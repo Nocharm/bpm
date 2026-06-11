@@ -1,0 +1,53 @@
+# 서버(사내 71번) 배포용 — 로컬 Windows PC는 Docker 없이 네이티브 실행 (CLAUDE.md Operations 참고)
+services:
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      # 서버 엣지 nginx(443/80)와 충돌하지 않는 비특권 포트
+      - "${APP_PORT:-9787}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend
+      # NEXT_PUBLIC_* 는 빌드 시 번들에 인라인됨 → build args로 주입
+      args:
+        NEXT_PUBLIC_AUTH_ENABLED: ${AUTH_ENABLED:-true}
+        NEXT_PUBLIC_KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+    expose:
+      - "3000"
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-processmap}:${POSTGRES_PASSWORD:?set in .env}@db:5432/${POSTGRES_DB:-processmap}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-processmap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-processmap}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
