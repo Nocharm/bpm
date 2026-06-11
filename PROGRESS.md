@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
+## 2026-06-12
+- 기능 확장 명세 확정 → `docs/spec.md` §7 추가: Phase A(undo/redo, 마우스 위치 컨텍스트 메뉴, 자동저장+이탈경고, 노드 색·모양/엣지 라벨), Phase B(노드 BPM 속성 4종, 복제 계보 기반 버전 diff 하이라이트, 초성 검색, PNG 내보내기), Phase C(버전 체크아웃 잠금, 노드 코멘트 5초 폴링). §2 데이터 모델·§6 구현 순서 갱신 — 배포(⑥→⑦)는 기능 확장 후 진행.
+
 ## 2026-06-11
 - `/init`: CLAUDE.md에 Project/Architecture 섹션 추가. 프로세스맵 그리기 웹 서비스 — Next.js(front) / Python(back) / PostgreSQL / nginx 4컨테이너 모노레포 구성 명시. hub @import 구조는 유지.
 - 운영 배경 반영: `.gitattributes`로 LF 고정(Windows 경유 CRLF 방지). CLAUDE.md에 Operations/Deployment 섹션 추가 — 파이프라인(GitHub→Windows 로컬 네이티브→서버 Docker), 제약(LF/로컬 Docker 없음/앱 nginx 443·80 미점유/env 분리). 서버 엣지 nginx 443·80 점유 가정 반영.

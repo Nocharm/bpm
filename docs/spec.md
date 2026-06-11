@@ -19,10 +19,16 @@
 
 ```
 process_maps   id, name, description, created_by, created_at, updated_at
-map_versions   id, map_id(FK), label(As-Is/To-Be/custom), created_by, created_at, updated_at
+map_versions   id, map_id(FK), label(As-Is/To-Be/custom), created_by, created_at, updated_at,
+               checked_out_by, checked_out_at              # 체크아웃 잠금 (§7 Phase C)
 nodes          id, version_id(FK), parent_node_id(FK nodes, null=최상위 캔버스),
-               title, description, node_type, pos_x, pos_y, sort_order
+               title, description, node_type, pos_x, pos_y, sort_order,
+               color,                                      # 노드 색 지정 (§7 Phase A)
+               assignee, department, system, duration,     # BPM 속성 (§7 Phase B)
+               source_node_id                              # 복제 출처 — diff 계보 매칭 (§7 Phase B)
 edges          id, version_id(FK), source_node_id(FK), target_node_id(FK), label
+comments       id, version_id(FK), node_id(FK nodes), author, body,
+               resolved, created_at                        # 노드 코멘트 (§7 Phase C)
 ```
 
 - 계층 탐색: `parent_node_id = X`인 노드들 = 노드 X의 하위 캔버스
@@ -50,7 +56,7 @@ edges          id, version_id(FK), source_node_id(FK), target_node_id(FK), label
 
 ### 3.4 버전 관리 / 비교
 - 맵 상세에서 버전 목록·생성(기존 버전 복제)·라벨 변경·삭제
-- **비교 화면**: 두 버전을 좌우 나란히 읽기 전용 렌더 (1차). 노드 추가/삭제/변경 하이라이트는 후속 단계
+- **비교 화면**: 두 버전을 좌우 나란히 읽기 전용 렌더 (1차). 노드 추가/삭제/변경 하이라이트는 §7 Phase B에서 구현
 
 ### 3.5 맵 목록
 - 전체 맵 목록 (이름·설명·버전 수·수정일), 생성/삭제
@@ -82,4 +88,36 @@ edges          id, version_id(FK), source_node_id(FK), target_node_id(FK), label
 3. ~~**계층(드릴다운+브레드크럼) + 정렬**~~ ✅ — 캔버스는 (version, parent_node_id) 스코프, 저장은 스코프별 교체
 4. ~~**버전 관리 + 비교 화면**~~ ✅ — 버전 복제(깊은 복사, ID 재발급)/이름변경/삭제, 두 버전 나란히 읽기 전용 비교
 5. ~~**Keycloak 인증 연동**~~ ✅ — OIDC 로그인 + JWT 검증, AUTH_ENABLED 플래그로 로컬 우회
-6. **서버 docker-compose 배포 (9787)** — 런북 `docs/deploy.md`. compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+6. **기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업
+7. **서버 docker-compose 배포 (9787)** — 런북 `docs/deploy.md`. compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+
+## 7. 기능 확장 (2026-06-12 확정)
+
+⑤까지 완료 후, 배포 전 추가하기로 확정한 기능. Phase 단위로 구현·검증·커밋한다.
+
+### Phase A — 캔버스 편집 경험
+
+| 기능 | 설계 |
+|------|------|
+| **Undo/Redo** | 에디터 스코프 단위 클라이언트 히스토리 스택. Ctrl+Z / Ctrl+Shift+Z(또는 Ctrl+Y). 노드 추가·이동·삭제·연결·속성 변경 기록. 백엔드 변경 없음 |
+| **마우스 위치 컨텍스트 메뉴** | 캔버스 우클릭 → 커서 위치에 메뉴, "노드 추가"는 그 좌표(screenToFlowPosition)에 생성. 노드 우클릭 → 편집/삭제/드릴다운, 엣지 우클릭 → 라벨 편집/삭제. 화면 가장자리에서 메뉴 위치 보정 |
+| **자동 저장 + 이탈 경고** | 변경 2초 디바운스 자동 저장, 미저장 상태 `beforeunload` 경고 |
+| **노드 색·모양 / 엣지 라벨** | `nodes.color` 컬럼 추가(헥스 문자열, 빈 값=기본). `node_type`(process/decision/start/end — 기존 컬럼 활용)별 모양 렌더. 사이드패널에서 타입·색 선택, 엣지 라벨(기존 컬럼) 편집 노출 |
+
+### Phase B — 데이터·조회
+
+| 기능 | 설계 |
+|------|------|
+| **노드 속성 확장** | `assignee`(담당자)/`department`(부서)/`system`(시스템)/`duration`(소요시간) 컬럼 추가, 사이드패널 편집 |
+| **버전 비교 diff** | 복제 시 노드 ID가 재발급되므로 `source_node_id`(출처 노드 ID)를 기록해 계보로 매칭, 계보 없으면 (parent 스코프, title) 매칭. 비교 화면에서 추가=초록/삭제=빨강/변경=노랑 하이라이트 + 변경 필드 목록 |
+| **노드 검색 (+초성)** | 버전 전체 노드 조회 API → 클라이언트 검색. 한글 초성 매칭(유니코드 분해, 의존성 없음) + 일반 부분 일치. 결과 클릭 시 해당 스코프로 점프 + 노드 하이라이트 |
+| **PNG 내보내기** | 현재 캔버스 PNG 다운로드 (`html-to-image`) |
+
+### Phase C — 협업 (체크아웃 + 코멘트)
+
+| 기능 | 설계 |
+|------|------|
+| **체크아웃 잠금** | 버전 단위 — 편집 진입 시 체크아웃(`checked_out_by/at`), 소유자만 저장 가능. 타 사용자는 읽기 전용 + "○○님이 편집 중" 배너. 30분 무활동 TTL 자동 해제 + 수동 해제. 저장/편집 활동이 heartbeat |
+| **실시간 코멘트** | 노드 단위 코멘트 핀 + 스레드 패널(작성/해결). 5초 폴링으로 갱신 — WebSocket 미도입(추후 SSE 전환 가능). 작성자는 인증 사용자(`author`) |
+
+**구현 순서 근거:** A는 프론트 중심(즉시 체감), B는 데이터 모델 확장(스키마 변경 동반), C는 신규 테이블·API(가장 큼). 각 Phase 종료 시 pytest/ruff/tsc/eslint/build 통과 후 커밋.
