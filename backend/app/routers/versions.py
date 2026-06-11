@@ -34,6 +34,12 @@ async def _clone_graph(
             description=node.description,
             node_type=node.node_type,
             color=node.color,
+            assignee=node.assignee,
+            department=node.department,
+            system=node.system,
+            duration=node.duration,
+            # 계보 루트 전파 — 복제의 복제도 최초 원본을 가리켜 diff 매칭 유지
+            source_node_id=node.source_node_id or node.id,
             pos_x=node.pos_x,
             pos_y=node.pos_y,
             sort_order=node.sort_order,

@@ -8,7 +8,15 @@ export type NodeData = {
   description: string;
   nodeType: ProcessNodeType;
   color: string;
+  assignee: string;
+  department: string;
+  system: string;
+  duration: string;
   hasChildren: boolean;
+  // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
+  diffStatus?: "added" | "removed" | "changed";
+  diffNote?: string;
+  hasDescendantChange?: boolean;
 };
 
 export type AppNode = Node<NodeData>;

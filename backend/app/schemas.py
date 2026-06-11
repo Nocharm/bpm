@@ -55,6 +55,11 @@ class NodeIn(BaseModel):
     node_type: str = "process"
     # hex 색 또는 빈 값(타입 기본색) — 형식은 API 경계에서 검증
     color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
+    # BPM 속성 (spec §7 Phase B)
+    assignee: str = Field(default="", max_length=100)
+    department: str = Field(default="", max_length=100)
+    system: str = Field(default="", max_length=100)
+    duration: str = Field(default="", max_length=50)
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
@@ -74,6 +79,12 @@ class NodeOut(NodeIn):
     has_children: bool = False
 
 
+class FlatNodeOut(NodeIn):
+    # 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff, spec §7 Phase B)
+    parent_node_id: str | None = None
+    source_node_id: str | None = None
+
+
 class GraphIn(BaseModel):
     nodes: list[NodeIn]
     edges: list[EdgeIn]
@@ -81,4 +92,9 @@ class GraphIn(BaseModel):
 
 class GraphOut(BaseModel):
     nodes: list[NodeOut]
+    edges: list[EdgeIn]
+
+
+class VersionGraphOut(BaseModel):
+    nodes: list[FlatNodeOut]
     edges: list[EdgeIn]

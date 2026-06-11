@@ -11,6 +11,7 @@
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
     "@xyflow/react": "^12.11.0",
+    "html-to-image": "^1.11.13",
     "next": "16.2.9",
     "oidc-client-ts": "^3.5.0",
     "react": "19.2.4",

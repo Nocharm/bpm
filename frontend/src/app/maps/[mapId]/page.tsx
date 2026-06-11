@@ -34,14 +34,18 @@ import {
 import {
   createVersion,
   deleteVersion,
+  getFullGraph,
   getGraph,
   getMap,
   renameVersion,
   saveGraph,
+  type FlatNode,
   type Graph,
   type GraphEdge,
   type VersionSummary,
 } from "@/lib/api";
+import { exportCanvasPng } from "@/lib/export";
+import { matchesQuery } from "@/lib/hangul";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -62,7 +66,10 @@ const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/�
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
 const AUTO_SAVE_DELAY_MS = 2000; // 마지막 변경 후 자동 저장까지의 디바운스
 
+const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
+
 type Scope = { parentId: string | null; title: string };
+type SearchResult = { node: FlatNode; path: string; scopes: Scope[] };
 type Snapshot = { nodes: AppNode[]; edges: Edge[] };
 type SaveState = "idle" | "saving" | "saved" | "error";
 type MenuState = {
@@ -82,6 +89,10 @@ function toAppNodes(graph: Graph): AppNode[] {
       description: node.description,
       nodeType: normalizeNodeType(node.node_type),
       color: node.color,
+      assignee: node.assignee,
+      department: node.department,
+      system: node.system,
+      duration: node.duration,
       hasChildren: node.has_children ?? false,
     },
   }));
@@ -104,6 +115,10 @@ function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
       description: node.data.description,
       node_type: node.data.nodeType,
       color: node.data.color,
+      assignee: node.data.assignee,
+      department: node.data.department,
+      system: node.data.system,
+      duration: node.data.duration,
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -130,6 +145,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchIndex, setSearchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // 검색 결과로 스코프 이동 후 포커스할 노드 — 스코프 로드 완료 시 소비
+  const focusNodeIdRef = useRef<string | null>(null);
 
   const reactFlow = useReactFlow();
   const currentParentId = scopes[scopes.length - 1].parentId;
@@ -272,9 +293,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     scheduleAutoSave();
   }, [setNodes, setEdges, scheduleAutoSave]);
 
-  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지. Ctrl+K는 검색 포커스.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
       if (
         event.target instanceof HTMLElement &&
         ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
@@ -353,6 +379,20 @@ function MapEditor({ mapId }: { mapId: number }) {
           autoSaveTimerRef.current = null;
         }
         setSaveState("idle");
+        // 검색 점프 — 노드가 렌더된 다음 틱에 화면 중앙으로
+        if (focusNodeIdRef.current) {
+          const focusId = focusNodeIdRef.current;
+          focusNodeIdRef.current = null;
+          setSelectedId(focusId);
+          setTimeout(() => {
+            void reactFlow.fitView({
+              nodes: [{ id: focusId }],
+              padding: 0.4,
+              duration: 300,
+              maxZoom: 1.25,
+            });
+          }, 80);
+        }
       } catch (err) {
         if (active) {
           setStatus(err instanceof Error ? err.message : "캔버스를 불러오지 못했습니다");
@@ -362,7 +402,56 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => {
       active = false;
     };
-  }, [versionId, currentParentId, setNodes, setEdges]);
+  }, [versionId, currentParentId, setNodes, setEdges, reactFlow]);
+
+  // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
+  // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
+  useEffect(() => {
+    if (versionId === null || !searchQuery.trim()) {
+      return;
+    }
+    let active = true;
+    void (async () => {
+      try {
+        const full = await getFullGraph(versionId);
+        if (!active) {
+          return;
+        }
+        const byId = new Map(full.nodes.map((node) => [node.id, node]));
+        const matches = full.nodes
+          .filter((node) => matchesQuery(node.title, searchQuery))
+          .slice(0, SEARCH_RESULT_LIMIT);
+        setSearchResults(
+          matches.map((node) => {
+            const ancestors: FlatNode[] = [];
+            let current = node.parent_node_id ? byId.get(node.parent_node_id) : undefined;
+            while (current) {
+              ancestors.unshift(current);
+              current = current.parent_node_id
+                ? byId.get(current.parent_node_id)
+                : undefined;
+            }
+            return {
+              node,
+              path: [mapName, ...ancestors.map((item) => item.title)].join(" › "),
+              scopes: [
+                { parentId: null, title: mapName },
+                ...ancestors.map((item) => ({ parentId: item.id, title: item.title })),
+              ],
+            };
+          }),
+        );
+        setSearchIndex(0);
+      } catch (err) {
+        if (active) {
+          setStatus(err instanceof Error ? err.message : "검색에 실패했습니다");
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [searchQuery, versionId, mapName]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -509,6 +598,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             description: "",
             nodeType: "process",
             color: "",
+            assignee: "",
+            department: "",
+            system: "",
+            duration: "",
             hasChildren: false,
           },
         },
@@ -559,6 +652,46 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [recordChange, selectedEdgeId, setEdges, scheduleAutoSave],
   );
+
+  // 검색 결과 선택 — 같은 스코프면 바로 포커스, 아니면 스코프 이동 후 포커스
+  const handleSearchSelect = useCallback(
+    (result: SearchResult) => {
+      setSearchQuery("");
+      setSearchResults([]);
+      const targetScope = result.scopes[result.scopes.length - 1];
+      if (targetScope.parentId === currentParentId) {
+        setSelectedId(result.node.id);
+        setSelectedEdgeId(null);
+        void reactFlow.fitView({
+          nodes: [{ id: result.node.id }],
+          padding: 0.4,
+          duration: 300,
+          maxZoom: 1.25,
+        });
+        return;
+      }
+      focusNodeIdRef.current = result.node.id;
+      void navigateTo(result.scopes);
+    },
+    [currentParentId, reactFlow, navigateTo],
+  );
+
+  const handleExportPng = useCallback(async () => {
+    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:T]/g, "")
+      .slice(0, 14);
+    try {
+      await exportCanvasPng(
+        nodesRef.current,
+        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.png`,
+      );
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "PNG 내보내기에 실패했습니다");
+    }
+  }, [versions, versionId, mapName]);
 
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
@@ -671,6 +804,59 @@ function MapEditor({ mapId }: { mapId: number }) {
           ))}
         </nav>
 
+        <div className="relative">
+          <input
+            ref={searchInputRef}
+            className="w-56 rounded border border-zinc-300 px-2 py-1 text-sm"
+            placeholder="노드 검색 — 초성 가능 (Ctrl+K)"
+            value={searchQuery}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSearchQuery(value);
+              if (!value.trim()) {
+                setSearchResults([]);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setSearchIndex((index) => Math.min(index + 1, searchResults.length - 1));
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setSearchIndex((index) => Math.max(index - 1, 0));
+              } else if (event.key === "Enter" && searchResults[searchIndex]) {
+                handleSearchSelect(searchResults[searchIndex]);
+              } else if (event.key === "Escape") {
+                setSearchQuery("");
+                setSearchResults([]);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          {searchResults.length > 0 && (
+            <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-80 overflow-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
+              {searchResults.map((result, index) => (
+                <li key={result.node.id}>
+                  <button
+                    className={`block w-full px-3 py-1.5 text-left text-sm ${
+                      index === searchIndex ? "bg-zinc-100" : ""
+                    }`}
+                    onMouseDown={(event) => {
+                      // blur로 드롭다운이 닫히기 전에 선택 처리
+                      event.preventDefault();
+                      handleSearchSelect(result);
+                    }}
+                    onMouseEnter={() => setSearchIndex(index)}
+                  >
+                    <span className="font-medium text-zinc-800">{result.node.title}</span>
+                    <span className="ml-2 text-xs text-zinc-400">{result.path}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {status && <span className="text-sm text-red-600">{status}</span>}
           {saveState === "saving" && (
@@ -769,6 +955,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           <button className={toolButton} onClick={() => handleAddNode(null)}>
             + 노드
           </button>
+          <button className={toolButton} onClick={() => void handleExportPng()}>
+            PNG
+          </button>
           <button
             className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
             onClick={() => void handleSave()}
@@ -842,7 +1031,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
 
         {selectedNode && (
-          <aside className="w-72 border-l border-zinc-200 p-4">
+          <aside className="w-80 overflow-y-auto border-l border-zinc-200 p-4">
             <h2 className="mb-3 text-sm font-semibold text-zinc-600">노드 편집</h2>
             <label className="mb-1 block text-xs text-zinc-500">제목</label>
             <input
@@ -908,6 +1097,44 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
               }}
             />
+            <details className="mb-3 rounded border border-zinc-200 px-2 py-1.5">
+              <summary className="cursor-pointer text-xs font-medium text-zinc-600">
+                BPM 속성
+              </summary>
+              <label className="mb-1 mt-2 block text-xs text-zinc-500">담당자</label>
+              <input
+                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                value={selectedNode.data.assignee}
+                onChange={(event) =>
+                  updateSelectedData({ assignee: event.target.value }, true)
+                }
+              />
+              <label className="mb-1 block text-xs text-zinc-500">부서</label>
+              <input
+                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                value={selectedNode.data.department}
+                onChange={(event) =>
+                  updateSelectedData({ department: event.target.value }, true)
+                }
+              />
+              <label className="mb-1 block text-xs text-zinc-500">시스템</label>
+              <input
+                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                value={selectedNode.data.system}
+                onChange={(event) =>
+                  updateSelectedData({ system: event.target.value }, true)
+                }
+              />
+              <label className="mb-1 block text-xs text-zinc-500">소요시간</label>
+              <input
+                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                value={selectedNode.data.duration}
+                onChange={(event) =>
+                  updateSelectedData({ duration: event.target.value }, true)
+                }
+                placeholder="예: 2일"
+              />
+            </details>
             <p className="mt-3 text-xs text-zinc-400">
               더블클릭: 하위 프로세스로 진입 · 우클릭: 메뉴 · Ctrl+Z: 실행취소
             </p>

@@ -49,6 +49,30 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     assert child["nodes"][0]["id"] != "c"
 
 
+def test_clone_records_source_lineage(client: TestClient) -> None:
+    created = _create_map(client)
+    source_version = created["versions"][0]["id"]
+    client.put(
+        f"/api/versions/{source_version}/graph",
+        json={"nodes": [{"id": "orig", "title": "원본"}], "edges": []},
+    )
+
+    clone1 = client.post(
+        f"/api/maps/{created['id']}/versions",
+        json={"label": "To-Be", "source_version_id": source_version},
+    ).json()
+    clone1_nodes = client.get(f"/api/versions/{clone1['id']}/graph/all").json()["nodes"]
+    clone2 = client.post(
+        f"/api/maps/{created['id']}/versions",
+        json={"label": "To-Be-2", "source_version_id": clone1["id"]},
+    ).json()
+    clone2_nodes = client.get(f"/api/versions/{clone2['id']}/graph/all").json()["nodes"]
+
+    # 1차 복제는 원본을, 복제의 복제도 같은 계보 루트(원본)를 가리킨다
+    assert clone1_nodes[0]["source_node_id"] == "orig"
+    assert clone2_nodes[0]["source_node_id"] == "orig"
+
+
 def test_clone_leaves_source_untouched(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]

@@ -23,10 +23,20 @@ export interface GraphNode {
   description: string;
   node_type: string;
   color: string;
+  assignee: string;
+  department: string;
+  system: string;
+  duration: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;
   has_children?: boolean;
+}
+
+// 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff)
+export interface FlatNode extends GraphNode {
+  parent_node_id: string | null;
+  source_node_id: string | null;
 }
 
 export interface GraphEdge {
@@ -38,6 +48,11 @@ export interface GraphEdge {
 
 export interface Graph {
   nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface VersionGraph {
+  nodes: FlatNode[];
   edges: GraphEdge[];
 }
 
@@ -119,6 +134,10 @@ export function getGraph(
   parentId: string | null = null,
 ): Promise<Graph> {
   return request<Graph>(`/versions/${versionId}/graph${scopeQuery(parentId)}`);
+}
+
+export function getFullGraph(versionId: number): Promise<VersionGraph> {
+  return request<VersionGraph>(`/versions/${versionId}/graph/all`);
 }
 
 export function saveGraph(

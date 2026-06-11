@@ -70,6 +70,52 @@ def test_node_type_and_color_roundtrip(client: TestClient) -> None:
     assert saved["nodes"][0]["color"] == "#3b82f6"
 
 
+def test_bpm_attributes_roundtrip(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {
+                "id": "n1",
+                "title": "발주",
+                "assignee": "김담당",
+                "department": "구매팀",
+                "system": "ERP",
+                "duration": "2일",
+            }
+        ],
+        "edges": [],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    node = saved["nodes"][0]
+    assert node["assignee"] == "김담당"
+    assert node["department"] == "구매팀"
+    assert node["system"] == "ERP"
+    assert node["duration"] == "2일"
+
+
+def test_full_graph_returns_all_scopes(client: TestClient) -> None:
+    version_id = _create_version(client)
+    client.put(
+        f"/api/versions/{version_id}/graph",
+        json={"nodes": [{"id": "p", "title": "발주"}], "edges": []},
+    )
+    client.put(
+        f"/api/versions/{version_id}/graph?parent=p",
+        json={"nodes": [{"id": "c", "title": "승인"}], "edges": []},
+    )
+
+    full = client.get(f"/api/versions/{version_id}/graph/all").json()
+
+    by_id = {n["id"]: n for n in full["nodes"]}
+    assert set(by_id) == {"p", "c"}
+    assert by_id["p"]["parent_node_id"] is None
+    assert by_id["c"]["parent_node_id"] == "p"
+    assert by_id["p"]["source_node_id"] is None
+
+
 def test_invalid_color_rejected(client: TestClient) -> None:
     version_id = _create_version(client)
 

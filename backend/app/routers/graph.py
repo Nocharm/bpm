@@ -13,7 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import Edge, MapVersion, Node
-from app.schemas import EdgeIn, GraphIn, GraphOut, NodeOut
+from app.schemas import (
+    EdgeIn,
+    FlatNodeOut,
+    GraphIn,
+    GraphOut,
+    NodeOut,
+    VersionGraphOut,
+)
 
 router = APIRouter(
     prefix="/api/versions", tags=["graph"], dependencies=[Depends(get_current_user)]
@@ -69,6 +76,27 @@ async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVers
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
     return version
+
+
+@router.get("/{version_id}/graph/all", response_model=VersionGraphOut)
+async def get_full_graph(
+    version_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> VersionGraphOut:
+    """버전 전체(모든 계층) 노드/엣지 — 노드 검색·버전 diff 용 (spec §7 Phase B)."""
+    await _get_version_or_404(session, version_id)
+    node_rows = (
+        await session.scalars(
+            select(Node).where(Node.version_id == version_id).order_by(Node.sort_order)
+        )
+    ).all()
+    edge_rows = (
+        await session.scalars(select(Edge).where(Edge.version_id == version_id))
+    ).all()
+    return VersionGraphOut(
+        nodes=[FlatNodeOut.model_validate(n) for n in node_rows],
+        edges=[EdgeIn.model_validate(e) for e in edge_rows],
+    )
 
 
 @router.get("/{version_id}/graph", response_model=GraphOut)
@@ -164,6 +192,10 @@ async def replace_graph(
             existing.description = node.description
             existing.node_type = node.node_type
             existing.color = node.color
+            existing.assignee = node.assignee
+            existing.department = node.department
+            existing.system = node.system
+            existing.duration = node.duration
             existing.pos_x = node.pos_x
             existing.pos_y = node.pos_y
             existing.sort_order = node.sort_order
