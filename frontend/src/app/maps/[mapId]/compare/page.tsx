@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 
 import { ProcessNode } from "@/components/process-node";
 import { getGraph, getMap, type Graph, type VersionSummary } from "@/lib/api";
-import type { AppNode } from "@/lib/canvas";
+import { normalizeNodeType, type AppNode } from "@/lib/canvas";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
@@ -26,6 +26,8 @@ function toNodes(graph: Graph): AppNode[] {
     data: {
       label: node.title,
       description: node.description,
+      nodeType: normalizeNodeType(node.node_type),
+      color: node.color,
       hasChildren: node.has_children ?? false,
     },
   }));

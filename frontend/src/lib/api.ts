@@ -22,6 +22,7 @@ export interface GraphNode {
   title: string;
   description: string;
   node_type: string;
+  color: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;

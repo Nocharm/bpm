@@ -54,6 +54,33 @@ def test_replace_graph_overwrites_previous(client: TestClient) -> None:
     assert [n["id"] for n in saved["nodes"]] == ["b"]
 
 
+def test_node_type_and_color_roundtrip(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n1", "title": "분기", "node_type": "decision", "color": "#3b82f6"}
+        ],
+        "edges": [],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    assert saved["nodes"][0]["node_type"] == "decision"
+    assert saved["nodes"][0]["color"] == "#3b82f6"
+
+
+def test_invalid_color_rejected(client: TestClient) -> None:
+    version_id = _create_version(client)
+
+    response = client.put(
+        f"/api/versions/{version_id}/graph",
+        json={"nodes": [{"id": "n1", "color": "red"}], "edges": []},
+    )
+
+    assert response.status_code == 422
+
+
 def test_edge_referencing_unknown_node_rejected(client: TestClient) -> None:
     version_id = _create_version(client)
 

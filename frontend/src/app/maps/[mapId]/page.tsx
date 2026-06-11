@@ -11,17 +11,23 @@ import {
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { ProcessNode } from "@/components/process-node";
 import {
   alignSelected,
   distributeSelected,
   layoutWithDagre,
+  normalizeNodeType,
+  NODE_HEIGHT,
+  NODE_TYPE_OPTIONS,
+  NODE_WIDTH,
   type AppNode,
   type NodeData,
 } from "@/lib/canvas";
@@ -40,7 +46,31 @@ import {
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
+// 색 프리셋 — 첫 항목(빈 값)은 타입 기본색
+const COLOR_PRESETS = [
+  "",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#3b82f6",
+  "#8b5cf6",
+  "#18181b",
+];
+
+const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
+const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
+const AUTO_SAVE_DELAY_MS = 2000; // 마지막 변경 후 자동 저장까지의 디바운스
+
 type Scope = { parentId: string | null; title: string };
+type Snapshot = { nodes: AppNode[]; edges: Edge[] };
+type SaveState = "idle" | "saving" | "saved" | "error";
+type MenuState = {
+  x: number;
+  y: number;
+  kind: "pane" | "node" | "edge";
+  targetId: string | null;
+};
 
 function toAppNodes(graph: Graph): AppNode[] {
   return graph.nodes.map((node) => ({
@@ -50,6 +80,8 @@ function toAppNodes(graph: Graph): AppNode[] {
     data: {
       label: node.title,
       description: node.description,
+      nodeType: normalizeNodeType(node.node_type),
+      color: node.color,
       hasChildren: node.has_children ?? false,
     },
   }));
@@ -70,7 +102,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
       id: node.id,
       title: node.data.label,
       description: node.data.description,
-      node_type: "default",
+      node_type: node.data.nodeType,
+      color: node.data.color,
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -92,9 +125,183 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
 
+  const reactFlow = useReactFlow();
   const currentParentId = scopes[scopes.length - 1].parentId;
+
+  // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
+  const nodesRef = useRef<AppNode[]>([]);
+  const edgesRef = useRef<Edge[]>([]);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  const historyRef = useRef<{ past: Snapshot[]; future: Snapshot[] }>({
+    past: [],
+    future: [],
+  });
+  const lastTextEditAtRef = useRef(0);
+  const dirtyRef = useRef(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── 저장 ──────────────────────────────────────────────
+
+  const saveCurrentScope = useCallback(async () => {
+    if (versionId === null) {
+      return;
+    }
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setSaveState("saving");
+    try {
+      await saveGraph(
+        versionId,
+        buildGraph(nodesRef.current, edgesRef.current),
+        currentParentId,
+      );
+      dirtyRef.current = false;
+      setSaveState("saved");
+    } catch (err) {
+      setSaveState("error");
+      throw err;
+    }
+  }, [versionId, currentParentId]);
+
+  const scheduleAutoSave = useCallback(() => {
+    dirtyRef.current = true;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      // 실패는 saveState=error 표시로 사용자에게 노출 — 수동 저장으로 재시도
+      void saveCurrentScope().catch(() => undefined);
+    }, AUTO_SAVE_DELAY_MS);
+  }, [saveCurrentScope]);
+
+  // "저장됨" 표시는 잠깐 보여주고 지움
+  useEffect(() => {
+    if (saveState !== "saved") {
+      return;
+    }
+    const timer = setTimeout(() => setSaveState("idle"), 1500);
+    return () => clearTimeout(timer);
+  }, [saveState]);
+
+  // 미저장 변경이 있으면 페이지 이탈 경고
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (dirtyRef.current) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  // ── Undo / Redo ───────────────────────────────────────
+
+  const pushHistory = useCallback(() => {
+    const history = historyRef.current;
+    history.past.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    if (history.past.length > HISTORY_LIMIT) {
+      history.past.shift();
+    }
+    history.future = [];
+    setHistorySize({ past: history.past.length, future: 0 });
+  }, []);
+
+  // 타이핑은 간격 안에서 한 스냅샷으로 묶고, 그 외 변경은 즉시 기록
+  const recordChange = useCallback(
+    (fromTyping: boolean) => {
+      if (fromTyping) {
+        const now = Date.now();
+        const withinGap = now - lastTextEditAtRef.current <= TEXT_HISTORY_GAP_MS;
+        lastTextEditAtRef.current = now;
+        if (withinGap) {
+          return;
+        }
+      }
+      pushHistory();
+    },
+    [pushHistory],
+  );
+
+  const undo = useCallback(() => {
+    const history = historyRef.current;
+    const previous = history.past.pop();
+    if (!previous) {
+      return;
+    }
+    history.future.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setHistorySize({ past: history.past.length, future: history.future.length });
+    scheduleAutoSave();
+  }, [setNodes, setEdges, scheduleAutoSave]);
+
+  const redo = useCallback(() => {
+    const history = historyRef.current;
+    const next = history.future.pop();
+    if (!next) {
+      return;
+    }
+    history.past.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setHistorySize({ past: history.past.length, future: history.future.length });
+    scheduleAutoSave();
+  }, [setNodes, setEdges, scheduleAutoSave]);
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.target instanceof HTMLElement &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+      ) {
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if (key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
+
+  // ── 로드 ──────────────────────────────────────────────
 
   // 맵 메타 로드 — 버전 확보 + 브레드크럼 루트 이름
   useEffect(() => {
@@ -120,7 +327,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
   }, [mapId]);
 
-  // 현재 스코프(version, parent) 캔버스 로드
+  // 현재 스코프(version, parent) 캔버스 로드 — 히스토리/저장 상태도 새 스코프 기준으로 리셋
   useEffect(() => {
     if (versionId === null) {
       return;
@@ -135,6 +342,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         setNodes(toAppNodes(graph));
         setEdges(toAppEdges(graph));
         setSelectedId(null);
+        setSelectedEdgeId(null);
+        setMenu(null);
+        historyRef.current = { past: [], future: [] };
+        setHistorySize({ past: 0, future: 0 });
+        lastTextEditAtRef.current = 0;
+        dirtyRef.current = false;
+        if (autoSaveTimerRef.current) {
+          clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        setSaveState("idle");
       } catch (err) {
         if (active) {
           setStatus(err instanceof Error ? err.message : "캔버스를 불러오지 못했습니다");
@@ -145,14 +363,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       active = false;
     };
   }, [versionId, currentParentId, setNodes, setEdges]);
-
-  const saveCurrentScope = useCallback(async () => {
-    if (versionId === null) {
-      return;
-    }
-    await saveGraph(versionId, buildGraph(nodes, edges), currentParentId);
-    setStatus("저장됨");
-  }, [versionId, nodes, edges, currentParentId]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -264,31 +474,65 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [versionId, versions, mapId, mapName]);
 
+  // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────
+
   const onConnect = useCallback(
     (connection: Connection) => {
+      pushHistory();
       setEdges((current) =>
         addEdge({ ...connection, id: crypto.randomUUID() }, current),
       );
+      scheduleAutoSave();
     },
-    [setEdges],
+    [pushHistory, setEdges, scheduleAutoSave],
   );
 
-  const handleAddNode = useCallback(() => {
-    const id = crypto.randomUUID();
-    setNodes((current) => [
-      ...current,
-      {
-        id,
-        type: "process",
-        position: { x: 80 + current.length * 30, y: 80 + current.length * 30 },
-        data: { label: "새 단계", description: "", hasChildren: false },
-      },
-    ]);
-    setSelectedId(id);
-  }, [setNodes]);
+  // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
+  const handleAddNode = useCallback(
+    (screen: { x: number; y: number } | null) => {
+      pushHistory();
+      const id = crypto.randomUUID();
+      const count = nodesRef.current.length;
+      let position = { x: 80 + count * 30, y: 80 + count * 30 };
+      if (screen) {
+        const point = reactFlow.screenToFlowPosition(screen);
+        position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
+      }
+      setNodes((current) => [
+        ...current,
+        {
+          id,
+          type: "process",
+          position,
+          data: {
+            label: "새 단계",
+            description: "",
+            nodeType: "process",
+            color: "",
+            hasChildren: false,
+          },
+        },
+      ]);
+      setSelectedId(id);
+      setSelectedEdgeId(null);
+      scheduleAutoSave();
+    },
+    [pushHistory, reactFlow, setNodes, scheduleAutoSave],
+  );
+
+  // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
+  const applyNodesTransform = useCallback(
+    (transform: (current: AppNode[]) => AppNode[]) => {
+      pushHistory();
+      setNodes(transform);
+      scheduleAutoSave();
+    },
+    [pushHistory, setNodes, scheduleAutoSave],
+  );
 
   const updateSelectedData = useCallback(
-    (patch: Partial<NodeData>) => {
+    (patch: Partial<NodeData>, fromTyping = false) => {
+      recordChange(fromTyping);
       setNodes((current) =>
         current.map((node) =>
           node.id === selectedId
@@ -296,15 +540,111 @@ function MapEditor({ mapId }: { mapId: number }) {
             : node,
         ),
       );
+      scheduleAutoSave();
     },
-    [selectedId, setNodes],
+    [recordChange, selectedId, setNodes, scheduleAutoSave],
   );
+
+  const updateSelectedEdgeLabel = useCallback(
+    (label: string) => {
+      recordChange(true);
+      setEdges((current) =>
+        current.map((edge) =>
+          edge.id === selectedEdgeId
+            ? { ...edge, label: label || undefined }
+            : edge,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [recordChange, selectedEdgeId, setEdges, scheduleAutoSave],
+  );
+
+  // ── 컨텍스트 메뉴 ─────────────────────────────────────
+
+  const openMenu = useCallback(
+    (event: React.MouseEvent | MouseEvent, kind: MenuState["kind"], targetId: string | null) => {
+      event.preventDefault();
+      setMenu({ x: event.clientX, y: event.clientY, kind, targetId });
+    },
+    [],
+  );
+
+  const menuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!menu) {
+      return [];
+    }
+    if (menu.kind === "pane") {
+      return [
+        {
+          label: "+ 노드 추가",
+          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }),
+        },
+        {
+          label: "자동 정렬",
+          onSelect: () =>
+            applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current)),
+        },
+      ];
+    }
+    if (menu.kind === "node") {
+      return [
+        {
+          label: "하위 프로세스 열기",
+          shortcut: "더블클릭",
+          onSelect: () => {
+            // ref 조회는 이벤트 시점에 — 렌더 중 ref 접근 금지 (react-hooks/refs)
+            const node = nodesRef.current.find((item) => item.id === menu.targetId);
+            if (node) {
+              handleDrillIn(node);
+            }
+          },
+        },
+        {
+          label: "삭제",
+          shortcut: "⌫",
+          danger: true,
+          onSelect: () => {
+            if (menu.targetId) {
+              void reactFlow.deleteElements({ nodes: [{ id: menu.targetId }] });
+            }
+          },
+        },
+      ];
+    }
+    return [
+      {
+        label: "라벨 편집",
+        onSelect: () => {
+          setSelectedEdgeId(menu.targetId);
+          setSelectedId(null);
+        },
+      },
+      {
+        label: "삭제",
+        shortcut: "⌫",
+        danger: true,
+        onSelect: () => {
+          if (menu.targetId) {
+            void reactFlow.deleteElements({ edges: [{ id: menu.targetId }] });
+          }
+        },
+      },
+    ];
+  }, [menu, handleAddNode, applyNodesTransform, handleDrillIn, reactFlow]);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedId) ?? null,
     [nodes, selectedId],
   );
+  const selectedEdge = useMemo(
+    () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
+    [edges, selectedEdgeId],
+  );
   const depth = scopes.length - 1;
+
+  const toolButton =
+    "rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
     <div className="flex h-screen flex-col">
@@ -332,7 +672,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         </nav>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {status && <span className="text-sm text-zinc-500">{status}</span>}
+          {status && <span className="text-sm text-red-600">{status}</span>}
+          {saveState === "saving" && (
+            <span className="text-sm text-zinc-400">저장 중…</span>
+          )}
+          {saveState === "saved" && (
+            <span className="text-sm text-green-600">저장됨 ✓</span>
+          )}
+          {saveState === "error" && (
+            <span className="text-sm text-red-600">저장 실패 — 저장 버튼으로 재시도</span>
+          )}
 
           <select
             className="rounded border border-zinc-300 px-2 py-1 text-sm"
@@ -346,16 +695,10 @@ function MapEditor({ mapId }: { mapId: number }) {
               </option>
             ))}
           </select>
-          <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => void handleCreateVersion()}
-          >
+          <button className={toolButton} onClick={() => void handleCreateVersion()}>
             새 버전
           </button>
-          <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => void handleRenameVersion()}
-          >
+          <button className={toolButton} onClick={() => void handleRenameVersion()}>
             이름변경
           </button>
           <button
@@ -375,39 +718,55 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-1 h-5 w-px bg-zinc-200" />
 
           <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => setNodes((current) => layoutWithDagre(current, edges))}
+            className={toolButton}
+            onClick={undo}
+            disabled={historySize.past === 0}
+            title="실행취소 (Ctrl+Z)"
+          >
+            ↶
+          </button>
+          <button
+            className={toolButton}
+            onClick={redo}
+            disabled={historySize.future === 0}
+            title="다시실행 (Ctrl+Shift+Z)"
+          >
+            ↷
+          </button>
+
+          <button
+            className={toolButton}
+            onClick={() =>
+              applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))
+            }
           >
             자동 정렬
           </button>
           <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => setNodes((current) => alignSelected(current, "left"))}
+            className={toolButton}
+            onClick={() => applyNodesTransform((current) => alignSelected(current, "left"))}
           >
             좌측 맞춤
           </button>
           <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => setNodes((current) => alignSelected(current, "top"))}
+            className={toolButton}
+            onClick={() => applyNodesTransform((current) => alignSelected(current, "top"))}
           >
             상단 맞춤
           </button>
           <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => setNodes((current) => distributeSelected(current, "x"))}
+            className={toolButton}
+            onClick={() => applyNodesTransform((current) => distributeSelected(current, "x"))}
           >
             가로 등간격
           </button>
           <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={() => setNodes((current) => distributeSelected(current, "y"))}
+            className={toolButton}
+            onClick={() => applyNodesTransform((current) => distributeSelected(current, "y"))}
           >
             세로 등간격
           </button>
-          <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
-            onClick={handleAddNode}
-          >
+          <button className={toolButton} onClick={() => handleAddNode(null)}>
             + 노드
           </button>
           <button
@@ -435,14 +794,51 @@ function MapEditor({ mapId }: { mapId: number }) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onNodeClick={(_, node) => setSelectedId(node.id)}
+            onNodeClick={(_, node) => {
+              setSelectedId(node.id);
+              setSelectedEdgeId(null);
+            }}
+            onEdgeClick={(_, edge) => {
+              setSelectedEdgeId(edge.id);
+              setSelectedId(null);
+            }}
             onNodeDoubleClick={(_, node) => handleDrillIn(node as AppNode)}
-            onPaneClick={() => setSelectedId(null)}
+            onPaneClick={() => {
+              setSelectedId(null);
+              setSelectedEdgeId(null);
+              setMenu(null);
+            }}
+            onPaneContextMenu={(event) => openMenu(event, "pane", null)}
+            onNodeContextMenu={(event, node) => {
+              setSelectedId(node.id);
+              setSelectedEdgeId(null);
+              openMenu(event, "node", node.id);
+            }}
+            onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
+            onNodeDragStart={() => pushHistory()}
+            onNodeDragStop={() => scheduleAutoSave()}
+            onSelectionDragStart={() => pushHistory()}
+            onSelectionDragStop={() => scheduleAutoSave()}
+            onBeforeDelete={async () => {
+              pushHistory();
+              return true;
+            }}
+            onNodesDelete={() => scheduleAutoSave()}
+            onEdgesDelete={() => scheduleAutoSave()}
+            onMoveStart={() => setMenu(null)}
             fitView
           >
             <Background />
             <Controls />
           </ReactFlow>
+          {menu && (
+            <ContextMenu
+              x={menu.x}
+              y={menu.y}
+              items={menuItems}
+              onClose={() => setMenu(null)}
+            />
+          )}
         </div>
 
         {selectedNode && (
@@ -452,19 +848,82 @@ function MapEditor({ mapId }: { mapId: number }) {
             <input
               className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               value={selectedNode.data.label}
-              onChange={(event) => updateSelectedData({ label: event.target.value })}
+              onChange={(event) =>
+                updateSelectedData({ label: event.target.value }, true)
+              }
             />
             <label className="mb-1 block text-xs text-zinc-500">설명</label>
             <textarea
               className="h-28 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               value={selectedNode.data.description}
               onChange={(event) =>
-                updateSelectedData({ description: event.target.value })
+                updateSelectedData({ description: event.target.value }, true)
               }
             />
+            <label className="mb-1 mt-3 block text-xs text-zinc-500">타입</label>
+            <select
+              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              value={selectedNode.data.nodeType}
+              onChange={(event) =>
+                updateSelectedData({ nodeType: normalizeNodeType(event.target.value) })
+              }
+            >
+              {NODE_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <label className="mb-1 block text-xs text-zinc-500">색상</label>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {COLOR_PRESETS.map((preset) => (
+                <button
+                  key={preset || "default"}
+                  title={preset || "기본색"}
+                  aria-label={`색상 ${preset || "기본"}`}
+                  className={`h-5 w-5 rounded border ${
+                    selectedNode.data.color === preset
+                      ? "ring-2 ring-blue-400"
+                      : "border-zinc-300"
+                  }`}
+                  style={{ backgroundColor: preset || "#ffffff" }}
+                  onClick={() => updateSelectedData({ color: preset })}
+                />
+              ))}
+            </div>
+            <input
+              key={`${selectedNode.id}-${selectedNode.data.color}`}
+              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              defaultValue={selectedNode.data.color}
+              placeholder="#RRGGBB 직접 입력 후 Enter"
+              onBlur={(event) => {
+                const value = event.target.value.trim();
+                if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
+                  updateSelectedData({ color: value });
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+            />
             <p className="mt-3 text-xs text-zinc-400">
-              더블클릭: 하위 프로세스로 진입 · Delete: 선택 삭제
+              더블클릭: 하위 프로세스로 진입 · 우클릭: 메뉴 · Ctrl+Z: 실행취소
             </p>
+          </aside>
+        )}
+
+        {!selectedNode && selectedEdge && (
+          <aside className="w-72 border-l border-zinc-200 p-4">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-600">엣지 편집</h2>
+            <label className="mb-1 block text-xs text-zinc-500">라벨 (분기 조건 등)</label>
+            <input
+              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
+              onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
+            />
+            <p className="mt-3 text-xs text-zinc-400">우클릭: 메뉴 · Ctrl+Z: 실행취소</p>
           </aside>
         )}
       </div>

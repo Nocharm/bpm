@@ -33,6 +33,7 @@ async def _clone_graph(
             title=node.title,
             description=node.description,
             node_type=node.node_type,
+            color=node.color,
             pos_x=node.pos_x,
             pos_y=node.pos_y,
             sort_order=node.sort_order,

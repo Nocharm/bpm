@@ -6,14 +6,38 @@ import type { Edge, Node } from "@xyflow/react";
 export type NodeData = {
   label: string;
   description: string;
+  nodeType: ProcessNodeType;
+  color: string;
   hasChildren: boolean;
 };
 
 export type AppNode = Node<NodeData>;
 
-// ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정에 사용
-const NODE_WIDTH = 170;
-const NODE_HEIGHT = 52;
+// 노드 타입 선택지 — 값은 백엔드 node_type 컬럼에 그대로 저장 (spec §7 Phase A)
+export const NODE_TYPE_OPTIONS = [
+  { value: "process", label: "프로세스" },
+  { value: "decision", label: "판단(분기)" },
+  { value: "start", label: "시작" },
+  { value: "end", label: "종료" },
+] as const;
+
+export type ProcessNodeType = (typeof NODE_TYPE_OPTIONS)[number]["value"];
+
+/** DB의 자유 문자열 node_type을 렌더 가능한 타입으로 정규화 (레거시 "default" → process). */
+export function normalizeNodeType(value: string): ProcessNodeType {
+  switch (value) {
+    case "decision":
+    case "start":
+    case "end":
+      return value;
+    default:
+      return "process";
+  }
+}
+
+// ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정·커서 중앙 배치에 사용
+export const NODE_WIDTH = 170;
+export const NODE_HEIGHT = 52;
 
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
 export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {

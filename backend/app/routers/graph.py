@@ -163,6 +163,7 @@ async def replace_graph(
             existing.title = node.title
             existing.description = node.description
             existing.node_type = node.node_type
+            existing.color = node.color
             existing.pos_x = node.pos_x
             existing.pos_y = node.pos_y
             existing.sort_order = node.sort_order

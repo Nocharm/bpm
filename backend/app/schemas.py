@@ -52,7 +52,9 @@ class NodeIn(BaseModel):
     id: str
     title: str = ""
     description: str = ""
-    node_type: str = "default"
+    node_type: str = "process"
+    # hex 색 또는 빈 값(타입 기본색) — 형식은 API 경계에서 검증
+    color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
