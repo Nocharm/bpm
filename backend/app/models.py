@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -37,6 +37,11 @@ class MapVersion(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
     label: Mapped[str] = mapped_column(String(100))
+    # 체크아웃 잠금 — 한 명만 편집, TTL 판정은 app/checkout.py (spec §7 Phase C)
+    checked_out_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    checked_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -47,6 +52,9 @@ class MapVersion(Base):
         back_populates="version", cascade="all, delete-orphan"
     )
     edges: Mapped[list["Edge"]] = relationship(
+        back_populates="version", cascade="all, delete-orphan"
+    )
+    comments: Mapped[list["Comment"]] = relationship(
         back_populates="version", cascade="all, delete-orphan"
     )
 
@@ -95,3 +103,20 @@ class Edge(Base):
     label: Mapped[str] = mapped_column(String(200), default="")
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("map_versions.id", ondelete="CASCADE")
+    )
+    # 노드 삭제 시 코멘트 정리는 graph 라우터가 명시적으로 수행 (sqlite FK pragma 비활성 대비)
+    node_id: Mapped[str] = mapped_column(String(50))
+    author: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(Text)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    version: Mapped[MapVersion] = relationship(back_populates="comments")

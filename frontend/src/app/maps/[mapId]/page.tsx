@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { ProcessNode } from "@/components/process-node";
 import {
@@ -32,13 +33,21 @@ import {
   type NodeData,
 } from "@/lib/canvas";
 import {
+  acquireCheckout,
+  createComment,
   createVersion,
+  deleteComment,
   deleteVersion,
   getFullGraph,
   getGraph,
   getMap,
+  listComments,
+  releaseCheckout,
   renameVersion,
   saveGraph,
+  updateComment,
+  type CheckoutState,
+  type CommentItem,
   type FlatNode,
   type Graph,
   type GraphEdge,
@@ -65,6 +74,8 @@ const COLOR_PRESETS = [
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
 const AUTO_SAVE_DELAY_MS = 2000; // 마지막 변경 후 자동 저장까지의 디바운스
+const CHECKOUT_HEARTBEAT_MS = 10_000; // 체크아웃 연장 주기 — TTL(기본 30분) 대비 충분히 짧게
+const COMMENT_POLL_MS = 5_000; // 코멘트 "실시간" 폴링 주기 (spec §7 Phase C)
 
 const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
 
@@ -151,6 +162,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   // 검색 결과로 스코프 이동 후 포커스할 노드 — 스코프 로드 완료 시 소비
   const focusNodeIdRef = useRef<string | null>(null);
+  const [checkout, setCheckout] = useState<CheckoutState | null>(null);
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  // 언마운트/버전 전환 시 해제 여부 판단용 — 상태와 달리 cleanup에서 즉시 읽힘
+  const checkoutMineRef = useRef(false);
+
+  // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
+  const readOnly = checkout !== null && !checkout.mine;
 
   const reactFlow = useReactFlow();
   const currentParentId = scopes[scopes.length - 1].parentId;
@@ -176,7 +194,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── 저장 ──────────────────────────────────────────────
 
   const saveCurrentScope = useCallback(async () => {
-    if (versionId === null) {
+    // 읽기 전용(타인 체크아웃)이면 저장 자체를 생략 — 스코프 이동은 계속 가능
+    if (versionId === null || readOnly) {
       return;
     }
     if (autoSaveTimerRef.current) {
@@ -196,9 +215,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSaveState("error");
       throw err;
     }
-  }, [versionId, currentParentId]);
+  }, [versionId, currentParentId, readOnly]);
 
   const scheduleAutoSave = useCallback(() => {
+    if (readOnly) {
+      return;
+    }
     dirtyRef.current = true;
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -208,7 +230,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 실패는 saveState=error 표시로 사용자에게 노출 — 수동 저장으로 재시도
       void saveCurrentScope().catch(() => undefined);
     }, AUTO_SAVE_DELAY_MS);
-  }, [saveCurrentScope]);
+  }, [saveCurrentScope, readOnly]);
 
   // "저장됨" 표시는 잠깐 보여주고 지움
   useEffect(() => {
@@ -453,6 +475,125 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
   }, [searchQuery, versionId, mapName]);
 
+  // 체크아웃 — 버전 진입 시 획득 시도, heartbeat로 연장. 타인이 선점 중이면
+  // mine=false가 와서 읽기 전용이 되고, 선점이 풀리면 다음 heartbeat에 자동 승격된다.
+  useEffect(() => {
+    if (versionId === null) {
+      return;
+    }
+    let active = true;
+    const tryAcquire = async () => {
+      try {
+        const state = await acquireCheckout(versionId);
+        if (!active) {
+          return;
+        }
+        checkoutMineRef.current = state.mine;
+        setCheckout(state);
+      } catch (err) {
+        if (active) {
+          setStatus(err instanceof Error ? err.message : "체크아웃에 실패했습니다");
+        }
+      }
+    };
+    void tryAcquire();
+    const heartbeat = setInterval(() => void tryAcquire(), CHECKOUT_HEARTBEAT_MS);
+    return () => {
+      active = false;
+      clearInterval(heartbeat);
+      if (checkoutMineRef.current) {
+        checkoutMineRef.current = false;
+        // 해제 실패는 무시 — TTL이 자동 회수
+        void releaseCheckout(versionId).catch(() => undefined);
+      }
+    };
+  }, [versionId]);
+
+  const handleForceCheckout = useCallback(async () => {
+    if (versionId === null) {
+      return;
+    }
+    try {
+      const state = await acquireCheckout(versionId, true);
+      checkoutMineRef.current = state.mine;
+      setCheckout(state);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "강제 체크아웃에 실패했습니다");
+    }
+  }, [versionId]);
+
+  // 코멘트 폴링 — 5초 주기. 일시 오류는 다음 주기에 재시도되므로 상태 표시를 덮지 않는다.
+  useEffect(() => {
+    if (versionId === null) {
+      return;
+    }
+    let active = true;
+    const poll = async () => {
+      try {
+        const rows = await listComments(versionId);
+        if (active) {
+          setComments(rows);
+        }
+      } catch {
+        // 다음 주기에 재시도
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), COMMENT_POLL_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [versionId]);
+
+  const refreshComments = useCallback(async () => {
+    if (versionId === null) {
+      return;
+    }
+    setComments(await listComments(versionId));
+  }, [versionId]);
+
+  const handleAddComment = useCallback(
+    async (body: string) => {
+      if (versionId === null || selectedId === null) {
+        return;
+      }
+      try {
+        await createComment(versionId, selectedId, body);
+        await refreshComments();
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : "코멘트 등록에 실패했습니다");
+      }
+    },
+    [versionId, selectedId, refreshComments],
+  );
+
+  const handleToggleComment = useCallback(
+    async (comment: CommentItem) => {
+      try {
+        await updateComment(comment.id, !comment.resolved);
+        await refreshComments();
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : "코멘트 변경에 실패했습니다");
+      }
+    },
+    [refreshComments],
+  );
+
+  const handleDeleteComment = useCallback(
+    async (comment: CommentItem) => {
+      try {
+        await deleteComment(comment.id);
+        await refreshComments();
+      } catch (err) {
+        setStatus(
+          err instanceof Error ? err.message : "코멘트 삭제에 실패했습니다 (작성자만 가능)",
+        );
+      }
+    },
+    [refreshComments],
+  );
+
   const handleSave = useCallback(async () => {
     try {
       await saveCurrentScope();
@@ -567,18 +708,24 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (readOnly) {
+        return;
+      }
       pushHistory();
       setEdges((current) =>
         addEdge({ ...connection, id: crypto.randomUUID() }, current),
       );
       scheduleAutoSave();
     },
-    [pushHistory, setEdges, scheduleAutoSave],
+    [readOnly, pushHistory, setEdges, scheduleAutoSave],
   );
 
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
     (screen: { x: number; y: number } | null) => {
+      if (readOnly) {
+        return;
+      }
       pushHistory();
       const id = crypto.randomUUID();
       const count = nodesRef.current.length;
@@ -610,21 +757,27 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSelectedEdgeId(null);
       scheduleAutoSave();
     },
-    [pushHistory, reactFlow, setNodes, scheduleAutoSave],
+    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave],
   );
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
   const applyNodesTransform = useCallback(
     (transform: (current: AppNode[]) => AppNode[]) => {
+      if (readOnly) {
+        return;
+      }
       pushHistory();
       setNodes(transform);
       scheduleAutoSave();
     },
-    [pushHistory, setNodes, scheduleAutoSave],
+    [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
   const updateSelectedData = useCallback(
     (patch: Partial<NodeData>, fromTyping = false) => {
+      if (readOnly) {
+        return;
+      }
       recordChange(fromTyping);
       setNodes((current) =>
         current.map((node) =>
@@ -635,11 +788,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       scheduleAutoSave();
     },
-    [recordChange, selectedId, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
   );
 
   const updateSelectedEdgeLabel = useCallback(
     (label: string) => {
+      if (readOnly) {
+        return;
+      }
       recordChange(true);
       setEdges((current) =>
         current.map((edge) =>
@@ -650,7 +806,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       scheduleAutoSave();
     },
-    [recordChange, selectedEdgeId, setEdges, scheduleAutoSave],
+    [readOnly, recordChange, selectedEdgeId, setEdges, scheduleAutoSave],
   );
 
   // 검색 결과 선택 — 같은 스코프면 바로 포커스, 아니면 스코프 이동 후 포커스
@@ -698,9 +854,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const openMenu = useCallback(
     (event: React.MouseEvent | MouseEvent, kind: MenuState["kind"], targetId: string | null) => {
       event.preventDefault();
+      // 읽기 전용에서는 노드 메뉴(드릴다운)만 의미가 있다
+      if (readOnly && kind !== "node") {
+        return;
+      }
       setMenu({ x: event.clientX, y: event.clientY, kind, targetId });
     },
-    [],
+    [readOnly],
   );
 
   const menuItems = useMemo<ContextMenuItem[]>(() => {
@@ -721,6 +881,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       ];
     }
     if (menu.kind === "node") {
+      const deleteItems: ContextMenuItem[] = readOnly
+        ? []
+        : [
+            {
+              label: "삭제",
+              shortcut: "⌫",
+              danger: true,
+              onSelect: () => {
+                if (menu.targetId) {
+                  void reactFlow.deleteElements({ nodes: [{ id: menu.targetId }] });
+                }
+              },
+            },
+          ];
       return [
         {
           label: "하위 프로세스 열기",
@@ -733,16 +907,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
           },
         },
-        {
-          label: "삭제",
-          shortcut: "⌫",
-          danger: true,
-          onSelect: () => {
-            if (menu.targetId) {
-              void reactFlow.deleteElements({ nodes: [{ id: menu.targetId }] });
-            }
-          },
-        },
+        ...deleteItems,
       ];
     }
     return [
@@ -764,7 +929,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       },
     ];
-  }, [menu, handleAddNode, applyNodesTransform, handleDrillIn, reactFlow]);
+  }, [menu, readOnly, handleAddNode, applyNodesTransform, handleDrillIn, reactFlow]);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedId) ?? null,
@@ -775,6 +940,33 @@ function MapEditor({ mapId }: { mapId: number }) {
     [edges, selectedEdgeId],
   );
   const depth = scopes.length - 1;
+
+  // 노드별 미해결 코멘트 수 — 렌더 시 nodes에 주입 (effect 내 setState 회피)
+  const unresolvedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const comment of comments) {
+      if (!comment.resolved) {
+        counts.set(comment.node_id, (counts.get(comment.node_id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [comments]);
+
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        const count = unresolvedCounts.get(node.id) ?? 0;
+        return count === (node.data.commentCount ?? 0)
+          ? node
+          : { ...node, data: { ...node.data, commentCount: count } };
+      }),
+    [nodes, unresolvedCounts],
+  );
+
+  const selectedComments = useMemo(
+    () => comments.filter((comment) => comment.node_id === selectedId),
+    [comments, selectedId],
+  );
 
   const toolButton =
     "rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
@@ -858,6 +1050,22 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {readOnly && checkout?.checked_out_by && (
+            <span className="flex items-center gap-2 rounded bg-amber-100 px-2 py-1 text-sm text-amber-900">
+              📝 {checkout.checked_out_by}님이 편집 중 — 읽기 전용
+              <button
+                className="rounded bg-red-500 px-1.5 py-0.5 text-xs text-white hover:bg-red-600"
+                onClick={() => void handleForceCheckout()}
+              >
+                강제 편집
+              </button>
+            </span>
+          )}
+          {checkout?.mine && (
+            <span className="text-xs text-zinc-400" title="이 버전을 편집 중입니다">
+              🔒 편집 중
+            </span>
+          )}
           {status && <span className="text-sm text-red-600">{status}</span>}
           {saveState === "saving" && (
             <span className="text-sm text-zinc-400">저장 중…</span>
@@ -890,7 +1098,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <button
             className="rounded border border-zinc-300 px-2 py-1 text-sm text-red-600 hover:bg-red-50 disabled:text-zinc-300"
             onClick={() => void handleDeleteVersion()}
-            disabled={versions.length <= 1}
+            disabled={versions.length <= 1 || readOnly}
           >
             버전삭제
           </button>
@@ -906,7 +1114,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <button
             className={toolButton}
             onClick={undo}
-            disabled={historySize.past === 0}
+            disabled={readOnly || historySize.past === 0}
             title="실행취소 (Ctrl+Z)"
           >
             ↶
@@ -914,7 +1122,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <button
             className={toolButton}
             onClick={redo}
-            disabled={historySize.future === 0}
+            disabled={readOnly || historySize.future === 0}
             title="다시실행 (Ctrl+Shift+Z)"
           >
             ↷
@@ -922,6 +1130,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
           <button
             className={toolButton}
+            disabled={readOnly}
             onClick={() =>
               applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))
             }
@@ -930,37 +1139,46 @@ function MapEditor({ mapId }: { mapId: number }) {
           </button>
           <button
             className={toolButton}
+            disabled={readOnly}
             onClick={() => applyNodesTransform((current) => alignSelected(current, "left"))}
           >
             좌측 맞춤
           </button>
           <button
             className={toolButton}
+            disabled={readOnly}
             onClick={() => applyNodesTransform((current) => alignSelected(current, "top"))}
           >
             상단 맞춤
           </button>
           <button
             className={toolButton}
+            disabled={readOnly}
             onClick={() => applyNodesTransform((current) => distributeSelected(current, "x"))}
           >
             가로 등간격
           </button>
           <button
             className={toolButton}
+            disabled={readOnly}
             onClick={() => applyNodesTransform((current) => distributeSelected(current, "y"))}
           >
             세로 등간격
           </button>
-          <button className={toolButton} onClick={() => handleAddNode(null)}>
+          <button
+            className={toolButton}
+            disabled={readOnly}
+            onClick={() => handleAddNode(null)}
+          >
             + 노드
           </button>
           <button className={toolButton} onClick={() => void handleExportPng()}>
             PNG
           </button>
           <button
-            className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
+            disabled={readOnly}
           >
             저장
           </button>
@@ -977,9 +1195,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             </>
           )}
           <ReactFlow
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            nodesDraggable={!readOnly}
+            nodesConnectable={!readOnly}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -1009,6 +1229,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             onSelectionDragStart={() => pushHistory()}
             onSelectionDragStop={() => scheduleAutoSave()}
             onBeforeDelete={async () => {
+              if (readOnly) {
+                return false;
+              }
               pushHistory();
               return true;
             }}
@@ -1037,6 +1260,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <input
               className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               value={selectedNode.data.label}
+              disabled={readOnly}
               onChange={(event) =>
                 updateSelectedData({ label: event.target.value }, true)
               }
@@ -1045,6 +1269,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <textarea
               className="h-28 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               value={selectedNode.data.description}
+              disabled={readOnly}
               onChange={(event) =>
                 updateSelectedData({ description: event.target.value }, true)
               }
@@ -1053,6 +1278,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <select
               className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               value={selectedNode.data.nodeType}
+              disabled={readOnly}
               onChange={(event) =>
                 updateSelectedData({ nodeType: normalizeNodeType(event.target.value) })
               }
@@ -1076,6 +1302,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       : "border-zinc-300"
                   }`}
                   style={{ backgroundColor: preset || "#ffffff" }}
+                  disabled={readOnly}
                   onClick={() => updateSelectedData({ color: preset })}
                 />
               ))}
@@ -1084,6 +1311,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               key={`${selectedNode.id}-${selectedNode.data.color}`}
               className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               defaultValue={selectedNode.data.color}
+              disabled={readOnly}
               placeholder="#RRGGBB 직접 입력 후 Enter"
               onBlur={(event) => {
                 const value = event.target.value.trim();
@@ -1105,6 +1333,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               <input
                 className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
                 value={selectedNode.data.assignee}
+                disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ assignee: event.target.value }, true)
                 }
@@ -1113,6 +1342,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               <input
                 className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
                 value={selectedNode.data.department}
+                disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ department: event.target.value }, true)
                 }
@@ -1121,6 +1351,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               <input
                 className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
                 value={selectedNode.data.system}
+                disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ system: event.target.value }, true)
                 }
@@ -1129,11 +1360,28 @@ function MapEditor({ mapId }: { mapId: number }) {
               <input
                 className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
                 value={selectedNode.data.duration}
+                disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ duration: event.target.value }, true)
                 }
                 placeholder="예: 2일"
               />
+            </details>
+            <details open className="mb-3 rounded border border-zinc-200 px-2 py-1.5">
+              <summary className="cursor-pointer text-xs font-medium text-zinc-600">
+                코멘트
+                {selectedComments.some((comment) => !comment.resolved) &&
+                  ` (미해결 ${selectedComments.filter((comment) => !comment.resolved).length})`}
+              </summary>
+              <div className="mt-2">
+                {/* 코멘트는 읽기 전용 모드에서도 작성 가능 — 피드백 통로 */}
+                <CommentSection
+                  comments={selectedComments}
+                  onAdd={(body) => void handleAddComment(body)}
+                  onToggleResolved={(comment) => void handleToggleComment(comment)}
+                  onDelete={(comment) => void handleDeleteComment(comment)}
+                />
+              </div>
             </details>
             <p className="mt-3 text-xs text-zinc-400">
               더블클릭: 하위 프로세스로 진입 · 우클릭: 메뉴 · Ctrl+Z: 실행취소
@@ -1148,6 +1396,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <input
               className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
               value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
+              disabled={readOnly}
               onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
             />
             <p className="mt-3 text-xs text-zinc-400">우클릭: 메뉴 · Ctrl+Z: 실행취소</p>

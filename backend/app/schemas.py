@@ -98,3 +98,35 @@ class GraphOut(BaseModel):
 class VersionGraphOut(BaseModel):
     nodes: list[FlatNodeOut]
     edges: list[EdgeIn]
+
+
+class CheckoutIn(BaseModel):
+    # True면 다른 사용자의 유효한 잠금도 인수 (spec §7 Phase C)
+    force: bool = False
+
+
+class CheckoutOut(BaseModel):
+    checked_out_by: str | None
+    checked_out_at: datetime | None
+    # 요청 사용자가 현재 잠금 소유자인지
+    mine: bool
+
+
+class CommentCreate(BaseModel):
+    node_id: str
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class CommentUpdate(BaseModel):
+    resolved: bool
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    node_id: str
+    author: str
+    body: str
+    resolved: bool
+    created_at: datetime

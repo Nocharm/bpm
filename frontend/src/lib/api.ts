@@ -140,6 +140,66 @@ export function getFullGraph(versionId: number): Promise<VersionGraph> {
   return request<VersionGraph>(`/versions/${versionId}/graph/all`);
 }
 
+// ── 체크아웃 / 코멘트 (spec §7 Phase C) ──────────────────
+
+export interface CheckoutState {
+  checked_out_by: string | null;
+  checked_out_at: string | null;
+  mine: boolean;
+}
+
+export function acquireCheckout(
+  versionId: number,
+  force = false,
+): Promise<CheckoutState> {
+  return request<CheckoutState>(`/versions/${versionId}/checkout`, {
+    method: "POST",
+    body: JSON.stringify({ force }),
+  });
+}
+
+export function releaseCheckout(versionId: number): Promise<void> {
+  return request<void>(`/versions/${versionId}/checkout`, { method: "DELETE" });
+}
+
+export interface CommentItem {
+  id: number;
+  node_id: string;
+  author: string;
+  body: string;
+  resolved: boolean;
+  created_at: string;
+}
+
+export function listComments(versionId: number): Promise<CommentItem[]> {
+  return request<CommentItem[]>(`/versions/${versionId}/comments`);
+}
+
+export function createComment(
+  versionId: number,
+  nodeId: string,
+  body: string,
+): Promise<CommentItem> {
+  return request<CommentItem>(`/versions/${versionId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ node_id: nodeId, body }),
+  });
+}
+
+export function updateComment(
+  commentId: number,
+  resolved: boolean,
+): Promise<CommentItem> {
+  return request<CommentItem>(`/comments/${commentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ resolved }),
+  });
+}
+
+export function deleteComment(commentId: number): Promise<void> {
+  return request<void>(`/comments/${commentId}`, { method: "DELETE" });
+}
+
 export function saveGraph(
   versionId: number,
   graph: Graph,

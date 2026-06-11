@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.db import init_models
-from app.routers import graph, maps, versions
+from app.routers import comments, graph, maps, versions
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ app = FastAPI(title="BPM API", lifespan=lifespan)
 app.include_router(maps.router)
 app.include_router(versions.router)
 app.include_router(graph.router)
+app.include_router(comments.router)
 
 
 @app.get("/api/health")

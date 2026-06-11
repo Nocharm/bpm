@@ -1,6 +1,7 @@
-"""Version management — create (optionally cloning), rename, delete (docs/spec.md §3.4)."""
+"""Version management — create (optionally cloning), rename, delete, checkout (docs/spec.md §3.4, §7)."""
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -8,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth import get_current_user
+from app.checkout import is_locked_by_other
 from app.db import get_session
 from app.models import Edge, MapVersion, Node, ProcessMap
-from app.schemas import VersionCreate, VersionOut, VersionUpdate
+from app.schemas import CheckoutIn, CheckoutOut, VersionCreate, VersionOut, VersionUpdate
 
 router = APIRouter(
     prefix="/api", tags=["versions"], dependencies=[Depends(get_current_user)]
@@ -111,13 +113,68 @@ async def rename_version(
     return version
 
 
+@router.post("/versions/{version_id}/checkout", response_model=CheckoutOut)
+async def acquire_checkout(
+    version_id: int,
+    payload: CheckoutIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CheckoutOut:
+    """체크아웃 획득/연장. 같은 사용자의 재호출은 TTL 연장(heartbeat).
+
+    다른 사용자가 유효한 잠금을 쥐고 있으면 force=False일 때 현재 상태를 그대로
+    반환(mine=False) — 클라이언트는 읽기 전용으로 전환한다.
+    """
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+
+    now = datetime.now(timezone.utc)
+    if is_locked_by_other(version, user, now) and not payload.force:
+        return CheckoutOut(
+            checked_out_by=version.checked_out_by,
+            checked_out_at=version.checked_out_at,
+            mine=False,
+        )
+
+    version.checked_out_by = user
+    version.checked_out_at = now
+    await session.commit()
+    return CheckoutOut(checked_out_by=user, checked_out_at=now, mine=True)
+
+
+@router.delete("/versions/{version_id}/checkout", status_code=204)
+async def release_checkout(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """잠금 해제 — 소유자 본인만. 타인 잠금 인수는 checkout force로 수행."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.checked_out_by == user:
+        version.checked_out_by = None
+        version.checked_out_at = None
+        await session.commit()
+
+
 @router.delete("/versions/{version_id}", status_code=204)
 async def delete_version(
-    version_id: int, session: AsyncSession = Depends(get_session)
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> None:
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+
+    # 다른 사용자가 편집 중인 버전은 삭제 불가 (spec §7 Phase C)
+    if is_locked_by_other(version, user, datetime.now(timezone.utc)):
+        raise HTTPException(
+            status_code=423,
+            detail=f"version checked out by {version.checked_out_by}",
+        )
 
     remaining = await session.scalar(
         select(func.count())

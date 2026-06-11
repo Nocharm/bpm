@@ -5,14 +5,16 @@ parent=<node id> 는 그 노드의 하위 프로세스맵. 저장은 해당 스�
 """
 
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.checkout import is_locked_by_other
 from app.db import get_session
-from app.models import Edge, MapVersion, Node
+from app.models import Comment, Edge, MapVersion, Node
 from app.schemas import (
     EdgeIn,
     FlatNodeOut,
@@ -114,10 +116,18 @@ async def replace_graph(
     version_id: int,
     payload: GraphIn,
     parent: str | None = Query(default=None),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
     """한 캔버스 스코프(version, parent)만 교체. 다른 계층의 노드/엣지는 보존."""
-    await _get_version_or_404(session, version_id)
+    version = await _get_version_or_404(session, version_id)
+
+    # 체크아웃 잠금 — 다른 사용자가 편집 중이면 저장 거부 (spec §7 Phase C)
+    if is_locked_by_other(version, user, datetime.now(timezone.utc)):
+        raise HTTPException(
+            status_code=423,
+            detail=f"version checked out by {version.checked_out_by}",
+        )
 
     if parent is not None:
         parent_node = await session.get(Node, parent)
@@ -175,6 +185,8 @@ async def replace_graph(
             )
         )
         await session.execute(delete(Node).where(Node.id.in_(to_delete)))
+        # 삭제 노드의 코멘트 정리 — sqlite는 FK pragma 비활성이라 명시적으로 수행
+        await session.execute(delete(Comment).where(Comment.node_id.in_(to_delete)))
 
     # 이 스코프(형제) 엣지를 비우고 payload로 재삽입
     if existing_ids:

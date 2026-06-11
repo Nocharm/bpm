@@ -88,7 +88,7 @@ comments       id, version_id(FK), node_id(FK nodes), author, body,
 3. ~~**계층(드릴다운+브레드크럼) + 정렬**~~ ✅ — 캔버스는 (version, parent_node_id) 스코프, 저장은 스코프별 교체
 4. ~~**버전 관리 + 비교 화면**~~ ✅ — 버전 복제(깊은 복사, ID 재발급)/이름변경/삭제, 두 버전 나란히 읽기 전용 비교
 5. ~~**Keycloak 인증 연동**~~ ✅ — OIDC 로그인 + JWT 검증, AUTH_ENABLED 플래그로 로컬 우회
-6. **기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업
+6. ~~**기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업~~ ✅
 7. **서버 docker-compose 배포 (9787)** — 런북 `docs/deploy.md`. compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
 
 ## 7. 기능 확장 (2026-06-12 확정)

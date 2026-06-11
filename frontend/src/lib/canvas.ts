@@ -17,6 +17,8 @@ export type NodeData = {
   diffStatus?: "added" | "removed" | "changed";
   diffNote?: string;
   hasDescendantChange?: boolean;
+  // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
+  commentCount?: number;
 };
 
 export type AppNode = Node<NodeData>;

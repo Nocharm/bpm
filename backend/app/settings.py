@@ -19,5 +19,8 @@ class Settings(BaseSettings):
     # auth 비활성 시 created_by에 기록할 개발용 사용자명
     dev_user: str = "local-dev"
 
+    # Tuning — 버전 체크아웃 잠금의 무활동 자동 해제 시간(분). spec §7 Phase C
+    checkout_ttl_minutes: int = 30
+
 
 settings = Settings()

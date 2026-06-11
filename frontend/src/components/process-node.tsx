@@ -19,6 +19,18 @@ const DIFF_RINGS: Record<string, string> = {
   changed: "ring-2 ring-amber-500",
 };
 
+// 미해결 코멘트 수 뱃지 (에디터 전용)
+function UnresolvedCommentBadge({ count }: { count: number }) {
+  return (
+    <span
+      className="absolute -left-2 -top-2 rounded-full bg-red-500 px-1 text-[10px] leading-4 text-white"
+      title={`미해결 코멘트 ${count}개`}
+    >
+      💬{count}
+    </span>
+  );
+}
+
 // 하위 계층에 변경이 있음을 알리는 뱃지 (비교 화면 전용)
 function DescendantChangeBadge() {
   return (
@@ -34,6 +46,7 @@ function DescendantChangeBadge() {
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
   const color = data.color || DEFAULT_COLORS[data.nodeType];
+  const commentCount = data.commentCount ?? 0;
   const ring = data.diffStatus
     ? DIFF_RINGS[data.diffStatus]
     : selected
@@ -59,6 +72,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
           )}
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
+        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         <Handle type="source" position={Position.Right} />
       </div>
     );
@@ -84,6 +98,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
         <div className="mt-0.5 text-xs text-blue-600">▾ 하위 프로세스</div>
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
+      {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       <Handle type="source" position={Position.Right} />
     </div>
   );

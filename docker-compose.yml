@@ -29,6 +29,7 @@ services:
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+      CHECKOUT_TTL_MINUTES: ${CHECKOUT_TTL_MINUTES:-30}
     depends_on:
       db:
         condition: service_healthy
