@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from "react-oidc-context";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import { setAuthToken } from "@/lib/api";
+import { setCurrentUser } from "@/lib/current-user";
+import { useI18n } from "@/lib/i18n";
 
 // SSR-safe 클라이언트 마운트 감지 (effect 내 setState 없이)
 const subscribe = () => () => {};
@@ -32,6 +34,7 @@ function buildOidcConfig() {
 
 function AuthGate({ children }: { children: ReactNode }) {
   const auth = useAuth();
+  const { t } = useI18n();
 
   // 미인증 시 Keycloak으로 리디렉트
   useEffect(() => {
@@ -50,11 +53,24 @@ function AuthGate({ children }: { children: ReactNode }) {
     setAuthToken(auth.user?.access_token ?? null);
   }, [auth.user]);
 
+  // 로그인 유저 프로필을 표시용 스토어에 발행 — TopNav가 구독
+  useEffect(() => {
+    const profile = auth.user?.profile;
+    if (profile) {
+      setCurrentUser({
+        name: profile.name ?? profile.preferred_username ?? profile.email ?? "User",
+        email: profile.email ?? null,
+      });
+    } else {
+      setCurrentUser(null);
+    }
+  }, [auth.user]);
+
   if (auth.error) {
-    return <div className="p-8 text-sm text-red-600">인증 오류: {auth.error.message}</div>;
+    return <div className="p-8 text-sm text-red-600">{t("auth.error", { msg: auth.error.message })}</div>;
   }
   if (auth.isLoading || !auth.isAuthenticated) {
-    return <div className="p-8 text-sm text-zinc-500">로그인 중…</div>;
+    return <div className="p-8 text-sm text-zinc-500">{t("auth.signingIn")}</div>;
   }
   return <>{children}</>;
 }
