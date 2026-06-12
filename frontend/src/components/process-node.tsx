@@ -70,7 +70,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
         <Handle type="target" position={Position.Left} />
         {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
-          className={`absolute inset-3 rotate-45 rounded-sm border-2 bg-surface shadow-sm ${ring}`}
+          className={`absolute inset-3 rotate-45 rounded-sm border-2 bg-surface ${ring}`}
           style={{ borderColor: color }}
         />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
@@ -92,7 +92,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`relative bg-surface px-3 py-2 text-sm shadow-sm ${ring} ${
+      className={`relative bg-surface px-3 py-2 text-sm ${ring} ${
         isTerminal
           ? "min-w-[90px] rounded-full border-2 text-center"
           : "min-w-[150px] rounded border"
