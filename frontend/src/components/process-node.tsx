@@ -3,6 +3,7 @@
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 
 import type { AppNode, ProcessNodeType } from "@/lib/canvas";
+import { useI18n } from "@/lib/i18n";
 
 // 타입별 기본 테두리색 — data.color 미지정(빈 값) 시 사용
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
@@ -21,10 +22,11 @@ const DIFF_RINGS: Record<string, string> = {
 
 // 미해결 코멘트 수 뱃지 (에디터 전용)
 function UnresolvedCommentBadge({ count }: { count: number }) {
+  const { t } = useI18n();
   return (
     <span
       className="absolute -left-2 -top-2 rounded-full bg-red-500 px-1 text-[10px] leading-4 text-white"
-      title={`미해결 코멘트 ${count}개`}
+      title={t("node.unresolvedAria", { n: count })}
     >
       💬{count}
     </span>
@@ -33,10 +35,11 @@ function UnresolvedCommentBadge({ count }: { count: number }) {
 
 // 하위 계층에 변경이 있음을 알리는 뱃지 (비교 화면 전용)
 function DescendantChangeBadge() {
+  const { t } = useI18n();
   return (
     <span
       className="absolute -right-2 -top-2 rounded-full bg-amber-400 px-1 text-[10px] leading-4 text-white"
-      title="하위 프로세스에 변경 있음"
+      title={t("node.childChangedTitle")}
     >
       ⚡
     </span>
@@ -45,6 +48,7 @@ function DescendantChangeBadge() {
 
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
+  const { t } = useI18n();
   const color = data.color || DEFAULT_COLORS[data.nodeType];
   const commentCount = data.commentCount ?? 0;
   const ring = data.diffStatus
@@ -68,7 +72,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
         <div className="relative max-w-20 text-center text-xs font-medium text-zinc-800">
           {data.label}
           {data.hasChildren && (
-            <div className="text-[10px] text-blue-600">▾ 하위</div>
+            <div className="text-[10px] text-blue-600">▾ {t("node.childBadge")}</div>
           )}
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
@@ -95,7 +99,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
         <div className="mt-0.5 text-xs text-zinc-500">👤 {data.assignee}</div>
       )}
       {data.hasChildren && (
-        <div className="mt-0.5 text-xs text-blue-600">▾ 하위 프로세스</div>
+        <div className="mt-0.5 text-xs text-blue-600">▾ {t("node.openChildTitle")}</div>
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}

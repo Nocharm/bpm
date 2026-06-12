@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { createMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 export default function MapListPage() {
+  const { t } = useI18n();
   const [maps, setMaps] = useState<MapSummary[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -14,9 +16,9 @@ export default function MapListPage() {
     try {
       setMaps(await listMaps());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "맵 목록을 불러오지 못했습니다");
+      setError(err instanceof Error ? err.message : t("err.loadMaps"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let active = true;
@@ -28,14 +30,14 @@ export default function MapListPage() {
         }
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : "맵 목록을 불러오지 못했습니다");
+          setError(err instanceof Error ? err.message : t("err.loadMaps"));
         }
       }
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   const handleCreate = useCallback(async () => {
     const trimmed = name.trim();
@@ -47,9 +49,9 @@ export default function MapListPage() {
       setName("");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "맵 생성에 실패했습니다");
+      setError(err instanceof Error ? err.message : t("err.createMap"));
     }
-  }, [name, refresh]);
+  }, [name, refresh, t]);
 
   const handleDelete = useCallback(
     async (mapId: number) => {
@@ -57,20 +59,20 @@ export default function MapListPage() {
         await deleteMap(mapId);
         await refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "맵 삭제에 실패했습니다");
+        setError(err instanceof Error ? err.message : t("err.deleteMap"));
       }
     },
-    [refresh],
+    [refresh, t],
   );
 
   return (
     <main className="mx-auto max-w-2xl p-8">
-      <h1 className="mb-6 text-2xl font-semibold">BPM — 프로세스맵</h1>
+      <h1 className="mb-6 text-2xl font-semibold">BPM — {t("home.title")}</h1>
 
       <div className="mb-6 flex gap-2">
         <input
           className="flex-1 rounded border border-zinc-300 px-3 py-2"
-          placeholder="새 맵 이름"
+          placeholder={t("home.newMapPlaceholder")}
           value={name}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
@@ -83,7 +85,7 @@ export default function MapListPage() {
           className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
           onClick={() => void handleCreate()}
         >
-          생성
+          {t("home.create")}
         </button>
       </div>
 
@@ -91,7 +93,7 @@ export default function MapListPage() {
 
       <ul className="divide-y divide-zinc-200 rounded border border-zinc-200">
         {maps.length === 0 && (
-          <li className="p-4 text-sm text-zinc-500">아직 맵이 없습니다.</li>
+          <li className="p-4 text-sm text-zinc-500">{t("home.empty")}</li>
         )}
         {maps.map((processMap) => (
           <li key={processMap.id} className="flex items-center justify-between p-4">
@@ -105,7 +107,7 @@ export default function MapListPage() {
               className="text-sm text-zinc-500 hover:text-red-600"
               onClick={() => void handleDelete(processMap.id)}
             >
-              삭제
+              {t("home.delete")}
             </button>
           </li>
         ))}
