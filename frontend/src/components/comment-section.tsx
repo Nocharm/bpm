@@ -5,6 +5,7 @@
 import { useState } from "react";
 
 import type { CommentItem } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 interface CommentSectionProps {
   comments: CommentItem[];
@@ -19,6 +20,7 @@ export function CommentSection({
   onToggleResolved,
   onDelete,
 }: CommentSectionProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
 
   const handleSubmit = () => {
@@ -57,25 +59,25 @@ export function CommentSection({
                 className="text-blue-600 hover:underline"
                 onClick={() => onToggleResolved(comment)}
               >
-                {comment.resolved ? "재열기" : "해결"}
+                {comment.resolved ? t("comment.reopen") : t("comment.resolve")}
               </button>
               {/* 작성자만 삭제 가능 — 서버가 403으로 거부, 클라이언트는 단순 노출 */}
               <button
                 className="text-red-500 hover:underline"
                 onClick={() => onDelete(comment)}
               >
-                삭제
+                {t("comment.delete")}
               </button>
             </div>
           </li>
         ))}
         {comments.length === 0 && (
-          <li className="text-xs text-zinc-400">아직 코멘트가 없습니다.</li>
+          <li className="text-xs text-zinc-400">{t("comment.empty")}</li>
         )}
       </ul>
       <textarea
         className="h-16 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
-        placeholder="코멘트 작성 — Ctrl+Enter 전송"
+        placeholder={t("comment.placeholder")}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
@@ -89,7 +91,7 @@ export function CommentSection({
         className="mt-1 rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
         onClick={handleSubmit}
       >
-        등록
+        {t("comment.submit")}
       </button>
     </div>
   );

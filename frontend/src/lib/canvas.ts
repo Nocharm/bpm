@@ -3,6 +3,8 @@
 import dagre from "@dagrejs/dagre";
 import type { Edge, Node } from "@xyflow/react";
 
+import type { MessageKey } from "@/lib/i18n-messages";
+
 export type NodeData = {
   label: string;
   description: string;
@@ -23,15 +25,15 @@ export type NodeData = {
 
 export type AppNode = Node<NodeData>;
 
-// 노드 타입 선택지 — 값은 백엔드 node_type 컬럼에 그대로 저장 (spec §7 Phase A)
-export const NODE_TYPE_OPTIONS = [
-  { value: "process", label: "프로세스" },
-  { value: "decision", label: "판단(분기)" },
-  { value: "start", label: "시작" },
-  { value: "end", label: "종료" },
-] as const;
+export type ProcessNodeType = "process" | "decision" | "start" | "end";
 
-export type ProcessNodeType = (typeof NODE_TYPE_OPTIONS)[number]["value"];
+// 노드 타입 선택지 — 값은 백엔드 node_type 컬럼에 그대로 저장 (spec §7 Phase A)
+export const NODE_TYPE_OPTIONS: { value: ProcessNodeType; labelKey: MessageKey }[] = [
+  { value: "process", labelKey: "nodeType.process" },
+  { value: "decision", labelKey: "nodeType.decision" },
+  { value: "start", labelKey: "nodeType.start" },
+  { value: "end", labelKey: "nodeType.end" },
+];
 
 /** DB의 자유 문자열 node_type을 렌더 가능한 타입으로 정규화 (레거시 "default" → process). */
 export function normalizeNodeType(value: string): ProcessNodeType {
