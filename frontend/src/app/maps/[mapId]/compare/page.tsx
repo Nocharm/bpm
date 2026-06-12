@@ -10,6 +10,7 @@ import {
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Zap } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -47,7 +48,7 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   location: "field.location",
 };
 
-// 최상위 캔버스 노드만 렌더 — 하위 변경은 ⚡ 뱃지로 표시
+// 최상위 캔버스 노드만 렌더 — 하위 변경은 Zap 뱃지로 표시
 function buildPaneNodes(
   graph: VersionGraph,
   nodeStatus: Map<string, NodeDiffEntry>,
@@ -103,9 +104,9 @@ function buildPaneEdges(
         label: edge.label || undefined,
         style:
           status === "added"
-            ? { stroke: "#22c55e", strokeWidth: 2 }
+            ? { stroke: "var(--color-added)", strokeWidth: 2 }
             : status === "removed"
-              ? { stroke: "#ef4444", strokeWidth: 2, strokeDasharray: "6 3" }
+              ? { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" }
               : undefined,
       };
     });
@@ -127,9 +128,9 @@ function VersionPane({
   const { t } = useI18n();
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="border-b border-zinc-200 px-3 py-2">
+      <div className="border-b border-hairline px-3 py-2">
         <select
-          className="rounded border border-zinc-300 px-2 py-1 text-sm"
+          className="rounded-sm border border-hairline px-2 py-1 text-caption"
           value={versionId}
           onChange={(event) => onChangeVersion(Number(event.target.value))}
           aria-label={t("compare.selectVersionAria")}
@@ -162,17 +163,17 @@ function VersionPane({
 function DiffLegend() {
   const { t } = useI18n();
   return (
-    <div className="flex items-center gap-3 text-xs text-zinc-600">
+    <div className="flex items-center gap-3 text-ink-secondary text-caption">
       <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-green-500" /> {t("compare.legendAdded")}
+        <span className="h-3 w-3 rounded border-2 border-added" /> {t("compare.legendAdded")}
       </span>
       <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-red-500" /> {t("compare.legendRemoved")}
+        <span className="h-3 w-3 rounded border-2 border-removed" /> {t("compare.legendRemoved")}
       </span>
       <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-amber-500" /> {t("compare.legendChanged")}
+        <span className="h-3 w-3 rounded border-2 border-changed" /> {t("compare.legendChanged")}
       </span>
-      <span className="flex items-center gap-1">⚡ {t("compare.childChanged")}</span>
+      <span className="flex items-center gap-1"><Zap size={14} strokeWidth={1.5} /> {t("compare.childChanged")}</span>
     </div>
   );
 }
@@ -181,14 +182,14 @@ function DiffEntryList({ diff }: { diff: VersionDiff }) {
   const { t } = useI18n();
 
   const entryBadges: Record<DiffStatus, { label: string; className: string }> = {
-    added: { label: t("compare.legendAdded"), className: "bg-green-100 text-green-700" },
-    removed: { label: t("compare.legendRemoved"), className: "bg-red-100 text-red-700" },
-    changed: { label: t("compare.legendChanged"), className: "bg-amber-100 text-amber-700" },
+    added: { label: t("compare.legendAdded"), className: "bg-added/10 text-added" },
+    removed: { label: t("compare.legendRemoved"), className: "bg-removed/10 text-removed" },
+    changed: { label: t("compare.legendChanged"), className: "bg-changed/10 text-changed" },
   };
 
   if (diff.entries.length === 0) {
     return (
-      <div className="border-t border-zinc-200 px-4 py-2 text-sm text-zinc-500">
+      <div className="border-t border-divider px-4 py-2 text-caption text-ink-tertiary">
         {t("compare.identical")}
       </div>
     );
@@ -196,28 +197,28 @@ function DiffEntryList({ diff }: { diff: VersionDiff }) {
   const count = (status: DiffStatus) =>
     diff.entries.filter((entry) => entry.status === status).length;
   return (
-    <div className="max-h-44 overflow-auto border-t border-zinc-200 px-4 py-2">
-      <div className="mb-1 text-xs text-zinc-500">
+    <div className="max-h-44 overflow-auto border-t border-divider px-4 py-2">
+      <div className="mb-1 text-caption text-ink-tertiary">
         {t("compare.summary", {
           a: count("added"),
           r: count("removed"),
           c: count("changed"),
         })}
       </div>
-      <ul className="space-y-1 text-sm">
+      <ul className="space-y-1 text-body">
         {diff.entries.map((entry, index) => {
           const badge = entryBadges[entry.status];
           return (
             <li key={`${entry.status}-${entry.leftNodeId ?? ""}-${entry.rightNodeId ?? index}`}>
               <span
-                className={`mr-2 rounded px-1.5 py-0.5 text-xs ${badge.className}`}
+                className={`mr-2 rounded px-1.5 py-0.5 text-caption ${badge.className}`}
               >
                 {badge.label}
               </span>
-              {entry.path && <span className="text-zinc-400">{entry.path} › </span>}
-              <span className="font-medium text-zinc-800">{entry.title}</span>
+              {entry.path && <span className="text-ink-tertiary">{entry.path} › </span>}
+              <span className="font-medium text-ink">{entry.title}</span>
               {entry.changedFields.length > 0 && (
-                <span className="ml-2 text-xs text-zinc-500">
+                <span className="ml-2 text-caption text-ink-secondary">
                   ({entry.changedFields.map((f) => t(FIELD_MSG[f])).join(", ")})
                 </span>
               )}
@@ -339,19 +340,19 @@ export default function ComparePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-4 border-b border-zinc-200 px-4 py-2">
-        <Link href={`/maps/${mapId}`} className="text-sm text-blue-700 hover:underline">
+      <header className="flex flex-wrap items-center gap-4 border-b border-hairline px-4 py-2">
+        <Link href={`/maps/${mapId}`} className="text-caption text-accent hover:underline">
           ← {t("compare.editorLink")}
         </Link>
-        <h1 className="font-medium">{mapName} — {t("compare.title")}</h1>
-        <span className="text-xs text-zinc-400">{t("compare.subtitle")}</span>
+        <h1 className="text-tagline text-ink font-medium">{mapName} — {t("compare.title")}</h1>
+        <span className="text-caption text-ink-secondary">{t("compare.subtitle")}</span>
         <div className="ml-auto">
           <DiffLegend />
         </div>
       </header>
       {leftId !== null && rightId !== null && versions.length > 0 && (
         <>
-          <div className="flex flex-1 divide-x divide-zinc-200">
+          <div className="flex flex-1 divide-x divide-hairline">
             <VersionPane
               versions={versions}
               versionId={leftId}
