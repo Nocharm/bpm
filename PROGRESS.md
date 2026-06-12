@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
 ## 2026-06-13
+- 노드 인터랙션 개편 구현 완료 (브랜치 `feat/node-interactions`, 서브에이전트 주도 4태스크 + 통합리뷰). ① 새 창을 **마우스 위치에서 확장**(신규 `window-open` 키프레임 scale 0.4→1 transform-origin center, ScopeWindow 마운트 시 재생), `handleDrillIn(node,x,y)`가 컨테이너 상대 좌표로 새 창 중앙=마우스 배치(저장된 창은 위치 유지, `windowGeomRef`로 드래그 시 리렌더 churn 방지). ② 드릴인 트리거를 더블클릭→**노드 호버 우상단 아이콘 버튼**(신규 `NodeActionsContext` 기본값 no-op로 노드→page 통신 — Provider 없는 compare 페이지 안전, `onDrill` 있을 때만 버튼). ③ **더블클릭=연결 모드**(노드 A 더블클릭→`connectSource` 무장+소스 링+상단 배너, 다른 노드 클릭→A→B 엣지 one-shot 생성, Esc/빈곳/포커스전환 취소). 기존 핸들 드래그 연결·박스선택·undo/autosave·창 이동/리사이즈/영속은 불변(ReactFlow는 onNodeClick/DoubleClick/PaneClick만 변경). 검증: 태스크별 tsc/lint/build green, 스펙+품질 2단 리뷰 + 통합리뷰 "ready to merge"(perf churn 보강). 시각·인터랙션은 원격이라 사용자 수동 검증 필요.
 - 노드 인터랙션 개편 설계 확정 → `docs/superpowers/specs/2026-06-13-node-interactions-design.md`. ① 새 창을 마우스 위치에서 확장 애니메이션(창 중앙=마우스, `window-open` 키프레임 transform-origin center), 새 창만 마우스 중앙·저장된 창은 위치 유지. ② 드릴인 트리거를 더블클릭→노드 호버 우상단 아이콘 버튼(신규 `NodeActionsContext`로 노드→page 통신). ③ 더블클릭=연결 모드(노드 A 더블클릭 후 다음 클릭 노드 B로 A→B 엣지, 한 번 후 종료, Esc/빈곳/포커스전환 취소, 소스 노드 ring-accent + 상단 배너). 기존 핸들 드래그 연결·이동/리사이즈·영속은 그대로. 순수 프론트엔드.
 
 ## 2026-06-12
