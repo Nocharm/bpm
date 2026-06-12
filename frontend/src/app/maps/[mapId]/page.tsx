@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, ChevronRight, Download, Lock, PencilLine, Plus, Redo2, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Download, Lock, PencilLine, Plus, Redo2, Spline, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -60,6 +60,7 @@ import {
 import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
 import { useI18n } from "@/lib/i18n";
+import { NodeActionsContext } from "@/lib/node-actions";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -163,6 +164,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [connectSource, setConnectSource] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -391,6 +393,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         event.target instanceof HTMLElement &&
         ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
       ) {
+        return;
+      }
+      if (event.key === "Escape") {
+        setConnectSource(null);
         return;
       }
       if (!(event.ctrlKey || event.metaKey)) {
@@ -694,18 +700,64 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const handleDrillIn = useCallback(
-    (node: AppNode) => {
+    (node: AppNode, clientX: number, clientY: number) => {
+      const childKey = node.id;
+      if (!windowGeom[childKey]) {
+        const w2 = Math.min(Math.min(760, Math.round(bounds.w * 0.82)), bounds.w);
+        const h2 = Math.min(Math.min(500, Math.round(bounds.h * 0.82)), bounds.h);
+        let cx = bounds.w / 2;
+        let cy = bounds.h / 2;
+        const el = canvasContainerRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          cx = clientX - rect.left;
+          cy = clientY - rect.top;
+        }
+        const x = Math.min(Math.max(cx - w2 / 2, 0), Math.max(0, bounds.w - w2));
+        const y = Math.min(Math.max(cy - h2 / 2, 0), Math.max(0, bounds.h - h2));
+        setWindowGeom((m) => ({
+          ...m,
+          [childKey]: { x, y, w: w2, h: h2, minimized: false, maximized: false },
+        }));
+      }
       void navigateTo([
         ...scopes.slice(0, activeIndex + 1),
         { parentId: node.id, title: node.data.label },
       ]);
     },
-    [navigateTo, scopes, activeIndex],
+    [windowGeom, bounds, navigateTo, scopes, activeIndex],
+  );
+
+  const handleDrillById = useCallback(
+    (nodeId: string, clientX: number, clientY: number) => {
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      if (node) {
+        handleDrillIn(node, clientX, clientY);
+      }
+    },
+    [handleDrillIn],
+  );
+
+  // 연결 모드 완료 — connectSource→target 엣지 생성(one-shot)
+  const completeConnect = useCallback(
+    (targetId: string) => {
+      if (!connectSource || connectSource === targetId) {
+        return;
+      }
+      pushHistory();
+      setEdges((current) =>
+        addEdge({ source: connectSource, target: targetId, id: crypto.randomUUID() }, current),
+      );
+      scheduleAutoSave();
+      setConnectSource(null);
+    },
+    [connectSource, pushHistory, setEdges, scheduleAutoSave],
   );
 
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
     async (index: number) => {
+      setConnectSource(null);
       if (index === activeIndex) {
         return;
       }
@@ -1011,7 +1063,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             // ref 조회는 이벤트 시점에 — 렌더 중 ref 접근 금지 (react-hooks/refs)
             const node = nodesRef.current.find((item) => item.id === menu.targetId);
             if (node) {
-              handleDrillIn(node);
+              handleDrillIn(node, menu.x, menu.y);
             }
           },
         },
@@ -1074,10 +1126,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     [comments, selectedId],
   );
 
+  const nodeActions = useMemo(
+    () => ({ onDrill: handleDrillById, connectSource }),
+    [handleDrillById, connectSource],
+  );
+
   const toolButton =
     "inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
+    <NodeActionsContext.Provider value={nodeActions}>
     <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
         <Link href="/" className="inline-flex items-center gap-1 text-caption text-accent hover:underline">
@@ -1181,6 +1239,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
           {saveState === "error" && (
             <span className="text-caption text-error">{t("editor.saveError")}</span>
+          )}
+          {connectSource && (
+            <span className="inline-flex items-center gap-1 rounded-sm bg-accent/10 px-2 py-1 text-caption text-accent">
+              <Spline size={14} strokeWidth={1.5} />
+              {t("connect.banner", {
+                name: nodes.find((node) => node.id === connectSource)?.data.label ?? "",
+              })}
+            </span>
           )}
 
           <select
@@ -1321,7 +1387,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onClose={() => closeScope(index)}
               >
                 {active ? (
-                  <div className="drill-canvas h-full w-full">
+                  <div className="h-full w-full">
                     <ReactFlow
                       nodes={displayNodes}
                       edges={edges}
@@ -1332,6 +1398,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
+                        if (connectSource && connectSource !== node.id) {
+                          completeConnect(node.id);
+                          return;
+                        }
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                       }}
@@ -1339,8 +1409,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(edge.id);
                         setSelectedId(null);
                       }}
-                      onNodeDoubleClick={(_, node) => handleDrillIn(node as AppNode)}
+                      onNodeDoubleClick={(_, node) => {
+                        if (readOnly) {
+                          return;
+                        }
+                        setConnectSource(node.id);
+                      }}
                       onPaneClick={() => {
+                        setConnectSource(null);
                         setSelectedId(null);
                         setSelectedEdgeId(null);
                         setMenu(null);
@@ -1540,6 +1616,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         )}
       </div>
     </div>
+    </NodeActionsContext.Provider>
   );
 }
 
