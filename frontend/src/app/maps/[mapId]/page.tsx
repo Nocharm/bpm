@@ -972,7 +972,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     "rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-200 px-4 py-2">
         <Link href="/" className="text-sm text-blue-700 hover:underline">
           ← 목록

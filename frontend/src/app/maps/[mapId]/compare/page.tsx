@@ -306,7 +306,7 @@ export default function ComparePage() {
   );
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-4 border-b border-zinc-200 px-4 py-2">
         <Link href={`/maps/${mapId}`} className="text-sm text-blue-700 hover:underline">
           ← 편집기
