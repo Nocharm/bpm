@@ -300,6 +300,31 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => observer.disconnect();
   }, []);
 
+  // bounds 변경 시 화면 밖으로 나간 창을 안으로 끌어들임 — 다른 해상도에서 저장된 위치 복구
+  useEffect(() => {
+    if (bounds.w === 0 || bounds.h === 0) {
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bounds 변동에 따른 기하 보정(같은 참조면 bail-out)
+    setWindowGeom((map) => {
+      let changed = false;
+      const next: Record<string, WindowGeom> = {};
+      for (const [key, g] of Object.entries(map)) {
+        const w = Math.min(g.w, bounds.w);
+        const h = Math.min(g.h, bounds.h);
+        const x = Math.min(Math.max(g.x, 0), Math.max(0, bounds.w - w));
+        const y = Math.min(Math.max(g.y, 0), Math.max(0, bounds.h - h));
+        if (w !== g.w || h !== g.h || x !== g.x || y !== g.y) {
+          next[key] = { ...g, x, y, w, h };
+          changed = true;
+        } else {
+          next[key] = g;
+        }
+      }
+      return changed ? next : map;
+    });
+  }, [bounds]);
+
   // ── Undo / Redo ───────────────────────────────────────
 
   const pushHistory = useCallback(() => {
