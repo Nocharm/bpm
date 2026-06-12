@@ -1252,6 +1252,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               onNodesDelete={() => scheduleAutoSave()}
               onEdgesDelete={() => scheduleAutoSave()}
               onMoveStart={() => setMenu(null)}
+              selectionOnDrag
+              panOnDrag={[1]}
+              panActivationKeyCode="Space"
               fitView
             >
               <Background />
