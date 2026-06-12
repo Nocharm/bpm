@@ -117,6 +117,7 @@ const en = {
   "window.maximize": "Maximize",
   "window.close": "Close",
   "window.clickToEdit": "Click to edit",
+  "connect.banner": "Connecting from {name} — click a target (Esc to cancel)",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -236,6 +237,7 @@ const ko: Record<MessageKey, string> = {
   "window.maximize": "최대화",
   "window.close": "닫기",
   "window.clickToEdit": "클릭해 편집",
+  "connect.banner": "{name}에서 연결 — 대상 노드를 클릭 (Esc 취소)",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
