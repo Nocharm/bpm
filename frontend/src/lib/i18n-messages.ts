@@ -113,6 +113,10 @@ const en = {
   "compare.editorLink": "Editor",
   "compare.title": "Version compare",
   "compare.subtitle": "Left baseline → right changes",
+  "window.minimize": "Minimize",
+  "window.maximize": "Maximize",
+  "window.close": "Close",
+  "window.clickToEdit": "Click to edit",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -228,6 +232,10 @@ const ko: Record<MessageKey, string> = {
   "compare.editorLink": "편집기",
   "compare.title": "버전 비교",
   "compare.subtitle": "왼쪽 기준 → 오른쪽 변경",
+  "window.minimize": "최소화",
+  "window.maximize": "최대화",
+  "window.close": "닫기",
+  "window.clickToEdit": "클릭해 편집",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
