@@ -1186,29 +1186,44 @@ function MapEditor({ mapId }: { mapId: number }) {
       </header>
 
       <div className="flex flex-1">
-        {/* 계층 깊이 — 조상 스코프를 우하향 오프셋 프레임으로 계단식 표시 */}
-        <div className="relative flex-1">
-          {/* 조상 프레임: 뒤에서 우하향으로 계단처럼 쌓이고, 제목 탭 클릭으로 상위 복귀 */}
-          {scopes.slice(0, -1).map((scope, index) => {
-            const offset = (index + 1) * 16; // 레벨당 16px 우하향
+        {/* 계단식 창 — 각 계층을 우하향 오프셋 윈도우로 쌓아 '새 창 열림 + 계단' 표현.
+            활성(최하위) 창만 라이브 캔버스, 조상 창은 타이틀바만 노출되어 깊이를 보여준다. */}
+        <div className="relative flex-1 bg-zinc-100">
+          {scopes.map((scope, index) => {
+            const depth = scopes.length - 1;
+            const isActive = index === depth;
+            const step = 32; // 레벨당 우하향 오프셋(px) — 타이틀바가 한 줄씩 드러나는 간격
             return (
-              <button
-                key={scope.parentId ?? "root"}
-                type="button"
-                className="absolute -z-10 truncate rounded-t border border-zinc-200 bg-zinc-50 px-3 py-1 text-left text-xs text-zinc-500 hover:bg-zinc-100"
-                style={{ top: offset, left: offset, maxWidth: "12rem" }}
-                onClick={() => handleBreadcrumb(index)}
-                title={scope.title}
+              <div
+                key={isActive ? `active-${String(currentParentId)}` : scope.parentId ?? "root"}
+                className={`absolute flex flex-col overflow-hidden rounded border bg-white shadow ${
+                  isActive ? "drill-canvas border-zinc-300" : "border-zinc-200"
+                }`}
+                style={{
+                  top: index * step,
+                  left: index * step,
+                  right: (depth - index) * step,
+                  bottom: (depth - index) * step,
+                }}
               >
-                {scope.title}
-              </button>
-            );
-          })}
-          <div
-            key={String(currentParentId)}
-            className="drill-canvas h-full rounded border border-zinc-200 bg-white"
-          >
-            <ReactFlow
+                {/* 윈도우 타이틀바 — 조상은 클릭 시 해당 깊이로 복귀 */}
+                <button
+                  type="button"
+                  disabled={isActive}
+                  onClick={() => handleBreadcrumb(index)}
+                  title={scope.title}
+                  className={`flex shrink-0 items-center gap-1 truncate border-b border-zinc-200 px-3 py-1 text-left text-xs ${
+                    isActive
+                      ? "bg-zinc-50 font-medium text-zinc-700"
+                      : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                  }`}
+                >
+                  {index > 0 && <span className="text-zinc-400">›</span>}
+                  <span className="truncate">{scope.title}</span>
+                </button>
+                {isActive ? (
+                  <div className="relative flex-1">
+                    <ReactFlow
               nodes={displayNodes}
               edges={edges}
               nodeTypes={nodeTypes}
@@ -1260,7 +1275,13 @@ function MapEditor({ mapId }: { mapId: number }) {
               <Background />
               <Controls />
             </ReactFlow>
-          </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 bg-zinc-50" />
+                )}
+              </div>
+            );
+          })}
           {menu && (
             <ContextMenu
               x={menu.x}
