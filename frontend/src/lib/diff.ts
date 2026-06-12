@@ -4,12 +4,24 @@ import type { FlatNode, VersionGraph } from "@/lib/api";
 
 export type DiffStatus = "added" | "removed" | "changed";
 
+// 비교 가능한 필드의 언어 중립 키 — compare 화면에서 t()로 번역
+export type ChangedField =
+  | "title"
+  | "description"
+  | "type"
+  | "color"
+  | "assignee"
+  | "department"
+  | "system"
+  | "duration"
+  | "location";
+
 export interface NodeDiffEntry {
   status: DiffStatus;
   // 루트부터의 제목 경로 (해당 노드 제외) — 변경 목록 표시용
   path: string;
   title: string;
-  changedFields: string[];
+  changedFields: ChangedField[];
   leftNodeId: string | null;
   rightNodeId: string | null;
 }
@@ -27,16 +39,16 @@ export interface VersionDiff {
   rightEdgeStatus: Map<string, DiffStatus>;
 }
 
-// 비교 대상 필드와 한국어 라벨 — 위치(pos)는 의미 변경이 아니므로 제외
-const FIELD_LABELS: [keyof FlatNode, string][] = [
-  ["title", "제목"],
-  ["description", "설명"],
-  ["node_type", "타입"],
-  ["color", "색상"],
-  ["assignee", "담당자"],
-  ["department", "부서"],
-  ["system", "시스템"],
-  ["duration", "소요시간"],
+// 비교 대상 필드 → ChangedField 키 매핑 — 위치(pos)는 의미 변경이 아니므로 제외
+const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
+  ["title", "title"],
+  ["description", "description"],
+  ["node_type", "type"],
+  ["color", "color"],
+  ["assignee", "assignee"],
+  ["department", "department"],
+  ["system", "system"],
+  ["duration", "duration"],
 ];
 
 // 계보 키 — 복제본은 원본 노드 ID를 공유한다
@@ -122,11 +134,11 @@ export function computeVersionDiff(
   const rightNodeStatus = new Map<string, NodeDiffEntry>();
 
   for (const [leftNode, rightNode] of pairs) {
-    const changedFields = FIELD_LABELS.filter(
+    const changedFields: ChangedField[] = FIELD_KEYS.filter(
       ([field]) => leftNode[field] !== rightNode[field],
-    ).map(([, label]) => label);
+    ).map(([, key]) => key);
     if (getParentLineageKey(leftNode, leftById) !== getParentLineageKey(rightNode, rightById)) {
-      changedFields.push("위치(계층)");
+      changedFields.push("location");
     }
     if (changedFields.length === 0) {
       continue;

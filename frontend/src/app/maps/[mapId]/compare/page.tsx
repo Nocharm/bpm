@@ -24,37 +24,35 @@ import {
 import { normalizeNodeType, type AppNode } from "@/lib/canvas";
 import {
   computeVersionDiff,
+  type ChangedField,
   type NodeDiffEntry,
   type DiffStatus,
   type VersionDiff,
 } from "@/lib/diff";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-const DIFF_NOTES: Record<DiffStatus, string> = {
-  added: "추가됨",
-  removed: "삭제됨",
-  changed: "변경됨",
+// 필드 키 → 번역 키 매핑 — t() 의존성 없음
+const FIELD_MSG: Record<ChangedField, MessageKey> = {
+  title: "field.title",
+  description: "field.description",
+  type: "field.type",
+  color: "field.color",
+  assignee: "field.assignee",
+  department: "field.department",
+  system: "field.system",
+  duration: "field.duration",
+  location: "field.location",
 };
-
-const ENTRY_BADGES: Record<DiffStatus, { label: string; className: string }> = {
-  added: { label: "추가", className: "bg-green-100 text-green-700" },
-  removed: { label: "삭제", className: "bg-red-100 text-red-700" },
-  changed: { label: "변경", className: "bg-amber-100 text-amber-700" },
-};
-
-function buildDiffNote(entry: NodeDiffEntry): string {
-  if (entry.status === "changed") {
-    return `변경: ${entry.changedFields.join(", ")}`;
-  }
-  return DIFF_NOTES[entry.status];
-}
 
 // 최상위 캔버스 노드만 렌더 — 하위 변경은 ⚡ 뱃지로 표시
 function buildPaneNodes(
   graph: VersionGraph,
   nodeStatus: Map<string, NodeDiffEntry>,
   descendantChanged: Set<string>,
+  buildDiffNote: (entry: NodeDiffEntry) => string,
 ): AppNode[] {
   const parentIds = new Set(
     graph.nodes.map((node) => node.parent_node_id).filter(Boolean),
@@ -126,6 +124,7 @@ function VersionPane({
   nodes: AppNode[];
   edges: Edge[];
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <div className="border-b border-zinc-200 px-3 py-2">
@@ -133,7 +132,7 @@ function VersionPane({
           className="rounded border border-zinc-300 px-2 py-1 text-sm"
           value={versionId}
           onChange={(event) => onChangeVersion(Number(event.target.value))}
-          aria-label="비교 버전 선택"
+          aria-label={t("compare.selectVersionAria")}
         >
           {versions.map((version) => (
             <option key={version.id} value={version.id}>
@@ -161,27 +160,36 @@ function VersionPane({
 }
 
 function DiffLegend() {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-3 text-xs text-zinc-600">
       <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-green-500" /> 추가
+        <span className="h-3 w-3 rounded border-2 border-green-500" /> {t("compare.legendAdded")}
       </span>
       <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-red-500" /> 삭제
+        <span className="h-3 w-3 rounded border-2 border-red-500" /> {t("compare.legendRemoved")}
       </span>
       <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-amber-500" /> 변경
+        <span className="h-3 w-3 rounded border-2 border-amber-500" /> {t("compare.legendChanged")}
       </span>
-      <span className="flex items-center gap-1">⚡ 하위 변경 있음</span>
+      <span className="flex items-center gap-1">⚡ {t("compare.childChanged")}</span>
     </div>
   );
 }
 
 function DiffEntryList({ diff }: { diff: VersionDiff }) {
+  const { t } = useI18n();
+
+  const entryBadges: Record<DiffStatus, { label: string; className: string }> = {
+    added: { label: t("compare.legendAdded"), className: "bg-green-100 text-green-700" },
+    removed: { label: t("compare.legendRemoved"), className: "bg-red-100 text-red-700" },
+    changed: { label: t("compare.legendChanged"), className: "bg-amber-100 text-amber-700" },
+  };
+
   if (diff.entries.length === 0) {
     return (
       <div className="border-t border-zinc-200 px-4 py-2 text-sm text-zinc-500">
-        두 버전의 내용이 동일합니다.
+        {t("compare.identical")}
       </div>
     );
   }
@@ -190,11 +198,15 @@ function DiffEntryList({ diff }: { diff: VersionDiff }) {
   return (
     <div className="max-h-44 overflow-auto border-t border-zinc-200 px-4 py-2">
       <div className="mb-1 text-xs text-zinc-500">
-        추가 {count("added")} · 삭제 {count("removed")} · 변경 {count("changed")}
+        {t("compare.summary", {
+          a: count("added"),
+          r: count("removed"),
+          c: count("changed"),
+        })}
       </div>
       <ul className="space-y-1 text-sm">
         {diff.entries.map((entry, index) => {
-          const badge = ENTRY_BADGES[entry.status];
+          const badge = entryBadges[entry.status];
           return (
             <li key={`${entry.status}-${entry.leftNodeId ?? ""}-${entry.rightNodeId ?? index}`}>
               <span
@@ -206,7 +218,7 @@ function DiffEntryList({ diff }: { diff: VersionDiff }) {
               <span className="font-medium text-zinc-800">{entry.title}</span>
               {entry.changedFields.length > 0 && (
                 <span className="ml-2 text-xs text-zinc-500">
-                  ({entry.changedFields.join(", ")})
+                  ({entry.changedFields.map((f) => t(FIELD_MSG[f])).join(", ")})
                 </span>
               )}
             </li>
@@ -220,6 +232,7 @@ function DiffEntryList({ diff }: { diff: VersionDiff }) {
 export default function ComparePage() {
   const params = useParams<{ mapId: string }>();
   const mapId = Number(params.mapId);
+  const { t } = useI18n();
 
   const [mapName, setMapName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
@@ -282,19 +295,38 @@ export default function ComparePage() {
     [leftGraph, rightGraph],
   );
 
+  // buildDiffNote 의존성: t (언어 변경 시 재생성)
+  const buildDiffNote = useMemo(
+    () =>
+      (entry: NodeDiffEntry): string => {
+        if (entry.status === "changed") {
+          return t("compare.changedFields", {
+            fields: entry.changedFields.map((f) => t(FIELD_MSG[f])).join(", "),
+          });
+        }
+        const diffNotes: Record<DiffStatus, string> = {
+          added: t("compare.statusAdded"),
+          removed: t("compare.statusRemoved"),
+          changed: t("compare.statusChanged"),
+        };
+        return diffNotes[entry.status];
+      },
+    [t],
+  );
+
   const leftNodes = useMemo(
     () =>
       leftGraph && diff
-        ? buildPaneNodes(leftGraph, diff.leftNodeStatus, diff.leftDescendantChanged)
+        ? buildPaneNodes(leftGraph, diff.leftNodeStatus, diff.leftDescendantChanged, buildDiffNote)
         : [],
-    [leftGraph, diff],
+    [leftGraph, diff, buildDiffNote],
   );
   const rightNodes = useMemo(
     () =>
       rightGraph && diff
-        ? buildPaneNodes(rightGraph, diff.rightNodeStatus, diff.rightDescendantChanged)
+        ? buildPaneNodes(rightGraph, diff.rightNodeStatus, diff.rightDescendantChanged, buildDiffNote)
         : [],
-    [rightGraph, diff],
+    [rightGraph, diff, buildDiffNote],
   );
   const leftEdges = useMemo(
     () => (leftGraph && diff ? buildPaneEdges(leftGraph, diff.leftEdgeStatus) : []),
@@ -309,10 +341,10 @@ export default function ComparePage() {
     <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-4 border-b border-zinc-200 px-4 py-2">
         <Link href={`/maps/${mapId}`} className="text-sm text-blue-700 hover:underline">
-          ← 편집기
+          ← {t("compare.editorLink")}
         </Link>
-        <h1 className="font-medium">{mapName} — 버전 비교</h1>
-        <span className="text-xs text-zinc-400">왼쪽 기준 → 오른쪽 변경</span>
+        <h1 className="font-medium">{mapName} — {t("compare.title")}</h1>
+        <span className="text-xs text-zinc-400">{t("compare.subtitle")}</span>
         <div className="ml-auto">
           <DiffLegend />
         </div>
