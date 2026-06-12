@@ -1,10 +1,11 @@
 "use client";
 
 import { Handle, type NodeProps, Position } from "@xyflow/react";
-import { CornerDownRight, MessageSquare, User, Zap } from "lucide-react";
+import { CornerDownRight, MessageSquare, SquareArrowOutUpRight, User, Zap } from "lucide-react";
 
 import type { AppNode, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+import { useNodeActions } from "@/lib/node-actions";
 
 // 타입별 기본 테두리색 — data.color 미지정(빈 값) 시 사용
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
@@ -50,21 +51,47 @@ function DescendantChangeBadge() {
   );
 }
 
-// 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
-export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
+// 호버 시 노드 우상단에 뜨는 드릴(하위 진입) 버튼 — onDrill 있을 때만(compare 등에서는 숨김)
+function DrillButton({ nodeId }: { nodeId: string }) {
   const { t } = useI18n();
+  const { onDrill } = useNodeActions();
+  if (!onDrill) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      title={t("node.openChildTitle")}
+      className="absolute -right-2 -top-2 z-10 rounded-xs border border-hairline bg-surface p-0.5 text-ink-secondary opacity-0 shadow-sm hover:bg-surface-alt group-hover:opacity-100"
+      onClick={(event) => {
+        event.stopPropagation();
+        onDrill(nodeId, event.clientX, event.clientY);
+      }}
+    >
+      <SquareArrowOutUpRight size={14} strokeWidth={1.5} />
+    </button>
+  );
+}
+
+// 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
+export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
+  const { t } = useI18n();
+  const { connectSource } = useNodeActions();
   const color = data.color || DEFAULT_COLORS[data.nodeType];
   const commentCount = data.commentCount ?? 0;
-  const ring = data.diffStatus
-    ? DIFF_RINGS[data.diffStatus]
-    : selected
+  const ring =
+    connectSource === id
       ? "ring-2 ring-accent"
-      : "";
+      : data.diffStatus
+        ? DIFF_RINGS[data.diffStatus]
+        : selected
+          ? "ring-2 ring-accent"
+          : "";
 
   if (data.nodeType === "decision") {
     return (
       <div
-        className="relative flex h-24 w-24 items-center justify-center"
+        className="group relative flex h-24 w-24 items-center justify-center"
         title={data.diffNote}
       >
         <Handle type="target" position={Position.Left} />
@@ -85,6 +112,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         <Handle type="source" position={Position.Right} />
+        <DrillButton nodeId={id} />
       </div>
     );
   }
@@ -92,7 +120,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`relative bg-surface px-3 py-2 text-sm ${ring} ${
+      className={`group relative bg-surface px-3 py-2 text-sm ${ring} ${
         isTerminal
           ? "min-w-[90px] rounded-full border-2 text-center"
           : "min-w-[150px] rounded border"
@@ -119,6 +147,7 @@ export function ProcessNode({ data, selected }: NodeProps<AppNode>) {
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       <Handle type="source" position={Position.Right} />
+      <DrillButton nodeId={id} />
     </div>
   );
 }
