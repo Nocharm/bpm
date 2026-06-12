@@ -941,8 +941,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
   );
-  const depth = scopes.length - 1;
-
   // 노드별 미해결 코멘트 수 — 렌더 시 nodes에 주입 (effect 내 setState 회피)
   const unresolvedCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1188,63 +1186,78 @@ function MapEditor({ mapId }: { mapId: number }) {
       </header>
 
       <div className="flex flex-1">
-        {/* 계층 깊이 시각화 — 뒤에 살짝 보이는 카드 스택 */}
+        {/* 계층 깊이 — 조상 스코프를 우하향 오프셋 프레임으로 계단식 표시 */}
         <div className="relative flex-1">
-          {depth > 0 && (
-            <>
-              <div className="pointer-events-none absolute inset-2 -z-10 rounded border border-zinc-200 bg-zinc-50" />
-              <div className="pointer-events-none absolute inset-1 -z-10 rounded border border-zinc-200 bg-white" />
-            </>
-          )}
-          <ReactFlow
-            nodes={displayNodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            nodesDraggable={!readOnly}
-            nodesConnectable={!readOnly}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={(_, node) => {
-              setSelectedId(node.id);
-              setSelectedEdgeId(null);
-            }}
-            onEdgeClick={(_, edge) => {
-              setSelectedEdgeId(edge.id);
-              setSelectedId(null);
-            }}
-            onNodeDoubleClick={(_, node) => handleDrillIn(node as AppNode)}
-            onPaneClick={() => {
-              setSelectedId(null);
-              setSelectedEdgeId(null);
-              setMenu(null);
-            }}
-            onPaneContextMenu={(event) => openMenu(event, "pane", null)}
-            onNodeContextMenu={(event, node) => {
-              setSelectedId(node.id);
-              setSelectedEdgeId(null);
-              openMenu(event, "node", node.id);
-            }}
-            onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
-            onNodeDragStart={() => pushHistory()}
-            onNodeDragStop={() => scheduleAutoSave()}
-            onSelectionDragStart={() => pushHistory()}
-            onSelectionDragStop={() => scheduleAutoSave()}
-            onBeforeDelete={async () => {
-              if (readOnly) {
-                return false;
-              }
-              pushHistory();
-              return true;
-            }}
-            onNodesDelete={() => scheduleAutoSave()}
-            onEdgesDelete={() => scheduleAutoSave()}
-            onMoveStart={() => setMenu(null)}
-            fitView
+          {/* 조상 프레임: 뒤에서 우하향으로 계단처럼 쌓이고, 제목 탭 클릭으로 상위 복귀 */}
+          {scopes.slice(0, -1).map((scope, index) => {
+            const offset = (index + 1) * 16; // 레벨당 16px 우하향
+            return (
+              <button
+                key={scope.parentId ?? "root"}
+                type="button"
+                className="absolute -z-10 truncate rounded-t border border-zinc-200 bg-zinc-50 px-3 py-1 text-left text-xs text-zinc-500 hover:bg-zinc-100"
+                style={{ top: offset, left: offset, maxWidth: "12rem" }}
+                onClick={() => handleBreadcrumb(index)}
+                title={scope.title}
+              >
+                {scope.title}
+              </button>
+            );
+          })}
+          <div
+            key={String(currentParentId)}
+            className="drill-canvas h-full rounded border border-zinc-200 bg-white"
           >
-            <Background />
-            <Controls />
-          </ReactFlow>
+            <ReactFlow
+              nodes={displayNodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              nodesDraggable={!readOnly}
+              nodesConnectable={!readOnly}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeClick={(_, node) => {
+                setSelectedId(node.id);
+                setSelectedEdgeId(null);
+              }}
+              onEdgeClick={(_, edge) => {
+                setSelectedEdgeId(edge.id);
+                setSelectedId(null);
+              }}
+              onNodeDoubleClick={(_, node) => handleDrillIn(node as AppNode)}
+              onPaneClick={() => {
+                setSelectedId(null);
+                setSelectedEdgeId(null);
+                setMenu(null);
+              }}
+              onPaneContextMenu={(event) => openMenu(event, "pane", null)}
+              onNodeContextMenu={(event, node) => {
+                setSelectedId(node.id);
+                setSelectedEdgeId(null);
+                openMenu(event, "node", node.id);
+              }}
+              onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
+              onNodeDragStart={() => pushHistory()}
+              onNodeDragStop={() => scheduleAutoSave()}
+              onSelectionDragStart={() => pushHistory()}
+              onSelectionDragStop={() => scheduleAutoSave()}
+              onBeforeDelete={async () => {
+                if (readOnly) {
+                  return false;
+                }
+                pushHistory();
+                return true;
+              }}
+              onNodesDelete={() => scheduleAutoSave()}
+              onEdgesDelete={() => scheduleAutoSave()}
+              onMoveStart={() => setMenu(null)}
+              fitView
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+          </div>
           {menu && (
             <ContextMenu
               x={menu.x}
