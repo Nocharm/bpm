@@ -19,6 +19,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ScopeWindow } from "@/components/scope-window";
+import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
+
 import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { ProcessNode } from "@/components/process-node";
@@ -151,6 +154,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [versionId, setVersionId] = useState<number | null>(null);
   const [scopes, setScopes] = useState<Scope[]>([{ parentId: null, title: "홈" }]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [windowGeom, setWindowGeom] = useState<Record<string, WindowGeom>>({});
+  const [zOrder, setZOrder] = useState<string[]>([]);
+  const [bounds, setBounds] = useState({ w: 960, h: 640 });
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -174,7 +182,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const readOnly = checkout !== null && !checkout.mine;
 
   const reactFlow = useReactFlow();
-  const currentParentId = scopes[scopes.length - 1].parentId;
+  const currentParentId =
+    scopes[Math.min(activeIndex, scopes.length - 1)]?.parentId ?? null;
+
+  const scopeKey = (scope: Scope) => scope.parentId ?? "root";
 
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
@@ -263,6 +274,31 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [],
   );
+
+  // 저장된 창 기하 복원 (클라이언트 전용)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
+    setWindowGeom(loadWindowGeoms(mapId));
+  }, [mapId]);
+
+  // 창 기하 변경 시 디바운스 저장
+  useEffect(() => {
+    const timer = setTimeout(() => saveWindowGeoms(mapId, windowGeom), 300);
+    return () => clearTimeout(timer);
+  }, [mapId, windowGeom]);
+
+  // 캔버스 컨테이너 크기 추적 — 창 클램프/기본배치용
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) {
+      return;
+    }
+    const update = () => setBounds({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // ── Undo / Redo ───────────────────────────────────────
 
@@ -367,6 +403,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setVersions(detail.versions);
         setVersionId(detail.versions[0].id);
         setScopes([{ parentId: null, title: detail.name }]);
+        setActiveIndex(0);
       } catch (err) {
         if (active) {
           setStatus(err instanceof Error ? err.message : t("err.loadMap"));
@@ -605,6 +642,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [saveCurrentScope, t]);
 
+  const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
+    const step = 36;
+    const w = Math.min(760, Math.round(b.w * 0.82));
+    const h = Math.min(500, Math.round(b.h * 0.82));
+    return { x: index * step, y: index * step, w, h, minimized: false, maximized: false };
+  };
+
+  const bringToFront = useCallback((key: string) => {
+    setZOrder((order) => [...order.filter((k) => k !== key), key]);
+  }, []);
+
   // 계층 진입/이탈 시 현재 스코프를 저장하고 이동 (편집 손실 방지)
   const navigateTo = useCallback(
     async (nextScopes: Scope[]) => {
@@ -615,25 +663,54 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       setScopes(nextScopes);
+      setActiveIndex(nextScopes.length - 1);
     },
     [saveCurrentScope, t],
   );
 
   const handleDrillIn = useCallback(
     (node: AppNode) => {
-      void navigateTo([...scopes, { parentId: node.id, title: node.data.label }]);
+      void navigateTo([
+        ...scopes.slice(0, activeIndex + 1),
+        { parentId: node.id, title: node.data.label },
+      ]);
+    },
+    [navigateTo, scopes, activeIndex],
+  );
+
+  // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
+  const focusScope = useCallback(
+    async (index: number) => {
+      if (index === activeIndex) {
+        return;
+      }
+      try {
+        await saveCurrentScope();
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.save"));
+        return;
+      }
+      setActiveIndex(index);
+    },
+    [activeIndex, saveCurrentScope, t],
+  );
+
+  // 창 닫기 — 그 창과 하위(더 깊은 창) 모두 닫고 상위로 복귀
+  const closeScope = useCallback(
+    (index: number) => {
+      if (index <= 0) {
+        return;
+      }
+      void navigateTo(scopes.slice(0, index));
     },
     [navigateTo, scopes],
   );
 
   const handleBreadcrumb = useCallback(
     (index: number) => {
-      if (index === scopes.length - 1) {
-        return;
-      }
-      void navigateTo(scopes.slice(0, index + 1));
+      void focusScope(index);
     },
-    [navigateTo, scopes],
+    [focusScope],
   );
 
   // 버전 전환 — 현재 스코프 저장 후 루트로 리셋해 새 버전 캔버스를 로드
@@ -647,6 +724,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       setVersionId(nextVersionId);
       setScopes([{ parentId: null, title: mapName }]);
+      setActiveIndex(0);
     },
     [saveCurrentScope, mapName, t],
   );
@@ -666,6 +744,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setVersions(detail.versions);
       setVersionId(created.id);
       setScopes([{ parentId: null, title: mapName }]);
+      setActiveIndex(0);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.createVersion"));
     }
@@ -702,6 +781,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setVersions(detail.versions);
       setVersionId(detail.versions[0].id);
       setScopes([{ parentId: null, title: mapName }]);
+      setActiveIndex(0);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
     }
@@ -1187,100 +1267,91 @@ function MapEditor({ mapId }: { mapId: number }) {
       </header>
 
       <div className="flex flex-1">
-        {/* 계단식 창 — 각 계층을 우하향 오프셋 윈도우로 쌓아 '새 창 열림 + 계단' 표현.
-            활성(최하위) 창만 라이브 캔버스, 조상 창은 타이틀바만 노출되어 깊이를 보여준다. */}
-        <div className="relative flex-1 bg-surface-alt">
+        <div
+          ref={canvasContainerRef}
+          className="relative flex-1 overflow-hidden bg-surface-alt"
+        >
           {scopes.map((scope, index) => {
-            const depth = scopes.length - 1;
-            const isActive = index === depth;
-            const step = 32; // 레벨당 우하향 오프셋(px) — 타이틀바가 한 줄씩 드러나는 간격
+            const key = scopeKey(scope);
+            const geom = windowGeom[key] ?? defaultGeom(index, bounds);
+            const active = index === activeIndex;
             return (
-              <div
-                key={isActive ? `active-${String(currentParentId)}` : scope.parentId ?? "root"}
-                className={`absolute flex flex-col overflow-hidden rounded-sm border bg-surface ${
-                  isActive ? "drill-canvas border-hairline" : "border-divider"
-                }`}
-                style={{
-                  top: index * step,
-                  left: index * step,
-                  right: (depth - index) * step,
-                  bottom: (depth - index) * step,
+              <ScopeWindow
+                key={key}
+                title={scope.title}
+                geom={geom}
+                active={active}
+                zIndex={active ? 1000 : zOrder.indexOf(key) + 1}
+                canClose={index > 0}
+                bounds={bounds}
+                onFocus={() => {
+                  bringToFront(key);
+                  if (!active) {
+                    void focusScope(index);
+                  }
                 }}
-              >
-                {/* 윈도우 타이틀바 — 조상은 클릭 시 해당 깊이로 복귀 */}
-                <button
-                  type="button"
-                  disabled={isActive}
-                  onClick={() => handleBreadcrumb(index)}
-                  title={scope.title}
-                  className={`flex shrink-0 items-center gap-1 truncate border-b border-hairline px-3 py-1 text-left text-fine ${
-                    isActive
-                      ? "bg-surface-alt font-medium text-ink-secondary"
-                      : "bg-surface-alt text-ink-tertiary hover:bg-surface-pearl"
-                  }`}
-                >
-                  {index > 0 && <ChevronRight size={12} strokeWidth={1.5} className="text-ink-tertiary" />}
-                  <span className="truncate">{scope.title}</span>
-                </button>
-                {isActive ? (
-                  <div className="relative flex-1">
-                    <ReactFlow
-              nodes={displayNodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              nodesDraggable={!readOnly}
-              nodesConnectable={!readOnly}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={(_, node) => {
-                setSelectedId(node.id);
-                setSelectedEdgeId(null);
-              }}
-              onEdgeClick={(_, edge) => {
-                setSelectedEdgeId(edge.id);
-                setSelectedId(null);
-              }}
-              onNodeDoubleClick={(_, node) => handleDrillIn(node as AppNode)}
-              onPaneClick={() => {
-                setSelectedId(null);
-                setSelectedEdgeId(null);
-                setMenu(null);
-              }}
-              onPaneContextMenu={(event) => openMenu(event, "pane", null)}
-              onNodeContextMenu={(event, node) => {
-                setSelectedId(node.id);
-                setSelectedEdgeId(null);
-                openMenu(event, "node", node.id);
-              }}
-              onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
-              onNodeDragStart={() => pushHistory()}
-              onNodeDragStop={() => scheduleAutoSave()}
-              onSelectionDragStart={() => pushHistory()}
-              onSelectionDragStop={() => scheduleAutoSave()}
-              onBeforeDelete={async () => {
-                if (readOnly) {
-                  return false;
+                onGeomChange={(next) =>
+                  setWindowGeom((map) => ({ ...map, [key]: next }))
                 }
-                pushHistory();
-                return true;
-              }}
-              onNodesDelete={() => scheduleAutoSave()}
-              onEdgesDelete={() => scheduleAutoSave()}
-              onMoveStart={() => setMenu(null)}
-              selectionOnDrag
-              panOnDrag={[1]}
-              panActivationKeyCode="Space"
-              fitView
-            >
-              <Background />
-              <Controls />
-            </ReactFlow>
+                onClose={() => closeScope(index)}
+              >
+                {active ? (
+                  <div className="drill-canvas h-full w-full">
+                    <ReactFlow
+                      nodes={displayNodes}
+                      edges={edges}
+                      nodeTypes={nodeTypes}
+                      nodesDraggable={!readOnly}
+                      nodesConnectable={!readOnly}
+                      onNodesChange={onNodesChange}
+                      onEdgesChange={onEdgesChange}
+                      onConnect={onConnect}
+                      onNodeClick={(_, node) => {
+                        setSelectedId(node.id);
+                        setSelectedEdgeId(null);
+                      }}
+                      onEdgeClick={(_, edge) => {
+                        setSelectedEdgeId(edge.id);
+                        setSelectedId(null);
+                      }}
+                      onNodeDoubleClick={(_, node) => handleDrillIn(node as AppNode)}
+                      onPaneClick={() => {
+                        setSelectedId(null);
+                        setSelectedEdgeId(null);
+                        setMenu(null);
+                      }}
+                      onPaneContextMenu={(event) => openMenu(event, "pane", null)}
+                      onNodeContextMenu={(event, node) => {
+                        setSelectedId(node.id);
+                        setSelectedEdgeId(null);
+                        openMenu(event, "node", node.id);
+                      }}
+                      onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
+                      onNodeDragStart={() => pushHistory()}
+                      onNodeDragStop={() => scheduleAutoSave()}
+                      onSelectionDragStart={() => pushHistory()}
+                      onSelectionDragStop={() => scheduleAutoSave()}
+                      onBeforeDelete={async () => {
+                        if (readOnly) {
+                          return false;
+                        }
+                        pushHistory();
+                        return true;
+                      }}
+                      onNodesDelete={() => scheduleAutoSave()}
+                      onEdgesDelete={() => scheduleAutoSave()}
+                      onMoveStart={() => setMenu(null)}
+                      selectionOnDrag
+                      panOnDrag={[1]}
+                      panActivationKeyCode="Space"
+                      fitView
+                    >
+                      <Background />
+                      <Controls />
+                    </ReactFlow>
                   </div>
-                ) : (
-                  <div className="flex-1 bg-surface-pearl" />
-                )}
-              </div>
+                ) : null}
+              </ScopeWindow>
             );
           })}
           {menu && (
