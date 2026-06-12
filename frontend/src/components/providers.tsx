@@ -67,10 +67,10 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, [auth.user]);
 
   if (auth.error) {
-    return <div className="p-8 text-sm text-red-600">{t("auth.error", { msg: auth.error.message })}</div>;
+    return <div className="p-8 text-caption text-error">{t("auth.error", { msg: auth.error.message })}</div>;
   }
   if (auth.isLoading || !auth.isAuthenticated) {
-    return <div className="p-8 text-sm text-zinc-500">{t("auth.signingIn")}</div>;
+    return <div className="p-8 text-caption text-ink-tertiary">{t("auth.signingIn")}</div>;
   }
   return <>{children}</>;
 }

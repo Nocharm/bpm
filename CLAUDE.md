@@ -128,3 +128,4 @@ docker-compose.yml
 
 @rules/languages/python.md
 @rules/languages/typescript.md
+@rules/frontend/design.md

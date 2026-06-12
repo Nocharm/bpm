@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft, Check, ChevronRight, Download, Lock, PencilLine, Plus, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -969,24 +970,24 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const toolButton =
-    "rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+    "inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-200 px-4 py-2">
-        <Link href="/" className="text-sm text-blue-700 hover:underline">
-          ← {t("editor.backToList")}
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
+        <Link href="/" className="inline-flex items-center gap-1 text-caption text-accent hover:underline">
+          <ArrowLeft size={16} strokeWidth={1.5} />{t("editor.backToList")}
         </Link>
 
         <nav className="flex items-center gap-1 text-sm">
           {scopes.map((scope, index) => (
             <span key={scope.parentId ?? "root"} className="flex items-center gap-1">
-              {index > 0 && <span className="text-zinc-400">›</span>}
+              {index > 0 && <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />}
               <button
                 className={
                   index === scopes.length - 1
-                    ? "font-medium text-zinc-800"
-                    : "text-blue-700 hover:underline"
+                    ? "font-medium text-ink"
+                    : "text-accent hover:underline"
                 }
                 onClick={() => handleBreadcrumb(index)}
               >
@@ -999,7 +1000,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div className="relative">
           <input
             ref={searchInputRef}
-            className="w-56 rounded border border-zinc-300 px-2 py-1 text-sm"
+            className="w-56 rounded-sm border border-hairline px-2 py-1 text-caption"
             placeholder={t("editor.searchPlaceholder")}
             value={searchQuery}
             onChange={(event) => {
@@ -1026,12 +1027,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             }}
           />
           {searchResults.length > 0 && (
-            <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-80 overflow-auto rounded border border-zinc-200 bg-white py-1 shadow-lg">
+            <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-80 overflow-auto rounded-sm border border-hairline bg-surface py-1">
               {searchResults.map((result, index) => (
                 <li key={result.node.id}>
                   <button
-                    className={`block w-full px-3 py-1.5 text-left text-sm ${
-                      index === searchIndex ? "bg-zinc-100" : ""
+                    className={`block w-full px-3 py-1.5 text-left text-caption ${
+                      index === searchIndex ? "bg-surface-alt" : ""
                     }`}
                     onMouseDown={(event) => {
                       // blur로 드롭다운이 닫히기 전에 선택 처리
@@ -1040,8 +1041,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                     }}
                     onMouseEnter={() => setSearchIndex(index)}
                   >
-                    <span className="font-medium text-zinc-800">{result.node.title}</span>
-                    <span className="ml-2 text-xs text-zinc-400">{result.path}</span>
+                    <span className="font-medium text-ink">{result.node.title}</span>
+                    <span className="ml-2 text-fine text-ink-tertiary">{result.path}</span>
                   </button>
                 </li>
               ))}
@@ -1051,10 +1052,10 @@ function MapEditor({ mapId }: { mapId: number }) {
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {readOnly && checkout?.checked_out_by && (
-            <span className="flex items-center gap-2 rounded bg-amber-100 px-2 py-1 text-sm text-amber-900">
-              📝 {t("editor.editingByOther", { name: checkout.checked_out_by })}
+            <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
+              <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
               <button
-                className="rounded bg-red-500 px-1.5 py-0.5 text-xs text-white hover:bg-red-600"
+                className="rounded-sm bg-error px-1.5 py-0.5 text-fine text-on-accent hover:bg-error/90"
                 onClick={() => void handleForceCheckout()}
               >
                 {t("editor.forceEdit")}
@@ -1062,23 +1063,23 @@ function MapEditor({ mapId }: { mapId: number }) {
             </span>
           )}
           {checkout?.mine && (
-            <span className="text-xs text-zinc-400" title={t("editor.editingMineTitle")}>
-              🔒 {t("editor.editingMine")}
+            <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary" title={t("editor.editingMineTitle")}>
+              <Lock size={14} strokeWidth={1.5} />{t("editor.editingMine")}
             </span>
           )}
-          {status && <span className="text-sm text-red-600">{status}</span>}
+          {status && <span className="text-caption text-error">{status}</span>}
           {saveState === "saving" && (
-            <span className="text-sm text-zinc-400">{t("editor.saving")}</span>
+            <span className="text-caption text-ink-tertiary">{t("editor.saving")}</span>
           )}
           {saveState === "saved" && (
-            <span className="text-sm text-green-600">{t("editor.saved")}</span>
+            <span className="inline-flex items-center gap-1 text-caption text-added"><Check size={14} strokeWidth={1.5} />{t("editor.saved")}</span>
           )}
           {saveState === "error" && (
-            <span className="text-sm text-red-600">{t("editor.saveError")}</span>
+            <span className="text-caption text-error">{t("editor.saveError")}</span>
           )}
 
           <select
-            className="rounded border border-zinc-300 px-2 py-1 text-sm"
+            className="rounded-sm border border-hairline px-2 py-1 text-caption"
             value={versionId ?? ""}
             onChange={(event) => void switchVersion(Number(event.target.value))}
             aria-label={t("editor.versionSelectAria")}
@@ -1096,7 +1097,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             {t("editor.rename")}
           </button>
           <button
-            className="rounded border border-zinc-300 px-2 py-1 text-sm text-red-600 hover:bg-red-50 disabled:text-zinc-300"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
             onClick={() => void handleDeleteVersion()}
             disabled={versions.length <= 1 || readOnly}
           >
@@ -1104,12 +1105,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           </button>
           <Link
             href={`/maps/${mapId}/compare`}
-            className="rounded border border-zinc-300 px-2 py-1 text-sm hover:bg-zinc-50"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
           >
             {t("editor.compare")}
           </Link>
 
-          <span className="mx-1 h-5 w-px bg-zinc-200" />
+          <span className="mx-1 h-5 w-px bg-hairline" />
 
           <button
             className={toolButton}
@@ -1117,7 +1118,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             disabled={readOnly || historySize.past === 0}
             title={t("editor.undoTitle")}
           >
-            ↶
+            <Undo2 size={16} strokeWidth={1.5} />
           </button>
           <button
             className={toolButton}
@@ -1125,7 +1126,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             disabled={readOnly || historySize.future === 0}
             title={t("editor.redoTitle")}
           >
-            ↷
+            <Redo2 size={16} strokeWidth={1.5} />
           </button>
 
           <button
@@ -1170,13 +1171,13 @@ function MapEditor({ mapId }: { mapId: number }) {
             disabled={readOnly}
             onClick={() => handleAddNode(null)}
           >
-            {t("editor.addNode")}
+            <Plus size={16} strokeWidth={1.5} />{t("editor.addNode")}
           </button>
           <button className={toolButton} onClick={() => void handleExportPng()}>
-            PNG
+            <Download size={16} strokeWidth={1.5} />PNG
           </button>
           <button
-            className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
             disabled={readOnly}
           >
@@ -1188,7 +1189,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       <div className="flex flex-1">
         {/* 계단식 창 — 각 계층을 우하향 오프셋 윈도우로 쌓아 '새 창 열림 + 계단' 표현.
             활성(최하위) 창만 라이브 캔버스, 조상 창은 타이틀바만 노출되어 깊이를 보여준다. */}
-        <div className="relative flex-1 bg-zinc-100">
+        <div className="relative flex-1 bg-surface-alt">
           {scopes.map((scope, index) => {
             const depth = scopes.length - 1;
             const isActive = index === depth;
@@ -1196,8 +1197,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             return (
               <div
                 key={isActive ? `active-${String(currentParentId)}` : scope.parentId ?? "root"}
-                className={`absolute flex flex-col overflow-hidden rounded border bg-white shadow ${
-                  isActive ? "drill-canvas border-zinc-300" : "border-zinc-200"
+                className={`absolute flex flex-col overflow-hidden rounded-sm border bg-surface ${
+                  isActive ? "drill-canvas border-hairline" : "border-divider"
                 }`}
                 style={{
                   top: index * step,
@@ -1212,13 +1213,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                   disabled={isActive}
                   onClick={() => handleBreadcrumb(index)}
                   title={scope.title}
-                  className={`flex shrink-0 items-center gap-1 truncate border-b border-zinc-200 px-3 py-1 text-left text-xs ${
+                  className={`flex shrink-0 items-center gap-1 truncate border-b border-hairline px-3 py-1 text-left text-fine ${
                     isActive
-                      ? "bg-zinc-50 font-medium text-zinc-700"
-                      : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                      ? "bg-surface-alt font-medium text-ink-secondary"
+                      : "bg-surface-alt text-ink-tertiary hover:bg-surface-pearl"
                   }`}
                 >
-                  {index > 0 && <span className="text-zinc-400">›</span>}
+                  {index > 0 && <ChevronRight size={12} strokeWidth={1.5} className="text-ink-tertiary" />}
                   <span className="truncate">{scope.title}</span>
                 </button>
                 {isActive ? (
@@ -1277,7 +1278,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             </ReactFlow>
                   </div>
                 ) : (
-                  <div className="flex-1 bg-zinc-50" />
+                  <div className="flex-1 bg-surface-pearl" />
                 )}
               </div>
             );
@@ -1293,29 +1294,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
 
         {selectedNode && (
-          <aside className="w-80 overflow-y-auto border-l border-zinc-200 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-zinc-600">{t("editor.nodeEdit")}</h2>
-            <label className="mb-1 block text-xs text-zinc-500">{t("field.title")}</label>
+          <aside className="w-80 overflow-y-auto border-l border-hairline bg-surface p-4">
+            <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
+            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
             <input
-              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
               value={selectedNode.data.label}
               disabled={readOnly}
               onChange={(event) =>
                 updateSelectedData({ label: event.target.value }, true)
               }
             />
-            <label className="mb-1 block text-xs text-zinc-500">{t("field.description")}</label>
+            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
             <textarea
-              className="h-28 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              className="h-28 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
               value={selectedNode.data.description}
               disabled={readOnly}
               onChange={(event) =>
                 updateSelectedData({ description: event.target.value }, true)
               }
             />
-            <label className="mb-1 mt-3 block text-xs text-zinc-500">{t("field.type")}</label>
+            <label className="mb-1 mt-3 block text-fine text-ink-tertiary">{t("field.type")}</label>
             <select
-              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
               value={selectedNode.data.nodeType}
               disabled={readOnly}
               onChange={(event) =>
@@ -1328,17 +1329,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                 </option>
               ))}
             </select>
-            <label className="mb-1 block text-xs text-zinc-500">{t("field.color")}</label>
+            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
             <div className="mb-2 flex flex-wrap gap-1.5">
               {COLOR_PRESETS.map((preset) => (
                 <button
                   key={preset || "default"}
                   title={preset || t("editor.defaultColor")}
                   aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
-                  className={`h-5 w-5 rounded border ${
+                  className={`h-5 w-5 rounded-xs border ${
                     selectedNode.data.color === preset
-                      ? "ring-2 ring-blue-400"
-                      : "border-zinc-300"
+                      ? "ring-2 ring-accent"
+                      : "border-hairline"
                   }`}
                   style={{ backgroundColor: preset || "#ffffff" }}
                   disabled={readOnly}
@@ -1348,7 +1349,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             </div>
             <input
               key={`${selectedNode.id}-${selectedNode.data.color}`}
-              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
               defaultValue={selectedNode.data.color}
               disabled={readOnly}
               placeholder={t("editor.hexPlaceholder")}
@@ -1364,40 +1365,40 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
               }}
             />
-            <details className="mb-3 rounded border border-zinc-200 px-2 py-1.5">
-              <summary className="cursor-pointer text-xs font-medium text-zinc-600">
+            <details className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
+              <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
                 {t("editor.bpmAttrs")}
               </summary>
-              <label className="mb-1 mt-2 block text-xs text-zinc-500">{t("field.assignee")}</label>
+              <label className="mb-1 mt-2 block text-fine text-ink-tertiary">{t("field.assignee")}</label>
               <input
-                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
                 value={selectedNode.data.assignee}
                 disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ assignee: event.target.value }, true)
                 }
               />
-              <label className="mb-1 block text-xs text-zinc-500">{t("field.department")}</label>
+              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.department")}</label>
               <input
-                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
                 value={selectedNode.data.department}
                 disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ department: event.target.value }, true)
                 }
               />
-              <label className="mb-1 block text-xs text-zinc-500">{t("field.system")}</label>
+              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.system")}</label>
               <input
-                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
                 value={selectedNode.data.system}
                 disabled={readOnly}
                 onChange={(event) =>
                   updateSelectedData({ system: event.target.value }, true)
                 }
               />
-              <label className="mb-1 block text-xs text-zinc-500">{t("field.duration")}</label>
+              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.duration")}</label>
               <input
-                className="mb-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
                 value={selectedNode.data.duration}
                 disabled={readOnly}
                 onChange={(event) =>
@@ -1406,8 +1407,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 placeholder={t("editor.durationPlaceholder")}
               />
             </details>
-            <details open className="mb-3 rounded border border-zinc-200 px-2 py-1.5">
-              <summary className="cursor-pointer text-xs font-medium text-zinc-600">
+            <details open className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
+              <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
                 {t("editor.comments")}
                 {selectedComments.some((comment) => !comment.resolved) &&
                   ` (${t("editor.unresolvedCount", { n: selectedComments.filter((comment) => !comment.resolved).length })})`}
@@ -1422,23 +1423,23 @@ function MapEditor({ mapId }: { mapId: number }) {
                 />
               </div>
             </details>
-            <p className="mt-3 text-xs text-zinc-400">
+            <p className="mt-3 text-fine text-ink-tertiary">
               {t("editor.hintNode")}
             </p>
           </aside>
         )}
 
         {!selectedNode && selectedEdge && (
-          <aside className="w-72 border-l border-zinc-200 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-zinc-600">{t("editor.edgeEdit")}</h2>
-            <label className="mb-1 block text-xs text-zinc-500">{t("editor.edgeLabel")}</label>
+          <aside className="w-72 border-l border-hairline bg-surface p-4">
+            <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.edgeEdit")}</h2>
+            <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
             <input
-              className="mb-3 w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
               value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
               disabled={readOnly}
               onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
             />
-            <p className="mt-3 text-xs text-zinc-400">{t("editor.hintEdge")}</p>
+            <p className="mt-3 text-fine text-ink-tertiary">{t("editor.hintEdge")}</p>
           </aside>
         )}
       </div>
