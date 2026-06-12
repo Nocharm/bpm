@@ -56,14 +56,14 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 w-44 rounded border border-zinc-200 bg-white py-1 text-sm shadow-lg"
+      className="fixed z-50 w-44 rounded border border-hairline bg-surface py-1 text-caption shadow-lg"
       style={{ left, top }}
     >
       {items.map((item) => (
         <button
           key={item.label}
-          className={`flex h-8 w-full items-center justify-between px-3 hover:bg-zinc-100 ${
-            item.danger ? "text-red-600" : "text-zinc-800"
+          className={`flex h-8 w-full items-center justify-between px-3 hover:bg-surface-alt ${
+            item.danger ? "text-error" : "text-ink"
           }`}
           onClick={() => {
             item.onSelect();
@@ -72,7 +72,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         >
           <span>{item.label}</span>
           {item.shortcut && (
-            <span className="text-xs text-zinc-400">{item.shortcut}</span>
+            <span className="text-caption text-ink-tertiary">{item.shortcut}</span>
           )}
         </button>
       ))}
