@@ -11,13 +11,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+실행 명령은 **bash(macOS/Linux)와 PowerShell(Windows)을 병기**한다 — 로컬 검증이 Windows PC에서 이뤄지기 때문 (`rules/common/documentation.md`).
+
 ```bash
+# === bash (macOS/Linux) ===
 # backend (backend/ 에서, 로컬 네이티브)
 # 의존성 설치 — uv (빠름) 또는 pip 중 환경에 맞게. 사내 로컬은 uv 불가 → pip 사용.
 uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
-# pip 대안:
-#   python -m venv .venv
-#   .venv/bin/pip install -r requirements-dev.txt          # Windows: .venv\Scripts\pip install -r requirements-dev.txt
+# pip 대안: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/uvicorn app.main:app --reload --port 8000   # 개발 서버
 .venv/bin/python -m pytest tests/ -q                  # 테스트
 .venv/bin/ruff check app/ tests/                      # 린트
@@ -27,8 +28,26 @@ npm install
 npm run dev    # 개발 서버 :3000 — /api는 BACKEND_URL(기본 localhost:8000)로 프록시
 npm run build  # 프로덕션 빌드 (standalone)
 npm run lint
+```
 
-# 서버 배포 (저장소 루트, .env 필요 — .env.example 참고)
+```powershell
+# === PowerShell (Windows) ===
+# backend (backend\ 에서, 로컬 네이티브) — 사내 로컬은 uv 불가 → pip 사용
+python -m venv .venv
+.venv\Scripts\pip install -r requirements-dev.txt
+.venv\Scripts\uvicorn app.main:app --reload --port 8000   # 개발 서버
+.venv\Scripts\python -m pytest tests/ -q                  # 테스트
+.venv\Scripts\ruff check app/ tests/                      # 린트
+
+# frontend (frontend\ 에서) — npm 명령은 동일
+npm install
+npm run dev
+npm run build
+npm run lint
+```
+
+```bash
+# 서버 배포 (리눅스 서버, 저장소 루트, .env 필요 — .env.example 참고)
 docker compose up -d --build   # 접속: http://<서버>:9787
 ```
 

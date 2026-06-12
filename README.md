@@ -20,15 +20,16 @@
 
 ## 로컬 개발 (Docker 없이 네이티브)
 
+**bash (macOS/Linux):**
+
 ```bash
 # backend — http://localhost:8000
 cd backend
 # uv가 있으면:
 uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.txt
 # uv가 없으면 (사내 로컬 등) pip로:
-#   python -m venv .venv
-#   .venv/bin/pip install -r requirements-dev.txt     # Windows: .venv\Scripts\pip install -r requirements-dev.txt
-.venv/bin/uvicorn app.main:app --reload --port 8000   # Windows: .venv\Scripts\uvicorn ...
+#   python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/uvicorn app.main:app --reload --port 8000
 
 # frontend — http://localhost:3000 (/api는 backend로 자동 프록시)
 cd frontend
@@ -36,7 +37,32 @@ npm install
 npm run dev
 ```
 
-테스트/린트: `backend/`에서 `.venv/bin/python -m pytest tests/ -q`, `.venv/bin/ruff check app/ tests/` (Windows는 `.venv\Scripts\`) · `frontend/`에서 `npm run lint`
+**PowerShell (Windows):**
+
+```powershell
+# backend — http://localhost:8000
+cd backend
+python -m venv .venv
+.venv\Scripts\pip install -r requirements-dev.txt
+.venv\Scripts\uvicorn app.main:app --reload --port 8000
+
+# frontend — http://localhost:3000 (/api는 backend로 자동 프록시)
+cd frontend
+npm install
+npm run dev
+```
+
+테스트/린트 (`backend/`에서 · frontend는 `npm run lint`):
+
+```bash
+.venv/bin/python -m pytest tests/ -q
+.venv/bin/ruff check app/ tests/
+```
+
+```powershell
+.venv\Scripts\python -m pytest tests/ -q
+.venv\Scripts\ruff check app/ tests/
+```
 
 ## 서버 배포 (docker-compose)
 
