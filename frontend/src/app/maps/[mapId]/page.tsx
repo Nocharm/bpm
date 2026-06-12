@@ -192,12 +192,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const edgesRef = useRef<Edge[]>([]);
+  const windowGeomRef = useRef<Record<string, WindowGeom>>({});
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+  useEffect(() => {
+    windowGeomRef.current = windowGeom;
+  }, [windowGeom]);
 
   const historyRef = useRef<{ past: Snapshot[]; future: Snapshot[] }>({
     past: [],
@@ -702,7 +706,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleDrillIn = useCallback(
     (node: AppNode, clientX: number, clientY: number) => {
       const childKey = node.id;
-      if (!windowGeom[childKey]) {
+      if (!windowGeomRef.current[childKey]) {
         const w2 = Math.min(Math.min(760, Math.round(bounds.w * 0.82)), bounds.w);
         const h2 = Math.min(Math.min(500, Math.round(bounds.h * 0.82)), bounds.h);
         let cx = bounds.w / 2;
@@ -725,7 +729,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         { parentId: node.id, title: node.data.label },
       ]);
     },
-    [windowGeom, bounds, navigateTo, scopes, activeIndex],
+    [bounds, navigateTo, scopes, activeIndex],
   );
 
   const handleDrillById = useCallback(
@@ -1136,7 +1140,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   return (
     <NodeActionsContext.Provider value={nodeActions}>
-    <div className="flex h-full flex-col">
+      <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
         <Link href="/" className="inline-flex items-center gap-1 text-caption text-accent hover:underline">
           <ArrowLeft size={16} strokeWidth={1.5} />{t("editor.backToList")}
@@ -1615,7 +1619,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           </aside>
         )}
       </div>
-    </div>
+      </div>
     </NodeActionsContext.Provider>
   );
 }
