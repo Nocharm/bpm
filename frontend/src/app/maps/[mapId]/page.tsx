@@ -1750,7 +1750,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                               left: 0,
                               top: 0,
                               transform: `translate(${box.x}px, ${box.y}px)`,
-                              zIndex: 0,
+                              // 음수 z-index → viewport 스택 컨텍스트에서 노드(z:0)보다 먼저 그려져 뒤로 깔림
+                              zIndex: -1,
                             }}
                           >
                             <GroupBox
