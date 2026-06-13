@@ -4,7 +4,7 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 
 ## 1. Raw hex 금지 — 토큰만
 - 컴포넌트(JSX/TSX/CSS)에 `#xxxxxx` 직접 사용 금지. 색은 토큰 클래스(`bg-surface`, `text-ink`, `text-accent`, `bg-accent-tint`, `border-hairline`, `text-error`, `ring-added` 등) 또는 inline style의 `var(--color-*)`로만.
-- **예외(데이터/출력)**: 사용자가 노드에 지정하는 `color`와 색 팔레트 `COLOR_PRESETS`(Whimsical 8톤 stroke — purple/blue/teal/green/yellow/orange/pink/gray), PNG export 배경색은 데이터/출력이며 chrome이 아니다 — 유지. 노드 fill은 stroke에서 `color-mix(in srgb, {color} 18%, white)`로 파생.
+- **예외(데이터/출력)**: 사용자가 노드에 지정하는 `color`와 색 팔레트 `COLOR_PRESETS`(세련된 무채도 8톤 stroke — slate/teal/sage/amber/clay/rose/violet/stone), PNG export 배경색은 데이터/출력이며 chrome이 아니다 — 유지. 노드 fill은 stroke에서 `color-mix(in srgb, {color} 18%, white)`로 파생.
 
 ## 2. Elevation — soft shadow 허용
 - 토큰 `--shadow-sm`(노드 hover) / `--shadow-md`(카드·패널·툴바) / `--shadow-lg`(플로팅 오버레이: 컨텍스트 메뉴·다이얼로그·토스트). 쿨톤 저확산만 — 글로우·이중 그림자 금지.

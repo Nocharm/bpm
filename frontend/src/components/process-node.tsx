@@ -7,12 +7,12 @@ import type { AppNode, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import { useNodeActions } from "@/lib/node-actions";
 
-// 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. Whimsical 8톤(데이터/출력 예외 → raw hex 허용)
+// 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용)
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
-  process: "#9a9aa6", // gray
-  decision: "#e0a800", // yellow
-  start: "#2bc56f", // green
-  end: "#ff5c9a", // pink
+  process: "#909098", // stone
+  decision: "#c7a062", // amber
+  start: "#84a07c", // sage
+  end: "#c2849a", // rose
 };
 
 // 파스텔 fill — 저장된 stroke color에서 파생(데이터 모델 무변경)
