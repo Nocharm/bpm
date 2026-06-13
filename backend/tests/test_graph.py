@@ -14,7 +14,7 @@ def test_new_version_has_empty_graph(client: TestClient) -> None:
     response = client.get(f"/api/versions/{version_id}/graph")
 
     assert response.status_code == 200
-    assert response.json() == {"nodes": [], "edges": []}
+    assert response.json() == {"nodes": [], "edges": [], "groups": []}
 
 
 def test_replace_graph_roundtrips(client: TestClient) -> None:
@@ -189,7 +189,7 @@ def test_removing_node_deletes_descendants(client: TestClient) -> None:
     )
     child = client.get(f"/api/versions/{version_id}/graph?parent=p").json()
 
-    assert child == {"nodes": [], "edges": []}
+    assert child == {"nodes": [], "edges": [], "groups": []}
 
 
 def test_put_with_unknown_parent_404(client: TestClient) -> None:
@@ -201,3 +201,54 @@ def test_put_with_unknown_parent_404(client: TestClient) -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_group_roundtrips_with_membership(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n1", "title": "A", "group_id": "g1"},
+            {"id": "n2", "title": "B", "group_id": "g1"},
+        ],
+        "edges": [],
+        "groups": [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}],
+    }
+
+    put_response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    assert put_response.status_code == 200
+    assert saved["groups"] == [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}]
+    assert {n["id"]: n["group_id"] for n in saved["nodes"]} == {"n1": "g1", "n2": "g1"}
+
+
+def test_node_referencing_unknown_group_rejected(client: TestClient) -> None:
+    version_id = _create_version(client)
+
+    response = client.put(
+        f"/api/versions/{version_id}/graph",
+        json={"nodes": [{"id": "n1", "group_id": "ghost"}], "edges": [], "groups": []},
+    )
+
+    assert response.status_code == 422
+
+
+def test_removed_group_is_cleaned(client: TestClient) -> None:
+    version_id = _create_version(client)
+    client.put(
+        f"/api/versions/{version_id}/graph",
+        json={
+            "nodes": [{"id": "n1", "group_id": "g1"}],
+            "edges": [],
+            "groups": [{"id": "g1", "label": "팀", "color": ""}],
+        },
+    )
+    # 그룹 해제 — group_id 제거 + groups 비움
+    client.put(
+        f"/api/versions/{version_id}/graph",
+        json={"nodes": [{"id": "n1"}], "edges": [], "groups": []},
+    )
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    assert saved["groups"] == []
+    assert saved["nodes"][0]["group_id"] is None

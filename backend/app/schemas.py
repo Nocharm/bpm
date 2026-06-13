@@ -63,6 +63,8 @@ class NodeIn(BaseModel):
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
+    # 업무 묶음(그룹 박스) 소속 그룹 id — null=무소속 (spec Phase 2)
+    group_id: str | None = None
 
 
 class EdgeIn(BaseModel):
@@ -85,14 +87,24 @@ class FlatNodeOut(NodeIn):
     source_node_id: str | None = None
 
 
+class GroupIn(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    label: str = Field(default="", max_length=200)
+    color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
+
+
 class GraphIn(BaseModel):
     nodes: list[NodeIn]
     edges: list[EdgeIn]
+    groups: list[GroupIn] = []
 
 
 class GraphOut(BaseModel):
     nodes: list[NodeOut]
     edges: list[EdgeIn]
+    groups: list[GroupIn] = []
 
 
 class VersionGraphOut(BaseModel):

@@ -57,6 +57,9 @@ class MapVersion(Base):
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="version", cascade="all, delete-orphan"
     )
+    groups: Mapped[list["Group"]] = relationship(
+        back_populates="version", cascade="all, delete-orphan"
+    )
 
 
 class Node(Base):
@@ -86,6 +89,8 @@ class Node(Base):
     pos_x: Mapped[float] = mapped_column(Float, default=0.0)
     pos_y: Mapped[float] = mapped_column(Float, default=0.0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # 업무 묶음(보이는 그룹 박스) 소속 — 그룹 id, null=무소속. FK 미설정(앱 계층 관리, spec Phase 2)
+    group_id: Mapped[str | None] = mapped_column(String(50), default=None)
 
     version: Mapped[MapVersion] = relationship(back_populates="nodes")
 
@@ -120,3 +125,21 @@ class Comment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     version: Mapped[MapVersion] = relationship(back_populates="comments")
+
+
+class Group(Base):
+    """업무 묶음 — 부서/담당자별 보이는 그룹 박스 (spec Phase 2). 노드와 같은 (version, parent) 스코프."""
+
+    __tablename__ = "groups"
+
+    # 클라이언트 생성 ID — 노드와 동일하게 안정적 식별자
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("map_versions.id", ondelete="CASCADE")
+    )
+    # 그룹이 놓인 캔버스 스코프 — 노드 parent_node_id와 동일 의미. FK 미설정(그래프 일괄 교체 순서 의존 제거)
+    parent_node_id: Mapped[str | None] = mapped_column(String(50), default=None)
+    label: Mapped[str] = mapped_column(String(200), default="")
+    color: Mapped[str] = mapped_column(String(20), default="")
+
+    version: Mapped[MapVersion] = relationship(back_populates="groups")

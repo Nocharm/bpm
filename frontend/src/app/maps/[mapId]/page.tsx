@@ -14,6 +14,7 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 
 import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { GroupBox } from "@/components/group-box";
 import { ProcessNode } from "@/components/process-node";
 import {
   alignSelected,
@@ -62,6 +64,7 @@ import {
   type FlatNode,
   type Graph,
   type GraphEdge,
+  type GraphGroup,
   type VersionSummary,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
@@ -72,10 +75,11 @@ import { NodeActionsContext } from "@/lib/node-actions";
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/뒤) 표시
+const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
+const GROUP_PAD = 16; // 그룹 박스가 멤버 bounding box를 감싸는 여백
 
-type DropZone = "front" | "back";
+type DropZone = "front" | "group" | "back";
 type ScreenRect = { left: number; top: number; width: number; height: number };
 
 // 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. Whimsical 8톤 stroke(데이터/출력 예외).
@@ -124,6 +128,7 @@ function toAppNodes(graph: Graph): AppNode[] {
       department: node.department,
       system: node.system,
       duration: node.duration,
+      groupId: node.group_id ?? null,
       hasChildren: node.has_children ?? false,
     },
   }));
@@ -139,7 +144,7 @@ function toAppEdges(graph: Graph): Edge[] {
   }));
 }
 
-function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
+function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   return {
     nodes: nodes.map((node, index) => ({
       id: node.id,
@@ -154,6 +159,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
+      group_id: node.data.groupId,
     })),
     edges: edges.map<GraphEdge>((edge) => ({
       id: edge.id,
@@ -161,6 +167,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
       target_node_id: edge.target,
       label: typeof edge.label === "string" ? edge.label : "",
     })),
+    // 멤버가 남은 그룹만 저장(빈 그룹 자동 정리)
+    groups: groups.filter((group) => nodes.some((node) => node.data.groupId === group.id)),
   };
 }
 
@@ -177,6 +185,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [groups, setGroups] = useState<GraphGroup[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectSource, setConnectSource] = useState<string | null>(null);
@@ -224,6 +233,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const edgesRef = useRef<Edge[]>([]);
+  const groupsRef = useRef<GraphGroup[]>([]);
   const windowGeomRef = useRef<Record<string, WindowGeom>>({});
   useEffect(() => {
     nodesRef.current = nodes;
@@ -231,6 +241,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
   useEffect(() => {
     windowGeomRef.current = windowGeom;
   }, [windowGeom]);
@@ -258,7 +271,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     try {
       await saveGraph(
         versionId,
-        buildGraph(nodesRef.current, edgesRef.current),
+        buildGraph(nodesRef.current, edgesRef.current, groupsRef.current),
         currentParentId,
       );
       dirtyRef.current = false;
@@ -497,6 +510,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         setNodes(toAppNodes(graph));
         setEdges(toAppEdges(graph));
+        setGroups(graph.groups);
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
@@ -949,6 +963,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             department: "",
             system: "",
             duration: "",
+            groupId: null,
             hasChildren: false,
           },
         },
@@ -1034,9 +1049,58 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setEdges, scheduleAutoSave],
   );
 
-  // 드롭 영역에 놓음 — A를 B 옆에 두고, 해당 방향에 기존 엣지가 있으면 유지/삽입 되묻기
+  // A를 B의 그룹에 합류 — B가 무소속이면 새 그룹 생성(라벨 기본=B의 부서/담당자)
+  const addToGroup = useCallback(
+    (aId: string, bId: string) => {
+      const b = nodesRef.current.find((node) => node.id === bId);
+      if (!b) {
+        return;
+      }
+      const bGroupWasEmpty = !b.data.groupId;
+      let groupId = b.data.groupId;
+      if (!groupId) {
+        const newId = crypto.randomUUID();
+        groupId = newId;
+        setGroups((cur) => [
+          ...cur,
+          {
+            id: newId,
+            label: b.data.department || b.data.assignee || "",
+            color: b.data.color || "#6a41ff",
+          },
+        ]);
+      }
+      setNodes((current) => {
+        const target = current.find((node) => node.id === bId);
+        if (!target) {
+          return current;
+        }
+        const bw = target.measured?.width ?? NODE_WIDTH;
+        const x = Math.round((target.position.x + bw + DROP_GAP) / 8) * 8;
+        const y = Math.round(target.position.y / 8) * 8;
+        const moved = current.map((node) => {
+          if (node.id === aId) {
+            return { ...node, position: { x, y }, data: { ...node.data, groupId } };
+          }
+          if (bGroupWasEmpty && node.id === bId) {
+            return { ...node, data: { ...node.data, groupId } };
+          }
+          return node;
+        });
+        return resolveCollision(moved, aId);
+      });
+      scheduleAutoSave();
+    },
+    [setNodes, setGroups, scheduleAutoSave],
+  );
+
+  // 드롭 영역에 놓음 — 그룹/앞/뒤. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
+      if (zone === "group") {
+        addToGroup(aId, bId);
+        return;
+      }
       placeBeside(aId, bId, zone);
       scheduleAutoSave();
       const conflict =
@@ -1051,7 +1115,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+    [addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
   );
 
   // dwell 타이머/상태 정리
@@ -1070,8 +1134,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!target) {
         return;
       }
-      const bCenter = target.position.x + (target.measured?.width ?? NODE_WIDTH) / 2;
-      const zone: DropZone = dragACenterRef.current < bCenter ? "front" : "back";
+      // A 중심이 B 좌측 1/3=앞, 우측 1/3=뒤, 가운데=그룹
+      const bw = target.measured?.width ?? NODE_WIDTH;
+      const bLeft = target.position.x;
+      const a = dragACenterRef.current;
+      const zone: DropZone =
+        a < bLeft + bw / 3 ? "front" : a > bLeft + (bw * 2) / 3 ? "back" : "group";
       const rect = screenRectOf(targetId);
       if (!rect) {
         return;
@@ -1300,6 +1368,39 @@ function MapEditor({ mapId }: { mapId: number }) {
       }),
     [nodes, unresolvedCounts],
   );
+
+  // 그룹 박스 — 멤버 bounding box로 자동 산정해 ViewportPortal에 flow 좌표로 렌더(시각 전용)
+  const groupBoxes = useMemo(() => {
+    return groups.flatMap((group) => {
+      const members = nodes.filter((node) => node.data.groupId === group.id);
+      if (members.length === 0) {
+        return [];
+      }
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const member of members) {
+        const w = member.measured?.width ?? NODE_WIDTH;
+        const h = member.measured?.height ?? NODE_HEIGHT;
+        minX = Math.min(minX, member.position.x);
+        minY = Math.min(minY, member.position.y);
+        maxX = Math.max(maxX, member.position.x + w);
+        maxY = Math.max(maxY, member.position.y + h);
+      }
+      return [
+        {
+          id: group.id,
+          label: group.label,
+          color: group.color,
+          x: minX - GROUP_PAD,
+          y: minY - GROUP_PAD,
+          width: maxX - minX + GROUP_PAD * 2,
+          height: maxY - minY + GROUP_PAD * 2,
+        },
+      ];
+    });
+  }, [nodes, groups]);
 
   const selectedComments = useMemo(
     () => comments.filter((comment) => comment.node_id === selectedId),
@@ -1640,6 +1741,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                       panActivationKeyCode="Space"
                       fitView
                     >
+                      <ViewportPortal>
+                        {groupBoxes.map((box) => (
+                          <div
+                            key={box.id}
+                            style={{
+                              position: "absolute",
+                              left: 0,
+                              top: 0,
+                              transform: `translate(${box.x}px, ${box.y}px)`,
+                              zIndex: 0,
+                            }}
+                          >
+                            <GroupBox
+                              label={box.label}
+                              color={box.color}
+                              width={box.width}
+                              height={box.height}
+                            />
+                          </div>
+                        ))}
+                      </ViewportPortal>
                       <Background
                         variant={BackgroundVariant.Dots}
                         gap={20}
@@ -1681,7 +1803,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                 >
                   {t("dropzone.front")}
                 </div>
-                <div style={{ width: dropTarget.rect.width }} />
+                <div
+                  className={`zone-wing flex items-center justify-center rounded-sm border-2 border-dashed text-fine font-medium ${
+                    dropTarget.zone === "group"
+                      ? "border-accent bg-accent-tint/70 text-accent"
+                      : "border-transparent text-transparent"
+                  }`}
+                  style={{ width: dropTarget.rect.width }}
+                >
+                  {t("dropzone.group")}
+                </div>
                 <div
                   className={`zone-wing flex items-center justify-center rounded-sm border text-fine font-medium ${
                     dropTarget.zone === "back"

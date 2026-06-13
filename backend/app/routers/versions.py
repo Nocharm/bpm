@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.auth import get_current_user
 from app.checkout import is_locked_by_other
 from app.db import get_session
-from app.models import Edge, MapVersion, Node, ProcessMap
+from app.models import Edge, Group, MapVersion, Node, ProcessMap
 from app.schemas import CheckoutIn, CheckoutOut, VersionCreate, VersionOut, VersionUpdate
 
 router = APIRouter(
@@ -55,6 +55,26 @@ async def _clone_graph(
         if node.parent_node_id is not None:
             cloned[node.id].parent_node_id = id_map[node.parent_node_id]
 
+    # 3차: 그룹 복제(새 ID) + 노드 멤버십(group_id) 재매핑. parent_node_id는 노드 id_map으로 리맵.
+    group_id_map = {group.id: uuid.uuid4().hex for group in source.groups}
+    for group in source.groups:
+        session.add(
+            Group(
+                id=group_id_map[group.id],
+                version_id=target_version_id,
+                parent_node_id=(
+                    id_map[group.parent_node_id]
+                    if group.parent_node_id is not None
+                    else None
+                ),
+                label=group.label,
+                color=group.color,
+            )
+        )
+    for node in source.nodes:
+        if node.group_id is not None:
+            cloned[node.id].group_id = group_id_map[node.group_id]
+
     for edge in source.edges:
         session.add(
             Edge(
@@ -85,7 +105,11 @@ async def create_version(
         source = await session.get(
             MapVersion,
             payload.source_version_id,
-            options=[selectinload(MapVersion.nodes), selectinload(MapVersion.edges)],
+            options=[
+                selectinload(MapVersion.nodes),
+                selectinload(MapVersion.edges),
+                selectinload(MapVersion.groups),
+            ],
         )
         if source is None or source.map_id != map_id:
             raise HTTPException(

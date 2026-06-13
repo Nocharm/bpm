@@ -77,6 +77,7 @@ function buildPaneNodes(
           department: node.department,
           system: node.system,
           duration: node.duration,
+          groupId: node.group_id ?? null,
           hasChildren: parentIds.has(node.id),
           diffStatus: entry?.status,
           diffNote: entry ? buildDiffNote(entry) : undefined,

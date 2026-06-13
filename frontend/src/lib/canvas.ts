@@ -14,6 +14,8 @@ export type NodeData = {
   department: string;
   system: string;
   duration: string;
+  // 업무 묶음(그룹 박스) 소속 — 그룹 id, null=무소속 (Phase 2)
+  groupId: string | null;
   hasChildren: boolean;
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";
