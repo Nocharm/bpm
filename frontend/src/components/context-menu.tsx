@@ -4,12 +4,10 @@
 
 import { useEffect, useRef } from "react";
 
-export interface ContextMenuItem {
-  label: string;
-  shortcut?: string;
-  danger?: boolean;
-  onSelect: () => void;
-}
+// 액션 항목 또는 기능 구분용 구분선
+export type ContextMenuItem =
+  | { divider: true }
+  | { divider?: false; label: string; shortcut?: string; danger?: boolean; onSelect: () => void };
 
 interface ContextMenuProps {
   x: number;
@@ -59,23 +57,27 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       className="fixed z-50 w-44 rounded border border-hairline bg-surface py-1 text-caption shadow-lg"
       style={{ left, top }}
     >
-      {items.map((item) => (
-        <button
-          key={item.label}
-          className={`flex h-8 w-full items-center justify-between px-3 hover:bg-surface-alt ${
-            item.danger ? "text-error" : "text-ink"
-          }`}
-          onClick={() => {
-            item.onSelect();
-            onClose();
-          }}
-        >
-          <span>{item.label}</span>
-          {item.shortcut && (
-            <span className="text-caption text-ink-tertiary">{item.shortcut}</span>
-          )}
-        </button>
-      ))}
+      {items.map((item, index) =>
+        item.divider ? (
+          <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
+        ) : (
+          <button
+            key={item.label}
+            className={`flex h-8 w-full items-center justify-between px-3 hover:bg-surface-alt ${
+              item.danger ? "text-error" : "text-ink"
+            }`}
+            onClick={() => {
+              item.onSelect();
+              onClose();
+            }}
+          >
+            <span>{item.label}</span>
+            {item.shortcut && (
+              <span className="text-caption text-ink-tertiary">{item.shortcut}</span>
+            )}
+          </button>
+        ),
+      )}
     </div>
   );
 }

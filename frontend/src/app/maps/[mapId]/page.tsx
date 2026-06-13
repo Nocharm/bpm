@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, ChevronRight, Download, Lock, PencilLine, Plus, Redo2, Spline, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Download, Lock, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -26,8 +26,10 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 
 import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { EditorLeftSidebar, type OutlineItem } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
 import { ProcessNode } from "@/components/process-node";
+import { ShortcutLegend } from "@/components/shortcut-legend";
 import {
   alignSelected,
   distributeSelected,
@@ -44,6 +46,7 @@ import {
   NODE_WIDTH,
   type AppNode,
   type NodeData,
+  type ProcessNodeType,
 } from "@/lib/canvas";
 import {
   acquireCheckout,
@@ -186,6 +189,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
+  // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorWidth, setInspectorWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 320;
+    }
+    const saved = Number(window.localStorage.getItem("bpm.inspectorWidth"));
+    return Number.isFinite(saved) && saved > 0 ? Math.min(480, Math.max(220, saved)) : 320;
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectSource, setConnectSource] = useState<string | null>(null);
@@ -936,7 +949,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
-    (screen: { x: number; y: number } | null) => {
+    (screen: { x: number; y: number } | null, nodeType: ProcessNodeType = "process") => {
       if (readOnly) {
         return;
       }
@@ -947,6 +960,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (screen) {
         const point = reactFlow.screenToFlowPosition(screen);
         position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
+      } else {
+        // 좌측 팔레트 등 좌표 없는 추가 — 현재 뷰포트 중앙에 배치
+        const container = canvasContainerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const point = reactFlow.screenToFlowPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          });
+          position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
+        }
       }
       setNodes((current) => [
         ...current,
@@ -957,7 +981,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           data: {
             label: t("editor.newStep"),
             description: "",
-            nodeType: "process",
+            nodeType,
             color: "",
             assignee: "",
             department: "",
@@ -1276,22 +1300,42 @@ function MapEditor({ mapId }: { mapId: number }) {
       return [];
     }
     if (menu.kind === "pane") {
+      if (readOnly) {
+        return [{ label: t("ctx.exportPng"), onSelect: () => void handleExportPng() }];
+      }
       return [
-        {
-          label: t("ctx.addNode"),
-          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }),
-        },
+        { label: t("ctx.addNode"), onSelect: () => handleAddNode({ x: menu.x, y: menu.y }) },
+        { divider: true },
         {
           label: t("ctx.autoLayout"),
           onSelect: () =>
             applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current)),
         },
+        {
+          label: t("editor.alignLeft"),
+          onSelect: () => applyNodesTransform((current) => alignSelected(current, "left")),
+        },
+        {
+          label: t("editor.alignTop"),
+          onSelect: () => applyNodesTransform((current) => alignSelected(current, "top")),
+        },
+        {
+          label: t("editor.distributeX"),
+          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x")),
+        },
+        {
+          label: t("editor.distributeY"),
+          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y")),
+        },
+        { divider: true },
+        { label: t("ctx.exportPng"), onSelect: () => void handleExportPng() },
       ];
     }
     if (menu.kind === "node") {
       const deleteItems: ContextMenuItem[] = readOnly
         ? []
         : [
+            { divider: true },
             {
               label: t("ctx.delete"),
               shortcut: "⌫",
@@ -1326,6 +1370,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           setSelectedId(null);
         },
       },
+      { divider: true },
       {
         label: t("ctx.delete"),
         shortcut: "⌫",
@@ -1337,7 +1382,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       },
     ];
-  }, [menu, readOnly, handleAddNode, applyNodesTransform, handleDrillIn, reactFlow, t]);
+  }, [menu, readOnly, handleAddNode, applyNodesTransform, handleDrillIn, handleExportPng, reactFlow, t]);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedId) ?? null,
@@ -1410,6 +1455,68 @@ function MapEditor({ mapId }: { mapId: number }) {
   const nodeActions = useMemo(
     () => ({ onDrill: handleDrillById, connectSource }),
     [handleDrillById, connectSource],
+  );
+
+  // 인스펙터 폭 로컬 영속
+  useEffect(() => {
+    window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
+  }, [inspectorWidth]);
+
+  // 좌측 아웃라인 — 현재 스코프 노드 요약
+  const outline = useMemo<OutlineItem[]>(
+    () =>
+      nodes.map((node) => ({
+        id: node.id,
+        label: node.data.label,
+        nodeType: node.data.nodeType,
+        hasChildren: node.data.hasChildren,
+      })),
+    [nodes],
+  );
+
+  const handleOutlineSelect = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      setSelectedEdgeId(null);
+      void reactFlow.fitView({ nodes: [{ id }], maxZoom: 1.2, duration: 300 });
+    },
+    [reactFlow],
+  );
+
+  const handleOutlineDrill = useCallback(
+    (id: string) => {
+      const rect = canvasContainerRef.current?.getBoundingClientRect();
+      handleDrillById(
+        id,
+        rect ? rect.left + rect.width / 2 : 0,
+        rect ? rect.top + rect.height / 2 : 0,
+      );
+    },
+    [handleDrillById],
+  );
+
+  const handleRecolor = useCallback(
+    (color: string) => updateSelectedData({ color }),
+    [updateSelectedData],
+  );
+
+  // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
+  const startInspectorResize = useCallback(
+    (event: { clientX: number; preventDefault: () => void }) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = inspectorWidth;
+      const onMove = (ev: PointerEvent) => {
+        setInspectorWidth(Math.min(480, Math.max(220, startW + (startX - ev.clientX))));
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [inspectorWidth],
   );
 
   const toolButton =
@@ -1581,52 +1688,16 @@ function MapEditor({ mapId }: { mapId: number }) {
             <Redo2 size={16} strokeWidth={1.5} />
           </button>
 
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() =>
-              applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))
-            }
-          >
-            {t("editor.autoLayout")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => alignSelected(current, "left"))}
-          >
-            {t("editor.alignLeft")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => alignSelected(current, "top"))}
-          >
-            {t("editor.alignTop")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => distributeSelected(current, "x"))}
-          >
-            {t("editor.distributeX")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => distributeSelected(current, "y"))}
-          >
-            {t("editor.distributeY")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => handleAddNode(null)}
-          >
-            <Plus size={16} strokeWidth={1.5} />{t("editor.addNode")}
-          </button>
           <button className={toolButton} onClick={() => void handleExportPng()}>
             <Download size={16} strokeWidth={1.5} />PNG
+          </button>
+          <button
+            className={toolButton}
+            onClick={() => setInspectorOpen((open) => !open)}
+            title={t("editor.inspectorToggle")}
+            aria-label={t("editor.inspectorToggle")}
+          >
+            <PanelRight size={16} strokeWidth={1.5} />
           </button>
           <button
             className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
@@ -1638,7 +1709,26 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       </header>
 
-      <div className="flex flex-1">
+      <div className="flex min-h-0 flex-1">
+        <EditorLeftSidebar
+          readOnly={readOnly}
+          collapsed={leftCollapsed}
+          onToggleCollapse={() => setLeftCollapsed((value) => !value)}
+          colorPresets={COLOR_PRESETS}
+          selectedId={selectedId}
+          onAddType={(type) => handleAddNode(null, type)}
+          onRecolor={handleRecolor}
+          onAutoLayout={() =>
+            applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))
+          }
+          onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
+          onDistribute={(axis) =>
+            applyNodesTransform((current) => distributeSelected(current, axis))
+          }
+          outline={outline}
+          onSelectNode={handleOutlineSelect}
+          onDrill={handleOutlineDrill}
+        />
         <div
           ref={canvasContainerRef}
           className="relative flex-1 overflow-hidden bg-canvas"
@@ -1857,10 +1947,19 @@ function MapEditor({ mapId }: { mapId: number }) {
               </div>
             </div>
           )}
+          <ShortcutLegend />
         </div>
 
-        {selectedNode && (
-          <aside className="w-80 overflow-y-auto border-l border-hairline bg-surface p-4">
+        {inspectorOpen && (
+          <div className="flex min-h-0 shrink-0" style={{ width: inspectorWidth }}>
+            <div
+              onPointerDown={startInspectorResize}
+              className="w-1 shrink-0 cursor-col-resize hover:bg-accent-tint"
+              title={t("editor.inspectorToggle")}
+            />
+            <div className="flex-1 overflow-y-auto border-l border-hairline bg-surface p-4">
+            {selectedNode ? (
+              <>
             <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
             <input
@@ -1992,11 +2091,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             <p className="mt-3 text-fine text-ink-tertiary">
               {t("editor.hintNode")}
             </p>
-          </aside>
-        )}
-
-        {!selectedNode && selectedEdge && (
-          <aside className="w-72 border-l border-hairline bg-surface p-4">
+              </>
+            ) : selectedEdge ? (
+              <>
             <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.edgeEdit")}</h2>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
             <input
@@ -2006,7 +2103,34 @@ function MapEditor({ mapId }: { mapId: number }) {
               onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
             />
             <p className="mt-3 text-fine text-ink-tertiary">{t("editor.hintEdge")}</p>
-          </aside>
+              </>
+            ) : (
+              <div className="text-caption text-ink-secondary">
+                <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
+                <h2 className="text-caption-strong text-ink">{mapName}</h2>
+                <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>
+                {groups.length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1 text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
+                      {t("inspector.groupsTitle")}
+                    </div>
+                    <ul className="flex flex-col gap-1">
+                      {groups.map((group) => (
+                        <li key={group.id} className="flex items-center gap-2">
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full border border-hairline"
+                            style={{ background: group.color || "var(--color-surface-alt)" }}
+                          />
+                          <span className="truncate">{group.label || t("sidebar.untitled")}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
+          </div>
         )}
       </div>
       </div>
