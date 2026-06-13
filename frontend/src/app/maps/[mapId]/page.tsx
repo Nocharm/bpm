@@ -573,8 +573,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             void reactFlow.fitView({
               nodes: [{ id: focusId }],
               padding: 0.4,
-              duration: 300,
-              maxZoom: 1.25,
+              duration: 700,
+              maxZoom: 1.3,
             });
           }, 80);
         }
@@ -1614,8 +1614,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
     }
-    return buildOutline(outlineNodes, outlineEdges, currentParentId, expandedOutline);
-  }, [nodes, edges, fullGraph, currentParentId, expandedOutline]);
+    // 항상 프로젝트 루트(전체 트리) 기준 — 창을 옮겨도 전체 프로젝트를 일관되게 표시.
+    // 활성 스코프 경로(드릴인한 노드들)는 항상 펼쳐 현재 위치가 보이도록 합성.
+    const effectiveExpanded = new Set(expandedOutline);
+    for (const scope of scopes) {
+      if (scope.parentId !== null) {
+        effectiveExpanded.add(scope.parentId);
+      }
+    }
+    return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
+  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, scopes]);
 
   const handleToggleExpand = useCallback((id: string) => {
     setExpandedOutline((prev) => {
@@ -1629,13 +1637,34 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, []);
 
+  // 아웃라인 클릭 — 노드가 속한 스코프로 이동 후, cubic ease(느림→빠름→느림)로 포커싱
   const handleOutlineSelect = useCallback(
     (id: string) => {
-      setSelectedId(id);
-      setSelectedEdgeId(null);
-      void reactFlow.fitView({ nodes: [{ id }], maxZoom: 1.2, duration: 300 });
+      const flatById = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
+      const flat = flatById.get(id);
+      const scopeParentId = flat ? flat.parent_node_id : currentParentId;
+      if (scopeParentId === currentParentId) {
+        setSelectedId(id);
+        setSelectedEdgeId(null);
+        // duration이 길수록 React Flow 기본 cubic-in-out 가감속이 또렷하게 보임
+        void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
+        return;
+      }
+      // 다른 스코프 — 루트부터 해당 노드 부모까지 스코프 체인 구성 후 이동, 로드 후 포커싱
+      const chainIds: string[] = [];
+      let cursor = scopeParentId;
+      while (cursor !== null) {
+        chainIds.unshift(cursor);
+        cursor = flatById.get(cursor)?.parent_node_id ?? null;
+      }
+      const chain: Scope[] = [{ parentId: null, title: mapName }];
+      for (const ancestorId of chainIds) {
+        chain.push({ parentId: ancestorId, title: flatById.get(ancestorId)?.title ?? "" });
+      }
+      focusNodeIdRef.current = id;
+      void navigateTo(chain);
     },
-    [reactFlow],
+    [fullGraph, currentParentId, mapName, reactFlow, navigateTo],
   );
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)

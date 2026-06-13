@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
+## 2026-06-14
+- 아웃라인 전체 프로젝트 트리화 + 클릭 포커싱 애니메이션 (브랜치 `feat/editor-ui`). ① 아웃라인을 **항상 프로젝트 루트(null) 기준 전체 트리**로 빌드(현재 스코프는 라이브 병합 유지) — 창을 옮겨도 전체 프로젝트를 일관 표시. 활성 스코프 경로(scopes의 drilled parentId)는 펼침 집합에 합성해 현재 위치 자동 노출(메모에서 파생 — set-state-in-effect 회피). ② 아웃라인 클릭 → 노드가 다른 스코프면 fullGraph로 스코프 체인 구성해 navigateTo+focusNodeIdRef, 같은 스코프면 즉시. 포커싱은 `fitView` duration 300→700(React Flow 기본 cubic-in-out=느림→빠름→느림 가감속이 또렷). 검증: tsc/eslint/build green.
+
 ## 2026-06-13
 - 드롭/저장 버그 수정 + 드롭 영역 개선 (브랜치 `feat/editor-ui`). ① **422 방어**: `buildGraph`가 항상 자기완결적 payload를 만들도록 — 고아 group_id(payload에 그룹 없음)는 null, 양 끝이 payload 노드인 엣지만 포함. 드릴인/저장 시 그룹·엣지 참조 불일치로 인한 422를 구조적으로 차단. `api.ts` 요청 에러에 서버 detail 포함(진단용). ② **드롭 영역 개선**: 판정 기준을 노드 위치→**마우스 flow 좌표**(커서 아래 노드 대상, 커서 방향으로 zone), 링 반경 2배, 4타일을 **원주 위 cardinal 지점**에 배치(좌/우/위/아래), 타일 크기 30→44·아이콘 20, 등장 애니메이션 `zone-ring-in`/`zone-pop-in`(ease-overshoot). 검증: tsc/eslint/build green.
 - 에디터 UI 2차 개선 (브랜치 `feat/editor-ui`). ① **아웃라인 분기 들여쓰기 + 하위 펼치기**: `buildOutline` 재작성 — 들여쓰기는 out-degree≥2(분기)일 때만(순차 전후는 같은 레벨), 입력을 OutlineNode/OutlineEdge로 분리. 하위 프로세스 있는 노드는 ▸/▾ 인라인 펼치기(전체 그래프 getFullGraph 1회 로드+현재 스코프는 라이브 상태 병합, 재귀, 하위는 다른 색·기본 접힘). 페이지에 fullGraph/expanded 상태 + refreshFullGraph(로드·저장 후). bun 검증 4케이스(순차평탄/분기/접힘/펼침) 통과. ② **Insert·Arrange·색 → 우클릭 메뉴**: 좌 사이드바는 아웃라인 전용으로 축소. ContextMenu에 색 스와치 행 타입 추가. 빈 캔버스 메뉴=타입별 추가(4)+자동배치·정렬·분배+PNG, 노드 메뉴=색 행+하위 열기+삭제. ③ **드롭 영역 4방향 재디자인**: dwell 시 B에 원형 링 + 4개 정사각 아이콘 타일(좌=앞 ←/우=뒤 →/위=그룹 ⊞/아래=하위로 넣기 ↳), A·B 중심 우세 방향으로 활성 판정(dragCenterRef x·y). **아래=신규 moveToChild**: A를 B 자식 스코프에 먼저 영속(재부모화)한 뒤 현재 스코프에서 A+연결엣지 제거(순서 보장으로 삭제 방지). 백엔드 변경 없음(기존 per-scope PUT의 parent upsert 활용). i18n 키 추가. 검증: tsc/eslint/build green. 시각·인터랙션은 로컬 확인 필요.
