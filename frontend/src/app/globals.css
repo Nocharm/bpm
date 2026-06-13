@@ -82,25 +82,25 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 드릴인 — 자식 캔버스가 좌상단에서 확장되며 열리는 연출 */
-@keyframes drill-in-open {
+/* 창 열림 — 마우스 지점(창 중앙)에서 확장되며 열리는 연출 */
+@keyframes window-open {
   from {
     opacity: 0;
-    transform: scale(0.92) translate(-8px, -8px);
+    transform: scale(0.4);
   }
   to {
     opacity: 1;
-    transform: scale(1) translate(0, 0);
+    transform: scale(1);
   }
 }
 
-.drill-canvas {
-  transform-origin: top left;
-  animation: drill-in-open 220ms var(--ease-overshoot);
+.window-open {
+  transform-origin: center;
+  animation: window-open 180ms var(--ease-overshoot);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drill-canvas {
+  .window-open {
     animation: none;
   }
 }
