@@ -118,6 +118,11 @@ const en = {
   "window.close": "Close",
   "window.clickToEdit": "Click to edit",
   "connect.banner": "Connecting from {name} — click a target (Esc to cancel)",
+  "dropzone.front": "Before",
+  "dropzone.back": "After",
+  "dropzone.conflictPrompt": "This node already has a connection here.",
+  "dropzone.keep": "Keep",
+  "dropzone.insert": "Insert between",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -238,6 +243,11 @@ const ko: Record<MessageKey, string> = {
   "window.close": "닫기",
   "window.clickToEdit": "클릭해 편집",
   "connect.banner": "{name}에서 연결 — 대상 노드를 클릭 (Esc 취소)",
+  "dropzone.front": "앞에",
+  "dropzone.back": "뒤에",
+  "dropzone.conflictPrompt": "이 노드에 이미 연결이 있습니다.",
+  "dropzone.keep": "유지",
+  "dropzone.insert": "중간에 삽입",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

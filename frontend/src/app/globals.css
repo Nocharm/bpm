@@ -125,3 +125,24 @@ body {
 .react-flow__edge:focus-visible .react-flow__edge-path {
   stroke: var(--color-accent);
 }
+
+/* 드롭 영역(앞/뒤) — 대상 노드 옆으로 확장되며 등장 */
+@keyframes zone-wing-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+.zone-wing {
+  transform-origin: center;
+  animation: zone-wing-in 200ms var(--ease-overshoot);
+}
+@media (prefers-reduced-motion: reduce) {
+  .zone-wing {
+    animation: none;
+  }
+}

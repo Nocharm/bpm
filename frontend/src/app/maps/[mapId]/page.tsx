@@ -8,7 +8,6 @@ import {
   Controls,
   type Connection,
   type Edge,
-  MarkerType,
   type NodeTypes,
   ReactFlow,
   ReactFlowProvider,
@@ -33,6 +32,11 @@ import {
   layoutWithDagre,
   normalizeNodeType,
   resolveCollision,
+  getIncomingEdges,
+  getOutgoingEdges,
+  insertNodeBefore,
+  insertNodeAfter,
+  EDGE_DEFAULTS,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
   NODE_WIDTH,
@@ -68,13 +72,11 @@ import { NodeActionsContext } from "@/lib/node-actions";
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-// 엣지 기본 — 직각(elbow) + 움직이는 점선 + 화살표로 흐름 방향 상시 표시.
-// 색/점선 애니메이션은 globals.css(.react-flow__edge-path)에서, 선택 시 accent로 전환.
-const EDGE_DEFAULTS = {
-  type: "smoothstep",
-  animated: true,
-  markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
-} as const;
+const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/뒤) 표시
+const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
+
+type DropZone = "front" | "back";
+type ScreenRect = { left: number; top: number; width: number; height: number };
 
 // 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. Whimsical 8톤 stroke(데이터/출력 예외).
 const COLOR_PRESETS = [
@@ -192,6 +194,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   // 언마운트/버전 전환 시 해제 여부 판단용 — 상태와 달리 cleanup에서 즉시 읽힘
   const checkoutMineRef = useRef(false);
+
+  // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
+  const [dropTarget, setDropTarget] = useState<{
+    id: string;
+    zone: DropZone;
+    rect: ScreenRect;
+  } | null>(null);
+  const dwellRef = useRef<{ id: string; since: number } | null>(null);
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragACenterRef = useRef(0); // 드래그 중 A 중심 x — dwell 타이머 발화 시 zone 판정용
+  // 기존 엣지 충돌 시 유지/삽입 되묻기 팝오버
+  const [pending, setPending] = useState<{
+    mode: DropZone;
+    aId: string;
+    bId: string;
+    rect: ScreenRect;
+  } | null>(null);
 
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = checkout !== null && !checkout.mine;
@@ -414,6 +433,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       if (event.key === "Escape") {
         setConnectSource(null);
+        setPending(null);
         return;
       }
       if (!(event.ctrlKey || event.metaKey)) {
@@ -953,6 +973,146 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
+  // ── 드래그-오버 드롭 영역 (앞/뒤 흐름 삽입, Phase 1) ─────────
+
+  // 노드 id의 캔버스 컨테이너 상대 화면 사각형 — 드롭 영역/팝오버 위치 계산용 (이벤트에서만 호출)
+  const screenRectOf = useCallback(
+    (nodeId: string): ScreenRect | null => {
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      const container = canvasContainerRef.current;
+      if (!node || !container) {
+        return null;
+      }
+      const zoom = reactFlow.getViewport().zoom;
+      const topLeft = reactFlow.flowToScreenPosition({ x: node.position.x, y: node.position.y });
+      const rect = container.getBoundingClientRect();
+      return {
+        left: topLeft.x - rect.left,
+        top: topLeft.y - rect.top,
+        width: (node.measured?.width ?? NODE_WIDTH) * zoom,
+        height: (node.measured?.height ?? NODE_HEIGHT) * zoom,
+      };
+    },
+    [reactFlow],
+  );
+
+  // A를 B의 좌(앞)/우(뒤)로 인접 배치 후 겹침 회피. 8px 그리드 스냅.
+  const placeBeside = useCallback(
+    (aId: string, bId: string, zone: DropZone) => {
+      setNodes((current) => {
+        const b = current.find((node) => node.id === bId);
+        if (!b) {
+          return current;
+        }
+        const bw = b.measured?.width ?? NODE_WIDTH;
+        const rawX =
+          zone === "front" ? b.position.x - NODE_WIDTH - DROP_GAP : b.position.x + bw + DROP_GAP;
+        const moved = current.map((node) =>
+          node.id === aId
+            ? {
+                ...node,
+                position: { x: Math.round(rawX / 8) * 8, y: Math.round(b.position.y / 8) * 8 },
+              }
+            : node,
+        );
+        return resolveCollision(moved, aId);
+      });
+    },
+    [setNodes],
+  );
+
+  // 흐름 엣지 적용 — rewire면 B의 기존 연결을 끊고 A를 중간에 삽입
+  const applyFlowEdges = useCallback(
+    (aId: string, bId: string, zone: DropZone, rewire: boolean) => {
+      setEdges((current) =>
+        zone === "front"
+          ? insertNodeBefore(current, aId, bId, rewire)
+          : insertNodeAfter(current, aId, bId, rewire),
+      );
+      scheduleAutoSave();
+    },
+    [setEdges, scheduleAutoSave],
+  );
+
+  // 드롭 영역에 놓음 — A를 B 옆에 두고, 해당 방향에 기존 엣지가 있으면 유지/삽입 되묻기
+  const handleZoneDrop = useCallback(
+    (aId: string, bId: string, zone: DropZone) => {
+      placeBeside(aId, bId, zone);
+      scheduleAutoSave();
+      const conflict =
+        zone === "front"
+          ? getIncomingEdges(edgesRef.current, bId).some((edge) => edge.source !== aId)
+          : getOutgoingEdges(edgesRef.current, bId).some((edge) => edge.target !== aId);
+      const rect = conflict ? screenRectOf(bId) : null;
+      if (conflict && rect) {
+        setPending({ mode: zone, aId, bId, rect });
+        return;
+      }
+      // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
+      applyFlowEdges(aId, bId, zone, true);
+    },
+    [placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+  );
+
+  // dwell 타이머/상태 정리
+  const clearDwell = useCallback(() => {
+    if (dwellTimerRef.current) {
+      clearTimeout(dwellTimerRef.current);
+      dwellTimerRef.current = null;
+    }
+    dwellRef.current = null;
+  }, []);
+
+  // 대상 B 위에 앞/뒤 영역 활성화 — A 중심 기준 좌=앞/우=뒤
+  const activateZone = useCallback(
+    (targetId: string) => {
+      const target = nodesRef.current.find((item) => item.id === targetId);
+      if (!target) {
+        return;
+      }
+      const bCenter = target.position.x + (target.measured?.width ?? NODE_WIDTH) / 2;
+      const zone: DropZone = dragACenterRef.current < bCenter ? "front" : "back";
+      const rect = screenRectOf(targetId);
+      if (!rect) {
+        return;
+      }
+      setDropTarget((cur) =>
+        cur && cur.id === targetId && cur.zone === zone ? cur : { id: targetId, zone, rect },
+      );
+    },
+    [screenRectOf],
+  );
+
+  // 드래그 중 — A 아래 노드를 DWELL_MS 머문 뒤 영역 표시(가만히 둬도 타이머로 발화), 이후 이동 시 zone 갱신
+  const handleNodeDrag = useCallback(
+    (_: unknown, node: AppNode) => {
+      if (readOnly) {
+        return;
+      }
+      dragACenterRef.current = node.position.x + (node.measured?.width ?? NODE_WIDTH) / 2;
+      const target = reactFlow.getIntersectingNodes(node).find((other) => other.id !== node.id);
+      if (!target) {
+        clearDwell();
+        setDropTarget((cur) => (cur ? null : cur));
+        return;
+      }
+      if (!dwellRef.current || dwellRef.current.id !== target.id) {
+        clearDwell();
+        dwellRef.current = { id: target.id, since: Date.now() };
+        setDropTarget((cur) => (cur ? null : cur));
+        dwellTimerRef.current = setTimeout(() => activateZone(target.id), DWELL_MS);
+        return;
+      }
+      if (Date.now() - dwellRef.current.since >= DWELL_MS) {
+        activateZone(target.id);
+      }
+    },
+    [readOnly, reactFlow, clearDwell, activateZone],
+  );
+
+  // 언마운트 시 dwell 타이머 정리
+  useEffect(() => clearDwell, [clearDwell]);
+
   const updateSelectedData = useCallback(
     (patch: Partial<NodeData>, fromTyping = false) => {
       if (readOnly) {
@@ -1442,6 +1602,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedId(null);
                         setSelectedEdgeId(null);
                         setMenu(null);
+                        setPending(null);
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
@@ -1451,11 +1612,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
                       onNodeDragStart={() => pushHistory()}
+                      onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
-                        if (!readOnly) {
+                        if (!readOnly && dropTarget && dropTarget.id !== node.id) {
+                          handleZoneDrop(node.id, dropTarget.id, dropTarget.zone);
+                        } else if (!readOnly) {
                           setNodes((current) => resolveCollision(current, node.id));
+                          scheduleAutoSave();
                         }
-                        scheduleAutoSave();
+                        clearDwell();
+                        setDropTarget(null);
                       }}
                       onSelectionDragStart={() => pushHistory()}
                       onSelectionDragStop={() => scheduleAutoSave()}
@@ -1494,6 +1660,70 @@ function MapEditor({ mapId }: { mapId: number }) {
               items={menuItems}
               onClose={() => setMenu(null)}
             />
+          )}
+          {dropTarget && (
+            <div
+              className="pointer-events-none absolute z-20"
+              style={{
+                left: dropTarget.rect.left - Math.max(dropTarget.rect.width, 84),
+                top: dropTarget.rect.top,
+                height: dropTarget.rect.height,
+              }}
+            >
+              <div className="flex h-full items-stretch gap-1">
+                <div
+                  className={`zone-wing flex items-center justify-center rounded-sm border text-fine font-medium ${
+                    dropTarget.zone === "front"
+                      ? "border-accent bg-accent-tint text-accent"
+                      : "border-hairline bg-surface/85 text-ink-tertiary"
+                  }`}
+                  style={{ width: Math.max(dropTarget.rect.width, 84) }}
+                >
+                  {t("dropzone.front")}
+                </div>
+                <div style={{ width: dropTarget.rect.width }} />
+                <div
+                  className={`zone-wing flex items-center justify-center rounded-sm border text-fine font-medium ${
+                    dropTarget.zone === "back"
+                      ? "border-accent bg-accent-tint text-accent"
+                      : "border-hairline bg-surface/85 text-ink-tertiary"
+                  }`}
+                  style={{ width: Math.max(dropTarget.rect.width, 84) }}
+                >
+                  {t("dropzone.back")}
+                </div>
+              </div>
+            </div>
+          )}
+          {pending && (
+            <div
+              className="absolute z-30 flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+              style={{ left: pending.rect.left, top: pending.rect.top + pending.rect.height + 8 }}
+            >
+              <span className="text-fine text-ink-secondary">{t("dropzone.conflictPrompt")}</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => {
+                    applyFlowEdges(pending.aId, pending.bId, pending.mode, false);
+                    setPending(null);
+                  }}
+                >
+                  {t("dropzone.keep")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm bg-accent px-2 py-0.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  onClick={() => {
+                    applyFlowEdges(pending.aId, pending.bId, pending.mode, true);
+                    setPending(null);
+                  }}
+                >
+                  {t("dropzone.insert")}
+                </button>
+              </div>
+            </div>
           )}
         </div>
 

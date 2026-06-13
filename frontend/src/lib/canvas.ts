@@ -1,7 +1,7 @@
 // 캔버스 공용 타입 + 정렬/레이아웃 헬퍼 (순수 함수).
 
 import dagre from "@dagrejs/dagre";
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 
 import type { MessageKey } from "@/lib/i18n-messages";
 
@@ -107,6 +107,63 @@ export function resolveCollision(nodes: AppNode[], draggedId: string): AppNode[]
   pos.x = Math.round(pos.x / COLLISION_GAP) * COLLISION_GAP;
   pos.y = Math.round(pos.y / COLLISION_GAP) * COLLISION_GAP;
   return nodes.map((node) => (node.id === draggedId ? { ...node, position: pos } : node));
+}
+
+// 엣지 기본 — 직각(elbow) + 움직이는 점선 + 화살표. 색/애니메이션은 globals.css(.react-flow__edge-path).
+export const EDGE_DEFAULTS = {
+  type: "smoothstep",
+  animated: true,
+  markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
+} as const;
+
+/** B로 들어오는(B가 target) 엣지들. */
+export function getIncomingEdges(edges: Edge[], nodeId: string): Edge[] {
+  return edges.filter((edge) => edge.target === nodeId);
+}
+
+/** B에서 나가는(B가 source) 엣지들. */
+export function getOutgoingEdges(edges: Edge[], nodeId: string): Edge[] {
+  return edges.filter((edge) => edge.source === nodeId);
+}
+
+// 자기루프·중복 없이 엣지 추가
+function withEdge(edges: Edge[], source: string, target: string): Edge[] {
+  if (source === target || edges.some((edge) => edge.source === source && edge.target === target)) {
+    return edges;
+  }
+  return [...edges, { ...EDGE_DEFAULTS, id: crypto.randomUUID(), source, target }];
+}
+
+/** A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B. */
+export function insertNodeBefore(
+  edges: Edge[],
+  aId: string,
+  bId: string,
+  rewire: boolean,
+): Edge[] {
+  let next = edges;
+  if (rewire) {
+    next = next.map((edge) =>
+      edge.target === bId && edge.source !== aId ? { ...edge, target: aId } : edge,
+    );
+  }
+  return withEdge(next, aId, bId);
+}
+
+/** A를 B의 후행으로 삽입. rewire면 B의 기존 outgoing(단, A행 제외)을 A로 재연결 → B→A→…. */
+export function insertNodeAfter(
+  edges: Edge[],
+  aId: string,
+  bId: string,
+  rewire: boolean,
+): Edge[] {
+  let next = edges;
+  if (rewire) {
+    next = next.map((edge) =>
+      edge.source === bId && edge.target !== aId ? { ...edge, source: aId } : edge,
+    );
+  }
+  return withEdge(next, bId, aId);
 }
 
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
