@@ -16,17 +16,10 @@ import {
   Square,
   SquareArrowOutUpRight,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import { Fragment, type ComponentType } from "react";
 
-import { NODE_TYPE_OPTIONS, type ProcessNodeType } from "@/lib/canvas";
+import { NODE_TYPE_OPTIONS, type OutlineRow, type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
-
-export interface OutlineItem {
-  id: string;
-  label: string;
-  nodeType: ProcessNodeType;
-  hasChildren: boolean;
-}
 
 interface EditorLeftSidebarProps {
   readOnly: boolean;
@@ -39,7 +32,7 @@ interface EditorLeftSidebarProps {
   onAutoLayout: () => void;
   onAlign: (axis: "left" | "top") => void;
   onDistribute: (axis: "x" | "y") => void;
-  outline: OutlineItem[];
+  outline: OutlineRow[];
   onSelectNode: (id: string) => void;
   onDrill: (id: string) => void;
 }
@@ -173,32 +166,45 @@ export function EditorLeftSidebar({
           <p className="px-2 text-fine text-ink-tertiary">{t("sidebar.outlineEmpty")}</p>
         ) : (
           <ul className="flex flex-col gap-0.5">
-            {outline.map((item) => {
+            {outline.map((item, index) => {
               const Icon = TYPE_ICONS[item.nodeType];
+              // 독립 연결요소(블록)가 바뀌면 스페이서로 구분
+              const newBlock = index > 0 && item.blockIndex !== outline[index - 1].blockIndex;
               return (
-                <li key={item.id} className="group flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => onSelectNode(item.id)}
-                    className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-2 py-1 text-caption hover:bg-surface-alt ${
-                      item.id === selectedId ? "bg-accent-tint text-accent" : "text-ink-secondary"
-                    }`}
+                <Fragment key={item.id}>
+                  {newBlock && <li role="separator" className="my-1 border-t border-divider" />}
+                  <li
+                    className="group flex items-center"
+                    style={{ paddingLeft: item.depth * 12 }}
                   >
-                    <Icon size={13} strokeWidth={1.5} />
-                    <span className="truncate">{item.label || t("sidebar.untitled")}</span>
-                  </button>
-                  {item.hasChildren && (
+                    {item.depth > 0 && (
+                      <span className="mr-0.5 text-ink-tertiary" aria-hidden>
+                        ┄
+                      </span>
+                    )}
                     <button
                       type="button"
-                      onClick={() => onDrill(item.id)}
-                      className="rounded-sm p-1 text-ink-tertiary opacity-0 hover:bg-surface-alt hover:text-ink group-hover:opacity-100"
-                      title={t("node.openChildTitle")}
-                      aria-label={t("node.openChildTitle")}
+                      onClick={() => onSelectNode(item.id)}
+                      className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-2 py-1 text-caption hover:bg-surface-alt ${
+                        item.id === selectedId ? "bg-accent-tint text-accent" : "text-ink-secondary"
+                      }`}
                     >
-                      <SquareArrowOutUpRight size={13} strokeWidth={1.5} />
+                      <Icon size={13} strokeWidth={1.5} />
+                      <span className="truncate">{item.label || t("sidebar.untitled")}</span>
                     </button>
-                  )}
-                </li>
+                    {item.hasChildren && (
+                      <button
+                        type="button"
+                        onClick={() => onDrill(item.id)}
+                        className="rounded-sm p-1 text-ink-tertiary opacity-0 hover:bg-surface-alt hover:text-ink group-hover:opacity-100"
+                        title={t("node.openChildTitle")}
+                        aria-label={t("node.openChildTitle")}
+                      >
+                        <SquareArrowOutUpRight size={13} strokeWidth={1.5} />
+                      </button>
+                    )}
+                  </li>
+                </Fragment>
               );
             })}
           </ul>

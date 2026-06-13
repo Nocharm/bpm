@@ -26,12 +26,13 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 
 import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
-import { EditorLeftSidebar, type OutlineItem } from "@/components/editor-left-sidebar";
+import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
 import { ProcessNode } from "@/components/process-node";
 import { ShortcutLegend } from "@/components/shortcut-legend";
 import {
   alignSelected,
+  buildOutline,
   distributeSelected,
   layoutWithDagre,
   normalizeNodeType,
@@ -1462,17 +1463,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
   }, [inspectorWidth]);
 
-  // 좌측 아웃라인 — 현재 스코프 노드 요약
-  const outline = useMemo<OutlineItem[]>(
-    () =>
-      nodes.map((node) => ({
-        id: node.id,
-        label: node.data.label,
-        nodeType: node.data.nodeType,
-        hasChildren: node.data.hasChildren,
-      })),
-    [nodes],
-  );
+  // 좌측 아웃라인 — 엣지 흐름 기준 들여쓰기 + 독립 연결요소 블록 구분
+  const outline = useMemo(() => buildOutline(nodes, edges), [nodes, edges]);
 
   const handleOutlineSelect = useCallback(
     (id: string) => {

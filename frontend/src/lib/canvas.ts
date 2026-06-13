@@ -111,6 +111,133 @@ export function resolveCollision(nodes: AppNode[], draggedId: string): AppNode[]
   return nodes.map((node) => (node.id === draggedId ? { ...node, position: pos } : node));
 }
 
+export interface OutlineRow {
+  id: string;
+  label: string;
+  nodeType: ProcessNodeType;
+  hasChildren: boolean;
+  depth: number; // 흐름 들여쓰기 깊이
+  blockIndex: number; // 독립 연결요소 인덱스 — 블록 사이 스페이서 구분용
+}
+
+/**
+ * 좌측 아웃라인 행 — 엣지(흐름) 기준 들여쓰기 + 독립 연결요소를 블록으로 분리.
+ * 연결요소(size>1)는 흐름 순서대로, 무연결 노드들은 마지막 블록에 모은다.
+ */
+export function buildOutline(nodes: AppNode[], edges: Edge[]): OutlineRow[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const order = new Map(nodes.map((node, index) => [node.id, index]));
+  const orderOf = (id: string): number => order.get(id) ?? 0;
+
+  const out = new Map<string, string[]>();
+  const indeg = new Map<string, number>();
+  for (const node of nodes) {
+    out.set(node.id, []);
+    indeg.set(node.id, 0);
+  }
+  const scoped = edges.filter((edge) => nodeById.has(edge.source) && nodeById.has(edge.target));
+  for (const edge of scoped) {
+    out.get(edge.source)?.push(edge.target);
+    indeg.set(edge.target, (indeg.get(edge.target) ?? 0) + 1);
+  }
+
+  // 무방향 union-find로 연결요소 분리
+  const parent = new Map(nodes.map((node) => [node.id, node.id]));
+  const find = (start: string): string => {
+    let root = start;
+    while ((parent.get(root) ?? root) !== root) {
+      root = parent.get(root) ?? root;
+    }
+    let cur = start;
+    while (cur !== root) {
+      const next = parent.get(cur) ?? root;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const edge of scoped) {
+    const rootA = find(edge.source);
+    const rootB = find(edge.target);
+    if (rootA !== rootB) {
+      parent.set(rootA, rootB);
+    }
+  }
+  const components = new Map<string, string[]>();
+  for (const node of nodes) {
+    const root = find(node.id);
+    const members = components.get(root);
+    if (members) {
+      members.push(node.id);
+    } else {
+      components.set(root, [node.id]);
+    }
+  }
+
+  const linked: string[][] = [];
+  const isolated: string[] = [];
+  for (const members of components.values()) {
+    if (members.length > 1) {
+      linked.push(members);
+    } else {
+      isolated.push(members[0]);
+    }
+  }
+  const byOrder = (ids: string[]): string[] => ids.slice().sort((a, b) => orderOf(a) - orderOf(b));
+  linked.sort((a, b) => Math.min(...a.map(orderOf)) - Math.min(...b.map(orderOf)));
+  isolated.sort((a, b) => orderOf(a) - orderOf(b));
+
+  const rows: OutlineRow[] = [];
+  let blockIndex = 0;
+  const pushNode = (id: string, depth: number): void => {
+    const node = nodeById.get(id);
+    if (node) {
+      rows.push({
+        id,
+        label: node.data.label,
+        nodeType: node.data.nodeType,
+        hasChildren: node.data.hasChildren,
+        depth,
+        blockIndex,
+      });
+    }
+  };
+
+  for (const members of linked) {
+    const memberSet = new Set(members);
+    const visited = new Set<string>();
+    const roots = byOrder(members.filter((id) => (indeg.get(id) ?? 0) === 0));
+    const starts = roots.length > 0 ? roots : byOrder(members).slice(0, 1);
+    const stack: { id: string; depth: number }[] = [];
+    for (const root of starts) {
+      stack.push({ id: root, depth: 0 });
+      while (stack.length > 0) {
+        const top = stack.pop();
+        if (!top || visited.has(top.id)) {
+          continue;
+        }
+        visited.add(top.id);
+        pushNode(top.id, top.depth);
+        // 자식을 order 역순으로 push → pop 시 정방향(좌→우) 방문
+        const children = byOrder((out.get(top.id) ?? []).filter((target) => memberSet.has(target)));
+        for (let i = children.length - 1; i >= 0; i--) {
+          stack.push({ id: children[i], depth: top.depth + 1 });
+        }
+      }
+    }
+    for (const id of byOrder(members)) {
+      if (!visited.has(id)) {
+        pushNode(id, 0);
+      }
+    }
+    blockIndex++;
+  }
+  for (const id of isolated) {
+    pushNode(id, 0);
+  }
+  return rows;
+}
+
 // 엣지 기본 — 직각(elbow) + 움직이는 점선 + 화살표. 색/애니메이션은 globals.css(.react-flow__edge-path).
 export const EDGE_DEFAULTS = {
   type: "smoothstep",
