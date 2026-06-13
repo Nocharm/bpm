@@ -19,7 +19,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
@@ -28,6 +28,7 @@ import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
+import { GroupTitleBar } from "@/components/group-title-bar";
 import { ProcessNode } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
@@ -1190,6 +1191,78 @@ function MapEditor({ mapId }: { mapId: number }) {
     [versionId, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
   );
 
+  const renameGroup = useCallback(
+    (groupId: string, label: string) => {
+      setGroups((current) => current.map((g) => (g.id === groupId ? { ...g, label } : g)));
+      scheduleAutoSave();
+    },
+    [setGroups, scheduleAutoSave],
+  );
+
+  const recolorGroup = useCallback(
+    (groupId: string, color: string) => {
+      setGroups((current) => current.map((g) => (g.id === groupId ? { ...g, color } : g)));
+      scheduleAutoSave();
+    },
+    [setGroups, scheduleAutoSave],
+  );
+
+  // 선택된 멤버 노드를 그룹에서 제거 (group_id=null). 멤버 0이면 저장 시 그룹 자동 정리.
+  const leaveGroup = useCallback(
+    (groupId: string) => {
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected && node.data.groupId === groupId
+            ? { ...node, data: { ...node.data, groupId: null } }
+            : node,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [setNodes, scheduleAutoSave],
+  );
+
+  // 그룹 타이틀바 드래그 → 멤버 전체를 함께 이동
+  const startGroupMove = useCallback(
+    (
+      groupId: string,
+      event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void },
+    ) => {
+      if (readOnly) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      pushHistory();
+      const zoom = reactFlow.getViewport().zoom || 1;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startPositions = new Map(
+        nodesRef.current
+          .filter((node) => node.data.groupId === groupId)
+          .map((node) => [node.id, { ...node.position }]),
+      );
+      const onMove = (ev: PointerEvent) => {
+        const dx = (ev.clientX - startX) / zoom;
+        const dy = (ev.clientY - startY) / zoom;
+        setNodes((current) =>
+          current.map((node) => {
+            const start = startPositions.get(node.id);
+            return start ? { ...node, position: { x: start.x + dx, y: start.y + dy } } : node;
+          }),
+        );
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        scheduleAutoSave();
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [readOnly, reactFlow, setNodes, pushHistory, scheduleAutoSave],
+  );
+
   // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위로 넣기. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
@@ -1566,6 +1639,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       ];
     });
   }, [nodes, groups]);
+
+  // 선택된 멤버가 속한 그룹 id — 타이틀바에 "그룹 나가기" 노출 판정
+  const selectedGroupIds = useMemo(
+    () =>
+      new Set(
+        nodes
+          .filter((node) => node.selected && node.data.groupId)
+          .map((node) => node.data.groupId),
+      ),
+    [nodes],
+  );
 
   const selectedComments = useMemo(
     () => comments.filter((comment) => comment.node_id === selectedId),
@@ -1990,24 +2074,44 @@ function MapEditor({ mapId }: { mapId: number }) {
                     >
                       <ViewportPortal>
                         {groupBoxes.map((box) => (
-                          <div
-                            key={box.id}
-                            style={{
-                              position: "absolute",
-                              left: 0,
-                              top: 0,
-                              transform: `translate(${box.x}px, ${box.y}px)`,
-                              // 음수 z-index → viewport 스택 컨텍스트에서 노드(z:0)보다 먼저 그려져 뒤로 깔림
-                              zIndex: -1,
-                            }}
-                          >
-                            <GroupBox
-                              label={box.label}
-                              color={box.color}
-                              width={box.width}
-                              height={box.height}
-                            />
-                          </div>
+                          <Fragment key={box.id}>
+                            {/* 파스텔 박스 — 노드 뒤로 */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                transform: `translate(${box.x}px, ${box.y}px)`,
+                                zIndex: -1,
+                              }}
+                            >
+                              <GroupBox color={box.color} width={box.width} height={box.height} />
+                            </div>
+                            {/* 타이틀바 — 노드 위, 박스 상단 좌측 */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                transform: `translate(${box.x + 4}px, ${box.y + 3}px)`,
+                                zIndex: 1,
+                              }}
+                            >
+                              <GroupTitleBar
+                                id={box.id}
+                                label={box.label}
+                                color={box.color}
+                                width={box.width - 8}
+                                readOnly={readOnly}
+                                colorPresets={COLOR_PRESETS}
+                                canLeave={selectedGroupIds.has(box.id)}
+                                onRename={renameGroup}
+                                onRecolor={recolorGroup}
+                                onLeave={leaveGroup}
+                                onMoveStart={startGroupMove}
+                              />
+                            </div>
+                          </Fragment>
                         ))}
                       </ViewportPortal>
                       <Background

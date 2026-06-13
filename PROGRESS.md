@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
 ## 2026-06-14
+- 그룹 타이틀바(이름·색·이동·나가기) (브랜치 `feat/editor-ui`). 신규 `group-title-bar.tsx` — 그룹 박스 상단 좌측에 ViewportPortal flow 좌표로 렌더(노드 위, pointer-events 활성). ① 이름: 더블클릭→인라인 input(`renameGroup`). ② 색: 스와치 버튼→COLOR_PRESETS 팔레트 팝오버(`recolorGroup`). ③ 그룹 전체 이동: 그립 핸들 드래그→멤버 전 노드 함께 이동(`startGroupMove`, screen delta/zoom, pushHistory 1회). ④ 그룹 나가기: 선택된 멤버가 그 그룹 소속이면(`selectedGroupIds`) 나가기 버튼 노출→선택 멤버 group_id=null(`leaveGroup`, 멤버 0이면 저장 시 자동정리). `GroupBox`는 라벨 제거(타이틀바와 중복)→파스텔 fill만. i18n group.* 키 추가. 검증: tsc/eslint/build green.
 - 비활성(조상) 창 정적 프리뷰 (브랜치 `feat/editor-ui`). 지금까지 조상 창은 타이틀바만(내용 비움)이라 라이브 ReactFlow는 활성 창 1개뿐. 사용자 요청대로 조상 창에도 내용을 보이되 N개 라이브 인스턴스 부하를 피하려 **정적 SVG 프리뷰**로: 신규 `scope-preview.tsx` — fullGraph에서 해당 스코프(parent_node_id) 노드/엣지를 골라 viewBox로 창 크기에 자동 맞춤, 노드는 둥근 rect(파스텔 fill+stroke)+제목, 엣지는 선. pointer-events-none이라 클릭은 창 onFocus로 전달돼 활성화. ReactFlow·ResizeObserver·store 없이 경량. 정확도는 마지막 저장본(fullGraph) 기준(조상은 편집 안 함+스코프 전환 시 저장·refresh). 검증: tsc/eslint/build green.
 - 아웃라인 전체 프로젝트 트리화 + 클릭 포커싱 애니메이션 (브랜치 `feat/editor-ui`). ① 아웃라인을 **항상 프로젝트 루트(null) 기준 전체 트리**로 빌드(현재 스코프는 라이브 병합 유지) — 창을 옮겨도 전체 프로젝트를 일관 표시. 활성 스코프 경로(scopes의 drilled parentId)는 펼침 집합에 합성해 현재 위치 자동 노출(메모에서 파생 — set-state-in-effect 회피). ② 아웃라인 클릭 → 노드가 다른 스코프면 fullGraph로 스코프 체인 구성해 navigateTo+focusNodeIdRef, 같은 스코프면 즉시. 포커싱은 `fitView` duration 300→700(React Flow 기본 cubic-in-out=느림→빠름→느림 가감속이 또렷). 검증: tsc/eslint/build green.
 
