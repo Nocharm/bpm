@@ -1785,7 +1785,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
           {dropTarget && (
             <div
-              className="pointer-events-none absolute z-20"
+              className="pointer-events-none absolute z-[1100]"
               style={{
                 left: dropTarget.rect.left - Math.max(dropTarget.rect.width, 84),
                 top: dropTarget.rect.top,
@@ -1828,7 +1828,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
           {pending && (
             <div
-              className="absolute z-30 flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+              className="absolute z-[1110] flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"
               style={{ left: pending.rect.left, top: pending.rect.top + pending.rect.height + 8 }}
             >
               <span className="text-fine text-ink-secondary">{t("dropzone.conflictPrompt")}</span>
