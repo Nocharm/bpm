@@ -56,9 +56,9 @@ export const NODE_HEIGHT = 52;
 // 노드 사이 최소 간격(8px 그리드 정렬과 일치)
 const COLLISION_GAP = 8;
 
-/** 노드 타입별 충돌 박스 크기 — process-node.tsx 렌더 크기 근사. */
-function getNodeSize(node: AppNode): { w: number; h: number } {
-  switch (node.data.nodeType) {
+/** 노드 타입별 렌더 크기 근사 — 충돌 박스·프리뷰 공용 (process-node.tsx 기준). */
+export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } {
+  switch (nodeType) {
     case "decision":
       return { w: 96, h: 96 };
     case "start":
@@ -67,6 +67,10 @@ function getNodeSize(node: AppNode): { w: number; h: number } {
     default:
       return { w: NODE_WIDTH, h: NODE_HEIGHT };
   }
+}
+
+function getNodeSize(node: AppNode): { w: number; h: number } {
+  return nodeSizeOf(node.data.nodeType);
 }
 
 /** 드롭된 노드가 다른 노드와 겹치면 최소 분리 벡터로 밀어내 가장 가까운 빈 자리로 보낸다 (onNodeDragStop). */

@@ -4,15 +4,7 @@
 // viewBox로 창 크기에 자동 맞춤. 라이브 인스턴스 N개의 부하를 피하는 경량 렌더(시각 전용).
 
 import type { VersionGraph } from "@/lib/api";
-import { normalizeNodeType, type ProcessNodeType } from "@/lib/canvas";
-
-// 프리뷰용 노드 크기 근사 (process-node 렌더 크기)
-const SIZE: Record<ProcessNodeType, { w: number; h: number }> = {
-  decision: { w: 96, h: 96 },
-  start: { w: 96, h: 40 },
-  end: { w: 96, h: 40 },
-  process: { w: 170, h: 52 },
-};
+import { nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
 
 export function ScopePreview({
   fullGraph,
@@ -29,7 +21,7 @@ export function ScopePreview({
   }
 
   const boxes = scopeNodes.map((node) => {
-    const size = SIZE[normalizeNodeType(node.node_type)];
+    const size = nodeSizeOf(normalizeNodeType(node.node_type));
     return {
       id: node.id,
       x: node.pos_x,
