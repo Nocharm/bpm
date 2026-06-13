@@ -104,6 +104,18 @@ const COLOR_PRESETS = [
   "#909098", // stone
 ];
 
+// 그룹 전용 팔레트 — 노드보다 깊은 "존/라벨" 톤(노드 색과 분리해 묶음 영역을 구분)
+const GROUP_COLOR_PRESETS = [
+  "#4a5a8c", // indigo
+  "#3f7d72", // pine
+  "#5c7a4e", // moss
+  "#a87b3e", // bronze
+  "#a65d3e", // sienna
+  "#8c5a72", // plum
+  "#6e5aa0", // iris
+  "#5f6068", // graphite
+];
+
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
 const AUTO_SAVE_DELAY_MS = 2000; // 마지막 변경 후 자동 저장까지의 디바운스
@@ -1120,7 +1132,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           {
             id: newId,
             label: b.data.department || b.data.assignee || "",
-            color: b.data.color || "#6e84a3",
+            color: b.data.color || "#4a5a8c",
           },
         ]);
       }
@@ -2103,7 +2115,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 color={box.color}
                                 width={box.width - 8}
                                 readOnly={readOnly}
-                                colorPresets={COLOR_PRESETS}
+                                colorPresets={GROUP_COLOR_PRESETS}
                                 canLeave={selectedGroupIds.has(box.id)}
                                 onRename={renameGroup}
                                 onRecolor={recolorGroup}
