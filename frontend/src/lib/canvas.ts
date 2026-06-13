@@ -111,38 +111,51 @@ export function resolveCollision(nodes: AppNode[], draggedId: string): AppNode[]
   return nodes.map((node) => (node.id === draggedId ? { ...node, position: pos } : node));
 }
 
+// 아웃라인 입력 — React Flow 타입과 분리(전체 그래프/라이브 상태 모두 매핑 가능)
+export interface OutlineNode {
+  id: string;
+  parentId: string | null; // 계층(하위 프로세스) 부모 — null=최상위 스코프
+  label: string;
+  nodeType: ProcessNodeType;
+}
+export interface OutlineEdge {
+  source: string;
+  target: string;
+}
+
 export interface OutlineRow {
   id: string;
   label: string;
   nodeType: ProcessNodeType;
-  hasChildren: boolean;
-  depth: number; // 흐름 들여쓰기 깊이
-  blockIndex: number; // 독립 연결요소 인덱스 — 블록 사이 스페이서 구분용
+  hasChildren: boolean; // 하위 프로세스(자식 스코프) 보유 → 접기/펼치기 대상
+  expanded: boolean;
+  hierarchy: boolean; // 하위 스코프에서 펼쳐진 행(색 구분)
+  depth: number; // 들여쓰기 단위 (분기 흐름 + 계층 중첩 누적)
+  blockIndex: number; // 최상위 독립 연결요소 — 블록 사이 스페이서 구분용
 }
 
-/**
- * 좌측 아웃라인 행 — 엣지(흐름) 기준 들여쓰기 + 독립 연결요소를 블록으로 분리.
- * 연결요소(size>1)는 흐름 순서대로, 무연결 노드들은 마지막 블록에 모은다.
- */
-export function buildOutline(nodes: AppNode[], edges: Edge[]): OutlineRow[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const order = new Map(nodes.map((node, index) => [node.id, index]));
+/** 한 스코프(같은 부모) 내 노드들을 분기 흐름 구조로 정렬 — out-degree≥2일 때만 자식 들여쓰기. */
+function computeScopeFlow(
+  scopeNodes: OutlineNode[],
+  edges: OutlineEdge[],
+): { id: string; depth: number; blockIndex: number }[] {
+  const idSet = new Set(scopeNodes.map((node) => node.id));
+  const order = new Map(scopeNodes.map((node, index) => [node.id, index]));
   const orderOf = (id: string): number => order.get(id) ?? 0;
 
   const out = new Map<string, string[]>();
   const indeg = new Map<string, number>();
-  for (const node of nodes) {
+  for (const node of scopeNodes) {
     out.set(node.id, []);
     indeg.set(node.id, 0);
   }
-  const scoped = edges.filter((edge) => nodeById.has(edge.source) && nodeById.has(edge.target));
+  const scoped = edges.filter((edge) => idSet.has(edge.source) && idSet.has(edge.target));
   for (const edge of scoped) {
     out.get(edge.source)?.push(edge.target);
     indeg.set(edge.target, (indeg.get(edge.target) ?? 0) + 1);
   }
 
-  // 무방향 union-find로 연결요소 분리
-  const parent = new Map(nodes.map((node) => [node.id, node.id]));
+  const parent = new Map(scopeNodes.map((node) => [node.id, node.id]));
   const find = (start: string): string => {
     let root = start;
     while ((parent.get(root) ?? root) !== root) {
@@ -164,7 +177,7 @@ export function buildOutline(nodes: AppNode[], edges: Edge[]): OutlineRow[] {
     }
   }
   const components = new Map<string, string[]>();
-  for (const node of nodes) {
+  for (const node of scopeNodes) {
     const root = find(node.id);
     const members = components.get(root);
     if (members) {
@@ -173,7 +186,6 @@ export function buildOutline(nodes: AppNode[], edges: Edge[]): OutlineRow[] {
       components.set(root, [node.id]);
     }
   }
-
   const linked: string[][] = [];
   const isolated: string[] = [];
   for (const members of components.values()) {
@@ -187,22 +199,8 @@ export function buildOutline(nodes: AppNode[], edges: Edge[]): OutlineRow[] {
   linked.sort((a, b) => Math.min(...a.map(orderOf)) - Math.min(...b.map(orderOf)));
   isolated.sort((a, b) => orderOf(a) - orderOf(b));
 
-  const rows: OutlineRow[] = [];
+  const result: { id: string; depth: number; blockIndex: number }[] = [];
   let blockIndex = 0;
-  const pushNode = (id: string, depth: number): void => {
-    const node = nodeById.get(id);
-    if (node) {
-      rows.push({
-        id,
-        label: node.data.label,
-        nodeType: node.data.nodeType,
-        hasChildren: node.data.hasChildren,
-        depth,
-        blockIndex,
-      });
-    }
-  };
-
   for (const members of linked) {
     const memberSet = new Set(members);
     const visited = new Set<string>();
@@ -217,24 +215,81 @@ export function buildOutline(nodes: AppNode[], edges: Edge[]): OutlineRow[] {
           continue;
         }
         visited.add(top.id);
-        pushNode(top.id, top.depth);
-        // 자식을 order 역순으로 push → pop 시 정방향(좌→우) 방문
+        result.push({ id: top.id, depth: top.depth, blockIndex });
         const children = byOrder((out.get(top.id) ?? []).filter((target) => memberSet.has(target)));
+        // 분기(자식 2개↑)일 때만 들여쓰기 — 단일 후속(순차)은 같은 레벨
+        const childDepth = top.depth + (children.length >= 2 ? 1 : 0);
         for (let i = children.length - 1; i >= 0; i--) {
-          stack.push({ id: children[i], depth: top.depth + 1 });
+          stack.push({ id: children[i], depth: childDepth });
         }
       }
     }
     for (const id of byOrder(members)) {
       if (!visited.has(id)) {
-        pushNode(id, 0);
+        result.push({ id, depth: 0, blockIndex });
       }
     }
     blockIndex++;
   }
   for (const id of isolated) {
-    pushNode(id, 0);
+    result.push({ id, depth: 0, blockIndex });
   }
+  return result;
+}
+
+/**
+ * 좌측 아웃라인 — 분기 흐름 들여쓰기 + 하위 프로세스 인라인 펼치기.
+ * rootParentId 스코프부터 시작, expanded에 든 노드의 자식 스코프를 재귀로 들여쓰기(hierarchy=true).
+ */
+export function buildOutline(
+  nodes: OutlineNode[],
+  edges: OutlineEdge[],
+  rootParentId: string | null,
+  expanded: Set<string>,
+): OutlineRow[] {
+  const byParent = new Map<string | null, OutlineNode[]>();
+  for (const node of nodes) {
+    const siblings = byParent.get(node.parentId);
+    if (siblings) {
+      siblings.push(node);
+    } else {
+      byParent.set(node.parentId, [node]);
+    }
+  }
+  const parentsWithChildren = new Set(
+    nodes.map((node) => node.parentId).filter((id): id is string => id !== null),
+  );
+  const labelOf = new Map(nodes.map((node) => [node.id, node.label]));
+  const typeOf = new Map(nodes.map((node) => [node.id, node.nodeType]));
+
+  const rows: OutlineRow[] = [];
+  const emit = (
+    scopeParent: string | null,
+    hierarchyLevel: number,
+    baseDepth: number,
+    inheritedBlock: number,
+  ): void => {
+    const flow = computeScopeFlow(byParent.get(scopeParent) ?? [], edges);
+    for (const entry of flow) {
+      const hasChildren = parentsWithChildren.has(entry.id);
+      const isExpanded = hasChildren && expanded.has(entry.id);
+      const block = hierarchyLevel === 0 ? entry.blockIndex : inheritedBlock;
+      rows.push({
+        id: entry.id,
+        label: labelOf.get(entry.id) ?? "",
+        nodeType: typeOf.get(entry.id) ?? "process",
+        hasChildren,
+        expanded: isExpanded,
+        hierarchy: hierarchyLevel > 0,
+        depth: baseDepth + entry.depth,
+        blockIndex: block,
+      });
+      if (isExpanded) {
+        emit(entry.id, hierarchyLevel + 1, baseDepth + entry.depth + 1, block);
+      }
+    }
+  };
+  emit(rootParentId, 0, 0, 0);
   return rows;
 }
 

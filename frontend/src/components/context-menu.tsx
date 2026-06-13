@@ -4,9 +4,10 @@
 
 import { useEffect, useRef } from "react";
 
-// 액션 항목 또는 기능 구분용 구분선
+// 액션 항목 / 구분선 / 색 스와치 행
 export type ContextMenuItem =
   | { divider: true }
+  | { colors: string[]; current: string; onPick: (color: string) => void }
   | { divider?: false; label: string; shortcut?: string; danger?: boolean; onSelect: () => void };
 
 interface ContextMenuProps {
@@ -58,8 +59,27 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       style={{ left, top }}
     >
       {items.map((item, index) =>
-        item.divider ? (
+        "divider" in item ? (
           <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
+        ) : "colors" in item ? (
+          <div key={`colors-${index}`} className="flex flex-wrap gap-1 px-3 py-1.5">
+            {item.colors.map((color) => (
+              <button
+                key={color || "default"}
+                type="button"
+                onClick={() => {
+                  item.onPick(color);
+                  onClose();
+                }}
+                title={color || "default"}
+                aria-label={color || "default"}
+                className={`h-4 w-4 rounded-full border ${
+                  item.current === color ? "ring-2 ring-accent" : "border-hairline"
+                }`}
+                style={{ background: color || "var(--color-surface-alt)" }}
+              />
+            ))}
+          </div>
         ) : (
           <button
             key={item.label}

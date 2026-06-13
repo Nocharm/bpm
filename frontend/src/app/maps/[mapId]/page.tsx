@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, ChevronRight, Download, Lock, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -47,6 +47,8 @@ import {
   NODE_WIDTH,
   type AppNode,
   type NodeData,
+  type OutlineEdge,
+  type OutlineNode,
   type ProcessNodeType,
 } from "@/lib/canvas";
 import {
@@ -69,6 +71,7 @@ import {
   type Graph,
   type GraphEdge,
   type GraphGroup,
+  type VersionGraph,
   type VersionSummary,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
@@ -83,7 +86,7 @@ const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 �
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
 const GROUP_PAD = 16; // 그룹 박스가 멤버 bounding box를 감싸는 여백
 
-type DropZone = "front" | "group" | "back";
+type DropZone = "front" | "back" | "group" | "child";
 type ScreenRect = { left: number; top: number; width: number; height: number };
 
 // 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. Whimsical 8톤 stroke(데이터/출력 예외).
@@ -190,6 +193,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
+  // 아웃라인 전체 그래프(하위 프로세스 펼치기용) + 펼친 노드 집합
+  const [fullGraph, setFullGraph] = useState<VersionGraph | null>(null);
+  const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -226,7 +232,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   } | null>(null);
   const dwellRef = useRef<{ id: string; since: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragACenterRef = useRef(0); // 드래그 중 A 중심 x — dwell 타이머 발화 시 zone 판정용
+  const dragCenterRef = useRef({ x: 0, y: 0 }); // 드래그 중 A 중심 — dwell 발화 시 4방향 zone 판정용
   // 기존 엣지 충돌 시 유지/삽입 되묻기 팝오버
   const [pending, setPending] = useState<{
     mode: DropZone;
@@ -258,6 +264,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+
+  // 아웃라인 하위 펼치기용 전체 그래프 — 비핵심이라 실패해도 조용히 무시(아웃라인만 영향)
+  const refreshFullGraph = useCallback(() => {
+    if (versionId === null) {
+      return;
+    }
+    void getFullGraph(versionId)
+      .then(setFullGraph)
+      .catch(() => undefined);
+  }, [versionId]);
   useEffect(() => {
     windowGeomRef.current = windowGeom;
   }, [windowGeom]);
@@ -290,11 +306,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       dirtyRef.current = false;
       setSaveState("saved");
+      refreshFullGraph();
     } catch (err) {
       setSaveState("error");
       throw err;
     }
-  }, [versionId, currentParentId, readOnly]);
+  }, [versionId, currentParentId, readOnly, refreshFullGraph]);
 
   const scheduleAutoSave = useCallback(() => {
     if (readOnly) {
@@ -525,6 +542,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setNodes(toAppNodes(graph));
         setEdges(toAppEdges(graph));
         setGroups(graph.groups);
+        refreshFullGraph();
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
@@ -560,7 +578,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => {
       active = false;
     };
-  }, [versionId, currentParentId, setNodes, setEdges, reactFlow, t]);
+  }, [versionId, currentParentId, setNodes, setEdges, reactFlow, refreshFullGraph, t]);
 
   // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
   // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
@@ -1119,11 +1137,58 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setNodes, setGroups, scheduleAutoSave],
   );
 
-  // 드롭 영역에 놓음 — 그룹/앞/뒤. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
+  // A를 B의 하위 프로세스(자식 스코프)로 이동. 자식 스코프에 먼저 영속(재부모화)한 뒤
+  // 현재 스코프에서 제거 — 순서 보장으로 현재 스코프 자동저장이 A를 삭제하지 않도록 함.
+  const moveToChild = useCallback(
+    async (aId: string, bId: string) => {
+      if (versionId === null) {
+        return;
+      }
+      const aNode = nodesRef.current.find((node) => node.id === aId);
+      if (!aNode) {
+        return;
+      }
+      const aGraph = buildGraph([aNode], [], []).nodes[0];
+      try {
+        const child = await getGraph(versionId, bId);
+        await saveGraph(
+          versionId,
+          {
+            nodes: [...child.nodes, { ...aGraph, group_id: null }],
+            edges: child.edges,
+            groups: child.groups,
+          },
+          bId,
+        );
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.moveChild"));
+        return;
+      }
+      setNodes((current) =>
+        current
+          .filter((node) => node.id !== aId)
+          .map((node) =>
+            node.id === bId ? { ...node, data: { ...node.data, hasChildren: true } } : node,
+          ),
+      );
+      // A에 연결된 현재 스코프 엣지 제거 — 안 하면 저장 시 payload 미존재 노드 참조로 422
+      setEdges((current) => current.filter((edge) => edge.source !== aId && edge.target !== aId));
+      setSelectedId((sel) => (sel === aId ? null : sel));
+      scheduleAutoSave();
+      refreshFullGraph();
+    },
+    [versionId, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
+  );
+
+  // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위로 넣기. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
       if (zone === "group") {
         addToGroup(aId, bId);
+        return;
+      }
+      if (zone === "child") {
+        void moveToChild(aId, bId);
         return;
       }
       placeBeside(aId, bId, zone);
@@ -1140,7 +1205,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+    [addToGroup, moveToChild, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
   );
 
   // dwell 타이머/상태 정리
@@ -1159,12 +1224,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!target) {
         return;
       }
-      // A 중심이 B 좌측 1/3=앞, 우측 1/3=뒤, 가운데=그룹
+      // A 중심과 B 중심의 우세 방향으로 판정 — 좌=앞/우=뒤/위=그룹/아래=하위
       const bw = target.measured?.width ?? NODE_WIDTH;
-      const bLeft = target.position.x;
-      const a = dragACenterRef.current;
+      const bh = target.measured?.height ?? NODE_HEIGHT;
+      const dx = dragCenterRef.current.x - (target.position.x + bw / 2);
+      const dy = dragCenterRef.current.y - (target.position.y + bh / 2);
       const zone: DropZone =
-        a < bLeft + bw / 3 ? "front" : a > bLeft + (bw * 2) / 3 ? "back" : "group";
+        Math.abs(dx) >= Math.abs(dy)
+          ? dx < 0
+            ? "front"
+            : "back"
+          : dy < 0
+            ? "group"
+            : "child";
       const rect = screenRectOf(targetId);
       if (!rect) {
         return;
@@ -1182,7 +1254,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
-      dragACenterRef.current = node.position.x + (node.measured?.width ?? NODE_WIDTH) / 2;
+      dragCenterRef.current = {
+        x: node.position.x + (node.measured?.width ?? NODE_WIDTH) / 2,
+        y: node.position.y + (node.measured?.height ?? NODE_HEIGHT) / 2,
+      };
       const target = reactFlow.getIntersectingNodes(node).find((other) => other.id !== node.id);
       if (!target) {
         clearDwell();
@@ -1222,6 +1297,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
     },
     [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
+  );
+
+  // 우클릭 색 스와치 → 선택 노드 색 변경 (우클릭 시 해당 노드가 selectedId가 됨)
+  const handleRecolor = useCallback(
+    (color: string) => updateSelectedData({ color }),
+    [updateSelectedData],
   );
 
   const updateSelectedEdgeLabel = useCallback(
@@ -1305,7 +1386,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         return [{ label: t("ctx.exportPng"), onSelect: () => void handleExportPng() }];
       }
       return [
-        { label: t("ctx.addNode"), onSelect: () => handleAddNode({ x: menu.x, y: menu.y }) },
+        ...NODE_TYPE_OPTIONS.map((option) => ({
+          label: t(option.labelKey),
+          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
+        })),
         { divider: true },
         {
           label: t("ctx.autoLayout"),
@@ -1348,7 +1432,18 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ];
+      const colorItems: ContextMenuItem[] = readOnly
+        ? []
+        : [
+            {
+              colors: COLOR_PRESETS,
+              current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
+              onPick: handleRecolor,
+            },
+            { divider: true },
+          ];
       return [
+        ...colorItems,
         {
           label: t("ctx.openChild"),
           shortcut: t("ctx.doubleClick"),
@@ -1383,7 +1478,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       },
     ];
-  }, [menu, readOnly, handleAddNode, applyNodesTransform, handleDrillIn, handleExportPng, reactFlow, t]);
+  }, [
+    menu,
+    readOnly,
+    nodes,
+    handleAddNode,
+    handleRecolor,
+    applyNodesTransform,
+    handleDrillIn,
+    handleExportPng,
+    reactFlow,
+    t,
+  ]);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedId) ?? null,
@@ -1463,8 +1569,53 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
   }, [inspectorWidth]);
 
-  // 좌측 아웃라인 — 엣지 흐름 기준 들여쓰기 + 독립 연결요소 블록 구분
-  const outline = useMemo(() => buildOutline(nodes, edges), [nodes, edges]);
+  // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
+  const outline = useMemo(() => {
+    const currentIds = new Set(nodes.map((node) => node.id));
+    const outlineNodes: OutlineNode[] = nodes.map((node) => ({
+      id: node.id,
+      parentId: currentParentId,
+      label: node.data.label,
+      nodeType: node.data.nodeType,
+    }));
+    const outlineEdges: OutlineEdge[] = edges.map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+    }));
+    if (fullGraph) {
+      for (const flat of fullGraph.nodes) {
+        if (flat.parent_node_id !== currentParentId) {
+          outlineNodes.push({
+            id: flat.id,
+            parentId: flat.parent_node_id,
+            label: flat.title,
+            nodeType: normalizeNodeType(flat.node_type),
+          });
+        }
+      }
+      for (const graphEdge of fullGraph.edges) {
+        if (!currentIds.has(graphEdge.source_node_id)) {
+          outlineEdges.push({
+            source: graphEdge.source_node_id,
+            target: graphEdge.target_node_id,
+          });
+        }
+      }
+    }
+    return buildOutline(outlineNodes, outlineEdges, currentParentId, expandedOutline);
+  }, [nodes, edges, fullGraph, currentParentId, expandedOutline]);
+
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedOutline((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const handleOutlineSelect = useCallback(
     (id: string) => {
@@ -1473,23 +1624,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       void reactFlow.fitView({ nodes: [{ id }], maxZoom: 1.2, duration: 300 });
     },
     [reactFlow],
-  );
-
-  const handleOutlineDrill = useCallback(
-    (id: string) => {
-      const rect = canvasContainerRef.current?.getBoundingClientRect();
-      handleDrillById(
-        id,
-        rect ? rect.left + rect.width / 2 : 0,
-        rect ? rect.top + rect.height / 2 : 0,
-      );
-    },
-    [handleDrillById],
-  );
-
-  const handleRecolor = useCallback(
-    (color: string) => updateSelectedData({ color }),
-    [updateSelectedData],
   );
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
@@ -1703,23 +1837,12 @@ function MapEditor({ mapId }: { mapId: number }) {
 
       <div className="flex min-h-0 flex-1">
         <EditorLeftSidebar
-          readOnly={readOnly}
           collapsed={leftCollapsed}
           onToggleCollapse={() => setLeftCollapsed((value) => !value)}
-          colorPresets={COLOR_PRESETS}
           selectedId={selectedId}
-          onAddType={(type) => handleAddNode(null, type)}
-          onRecolor={handleRecolor}
-          onAutoLayout={() =>
-            applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))
-          }
-          onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
-          onDistribute={(axis) =>
-            applyNodesTransform((current) => distributeSelected(current, axis))
-          }
           outline={outline}
           onSelectNode={handleOutlineSelect}
-          onDrill={handleOutlineDrill}
+          onToggleExpand={handleToggleExpand}
         />
         <div
           ref={canvasContainerRef}
@@ -1866,49 +1989,44 @@ function MapEditor({ mapId }: { mapId: number }) {
               onClose={() => setMenu(null)}
             />
           )}
-          {dropTarget && (
-            <div
-              className="pointer-events-none absolute z-[1100]"
-              style={{
-                left: dropTarget.rect.left - Math.max(dropTarget.rect.width, 84),
-                top: dropTarget.rect.top,
-                height: dropTarget.rect.height,
-              }}
-            >
-              <div className="flex h-full items-stretch gap-1">
-                <div
-                  className={`zone-wing flex items-center justify-center rounded-sm border text-fine font-medium ${
-                    dropTarget.zone === "front"
-                      ? "border-accent bg-accent-tint text-accent"
-                      : "border-hairline bg-surface/85 text-ink-tertiary"
-                  }`}
-                  style={{ width: Math.max(dropTarget.rect.width, 84) }}
-                >
-                  {t("dropzone.front")}
+          {dropTarget &&
+            (() => {
+              const r = dropTarget.rect;
+              const tileSize = 30;
+              const gap = 8;
+              const cx = r.left + r.width / 2;
+              const cy = r.top + r.height / 2;
+              const ringD = Math.max(r.width, r.height) + 20;
+              const tiles = [
+                { zone: "front", Icon: ArrowLeft, left: r.left - tileSize - gap, top: cy - tileSize / 2, label: t("dropzone.front") },
+                { zone: "back", Icon: ArrowRight, left: r.left + r.width + gap, top: cy - tileSize / 2, label: t("dropzone.back") },
+                { zone: "group", Icon: Boxes, left: cx - tileSize / 2, top: r.top - tileSize - gap, label: t("dropzone.group") },
+                { zone: "child", Icon: CornerDownRight, left: cx - tileSize / 2, top: r.top + r.height + gap, label: t("dropzone.child") },
+              ] as const;
+              return (
+                <div className="pointer-events-none absolute inset-0 z-[1100]">
+                  {/* 기준 셀(B) 원형 링 */}
+                  <div
+                    className="zone-wing absolute rounded-full border-2 border-accent/40"
+                    style={{ left: cx - ringD / 2, top: cy - ringD / 2, width: ringD, height: ringD }}
+                  />
+                  {tiles.map(({ zone, Icon, left, top, label }) => (
+                    <div
+                      key={zone}
+                      title={label}
+                      className={`zone-wing absolute flex items-center justify-center rounded-sm border shadow-sm ${
+                        dropTarget.zone === zone
+                          ? "border-accent bg-accent-tint text-accent"
+                          : "border-hairline bg-surface/90 text-ink-tertiary"
+                      }`}
+                      style={{ left, top, width: tileSize, height: tileSize }}
+                    >
+                      <Icon size={16} strokeWidth={1.5} />
+                    </div>
+                  ))}
                 </div>
-                <div
-                  className={`zone-wing flex items-center justify-center rounded-sm border-2 border-dashed text-fine font-medium ${
-                    dropTarget.zone === "group"
-                      ? "border-accent bg-accent-tint/70 text-accent"
-                      : "border-transparent text-transparent"
-                  }`}
-                  style={{ width: dropTarget.rect.width }}
-                >
-                  {t("dropzone.group")}
-                </div>
-                <div
-                  className={`zone-wing flex items-center justify-center rounded-sm border text-fine font-medium ${
-                    dropTarget.zone === "back"
-                      ? "border-accent bg-accent-tint text-accent"
-                      : "border-hairline bg-surface/85 text-ink-tertiary"
-                  }`}
-                  style={{ width: Math.max(dropTarget.rect.width, 84) }}
-                >
-                  {t("dropzone.back")}
-                </div>
-              </div>
-            </div>
-          )}
+              );
+            })()}
           {pending && (
             <div
               className="absolute z-[1110] flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"
