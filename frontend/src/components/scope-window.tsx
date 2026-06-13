@@ -101,7 +101,7 @@ export function ScopeWindow({
 
   return (
     <div
-      className={`window-open absolute flex flex-col overflow-hidden rounded-sm border bg-surface shadow ${
+      className={`window-open absolute flex flex-col overflow-hidden rounded-sm border bg-surface shadow-md ${
         active ? "border-hairline" : "border-divider"
       }`}
       style={{ ...rect, zIndex }}

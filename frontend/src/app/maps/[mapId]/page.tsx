@@ -4,9 +4,11 @@ import { ArrowLeft, Check, ChevronRight, Download, Lock, PencilLine, Plus, Redo2
 import {
   addEdge,
   Background,
+  BackgroundVariant,
   Controls,
   type Connection,
   type Edge,
+  MarkerType,
   type NodeTypes,
   ReactFlow,
   ReactFlowProvider,
@@ -30,6 +32,7 @@ import {
   distributeSelected,
   layoutWithDagre,
   normalizeNodeType,
+  resolveCollision,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
   NODE_WIDTH,
@@ -65,16 +68,25 @@ import { NodeActionsContext } from "@/lib/node-actions";
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-// 색 프리셋 — 첫 항목(빈 값)은 타입 기본색
+// 엣지 기본 — 직각(elbow) + 움직이는 점선 + 화살표로 흐름 방향 상시 표시.
+// 색/점선 애니메이션은 globals.css(.react-flow__edge-path)에서, 선택 시 accent로 전환.
+const EDGE_DEFAULTS = {
+  type: "smoothstep",
+  animated: true,
+  markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
+} as const;
+
+// 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. Whimsical 8톤 stroke(데이터/출력 예외).
 const COLOR_PRESETS = [
   "",
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#3b82f6",
-  "#8b5cf6",
-  "#18181b",
+  "#6a41ff", // purple
+  "#3d7eff", // blue
+  "#14b8a6", // teal
+  "#2bc56f", // green
+  "#e0a800", // yellow
+  "#ff8a33", // orange
+  "#ff5c9a", // pink
+  "#9a9aa6", // gray
 ];
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
@@ -117,6 +129,7 @@ function toAppNodes(graph: Graph): AppNode[] {
 
 function toAppEdges(graph: Graph): Edge[] {
   return graph.edges.map((edge) => ({
+    ...EDGE_DEFAULTS,
     id: edge.id,
     source: edge.source_node_id,
     target: edge.target_node_id,
@@ -750,7 +763,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       pushHistory();
       setEdges((current) =>
-        addEdge({ source: connectSource, target: targetId, id: crypto.randomUUID() }, current),
+        addEdge(
+          { ...EDGE_DEFAULTS, source: connectSource, target: targetId, id: crypto.randomUUID() },
+          current,
+        ),
       );
       scheduleAutoSave();
       setConnectSource(null);
@@ -877,7 +893,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       pushHistory();
       setEdges((current) =>
-        addEdge({ ...connection, id: crypto.randomUUID() }, current),
+        addEdge({ ...EDGE_DEFAULTS, ...connection, id: crypto.randomUUID() }, current),
       );
       scheduleAutoSave();
     },
@@ -1364,7 +1380,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       <div className="flex flex-1">
         <div
           ref={canvasContainerRef}
-          className="relative flex-1 overflow-hidden bg-surface-alt"
+          className="relative flex-1 overflow-hidden bg-canvas"
         >
           {scopes.map((scope, index) => {
             const key = scopeKey(scope);
@@ -1391,11 +1407,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onClose={() => closeScope(index)}
               >
                 {active ? (
-                  <div className="h-full w-full">
+                  <div className="h-full w-full bg-canvas">
                     <ReactFlow
                       nodes={displayNodes}
                       edges={edges}
                       nodeTypes={nodeTypes}
+                      snapToGrid
+                      snapGrid={[8, 8]}
                       nodesDraggable={!readOnly}
                       nodesConnectable={!readOnly}
                       onNodesChange={onNodesChange}
@@ -1433,7 +1451,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
                       onNodeDragStart={() => pushHistory()}
-                      onNodeDragStop={() => scheduleAutoSave()}
+                      onNodeDragStop={(_, node) => {
+                        if (!readOnly) {
+                          setNodes((current) => resolveCollision(current, node.id));
+                        }
+                        scheduleAutoSave();
+                      }}
                       onSelectionDragStart={() => pushHistory()}
                       onSelectionDragStop={() => scheduleAutoSave()}
                       onBeforeDelete={async () => {
@@ -1451,7 +1474,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       panActivationKeyCode="Space"
                       fitView
                     >
-                      <Background />
+                      <Background
+                        variant={BackgroundVariant.Dots}
+                        gap={20}
+                        size={1.2}
+                        color="var(--color-canvas-dot)"
+                      />
                       <Controls />
                     </ReactFlow>
                   </div>

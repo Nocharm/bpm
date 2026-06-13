@@ -4,8 +4,10 @@
 
 import {
   Background,
+  BackgroundVariant,
   Controls,
   type Edge,
+  MarkerType,
   type NodeTypes,
   ReactFlow,
 } from "@xyflow/react";
@@ -98,6 +100,9 @@ function buildPaneEdges(
     .map((edge) => {
       const status = edgeStatus.get(edge.id);
       return {
+        // 비교 화면은 읽기 전용 — 흐름 방향(화살표·elbow)은 동일 적용하되 diff dash 의미 보존 위해 animated 미적용
+        type: "smoothstep" as const,
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
         id: edge.id,
         source: edge.source_node_id,
         target: edge.target_node_id,
@@ -142,7 +147,7 @@ function VersionPane({
           ))}
         </select>
       </div>
-      <div className="flex-1">
+      <div className="flex-1 bg-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -152,7 +157,12 @@ function VersionPane({
           elementsSelectable={false}
           fitView
         >
-          <Background />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1.2}
+            color="var(--color-canvas-dot)"
+          />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>

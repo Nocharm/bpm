@@ -7,13 +7,18 @@ import type { AppNode, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import { useNodeActions } from "@/lib/node-actions";
 
-// 타입별 기본 테두리색 — data.color 미지정(빈 값) 시 사용
+// 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. Whimsical 8톤(데이터/출력 예외 → raw hex 허용)
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
-  process: "var(--color-surface-chip)",
-  decision: "var(--color-changed)",
-  start: "var(--color-added)",
-  end: "var(--color-removed)",
+  process: "#9a9aa6", // gray
+  decision: "#e0a800", // yellow
+  start: "#2bc56f", // green
+  end: "#ff5c9a", // pink
 };
+
+// 파스텔 fill — 저장된 stroke color에서 파생(데이터 모델 무변경)
+function deriveFill(color: string): string {
+  return `color-mix(in srgb, ${color} 18%, white)`;
+}
 
 // 비교 화면 diff 상태별 강조 — 선택 링보다 우선
 const DIFF_RINGS: Record<string, string> = {
@@ -78,6 +83,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
   const { connectSource } = useNodeActions();
   const color = data.color || DEFAULT_COLORS[data.nodeType];
+  const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
   const ring =
     connectSource === id
@@ -97,8 +103,8 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         <Handle type="target" position={Position.Left} />
         {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
-          className={`absolute inset-3 rotate-45 rounded-sm border-2 bg-surface ${ring}`}
-          style={{ borderColor: color }}
+          className={`absolute inset-3 rotate-45 rounded-sm transition-shadow group-hover:shadow-sm ${ring}`}
+          style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
         />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
           {data.label}
@@ -120,12 +126,12 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`group relative bg-surface px-3 py-2 text-sm ${ring} ${
+      className={`group relative px-3 py-2 text-sm transition-shadow hover:shadow-sm ${ring} ${
         isTerminal
-          ? "min-w-[90px] rounded-full border-2 text-center"
-          : "min-w-[150px] rounded border"
+          ? "min-w-[90px] rounded-full text-center"
+          : "min-w-[150px] rounded-sm"
       }`}
-      style={{ borderColor: color }}
+      style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
       title={data.diffNote}
     >
       <Handle type="target" position={Position.Left} />
