@@ -29,6 +29,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
 import { ProcessNode } from "@/components/process-node";
+import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
 import {
   alignSelected,
@@ -2018,7 +2019,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <Controls />
                     </ReactFlow>
                   </div>
-                ) : null}
+                ) : (
+                  <ScopePreview fullGraph={fullGraph} scopeParentId={scope.parentId} />
+                )}
               </ScopeWindow>
             );
           })}
