@@ -83,7 +83,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { ...headers, ...init?.headers },
   });
   if (!response.ok) {
-    throw new Error(`API ${init?.method ?? "GET"} ${path} failed: ${response.status}`);
+    // 서버 detail(검증 실패 사유 등)을 메시지에 포함 — 진단 용이
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+    );
   }
   if (response.status === 204) {
     return undefined as T;

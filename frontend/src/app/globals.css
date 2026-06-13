@@ -126,23 +126,38 @@ body {
   stroke: var(--color-accent);
 }
 
-/* 드롭 영역(앞/뒤) — 대상 노드 옆으로 확장되며 등장 */
-@keyframes zone-wing-in {
+/* 드롭 영역 — 기준 셀 원형 링 + 원주 위 타일 등장 */
+@keyframes zone-ring-in {
   from {
     opacity: 0;
-    transform: scaleX(0.6);
+    transform: scale(0.4);
   }
   to {
     opacity: 1;
-    transform: scaleX(1);
+    transform: scale(1);
   }
 }
-.zone-wing {
+@keyframes zone-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.zone-ring {
   transform-origin: center;
-  animation: zone-wing-in 200ms var(--ease-overshoot);
+  animation: zone-ring-in 220ms var(--ease-overshoot);
+}
+.zone-pop {
+  transform-origin: center;
+  animation: zone-pop-in 260ms var(--ease-overshoot);
 }
 @media (prefers-reduced-motion: reduce) {
-  .zone-wing {
+  .zone-ring,
+  .zone-pop {
     animation: none;
   }
 }

@@ -152,6 +152,12 @@ function toAppEdges(graph: Graph): Edge[] {
 }
 
 function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
+  // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const keptGroups = groups.filter((group) =>
+    nodes.some((node) => node.data.groupId === group.id),
+  );
+  const groupIds = new Set(keptGroups.map((group) => group.id));
   return {
     nodes: nodes.map((node, index) => ({
       id: node.id,
@@ -166,16 +172,19 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
-      group_id: node.data.groupId,
+      // 고아 group_id(그룹이 payload에 없음)는 null 처리
+      group_id: node.data.groupId && groupIds.has(node.data.groupId) ? node.data.groupId : null,
     })),
-    edges: edges.map<GraphEdge>((edge) => ({
-      id: edge.id,
-      source_node_id: edge.source,
-      target_node_id: edge.target,
-      label: typeof edge.label === "string" ? edge.label : "",
-    })),
-    // 멤버가 남은 그룹만 저장(빈 그룹 자동 정리)
-    groups: groups.filter((group) => nodes.some((node) => node.data.groupId === group.id)),
+    // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거
+    edges: edges
+      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+      .map<GraphEdge>((edge) => ({
+        id: edge.id,
+        source_node_id: edge.source,
+        target_node_id: edge.target,
+        label: typeof edge.label === "string" ? edge.label : "",
+      })),
+    groups: keptGroups.map((group) => ({ id: group.id, label: group.label, color: group.color })),
   };
 }
 
@@ -232,7 +241,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   } | null>(null);
   const dwellRef = useRef<{ id: string; since: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragCenterRef = useRef({ x: 0, y: 0 }); // 드래그 중 A 중심 — dwell 발화 시 4방향 zone 판정용
+  const dragMouseRef = useRef({ x: 0, y: 0 }); // 드래그 중 마우스 flow 좌표 — 4방향 zone 판정 기준
   // 기존 엣지 충돌 시 유지/삽입 되묻기 팝오버
   const [pending, setPending] = useState<{
     mode: DropZone;
@@ -1227,8 +1236,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       // A 중심과 B 중심의 우세 방향으로 판정 — 좌=앞/우=뒤/위=그룹/아래=하위
       const bw = target.measured?.width ?? NODE_WIDTH;
       const bh = target.measured?.height ?? NODE_HEIGHT;
-      const dx = dragCenterRef.current.x - (target.position.x + bw / 2);
-      const dy = dragCenterRef.current.y - (target.position.y + bh / 2);
+      const dx = dragMouseRef.current.x - (target.position.x + bw / 2);
+      const dy = dragMouseRef.current.y - (target.position.y + bh / 2);
       const zone: DropZone =
         Math.abs(dx) >= Math.abs(dy)
           ? dx < 0
@@ -1250,15 +1259,18 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 드래그 중 — A 아래 노드를 DWELL_MS 머문 뒤 영역 표시(가만히 둬도 타이머로 발화), 이후 이동 시 zone 갱신
   const handleNodeDrag = useCallback(
-    (_: unknown, node: AppNode) => {
+    (event: MouseEvent | TouchEvent, node: AppNode) => {
       if (readOnly) {
         return;
       }
-      dragCenterRef.current = {
-        x: node.position.x + (node.measured?.width ?? NODE_WIDTH) / 2,
-        y: node.position.y + (node.measured?.height ?? NODE_HEIGHT) / 2,
-      };
-      const target = reactFlow.getIntersectingNodes(node).find((other) => other.id !== node.id);
+      // 마우스/터치 flow 좌표 기준 — 커서 아래 노드를 대상으로, 커서 방향으로 zone 판정
+      const clientX = "touches" in event ? (event.touches[0]?.clientX ?? 0) : event.clientX;
+      const clientY = "touches" in event ? (event.touches[0]?.clientY ?? 0) : event.clientY;
+      const mouse = reactFlow.screenToFlowPosition({ x: clientX, y: clientY });
+      dragMouseRef.current = mouse;
+      const target = reactFlow
+        .getIntersectingNodes({ x: mouse.x, y: mouse.y, width: 1, height: 1 })
+        .find((other) => other.id !== node.id);
       if (!target) {
         clearDwell();
         setDropTarget((cur) => (cur ? null : cur));
@@ -1992,36 +2004,37 @@ function MapEditor({ mapId }: { mapId: number }) {
           {dropTarget &&
             (() => {
               const r = dropTarget.rect;
-              const tileSize = 30;
-              const gap = 8;
+              const tileSize = 44;
               const cx = r.left + r.width / 2;
               const cy = r.top + r.height / 2;
-              const ringD = Math.max(r.width, r.height) + 20;
+              // 링 반경 — 기존(=max/2+10) 대비 약 2배
+              const radius = Math.max(r.width, r.height) + 20;
+              // 타일은 원주 위 4 cardinal 지점
               const tiles = [
-                { zone: "front", Icon: ArrowLeft, left: r.left - tileSize - gap, top: cy - tileSize / 2, label: t("dropzone.front") },
-                { zone: "back", Icon: ArrowRight, left: r.left + r.width + gap, top: cy - tileSize / 2, label: t("dropzone.back") },
-                { zone: "group", Icon: Boxes, left: cx - tileSize / 2, top: r.top - tileSize - gap, label: t("dropzone.group") },
-                { zone: "child", Icon: CornerDownRight, left: cx - tileSize / 2, top: r.top + r.height + gap, label: t("dropzone.child") },
+                { zone: "front", Icon: ArrowLeft, x: cx - radius, y: cy, label: t("dropzone.front") },
+                { zone: "back", Icon: ArrowRight, x: cx + radius, y: cy, label: t("dropzone.back") },
+                { zone: "group", Icon: Boxes, x: cx, y: cy - radius, label: t("dropzone.group") },
+                { zone: "child", Icon: CornerDownRight, x: cx, y: cy + radius, label: t("dropzone.child") },
               ] as const;
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
                   {/* 기준 셀(B) 원형 링 */}
                   <div
-                    className="zone-wing absolute rounded-full border-2 border-accent/40"
-                    style={{ left: cx - ringD / 2, top: cy - ringD / 2, width: ringD, height: ringD }}
+                    className="zone-ring absolute rounded-full border-2 border-accent/40"
+                    style={{ left: cx - radius, top: cy - radius, width: radius * 2, height: radius * 2 }}
                   />
-                  {tiles.map(({ zone, Icon, left, top, label }) => (
+                  {tiles.map(({ zone, Icon, x, y, label }) => (
                     <div
                       key={zone}
                       title={label}
-                      className={`zone-wing absolute flex items-center justify-center rounded-sm border shadow-sm ${
+                      className={`zone-pop absolute flex items-center justify-center rounded-md border shadow-md ${
                         dropTarget.zone === zone
                           ? "border-accent bg-accent-tint text-accent"
                           : "border-hairline bg-surface/90 text-ink-tertiary"
                       }`}
-                      style={{ left, top, width: tileSize, height: tileSize }}
+                      style={{ left: x - tileSize / 2, top: y - tileSize / 2, width: tileSize, height: tileSize }}
                     >
-                      <Icon size={16} strokeWidth={1.5} />
+                      <Icon size={20} strokeWidth={1.5} />
                     </div>
                   ))}
                 </div>
