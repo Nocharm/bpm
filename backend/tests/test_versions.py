@@ -49,6 +49,32 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     assert child["nodes"][0]["id"] != "c"
 
 
+def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
+    created = _create_map(client)
+    source_version = created["versions"][0]["id"]
+    client.put(
+        f"/api/versions/{source_version}/graph",
+        json={
+            "nodes": [{"id": "n1", "title": "A", "group_id": "g1"}],
+            "edges": [],
+            "groups": [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}],
+        },
+    )
+
+    clone = client.post(
+        f"/api/maps/{created['id']}/versions",
+        json={"label": "To-Be", "source_version_id": source_version},
+    ).json()
+    top = client.get(f"/api/versions/{clone['id']}/graph").json()
+
+    # 그룹은 새 ID로 복제되고, 멤버 노드의 group_id도 복제된 그룹을 가리킴
+    assert len(top["groups"]) == 1
+    cloned_group_id = top["groups"][0]["id"]
+    assert cloned_group_id != "g1"
+    assert top["groups"][0]["label"] == "영업팀"
+    assert top["nodes"][0]["group_id"] == cloned_group_id
+
+
 def test_clone_records_source_lineage(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]

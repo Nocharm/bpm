@@ -9,29 +9,39 @@
 }
 
 @theme {
-  /* Accent — 단일 블루, 세 역할 */
-  --color-accent: #0066cc;
-  --color-accent-focus: #0071e3;
-  --color-accent-elevated: #2997ff;
+  /* Accent — 단일 바이올렛(Whimsical), 세 역할 + tint */
+  --color-accent: #6a41ff;
+  --color-accent-focus: #5733e0;
+  --color-accent-elevated: #4a29c2;
   --color-on-accent: #ffffff;
+  --color-accent-tint: #efebff; /* 선택 행/활성 툴 배경 */
+  --color-accent-tint-border: #d7ccff;
 
   /* Surfaces */
   --color-surface: #ffffff;
   --color-surface-alt: #f5f5f7;
   --color-surface-pearl: #fafafc;
   --color-surface-chip: #d2d2d7;
+  --color-canvas: #f6f6f8; /* 무한 캔버스 배경 */
+  --color-canvas-dot: #dddde3; /* dot-grid 점 */
 
   /* Ink */
-  --color-ink: #1d1d1f;
+  --color-ink: #16161d;
   --color-ink-secondary: #333333;
   --color-ink-tertiary: #7a7a7a;
 
   /* Borders */
   --color-divider: #f0f0f0;
-  --color-hairline: #e0e0e0;
+  --color-hairline: #e6e6ea;
+  --color-border-strong: #c9c9d1; /* 엣지 기본선 */
 
   /* Feedback */
   --color-error: #cc3300;
+
+  /* Elevation — Whimsical 쿨톤 저확산 (노드 hover / 패널 / 플로팅) */
+  --shadow-sm: 0 1px 2px rgba(22, 22, 29, 0.06);
+  --shadow-md: 0 4px 12px rgba(22, 22, 29, 0.08);
+  --shadow-lg: 0 8px 28px rgba(22, 22, 29, 0.12);
 
   /* Diff(비교) — 노드 타입 의미색으로도 재사용 */
   --color-added: #16794f;
@@ -101,6 +111,53 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .window-open {
+    animation: none;
+  }
+}
+
+/* 엣지 — 기본선 border-strong, 선택 시 바이올렛 accent. 점선 marching 애니메이션은 React Flow `animated` 기본 제공 */
+.react-flow__edge-path {
+  stroke: var(--color-border-strong);
+  stroke-width: 1.5;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path,
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: var(--color-accent);
+}
+
+/* 드롭 영역 — 기준 셀 원형 링 + 원주 위 타일 등장 */
+@keyframes zone-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes zone-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.zone-ring {
+  transform-origin: center;
+  animation: zone-ring-in 220ms var(--ease-overshoot);
+}
+.zone-pop {
+  transform-origin: center;
+  animation: zone-pop-in 260ms var(--ease-overshoot);
+}
+@media (prefers-reduced-motion: reduce) {
+  .zone-ring,
+  .zone-pop {
     animation: none;
   }
 }

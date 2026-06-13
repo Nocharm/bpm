@@ -14,12 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.checkout import is_locked_by_other
 from app.db import get_session
-from app.models import Comment, Edge, MapVersion, Node
+from app.models import Comment, Edge, Group, MapVersion, Node
 from app.schemas import (
     EdgeIn,
     FlatNodeOut,
     GraphIn,
     GraphOut,
+    GroupIn,
     NodeOut,
     VersionGraphOut,
 )
@@ -70,7 +71,15 @@ async def _load_scope(
         )
         for n in node_rows
     ]
-    return GraphOut(nodes=nodes, edges=edges)
+    group_rows = (
+        await session.scalars(
+            select(Group).where(
+                Group.version_id == version_id, Group.parent_node_id == parent_node_id
+            )
+        )
+    ).all()
+    groups = [GroupIn.model_validate(g) for g in group_rows]
+    return GraphOut(nodes=nodes, edges=edges, groups=groups)
 
 
 async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVersion:
@@ -144,6 +153,14 @@ async def replace_graph(
                 detail=f"edge {edge.id} references a node not in the payload",
             )
 
+    payload_group_ids = {g.id for g in payload.groups}
+    for node in payload.nodes:
+        if node.group_id is not None and node.group_id not in payload_group_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"node {node.id} references a group not in the payload",
+            )
+
     existing_ids = set(
         (
             await session.scalars(
@@ -187,12 +204,46 @@ async def replace_graph(
         await session.execute(delete(Node).where(Node.id.in_(to_delete)))
         # 삭제 노드의 코멘트 정리 — sqlite는 FK pragma 비활성이라 명시적으로 수행
         await session.execute(delete(Comment).where(Comment.node_id.in_(to_delete)))
+        # 삭제되는 하위 캔버스의 그룹 정리 (group은 node FK가 없어 명시적으로 수행)
+        await session.execute(delete(Group).where(Group.parent_node_id.in_(to_delete)))
 
     # 이 스코프(형제) 엣지를 비우고 payload로 재삽입
     if existing_ids:
         await session.execute(
             delete(Edge).where(Edge.source_node_id.in_(existing_ids))
         )
+
+    # 그룹도 이 스코프만 교체 — 사라진 그룹 삭제 후 payload upsert
+    existing_group_ids = set(
+        (
+            await session.scalars(
+                select(Group.id).where(
+                    Group.version_id == version_id,
+                    Group.parent_node_id == parent,
+                )
+            )
+        ).all()
+    )
+    removed_groups = existing_group_ids - payload_group_ids
+    if removed_groups:
+        await session.execute(delete(Group).where(Group.id.in_(removed_groups)))
+    for group in payload.groups:
+        existing_group = await session.get(Group, group.id)
+        if existing_group is not None:
+            existing_group.version_id = version_id
+            existing_group.parent_node_id = parent
+            existing_group.label = group.label
+            existing_group.color = group.color
+        else:
+            session.add(
+                Group(
+                    id=group.id,
+                    version_id=version_id,
+                    parent_node_id=parent,
+                    label=group.label,
+                    color=group.color,
+                )
+            )
 
     # 노드는 upsert — 유지되는 노드를 지우지 않아 자식 계층이 끊기지 않는다
     for node in payload.nodes:
@@ -211,6 +262,7 @@ async def replace_graph(
             existing.pos_x = node.pos_x
             existing.pos_y = node.pos_y
             existing.sort_order = node.sort_order
+            existing.group_id = node.group_id
         else:
             session.add(Node(version_id=version_id, parent_node_id=parent, **node.model_dump()))
     for edge in payload.edges:

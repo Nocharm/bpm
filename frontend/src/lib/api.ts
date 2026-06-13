@@ -30,6 +30,8 @@ export interface GraphNode {
   pos_x: number;
   pos_y: number;
   sort_order: number;
+  // 업무 묶음(그룹 박스) 소속 그룹 id — null=무소속 (Phase 2)
+  group_id: string | null;
   has_children?: boolean;
 }
 
@@ -46,9 +48,17 @@ export interface GraphEdge {
   label: string;
 }
 
+// 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)
+export interface GraphGroup {
+  id: string;
+  label: string;
+  color: string;
+}
+
 export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  groups: GraphGroup[];
 }
 
 export interface VersionGraph {
@@ -73,7 +83,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { ...headers, ...init?.headers },
   });
   if (!response.ok) {
-    throw new Error(`API ${init?.method ?? "GET"} ${path} failed: ${response.status}`);
+    // 서버 detail(검증 실패 사유 등)을 메시지에 포함 — 진단 용이
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+    );
   }
   if (response.status === 204) {
     return undefined as T;

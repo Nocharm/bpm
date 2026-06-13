@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Check, ChevronRight, Download, Lock, PencilLine, Plus, Redo2, Spline, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
+  BackgroundVariant,
   Controls,
   type Connection,
   type Edge,
@@ -13,28 +14,44 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
 
 import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
+import { GroupBox } from "@/components/group-box";
+import { GroupTitleBar } from "@/components/group-title-bar";
 import { ProcessNode } from "@/components/process-node";
+import { ScopePreview } from "@/components/scope-preview";
+import { ShortcutLegend } from "@/components/shortcut-legend";
 import {
   alignSelected,
+  buildOutline,
   distributeSelected,
   layoutWithDagre,
   normalizeNodeType,
+  resolveCollision,
+  getIncomingEdges,
+  getOutgoingEdges,
+  insertNodeBefore,
+  insertNodeAfter,
+  EDGE_DEFAULTS,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
   NODE_WIDTH,
   type AppNode,
   type NodeData,
+  type OutlineEdge,
+  type OutlineNode,
+  type ProcessNodeType,
 } from "@/lib/canvas";
 import {
   acquireCheckout,
@@ -55,6 +72,8 @@ import {
   type FlatNode,
   type Graph,
   type GraphEdge,
+  type GraphGroup,
+  type VersionGraph,
   type VersionSummary,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
@@ -65,16 +84,36 @@ import { NodeActionsContext } from "@/lib/node-actions";
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-// 색 프리셋 — 첫 항목(빈 값)은 타입 기본색
+const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
+const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
+const GROUP_PAD = 16; // 그룹 박스가 멤버 bounding box를 감싸는 여백
+
+type DropZone = "front" | "back" | "group" | "child";
+type ScreenRect = { left: number; top: number; width: number; height: number };
+
+// 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. 세련된 무채도(muted) 8톤 stroke(데이터/출력 예외).
 const COLOR_PRESETS = [
   "",
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#3b82f6",
-  "#8b5cf6",
-  "#18181b",
+  "#6e84a3", // slate blue
+  "#5e988f", // teal
+  "#84a07c", // sage
+  "#c7a062", // amber
+  "#c58a6b", // clay
+  "#c2849a", // rose
+  "#9183c0", // violet
+  "#909098", // stone
+];
+
+// 그룹 전용 팔레트 — 노드보다 깊은 "존/라벨" 톤(노드 색과 분리해 묶음 영역을 구분)
+const GROUP_COLOR_PRESETS = [
+  "#4a5a8c", // indigo
+  "#3f7d72", // pine
+  "#5c7a4e", // moss
+  "#a87b3e", // bronze
+  "#a65d3e", // sienna
+  "#8c5a72", // plum
+  "#6e5aa0", // iris
+  "#5f6068", // graphite
 ];
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
@@ -110,6 +149,7 @@ function toAppNodes(graph: Graph): AppNode[] {
       department: node.department,
       system: node.system,
       duration: node.duration,
+      groupId: node.group_id ?? null,
       hasChildren: node.has_children ?? false,
     },
   }));
@@ -117,6 +157,7 @@ function toAppNodes(graph: Graph): AppNode[] {
 
 function toAppEdges(graph: Graph): Edge[] {
   return graph.edges.map((edge) => ({
+    ...EDGE_DEFAULTS,
     id: edge.id,
     source: edge.source_node_id,
     target: edge.target_node_id,
@@ -124,7 +165,13 @@ function toAppEdges(graph: Graph): Edge[] {
   }));
 }
 
-function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
+function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
+  // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const keptGroups = groups.filter((group) =>
+    nodes.some((node) => node.data.groupId === group.id),
+  );
+  const groupIds = new Set(keptGroups.map((group) => group.id));
   return {
     nodes: nodes.map((node, index) => ({
       id: node.id,
@@ -139,13 +186,19 @@ function buildGraph(nodes: AppNode[], edges: Edge[]): Graph {
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
+      // 고아 group_id(그룹이 payload에 없음)는 null 처리
+      group_id: node.data.groupId && groupIds.has(node.data.groupId) ? node.data.groupId : null,
     })),
-    edges: edges.map<GraphEdge>((edge) => ({
-      id: edge.id,
-      source_node_id: edge.source,
-      target_node_id: edge.target,
-      label: typeof edge.label === "string" ? edge.label : "",
-    })),
+    // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거
+    edges: edges
+      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+      .map<GraphEdge>((edge) => ({
+        id: edge.id,
+        source_node_id: edge.source,
+        target_node_id: edge.target,
+        label: typeof edge.label === "string" ? edge.label : "",
+      })),
+    groups: keptGroups.map((group) => ({ id: group.id, label: group.label, color: group.color })),
   };
 }
 
@@ -162,6 +215,15 @@ function MapEditor({ mapId }: { mapId: number }) {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [groups, setGroups] = useState<GraphGroup[]>([]);
+  // 아웃라인 전체 그래프(하위 프로세스 펼치기용) + 펼친 노드 집합
+  const [fullGraph, setFullGraph] = useState<VersionGraph | null>(null);
+  const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
+  // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
+  const [inspectorWidth, setInspectorWidth] = useState(320);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectSource, setConnectSource] = useState<string | null>(null);
@@ -180,6 +242,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 언마운트/버전 전환 시 해제 여부 판단용 — 상태와 달리 cleanup에서 즉시 읽힘
   const checkoutMineRef = useRef(false);
 
+  // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
+  const [dropTarget, setDropTarget] = useState<{
+    id: string;
+    zone: DropZone;
+    rect: ScreenRect;
+  } | null>(null);
+  const dwellRef = useRef<{ id: string; since: number } | null>(null);
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragMouseRef = useRef({ x: 0, y: 0 }); // 드래그 중 마우스 flow 좌표 — 4방향 zone 판정 기준
+  // 기존 엣지 충돌 시 유지/삽입 되묻기 팝오버
+  const [pending, setPending] = useState<{
+    mode: DropZone;
+    aId: string;
+    bId: string;
+    rect: ScreenRect;
+  } | null>(null);
+
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = checkout !== null && !checkout.mine;
 
@@ -192,6 +271,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const edgesRef = useRef<Edge[]>([]);
+  const groupsRef = useRef<GraphGroup[]>([]);
   const windowGeomRef = useRef<Record<string, WindowGeom>>({});
   useEffect(() => {
     nodesRef.current = nodes;
@@ -199,6 +279,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
+  // 아웃라인 하위 펼치기용 전체 그래프 — 비핵심이라 실패해도 조용히 무시(아웃라인만 영향)
+  const refreshFullGraph = useCallback(() => {
+    if (versionId === null) {
+      return;
+    }
+    void getFullGraph(versionId)
+      .then(setFullGraph)
+      .catch(() => undefined);
+  }, [versionId]);
   useEffect(() => {
     windowGeomRef.current = windowGeom;
   }, [windowGeom]);
@@ -226,16 +319,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     try {
       await saveGraph(
         versionId,
-        buildGraph(nodesRef.current, edgesRef.current),
+        buildGraph(nodesRef.current, edgesRef.current, groupsRef.current),
         currentParentId,
       );
       dirtyRef.current = false;
       setSaveState("saved");
+      refreshFullGraph();
     } catch (err) {
       setSaveState("error");
       throw err;
     }
-  }, [versionId, currentParentId, readOnly]);
+  }, [versionId, currentParentId, readOnly, refreshFullGraph]);
 
   const scheduleAutoSave = useCallback(() => {
     if (readOnly) {
@@ -286,6 +380,15 @@ function MapEditor({ mapId }: { mapId: number }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
     setWindowGeom(loadWindowGeoms(mapId));
   }, [mapId]);
+
+  // 저장된 인스펙터 너비 복원 (클라이언트 전용, hydration 후 1회)
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("bpm.inspectorWidth"));
+    if (Number.isFinite(saved) && saved > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
+      setInspectorWidth(Math.min(480, Math.max(220, saved)));
+    }
+  }, []);
 
   // 창 기하 변경 시 디바운스 저장
   useEffect(() => {
@@ -401,6 +504,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       if (event.key === "Escape") {
         setConnectSource(null);
+        setPending(null);
         return;
       }
       if (!(event.ctrlKey || event.metaKey)) {
@@ -464,6 +568,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         setNodes(toAppNodes(graph));
         setEdges(toAppEdges(graph));
+        setGroups(graph.groups);
+        refreshFullGraph();
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
@@ -485,8 +591,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             void reactFlow.fitView({
               nodes: [{ id: focusId }],
               padding: 0.4,
-              duration: 300,
-              maxZoom: 1.25,
+              duration: 700,
+              maxZoom: 1.3,
             });
           }, 80);
         }
@@ -499,7 +605,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => {
       active = false;
     };
-  }, [versionId, currentParentId, setNodes, setEdges, reactFlow, t]);
+  }, [versionId, currentParentId, setNodes, setEdges, reactFlow, refreshFullGraph, t]);
 
   // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
   // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
@@ -750,7 +856,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       pushHistory();
       setEdges((current) =>
-        addEdge({ source: connectSource, target: targetId, id: crypto.randomUUID() }, current),
+        addEdge(
+          { ...EDGE_DEFAULTS, source: connectSource, target: targetId, id: crypto.randomUUID() },
+          current,
+        ),
       );
       scheduleAutoSave();
       setConnectSource(null);
@@ -877,7 +986,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       pushHistory();
       setEdges((current) =>
-        addEdge({ ...connection, id: crypto.randomUUID() }, current),
+        addEdge({ ...EDGE_DEFAULTS, ...connection, id: crypto.randomUUID() }, current),
       );
       scheduleAutoSave();
     },
@@ -886,7 +995,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
-    (screen: { x: number; y: number } | null) => {
+    (screen: { x: number; y: number } | null, nodeType: ProcessNodeType = "process") => {
       if (readOnly) {
         return;
       }
@@ -897,6 +1006,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (screen) {
         const point = reactFlow.screenToFlowPosition(screen);
         position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
+      } else {
+        // 좌측 팔레트 등 좌표 없는 추가 — 현재 뷰포트 중앙에 배치
+        const container = canvasContainerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const point = reactFlow.screenToFlowPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          });
+          position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
+        }
       }
       setNodes((current) => [
         ...current,
@@ -907,12 +1027,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           data: {
             label: t("editor.newStep"),
             description: "",
-            nodeType: "process",
+            nodeType,
             color: "",
             assignee: "",
             department: "",
             system: "",
             duration: "",
+            groupId: null,
             hasChildren: false,
           },
         },
@@ -937,6 +1058,344 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
+  // ── 드래그-오버 드롭 영역 (앞/뒤 흐름 삽입, Phase 1) ─────────
+
+  // 노드 id의 캔버스 컨테이너 상대 화면 사각형 — 드롭 영역/팝오버 위치 계산용 (이벤트에서만 호출)
+  const screenRectOf = useCallback(
+    (nodeId: string): ScreenRect | null => {
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      const container = canvasContainerRef.current;
+      if (!node || !container) {
+        return null;
+      }
+      const zoom = reactFlow.getViewport().zoom;
+      const topLeft = reactFlow.flowToScreenPosition({ x: node.position.x, y: node.position.y });
+      const rect = container.getBoundingClientRect();
+      return {
+        left: topLeft.x - rect.left,
+        top: topLeft.y - rect.top,
+        width: (node.measured?.width ?? NODE_WIDTH) * zoom,
+        height: (node.measured?.height ?? NODE_HEIGHT) * zoom,
+      };
+    },
+    [reactFlow],
+  );
+
+  // A를 B의 좌(앞)/우(뒤)로 인접 배치 후 겹침 회피. 8px 그리드 스냅.
+  const placeBeside = useCallback(
+    (aId: string, bId: string, zone: DropZone) => {
+      setNodes((current) => {
+        const b = current.find((node) => node.id === bId);
+        if (!b) {
+          return current;
+        }
+        const bw = b.measured?.width ?? NODE_WIDTH;
+        const rawX =
+          zone === "front" ? b.position.x - NODE_WIDTH - DROP_GAP : b.position.x + bw + DROP_GAP;
+        const moved = current.map((node) =>
+          node.id === aId
+            ? {
+                ...node,
+                position: { x: Math.round(rawX / 8) * 8, y: Math.round(b.position.y / 8) * 8 },
+              }
+            : node,
+        );
+        return resolveCollision(moved, aId);
+      });
+    },
+    [setNodes],
+  );
+
+  // 흐름 엣지 적용 — rewire면 B의 기존 연결을 끊고 A를 중간에 삽입
+  const applyFlowEdges = useCallback(
+    (aId: string, bId: string, zone: DropZone, rewire: boolean) => {
+      setEdges((current) =>
+        zone === "front"
+          ? insertNodeBefore(current, aId, bId, rewire)
+          : insertNodeAfter(current, aId, bId, rewire),
+      );
+      scheduleAutoSave();
+    },
+    [setEdges, scheduleAutoSave],
+  );
+
+  // A를 B의 그룹에 합류 — B가 무소속이면 새 그룹 생성(라벨 기본=B의 부서/담당자)
+  const addToGroup = useCallback(
+    (aId: string, bId: string) => {
+      const b = nodesRef.current.find((node) => node.id === bId);
+      if (!b) {
+        return;
+      }
+      const bGroupWasEmpty = !b.data.groupId;
+      let groupId = b.data.groupId;
+      if (!groupId) {
+        const newId = crypto.randomUUID();
+        groupId = newId;
+        setGroups((cur) => [
+          ...cur,
+          {
+            id: newId,
+            label: b.data.department || b.data.assignee || "",
+            color: b.data.color || "#4a5a8c",
+          },
+        ]);
+      }
+      setNodes((current) => {
+        const target = current.find((node) => node.id === bId);
+        if (!target) {
+          return current;
+        }
+        const bw = target.measured?.width ?? NODE_WIDTH;
+        const x = Math.round((target.position.x + bw + DROP_GAP) / 8) * 8;
+        const y = Math.round(target.position.y / 8) * 8;
+        const moved = current.map((node) => {
+          if (node.id === aId) {
+            return { ...node, position: { x, y }, data: { ...node.data, groupId } };
+          }
+          if (bGroupWasEmpty && node.id === bId) {
+            return { ...node, data: { ...node.data, groupId } };
+          }
+          return node;
+        });
+        return resolveCollision(moved, aId);
+      });
+      scheduleAutoSave();
+    },
+    [setNodes, setGroups, scheduleAutoSave],
+  );
+
+  // A를 B의 하위 프로세스(자식 스코프)로 이동. 자식 스코프에 먼저 영속(재부모화)한 뒤
+  // 현재 스코프에서 제거 — 순서 보장으로 현재 스코프 자동저장이 A를 삭제하지 않도록 함.
+  const moveToChild = useCallback(
+    async (aId: string, bId: string) => {
+      if (versionId === null) {
+        return;
+      }
+      const aNode = nodesRef.current.find((node) => node.id === aId);
+      if (!aNode) {
+        return;
+      }
+      // 사이클 방지 — B가 A의 하위(=A가 B의 조상)면 거부. 전체 그래프로 B의 조상 체인 확인.
+      if (aId === bId) {
+        return;
+      }
+      const parentById = new Map(
+        (fullGraph?.nodes ?? []).map((node) => [node.id, node.parent_node_id]),
+      );
+      for (let anc = parentById.get(bId) ?? null; anc !== null; anc = parentById.get(anc) ?? null) {
+        if (anc === aId) {
+          setStatus(t("err.moveChildCycle"));
+          return;
+        }
+      }
+      const aGraph = buildGraph([aNode], [], []).nodes[0];
+      try {
+        const child = await getGraph(versionId, bId);
+        await saveGraph(
+          versionId,
+          {
+            nodes: [...child.nodes, { ...aGraph, group_id: null }],
+            edges: child.edges,
+            groups: child.groups,
+          },
+          bId,
+        );
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.moveChild"));
+        return;
+      }
+      setNodes((current) =>
+        current
+          .filter((node) => node.id !== aId)
+          .map((node) =>
+            node.id === bId ? { ...node, data: { ...node.data, hasChildren: true } } : node,
+          ),
+      );
+      // A에 연결된 현재 스코프 엣지 제거 — 안 하면 저장 시 payload 미존재 노드 참조로 422
+      setEdges((current) => current.filter((edge) => edge.source !== aId && edge.target !== aId));
+      setSelectedId((sel) => (sel === aId ? null : sel));
+      scheduleAutoSave();
+      refreshFullGraph();
+    },
+    [versionId, fullGraph, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
+  );
+
+  const renameGroup = useCallback(
+    (groupId: string, label: string) => {
+      setGroups((current) => current.map((g) => (g.id === groupId ? { ...g, label } : g)));
+      scheduleAutoSave();
+    },
+    [setGroups, scheduleAutoSave],
+  );
+
+  const recolorGroup = useCallback(
+    (groupId: string, color: string) => {
+      setGroups((current) => current.map((g) => (g.id === groupId ? { ...g, color } : g)));
+      scheduleAutoSave();
+    },
+    [setGroups, scheduleAutoSave],
+  );
+
+  // 선택된 멤버 노드를 그룹에서 제거 (group_id=null). 멤버 0이면 저장 시 그룹 자동 정리.
+  const leaveGroup = useCallback(
+    (groupId: string) => {
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected && node.data.groupId === groupId
+            ? { ...node, data: { ...node.data, groupId: null } }
+            : node,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [setNodes, scheduleAutoSave],
+  );
+
+  // 그룹 타이틀바 드래그 → 멤버 전체를 함께 이동
+  const startGroupMove = useCallback(
+    (
+      groupId: string,
+      event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void },
+    ) => {
+      if (readOnly) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      pushHistory();
+      const zoom = reactFlow.getViewport().zoom || 1;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startPositions = new Map(
+        nodesRef.current
+          .filter((node) => node.data.groupId === groupId)
+          .map((node) => [node.id, { ...node.position }]),
+      );
+      const onMove = (ev: PointerEvent) => {
+        const dx = (ev.clientX - startX) / zoom;
+        const dy = (ev.clientY - startY) / zoom;
+        setNodes((current) =>
+          current.map((node) => {
+            const start = startPositions.get(node.id);
+            return start ? { ...node, position: { x: start.x + dx, y: start.y + dy } } : node;
+          }),
+        );
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        scheduleAutoSave();
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [readOnly, reactFlow, setNodes, pushHistory, scheduleAutoSave],
+  );
+
+  // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위로 넣기. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
+  const handleZoneDrop = useCallback(
+    (aId: string, bId: string, zone: DropZone) => {
+      if (zone === "group") {
+        addToGroup(aId, bId);
+        return;
+      }
+      if (zone === "child") {
+        void moveToChild(aId, bId);
+        return;
+      }
+      placeBeside(aId, bId, zone);
+      scheduleAutoSave();
+      const conflict =
+        zone === "front"
+          ? getIncomingEdges(edgesRef.current, bId).some((edge) => edge.source !== aId)
+          : getOutgoingEdges(edgesRef.current, bId).some((edge) => edge.target !== aId);
+      const rect = conflict ? screenRectOf(bId) : null;
+      if (conflict && rect) {
+        setPending({ mode: zone, aId, bId, rect });
+        return;
+      }
+      // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
+      applyFlowEdges(aId, bId, zone, true);
+    },
+    [addToGroup, moveToChild, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+  );
+
+  // dwell 타이머/상태 정리
+  const clearDwell = useCallback(() => {
+    if (dwellTimerRef.current) {
+      clearTimeout(dwellTimerRef.current);
+      dwellTimerRef.current = null;
+    }
+    dwellRef.current = null;
+  }, []);
+
+  // 대상 B 위에 앞/뒤 영역 활성화 — A 중심 기준 좌=앞/우=뒤
+  const activateZone = useCallback(
+    (targetId: string) => {
+      const target = nodesRef.current.find((item) => item.id === targetId);
+      if (!target) {
+        return;
+      }
+      // A 중심과 B 중심의 우세 방향으로 판정 — 좌=앞/우=뒤/위=그룹/아래=하위
+      const bw = target.measured?.width ?? NODE_WIDTH;
+      const bh = target.measured?.height ?? NODE_HEIGHT;
+      const dx = dragMouseRef.current.x - (target.position.x + bw / 2);
+      const dy = dragMouseRef.current.y - (target.position.y + bh / 2);
+      const zone: DropZone =
+        Math.abs(dx) >= Math.abs(dy)
+          ? dx < 0
+            ? "front"
+            : "back"
+          : dy < 0
+            ? "group"
+            : "child";
+      const rect = screenRectOf(targetId);
+      if (!rect) {
+        return;
+      }
+      setDropTarget((cur) =>
+        cur && cur.id === targetId && cur.zone === zone ? cur : { id: targetId, zone, rect },
+      );
+    },
+    [screenRectOf],
+  );
+
+  // 드래그 중 — A 아래 노드를 DWELL_MS 머문 뒤 영역 표시(가만히 둬도 타이머로 발화), 이후 이동 시 zone 갱신
+  const handleNodeDrag = useCallback(
+    (event: MouseEvent | TouchEvent, node: AppNode) => {
+      if (readOnly) {
+        return;
+      }
+      // 마우스/터치 flow 좌표 기준 — 커서 아래 노드를 대상으로, 커서 방향으로 zone 판정
+      const clientX = "touches" in event ? (event.touches[0]?.clientX ?? 0) : event.clientX;
+      const clientY = "touches" in event ? (event.touches[0]?.clientY ?? 0) : event.clientY;
+      const mouse = reactFlow.screenToFlowPosition({ x: clientX, y: clientY });
+      dragMouseRef.current = mouse;
+      const target = reactFlow
+        .getIntersectingNodes({ x: mouse.x, y: mouse.y, width: 1, height: 1 })
+        .find((other) => other.id !== node.id);
+      if (!target) {
+        clearDwell();
+        setDropTarget((cur) => (cur ? null : cur));
+        return;
+      }
+      if (!dwellRef.current || dwellRef.current.id !== target.id) {
+        clearDwell();
+        dwellRef.current = { id: target.id, since: Date.now() };
+        setDropTarget((cur) => (cur ? null : cur));
+        dwellTimerRef.current = setTimeout(() => activateZone(target.id), DWELL_MS);
+        return;
+      }
+      if (Date.now() - dwellRef.current.since >= DWELL_MS) {
+        activateZone(target.id);
+      }
+    },
+    [readOnly, reactFlow, clearDwell, activateZone],
+  );
+
+  // 언마운트 시 dwell 타이머 정리
+  useEffect(() => clearDwell, [clearDwell]);
+
   const updateSelectedData = useCallback(
     (patch: Partial<NodeData>, fromTyping = false) => {
       if (readOnly) {
@@ -953,6 +1412,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
     },
     [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
+  );
+
+  // 우클릭 색 스와치 → 선택 노드 색 변경 (우클릭 시 해당 노드가 selectedId가 됨)
+  const handleRecolor = useCallback(
+    (color: string) => updateSelectedData({ color }),
+    [updateSelectedData],
   );
 
   const updateSelectedEdgeLabel = useCallback(
@@ -1032,22 +1497,45 @@ function MapEditor({ mapId }: { mapId: number }) {
       return [];
     }
     if (menu.kind === "pane") {
+      if (readOnly) {
+        return [{ label: t("ctx.exportPng"), onSelect: () => void handleExportPng() }];
+      }
       return [
-        {
-          label: t("ctx.addNode"),
-          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }),
-        },
+        ...NODE_TYPE_OPTIONS.map((option) => ({
+          label: t(option.labelKey),
+          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
+        })),
+        { divider: true },
         {
           label: t("ctx.autoLayout"),
           onSelect: () =>
             applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current)),
         },
+        {
+          label: t("editor.alignLeft"),
+          onSelect: () => applyNodesTransform((current) => alignSelected(current, "left")),
+        },
+        {
+          label: t("editor.alignTop"),
+          onSelect: () => applyNodesTransform((current) => alignSelected(current, "top")),
+        },
+        {
+          label: t("editor.distributeX"),
+          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x")),
+        },
+        {
+          label: t("editor.distributeY"),
+          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y")),
+        },
+        { divider: true },
+        { label: t("ctx.exportPng"), onSelect: () => void handleExportPng() },
       ];
     }
     if (menu.kind === "node") {
       const deleteItems: ContextMenuItem[] = readOnly
         ? []
         : [
+            { divider: true },
             {
               label: t("ctx.delete"),
               shortcut: "⌫",
@@ -1059,7 +1547,18 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ];
+      const colorItems: ContextMenuItem[] = readOnly
+        ? []
+        : [
+            {
+              colors: COLOR_PRESETS,
+              current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
+              onPick: handleRecolor,
+            },
+            { divider: true },
+          ];
       return [
+        ...colorItems,
         {
           label: t("ctx.openChild"),
           shortcut: t("ctx.doubleClick"),
@@ -1082,6 +1581,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           setSelectedId(null);
         },
       },
+      { divider: true },
       {
         label: t("ctx.delete"),
         shortcut: "⌫",
@@ -1093,7 +1593,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       },
     ];
-  }, [menu, readOnly, handleAddNode, applyNodesTransform, handleDrillIn, reactFlow, t]);
+  }, [
+    menu,
+    readOnly,
+    nodes,
+    handleAddNode,
+    handleRecolor,
+    applyNodesTransform,
+    handleDrillIn,
+    handleExportPng,
+    reactFlow,
+    t,
+  ]);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedId) ?? null,
@@ -1125,6 +1636,50 @@ function MapEditor({ mapId }: { mapId: number }) {
     [nodes, unresolvedCounts],
   );
 
+  // 그룹 박스 — 멤버 bounding box로 자동 산정해 ViewportPortal에 flow 좌표로 렌더(시각 전용)
+  const groupBoxes = useMemo(() => {
+    return groups.flatMap((group) => {
+      const members = nodes.filter((node) => node.data.groupId === group.id);
+      if (members.length === 0) {
+        return [];
+      }
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const member of members) {
+        const w = member.measured?.width ?? NODE_WIDTH;
+        const h = member.measured?.height ?? NODE_HEIGHT;
+        minX = Math.min(minX, member.position.x);
+        minY = Math.min(minY, member.position.y);
+        maxX = Math.max(maxX, member.position.x + w);
+        maxY = Math.max(maxY, member.position.y + h);
+      }
+      return [
+        {
+          id: group.id,
+          label: group.label,
+          color: group.color,
+          x: minX - GROUP_PAD,
+          y: minY - GROUP_PAD,
+          width: maxX - minX + GROUP_PAD * 2,
+          height: maxY - minY + GROUP_PAD * 2,
+        },
+      ];
+    });
+  }, [nodes, groups]);
+
+  // 선택된 멤버가 속한 그룹 id — 타이틀바에 "그룹 나가기" 노출 판정
+  const selectedGroupIds = useMemo(
+    () =>
+      new Set(
+        nodes
+          .filter((node) => node.selected && node.data.groupId)
+          .map((node) => node.data.groupId),
+      ),
+    [nodes],
+  );
+
   const selectedComments = useMemo(
     () => comments.filter((comment) => comment.node_id === selectedId),
     [comments, selectedId],
@@ -1133,6 +1688,116 @@ function MapEditor({ mapId }: { mapId: number }) {
   const nodeActions = useMemo(
     () => ({ onDrill: handleDrillById, connectSource }),
     [handleDrillById, connectSource],
+  );
+
+  // 인스펙터 폭 로컬 영속
+  useEffect(() => {
+    window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
+  }, [inspectorWidth]);
+
+  // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
+  const outline = useMemo(() => {
+    const currentIds = new Set(nodes.map((node) => node.id));
+    const outlineNodes: OutlineNode[] = nodes.map((node) => ({
+      id: node.id,
+      parentId: currentParentId,
+      label: node.data.label,
+      nodeType: node.data.nodeType,
+    }));
+    const outlineEdges: OutlineEdge[] = edges.map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+    }));
+    if (fullGraph) {
+      for (const flat of fullGraph.nodes) {
+        if (flat.parent_node_id !== currentParentId) {
+          outlineNodes.push({
+            id: flat.id,
+            parentId: flat.parent_node_id,
+            label: flat.title,
+            nodeType: normalizeNodeType(flat.node_type),
+          });
+        }
+      }
+      for (const graphEdge of fullGraph.edges) {
+        if (!currentIds.has(graphEdge.source_node_id)) {
+          outlineEdges.push({
+            source: graphEdge.source_node_id,
+            target: graphEdge.target_node_id,
+          });
+        }
+      }
+    }
+    // 항상 프로젝트 루트(전체 트리) 기준 — 창을 옮겨도 전체 프로젝트를 일관되게 표시.
+    // 활성 스코프 경로(드릴인한 노드들)는 항상 펼쳐 현재 위치가 보이도록 합성.
+    const effectiveExpanded = new Set(expandedOutline);
+    for (const scope of scopes) {
+      if (scope.parentId !== null) {
+        effectiveExpanded.add(scope.parentId);
+      }
+    }
+    return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
+  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, scopes]);
+
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedOutline((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  // 아웃라인 클릭 — 노드가 속한 스코프로 이동 후, cubic ease(느림→빠름→느림)로 포커싱
+  const handleOutlineSelect = useCallback(
+    (id: string) => {
+      const flatById = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
+      const flat = flatById.get(id);
+      const scopeParentId = flat ? flat.parent_node_id : currentParentId;
+      if (scopeParentId === currentParentId) {
+        setSelectedId(id);
+        setSelectedEdgeId(null);
+        // duration이 길수록 React Flow 기본 cubic-in-out 가감속이 또렷하게 보임
+        void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
+        return;
+      }
+      // 다른 스코프 — 루트부터 해당 노드 부모까지 스코프 체인 구성 후 이동, 로드 후 포커싱
+      const chainIds: string[] = [];
+      let cursor = scopeParentId;
+      while (cursor !== null) {
+        chainIds.unshift(cursor);
+        cursor = flatById.get(cursor)?.parent_node_id ?? null;
+      }
+      const chain: Scope[] = [{ parentId: null, title: mapName }];
+      for (const ancestorId of chainIds) {
+        chain.push({ parentId: ancestorId, title: flatById.get(ancestorId)?.title ?? "" });
+      }
+      focusNodeIdRef.current = id;
+      void navigateTo(chain);
+    },
+    [fullGraph, currentParentId, mapName, reactFlow, navigateTo],
+  );
+
+  // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
+  const startInspectorResize = useCallback(
+    (event: { clientX: number; preventDefault: () => void }) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = inspectorWidth;
+      const onMove = (ev: PointerEvent) => {
+        setInspectorWidth(Math.min(480, Math.max(220, startW + (startX - ev.clientX))));
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [inspectorWidth],
   );
 
   const toolButton =
@@ -1304,52 +1969,16 @@ function MapEditor({ mapId }: { mapId: number }) {
             <Redo2 size={16} strokeWidth={1.5} />
           </button>
 
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() =>
-              applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))
-            }
-          >
-            {t("editor.autoLayout")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => alignSelected(current, "left"))}
-          >
-            {t("editor.alignLeft")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => alignSelected(current, "top"))}
-          >
-            {t("editor.alignTop")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => distributeSelected(current, "x"))}
-          >
-            {t("editor.distributeX")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => applyNodesTransform((current) => distributeSelected(current, "y"))}
-          >
-            {t("editor.distributeY")}
-          </button>
-          <button
-            className={toolButton}
-            disabled={readOnly}
-            onClick={() => handleAddNode(null)}
-          >
-            <Plus size={16} strokeWidth={1.5} />{t("editor.addNode")}
-          </button>
           <button className={toolButton} onClick={() => void handleExportPng()}>
             <Download size={16} strokeWidth={1.5} />PNG
+          </button>
+          <button
+            className={toolButton}
+            onClick={() => setInspectorOpen((open) => !open)}
+            title={t("editor.inspectorToggle")}
+            aria-label={t("editor.inspectorToggle")}
+          >
+            <PanelRight size={16} strokeWidth={1.5} />
           </button>
           <button
             className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
@@ -1361,10 +1990,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       </header>
 
-      <div className="flex flex-1">
+      <div className="flex min-h-0 flex-1">
+        <EditorLeftSidebar
+          collapsed={leftCollapsed}
+          onToggleCollapse={() => setLeftCollapsed((value) => !value)}
+          selectedId={selectedId}
+          outline={outline}
+          onSelectNode={handleOutlineSelect}
+          onToggleExpand={handleToggleExpand}
+        />
         <div
           ref={canvasContainerRef}
-          className="relative flex-1 overflow-hidden bg-surface-alt"
+          className="relative flex-1 overflow-hidden bg-canvas"
         >
           {scopes.map((scope, index) => {
             const key = scopeKey(scope);
@@ -1391,11 +2028,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onClose={() => closeScope(index)}
               >
                 {active ? (
-                  <div className="h-full w-full">
+                  <div className="h-full w-full bg-canvas">
                     <ReactFlow
                       nodes={displayNodes}
                       edges={edges}
                       nodeTypes={nodeTypes}
+                      snapToGrid
+                      snapGrid={[8, 8]}
                       nodesDraggable={!readOnly}
                       nodesConnectable={!readOnly}
                       onNodesChange={onNodesChange}
@@ -1424,6 +2063,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedId(null);
                         setSelectedEdgeId(null);
                         setMenu(null);
+                        setPending(null);
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
@@ -1433,7 +2073,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
                       onNodeDragStart={() => pushHistory()}
-                      onNodeDragStop={() => scheduleAutoSave()}
+                      onNodeDrag={handleNodeDrag}
+                      onNodeDragStop={(_, node) => {
+                        if (!readOnly && dropTarget && dropTarget.id !== node.id) {
+                          handleZoneDrop(node.id, dropTarget.id, dropTarget.zone);
+                        } else if (!readOnly) {
+                          setNodes((current) => resolveCollision(current, node.id));
+                          scheduleAutoSave();
+                        }
+                        clearDwell();
+                        setDropTarget(null);
+                      }}
                       onSelectionDragStart={() => pushHistory()}
                       onSelectionDragStop={() => scheduleAutoSave()}
                       onBeforeDelete={async () => {
@@ -1451,11 +2101,60 @@ function MapEditor({ mapId }: { mapId: number }) {
                       panActivationKeyCode="Space"
                       fitView
                     >
-                      <Background />
+                      <ViewportPortal>
+                        {groupBoxes.map((box) => (
+                          <Fragment key={box.id}>
+                            {/* 파스텔 박스 — 노드 뒤로 */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                transform: `translate(${box.x}px, ${box.y}px)`,
+                                zIndex: -1,
+                              }}
+                            >
+                              <GroupBox color={box.color} width={box.width} height={box.height} />
+                            </div>
+                            {/* 타이틀바 — 노드 위, 박스 상단 좌측 */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                transform: `translate(${box.x + 4}px, ${box.y + 3}px)`,
+                                zIndex: 1,
+                              }}
+                            >
+                              <GroupTitleBar
+                                id={box.id}
+                                label={box.label}
+                                color={box.color}
+                                width={box.width - 8}
+                                readOnly={readOnly}
+                                colorPresets={GROUP_COLOR_PRESETS}
+                                canLeave={selectedGroupIds.has(box.id)}
+                                onRename={renameGroup}
+                                onRecolor={recolorGroup}
+                                onLeave={leaveGroup}
+                                onMoveStart={startGroupMove}
+                              />
+                            </div>
+                          </Fragment>
+                        ))}
+                      </ViewportPortal>
+                      <Background
+                        variant={BackgroundVariant.Dots}
+                        gap={20}
+                        size={1.2}
+                        color="var(--color-canvas-dot)"
+                      />
                       <Controls />
                     </ReactFlow>
                   </div>
-                ) : null}
+                ) : (
+                  <ScopePreview fullGraph={fullGraph} scopeParentId={scope.parentId} />
+                )}
               </ScopeWindow>
             );
           })}
@@ -1467,10 +2166,88 @@ function MapEditor({ mapId }: { mapId: number }) {
               onClose={() => setMenu(null)}
             />
           )}
+          {dropTarget &&
+            (() => {
+              const r = dropTarget.rect;
+              const tileSize = 44;
+              const cx = r.left + r.width / 2;
+              const cy = r.top + r.height / 2;
+              // 링 반경 — 기존(=max/2+10) 대비 약 2배
+              const radius = Math.max(r.width, r.height) + 20;
+              // 타일은 원주 위 4 cardinal 지점
+              const tiles = [
+                { zone: "front", Icon: ArrowLeft, x: cx - radius, y: cy, label: t("dropzone.front") },
+                { zone: "back", Icon: ArrowRight, x: cx + radius, y: cy, label: t("dropzone.back") },
+                { zone: "group", Icon: Boxes, x: cx, y: cy - radius, label: t("dropzone.group") },
+                { zone: "child", Icon: CornerDownRight, x: cx, y: cy + radius, label: t("dropzone.child") },
+              ] as const;
+              return (
+                <div className="pointer-events-none absolute inset-0 z-[1100]">
+                  {/* 기준 셀(B) 원형 링 */}
+                  <div
+                    className="zone-ring absolute rounded-full border-2 border-accent/40"
+                    style={{ left: cx - radius, top: cy - radius, width: radius * 2, height: radius * 2 }}
+                  />
+                  {tiles.map(({ zone, Icon, x, y, label }) => (
+                    <div
+                      key={zone}
+                      title={label}
+                      className={`zone-pop absolute flex items-center justify-center rounded-md border shadow-md ${
+                        dropTarget.zone === zone
+                          ? "border-accent bg-accent-tint text-accent"
+                          : "border-hairline bg-surface/90 text-ink-tertiary"
+                      }`}
+                      style={{ left: x - tileSize / 2, top: y - tileSize / 2, width: tileSize, height: tileSize }}
+                    >
+                      <Icon size={20} strokeWidth={1.5} />
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          {pending && (
+            <div
+              className="absolute z-[1110] flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+              style={{ left: pending.rect.left, top: pending.rect.top + pending.rect.height + 8 }}
+            >
+              <span className="text-fine text-ink-secondary">{t("dropzone.conflictPrompt")}</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => {
+                    applyFlowEdges(pending.aId, pending.bId, pending.mode, false);
+                    setPending(null);
+                  }}
+                >
+                  {t("dropzone.keep")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm bg-accent px-2 py-0.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  onClick={() => {
+                    applyFlowEdges(pending.aId, pending.bId, pending.mode, true);
+                    setPending(null);
+                  }}
+                >
+                  {t("dropzone.insert")}
+                </button>
+              </div>
+            </div>
+          )}
+          <ShortcutLegend />
         </div>
 
-        {selectedNode && (
-          <aside className="w-80 overflow-y-auto border-l border-hairline bg-surface p-4">
+        {inspectorOpen && (
+          <div className="flex min-h-0 shrink-0" style={{ width: inspectorWidth }}>
+            <div
+              onPointerDown={startInspectorResize}
+              className="w-1 shrink-0 cursor-col-resize hover:bg-accent-tint"
+              title={t("editor.inspectorToggle")}
+            />
+            <div className="flex-1 overflow-y-auto border-l border-hairline bg-surface p-4">
+            {selectedNode ? (
+              <>
             <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
             <input
@@ -1602,11 +2379,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             <p className="mt-3 text-fine text-ink-tertiary">
               {t("editor.hintNode")}
             </p>
-          </aside>
-        )}
-
-        {!selectedNode && selectedEdge && (
-          <aside className="w-72 border-l border-hairline bg-surface p-4">
+              </>
+            ) : selectedEdge ? (
+              <>
             <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.edgeEdit")}</h2>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
             <input
@@ -1616,7 +2391,34 @@ function MapEditor({ mapId }: { mapId: number }) {
               onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
             />
             <p className="mt-3 text-fine text-ink-tertiary">{t("editor.hintEdge")}</p>
-          </aside>
+              </>
+            ) : (
+              <div className="text-caption text-ink-secondary">
+                <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
+                <h2 className="text-caption-strong text-ink">{mapName}</h2>
+                <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>
+                {groups.length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1 text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
+                      {t("inspector.groupsTitle")}
+                    </div>
+                    <ul className="flex flex-col gap-1">
+                      {groups.map((group) => (
+                        <li key={group.id} className="flex items-center gap-2">
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full border border-hairline"
+                            style={{ background: group.color || "var(--color-surface-alt)" }}
+                          />
+                          <span className="truncate">{group.label || t("sidebar.untitled")}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
+          </div>
         )}
       </div>
       </div>
