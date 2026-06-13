@@ -267,12 +267,20 @@ export function buildOutline(
   const typeOf = new Map(nodes.map((node) => [node.id, node.nodeType]));
 
   const rows: OutlineRow[] = [];
+  // 계층 사이클(부모가 자기 하위를 가리킴) 가드 — 같은 스코프 재진입 시 중단해 무한 재귀 방지
+  const visitedScopes = new Set<string>();
   const emit = (
     scopeParent: string | null,
     hierarchyLevel: number,
     baseDepth: number,
     inheritedBlock: number,
   ): void => {
+    if (scopeParent !== null) {
+      if (visitedScopes.has(scopeParent)) {
+        return;
+      }
+      visitedScopes.add(scopeParent);
+    }
     const flow = computeScopeFlow(byParent.get(scopeParent) ?? [], edges);
     for (const entry of flow) {
       const hasChildren = parentsWithChildren.has(entry.id);

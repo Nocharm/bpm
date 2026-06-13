@@ -222,13 +222,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [inspectorWidth, setInspectorWidth] = useState(() => {
-    if (typeof window === "undefined") {
-      return 320;
-    }
-    const saved = Number(window.localStorage.getItem("bpm.inspectorWidth"));
-    return Number.isFinite(saved) && saved > 0 ? Math.min(480, Math.max(220, saved)) : 320;
-  });
+  // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
+  const [inspectorWidth, setInspectorWidth] = useState(320);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [connectSource, setConnectSource] = useState<string | null>(null);
@@ -385,6 +380,15 @@ function MapEditor({ mapId }: { mapId: number }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
     setWindowGeom(loadWindowGeoms(mapId));
   }, [mapId]);
+
+  // 저장된 인스펙터 너비 복원 (클라이언트 전용, hydration 후 1회)
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("bpm.inspectorWidth"));
+    if (Number.isFinite(saved) && saved > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
+      setInspectorWidth(Math.min(480, Math.max(220, saved)));
+    }
+  }, []);
 
   // 창 기하 변경 시 디바운스 저장
   useEffect(() => {
@@ -1171,6 +1175,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!aNode) {
         return;
       }
+      // 사이클 방지 — B가 A의 하위(=A가 B의 조상)면 거부. 전체 그래프로 B의 조상 체인 확인.
+      if (aId === bId) {
+        return;
+      }
+      const parentById = new Map(
+        (fullGraph?.nodes ?? []).map((node) => [node.id, node.parent_node_id]),
+      );
+      for (let anc = parentById.get(bId) ?? null; anc !== null; anc = parentById.get(anc) ?? null) {
+        if (anc === aId) {
+          setStatus(t("err.moveChildCycle"));
+          return;
+        }
+      }
       const aGraph = buildGraph([aNode], [], []).nodes[0];
       try {
         const child = await getGraph(versionId, bId);
@@ -1200,7 +1217,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
       refreshFullGraph();
     },
-    [versionId, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
+    [versionId, fullGraph, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
   );
 
   const renameGroup = useCallback(
