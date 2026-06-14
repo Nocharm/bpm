@@ -25,6 +25,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
 
+import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
 import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
@@ -82,6 +83,7 @@ import {
   submitVersion,
   updateComment,
   withdrawVersion,
+  type AiProposal,
   type CheckoutState,
   type CommentItem,
   type FlatNode,
@@ -268,6 +270,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [managingApprovers, setManagingApprovers] = useState(false);
 
+  // AI 채팅 패널 상태
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiPreviewActive, setAiPreviewActive] = useState(false);
+  const aiPreviewRef = useRef(false);
+
   // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
   const [dropTarget, setDropTarget] = useState<{
     id: string;
@@ -367,6 +375,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── 저장 ──────────────────────────────────────────────
 
   const saveCurrentScope = useCallback(async () => {
+    // AI 미리보기 중에는 저장 생략 — Apply 전 자동 영속화 방지
+    if (aiPreviewRef.current) return;
     // 읽기 전용(타인 체크아웃)이면 저장 자체를 생략 — 스코프 이동은 계속 가능
     if (versionId === null || readOnly) {
       return;
@@ -392,6 +402,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [versionId, currentParentId, readOnly, refreshFullGraph]);
 
   const scheduleAutoSave = useCallback(() => {
+    // AI 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
+    if (aiPreviewRef.current) return;
     if (readOnly) {
       return;
     }
@@ -557,6 +569,67 @@ function MapEditor({ mapId }: { mapId: number }) {
     scheduleAutoSave();
   }, [setNodes, setEdges, scheduleAutoSave]);
 
+  // ── AI 제안 미리보기 / 적용 / 취소 ─────────────────────
+  const applyAiProposal = useCallback(
+    (proposal: AiProposal) => {
+      const keyToId = new Map<string, string>();
+      const gnodes = proposal.nodes.map((node) => {
+        const id = crypto.randomUUID();
+        keyToId.set(node.key, id);
+        return {
+          id,
+          title: node.title,
+          description: node.description,
+          node_type: node.node_type,
+          color: "",
+          assignee: "",
+          department: "",
+          system: "",
+          duration: "",
+          pos_x: 0,
+          pos_y: 0,
+          sort_order: 0,
+          group_id: null,
+        };
+      });
+      const gedges = proposal.edges
+        .map((edge) => {
+          const source = keyToId.get(edge.source);
+          const target = keyToId.get(edge.target);
+          if (!source || !target) return null;
+          return {
+            id: crypto.randomUUID(),
+            source_node_id: source,
+            target_node_id: target,
+            label: edge.label,
+          };
+        })
+        .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
+
+      const graph = { nodes: gnodes, edges: gedges, groups: [] };
+      const laidOut = layoutWithDagre(toAppNodes(graph), toAppEdges(graph));
+
+      pushHistory(); // Discard = undo restores the pre-preview state
+      aiPreviewRef.current = true;
+      setNodes(laidOut);
+      setEdges(toAppEdges(graph));
+      setAiPreviewActive(true);
+    },
+    [pushHistory, setNodes, setEdges],
+  );
+
+  const commitAiPreview = useCallback(() => {
+    aiPreviewRef.current = false;
+    setAiPreviewActive(false);
+    void saveCurrentScope();
+  }, [saveCurrentScope]);
+
+  const discardAiPreview = useCallback(() => {
+    aiPreviewRef.current = false;
+    setAiPreviewActive(false);
+    undo(); // restore the snapshot pushed in applyAiProposal
+  }, [undo]);
+
   // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지. Ctrl+K는 검색 포커스.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -628,7 +701,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     let alive = true;
     void getMe()
       .then((me) => {
-        if (alive) setUsername(me.username);
+        if (alive) {
+          setUsername(me.username);
+          setAiEnabled(me.ai_enabled);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -2279,6 +2355,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           >
             <PanelRight size={16} strokeWidth={1.5} />
           </button>
+          {aiEnabled && (
+            <button
+              type="button"
+              className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+              onClick={() => setAiOpen((open) => !open)}
+              title={t("ai.toggle")}
+            >
+              {t("ai.toggle")}
+            </button>
+          )}
           <button
             className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
@@ -2584,6 +2670,17 @@ function MapEditor({ mapId }: { mapId: number }) {
               </div>
             </div>
           )}
+          {aiPreviewActive && (
+            <div className="absolute left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md bg-surface px-3 py-2 shadow-lg">
+              <span className="text-caption text-ink">{t("ai.title")}</span>
+              <button type="button" className="rounded-sm border border-hairline px-2 py-1 text-caption text-accent" onClick={commitAiPreview}>
+                {t("approvers.save")}
+              </button>
+              <button type="button" className="rounded-sm border border-hairline px-2 py-1 text-caption text-error" onClick={discardAiPreview}>
+                {t("approvers.cancel")}
+              </button>
+            </div>
+          )}
           <ShortcutLegend />
           {summaryNodeId && versionId !== null && (() => {
             const node = nodes.find((n) => n.id === summaryNodeId);
@@ -2835,6 +2932,16 @@ function MapEditor({ mapId }: { mapId: number }) {
               </>
             )}
             </div>
+          </div>
+        )}
+        {aiEnabled && aiOpen && versionId !== null && (
+          <div className="flex w-80 shrink-0 border-l border-hairline">
+            <AiChatPanel
+              versionId={versionId}
+              parent={currentParentId}
+              canEdit={!readOnly && (checkout?.mine ?? false)}
+              onGraphProposal={applyAiProposal}
+            />
           </div>
         )}
       </div>
