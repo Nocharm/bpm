@@ -189,7 +189,8 @@ AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 
 class AiChatTurn(BaseModel):
-    role: str
+    # 경계에서 역할 제약 — 클라이언트가 system 역할을 주입하지 못하도록 (security.md)
+    role: Literal["user", "assistant"]
     content: str
 
 
