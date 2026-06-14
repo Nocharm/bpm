@@ -343,9 +343,14 @@ export function aiChat(
   parent: string | null,
   instruction: string,
   history: AiChatTurn[],
+  model: string | null,
 ): Promise<AiProposal> {
   return request<AiProposal>(`/versions/${versionId}/ai/chat`, {
     method: "POST",
-    body: JSON.stringify({ parent, instruction, history }),
+    body: JSON.stringify({ parent, instruction, history, model }),
   });
+}
+
+export function getAiModels(): Promise<{ models: string[] }> {
+  return request<{ models: string[] }>("/ai/models");
 }

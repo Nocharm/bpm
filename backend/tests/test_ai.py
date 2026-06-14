@@ -90,7 +90,7 @@ def _enable_ai(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _fake_ai(content: str):
-    async def _call(messages: list[dict]) -> str:
+    async def _call(messages: list[dict], model: str | None = None) -> str:
         return content
 
     return _call
@@ -185,7 +185,7 @@ def test_ai_invalid_then_retry_succeeds(
     valid = json.dumps({"kind": "answer", "message": "ok"})
     calls = {"n": 0}
 
-    async def _flaky(messages: list[dict]) -> str:
+    async def _flaky(messages: list[dict], model: str | None = None) -> str:
         calls["n"] += 1
         return "not json" if calls["n"] == 1 else valid
 
@@ -219,7 +219,7 @@ def test_ai_server_error_returns_502_without_leaking_url(
     _enable_ai(monkeypatch)
     version_id = _draft_version_checked_out(client)
 
-    async def _boom(messages: list[dict]) -> str:
+    async def _boom(messages: list[dict], model: str | None = None) -> str:
         raise RuntimeError("connection failed to http://internal-gpu:8000/v1")
 
     monkeypatch.setattr(ai_client, "call_ai", _boom)
@@ -230,3 +230,60 @@ def test_ai_server_error_returns_502_without_leaking_url(
 
     assert resp.status_code == 502
     assert "internal-gpu" not in resp.text  # 내부 주소 비노출
+
+
+def test_ai_chat_uses_selected_model(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    version_id = _draft_version_checked_out(client)
+    captured: dict[str, str | None] = {}
+
+    async def _capture(messages: list[dict], model: str | None = None) -> str:
+        captured["model"] = model
+        return json.dumps({"kind": "answer", "message": "ok"})
+
+    monkeypatch.setattr(ai_client, "call_ai", _capture)
+
+    client.post(
+        f"/api/versions/{version_id}/ai/chat",
+        json={"instruction": "?", "model": "/gpt-oss-120b"},
+    )
+
+    assert captured["model"] == "/gpt-oss-120b"
+
+
+def test_ai_models_lists(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_ai(monkeypatch)
+
+    async def _models() -> list[str]:
+        return ["/gpt-oss-120b", "/other-model"]
+
+    monkeypatch.setattr(ai_client, "list_models", _models)
+
+    resp = client.get("/api/ai/models")
+
+    assert resp.status_code == 200
+    assert resp.json()["models"] == ["/gpt-oss-120b", "/other-model"]
+
+
+def test_ai_models_disabled_returns_503(client: TestClient) -> None:
+    resp = client.get("/api/ai/models")
+    assert resp.status_code == 503
+
+
+def test_ai_models_fallback_to_default_on_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(settings, "ai_model", "/default-model")
+
+    async def _boom() -> list[str]:
+        raise RuntimeError("models endpoint down")
+
+    monkeypatch.setattr(ai_client, "list_models", _boom)
+
+    resp = client.get("/api/ai/models")
+
+    assert resp.status_code == 200
+    assert resp.json()["models"] == ["/default-model"]
