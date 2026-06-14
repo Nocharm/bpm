@@ -280,6 +280,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const edgesRef = useRef<Edge[]>([]);
   const groupsRef = useRef<GraphGroup[]>([]);
   const windowGeomRef = useRef<Record<string, WindowGeom>>({});
+  // fullGraph가 어떤 버전의 트리인지 기록 — 스코프 전환 시 재요청 게이트용(버전 바뀌면 다시 받음)
+  const fullGraphRef = useRef<VersionGraph | null>(null);
+  const fullGraphVersionRef = useRef<number | null>(null);
+  useEffect(() => {
+    fullGraphRef.current = fullGraph;
+    fullGraphVersionRef.current = fullGraph === null ? null : versionId;
+  }, [fullGraph, versionId]);
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -581,7 +588,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         setNodes(toAppNodes(graph));
         setEdges(toAppEdges(graph));
         setGroups(graph.groups);
-        refreshFullGraph();
+        // 전체 트리는 버전당 1회만 — 스코프 전환 시 기존 데이터 재사용(깜빡임 방지).
+        // 버전이 바뀌면 stale 트리이므로 다시 받는다.
+        if (fullGraphRef.current === null || fullGraphVersionRef.current !== versionId) {
+          refreshFullGraph();
+        }
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
@@ -1808,6 +1819,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
   }, [nodes, edges, fullGraph, currentParentId, expandedOutline, scopes]);
 
+  // 스코프 전환 중 라이브 nodes 공백 구간엔 직전 비어있지 않은 outline을 고스트로 유지(깜빡임 방지).
+  // 비어있지 않을 때만 갱신 → 공백 구간엔 마지막 good 값을 그대로 렌더해 "사라졌다 뜨는" 현상 제거.
+  const [displayOutline, setDisplayOutline] = useState(outline);
+  useEffect(() => {
+    if (outline.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 비어있지 않은 outline만 표시 캐시에 반영(고스트 유지)
+      setDisplayOutline(outline);
+    }
+  }, [outline]);
+
   const handleToggleExpand = useCallback((id: string) => {
     setExpandedOutline((prev) => {
       const next = new Set(prev);
@@ -2055,7 +2076,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           collapsed={leftCollapsed}
           onToggleCollapse={() => setLeftCollapsed((value) => !value)}
           selectedId={selectedId}
-          outline={outline}
+          outline={displayOutline}
           onSelectNode={handleOutlineSelect}
           onToggleExpand={handleToggleExpand}
         />
