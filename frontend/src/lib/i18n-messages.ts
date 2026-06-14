@@ -174,6 +174,18 @@ const en = {
   "status.approved": "Approved",
   "status.published": "Published",
   "status.rejected": "Rejected",
+  "wf.submit": "Submit for approval",
+  "wf.approve": "Approve",
+  "wf.reject": "Reject",
+  "wf.publish": "Publish",
+  "wf.withdraw": "Withdraw",
+  "wf.approvalProgress": "{done}/{total} approved",
+  "wf.rejectTitle": "Reject this version",
+  "wf.rejectReason": "Reason",
+  "wf.rejectConfirm": "Reject",
+  "wf.rejectCancel": "Cancel",
+  "wf.rejectedBanner": "Rejected: {reason}",
+  "err.workflow": "Workflow action failed",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -350,6 +362,18 @@ const ko: Record<MessageKey, string> = {
   "status.approved": "승인됨",
   "status.published": "게시됨",
   "status.rejected": "반려됨",
+  "wf.submit": "승인 요청",
+  "wf.approve": "승인",
+  "wf.reject": "반려",
+  "wf.publish": "게시",
+  "wf.withdraw": "회수",
+  "wf.approvalProgress": "{done}/{total} 승인",
+  "wf.rejectTitle": "이 버전 반려",
+  "wf.rejectReason": "사유",
+  "wf.rejectConfirm": "반려",
+  "wf.rejectCancel": "취소",
+  "wf.rejectedBanner": "반려됨: {reason}",
+  "err.workflow": "워크플로우 작업 실패",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
