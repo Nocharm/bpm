@@ -182,6 +182,7 @@ class NotificationOut(BaseModel):
 
 class MeOut(BaseModel):
     username: str
+    ai_enabled: bool
 
 
 AI_NODE_TYPES = {"start", "process", "decision", "end"}
