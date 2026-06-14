@@ -97,7 +97,11 @@ import {
 import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
 import { useI18n } from "@/lib/i18n";
-import { NodeActionsContext } from "@/lib/node-actions";
+import {
+  NODE_DISPLAY_FIELDS,
+  NodeActionsContext,
+  type NodeDisplayField,
+} from "@/lib/node-actions";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -2019,9 +2023,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     [comments, selectedId],
   );
 
+  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속
+  const [displayFields, setDisplayFields] = useState<NodeDisplayField[]>(["assignee"]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("bpm.nodeDisplayFields");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as NodeDisplayField[];
+        const valid = parsed.filter((field) => NODE_DISPLAY_FIELDS.includes(field));
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+        setDisplayFields(valid);
+      } catch {
+        // 무시 — 기본값 유지
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("bpm.nodeDisplayFields", JSON.stringify(displayFields));
+  }, [displayFields]);
+
+  const toggleDisplayField = useCallback((field: NodeDisplayField) => {
+    setDisplayFields((prev) =>
+      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
+    );
+  }, []);
+
   const nodeActions = useMemo(
-    () => ({ onDrill: handleDrillById }),
-    [handleDrillById],
+    () => ({ onDrill: handleDrillById, displayFields }),
+    [handleDrillById, displayFields],
   );
 
   // 인스펙터 폭 로컬 영속
@@ -2393,6 +2424,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           outline={displayOutline}
           onSelectNode={handleOutlineSelect}
           onToggleExpand={handleToggleExpand}
+          displayFields={displayFields}
+          onToggleDisplayField={toggleDisplayField}
         />
         <div
           ref={canvasContainerRef}

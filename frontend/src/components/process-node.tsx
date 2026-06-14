@@ -1,11 +1,66 @@
 "use client";
 
 import { Handle, type NodeProps, Position } from "@xyflow/react";
-import { CornerDownRight, MessageSquare, SquareArrowOutUpRight, User, Zap } from "lucide-react";
+import {
+  Building2,
+  Clock,
+  CornerDownRight,
+  type LucideIcon,
+  MessageSquare,
+  Server,
+  SquareArrowOutUpRight,
+  Tag,
+  User,
+  Zap,
+} from "lucide-react";
 
 import type { AppNode, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
-import { useNodeActions } from "@/lib/node-actions";
+import type { MessageKey } from "@/lib/i18n-messages";
+import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+
+const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
+  assignee: User,
+  department: Building2,
+  system: Server,
+  duration: Clock,
+  nodeType: Tag,
+};
+
+const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
+  process: "nodeType.process",
+  decision: "nodeType.decision",
+  start: "nodeType.start",
+  end: "nodeType.end",
+};
+
+// 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
+function NodeFields({ data }: { data: AppNode["data"] }) {
+  const { t } = useI18n();
+  const { displayFields } = useNodeActions();
+  return (
+    <>
+      {displayFields.map((field) => {
+        const value =
+          field === "nodeType"
+            ? t(NODE_TYPE_LABEL_KEY[data.nodeType])
+            : data[field];
+        if (!value) {
+          return null;
+        }
+        const Icon = FIELD_ICON[field];
+        return (
+          <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
+            <span className="inline-flex items-center gap-1">
+              <Icon size={12} strokeWidth={1.5} />
+              {value}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 // 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용)
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
@@ -132,14 +187,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
     >
       <Handle type="target" position={Position.Left} />
       <div className="font-medium text-ink">{data.label}</div>
-      {data.assignee && (
-        <div className="mt-0.5 text-xs text-ink-tertiary">
-          <span className="inline-flex items-center gap-1">
-            <User size={12} strokeWidth={1.5} />
-            {data.assignee}
-          </span>
-        </div>
-      )}
+      <NodeFields data={data} />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">
           <CornerDownRight size={12} strokeWidth={1.5} />

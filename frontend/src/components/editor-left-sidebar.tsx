@@ -17,6 +17,16 @@ import { Fragment, type ComponentType } from "react";
 
 import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
+import { NODE_DISPLAY_FIELDS, type NodeDisplayField } from "@/lib/node-actions";
+
+const FIELD_LABEL_KEY: Record<NodeDisplayField, MessageKey> = {
+  assignee: "field.assignee",
+  department: "field.department",
+  system: "field.system",
+  duration: "field.duration",
+  nodeType: "field.type",
+};
 
 interface EditorLeftSidebarProps {
   collapsed: boolean;
@@ -25,6 +35,8 @@ interface EditorLeftSidebarProps {
   outline: OutlineRow[];
   onSelectNode: (id: string) => void;
   onToggleExpand: (id: string) => void;
+  displayFields: NodeDisplayField[];
+  onToggleDisplayField: (field: NodeDisplayField) => void;
 }
 
 const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -41,6 +53,8 @@ export function EditorLeftSidebar({
   outline,
   onSelectNode,
   onToggleExpand,
+  displayFields,
+  onToggleDisplayField,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
 
@@ -73,6 +87,26 @@ export function EditorLeftSidebar({
         >
           <ChevronLeft size={16} strokeWidth={1.5} />
         </button>
+      </div>
+
+      {/* 노드에 표시할 정보 선택 — 켠 필드가 노드에 여러 줄로 표시됨 */}
+      <div className="mb-2 border-b border-hairline pb-2">
+        <p className="px-1 text-fine text-ink-tertiary">{t("sidebar.nodeInfo")}</p>
+        <div className="mt-1 flex flex-col gap-0.5">
+          {NODE_DISPLAY_FIELDS.map((field) => (
+            <label
+              key={field}
+              className="flex items-center gap-1.5 px-1 text-fine text-ink-secondary"
+            >
+              <input
+                type="checkbox"
+                checked={displayFields.includes(field)}
+                onChange={() => onToggleDisplayField(field)}
+              />
+              {t(FIELD_LABEL_KEY[field])}
+            </label>
+          ))}
+        </div>
       </div>
 
       {outline.length === 0 ? (
