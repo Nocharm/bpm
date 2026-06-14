@@ -247,8 +247,8 @@ export interface WorkflowState {
   approvals: string[];
 }
 
-export function getMe(): Promise<{ username: string }> {
-  return request<{ username: string }>("/me");
+export function getMe(): Promise<{ username: string; ai_enabled: boolean }> {
+  return request<{ username: string; ai_enabled: boolean }>("/me");
 }
 
 export function getWorkflowState(versionId: number): Promise<WorkflowState> {
@@ -309,4 +309,43 @@ export function listNotifications(unreadOnly = false): Promise<NotificationItem[
 
 export function markNotificationRead(id: number): Promise<NotificationItem> {
   return request<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
+}
+
+// ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
+
+export interface AiNode {
+  key: string;
+  title: string;
+  node_type: string;
+  description: string;
+}
+
+export interface AiEdge {
+  source: string;
+  target: string;
+  label: string;
+}
+
+export interface AiProposal {
+  kind: "graph" | "answer";
+  message: string;
+  nodes: AiNode[];
+  edges: AiEdge[];
+}
+
+export interface AiChatTurn {
+  role: string;
+  content: string;
+}
+
+export function aiChat(
+  versionId: number,
+  parent: string | null,
+  instruction: string,
+  history: AiChatTurn[],
+): Promise<AiProposal> {
+  return request<AiProposal>(`/versions/${versionId}/ai/chat`, {
+    method: "POST",
+    body: JSON.stringify({ parent, instruction, history }),
+  });
 }
