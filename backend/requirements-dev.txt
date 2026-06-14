@@ -1,5 +1,3 @@
 -r requirements.txt
 pytest==9.0.3
-# starlette TestClient 백엔드 (httpx v1은 deprecated)
-httpx2==2.3.0
 ruff==0.15.16

@@ -22,5 +22,12 @@ class Settings(BaseSettings):
     # Tuning — 버전 체크아웃 잠금의 무활동 자동 해제 시간(분). spec §7 Phase C
     checkout_ttl_minutes: int = 30
 
+    # 온프레미스 AI (OpenAI 호환 GPU 서버) — 로컬 기본 비활성, 서버 compose만 활성 (design 2026-06-15)
+    ai_enabled: bool = False
+    ai_base_url: str = ""  # 예: http://<gpu>:8000/v1
+    ai_api_token: str = ""  # Bearer 토큰 (시크릿 — .env만, git 금지)
+    ai_model: str = ""
+    ai_timeout_seconds: int = 60  # 요청 타임아웃(초)
+
 
 settings = Settings()
