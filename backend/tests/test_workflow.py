@@ -242,3 +242,32 @@ def test_withdraw_submitter_only(
     monkeypatch.setattr(settings, "dev_user", "stranger")
     forbidden = client.post(f"/api/versions/{version_id}/withdraw")
     assert forbidden.status_code == 403
+
+
+def test_checkout_blocked_on_pending(client: TestClient) -> None:
+    _map_id, version_id = _submit_with_approvers(client, ["a"])  # now pending
+
+    blocked = client.post(f"/api/versions/{version_id}/checkout", json={})
+    assert blocked.status_code == 409
+
+
+def test_delete_blocked_on_published(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    map_id, v1 = _submit_with_approvers(client, ["a"])
+    client.post(f"/api/maps/{map_id}/versions", json={"label": "keep"})  # not last
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{v1}/approve")
+    monkeypatch.setattr(settings, "dev_user", "local-dev")
+    client.post(f"/api/versions/{v1}/publish")
+
+    blocked = client.delete(f"/api/versions/{v1}")
+    assert blocked.status_code == 409
+
+
+def test_delete_blocked_on_pending(client: TestClient) -> None:
+    map_id, v1 = _submit_with_approvers(client, ["a"])  # pending
+    client.post(f"/api/maps/{map_id}/versions", json={"label": "keep"})  # not last
+
+    blocked = client.delete(f"/api/versions/{v1}")
+    assert blocked.status_code == 409

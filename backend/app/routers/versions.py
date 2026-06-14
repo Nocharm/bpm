@@ -169,6 +169,10 @@ async def acquire_checkout(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if not workflow.is_editable_status(version.status):
+        raise HTTPException(
+            status_code=409, detail=f"version is {version.status} — not editable"
+        )
 
     now = datetime.now(timezone.utc)
     if is_locked_by_other(version, user, now) and not payload.force:
@@ -209,6 +213,10 @@ async def delete_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status in (workflow.PENDING, workflow.PUBLISHED):
+        raise HTTPException(
+            status_code=409, detail=f"cannot delete a {version.status} version"
+        )
 
     # 다른 사용자가 편집 중인 버전은 삭제 불가 (spec §7 Phase C)
     if is_locked_by_other(version, user, datetime.now(timezone.utc)):
