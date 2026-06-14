@@ -8,6 +8,7 @@ import {
   Controls,
   type Connection,
   type Edge,
+  MarkerType,
   type NodeTypes,
   ReactFlow,
   ReactFlowProvider,
@@ -96,7 +97,7 @@ const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
 
-type ScreenRect = { left: number; top: number; width: number; height: number };
+type ScreenRect = { left: number; top: number; width: number; height: number; radius: number };
 
 // 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. 세련된 무채도(muted) 8톤 stroke(데이터/출력 예외).
 const COLOR_PRESETS = [
@@ -617,6 +618,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           const focusId = focusNodeIdRef.current;
           focusNodeIdRef.current = null;
           setSelectedId(focusId);
+          // 새 스코프 로드 직후 — 보더 강조를 위해 React Flow 선택 상태도 단일 선택으로 동기화
+          setNodes((current) =>
+            current.map((node) =>
+              node.selected === (node.id === focusId)
+                ? node
+                : { ...node, selected: node.id === focusId },
+            ),
+          );
           setTimeout(() => {
             void reactFlow.fitView({
               nodes: [{ id: focusId }],
@@ -1081,11 +1090,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       const zoom = reactFlow.getViewport().zoom;
       const topLeft = reactFlow.flowToScreenPosition({ x: node.position.x, y: node.position.y });
       const rect = container.getBoundingClientRect();
+      const w = node.measured?.width ?? NODE_WIDTH;
+      const h = node.measured?.height ?? NODE_HEIGHT;
       return {
         left: topLeft.x - rect.left,
         top: topLeft.y - rect.top,
-        width: (node.measured?.width ?? NODE_WIDTH) * zoom,
-        height: (node.measured?.height ?? NODE_HEIGHT) * zoom,
+        width: w * zoom,
+        height: h * zoom,
+        // 링 반경은 줌과 무관하게 노드 원래 크기 기준 — 화면상 항상 같은 크기로 보이게 함
+        radius: Math.max(w, h) + ZONE_RADIUS_PAD,
       };
     },
     [reactFlow],
@@ -1393,8 +1406,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
-      const radius = Math.max(rect.width, rect.height) + ZONE_RADIUS_PAD;
-      const zone = pickDropZone(cursorX, cursorY, cx, cy, radius, ZONE_TILE_W, ZONE_TILE_H);
+      const zone = pickDropZone(cursorX, cursorY, cx, cy, rect.radius, ZONE_TILE_W, ZONE_TILE_H);
       setGroupDropTarget((cur) => (cur ? null : cur)); // 노드 대상이 그룹 박스 hover보다 우선
       setDropTarget((cur) =>
         cur && cur.id === targetId && cur.zone === zone ? cur : { id: targetId, zone, rect },
@@ -1427,8 +1439,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const r = active.rect;
         const cx = r.left + r.width / 2;
         const cy = r.top + r.height / 2;
-        const radius = Math.max(r.width, r.height) + ZONE_RADIUS_PAD;
-        const keep = radius + ZONE_TILE_H; // 타일까지 커서를 옮겨도 링 유지
+        const keep = r.radius + ZONE_TILE_H; // 타일까지 커서를 옮겨도 링 유지
         const dist = Math.hypot(curX - cx, curY - cy);
         if (dist <= keep) {
           activateZone(active.id, curX, curY);
@@ -1709,6 +1720,29 @@ function MapEditor({ mapId }: { mapId: number }) {
     [nodes, unresolvedCounts],
   );
 
+  // 선택 노드 기준 앞/뒤 단계 엣지 강조 — 들어오는(target=선택) teal, 나가는(source=선택) orange
+  const styledEdges = useMemo(() => {
+    if (!selectedId) {
+      return edges;
+    }
+    return edges.map((edge) => {
+      const stroke =
+        edge.target === selectedId
+          ? "var(--color-edge-in)"
+          : edge.source === selectedId
+            ? "var(--color-edge-out)"
+            : null;
+      if (!stroke) {
+        return edge;
+      }
+      return {
+        ...edge,
+        style: { ...edge.style, stroke, strokeWidth: 2.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+      };
+    });
+  }, [edges, selectedId]);
+
   // 그룹 박스 — 멤버 bounding box로 자동 산정해 ViewportPortal에 flow 좌표로 렌더(시각 전용)
   const groupBoxes = useMemo(() => {
     return groups.flatMap((group) => {
@@ -1852,6 +1886,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (scopeParentId === currentParentId) {
         setSelectedId(id);
         setSelectedEdgeId(null);
+        // 캔버스 클릭과 달리 프로그램적 선택은 React Flow 선택 상태를 안 건드려 보더가 안 켜짐 — 직접 단일 선택 동기화
+        setNodes((current) =>
+          current.map((node) =>
+            node.selected === (node.id === id) ? node : { ...node, selected: node.id === id },
+          ),
+        );
         // duration이 길수록 React Flow 기본 cubic-in-out 가감속이 또렷하게 보임
         void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
         return;
@@ -1870,7 +1910,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       focusNodeIdRef.current = id;
       void navigateTo(chain);
     },
-    [fullGraph, currentParentId, mapName, reactFlow, navigateTo],
+    [fullGraph, currentParentId, mapName, reactFlow, navigateTo, setNodes],
   );
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
@@ -2118,7 +2158,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   <div className="h-full w-full bg-canvas">
                     <ReactFlow
                       nodes={displayNodes}
-                      edges={edges}
+                      edges={styledEdges}
                       nodeTypes={nodeTypes}
                       snapToGrid
                       snapGrid={[8, 8]}
@@ -2299,8 +2339,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               const tileH = ZONE_TILE_H;
               const cx = r.left + r.width / 2;
               const cy = r.top + r.height / 2;
-              // 링 반경 — 넓힌 타일이 노드를 가리지 않도록 약간 키움 (hit-test와 공용)
-              const radius = Math.max(r.width, r.height) + ZONE_RADIUS_PAD;
+              // 링 반경 — screenRectOf에서 줌 무관 고정값으로 계산됨 (hit-test와 공용)
+              const radius = r.radius;
               // 타일은 원주 위 4 cardinal 지점
               const tiles = [
                 { zone: "front", Icon: ArrowLeft, x: cx - radius, y: cy, label: t("dropzone.front") },
