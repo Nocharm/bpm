@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
 ## 2026-06-14
+- 버전 승인 워크플로우 설계 문서 작성. 버전 라이프사이클을 Draft→Pending→Approved→Published(+Rejected)로 격상하는 거버넌스 기능 설계 — 맵별 지정 승인자 만장일치 승인, 수동 게시+구버전 강등, 편집·게시 권한=체크아웃 보유자(submit 시 submitted_by 박제), 인앱 알림(폴링). `docs/superpowers/specs/2026-06-14-version-approval-workflow-design.md`. 다음: 구현 계획 수립. 코드 변경 없음.
 - 드롭존 과민성 해소 (브랜치 `feat/canvas-ux`). zone을 커서 방향식 → 타일 hitbox 적중식으로 변경(canvas.ts 신규 순수함수 pickDropZone, bun 검증). 커서가 타일 밖이면 중립 드롭(resolveCollision)으로 그냥 겹침 밀어냄. 링 유지 경계를 radius+타일높이로 키워 커서를 타일로 옮겨도 안 사라지게 함. ZONE 상수(radius pad/tile w/h)를 오버레이 렌더와 hit-test 단일 출처로 정합. DropZone 타입을 canvas.ts로 통일. 검증: lint/build green + pickDropZone bun. 인터랙션 로컬 확인 필요.
 - 아웃라인 깜빡임 제거 (브랜치 `feat/canvas-ux`). 스코프 전환 시 전체 트리 refetch를 최초 1회로 제한(fullGraphRef로 게이트, 기존 fullGraph 재사용), 라이브 nodes 공백 구간엔 직전 비어있지 않은 outline을 고스트로 유지(lastOutlineRef→displayOutline)해 "사라졌다 뜨는" 현상 제거. 저장·moveToChild·버전전환 후 갱신은 유지. 검증: lint/build green.
 - 창 최소화 → 좌하단 dock 스택 (브랜치 `feat/canvas-ux`). 최소화 시 제자리 접힘 대신 신규 window-dock.tsx 칩으로 좌하단에 쌓이고, 칩 클릭 시 복원+포커스. scope-window.tsx의 minimized 제자리 렌더 제거. 검증: lint/build green. 인터랙션 로컬 확인 필요.
