@@ -1,8 +1,9 @@
 """Pydantic request/response models — API boundary validation."""
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MapCreate(BaseModel):
@@ -181,3 +182,54 @@ class NotificationOut(BaseModel):
 
 class MeOut(BaseModel):
     username: str
+
+
+AI_NODE_TYPES = {"start", "process", "decision", "end"}
+
+
+class AiChatTurn(BaseModel):
+    role: str
+    content: str
+
+
+class AiChatRequest(BaseModel):
+    parent: str | None = None
+    instruction: str = Field(min_length=1, max_length=2000)
+    history: list[AiChatTurn] = Field(default_factory=list, max_length=20)
+
+
+class AiNode(BaseModel):
+    key: str = Field(min_length=1, max_length=50)
+    title: str = Field(min_length=1, max_length=200)
+    node_type: str = "process"
+    description: str = ""
+
+
+class AiEdge(BaseModel):
+    source: str
+    target: str
+    label: str = ""
+
+
+class AiProposal(BaseModel):
+    # 판별 타입 — graph: 순서도 제안, answer: 사용법 텍스트 (design 2026-06-15)
+    kind: Literal["graph", "answer"]
+    message: str = ""
+    nodes: list[AiNode] = Field(default_factory=list)
+    edges: list[AiEdge] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_graph_integrity(self) -> "AiProposal":
+        if self.kind != "graph":
+            return self
+        keys = [node.key for node in self.nodes]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate node keys")
+        keyset = set(keys)
+        for node in self.nodes:
+            if node.node_type not in AI_NODE_TYPES:
+                raise ValueError(f"invalid node_type: {node.node_type}")
+        for edge in self.edges:
+            if edge.source not in keyset or edge.target not in keyset:
+                raise ValueError("edge references unknown node key")
+        return self
