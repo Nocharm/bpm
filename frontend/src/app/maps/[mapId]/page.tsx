@@ -25,6 +25,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
 
+import { ApproverManager } from "@/components/approver-manager";
 import { CommentSection } from "@/components/comment-section";
 import { StatusBadge } from "@/components/status-badge";
 import { WorkflowActions } from "@/components/workflow-actions";
@@ -263,6 +264,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
+  const [managingApprovers, setManagingApprovers] = useState(false);
 
   // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
   const [dropTarget, setDropTarget] = useState<{
@@ -296,8 +298,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = (checkout !== null && !checkout.mine) || statusLocksEditing;
   // 역할 판정 — render 중 파생(useEffect 금지)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const isMapOwner = username !== null && mapOwner !== null && username === mapOwner; // reserved for admin controls
+  const isMapOwner = username !== null && mapOwner !== null && username === mapOwner;
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
@@ -2151,6 +2152,22 @@ function MapEditor({ mapId }: { mapId: number }) {
               onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
               onPublish={() => void runTransition(publishVersion)}
               onWithdraw={() => void runTransition(withdrawVersion)}
+            />
+          )}
+          {isMapOwner && (
+            <button
+              type="button"
+              className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+              onClick={() => setManagingApprovers(true)}
+            >
+              {t("approvers.manage")}
+            </button>
+          )}
+          {managingApprovers && (
+            <ApproverManager
+              mapId={mapId}
+              onClose={() => setManagingApprovers(false)}
+              onSaved={() => void refreshWorkflow()}
             />
           )}
           <button className={toolButton} onClick={() => void handleCreateVersion()}>

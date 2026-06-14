@@ -186,6 +186,12 @@ const en = {
   "wf.rejectCancel": "Cancel",
   "wf.rejectedBanner": "Rejected: {reason}",
   "err.workflow": "Workflow action failed",
+  "approvers.manage": "Manage approvers",
+  "approvers.title": "Approvers",
+  "approvers.hint": "One username per line. All must approve.",
+  "approvers.save": "Save",
+  "approvers.cancel": "Cancel",
+  "err.approvers": "Failed to update approvers",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -374,6 +380,12 @@ const ko: Record<MessageKey, string> = {
   "wf.rejectCancel": "취소",
   "wf.rejectedBanner": "반려됨: {reason}",
   "err.workflow": "워크플로우 작업 실패",
+  "approvers.manage": "승인자 관리",
+  "approvers.title": "승인자",
+  "approvers.hint": "한 줄에 한 명. 전원 승인해야 통과.",
+  "approvers.save": "저장",
+  "approvers.cancel": "취소",
+  "err.approvers": "승인자 변경 실패",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
