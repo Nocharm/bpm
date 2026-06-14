@@ -48,6 +48,10 @@
   --color-removed: #cc3300;
   --color-changed: #9a6b00;
 
+  /* 엣지 방향 강조 — 선택 노드로 들어오는(teal)·나가는(orange) 흐름. 한류/난류 대비로 방향 구분 */
+  --color-edge-in: #0d9488;
+  --color-edge-out: #ea580c;
+
   /* Fonts */
   --font-text: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Text", system-ui, sans-serif;
   --font-display: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Display", system-ui, sans-serif;

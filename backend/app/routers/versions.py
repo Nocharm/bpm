@@ -4,15 +4,32 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app import workflow
 from app.auth import get_current_user
-from app.checkout import is_locked_by_other
+from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.models import Edge, Group, MapVersion, Node, ProcessMap
-from app.schemas import CheckoutIn, CheckoutOut, VersionCreate, VersionOut, VersionUpdate
+from app.models import (
+    Edge,
+    Group,
+    MapApprover,
+    MapVersion,
+    Node,
+    ProcessMap,
+    VersionApproval,
+)
+from app.schemas import (
+    CheckoutIn,
+    CheckoutOut,
+    RejectIn,
+    VersionCreate,
+    VersionOut,
+    VersionUpdate,
+    WorkflowStateOut,
+)
 
 router = APIRouter(
     prefix="/api", tags=["versions"], dependencies=[Depends(get_current_user)]
@@ -152,6 +169,10 @@ async def acquire_checkout(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if not workflow.is_editable_status(version.status):
+        raise HTTPException(
+            status_code=409, detail=f"version is {version.status} — not editable"
+        )
 
     now = datetime.now(timezone.utc)
     if is_locked_by_other(version, user, now) and not payload.force:
@@ -192,6 +213,10 @@ async def delete_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status in (workflow.PENDING, workflow.PUBLISHED):
+        raise HTTPException(
+            status_code=409, detail=f"cannot delete a {version.status} version"
+        )
 
     # 다른 사용자가 편집 중인 버전은 삭제 불가 (spec §7 Phase C)
     if is_locked_by_other(version, user, datetime.now(timezone.utc)):
@@ -212,3 +237,237 @@ async def delete_version(
 
     await session.delete(version)
     await session.commit()
+
+
+async def _load_approvers(session: AsyncSession, map_id: int) -> list[str]:
+    rows = await session.scalars(
+        select(MapApprover.user_id).where(MapApprover.map_id == map_id)
+    )
+    return list(rows.all())
+
+
+@router.get("/versions/{version_id}/workflow", response_model=WorkflowStateOut)
+async def get_workflow_state(
+    version_id: int, session: AsyncSession = Depends(get_session)
+) -> WorkflowStateOut:
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    approvers = await _load_approvers(session, version.map_id)
+    approvals = list(
+        (
+            await session.scalars(
+                select(VersionApproval.approver).where(
+                    VersionApproval.version_id == version_id
+                )
+            )
+        ).all()
+    )
+    return WorkflowStateOut(
+        version_id=version_id,
+        status=version.status,
+        submitted_by=version.submitted_by,
+        reject_reason=version.reject_reason,
+        approvers=approvers,
+        approvals=approvals,
+    )
+
+
+@router.post("/versions/{version_id}/submit", response_model=VersionOut)
+async def submit_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if not workflow.is_editable_status(version.status):
+        raise HTTPException(
+            status_code=409, detail=f"cannot submit from status {version.status}"
+        )
+    now = datetime.now(timezone.utc)
+    if not (is_checkout_active(version, now) and version.checked_out_by == user):
+        raise HTTPException(status_code=403, detail="only the checkout holder can submit")
+
+    approvers = await _load_approvers(session, version.map_id)
+    if not approvers:
+        raise HTTPException(
+            status_code=409, detail="map has no approvers — assign approvers first"
+        )
+
+    await session.execute(
+        delete(VersionApproval).where(VersionApproval.version_id == version_id)
+    )
+    version.status = workflow.PENDING
+    version.submitted_by = user
+    version.reject_reason = None
+    version.checked_out_by = None
+    version.checked_out_at = None
+    workflow.create_notifications(
+        session,
+        approvers,
+        type="review_requested",
+        map_id=version.map_id,
+        version_id=version_id,
+        message=f"{user} requested approval for '{version.label}'",
+    )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/approve", response_model=VersionOut)
+async def approve_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """지정 승인자의 승인 1건 기록. 전원 승인되면 Pending → Approved 자동 전이."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status != workflow.PENDING:
+        raise HTTPException(
+            status_code=409, detail=f"cannot approve from status {version.status}"
+        )
+    approvers = await _load_approvers(session, version.map_id)
+    if user not in approvers:
+        raise HTTPException(
+            status_code=403, detail="only a designated approver can approve"
+        )
+
+    existing = await session.scalar(
+        select(VersionApproval).where(
+            VersionApproval.version_id == version_id,
+            VersionApproval.approver == user,
+        )
+    )
+    if existing is None:
+        session.add(VersionApproval(version_id=version_id, approver=user))
+        await session.flush()
+
+    approved_count = await session.scalar(
+        select(func.count())
+        .select_from(VersionApproval)
+        .where(VersionApproval.version_id == version_id)
+    )
+    # 승인자 목록은 현재 시점 기준 — 제출 후 승인자가 추가되면 재승인이 필요해 Approved로 안 넘어감
+    if approved_count is not None and approved_count >= len(approvers):
+        version.status = workflow.APPROVED
+        if version.submitted_by:
+            workflow.create_notifications(
+                session,
+                [version.submitted_by],
+                type="approved",
+                map_id=version.map_id,
+                version_id=version_id,
+                message=f"'{version.label}' is fully approved — ready to publish",
+            )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/reject", response_model=VersionOut)
+async def reject_version(
+    version_id: int,
+    payload: RejectIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """지정 승인자 1인의 반려 — 사유 필수. Pending → Rejected, submitter 알림."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status != workflow.PENDING:
+        raise HTTPException(
+            status_code=409, detail=f"cannot reject from status {version.status}"
+        )
+    approvers = await _load_approvers(session, version.map_id)
+    if user not in approvers:
+        raise HTTPException(
+            status_code=403, detail="only a designated approver can reject"
+        )
+
+    version.status = workflow.REJECTED
+    version.reject_reason = payload.reason
+    if version.submitted_by:
+        workflow.create_notifications(
+            session,
+            [version.submitted_by],
+            type="rejected",
+            map_id=version.map_id,
+            version_id=version_id,
+            message=f"'{version.label}' was rejected: {payload.reason}",
+        )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/publish", response_model=VersionOut)
+async def publish_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Approved → Published. submitter만. 같은 맵의 기존 Published는 Approved로 강등."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status != workflow.APPROVED:
+        raise HTTPException(
+            status_code=409, detail=f"cannot publish from status {version.status}"
+        )
+    if version.submitted_by != user:
+        raise HTTPException(status_code=403, detail="only the submitter can publish")
+
+    approvers = await _load_approvers(session, version.map_id)
+    prior_published = await session.scalars(
+        select(MapVersion).where(
+            MapVersion.map_id == version.map_id,
+            MapVersion.status == workflow.PUBLISHED,
+        )
+    )
+    for prior in prior_published:
+        prior.status = workflow.APPROVED
+
+    version.status = workflow.PUBLISHED
+    workflow.create_notifications(
+        session,
+        approvers,
+        type="published",
+        map_id=version.map_id,
+        version_id=version_id,
+        message=f"'{version.label}' was published",
+    )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/withdraw", response_model=VersionOut)
+async def withdraw_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Pending/Approved/Rejected → Draft. submitter만. 회수자에게 체크아웃 재부여."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status not in (workflow.PENDING, workflow.APPROVED, workflow.REJECTED):
+        raise HTTPException(
+            status_code=409, detail=f"cannot withdraw from status {version.status}"
+        )
+    if version.submitted_by != user:
+        raise HTTPException(status_code=403, detail="only the submitter can withdraw")
+
+    version.status = workflow.DRAFT
+    version.checked_out_by = user
+    version.checked_out_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(version)
+    return version

@@ -20,6 +20,9 @@ class VersionOut(BaseModel):
 
     id: int
     label: str
+    status: str
+    submitted_by: str | None
+    reject_reason: str | None
 
 
 class VersionCreate(BaseModel):
@@ -32,12 +35,32 @@ class VersionUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=100)
 
 
+class ApproversUpdate(BaseModel):
+    user_ids: list[str]
+
+
+class WorkflowStateOut(BaseModel):
+    version_id: int
+    status: str
+    submitted_by: str | None
+    reject_reason: str | None
+    # 맵의 지정 승인자 전체
+    approvers: list[str]
+    # 이번 사이클에 이미 승인한 승인자
+    approvals: list[str]
+
+
+class RejectIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class MapOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     description: str
+    created_by: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -142,3 +165,19 @@ class CommentOut(BaseModel):
     body: str
     resolved: bool
     created_at: datetime
+
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    type: str
+    map_id: int | None
+    version_id: int | None
+    message: str
+    read: bool
+    created_at: datetime
+
+
+class MeOut(BaseModel):
+    username: str
