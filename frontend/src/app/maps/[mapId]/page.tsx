@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, LogOut, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, LogOut, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -227,7 +227,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [inspectorWidth, setInspectorWidth] = useState(320);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [connectSource, setConnectSource] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -514,7 +513,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       if (event.key === "Escape") {
-        setConnectSource(null);
         setPending(null);
         return;
       }
@@ -859,29 +857,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     [handleDrillIn],
   );
 
-  // 연결 모드 완료 — connectSource→target 엣지 생성(one-shot)
-  const completeConnect = useCallback(
-    (targetId: string) => {
-      if (!connectSource || connectSource === targetId) {
-        return;
-      }
-      pushHistory();
-      setEdges((current) =>
-        addEdge(
-          { ...EDGE_DEFAULTS, source: connectSource, target: targetId, id: crypto.randomUUID() },
-          current,
-        ),
-      );
-      scheduleAutoSave();
-      setConnectSource(null);
-    },
-    [connectSource, pushHistory, setEdges, scheduleAutoSave],
-  );
-
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
     async (index: number) => {
-      setConnectSource(null);
       if (index === activeIndex) {
         return;
       }
@@ -1766,8 +1744,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const nodeActions = useMemo(
-    () => ({ onDrill: handleDrillById, connectSource }),
-    [handleDrillById, connectSource],
+    () => ({ onDrill: handleDrillById }),
+    [handleDrillById],
   );
 
   // 인스펙터 폭 로컬 영속
@@ -1997,15 +1975,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           {saveState === "error" && (
             <span className="text-caption text-error">{t("editor.saveError")}</span>
           )}
-          {connectSource && (
-            <span className="inline-flex items-center gap-1 rounded-sm bg-accent/10 px-2 py-1 text-caption text-accent">
-              <Spline size={14} strokeWidth={1.5} />
-              {t("connect.banner", {
-                name: nodes.find((node) => node.id === connectSource)?.data.label ?? "",
-              })}
-            </span>
-          )}
-
           <select
             className="rounded-sm border border-hairline px-2 py-1 text-caption"
             value={versionId ?? ""}
@@ -2130,10 +2099,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
-                        if (connectSource && connectSource !== node.id) {
-                          completeConnect(node.id);
-                          return;
-                        }
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                       }}
@@ -2141,14 +2106,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(edge.id);
                         setSelectedId(null);
                       }}
-                      onNodeDoubleClick={(_, node) => {
-                        if (readOnly) {
-                          return;
-                        }
-                        setConnectSource(node.id);
-                      }}
                       onPaneClick={() => {
-                        setConnectSource(null);
                         setSelectedId(null);
                         setSelectedEdgeId(null);
                         setMenu(null);
