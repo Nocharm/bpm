@@ -285,11 +285,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     rect: ScreenRect;
   } | null>(null);
 
-  // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
-  const readOnly = checkout !== null && !checkout.mine;
-
   // 현재 버전 객체 — StatusBadge·워크플로우 역할 판정 공용
   const currentVersion = versions.find((v) => v.id === versionId) ?? null;
+
+  // 비편집 상태(pending/approved/published)는 캔버스 읽기 전용 — 잠금과 별개로 status 기준
+  const statusLocksEditing =
+    currentVersion !== null &&
+    currentVersion.status !== "draft" &&
+    currentVersion.status !== "rejected";
+  // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
+  const readOnly = (checkout !== null && !checkout.mine) || statusLocksEditing;
   // 역할 판정 — render 중 파생(useEffect 금지)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isMapOwner = username !== null && mapOwner !== null && username === mapOwner; // reserved for admin controls
@@ -753,6 +758,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (versionId === null) {
       return;
     }
+    // 비편집 상태에선 체크아웃 시도 안 함 — 백엔드가 409 반환하므로 스팸 방지
+    const selected = versions.find((v) => v.id === versionId);
+    if (selected && selected.status !== "draft" && selected.status !== "rejected") {
+      return;
+    }
     let active = true;
     const tryAcquire = async () => {
       try {
@@ -779,7 +789,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         void releaseCheckout(versionId).catch(() => undefined);
       }
     };
-  }, [versionId, t]);
+  }, [versionId, versions, t]);
 
   const handleForceCheckout = useCallback(async () => {
     if (versionId === null) {
@@ -2093,6 +2103,11 @@ function MapEditor({ mapId }: { mapId: number }) {
               >
                 {t("editor.forceEdit")}
               </button>
+            </span>
+          )}
+          {currentVersion?.status === "rejected" && currentVersion.reject_reason && (
+            <span className="text-caption text-error">
+              {t("wf.rejectedBanner", { reason: currentVersion.reject_reason })}
             </span>
           )}
           {checkout?.mine && (
