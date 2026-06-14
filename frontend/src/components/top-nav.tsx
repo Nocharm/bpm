@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
+import { NotificationBell } from "@/components/notification-bell";
 
 export function TopNav() {
   const { t, lang, toggleLang } = useI18n();
@@ -22,6 +23,8 @@ export function TopNav() {
       </Link>
       <div className="flex items-center gap-3">
         <span className="text-caption text-ink-secondary">{user?.name ?? t("nav.guest")}</span>
+        {/* 무조건 렌더 — 로컬(인증 비활성)은 user가 null이라 가드 시 벨이 안 뜬다. 서버는 TopNav 자체가 AuthGate 인증 후에만 노출 */}
+        <NotificationBell />
         <button
           type="button"
           className="rounded-xs border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"

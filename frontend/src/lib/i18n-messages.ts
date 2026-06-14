@@ -192,6 +192,9 @@ const en = {
   "approvers.save": "Save",
   "approvers.cancel": "Cancel",
   "err.approvers": "Failed to update approvers",
+  "notif.title": "Notifications",
+  "notif.empty": "No notifications",
+  "notif.markRead": "Mark read",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -386,6 +389,9 @@ const ko: Record<MessageKey, string> = {
   "approvers.save": "저장",
   "approvers.cancel": "취소",
   "err.approvers": "승인자 변경 실패",
+  "notif.title": "알림",
+  "notif.empty": "알림 없음",
+  "notif.markRead": "읽음",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
