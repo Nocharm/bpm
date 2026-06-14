@@ -169,6 +169,11 @@ const en = {
   "dropzone.conflictPrompt": "This node already has a connection here.",
   "dropzone.keep": "Keep",
   "dropzone.insert": "Insert between",
+  "status.draft": "Draft",
+  "status.pending": "Pending",
+  "status.approved": "Approved",
+  "status.published": "Published",
+  "status.rejected": "Rejected",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -340,6 +345,11 @@ const ko: Record<MessageKey, string> = {
   "dropzone.conflictPrompt": "이 노드에 이미 연결이 있습니다.",
   "dropzone.keep": "유지",
   "dropzone.insert": "중간에 삽입",
+  "status.draft": "초안",
+  "status.pending": "검토 대기",
+  "status.approved": "승인됨",
+  "status.published": "게시됨",
+  "status.rejected": "반려됨",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

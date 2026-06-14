@@ -26,6 +26,7 @@ import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
 
 import { CommentSection } from "@/components/comment-section";
+import { StatusBadge } from "@/components/status-badge";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
@@ -2041,6 +2042,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           {saveState === "error" && (
             <span className="text-caption text-error">{t("editor.saveError")}</span>
           )}
+          {(() => {
+            const current = versions.find((v) => v.id === versionId);
+            return current ? <StatusBadge status={current.status} /> : null;
+          })()}
           <select
             className="rounded-sm border border-hairline px-2 py-1 text-caption"
             value={versionId ?? ""}
