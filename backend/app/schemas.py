@@ -198,6 +198,12 @@ class AiChatRequest(BaseModel):
     parent: str | None = None
     instruction: str = Field(min_length=1, max_length=2000)
     history: list[AiChatTurn] = Field(default_factory=list, max_length=20)
+    # 사용할 모델 id — 없으면 서버 기본(settings.ai_model). 프론트가 /ai/models에서 선택
+    model: str | None = None
+
+
+class AiModelsOut(BaseModel):
+    models: list[str]
 
 
 class AiNode(BaseModel):

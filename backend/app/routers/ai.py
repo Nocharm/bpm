@@ -14,7 +14,7 @@ from app.db import get_session
 from app.manual import get_manual
 from app.models import MapVersion
 from app.routers.graph import _load_scope
-from app.schemas import AiChatRequest, AiProposal
+from app.schemas import AiChatRequest, AiModelsOut, AiProposal
 from app.settings import settings
 
 router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current_user)])
@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 _NOT_EDITABLE_MSG = "이 버전은 편집할 수 없어 그래프를 적용할 수 없습니다. 도움말만 가능합니다."
 
 
-async def _ask_and_validate(messages: list[dict]) -> AiProposal:
+async def _ask_and_validate(messages: list[dict], model: str | None) -> AiProposal:
     """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502."""
     for attempt in range(2):
         try:
-            content = await ai_client.call_ai(messages)
+            content = await ai_client.call_ai(messages, model)
         except Exception as exc:  # noqa: BLE001 -- 외부 AI 서버 오류는 502로 일괄 변환
             # exc는 내부 GPU 주소를 담을 수 있어 클라이언트엔 노출 금지 — 서버 로그에만 기록
             logger.warning("AI server call failed: %s", exc)
@@ -67,8 +67,23 @@ async def ai_chat(
         get_manual(), current, can_edit, payload.instruction, payload.history
     )
 
-    proposal = await _ask_and_validate(messages)
+    proposal = await _ask_and_validate(messages, payload.model)
     # 편집 불가인데 그래프를 제안하면 적용 불가 — answer로 다운그레이드 (실제 적용 가드는 saveGraph가 최종 enforce)
     if proposal.kind == "graph" and not can_edit:
         return AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
     return proposal
+
+
+@router.get("/ai/models", response_model=AiModelsOut)
+async def ai_models() -> AiModelsOut:
+    """서빙 중인 모델 목록 — 프론트 모델 선택용. 조회 실패 시 기본 모델로 폴백."""
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=503, detail="AI is disabled")
+    try:
+        models = await ai_client.list_models()
+    except Exception as exc:  # noqa: BLE001 -- 목록 조회 실패는 기본 모델로 폴백
+        logger.warning("AI models list failed: %s", exc)
+        models = []
+    if not models and settings.ai_model:
+        models = [settings.ai_model]
+    return AiModelsOut(models=models)
