@@ -21,3 +21,13 @@ def test_new_version_defaults_to_draft(client: TestClient) -> None:
     assert version["status"] == "draft"
     assert version["submitted_by"] is None
     assert version["reject_reason"] is None
+
+
+def test_is_editable_status() -> None:
+    from app import workflow
+
+    assert workflow.is_editable_status("draft") is True
+    assert workflow.is_editable_status("rejected") is True
+    assert workflow.is_editable_status("pending") is False
+    assert workflow.is_editable_status("approved") is False
+    assert workflow.is_editable_status("published") is False
