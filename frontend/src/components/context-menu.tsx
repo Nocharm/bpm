@@ -2,13 +2,15 @@
 
 // 마우스 커서 위치에 뜨는 컨텍스트 메뉴 — 캔버스/노드/엣지 우클릭 공용 (spec §7 Phase A).
 
-import { useEffect, useRef } from "react";
+import { ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-// 액션 항목 / 구분선 / 색 스와치 행
+// 액션 항목 / 구분선 / 색 스와치 행 / 하위 메뉴
 export type ContextMenuItem =
   | { divider: true }
   | { colors: string[]; current: string; onPick: (color: string) => void }
-  | { divider?: false; label: string; shortcut?: string; danger?: boolean; onSelect: () => void };
+  | { divider?: false; label: string; submenu: ContextMenuItem[]; disabled?: boolean }
+  | { divider?: false; label: string; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
 
 interface ContextMenuProps {
   x: number;
@@ -21,6 +23,7 @@ interface ContextMenuProps {
 const MENU_WIDTH = 176;
 const ITEM_HEIGHT = 32;
 const EDGE_MARGIN = 10;
+const PANEL_CLASS = "w-44 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
 
 // 우측/하단 잘림 보정, 바깥 클릭·ESC로 닫힘.
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
@@ -53,13 +56,18 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const top = Math.min(y, window.innerHeight - menuHeight - EDGE_MARGIN);
 
   return (
-    <div
-      ref={menuRef}
-      className="fixed z-[1200] w-44 rounded border border-hairline bg-surface py-1 text-caption shadow-lg"
-      style={{ left, top }}
-    >
+    <div ref={menuRef} className={`fixed z-[1200] ${PANEL_CLASS}`} style={{ left, top }}>
+      <MenuList items={items} onClose={onClose} />
+    </div>
+  );
+}
+
+// 항목 목록 렌더 — 하위 메뉴를 위해 재귀 구조.
+function MenuList({ items, onClose }: { items: ContextMenuItem[]; onClose: () => void }) {
+  return (
+    <>
       {items.map((item, index) =>
-        "divider" in item ? (
+        "divider" in item && item.divider ? (
           <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
         ) : "colors" in item ? (
           <div key={`colors-${index}`} className="flex flex-wrap gap-1 px-3 py-1.5">
@@ -80,11 +88,17 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
               />
             ))}
           </div>
+        ) : "submenu" in item ? (
+          <SubmenuItem key={item.label} item={item} onClose={onClose} />
         ) : (
           <button
             key={item.label}
-            className={`flex h-8 w-full items-center justify-between px-3 hover:bg-surface-alt ${
-              item.danger ? "text-error" : "text-ink"
+            type="button"
+            disabled={item.disabled}
+            className={`flex h-8 w-full items-center justify-between px-3 ${
+              item.disabled
+                ? "cursor-not-allowed text-ink-tertiary"
+                : `hover:bg-surface-alt ${item.danger ? "text-error" : "text-ink"}`
             }`}
             onClick={() => {
               item.onSelect();
@@ -97,6 +111,51 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             )}
           </button>
         ),
+      )}
+    </>
+  );
+}
+
+// 하위 메뉴 항목 — hover 시 우측(공간 부족하면 좌측) 플라이아웃.
+function SubmenuItem({
+  item,
+  onClose,
+}: {
+  item: { label: string; submenu: ContextMenuItem[]; disabled?: boolean };
+  onClose: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [toLeft, setToLeft] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const handleEnter = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setToLeft(rect.right + MENU_WIDTH + EDGE_MARGIN > window.innerWidth);
+    }
+    setOpen(true);
+  };
+
+  return (
+    <div className="relative" onMouseEnter={handleEnter} onMouseLeave={() => setOpen(false)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={item.disabled}
+        className={`flex h-8 w-full items-center justify-between px-3 ${
+          item.disabled ? "cursor-not-allowed text-ink-tertiary" : "hover:bg-surface-alt text-ink"
+        }`}
+      >
+        <span>{item.label}</span>
+        <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+      </button>
+      {open && !item.disabled && (
+        <div
+          className={`absolute top-0 z-[1200] ${PANEL_CLASS}`}
+          style={toLeft ? { right: "100%" } : { left: "100%" }}
+        >
+          <MenuList items={item.submenu} onClose={onClose} />
+        </div>
       )}
     </div>
   );
