@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
 ## 2026-06-14
+- 창 최소화 → 좌하단 dock 스택 (브랜치 `feat/canvas-ux`). 최소화 시 제자리 접힘 대신 신규 window-dock.tsx 칩으로 좌하단에 쌓이고, 칩 클릭 시 복원+포커스. scope-window.tsx의 minimized 제자리 렌더 제거. 검증: lint/build green. 인터랙션 로컬 확인 필요.
 - 노드 더블클릭 요약 모달 추가 (브랜치 `feat/canvas-ux`). 신규 node-summary-modal.tsx — 전/후 단계, 하위 프로세스 ScopePreview 썸네일, 코멘트 읽기 목록 + 인라인 추가(createComment), 노드 타입·그룹 메타. 바깥 클릭/Esc 닫힘, readOnly면 추가 숨김. 검증: lint/build green. 인터랙션 로컬 확인 필요.
 - 더블클릭=연결 모드 제거 (브랜치 `feat/canvas-ux`). 노드 연결은 핸들 드래그(onConnect)만 유지. connectSource state·completeConnect·연결 배너·NodeActionsContext.connectSource·process-node 소스 링·connect.banner i18n 제거. 더블클릭은 후속 작업에서 요약 모달로 재사용. 검증: lint/build green.
 - 캔버스 4가지 UI/UX 개선 (브랜치 `feat/canvas-ux`). ① **루트 프로세스 창 chromeless** — 최외곽(index 0) ScopeWindow는 항상 최대화 고정·타이틀바 없이 제목만 좌상단에 노출(`chromeless` prop, 크기조절·최소화 버튼 제거). ② **그룹 합류 펄스 + 여백** — 노드를 기존 그룹 박스 빈 영역에 드롭하면 합류(`findGroupAt`/`addToGroupId`, 멤버 겹침만 회피), hover 시 `targeted` prop→`group-target-pulse`(750ms scale 1→1.025 accent 글로우), 박스 상단에 `GROUP_TITLE_GAP`(26px) 여백으로 제목·멤버 겹침 방지. ③ **탈출 버튼 이동** — group-title-bar.tsx의 canLeave/onLeave 제거, 선택 멤버가 있을 때 그룹 박스 경계 우측 상단에 LogOut 버튼 신설. ④ **드롭존 타일 확대** — 44px 정사각→84×58 아이콘+텍스트 타일, 판정을 노드 겹침→마우스 좌표 기반으로 전환, 링이 한번 뜨면 커서가 링(원) 밖으로 나가기 전까지 유지(겹침 해제와 무관, `dropTargetRef`). 검증: 프론트 eslint clean + `next build`(TypeScript) green. 시각·인터랙션은 로컬(Windows) 확인 필요.

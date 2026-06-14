@@ -33,6 +33,7 @@ import { NodeSummaryModal } from "@/components/node-summary-modal";
 import { ProcessNode } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
+import { WindowDock } from "@/components/window-dock";
 import {
   alignSelected,
   buildOutline,
@@ -2066,6 +2067,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             const key = scopeKey(scope);
             const geom = windowGeom[key] ?? defaultGeom(index, bounds);
             const active = index === activeIndex;
+            if (geom.minimized && index !== 0) {
+              return null; // 최소화 창은 아래 WindowDock으로 렌더
+            }
             return (
               <ScopeWindow
                 key={key}
@@ -2237,6 +2241,20 @@ function MapEditor({ mapId }: { mapId: number }) {
               </ScopeWindow>
             );
           })}
+          <WindowDock
+            items={scopes
+              .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
+              .filter(({ index, key }) => index !== 0 && (windowGeom[key] ?? defaultGeom(index, bounds)).minimized)
+              .map(({ scope, key }) => ({ key, title: scope.title }))}
+            onRestore={(key) => {
+              setWindowGeom((map) => {
+                const idx = scopes.findIndex((scope) => scopeKey(scope) === key);
+                const base = map[key] ?? defaultGeom(idx, bounds);
+                return { ...map, [key]: { ...base, minimized: false } };
+              });
+              bringToFront(key);
+            }}
+          />
           {menu && (
             <ContextMenu
               x={menu.x}

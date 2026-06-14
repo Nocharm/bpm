@@ -117,12 +117,7 @@ export function ScopeWindow({
 
   const rect = geom.maximized
     ? { left: 0, top: 0, width: bounds.w, height: bounds.h }
-    : {
-        left: geom.x,
-        top: geom.y,
-        width: geom.w,
-        height: geom.minimized ? undefined : geom.h,
-      };
+    : { left: geom.x, top: geom.y, width: geom.w, height: geom.h };
 
   return (
     <div
@@ -182,18 +177,16 @@ export function ScopeWindow({
         )}
       </div>
 
-      {!geom.minimized && (
-        <div className="relative flex-1">
-          {children}
-          {!active && (
-            <div className="absolute inset-0 flex items-center justify-center bg-surface/60 text-caption text-ink-tertiary">
-              {t("window.clickToEdit")}
-            </div>
-          )}
-        </div>
-      )}
+      <div className="relative flex-1">
+        {children}
+        {!active && (
+          <div className="absolute inset-0 flex items-center justify-center bg-surface/60 text-caption text-ink-tertiary">
+            {t("window.clickToEdit")}
+          </div>
+        )}
+      </div>
 
-      {!geom.minimized && !geom.maximized && (
+      {!geom.maximized && (
         <div
           className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize"
           onPointerDown={startDrag}
