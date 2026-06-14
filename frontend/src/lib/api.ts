@@ -1,16 +1,27 @@
 // 백엔드 REST 클라이언트. /api는 nginx(운영) 또는 next.config rewrites(로컬)가 backend로 프록시.
 
-export interface MapSummary {
-  id: number;
-  name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
+export type VersionStatus =
+  | "draft"
+  | "pending"
+  | "approved"
+  | "published"
+  | "rejected";
 
 export interface VersionSummary {
   id: number;
   label: string;
+  status: VersionStatus;
+  submitted_by: string | null;
+  reject_reason: string | null;
+}
+
+export interface MapSummary {
+  id: number;
+  name: string;
+  description: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MapDetail extends MapSummary {
@@ -223,4 +234,79 @@ export function saveGraph(
     method: "PUT",
     body: JSON.stringify(graph),
   });
+}
+
+// ── Version approval workflow (design 2026-06-14) ──────────
+
+export interface WorkflowState {
+  version_id: number;
+  status: VersionStatus;
+  submitted_by: string | null;
+  reject_reason: string | null;
+  approvers: string[];
+  approvals: string[];
+}
+
+export function getMe(): Promise<{ username: string }> {
+  return request<{ username: string }>("/me");
+}
+
+export function getWorkflowState(versionId: number): Promise<WorkflowState> {
+  return request<WorkflowState>(`/versions/${versionId}/workflow`);
+}
+
+export function submitVersion(versionId: number): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/submit`, { method: "POST" });
+}
+
+export function approveVersion(versionId: number): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/approve`, { method: "POST" });
+}
+
+export function rejectVersion(
+  versionId: number,
+  reason: string,
+): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function publishVersion(versionId: number): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/publish`, { method: "POST" });
+}
+
+export function withdrawVersion(versionId: number): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/withdraw`, { method: "POST" });
+}
+
+export function listApprovers(mapId: number): Promise<string[]> {
+  return request<string[]>(`/maps/${mapId}/approvers`);
+}
+
+export function setApprovers(mapId: number, userIds: string[]): Promise<string[]> {
+  return request<string[]>(`/maps/${mapId}/approvers`, {
+    method: "PUT",
+    body: JSON.stringify({ user_ids: userIds }),
+  });
+}
+
+export interface NotificationItem {
+  id: number;
+  type: string;
+  map_id: number | null;
+  version_id: number | null;
+  message: string;
+  read: boolean;
+  created_at: string;
+}
+
+export function listNotifications(unreadOnly = false): Promise<NotificationItem[]> {
+  const query = unreadOnly ? "?unread_only=true" : "";
+  return request<NotificationItem[]>(`/notifications${query}`);
+}
+
+export function markNotificationRead(id: number): Promise<NotificationItem> {
+  return request<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
 }
