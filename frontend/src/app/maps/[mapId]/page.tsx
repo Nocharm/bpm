@@ -29,6 +29,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
 import { GroupTitleBar } from "@/components/group-title-bar";
+import { NodeSummaryModal } from "@/components/node-summary-modal";
 import { ProcessNode } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
@@ -227,6 +228,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [inspectorWidth, setInspectorWidth] = useState(320);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -2102,6 +2104,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                       }}
+                      onNodeDoubleClick={(_, node) => setSummaryNodeId(node.id)}
                       onEdgeClick={(_, edge) => {
                         setSelectedEdgeId(edge.id);
                         setSelectedId(null);
@@ -2111,6 +2114,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                         setMenu(null);
                         setPending(null);
+                        setSummaryNodeId(null);
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
@@ -2312,6 +2316,40 @@ function MapEditor({ mapId }: { mapId: number }) {
             </div>
           )}
           <ShortcutLegend />
+          {summaryNodeId && versionId !== null && (() => {
+            const node = nodes.find((n) => n.id === summaryNodeId);
+            if (!node) {
+              return null;
+            }
+            const predecessors = edges
+              .filter((edge) => edge.target === summaryNodeId)
+              .map((edge) => nodes.find((n) => n.id === edge.source)?.data.label ?? "")
+              .filter(Boolean);
+            const successors = edges
+              .filter((edge) => edge.source === summaryNodeId)
+              .map((edge) => nodes.find((n) => n.id === edge.target)?.data.label ?? "")
+              .filter(Boolean);
+            const hasChildren = (fullGraph?.nodes ?? []).some((n) => n.parent_node_id === summaryNodeId);
+            const groupLabel = node.data.groupId
+              ? groups.find((g) => g.id === node.data.groupId)?.label ?? null
+              : null;
+            const typeKey = NODE_TYPE_OPTIONS.find((option) => option.value === node.data.nodeType)?.labelKey;
+            return (
+              <NodeSummaryModal
+                versionId={versionId}
+                nodeId={summaryNodeId}
+                title={node.data.label}
+                typeLabel={typeKey ? t(typeKey) : node.data.nodeType}
+                groupLabel={groupLabel}
+                predecessors={predecessors}
+                successors={successors}
+                hasChildren={hasChildren}
+                fullGraph={fullGraph}
+                readOnly={readOnly}
+                onClose={() => setSummaryNodeId(null)}
+              />
+            );
+          })()}
         </div>
 
         {inspectorOpen && (
