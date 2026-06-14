@@ -397,3 +397,69 @@ async def reject_version(
     await session.commit()
     await session.refresh(version)
     return version
+
+
+@router.post("/versions/{version_id}/publish", response_model=VersionOut)
+async def publish_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Approved → Published. submitter만. 같은 맵의 기존 Published는 Approved로 강등."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status != workflow.APPROVED:
+        raise HTTPException(
+            status_code=409, detail=f"cannot publish from status {version.status}"
+        )
+    if version.submitted_by != user:
+        raise HTTPException(status_code=403, detail="only the submitter can publish")
+
+    approvers = await _load_approvers(session, version.map_id)
+    prior_published = await session.scalars(
+        select(MapVersion).where(
+            MapVersion.map_id == version.map_id,
+            MapVersion.status == workflow.PUBLISHED,
+        )
+    )
+    for prior in prior_published:
+        prior.status = workflow.APPROVED
+
+    version.status = workflow.PUBLISHED
+    workflow.create_notifications(
+        session,
+        approvers,
+        type="published",
+        map_id=version.map_id,
+        version_id=version_id,
+        message=f"'{version.label}' was published",
+    )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/withdraw", response_model=VersionOut)
+async def withdraw_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Pending/Approved/Rejected → Draft. submitter만. 회수자에게 체크아웃 재부여."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status not in (workflow.PENDING, workflow.APPROVED, workflow.REJECTED):
+        raise HTTPException(
+            status_code=409, detail=f"cannot withdraw from status {version.status}"
+        )
+    if version.submitted_by != user:
+        raise HTTPException(status_code=403, detail="only the submitter can withdraw")
+
+    version.status = workflow.DRAFT
+    version.checked_out_by = user
+    version.checked_out_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(version)
+    return version
