@@ -27,8 +27,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 
 import { ApproverManager } from "@/components/approver-manager";
 import { CommentSection } from "@/components/comment-section";
-import { StatusBadge } from "@/components/status-badge";
-import { WorkflowActions } from "@/components/workflow-actions";
+import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
@@ -43,6 +42,7 @@ import {
   buildOutline,
   distributeSelected,
   layoutWithDagre,
+  layoutSubsetWithDagre,
   normalizeNodeType,
   resolveCollision,
   getIncomingEdges,
@@ -150,7 +150,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 type MenuState = {
   x: number;
   y: number;
-  kind: "pane" | "node" | "edge";
+  kind: "pane" | "node" | "edge" | "group" | "selection";
   targetId: string | null;
 };
 
@@ -1661,9 +1661,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (!menu) {
       return [];
     }
+    // 정렬은 2개 이상, 분배는 3개 이상 대상이 있어야 의미가 있다 — 부족하면 비활성화
+    const selectedCount = nodes.filter((node) => node.selected).length;
     if (menu.kind === "pane") {
+      // 맨 아래 "기타" 하위 메뉴 — 추후 기능 확장 지점
+      const moreItem: ContextMenuItem = {
+        label: t("ctx.more"),
+        submenu: [{ label: t("ctx.exportPng"), onSelect: () => void handleExportPng() }],
+      };
       if (readOnly) {
-        return [{ label: t("ctx.exportPng"), onSelect: () => void handleExportPng() }];
+        return [moreItem];
       }
       return [
         ...NODE_TYPE_OPTIONS.map((option) => ({
@@ -1678,22 +1685,63 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
         {
           label: t("editor.alignLeft"),
+          disabled: selectedCount < 2,
           onSelect: () => applyNodesTransform((current) => alignSelected(current, "left")),
         },
         {
           label: t("editor.alignTop"),
+          disabled: selectedCount < 2,
           onSelect: () => applyNodesTransform((current) => alignSelected(current, "top")),
         },
         {
           label: t("editor.distributeX"),
+          disabled: selectedCount < 3,
           onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x")),
         },
         {
           label: t("editor.distributeY"),
+          disabled: selectedCount < 3,
           onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y")),
         },
         { divider: true },
-        { label: t("ctx.exportPng"), onSelect: () => void handleExportPng() },
+        moreItem,
+      ];
+    }
+    // 그룹/복수선택 정렬 메뉴 — ids 미지정(selection)은 선택 노드, 지정(group)은 그룹 멤버 대상
+    if (menu.kind === "group" || menu.kind === "selection") {
+      const ids =
+        menu.kind === "group"
+          ? new Set(nodes.filter((node) => node.data.groupId === menu.targetId).map((node) => node.id))
+          : new Set(nodes.filter((node) => node.selected).map((node) => node.id));
+      const targetCount = ids.size;
+      return [
+        {
+          label: t("ctx.autoLayout"),
+          disabled: targetCount < 2,
+          onSelect: () =>
+            applyNodesTransform((current) => layoutSubsetWithDagre(current, edgesRef.current, ids)),
+        },
+        { divider: true },
+        {
+          label: t("editor.alignLeft"),
+          disabled: targetCount < 2,
+          onSelect: () => applyNodesTransform((current) => alignSelected(current, "left", ids)),
+        },
+        {
+          label: t("editor.alignTop"),
+          disabled: targetCount < 2,
+          onSelect: () => applyNodesTransform((current) => alignSelected(current, "top", ids)),
+        },
+        {
+          label: t("editor.distributeX"),
+          disabled: targetCount < 3,
+          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x", ids)),
+        },
+        {
+          label: t("editor.distributeY"),
+          disabled: targetCount < 3,
+          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y", ids)),
+        },
       ];
     }
     if (menu.kind === "node") {
@@ -2127,7 +2175,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           {saveState === "error" && (
             <span className="text-caption text-error">{t("editor.saveError")}</span>
           )}
-          {currentVersion && <StatusBadge status={currentVersion.status} />}
           <select
             className="rounded-sm border border-hairline px-2 py-1 text-caption"
             value={versionId ?? ""}
@@ -2140,30 +2187,6 @@ function MapEditor({ mapId }: { mapId: number }) {
               </option>
             ))}
           </select>
-          {currentVersion && (
-            <WorkflowActions
-              status={currentVersion.status}
-              workflow={workflow}
-              isCheckoutHolder={checkout?.mine ?? false}
-              isApprover={isApprover}
-              isSubmitter={isSubmitter}
-              hasApproved={hasApproved}
-              onSubmit={() => void runTransition(submitVersion)}
-              onApprove={() => void runTransition(approveVersion)}
-              onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
-              onPublish={() => void runTransition(publishVersion)}
-              onWithdraw={() => void runTransition(withdrawVersion)}
-            />
-          )}
-          {isMapOwner && (
-            <button
-              type="button"
-              className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
-              onClick={() => setManagingApprovers(true)}
-            >
-              {t("approvers.manage")}
-            </button>
-          )}
           {managingApprovers && (
             <ApproverManager
               mapId={mapId}
@@ -2273,7 +2296,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onClose={() => closeScope(index)}
               >
                 {active ? (
-                  <div className="h-full w-full bg-canvas">
+                  // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
+                  <div className="h-full w-full bg-canvas" onContextMenu={(event) => event.preventDefault()}>
                     <ReactFlow
                       nodes={displayNodes}
                       edges={styledEdges}
@@ -2308,6 +2332,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         openMenu(event, "node", node.id);
                       }}
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
+                      onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
                       onNodeDragStart={() => pushHistory()}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
@@ -2366,7 +2391,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 targeted={groupDropTarget === box.id}
                               />
                             </div>
-                            {/* 타이틀바 — 노드 위, 박스 상단 좌측 */}
+                            {/* 타이틀바 — 노드 위, 박스 상단 좌측. 우클릭 시 그룹 멤버 정렬 메뉴 */}
                             <div
                               style={{
                                 position: "absolute",
@@ -2374,6 +2399,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 top: 0,
                                 transform: `translate(${box.x + 4}px, ${box.y + 3}px)`,
                                 zIndex: 1,
+                              }}
+                              onContextMenu={(event) => {
+                                event.stopPropagation(); // 팬 컨텍스트 메뉴로 덮어쓰이지 않게
+                                openMenu(event, "group", box.id);
                               }}
                             >
                               <GroupTitleBar
@@ -2564,7 +2593,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               className="w-1 shrink-0 cursor-col-resize hover:bg-accent-tint"
               title={t("editor.inspectorToggle")}
             />
-            <div className="flex-1 overflow-y-auto border-l border-hairline bg-surface p-4">
+            <div className="flex min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
+            <div className="flex-1 overflow-y-auto p-4">
             {selectedNode ? (
               <>
             <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
@@ -2735,6 +2765,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 )}
               </div>
+            )}
+            </div>
+            {currentVersion && (
+              <WorkflowDashboard
+                versionLabel={currentVersion.label}
+                status={currentVersion.status}
+                submittedBy={currentVersion.submitted_by}
+                rejectReason={currentVersion.reject_reason}
+                workflow={workflow}
+                isCheckoutHolder={checkout?.mine ?? false}
+                isApprover={isApprover}
+                isSubmitter={isSubmitter}
+                hasApproved={hasApproved}
+                isMapOwner={isMapOwner}
+                onSubmit={() => void runTransition(submitVersion)}
+                onApprove={() => void runTransition(approveVersion)}
+                onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
+                onPublish={() => void runTransition(publishVersion)}
+                onWithdraw={() => void runTransition(withdrawVersion)}
+                onManageApprovers={() => setManagingApprovers(true)}
+              />
             )}
             </div>
           </div>
