@@ -298,7 +298,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = (checkout !== null && !checkout.mine) || statusLocksEditing;
   // 역할 판정 — render 중 파생(useEffect 금지)
-  const isMapOwner = username !== null && mapOwner !== null && username === mapOwner;
+  // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
+  const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);

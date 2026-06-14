@@ -40,12 +40,28 @@ export function WorkflowActions({
   const btn =
     "rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt disabled:opacity-40";
 
+  // 승인자 미지정이면 제출은 백엔드 409 — 막다른 클릭 대신 비활성 + 안내
+  const noApprovers = (workflow?.approvers.length ?? 0) === 0;
+
   return (
     <div className="flex items-center gap-1">
       {(status === "draft" || status === "rejected") && isCheckoutHolder && (
-        <button type="button" className={btn} onClick={onSubmit}>
-          {t("wf.submit")}
-        </button>
+        <>
+          <button
+            type="button"
+            className={btn}
+            onClick={onSubmit}
+            disabled={noApprovers}
+            title={noApprovers ? t("wf.submitNeedsApprovers") : undefined}
+          >
+            {t("wf.submit")}
+          </button>
+          {noApprovers && (
+            <span className="text-fine text-ink-tertiary">
+              {t("wf.submitNeedsApprovers")}
+            </span>
+          )}
+        </>
       )}
 
       {status === "pending" && isApprover && (
