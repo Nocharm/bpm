@@ -1,12 +1,14 @@
 "use client";
 
-// 승인 워크플로우 대시보드 — 인스펙터 하단 고정, 상태·승인자 현황·액션을 한곳에 (design 2026-06-14)
-import { Check, Circle } from "lucide-react";
+// 승인 워크플로우 대시보드 — 인스펙터 하단, 진행 순서도 + 상태·승인자 현황·액션 (design 2026-06-14)
+import { Check, Circle, X } from "lucide-react";
+import { Fragment } from "react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { WorkflowActions } from "@/components/workflow-actions";
 import type { VersionStatus, WorkflowState } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 
 interface WorkflowDashboardProps {
   versionLabel: string;
@@ -25,6 +27,73 @@ interface WorkflowDashboardProps {
   onPublish: () => void;
   onWithdraw: () => void;
   onManageApprovers: () => void;
+}
+
+// 라이프사이클 순서: Draft→Pending→Approved→Published. Rejected는 Pending 위치에서 이탈(빨강).
+const STEP_ORDER: VersionStatus[] = ["draft", "pending", "approved", "published"];
+const STEP_LABEL_KEY: Record<VersionStatus, MessageKey> = {
+  draft: "status.draft",
+  pending: "status.pending",
+  approved: "status.approved",
+  published: "status.published",
+  rejected: "status.rejected",
+};
+
+function LifecycleStepper({ status }: { status: VersionStatus }) {
+  const { t } = useI18n();
+  const rejected = status === "rejected";
+  // 반려는 Pending 단계에서 멈춘 것으로 표시
+  const currentIndex = rejected ? 1 : STEP_ORDER.indexOf(status);
+
+  return (
+    <div className="mb-3 flex items-start">
+      {STEP_ORDER.map((step, index) => {
+        const done = index < currentIndex;
+        const active = index === currentIndex;
+        const rejectedActive = rejected && active;
+
+        const dotClass = rejectedActive
+          ? "border-error bg-error text-surface"
+          : done
+            ? "border-accent bg-accent text-surface"
+            : active
+              ? "border-accent bg-accent-tint text-accent"
+              : "border-hairline text-ink-tertiary";
+
+        return (
+          <Fragment key={step}>
+            {index > 0 && (
+              <div
+                className={`mt-2.5 h-px flex-1 ${
+                  index <= currentIndex && !rejected ? "bg-accent" : "bg-hairline"
+                }`}
+              />
+            )}
+            <div className="flex w-12 shrink-0 flex-col items-center">
+              <div
+                className={`flex h-5 w-5 items-center justify-center rounded-full border ${dotClass}`}
+              >
+                {rejectedActive ? (
+                  <X size={11} strokeWidth={2} />
+                ) : done ? (
+                  <Check size={11} strokeWidth={2} />
+                ) : (
+                  <span className="text-[10px]">{index + 1}</span>
+                )}
+              </div>
+              <span
+                className={`mt-1 text-center text-[10px] leading-tight ${
+                  active ? "text-ink" : "text-ink-tertiary"
+                }`}
+              >
+                {t(STEP_LABEL_KEY[step])}
+              </span>
+            </div>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
 }
 
 export function WorkflowDashboard({
@@ -50,13 +119,14 @@ export function WorkflowDashboard({
   const approvals = workflow?.approvals ?? [];
 
   return (
-    <div className="shrink-0 border-t border-hairline bg-surface-alt p-4">
+    <div className="bg-surface-alt p-4">
+      {/* 진행 순서도 — 라이프사이클 한눈에 */}
+      <LifecycleStepper status={status} />
+
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-caption-strong text-ink-secondary">{t("dash.title")}</h2>
+        <h2 className="truncate text-caption-strong text-ink-secondary">{versionLabel}</h2>
         <StatusBadge status={status} />
       </div>
-
-      <p className="mb-2 truncate text-fine text-ink-tertiary">{versionLabel}</p>
 
       {submittedBy && (
         <p className="mb-2 text-fine text-ink-tertiary">

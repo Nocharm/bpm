@@ -243,6 +243,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(320);
+  // 대시보드 패널 높이(px) — 사용자 조절, localStorage 영속
+  const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
@@ -445,6 +447,15 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (Number.isFinite(saved) && saved > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
       setInspectorWidth(Math.min(480, Math.max(220, saved)));
+    }
+  }, []);
+
+  // 저장된 대시보드 높이 복원 (클라이언트 전용, hydration 후 1회)
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("bpm.dashboardHeight"));
+    if (Number.isFinite(saved) && saved > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
+      setDashboardHeight(Math.min(560, Math.max(120, saved)));
     }
   }, []);
 
@@ -1932,6 +1943,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
   }, [inspectorWidth]);
 
+  // 대시보드 높이 로컬 영속
+  useEffect(() => {
+    window.localStorage.setItem("bpm.dashboardHeight", String(dashboardHeight));
+  }, [dashboardHeight]);
+
   // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
   const outline = useMemo(() => {
     // 현재 스코프는 라이브 상태가 권위 — id로 dedup해 fullGraph가 stale일 때 중복 행 방지
@@ -2059,6 +2075,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       window.addEventListener("pointerup", onUp);
     },
     [inspectorWidth],
+  );
+
+  const startDashboardResize = useCallback(
+    (event: { clientY: number; preventDefault: () => void }) => {
+      event.preventDefault();
+      const startY = event.clientY;
+      const startH = dashboardHeight;
+      const onMove = (ev: PointerEvent) => {
+        // 핸들을 위로 끌면 대시보드가 커진다
+        setDashboardHeight(Math.min(560, Math.max(120, startH + (startY - ev.clientY))));
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [dashboardHeight],
   );
 
   const toolButton =
@@ -2768,24 +2803,36 @@ function MapEditor({ mapId }: { mapId: number }) {
             )}
             </div>
             {currentVersion && (
-              <WorkflowDashboard
-                versionLabel={currentVersion.label}
-                status={currentVersion.status}
-                submittedBy={currentVersion.submitted_by}
-                rejectReason={currentVersion.reject_reason}
-                workflow={workflow}
-                isCheckoutHolder={checkout?.mine ?? false}
-                isApprover={isApprover}
-                isSubmitter={isSubmitter}
-                hasApproved={hasApproved}
-                isMapOwner={isMapOwner}
-                onSubmit={() => void runTransition(submitVersion)}
-                onApprove={() => void runTransition(approveVersion)}
-                onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
-                onPublish={() => void runTransition(publishVersion)}
-                onWithdraw={() => void runTransition(withdrawVersion)}
-                onManageApprovers={() => setManagingApprovers(true)}
-              />
+              <>
+                <div
+                  onPointerDown={startDashboardResize}
+                  className="h-1 shrink-0 cursor-row-resize border-t border-hairline hover:bg-accent-tint"
+                  title={t("dash.resize")}
+                />
+                <div
+                  className="shrink-0 overflow-y-auto"
+                  style={{ height: dashboardHeight }}
+                >
+                  <WorkflowDashboard
+                    versionLabel={currentVersion.label}
+                    status={currentVersion.status}
+                    submittedBy={currentVersion.submitted_by}
+                    rejectReason={currentVersion.reject_reason}
+                    workflow={workflow}
+                    isCheckoutHolder={checkout?.mine ?? false}
+                    isApprover={isApprover}
+                    isSubmitter={isSubmitter}
+                    hasApproved={hasApproved}
+                    isMapOwner={isMapOwner}
+                    onSubmit={() => void runTransition(submitVersion)}
+                    onApprove={() => void runTransition(approveVersion)}
+                    onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
+                    onPublish={() => void runTransition(publishVersion)}
+                    onWithdraw={() => void runTransition(withdrawVersion)}
+                    onManageApprovers={() => setManagingApprovers(true)}
+                  />
+                </div>
+              </>
             )}
             </div>
           </div>
