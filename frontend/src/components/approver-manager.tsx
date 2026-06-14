@@ -2,6 +2,7 @@
 
 // 맵 소유자가 승인자 목록을 편집 (design 2026-06-14)
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { listApprovers, setApprovers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -29,6 +30,15 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
     };
   }, [mapId]);
 
+  // Esc로 닫기 — backdrop·캔버스 뒤에 갇히지 않도록 항상 탈출 가능
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
   const handleSave = async () => {
     const ids = text
       .split("\n")
@@ -46,9 +56,17 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
   const btn =
     "rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt disabled:opacity-40";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-      <div className="w-80 rounded-md bg-surface p-4 shadow-lg">
+  // document.body로 포털 — 에디터 캔버스/창의 스택 컨텍스트 밖에서 최상단 렌더
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1200] flex items-center justify-center"
+      style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-80 rounded-md bg-surface p-4 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
         <p className="text-body-strong text-ink">{t("approvers.title")}</p>
         <p className="mt-1 text-fine text-ink-tertiary">{t("approvers.hint")}</p>
         <textarea
@@ -67,6 +85,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

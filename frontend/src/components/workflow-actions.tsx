@@ -1,7 +1,8 @@
 "use client";
 
 // 버전 상태·역할에 따라 조건부 전이 버튼을 노출 (design 2026-06-14)
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { VersionStatus, WorkflowState } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -42,6 +43,21 @@ export function WorkflowActions({
 
   // 승인자 미지정이면 제출은 백엔드 409 — 막다른 클릭 대신 비활성 + 안내
   const noApprovers = (workflow?.approvers.length ?? 0) === 0;
+
+  const closeReject = () => {
+    setRejecting(false);
+    setReason("");
+  };
+
+  // Esc로 반려 모달 닫기 — 캔버스 뒤에 갇히지 않도록
+  useEffect(() => {
+    if (!rejecting) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeReject();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [rejecting]);
 
   return (
     <div className="flex items-center gap-1">
@@ -101,10 +117,18 @@ export function WorkflowActions({
         </button>
       )}
 
-      {rejecting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-          <div className="w-80 rounded-md bg-surface p-4 shadow-lg">
-            <p className="text-body-strong text-ink">{t("wf.rejectTitle")}</p>
+      {rejecting &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[1200] flex items-center justify-center"
+            style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
+            onClick={closeReject}
+          >
+            <div
+              className="w-80 rounded-md bg-surface p-4 shadow-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-body-strong text-ink">{t("wf.rejectTitle")}</p>
             <label className="mt-2 block text-caption text-ink-secondary">
               {t("wf.rejectReason")}
             </label>
@@ -139,8 +163,9 @@ export function WorkflowActions({
               </button>
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
