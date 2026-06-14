@@ -1697,7 +1697,8 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
   const outline = useMemo(() => {
-    const currentIds = new Set(nodes.map((node) => node.id));
+    // 현재 스코프는 라이브 상태가 권위 — id로 dedup해 fullGraph가 stale일 때 중복 행 방지
+    const liveIds = new Set(nodes.map((node) => node.id));
     const outlineNodes: OutlineNode[] = nodes.map((node) => ({
       id: node.id,
       parentId: currentParentId,
@@ -1709,23 +1710,30 @@ function MapEditor({ mapId }: { mapId: number }) {
       target: edge.target,
     }));
     if (fullGraph) {
+      const seenNodes = new Set(liveIds);
       for (const flat of fullGraph.nodes) {
-        if (flat.parent_node_id !== currentParentId) {
-          outlineNodes.push({
-            id: flat.id,
-            parentId: flat.parent_node_id,
-            label: flat.title,
-            nodeType: normalizeNodeType(flat.node_type),
-          });
+        if (seenNodes.has(flat.id)) {
+          continue;
         }
+        seenNodes.add(flat.id);
+        outlineNodes.push({
+          id: flat.id,
+          parentId: flat.parent_node_id,
+          label: flat.title,
+          nodeType: normalizeNodeType(flat.node_type),
+        });
       }
+      const seenEdges = new Set(outlineEdges.map((edge) => `${edge.source} ${edge.target}`));
       for (const graphEdge of fullGraph.edges) {
-        if (!currentIds.has(graphEdge.source_node_id)) {
-          outlineEdges.push({
-            source: graphEdge.source_node_id,
-            target: graphEdge.target_node_id,
-          });
+        const key = `${graphEdge.source_node_id} ${graphEdge.target_node_id}`;
+        if (liveIds.has(graphEdge.source_node_id) || seenEdges.has(key)) {
+          continue;
         }
+        seenEdges.add(key);
+        outlineEdges.push({
+          source: graphEdge.source_node_id,
+          target: graphEdge.target_node_id,
+        });
       }
     }
     // 항상 프로젝트 루트(전체 트리) 기준 — 창을 옮겨도 전체 프로젝트를 일관되게 표시.
