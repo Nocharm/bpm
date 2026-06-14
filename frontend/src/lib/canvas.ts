@@ -269,6 +269,8 @@ export function buildOutline(
   const rows: OutlineRow[] = [];
   // 계층 사이클(부모가 자기 하위를 가리킴) 가드 — 같은 스코프 재진입 시 중단해 무한 재귀 방지
   const visitedScopes = new Set<string>();
+  // 노드 단위 dedup — 입력에 중복 id가 있어도 행은 한 번만
+  const emitted = new Set<string>();
   const emit = (
     scopeParent: string | null,
     hierarchyLevel: number,
@@ -283,6 +285,10 @@ export function buildOutline(
     }
     const flow = computeScopeFlow(byParent.get(scopeParent) ?? [], edges);
     for (const entry of flow) {
+      if (emitted.has(entry.id)) {
+        continue;
+      }
+      emitted.add(entry.id);
       const hasChildren = parentsWithChildren.has(entry.id);
       const isExpanded = hasChildren && expanded.has(entry.id);
       const block = hierarchyLevel === 0 ? entry.blockIndex : inheritedBlock;
