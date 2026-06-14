@@ -294,3 +294,14 @@ def test_delete_blocked_on_pending(client: TestClient) -> None:
 
     blocked = client.delete(f"/api/versions/{v1}")
     assert blocked.status_code == 409
+
+
+def test_me_returns_current_user(client: TestClient) -> None:
+    me = client.get("/api/me").json()
+    assert me["username"] == settings.dev_user
+
+
+def test_map_detail_exposes_created_by(client: TestClient) -> None:
+    map_id, _version_id = _create_map_with_version(client)
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["created_by"] == settings.dev_user

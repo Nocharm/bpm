@@ -60,6 +60,7 @@ class MapOut(BaseModel):
     id: int
     name: str
     description: str
+    created_by: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -176,3 +177,7 @@ class NotificationOut(BaseModel):
     message: str
     read: bool
     created_at: datetime
+
+
+class MeOut(BaseModel):
+    username: str
