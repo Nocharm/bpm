@@ -394,28 +394,68 @@ export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
   });
 }
 
-/** 선택된 노드들을 한 축으로 맞춤 정렬. */
-export function alignSelected(nodes: AppNode[], axis: "left" | "top"): AppNode[] {
-  const selected = nodes.filter((node) => node.selected);
-  if (selected.length < 2) {
+/** 일부 노드(ids)만 자체 서브그래프로 자동 배치하고, 현재 좌상단 위치에 고정해 그룹이 제자리에 남게 한다. */
+export function layoutSubsetWithDagre(
+  nodes: AppNode[],
+  edges: Edge[],
+  ids: ReadonlySet<string>,
+): AppNode[] {
+  const subset = nodes.filter((node) => ids.has(node.id));
+  if (subset.length < 2) {
+    return nodes;
+  }
+  const subsetEdges = edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
+  // 배치 전 좌상단 — 배치 후 같은 위치에 고정하기 위한 기준점
+  const anchorX = Math.min(...subset.map((node) => node.position.x));
+  const anchorY = Math.min(...subset.map((node) => node.position.y));
+
+  const laid = layoutWithDagre(subset, subsetEdges);
+  const newMinX = Math.min(...laid.map((node) => node.position.x));
+  const newMinY = Math.min(...laid.map((node) => node.position.y));
+  const dx = anchorX - newMinX;
+  const dy = anchorY - newMinY;
+
+  const positionById = new Map(laid.map((node) => [node.id, node.position]));
+  return nodes.map((node) => {
+    const positioned = positionById.get(node.id);
+    return positioned
+      ? { ...node, position: { x: positioned.x + dx, y: positioned.y + dy } }
+      : node;
+  });
+}
+
+/** 대상 노드들을 한 축으로 맞춤 정렬. ids 미지정 시 선택된 노드, 지정 시 해당 id 집합. */
+export function alignSelected(
+  nodes: AppNode[],
+  axis: "left" | "top",
+  ids?: ReadonlySet<string>,
+): AppNode[] {
+  const isTarget = (node: AppNode): boolean => (ids ? ids.has(node.id) : node.selected === true);
+  const targets = nodes.filter(isTarget);
+  if (targets.length < 2) {
     return nodes;
   }
   if (axis === "left") {
-    const minX = Math.min(...selected.map((node) => node.position.x));
+    const minX = Math.min(...targets.map((node) => node.position.x));
     return nodes.map((node) =>
-      node.selected ? { ...node, position: { ...node.position, x: minX } } : node,
+      isTarget(node) ? { ...node, position: { ...node.position, x: minX } } : node,
     );
   }
-  const minY = Math.min(...selected.map((node) => node.position.y));
+  const minY = Math.min(...targets.map((node) => node.position.y));
   return nodes.map((node) =>
-    node.selected ? { ...node, position: { ...node.position, y: minY } } : node,
+    isTarget(node) ? { ...node, position: { ...node.position, y: minY } } : node,
   );
 }
 
-/** 선택된 노드들을 한 축으로 등간격 분배. */
-export function distributeSelected(nodes: AppNode[], axis: "x" | "y"): AppNode[] {
+/** 대상 노드들을 한 축으로 등간격 분배. ids 미지정 시 선택된 노드, 지정 시 해당 id 집합. */
+export function distributeSelected(
+  nodes: AppNode[],
+  axis: "x" | "y",
+  ids?: ReadonlySet<string>,
+): AppNode[] {
+  const isTarget = (node: AppNode): boolean => (ids ? ids.has(node.id) : node.selected === true);
   const selected = nodes
-    .filter((node) => node.selected)
+    .filter(isTarget)
     .sort((a, b) => a.position[axis] - b.position[axis]);
   if (selected.length < 3) {
     return nodes;

@@ -299,6 +299,7 @@ def test_delete_blocked_on_pending(client: TestClient) -> None:
 def test_me_returns_current_user(client: TestClient) -> None:
     me = client.get("/api/me").json()
     assert me["username"] == settings.dev_user
+    assert me["ai_enabled"] is False
 
 
 def test_map_detail_exposes_created_by(client: TestClient) -> None:

@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
 ## 2026-06-15
+- 온프레미스 AI 채팅 **구현 완료** (브랜치 `feat/ai-chat`). ① 백엔드: AI 설정(`AI_*`)+httpx2 프로덕션 승격, 스키마(`AiChatRequest`/판별 `AiProposal`+검증: 고아엣지·node_type·중복키), 매뉴얼 로더(`manual.py`+`manual.md`), 프롬프트 빌더(`ai_prompt.py`, 스키마+매뉴얼+현재그래프), AI 어댑터(`ai_client.py`, OpenAI 호환, 교체가능 경계), `/ai/chat` 엔드포인트(`routers/ai.py`: AI_ENABLED 503·404·can_edit 가드·검증 1회 재시도·편집불가 시 graph→answer 다운그레이드, **502 오류에 내부 URL 비노출**·서버 로그만). ② 프론트: `aiChat()`+`me.ai_enabled`, `ai-chat-panel.tsx`(멀티턴 6, 답변/오류 표시), 에디터 배선(토글·미리보기/적용 — key→uuid+dagre 배치, 자동저장 억제+Apply/Discard, undo로 Discard). ③ 매뉴얼 본문 작성, docker-compose에 AI_* env 추가. 검증: 백엔드 pytest 87 passed(AI 서버 mock)+ruff clean, 프론트 eslint+next build green. **검증 한계: 실 GPU 서버 HTTP 경로(`call_ai`)는 단위테스트 없음 — 수동 통합 확인 필요, 프론트 미리보기/적용은 AI 서버 가동 시 브라우저 수동 확인 필요.** 부수: 미커밋이던 `layoutSubsetWithDagre`(canvas.ts)·context-menu submenu를 stash에서 복구·커밋해 깨져있던 main 빌드도 수리.
 - 온프레미스 AI 채팅(순서도 생성·편집 + 매뉴얼 안내) 설계 문서 작성. 사내 GPU 서버(OpenAI 호환, base URL+토큰)를 백엔드가 프록시 — 채팅 자연어로 순서도 생성/편집(AI는 좌표 없는 논리 그래프 반환 → 클라이언트 dagre 배치 → 미리보기 후 적용), 같은 채팅에서 사용법 도움말(판별 타입 graph/answer, 매뉴얼 마크다운 주입). AI_ENABLED 플래그(로컬 비활성), 편집 권한 가드 동일 적용, AI 서버 mock 테스트. `docs/superpowers/specs/2026-06-15-ai-chat-flowchart-design.md`. 다음: 구현 계획. 코드 변경 없음.
 
 ## 2026-06-14

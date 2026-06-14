@@ -7,8 +7,9 @@ from fastapi import Depends, FastAPI
 
 from app.auth import get_current_user
 from app.db import init_models
-from app.routers import approvers, comments, graph, maps, notifications, versions
+from app.routers import ai, approvers, comments, graph, maps, notifications, versions
 from app.schemas import MeOut
+from app.settings import settings
 
 
 @asynccontextmanager
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="BPM API", lifespan=lifespan)
+app.include_router(ai.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
 app.include_router(graph.router)
@@ -33,4 +35,4 @@ async def check_health() -> dict[str, str]:
 
 @app.get("/api/me", response_model=MeOut)
 async def get_me(user: str = Depends(get_current_user)) -> MeOut:
-    return MeOut(username=user)
+    return MeOut(username=user, ai_enabled=settings.ai_enabled)
