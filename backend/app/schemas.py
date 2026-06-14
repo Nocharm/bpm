@@ -164,3 +164,15 @@ class CommentOut(BaseModel):
     body: str
     resolved: bool
     created_at: datetime
+
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    type: str
+    map_id: int | None
+    version_id: int | None
+    message: str
+    read: bool
+    created_at: datetime
