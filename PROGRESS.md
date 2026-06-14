@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신한다 (`rules/common/git.md` 규칙).
 
+## 2026-06-15
+- 온프레미스 AI 채팅(순서도 생성·편집 + 매뉴얼 안내) 설계 문서 작성. 사내 GPU 서버(OpenAI 호환, base URL+토큰)를 백엔드가 프록시 — 채팅 자연어로 순서도 생성/편집(AI는 좌표 없는 논리 그래프 반환 → 클라이언트 dagre 배치 → 미리보기 후 적용), 같은 채팅에서 사용법 도움말(판별 타입 graph/answer, 매뉴얼 마크다운 주입). AI_ENABLED 플래그(로컬 비활성), 편집 권한 가드 동일 적용, AI 서버 mock 테스트. `docs/superpowers/specs/2026-06-15-ai-chat-flowchart-design.md`. 다음: 구현 계획. 코드 변경 없음.
+
 ## 2026-06-14
 - 승인 대시보드 강화 — 진행 순서도 + 높이 조절. ① **라이프사이클 stepper**: 대시보드 상단에 Draft→Pending→Approved→Published 4단계 순서도(`LifecycleStepper`) — 완료=accent 체크, 현재=accent-tint 강조, 예정=hairline 번호, 반려=error X(Pending 위치). 연결선도 진행도 반영. 한눈에 현재 단계 파악. ② **높이 조절**: 인스펙터 폭 조절 패턴 미러링 — 대시보드 상단 row-resize 핸들 드래그로 높이(120~560px) 조절, `bpm.dashboardHeight` localStorage 영속, 내용 넘치면 스크롤. i18n `dash.resize` 추가, 미사용 `dash.title` 제거. 검증: eslint clean + next build green.
 - 승인 워크플로우 대시보드 (frontend). 헤더에 흩어져 있던 워크플로우 컨트롤(상태배지·액션·승인자관리)을 오른쪽 인스펙터 **하단 고정 대시보드**(신규 `workflow-dashboard.tsx`)로 통합 — 노드 선택과 무관하게 항상 표시(한눈에). 인스펙터를 flex-col로 재구성(상단 스크롤=노드편집/카운트, 하단 shrink-0=대시보드). 대시보드 내용: 상태 배지·버전 라벨·제출자·**승인자 체크리스트(✓승인/○대기)+n/m 진행**·반려 사유·액션 버튼(WorkflowActions 재사용, flex-wrap)·Manage approvers(소유자). 헤더에서 3종 제거. i18n `dash.*` 추가. 검증: eslint clean + next build green.
