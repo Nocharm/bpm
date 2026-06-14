@@ -81,18 +81,14 @@ function DrillButton({ nodeId }: { nodeId: string }) {
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { connectSource } = useNodeActions();
   const color = data.color || DEFAULT_COLORS[data.nodeType];
   const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
-  const ring =
-    connectSource === id
+  const ring = data.diffStatus
+    ? DIFF_RINGS[data.diffStatus]
+    : selected
       ? "ring-2 ring-accent"
-      : data.diffStatus
-        ? DIFF_RINGS[data.diffStatus]
-        : selected
-          ? "ring-2 ring-accent"
-          : "";
+      : "";
 
   if (data.nodeType === "decision") {
     return (
