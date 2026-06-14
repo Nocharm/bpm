@@ -48,3 +48,9 @@ def test_proposal_answer_ok_without_graph() -> None:
     proposal = AiProposal.model_validate({"kind": "answer", "message": "hello"})
     assert proposal.kind == "answer"
     assert proposal.nodes == []
+
+
+def test_manual_loads_nonempty() -> None:
+    from app.manual import get_manual
+
+    assert len(get_manual().strip()) > 0
