@@ -35,6 +35,10 @@ class VersionUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=100)
 
 
+class ApproversUpdate(BaseModel):
+    user_ids: list[str]
+
+
 class MapOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

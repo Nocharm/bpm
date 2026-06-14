@@ -4,7 +4,10 @@ auth 우회 모드에서는 모든 요청이 settings.dev_user로 인증된다. 
 시나리오는 dev_user를 monkeypatch로 바꿔 재현한다 (tests/test_collab.py 패턴).
 """
 
+import pytest
 from fastapi.testclient import TestClient
+
+from app.settings import settings
 
 
 def _create_map_with_version(client: TestClient) -> tuple[int, int]:
@@ -31,3 +34,22 @@ def test_is_editable_status() -> None:
     assert workflow.is_editable_status("pending") is False
     assert workflow.is_editable_status("approved") is False
     assert workflow.is_editable_status("published") is False
+
+
+def test_set_and_list_approvers(client: TestClient) -> None:
+    map_id, _version_id = _create_map_with_version(client)
+
+    put = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["boss", "lead"]})
+    listed = client.get(f"/api/maps/{map_id}/approvers").json()
+
+    assert put.status_code == 200
+    assert listed == ["boss", "lead"]
+
+
+def test_set_approvers_owner_only(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    map_id, _version_id = _create_map_with_version(client)
+
+    monkeypatch.setattr(settings, "dev_user", "intruder")
+    forbidden = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["x"]})
+
+    assert forbidden.status_code == 403
