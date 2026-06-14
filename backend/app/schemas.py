@@ -39,6 +39,21 @@ class ApproversUpdate(BaseModel):
     user_ids: list[str]
 
 
+class WorkflowStateOut(BaseModel):
+    version_id: int
+    status: str
+    submitted_by: str | None
+    reject_reason: str | None
+    # 맵의 지정 승인자 전체
+    approvers: list[str]
+    # 이번 사이클에 이미 승인한 승인자
+    approvals: list[str]
+
+
+class RejectIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class MapOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -4,15 +4,32 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app import workflow
 from app.auth import get_current_user
-from app.checkout import is_locked_by_other
+from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.models import Edge, Group, MapVersion, Node, ProcessMap
-from app.schemas import CheckoutIn, CheckoutOut, VersionCreate, VersionOut, VersionUpdate
+from app.models import (
+    Edge,
+    Group,
+    MapApprover,
+    MapVersion,
+    Node,
+    ProcessMap,
+    VersionApproval,
+)
+from app.schemas import (
+    CheckoutIn,
+    CheckoutOut,
+    RejectIn,  # noqa: F401 — used in Task 5 (approve/reject endpoints)
+    VersionCreate,
+    VersionOut,
+    VersionUpdate,
+    WorkflowStateOut,
+)
 
 router = APIRouter(
     prefix="/api", tags=["versions"], dependencies=[Depends(get_current_user)]
@@ -212,3 +229,82 @@ async def delete_version(
 
     await session.delete(version)
     await session.commit()
+
+
+async def _load_approvers(session: AsyncSession, map_id: int) -> list[str]:
+    rows = await session.scalars(
+        select(MapApprover.user_id).where(MapApprover.map_id == map_id)
+    )
+    return list(rows.all())
+
+
+@router.get("/versions/{version_id}/workflow", response_model=WorkflowStateOut)
+async def get_workflow_state(
+    version_id: int, session: AsyncSession = Depends(get_session)
+) -> WorkflowStateOut:
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    approvers = await _load_approvers(session, version.map_id)
+    approvals = list(
+        (
+            await session.scalars(
+                select(VersionApproval.approver).where(
+                    VersionApproval.version_id == version_id
+                )
+            )
+        ).all()
+    )
+    return WorkflowStateOut(
+        version_id=version_id,
+        status=version.status,
+        submitted_by=version.submitted_by,
+        reject_reason=version.reject_reason,
+        approvers=approvers,
+        approvals=approvals,
+    )
+
+
+@router.post("/versions/{version_id}/submit", response_model=VersionOut)
+async def submit_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if not workflow.is_editable_status(version.status):
+        raise HTTPException(
+            status_code=409, detail=f"cannot submit from status {version.status}"
+        )
+    now = datetime.now(timezone.utc)
+    if not (is_checkout_active(version, now) and version.checked_out_by == user):
+        raise HTTPException(status_code=403, detail="only the checkout holder can submit")
+
+    approvers = await _load_approvers(session, version.map_id)
+    if not approvers:
+        raise HTTPException(
+            status_code=409, detail="map has no approvers — assign approvers first"
+        )
+
+    await session.execute(
+        delete(VersionApproval).where(VersionApproval.version_id == version_id)
+    )
+    version.status = workflow.PENDING
+    version.submitted_by = user
+    version.reject_reason = None
+    version.checked_out_by = None
+    version.checked_out_at = None
+    workflow.create_notifications(
+        session,
+        approvers,
+        type="review_requested",
+        map_id=version.map_id,
+        version_id=version_id,
+        message=f"{user} requested approval for '{version.label}'",
+    )
+    await session.commit()
+    await session.refresh(version)
+    return version

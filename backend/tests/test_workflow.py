@@ -53,3 +53,41 @@ def test_set_approvers_owner_only(client: TestClient, monkeypatch: pytest.Monkey
     forbidden = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["x"]})
 
     assert forbidden.status_code == 403
+
+
+def test_submit_requires_checkout_and_approvers(client: TestClient) -> None:
+    map_id, version_id = _create_map_with_version(client)
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    # 승인자 미지정 → 제출 차단
+    blocked = client.post(f"/api/versions/{version_id}/submit")
+    assert blocked.status_code == 409
+
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["boss"]})
+    ok = client.post(f"/api/versions/{version_id}/submit")
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "pending"
+    assert ok.json()["submitted_by"] == settings.dev_user
+
+
+def test_submit_requires_checkout_holder(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    map_id, version_id = _create_map_with_version(client)
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["boss"]})
+    client.post(f"/api/versions/{version_id}/checkout", json={})  # local-dev holds it
+
+    monkeypatch.setattr(settings, "dev_user", "stranger")
+    forbidden = client.post(f"/api/versions/{version_id}/submit")
+    assert forbidden.status_code == 403
+
+
+def test_workflow_state_endpoint(client: TestClient) -> None:
+    map_id, version_id = _create_map_with_version(client)
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a", "b"]})
+
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+
+    assert state["status"] == "draft"
+    assert state["approvers"] == ["a", "b"]
+    assert state["approvals"] == []
