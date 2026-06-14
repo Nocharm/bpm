@@ -200,6 +200,13 @@ const en = {
   "notif.title": "Notifications",
   "notif.empty": "No notifications",
   "notif.markRead": "Mark read",
+  "ai.title": "AI assistant",
+  "ai.toggle": "AI assistant",
+  "ai.placeholder": "Describe the flowchart, or ask how to use…",
+  "ai.send": "Send",
+  "ai.thinking": "Thinking…",
+  "ai.readOnly": "Editing is locked — only help answers are available.",
+  "ai.error": "AI request failed",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -402,6 +409,13 @@ const ko: Record<MessageKey, string> = {
   "notif.title": "알림",
   "notif.empty": "알림 없음",
   "notif.markRead": "읽음",
+  "ai.title": "AI 도우미",
+  "ai.toggle": "AI 도우미",
+  "ai.placeholder": "순서도를 설명하거나 사용법을 물어보세요…",
+  "ai.send": "보내기",
+  "ai.thinking": "생각 중…",
+  "ai.readOnly": "편집이 잠겨 도움말 답변만 가능합니다.",
+  "ai.error": "AI 요청 실패",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
