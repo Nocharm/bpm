@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, LogOut, PanelRight, PencilLine, Redo2, Spline, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -87,6 +87,7 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
 const GROUP_PAD = 16; // 그룹 박스가 멤버 bounding box를 감싸는 여백
+const GROUP_TITLE_GAP = 26; // 박스 상단에 타이틀바를 얹을 추가 여백 — 멤버 노드와 제목 겹침 방지
 
 type DropZone = "front" | "back" | "group" | "child";
 type ScreenRect = { left: number; top: number; width: number; height: number };
@@ -248,6 +249,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     zone: DropZone;
     rect: ScreenRect;
   } | null>(null);
+  // 드래그 노드가 기존 그룹 박스 빈 영역 위에 머무는 중 — 합류 대상 그룹 id(펄스 강조)
+  const [groupDropTarget, setGroupDropTarget] = useState<string | null>(null);
+  const dropTargetRef = useRef<typeof dropTarget>(null);
+  const groupDropTargetRef = useRef<string | null>(null);
   const dwellRef = useRef<{ id: string; since: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragMouseRef = useRef({ x: 0, y: 0 }); // 드래그 중 마우스 flow 좌표 — 4방향 zone 판정 기준
@@ -282,6 +287,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+  useEffect(() => {
+    dropTargetRef.current = dropTarget;
+  }, [dropTarget]);
+  useEffect(() => {
+    groupDropTargetRef.current = groupDropTarget;
+  }, [groupDropTarget]);
 
   // 아웃라인 하위 펼치기용 전체 그래프 — 비핵심이라 실패해도 조용히 무시(아웃라인만 영향)
   const refreshFullGraph = useCallback(() => {
@@ -1164,6 +1175,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setNodes, setGroups, scheduleAutoSave],
   );
 
+  // A를 특정 기존 그룹에 합류 — 그룹 박스 빈 영역에 드롭한 경우. 드롭 위치는 유지하되 멤버 겹침만 회피.
+  const addToGroupId = useCallback(
+    (aId: string, groupId: string) => {
+      setNodes((current) => {
+        const moved = current.map((node) =>
+          node.id === aId ? { ...node, data: { ...node.data, groupId } } : node,
+        );
+        return resolveCollision(moved, aId);
+      });
+      scheduleAutoSave();
+    },
+    [setNodes, scheduleAutoSave],
+  );
+
   // A를 B의 하위 프로세스(자식 스코프)로 이동. 자식 스코프에 먼저 영속(재부모화)한 뒤
   // 현재 스코프에서 제거 — 순서 보장으로 현재 스코프 자동저장이 A를 삭제하지 않도록 함.
   const moveToChild = useCallback(
@@ -1320,6 +1345,37 @@ function MapEditor({ mapId }: { mapId: number }) {
     [addToGroup, moveToChild, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
   );
 
+  // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
+  const findGroupAt = useCallback((mouse: { x: number; y: number }, draggingId: string): string | null => {
+    const draggingGroupId = nodesRef.current.find((n) => n.id === draggingId)?.data.groupId ?? null;
+    for (const group of groupsRef.current) {
+      if (group.id === draggingGroupId) {
+        continue; // 이미 이 그룹 멤버
+      }
+      const members = nodesRef.current.filter(
+        (n) => n.data.groupId === group.id && n.id !== draggingId,
+      );
+      if (members.length === 0) {
+        continue;
+      }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const m of members) {
+        const w = m.measured?.width ?? NODE_WIDTH;
+        const h = m.measured?.height ?? NODE_HEIGHT;
+        minX = Math.min(minX, m.position.x);
+        minY = Math.min(minY, m.position.y);
+        maxX = Math.max(maxX, m.position.x + w);
+        maxY = Math.max(maxY, m.position.y + h);
+      }
+      const inX = mouse.x >= minX - GROUP_PAD && mouse.x <= maxX + GROUP_PAD;
+      const inY = mouse.y >= minY - GROUP_PAD - GROUP_TITLE_GAP && mouse.y <= maxY + GROUP_PAD;
+      if (inX && inY) {
+        return group.id;
+      }
+    }
+    return null;
+  }, []);
+
   // dwell 타이머/상태 정리
   const clearDwell = useCallback(() => {
     if (dwellTimerRef.current) {
@@ -1353,6 +1409,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!rect) {
         return;
       }
+      setGroupDropTarget((cur) => (cur ? null : cur)); // 노드 대상이 그룹 박스 hover보다 우선
       setDropTarget((cur) =>
         cur && cur.id === targetId && cur.zone === zone ? cur : { id: targetId, zone, rect },
       );
@@ -1360,37 +1417,59 @@ function MapEditor({ mapId }: { mapId: number }) {
     [screenRectOf],
   );
 
-  // 드래그 중 — A 아래 노드를 DWELL_MS 머문 뒤 영역 표시(가만히 둬도 타이머로 발화), 이후 이동 시 zone 갱신
+  // 드래그 중 — 커서 위치(현재 마우스) 기준으로 판정.
+  // 링이 한번 뜨면 커서가 링 밖으로 나가기 전까지 유지(겹침 해제와 무관). 노드가 없으면 그룹 박스 hover.
   const handleNodeDrag = useCallback(
     (event: MouseEvent | TouchEvent, node: AppNode) => {
       if (readOnly) {
         return;
       }
-      // 마우스/터치 flow 좌표 기준 — 커서 아래 노드를 대상으로, 커서 방향으로 zone 판정
       const clientX = "touches" in event ? (event.touches[0]?.clientX ?? 0) : event.clientX;
       const clientY = "touches" in event ? (event.touches[0]?.clientY ?? 0) : event.clientY;
       const mouse = reactFlow.screenToFlowPosition({ x: clientX, y: clientY });
       dragMouseRef.current = mouse;
+
+      // 이미 떠 있는 링 — 커서가 링(원) 안에 있으면 유지하며 zone만 갱신, 밖으로 나가면 해제 후 재탐지
+      const active = dropTargetRef.current;
+      const container = canvasContainerRef.current;
+      if (active && active.id !== node.id && container) {
+        const r = active.rect;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const radius = Math.max(r.width, r.height) + 20;
+        const crect = container.getBoundingClientRect();
+        const dist = Math.hypot(clientX - crect.left - cx, clientY - crect.top - cy);
+        if (dist <= radius) {
+          activateZone(active.id);
+          return;
+        }
+        setDropTarget((cur) => (cur ? null : cur));
+        clearDwell();
+      }
+
+      // 커서 아래 노드 — DWELL_MS 머문 뒤 4방향 링 표시(그룹 hover는 끔)
       const target = reactFlow
         .getIntersectingNodes({ x: mouse.x, y: mouse.y, width: 1, height: 1 })
         .find((other) => other.id !== node.id);
-      if (!target) {
-        clearDwell();
-        setDropTarget((cur) => (cur ? null : cur));
+      if (target) {
+        setGroupDropTarget((cur) => (cur ? null : cur));
+        if (!dwellRef.current || dwellRef.current.id !== target.id) {
+          clearDwell();
+          dwellRef.current = { id: target.id, since: Date.now() };
+          dwellTimerRef.current = setTimeout(() => activateZone(target.id), DWELL_MS);
+        } else if (Date.now() - dwellRef.current.since >= DWELL_MS) {
+          activateZone(target.id);
+        }
         return;
       }
-      if (!dwellRef.current || dwellRef.current.id !== target.id) {
-        clearDwell();
-        dwellRef.current = { id: target.id, since: Date.now() };
-        setDropTarget((cur) => (cur ? null : cur));
-        dwellTimerRef.current = setTimeout(() => activateZone(target.id), DWELL_MS);
-        return;
-      }
-      if (Date.now() - dwellRef.current.since >= DWELL_MS) {
-        activateZone(target.id);
-      }
+
+      // 커서 아래 노드 없음 — 기존 그룹 박스 빈 영역 위면 합류 대상으로 강조
+      clearDwell();
+      setDropTarget((cur) => (cur ? null : cur));
+      const gid = findGroupAt(mouse, node.id);
+      setGroupDropTarget((cur) => (cur === gid ? cur : gid));
     },
-    [readOnly, reactFlow, clearDwell, activateZone],
+    [readOnly, reactFlow, clearDwell, activateZone, findGroupAt],
   );
 
   // 언마운트 시 dwell 타이머 정리
@@ -1660,10 +1739,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           id: group.id,
           label: group.label,
           color: group.color,
+          // 상단은 타이틀바 높이만큼 더 띄워 멤버 노드와 제목이 겹치지 않게 함
           x: minX - GROUP_PAD,
-          y: minY - GROUP_PAD,
+          y: minY - GROUP_PAD - GROUP_TITLE_GAP,
           width: maxX - minX + GROUP_PAD * 2,
-          height: maxY - minY + GROUP_PAD * 2,
+          height: maxY - minY + GROUP_PAD * 2 + GROUP_TITLE_GAP,
         },
       ];
     });
@@ -2023,6 +2103,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 active={active}
                 zIndex={active ? 1000 : zOrder.indexOf(key) + 1}
                 canClose={index > 0}
+                chromeless={index === 0}
                 bounds={bounds}
                 onFocus={() => {
                   bringToFront(key);
@@ -2083,14 +2164,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodeDragStart={() => pushHistory()}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
-                        if (!readOnly && dropTarget && dropTarget.id !== node.id) {
-                          handleZoneDrop(node.id, dropTarget.id, dropTarget.zone);
+                        if (!readOnly && dropTargetRef.current && dropTargetRef.current.id !== node.id) {
+                          handleZoneDrop(node.id, dropTargetRef.current.id, dropTargetRef.current.zone);
+                        } else if (!readOnly && groupDropTargetRef.current) {
+                          addToGroupId(node.id, groupDropTargetRef.current);
                         } else if (!readOnly) {
                           setNodes((current) => resolveCollision(current, node.id));
                           scheduleAutoSave();
                         }
                         clearDwell();
                         setDropTarget(null);
+                        setGroupDropTarget(null);
                       }}
                       onSelectionDragStart={() => pushHistory()}
                       onSelectionDragStop={() => scheduleAutoSave()}
@@ -2122,7 +2206,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 zIndex: -1,
                               }}
                             >
-                              <GroupBox color={box.color} width={box.width} height={box.height} />
+                              <GroupBox
+                                color={box.color}
+                                width={box.width}
+                                height={box.height}
+                                targeted={groupDropTarget === box.id}
+                              />
                             </div>
                             {/* 타이틀바 — 노드 위, 박스 상단 좌측 */}
                             <div
@@ -2138,16 +2227,36 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 id={box.id}
                                 label={box.label}
                                 color={box.color}
-                                width={box.width - 8}
+                                width={box.width - 56}
                                 readOnly={readOnly}
                                 colorPresets={GROUP_COLOR_PRESETS}
-                                canLeave={selectedGroupIds.has(box.id)}
                                 onRename={renameGroup}
                                 onRecolor={recolorGroup}
-                                onLeave={leaveGroup}
                                 onMoveStart={startGroupMove}
                               />
                             </div>
+                            {/* 그룹 나가기 — 박스 경계 우측 위 모서리. 선택 멤버가 있을 때만 */}
+                            {selectedGroupIds.has(box.id) && !readOnly && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  left: 0,
+                                  top: 0,
+                                  transform: `translate(${box.x + box.width - 26}px, ${box.y + 3}px)`,
+                                  zIndex: 2,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  className="pointer-events-auto rounded-sm border border-hairline bg-surface p-1 text-ink-tertiary shadow-sm hover:bg-error/10 hover:text-error"
+                                  title={t("group.leave")}
+                                  aria-label={t("group.leave")}
+                                  onClick={() => leaveGroup(box.id)}
+                                >
+                                  <LogOut size={12} strokeWidth={1.5} />
+                                </button>
+                              </div>
+                            )}
                           </Fragment>
                         ))}
                       </ViewportPortal>
@@ -2177,11 +2286,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           {dropTarget &&
             (() => {
               const r = dropTarget.rect;
-              const tileSize = 44;
+              const tileW = 84;
+              const tileH = 58;
               const cx = r.left + r.width / 2;
               const cy = r.top + r.height / 2;
-              // 링 반경 — 기존(=max/2+10) 대비 약 2배
-              const radius = Math.max(r.width, r.height) + 20;
+              // 링 반경 — 넓힌 타일이 노드를 가리지 않도록 약간 키움
+              const radius = Math.max(r.width, r.height) + 32;
               // 타일은 원주 위 4 cardinal 지점
               const tiles = [
                 { zone: "front", Icon: ArrowLeft, x: cx - radius, y: cy, label: t("dropzone.front") },
@@ -2199,15 +2309,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                   {tiles.map(({ zone, Icon, x, y, label }) => (
                     <div
                       key={zone}
-                      title={label}
-                      className={`zone-pop absolute flex items-center justify-center rounded-md border shadow-md ${
+                      className={`zone-pop absolute flex flex-col items-center justify-center gap-1 rounded-md border px-2 text-center shadow-md ${
                         dropTarget.zone === zone
                           ? "border-accent bg-accent-tint text-accent"
-                          : "border-hairline bg-surface/90 text-ink-tertiary"
+                          : "border-hairline bg-surface/95 text-ink-tertiary"
                       }`}
-                      style={{ left: x - tileSize / 2, top: y - tileSize / 2, width: tileSize, height: tileSize }}
+                      style={{ left: x - tileW / 2, top: y - tileH / 2, width: tileW, height: tileH }}
                     >
                       <Icon size={20} strokeWidth={1.5} />
+                      <span className="text-fine font-medium leading-tight">{label}</span>
                     </div>
                   ))}
                 </div>

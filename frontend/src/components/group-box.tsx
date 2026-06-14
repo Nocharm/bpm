@@ -6,15 +6,17 @@ export function GroupBox({
   color,
   width,
   height,
+  targeted = false,
 }: {
   color: string;
   width: number;
   height: number;
+  targeted?: boolean; // 드래그 노드가 합류 대상으로 이 박스 위에 머무는 중 — 펄스 강조
 }) {
   const stroke = color || "var(--color-border-strong)";
   return (
     <div
-      className="pointer-events-none h-full w-full rounded-md border"
+      className={`pointer-events-none h-full w-full rounded-md border ${targeted ? "group-target" : ""}`}
       style={{
         width,
         height,

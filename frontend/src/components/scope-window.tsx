@@ -16,6 +16,7 @@ interface ScopeWindowProps {
   active: boolean;
   zIndex: number;
   canClose: boolean;
+  chromeless?: boolean; // 최상위(루트) 프로세스 — 항상 최대화, 타이틀바/리사이즈 없이 제목 칩만
   bounds: { w: number; h: number };
   onFocus: () => void;
   onGeomChange: (geom: WindowGeom) => void;
@@ -29,6 +30,7 @@ export function ScopeWindow({
   active,
   zIndex,
   canClose,
+  chromeless = false,
   bounds,
   onFocus,
   onGeomChange,
@@ -89,6 +91,29 @@ export function ScopeWindow({
 
   const toggleMax = () => onGeomChange({ ...geom, maximized: !geom.maximized });
   const toggleMin = () => onGeomChange({ ...geom, minimized: !geom.minimized });
+
+  // 루트 프로세스 — 항상 캔버스를 가득 채우고, 타이틀바 대신 좌상단에 제목 칩만(그룹 UI와 동일 톤)
+  if (chromeless) {
+    return (
+      <div
+        className="absolute inset-0 flex flex-col overflow-hidden bg-surface"
+        style={{ zIndex }}
+        onPointerDown={onFocus}
+      >
+        <div className="relative flex-1">
+          {children}
+          {!active && (
+            <div className="absolute inset-0 flex items-center justify-center bg-surface/60 text-caption text-ink-tertiary">
+              {t("window.clickToEdit")}
+            </div>
+          )}
+          <span className="pointer-events-none absolute left-2 top-2 z-10 max-w-[60%] truncate rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-medium text-ink-secondary shadow-sm">
+            {title}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const rect = geom.maximized
     ? { left: 0, top: 0, width: bounds.w, height: bounds.h }

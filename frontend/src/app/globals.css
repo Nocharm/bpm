@@ -155,9 +155,31 @@ body {
   transform-origin: center;
   animation: zone-pop-in 260ms var(--ease-overshoot);
 }
+
+/* 그룹 합류 대상 — 노드를 끌어와 박스 위에 머물 때 반투명 반짝임 + 커졌다 작아지기 */
+@keyframes group-target-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 0%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 8%, white);
+  }
+  50% {
+    transform: scale(1.025);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 18%, white);
+  }
+}
+.group-target {
+  transform-origin: center;
+  border-color: var(--color-accent) !important;
+  animation: group-target-pulse 750ms var(--ease-smooth) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .zone-ring,
-  .zone-pop {
+  .zone-pop,
+  .group-target {
     animation: none;
   }
 }
