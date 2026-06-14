@@ -27,6 +27,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 
 import { CommentSection } from "@/components/comment-section";
 import { StatusBadge } from "@/components/status-badge";
+import { WorkflowActions } from "@/components/workflow-actions";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
@@ -61,6 +62,7 @@ import {
 } from "@/lib/canvas";
 import {
   acquireCheckout,
+  approveVersion,
   createComment,
   createVersion,
   deleteComment,
@@ -68,11 +70,17 @@ import {
   getFullGraph,
   getGraph,
   getMap,
+  getMe,
+  getWorkflowState,
   listComments,
+  publishVersion,
+  rejectVersion,
   releaseCheckout,
   renameVersion,
   saveGraph,
+  submitVersion,
   updateComment,
+  withdrawVersion,
   type CheckoutState,
   type CommentItem,
   type FlatNode,
@@ -81,6 +89,7 @@ import {
   type GraphGroup,
   type VersionGraph,
   type VersionSummary,
+  type WorkflowState,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
@@ -250,6 +259,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   // 언마운트/버전 전환 시 해제 여부 판단용 — 상태와 달리 cleanup에서 즉시 읽힘
   const checkoutMineRef = useRef(false);
+  // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
+  const [username, setUsername] = useState<string | null>(null);
+  const [mapOwner, setMapOwner] = useState<string | null>(null);
+  const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
 
   // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
   const [dropTarget, setDropTarget] = useState<{
@@ -274,6 +287,15 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = checkout !== null && !checkout.mine;
+
+  // 현재 버전 객체 — StatusBadge·워크플로우 역할 판정 공용
+  const currentVersion = versions.find((v) => v.id === versionId) ?? null;
+  // 역할 판정 — render 중 파생(useEffect 금지)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isMapOwner = username !== null && mapOwner !== null && username === mapOwner; // reserved for admin controls
+  const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
+  const isSubmitter = username !== null && currentVersion?.submitted_by === username;
+  const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
 
   const reactFlow = useReactFlow();
   const currentParentId =
@@ -567,6 +589,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
         setMapName(detail.name);
+        setMapOwner(detail.created_by);
         setVersions(detail.versions);
         setVersionId(detail.versions[0].id);
         setScopes([{ parentId: null, title: detail.name }]);
@@ -581,6 +604,34 @@ function MapEditor({ mapId }: { mapId: number }) {
       active = false;
     };
   }, [mapId, t]);
+
+  // 현재 사용자 신원 — 마운트 1회, auth 비활성 시 null 유지
+  useEffect(() => {
+    let alive = true;
+    void getMe()
+      .then((me) => {
+        if (alive) setUsername(me.username);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 워크플로우 상태 — 버전 전환 시 재요청
+  const refreshWorkflow = useCallback(async () => {
+    if (versionId === null) return;
+    try {
+      setWorkflow(await getWorkflowState(versionId));
+    } catch {
+      setWorkflow(null);
+    }
+  }, [versionId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshWorkflow(); // intentional: fetch workflow state when version changes
+  }, [refreshWorkflow]);
 
   // 현재 스코프(version, parent) 캔버스 로드 — 히스토리/저장 상태도 새 스코프 기준으로 리셋
   useEffect(() => {
@@ -996,6 +1047,23 @@ function MapEditor({ mapId }: { mapId: number }) {
       setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
     }
   }, [versionId, versions, mapId, mapName, t]);
+
+  // 워크플로우 전이 — updated VersionSummary를 versions에 머지하고 workflow 갱신
+  const runTransition = useCallback(
+    async (action: (id: number) => Promise<VersionSummary>) => {
+      if (versionId === null) return;
+      try {
+        const updated = await action(versionId);
+        setVersions((prev) =>
+          prev.map((v) => (v.id === updated.id ? { ...v, ...updated } : v)),
+        );
+        await refreshWorkflow();
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.workflow"));
+      }
+    },
+    [versionId, refreshWorkflow, t],
+  );
 
   // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────
 
@@ -2042,10 +2110,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           {saveState === "error" && (
             <span className="text-caption text-error">{t("editor.saveError")}</span>
           )}
-          {(() => {
-            const current = versions.find((v) => v.id === versionId);
-            return current ? <StatusBadge status={current.status} /> : null;
-          })()}
+          {currentVersion && <StatusBadge status={currentVersion.status} />}
           <select
             className="rounded-sm border border-hairline px-2 py-1 text-caption"
             value={versionId ?? ""}
@@ -2058,6 +2123,21 @@ function MapEditor({ mapId }: { mapId: number }) {
               </option>
             ))}
           </select>
+          {currentVersion && (
+            <WorkflowActions
+              status={currentVersion.status}
+              workflow={workflow}
+              isCheckoutHolder={checkout?.mine ?? false}
+              isApprover={isApprover}
+              isSubmitter={isSubmitter}
+              hasApproved={hasApproved}
+              onSubmit={() => void runTransition(submitVersion)}
+              onApprove={() => void runTransition(approveVersion)}
+              onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
+              onPublish={() => void runTransition(publishVersion)}
+              onWithdraw={() => void runTransition(withdrawVersion)}
+            />
+          )}
           <button className={toolButton} onClick={() => void handleCreateVersion()}>
             {t("editor.newVersion")}
           </button>
