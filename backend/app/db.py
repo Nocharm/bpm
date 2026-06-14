@@ -15,6 +15,11 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 # Alembic 도입 전까지 기존 DB가 깨지지 않도록 startup에서 멱등 적용. (table, column, DDL 타입)
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "group_id", "VARCHAR(50)"),  # spec Phase 2 — 업무 묶음 소속
+    # 버전 승인 워크플로우 — 기존 map_versions에 컬럼 보강 (design 2026-06-14)
+    # status는 기존 행이 NULL이면 VersionOut(status:str) 검증이 깨지므로 DEFAULT 'draft'로 백필
+    ("map_versions", "status", "VARCHAR(20) DEFAULT 'draft'"),
+    ("map_versions", "submitted_by", "VARCHAR(100)"),
+    ("map_versions", "reject_reason", "VARCHAR(500)"),
 ]
 
 
