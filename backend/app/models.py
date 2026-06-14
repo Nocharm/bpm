@@ -29,6 +29,9 @@ class ProcessMap(Base):
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"
     )
+    approvers: Mapped[list["MapApprover"]] = relationship(
+        cascade="all, delete-orphan"
+    )
 
 
 class MapVersion(Base):
@@ -42,6 +45,12 @@ class MapVersion(Base):
     checked_out_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 승인 워크플로우 상태 — draft|pending|approved|published|rejected (design 2026-06-14)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    # 현재 사이클 제출자(=submit 시점 체크아웃 보유자 박제) — 게시/회수 권한자
+    submitted_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 최신 반려 사유만 보관 (전이 이력 로그는 두지 않음)
+    reject_reason: Mapped[str | None] = mapped_column(String(500), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -59,6 +68,9 @@ class MapVersion(Base):
     )
     groups: Mapped[list["Group"]] = relationship(
         back_populates="version", cascade="all, delete-orphan"
+    )
+    approvals: Mapped[list["VersionApproval"]] = relationship(
+        cascade="all, delete-orphan"
     )
 
 
@@ -143,3 +155,43 @@ class Group(Base):
     color: Mapped[str] = mapped_column(String(20), default="")
 
     version: Mapped[MapVersion] = relationship(back_populates="groups")
+
+
+class MapApprover(Base):
+    """맵별 지정 승인자 — 전원 승인(만장일치) 게이트 (design 2026-06-14)."""
+
+    __tablename__ = "map_approvers"
+
+    map_id: Mapped[int] = mapped_column(
+        ForeignKey("process_maps.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+
+
+class VersionApproval(Base):
+    """현재 제출 사이클의 승인 집계 — 재제출 시 해당 version 행 전체 삭제(리셋)."""
+
+    __tablename__ = "version_approvals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("map_versions.id", ondelete="CASCADE")
+    )
+    approver: Mapped[str] = mapped_column(String(100))
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Notification(Base):
+    """인앱 알림 — 5초 폴링으로 본인 수신분 조회 (design 2026-06-14)."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient: Mapped[str] = mapped_column(String(100))
+    type: Mapped[str] = mapped_column(String(50))
+    # 느슨한 참조(FK 미설정) — 알림은 fire-and-forget 스탬프라 맵/버전 삭제와 무관하게 보존
+    map_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    version_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    message: Mapped[str] = mapped_column(Text, default="")
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

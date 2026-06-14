@@ -20,6 +20,9 @@ class VersionOut(BaseModel):
 
     id: int
     label: str
+    status: str
+    submitted_by: str | None
+    reject_reason: str | None
 
 
 class VersionCreate(BaseModel):
