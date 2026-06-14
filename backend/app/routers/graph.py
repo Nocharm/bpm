@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import workflow
 from app.auth import get_current_user
 from app.checkout import is_locked_by_other
 from app.db import get_session
@@ -130,6 +131,13 @@ async def replace_graph(
 ) -> GraphOut:
     """한 캔버스 스코프(version, parent)만 교체. 다른 계층의 노드/엣지는 보존."""
     version = await _get_version_or_404(session, version_id)
+
+    # 승인 워크플로우 — 편집 가능 상태(draft/rejected)만 저장 허용. submit이 체크아웃을
+    # 해제하므로 잠금만으론 pending/approved/published 쓰기를 못 막는다 (design 2026-06-14)
+    if not workflow.is_editable_status(version.status):
+        raise HTTPException(
+            status_code=409, detail=f"version is {version.status} — not editable"
+        )
 
     # 체크아웃 잠금 — 다른 사용자가 편집 중이면 저장 거부 (spec §7 Phase C)
     if is_locked_by_other(version, user, datetime.now(timezone.utc)):

@@ -113,6 +113,29 @@ def test_unanimous_approval(client: TestClient, monkeypatch: pytest.MonkeyPatch)
     assert after_second["status"] == "approved"  # 2/2 — 만장일치 통과
 
 
+def test_approve_is_idempotent_per_user(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 같은 승인자가 두 번 눌러도 2명 게이트를 조기 통과하지 않는다
+    _map_id, version_id = _submit_with_approvers(client, ["a", "b"])
+
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/approve")
+    repeat = client.post(f"/api/versions/{version_id}/approve").json()
+
+    assert repeat["status"] == "pending"  # a가 두 번 눌러도 여전히 1/2
+
+
+def test_graph_save_blocked_on_pending(client: TestClient) -> None:
+    # 비편집 상태(pending) 버전은 그래프 저장이 거부되어야 한다 (편집 잠금이 없어도)
+    _map_id, version_id = _submit_with_approvers(client, ["a"])  # pending, 체크아웃 해제됨
+
+    blocked = client.put(
+        f"/api/versions/{version_id}/graph", json={"nodes": [], "edges": []}
+    )
+    assert blocked.status_code == 409
+
+
 def test_approve_non_approver_forbidden(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
