@@ -436,3 +436,30 @@ export function distributeSelected(nodes: AppNode[], axis: "x" | "y"): AppNode[]
     return { ...node, position: { ...node.position, [axis]: target } };
   });
 }
+
+// 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 4 cardinal 타일 중 하나의 박스 안이면 그 zone, 아니면 null.
+// 타일 배치는 page.tsx 오버레이 렌더와 동일해야 한다(좌=front/우=back/상=group/하=child).
+export type DropZone = "front" | "back" | "group" | "child";
+
+export function pickDropZone(
+  cursorX: number,
+  cursorY: number,
+  cx: number,
+  cy: number,
+  radius: number,
+  tileW: number,
+  tileH: number,
+): DropZone | null {
+  const tiles: { zone: DropZone; x: number; y: number }[] = [
+    { zone: "front", x: cx - radius, y: cy },
+    { zone: "back", x: cx + radius, y: cy },
+    { zone: "group", x: cx, y: cy - radius },
+    { zone: "child", x: cx, y: cy + radius },
+  ];
+  for (const tile of tiles) {
+    if (Math.abs(cursorX - tile.x) <= tileW / 2 && Math.abs(cursorY - tile.y) <= tileH / 2) {
+      return tile.zone;
+    }
+  }
+  return null;
+}
