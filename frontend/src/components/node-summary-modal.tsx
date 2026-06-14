@@ -42,6 +42,7 @@ export function NodeSummaryModal({
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 해당 노드 코멘트 로드(진입 1회) — 실패해도 모달은 동작(빈 목록)
   useEffect(() => {
@@ -75,11 +76,14 @@ export function NodeSummaryModal({
       return;
     }
     setSubmitting(true);
+    setError(null);
     try {
       const created = await createComment(versionId, nodeId, body);
       setComments((current) => [...current, created]);
       setDraft("");
       setAdding(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("summary.addError"));
     } finally {
       setSubmitting(false);
     }
@@ -177,11 +181,12 @@ export function NodeSummaryModal({
                   <button
                     type="button"
                     className="rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary"
-                    onClick={() => { setAdding(false); setDraft(""); }}
+                    onClick={() => { setAdding(false); setDraft(""); setError(null); }}
                   >
                     {t("summary.cancel")}
                   </button>
                 </div>
+                {error && <span className="text-fine text-error">{error}</span>}
               </div>
             )}
           </div>
