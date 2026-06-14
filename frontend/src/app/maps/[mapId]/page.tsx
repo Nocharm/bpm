@@ -285,8 +285,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const fullGraphVersionRef = useRef<number | null>(null);
   useEffect(() => {
     fullGraphRef.current = fullGraph;
-    fullGraphVersionRef.current = fullGraph === null ? null : versionId;
-  }, [fullGraph, versionId]);
+  }, [fullGraph]);
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -308,8 +307,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (versionId === null) {
       return;
     }
-    void getFullGraph(versionId)
-      .then(setFullGraph)
+    const fetchedVersion = versionId;
+    void getFullGraph(fetchedVersion)
+      .then((graph) => {
+        setFullGraph(graph);
+        fullGraphVersionRef.current = fetchedVersion; // 캐시된 트리가 속한 버전을 기록 — 게이트의 버전 불일치 판정용
+      })
       .catch(() => undefined);
   }, [versionId]);
   useEffect(() => {
