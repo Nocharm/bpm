@@ -91,3 +91,76 @@ def test_workflow_state_endpoint(client: TestClient) -> None:
     assert state["status"] == "draft"
     assert state["approvers"] == ["a", "b"]
     assert state["approvals"] == []
+
+
+def _submit_with_approvers(client: TestClient, approvers: list[str]) -> tuple[int, int]:
+    map_id, version_id = _create_map_with_version(client)
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": approvers})
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    client.post(f"/api/versions/{version_id}/submit")
+    return map_id, version_id
+
+
+def test_unanimous_approval(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _map_id, version_id = _submit_with_approvers(client, ["a", "b"])
+
+    monkeypatch.setattr(settings, "dev_user", "a")
+    after_first = client.post(f"/api/versions/{version_id}/approve").json()
+    assert after_first["status"] == "pending"  # 1/2 — 아직 미통과
+
+    monkeypatch.setattr(settings, "dev_user", "b")
+    after_second = client.post(f"/api/versions/{version_id}/approve").json()
+    assert after_second["status"] == "approved"  # 2/2 — 만장일치 통과
+
+
+def test_approve_non_approver_forbidden(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _map_id, version_id = _submit_with_approvers(client, ["a"])
+
+    monkeypatch.setattr(settings, "dev_user", "stranger")
+    forbidden = client.post(f"/api/versions/{version_id}/approve")
+    assert forbidden.status_code == 403
+
+
+def test_approve_on_draft_conflicts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    map_id, version_id = _create_map_with_version(client)
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a"]})
+
+    monkeypatch.setattr(settings, "dev_user", "a")
+    conflict = client.post(f"/api/versions/{version_id}/approve")  # still draft
+    assert conflict.status_code == 409
+
+
+def test_reject_sets_reason_and_resets_tally(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _map_id, version_id = _submit_with_approvers(client, ["a", "b"])
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/approve")  # 1/2 recorded
+
+    monkeypatch.setattr(settings, "dev_user", "b")
+    rejected = client.post(
+        f"/api/versions/{version_id}/reject", json={"reason": "needs rework"}
+    ).json()
+    assert rejected["status"] == "rejected"
+    assert rejected["reject_reason"] == "needs rework"
+
+    # 재제출 시 tally 리셋 — rejected는 편집 가능. submitter(local-dev)로 복귀해 재제출
+    monkeypatch.setattr(settings, "dev_user", "local-dev")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    client.post(f"/api/versions/{version_id}/submit")
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["approvals"] == []
+
+
+def test_reject_requires_reason(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _map_id, version_id = _submit_with_approvers(client, ["a"])
+
+    monkeypatch.setattr(settings, "dev_user", "a")
+    missing = client.post(f"/api/versions/{version_id}/reject", json={})
+    assert missing.status_code == 422

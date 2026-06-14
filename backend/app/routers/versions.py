@@ -24,7 +24,7 @@ from app.models import (
 from app.schemas import (
     CheckoutIn,
     CheckoutOut,
-    RejectIn,  # noqa: F401 — used in Task 5 (approve/reject endpoints)
+    RejectIn,
     VersionCreate,
     VersionOut,
     VersionUpdate,
@@ -305,6 +305,95 @@ async def submit_version(
         version_id=version_id,
         message=f"{user} requested approval for '{version.label}'",
     )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/approve", response_model=VersionOut)
+async def approve_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """지정 승인자의 승인 1건 기록. 전원 승인되면 Pending → Approved 자동 전이."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status != workflow.PENDING:
+        raise HTTPException(
+            status_code=409, detail=f"cannot approve from status {version.status}"
+        )
+    approvers = await _load_approvers(session, version.map_id)
+    if user not in approvers:
+        raise HTTPException(
+            status_code=403, detail="only a designated approver can approve"
+        )
+
+    existing = await session.scalar(
+        select(VersionApproval).where(
+            VersionApproval.version_id == version_id,
+            VersionApproval.approver == user,
+        )
+    )
+    if existing is None:
+        session.add(VersionApproval(version_id=version_id, approver=user))
+        await session.flush()
+
+    approved_count = await session.scalar(
+        select(func.count())
+        .select_from(VersionApproval)
+        .where(VersionApproval.version_id == version_id)
+    )
+    # 승인자 목록은 현재 시점 기준 — 제출 후 승인자가 추가되면 재승인이 필요해 Approved로 안 넘어감
+    if approved_count is not None and approved_count >= len(approvers):
+        version.status = workflow.APPROVED
+        if version.submitted_by:
+            workflow.create_notifications(
+                session,
+                [version.submitted_by],
+                type="approved",
+                map_id=version.map_id,
+                version_id=version_id,
+                message=f"'{version.label}' is fully approved — ready to publish",
+            )
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+@router.post("/versions/{version_id}/reject", response_model=VersionOut)
+async def reject_version(
+    version_id: int,
+    payload: RejectIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """지정 승인자 1인의 반려 — 사유 필수. Pending → Rejected, submitter 알림."""
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status != workflow.PENDING:
+        raise HTTPException(
+            status_code=409, detail=f"cannot reject from status {version.status}"
+        )
+    approvers = await _load_approvers(session, version.map_id)
+    if user not in approvers:
+        raise HTTPException(
+            status_code=403, detail="only a designated approver can reject"
+        )
+
+    version.status = workflow.REJECTED
+    version.reject_reason = payload.reason
+    if version.submitted_by:
+        workflow.create_notifications(
+            session,
+            [version.submitted_by],
+            type="rejected",
+            map_id=version.map_id,
+            version_id=version_id,
+            message=f"'{version.label}' was rejected: {payload.reason}",
+        )
     await session.commit()
     await session.refresh(version)
     return version
