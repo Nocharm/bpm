@@ -119,7 +119,9 @@ export function WorkflowDashboard({
   const approvals = workflow?.approvals ?? [];
 
   return (
-    <div className="bg-surface-alt p-4">
+    <div className="flex h-full flex-col bg-surface-alt">
+      {/* 가운데 내용 — 공간 부족 시 보이지 않는 스크롤, 배경 채워 흰 영역 방지 */}
+      <div className="flex-1 overflow-y-auto p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {/* 진행 순서도 — 라이프사이클 한눈에 */}
       <LifecycleStepper status={status} />
 
@@ -189,15 +191,19 @@ export function WorkflowDashboard({
         onPublish={onPublish}
         onWithdraw={onWithdraw}
       />
+      </div>
 
+      {/* 가장 아래 버튼 — 항상 하단 고정 */}
       {isMapOwner && (
-        <button
-          type="button"
-          className="mt-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface"
-          onClick={onManageApprovers}
-        >
-          {t("approvers.manage")}
-        </button>
+        <div className="shrink-0 border-t border-hairline p-2">
+          <button
+            type="button"
+            className="w-full rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface"
+            onClick={onManageApprovers}
+          >
+            {t("approvers.manage")}
+          </button>
+        </div>
       )}
     </div>
   );

@@ -1038,6 +1038,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     [handleDrillIn],
   );
 
+  // 요약 모달의 "하위 프로세스 열기" — 모달 닫고 해당 노드 하위 캔버스로 진입
+  const handleOpenSummaryChild = useCallback(() => {
+    if (summaryNodeId === null) {
+      return;
+    }
+    const id = summaryNodeId;
+    setSummaryNodeId(null);
+    handleDrillById(id, window.innerWidth / 2, window.innerHeight / 2);
+  }, [summaryNodeId, handleDrillById]);
+
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
     async (index: number) => {
@@ -2713,6 +2723,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 fullGraph={fullGraph}
                 readOnly={readOnly}
                 onClose={() => setSummaryNodeId(null)}
+                onOpenChild={handleOpenSummaryChild}
               />
             );
           })()}
@@ -2907,7 +2918,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   title={t("dash.resize")}
                 />
                 <div
-                  className="shrink-0 overflow-y-auto"
+                  className="shrink-0 overflow-hidden"
                   style={{ height: dashboardHeight }}
                 >
                   <WorkflowDashboard
