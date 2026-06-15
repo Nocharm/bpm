@@ -2113,12 +2113,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("editor.alignLeft"),
         icon: AlignStartVertical,
+        shortcut: "L",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "left", ids ?? undefined)),
       },
       {
         label: t("editor.alignCenterX"),
         icon: AlignCenterVertical,
+        shortcut: "C",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerX", ids ?? undefined)),
       },
@@ -2127,12 +2129,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("editor.alignTop"),
         icon: AlignStartHorizontal,
+        shortcut: "T",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "top", ids ?? undefined)),
       },
       {
         label: t("editor.alignCenterY"),
         icon: AlignCenterHorizontal,
+        shortcut: "M",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerY", ids ?? undefined)),
       },
@@ -2141,12 +2145,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("editor.distributeX"),
         icon: AlignHorizontalDistributeCenter,
+        shortcut: "H",
         disabled: count < 3,
         onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x", ids ?? undefined)),
       },
       {
         label: t("editor.distributeY"),
         icon: AlignVerticalDistributeCenter,
+        shortcut: "V",
         disabled: count < 3,
         onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y", ids ?? undefined)),
       },
@@ -2161,14 +2167,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 맨 아래 "기타" 하위 메뉴 — 추후 기능 확장 지점
       const moreItem: ContextMenuItem = {
         label: t("ctx.more"),
-        submenu: [{ label: t("ctx.exportPng"), onSelect: () => void handleExportPng() }],
+        submenu: [
+          { label: t("ctx.exportPng"), shortcut: "Ctrl+⇧E", onSelect: () => void handleExportPng() },
+        ],
       };
       if (readOnly) {
         return [moreItem];
       }
       return [
-        ...NODE_TYPE_OPTIONS.map((option) => ({
+        ...NODE_TYPE_OPTIONS.map((option, index) => ({
           label: t(option.labelKey),
+          shortcut: String(index + 1),
           onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
         })),
         { divider: true },
@@ -2197,6 +2206,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             ? [
                 {
                   label: t("ctx.createGroup"),
+                  shortcut: "Ctrl+G",
                   disabled: targetCount < 2,
                   onSelect: () => createGroupFromSelection(),
                 },
@@ -2236,6 +2246,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
         {
           label: t("ctx.editInfo"),
+          shortcut: "E",
           onSelect: () => {
             if (menu.targetId) {
               setSummaryNodeId(menu.targetId);
@@ -2707,6 +2718,85 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [outline, fullGraph, handleOutlineSelect],
   );
+
+  // 메뉴 단축키 — 캔버스 포커스에서 동작(입력/모달 중엔 무시). 메뉴 힌트와 동일.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      // 입력/편집 중이면 무시 (검색·라벨·AI·아웃라인 rename 등)
+      if (
+        event.target instanceof HTMLElement &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+      ) {
+        return;
+      }
+      // 모달 열림 중엔 무시
+      if (summaryNodeId || bulkEditGroupId || pendingBranch || managingApprovers || pending) {
+        return;
+      }
+      const lower = event.key.toLowerCase();
+      const ctrl = event.ctrlKey || event.metaKey;
+      const selected = nodesRef.current.filter((node) => node.selected);
+      const count = selected.length;
+      const fire = (action: () => void) => {
+        event.preventDefault();
+        setMenu(null); // 메뉴가 떠 있으면 닫고 실행
+        action();
+      };
+
+      if (ctrl) {
+        // Ctrl+G 그룹 생성 / Ctrl+Shift+E PNG 내보내기 (그 외 Ctrl 조합은 undo/redo·검색 핸들러에 위임)
+        if (lower === "g" && !event.shiftKey) {
+          fire(() => createGroupFromSelection());
+        } else if (lower === "e" && event.shiftKey) {
+          fire(() => void handleExportPng());
+        }
+        return;
+      }
+
+      const addType: Record<string, ProcessNodeType> = {
+        "1": "process",
+        "2": "decision",
+        "3": "start",
+        "4": "end",
+      };
+      if (addType[event.key]) {
+        fire(() => handleAddNode(null, addType[event.key]));
+        return;
+      }
+      if (lower === "e") {
+        if (selectedId) {
+          fire(() => setSummaryNodeId(selectedId));
+        }
+        return;
+      }
+      const alignAxis: "left" | "centerX" | "top" | "centerY" | null =
+        lower === "l" ? "left" : lower === "c" ? "centerX" : lower === "t" ? "top" : lower === "m" ? "centerY" : null;
+      if (alignAxis) {
+        if (count >= 2) {
+          fire(() => applyNodesTransform((current) => alignSelected(current, alignAxis)));
+        }
+        return;
+      }
+      if (lower === "h" || lower === "v") {
+        if (count >= 3) {
+          fire(() => applyNodesTransform((current) => distributeSelected(current, lower === "h" ? "x" : "y")));
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    selectedId,
+    summaryNodeId,
+    bulkEditGroupId,
+    pendingBranch,
+    managingApprovers,
+    pending,
+    handleAddNode,
+    applyNodesTransform,
+    createGroupFromSelection,
+    handleExportPng,
+  ]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
