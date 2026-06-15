@@ -41,8 +41,8 @@ export interface GraphNode {
   pos_x: number;
   pos_y: number;
   sort_order: number;
-  // 업무 묶음(그룹 박스) 소속 그룹 id — null=무소속 (Phase 2)
-  group_id: string | null;
+  // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
+  group_ids: string[];
   has_children?: boolean;
 }
 

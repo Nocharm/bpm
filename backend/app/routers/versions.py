@@ -95,8 +95,12 @@ async def _clone_graph(
             )
         )
     for node in source.nodes:
-        if node.group_id is not None:
-            cloned[node.id].group_id = group_id_map[node.group_id]
+        # 다중 그룹(group_ids) + 레거시 단일(group_id)을 합쳐 새 그룹 id로 리맵
+        src_gids = list(node.group_ids) if node.group_ids else (
+            [node.group_id] if node.group_id else []
+        )
+        cloned[node.id].group_ids = [group_id_map[g] for g in src_gids if g in group_id_map]
+        cloned[node.id].group_id = None
 
     for edge in source.edges:
         session.add(

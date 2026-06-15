@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class MapCreate(BaseModel):
@@ -87,8 +87,14 @@ class NodeIn(BaseModel):
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
-    # 업무 묶음(그룹 박스) 소속 그룹 id — null=무소속 (spec Phase 2)
-    group_id: str | None = None
+    # 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
+    group_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("group_ids", mode="before")
+    @classmethod
+    def _coerce_group_ids(cls, value: object) -> object:
+        # 레거시 DB(컬럼 NULL)에서 from_attributes 로드 시 None → [] 로 보정
+        return [] if value is None else value
 
 
 class EdgeIn(BaseModel):

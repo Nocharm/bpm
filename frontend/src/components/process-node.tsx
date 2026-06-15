@@ -64,8 +64,9 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 }
 
 // 노드 타이틀 — 더블클릭 인라인 편집(editingNodeId 일치 시 입력 모드). 평상시 호버에 I-beam 커서.
+// 타이틀 더블클릭만 이름 편집으로 진입(stopPropagation) — 이름 외 영역은 노드 요약창으로.
 function NodeTitle({ id, label }: { id: string; label: string }) {
-  const { editingNodeId, onRename, onCancelRename } = useNodeActions();
+  const { editingNodeId, onStartRename, onRename, onCancelRename } = useNodeActions();
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
 
@@ -99,7 +100,22 @@ function NodeTitle({ id, label }: { id: string; label: string }) {
       />
     );
   }
-  return <span className={onRename ? "cursor-text" : undefined}>{label}</span>;
+  return (
+    <span
+      className={onStartRename ? "cursor-text" : undefined}
+      onDoubleClick={
+        onStartRename
+          ? (event) => {
+              // 타이틀 더블클릭 = 이름 편집 (노드 더블클릭=요약창으로 버블되지 않게 차단)
+              event.stopPropagation();
+              onStartRename(id);
+            }
+          : undefined
+      }
+    >
+      {label}
+    </span>
+  );
 }
 
 // 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용)
@@ -194,7 +210,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         <Handle type="target" position={Position.Left} />
         {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
-          className={`absolute inset-3 rotate-45 rounded-sm transition-shadow group-hover:shadow-sm ${ring}`}
+          className={`absolute inset-3 rotate-45 rounded-sm transition-all duration-150 group-hover:scale-105 group-hover:opacity-95 group-hover:shadow-md ${ring}`}
           style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
         />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
@@ -217,7 +233,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`group relative px-3 py-2 text-sm transition-shadow hover:shadow-sm ${ring} ${
+      className={`group relative px-3 py-2 text-sm transition-all duration-150 hover:-translate-y-0.5 hover:scale-[1.02] hover:opacity-95 hover:shadow-md ${ring} ${
         isTerminal
           ? "min-w-[90px] rounded-full text-center"
           : "min-w-[150px] rounded-sm"

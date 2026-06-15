@@ -75,7 +75,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-7 z-50 w-72 rounded-md bg-surface p-2 shadow-lg">
+        <div className="absolute right-0 top-7 z-[1300] w-72 rounded-md bg-surface p-2 shadow-lg">
           <p className="px-1 pb-1 text-caption-strong text-ink">{t("notif.title")}</p>
           {items.length === 0 ? (
             <p className="px-1 py-2 text-fine text-ink-tertiary">{t("notif.empty")}</p>
