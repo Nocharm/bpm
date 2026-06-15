@@ -210,7 +210,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         <Handle type="target" position={Position.Left} />
         {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
-          className={`absolute inset-3 rotate-45 rounded-sm transition-all duration-150 group-hover:scale-105 group-hover:opacity-95 group-hover:shadow-md ${ring}`}
+          className={`absolute inset-3 rotate-45 rounded-sm transition-all duration-150 group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 group-hover:scale-105 group-hover:opacity-95 group-hover:shadow-md ${ring}`}
           style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
         />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
@@ -234,7 +234,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`group relative px-3 py-2 text-sm transition-all duration-150 hover:-translate-y-0.5 hover:scale-[1.02] hover:opacity-95 hover:shadow-md ${ring} ${
+      className={`group relative px-3 py-2 text-sm transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:scale-[1.02] hover:opacity-95 hover:shadow-md ${ring} ${
         isTerminal
           ? "min-w-[90px] rounded-full text-center"
           : "min-w-[150px] rounded-sm"
