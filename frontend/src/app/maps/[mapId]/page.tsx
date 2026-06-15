@@ -3370,7 +3370,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 // 좌하단(SW) 대각 — 위치+연결 교환
                 { zone: "swap", Icon: ArrowLeftRight, x: cx - radius * Math.SQRT1_2, y: cy + radius * Math.SQRT1_2, label: t("dropzone.swap") },
               ] as const;
-              // 하위로 넣기는 process 노드 타깃만 — decision/start/end면 child 타일 숨김
+              // 하위로 넣기는 process 노드 타깃만 — decision/start/end면 child 타일을 숨기지 않고 비활성 표시
               const childAllowed =
                 nodes.find((node) => node.id === dropTarget.id)?.data.nodeType === "process";
               return (
@@ -3380,22 +3380,26 @@ function MapEditor({ mapId }: { mapId: number }) {
                     className="zone-ring absolute rounded-full border-2 border-accent/40"
                     style={{ left: cx - radius, top: cy - radius, width: radius * 2, height: radius * 2 }}
                   />
-                  {tiles
-                    .filter((tile) => tile.zone !== "child" || childAllowed)
-                    .map(({ zone, Icon, x, y, label }) => (
+                  {tiles.map(({ zone, Icon, x, y, label }) => {
+                    const disabled = zone === "child" && !childAllowed;
+                    const active = dropTarget.zone === zone && !disabled;
+                    return (
                     <div
                       key={zone}
                       className={`zone-pop absolute flex flex-col items-center justify-center gap-1 rounded-md border px-2 text-center shadow-md ${
-                        dropTarget.zone === zone
-                          ? "border-accent bg-accent-tint text-accent"
-                          : "border-hairline bg-surface/95 text-ink-tertiary"
+                        disabled
+                          ? "border-dashed border-hairline bg-surface/70 text-ink-tertiary opacity-40"
+                          : active
+                            ? "border-accent bg-accent-tint text-accent"
+                            : "border-hairline bg-surface/95 text-ink-tertiary"
                       }`}
                       style={{ left: x - tileW / 2, top: y - tileH / 2, width: tileW, height: tileH }}
                     >
                       <Icon size={20} strokeWidth={1.5} />
                       <span className="text-fine font-medium leading-tight">{label}</span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               );
             })()}
