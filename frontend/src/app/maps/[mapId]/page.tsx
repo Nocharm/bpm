@@ -1279,8 +1279,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         top: topLeft.y - rect.top,
         width: w * zoom,
         height: h * zoom,
-        // 링 반경은 줌과 무관하게 노드 원래 크기 기준 — 화면상 항상 같은 크기로 보이게 함
-        radius: Math.max(w, h) + ZONE_RADIUS_PAD,
+        // 링 반경은 줌과 무관하게 노드 원래 크기 기준 — 화면상 항상 같은 크기. 0.7배로 축소
+        radius: (Math.max(w, h) + ZONE_RADIUS_PAD) * 0.7,
       };
     },
     [reactFlow],
@@ -1631,9 +1631,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         clearDwell();
       }
 
-      // 커서 아래 노드 — DWELL_MS 머문 뒤 4방향 링 표시(그룹 hover는 끔)
+      // 드래그 노드와 겹치는 노드 — DWELL_MS 머문 뒤 4방향 링 표시(커서 아님, 노드끼리 겹침 기준)
       const target = reactFlow
-        .getIntersectingNodes({ x: mouse.x, y: mouse.y, width: 1, height: 1 })
+        .getIntersectingNodes(node)
         .find((other) => other.id !== node.id);
       if (target) {
         setGroupDropTarget((cur) => (cur ? null : cur));
