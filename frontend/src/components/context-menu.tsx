@@ -52,7 +52,20 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       ) {
         return;
       }
-      const key = event.key.toLowerCase();
+      // 물리 키(event.code)로 판정 — 한글(ㅁ/ㅊ) 등 IME·레이아웃 무관하게 가속기 인식
+      let key = "";
+      const letter = event.code.match(/^Key([A-Z])$/);
+      if (letter) {
+        key = letter[1].toLowerCase();
+      } else {
+        const digit = event.code.match(/^(?:Digit|Numpad)([0-9])$/);
+        if (digit) {
+          key = digit[1];
+        }
+      }
+      if (!key) {
+        return;
+      }
       const parent = kbSub !== null ? items[kbSub] : null;
       const active: ContextMenuItem[] = parent && "submenu" in parent ? parent.submenu : items;
       const match = active.find(
