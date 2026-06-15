@@ -1,8 +1,7 @@
 "use client";
 
 // 승인 워크플로우 대시보드 — 인스펙터 하단, 진행 순서도 + 상태·승인자 현황·액션 (design 2026-06-14)
-import { Check, Circle, X } from "lucide-react";
-import { Fragment } from "react";
+import { Check, Circle } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { WorkflowActions } from "@/components/workflow-actions";
@@ -39,57 +38,49 @@ const STEP_LABEL_KEY: Record<VersionStatus, MessageKey> = {
   rejected: "status.rejected",
 };
 
+// powerline(agnoster) 셰브론 깊이 — 점이 다음 칸 노치에 맞물리는 px
+const ARROW = 9;
+
 function LifecycleStepper({ status }: { status: VersionStatus }) {
   const { t } = useI18n();
   const rejected = status === "rejected";
   // 반려는 Pending 단계에서 멈춘 것으로 표시
   const currentIndex = rejected ? 1 : STEP_ORDER.indexOf(status);
+  const lastIndex = STEP_ORDER.length - 1;
 
   return (
-    <div className="mb-3 flex items-start">
+    <div className="mb-3 flex items-stretch">
       {STEP_ORDER.map((step, index) => {
         const done = index < currentIndex;
         const active = index === currentIndex;
         const rejectedActive = rejected && active;
 
-        const dotClass = rejectedActive
-          ? "border-error bg-error text-surface"
-          : done
-            ? "border-accent bg-accent text-surface"
-            : active
-              ? "border-accent bg-accent-tint text-accent"
-              : "border-hairline text-ink-tertiary";
+        const segClass = rejectedActive
+          ? "bg-error text-surface"
+          : done || active
+            ? "bg-accent text-surface"
+            // 미완료 — 패널(surface-alt)과 구분되는 중간 회색 + 진한 텍스트로 가시성 확보
+            : "bg-surface-chip text-ink-secondary";
+
+        // 첫 칸: 좌측 노치 없음 / 끝 칸: 우측 화살표 없음 / 중간: 양쪽 셰브론
+        const clip =
+          index === 0
+            ? `polygon(0 0, calc(100% - ${ARROW}px) 0, 100% 50%, calc(100% - ${ARROW}px) 100%, 0 100%)`
+            : index === lastIndex
+              ? `polygon(0 0, 100% 0, 100% 100%, 0 100%, ${ARROW}px 50%)`
+              : `polygon(0 0, calc(100% - ${ARROW}px) 0, 100% 50%, calc(100% - ${ARROW}px) 100%, 0 100%, ${ARROW}px 50%)`;
 
         return (
-          <Fragment key={step}>
-            {index > 0 && (
-              <div
-                className={`mt-2.5 h-px flex-1 ${
-                  index <= currentIndex && !rejected ? "bg-accent" : "bg-hairline"
-                }`}
-              />
-            )}
-            <div className="flex w-12 shrink-0 flex-col items-center">
-              <div
-                className={`flex h-5 w-5 items-center justify-center rounded-full border ${dotClass}`}
-              >
-                {rejectedActive ? (
-                  <X size={11} strokeWidth={2} />
-                ) : done ? (
-                  <Check size={11} strokeWidth={2} />
-                ) : (
-                  <span className="text-[10px]">{index + 1}</span>
-                )}
-              </div>
-              <span
-                className={`mt-1 text-center text-[10px] leading-tight ${
-                  active ? "text-ink" : "text-ink-tertiary"
-                }`}
-              >
-                {t(STEP_LABEL_KEY[step])}
-              </span>
-            </div>
-          </Fragment>
+          <div
+            key={step}
+            className={`flex h-7 min-w-0 flex-1 items-center justify-center px-3 text-[11px] leading-none ${
+              active ? "font-semibold" : ""
+            } ${segClass}`}
+            // 음수 marginLeft로 점↔노치를 겹쳐 powerline처럼 맞물림 (첫 칸 제외)
+            style={{ clipPath: clip, marginLeft: index === 0 ? undefined : -ARROW }}
+          >
+            <span className="truncate">{t(STEP_LABEL_KEY[step])}</span>
+          </div>
         );
       })}
     </div>
@@ -179,33 +170,34 @@ export function WorkflowDashboard({
         </p>
       )}
 
-      <WorkflowActions
-        status={status}
-        workflow={workflow}
-        isCheckoutHolder={isCheckoutHolder}
-        isApprover={isApprover}
-        isSubmitter={isSubmitter}
-        hasApproved={hasApproved}
-        onSubmit={onSubmit}
-        onApprove={onApprove}
-        onReject={onReject}
-        onPublish={onPublish}
-        onWithdraw={onWithdraw}
-      />
+      {/* 승인자 관리 — 본문(이전 승인 버튼 위치)으로 이동 */}
+      {isMapOwner && (
+        <button
+          type="button"
+          className="w-full rounded-sm border border-hairline px-2 py-1 text-caption hover:border-accent hover:bg-surface"
+          onClick={onManageApprovers}
+        >
+          {t("approvers.manage")}
+        </button>
+      )}
       </div>
 
-      {/* 가장 아래 버튼 — 항상 하단 고정 */}
-      {isMapOwner && (
-        <div className="shrink-0 border-t border-hairline p-2">
-          <button
-            type="button"
-            className="w-full rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface"
-            onClick={onManageApprovers}
-          >
-            {t("approvers.manage")}
-          </button>
-        </div>
-      )}
+      {/* 승인 절차 버튼 — 항상 하단 고정 */}
+      <div className="shrink-0 border-t border-hairline p-2">
+        <WorkflowActions
+          status={status}
+          workflow={workflow}
+          isCheckoutHolder={isCheckoutHolder}
+          isApprover={isApprover}
+          isSubmitter={isSubmitter}
+          hasApproved={hasApproved}
+          onSubmit={onSubmit}
+          onApprove={onApprove}
+          onReject={onReject}
+          onPublish={onPublish}
+          onWithdraw={onWithdraw}
+        />
+      </div>
     </div>
   );
 }
