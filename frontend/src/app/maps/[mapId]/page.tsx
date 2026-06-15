@@ -32,6 +32,12 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
+import {
+  GroupBulkModal,
+  type BulkAction,
+  type BulkAttrField,
+  type BulkPolicy,
+} from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
 import { ProcessNode } from "@/components/process-node";
@@ -254,6 +260,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
+  const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -1470,6 +1477,56 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setNodes, scheduleAutoSave],
   );
 
+  // 그룹 멤버 전원 노드 색 일괄 변경
+  const applyGroupColor = useCallback(
+    (groupId: string, color: string) => {
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) =>
+          node.data.groupId === groupId
+            ? { ...node, data: { ...node.data, color } }
+            : node,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [pushHistory, setNodes, scheduleAutoSave],
+  );
+
+  // 그룹 멤버 전원 속성 일괄 — 설정/비우기, 기존값은 추가(콤마)·교체·건너뛰기
+  const applyGroupAttribute = useCallback(
+    (
+      groupId: string,
+      field: BulkAttrField,
+      action: BulkAction,
+      value: string,
+      policy: BulkPolicy,
+    ) => {
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) => {
+          if (node.data.groupId !== groupId) {
+            return node;
+          }
+          const existing = node.data[field] ?? "";
+          let next: string;
+          if (action === "clear") {
+            next = "";
+          } else if (existing.trim() === "" || policy === "replace") {
+            next = value;
+          } else if (policy === "append") {
+            next = `${existing}, ${value}`;
+          } else {
+            next = existing; // skip
+          }
+          return { ...node, data: { ...node.data, [field]: next } };
+        }),
+      );
+      scheduleAutoSave();
+    },
+    [pushHistory, setNodes, scheduleAutoSave],
+  );
+
   // 그룹 타이틀바 드래그 → 멤버 전체를 함께 이동
   const startGroupMove = useCallback(
     (
@@ -2579,6 +2636,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 onRename={renameGroup}
                                 onRecolor={recolorGroup}
                                 onMoveStart={startGroupMove}
+                                onBulkEdit={setBulkEditGroupId}
                               />
                             </div>
                             {/* 그룹 나가기 — 박스 경계 우측 위 모서리. 선택 멤버가 있을 때만 */}
@@ -2760,6 +2818,24 @@ function MapEditor({ mapId }: { mapId: number }) {
               />
             );
           })()}
+          {bulkEditGroupId && (
+            <GroupBulkModal
+              members={nodes
+                .filter((n) => n.data.groupId === bulkEditGroupId)
+                .map((n) => ({
+                  assignee: n.data.assignee,
+                  department: n.data.department,
+                  system: n.data.system,
+                  duration: n.data.duration,
+                }))}
+              colorPresets={COLOR_PRESETS}
+              onApplyColor={(color) => applyGroupColor(bulkEditGroupId, color)}
+              onApplyAttribute={(field, action, value, policy) =>
+                applyGroupAttribute(bulkEditGroupId, field, action, value, policy)
+              }
+              onClose={() => setBulkEditGroupId(null)}
+            />
+          )}
         </div>
 
         {inspectorOpen && (

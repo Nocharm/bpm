@@ -3,7 +3,7 @@
 // 그룹 박스 타이틀바 — 이름 편집·색 지정·그룹 전체 이동(드래그 핸들)·선택 멤버 그룹 나가기.
 // ViewportPortal 안 flow 좌표로 박스 상단에 렌더(노드 위, pointer-events 활성).
 
-import { GripVertical } from "lucide-react";
+import { GripVertical, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
@@ -18,6 +18,7 @@ interface GroupTitleBarProps {
   onRename: (id: string, label: string) => void;
   onRecolor: (id: string, color: string) => void;
   onMoveStart: (id: string, event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void }) => void;
+  onBulkEdit?: (id: string) => void;
 }
 
 export function GroupTitleBar({
@@ -30,6 +31,7 @@ export function GroupTitleBar({
   onRename,
   onRecolor,
   onMoveStart,
+  onBulkEdit,
 }: GroupTitleBarProps) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
@@ -88,6 +90,17 @@ export function GroupTitleBar({
         >
           {label || t("group.untitled")}
         </span>
+      )}
+      {!readOnly && onBulkEdit && (
+        <button
+          type="button"
+          className="shrink-0 text-ink-tertiary hover:text-ink"
+          title={t("group.bulkEdit")}
+          aria-label={t("group.bulkEdit")}
+          onClick={() => onBulkEdit(id)}
+        >
+          <SlidersHorizontal size={12} strokeWidth={1.5} />
+        </button>
       )}
       {showColors && !readOnly && (
         <div className="absolute left-0 top-full z-10 mt-1 flex w-24 flex-wrap gap-1 rounded-sm border border-hairline bg-surface p-1 shadow-lg">
