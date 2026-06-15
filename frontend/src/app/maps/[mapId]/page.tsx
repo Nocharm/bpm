@@ -52,7 +52,7 @@ import {
   insertNodeBefore,
   insertNodeAfter,
   pickDropZone,
-  orthogonalUnion,
+  connectedOrthogonalUnion,
   EDGE_DEFAULTS,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
@@ -2299,15 +2299,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       // 멤버 많을수록 패딩↑ → 큰 그룹이 작은 그룹을 시각적으로 감쌈
       const pad = GROUP_PAD + Math.min(members.length, 8) * 4;
-      // 멤버 사각형(패딩 포함)들의 직교 union 외곽선 — bbox 한 장이 아니라 멤버에 달라붙는 폴리곤.
+      // 멤버 사각형(패딩 포함)들을 직교 L자 통로로 이어 하나로 연결된 union 외곽선 — 흩어져도 분리 안 됨.
       // 좌표는 박스 좌상단(origin) 기준 상대. y는 타이틀바 헤드룸(GROUP_TITLE_GAP)만큼 내림.
-      const union = orthogonalUnion(
+      const union = connectedOrthogonalUnion(
         members.map((member) => ({
           x: member.position.x - minX,
           y: member.position.y - minY + GROUP_TITLE_GAP,
           w: (member.measured?.width ?? NODE_WIDTH) + pad * 2,
           h: (member.measured?.height ?? NODE_HEIGHT) + pad * 2,
         })),
+        NODE_HEIGHT,
       );
       return [
         {
