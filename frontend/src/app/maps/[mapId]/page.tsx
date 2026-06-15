@@ -2114,6 +2114,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: t("editor.alignLeft"),
         icon: AlignStartVertical,
         shortcut: "L",
+        accel: "l",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "left", ids ?? undefined)),
       },
@@ -2121,6 +2122,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: t("editor.alignCenterX"),
         icon: AlignCenterVertical,
         shortcut: "C",
+        accel: "c",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerX", ids ?? undefined)),
       },
@@ -2130,6 +2132,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: t("editor.alignTop"),
         icon: AlignStartHorizontal,
         shortcut: "T",
+        accel: "t",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "top", ids ?? undefined)),
       },
@@ -2137,6 +2140,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: t("editor.alignCenterY"),
         icon: AlignCenterHorizontal,
         shortcut: "M",
+        accel: "m",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerY", ids ?? undefined)),
       },
@@ -2146,6 +2150,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: t("editor.distributeX"),
         icon: AlignHorizontalDistributeCenter,
         shortcut: "H",
+        accel: "h",
         disabled: count < 3,
         onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x", ids ?? undefined)),
       },
@@ -2153,6 +2158,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: t("editor.distributeY"),
         icon: AlignVerticalDistributeCenter,
         shortcut: "V",
+        accel: "v",
         disabled: count < 3,
         onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y", ids ?? undefined)),
       },
@@ -2160,6 +2166,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     const alignItem = (ids: ReadonlySet<string> | null, count: number): ContextMenuItem => ({
       label: t("ctx.align"),
       icon: LayoutGrid,
+      accel: "a",
+      shortcut: "A",
       submenu: alignSubmenu(ids, count),
     });
 
@@ -2178,6 +2186,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         ...NODE_TYPE_OPTIONS.map((option, index) => ({
           label: t(option.labelKey),
           shortcut: String(index + 1),
+          accel: String(index + 1),
           onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
         })),
         { divider: true },
@@ -2206,7 +2215,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             ? [
                 {
                   label: t("ctx.createGroup"),
-                  shortcut: "Ctrl+G",
+                  shortcut: "G",
+                  accel: "g",
                   disabled: targetCount < 2,
                   onSelect: () => createGroupFromSelection(),
                 },
@@ -2247,6 +2257,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         {
           label: t("ctx.editInfo"),
           shortcut: "E",
+          accel: "e",
           onSelect: () => {
             if (menu.targetId) {
               setSummaryNodeId(menu.targetId);
@@ -2719,7 +2730,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     [outline, fullGraph, handleOutlineSelect],
   );
 
-  // 메뉴 단축키 — 캔버스 포커스에서 동작(입력/모달 중엔 무시). 메뉴 힌트와 동일.
+  // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       // 입력/편집 중이면 무시 (검색·라벨·AI·아웃라인 rename 등)
@@ -2734,17 +2745,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       const lower = event.key.toLowerCase();
-      const ctrl = event.ctrlKey || event.metaKey;
-      const selected = nodesRef.current.filter((node) => node.selected);
-      const count = selected.length;
+      const count = nodesRef.current.filter((node) => node.selected).length;
       const fire = (action: () => void) => {
         event.preventDefault();
         setMenu(null); // 메뉴가 떠 있으면 닫고 실행
         action();
       };
 
-      if (ctrl) {
-        // Ctrl+G 그룹 생성 / Ctrl+Shift+E PNG 내보내기 (그 외 Ctrl 조합은 undo/redo·검색 핸들러에 위임)
+      // Ctrl 조합 — 그룹 생성 / PNG 내보내기 (undo/redo·검색은 별도 핸들러)
+      if (event.ctrlKey || event.metaKey) {
         if (lower === "g" && !event.shiftKey) {
           fire(() => createGroupFromSelection());
         } else if (lower === "e" && event.shiftKey) {
@@ -2753,46 +2762,38 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
 
-      const addType: Record<string, ProcessNodeType> = {
-        "1": "process",
-        "2": "decision",
-        "3": "start",
-        "4": "end",
-      };
-      if (addType[event.key]) {
-        fire(() => handleAddNode(null, addType[event.key]));
-        return;
-      }
-      if (lower === "e") {
-        if (selectedId) {
-          fire(() => setSummaryNodeId(selectedId));
+      // Alt 조합 — 전역 정렬/분배 (예: Alt+T = 위쪽 정렬). 키 레이아웃/OS(Mac Option) 무관하게 code로 판정.
+      if (event.altKey) {
+        const alignByCode: Record<string, "left" | "centerX" | "top" | "centerY"> = {
+          KeyL: "left",
+          KeyC: "centerX",
+          KeyT: "top",
+          KeyM: "centerY",
+        };
+        const axis = alignByCode[event.code];
+        if (axis) {
+          if (count >= 2) {
+            fire(() => applyNodesTransform((current) => alignSelected(current, axis)));
+          }
+          return;
         }
-        return;
-      }
-      const alignAxis: "left" | "centerX" | "top" | "centerY" | null =
-        lower === "l" ? "left" : lower === "c" ? "centerX" : lower === "t" ? "top" : lower === "m" ? "centerY" : null;
-      if (alignAxis) {
-        if (count >= 2) {
-          fire(() => applyNodesTransform((current) => alignSelected(current, alignAxis)));
-        }
-        return;
-      }
-      if (lower === "h" || lower === "v") {
-        if (count >= 3) {
-          fire(() => applyNodesTransform((current) => distributeSelected(current, lower === "h" ? "x" : "y")));
+        if (event.code === "KeyH" || event.code === "KeyV") {
+          if (count >= 3) {
+            fire(() =>
+              applyNodesTransform((current) => distributeSelected(current, event.code === "KeyH" ? "x" : "y")),
+            );
+          }
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [
-    selectedId,
     summaryNodeId,
     bulkEditGroupId,
     pendingBranch,
     managingApprovers,
     pending,
-    handleAddNode,
     applyNodesTransform,
     createGroupFromSelection,
     handleExportPng,
