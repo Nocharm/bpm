@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, LogOut, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -2091,6 +2091,72 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     // 정렬은 2개 이상, 분배는 3개 이상 대상이 있어야 의미가 있다 — 부족하면 비활성화
     const selectedCount = nodes.filter((node) => node.selected).length;
+
+    // 정렬·레이아웃 통합 하위 메뉴 — ids=null이면 전체(pane), 지정이면 그 대상. 가로/세로는 아이콘으로 구분.
+    const alignSubmenu = (
+      ids: ReadonlySet<string> | null,
+      count: number,
+    ): ContextMenuItem[] => [
+      {
+        label: t("ctx.autoLayout"),
+        icon: Network,
+        disabled: ids ? count < 2 : false,
+        onSelect: () =>
+          applyNodesTransform((current) =>
+            ids
+              ? layoutSubsetWithDagre(current, edgesRef.current, ids)
+              : layoutWithDagre(current, edgesRef.current),
+          ),
+      },
+      { divider: true },
+      // 가로 정렬(세로 기준선) — 좌측 / 가로 가운데
+      {
+        label: t("editor.alignLeft"),
+        icon: AlignStartVertical,
+        disabled: count < 2,
+        onSelect: () => applyNodesTransform((current) => alignSelected(current, "left", ids ?? undefined)),
+      },
+      {
+        label: t("editor.alignCenterX"),
+        icon: AlignCenterVertical,
+        disabled: count < 2,
+        onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerX", ids ?? undefined)),
+      },
+      { divider: true },
+      // 세로 정렬(가로 기준선) — 상단 / 세로 가운데
+      {
+        label: t("editor.alignTop"),
+        icon: AlignStartHorizontal,
+        disabled: count < 2,
+        onSelect: () => applyNodesTransform((current) => alignSelected(current, "top", ids ?? undefined)),
+      },
+      {
+        label: t("editor.alignCenterY"),
+        icon: AlignCenterHorizontal,
+        disabled: count < 2,
+        onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerY", ids ?? undefined)),
+      },
+      { divider: true },
+      // 등간격 분배 — 가로 / 세로
+      {
+        label: t("editor.distributeX"),
+        icon: AlignHorizontalDistributeCenter,
+        disabled: count < 3,
+        onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x", ids ?? undefined)),
+      },
+      {
+        label: t("editor.distributeY"),
+        icon: AlignVerticalDistributeCenter,
+        disabled: count < 3,
+        onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y", ids ?? undefined)),
+      },
+    ];
+    const alignItem = (ids: ReadonlySet<string> | null, count: number): ContextMenuItem => ({
+      label: t("ctx.align"),
+      icon: LayoutGrid,
+      submenu: alignSubmenu(ids, count),
+    });
+
     if (menu.kind === "pane") {
       // 맨 아래 "기타" 하위 메뉴 — 추후 기능 확장 지점
       const moreItem: ContextMenuItem = {
@@ -2106,31 +2172,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
         })),
         { divider: true },
-        {
-          label: t("ctx.autoLayout"),
-          onSelect: () =>
-            applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current)),
-        },
-        {
-          label: t("editor.alignLeft"),
-          disabled: selectedCount < 2,
-          onSelect: () => applyNodesTransform((current) => alignSelected(current, "left")),
-        },
-        {
-          label: t("editor.alignTop"),
-          disabled: selectedCount < 2,
-          onSelect: () => applyNodesTransform((current) => alignSelected(current, "top")),
-        },
-        {
-          label: t("editor.distributeX"),
-          disabled: selectedCount < 3,
-          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x")),
-        },
-        {
-          label: t("editor.distributeY"),
-          disabled: selectedCount < 3,
-          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y")),
-        },
+        alignItem(null, selectedCount),
         { divider: true },
         moreItem,
       ];
@@ -2161,36 +2203,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 { divider: true },
               ]
             : [];
-      return [
-        ...groupActions,
-        {
-          label: t("ctx.autoLayout"),
-          disabled: targetCount < 2,
-          onSelect: () =>
-            applyNodesTransform((current) => layoutSubsetWithDagre(current, edgesRef.current, ids)),
-        },
-        { divider: true },
-        {
-          label: t("editor.alignLeft"),
-          disabled: targetCount < 2,
-          onSelect: () => applyNodesTransform((current) => alignSelected(current, "left", ids)),
-        },
-        {
-          label: t("editor.alignTop"),
-          disabled: targetCount < 2,
-          onSelect: () => applyNodesTransform((current) => alignSelected(current, "top", ids)),
-        },
-        {
-          label: t("editor.distributeX"),
-          disabled: targetCount < 3,
-          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x", ids)),
-        },
-        {
-          label: t("editor.distributeY"),
-          disabled: targetCount < 3,
-          onSelect: () => applyNodesTransform((current) => distributeSelected(current, "y", ids)),
-        },
-      ];
+      return [...groupActions, alignItem(ids, targetCount)];
     }
     if (menu.kind === "node") {
       const deleteItems: ContextMenuItem[] = readOnly

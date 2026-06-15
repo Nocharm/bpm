@@ -2,15 +2,15 @@
 
 // 마우스 커서 위치에 뜨는 컨텍스트 메뉴 — 캔버스/노드/엣지 우클릭 공용 (spec §7 Phase A).
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-// 액션 항목 / 구분선 / 색 스와치 행 / 하위 메뉴
+// 액션 항목 / 구분선 / 색 스와치 행 / 하위 메뉴 (icon = 선택적 Lucide 아이콘)
 export type ContextMenuItem =
   | { divider: true }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
-  | { divider?: false; label: string; submenu: ContextMenuItem[]; disabled?: boolean }
-  | { divider?: false; label: string; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
+  | { divider?: false; label: string; icon?: LucideIcon; submenu: ContextMenuItem[]; disabled?: boolean }
+  | { divider?: false; label: string; icon?: LucideIcon; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
 
 interface ContextMenuProps {
   x: number;
@@ -88,7 +88,10 @@ function MenuList({ items, onClose }: { items: ContextMenuItem[]; onClose: () =>
               onClose();
             }}
           >
-            <span>{item.label}</span>
+            <span className="flex items-center gap-2">
+              {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
+              {item.label}
+            </span>
             {item.shortcut && (
               <span className="text-caption text-ink-tertiary">{item.shortcut}</span>
             )}
@@ -147,7 +150,7 @@ function SubmenuItem({
   item,
   onClose,
 }: {
-  item: { label: string; submenu: ContextMenuItem[]; disabled?: boolean };
+  item: { label: string; icon?: LucideIcon; submenu: ContextMenuItem[]; disabled?: boolean };
   onClose: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -172,7 +175,10 @@ function SubmenuItem({
           item.disabled ? "cursor-not-allowed text-ink-tertiary" : "hover:bg-surface-alt text-ink"
         }`}
       >
-        <span>{item.label}</span>
+        <span className="flex items-center gap-2">
+          {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
+          {item.label}
+        </span>
         <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
       </button>
       {open && !item.disabled && (
