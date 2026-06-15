@@ -79,6 +79,8 @@ export function GroupBulkModal({
   const finish = (updates: Update[]) => {
     onApplyAttribute(field, updates);
     setWizard(null);
+    setValue(""); // 적용 후 입력값 초기화
+    setPolicy(null);
   };
 
   const apply = () => {

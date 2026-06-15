@@ -256,6 +256,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
+  // 일시 토스트 — 2초 후 자동 사라짐
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToast(null), 2000);
+  }, []);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -1504,8 +1514,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         ),
       );
       scheduleAutoSave();
+      showToast(t("bulk.applied"));
     },
-    [pushHistory, setNodes, scheduleAutoSave],
+    [pushHistory, setNodes, scheduleAutoSave, showToast, t],
   );
 
   // 그룹 타이틀바 드래그 → 멤버 전체를 함께 이동
@@ -2463,7 +2474,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <EditorLeftSidebar
           collapsed={leftCollapsed}
           onToggleCollapse={() => setLeftCollapsed((value) => !value)}
@@ -3048,8 +3059,14 @@ function MapEditor({ mapId }: { mapId: number }) {
             </div>
           </div>
         )}
-        {aiOpen && versionId !== null && (
-          <div className="flex w-80 shrink-0 border-l border-hairline">
+        {/* 플로팅 AI 채팅 — 우측에서 슬라이드 인/아웃(닫혀도 마운트 유지해 애니메이션·대화 보존) */}
+        {versionId !== null && (
+          <div
+            className={`absolute right-0 top-0 z-30 flex h-full w-80 flex-col border-l border-hairline bg-surface shadow-lg transition-transform duration-300 ease-out ${
+              aiOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+            }`}
+            aria-hidden={!aiOpen}
+          >
             <AiChatPanel
               versionId={versionId}
               parent={currentParentId}
@@ -3061,6 +3078,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         )}
       </div>
       </div>
+      {toast && (
+        <div className="pointer-events-none fixed bottom-4 left-1/2 z-[1300] -translate-x-1/2 rounded-md bg-ink px-3 py-2 text-caption text-surface shadow-lg">
+          {toast}
+        </div>
+      )}
     </NodeActionsContext.Provider>
   );
 }
