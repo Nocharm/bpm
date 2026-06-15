@@ -39,12 +39,11 @@ export function ShortcutLegend() {
     { keys: t("legend.hover"), label: t("legend.dropZones") },
     { keys: "Del", label: t("legend.delete") },
     { keys: "Esc", label: t("legend.cancel") },
-    { keys: "1–4", label: t("legend.addNode") },
-    { keys: "E", label: t("legend.editInfo") },
-    { keys: "L C T M", label: t("legend.align") },
-    { keys: "H V", label: t("legend.distribute") },
+    { keys: "Alt+L/C/T/M", label: t("legend.align") },
+    { keys: "Alt+H/V", label: t("legend.distribute") },
     { keys: "Ctrl+G", label: t("legend.createGroup") },
     { keys: "Ctrl+⇧E", label: t("legend.exportPng") },
+    { keys: "1–4 · E · A…", label: t("legend.menuKeys") },
   ];
 
   return (

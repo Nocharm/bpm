@@ -247,12 +247,11 @@ const en = {
   "ctx.align": "Align & layout",
   "editor.alignCenterX": "Center (horizontal)",
   "editor.alignCenterY": "Middle (vertical)",
-  "legend.addNode": "Add node (type)",
-  "legend.editInfo": "Edit info",
-  "legend.align": "Align L / C / T / M",
-  "legend.distribute": "Distribute H / V",
+  "legend.align": "Align",
+  "legend.distribute": "Distribute",
   "legend.createGroup": "Create group",
   "legend.exportPng": "Export PNG",
+  "legend.menuKeys": "Right-click menu keys",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -502,12 +501,11 @@ const ko: Record<MessageKey, string> = {
   "ctx.align": "정렬 · 레이아웃",
   "editor.alignCenterX": "가로 가운데",
   "editor.alignCenterY": "세로 가운데",
-  "legend.addNode": "노드 추가(유형)",
-  "legend.editInfo": "정보 수정",
-  "legend.align": "정렬 좌·가운데·상·세로",
-  "legend.distribute": "등간격 가로·세로",
+  "legend.align": "정렬",
+  "legend.distribute": "등간격 분배",
   "legend.createGroup": "그룹 생성",
   "legend.exportPng": "PNG 내보내기",
+  "legend.menuKeys": "우클릭 메뉴 키",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
