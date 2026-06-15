@@ -19,11 +19,14 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-// 화면 가장자리 잘림 보정용 추정치 — w-44(176px), 항목 높이 32px
-const MENU_WIDTH = 176;
+// 화면 가장자리 잘림 보정용 추정치 — w-48(192px), 항목 높이 32px
+const MENU_WIDTH = 192;
 const ITEM_HEIGHT = 32;
 const EDGE_MARGIN = 10;
-const PANEL_CLASS = "w-44 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
+const PANEL_CLASS = "w-48 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
+// 단축키 힌트 — 숏컷 레전드(shortcut-legend.tsx)의 kbd와 동일한 디자인
+const KBD_CLASS =
+  "rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary";
 
 // 우측/하단 잘림 보정, 바깥 클릭·ESC로 닫힘.
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
@@ -142,7 +145,7 @@ function MenuList({
             key={item.label}
             type="button"
             disabled={item.disabled}
-            className={`flex h-8 w-full items-center justify-between px-3 ${
+            className={`flex h-8 w-full items-center justify-between gap-3 px-3 ${
               item.disabled
                 ? "cursor-not-allowed text-ink-tertiary"
                 : `hover:bg-surface-alt ${item.danger ? "text-error" : "text-ink"}`
@@ -156,9 +159,7 @@ function MenuList({
               {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
               {item.label}
             </span>
-            {item.shortcut && (
-              <span className="text-caption text-ink-tertiary">{item.shortcut}</span>
-            )}
+            {item.shortcut && <kbd className={KBD_CLASS}>{item.shortcut}</kbd>}
           </button>
         ),
       )}
@@ -237,7 +238,7 @@ function SubmenuItem({
         ref={triggerRef}
         type="button"
         disabled={item.disabled}
-        className={`flex h-8 w-full items-center justify-between px-3 ${
+        className={`flex h-8 w-full items-center justify-between gap-3 px-3 ${
           item.disabled ? "cursor-not-allowed text-ink-tertiary" : "hover:bg-surface-alt text-ink"
         }`}
       >
@@ -245,9 +246,9 @@ function SubmenuItem({
           {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
           {item.label}
         </span>
-        <span className="flex items-center gap-1 text-ink-tertiary">
-          {item.shortcut && <span className="text-caption">{item.shortcut}</span>}
-          <ChevronRight size={14} strokeWidth={1.5} />
+        <span className="flex items-center gap-1.5">
+          {item.shortcut && <kbd className={KBD_CLASS}>{item.shortcut}</kbd>}
+          <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
         </span>
       </button>
       {(open || keyboardOpen) && !item.disabled && (
