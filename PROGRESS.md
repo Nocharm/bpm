@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-15
+- 아웃라인 들여쓰기·키보드 편집. ① 들여쓰기는 하위 프로세스(계층)에만 — 병렬/분기는 같은 수준(`computeScopeFlow` 분기 indentation 제거, bun 검증). ② 키보드: 선택 상태 Enter=이름 편집 진입·재Enter=저장, Esc=취소, Tab=다음 노드(하위 프로세스 있으면 펼쳐 첫 자식 진입), 편집 중 Tab=저장+다음(`page.tsx handleOutlineNext`, 사이드바 onKeyDown·focus 관리). build green.
 - 그룹 박스 외곽선 로직 = **기본 사각형(멤버 bbox) − 비멤버 notch**. 범위 안에 들어온 비그룹 노드를 가장 가까운 변쪽으로 직사각형으로 잘라내 제외(90° 직교, 연결 유지). `canvas.ts rectWithExclusions`/`nearestEdgeNotch`(좌표압축 격자, 의존성 0, bun 검증). `GroupBox`는 SVG fill+outline path(non-scaling-stroke). 반투명·z·타이틀바·합류 펄스 유지. build green. (이전 union/MST-다리 방식 대체)
 - 그룹 = 다중 태그 모델로 전환(#6) — 중첩(parent_group_id) 미사용, 노드가 여러 그룹(태그) 동시 소속. 백엔드 `nodes.group_ids`(JSON, 레거시 `group_id` 로드시 병합·무손실, 스톱갭 컬럼, 검증·복제 갱신, 테스트). 프론트 `NodeData.groupIds[]`, 태그별 박스(멤버 많을수록 패딩↑로 감쌈), 반투명 fill(z 무관 모두 가시) + z는 멤버 적은 그룹이 위, 색 팔레트 순환. 백엔드 94 passed+ruff, 프론트 build green.
 - 에디터 후속 7종(#0·3·4-1·4-2·4-3·5·10·14) — 노드 호버(그림자·살짝나옴·반투명), 이름 외 영역 더블클릭=요약창(타이틀 더블클릭=이름편집), 스왑 드롭존 좌하단 이동·엣지연결도 교환·드롭존 크기 프로세스 기준 고정, 엣지 선택 강조색, dagre 간격 확대(엣지-노드 겹침), 알림센터 z최상위. build green.

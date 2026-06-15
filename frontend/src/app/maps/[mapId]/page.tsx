@@ -2560,6 +2560,31 @@ function MapEditor({ mapId }: { mapId: number }) {
     [fullGraph, currentParentId, mapName, reactFlow, navigateTo, setNodes],
   );
 
+  // 아웃라인 Tab 네비게이션 — 하위 프로세스가 있으면 펼쳐서 첫 자식으로 진입, 아니면 다음 행(병렬·다음 형제)
+  const handleOutlineNext = useCallback(
+    (id: string) => {
+      const idx = outline.findIndex((row) => row.id === id);
+      if (idx === -1) {
+        return;
+      }
+      if (outline[idx].hasChildren) {
+        setExpandedOutline((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+        const children = (fullGraph?.nodes ?? [])
+          .filter((node) => node.parent_node_id === id)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        if (children.length > 0) {
+          handleOutlineSelect(children[0].id);
+          return;
+        }
+      }
+      const next = outline[idx + 1];
+      if (next) {
+        handleOutlineSelect(next.id);
+      }
+    },
+    [outline, fullGraph, handleOutlineSelect],
+  );
+
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
     (event: { clientX: number; preventDefault: () => void }) => {
@@ -2840,6 +2865,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             openMenu(event, "node", id);
           }}
           onRenameNode={renameNode}
+          onSelectNext={handleOutlineNext}
         />
         <div
           ref={canvasContainerRef}

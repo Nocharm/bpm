@@ -221,10 +221,9 @@ function computeScopeFlow(
         visited.add(top.id);
         result.push({ id: top.id, depth: top.depth, blockIndex });
         const children = byOrder((out.get(top.id) ?? []).filter((target) => memberSet.has(target)));
-        // 분기(자식 2개↑)일 때만 들여쓰기 — 단일 후속(순차)은 같은 레벨
-        const childDepth = top.depth + (children.length >= 2 ? 1 : 0);
+        // 같은 스코프 내 흐름(병렬·분기 포함)은 모두 같은 수준 — 들여쓰기는 하위 프로세스(계층)에만(buildOutline baseDepth)
         for (let i = children.length - 1; i >= 0; i--) {
-          stack.push({ id: children[i], depth: childDepth });
+          stack.push({ id: children[i], depth: top.depth });
         }
       }
     }
