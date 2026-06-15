@@ -2329,9 +2329,22 @@ function MapEditor({ mapId }: { mapId: number }) {
             },
           ];
         });
+      // 멤버 노드(작은 여백)는 notch보다 우선 — notch가 멤버를 반만 자르지 않게 비껴감
+      const memberKeep = 6;
+      const memberRects = members.map((member) => {
+        const w = member.measured?.width ?? NODE_WIDTH;
+        const h = member.measured?.height ?? NODE_HEIGHT;
+        return {
+          x: member.position.x - memberKeep - originX,
+          y: member.position.y - memberKeep - originY,
+          w: w + memberKeep * 2,
+          h: h + memberKeep * 2,
+        };
+      });
       const region = rectWithExclusions(
         { x: 0, y: GROUP_TITLE_GAP, w: width, h: height - GROUP_TITLE_GAP },
         intruders,
+        memberRects,
       );
       return [
         {
