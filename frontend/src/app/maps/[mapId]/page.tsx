@@ -32,12 +32,7 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
-import {
-  GroupBulkModal,
-  type BulkAction,
-  type BulkAttrField,
-  type BulkPolicy,
-} from "@/components/group-bulk-modal";
+import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
 import { ProcessNode } from "@/components/process-node";
@@ -1493,34 +1488,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pushHistory, setNodes, scheduleAutoSave],
   );
 
-  // 그룹 멤버 전원 속성 일괄 — 설정/비우기, 기존값은 추가(콤마)·교체·건너뛰기
+  // 그룹 멤버 속성 일괄 적용 — 모달이 정책(교체/추가/건너뛰기/개별)을 멤버별 값으로 해석해 넘김
   const applyGroupAttribute = useCallback(
-    (
-      groupId: string,
-      field: BulkAttrField,
-      action: BulkAction,
-      value: string,
-      policy: BulkPolicy,
-    ) => {
+    (field: BulkAttrField, updates: { id: string; value: string }[]) => {
+      if (updates.length === 0) {
+        return;
+      }
       pushHistory();
+      const valueById = new Map(updates.map((u) => [u.id, u.value]));
       setNodes((current) =>
-        current.map((node) => {
-          if (node.data.groupId !== groupId) {
-            return node;
-          }
-          const existing = node.data[field] ?? "";
-          let next: string;
-          if (action === "clear") {
-            next = "";
-          } else if (existing.trim() === "" || policy === "replace") {
-            next = value;
-          } else if (policy === "append") {
-            next = `${existing}, ${value}`;
-          } else {
-            next = existing; // skip
-          }
-          return { ...node, data: { ...node.data, [field]: next } };
-        }),
+        current.map((node) =>
+          valueById.has(node.id)
+            ? { ...node, data: { ...node.data, [field]: valueById.get(node.id) ?? "" } }
+            : node,
+        ),
       );
       scheduleAutoSave();
     },
@@ -1872,7 +1853,17 @@ function MapEditor({ mapId }: { mapId: number }) {
           ? new Set(nodes.filter((node) => node.data.groupId === menu.targetId).map((node) => node.id))
           : new Set(nodes.filter((node) => node.selected).map((node) => node.id));
       const targetCount = ids.size;
+      const groupId = menu.targetId;
+      // 그룹 우클릭에만 일괄 편집 항목 — 모달 진입(복수선택엔 단일 그룹이 없어 제외)
+      const bulkItems: ContextMenuItem[] =
+        menu.kind === "group" && groupId && !readOnly
+          ? [
+              { label: t("group.bulkEdit"), onSelect: () => setBulkEditGroupId(groupId) },
+              { divider: true },
+            ]
+          : [];
       return [
+        ...bulkItems,
         {
           label: t("ctx.autoLayout"),
           disabled: targetCount < 2,
@@ -2819,18 +2810,22 @@ function MapEditor({ mapId }: { mapId: number }) {
           })()}
           {bulkEditGroupId && (
             <GroupBulkModal
+              groupLabel={groups.find((g) => g.id === bulkEditGroupId)?.label ?? ""}
               members={nodes
                 .filter((n) => n.data.groupId === bulkEditGroupId)
                 .map((n) => ({
+                  id: n.id,
+                  label: n.data.label,
                   assignee: n.data.assignee,
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
                 }))}
               colorPresets={COLOR_PRESETS}
+              onRenameGroup={(label) => renameGroup(bulkEditGroupId, label)}
               onApplyColor={(color) => applyGroupColor(bulkEditGroupId, color)}
-              onApplyAttribute={(field, action, value, policy) =>
-                applyGroupAttribute(bulkEditGroupId, field, action, value, policy)
+              onApplyAttribute={(field, updates) =>
+                applyGroupAttribute(field, updates)
               }
               onClose={() => setBulkEditGroupId(null)}
             />
