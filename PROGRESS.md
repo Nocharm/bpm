@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-15
+- 메뉴 단축키 추가(전역 keydown, 입력/모달 중 무시·메뉴 떠 있어도 동작). 노드 추가 1~4, 정보 수정 E, 정렬 L/C/T/M·분배 H/V(쉬프트 없음), 그룹 생성 Ctrl+G, PNG Ctrl+⇧E. 각 메뉴 항목에 shortcut 힌트 + ShortcutLegend 반영.
 - 정렬 메뉴 재구성. 가로 가운데(centerX)·세로 가운데(centerY) 정렬 추가(`alignSelected`), 오토레이아웃+정렬+분배를 단일 "정렬·레이아웃" 날개(submenu) 메뉴로 통합(pane/group/selection 공용 `alignItem`), 각 항목에 Lucide 정렬 아이콘으로 가로/세로 구분(`ContextMenuItem.icon` 지원 추가). bun 검증.
 - dot-grid 가시성 향상(`--color-canvas-dot` 진하게 + size 1.2→1.8) + 루트(최외곽) 캔버스 포커스 시 드릴인 창 자동 최소화(좌하단 dock, `focusScope` index 0).
 - 판단(decision) 노드 분기 엣지. 판단 노드에서 연결 시 Yes/No/기타 선택 모달(`edge-branch-modal.tsx`), 엣지 라벨에 디자인 알약 스타일(styledEdges labelStyle/Bg), 인스펙터에 Yes/No/기타 세그먼트 탭 전환 + 기타일 때만 라벨 직접 편집. 라벨 기반 종류 판정(`branchKindOf`, 백엔드 무변경 — 기존 label 영속). build green.
