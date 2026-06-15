@@ -68,7 +68,10 @@ export function GroupBulkModal({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const conflicts = members.filter((m) => m[field].trim() !== "");
+  // 충돌 = 기존 값이 있고 새 값과 다른 멤버. 동일한 값은 자동 스킵(충돌 아님)
+  const conflicts = members.filter(
+    (m) => m[field].trim() !== "" && m[field].trim() !== value.trim(),
+  );
   const hasConflict = action === "set" && conflicts.length > 0;
   const btn =
     "rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt disabled:opacity-40";
@@ -101,6 +104,7 @@ export function GroupBulkModal({
     const updates = members.flatMap<Update>((m) => {
       const existing = m[field].trim();
       if (existing === "") return [{ id: m.id, value }];
+      if (existing === value.trim()) return []; // 동일 값 — 자동 스킵
       if (policy === "replace") return [{ id: m.id, value }];
       if (policy === "append") return [{ id: m.id, value: `${m[field]}, ${value}` }];
       return []; // skip

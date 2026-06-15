@@ -84,7 +84,7 @@ export function ScopePreview({
               strokeWidth={1.5}
               className={
                 interactive
-                  ? "cursor-pointer [transition:stroke-width_.15s] hover:[stroke-width:3px]"
+                  ? "cursor-pointer [transition:all_.15s] hover:[stroke-width:3px] hover:[filter:brightness(0.92)]"
                   : undefined
               }
               style={{
