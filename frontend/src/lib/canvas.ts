@@ -492,6 +492,65 @@ export function distributeSelected(
   });
 }
 
+// ── 그룹 박스 직교 union 외곽선 ─────────────────────────
+// 멤버 사각형들의 합집합을 90° 직교 폴리곤으로 — bbox 한 장 대신 멤버에 달라붙는 외곽선으로
+// "빈 구석의 비멤버 노드가 그룹 안처럼 보이는" 문제 해소.
+export interface OrthoUnion {
+  fill: string; // 채움 영역 path (filled 셀들의 사각형 모음, 균일 반투명)
+  outline: string; // 경계 변만 모은 stroke path (filled↔unfilled 전이)
+}
+
+/** 축 정렬 사각형들의 합집합 외곽선 — 좌표 압축 격자로 정확히 계산(래스터 오차 없음). 좌표는 입력 그대로(상대). */
+export function orthogonalUnion(rects: { x: number; y: number; w: number; h: number }[]): OrthoUnion {
+  const valid = rects.filter((r) => r.w > 0 && r.h > 0);
+  if (valid.length === 0) {
+    return { fill: "", outline: "" };
+  }
+  // 모든 변 좌표로 격자 분할(좌표 압축)
+  const xs = Array.from(new Set(valid.flatMap((r) => [r.x, r.x + r.w]))).sort((a, b) => a - b);
+  const ys = Array.from(new Set(valid.flatMap((r) => [r.y, r.y + r.h]))).sort((a, b) => a - b);
+  const xi = new Map(xs.map((x, i) => [x, i]));
+  const yi = new Map(ys.map((y, i) => [y, i]));
+  const nx = xs.length - 1;
+  const ny = ys.length - 1;
+  // filled[i*ny + j] — 셀 (i,j)가 어떤 사각형에 덮이는지. 사각형이 덮는 셀 범위를 직접 마킹(O(덮인 셀))
+  const filled = new Array<boolean>(nx * ny).fill(false);
+  for (const r of valid) {
+    const i0 = xi.get(r.x) ?? 0;
+    const i1 = xi.get(r.x + r.w) ?? nx;
+    const j0 = yi.get(r.y) ?? 0;
+    const j1 = yi.get(r.y + r.h) ?? ny;
+    for (let i = i0; i < i1; i++) {
+      for (let j = j0; j < j1; j++) {
+        filled[i * ny + j] = true;
+      }
+    }
+  }
+  const isFilled = (i: number, j: number): boolean =>
+    i >= 0 && i < nx && j >= 0 && j < ny && filled[i * ny + j];
+
+  const fillParts: string[] = [];
+  const outlineParts: string[] = [];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      if (!filled[i * ny + j]) {
+        continue;
+      }
+      const x0 = xs[i];
+      const x1 = xs[i + 1];
+      const y0 = ys[j];
+      const y1 = ys[j + 1];
+      fillParts.push(`M${x0} ${y0}H${x1}V${y1}H${x0}Z`);
+      // 경계 변 — 이웃이 비어있으면(또는 격자 밖) 그 변이 외곽선
+      if (!isFilled(i, j - 1)) outlineParts.push(`M${x0} ${y0}H${x1}`); // top
+      if (!isFilled(i, j + 1)) outlineParts.push(`M${x0} ${y1}H${x1}`); // bottom
+      if (!isFilled(i - 1, j)) outlineParts.push(`M${x0} ${y0}V${y1}`); // left
+      if (!isFilled(i + 1, j)) outlineParts.push(`M${x1} ${y0}V${y1}`); // right
+    }
+  }
+  return { fill: fillParts.join(""), outline: outlineParts.join("") };
+}
+
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
 // 8방향 앵커 위에 배치: 좌=front/우=back/상=group/하=child/좌하(SW)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
 export type DropZone = "front" | "back" | "group" | "child" | "swap";
