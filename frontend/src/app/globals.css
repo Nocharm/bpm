@@ -128,6 +128,9 @@ body {
 .react-flow__edge:focus .react-flow__edge-path,
 .react-flow__edge:focus-visible .react-flow__edge-path {
   stroke: var(--color-accent);
+  /* 선택 강조 — 색만으로 약해 굵기↑ + accent 저확산 외곽으로 또렷하게 */
+  stroke-width: 3;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent));
 }
 
 /* 드롭 영역 — 기준 셀 원형 링 + 원주 위 타일 등장 */

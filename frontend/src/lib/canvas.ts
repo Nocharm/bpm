@@ -371,11 +371,23 @@ export function insertNodeAfter(
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
 export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
   const graph = new dagre.graphlib.Graph();
-  graph.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 90 });
+  // 교차/겹침 최소화 — network-simplex 랭커 + 넉넉한 간격(노드끼리·랭크끼리·엣지끼리).
+  // edgesep을 키워 평행 엣지가 노드 위로 겹쳐 지나가는 경우를 줄인다.
+  graph.setGraph({
+    rankdir: "LR",
+    ranker: "network-simplex",
+    nodesep: 56,
+    ranksep: 120,
+    edgesep: 28,
+    marginx: 16,
+    marginy: 16,
+  });
   graph.setDefaultEdgeLabel(() => ({}));
 
+  // 노드별 실제 크기로 박스를 잡아야 큰 노드(마름모) 주변 엣지가 노드를 덜 침범한다.
   nodes.forEach((node) => {
-    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    const size = nodeSizeOf(node.data.nodeType);
+    graph.setNode(node.id, { width: size.w, height: size.h });
   });
   edges.forEach((edge) => {
     graph.setEdge(edge.source, edge.target);
@@ -384,11 +396,12 @@ export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
 
   return nodes.map((node) => {
     const positioned = graph.node(node.id);
+    const size = nodeSizeOf(node.data.nodeType);
     return {
       ...node,
       position: {
-        x: positioned.x - NODE_WIDTH / 2,
-        y: positioned.y - NODE_HEIGHT / 2,
+        x: positioned.x - size.w / 2,
+        y: positioned.y - size.h / 2,
       },
     };
   });
@@ -477,9 +490,9 @@ export function distributeSelected(
   });
 }
 
-// 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 4 cardinal 타일 중 하나의 박스 안이면 그 zone, 아니면 null.
-// 타일 배치는 page.tsx 오버레이 렌더와 동일해야 한다(좌=front/우=back/상=group/하=child).
-export type DropZone = "front" | "back" | "group" | "child";
+// 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
+// 타일 배치는 page.tsx 오버레이 렌더와 동일해야 한다(좌=front/우=back/상=group/하=child/중앙=swap).
+export type DropZone = "front" | "back" | "group" | "child" | "swap";
 
 export function pickDropZone(
   cursorX: number,
@@ -495,6 +508,8 @@ export function pickDropZone(
     { zone: "back", x: cx + radius, y: cy },
     { zone: "group", x: cx, y: cy - radius },
     { zone: "child", x: cx, y: cy + radius },
+    // 중앙(기준 노드 위) = 두 노드 위치 교환
+    { zone: "swap", x: cx, y: cy },
   ];
   for (const tile of tiles) {
     if (Math.abs(cursorX - tile.x) <= tileW / 2 && Math.abs(cursorY - tile.y) <= tileH / 2) {

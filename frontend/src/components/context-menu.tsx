@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 // 액션 항목 / 구분선 / 색 스와치 행 / 하위 메뉴
 export type ContextMenuItem =
   | { divider: true }
-  | { colors: string[]; current: string; onPick: (color: string) => void }
+  | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
   | { divider?: false; label: string; submenu: ContextMenuItem[]; disabled?: boolean }
   | { divider?: false; label: string; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
 
@@ -70,24 +70,7 @@ function MenuList({ items, onClose }: { items: ContextMenuItem[]; onClose: () =>
         "divider" in item && item.divider ? (
           <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
         ) : "colors" in item ? (
-          <div key={`colors-${index}`} className="flex flex-wrap gap-1 px-3 py-1.5">
-            {item.colors.map((color) => (
-              <button
-                key={color || "default"}
-                type="button"
-                onClick={() => {
-                  item.onPick(color);
-                  onClose();
-                }}
-                title={color || "default"}
-                aria-label={color || "default"}
-                className={`h-4 w-4 rounded-full border ${
-                  item.current === color ? "ring-2 ring-accent" : "border-hairline"
-                }`}
-                style={{ background: color || "var(--color-surface-alt)" }}
-              />
-            ))}
-          </div>
+          <ColorRow key={`colors-${index}`} item={item} onClose={onClose} />
         ) : "submenu" in item ? (
           <SubmenuItem key={item.label} item={item} onClose={onClose} />
         ) : (
@@ -113,6 +96,49 @@ function MenuList({ items, onClose }: { items: ContextMenuItem[]; onClose: () =>
         ),
       )}
     </>
+  );
+}
+
+// 색 스와치 행 — 기본 1줄(5개)만 노출하고 "더보기"로 전체 팔레트 펼침.
+const COLOR_COLLAPSED = 5;
+function ColorRow({
+  item,
+  onClose,
+}: {
+  item: { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string };
+  onClose: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = item.colors.length > COLOR_COLLAPSED;
+  const shown = expanded || !hasMore ? item.colors : item.colors.slice(0, COLOR_COLLAPSED);
+  return (
+    <div className="flex flex-wrap items-center gap-1 px-3 py-1.5">
+      {shown.map((color) => (
+        <button
+          key={color || "default"}
+          type="button"
+          onClick={() => {
+            item.onPick(color);
+            onClose();
+          }}
+          title={color || "default"}
+          aria-label={color || "default"}
+          className={`h-4 w-4 rounded-full border ${
+            item.current === color ? "ring-2 ring-accent" : "border-hairline"
+          }`}
+          style={{ background: color || "var(--color-surface-alt)" }}
+        />
+      ))}
+      {hasMore && !expanded && (
+        <button
+          type="button"
+          className="px-1 text-fine text-ink-tertiary hover:text-ink"
+          onClick={() => setExpanded(true)}
+        >
+          {item.moreLabel ?? "…"}
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -57,7 +57,7 @@ const en = {
   "editor.durationPlaceholder": "e.g. 2 days",
   "editor.comments": "Comments",
   "editor.unresolvedCount": "unresolved {n}",
-  "editor.hintNode": "Double-click: open child · Right-click: menu · Ctrl+Z: undo",
+  "editor.hintNode": "Double-click: rename · Right-click: menu · Ctrl+Z: undo",
   "editor.edgeEdit": "Edit edge",
   "editor.edgeLabel": "Label (branch condition, etc.)",
   "editor.hintEdge": "Right-click: menu · Ctrl+Z: undo",
@@ -230,6 +230,16 @@ const en = {
   "ai.readOnly": "Editing is locked — only help answers are available.",
   "ai.error": "AI request failed",
   "ai.disabled": "AI is unavailable — the backend AI is disabled or unreachable.",
+  "ctx.editInfo": "Edit info",
+  "ctx.createGroup": "Create group",
+  "ctx.disband": "Ungroup",
+  "node.rename": "Rename",
+  "editor.moreColors": "More",
+  "dropzone.swap": "Swap",
+  "editor.edgeStyle": "Edge style",
+  "edgeStyle.curve": "Curved",
+  "edgeStyle.step": "Stepped",
+  "edgeStyle.straight": "Straight",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -289,7 +299,7 @@ const ko: Record<MessageKey, string> = {
   "editor.durationPlaceholder": "예: 2일",
   "editor.comments": "코멘트",
   "editor.unresolvedCount": "미해결 {n}",
-  "editor.hintNode": "더블클릭: 하위 프로세스로 진입 · 우클릭: 메뉴 · Ctrl+Z: 실행취소",
+  "editor.hintNode": "더블클릭: 이름 변경 · 우클릭: 메뉴 · Ctrl+Z: 실행취소",
   "editor.edgeEdit": "엣지 편집",
   "editor.edgeLabel": "라벨 (분기 조건 등)",
   "editor.hintEdge": "우클릭: 메뉴 · Ctrl+Z: 실행취소",
@@ -462,6 +472,16 @@ const ko: Record<MessageKey, string> = {
   "ai.readOnly": "편집이 잠겨 도움말 답변만 가능합니다.",
   "ai.error": "AI 요청 실패",
   "ai.disabled": "AI를 사용할 수 없습니다 — 백엔드 AI가 비활성이거나 연결되지 않았습니다.",
+  "ctx.editInfo": "정보 수정",
+  "ctx.createGroup": "그룹 생성",
+  "ctx.disband": "그룹 해제",
+  "node.rename": "이름 변경",
+  "editor.moreColors": "더 보기",
+  "dropzone.swap": "위치 교환",
+  "editor.edgeStyle": "엣지 스타일",
+  "edgeStyle.curve": "곡선",
+  "edgeStyle.step": "꺾은선",
+  "edgeStyle.straight": "직선",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
