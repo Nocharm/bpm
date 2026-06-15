@@ -105,17 +105,6 @@ export function NodeSummaryModal({
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
           <span className="flex-1 truncate text-body-strong text-ink">{title}</span>
-          {hasChildren && onOpenChild && (
-            <button
-              type="button"
-              title={t("summary.openSubprocess")}
-              aria-label={t("summary.openSubprocess")}
-              className="rounded-xs p-0.5 text-accent hover:bg-surface-alt"
-              onClick={onOpenChild}
-            >
-              <CornerDownRight size={16} strokeWidth={1.5} />
-            </button>
-          )}
           <button
             type="button"
             title={t("summary.close")}
@@ -147,8 +136,20 @@ export function NodeSummaryModal({
           {hasChildren && (
             <div>
               <div className="text-fine text-ink-tertiary">{t("summary.subprocess")}</div>
-              <div className="mt-1 h-32 overflow-hidden rounded-sm border border-hairline">
-                <ScopePreview fullGraph={fullGraph} scopeParentId={nodeId} />
+              {/* 미리보기 우상단 — 호버 시에만 열기 버튼 노출 */}
+              <div className="group relative mt-1 h-32 overflow-hidden rounded-sm border border-hairline">
+                <ScopePreview fullGraph={fullGraph} scopeParentId={nodeId} interactive />
+                {onOpenChild && (
+                  <button
+                    type="button"
+                    title={t("summary.openSubprocess")}
+                    aria-label={t("summary.openSubprocess")}
+                    className="absolute right-1 top-1 rounded-xs border border-hairline bg-surface p-0.5 text-accent opacity-0 shadow-sm transition-opacity hover:bg-surface-alt group-hover:opacity-100"
+                    onClick={onOpenChild}
+                  >
+                    <CornerDownRight size={14} strokeWidth={1.5} />
+                  </button>
+                )}
               </div>
             </div>
           )}
