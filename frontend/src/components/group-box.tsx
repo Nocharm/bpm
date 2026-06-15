@@ -21,7 +21,8 @@ export function GroupBox({
         width,
         height,
         borderColor: stroke,
-        background: `color-mix(in srgb, ${stroke} 10%, white)`,
+        // 반투명 fill — 여러 그룹이 겹쳐도 z-index와 무관하게 모두 비쳐 보이게(다중 태그)
+        background: `color-mix(in srgb, ${stroke} 16%, transparent)`,
       }}
     />
   );

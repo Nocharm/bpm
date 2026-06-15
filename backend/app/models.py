@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -101,8 +101,10 @@ class Node(Base):
     pos_x: Mapped[float] = mapped_column(Float, default=0.0)
     pos_y: Mapped[float] = mapped_column(Float, default=0.0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
-    # 업무 묶음(보이는 그룹 박스) 소속 — 그룹 id, null=무소속. FK 미설정(앱 계층 관리, spec Phase 2)
+    # [레거시] 단일 그룹 소속 — group_ids 도입 전 데이터. 로드 시 group_ids로 병합(무손실 마이그레이션)
     group_id: Mapped[str | None] = mapped_column(String(50), default=None)
+    # 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속 (design 2026-06-15). JSON 배열
+    group_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     version: Mapped[MapVersion] = relationship(back_populates="nodes")
 

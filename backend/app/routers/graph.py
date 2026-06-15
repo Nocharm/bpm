@@ -31,6 +31,13 @@ router = APIRouter(
 )
 
 
+def _node_group_ids(node: Node) -> list[str]:
+    """다중 그룹(group_ids) + 레거시 단일(group_id)을 합쳐 반환 — 무손실 마이그레이션."""
+    if node.group_ids:
+        return list(node.group_ids)
+    return [node.group_id] if node.group_id else []
+
+
 async def _load_scope(
     session: AsyncSession, version_id: int, parent_node_id: str | None
 ) -> GraphOut:
@@ -68,7 +75,10 @@ async def _load_scope(
 
     nodes = [
         NodeOut.model_validate(n).model_copy(
-            update={"has_children": n.id in parents_with_children}
+            update={
+                "has_children": n.id in parents_with_children,
+                "group_ids": _node_group_ids(n),
+            }
         )
         for n in node_rows
     ]
@@ -106,7 +116,10 @@ async def get_full_graph(
         await session.scalars(select(Edge).where(Edge.version_id == version_id))
     ).all()
     return VersionGraphOut(
-        nodes=[FlatNodeOut.model_validate(n) for n in node_rows],
+        nodes=[
+            FlatNodeOut.model_validate(n).model_copy(update={"group_ids": _node_group_ids(n)})
+            for n in node_rows
+        ],
         edges=[EdgeIn.model_validate(e) for e in edge_rows],
     )
 
@@ -163,11 +176,12 @@ async def replace_graph(
 
     payload_group_ids = {g.id for g in payload.groups}
     for node in payload.nodes:
-        if node.group_id is not None and node.group_id not in payload_group_ids:
-            raise HTTPException(
-                status_code=422,
-                detail=f"node {node.id} references a group not in the payload",
-            )
+        for gid in node.group_ids:
+            if gid not in payload_group_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"node {node.id} references a group not in the payload",
+                )
 
     existing_ids = set(
         (
@@ -280,7 +294,8 @@ async def replace_graph(
             existing.pos_x = node.pos_x
             existing.pos_y = node.pos_y
             existing.sort_order = node.sort_order
-            existing.group_id = node.group_id
+            existing.group_ids = list(node.group_ids)
+            existing.group_id = None  # 레거시 단일 소속 정리 — group_ids로 일원화
         else:
             session.add(Node(version_id=version_id, parent_node_id=parent, **node.model_dump()))
     for edge in payload.edges:

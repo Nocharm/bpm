@@ -207,28 +207,38 @@ def test_group_roundtrips_with_membership(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
-            {"id": "n1", "title": "A", "group_id": "g1"},
-            {"id": "n2", "title": "B", "group_id": "g1"},
+            {"id": "n1", "title": "A", "group_ids": ["g1"]},
+            {"id": "n2", "title": "B", "group_ids": ["g1", "g2"]},
         ],
         "edges": [],
-        "groups": [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}],
+        "groups": [
+            {"id": "g1", "label": "영업팀", "color": "#6a41ff"},
+            {"id": "g2", "label": "프로젝트", "color": ""},
+        ],
     }
 
     put_response = client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
     assert put_response.status_code == 200
-    assert saved["groups"] == [
-        {"id": "g1", "parent_group_id": None, "label": "영업팀", "color": "#6a41ff"}
-    ]
-    assert {n["id"]: n["group_id"] for n in saved["nodes"]} == {"n1": "g1", "n2": "g1"}
+    assert saved["groups"][0] == {
+        "id": "g1",
+        "parent_group_id": None,
+        "label": "영업팀",
+        "color": "#6a41ff",
+    }
+    # 다중 그룹(태그) 멤버십 왕복
+    assert {n["id"]: n["group_ids"] for n in saved["nodes"]} == {
+        "n1": ["g1"],
+        "n2": ["g1", "g2"],
+    }
 
 
 def test_nested_groups_roundtrip_and_sanitize(client: TestClient) -> None:
     """중첩 그룹(parent_group_id) 왕복 + 고아/자기참조 상위는 None으로 정리."""
     version_id = _create_version(client)
     graph = {
-        "nodes": [{"id": "n1", "title": "A", "group_id": "child"}],
+        "nodes": [{"id": "n1", "title": "A", "group_ids": ["child"]}],
         "edges": [],
         "groups": [
             {"id": "parent", "label": "부서", "color": ""},
@@ -253,7 +263,7 @@ def test_node_referencing_unknown_group_rejected(client: TestClient) -> None:
 
     response = client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "n1", "group_id": "ghost"}], "edges": [], "groups": []},
+        json={"nodes": [{"id": "n1", "group_ids": ["ghost"]}], "edges": [], "groups": []},
     )
 
     assert response.status_code == 422
@@ -264,12 +274,12 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
     client.put(
         f"/api/versions/{version_id}/graph",
         json={
-            "nodes": [{"id": "n1", "group_id": "g1"}],
+            "nodes": [{"id": "n1", "group_ids": ["g1"]}],
             "edges": [],
             "groups": [{"id": "g1", "label": "팀", "color": ""}],
         },
     )
-    # 그룹 해제 — group_id 제거 + groups 비움
+    # 그룹 해제 — group_ids 비움 + groups 비움
     client.put(
         f"/api/versions/{version_id}/graph",
         json={"nodes": [{"id": "n1"}], "edges": [], "groups": []},
@@ -277,4 +287,4 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
     assert saved["groups"] == []
-    assert saved["nodes"][0]["group_id"] is None
+    assert saved["nodes"][0]["group_ids"] == []
