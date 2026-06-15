@@ -3,7 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-15
-- 그룹 박스를 bbox 사각형 → **직교(90°) union 외곽선**으로(멤버에 달라붙어 빈 구석 비멤버 노드 제외). `canvas.ts orthogonalUnion`(좌표압축 격자로 정확 계산, 의존성 0, bun 검증), `GroupBox`는 SVG fill+outline path 렌더(non-scaling-stroke). 반투명·z·타이틀바·합류 펄스 유지. build green.
+- 그룹 박스를 bbox 사각형 → **직교(90°) union 외곽선**으로(멤버에 달라붙어 빈 구석 비멤버 노드 제외). 흩어진 멤버도 **MST 직교 L자 통로로 이어 하나로 연결**(분리 방지) — `canvas.ts orthogonalUnion`/`connectedOrthogonalUnion`(좌표압축 격자·Prim MST, 의존성 0, bun 연결성 검증), `GroupBox`는 SVG fill+outline path 렌더(non-scaling-stroke). 반투명·z·타이틀바·합류 펄스 유지. build green.
 - 그룹 = 다중 태그 모델로 전환(#6) — 중첩(parent_group_id) 미사용, 노드가 여러 그룹(태그) 동시 소속. 백엔드 `nodes.group_ids`(JSON, 레거시 `group_id` 로드시 병합·무손실, 스톱갭 컬럼, 검증·복제 갱신, 테스트). 프론트 `NodeData.groupIds[]`, 태그별 박스(멤버 많을수록 패딩↑로 감쌈), 반투명 fill(z 무관 모두 가시) + z는 멤버 적은 그룹이 위, 색 팔레트 순환. 백엔드 94 passed+ruff, 프론트 build green.
 - 에디터 후속 7종(#0·3·4-1·4-2·4-3·5·10·14) — 노드 호버(그림자·살짝나옴·반투명), 이름 외 영역 더블클릭=요약창(타이틀 더블클릭=이름편집), 스왑 드롭존 좌하단 이동·엣지연결도 교환·드롭존 크기 프로세스 기준 고정, 엣지 선택 강조색, dagre 간격 확대(엣지-노드 겹침), 알림센터 z최상위. build green.
 - 그룹 중첩(하위 그룹핑, 항목 8 — 옵션1 중첩만, 큰 다중소속 모델은 보류). 백엔드: `groups.parent_group_id`(자기참조, 스톱갭 컬럼 보강·고아/자기참조 정리·복제 리맵, 테스트). 프론트: 그룹 멤버 부분집합 선택→"그룹 생성" 시 하위 그룹으로 중첩, 해제 시 멤버·하위그룹 상위로 승격, 중첩 높이 기반 패딩으로 박스 포함 렌더, 일괄편집·색은 서브트리 대상. 순수 헬퍼 `collectKeptGroups`/`computeGroupHeights`/`groupSubtreeIds`(bun 검증). 백엔드 94 passed+ruff, 프론트 build green.

@@ -551,6 +551,63 @@ export function orthogonalUnion(rects: { x: number; y: number; w: number; h: num
   return { fill: fillParts.join(""), outline: outlineParts.join("") };
 }
 
+type Rect = { x: number; y: number; w: number; h: number };
+
+/** 멤버 사각형들을 MST 기반 직교 L자 통로로 이어, 흩어져도 하나로 연결된 union 외곽선을 만든다. */
+export function connectedOrthogonalUnion(rects: Rect[], bridgeWidth: number): OrthoUnion {
+  const valid = rects.filter((r) => r.w > 0 && r.h > 0);
+  if (valid.length <= 1) {
+    return orthogonalUnion(valid);
+  }
+  const cx = valid.map((r) => r.x + r.w / 2);
+  const cy = valid.map((r) => r.y + r.h / 2);
+  const n = valid.length;
+  // Prim MST (Manhattan 거리) — 작은 N이라 O(N²)로 충분
+  const inTree = new Array<boolean>(n).fill(false);
+  const dist = new Array<number>(n).fill(Infinity);
+  const parent = new Array<number>(n).fill(-1);
+  dist[0] = 0;
+  const edges: [number, number][] = [];
+  for (let k = 0; k < n; k++) {
+    let u = -1;
+    let best = Infinity;
+    for (let v = 0; v < n; v++) {
+      if (!inTree[v] && dist[v] < best) {
+        best = dist[v];
+        u = v;
+      }
+    }
+    if (u === -1) {
+      break;
+    }
+    inTree[u] = true;
+    if (parent[u] !== -1) {
+      edges.push([parent[u], u]);
+    }
+    for (let v = 0; v < n; v++) {
+      if (!inTree[v]) {
+        const d = Math.abs(cx[u] - cx[v]) + Math.abs(cy[u] - cy[v]);
+        if (d < dist[v]) {
+          dist[v] = d;
+          parent[v] = u;
+        }
+      }
+    }
+  }
+  const half = bridgeWidth / 2;
+  const corridors: Rect[] = [];
+  for (const [a, b] of edges) {
+    // 코너 (cx[b], cy[a])를 도는 L자 — 수평 통로 + 수직 통로
+    const hx = Math.min(cx[a], cx[b]) - half;
+    const hw = Math.abs(cx[a] - cx[b]) + bridgeWidth;
+    corridors.push({ x: hx, y: cy[a] - half, w: hw, h: bridgeWidth });
+    const vy = Math.min(cy[a], cy[b]) - half;
+    const vh = Math.abs(cy[a] - cy[b]) + bridgeWidth;
+    corridors.push({ x: cx[b] - half, y: vy, w: bridgeWidth, h: vh });
+  }
+  return orthogonalUnion([...valid, ...corridors]);
+}
+
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
 // 8방향 앵커 위에 배치: 좌=front/우=back/상=group/하=child/좌하(SW)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
 export type DropZone = "front" | "back" | "group" | "child" | "swap";
