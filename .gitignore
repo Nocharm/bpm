@@ -33,3 +33,6 @@ dist/
 .vscode/
 .idea/
 *.swp
+
+# Tooling caches (superpowers brainstorm 등 — 프로젝트 코드 아님)
+.superpowers/
