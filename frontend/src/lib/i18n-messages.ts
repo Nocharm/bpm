@@ -244,6 +244,9 @@ const en = {
   "branch.yes": "Yes",
   "branch.no": "No",
   "branch.other": "Other",
+  "ctx.align": "Align & layout",
+  "editor.alignCenterX": "Center (horizontal)",
+  "editor.alignCenterY": "Middle (vertical)",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -490,6 +493,9 @@ const ko: Record<MessageKey, string> = {
   "branch.yes": "Yes",
   "branch.no": "No",
   "branch.other": "기타",
+  "ctx.align": "정렬 · 레이아웃",
+  "editor.alignCenterX": "가로 가운데",
+  "editor.alignCenterY": "세로 가운데",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

@@ -455,10 +455,13 @@ export function layoutSubsetWithDagre(
   });
 }
 
-/** 대상 노드들을 한 축으로 맞춤 정렬. ids 미지정 시 선택된 노드, 지정 시 해당 id 집합. */
+/**
+ * 대상 노드들을 한 축으로 맞춤 정렬. ids 미지정 시 선택된 노드, 지정 시 해당 id 집합.
+ * left=좌측 변, centerX=가로 가운데(중심선), top=상단 변, centerY=세로 가운데(중심선).
+ */
 export function alignSelected(
   nodes: AppNode[],
-  axis: "left" | "top",
+  axis: "left" | "centerX" | "top" | "centerY",
   ids?: ReadonlySet<string>,
 ): AppNode[] {
   const isTarget = (node: AppNode): boolean => (ids ? ids.has(node.id) : node.selected === true);
@@ -466,15 +469,42 @@ export function alignSelected(
   if (targets.length < 2) {
     return nodes;
   }
+  const widthOf = (node: AppNode): number =>
+    node.measured?.width ?? nodeSizeOf(node.data.nodeType).w;
+  const heightOf = (node: AppNode): number =>
+    node.measured?.height ?? nodeSizeOf(node.data.nodeType).h;
+
   if (axis === "left") {
     const minX = Math.min(...targets.map((node) => node.position.x));
     return nodes.map((node) =>
       isTarget(node) ? { ...node, position: { ...node.position, x: minX } } : node,
     );
   }
+  if (axis === "top") {
+    const minY = Math.min(...targets.map((node) => node.position.y));
+    return nodes.map((node) =>
+      isTarget(node) ? { ...node, position: { ...node.position, y: minY } } : node,
+    );
+  }
+  if (axis === "centerX") {
+    // 선택 영역 가로 중심에 각 노드 중심을 맞춤
+    const minX = Math.min(...targets.map((node) => node.position.x));
+    const maxX = Math.max(...targets.map((node) => node.position.x + widthOf(node)));
+    const centerX = (minX + maxX) / 2;
+    return nodes.map((node) =>
+      isTarget(node)
+        ? { ...node, position: { ...node.position, x: centerX - widthOf(node) / 2 } }
+        : node,
+    );
+  }
+  // centerY — 선택 영역 세로 중심에 각 노드 중심을 맞춤
   const minY = Math.min(...targets.map((node) => node.position.y));
+  const maxY = Math.max(...targets.map((node) => node.position.y + heightOf(node)));
+  const centerY = (minY + maxY) / 2;
   return nodes.map((node) =>
-    isTarget(node) ? { ...node, position: { ...node.position, y: minY } } : node,
+    isTarget(node)
+      ? { ...node, position: { ...node.position, y: centerY - heightOf(node) / 2 } }
+      : node,
   );
 }
 
