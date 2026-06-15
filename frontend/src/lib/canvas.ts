@@ -395,17 +395,18 @@ export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
   });
   dagre.layout(graph);
 
-  return nodes.map((node) => {
+  // 배치 결과를 좌상단(0,0) 기준으로 정규화 — 누적 드리프트 없이 항상 원점에서 시작(캔버스 비대화 방지).
+  const placed = nodes.map((node) => {
     const positioned = graph.node(node.id);
     const size = nodeSizeOf(node.data.nodeType);
-    return {
-      ...node,
-      position: {
-        x: positioned.x - size.w / 2,
-        y: positioned.y - size.h / 2,
-      },
-    };
+    return { node, x: positioned.x - size.w / 2, y: positioned.y - size.h / 2 };
   });
+  const minX = Math.min(...placed.map((p) => p.x));
+  const minY = Math.min(...placed.map((p) => p.y));
+  return placed.map(({ node, x, y }) => ({
+    ...node,
+    position: { x: x - minX, y: y - minY },
+  }));
 }
 
 /** 일부 노드(ids)만 자체 서브그래프로 자동 배치하고, 현재 좌상단 위치에 고정해 그룹이 제자리에 남게 한다. */
