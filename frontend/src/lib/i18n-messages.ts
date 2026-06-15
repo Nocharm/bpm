@@ -240,6 +240,10 @@ const en = {
   "edgeStyle.curve": "Curved",
   "edgeStyle.step": "Stepped",
   "edgeStyle.straight": "Straight",
+  "branch.pick": "Branch label from decision",
+  "branch.yes": "Yes",
+  "branch.no": "No",
+  "branch.other": "Other",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -482,6 +486,10 @@ const ko: Record<MessageKey, string> = {
   "edgeStyle.curve": "곡선",
   "edgeStyle.step": "꺾은선",
   "edgeStyle.straight": "직선",
+  "branch.pick": "판단 분기 라벨",
+  "branch.yes": "Yes",
+  "branch.no": "No",
+  "branch.other": "기타",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

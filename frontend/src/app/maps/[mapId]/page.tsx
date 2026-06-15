@@ -30,6 +30,7 @@ import { ApproverManager } from "@/components/approver-manager";
 import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
@@ -53,11 +54,15 @@ import {
   insertNodeAfter,
   pickDropZone,
   rectWithExclusions,
+  branchKindOf,
+  BRANCH_YES_LABEL,
+  BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
   NODE_WIDTH,
   type AppNode,
+  type BranchKind,
   type DropZone,
   type NodeData,
   type OutlineEdge,
@@ -113,6 +118,10 @@ const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
 const GROUP_PAD = 16; // 그룹 박스가 멤버 bounding box를 감싸는 여백
 const GROUP_TITLE_GAP = 26; // 박스 상단에 타이틀바를 얹을 추가 여백 — 멤버 노드와 제목 겹침 방지
 const EXTENT_MARGIN = 600; // 노드 위치·패닝 허용 범위 = 콘텐츠 bbox + 이 여백 (무한 확장 방지, 콘텐츠 늘면 확장)
+// 엣지 라벨(분기 Yes/No/기타 등) — 디자인 토큰으로 알약 스타일(서피스 배경 + hairline 테두리 + ink 텍스트)
+const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
+const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
+const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
@@ -277,6 +286,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  // 판단 노드에서 연결 시 분기(Yes/No/기타) 선택 대기 중인 연결
+  const [pendingBranch, setPendingBranch] = useState<Connection | null>(null);
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -1229,18 +1240,47 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────
 
+  // 라벨 지정해 엣지 생성 (기본은 빈 라벨)
+  const createEdge = useCallback(
+    (connection: Connection, label: string) => {
+      pushHistory();
+      setEdges((current) =>
+        addEdge(
+          { ...EDGE_DEFAULTS, ...connection, id: crypto.randomUUID(), label: label || undefined },
+          current,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [pushHistory, setEdges, scheduleAutoSave],
+  );
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly) {
         return;
       }
-      pushHistory();
-      setEdges((current) =>
-        addEdge({ ...EDGE_DEFAULTS, ...connection, id: crypto.randomUUID() }, current),
-      );
-      scheduleAutoSave();
+      // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
+      const source = nodesRef.current.find((node) => node.id === connection.source);
+      if (source?.data.nodeType === "decision") {
+        setPendingBranch(connection);
+        return;
+      }
+      createEdge(connection, "");
     },
-    [readOnly, pushHistory, setEdges, scheduleAutoSave],
+    [readOnly, createEdge],
+  );
+
+  // 분기 모달 선택 → 라벨(Yes/No/빈값=기타)로 엣지 생성
+  const handlePickBranch = useCallback(
+    (kind: BranchKind) => {
+      if (pendingBranch) {
+        const label = kind === "yes" ? BRANCH_YES_LABEL : kind === "no" ? BRANCH_NO_LABEL : "";
+        createEdge(pendingBranch, label);
+      }
+      setPendingBranch(null);
+    },
+    [pendingBranch, createEdge],
   );
 
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
@@ -2232,6 +2272,27 @@ function MapEditor({ mapId }: { mapId: number }) {
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
   );
+  // 선택 엣지가 판단 노드 분기면 그 종류(Yes/No/기타), 아니면 null — 인스펙터 탭 표시 판정
+  const selectedEdgeBranch = useMemo<BranchKind | null>(() => {
+    if (!selectedEdge) {
+      return null;
+    }
+    const source = nodes.find((node) => node.id === selectedEdge.source);
+    if (source?.data.nodeType !== "decision") {
+      return null;
+    }
+    return branchKindOf(selectedEdge.label);
+  }, [selectedEdge, nodes]);
+
+  // 인스펙터 탭으로 분기 종류 전환 — Yes/No는 고정 라벨, 기타는 라벨 비우고 직접 편집
+  const setSelectedEdgeBranch = useCallback(
+    (kind: BranchKind) => {
+      updateSelectedEdgeLabel(
+        kind === "yes" ? BRANCH_YES_LABEL : kind === "no" ? BRANCH_NO_LABEL : "",
+      );
+    },
+    [updateSelectedEdgeLabel],
+  );
   // 노드별 미해결 코멘트 수 — 렌더 시 nodes에 주입 (effect 내 setState 회피)
   const unresolvedCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -2257,9 +2318,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
     return edges.map((edge) => {
-      const typed = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
+      let next: Edge = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
+      // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일
+      if (edge.label) {
+        next = {
+          ...next,
+          labelStyle: EDGE_LABEL_STYLE,
+          labelBgStyle: EDGE_LABEL_BG_STYLE,
+          labelBgPadding: EDGE_LABEL_BG_PADDING,
+          labelBgBorderRadius: 6,
+        };
+      }
       if (!selectedId) {
-        return typed;
+        return next;
       }
       const stroke =
         edge.target === selectedId
@@ -2268,11 +2339,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             ? "var(--color-edge-out)"
             : null;
       if (!stroke) {
-        return typed;
+        return next;
       }
       return {
-        ...typed,
-        style: { ...typed.style, stroke, strokeWidth: 2.5 },
+        ...next,
+        style: { ...next.style, stroke, strokeWidth: 2.5 },
         markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
       };
     });
@@ -3461,11 +3532,31 @@ function MapEditor({ mapId }: { mapId: number }) {
             ) : selectedEdge ? (
               <>
             <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.edgeEdit")}</h2>
+            {/* 판단 노드 분기 엣지 — Yes/No/기타 탭 전환. 기타일 때만 라벨 직접 편집 */}
+            {selectedEdgeBranch !== null && (
+              <div className="mb-3 flex overflow-hidden rounded-sm border border-hairline text-caption">
+                {(["yes", "no", "other"] as BranchKind[]).map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => setSelectedEdgeBranch(kind)}
+                    className={`flex-1 px-2 py-1 ${
+                      selectedEdgeBranch === kind
+                        ? "bg-accent-tint text-accent"
+                        : "text-ink-secondary hover:bg-surface-alt"
+                    }`}
+                  >
+                    {t(`branch.${kind}`)}
+                  </button>
+                ))}
+              </div>
+            )}
             <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
             <input
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
+              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
               value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
-              disabled={readOnly}
+              disabled={readOnly || (selectedEdgeBranch !== null && selectedEdgeBranch !== "other")}
               onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
             />
             <p className="mt-3 text-fine text-ink-tertiary">{t("editor.hintEdge")}</p>
@@ -3537,6 +3628,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div className="pointer-events-none fixed bottom-4 left-1/2 z-[1300] -translate-x-1/2 rounded-md bg-ink px-3 py-2 text-caption text-surface shadow-lg">
           {toast}
         </div>
+      )}
+      {pendingBranch && (
+        <EdgeBranchModal onPick={handlePickBranch} onClose={() => setPendingBranch(null)} />
       )}
     </NodeActionsContext.Provider>
   );
