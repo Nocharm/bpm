@@ -225,7 +225,8 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         <Handle type="source" position={Position.Right} />
-        <DrillButton nodeId={id} />
+        {/* decision 노드는 하위 프로세스 생성 불가 — 기존 하위가 있을 때만 진입 버튼 */}
+        {data.hasChildren && <DrillButton nodeId={id} />}
       </div>
     );
   }
@@ -255,7 +256,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       <Handle type="source" position={Position.Right} />
-      <DrillButton nodeId={id} />
+      {(data.nodeType === "process" || data.hasChildren) && <DrillButton nodeId={id} />}
     </div>
   );
 }

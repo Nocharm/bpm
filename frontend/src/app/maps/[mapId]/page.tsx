@@ -1508,6 +1508,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (aId === bId) {
         return;
       }
+      // 하위 프로세스는 process 노드만 가질 수 있음 — decision/start/end는 거부
+      const bNode = nodesRef.current.find((node) => node.id === bId);
+      if (bNode && bNode.data.nodeType !== "process") {
+        setStatus(t("err.childOnlyProcess"));
+        return;
+      }
       const parentById = new Map(
         (fullGraph?.nodes ?? []).map((node) => [node.id, node.parent_node_id]),
       );
@@ -2100,6 +2106,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("ctx.autoLayout"),
         icon: Network,
+        accel: "a",
+        shortcut: "A",
         disabled: ids ? count < 2 : false,
         onSelect: () =>
           applyNodesTransform((current) =>
@@ -2252,6 +2260,24 @@ function MapEditor({ mapId }: { mapId: number }) {
             },
             { divider: true },
           ];
+      // 하위 프로세스는 process 노드(또는 이미 하위를 가진 노드)만 — decision/start/end 제외
+      const targetNode = nodes.find((item) => item.id === menu.targetId);
+      const canHaveChild =
+        targetNode?.data.nodeType === "process" || (targetNode?.data.hasChildren ?? false);
+      const openChildItems: ContextMenuItem[] = canHaveChild
+        ? [
+            {
+              label: t("ctx.openChild"),
+              onSelect: () => {
+                // ref 조회는 이벤트 시점에 — 렌더 중 ref 접근 금지 (react-hooks/refs)
+                const node = nodesRef.current.find((item) => item.id === menu.targetId);
+                if (node) {
+                  handleDrillIn(node, menu.x, menu.y);
+                }
+              },
+            },
+          ]
+        : [];
       return [
         // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
         {
@@ -2266,16 +2292,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
         { divider: true },
         ...colorItems,
-        {
-          label: t("ctx.openChild"),
-          onSelect: () => {
-            // ref 조회는 이벤트 시점에 — 렌더 중 ref 접근 금지 (react-hooks/refs)
-            const node = nodesRef.current.find((item) => item.id === menu.targetId);
-            if (node) {
-              handleDrillIn(node, menu.x, menu.y);
-            }
-          },
-        },
+        ...openChildItems,
         ...deleteItems,
       ];
     }
@@ -2752,6 +2769,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
 
       // 모든 판정은 물리 키(event.code) — 한글 IME·키 레이아웃·OS(Mac Option) 무관
+      // Shift+L — 전역 자동 정렬(오토레이아웃, L=Layout). 메뉴 가속기는 A→A.
+      if (
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.code === "KeyL"
+      ) {
+        fire(() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current)));
+        return;
+      }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 (undo/redo·검색은 별도 핸들러)
       if (event.ctrlKey || event.metaKey) {
         if (event.code === "KeyG" && !event.shiftKey) {
@@ -3342,6 +3370,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                 // 좌하단(SW) 대각 — 위치+연결 교환
                 { zone: "swap", Icon: ArrowLeftRight, x: cx - radius * Math.SQRT1_2, y: cy + radius * Math.SQRT1_2, label: t("dropzone.swap") },
               ] as const;
+              // 하위로 넣기는 process 노드 타깃만 — decision/start/end면 child 타일 숨김
+              const childAllowed =
+                nodes.find((node) => node.id === dropTarget.id)?.data.nodeType === "process";
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
                   {/* 기준 셀(B) 원형 링 */}
@@ -3349,7 +3380,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                     className="zone-ring absolute rounded-full border-2 border-accent/40"
                     style={{ left: cx - radius, top: cy - radius, width: radius * 2, height: radius * 2 }}
                   />
-                  {tiles.map(({ zone, Icon, x, y, label }) => (
+                  {tiles
+                    .filter((tile) => tile.zone !== "child" || childAllowed)
+                    .map(({ zone, Icon, x, y, label }) => (
                     <div
                       key={zone}
                       className={`zone-pop absolute flex flex-col items-center justify-center gap-1 rounded-md border px-2 text-center shadow-md ${

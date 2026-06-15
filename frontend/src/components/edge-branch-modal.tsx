@@ -1,7 +1,7 @@
 "use client";
 
 // 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 — Yes / No / 기타.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { BranchKind } from "@/lib/canvas";
@@ -15,6 +15,12 @@ export function EdgeBranchModal({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  // 연결 릴리스(pointerup) 직후 따라오는 click이 백드롭에 떨어져 모달이 즉시 닫히는 것 방지
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setArmed(true), 150);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Esc로 취소
   useEffect(() => {
@@ -33,7 +39,11 @@ export function EdgeBranchModal({
     <div
       className="fixed inset-0 z-[1200] flex items-center justify-center"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-      onClick={onClose}
+      onClick={() => {
+        if (armed) {
+          onClose();
+        }
+      }}
     >
       <div
         className="w-72 rounded-md bg-surface p-4 shadow-lg"
