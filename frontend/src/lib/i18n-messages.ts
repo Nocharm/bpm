@@ -224,6 +224,7 @@ const en = {
   "ai.thinking": "Thinking…",
   "ai.readOnly": "Editing is locked — only help answers are available.",
   "ai.error": "AI request failed",
+  "ai.disabled": "AI is unavailable — the backend AI is disabled or unreachable.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -450,6 +451,7 @@ const ko: Record<MessageKey, string> = {
   "ai.thinking": "생각 중…",
   "ai.readOnly": "편집이 잠겨 도움말 답변만 가능합니다.",
   "ai.error": "AI 요청 실패",
+  "ai.disabled": "AI를 사용할 수 없습니다 — 백엔드 AI가 비활성이거나 연결되지 않았습니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

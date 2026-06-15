@@ -2453,16 +2453,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           >
             <PanelRight size={16} strokeWidth={1.5} />
           </button>
-          {aiEnabled && (
-            <button
-              type="button"
-              className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
-              onClick={() => setAiOpen((open) => !open)}
-              title={t("ai.toggle")}
-            >
-              {t("ai.toggle")}
-            </button>
-          )}
+          {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
+          <button
+            type="button"
+            className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+            onClick={() => setAiOpen((open) => !open)}
+            title={t("ai.toggle")}
+          >
+            {t("ai.toggle")}
+          </button>
           <button
             className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
@@ -3054,11 +3053,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             </div>
           </div>
         )}
-        {aiEnabled && aiOpen && versionId !== null && (
+        {aiOpen && versionId !== null && (
           <div className="flex w-80 shrink-0 border-l border-hairline">
             <AiChatPanel
               versionId={versionId}
               parent={currentParentId}
+              aiEnabled={aiEnabled}
               canEdit={!readOnly && (checkout?.mine ?? false)}
               onGraphProposal={applyAiProposal}
             />
