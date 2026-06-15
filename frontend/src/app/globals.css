@@ -98,6 +98,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* 버튼 기본 인터랙션 — 전역. 포인터 커서 + 클릭 시 살짝 눌림(tactile).
+   hover 배경은 컴포넌트별 토큰(hover:bg-*) 유지. element 셀렉터로 specificity를 낮춰 Tailwind 유틸리티가 항상 우선. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button {
+  transition: transform 120ms var(--ease-smooth);
+}
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+  button:not(:disabled):active {
+    transform: none;
+  }
+}
+
 /* 창 열림 — 마우스 지점(창 중앙)에서 확장되며 열리는 연출 */
 @keyframes window-open {
   from {
