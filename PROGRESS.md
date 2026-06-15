@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-15
+- dot-grid 가시성 향상(`--color-canvas-dot` 진하게 + size 1.2→1.8) + 루트(최외곽) 캔버스 포커스 시 드릴인 창 자동 최소화(좌하단 dock, `focusScope` index 0).
 - 판단(decision) 노드 분기 엣지. 판단 노드에서 연결 시 Yes/No/기타 선택 모달(`edge-branch-modal.tsx`), 엣지 라벨에 디자인 알약 스타일(styledEdges labelStyle/Bg), 인스펙터에 Yes/No/기타 세그먼트 탭 전환 + 기타일 때만 라벨 직접 편집. 라벨 기반 종류 판정(`branchKindOf`, 백엔드 무변경 — 기존 label 영속). build green.
 - 캔버스 무한 확장 → fit 비대화 개선. ① 오토레이아웃(`layoutWithDagre`) 결과를 좌상단(0,0) 기준 정규화(드리프트 누적 제거, bun 검증). ② 노드 위치·패닝 범위를 콘텐츠 bbox+여백(600)으로 제한(`contentExtent` → `nodeExtent`/`translateExtent`, 콘텐츠 늘면 확장) + `minZoom 0.2` 안전망. build green.
 - 아웃라인 들여쓰기·키보드 편집. ① 들여쓰기는 하위 프로세스(계층)에만 — 병렬/분기는 같은 수준(`computeScopeFlow` 분기 indentation 제거, bun 검증). ② 키보드: 선택 상태 Enter=이름 편집 진입·재Enter=저장, Esc=취소, Tab=다음 노드(하위 프로세스 있으면 펼쳐 첫 자식 진입), 편집 중 Tab=저장+다음(`page.tsx handleOutlineNext`, 사이드바 onKeyDown·focus 관리). build green.

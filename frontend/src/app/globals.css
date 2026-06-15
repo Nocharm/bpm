@@ -23,7 +23,7 @@
   --color-surface-pearl: #fafafc;
   --color-surface-chip: #d2d2d7;
   --color-canvas: #f6f6f8; /* 무한 캔버스 배경 */
-  --color-canvas-dot: #dddde3; /* dot-grid 점 */
+  --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
 
   /* Ink */
   --color-ink: #16161d;

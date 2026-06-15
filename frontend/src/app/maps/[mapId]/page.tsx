@@ -1125,8 +1125,23 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       setActiveIndex(index);
+      // 최외곽(루트) 캔버스를 포커스하면 떠 있던 드릴인 창들을 최소화(좌하단 dock)
+      if (index === 0) {
+        setWindowGeom((map) => {
+          const next = { ...map };
+          scopes.forEach((scope, i) => {
+            if (i === 0) {
+              return;
+            }
+            const key = scopeKey(scope);
+            const base = next[key] ?? defaultGeom(i, bounds);
+            next[key] = { ...base, minimized: true };
+          });
+          return next;
+        });
+      }
     },
-    [activeIndex, saveCurrentScope, t],
+    [activeIndex, saveCurrentScope, scopes, bounds, t],
   );
 
   // 창 닫기 — 그 창과 하위(더 깊은 창) 모두 닫고 상위로 복귀
@@ -3159,7 +3174,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <Background
                         variant={BackgroundVariant.Dots}
                         gap={20}
-                        size={1.2}
+                        size={1.8}
                         color="var(--color-canvas-dot)"
                       />
                       <Controls />
