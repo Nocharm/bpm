@@ -317,6 +317,22 @@ export const EDGE_DEFAULTS = {
   markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
 } as const;
 
+// 판단(decision) 노드 분기 엣지 — Yes/No는 고정 라벨, 기타는 사용자 지정(빈 값 포함)
+export type BranchKind = "yes" | "no" | "other";
+export const BRANCH_YES_LABEL = "Yes";
+export const BRANCH_NO_LABEL = "No";
+
+/** 엣지 라벨로 분기 종류 판정 — "Yes"/"No"는 고정, 그 외(빈 값·커스텀)는 기타. */
+export function branchKindOf(label: unknown): BranchKind {
+  if (label === BRANCH_YES_LABEL) {
+    return "yes";
+  }
+  if (label === BRANCH_NO_LABEL) {
+    return "no";
+  }
+  return "other";
+}
+
 /** B로 들어오는(B가 target) 엣지들. */
 export function getIncomingEdges(edges: Edge[], nodeId: string): Edge[] {
   return edges.filter((edge) => edge.target === nodeId);
