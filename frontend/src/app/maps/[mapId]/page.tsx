@@ -52,7 +52,7 @@ import {
   insertNodeBefore,
   insertNodeAfter,
   pickDropZone,
-  connectedOrthogonalUnion,
+  rectWithExclusions,
   EDGE_DEFAULTS,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
@@ -2299,29 +2299,51 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       // 멤버 많을수록 패딩↑ → 큰 그룹이 작은 그룹을 시각적으로 감쌈
       const pad = GROUP_PAD + Math.min(members.length, 8) * 4;
-      // 멤버 사각형(패딩 포함)들을 직교 L자 통로로 이어 하나로 연결된 union 외곽선 — 흩어져도 분리 안 됨.
+      const originX = minX - pad;
+      const originY = minY - pad - GROUP_TITLE_GAP;
+      const width = maxX - minX + pad * 2;
+      const height = maxY - minY + pad * 2 + GROUP_TITLE_GAP;
+      // 기본 사각형(멤버 padded bbox)에서, 범위 안에 들어온 비멤버 노드를 가장 가까운 변쪽으로 잘라냄.
       // 좌표는 박스 좌상단(origin) 기준 상대. y는 타이틀바 헤드룸(GROUP_TITLE_GAP)만큼 내림.
-      const union = connectedOrthogonalUnion(
-        members.map((member) => ({
-          x: member.position.x - minX,
-          y: member.position.y - minY + GROUP_TITLE_GAP,
-          w: (member.measured?.width ?? NODE_WIDTH) + pad * 2,
-          h: (member.measured?.height ?? NODE_HEIGHT) + pad * 2,
-        })),
-        NODE_HEIGHT,
+      const intruderMargin = 8;
+      const intruders = nodes
+        .filter((node) => !node.data.groupIds.includes(group.id))
+        .flatMap((node) => {
+          const w = node.measured?.width ?? NODE_WIDTH;
+          const h = node.measured?.height ?? NODE_HEIGHT;
+          // 멤버 padded bbox와 겹치는 비멤버만
+          if (
+            node.position.x >= maxX + pad ||
+            node.position.x + w <= minX - pad ||
+            node.position.y >= maxY + pad ||
+            node.position.y + h <= minY - pad
+          ) {
+            return [];
+          }
+          return [
+            {
+              x: node.position.x - intruderMargin - originX,
+              y: node.position.y - intruderMargin - originY,
+              w: w + intruderMargin * 2,
+              h: h + intruderMargin * 2,
+            },
+          ];
+        });
+      const region = rectWithExclusions(
+        { x: 0, y: GROUP_TITLE_GAP, w: width, h: height - GROUP_TITLE_GAP },
+        intruders,
       );
       return [
         {
           id: group.id,
           label: group.label,
           color: group.color,
-          // 상단은 타이틀바 높이만큼 더 띄워 멤버 노드와 제목이 겹치지 않게 함
-          x: minX - pad,
-          y: minY - pad - GROUP_TITLE_GAP,
-          width: maxX - minX + pad * 2,
-          height: maxY - minY + pad * 2 + GROUP_TITLE_GAP,
-          fill: union.fill,
-          outline: union.outline,
+          x: originX,
+          y: originY,
+          width,
+          height,
+          fill: region.fill,
+          outline: region.outline,
           // 멤버 적은 그룹이 위(z 큼). 전부 노드(z:0)보다 뒤
           z: -members.length,
         },

@@ -492,43 +492,22 @@ export function distributeSelected(
   });
 }
 
-// ── 그룹 박스 직교 union 외곽선 ─────────────────────────
-// 멤버 사각형들의 합집합을 90° 직교 폴리곤으로 — bbox 한 장 대신 멤버에 달라붙는 외곽선으로
-// "빈 구석의 비멤버 노드가 그룹 안처럼 보이는" 문제 해소.
+// ── 그룹 박스 외곽선 (기본 사각형 − 비멤버 notch) ─────────────────────────
+// 멤버 bbox 사각형에서, 범위 안에 들어온 비멤버 노드를 "가장 가까운 변쪽으로" 직사각형으로 잘라낸다.
+// 90° 직교 폴리곤이라 연결 유지 + 비멤버는 제외.
 export interface OrthoUnion {
   fill: string; // 채움 영역 path (filled 셀들의 사각형 모음, 균일 반투명)
   outline: string; // 경계 변만 모은 stroke path (filled↔unfilled 전이)
 }
 
-/** 축 정렬 사각형들의 합집합 외곽선 — 좌표 압축 격자로 정확히 계산(래스터 오차 없음). 좌표는 입력 그대로(상대). */
-export function orthogonalUnion(rects: { x: number; y: number; w: number; h: number }[]): OrthoUnion {
-  const valid = rects.filter((r) => r.w > 0 && r.h > 0);
-  if (valid.length === 0) {
-    return { fill: "", outline: "" };
-  }
-  // 모든 변 좌표로 격자 분할(좌표 압축)
-  const xs = Array.from(new Set(valid.flatMap((r) => [r.x, r.x + r.w]))).sort((a, b) => a - b);
-  const ys = Array.from(new Set(valid.flatMap((r) => [r.y, r.y + r.h]))).sort((a, b) => a - b);
-  const xi = new Map(xs.map((x, i) => [x, i]));
-  const yi = new Map(ys.map((y, i) => [y, i]));
+export type Rect = { x: number; y: number; w: number; h: number };
+
+/** 좌표 압축 격자(filled 셀)에서 채움 path + 경계 외곽선 path 생성 — 공용. */
+function emitCellPaths(xs: number[], ys: number[], filled: boolean[]): OrthoUnion {
   const nx = xs.length - 1;
   const ny = ys.length - 1;
-  // filled[i*ny + j] — 셀 (i,j)가 어떤 사각형에 덮이는지. 사각형이 덮는 셀 범위를 직접 마킹(O(덮인 셀))
-  const filled = new Array<boolean>(nx * ny).fill(false);
-  for (const r of valid) {
-    const i0 = xi.get(r.x) ?? 0;
-    const i1 = xi.get(r.x + r.w) ?? nx;
-    const j0 = yi.get(r.y) ?? 0;
-    const j1 = yi.get(r.y + r.h) ?? ny;
-    for (let i = i0; i < i1; i++) {
-      for (let j = j0; j < j1; j++) {
-        filled[i * ny + j] = true;
-      }
-    }
-  }
   const isFilled = (i: number, j: number): boolean =>
     i >= 0 && i < nx && j >= 0 && j < ny && filled[i * ny + j];
-
   const fillParts: string[] = [];
   const outlineParts: string[] = [];
   for (let i = 0; i < nx; i++) {
@@ -551,61 +530,60 @@ export function orthogonalUnion(rects: { x: number; y: number; w: number; h: num
   return { fill: fillParts.join(""), outline: outlineParts.join("") };
 }
 
-type Rect = { x: number; y: number; w: number; h: number };
+/** 침입 사각형을 base 안으로 클램프 후, 가장 가까운 변에서 그 사각형까지 잘라낼 notch 사각형. 겹침 없으면 null. */
+function nearestEdgeNotch(base: Rect, it: Rect): Rect | null {
+  const ix0 = Math.max(it.x, base.x);
+  const iy0 = Math.max(it.y, base.y);
+  const ix1 = Math.min(it.x + it.w, base.x + base.w);
+  const iy1 = Math.min(it.y + it.h, base.y + base.h);
+  if (ix0 >= ix1 || iy0 >= iy1) {
+    return null; // base와 겹치지 않음
+  }
+  const dLeft = ix0 - base.x;
+  const dRight = base.x + base.w - ix1;
+  const dTop = iy0 - base.y;
+  const dBottom = base.y + base.h - iy1;
+  const nearest = Math.min(dLeft, dRight, dTop, dBottom);
+  if (nearest === dLeft) {
+    return { x: base.x, y: iy0, w: ix1 - base.x, h: iy1 - iy0 };
+  }
+  if (nearest === dRight) {
+    return { x: ix0, y: iy0, w: base.x + base.w - ix0, h: iy1 - iy0 };
+  }
+  if (nearest === dTop) {
+    return { x: ix0, y: base.y, w: ix1 - ix0, h: iy1 - base.y };
+  }
+  return { x: ix0, y: iy0, w: ix1 - ix0, h: base.y + base.h - iy0 }; // bottom
+}
 
-/** 멤버 사각형들을 MST 기반 직교 L자 통로로 이어, 흩어져도 하나로 연결된 union 외곽선을 만든다. */
-export function connectedOrthogonalUnion(rects: Rect[], bridgeWidth: number): OrthoUnion {
-  const valid = rects.filter((r) => r.w > 0 && r.h > 0);
-  if (valid.length <= 1) {
-    return orthogonalUnion(valid);
+/** 기본 사각형 base에서, 침입(비멤버) 사각형들을 가장 가까운 변쪽으로 잘라낸 직교 외곽선. */
+export function rectWithExclusions(base: Rect, intruders: Rect[]): OrthoUnion {
+  if (base.w <= 0 || base.h <= 0) {
+    return { fill: "", outline: "" };
   }
-  const cx = valid.map((r) => r.x + r.w / 2);
-  const cy = valid.map((r) => r.y + r.h / 2);
-  const n = valid.length;
-  // Prim MST (Manhattan 거리) — 작은 N이라 O(N²)로 충분
-  const inTree = new Array<boolean>(n).fill(false);
-  const dist = new Array<number>(n).fill(Infinity);
-  const parent = new Array<number>(n).fill(-1);
-  dist[0] = 0;
-  const edges: [number, number][] = [];
-  for (let k = 0; k < n; k++) {
-    let u = -1;
-    let best = Infinity;
-    for (let v = 0; v < n; v++) {
-      if (!inTree[v] && dist[v] < best) {
-        best = dist[v];
-        u = v;
-      }
-    }
-    if (u === -1) {
-      break;
-    }
-    inTree[u] = true;
-    if (parent[u] !== -1) {
-      edges.push([parent[u], u]);
-    }
-    for (let v = 0; v < n; v++) {
-      if (!inTree[v]) {
-        const d = Math.abs(cx[u] - cx[v]) + Math.abs(cy[u] - cy[v]);
-        if (d < dist[v]) {
-          dist[v] = d;
-          parent[v] = u;
-        }
-      }
+  const notches = intruders
+    .map((it) => nearestEdgeNotch(base, it))
+    .filter((r): r is Rect => r !== null);
+  const xs = Array.from(
+    new Set([base.x, base.x + base.w, ...notches.flatMap((r) => [r.x, r.x + r.w])]),
+  ).sort((a, b) => a - b);
+  const ys = Array.from(
+    new Set([base.y, base.y + base.h, ...notches.flatMap((r) => [r.y, r.y + r.h])]),
+  ).sort((a, b) => a - b);
+  const nx = xs.length - 1;
+  const ny = ys.length - 1;
+  const inRect = (r: Rect, cx: number, cy: number): boolean =>
+    cx > r.x && cx < r.x + r.w && cy > r.y && cy < r.y + r.h;
+  const filled = new Array<boolean>(nx * ny).fill(false);
+  for (let i = 0; i < nx; i++) {
+    const cx = (xs[i] + xs[i + 1]) / 2;
+    for (let j = 0; j < ny; j++) {
+      const cy = (ys[j] + ys[j + 1]) / 2;
+      // base 안이고 어떤 notch에도 안 들면 채움
+      filled[i * ny + j] = !notches.some((notch) => inRect(notch, cx, cy));
     }
   }
-  const half = bridgeWidth / 2;
-  const corridors: Rect[] = [];
-  for (const [a, b] of edges) {
-    // 코너 (cx[b], cy[a])를 도는 L자 — 수평 통로 + 수직 통로
-    const hx = Math.min(cx[a], cx[b]) - half;
-    const hw = Math.abs(cx[a] - cx[b]) + bridgeWidth;
-    corridors.push({ x: hx, y: cy[a] - half, w: hw, h: bridgeWidth });
-    const vy = Math.min(cy[a], cy[b]) - half;
-    const vh = Math.abs(cy[a] - cy[b]) + bridgeWidth;
-    corridors.push({ x: cx[b] - half, y: vy, w: bridgeWidth, h: vh });
-  }
-  return orthogonalUnion([...valid, ...corridors]);
+  return emitCellPaths(xs, ys, filled);
 }
 
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
