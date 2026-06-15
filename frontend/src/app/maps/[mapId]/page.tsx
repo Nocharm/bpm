@@ -292,6 +292,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [aiPreviewActive, setAiPreviewActive] = useState(false);
   const aiPreviewRef = useRef(false);
 
+  // 엣지 스타일 — 맵 전역(모든 엣지 일괄). React Flow 빌트인 타입: default=곡선, smoothstep=꺾은선, straight=직선. localStorage 영속.
+  const [edgeStyle, setEdgeStyle] = useState<"default" | "smoothstep" | "straight">("smoothstep");
+
   // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
   const [dropTarget, setDropTarget] = useState<{
     id: string;
@@ -2009,12 +2012,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     [nodes, unresolvedCounts],
   );
 
-  // 선택 노드 기준 앞/뒤 단계 엣지 강조 — 들어오는(target=선택) teal, 나가는(source=선택) orange
+  // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
-    if (!selectedId) {
-      return edges;
-    }
     return edges.map((edge) => {
+      const typed = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
+      if (!selectedId) {
+        return typed;
+      }
       const stroke =
         edge.target === selectedId
           ? "var(--color-edge-in)"
@@ -2022,15 +2026,15 @@ function MapEditor({ mapId }: { mapId: number }) {
             ? "var(--color-edge-out)"
             : null;
       if (!stroke) {
-        return edge;
+        return typed;
       }
       return {
-        ...edge,
-        style: { ...edge.style, stroke, strokeWidth: 2.5 },
+        ...typed,
+        style: { ...typed.style, stroke, strokeWidth: 2.5 },
         markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
       };
     });
-  }, [edges, selectedId]);
+  }, [edges, selectedId, edgeStyle]);
 
   // 그룹 박스 — 멤버 bounding box로 자동 산정해 ViewportPortal에 flow 좌표로 렌더(시각 전용)
   const groupBoxes = useMemo(() => {
@@ -2102,6 +2106,18 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     window.localStorage.setItem("bpm.nodeDisplayFields", JSON.stringify(displayFields));
   }, [displayFields]);
+
+  // 엣지 스타일 1회 hydration + 변경 영속
+  useEffect(() => {
+    const saved = window.localStorage.getItem("bpm.edgeStyle");
+    if (saved === "default" || saved === "smoothstep" || saved === "straight") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setEdgeStyle(saved);
+    }
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem("bpm.edgeStyle", edgeStyle);
+  }, [edgeStyle]);
 
   const toggleDisplayField = useCallback((field: NodeDisplayField) => {
     setDisplayFields((prev) =>
@@ -2455,6 +2471,20 @@ function MapEditor({ mapId }: { mapId: number }) {
           >
             <PanelRight size={16} strokeWidth={1.5} />
           </button>
+          {/* 엣지 스타일 — 맵 전역(모든 엣지 일괄 적용) */}
+          <select
+            className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+            value={edgeStyle}
+            onChange={(event) =>
+              setEdgeStyle(event.target.value as "default" | "smoothstep" | "straight")
+            }
+            title={t("editor.edgeStyle")}
+            aria-label={t("editor.edgeStyle")}
+          >
+            <option value="default">{t("edgeStyle.curve")}</option>
+            <option value="smoothstep">{t("edgeStyle.step")}</option>
+            <option value="straight">{t("edgeStyle.straight")}</option>
+          </select>
           {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
           <button
             type="button"
