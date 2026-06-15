@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-15
+- 단축키 IME 무관(`event.code` 물리키 판정 — 한글 ㅁ/ㅊ 등도 인식) + 정렬 키를 왼손 전용·연관 철자로 재배치(좌 W=West, 가로가운데 C, 상단 T, 세로가운데 X, 가로분배 R=spRead, 세로분배 V). Alt 조합도 동일(Alt+W/C/T/X·R/V). 레전드 갱신.
 - 메뉴 단축키 2계층화. ① **메뉴 가속기(단일 키, 우클릭 메뉴 떠 있을 때만)** — `ContextMenu`에 키보드 네비게이션(`accel` 필드, 하위 메뉴 진입: A→정렬 날개→T 등). 1~4 추가, E 정보수정, A 정렬, G 그룹생성. ② **전역 조합키(메뉴 없이)** — Alt+L/C/T/M 정렬·Alt+H/V 분배(event.code로 OS무관), Ctrl+G 그룹, Ctrl+⇧E PNG. 레전드 갱신.
 - 정렬 메뉴 재구성. 가로 가운데(centerX)·세로 가운데(centerY) 정렬 추가(`alignSelected`), 오토레이아웃+정렬+분배를 단일 "정렬·레이아웃" 날개(submenu) 메뉴로 통합(pane/group/selection 공용 `alignItem`), 각 항목에 Lucide 정렬 아이콘으로 가로/세로 구분(`ContextMenuItem.icon` 지원 추가). bun 검증.
 - dot-grid 가시성 향상(`--color-canvas-dot` 진하게 + size 1.2→1.8) + 루트(최외곽) 캔버스 포커스 시 드릴인 창 자동 최소화(좌하단 dock, `focusScope` index 0).

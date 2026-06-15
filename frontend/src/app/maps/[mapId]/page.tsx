@@ -2113,8 +2113,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("editor.alignLeft"),
         icon: AlignStartVertical,
-        shortcut: "L",
-        accel: "l",
+        shortcut: "W",
+        accel: "w",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "left", ids ?? undefined)),
       },
@@ -2139,8 +2139,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("editor.alignCenterY"),
         icon: AlignCenterHorizontal,
-        shortcut: "M",
-        accel: "m",
+        shortcut: "X",
+        accel: "x",
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerY", ids ?? undefined)),
       },
@@ -2149,8 +2149,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         label: t("editor.distributeX"),
         icon: AlignHorizontalDistributeCenter,
-        shortcut: "H",
-        accel: "h",
+        shortcut: "R",
+        accel: "r",
         disabled: count < 3,
         onSelect: () => applyNodesTransform((current) => distributeSelected(current, "x", ids ?? undefined)),
       },
@@ -2744,7 +2744,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (summaryNodeId || bulkEditGroupId || pendingBranch || managingApprovers || pending) {
         return;
       }
-      const lower = event.key.toLowerCase();
       const count = nodesRef.current.filter((node) => node.selected).length;
       const fire = (action: () => void) => {
         event.preventDefault();
@@ -2752,23 +2751,24 @@ function MapEditor({ mapId }: { mapId: number }) {
         action();
       };
 
+      // 모든 판정은 물리 키(event.code) — 한글 IME·키 레이아웃·OS(Mac Option) 무관
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 (undo/redo·검색은 별도 핸들러)
       if (event.ctrlKey || event.metaKey) {
-        if (lower === "g" && !event.shiftKey) {
+        if (event.code === "KeyG" && !event.shiftKey) {
           fire(() => createGroupFromSelection());
-        } else if (lower === "e" && event.shiftKey) {
+        } else if (event.code === "KeyE" && event.shiftKey) {
           fire(() => void handleExportPng());
         }
         return;
       }
 
-      // Alt 조합 — 전역 정렬/분배 (예: Alt+T = 위쪽 정렬). 키 레이아웃/OS(Mac Option) 무관하게 code로 판정.
+      // Alt 조합 — 전역 정렬/분배 (왼손 전용 키: 좌=W, 가로가운데=C, 상단=T, 세로가운데=X, 가로분배=R, 세로분배=V)
       if (event.altKey) {
         const alignByCode: Record<string, "left" | "centerX" | "top" | "centerY"> = {
-          KeyL: "left",
+          KeyW: "left",
           KeyC: "centerX",
           KeyT: "top",
-          KeyM: "centerY",
+          KeyX: "centerY",
         };
         const axis = alignByCode[event.code];
         if (axis) {
@@ -2777,10 +2777,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
           return;
         }
-        if (event.code === "KeyH" || event.code === "KeyV") {
+        if (event.code === "KeyR" || event.code === "KeyV") {
           if (count >= 3) {
             fire(() =>
-              applyNodesTransform((current) => distributeSelected(current, event.code === "KeyH" ? "x" : "y")),
+              applyNodesTransform((current) => distributeSelected(current, event.code === "KeyR" ? "x" : "y")),
             );
           }
         }
