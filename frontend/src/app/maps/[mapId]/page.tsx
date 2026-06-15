@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, LogOut, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Lock, LogOut, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -309,6 +309,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const groupDropTargetRef = useRef<string | null>(null);
   const dwellRef = useRef<{ id: string; since: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 드래그 시작 시점의 노드 위치 — 위치 교환(swap) 시 드래그 노드의 원래 자리 복원용
+  const dragStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragCursorRef = useRef({ x: 0, y: 0 }); // 컨테이너 상대 커서 — 타일 적중 판정용
   // 기존 엣지 충돌 시 유지/삽입 되묻기 팝오버
   const [pending, setPending] = useState<{
@@ -1608,9 +1610,39 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, setNodes, pushHistory, scheduleAutoSave],
   );
 
-  // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위로 넣기. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
+  // A를 B의 자리로, B를 A의 드래그 시작 자리로 교환 (드롭존 중앙=swap)
+  const swapNodes = useCallback(
+    (aId: string, bId: string) => {
+      const start = dragStartPosRef.current;
+      setNodes((current) => {
+        const b = current.find((node) => node.id === bId);
+        if (!b) {
+          return current;
+        }
+        const bPos = { ...b.position };
+        const aOrig = start && start.id === aId ? { x: start.x, y: start.y } : null;
+        return current.map((node) => {
+          if (node.id === aId) {
+            return { ...node, position: bPos };
+          }
+          if (node.id === bId && aOrig) {
+            return { ...node, position: aOrig };
+          }
+          return node;
+        });
+      });
+      scheduleAutoSave();
+    },
+    [setNodes, scheduleAutoSave],
+  );
+
+  // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위·교환. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
+      if (zone === "swap") {
+        swapNodes(aId, bId);
+        return;
+      }
       if (zone === "group") {
         addToGroup(aId, bId);
         return;
@@ -1633,7 +1665,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [addToGroup, moveToChild, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+    [swapNodes, addToGroup, moveToChild, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -2717,7 +2749,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
                       onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
-                      onNodeDragStart={() => pushHistory()}
+                      onNodeDragStart={(_, node) => {
+                        pushHistory();
+                        dragStartPosRef.current = { id: node.id, x: node.position.x, y: node.position.y };
+                      }}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
                         const drop = dropTargetRef.current;
@@ -2880,6 +2915,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 { zone: "back", Icon: ArrowRight, x: cx + radius, y: cy, label: t("dropzone.back") },
                 { zone: "group", Icon: Boxes, x: cx, y: cy - radius, label: t("dropzone.group") },
                 { zone: "child", Icon: CornerDownRight, x: cx, y: cy + radius, label: t("dropzone.child") },
+                { zone: "swap", Icon: ArrowLeftRight, x: cx, y: cy, label: t("dropzone.swap") },
               ] as const;
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
