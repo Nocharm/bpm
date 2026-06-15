@@ -2,7 +2,7 @@
 
 // 인앱 알림 벨 — 5초 폴링, 미읽음 점 + 드롭다운 (design 2026-06-14)
 import { Bell } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -13,6 +13,21 @@ export function NotificationBell() {
   const { t } = useI18n();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // 바깥 클릭 시 닫기 — context-menu.tsx와 동일 패턴 (열려 있을 때만 바인딩)
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.target instanceof Element && !rootRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleMouseDown);
+    return () => window.removeEventListener("mousedown", handleMouseDown);
+  }, [open]);
 
   useEffect(() => {
     let alive = true;
@@ -46,7 +61,7 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <button
         type="button"
         className="relative flex items-center"
