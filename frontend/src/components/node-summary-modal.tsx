@@ -8,7 +8,28 @@ import { useEffect, useState } from "react";
 
 import { ScopePreview } from "@/components/scope-preview";
 import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
+import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+
+// 정보 수정 모달이 편집하는 필드 — 부분 패치
+export type NodeEditPatch = Partial<{
+  label: string;
+  nodeType: ProcessNodeType;
+  color: string;
+  assignee: string;
+  department: string;
+  system: string;
+  duration: string;
+}>;
+
+const ATTR_FIELDS: { key: "assignee" | "department" | "system" | "duration"; labelKey: "field.assignee" | "field.department" | "field.system" | "field.duration" }[] = [
+  { key: "assignee", labelKey: "field.assignee" },
+  { key: "department", labelKey: "field.department" },
+  { key: "system", labelKey: "field.system" },
+  { key: "duration", labelKey: "field.duration" },
+];
+
+const COLOR_COLLAPSED = 5; // 색 스와치 기본 1줄 노출 수 — "더 보기"로 전체 펼침
 
 interface NodeSummaryModalProps {
   versionId: number;
@@ -21,6 +42,16 @@ interface NodeSummaryModalProps {
   hasChildren: boolean;
   fullGraph: VersionGraph | null;
   readOnly: boolean;
+  // 편집 데이터 + 패치 (readOnly면 입력 비활성)
+  nodeType: ProcessNodeType;
+  color: string;
+  assignee: string;
+  department: string;
+  system: string;
+  duration: string;
+  colorPresets: string[];
+  typeOptions: { value: ProcessNodeType; label: string }[];
+  onPatch: (patch: NodeEditPatch) => void;
   onClose: () => void;
   // 하위 프로세스가 있을 때 그 캔버스로 진입 (있을 때만 버튼 노출)
   onOpenChild?: () => void;
@@ -37,6 +68,15 @@ export function NodeSummaryModal({
   hasChildren,
   fullGraph,
   readOnly,
+  nodeType,
+  color,
+  assignee,
+  department,
+  system,
+  duration,
+  colorPresets,
+  typeOptions,
+  onPatch,
   onClose,
   onOpenChild,
 }: NodeSummaryModalProps) {
@@ -46,6 +86,12 @@ export function NodeSummaryModal({
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [colorExpanded, setColorExpanded] = useState(false);
+  const attrValues = { assignee, department, system, duration };
+  const shownColors =
+    colorExpanded || colorPresets.length <= COLOR_COLLAPSED
+      ? colorPresets
+      : colorPresets.slice(0, COLOR_COLLAPSED);
 
   // 해당 노드 코멘트 로드(진입 1회) — 실패해도 모달은 동작(빈 목록)
   useEffect(() => {
@@ -104,7 +150,16 @@ export function NodeSummaryModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
-          <span className="flex-1 truncate text-body-strong text-ink">{title}</span>
+          {readOnly ? (
+            <span className="flex-1 truncate text-body-strong text-ink">{title}</span>
+          ) : (
+            <input
+              className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-body-strong text-ink"
+              value={title}
+              aria-label={t("field.title")}
+              onChange={(event) => onPatch({ label: event.target.value })}
+            />
+          )}
           <button
             type="button"
             title={t("summary.close")}
@@ -117,12 +172,82 @@ export function NodeSummaryModal({
         </div>
 
         <div className="flex flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary">
-          <div className="flex gap-4">
-            <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
-            {groupLabel && (
-              <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
-            )}
-          </div>
+          {readOnly ? (
+            <div className="flex gap-4">
+              <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
+              {groupLabel && (
+                <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {/* 유형 */}
+              <div className="flex items-center gap-2">
+                <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</label>
+                <select
+                  className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                  value={nodeType}
+                  onChange={(event) => onPatch({ nodeType: event.target.value as ProcessNodeType })}
+                >
+                  {typeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* 색 — 기본 1줄 + 더 보기 */}
+              <div className="flex items-start gap-2">
+                <span className="w-14 shrink-0 pt-1 text-fine text-ink-tertiary">{t("field.color")}</span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {shownColors.map((preset) => (
+                    <button
+                      key={preset || "default"}
+                      type="button"
+                      title={preset || "default"}
+                      aria-label={preset || "default"}
+                      onClick={() => onPatch({ color: preset })}
+                      className={`h-5 w-5 rounded-full border ${
+                        color === preset ? "ring-2 ring-accent" : "border-hairline"
+                      }`}
+                      style={{ background: preset || "var(--color-surface-alt)" }}
+                    />
+                  ))}
+                  {colorPresets.length > COLOR_COLLAPSED && !colorExpanded && (
+                    <button
+                      type="button"
+                      className="px-1 text-fine text-ink-tertiary hover:text-ink"
+                      onClick={() => setColorExpanded(true)}
+                    >
+                      {t("editor.moreColors")}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* BPM 속성 */}
+              {ATTR_FIELDS.map(({ key, labelKey }) => (
+                <div key={key} className="flex items-center gap-2">
+                  <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
+                  <input
+                    className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                    value={attrValues[key]}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (key === "assignee") onPatch({ assignee: value });
+                      else if (key === "department") onPatch({ department: value });
+                      else if (key === "system") onPatch({ system: value });
+                      else onPatch({ duration: value });
+                    }}
+                  />
+                </div>
+              ))}
+              {groupLabel && (
+                <span className="text-fine text-ink-tertiary">
+                  {t("summary.group")}: {groupLabel}
+                </span>
+              )}
+            </div>
+          )}
 
           <div>
             <div className="text-fine text-ink-tertiary">{t("summary.predecessors")}</div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Handle, type NodeProps, Position } from "@xyflow/react";
+import { useRef } from "react";
 import {
   Building2,
   Clock,
@@ -60,6 +61,45 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
       })}
     </>
   );
+}
+
+// 노드 타이틀 — 더블클릭 인라인 편집(editingNodeId 일치 시 입력 모드). 평상시 호버에 I-beam 커서.
+function NodeTitle({ id, label }: { id: string; label: string }) {
+  const { editingNodeId, onRename, onCancelRename } = useNodeActions();
+  // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
+  const cancelledRef = useRef(false);
+
+  if (editingNodeId === id && onRename) {
+    return (
+      <input
+        autoFocus
+        defaultValue={label}
+        // nodrag — 입력 중 React Flow가 노드를 끌지 않게
+        className="nodrag w-full rounded-xs border border-accent bg-surface px-1 text-center text-sm text-ink"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => event.stopPropagation()}
+        onBlur={(event) => {
+          if (cancelledRef.current) {
+            cancelledRef.current = false;
+            return;
+          }
+          onRename(id, event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            cancelledRef.current = true;
+            onCancelRename?.();
+          }
+        }}
+      />
+    );
+  }
+  return <span className={onRename ? "cursor-text" : undefined}>{label}</span>;
 }
 
 // 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용)
@@ -158,7 +198,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
           style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
         />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
-          {data.label}
+          <NodeTitle id={id} label={data.label} />
           {data.hasChildren && (
             <div className="inline-flex items-center gap-0.5 text-[10px] text-accent">
               <CornerDownRight size={12} strokeWidth={1.5} />
@@ -186,7 +226,9 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
       title={data.diffNote}
     >
       <Handle type="target" position={Position.Left} />
-      <div className="font-medium text-ink">{data.label}</div>
+      <div className="font-medium text-ink">
+        <NodeTitle id={id} label={data.label} />
+      </div>
       <NodeFields data={data} />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">

@@ -255,6 +255,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
+  // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 일시 토스트 — 2초 후 자동 사라짐
   const [toast, setToast] = useState<string | null>(null);
@@ -1781,6 +1783,51 @@ function MapEditor({ mapId }: { mapId: number }) {
     [updateSelectedData],
   );
 
+  // 특정 노드 데이터 패치 — 정보 수정 모달(summaryNodeId 대상)에서 사용. id로 직접 지정(선택과 무관).
+  const patchNode = useCallback(
+    (id: string, patch: Partial<NodeData>, fromTyping = false) => {
+      if (readOnly) {
+        return;
+      }
+      recordChange(fromTyping);
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === id ? { ...node, data: { ...node.data, ...patch } } : node,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [readOnly, recordChange, setNodes, scheduleAutoSave],
+  );
+
+  // 정보 수정 모달 패치 — summaryNodeId 대상. 렌더 IIFE에서 ref 접근(react-hooks/refs) 피하려 useCallback로 분리.
+  const handleSummaryPatch = useCallback(
+    (patch: Partial<NodeData>) => {
+      if (summaryNodeId) {
+        patchNode(summaryNodeId, patch, true);
+      }
+    },
+    [summaryNodeId, patchNode],
+  );
+
+  // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 라이브 노드만 적용, 편집 모드 해제.
+  const renameNode = useCallback(
+    (id: string, label: string) => {
+      setEditingNodeId(null);
+      if (readOnly || !nodesRef.current.some((node) => node.id === id)) {
+        return;
+      }
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === id ? { ...node, data: { ...node.data, label } } : node,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setNodes, scheduleAutoSave],
+  );
+
   const updateSelectedEdgeLabel = useCallback(
     (label: string) => {
       if (readOnly) {
@@ -1983,14 +2030,24 @@ function MapEditor({ mapId }: { mapId: number }) {
               colors: COLOR_PRESETS,
               current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
               onPick: handleRecolor,
+              moreLabel: t("editor.moreColors"),
             },
             { divider: true },
           ];
       return [
+        // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
+        {
+          label: t("ctx.editInfo"),
+          onSelect: () => {
+            if (menu.targetId) {
+              setSummaryNodeId(menu.targetId);
+            }
+          },
+        },
+        { divider: true },
         ...colorItems,
         {
           label: t("ctx.openChild"),
-          shortcut: t("ctx.doubleClick"),
           onSelect: () => {
             // ref 조회는 이벤트 시점에 — 렌더 중 ref 접근 금지 (react-hooks/refs)
             const node = nodesRef.current.find((item) => item.id === menu.targetId);
@@ -2180,9 +2237,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     );
   }, []);
 
+  const cancelRename = useCallback(() => setEditingNodeId(null), []);
   const nodeActions = useMemo(
-    () => ({ onDrill: handleDrillById, displayFields }),
-    [handleDrillById, displayFields],
+    () => ({
+      onDrill: handleDrillById,
+      displayFields,
+      editingNodeId,
+      onRename: renameNode,
+      onCancelRename: cancelRename,
+    }),
+    [handleDrillById, displayFields, editingNodeId, renameNode, cancelRename],
   );
 
   // 인스펙터 폭 로컬 영속
@@ -2620,7 +2684,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                       }}
-                      onNodeDoubleClick={(_, node) => setSummaryNodeId(node.id)}
+                      onNodeDoubleClick={(_, node) => {
+                        // 더블클릭 = 이름 인라인 편집(요약 아님). 요약/정보 수정은 우클릭 메뉴로.
+                        if (!readOnly) {
+                          setSelectedId(node.id);
+                          setEditingNodeId(node.id);
+                        }
+                      }}
                       onEdgeClick={(_, edge) => {
                         setSelectedEdgeId(edge.id);
                         setSelectedId(null);
@@ -2900,6 +2970,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                 hasChildren={hasChildren}
                 fullGraph={fullGraph}
                 readOnly={readOnly}
+                nodeType={node.data.nodeType}
+                color={node.data.color}
+                assignee={node.data.assignee}
+                department={node.data.department}
+                system={node.data.system}
+                duration={node.data.duration}
+                colorPresets={COLOR_PRESETS}
+                typeOptions={NODE_TYPE_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: t(option.labelKey),
+                }))}
+                onPatch={handleSummaryPatch}
                 onClose={() => setSummaryNodeId(null)}
                 onOpenChild={handleOpenSummaryChild}
               />
