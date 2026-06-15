@@ -20,6 +20,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("map_versions", "status", "VARCHAR(20) DEFAULT 'draft'"),
     ("map_versions", "submitted_by", "VARCHAR(100)"),
     ("map_versions", "reject_reason", "VARCHAR(500)"),
+    ("groups", "parent_group_id", "VARCHAR(50)"),  # 그룹 중첩(하위 그룹핑) — design 2026-06-15
 ]
 
 

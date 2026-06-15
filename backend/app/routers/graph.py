@@ -236,10 +236,19 @@ async def replace_graph(
     if removed_groups:
         await session.execute(delete(Group).where(Group.id.in_(removed_groups)))
     for group in payload.groups:
+        # 중첩 상위 그룹 — 같은 페이로드에 있고 자기 자신이 아닐 때만 유지(고아·자기참조 차단)
+        parent_group_id = (
+            group.parent_group_id
+            if group.parent_group_id is not None
+            and group.parent_group_id != group.id
+            and group.parent_group_id in payload_group_ids
+            else None
+        )
         existing_group = await session.get(Group, group.id)
         if existing_group is not None:
             existing_group.version_id = version_id
             existing_group.parent_node_id = parent
+            existing_group.parent_group_id = parent_group_id
             existing_group.label = group.label
             existing_group.color = group.color
         else:
@@ -248,6 +257,7 @@ async def replace_graph(
                     id=group.id,
                     version_id=version_id,
                     parent_node_id=parent,
+                    parent_group_id=parent_group_id,
                     label=group.label,
                     color=group.color,
                 )

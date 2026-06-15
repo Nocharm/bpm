@@ -218,8 +218,34 @@ def test_group_roundtrips_with_membership(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
     assert put_response.status_code == 200
-    assert saved["groups"] == [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}]
+    assert saved["groups"] == [
+        {"id": "g1", "parent_group_id": None, "label": "영업팀", "color": "#6a41ff"}
+    ]
     assert {n["id"]: n["group_id"] for n in saved["nodes"]} == {"n1": "g1", "n2": "g1"}
+
+
+def test_nested_groups_roundtrip_and_sanitize(client: TestClient) -> None:
+    """중첩 그룹(parent_group_id) 왕복 + 고아/자기참조 상위는 None으로 정리."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [{"id": "n1", "title": "A", "group_id": "child"}],
+        "edges": [],
+        "groups": [
+            {"id": "parent", "label": "부서", "color": ""},
+            {"id": "child", "parent_group_id": "parent", "label": "하위팀", "color": ""},
+            # 자기참조 + 고아 상위 — 둘 다 None으로 정리되어야 함
+            {"id": "selfref", "parent_group_id": "selfref", "label": "", "color": ""},
+            {"id": "orphan", "parent_group_id": "ghost", "label": "", "color": ""},
+        ],
+    }
+
+    assert client.put(f"/api/versions/{version_id}/graph", json=graph).status_code == 200
+    saved = {g["id"]: g for g in client.get(f"/api/versions/{version_id}/graph").json()["groups"]}
+
+    assert saved["child"]["parent_group_id"] == "parent"
+    assert saved["parent"]["parent_group_id"] is None
+    assert saved["selfref"]["parent_group_id"] is None
+    assert saved["orphan"]["parent_group_id"] is None
 
 
 def test_node_referencing_unknown_group_rejected(client: TestClient) -> None:
