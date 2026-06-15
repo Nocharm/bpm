@@ -1708,13 +1708,50 @@ function MapEditor({ mapId }: { mapId: number }) {
     dwellRef.current = null;
   }, []);
 
+  // 드롭 링(+타일)이 컨테이너 가장자리를 넘으면 뷰포트를 패닝해 시야 안으로 끌어온다.
+  // 링 반경은 화면 고정 크기라 줌이 아닌 패닝이 링을 드러내는 수단. 패닝한 만큼 rect도 옮겨 반환(타일 정합).
+  const ensureRingVisible = useCallback(
+    (rect: ScreenRect): ScreenRect => {
+      const container = canvasContainerRef.current;
+      if (!container) {
+        return rect;
+      }
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const margin = rect.radius + ZONE_TILE_H + 8; // 타일 한 칸까지 여유
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = 0;
+      let dy = 0;
+      if (cx - margin < 0) {
+        dx = margin - cx;
+      } else if (cx + margin > cw) {
+        dx = cw - margin - cx;
+      }
+      if (cy - margin < 0) {
+        dy = margin - cy;
+      } else if (cy + margin > ch) {
+        dy = ch - margin - cy;
+      }
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+        return rect;
+      }
+      const vp = reactFlow.getViewport();
+      reactFlow.setViewport({ x: vp.x + dx, y: vp.y + dy, zoom: vp.zoom }, { duration: 200 });
+      return { ...rect, left: rect.left + dx, top: rect.top + dy };
+    },
+    [reactFlow],
+  );
+
   // 커서(컨테이너 상대 좌표)로 타일 적중 zone을 갱신. 타일 밖이면 zone=null(중립). 링(rect)은 유지.
   const activateZone = useCallback(
     (targetId: string, cursorX: number, cursorY: number) => {
-      const rect = screenRectOf(targetId);
-      if (!rect) {
+      const found = screenRectOf(targetId);
+      if (!found) {
         return;
       }
+      // 가장자리면 시야 보정(패닝) 후 보정된 rect로 타일 판정
+      const rect = ensureRingVisible(found);
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
       const zone = pickDropZone(cursorX, cursorY, cx, cy, rect.radius, ZONE_TILE_W, ZONE_TILE_H);
@@ -1723,7 +1760,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         cur && cur.id === targetId && cur.zone === zone ? cur : { id: targetId, zone, rect },
       );
     },
-    [screenRectOf],
+    [screenRectOf, ensureRingVisible],
   );
 
   // 드래그 중 — 커서 위치(현재 마우스) 기준으로 판정.
