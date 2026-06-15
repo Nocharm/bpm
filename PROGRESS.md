@@ -4,6 +4,10 @@
 
 ## 2026-06-16
 - DB 초기화·더미 시드 문서화(`docs/db-seed.md`) + 시드 스크립트(`backend/scripts/seed_dummy.py`) 저장소 등록. `--reset`(전체삭제 후 3세트 재생성)·`--verify`(인접 버전 diff) 사용법, 대상 DB(로컬 sqlite/서버 postgres), 검증 절차 정리.
+- 판단(마름모) 분기 모달 누락 수정. 엣지 생성 경로가 둘(핸들 드래그 `onConnect` / 노드 드롭 `applyFlowEdges`)인데 모달이 드래그에만 있어 드롭 연결 시 라벨 없는(=기타) 엣지가 바로 생성되던 버그 → 드롭 경로도 모달을 타도록 `branchPrompt`(connection/edge) 일반화. 중간 삽입 시 분기 라벨이 마름모를 source로 유지되도록 `insertNodeAfter`에 `bIsDecision` 분기 추가.
+- 전역 버튼 인터랙션 base(`globals.css`) — 모든 `<button>` 포인터 커서 + 클릭 `scale(0.97)` 눌림(`prefers-reduced-motion` 가드), 컴포넌트는 hover 배경만. 설계 규칙(`rules/frontend/design.md` §4)에 명문화.
+- 캔버스 노드 hover 모션에 대각선 이동(`-translate-x-0.5`) 추가 — 마름모·일반 노드.
+- WorkflowDashboard 리디자인 — 하단 액션 버튼 전폭(flex-1)·흰 배경 호버 가시화, 안내/진행 메시지 좌측 배치, 승인자 관리 버튼 본문 이동, LifecycleStepper를 oh-my-zsh Powerline 셰브론 세그먼트 바 스타일로 재설계.
 - decision/start/end는 하위 프로세스 생성 차단(moveToChild 가드+`err.childOnlyProcess`, 노드메뉴 "하위 열기"·DrillButton은 process/기존하위 노드에만 노출, 드롭존 child 타일은 숨기지 않고 비활성(흐리게) 표시). 분기 모달 즉시닫힘 방지(EdgeBranchModal `armed` 150ms 가드 — 연결 릴리스 후속 click 무시; onConnect 로직은 회귀 아님). 오토레이아웃 단축키 추가: 전역 Shift+L, 메뉴 가속기 A→A(정렬 날개 첫 항목 accel A).
 
 ## 2026-06-15
