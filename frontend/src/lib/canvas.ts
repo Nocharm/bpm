@@ -556,20 +556,29 @@ function nearestEdgeNotch(base: Rect, it: Rect): Rect | null {
   return { x: ix0, y: iy0, w: ix1 - ix0, h: base.y + base.h - iy0 }; // bottom
 }
 
-/** 기본 사각형 base에서, 침입(비멤버) 사각형들을 가장 가까운 변쪽으로 잘라낸 직교 외곽선. */
-export function rectWithExclusions(base: Rect, intruders: Rect[]): OrthoUnion {
+/**
+ * 기본 사각형 base에서 침입(비멤버) 사각형들을 가장 가까운 변쪽으로 잘라낸 직교 외곽선.
+ * members 사각형은 notch보다 우선(항상 채움) — notch가 멤버 노드를 반만 자르지 않게 비껴간다.
+ */
+export function rectWithExclusions(base: Rect, intruders: Rect[], members: Rect[]): OrthoUnion {
   if (base.w <= 0 || base.h <= 0) {
     return { fill: "", outline: "" };
   }
   const notches = intruders
     .map((it) => nearestEdgeNotch(base, it))
     .filter((r): r is Rect => r !== null);
+  // 멤버 변도 격자에 포함해야 멤버 경계가 셀에 정렬됨
+  const edgeRects = [...notches, ...members];
   const xs = Array.from(
-    new Set([base.x, base.x + base.w, ...notches.flatMap((r) => [r.x, r.x + r.w])]),
-  ).sort((a, b) => a - b);
+    new Set([base.x, base.x + base.w, ...edgeRects.flatMap((r) => [r.x, r.x + r.w])]),
+  )
+    .filter((x) => x >= base.x && x <= base.x + base.w)
+    .sort((a, b) => a - b);
   const ys = Array.from(
-    new Set([base.y, base.y + base.h, ...notches.flatMap((r) => [r.y, r.y + r.h])]),
-  ).sort((a, b) => a - b);
+    new Set([base.y, base.y + base.h, ...edgeRects.flatMap((r) => [r.y, r.y + r.h])]),
+  )
+    .filter((y) => y >= base.y && y <= base.y + base.h)
+    .sort((a, b) => a - b);
   const nx = xs.length - 1;
   const ny = ys.length - 1;
   const inRect = (r: Rect, cx: number, cy: number): boolean =>
@@ -579,8 +588,10 @@ export function rectWithExclusions(base: Rect, intruders: Rect[]): OrthoUnion {
     const cx = (xs[i] + xs[i + 1]) / 2;
     for (let j = 0; j < ny; j++) {
       const cy = (ys[j] + ys[j + 1]) / 2;
-      // base 안이고 어떤 notch에도 안 들면 채움
-      filled[i * ny + j] = !notches.some((notch) => inRect(notch, cx, cy));
+      const inNotch = notches.some((notch) => inRect(notch, cx, cy));
+      const inMember = members.some((member) => inRect(member, cx, cy));
+      // notch 밖이거나, notch에 들어도 멤버 영역이면 채움(멤버 우선)
+      filled[i * ny + j] = !inNotch || inMember;
     }
   }
   return emitCellPaths(xs, ys, filled);
