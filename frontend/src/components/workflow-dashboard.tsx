@@ -120,16 +120,17 @@ export function WorkflowDashboard({
 
   return (
     <div className="flex h-full flex-col bg-surface-alt">
-      {/* 가운데 내용 — 공간 부족 시 보이지 않는 스크롤, 배경 채워 흰 영역 방지 */}
-      <div className="flex-1 overflow-y-auto p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {/* 진행 순서도 — 라이프사이클 한눈에 */}
-      <LifecycleStepper status={status} />
-
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="truncate text-caption-strong text-ink-secondary">{versionLabel}</h2>
-        <StatusBadge status={status} />
+      {/* 상단 고정 — 진행바 + 버전 제목(길면 ellipsis) */}
+      <div className="shrink-0 border-b border-hairline p-4 pb-2">
+        <LifecycleStepper status={status} />
+        <div className="flex items-center justify-between">
+          <h2 className="truncate text-caption-strong text-ink-secondary">{versionLabel}</h2>
+          <StatusBadge status={status} />
+        </div>
       </div>
 
+      {/* 본문 — 공간 부족 시 보이지 않는 스크롤, 배경 채워 흰 영역 방지 */}
+      <div className="flex-1 overflow-y-auto p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {submittedBy && (
         <p className="mb-2 text-fine text-ink-tertiary">
           {t("dash.submittedBy", { name: submittedBy })}

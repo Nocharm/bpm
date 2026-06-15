@@ -89,23 +89,37 @@ export function EditorLeftSidebar({
         </button>
       </div>
 
-      {/* 노드에 표시할 정보 선택 — 켠 필드가 노드에 여러 줄로 표시됨 */}
-      <div className="mb-2 border-b border-hairline pb-2">
-        <p className="px-1 text-fine text-ink-tertiary">{t("sidebar.nodeInfo")}</p>
-        <div className="mt-1 flex flex-col gap-0.5">
-          {NODE_DISPLAY_FIELDS.map((field) => (
-            <label
-              key={field}
-              className="flex items-center gap-1.5 px-1 text-fine text-ink-secondary"
-            >
-              <input
-                type="checkbox"
-                checked={displayFields.includes(field)}
-                onChange={() => onToggleDisplayField(field)}
-              />
-              {t(FIELD_LABEL_KEY[field])}
-            </label>
-          ))}
+      {/* 노드에 표시할 정보 — 별도 섹션, 토글 스위치로 켜면 노드에 여러 줄 표시 */}
+      <div className="mb-2 rounded-sm border border-hairline bg-surface-alt p-2">
+        <p className="mb-1 text-fine text-ink-tertiary">{t("sidebar.nodeInfo")}</p>
+        <div className="flex flex-col gap-1">
+          {NODE_DISPLAY_FIELDS.map((field) => {
+            const on = displayFields.includes(field);
+            return (
+              <div
+                key={field}
+                className="flex items-center justify-between text-fine text-ink-secondary"
+              >
+                <span>{t(FIELD_LABEL_KEY[field])}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={on}
+                  aria-label={t(FIELD_LABEL_KEY[field])}
+                  onClick={() => onToggleDisplayField(field)}
+                  className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                    on ? "bg-accent" : "bg-border-strong"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                      on ? "left-3.5" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 

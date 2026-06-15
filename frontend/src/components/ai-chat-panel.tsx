@@ -15,11 +15,18 @@ interface ChatMessage {
 interface AiChatPanelProps {
   versionId: number;
   parent: string | null;
+  aiEnabled: boolean;
   canEdit: boolean;
   onGraphProposal: (proposal: AiProposal) => void;
 }
 
-export function AiChatPanel({ versionId, parent, canEdit, onGraphProposal }: AiChatPanelProps) {
+export function AiChatPanel({
+  versionId,
+  parent,
+  aiEnabled,
+  canEdit,
+  onGraphProposal,
+}: AiChatPanelProps) {
   const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -27,8 +34,9 @@ export function AiChatPanel({ versionId, parent, canEdit, onGraphProposal }: AiC
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
 
-  // 서빙 모델 목록 조회(진입 1회) — 첫 모델을 기본 선택
+  // 서빙 모델 목록 조회(진입 1회, AI 활성일 때만) — 첫 모델을 기본 선택
   useEffect(() => {
+    if (!aiEnabled) return;
     let alive = true;
     void getAiModels()
       .then((result) => {
@@ -41,11 +49,11 @@ export function AiChatPanel({ versionId, parent, canEdit, onGraphProposal }: AiC
     return () => {
       alive = false;
     };
-  }, []);
+  }, [aiEnabled]);
 
   const send = async () => {
     const instruction = input.trim();
-    if (!instruction || busy) return;
+    if (!instruction || busy || !aiEnabled) return;
     setInput("");
     setBusy(true);
     const nextMessages: ChatMessage[] = [...messages, { role: "user", content: instruction }];
@@ -91,7 +99,12 @@ export function AiChatPanel({ versionId, parent, canEdit, onGraphProposal }: AiC
         </div>
       )}
       <div className="flex-1 overflow-y-auto p-3">
-        {!canEdit && (
+        {!aiEnabled && (
+          <p className="mb-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-tertiary">
+            {t("ai.disabled")}
+          </p>
+        )}
+        {aiEnabled && !canEdit && (
           <p className="mb-2 text-fine text-ink-tertiary">{t("ai.readOnly")}</p>
         )}
         <ul className="flex flex-col gap-2">
@@ -112,10 +125,11 @@ export function AiChatPanel({ versionId, parent, canEdit, onGraphProposal }: AiC
       </div>
       <div className="flex items-end gap-1 border-t border-hairline p-2">
         <textarea
-          className="min-h-[36px] flex-1 resize-none rounded-sm border border-hairline px-2 py-1 text-caption"
+          className="min-h-[36px] flex-1 resize-none rounded-sm border border-hairline px-2 py-1 text-caption disabled:bg-surface-alt"
           rows={2}
-          placeholder={t("ai.placeholder")}
+          placeholder={aiEnabled ? t("ai.placeholder") : t("ai.disabled")}
           value={input}
+          disabled={!aiEnabled}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -128,7 +142,7 @@ export function AiChatPanel({ versionId, parent, canEdit, onGraphProposal }: AiC
           type="button"
           className="rounded-sm border border-hairline p-2 hover:bg-surface-alt disabled:opacity-40"
           onClick={() => void send()}
-          disabled={busy || input.trim().length === 0}
+          disabled={!aiEnabled || busy || input.trim().length === 0}
           aria-label={t("ai.send")}
         >
           <Send size={16} strokeWidth={1.5} />

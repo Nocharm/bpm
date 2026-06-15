@@ -9,9 +9,12 @@ import { nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
 export function ScopePreview({
   fullGraph,
   scopeParentId,
+  interactive = false,
 }: {
   fullGraph: VersionGraph | null;
   scopeParentId: string | null;
+  // true면 노드에 호버 효과 + 포인터 이벤트 허용(요약 모달 미리보기용). 기본은 정적(조상 창)
+  interactive?: boolean;
 }) {
   const scopeNodes = (fullGraph?.nodes ?? []).filter(
     (node) => node.parent_node_id === scopeParentId,
@@ -48,7 +51,9 @@ export function ScopePreview({
   const viewBox = `${minX} ${minY} ${Math.max(1, maxX - minX)} ${Math.max(1, maxY - minY)}`;
 
   return (
-    <div className="pointer-events-none h-full w-full bg-canvas">
+    <div
+      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} h-full w-full bg-canvas`}
+    >
       <svg className="h-full w-full" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
         {edges.map((edge) => {
           const source = centerById.get(edge.source_node_id);
@@ -77,6 +82,11 @@ export function ScopePreview({
               height={box.h}
               rx={8}
               strokeWidth={1.5}
+              className={
+                interactive
+                  ? "cursor-pointer [transition:stroke-width_.15s] hover:[stroke-width:3px]"
+                  : undefined
+              }
               style={{
                 fill: `color-mix(in srgb, ${box.color} 18%, white)`,
                 stroke: box.color,
