@@ -371,11 +371,23 @@ export function insertNodeAfter(
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
 export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
   const graph = new dagre.graphlib.Graph();
-  graph.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 90 });
+  // 교차/겹침 최소화 — network-simplex 랭커 + 넉넉한 간격(노드끼리·랭크끼리·엣지끼리).
+  // edgesep을 키워 평행 엣지가 노드 위로 겹쳐 지나가는 경우를 줄인다.
+  graph.setGraph({
+    rankdir: "LR",
+    ranker: "network-simplex",
+    nodesep: 56,
+    ranksep: 120,
+    edgesep: 28,
+    marginx: 16,
+    marginy: 16,
+  });
   graph.setDefaultEdgeLabel(() => ({}));
 
+  // 노드별 실제 크기로 박스를 잡아야 큰 노드(마름모) 주변 엣지가 노드를 덜 침범한다.
   nodes.forEach((node) => {
-    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    const size = nodeSizeOf(node.data.nodeType);
+    graph.setNode(node.id, { width: size.w, height: size.h });
   });
   edges.forEach((edge) => {
     graph.setEdge(edge.source, edge.target);
@@ -384,11 +396,12 @@ export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
 
   return nodes.map((node) => {
     const positioned = graph.node(node.id);
+    const size = nodeSizeOf(node.data.nodeType);
     return {
       ...node,
       position: {
-        x: positioned.x - NODE_WIDTH / 2,
-        y: positioned.y - NODE_HEIGHT / 2,
+        x: positioned.x - size.w / 2,
+        y: positioned.y - size.h / 2,
       },
     };
   });
