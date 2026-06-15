@@ -51,6 +51,8 @@
   /* 엣지 방향 강조 — 선택 노드로 들어오는(teal)·나가는(orange) 흐름. 한류/난류 대비로 방향 구분 */
   --color-edge-in: #0d9488;
   --color-edge-out: #ea580c;
+  /* 선택된 엣지 강조색 — accent보다 밝은 바이올렛으로 또렷하게 */
+  --color-edge-selected: #7c4dff;
 
   /* Fonts */
   --font-text: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Text", system-ui, sans-serif;
@@ -127,10 +129,11 @@ body {
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:focus .react-flow__edge-path,
 .react-flow__edge:focus-visible .react-flow__edge-path {
-  stroke: var(--color-accent);
-  /* 선택 강조 — 색만으로 약해 굵기↑ + accent 저확산 외곽으로 또렷하게 */
-  stroke-width: 3;
-  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent));
+  /* 선택 강조 — 선명한 강조색(밝은 바이올렛) + 굵기↑ + 이중 저확산 글로우로 또렷하게 */
+  stroke: var(--color-edge-selected);
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-edge-selected) 70%, transparent))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--color-edge-selected) 35%, transparent));
 }
 
 /* 드롭 영역 — 기준 셀 원형 링 + 원주 위 타일 등장 */

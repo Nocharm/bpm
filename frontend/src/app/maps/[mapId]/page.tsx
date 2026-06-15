@@ -1325,8 +1325,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         top: topLeft.y - rect.top,
         width: w * zoom,
         height: h * zoom,
-        // 링 반경은 줌과 무관하게 노드 원래 크기 기준 — 화면상 항상 같은 크기. 0.7배로 축소
-        radius: (Math.max(w, h) + ZONE_RADIUS_PAD) * 0.7,
+        // 링 반경은 줌·노드 타입과 무관하게 프로세스 노드 크기 기준 상수 — 모든 노드에서 동일 크기. 0.7배로 축소
+        radius: (Math.max(NODE_WIDTH, NODE_HEIGHT) + ZONE_RADIUS_PAD) * 0.7,
       };
     },
     [reactFlow],
@@ -1679,9 +1679,19 @@ function MapEditor({ mapId }: { mapId: number }) {
           return node;
         });
       });
+      // 엣지 연결 상태도 교환 — A의 연결은 B로, B의 연결은 A로
+      setEdges((current) =>
+        current.map((edge) => {
+          const source = edge.source === aId ? bId : edge.source === bId ? aId : edge.source;
+          const target = edge.target === aId ? bId : edge.target === bId ? aId : edge.target;
+          return source === edge.source && target === edge.target
+            ? edge
+            : { ...edge, source, target };
+        }),
+      );
       scheduleAutoSave();
     },
-    [setNodes, scheduleAutoSave],
+    [setNodes, setEdges, scheduleAutoSave],
   );
 
   // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위·교환. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
@@ -2367,15 +2377,26 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, []);
 
   const cancelRename = useCallback(() => setEditingNodeId(null), []);
+  // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
+  const startRename = useCallback(
+    (id: string) => {
+      if (!readOnly) {
+        setSelectedId(id);
+        setEditingNodeId(id);
+      }
+    },
+    [readOnly],
+  );
   const nodeActions = useMemo(
     () => ({
       onDrill: handleDrillById,
       displayFields,
       editingNodeId,
+      onStartRename: startRename,
       onRename: renameNode,
       onCancelRename: cancelRename,
     }),
-    [handleDrillById, displayFields, editingNodeId, renameNode, cancelRename],
+    [handleDrillById, displayFields, editingNodeId, startRename, renameNode, cancelRename],
   );
 
   // 인스펙터 폭 로컬 영속
@@ -2830,11 +2851,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
-                        // 더블클릭 = 이름 인라인 편집(요약 아님). 요약/정보 수정은 우클릭 메뉴로.
-                        if (!readOnly) {
-                          setSelectedId(node.id);
-                          setEditingNodeId(node.id);
-                        }
+                        // 이름 외 영역 더블클릭 = 요약창. 타이틀 더블클릭은 process-node가 stopPropagation해 이름 편집으로.
+                        setSelectedId(node.id);
+                        setSummaryNodeId(node.id);
                       }}
                       onEdgeClick={(_, edge) => {
                         setSelectedEdgeId(edge.id);
@@ -3033,7 +3052,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 { zone: "back", Icon: ArrowRight, x: cx + radius, y: cy, label: t("dropzone.back") },
                 { zone: "group", Icon: Boxes, x: cx, y: cy - radius, label: t("dropzone.group") },
                 { zone: "child", Icon: CornerDownRight, x: cx, y: cy + radius, label: t("dropzone.child") },
-                { zone: "swap", Icon: ArrowLeftRight, x: cx, y: cy, label: t("dropzone.swap") },
+                // 좌하단(SW) 대각 — 위치+연결 교환
+                { zone: "swap", Icon: ArrowLeftRight, x: cx - radius * Math.SQRT1_2, y: cy + radius * Math.SQRT1_2, label: t("dropzone.swap") },
               ] as const;
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">

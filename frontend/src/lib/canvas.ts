@@ -376,11 +376,13 @@ export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
   graph.setGraph({
     rankdir: "LR",
     ranker: "network-simplex",
-    nodesep: 56,
-    ranksep: 120,
-    edgesep: 28,
-    marginx: 16,
-    marginy: 16,
+    // 간격을 넉넉히 — 랭크 사이(ranksep)를 크게 둬 엣지가 노드 위로 겹쳐 지나가지 않게,
+    // 같은 랭크 노드 간격(nodesep)·평행 엣지 간격(edgesep)도 키워 엣지가 노드에 가려지는 일 방지.
+    nodesep: 72,
+    ranksep: 160,
+    edgesep: 40,
+    marginx: 20,
+    marginy: 20,
   });
   graph.setDefaultEdgeLabel(() => ({}));
 
@@ -572,8 +574,11 @@ export function groupSubtreeIds(groups: GroupNode[], rootId: string): Set<string
 }
 
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
-// 타일 배치는 page.tsx 오버레이 렌더와 동일해야 한다(좌=front/우=back/상=group/하=child/중앙=swap).
+// 8방향 앵커 위에 배치: 좌=front/우=back/상=group/하=child/좌하(SW)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
 export type DropZone = "front" | "back" | "group" | "child" | "swap";
+
+// 대각선 앵커 거리 — 원주 위 45° 지점
+const DIAG = Math.SQRT1_2; // ≈0.707
 
 export function pickDropZone(
   cursorX: number,
@@ -589,8 +594,8 @@ export function pickDropZone(
     { zone: "back", x: cx + radius, y: cy },
     { zone: "group", x: cx, y: cy - radius },
     { zone: "child", x: cx, y: cy + radius },
-    // 중앙(기준 노드 위) = 두 노드 위치 교환
-    { zone: "swap", x: cx, y: cy },
+    // 좌하단(SW) = 두 노드 위치+연결 교환
+    { zone: "swap", x: cx - radius * DIAG, y: cy + radius * DIAG },
   ];
   for (const tile of tiles) {
     if (Math.abs(cursorX - tile.x) <= tileW / 2 && Math.abs(cursorY - tile.y) <= tileH / 2) {
