@@ -2633,6 +2633,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           onToggleExpand={handleToggleExpand}
           displayFields={displayFields}
           onToggleDisplayField={toggleDisplayField}
+          readOnly={readOnly}
+          onRowContextMenu={(event, id) => {
+            setSelectedId(id);
+            setSelectedEdgeId(null);
+            openMenu(event, "node", id);
+          }}
+          onRenameNode={renameNode}
         />
         <div
           ref={canvasContainerRef}

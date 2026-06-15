@@ -13,7 +13,7 @@ import {
   PanelsTopLeft,
   Square,
 } from "lucide-react";
-import { Fragment, type ComponentType, useState } from "react";
+import { Fragment, type ComponentType, type MouseEvent, useRef, useState } from "react";
 
 import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -37,6 +37,10 @@ interface EditorLeftSidebarProps {
   onToggleExpand: (id: string) => void;
   displayFields: NodeDisplayField[];
   onToggleDisplayField: (field: NodeDisplayField) => void;
+  // 행 우클릭 = 캔버스 노드와 동일 컨텍스트 메뉴, 더블클릭 = 이름 인라인 편집
+  readOnly: boolean;
+  onRowContextMenu: (event: MouseEvent, id: string) => void;
+  onRenameNode: (id: string, label: string) => void;
 }
 
 const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -55,9 +59,15 @@ export function EditorLeftSidebar({
   onToggleExpand,
   displayFields,
   onToggleDisplayField,
+  readOnly,
+  onRowContextMenu,
+  onRenameNode,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
   const [nodeInfoOpen, setNodeInfoOpen] = useState(true);
+  // 인라인 이름 편집 중인 행 — Esc 취소 시 blur 커밋 방지 가드
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const cancelledRef = useRef(false);
 
   if (collapsed) {
     return (
@@ -170,20 +180,46 @@ export function EditorLeftSidebar({
                   ) : (
                     <span className="w-[18px] shrink-0" aria-hidden />
                   )}
-                  <button
-                    type="button"
-                    onClick={() => onSelectNode(item.id)}
-                    className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-caption hover:bg-surface-alt ${
-                      item.id === selectedId
-                        ? "bg-accent-tint text-accent"
-                        : item.hierarchy
-                          ? "text-ink-tertiary"
-                          : "text-ink-secondary"
-                    }`}
-                  >
-                    <Icon size={13} strokeWidth={1.5} />
-                    <span className="truncate">{item.label || t("sidebar.untitled")}</span>
-                  </button>
+                  {editingId === item.id ? (
+                    <input
+                      autoFocus
+                      defaultValue={item.label}
+                      className="min-w-0 flex-1 rounded-sm border border-accent px-1.5 py-1 text-caption"
+                      onBlur={(event) => {
+                        if (cancelledRef.current) {
+                          cancelledRef.current = false;
+                        } else {
+                          onRenameNode(item.id, event.target.value);
+                        }
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.currentTarget.blur();
+                        } else if (event.key === "Escape") {
+                          cancelledRef.current = true;
+                          event.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onSelectNode(item.id)}
+                      onDoubleClick={() => !readOnly && setEditingId(item.id)}
+                      onContextMenu={(event) => onRowContextMenu(event, item.id)}
+                      className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-caption hover:bg-surface-alt ${
+                        item.id === selectedId
+                          ? "bg-accent-tint text-accent"
+                          : item.hierarchy
+                            ? "text-ink-tertiary"
+                            : "text-ink-secondary"
+                      }`}
+                    >
+                      <Icon size={13} strokeWidth={1.5} />
+                      <span className="truncate">{item.label || t("sidebar.untitled")}</span>
+                    </button>
+                  )}
                 </li>
               </Fragment>
             );
