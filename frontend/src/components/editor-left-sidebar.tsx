@@ -13,7 +13,7 @@ import {
   PanelsTopLeft,
   Square,
 } from "lucide-react";
-import { Fragment, type ComponentType } from "react";
+import { Fragment, type ComponentType, useState } from "react";
 
 import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -57,6 +57,7 @@ export function EditorLeftSidebar({
   onToggleDisplayField,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
+  const [nodeInfoOpen, setNodeInfoOpen] = useState(true);
 
   if (collapsed) {
     return (
@@ -76,6 +77,54 @@ export function EditorLeftSidebar({
 
   return (
     <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2">
+      {/* 노드에 표시할 정보 — 아웃라인보다 위(바깥) 별도 섹션, 접기/펼치기 */}
+      <div className="mb-2 rounded-sm border border-hairline bg-surface-alt">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between p-2 text-fine text-ink-tertiary"
+          onClick={() => setNodeInfoOpen((value) => !value)}
+          aria-expanded={nodeInfoOpen}
+        >
+          <span>{t("sidebar.nodeInfo")}</span>
+          {nodeInfoOpen ? (
+            <ChevronDown size={14} strokeWidth={1.5} />
+          ) : (
+            <ChevronRight size={14} strokeWidth={1.5} />
+          )}
+        </button>
+        {nodeInfoOpen && (
+          <div className="flex flex-col gap-1 px-2 pb-2">
+            {NODE_DISPLAY_FIELDS.map((field) => {
+              const on = displayFields.includes(field);
+              return (
+                <div
+                  key={field}
+                  className="flex items-center justify-between text-fine text-ink-secondary"
+                >
+                  <span>{t(FIELD_LABEL_KEY[field])}</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={t(FIELD_LABEL_KEY[field])}
+                    onClick={() => onToggleDisplayField(field)}
+                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                      on ? "bg-accent" : "bg-border-strong"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                        on ? "left-3.5" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="mb-1 flex items-center justify-between">
         <span className="px-1 text-caption-strong text-ink">{t("sidebar.outline")}</span>
         <button
@@ -87,40 +136,6 @@ export function EditorLeftSidebar({
         >
           <ChevronLeft size={16} strokeWidth={1.5} />
         </button>
-      </div>
-
-      {/* 노드에 표시할 정보 — 별도 섹션, 토글 스위치로 켜면 노드에 여러 줄 표시 */}
-      <div className="mb-2 rounded-sm border border-hairline bg-surface-alt p-2">
-        <p className="mb-1 text-fine text-ink-tertiary">{t("sidebar.nodeInfo")}</p>
-        <div className="flex flex-col gap-1">
-          {NODE_DISPLAY_FIELDS.map((field) => {
-            const on = displayFields.includes(field);
-            return (
-              <div
-                key={field}
-                className="flex items-center justify-between text-fine text-ink-secondary"
-              >
-                <span>{t(FIELD_LABEL_KEY[field])}</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={on}
-                  aria-label={t(FIELD_LABEL_KEY[field])}
-                  onClick={() => onToggleDisplayField(field)}
-                  className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                    on ? "bg-accent" : "bg-border-strong"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                      on ? "left-3.5" : "left-0.5"
-                    }`}
-                  />
-                </button>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {outline.length === 0 ? (
