@@ -13,7 +13,7 @@ import {
   PanelsTopLeft,
   Square,
 } from "lucide-react";
-import { Fragment, type ComponentType, type MouseEvent, useRef, useState } from "react";
+import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useRef, useState } from "react";
 
 import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -41,6 +41,8 @@ interface EditorLeftSidebarProps {
   readOnly: boolean;
   onRowContextMenu: (event: MouseEvent, id: string) => void;
   onRenameNode: (id: string, label: string) => void;
+  // Tab 네비게이션 — 다음 노드 선택(하위 프로세스 있으면 하위로 진입). 페이지가 트리로 계산.
+  onSelectNext: (id: string) => void;
 }
 
 const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -62,12 +64,33 @@ export function EditorLeftSidebar({
   readOnly,
   onRowContextMenu,
   onRenameNode,
+  onSelectNext,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
   const [nodeInfoOpen, setNodeInfoOpen] = useState(true);
   // 인라인 이름 편집 중인 행 — Esc 취소 시 blur 커밋 방지 가드
   const [editingId, setEditingId] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+  // 편집 중 Tab → 저장 후 이동할 노드(blur에서 소비). 리스트 ref는 편집 종료 후 키 포커스 복귀용.
+  const pendingNavRef = useRef<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // 선택 상태에서 Enter=편집 진입, Tab=다음 노드. 편집 중에는 input이 키를 처리하므로 무시.
+  const handleListKey = (event: KeyboardEvent) => {
+    if (editingId !== null || !selectedId) {
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!readOnly) {
+        setEditingId(selectedId);
+      }
+    } else if (event.key === "Tab") {
+      event.preventDefault();
+      onSelectNext(selectedId);
+      listRef.current?.focus();
+    }
+  };
 
   if (collapsed) {
     return (
@@ -151,7 +174,12 @@ export function EditorLeftSidebar({
       {outline.length === 0 ? (
         <p className="px-2 text-fine text-ink-tertiary">{t("sidebar.outlineEmpty")}</p>
       ) : (
-        <ul className="flex flex-col gap-0.5">
+        <ul
+          ref={listRef}
+          tabIndex={-1}
+          onKeyDown={handleListKey}
+          className="flex flex-col gap-0.5 outline-none"
+        >
           {outline.map((item, index) => {
             const Icon = TYPE_ICONS[item.nodeType];
             const newBlock = index > 0 && item.blockIndex !== outline[index - 1].blockIndex;
@@ -186,18 +214,31 @@ export function EditorLeftSidebar({
                       defaultValue={item.label}
                       className="min-w-0 flex-1 rounded-sm border border-accent px-1.5 py-1 text-caption"
                       onBlur={(event) => {
-                        if (cancelledRef.current) {
-                          cancelledRef.current = false;
-                        } else {
-                          onRenameNode(item.id, event.target.value);
-                        }
+                        const value = event.target.value;
                         setEditingId(null);
+                        if (cancelledRef.current) {
+                          cancelledRef.current = false; // Esc 취소 — 저장 안 함
+                        } else {
+                          onRenameNode(item.id, value);
+                        }
+                        const navId = pendingNavRef.current;
+                        pendingNavRef.current = null;
+                        if (navId) {
+                          onSelectNext(navId); // Tab 저장 후 다음 노드
+                        }
+                        listRef.current?.focus(); // 키 포커스 복귀(연속 편집/이동)
                       }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.currentTarget.blur(); // 한번 더 Enter = 저장
+                        } else if (event.key === "Tab") {
+                          event.preventDefault();
+                          pendingNavRef.current = item.id; // 저장 후 다음 노드로
                           event.currentTarget.blur();
                         } else if (event.key === "Escape") {
-                          cancelledRef.current = true;
+                          event.preventDefault();
+                          cancelledRef.current = true; // 변경 취소
                           event.currentTarget.blur();
                         }
                       }}
