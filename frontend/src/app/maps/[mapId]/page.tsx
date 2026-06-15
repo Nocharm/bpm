@@ -1485,6 +1485,49 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setNodes, scheduleAutoSave],
   );
 
+  // 선택된 노드들(2개 이상)로 새 그룹 생성 — 라벨 기본=첫 노드의 부서/담당자. (노드당 그룹 1개: 기존 소속은 새 그룹으로 이동)
+  const createGroupFromSelection = useCallback(() => {
+    if (readOnly) {
+      return;
+    }
+    const selected = nodesRef.current.filter((node) => node.selected);
+    if (selected.length < 2) {
+      return;
+    }
+    pushHistory();
+    const newId = crypto.randomUUID();
+    const first = selected[0];
+    setGroups((cur) => [
+      ...cur,
+      { id: newId, label: first.data.department || first.data.assignee || "", color: "#4a5a8c" },
+    ]);
+    const ids = new Set(selected.map((node) => node.id));
+    setNodes((current) =>
+      current.map((node) =>
+        ids.has(node.id) ? { ...node, data: { ...node.data, groupId: newId } } : node,
+      ),
+    );
+    scheduleAutoSave();
+  }, [readOnly, pushHistory, setGroups, setNodes, scheduleAutoSave]);
+
+  // 그룹 해제(disband) — 멤버 전원 group_id=null + 그룹 자체 제거. leaveGroup(선택 멤버만 이탈)과 구분.
+  const disbandGroup = useCallback(
+    (groupId: string) => {
+      if (readOnly) {
+        return;
+      }
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) =>
+          node.data.groupId === groupId ? { ...node, data: { ...node.data, groupId: null } } : node,
+        ),
+      );
+      setGroups((current) => current.filter((group) => group.id !== groupId));
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setNodes, setGroups, scheduleAutoSave],
+  );
+
   // 그룹 멤버 전원 노드 색 일괄 변경
   const applyGroupColor = useCallback(
     (groupId: string, color: string) => {
@@ -1868,16 +1911,26 @@ function MapEditor({ mapId }: { mapId: number }) {
           : new Set(nodes.filter((node) => node.selected).map((node) => node.id));
       const targetCount = ids.size;
       const groupId = menu.targetId;
-      // 그룹 우클릭에만 일괄 편집 항목 — 모달 진입(복수선택엔 단일 그룹이 없어 제외)
-      const bulkItems: ContextMenuItem[] =
+      // 그룹 우클릭 = 일괄 편집·그룹 해제, 복수선택 우클릭 = 그룹 생성 (둘 다 정렬 위에 배치)
+      const groupActions: ContextMenuItem[] =
         menu.kind === "group" && groupId && !readOnly
           ? [
               { label: t("group.bulkEdit"), onSelect: () => setBulkEditGroupId(groupId) },
+              { label: t("ctx.disband"), onSelect: () => disbandGroup(groupId) },
               { divider: true },
             ]
-          : [];
+          : menu.kind === "selection" && !readOnly
+            ? [
+                {
+                  label: t("ctx.createGroup"),
+                  disabled: targetCount < 2,
+                  onSelect: () => createGroupFromSelection(),
+                },
+                { divider: true },
+              ]
+            : [];
       return [
-        ...bulkItems,
+        ...groupActions,
         {
           label: t("ctx.autoLayout"),
           disabled: targetCount < 2,
@@ -1978,6 +2031,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyNodesTransform,
     handleDrillIn,
     handleExportPng,
+    createGroupFromSelection,
+    disbandGroup,
     reactFlow,
     t,
   ]);
