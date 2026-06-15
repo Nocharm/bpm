@@ -39,10 +39,25 @@ export function WorkflowActions({
   const [reason, setReason] = useState("");
 
   const btn =
-    "rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt disabled:opacity-40";
+    "rounded-sm border border-hairline px-2 py-1 text-caption disabled:opacity-40";
+  // 하단 푸터(bg-surface-alt) 위 — 흰 배경으로 호버 가시화. 남은 폭을 나눠 채움
+  const actionBtn = `${btn} flex-1 hover:border-accent hover:bg-surface`;
+  // 반려 모달(bg-surface) 위 — surface-alt로 호버 가시화
+  const modalBtn = `${btn} hover:bg-surface-alt`;
 
   // 승인자 미지정이면 제출은 백엔드 409 — 막다른 클릭 대신 비활성 + 안내
   const noApprovers = (workflow?.approvers.length ?? 0) === 0;
+
+  // 버튼 왼쪽에 둘 안내/진행 메시지 — 있을 때만 노출
+  const message =
+    (status === "draft" || status === "rejected") && isCheckoutHolder && noApprovers
+      ? t("wf.submitNeedsApprovers")
+      : status === "pending" && workflow
+        ? t("wf.approvalProgress", {
+            done: workflow.approvals.length,
+            total: workflow.approvers.length,
+          })
+        : null;
 
   const closeReject = () => {
     setRejecting(false);
@@ -60,59 +75,49 @@ export function WorkflowActions({
   }, [rejecting]);
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      {message && (
+        <span className="shrink-0 text-fine leading-tight text-ink-tertiary">
+          {message}
+        </span>
+      )}
+
       {(status === "draft" || status === "rejected") && isCheckoutHolder && (
-        <>
-          <button
-            type="button"
-            className={btn}
-            onClick={onSubmit}
-            disabled={noApprovers}
-            title={noApprovers ? t("wf.submitNeedsApprovers") : undefined}
-          >
-            {t("wf.submit")}
-          </button>
-          {noApprovers && (
-            <span className="text-fine text-ink-tertiary">
-              {t("wf.submitNeedsApprovers")}
-            </span>
-          )}
-        </>
+        <button
+          type="button"
+          className={actionBtn}
+          onClick={onSubmit}
+          disabled={noApprovers}
+          title={noApprovers ? t("wf.submitNeedsApprovers") : undefined}
+        >
+          {t("wf.submit")}
+        </button>
       )}
 
       {status === "pending" && isApprover && (
         <>
           <button
             type="button"
-            className={btn}
+            className={actionBtn}
             onClick={onApprove}
             disabled={hasApproved}
           >
             {t("wf.approve")}
           </button>
-          <button type="button" className={btn} onClick={() => setRejecting(true)}>
+          <button type="button" className={actionBtn} onClick={() => setRejecting(true)}>
             {t("wf.reject")}
           </button>
         </>
       )}
 
-      {status === "pending" && workflow && (
-        <span className="text-fine text-ink-tertiary">
-          {t("wf.approvalProgress", {
-            done: workflow.approvals.length,
-            total: workflow.approvers.length,
-          })}
-        </span>
-      )}
-
       {status === "approved" && isSubmitter && (
-        <button type="button" className={btn} onClick={onPublish}>
+        <button type="button" className={actionBtn} onClick={onPublish}>
           {t("wf.publish")}
         </button>
       )}
 
       {(status === "pending" || status === "approved") && isSubmitter && (
-        <button type="button" className={btn} onClick={onWithdraw}>
+        <button type="button" className={actionBtn} onClick={onWithdraw}>
           {t("wf.withdraw")}
         </button>
       )}
@@ -141,7 +146,7 @@ export function WorkflowActions({
             <div className="mt-3 flex justify-end gap-2">
               <button
                 type="button"
-                className={btn}
+                className={modalBtn}
                 onClick={() => {
                   setRejecting(false);
                   setReason("");
@@ -151,7 +156,7 @@ export function WorkflowActions({
               </button>
               <button
                 type="button"
-                className={`${btn} text-error`}
+                className={`${modalBtn} text-error`}
                 disabled={reason.trim().length === 0}
                 onClick={() => {
                   onReject(reason.trim());

@@ -367,13 +367,29 @@ export function insertNodeBefore(
   return withEdge(next, aId, bId);
 }
 
-/** A를 B의 후행으로 삽입. rewire면 B의 기존 outgoing(단, A행 제외)을 A로 재연결 → B→A→…. */
+/**
+ * A를 B의 후행으로 삽입. rewire면 B의 기존 outgoing(단, A행 제외)을 A로 재연결 → B→A→….
+ * bIsDecision(=B가 마름모)이면 분기 라벨이 항상 마름모에서 출발하도록 유지한다:
+ * 기존 B--Yes-->C 를 B--Yes-->A 로 재타깃하고 A-->C 는 일반 엣지로 잇는다(라벨을 A로 옮기지 않음).
+ */
 export function insertNodeAfter(
   edges: Edge[],
   aId: string,
   bId: string,
   rewire: boolean,
+  bIsDecision = false,
 ): Edge[] {
+  if (rewire && bIsDecision) {
+    const branchEdges = edges.filter((edge) => edge.source === bId && edge.target !== aId);
+    if (branchEdges.length > 0) {
+      let next = edges.filter((edge) => !(edge.source === bId && edge.target !== aId));
+      for (const edge of branchEdges) {
+        next = [...next, { ...edge, target: aId }]; // B--label-->A (source·라벨 유지)
+        next = withEdge(next, aId, edge.target); // A-->기존 타깃 (일반)
+      }
+      return next;
+    }
+  }
   let next = edges;
   if (rewire) {
     next = next.map((edge) =>

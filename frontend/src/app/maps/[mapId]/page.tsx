@@ -286,8 +286,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  // 판단 노드에서 연결 시 분기(Yes/No/기타) 선택 대기 중인 연결
-  const [pendingBranch, setPendingBranch] = useState<Connection | null>(null);
+  // 판단 노드에서 분기(Yes/No/기타) 라벨을 기다리는 대상.
+  // connection: 핸들 드래그(엣지 미생성, 선택 시 생성) / edge: 노드 드롭으로 이미 생성된 엣지에 라벨 부여
+  const [branchPrompt, setBranchPrompt] = useState<
+    { kind: "connection"; connection: Connection } | { kind: "edge"; edgeId: string } | null
+  >(null);
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -1278,7 +1281,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
       const source = nodesRef.current.find((node) => node.id === connection.source);
       if (source?.data.nodeType === "decision") {
-        setPendingBranch(connection);
+        setBranchPrompt({ kind: "connection", connection });
         return;
       }
       createEdge(connection, "");
@@ -1286,16 +1289,24 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, createEdge],
   );
 
-  // 분기 모달 선택 → 라벨(Yes/No/빈값=기타)로 엣지 생성
+  // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결은 엣지를 생성, 노드 드롭은 기존 엣지에 라벨만 부여.
   const handlePickBranch = useCallback(
     (kind: BranchKind) => {
-      if (pendingBranch) {
-        const label = kind === "yes" ? BRANCH_YES_LABEL : kind === "no" ? BRANCH_NO_LABEL : "";
-        createEdge(pendingBranch, label);
+      const label = kind === "yes" ? BRANCH_YES_LABEL : kind === "no" ? BRANCH_NO_LABEL : "";
+      if (branchPrompt?.kind === "connection") {
+        createEdge(branchPrompt.connection, label);
+      } else if (branchPrompt?.kind === "edge") {
+        const edgeId = branchPrompt.edgeId;
+        setEdges((current) =>
+          current.map((edge) =>
+            edge.id === edgeId ? { ...edge, label: label || undefined } : edge,
+          ),
+        );
+        scheduleAutoSave();
       }
-      setPendingBranch(null);
+      setBranchPrompt(null);
     },
-    [pendingBranch, createEdge],
+    [branchPrompt, createEdge, setEdges, scheduleAutoSave],
   );
 
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
@@ -1418,11 +1429,22 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 흐름 엣지 적용 — rewire면 B의 기존 연결을 끊고 A를 중간에 삽입
   const applyFlowEdges = useCallback(
     (aId: string, bId: string, zone: DropZone, rewire: boolean) => {
-      setEdges((current) =>
+      const current = edgesRef.current;
+      const isDecision = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "decision";
+      const next =
         zone === "front"
           ? insertNodeBefore(current, aId, bId, rewire)
-          : insertNodeAfter(current, aId, bId, rewire),
+          : insertNodeAfter(current, aId, bId, rewire, isDecision(bId));
+      setEdges(next);
+      // 마름모에서 새로 출발하는(라벨 없는) 엣지가 생겼으면 분기 라벨 모달을 띄운다.
+      const beforeIds = new Set(current.map((edge) => edge.id));
+      const fresh = next.find(
+        (edge) => !beforeIds.has(edge.id) && !edge.label && isDecision(edge.source),
       );
+      if (fresh) {
+        setBranchPrompt({ kind: "edge", edgeId: fresh.id });
+      }
       scheduleAutoSave();
     },
     [setEdges, scheduleAutoSave],
@@ -2758,7 +2780,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // 모달 열림 중엔 무시
-      if (summaryNodeId || bulkEditGroupId || pendingBranch || managingApprovers || pending) {
+      if (summaryNodeId || bulkEditGroupId || branchPrompt || managingApprovers || pending) {
         return;
       }
       const count = nodesRef.current.filter((node) => node.selected).length;
@@ -2819,7 +2841,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [
     summaryNodeId,
     bulkEditGroupId,
-    pendingBranch,
+    branchPrompt,
     managingApprovers,
     pending,
     applyNodesTransform,
@@ -3785,8 +3807,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           {toast}
         </div>
       )}
-      {pendingBranch && (
-        <EdgeBranchModal onPick={handlePickBranch} onClose={() => setPendingBranch(null)} />
+      {branchPrompt && (
+        <EdgeBranchModal onPick={handlePickBranch} onClose={() => setBranchPrompt(null)} />
       )}
     </NodeActionsContext.Provider>
   );
