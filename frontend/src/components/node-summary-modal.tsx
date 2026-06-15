@@ -3,7 +3,7 @@
 // 노드 더블클릭 요약 모달 — 전/후 단계, 하위 프로세스 프리뷰, 코멘트(읽기+추가), 메타.
 // 바깥 클릭/Esc로 닫힘. readOnly면 코멘트 추가 숨김.
 
-import { X } from "lucide-react";
+import { CornerDownRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ScopePreview } from "@/components/scope-preview";
@@ -22,6 +22,8 @@ interface NodeSummaryModalProps {
   fullGraph: VersionGraph | null;
   readOnly: boolean;
   onClose: () => void;
+  // 하위 프로세스가 있을 때 그 캔버스로 진입 (있을 때만 버튼 노출)
+  onOpenChild?: () => void;
 }
 
 export function NodeSummaryModal({
@@ -36,6 +38,7 @@ export function NodeSummaryModal({
   fullGraph,
   readOnly,
   onClose,
+  onOpenChild,
 }: NodeSummaryModalProps) {
   const { t } = useI18n();
   const [comments, setComments] = useState<CommentItem[]>([]);
@@ -102,6 +105,17 @@ export function NodeSummaryModal({
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
           <span className="flex-1 truncate text-body-strong text-ink">{title}</span>
+          {hasChildren && onOpenChild && (
+            <button
+              type="button"
+              title={t("summary.openSubprocess")}
+              aria-label={t("summary.openSubprocess")}
+              className="rounded-xs p-0.5 text-accent hover:bg-surface-alt"
+              onClick={onOpenChild}
+            >
+              <CornerDownRight size={16} strokeWidth={1.5} />
+            </button>
+          )}
           <button
             type="button"
             title={t("summary.close")}

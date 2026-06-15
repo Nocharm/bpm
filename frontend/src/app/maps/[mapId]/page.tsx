@@ -97,7 +97,11 @@ import {
 import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
 import { useI18n } from "@/lib/i18n";
-import { NodeActionsContext } from "@/lib/node-actions";
+import {
+  NODE_DISPLAY_FIELDS,
+  NodeActionsContext,
+  type NodeDisplayField,
+} from "@/lib/node-actions";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -1038,6 +1042,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     [handleDrillIn],
   );
 
+  // 요약 모달의 "하위 프로세스 열기" — 모달 닫고 해당 노드 하위 캔버스로 진입
+  const handleOpenSummaryChild = useCallback(() => {
+    if (summaryNodeId === null) {
+      return;
+    }
+    const id = summaryNodeId;
+    setSummaryNodeId(null);
+    handleDrillById(id, window.innerWidth / 2, window.innerHeight / 2);
+  }, [summaryNodeId, handleDrillById]);
+
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
     async (index: number) => {
@@ -1265,8 +1279,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         top: topLeft.y - rect.top,
         width: w * zoom,
         height: h * zoom,
-        // 링 반경은 줌과 무관하게 노드 원래 크기 기준 — 화면상 항상 같은 크기로 보이게 함
-        radius: Math.max(w, h) + ZONE_RADIUS_PAD,
+        // 링 반경은 줌과 무관하게 노드 원래 크기 기준 — 화면상 항상 같은 크기. 0.7배로 축소
+        radius: (Math.max(w, h) + ZONE_RADIUS_PAD) * 0.7,
       };
     },
     [reactFlow],
@@ -1617,9 +1631,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         clearDwell();
       }
 
-      // 커서 아래 노드 — DWELL_MS 머문 뒤 4방향 링 표시(그룹 hover는 끔)
+      // 드래그 노드와 겹치는 노드 — DWELL_MS 머문 뒤 4방향 링 표시(커서 아님, 노드끼리 겹침 기준)
       const target = reactFlow
-        .getIntersectingNodes({ x: mouse.x, y: mouse.y, width: 1, height: 1 })
+        .getIntersectingNodes(node)
         .find((other) => other.id !== node.id);
       if (target) {
         setGroupDropTarget((cur) => (cur ? null : cur));
@@ -2009,9 +2023,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     [comments, selectedId],
   );
 
+  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속
+  const [displayFields, setDisplayFields] = useState<NodeDisplayField[]>(["assignee"]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("bpm.nodeDisplayFields");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as NodeDisplayField[];
+        const valid = parsed.filter((field) => NODE_DISPLAY_FIELDS.includes(field));
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+        setDisplayFields(valid);
+      } catch {
+        // 무시 — 기본값 유지
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("bpm.nodeDisplayFields", JSON.stringify(displayFields));
+  }, [displayFields]);
+
+  const toggleDisplayField = useCallback((field: NodeDisplayField) => {
+    setDisplayFields((prev) =>
+      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
+    );
+  }, []);
+
   const nodeActions = useMemo(
-    () => ({ onDrill: handleDrillById }),
-    [handleDrillById],
+    () => ({ onDrill: handleDrillById, displayFields }),
+    [handleDrillById, displayFields],
   );
 
   // 인스펙터 폭 로컬 영속
@@ -2383,6 +2424,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           outline={displayOutline}
           onSelectNode={handleOutlineSelect}
           onToggleExpand={handleToggleExpand}
+          displayFields={displayFields}
+          onToggleDisplayField={toggleDisplayField}
         />
         <div
           ref={canvasContainerRef}
@@ -2713,6 +2756,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 fullGraph={fullGraph}
                 readOnly={readOnly}
                 onClose={() => setSummaryNodeId(null)}
+                onOpenChild={handleOpenSummaryChild}
               />
             );
           })()}
@@ -2907,7 +2951,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   title={t("dash.resize")}
                 />
                 <div
-                  className="shrink-0 overflow-y-auto"
+                  className="shrink-0 overflow-hidden"
                   style={{ height: dashboardHeight }}
                 >
                   <WorkflowDashboard
