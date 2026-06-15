@@ -1911,7 +1911,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             { divider: true },
             {
               label: t("ctx.delete"),
-              shortcut: "⌫",
+              shortcut: "Del",
               danger: true,
               onSelect: () => {
                 if (menu.targetId) {
@@ -1957,7 +1957,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       { divider: true },
       {
         label: t("ctx.delete"),
-        shortcut: "⌫",
+        shortcut: "Del",
         danger: true,
         onSelect: () => {
           if (menu.targetId) {
@@ -2591,6 +2591,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       selectionOnDrag
                       panOnDrag={[1]}
                       panActivationKeyCode="Space"
+                      deleteKeyCode={["Delete"]}
                       fitView
                     >
                       <ViewportPortal>
