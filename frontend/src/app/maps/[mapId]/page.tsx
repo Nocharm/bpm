@@ -114,6 +114,7 @@ const GROUP_TITLE_GAP = 26; // 박스 상단에 타이틀바를 얹을 추가 �
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
+const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
 
 type ScreenRect = { left: number; top: number; width: number; height: number; radius: number };
 
@@ -1001,6 +1002,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     const w = Math.min(760, Math.round(b.w * 0.82));
     const h = Math.min(500, Math.round(b.h * 0.82));
     return { x: index * step, y: index * step, w, h, minimized: false, maximized: false };
+  };
+
+  // AI 창 기본 기하 — 우측에 도킹된 좁은 패널(처음 열 때). 이후 이동/리사이즈는 windowGeom["ai"]에 영속.
+  const aiDefaultGeom = (b: { w: number; h: number }): WindowGeom => {
+    const w = 340;
+    const h = Math.min(440, Math.max(280, Math.round(b.h * 0.7)));
+    return { x: Math.max(0, b.w - w - 16), y: 16, w, h, minimized: false, maximized: false };
   };
 
   const bringToFront = useCallback((key: string) => {
@@ -2677,7 +2685,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           <button
             type="button"
             className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
-            onClick={() => setAiOpen((open) => !open)}
+            onClick={() => {
+              // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
+              if (!aiOpen) {
+                setWindowGeom((map) => {
+                  const g = map[AI_WINDOW_KEY];
+                  return g?.minimized ? { ...map, [AI_WINDOW_KEY]: { ...g, minimized: false } } : map;
+                });
+              }
+              setAiOpen((open) => !open);
+            }}
             title={t("ai.toggle")}
           >
             {t("ai.toggle")}
@@ -2916,11 +2933,23 @@ function MapEditor({ mapId }: { mapId: number }) {
             );
           })}
           <WindowDock
-            items={scopes
-              .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
-              .filter(({ index, key }) => index !== 0 && (windowGeom[key] ?? defaultGeom(index, bounds)).minimized)
-              .map(({ scope, key }) => ({ key, title: scope.title }))}
+            items={[
+              ...scopes
+                .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
+                .filter(({ index, key }) => index !== 0 && (windowGeom[key] ?? defaultGeom(index, bounds)).minimized)
+                .map(({ scope, key }) => ({ key, title: scope.title })),
+              ...(aiOpen && windowGeom[AI_WINDOW_KEY]?.minimized
+                ? [{ key: AI_WINDOW_KEY, title: t("ai.title") }]
+                : []),
+            ]}
             onRestore={(key) => {
+              if (key === AI_WINDOW_KEY) {
+                setWindowGeom((map) => {
+                  const base = map[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds);
+                  return { ...map, [AI_WINDOW_KEY]: { ...base, minimized: false } };
+                });
+                return;
+              }
               setWindowGeom((map) => {
                 const idx = scopes.findIndex((scope) => scopeKey(scope) === key);
                 const base = map[key] ?? defaultGeom(idx, bounds);
@@ -3088,6 +3117,30 @@ function MapEditor({ mapId }: { mapId: number }) {
               }
               onClose={() => setBulkEditGroupId(null)}
             />
+          )}
+          {/* 플로팅 AI 채팅 — ScopeWindow 재사용(드래그/리사이즈/최소화→dock/위치 영속). active=항상 상호작용. */}
+          {versionId !== null && aiOpen && !(windowGeom[AI_WINDOW_KEY]?.minimized) && (
+            <ScopeWindow
+              title={t("ai.title")}
+              geom={windowGeom[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds)}
+              active
+              zIndex={1090}
+              canClose
+              bounds={bounds}
+              onFocus={() => {}}
+              onGeomChange={(next) =>
+                setWindowGeom((map) => ({ ...map, [AI_WINDOW_KEY]: next }))
+              }
+              onClose={() => setAiOpen(false)}
+            >
+              <AiChatPanel
+                versionId={versionId}
+                parent={currentParentId}
+                aiEnabled={aiEnabled}
+                canEdit={!readOnly && (checkout?.mine ?? false)}
+                onGraphProposal={applyAiProposal}
+              />
+            </ScopeWindow>
           )}
         </div>
 
@@ -3305,23 +3358,6 @@ function MapEditor({ mapId }: { mapId: number }) {
               </>
             )}
             </div>
-          </div>
-        )}
-        {/* 플로팅 AI 채팅 — 우측에서 슬라이드 인/아웃(닫혀도 마운트 유지해 애니메이션·대화 보존) */}
-        {versionId !== null && (
-          <div
-            className={`absolute right-0 top-0 z-30 flex h-full w-80 flex-col border-l border-hairline bg-surface shadow-lg transition-transform duration-300 ease-out ${
-              aiOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
-            }`}
-            aria-hidden={!aiOpen}
-          >
-            <AiChatPanel
-              versionId={versionId}
-              parent={currentParentId}
-              aiEnabled={aiEnabled}
-              canEdit={!readOnly && (checkout?.mine ?? false)}
-              onGraphProposal={applyAiProposal}
-            />
           </div>
         )}
       </div>
