@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
+## 2026-06-16
+- decision/start/end는 하위 프로세스 생성 차단(moveToChild 가드+`err.childOnlyProcess`, 노드메뉴 "하위 열기"·DrillButton·드롭존 child 타일을 process/기존하위 노드에만 노출). 분기 모달 즉시닫힘 방지(EdgeBranchModal `armed` 150ms 가드 — 연결 릴리스 후속 click 무시; onConnect 로직은 회귀 아님). 오토레이아웃 단축키 추가: 전역 Shift+L, 메뉴 가속기 A→A(정렬 날개 첫 항목 accel A).
+
 ## 2026-06-15
 - 드롭다운 메뉴 단축키 힌트를 숏컷 레전드와 동일한 `kbd` 디자인(공용 `KBD_CLASS`)으로 + 라벨과 간격(gap-3) 분리, 패널 폭 w-44→w-48.
 - 단축키 IME 무관(`event.code` 물리키 판정 — 한글 ㅁ/ㅊ 등도 인식) + 정렬 키를 왼손 전용·연관 철자로 재배치(좌 W=West, 가로가운데 C, 상단 T, 세로가운데 X, 가로분배 R=spRead, 세로분배 V). Alt 조합도 동일(Alt+W/C/T/X·R/V). 레전드 갱신.

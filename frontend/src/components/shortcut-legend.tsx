@@ -39,6 +39,7 @@ export function ShortcutLegend() {
     { keys: t("legend.hover"), label: t("legend.dropZones") },
     { keys: "Del", label: t("legend.delete") },
     { keys: "Esc", label: t("legend.cancel") },
+    { keys: "Shift+L", label: t("ctx.autoLayout") },
     { keys: "Alt+W/C/T/X", label: t("legend.align") },
     { keys: "Alt+R/V", label: t("legend.distribute") },
     { keys: "Ctrl+G", label: t("legend.createGroup") },
