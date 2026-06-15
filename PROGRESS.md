@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-16
+- DB 초기화·더미 시드 문서화(`docs/db-seed.md`) + 시드 스크립트(`backend/scripts/seed_dummy.py`) 저장소 등록. `--reset`(전체삭제 후 3세트 재생성)·`--verify`(인접 버전 diff) 사용법, 대상 DB(로컬 sqlite/서버 postgres), 검증 절차 정리.
 - decision/start/end는 하위 프로세스 생성 차단(moveToChild 가드+`err.childOnlyProcess`, 노드메뉴 "하위 열기"·DrillButton은 process/기존하위 노드에만 노출, 드롭존 child 타일은 숨기지 않고 비활성(흐리게) 표시). 분기 모달 즉시닫힘 방지(EdgeBranchModal `armed` 150ms 가드 — 연결 릴리스 후속 click 무시; onConnect 로직은 회귀 아님). 오토레이아웃 단축키 추가: 전역 Shift+L, 메뉴 가속기 A→A(정렬 날개 첫 항목 accel A).
 
 ## 2026-06-15
