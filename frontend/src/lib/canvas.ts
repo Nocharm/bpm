@@ -490,6 +490,87 @@ export function distributeSelected(
   });
 }
 
+// ── 그룹 중첩(하위 그룹핑) 헬퍼 ─────────────────────────
+// 구조만 필요 — id + 상위 그룹 id (api GraphGroup와 호환)
+type GroupNode = { id: string; parent_group_id: string | null };
+
+/** 노드가 직접 속한 그룹(leaf) ids의 모든 상위 그룹까지 포함한 집합 — 직접 멤버 없는 상위 그룹도 보존. */
+export function collectKeptGroups(groups: GroupNode[], leafGroupIds: Iterable<string>): Set<string> {
+  const parentOf = new Map(groups.map((group) => [group.id, group.parent_group_id]));
+  const keep = new Set<string>();
+  for (const leaf of leafGroupIds) {
+    let cur: string | null = leaf;
+    while (cur !== null && parentOf.has(cur) && !keep.has(cur)) {
+      keep.add(cur);
+      cur = parentOf.get(cur) ?? null;
+    }
+  }
+  return keep;
+}
+
+function buildGroupChildren(groups: GroupNode[]): Map<string, string[]> {
+  const childrenOf = new Map<string, string[]>();
+  for (const group of groups) {
+    if (group.parent_group_id) {
+      const arr = childrenOf.get(group.parent_group_id);
+      if (arr) {
+        arr.push(group.id);
+      } else {
+        childrenOf.set(group.parent_group_id, [group.id]);
+      }
+    }
+  }
+  return childrenOf;
+}
+
+/** 그룹 중첩 높이 — 리프(자식 그룹 없음)=0, 상위로 갈수록 +1. 사이클은 방문 가드로 0 처리. */
+export function computeGroupHeights(groups: GroupNode[]): Map<string, number> {
+  const childrenOf = buildGroupChildren(groups);
+  const memo = new Map<string, number>();
+  const visiting = new Set<string>();
+  const height = (id: string): number => {
+    const cached = memo.get(id);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (visiting.has(id)) {
+      return 0; // 사이클 방지
+    }
+    visiting.add(id);
+    let h = 0;
+    for (const child of childrenOf.get(id) ?? []) {
+      h = Math.max(h, height(child) + 1);
+    }
+    visiting.delete(id);
+    memo.set(id, h);
+    return h;
+  };
+  for (const group of groups) {
+    height(group.id);
+  }
+  return memo;
+}
+
+/** 그룹 G의 서브트리(자기+모든 하위 그룹) 그룹 id 집합 — 멤버 산정·일괄편집용. */
+export function groupSubtreeIds(groups: GroupNode[], rootId: string): Set<string> {
+  const childrenOf = buildGroupChildren(groups);
+  const out = new Set<string>([rootId]);
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const cur = stack.pop();
+    if (cur === undefined) {
+      break;
+    }
+    for (const child of childrenOf.get(cur) ?? []) {
+      if (!out.has(child)) {
+        out.add(child);
+        stack.push(child);
+      }
+    }
+  }
+  return out;
+}
+
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
 // 타일 배치는 page.tsx 오버레이 렌더와 동일해야 한다(좌=front/우=back/상=group/하=child/중앙=swap).
 export type DropZone = "front" | "back" | "group" | "child" | "swap";

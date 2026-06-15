@@ -62,6 +62,8 @@ export interface GraphEdge {
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)
 export interface GraphGroup {
   id: string;
+  // 상위 그룹 id — 중첩(하위 그룹핑). null=최상위
+  parent_group_id: string | null;
   label: string;
   color: string;
 }

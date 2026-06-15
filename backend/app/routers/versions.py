@@ -84,6 +84,12 @@ async def _clone_graph(
                     if group.parent_node_id is not None
                     else None
                 ),
+                # 중첩 상위 그룹도 새 ID로 리맵 (없으면 None)
+                parent_group_id=(
+                    group_id_map.get(group.parent_group_id)
+                    if group.parent_group_id is not None
+                    else None
+                ),
                 label=group.label,
                 color=group.color,
             )

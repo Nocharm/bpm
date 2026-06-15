@@ -115,6 +115,8 @@ class GroupIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    # 상위 그룹 id — 중첩(그룹 안 그룹). null=최상위
+    parent_group_id: str | None = None
     label: str = Field(default="", max_length=200)
     color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
 
