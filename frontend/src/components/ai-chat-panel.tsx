@@ -2,7 +2,7 @@
 
 // 에디터 AI 채팅 패널 — 순서도 생성/편집 지시 + 사용법 안내 (design 2026-06-15)
 import { Send } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { aiChat, getAiModels, type AiChatTurn, type AiProposal } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -33,6 +33,15 @@ export function AiChatPanel({
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 새 메시지·생각중 표시가 추가되면 항상 최신(하단)으로 스크롤
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, busy]);
 
   // 서빙 모델 목록 조회(진입 1회, AI 활성일 때만) — 첫 모델을 기본 선택
   useEffect(() => {
@@ -98,7 +107,7 @@ export function AiChatPanel({
           </select>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div ref={scrollRef} className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-3">
         {!aiEnabled && (
           <p className="mb-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-tertiary">
             {t("ai.disabled")}
