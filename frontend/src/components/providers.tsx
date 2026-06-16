@@ -51,8 +51,11 @@ function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 토큰은 렌더 단계에서 동기 반영 — 자식 페이지의 fetch effect가 AuthGate effect보다 먼저 실행되는
+  // 레이스(첫 GET /maps가 토큰 없이 나가 401) 방지. React effect는 자식→부모 순서라 effect로 세팅하면 늦다.
+  setAuthToken(auth.user?.access_token ?? null);
+
   useEffect(() => {
-    setAuthToken(auth.user?.access_token ?? null);
     if (auth.user?.access_token) {
       void publishMe();
     } else {

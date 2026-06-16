@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-16
+- 로그인 직후 첫 `GET /maps` 401(missing bearer token) 수정 — 자식 페이지 fetch effect가 부모 AuthGate의 `setAuthToken` effect보다 먼저 실행되던 레이스(React effect 자식→부모 순서). 토큰을 effect 대신 AuthGate **렌더 단계에서 동기 반영**해 자식 mount 전에 채움. 전 페이지 적용.
 - 앱 노출 포트 9787→3333 일괄 변경 — 서버 실제 배포 포트(3333)에 맞춤. `.env.example`·`docker-compose.yml` 기본값·README·CLAUDE.md·`docs/spec.md`·`docs/deploy.md`·`docs/deploy-auth-ad.md`·`nginx/default.conf` 주석 전수 스윕(과거 로그는 보존). ⚠️ Keycloak `bpm-frontend` Valid redirect URIs/Web origins도 `:3333`으로 갱신해야 로그인 redirect 정상.
 - Keycloak 로그인 무반응(평문 HTTP) 수정 — 원격 IP HTTP는 secure context가 아니라 PKCE의 `crypto.subtle`이 브라우저에 차단됨 → `signinRedirect`가 조용히 throw. 프론트 OIDC 설정(`keycloak-login.ts`·`providers.tsx`)에 `disablePKCE: true`로 우회(사내망 한정·Keycloak도 동일 서버 개발용이라 수용한 트레이드오프, HTTPS 전환 시 복구). 배포 문서 트러블슈팅·보안 메모 추가.
 - 서버(사내 71번) 배포 성공 반영 — 프론트 Dockerfile `node:22-alpine`→`node:20-alpine`(서버에서 node:22 이미지 풀 실패), `docker-compose.yml`에 `networks.default` 명시 서브넷(172.36.0.0/16, 사내망 대역 충돌 회피).
