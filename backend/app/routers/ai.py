@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 _NOT_EDITABLE_MSG = "이 버전은 편집할 수 없어 그래프를 적용할 수 없습니다. 도움말만 가능합니다."
 
 
+def _extract_json(text: str) -> str:
+    """모델이 ```json 펜스나 앞뒤 설명을 붙여도 본문 JSON 오브젝트만 추출 — 첫 '{' ~ 마지막 '}'."""
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        return text[start : end + 1]
+    return text
+
+
 async def _ask_and_validate(messages: list[dict], model: str | None) -> AiProposal:
     """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502."""
     for attempt in range(2):
@@ -34,8 +42,10 @@ async def _ask_and_validate(messages: list[dict], model: str | None) -> AiPropos
             logger.warning("AI server call failed: %s", exc)
             raise HTTPException(status_code=502, detail="AI server error") from exc
         try:
-            return AiProposal.model_validate_json(content)
-        except ValueError:
+            return AiProposal.model_validate_json(_extract_json(content))
+        except ValueError as exc:
+            # 원본 출력(모델 텍스트, 비밀 아님)을 서버 로그에만 기록 — 502 원인 진단용. 클라이언트엔 일반 메시지만.
+            logger.warning("AI response invalid (attempt %d): %s | raw=%.800s", attempt, exc, content)
             if attempt == 0:
                 messages = [*messages, {"role": "user", "content": "유효한 JSON 한 개만 반환하세요."}]
                 continue
