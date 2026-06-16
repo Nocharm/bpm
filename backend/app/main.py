@@ -35,4 +35,4 @@ async def check_health() -> dict[str, str]:
 
 @app.get("/api/me", response_model=MeOut)
 async def get_me(user: str = Depends(get_current_user)) -> MeOut:
-    return MeOut(username=user, ai_enabled=settings.ai_enabled)
+    return MeOut(username=user, ai_enabled=settings.ai_enabled, name=user, role="user", department="")

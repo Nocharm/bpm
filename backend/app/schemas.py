@@ -191,6 +191,26 @@ class NotificationOut(BaseModel):
 class MeOut(BaseModel):
     username: str
     ai_enabled: bool
+    name: str
+    role: str
+    department: str
+
+
+class EmployeeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    login_id: str
+    name: str
+    title: str
+    source: str
+    role: str
+    department: str
+
+
+class SyncSummaryOut(BaseModel):
+    scanned: int
+    upserted: int
+    excluded: int
 
 
 AI_NODE_TYPES = {"start", "process", "decision", "end"}

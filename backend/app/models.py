@@ -199,3 +199,23 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, default="")
     read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Employee(Base):
+    """사내 AD 동기화 사용자 — loginId(sAMAccountName) PK. source=ad|local (design 2026-06-16)."""
+
+    __tablename__ = "employees"
+
+    login_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    title: Mapped[str] = mapped_column(String(100), default="")
+    source: Mapped[str] = mapped_column(String(10), default="ad")  # ad | local
+    role: Mapped[str] = mapped_column(String(10), default="user")  # admin | user
+    org_l1: Mapped[str | None] = mapped_column(String(200), default=None)
+    org_l2: Mapped[str | None] = mapped_column(String(200), default=None)
+    org_l3: Mapped[str | None] = mapped_column(String(200), default=None)
+    department: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
