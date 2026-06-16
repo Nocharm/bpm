@@ -2445,10 +2445,26 @@ function MapEditor({ mapId }: { mapId: number }) {
       let next: Edge = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
       // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일
       if (edge.label) {
+        // Yes/No 분기는 은은한 파스텔 블루/레드로 선·라벨 색 구분(라벨에서 파생, 영속 불필요). 기타는 기본 톤.
+        const branch = branchKindOf(edge.label);
+        const branchColor =
+          branch === "yes"
+            ? "var(--color-branch-yes)"
+            : branch === "no"
+              ? "var(--color-branch-no)"
+              : null;
         next = {
           ...next,
+          ...(branchColor
+            ? {
+                style: { ...next.style, stroke: branchColor },
+                markerEnd: { type: MarkerType.ArrowClosed, color: branchColor },
+              }
+            : {}),
           labelStyle: EDGE_LABEL_STYLE,
-          labelBgStyle: EDGE_LABEL_BG_STYLE,
+          labelBgStyle: branchColor
+            ? { fill: `color-mix(in srgb, ${branchColor} 14%, white)`, stroke: branchColor }
+            : EDGE_LABEL_BG_STYLE,
           labelBgPadding: EDGE_LABEL_BG_PADDING,
           labelBgBorderRadius: 6,
         };

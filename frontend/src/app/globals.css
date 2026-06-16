@@ -53,6 +53,9 @@
   --color-edge-out: #ea580c;
   /* 선택된 엣지 강조색 — accent보다 밝은 바이올렛으로 또렷하게 */
   --color-edge-selected: #7c4dff;
+  /* 판단(decision) 분기 엣지 — 은은한 파스텔 블루(Yes)/레드(No). 무채도 팔레트와 조화, 과강조 회피 */
+  --color-branch-yes: #6f93cc;
+  --color-branch-no: #cf7e84;
 
   /* Fonts */
   --font-text: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Text", system-ui, sans-serif;
