@@ -29,5 +29,28 @@ class Settings(BaseSettings):
     ai_model: str = ""
     ai_timeout_seconds: int = 60  # 요청 타임아웃(초)
 
+    # 사내 AD(LDAP) 동기화 — 비우면 비활성(로컬). 시크릿은 .env만 (design 2026-06-16)
+    ldap_url: str = ""  # 예: ldaps://ad.example.com:636
+    ldap_bind_dn: str = ""  # 서비스 계정 DN
+    ldap_bind_credentials: str = ""  # 서비스 계정 비밀번호 (시크릿)
+    ldap_user_search_base: str = ""  # 사용자 검색 기준 DN
+    ldap_start_tls: bool = False  # ldap:// + StartTLS 쓸 때만 True
+    ldap_user_filter: str = ""  # 비우면 기본 enumerate 필터
+    # admin role을 부여할 loginId(콤마 구분). 비우면 AD 유저는 전부 user
+    system_admin_login_ids: str = ""
+
+    @property
+    def ldap_enabled(self) -> bool:
+        """필수 4종이 모두 채워졌는지 — 로그인/전체 동기화 동작 게이트."""
+        return bool(
+            self.ldap_url
+            and self.ldap_bind_dn
+            and self.ldap_bind_credentials
+            and self.ldap_user_search_base
+        )
+
+    def admin_login_ids(self) -> set[str]:
+        return {x.strip() for x in self.system_admin_login_ids.split(",") if x.strip()}
+
 
 settings = Settings()
