@@ -138,10 +138,11 @@ class SyncTooSoon(Exception):
 
 
 async def run_full_sync(session: AsyncSession) -> SyncSummary:
-    """5분 가드 적용 전체 동기화. 과빈도면 SyncTooSoon."""
+    """5분 가드 적용 전체 동기화. 과빈도면 SyncTooSoon. 실패 시엔 가드를 소모하지 않아 재시도 가능."""
     global _last_full_sync_at
     now = time.monotonic()
     if _last_full_sync_at is not None and now - _last_full_sync_at < _FULL_SYNC_MIN_INTERVAL:
         raise SyncTooSoon(int(_FULL_SYNC_MIN_INTERVAL - (now - _last_full_sync_at)))
+    summary = await sync_all(session)
     _last_full_sync_at = now
-    return await sync_all(session)
+    return summary
