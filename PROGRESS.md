@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-16
+- Keycloak 로그인 화면 + 사내 AD(LDAP) 동기화 + 로컬 임시 로그인 구현(spec/plan: `docs/superpowers/specs|plans/2026-06-16-keycloak-login-ad-sync*`). 백엔드: `employees` 테이블, `app/ad/`(DN 파싱·필터 순수함수+pytest, ldap3 클라이언트, `sync_one`/`sync_all`+5분 인메모리 가드), `X-Dev-User` 의존성·`require_admin`, `/api/me` 확장·`/api/employees`·`/api/employees/sync`(admin). 프론트: `/login` 와일드카드 게이트(AuthGate/DevGate), 임시 로그인 모달(5명 fixture, `X-Dev-User`), TopNav 유저 드롭다운(관리자 페이지/로그아웃), `/admin` 직원 테이블+동기화. 검증: 백엔드 108 pytest+ruff, 프론트 eslint+build green. (Keycloak 서버 설정·실연동은 서버 배포 시.)
 - DB 초기화·더미 시드 문서화(`docs/db-seed.md`) + 시드 스크립트(`backend/scripts/seed_dummy.py`) 저장소 등록. `--reset`(전체삭제 후 3세트 재생성)·`--verify`(인접 버전 diff) 사용법, 대상 DB(로컬 sqlite/서버 postgres), 검증 절차 정리.
 - 판단(마름모) 분기 모달 누락 수정. 엣지 생성 경로가 둘(핸들 드래그 `onConnect` / 노드 드롭 `applyFlowEdges`)인데 모달이 드래그에만 있어 드롭 연결 시 라벨 없는(=기타) 엣지가 바로 생성되던 버그 → 드롭 경로도 모달을 타도록 `branchPrompt`(connection/edge) 일반화. 중간 삽입 시 분기 라벨이 마름모를 source로 유지되도록 `insertNodeAfter`에 `bIsDecision` 분기 추가.
 - 전역 버튼 인터랙션 base(`globals.css`) — 모든 `<button>` 포인터 커서 + 클릭 `scale(0.97)` 눌림(`prefers-reduced-motion` 가드), 컴포넌트는 hover 배경만. 설계 규칙(`rules/frontend/design.md` §4)에 명문화.
