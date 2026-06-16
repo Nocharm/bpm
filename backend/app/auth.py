@@ -40,8 +40,9 @@ def get_current_user(
             signing_key.key,
             algorithms=["RS256"],
             issuer=settings.keycloak_issuer,
-            audience=settings.keycloak_audience,
-            options={"verify_aud": settings.keycloak_audience is not None},
+            # 빈 문자열(미설정·compose 기본 ${VAR:-})도 None과 동일하게 aud 검증 생략 — 아니면 토큰이 항상 깨짐
+            audience=settings.keycloak_audience or None,
+            options={"verify_aud": bool(settings.keycloak_audience)},
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail=f"invalid token: {exc}") from exc
