@@ -21,6 +21,8 @@ function buildOidcConfig() {
     authority: process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ?? "",
     client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
     redirect_uri: window.location.origin,
+    // signinRedirect(keycloak-login.ts)와 짝 — 평문 HTTP 접속 위해 PKCE 비활성(crypto.subtle 회피).
+    disablePKCE: true,
     onSigninCallback: () => {
       window.history.replaceState({}, document.title, window.location.pathname);
     },

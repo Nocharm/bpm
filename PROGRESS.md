@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-16
+- Keycloak 로그인 무반응(평문 HTTP) 수정 — 원격 IP HTTP는 secure context가 아니라 PKCE의 `crypto.subtle`이 브라우저에 차단됨 → `signinRedirect`가 조용히 throw. 프론트 OIDC 설정(`keycloak-login.ts`·`providers.tsx`)에 `disablePKCE: true`로 우회(사내망 한정·Keycloak도 동일 서버 개발용이라 수용한 트레이드오프, HTTPS 전환 시 복구). 배포 문서 트러블슈팅·보안 메모 추가.
 - 서버(사내 71번) 배포 성공 반영 — 프론트 Dockerfile `node:22-alpine`→`node:20-alpine`(서버에서 node:22 이미지 풀 실패), `docker-compose.yml`에 `networks.default` 명시 서브넷(172.36.0.0/16, 사내망 대역 충돌 회피).
 - 배포 절차 문서(`docs/deploy-auth-ad.md`) — Keycloak 로그인+AD 동기화 서버 배포(env·Keycloak federation·검증·트러블슈팅). + `docker-compose.yml` backend에 `LDAP_*`·`SYSTEM_ADMIN_LOGIN_IDS` 환경변수 배선(누락 갭 수정 — 컨테이너는 .env 직접 안 읽고 compose environment로만 주입받음).
 - Keycloak 로그인 화면 + 사내 AD(LDAP) 동기화 + 로컬 임시 로그인 구현(spec/plan: `docs/superpowers/specs|plans/2026-06-16-keycloak-login-ad-sync*`). 백엔드: `employees` 테이블, `app/ad/`(DN 파싱·필터 순수함수+pytest, ldap3 클라이언트, `sync_one`/`sync_all`+5분 인메모리 가드), `X-Dev-User` 의존성·`require_admin`, `/api/me` 확장·`/api/employees`·`/api/employees/sync`(admin). 프론트: `/login` 와일드카드 게이트(AuthGate/DevGate), 임시 로그인 모달(5명 fixture, `X-Dev-User`), TopNav 유저 드롭다운(관리자 페이지/로그아웃), `/admin` 직원 테이블+동기화. 검증: 백엔드 108 pytest+ruff, 프론트 eslint+build green. (Keycloak 서버 설정·실연동은 서버 배포 시.)

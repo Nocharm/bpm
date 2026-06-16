@@ -105,6 +105,7 @@ docker compose exec backend python -c "from app.settings import settings; print(
 | 전체 동기화가 timeout/오류 | LDAP 접속(방화벽/포트/LDAPS 인증서), bind 자격 증명, 검색 기준 DN. `LDAP_START_TLS`와 스킴(ldaps:// vs ldap://) 일치 여부 |
 | 특정 사용자가 동기화에서 빠짐 | 필터 규칙(설계 §4.2): `loginId`에 `.` 없음 / `name`에 `_` 포함 / `org_l1`이 제외목록(Partners·TEST·View 등)이면 제외됨 — 의도된 동작 |
 | `preferred_username`이 loginId가 아님 | Keycloak federation의 username 매퍼가 `sAMAccountName`인지. 다르면 employees 매칭이 어긋남 |
+| 로그인 버튼 눌러도 무반응(Keycloak 화면 안 뜸) | 콘솔에 `crypto.subtle is available only in secure contexts`. 평문 HTTP(원격 IP)는 secure context가 아니라 PKCE의 `crypto.subtle`이 차단됨 → 프론트는 `disablePKCE: true`로 우회(아래 §6). Keycloak 클라이언트 `bpm-frontend` Advanced의 *PKCE Code Challenge Method*가 `S256`으로 **강제돼 있으면** 비워야 함 |
 
 로그: `docker compose logs -f backend`
 
@@ -116,3 +117,4 @@ docker compose exec backend python -c "from app.settings import settings; print(
 - 가능하면 **LDAPS(636)** 또는 StartTLS로 평문 bind 회피.
 - `X-Dev-User` 헤더는 **`AUTH_ENABLED=false`에서만** 신뢰된다. 서버는 `AUTH_ENABLED=true`이므로 이 헤더가 들어와도 무시되고 JWT만 신뢰한다(우회 불가).
 - 관리자 엔드포인트(`/api/employees`, `/api/employees/sync`)는 **백엔드 `require_admin`으로 서버측 보호**된다(프론트 숨김에 의존하지 않음).
+- **PKCE 비활성(`disablePKCE: true`)은 의도된 트레이드오프** — 사내망 평문 HTTP 접속에서 `crypto.subtle`(secure context 전용)을 못 써서 끈 것. public 클라이언트에서 PKCE를 빼면 auth code 가로채기 방어가 약해진다. 사내망 한정·Keycloak도 같은 서버 개발용이라 수용. **HTTPS 도메인 경유로 전환하면 `disablePKCE`를 되돌려 PKCE(S256) 복구**할 것(앱·Keycloak 둘 다 HTTPS여야 discovery fetch mixed-content 회피).
