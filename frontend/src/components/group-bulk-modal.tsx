@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
@@ -131,10 +132,10 @@ export function GroupBulkModal({
   };
 
   return createPortal(
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="w-96 rounded-md bg-surface p-4 shadow-lg"
@@ -329,7 +330,7 @@ export function GroupBulkModal({
           </div>
         )}
       </div>
-    </div>,
+    </ModalBackdrop>,
     document.body,
   );
 }

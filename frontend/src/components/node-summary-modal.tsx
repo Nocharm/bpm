@@ -6,6 +6,7 @@
 import { CornerDownRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ScopePreview } from "@/components/scope-preview";
 import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
 import { type ProcessNodeType } from "@/lib/canvas";
@@ -52,6 +53,8 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   typeOptions: { value: ProcessNodeType; label: string }[];
   onPatch: (patch: NodeEditPatch) => void;
+  // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
+  onCommitLabel?: (label: string) => void;
   onClose: () => void;
   // 하위 프로세스가 있을 때 그 캔버스로 진입 (있을 때만 버튼 노출)
   onOpenChild?: () => void;
@@ -77,6 +80,7 @@ export function NodeSummaryModal({
   colorPresets,
   typeOptions,
   onPatch,
+  onCommitLabel,
   onClose,
   onOpenChild,
 }: NodeSummaryModalProps) {
@@ -139,10 +143,10 @@ export function NodeSummaryModal({
   };
 
   return (
-    <div
+    <ModalBackdrop
       className="absolute inset-0 z-[1200] flex items-center justify-center"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface"
@@ -158,6 +162,7 @@ export function NodeSummaryModal({
               value={title}
               aria-label={t("field.title")}
               onChange={(event) => onPatch({ label: event.target.value })}
+              onBlur={(event) => onCommitLabel?.(event.target.value)}
             />
           )}
           <button
@@ -332,6 +337,6 @@ export function NodeSummaryModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

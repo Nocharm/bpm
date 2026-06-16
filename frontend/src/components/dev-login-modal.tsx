@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { LOCAL_USERS } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 
@@ -14,10 +15,10 @@ export function DevLoginModal({
 }) {
   const { t } = useI18n();
   return createPortal(
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="w-80 rounded-md bg-surface p-4 shadow-lg"
@@ -42,7 +43,7 @@ export function DevLoginModal({
           ))}
         </div>
       </div>
-    </div>,
+    </ModalBackdrop>,
     document.body,
   );
 }

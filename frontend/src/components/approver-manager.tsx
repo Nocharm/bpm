@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { listApprovers, setApprovers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
@@ -58,10 +59,10 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
 
   // document.body로 포털 — 에디터 캔버스/창의 스택 컨텍스트 밖에서 최상단 렌더
   return createPortal(
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="w-80 rounded-md bg-surface p-4 shadow-lg"
@@ -85,7 +86,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
           </button>
         </div>
       </div>
-    </div>,
+    </ModalBackdrop>,
     document.body,
   );
 }
