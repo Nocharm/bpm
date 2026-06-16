@@ -27,6 +27,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
+import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
@@ -46,6 +47,7 @@ import {
   distributeSelected,
   layoutWithDagre,
   layoutSubsetWithDagre,
+  makeUniqueLabel,
   normalizeNodeType,
   resolveCollision,
   getIncomingEdges,
@@ -1342,7 +1344,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           type: "process",
           position,
           data: {
-            label: t("editor.newStep"),
+            label: makeUniqueLabel(
+              t("editor.newStep"),
+              current.map((node) => node.data.label),
+            ),
             description: "",
             nodeType,
             color: "",
@@ -1467,7 +1472,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           {
             id: newId,
             parent_group_id: null,
-            label: b.data.department || b.data.assignee || "",
+            label: makeUniqueLabel(
+              b.data.department || b.data.assignee || "",
+              cur.map((g) => g.label),
+            ),
             color: GROUP_COLOR_PRESETS[cur.length % GROUP_COLOR_PRESETS.length],
           },
         ]);
@@ -1580,7 +1588,11 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const renameGroup = useCallback(
     (groupId: string, label: string) => {
-      setGroups((current) => current.map((g) => (g.id === groupId ? { ...g, label } : g)));
+      setGroups((current) => {
+        const taken = current.filter((g) => g.id !== groupId).map((g) => g.label);
+        const unique = makeUniqueLabel(label, taken);
+        return current.map((g) => (g.id === groupId ? { ...g, label: unique } : g));
+      });
       scheduleAutoSave();
     },
     [setGroups, scheduleAutoSave],
@@ -1629,7 +1641,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       {
         id: newId,
         parent_group_id: null,
-        label: first.data.department || first.data.assignee || "",
+        label: makeUniqueLabel(
+          first.data.department || first.data.assignee || "",
+          cur.map((g) => g.label),
+        ),
         color: GROUP_COLOR_PRESETS[cur.length % GROUP_COLOR_PRESETS.length],
       },
     ]);
@@ -2024,6 +2039,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     [summaryNodeId, patchNode],
   );
 
+  // 제목 입력 확정(blur) — 캔버스 내 다른 노드와 이름 중복 시 " (n)" 접미사로 고유화.
+  const handleSummaryLabelCommit = useCallback(
+    (label: string) => {
+      if (!summaryNodeId) {
+        return;
+      }
+      const taken = nodesRef.current
+        .filter((node) => node.id !== summaryNodeId)
+        .map((node) => node.data.label);
+      const unique = makeUniqueLabel(label, taken);
+      if (unique !== label) {
+        patchNode(summaryNodeId, { label: unique }, false);
+      }
+    },
+    [summaryNodeId, patchNode],
+  );
+
   // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 라이브 노드만 적용, 편집 모드 해제.
   const renameNode = useCallback(
     (id: string, label: string) => {
@@ -2032,11 +2064,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       pushHistory();
-      setNodes((current) =>
-        current.map((node) =>
-          node.id === id ? { ...node, data: { ...node.data, label } } : node,
-        ),
-      );
+      setNodes((current) => {
+        const taken = current.filter((node) => node.id !== id).map((node) => node.data.label);
+        const unique = makeUniqueLabel(label, taken);
+        return current.map((node) =>
+          node.id === id ? { ...node, data: { ...node.data, label: unique } } : node,
+        );
+      });
       scheduleAutoSave();
     },
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
@@ -3333,6 +3367,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         color="var(--color-canvas-dot)"
                       />
                       <Controls />
+                      <CanvasZoomScale />
                     </ReactFlow>
                   </div>
                 ) : (
@@ -3512,6 +3547,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   label: t(option.labelKey),
                 }))}
                 onPatch={handleSummaryPatch}
+                onCommitLabel={handleSummaryLabelCommit}
                 onClose={() => setSummaryNodeId(null)}
                 onOpenChild={handleOpenSummaryChild}
               />

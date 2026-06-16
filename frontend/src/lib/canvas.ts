@@ -334,6 +334,25 @@ export function branchKindOf(label: unknown): BranchKind {
   return "other";
 }
 
+// 캔버스 내 이름 중복 방지 — 이미 쓰이는 이름이면 " (2)", " (3)"... 접미사를 붙여 고유화.
+// 빈/공백 이름은 예외(여러 미명명 노드·그룹 허용). 비교는 trim 기준.
+export function makeUniqueLabel(desired: string, taken: string[]): string {
+  const trimmed = desired.trim();
+  if (!trimmed) {
+    return desired;
+  }
+  const used = new Set(taken.map((name) => name.trim()));
+  if (!used.has(trimmed)) {
+    return desired;
+  }
+  for (let n = 2; ; n += 1) {
+    const candidate = `${trimmed} (${n})`;
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
 /** B로 들어오는(B가 target) 엣지들. */
 export function getIncomingEdges(edges: Edge[], nodeId: string): Edge[] {
   return edges.filter((edge) => edge.target === nodeId);

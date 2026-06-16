@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
+## 2026-06-17
+- AI 채팅 패널 세로 스크롤 수정 — 메시지 영역 `flex-1`에 `min-h-0` 누락으로 컨테이너 밖으로 늘어나 스크롤 불가였음. `min-h-0` 추가 + 새 메시지 시 자동 하단 스크롤. 스크롤바는 `scrollbar-hidden` 유틸(globals.css)로 기본 숨김(동작은 유지).
+- 모달 외부클릭 닫기 버그 수정 — `onClick`(=mouseup)으로 닫아, 모달 내부 드래그를 바깥에서 떼면 백드롭 click이 발생해 잘못 닫혔음. 공용 `ModalBackdrop`(mousedown·click 모두 백드롭 자신일 때만 닫음)으로 5개 모달(dev-login·node-summary·group-bulk·approver-manager·edge-branch) 통일. edge-branch 기존 150ms `armed` 해킹은 이 가드로 대체·제거.
+- 캔버스 좌측 줌 인디케이터(`canvas-zoom-scale.tsx`) — `useViewport`로 현재 줌을 세로 눈금 바에 실시간 표시(로그 스케일·반응형 높이·표시 전용 pointer-events-none).
+- 노드·그룹 이름 캔버스 내 중복 금지 — 중복 시 `(2)`/`(3)` 자동 접미사(`canvas.ts makeUniqueLabel`). 노드끼리·그룹끼리 따로, 빈 이름 예외. 적용: 노드 인라인/요약모달(blur) 리네임·생성, 그룹 리네임(타이틀바·일괄)·생성(선택→/드롭→).
+
 ## 2026-06-16
 - 편집화면 노드/엣지 생성 시 `crypto.randomUUID is not a function`(평문 HTTP=insecure context, secure context 전용 API) 수정. 실제 호출처는 에디터 `[mapId]/page.tsx` **6곳**(handleAddNode·createEdge·applyAiProposal·그룹 생성) — 직접 `crypto.randomUUID()`. 공용 헬퍼 `lib/id.ts`(`genId`, getRandomValues 폴백) 신설해 6곳 + `canvas.ts` 전부 교체. (앞선 canvas.ts-only 수정은 실제 경로를 못 짚었고, ugrep이 `[mapId]` 대괄호 경로를 건너뛰어 호출처를 놓쳤었음.) localhost는 secure context라 정상 → 서버(원격 HTTP) 전용 증상.
 - AI 채팅 502 "AI returned invalid response" 진단 보강 — 검증 실패 시 원본 모델 출력을 서버 로그에 기록(`ai.py`), `_extract_json`으로 ```json 펜스·앞뒤 prose 제거 후 재파싱. (AI는 서버 전용 기능=AI_ENABLED, 로컬 기본 비활성이라 서버에서만 발현. 근본 원인은 로그의 raw 출력으로 확정 필요.)
