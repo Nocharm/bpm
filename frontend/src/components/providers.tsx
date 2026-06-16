@@ -1,23 +1,19 @@
 "use client";
 
 import { AuthProvider, useAuth } from "react-oidc-context";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
-import { setAuthToken } from "@/lib/api";
+import { getMe, setAuthToken, setDevUser } from "@/lib/api";
 import { setCurrentUser } from "@/lib/current-user";
+import { getStoredDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 
-// SSR-safe 클라이언트 마운트 감지 (effect 내 setState 없이)
 const subscribe = () => () => {};
 function useMounted(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
+  return useSyncExternalStore(subscribe, () => true, () => false);
 }
 
-// 로컬(Docker 없음)은 Keycloak 접근 불가 → 빌드 시 비활성. 서버 빌드에서만 활성.
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 function buildOidcConfig() {
@@ -25,47 +21,54 @@ function buildOidcConfig() {
     authority: process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ?? "",
     client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
     redirect_uri: window.location.origin,
-    // 로그인 후 URL의 code/state 쿼리를 정리
     onSigninCallback: () => {
       window.history.replaceState({}, document.title, window.location.pathname);
     },
   };
 }
 
+// 로그인 후 /api/me로 표시 프로필 + role 발행
+async function publishMe(): Promise<void> {
+  try {
+    const me = await getMe();
+    setCurrentUser({
+      name: me.name || me.username,
+      email: null,
+      loginId: me.username,
+      role: me.role,
+      department: me.department,
+    });
+  } catch {
+    setCurrentUser(null);
+  }
+}
+
 function AuthGate({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const { t } = useI18n();
+  const router = useRouter();
+  const pathname = usePathname();
 
-  // 미인증 시 Keycloak으로 리디렉트
-  useEffect(() => {
-    if (
-      !auth.isLoading &&
-      !auth.isAuthenticated &&
-      !auth.activeNavigator &&
-      !auth.error
-    ) {
-      void auth.signinRedirect();
-    }
-  }, [auth]);
-
-  // 액세스 토큰을 API 클라이언트에 동기화
   useEffect(() => {
     setAuthToken(auth.user?.access_token ?? null);
-  }, [auth.user]);
-
-  // 로그인 유저 프로필을 표시용 스토어에 발행 — TopNav가 구독
-  useEffect(() => {
-    const profile = auth.user?.profile;
-    if (profile) {
-      setCurrentUser({
-        name: profile.name ?? profile.preferred_username ?? profile.email ?? "User",
-        email: profile.email ?? null,
-      });
+    if (auth.user?.access_token) {
+      void publishMe();
     } else {
       setCurrentUser(null);
     }
   }, [auth.user]);
 
+  useEffect(() => {
+    if (!auth.isLoading && !auth.isAuthenticated && !auth.activeNavigator && !auth.error) {
+      if (pathname !== "/login") {
+        router.replace("/login");
+      }
+    }
+  }, [auth.isLoading, auth.isAuthenticated, auth.activeNavigator, auth.error, pathname, router]);
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
   if (auth.error) {
     return <div className="p-8 text-caption text-error">{t("auth.error", { msg: auth.error.message })}</div>;
   }
@@ -75,15 +78,39 @@ function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-export function Providers({ children }: { children: ReactNode }) {
-  // SSR에서 window 접근을 피하려 마운트 후에만 AuthProvider 렌더
-  const mounted = useMounted();
+function DevGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const stored = getStoredDevUser();
 
-  if (!AUTH_ENABLED) {
+  useEffect(() => {
+    setDevUser(stored);
+    if (stored) {
+      void publishMe();
+    } else {
+      setCurrentUser(null);
+      if (pathname !== "/login") {
+        router.replace("/login");
+      }
+    }
+  }, [stored, pathname, router]);
+
+  if (pathname === "/login") {
     return <>{children}</>;
   }
+  if (!stored) {
+    return null;
+  }
+  return <>{children}</>;
+}
+
+export function Providers({ children }: { children: ReactNode }) {
+  const mounted = useMounted();
   if (!mounted) {
     return null;
+  }
+  if (!AUTH_ENABLED) {
+    return <DevGate>{children}</DevGate>;
   }
   return (
     <AuthProvider {...buildOidcConfig()}>

@@ -86,10 +86,18 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
+let devUser: string | null = null;
+
+export function setDevUser(loginId: string | null): void {
+  devUser = loginId;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
   }
   const response = await fetch(`/api${path}`, {
     ...init,
@@ -249,8 +257,39 @@ export interface WorkflowState {
   approvals: string[];
 }
 
-export function getMe(): Promise<{ username: string; ai_enabled: boolean }> {
-  return request<{ username: string; ai_enabled: boolean }>("/me");
+export interface Me {
+  username: string;
+  ai_enabled: boolean;
+  name: string;
+  role: "admin" | "user";
+  department: string;
+}
+
+export function getMe(): Promise<Me> {
+  return request<Me>("/me");
+}
+
+export interface EmployeeRow {
+  login_id: string;
+  name: string;
+  title: string;
+  source: string;
+  role: string;
+  department: string;
+}
+
+export function listEmployees(): Promise<EmployeeRow[]> {
+  return request<EmployeeRow[]>("/employees");
+}
+
+export interface SyncSummary {
+  scanned: number;
+  upserted: number;
+  excluded: number;
+}
+
+export function syncEmployees(): Promise<SyncSummary> {
+  return request<SyncSummary>("/employees/sync", { method: "POST" });
 }
 
 export function getWorkflowState(versionId: number): Promise<WorkflowState> {

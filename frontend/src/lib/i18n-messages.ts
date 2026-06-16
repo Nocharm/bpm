@@ -253,6 +253,15 @@ const en = {
   "legend.createGroup": "Create group",
   "legend.exportPng": "Export PNG",
   "legend.menuKeys": "Right-click menu keys",
+  "login.title": "Sign in to BPM",
+  "login.keycloak": "Sign in with Keycloak",
+  "login.dev": "Sign in with a test account",
+  "login.devPick": "Pick a test user",
+  "nav.adminPage": "Admin page",
+  "nav.logout": "Log out",
+  "admin.title": "Employees",
+  "admin.sync": "Sync all from AD",
+  "admin.syncing": "Syncing…",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -508,6 +517,15 @@ const ko: Record<MessageKey, string> = {
   "legend.createGroup": "그룹 생성",
   "legend.exportPng": "PNG 내보내기",
   "legend.menuKeys": "우클릭 메뉴 키",
+  "login.title": "BPM 로그인",
+  "login.keycloak": "Keycloak으로 로그인",
+  "login.dev": "임시 아이디로 로그인",
+  "login.devPick": "임시 사용자 선택",
+  "nav.adminPage": "관리자 페이지",
+  "nav.logout": "로그아웃",
+  "admin.title": "직원 관리",
+  "admin.sync": "AD 전체 동기화",
+  "admin.syncing": "동기화 중…",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

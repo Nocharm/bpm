@@ -3,6 +3,9 @@
 export interface CurrentUser {
   name: string;
   email: string | null;
+  loginId: string;
+  role: "admin" | "user";
+  department: string;
 }
 
 let currentUser: CurrentUser | null = null;
