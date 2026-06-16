@@ -15,6 +15,13 @@ from app.settings import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_models()
+    # 로컬(인증 OFF)은 임시 유저 5명 시드 — role별 테스트용
+    if not settings.auth_enabled:
+        from app.ad.service import seed_local_employees
+        from app.db import SessionLocal
+
+        async with SessionLocal() as session:
+            await seed_local_employees(session)
     yield
 
 

@@ -10,9 +10,9 @@ from app.models import Employee
 
 
 def test_employees_table_created(client: TestClient) -> None:
+    # client fixture는 직접 호출하지 않고 lifespan(create_all + 로컬 시드) 트리거 용도
     async def _count() -> int:
         async with SessionLocal() as session:
             return len(list((await session.scalars(select(Employee))).all()))
 
-    # Task 1 단계에서는 시드(Task 3)가 없어 0 이상이면 통과 — 테이블 존재 확인이 목적
-    assert asyncio.get_event_loop().run_until_complete(_count()) >= 0
+    assert asyncio.run(_count()) >= 5  # 로컬 임시 유저 5명 시드됨
