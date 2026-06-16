@@ -19,7 +19,7 @@
 | `frontend/` | Next.js + TypeScript + @xyflow/react | 에디터 UI |
 | `backend/` | FastAPI + Python 3.11 | 맵/버전/노드/엣지 API |
 | `nginx/` | nginx | 리버스 프록시 — `/` → frontend, `/api` → backend |
-| `docker-compose.yml` | + PostgreSQL 16 | 서버 배포 (포트 **9787**) |
+| `docker-compose.yml` | + PostgreSQL 16 | 서버 배포 (포트 **3333**) |
 
 ## 로컬 개발 (Docker 없이 네이티브)
 
@@ -72,8 +72,8 @@ npm run dev
 ```bash
 cp .env.example .env   # POSTGRES_PASSWORD, KEYCLOAK_* 등 수정
 docker compose up -d --build
-# 접속: http://<서버>:9787
+# 접속: http://<서버>:3333
 ```
 
 > 전체 절차(Keycloak 클라이언트 등록·헬스체크·롤백)는 **[`docs/deploy.md`](docs/deploy.md)** 참고.
-> 서버의 엣지 nginx(443/80)와 충돌하지 않도록 앱은 9787에 노출한다. 줄바꿈은 `.gitattributes`로 LF 고정 — Windows PC를 경유해도 안전. 자세한 운영 제약은 `CLAUDE.md`의 Operations 섹션 참고.
+> 서버의 엣지 nginx(443/80)와 충돌하지 않도록 앱은 3333에 노출한다. 줄바꿈은 `.gitattributes`로 LF 고정 — Windows PC를 경유해도 안전. 자세한 운영 제약은 `CLAUDE.md`의 Operations 섹션 참고.

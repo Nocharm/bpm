@@ -84,7 +84,7 @@ docker compose exec backend python -c "from app.settings import settings; print(
 # → ldap_enabled= True  admins= {'hong.gildong', ...}
 ```
 
-브라우저(`http://<서버>:9787`) 플로우:
+브라우저(`http://<서버>:3333`) 플로우:
 1. 미인증 접근 → **로그인 화면**(`/login`)으로 리다이렉트.
 2. "Keycloak으로 로그인" → Keycloak 로그인 → 메인 진입.
 3. 유저명 클릭 → 드롭다운. `SYSTEM_ADMIN_LOGIN_IDS`에 든 계정이면 **관리자 페이지** 노출.

@@ -76,9 +76,9 @@ comments       id, version_id(FK), node_id(FK nodes), author, body,
 | frontend | Next.js + TypeScript + **@xyflow/react** (React Flow) | 캔버스/노드/엣지 에디터 표준 |
 | backend | **FastAPI** + SQLAlchemy + Pydantic | 비동기 API, 검증은 Pydantic |
 | db | PostgreSQL | |
-| proxy | nginx — **서버 노출 포트 9787** | `/` → frontend, `/api` → backend |
+| proxy | nginx — **서버 노출 포트 3333** | `/` → frontend, `/api` → backend |
 
-- 접속: 우선 `http://<서버IP or g-ai-agent.sbiologics.com>:9787` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
+- 접속: 우선 `http://<서버IP or g-ai-agent.sbiologics.com>:3333` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
 - Keycloak(8080)은 이 compose 외부의 기존 서비스 — 주소는 `.env`로만 참조
 
 ## 6. 단계별 구현 순서 (제안)
@@ -89,7 +89,7 @@ comments       id, version_id(FK), node_id(FK nodes), author, body,
 4. ~~**버전 관리 + 비교 화면**~~ ✅ — 버전 복제(깊은 복사, ID 재발급)/이름변경/삭제, 두 버전 나란히 읽기 전용 비교
 5. ~~**Keycloak 인증 연동**~~ ✅ — OIDC 로그인 + JWT 검증, AUTH_ENABLED 플래그로 로컬 우회
 6. ~~**기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업~~ ✅
-7. **서버 docker-compose 배포 (9787)** — 런북 `docs/deploy.md`. compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+7. **서버 docker-compose 배포 (3333)** — 런북 `docs/deploy.md`. compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
 
 ## 7. 기능 확장 (2026-06-12 확정)
 

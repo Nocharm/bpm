@@ -4,7 +4,7 @@ services:
     image: nginx:1.27-alpine
     ports:
       # 서버 엣지 nginx(443/80)와 충돌하지 않는 비특권 포트
-      - "${APP_PORT:-9787}:80"
+      - "${APP_PORT:-3333}:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:

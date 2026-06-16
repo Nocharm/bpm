@@ -48,7 +48,7 @@ npm run lint
 
 ```bash
 # 서버 배포 (리눅스 서버, 저장소 루트, .env 필요 — .env.example 참고)
-docker compose up -d --build   # 접속: http://<서버>:9787
+docker compose up -d --build   # 접속: http://<서버>:3333
 ```
 
 ## Architecture
@@ -60,11 +60,11 @@ docker compose up -d --build   # 접속: http://<서버>:9787
 | **frontend** | Next.js (TypeScript, React) + @xyflow/react | 프로세스맵 에디터 UI — 캔버스/노드/엣지 편집, 계층 오버레이, 버전 비교 |
 | **backend** | Python — FastAPI + SQLAlchemy + Pydantic | 맵/버전/노드/엣지 CRUD·검증·영속화 API, Keycloak JWT 검증 |
 | **db** | PostgreSQL | 맵·버전·노드·엣지 영속 저장 |
-| **proxy** | nginx | 앱 내부 리버스 프록시 — `/` → frontend, `/api` → backend 라우팅. **서버 노출 포트 9787** |
+| **proxy** | nginx | 앱 내부 리버스 프록시 — `/` → frontend, `/api` → backend 라우팅. **서버 노출 포트 3333** |
 
-**경계:** 브라우저 → `:9787`(앱 nginx) → (Next.js | FastAPI) → PostgreSQL. frontend↔backend 통신은 nginx 경유 HTTP. 입력 검증은 backend API 경계에서 수행 (`rules/common/security.md`).
+**경계:** 브라우저 → `:3333`(앱 nginx) → (Next.js | FastAPI) → PostgreSQL. frontend↔backend 통신은 nginx 경유 HTTP. 입력 검증은 backend API 경계에서 수행 (`rules/common/security.md`).
 
-**nginx 토폴로지 (확정):** 서버 엣지 nginx(443/80)는 직접 편집 가능한 별도 자산. 앱 compose nginx는 **9787**에 노출하고 우선 포트로 직접 접속, 추후 엣지 nginx에 도메인(g-ai-agent.sbiologics.com) 라우팅 추가.
+**nginx 토폴로지 (확정):** 서버 엣지 nginx(443/80)는 직접 편집 가능한 별도 자산. 앱 compose nginx는 **3333**에 노출하고 우선 포트로 직접 접속, 추후 엣지 nginx에 도메인(g-ai-agent.sbiologics.com) 라우팅 추가.
 
 **인증 (확정):** 같은 서버의 기존 Keycloak(realm `ai-portal`) OIDC 사용. 주소는 하드코딩 금지 — `.env` 경유 (`docs/spec.md` §4).
 
@@ -88,7 +88,7 @@ docker-compose.yml
 |------|------|-----------|
 | **줄바꿈은 LF 고정** | Windows PC 경유 시 CRLF 오염 → Linux/Docker에서 스크립트·빌드 깨짐 | `.gitattributes`로 `* text=auto eol=lf` 강제 (Windows 전용 스크립트만 CRLF) |
 | **로컬은 Docker 없음** | Windows PC에 Docker 미설치 | frontend/backend는 네이티브 실행 가능해야 함 (`npm run dev`, Python 직접 실행). DB·서비스 주소는 env로 분리 (`rules/backend/config.md`) — 로컬은 로컬 Postgres/원격, 서버는 compose 네트워크 |
-| **앱 nginx는 443/80 미점유** | 서버 엣지 nginx가 이미 443/80 사용 | compose nginx는 **9787** 노출. 우선 포트 직접 접속, 도메인 라우팅은 추후 엣지 nginx에 추가 |
+| **앱 nginx는 443/80 미점유** | 서버 엣지 nginx가 이미 443/80 사용 | compose nginx는 **3333** 노출. 우선 포트 직접 접속, 도메인 라우팅은 추후 엣지 nginx에 추가 |
 | **로컬↔서버 실행 경로 이원화** | 로컬=네이티브, 서버=Docker | 같은 코드가 양쪽에서 돌도록 환경 의존 값은 하드코딩 금지, 전부 `.env` 경유 |
 
 **검증 단계:** 로컬 네이티브 실행으로 기능 확인 → 서버 docker-compose로 배포 확인. 로컬에서 통과해도 컨테이너 네트워크/포트/줄바꿈 차이로 서버에서 깨질 수 있으니 양쪽 모두 검증한다.
