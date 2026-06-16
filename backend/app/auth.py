@@ -7,8 +7,11 @@ True(서버)면 realm JWKS로 RS256 서명을 검증한다.
 from functools import lru_cache
 
 import jwt
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db import get_session
+from app.models import Employee
 from app.settings import settings
 
 
@@ -18,10 +21,13 @@ def _jwk_client() -> jwt.PyJWKClient:
     return jwt.PyJWKClient(f"{settings.keycloak_issuer}/protocol/openid-connect/certs")
 
 
-def get_current_user(authorization: str | None = Header(default=None)) -> str:
-    """요청 사용자명을 반환. 동기 의존성 → FastAPI가 스레드풀에서 실행(JWKS fetch 블로킹 허용)."""
+def get_current_user(
+    authorization: str | None = Header(default=None),
+    x_dev_user: str | None = Header(default=None),
+) -> str:
+    """요청 사용자 loginId. auth OFF면 X-Dev-User(없으면 dev_user), ON이면 JWT preferred_username."""
     if not settings.auth_enabled:
-        return settings.dev_user
+        return x_dev_user or settings.dev_user  # 헤더는 auth OFF에서만 신뢰
 
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
@@ -44,3 +50,21 @@ def get_current_user(authorization: str | None = Header(default=None)) -> str:
     if not username:
         raise HTTPException(status_code=401, detail="token has no subject")
     return username
+
+
+async def get_current_employee(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Employee:
+    """현재 사용자 Employee. 행이 없으면 임시 Employee(role=user, 미영속)."""
+    emp = await session.get(Employee, login_id)
+    if emp is None:
+        return Employee(login_id=login_id, name=login_id, source="ad", role="user", department="")
+    return emp
+
+
+async def require_admin(emp: Employee = Depends(get_current_employee)) -> Employee:
+    """role=admin 아니면 403."""
+    if emp.role != "admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    return emp

@@ -36,3 +36,12 @@ def test_to_employee_fields_maps_and_filters() -> None:
 
     excluded = RawUser("nodot", "이름", "", "OU=TeamA,DC=corp")  # loginId에 '.' 없음
     assert to_employee_fields(excluded) is None
+
+
+def test_get_current_user_prefers_dev_header() -> None:
+    # auth_enabled=False(기본)일 때 X-Dev-User 우선, 없으면 dev_user
+    from app.auth import get_current_user
+    from app.settings import settings
+
+    assert get_current_user(authorization=None, x_dev_user="admin.kim") == "admin.kim"
+    assert get_current_user(authorization=None, x_dev_user=None) == settings.dev_user
