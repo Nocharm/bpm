@@ -62,3 +62,51 @@ def test_me_falls_back_for_unknown_user(client: TestClient) -> None:
     body = res.json()
     assert body["username"] == "unknown.person"
     assert body["role"] == "user"  # employees에 없으면 기본 user
+
+
+def test_employees_list_requires_admin(client: TestClient) -> None:
+    # 일반 유저 → 403, admin → 200
+    assert client.get("/api/employees", headers={"X-Dev-User": "user.lee"}).status_code == 403
+    res = client.get("/api/employees", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    assert len(res.json()) >= 5
+
+
+def test_sync_requires_admin(client: TestClient) -> None:
+    assert client.post("/api/employees/sync", headers={"X-Dev-User": "user.lee"}).status_code == 403
+
+
+def test_sync_503_without_ldap(client: TestClient) -> None:
+    # LDAP 미설정(테스트 기본) → 503
+    res = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 503
+
+
+def test_sync_mocked_filters_and_guards(client: TestClient, monkeypatch) -> None:
+    from app.ad import client as ldap_client
+    from app.ad import service
+    from app.ad.client import RawUser
+    from app.settings import settings
+
+    # LDAP 설정된 것처럼 위장 (ldap_enabled 프로퍼티가 True가 되도록 4종 채움)
+    monkeypatch.setattr(settings, "ldap_url", "ldaps://x")
+    monkeypatch.setattr(settings, "ldap_bind_dn", "cn=svc")
+    monkeypatch.setattr(settings, "ldap_bind_credentials", "pw")
+    monkeypatch.setattr(settings, "ldap_user_search_base", "dc=corp")
+    monkeypatch.setattr(service, "_last_full_sync_at", None)  # 가드 리셋
+    raws = [
+        RawUser("new.user", "신규", "사원", "OU=TeamA,DC=corp"),
+        RawUser("nodot", "제외", "", "OU=TeamA,DC=corp"),  # loginId '.' 없음 → 제외
+    ]
+    monkeypatch.setattr(ldap_client, "fetch_all_users", lambda: raws)
+
+    res = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["scanned"] == 2
+    assert body["upserted"] == 1
+    assert body["excluded"] == 1
+
+    # 5분 가드 — 즉시 재호출 시 429
+    res2 = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
+    assert res2.status_code == 429
