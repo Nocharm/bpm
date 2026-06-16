@@ -103,6 +103,7 @@ import {
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import {
   NODE_DISPLAY_FIELDS,
@@ -634,7 +635,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     (proposal: AiProposal) => {
       const keyToId = new Map<string, string>();
       const gnodes = proposal.nodes.map((node) => {
-        const id = crypto.randomUUID();
+        const id = genId();
         keyToId.set(node.key, id);
         return {
           id,
@@ -658,7 +659,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           const target = keyToId.get(edge.target);
           if (!source || !target) return null;
           return {
-            id: crypto.randomUUID(),
+            id: genId(),
             source_node_id: source,
             target_node_id: target,
             label: edge.label,
@@ -1264,7 +1265,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       pushHistory();
       setEdges((current) =>
         addEdge(
-          { ...EDGE_DEFAULTS, ...connection, id: crypto.randomUUID(), label: label || undefined },
+          { ...EDGE_DEFAULTS, ...connection, id: genId(), label: label || undefined },
           current,
         ),
       );
@@ -1316,7 +1317,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       pushHistory();
-      const id = crypto.randomUUID();
+      const id = genId();
       const count = nodesRef.current.length;
       let position = { x: 80 + count * 30, y: 80 + count * 30 };
       if (screen) {
@@ -1458,7 +1459,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       const createNew = b.data.groupIds.length === 0;
-      const newId = createNew ? crypto.randomUUID() : "";
+      const newId = createNew ? genId() : "";
       const tagsForA = createNew ? [newId] : b.data.groupIds;
       if (createNew) {
         setGroups((cur) => [
@@ -1621,7 +1622,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       return;
     }
     pushHistory();
-    const newId = crypto.randomUUID();
+    const newId = genId();
     const first = selected[0];
     setGroups((cur) => [
       ...cur,

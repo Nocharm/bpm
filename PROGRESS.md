@@ -3,7 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-16
-- 편집화면 엣지 생성 시 `crypto.randomUUID is not a function`(평문 HTTP=insecure context, secure context 전용 API) 수정 — `canvas.ts`에 `getRandomValues` 폴백 추가. `crypto.subtle`과 동일 계열 문제, localhost에선 정상이라 서버(원격 HTTP) 전용 증상.
+- 편집화면 노드/엣지 생성 시 `crypto.randomUUID is not a function`(평문 HTTP=insecure context, secure context 전용 API) 수정. 실제 호출처는 에디터 `[mapId]/page.tsx` **6곳**(handleAddNode·createEdge·applyAiProposal·그룹 생성) — 직접 `crypto.randomUUID()`. 공용 헬퍼 `lib/id.ts`(`genId`, getRandomValues 폴백) 신설해 6곳 + `canvas.ts` 전부 교체. (앞선 canvas.ts-only 수정은 실제 경로를 못 짚었고, ugrep이 `[mapId]` 대괄호 경로를 건너뛰어 호출처를 놓쳤었음.) localhost는 secure context라 정상 → 서버(원격 HTTP) 전용 증상.
 - AI 채팅 502 "AI returned invalid response" 진단 보강 — 검증 실패 시 원본 모델 출력을 서버 로그에 기록(`ai.py`), `_extract_json`으로 ```json 펜스·앞뒤 prose 제거 후 재파싱. (AI는 서버 전용 기능=AI_ENABLED, 로컬 기본 비활성이라 서버에서만 발현. 근본 원인은 로그의 raw 출력으로 확정 필요.)
 - 로그인 직후 첫 `GET /maps` 401(missing bearer token) 수정 — 자식 페이지 fetch effect가 부모 AuthGate의 `setAuthToken` effect보다 먼저 실행되던 레이스(React effect 자식→부모 순서). 토큰을 effect 대신 AuthGate **렌더 단계에서 동기 반영**해 자식 mount 전에 채움. 전 페이지 적용.
 - 앱 노출 포트 9787→3333 일괄 변경 — 서버 실제 배포 포트(3333)에 맞춤. `.env.example`·`docker-compose.yml` 기본값·README·CLAUDE.md·`docs/spec.md`·`docs/deploy.md`·`docs/deploy-auth-ad.md`·`nginx/default.conf` 주석 전수 스윕(과거 로그는 보존). ⚠️ Keycloak `bpm-frontend` Valid redirect URIs/Web origins도 `:3333`으로 갱신해야 로그인 redirect 정상.

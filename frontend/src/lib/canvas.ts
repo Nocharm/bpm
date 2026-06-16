@@ -3,6 +3,7 @@
 import dagre from "@dagrejs/dagre";
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
 
+import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 
 export type NodeData = {
@@ -343,22 +344,12 @@ export function getOutgoingEdges(edges: Edge[], nodeId: string): Edge[] {
   return edges.filter((edge) => edge.source === nodeId);
 }
 
-// 평문 HTTP(insecure context)엔 crypto.randomUUID가 없음(secure context 전용) → getRandomValues 폴백.
-function genEdgeId(): string {
-  const c = globalThis.crypto;
-  if (typeof c?.randomUUID === "function") {
-    return c.randomUUID();
-  }
-  const bytes = c.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 // 자기루프·중복 없이 엣지 추가
 function withEdge(edges: Edge[], source: string, target: string): Edge[] {
   if (source === target || edges.some((edge) => edge.source === source && edge.target === target)) {
     return edges;
   }
-  return [...edges, { ...EDGE_DEFAULTS, id: genEdgeId(), source, target }];
+  return [...edges, { ...EDGE_DEFAULTS, id: genId(), source, target }];
 }
 
 /** A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B. */
