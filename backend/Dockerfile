@@ -3,11 +3,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# uv로 프로덕션 의존성만 설치 (requirements-dev.txt 제외)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# 프로덕션 의존성만 설치 (requirements-dev.txt 제외).
+# 사내망에서 GHCR(uv 이미지)이 차단되므로 python 내장 pip 사용 — 외부 Docker 레지스트리 의존 제거.
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 COPY app/ app/
 
