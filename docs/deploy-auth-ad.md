@@ -106,6 +106,9 @@ docker compose exec backend python -c "from app.settings import settings; print(
 | 특정 사용자가 동기화에서 빠짐 | 필터 규칙(설계 §4.2): `loginId`에 `.` 없음 / `name`에 `_` 포함 / `org_l1`이 제외목록(Partners·TEST·View 등)이면 제외됨 — 의도된 동작 |
 | `preferred_username`이 loginId가 아님 | Keycloak federation의 username 매퍼가 `sAMAccountName`인지. 다르면 employees 매칭이 어긋남 |
 | 로그인 버튼 눌러도 무반응(Keycloak 화면 안 뜸) | 콘솔에 `crypto.subtle is available only in secure contexts`. 평문 HTTP(원격 IP)는 secure context가 아니라 PKCE의 `crypto.subtle`이 차단됨 → 프론트는 `disablePKCE: true`로 우회(아래 §6). Keycloak 클라이언트 `bpm-frontend` Advanced의 *PKCE Code Challenge Method*가 `S256`으로 **강제돼 있으면** 비워야 함 |
+| 로그인 후 복귀 시 `Auth error: failed to fetch` / 새로고침 시 `No matching state found in storage` | **token 엔드포인트 CORS**. Network 탭의 `.../openid-connect/token` POST가 200인데 status가 "CORS error" → Keycloak이 응답에 `Access-Control-Allow-Origin`을 안 내림. Keycloak `bpm-frontend` **Web origins**에 접속 출처(`http://<서버>:3333`, 도메인 쓰면 그 도메인) 정확히 추가, 또는 `+`. **redirect URIs가 아니라 Web origins가 token 교환 CORS를 푼다.** (state 오류는 1차 실패의 후속 증상 — 깨끗한 `/login`에서 재시도) |
+| 로그인은 됐는데 화면에 `GET /maps 401 - missing bearer token` 배너 | 로그인 직후 첫 요청이 access token 세팅 전에 나가던 레이스. `58139e7` 이전 빌드면 발생 → 최신 빌드로 재배포. (토큰을 AuthGate 렌더 단계에서 동기 반영하도록 수정됨) |
+| 편집화면에서 노드/엣지 생성 시 무반응 + 콘솔 `crypto.randomUUID is not a function` (`at Object.onSelect`) | `crypto.randomUUID`도 secure context 전용. 평문 HTTP에선 undefined. `lib/id.ts`의 `genId`(getRandomValues 폴백)로 전 호출처 교체됨(`58139e7`) → 최신 빌드로 재배포 필요. **localhost에선 재현 안 됨**(secure context) — 반드시 서버/원격 IP로 확인. 빌드 반영 확인은 §7 |
 
 로그: `docker compose logs -f backend`
 
@@ -118,3 +121,34 @@ docker compose exec backend python -c "from app.settings import settings; print(
 - `X-Dev-User` 헤더는 **`AUTH_ENABLED=false`에서만** 신뢰된다. 서버는 `AUTH_ENABLED=true`이므로 이 헤더가 들어와도 무시되고 JWT만 신뢰한다(우회 불가).
 - 관리자 엔드포인트(`/api/employees`, `/api/employees/sync`)는 **백엔드 `require_admin`으로 서버측 보호**된다(프론트 숨김에 의존하지 않음).
 - **PKCE 비활성(`disablePKCE: true`)은 의도된 트레이드오프** — 사내망 평문 HTTP 접속에서 `crypto.subtle`(secure context 전용)을 못 써서 끈 것. public 클라이언트에서 PKCE를 빼면 auth code 가로채기 방어가 약해진다. 사내망 한정·Keycloak도 같은 서버 개발용이라 수용. **HTTPS 도메인 경유로 전환하면 `disablePKCE`를 되돌려 PKCE(S256) 복구**할 것(앱·Keycloak 둘 다 HTTPS여야 discovery fetch mixed-content 회피).
+
+---
+
+## 7. 프론트 배포 — insecure context · 빌드 반영(해시 청크) 확인
+
+**왜 "로컬은 되는데 서버만" 깨지나 — secure context.** 브라우저는 `crypto.subtle`·`crypto.randomUUID` 같은 Web Crypto API를 **secure context**(HTTPS, 또는 `localhost`/`127.0.0.1`)에서만 노출한다. 서버는 **원격 IP + 평문 HTTP**(`http://<IP>:3333`)라 insecure context → 이 API들이 `undefined`. 그래서:
+- 로그인(PKCE의 `crypto.subtle`) → `disablePKCE: true`로 우회(§6).
+- 노드/엣지 생성(`crypto.randomUUID`) → `lib/id.ts`의 `genId()`(`getRandomValues` 폴백)로 교체.
+- **로컬 `npm run dev`를 `localhost`로 띄우면 둘 다 정상 동작 → 버그도 수정도 검증 불가.** 서버 또는 윈도우에서 LAN IP(`http://192.168.x.x:3000`)로 접속해야 동일 조건 재현.
+
+**`NEXT_PUBLIC_*`는 빌드 타임 인라인** — `AUTH_ENABLED`/`KEYCLOAK_*`는 번들에 박히므로 값 변경 시 `docker compose up -d --build frontend` 필수. `APP_PORT`(노출 포트)는 런타임이라 재빌드 불필요.
+
+**"분명히 고쳤는데 서버에서 여전히 같은 에러" — 빌드가 실제로 반영됐는지부터 확인.** 흔한 함정: `git pull`은 했지만 이미지를 그 소스로 재빌드 안 함, 또는 브라우저가 옛 JS 청크 캐시.
+
+1. **소스가 디스크에 반영됐는지** (compose 디렉터리에서):
+   ```bash
+   git rev-parse HEAD          # 기대 커밋인지
+   grep -n genId frontend/src/lib/id.ts   # 수정 코드 존재 확인
+   ```
+2. **실행 중인 컨테이너 번들에 들어갔는지**:
+   ```bash
+   docker compose exec frontend grep -rl genId .next
+   ```
+   비어 있으면 = 이미지 미리빌드. 아래로 강제:
+   ```bash
+   docker compose build --no-cache frontend && docker compose up -d --force-recreate frontend
+   ```
+3. **해시 청크 단서**: Next.js는 소스가 바뀌면 청크 **파일명(콘텐츠 해시)이 반드시 바뀐다.** DevTools Network/에러 스택의 청크명(예: `2pb8-1mt-f1-q.js`)이 재빌드 후에도 **그대로면 빌드 미반영**(같은 산출물을 서빙 중)이라는 강한 신호.
+4. **브라우저 캐시 배제**: **시크릿(Incognito) 창**으로 접속해 재확인.
+
+> 진단 팁: 어떤 소스가 실제 호출처인지 찾을 때, 이 저장소의 에디터 경로 `src/app/maps/[mapId]/page.tsx`처럼 **대괄호 디렉터리**는 일부 grep(ugrep)이 조용히 건너뛴다. 누락 의심되면 `find`+파일별 grep이나 다른 도구로 재확인할 것.
