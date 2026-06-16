@@ -65,3 +65,13 @@ services:
 
 volumes:
   pgdata:
+
+# 서버(사내 71번) 기본 브리지 서브넷이 사내망 대역과 충돌 → 명시 대역으로 고정
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.36.0.0/16
+          gateway: 172.36.0.1
