@@ -4,9 +4,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
-from app.db import init_models
+from app.db import get_session, init_models
+from app.models import Employee
 from app.routers import ai, approvers, comments, graph, maps, notifications, versions
 from app.schemas import MeOut
 from app.settings import settings
@@ -41,5 +43,20 @@ async def check_health() -> dict[str, str]:
 
 
 @app.get("/api/me", response_model=MeOut)
-async def get_me(user: str = Depends(get_current_user)) -> MeOut:
-    return MeOut(username=user, ai_enabled=settings.ai_enabled, name=user, role="user", department="")
+async def get_me(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeOut:
+    # 인증 ON + LDAP 설정 시 로그인 시점 1인 동기화 (로컬은 skip)
+    if settings.auth_enabled and settings.ldap_enabled:
+        from app.ad.service import sync_one
+
+        await sync_one(session, login_id)
+    emp = await session.get(Employee, login_id)
+    return MeOut(
+        username=login_id,
+        ai_enabled=settings.ai_enabled,
+        name=emp.name if emp else login_id,
+        role=emp.role if emp else "user",
+        department=emp.department if emp else "",
+    )

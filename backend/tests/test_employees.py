@@ -45,3 +45,20 @@ def test_get_current_user_prefers_dev_header() -> None:
 
     assert get_current_user(authorization=None, x_dev_user="admin.kim") == "admin.kim"
     assert get_current_user(authorization=None, x_dev_user=None) == settings.dev_user
+
+
+def test_me_uses_dev_user_header(client: TestClient) -> None:
+    res = client.get("/api/me", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["username"] == "admin.kim"
+    assert body["role"] == "admin"
+    assert body["department"] == "프로세스혁신팀"
+
+
+def test_me_falls_back_for_unknown_user(client: TestClient) -> None:
+    res = client.get("/api/me", headers={"X-Dev-User": "unknown.person"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["username"] == "unknown.person"
+    assert body["role"] == "user"  # employees에 없으면 기본 user
