@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CornerDownRight, Download, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -3691,7 +3691,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <ViewportPortal>
                         {inlineComposition?.regions.map((box) => (
                           <Fragment key={`region:${box.id}`}>
-                            {/* 삽입된 캔버스 레인 — 흰 surface + dot-grid + 좌우 디바이더. 노드 뒤(z<0), 비상호작용 */}
+                            {/* 세로선 2개 + 반투명 틴트만 — 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
                             <div
                               style={{
                                 position: "absolute",
@@ -3702,32 +3702,35 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 height: box.height,
                                 zIndex: -1,
                                 pointerEvents: "none",
-                                background: `color-mix(in srgb, var(--color-accent) ${(box.depth - 1) * 6}%, var(--color-surface))`,
-                                backgroundImage:
-                                  "radial-gradient(var(--color-canvas-dot) 1px, transparent 1px)",
-                                backgroundSize: "16px 16px",
-                                borderLeft: "1.5px solid var(--color-divider)",
-                                borderRight: "1.5px solid var(--color-divider)",
+                                background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
+                                borderLeft:
+                                  "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+                                borderRight:
+                                  "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
                               }}
                             />
-                            {/* 영역 제목 칩 — 클릭 시 접기 */}
+                            {/* 깊이 표시(›×depth) + 이름 — 영역 좌상단, 클릭 시 접기 */}
                             <div
                               style={{
                                 position: "absolute",
                                 left: 0,
                                 top: 0,
-                                transform: `translate(${box.x + 8}px, ${box.y + 6}px)`,
+                                transform: `translate(${box.x + 6}px, ${box.y + 4}px)`,
                                 zIndex: 1,
                               }}
                             >
                               <button
                                 type="button"
-                                className="pointer-events-auto inline-flex items-center gap-1 rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary shadow-sm hover:bg-surface-alt"
+                                className="pointer-events-auto inline-flex items-center gap-1 rounded-xs px-1 py-0.5 text-fine hover:bg-accent-tint"
                                 title={t("node.collapseChildTitle")}
                                 onClick={() => toggleInlineExpand(box.id)}
                               >
-                                <ChevronDown size={12} strokeWidth={1.5} />
-                                {box.label || t("node.childBadge")}
+                                <span className="font-semibold tracking-tight text-accent">
+                                  {"›".repeat(box.depth)}
+                                </span>
+                                <span className="text-ink-secondary">
+                                  {box.label || t("node.childBadge")}
+                                </span>
                               </button>
                             </div>
                           </Fragment>
