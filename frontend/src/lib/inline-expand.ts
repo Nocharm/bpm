@@ -50,37 +50,54 @@ export function collectExpandedDescendants(
 
 const GATEWAY_PREFIX = "gw:";
 
-/** 게이트웨이는 view 전용(저장·state 비포함). dagre 입력 + 렌더용. P→Start, End→후속T. */
+/**
+ * 게이트웨이는 view 전용(저장·state 비포함). dagre 입력 + 렌더용 — 자식을 P와 후속(A→B의 B) 사이에 끼워 통합 LR 흐름 유지.
+ * 진입점 = Start 노드(없으면 자식 스코프 내 진입차수 0인 자식, 그것도 없으면 전체).
+ * 진출점 = End 노드(없으면 진출차수 0인 자식, 그것도 없으면 전체).
+ * Start/End가 없는 레거시 하위(자동 생성 전)도 끊기지 않고 가운데로 들어오게 한다.
+ */
 export function buildGatewayEdges(
   expanded: Set<string>,
   childNodes: AppNode[],
   scopeEdges: Edge[],
 ): Edge[] {
-  const startsByParent = new Map<string, string[]>();
-  const endsByParent = new Map<string, string[]>();
+  // 펼친 스코프(P)별 자식 묶기
+  const childrenByScope = new Map<string, AppNode[]>();
   for (const node of childNodes) {
     const parent = node.data.scopeId ?? null;
     if (parent == null || !expanded.has(parent)) {
       continue;
     }
-    if (node.data.nodeType === "start") {
-      startsByParent.set(parent, [...(startsByParent.get(parent) ?? []), node.id]);
-    } else if (node.data.nodeType === "end") {
-      endsByParent.set(parent, [...(endsByParent.get(parent) ?? []), node.id]);
-    }
+    childrenByScope.set(parent, [...(childrenByScope.get(parent) ?? []), node]);
   }
   const gateways: Edge[] = [];
-  for (const parent of expanded) {
-    for (const start of startsByParent.get(parent) ?? []) {
-      gateways.push(makeGateway(parent, start));
+  for (const [parent, children] of childrenByScope) {
+    const childIds = new Set(children.map((child) => child.id));
+    // 자식 스코프 내부 엣지만으로 진입/진출 차수 판정
+    const hasIncoming = new Set<string>();
+    const hasOutgoing = new Set<string>();
+    for (const edge of scopeEdges) {
+      if (childIds.has(edge.source) && childIds.has(edge.target)) {
+        hasIncoming.add(edge.target);
+        hasOutgoing.add(edge.source);
+      }
     }
-    // 후속 T = 현재 스코프에서 P가 출발인 엣지의 타깃(펼침 시 숨기는 A→B의 B)
+    const starts = children.filter((child) => child.data.nodeType === "start");
+    const ends = children.filter((child) => child.data.nodeType === "end");
+    const inferredEntries = children.filter((child) => !hasIncoming.has(child.id));
+    const inferredExits = children.filter((child) => !hasOutgoing.has(child.id));
+    const entries = starts.length > 0 ? starts : inferredEntries.length > 0 ? inferredEntries : children;
+    const exits = ends.length > 0 ? ends : inferredExits.length > 0 ? inferredExits : children;
+    // 후속 T = P가 출발인 엣지의 타깃(펼침 시 숨기는 A→B의 B)
     const successors = scopeEdges
       .filter((edge) => edge.source === parent)
       .map((edge) => edge.target);
-    for (const end of endsByParent.get(parent) ?? []) {
+    for (const entry of entries) {
+      gateways.push(makeGateway(parent, entry.id));
+    }
+    for (const exit of exits) {
       for (const target of successors) {
-        gateways.push(makeGateway(end, target));
+        gateways.push(makeGateway(exit.id, target));
       }
     }
   }

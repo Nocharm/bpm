@@ -2591,6 +2591,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { nodes: positioned, childEdges, gateways, hiddenIds };
   }, [expandedInline, fullGraph, nodes, edges]);
 
+  // 펼침 변경 시 합성 레이아웃을 화면에 맞춤 — 자식이 화면 밖에 생겨도 보이도록(렌더 반영 후 한 틱 뒤)
+  useEffect(() => {
+    if (expandedInline.size === 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void reactFlow.fitView({ padding: 0.2, duration: 400 });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [expandedInline, reactFlow]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;

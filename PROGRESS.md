@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-18
+- 인라인 펼침 레이아웃 수정 — 게이트웨이가 Start/End 타입에만 의존해 레거시 하위(Start/End 없음)에서 자식이 그래프와 끊겨 dagre가 분리 컴포넌트로 처리 → 다음 노드가 아래로 빠지고 자식이 안 보이던 문제. 진입점=Start(없으면 진입차수0 자식)·진출점=End(없으면 진출차수0 자식)로 추론해 항상 `P↔자식↔다음노드`를 연결(자식이 가운데로 삽입·다음노드 우측 이동). 펼침 시 `fitView`로 화면 맞춤. tsc/eslint/build green.
 - 인라인 펼치기/접기 **Phase 2(렌더)** — 노드 우상단 토글(`DrillButton`→`ExpandToggleButton`, Chevron, `hasChildren`일 때만)로 하위를 같은 캔버스에 인라인 펼침/접기. 메모리 `fullGraph`에서 자식 수집 → 통합 `layoutWithDagre(LR)` 재배치(**파생 레이어** `inlineComposition`, raw state·저장 무오염), A→B(펼친 노드 출발 엣지)는 `hidden`·게이트웨이(P→Start/End→후속)는 흐리게, 중첩 펼침은 현재+자식 엣지 합쳐 처리. 펼침 중 드래그/연결 비활성(dagre 재배치 좌표 불일치 방지)·자식은 보기 전용(비선택)·pan extent는 합성 노드 기준·그룹박스는 펼침 중 숨김. 자식 편집은 당분간 기존 창(존속) 경로 유지(편집 인라인화는 후속). 프론트 tsc/eslint/build green. ⚠️ 캔버스 수동 검증 필요(이 환경 브라우저 구동 불가).
 
 ## 2026-06-17
