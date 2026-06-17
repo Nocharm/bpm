@@ -1,4 +1,4 @@
-// 노드(ProcessNode)→에디터 통신 — 드릴 트리거. Provider 없으면 no-op(compare 안전).
+// 노드(ProcessNode)→에디터 통신 — 펼침/이름편집 트리거. Provider 없으면 no-op(compare 안전).
 "use client";
 
 import { createContext, useContext } from "react";
@@ -20,7 +20,10 @@ export const NODE_DISPLAY_FIELDS: NodeDisplayField[] = [
 ];
 
 export interface NodeActions {
-  onDrill: ((nodeId: string, clientX: number, clientY: number) => void) | null;
+  // 노드 호버 토글 → 인라인 하위 프로세스 펼치기/접기 (Provider 없으면 비활성)
+  onToggleExpand: ((nodeId: string) => void) | null;
+  // 현재 인라인 펼쳐진 노드 id 집합 — 토글 버튼 아이콘(펼침/접힘) 표시용
+  expandedInlineIds: ReadonlySet<string>;
   // 노드에 표시할 필드 — 미지정 시 담당자만(기존 동작 유지)
   displayFields: NodeDisplayField[];
   // 인라인 이름 편집 — 타이틀 더블클릭으로 진입(onStartRename), editingNodeId 일치 노드만 입력 모드.
@@ -32,7 +35,8 @@ export interface NodeActions {
 }
 
 const defaultActions: NodeActions = {
-  onDrill: null,
+  onToggleExpand: null,
+  expandedInlineIds: new Set<string>(),
   displayFields: ["assignee"],
   editingNodeId: null,
   onStartRename: null,

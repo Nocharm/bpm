@@ -5,12 +5,13 @@ import { Fragment, useRef } from "react";
 import { Handle, type NodeProps } from "@xyflow/react";
 import {
   Building2,
+  ChevronDown,
+  ChevronRight,
   Clock,
   CornerDownRight,
   type LucideIcon,
   MessageSquare,
   Server,
-  SquareArrowOutUpRight,
   Tag,
   User,
   Zap,
@@ -168,24 +169,29 @@ function DescendantChangeBadge() {
   );
 }
 
-// 호버 시 노드 우상단에 뜨는 드릴(하위 진입) 버튼 — onDrill 있을 때만(compare 등에서는 숨김)
-function DrillButton({ nodeId }: { nodeId: string }) {
+// 호버 시 노드 우상단에 뜨는 인라인 펼치기/접기 토글 — onToggleExpand 있을 때만(compare 등에서는 숨김)
+function ExpandToggleButton({ nodeId }: { nodeId: string }) {
   const { t } = useI18n();
-  const { onDrill } = useNodeActions();
-  if (!onDrill) {
+  const { onToggleExpand, expandedInlineIds } = useNodeActions();
+  if (!onToggleExpand) {
     return null;
   }
+  const expanded = expandedInlineIds.has(nodeId);
   return (
     <button
       type="button"
-      title={t("node.openChildTitle")}
+      title={t(expanded ? "node.collapseChildTitle" : "node.expandChildTitle")}
       className="absolute -right-2 -top-2 z-10 rounded-xs border border-hairline bg-surface p-0.5 text-ink-secondary opacity-0 shadow-sm hover:bg-surface-alt group-hover:opacity-100"
       onClick={(event) => {
         event.stopPropagation();
-        onDrill(nodeId, event.clientX, event.clientY);
+        onToggleExpand(nodeId);
       }}
     >
-      <SquareArrowOutUpRight size={14} strokeWidth={1.5} />
+      {expanded ? (
+        <ChevronDown size={14} strokeWidth={1.5} />
+      ) : (
+        <ChevronRight size={14} strokeWidth={1.5} />
+      )}
     </button>
   );
 }
@@ -240,8 +246,8 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-        {/* decision 노드는 하위 프로세스 생성 불가 — 기존 하위가 있을 때만 진입 버튼 */}
-        {data.hasChildren && <DrillButton nodeId={id} />}
+        {/* decision 노드는 기존 하위가 있을 때만 펼침 토글 */}
+        {data.hasChildren && <ExpandToggleButton nodeId={id} />}
         <NodeHandles />
       </div>
     );
@@ -270,7 +276,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-      {(data.nodeType === "process" || data.hasChildren) && <DrillButton nodeId={id} />}
+      {data.hasChildren && <ExpandToggleButton nodeId={id} />}
       <NodeHandles />
     </div>
   );

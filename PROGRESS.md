@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
+## 2026-06-18
+- 인라인 펼치기/접기 **Phase 2(렌더)** — 노드 우상단 토글(`DrillButton`→`ExpandToggleButton`, Chevron, `hasChildren`일 때만)로 하위를 같은 캔버스에 인라인 펼침/접기. 메모리 `fullGraph`에서 자식 수집 → 통합 `layoutWithDagre(LR)` 재배치(**파생 레이어** `inlineComposition`, raw state·저장 무오염), A→B(펼친 노드 출발 엣지)는 `hidden`·게이트웨이(P→Start/End→후속)는 흐리게, 중첩 펼침은 현재+자식 엣지 합쳐 처리. 펼침 중 드래그/연결 비활성(dagre 재배치 좌표 불일치 방지)·자식은 보기 전용(비선택)·pan extent는 합성 노드 기준·그룹박스는 펼침 중 숨김. 자식 편집은 당분간 기존 창(존속) 경로 유지(편집 인라인화는 후속). 프론트 tsc/eslint/build green. ⚠️ 캔버스 수동 검증 필요(이 환경 브라우저 구동 불가).
+
 ## 2026-06-17
 - 인라인 하위 프로세스 펼치기/접기 — 드릴인 자유창(`ScopeWindow`)을 같은 캔버스 인라인 펼침으로 전환 착수. 설계 확정: 자식 스코프(`parent_node_id`) 유지+뷰 합성(백엔드 무변경), 메모리의 `fullGraph` 재사용(추가 fetch 0), 통합 `layoutWithDagre(LR)`, 펼침=순수 뷰(A→B는 hide·재배선 없음), scope-split 저장, AI 채팅용 ScopeWindow는 존속. **Phase 1 기반**: 캡 config(`expansion-config.ts` 노드300/깊이5), 순수 로직(`inline-expand.ts` — 자식수집·게이트웨이·캡·scope-split·불변식), `NodeData.scopeId` 태그(`toAppNodes` 주입). 프론트 tsc/eslint green. WIP. (스펙/계획: `docs/superpowers/specs|plans/2026-06-17-inline-subprocess-expand.md`)
 - 마이너 버그 수정 묶음. ① 언그룹→실행취소 시 그룹 미복원 — `Snapshot`이 `groups` 누락해 undo가 nodes만 복원하던 게 원인, 스냅샷·undo·redo에 `groups` 포함(disband·create 양쪽 정상화). ② 그룹 생성 로직 — 멤버 2명 미만이면 자동 제거(`pruneSmallGroups`, leaveGroup·노드삭제 경로 한정, 로드 데이터 불변), 선택 노드가 모두 한 그룹이면 생성 차단+토스트, 단일 노드 Ctrl+G 차단+토스트, 생성 즉시 이름 편집모드 진입(`GroupTitleBar autoEdit`), 그룹 자동삭제 시 토스트. ③ 노드 타입 변경 기능 삭제 — 인스펙터·요약모달 select를 읽기전용 표시로 교체(생성 시 타입 선택은 우클릭 메뉴 유지). ④ 토스트 재설계 — 우상단(Nav 아래) 슬라이드 인/아웃+스택(`toast-stack.tsx`, `var(--ease-spring/smooth)`). ⑤ 아웃라인 노드 삭제 지연 — stale `fullGraph` 병합이 삭제 노드를 되살리던 빈틈, 라이브 로드 후 현재 스코프는 라이브가 권위(즉시 반영). 프론트 tsc/lint/build green.

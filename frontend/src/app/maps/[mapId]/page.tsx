@@ -112,6 +112,7 @@ import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
+import { buildGatewayEdges, collectExpandedDescendants } from "@/lib/inline-expand";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -130,6 +131,7 @@ const EXTENT_MARGIN = 600; // 노드 위치·패닝 허용 범위 = 콘텐츠 bb
 const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
+const INLINE_GATEWAY_OPACITY = 0.28; // 인라인 펼침 게이트웨이(A→Start, End→B) 기본 흐림 — 경계 연결 암시
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
@@ -292,6 +294,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 아웃라인 전체 그래프(하위 프로세스 펼치기용) + 펼친 노드 집합
   const [fullGraph, setFullGraph] = useState<VersionGraph | null>(null);
   const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
+  // 캔버스 인라인 펼친 노드 id 집합 — 아웃라인용 expandedOutline과 분리. 스코프/버전 전환 시 초기화.
+  const [expandedInline, setExpandedInline] = useState<Set<string>>(new Set());
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -828,6 +832,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
+        setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
         historyRef.current = { past: [], future: [] };
         setHistorySize({ past: 0, future: 0 });
         lastTextEditAtRef.current = 0;
@@ -2532,20 +2537,79 @@ function MapEditor({ mapId }: { mapId: number }) {
     return counts;
   }, [comments]);
 
-  const displayNodes = useMemo(
-    () =>
-      nodes.map((node) => {
-        const count = unresolvedCounts.get(node.id) ?? 0;
-        return count === (node.data.commentCount ?? 0)
-          ? node
-          : { ...node, data: { ...node.data, commentCount: count } };
-      }),
-    [nodes, unresolvedCounts],
-  );
+  // 인라인 펼치기/접기 토글 — 순수 뷰(raw state·저장 무영향). 펼침/접힘만 토글, 캡은 Phase 4에서.
+  const toggleInlineExpand = useCallback((nodeId: string) => {
+    setExpandedInline((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  // 인라인 펼침 합성 — 펼친 노드의 자식을 fullGraph에서 읽어 현재 그래프와 합쳐 통합 LR 재배치(파생).
+  // 자식은 view 전용(비드래그·비선택). A→B(펼친 노드 출발 엣지)는 hidden, 게이트웨이는 흐리게.
+  const inlineComposition = useMemo(() => {
+    if (expandedInline.size === 0 || !fullGraph) {
+      return null;
+    }
+    const descendants = collectExpandedDescendants(fullGraph, expandedInline);
+    if (descendants.nodes.length === 0) {
+      return null;
+    }
+    const childNodes = descendants.nodes.map((flat) => {
+      const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, flat.parent_node_id);
+      return { ...app, draggable: false, selectable: false, deletable: false };
+    });
+    const childEdges = toAppEdges({ nodes: [], edges: descendants.edges, groups: [] }).map(
+      (edge) => ({ ...edge, selectable: false, deletable: false, focusable: false }),
+    );
+    // 현재+자식 엣지를 합쳐 처리 — 중첩 펼침에서도 깊은 레벨의 A→B 숨김·게이트웨이가 성립
+    const combinedEdges = [...edges, ...childEdges];
+    // A→B 숨김 대상 = 펼친 노드가 source인 엣지(현재·자식 양쪽)
+    const hiddenIds = new Set(
+      combinedEdges.filter((edge) => expandedInline.has(edge.source)).map((edge) => edge.id),
+    );
+    const gateways = buildGatewayEdges(expandedInline, childNodes, combinedEdges).map((edge) => ({
+      ...EDGE_DEFAULTS,
+      ...edge,
+      animated: false,
+      selectable: false,
+      deletable: false,
+      focusable: false,
+      style: { opacity: INLINE_GATEWAY_OPACITY, strokeDasharray: "5 4" },
+    }));
+    const mergedNodes = [...nodes, ...childNodes];
+    const layoutEdges = [
+      ...combinedEdges.filter((edge) => !hiddenIds.has(edge.id)),
+      ...gateways,
+    ];
+    const positioned = layoutWithDagre(mergedNodes, layoutEdges);
+    return { nodes: positioned, childEdges, gateways, hiddenIds };
+  }, [expandedInline, fullGraph, nodes, edges]);
+
+  const displayNodes = useMemo(() => {
+    // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
+    const base = inlineComposition ? inlineComposition.nodes : nodes;
+    return base.map((node) => {
+      const count = unresolvedCounts.get(node.id) ?? 0;
+      return count === (node.data.commentCount ?? 0)
+        ? node
+        : { ...node, data: { ...node.data, commentCount: count } };
+    });
+  }, [nodes, inlineComposition, unresolvedCounts]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
-    return edges.map((edge) => {
+    const hiddenIds = inlineComposition?.hiddenIds;
+    const currentStyled = edges.map((edge) => {
+      // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
+      if (hiddenIds?.has(edge.id)) {
+        return { ...edge, hidden: true } as Edge;
+      }
       let next: Edge = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
       // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일
       if (edge.label) {
@@ -2591,11 +2655,30 @@ function MapEditor({ mapId }: { mapId: number }) {
         markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
       };
     });
-  }, [edges, selectedId, edgeStyle]);
+    if (!inlineComposition) {
+      return currentStyled;
+    }
+    // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김, 아니면 맵 전역 type만 맞춤. 게이트웨이는 합성 시 스타일 완료.
+    const childStyled = inlineComposition.childEdges.map((edge) =>
+      hiddenIds?.has(edge.id)
+        ? ({ ...edge, hidden: true } as Edge)
+        : edge.type === edgeStyle
+          ? edge
+          : { ...edge, type: edgeStyle },
+    );
+    const gatewayStyled = inlineComposition.gateways.map((edge) =>
+      edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
+    );
+    return [...currentStyled, ...childStyled, ...gatewayStyled];
+  }, [edges, selectedId, edgeStyle, inlineComposition]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
   const groupBoxes = useMemo(() => {
+    // 인라인 펼침 중엔 그룹 박스 숨김 — 노드가 dagre로 재배치돼 raw 위치 기준 박스가 어긋나는 것 방지(Phase 2 단순화)
+    if (expandedInline.size > 0) {
+      return [];
+    }
     return groups.flatMap((group) => {
       const members = nodes.filter((node) => node.data.groupIds.includes(group.id));
       if (members.length === 0) {
@@ -2678,18 +2761,20 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       ];
     });
-  }, [nodes, groups]);
+  }, [nodes, groups, expandedInline]);
 
   // 노드 위치·패닝 허용 범위 = 콘텐츠 bbox + 여백. 무한 확장 방지(콘텐츠 늘면 함께 확장).
   const contentExtent = useMemo<[[number, number], [number, number]] | undefined>(() => {
-    if (nodes.length === 0) {
+    // 인라인 펼침 중엔 합성·재배치된 노드(현재+자식) 기준 — 자식이 패닝 범위 밖으로 잘리지 않게
+    const extentNodes = inlineComposition ? inlineComposition.nodes : nodes;
+    if (extentNodes.length === 0) {
       return undefined; // 빈 캔버스는 React Flow 기본(무제한)
     }
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const node of nodes) {
+    for (const node of extentNodes) {
       const w = node.measured?.width ?? NODE_WIDTH;
       const h = node.measured?.height ?? NODE_HEIGHT;
       minX = Math.min(minX, node.position.x);
@@ -2701,7 +2786,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       [minX - EXTENT_MARGIN, minY - EXTENT_MARGIN],
       [maxX + EXTENT_MARGIN, maxY + EXTENT_MARGIN],
     ];
-  }, [nodes]);
+  }, [nodes, inlineComposition]);
 
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
@@ -2769,14 +2854,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
   const nodeActions = useMemo(
     () => ({
-      onDrill: handleDrillById,
+      onToggleExpand: toggleInlineExpand,
+      expandedInlineIds: expandedInline,
       displayFields,
       editingNodeId,
       onStartRename: startRename,
       onRename: renameNode,
       onCancelRename: cancelRename,
     }),
-    [handleDrillById, displayFields, editingNodeId, startRename, renameNode, cancelRename],
+    [
+      toggleInlineExpand,
+      expandedInline,
+      displayFields,
+      editingNodeId,
+      startRename,
+      renameNode,
+      cancelRename,
+    ],
   );
 
   // 인스펙터 폭 로컬 영속
@@ -3332,17 +3426,24 @@ function MapEditor({ mapId }: { mapId: number }) {
                       nodeTypes={nodeTypes}
                       snapToGrid
                       snapGrid={[8, 8]}
-                      nodesDraggable={!readOnly}
-                      nodesConnectable={!readOnly}
+                      nodesDraggable={!readOnly && expandedInline.size === 0}
+                      nodesConnectable={!readOnly && expandedInline.size === 0}
                       onNodesChange={onNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
+                        // 인라인 펼친 자식 노드는 보기 전용 — 현재 스코프 노드만 선택
+                        if (!nodesRef.current.some((item) => item.id === node.id)) {
+                          return;
+                        }
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
                         // 이름 외 영역 더블클릭 = 요약창. 타이틀 더블클릭은 process-node가 stopPropagation해 이름 편집으로.
+                        if (!nodesRef.current.some((item) => item.id === node.id)) {
+                          return; // 인라인 자식은 보기 전용
+                        }
                         setSelectedId(node.id);
                         setSummaryNodeId(node.id);
                       }}
