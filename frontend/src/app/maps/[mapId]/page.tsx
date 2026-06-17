@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CornerDownRight, Download, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -49,6 +49,7 @@ import {
   layoutWithDagre,
   layoutSubsetWithDagre,
   makeUniqueLabel,
+  nodeSizeOf,
   normalizeNodeType,
   resolveCollision,
   getIncomingEdges,
@@ -112,7 +113,7 @@ import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
-import { buildGatewayEdges, collectExpandedDescendants } from "@/lib/inline-expand";
+import { buildGatewayEdges } from "@/lib/inline-expand";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -131,7 +132,11 @@ const EXTENT_MARGIN = 600; // 노드 위치·패닝 허용 범위 = 콘텐츠 bb
 const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
-const INLINE_GATEWAY_OPACITY = 0.28; // 인라인 펼침 게이트웨이(A→Start, End→B) 기본 흐림 — 경계 연결 암시
+const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
+const REGION_PAD = 28; // 하위 영역 박스 안쪽 여백
+const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
+const REGION_TITLE_GAP = 24; // 영역 상단 제목 칩 헤드룸
+const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
@@ -176,6 +181,16 @@ type Scope = { parentId: string | null; title: string };
 type SearchResult = { node: FlatNode; path: string; scopes: Scope[] };
 type Snapshot = { nodes: AppNode[]; edges: Edge[]; groups: GraphGroup[] };
 type SaveState = "idle" | "saving" | "saved" | "error";
+// 인라인 펼침 하위 영역 박스 — 깊이 틴트 배경 렌더용(flow 좌표 절대배치)
+type RegionBox = {
+  id: string;
+  label: string;
+  depth: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 type MenuState = {
   x: number;
   y: number;
@@ -2550,29 +2565,103 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, []);
 
-  // 인라인 펼침 합성 — 펼친 노드의 자식을 fullGraph에서 읽어 현재 그래프와 합쳐 통합 LR 재배치(파생).
-  // 자식은 view 전용(비드래그·비선택). A→B(펼친 노드 출발 엣지)는 hidden, 게이트웨이는 흐리게.
+  // 인라인 펼침 합성(영역 컨테이너 모델) — 펼친 루트 노드 오른쪽에 하위 영역 박스를 삽입하고
+  // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
   const inlineComposition = useMemo(() => {
     if (expandedInline.size === 0 || !fullGraph) {
       return null;
     }
-    const descendants = collectExpandedDescendants(fullGraph, expandedInline);
-    if (descendants.nodes.length === 0) {
+    // 펼친 루트 노드만 처리(자식은 비상호작용 → expandedInline ⊆ 루트). 왼→오 순서로 누적 시프트.
+    const expandedRoots = nodes
+      .filter((node) => expandedInline.has(node.id))
+      .sort((a, b) => a.position.x - b.position.x);
+    if (expandedRoots.length === 0) {
       return null;
     }
-    const childNodes = descendants.nodes.map((flat) => {
-      const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, flat.parent_node_id);
-      return { ...app, draggable: false, selectable: false, deletable: false };
-    });
-    const childEdges = toAppEdges({ nodes: [], edges: descendants.edges, groups: [] }).map(
-      (edge) => ({ ...edge, selectable: false, deletable: false, focusable: false }),
+    const placed = new Map<string, AppNode>(
+      nodes.map((node) => [node.id, { ...node, position: { ...node.position } }]),
     );
-    // 현재+자식 엣지를 합쳐 처리 — 중첩 펼침에서도 깊은 레벨의 A→B 숨김·게이트웨이가 성립
+    const childNodes: AppNode[] = [];
+    const childEdges: Edge[] = [];
+    const regions: RegionBox[] = [];
+
+    for (const root of expandedRoots) {
+      const anchor = placed.get(root.id);
+      if (!anchor) {
+        continue;
+      }
+      const kids = fullGraph.nodes.filter((node) => node.parent_node_id === root.id);
+      if (kids.length === 0) {
+        continue;
+      }
+      const kidApp = kids.map((flat) => {
+        const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, root.id);
+        return { ...app, draggable: false, selectable: false, deletable: false };
+      });
+      const kidIds = new Set(kids.map((kid) => kid.id));
+      const kidEdges = toAppEdges({
+        nodes: [],
+        edges: fullGraph.edges.filter(
+          (edge) => kidIds.has(edge.source_node_id) && kidIds.has(edge.target_node_id),
+        ),
+        groups: [],
+      }).map((edge) => ({ ...edge, selectable: false, deletable: false, focusable: false }));
+      // 자식 로컬 LR 배치(원점 정규화) + 콘텐츠 bbox
+      const laid = layoutWithDagre(kidApp, kidEdges);
+      let contentW = 0;
+      let contentH = 0;
+      for (const kid of laid) {
+        const size = nodeSizeOf(kid.data.nodeType);
+        contentW = Math.max(contentW, kid.position.x + size.w);
+        contentH = Math.max(contentH, kid.position.y + size.h);
+      }
+      const anchorSize = nodeSizeOf(anchor.data.nodeType);
+      const regionW = contentW + REGION_PAD * 2;
+      const regionH = contentH + REGION_PAD * 2 + REGION_TITLE_GAP;
+      const regionX = anchor.position.x + anchorSize.w + REGION_GAP;
+      const regionY = anchor.position.y + anchorSize.h / 2 - regionH / 2;
+      // A 바로 오른쪽 노드도 영역을 완전히 벗어나도록 앵커 폭 포함(겹침 방지)
+      const footprint = anchorSize.w + regionW + REGION_GAP * 2;
+      // 공간상 A보다 오른쪽 = 우측 이동(루트 노드 + 먼저 배치된 자식/영역)
+      for (const node of placed.values()) {
+        if (node.position.x > anchor.position.x) {
+          node.position = { ...node.position, x: node.position.x + footprint };
+        }
+      }
+      for (const child of childNodes) {
+        if (child.position.x > anchor.position.x) {
+          child.position = { ...child.position, x: child.position.x + footprint };
+        }
+      }
+      for (const region of regions) {
+        if (region.x > anchor.position.x) {
+          region.x += footprint;
+        }
+      }
+      // 자식 절대 배치(영역 안쪽, 제목 헤드룸 아래)
+      for (const kid of laid) {
+        childNodes.push({
+          ...kid,
+          position: {
+            x: regionX + REGION_PAD + kid.position.x,
+            y: regionY + REGION_PAD + REGION_TITLE_GAP + kid.position.y,
+          },
+        });
+      }
+      childEdges.push(...kidEdges);
+      regions.push({
+        id: root.id,
+        label: root.data.label,
+        depth: 1,
+        x: regionX,
+        y: regionY,
+        width: regionW,
+        height: regionH,
+      });
+    }
+
+    // 게이트웨이(A→진입, 진출→후속) + A→B 숨김
     const combinedEdges = [...edges, ...childEdges];
-    // A→B 숨김 대상 = 펼친 노드가 source인 엣지(현재·자식 양쪽)
-    const hiddenIds = new Set(
-      combinedEdges.filter((edge) => expandedInline.has(edge.source)).map((edge) => edge.id),
-    );
     const gateways = buildGatewayEdges(expandedInline, childNodes, combinedEdges).map((edge) => ({
       ...EDGE_DEFAULTS,
       ...edge,
@@ -2582,13 +2671,42 @@ function MapEditor({ mapId }: { mapId: number }) {
       focusable: false,
       style: { opacity: INLINE_GATEWAY_OPACITY, strokeDasharray: "5 4" },
     }));
-    const mergedNodes = [...nodes, ...childNodes];
-    const layoutEdges = [
-      ...combinedEdges.filter((edge) => !hiddenIds.has(edge.id)),
-      ...gateways,
-    ];
-    const positioned = layoutWithDagre(mergedNodes, layoutEdges);
-    return { nodes: positioned, childEdges, gateways, hiddenIds };
+    const hiddenIds = new Set(
+      edges.filter((edge) => expandedInline.has(edge.source)).map((edge) => edge.id),
+    );
+    // 영역을 가로지르는 루트 엣지 → 반투명(양 끝이 영역 좌우로 갈리는 경우)
+    const xOf = new Map<string, number>();
+    for (const node of placed.values()) {
+      xOf.set(node.id, node.position.x);
+    }
+    for (const child of childNodes) {
+      xOf.set(child.id, child.position.x);
+    }
+    const crossingIds = new Set<string>();
+    for (const edge of edges) {
+      if (hiddenIds.has(edge.id)) {
+        continue;
+      }
+      const sx = xOf.get(edge.source);
+      const tx = xOf.get(edge.target);
+      if (sx == null || tx == null) {
+        continue;
+      }
+      const lo = Math.min(sx, tx);
+      const hi = Math.max(sx, tx);
+      if (regions.some((region) => lo < region.x && hi > region.x + region.width)) {
+        crossingIds.add(edge.id);
+      }
+    }
+
+    return {
+      nodes: [...placed.values(), ...childNodes],
+      childEdges,
+      gateways,
+      regions,
+      hiddenIds,
+      crossingIds,
+    };
   }, [expandedInline, fullGraph, nodes, edges]);
 
   // 펼침 변경 시 합성 레이아웃을 화면에 맞춤 — 자식이 화면 밖에 생겨도 보이도록(렌더 반영 후 한 틱 뒤)
@@ -2616,12 +2734,17 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
     const hiddenIds = inlineComposition?.hiddenIds;
+    const crossingIds = inlineComposition?.crossingIds;
     const currentStyled = edges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
         return { ...edge, hidden: true } as Edge;
       }
       let next: Edge = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
+      // 영역을 가로지르는 엣지 — 반투명으로 영역 위를 지나가게
+      if (crossingIds?.has(edge.id)) {
+        next = { ...next, style: { ...next.style, opacity: REGION_CROSSING_OPACITY } };
+      }
       // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일
       if (edge.label) {
         // Yes/No 분기는 은은한 파스텔 블루/레드로 선·라벨 색 구분(라벨에서 파생, 영속 불필요). 기타는 기본 톤.
@@ -3524,6 +3647,46 @@ function MapEditor({ mapId }: { mapId: number }) {
                       fitView
                     >
                       <ViewportPortal>
+                        {inlineComposition?.regions.map((box) => (
+                          <Fragment key={`region:${box.id}`}>
+                            {/* 깊이 틴트 배경 — 노드 뒤(z<0), 비상호작용 */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                transform: `translate(${box.x}px, ${box.y}px)`,
+                                width: box.width,
+                                height: box.height,
+                                zIndex: -1,
+                                pointerEvents: "none",
+                                borderRadius: 12,
+                                background: `color-mix(in srgb, var(--color-accent) ${4 + box.depth * 4}%, transparent)`,
+                                border: "1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)",
+                              }}
+                            />
+                            {/* 영역 제목 칩 — 클릭 시 접기 */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                transform: `translate(${box.x + 8}px, ${box.y + 6}px)`,
+                                zIndex: 1,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="pointer-events-auto inline-flex items-center gap-1 rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary shadow-sm hover:bg-surface-alt"
+                                title={t("node.collapseChildTitle")}
+                                onClick={() => toggleInlineExpand(box.id)}
+                              >
+                                <ChevronDown size={12} strokeWidth={1.5} />
+                                {box.label || t("node.childBadge")}
+                              </button>
+                            </div>
+                          </Fragment>
+                        ))}
                         {groupBoxes.map((box) => (
                           <Fragment key={box.id}>
                             {/* 반투명 박스 — 노드 뒤로, 멤버 적은 그룹이 위(z) */}
