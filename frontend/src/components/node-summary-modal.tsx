@@ -44,14 +44,12 @@ interface NodeSummaryModalProps {
   fullGraph: VersionGraph | null;
   readOnly: boolean;
   // 편집 데이터 + 패치 (readOnly면 입력 비활성)
-  nodeType: ProcessNodeType;
   color: string;
   assignee: string;
   department: string;
   system: string;
   duration: string;
   colorPresets: string[];
-  typeOptions: { value: ProcessNodeType; label: string }[];
   onPatch: (patch: NodeEditPatch) => void;
   // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
   onCommitLabel?: (label: string) => void;
@@ -71,14 +69,12 @@ export function NodeSummaryModal({
   hasChildren,
   fullGraph,
   readOnly,
-  nodeType,
   color,
   assignee,
   department,
   system,
   duration,
   colorPresets,
-  typeOptions,
   onPatch,
   onCommitLabel,
   onClose,
@@ -186,20 +182,10 @@ export function NodeSummaryModal({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {/* 유형 */}
+              {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
               <div className="flex items-center gap-2">
                 <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</label>
-                <select
-                  className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                  value={nodeType}
-                  onChange={(event) => onPatch({ nodeType: event.target.value as ProcessNodeType })}
-                >
-                  {typeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <span className="min-w-0 flex-1 truncate text-caption text-ink-secondary">{typeLabel}</span>
               </div>
               {/* 색 — 기본 1줄 + 더 보기 */}
               <div className="flex items-start gap-2">

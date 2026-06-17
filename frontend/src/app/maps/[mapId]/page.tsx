@@ -40,6 +40,7 @@ import { NodeSummaryModal } from "@/components/node-summary-modal";
 import { ProcessNode } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { WindowDock } from "@/components/window-dock";
 import {
   alignSelected,
@@ -171,7 +172,7 @@ const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
 
 type Scope = { parentId: string | null; title: string };
 type SearchResult = { node: FlatNode; path: string; scopes: Scope[] };
-type Snapshot = { nodes: AppNode[]; edges: Edge[] };
+type Snapshot = { nodes: AppNode[]; edges: Edge[]; groups: GraphGroup[] };
 type SaveState = "idle" | "saving" | "saved" | "error";
 type MenuState = {
   x: number;
@@ -285,6 +286,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
+  // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
+  const [newGroupId, setNewGroupId] = useState<string | null>(null);
   // 아웃라인 전체 그래프(하위 프로세스 펼치기용) + 펼친 노드 집합
   const [fullGraph, setFullGraph] = useState<VersionGraph | null>(null);
   const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
@@ -306,15 +309,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
-  // 일시 토스트 — 2초 후 자동 사라짐
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const removeToast = useCallback((id: string) => {
+    setToasts((cur) => cur.filter((toast) => toast.id !== id));
+  }, []);
   const showToast = useCallback((message: string) => {
-    setToast(message);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => setToast(null), 2000);
+    setToasts((cur) => [{ id: genId(), message }, ...cur]);
   }, []);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -590,7 +591,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const pushHistory = useCallback(() => {
     const history = historyRef.current;
-    history.past.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    history.past.push({ nodes: nodesRef.current, edges: edgesRef.current, groups: groupsRef.current });
     if (history.past.length > HISTORY_LIMIT) {
       history.past.shift();
     }
@@ -620,12 +621,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (!previous) {
       return;
     }
-    history.future.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    history.future.push({ nodes: nodesRef.current, edges: edgesRef.current, groups: groupsRef.current });
     setNodes(previous.nodes);
     setEdges(previous.edges);
+    setGroups(previous.groups);
     setHistorySize({ past: history.past.length, future: history.future.length });
     scheduleAutoSave();
-  }, [setNodes, setEdges, scheduleAutoSave]);
+  }, [setNodes, setEdges, setGroups, scheduleAutoSave]);
 
   const redo = useCallback(() => {
     const history = historyRef.current;
@@ -633,12 +635,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (!next) {
       return;
     }
-    history.past.push({ nodes: nodesRef.current, edges: edgesRef.current });
+    history.past.push({ nodes: nodesRef.current, edges: edgesRef.current, groups: groupsRef.current });
     setNodes(next.nodes);
     setEdges(next.edges);
+    setGroups(next.groups);
     setHistorySize({ past: history.past.length, future: history.future.length });
     scheduleAutoSave();
-  }, [setNodes, setEdges, scheduleAutoSave]);
+  }, [setNodes, setEdges, setGroups, scheduleAutoSave]);
 
   // ── AI 제안 미리보기 / 적용 / 취소 ─────────────────────
   const applyAiProposal = useCallback(
@@ -1603,6 +1606,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const unique = makeUniqueLabel(label, taken);
         return current.map((g) => (g.id === groupId ? { ...g, label: unique } : g));
       });
+      setNewGroupId((cur) => (cur === groupId ? null : cur));
       scheduleAutoSave();
     },
     [setGroups, scheduleAutoSave],
@@ -1616,22 +1620,53 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setGroups, scheduleAutoSave],
   );
 
-  // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 0이면 저장 시 그룹 자동 정리.
-  const leaveGroup = useCallback(
-    (groupId: string) => {
-      setNodes((current) =>
-        current.map((node) =>
-          node.selected && node.data.groupIds.includes(groupId)
-            ? {
-                ...node,
-                data: { ...node.data, groupIds: node.data.groupIds.filter((id) => id !== groupId) },
-              }
-            : node,
-        ),
-      );
+  // 멤버 2명 미만 그룹은 유지 의미 없음 — 주어진 노드로 멤버 수를 세어 자동 제거(라이브 정리, 저장 0명 정리와 별개).
+  const pruneSmallGroups = useCallback(
+    (nextNodes: AppNode[]) => {
+      const counts = new Map<string, number>();
+      for (const node of nextNodes) {
+        for (const gid of node.data.groupIds) {
+          counts.set(gid, (counts.get(gid) ?? 0) + 1);
+        }
+      }
+      // 라이브 groups 기준으로 제거 대상 선판정 — setGroups 업데이터 안 부작용(StrictMode 이중호출) 회피
+      const removed = groupsRef.current.filter((group) => (counts.get(group.id) ?? 0) < 2);
+      if (removed.length === 0) {
+        return;
+      }
+      const removedIds = new Set(removed.map((group) => group.id));
+      setGroups((cur) => cur.filter((group) => !removedIds.has(group.id)));
+      showToast(removed.length === 1 ? t("group.removed") : t("group.removedN", { n: removed.length }));
+    },
+    [setGroups, showToast, t],
+  );
+
+  // 노드 삭제 시 멤버가 2명 미만이 된 그룹 정리 — 삭제된 노드를 제외한 잔여 노드로 멤버 재계산.
+  const handleNodesDelete = useCallback(
+    (deleted: AppNode[]) => {
+      const removed = new Set(deleted.map((node) => node.id));
+      pruneSmallGroups(nodesRef.current.filter((node) => !removed.has(node.id)));
       scheduleAutoSave();
     },
-    [setNodes, scheduleAutoSave],
+    [pruneSmallGroups, scheduleAutoSave],
+  );
+
+  // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 2명 미만이 되면 그룹 자동 제거.
+  const leaveGroup = useCallback(
+    (groupId: string) => {
+      const next = nodesRef.current.map((node) =>
+        node.selected && node.data.groupIds.includes(groupId)
+          ? {
+              ...node,
+              data: { ...node.data, groupIds: node.data.groupIds.filter((id) => id !== groupId) },
+            }
+          : node,
+      );
+      setNodes(next);
+      pruneSmallGroups(next);
+      scheduleAutoSave();
+    },
+    [setNodes, pruneSmallGroups, scheduleAutoSave],
   );
 
   // 선택된 노드들(2개 이상)에 새 그룹 태그 추가 — 라벨 기본=첫 노드의 부서/담당자. 기존 태그는 유지(다중 소속).
@@ -1641,6 +1676,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     const selected = nodesRef.current.filter((node) => node.selected);
     if (selected.length < 2) {
+      showToast(t("group.needTwo"));
+      return;
+    }
+    // 선택 노드가 모두 한 그룹에 함께 속하면 중복 그룹 — 차단(무명 그룹 양산 방지)
+    const shared = selected.reduce<Set<string> | null>((common, node) => {
+      const ids = new Set(node.data.groupIds);
+      return common === null ? ids : new Set([...common].filter((id) => ids.has(id)));
+    }, null);
+    if (shared && shared.size > 0) {
+      showToast(t("group.allInOne"));
       return;
     }
     pushHistory();
@@ -1666,8 +1711,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           : node,
       ),
     );
+    setNewGroupId(newId);
     scheduleAutoSave();
-  }, [readOnly, pushHistory, setGroups, setNodes, scheduleAutoSave]);
+  }, [readOnly, pushHistory, setGroups, setNodes, scheduleAutoSave, showToast, t]);
 
   // 그룹 해제(disband) — 모든 노드에서 이 그룹 태그 제거 + 그룹 자체 삭제. leaveGroup(선택 멤버만 이탈)과 구분.
   const disbandGroup = useCallback(
@@ -2761,6 +2807,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (seenNodes.has(flat.id)) {
           continue;
         }
+        // 현재 스코프 노드는 라이브가 권위 — 라이브 로드 후 fullGraph에만 있으면 삭제된 것이므로 제외(아웃라인 즉시 반영).
+        // nodes 비어있는 로드/전환 구간엔 fullGraph로 폴백(깜빡임 방지).
+        if (nodes.length > 0 && flat.parent_node_id === currentParentId) {
+          continue;
+        }
         seenNodes.add(flat.id);
         outlineNodes.push({
           id: flat.id,
@@ -3345,7 +3396,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         pushHistory();
                         return true;
                       }}
-                      onNodesDelete={() => scheduleAutoSave()}
+                      onNodesDelete={handleNodesDelete}
                       onEdgesDelete={() => scheduleAutoSave()}
                       onMoveStart={() => setMenu(null)}
                       selectionOnDrag
@@ -3400,6 +3451,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 color={box.color}
                                 width={box.width - 56}
                                 readOnly={readOnly}
+                                autoEdit={box.id === newGroupId}
                                 colorPresets={GROUP_COLOR_PRESETS}
                                 onRename={renameGroup}
                                 onRecolor={recolorGroup}
@@ -3607,17 +3659,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                 hasChildren={hasChildren}
                 fullGraph={fullGraph}
                 readOnly={readOnly}
-                nodeType={node.data.nodeType}
                 color={node.data.color}
                 assignee={node.data.assignee}
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
                 colorPresets={COLOR_PRESETS}
-                typeOptions={NODE_TYPE_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: t(option.labelKey),
-                }))}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onClose={() => setSummaryNodeId(null)}
@@ -3703,21 +3750,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                 updateSelectedData({ description: event.target.value }, true)
               }
             />
+            {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
             <label className="mb-1 mt-3 block text-fine text-ink-tertiary">{t("field.type")}</label>
-            <select
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              value={selectedNode.data.nodeType}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateSelectedData({ nodeType: normalizeNodeType(event.target.value) })
-              }
-            >
-              {NODE_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {t(option.labelKey)}
-                </option>
-              ))}
-            </select>
+            <div className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary">
+              {t(
+                NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
+                  ?.labelKey ?? "nodeType.process",
+              )}
+            </div>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
             <div className="mb-2 flex flex-wrap gap-1.5">
               {COLOR_PRESETS.map((preset) => (
@@ -3911,11 +3951,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         )}
       </div>
       </div>
-      {toast && (
-        <div className="pointer-events-none fixed bottom-4 left-1/2 z-[1300] -translate-x-1/2 rounded-md bg-ink px-3 py-2 text-caption text-surface shadow-lg">
-          {toast}
-        </div>
-      )}
+      <ToastStack toasts={toasts} onDismiss={removeToast} />
       {branchPrompt && (
         <EdgeBranchModal onPick={handlePickBranch} onClose={() => setBranchPrompt(null)} />
       )}

@@ -14,6 +14,8 @@ interface GroupTitleBarProps {
   color: string;
   width: number;
   readOnly: boolean;
+  // 갓 생성된 그룹은 true — 마운트 즉시 이름 편집모드로 진입(무명 그룹 방지)
+  autoEdit?: boolean;
   colorPresets: string[];
   onRename: (id: string, label: string) => void;
   onRecolor: (id: string, color: string) => void;
@@ -27,6 +29,7 @@ export function GroupTitleBar({
   color,
   width,
   readOnly,
+  autoEdit,
   colorPresets,
   onRename,
   onRecolor,
@@ -34,7 +37,7 @@ export function GroupTitleBar({
   onBulkEdit,
 }: GroupTitleBarProps) {
   const { t } = useI18n();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(autoEdit ?? false);
   const [showColors, setShowColors] = useState(false);
   const stroke = color || "var(--color-border-strong)";
 
