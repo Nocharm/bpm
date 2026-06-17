@@ -133,9 +133,9 @@ const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
-const REGION_PAD = 28; // 하위 영역 박스 안쪽 여백
+const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
-const REGION_TITLE_GAP = 24; // 영역 상단 제목 칩 헤드룸
+const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
@@ -2617,9 +2617,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       const anchorSize = nodeSizeOf(anchor.data.nodeType);
       const regionW = contentW + REGION_PAD * 2;
-      const regionH = contentH + REGION_PAD * 2 + REGION_TITLE_GAP;
       const regionX = anchor.position.x + anchorSize.w + REGION_GAP;
-      const regionY = anchor.position.y + anchorSize.h / 2 - regionH / 2;
+      // 자식은 A의 세로 중앙에 맞춰 배치(영역 배경은 이후 전체 높이 레인으로 확장)
+      const childTop = anchor.position.y + anchorSize.h / 2 - contentH / 2;
       // A 바로 오른쪽 노드도 영역을 완전히 벗어나도록 앵커 폭 포함(겹침 방지)
       const footprint = anchorSize.w + regionW + REGION_GAP * 2;
       // 공간상 A보다 오른쪽 = 우측 이동(루트 노드 + 먼저 배치된 자식/영역)
@@ -2638,13 +2638,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           region.x += footprint;
         }
       }
-      // 자식 절대 배치(영역 안쪽, 제목 헤드룸 아래)
+      // 자식 절대 배치(영역 안쪽, A 세로 중앙)
       for (const kid of laid) {
         childNodes.push({
           ...kid,
           position: {
             x: regionX + REGION_PAD + kid.position.x,
-            y: regionY + REGION_PAD + REGION_TITLE_GAP + kid.position.y,
+            y: childTop + kid.position.y,
           },
         });
       }
@@ -2654,10 +2654,30 @@ function MapEditor({ mapId }: { mapId: number }) {
         label: root.data.label,
         depth: 1,
         x: regionX,
-        y: regionY,
+        y: 0,
         width: regionW,
-        height: regionH,
+        height: 0,
       });
+    }
+
+    // 영역 배경은 캔버스를 상하로 가득 채우는 세로 레인 — 전체 콘텐츠 Y 범위 + 여백
+    if (regions.length > 0) {
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const node of placed.values()) {
+        const size = nodeSizeOf(node.data.nodeType);
+        minY = Math.min(minY, node.position.y);
+        maxY = Math.max(maxY, node.position.y + size.h);
+      }
+      for (const child of childNodes) {
+        const size = nodeSizeOf(child.data.nodeType);
+        minY = Math.min(minY, child.position.y);
+        maxY = Math.max(maxY, child.position.y + size.h);
+      }
+      for (const region of regions) {
+        region.y = minY - REGION_MARGIN;
+        region.height = maxY - minY + REGION_MARGIN * 2;
+      }
     }
 
     // 게이트웨이(A→진입, 진출→후속) + A→B 숨김
@@ -3649,7 +3669,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <ViewportPortal>
                         {inlineComposition?.regions.map((box) => (
                           <Fragment key={`region:${box.id}`}>
-                            {/* 깊이 틴트 배경 — 노드 뒤(z<0), 비상호작용 */}
+                            {/* 삽입된 캔버스 레인 — 흰 surface + dot-grid + 좌우 디바이더. 노드 뒤(z<0), 비상호작용 */}
                             <div
                               style={{
                                 position: "absolute",
@@ -3660,9 +3680,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 height: box.height,
                                 zIndex: -1,
                                 pointerEvents: "none",
-                                borderRadius: 12,
-                                background: `color-mix(in srgb, var(--color-accent) ${4 + box.depth * 4}%, transparent)`,
-                                border: "1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)",
+                                background: "var(--color-surface)",
+                                backgroundImage:
+                                  "radial-gradient(var(--color-canvas-dot) 1px, transparent 1px)",
+                                backgroundSize: "16px 16px",
+                                borderLeft: "1.5px solid var(--color-divider)",
+                                borderRight: "1.5px solid var(--color-divider)",
                               }}
                             />
                             {/* 영역 제목 칩 — 클릭 시 접기 */}
