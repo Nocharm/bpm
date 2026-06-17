@@ -2565,122 +2565,154 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, []);
 
-  // 인라인 펼침 합성(영역 컨테이너 모델) — 펼친 루트 노드 오른쪽에 하위 영역 박스를 삽입하고
+  // 인라인 펼침 합성(영역 컨테이너 모델, 중첩 재귀) — 펼친 노드 오른쪽에 하위 "캔버스 레인"을 삽입하고
   // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
   const inlineComposition = useMemo(() => {
     if (expandedInline.size === 0 || !fullGraph) {
       return null;
     }
-    // 펼친 루트 노드만 처리(자식은 비상호작용 → expandedInline ⊆ 루트). 왼→오 순서로 누적 시프트.
-    const expandedRoots = nodes
-      .filter((node) => expandedInline.has(node.id))
-      .sort((a, b) => a.position.x - b.position.x);
-    if (expandedRoots.length === 0) {
-      return null;
-    }
-    const placed = new Map<string, AppNode>(
-      nodes.map((node) => [node.id, { ...node, position: { ...node.position } }]),
-    );
-    const childNodes: AppNode[] = [];
-    const childEdges: Edge[] = [];
-    const regions: RegionBox[] = [];
+    const tree = fullGraph;
+    const rootIds = new Set(nodes.map((node) => node.id));
 
-    for (const root of expandedRoots) {
-      const anchor = placed.get(root.id);
-      if (!anchor) {
-        continue;
-      }
-      const kids = fullGraph.nodes.filter((node) => node.parent_node_id === root.id);
-      if (kids.length === 0) {
-        continue;
-      }
-      const kidApp = kids.map((flat) => {
-        const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, root.id);
-        return { ...app, draggable: false, selectable: false, deletable: false };
-      });
-      const kidIds = new Set(kids.map((kid) => kid.id));
-      const kidEdges = toAppEdges({
-        nodes: [],
-        edges: fullGraph.edges.filter(
-          (edge) => kidIds.has(edge.source_node_id) && kidIds.has(edge.target_node_id),
-        ),
-        groups: [],
-      }).map((edge) => ({ ...edge, selectable: false, deletable: false, focusable: false }));
-      // 자식 로컬 LR 배치(원점 정규화) + 콘텐츠 bbox
-      const laid = layoutWithDagre(kidApp, kidEdges);
-      let contentW = 0;
-      let contentH = 0;
-      for (const kid of laid) {
-        const size = nodeSizeOf(kid.data.nodeType);
-        contentW = Math.max(contentW, kid.position.x + size.w);
-        contentH = Math.max(contentH, kid.position.y + size.h);
-      }
-      const anchorSize = nodeSizeOf(anchor.data.nodeType);
-      const regionW = contentW + REGION_PAD * 2;
-      const regionX = anchor.position.x + anchorSize.w + REGION_GAP;
-      // 자식은 A의 세로 중앙에 맞춰 배치(영역 배경은 이후 전체 높이 레인으로 확장)
-      const childTop = anchor.position.y + anchorSize.h / 2 - contentH / 2;
-      // A 바로 오른쪽 노드도 영역을 완전히 벗어나도록 앵커 폭 포함(겹침 방지)
-      const footprint = anchorSize.w + regionW + REGION_GAP * 2;
-      // 공간상 A보다 오른쪽 = 우측 이동(루트 노드 + 먼저 배치된 자식/영역)
-      for (const node of placed.values()) {
-        if (node.position.x > anchor.position.x) {
-          node.position = { ...node.position, x: node.position.x + footprint };
+    // 한 스코프를 배치 — 펼친 노드마다 하위 스코프를 재귀 배치해 오른쪽에 영역으로 삽입.
+    // 입력 노드는 이미 배치돼 있음(루트=수동, 자식=dagre). depth>1이면 결과를 원점 정규화해 부모가 평행이동.
+    const buildScope = (
+      scopeNodes: AppNode[],
+      depth: number,
+    ): { nodes: AppNode[]; regions: RegionBox[]; childEdges: Edge[]; width: number; height: number } => {
+      const placed = new Map<string, AppNode>(
+        scopeNodes.map((node) => [node.id, { ...node, position: { ...node.position } }]),
+      );
+      const descendants: AppNode[] = [];
+      const regions: RegionBox[] = [];
+      const childEdges: Edge[] = [];
+
+      const expandedHere = scopeNodes
+        .filter((node) => expandedInline.has(node.id))
+        .sort((a, b) => a.position.x - b.position.x);
+
+      for (const target of expandedHere) {
+        const anchor = placed.get(target.id);
+        if (!anchor) {
+          continue;
         }
-      }
-      for (const child of childNodes) {
-        if (child.position.x > anchor.position.x) {
-          child.position = { ...child.position, x: child.position.x + footprint };
+        const kidsFlat = tree.nodes.filter((node) => node.parent_node_id === target.id);
+        if (kidsFlat.length === 0) {
+          continue;
         }
-      }
-      for (const region of regions) {
-        if (region.x > anchor.position.x) {
-          region.x += footprint;
+        const kidApp = kidsFlat.map((flat) => {
+          const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, target.id);
+          return { ...app, draggable: false, selectable: false, deletable: false };
+        });
+        const kidIds = new Set(kidsFlat.map((kid) => kid.id));
+        const kidEdges = toAppEdges({
+          nodes: [],
+          edges: tree.edges.filter(
+            (edge) => kidIds.has(edge.source_node_id) && kidIds.has(edge.target_node_id),
+          ),
+          groups: [],
+        }).map((edge) => ({ ...edge, selectable: false, deletable: false, focusable: false }));
+        // 자식 스코프 로컬 LR 배치 후 재귀(자식 안의 펼침 처리)
+        const sub = buildScope(layoutWithDagre(kidApp, kidEdges), depth + 1);
+        const anchorSize = nodeSizeOf(anchor.data.nodeType);
+        const regionW = sub.width + REGION_PAD * 2;
+        const regionX = anchor.position.x + anchorSize.w + REGION_GAP;
+        const childTop = anchor.position.y + anchorSize.h / 2 - sub.height / 2;
+        // A 바로 오른쪽 노드도 영역을 완전히 벗어나도록 앵커 폭 포함(겹침 방지)
+        const footprint = anchorSize.w + regionW + REGION_GAP * 2;
+        // 공간상 A보다 오른쪽 = 우측 이동(이 스코프 노드 + 먼저 배치된 자식/영역)
+        for (const node of placed.values()) {
+          if (node.position.x > anchor.position.x) {
+            node.position = { ...node.position, x: node.position.x + footprint };
+          }
         }
-      }
-      // 자식 절대 배치(영역 안쪽, A 세로 중앙)
-      for (const kid of laid) {
-        childNodes.push({
-          ...kid,
-          position: {
-            x: regionX + REGION_PAD + kid.position.x,
-            y: childTop + kid.position.y,
-          },
+        for (const node of descendants) {
+          if (node.position.x > anchor.position.x) {
+            node.position = { ...node.position, x: node.position.x + footprint };
+          }
+        }
+        for (const region of regions) {
+          if (region.x > anchor.position.x) {
+            region.x += footprint;
+          }
+        }
+        // 하위 레이아웃을 영역 안쪽으로 평행이동(좌: 안쪽 여백, 상: A 세로 중앙)
+        const offsetX = regionX + REGION_PAD;
+        for (const node of sub.nodes) {
+          descendants.push({
+            ...node,
+            position: { x: node.position.x + offsetX, y: node.position.y + childTop },
+          });
+        }
+        for (const region of sub.regions) {
+          regions.push({ ...region, x: region.x + offsetX, y: region.y + childTop });
+        }
+        childEdges.push(...sub.childEdges, ...kidEdges);
+        regions.push({
+          id: target.id,
+          label: target.data.label,
+          depth,
+          x: regionX,
+          y: 0,
+          width: regionW,
+          height: 0,
         });
       }
-      childEdges.push(...kidEdges);
-      regions.push({
-        id: root.id,
-        label: root.data.label,
-        depth: 1,
-        x: regionX,
-        y: 0,
-        width: regionW,
-        height: 0,
-      });
-    }
 
-    // 영역 배경은 캔버스를 상하로 가득 채우는 세로 레인 — 전체 콘텐츠 Y 범위 + 여백
-    if (regions.length > 0) {
+      // 콘텐츠 bbox — Y는 노드만, X는 노드+영역(영역이 더 넓을 수 있음)
+      const all = [...placed.values(), ...descendants];
+      let minX = Infinity;
       let minY = Infinity;
+      let maxX = -Infinity;
       let maxY = -Infinity;
-      for (const node of placed.values()) {
+      for (const node of all) {
         const size = nodeSizeOf(node.data.nodeType);
+        minX = Math.min(minX, node.position.x);
         minY = Math.min(minY, node.position.y);
+        maxX = Math.max(maxX, node.position.x + size.w);
         maxY = Math.max(maxY, node.position.y + size.h);
       }
-      for (const child of childNodes) {
-        const size = nodeSizeOf(child.data.nodeType);
-        minY = Math.min(minY, child.position.y);
-        maxY = Math.max(maxY, child.position.y + size.h);
-      }
       for (const region of regions) {
-        region.y = minY - REGION_MARGIN;
-        region.height = maxY - minY + REGION_MARGIN * 2;
+        minX = Math.min(minX, region.x);
+        maxX = Math.max(maxX, region.x + region.width);
       }
+      const width = all.length > 0 ? maxX - minX : 0;
+      const height = all.length > 0 ? maxY - minY : 0;
+      // 중첩(depth>1)은 원점 정규화 — 부모가 (offsetX, childTop)으로 평행이동하도록
+      if (depth > 1 && all.length > 0) {
+        for (const node of all) {
+          node.position = { x: node.position.x - minX, y: node.position.y - minY };
+        }
+        for (const region of regions) {
+          region.x -= minX;
+          region.y -= minY;
+        }
+      }
+      return { nodes: all, regions, childEdges, width, height };
+    };
+
+    const root = buildScope(nodes, 1);
+    if (root.regions.length === 0) {
+      return null;
+    }
+    const allNodes = root.nodes;
+    const childNodes = allNodes.filter((node) => !rootIds.has(node.id));
+    const { regions, childEdges } = root;
+
+    // 영역 배경은 캔버스를 상하로 가득 채우는 세로 레인 — 전체 콘텐츠 Y 범위 + 여백
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const node of allNodes) {
+      const size = nodeSizeOf(node.data.nodeType);
+      minY = Math.min(minY, node.position.y);
+      maxY = Math.max(maxY, node.position.y + size.h);
+    }
+    for (const region of regions) {
+      region.y = minY - REGION_MARGIN;
+      region.height = maxY - minY + REGION_MARGIN * 2;
     }
 
-    // 게이트웨이(A→진입, 진출→후속) + A→B 숨김
+    // 게이트웨이(A→진입, 진출→후속, 깊이 무관) + A→B 숨김(깊이 무관)
     const combinedEdges = [...edges, ...childEdges];
     const gateways = buildGatewayEdges(expandedInline, childNodes, combinedEdges).map((edge) => ({
       ...EDGE_DEFAULTS,
@@ -2692,15 +2724,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       style: { opacity: INLINE_GATEWAY_OPACITY, strokeDasharray: "5 4" },
     }));
     const hiddenIds = new Set(
-      edges.filter((edge) => expandedInline.has(edge.source)).map((edge) => edge.id),
+      combinedEdges.filter((edge) => expandedInline.has(edge.source)).map((edge) => edge.id),
     );
     // 영역을 가로지르는 루트 엣지 → 반투명(양 끝이 영역 좌우로 갈리는 경우)
     const xOf = new Map<string, number>();
-    for (const node of placed.values()) {
+    for (const node of allNodes) {
       xOf.set(node.id, node.position.x);
-    }
-    for (const child of childNodes) {
-      xOf.set(child.id, child.position.x);
     }
     const crossingIds = new Set<string>();
     for (const edge of edges) {
@@ -2719,14 +2748,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     }
 
-    return {
-      nodes: [...placed.values(), ...childNodes],
-      childEdges,
-      gateways,
-      regions,
-      hiddenIds,
-      crossingIds,
-    };
+    return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds };
   }, [expandedInline, fullGraph, nodes, edges]);
 
   // 펼침 변경 시 합성 레이아웃을 화면에 맞춤 — 자식이 화면 밖에 생겨도 보이도록(렌더 반영 후 한 틱 뒤)
@@ -3680,7 +3702,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 height: box.height,
                                 zIndex: -1,
                                 pointerEvents: "none",
-                                background: "var(--color-surface)",
+                                background: `color-mix(in srgb, var(--color-accent) ${(box.depth - 1) * 6}%, var(--color-surface))`,
                                 backgroundImage:
                                   "radial-gradient(var(--color-canvas-dot) 1px, transparent 1px)",
                                 backgroundSize: "16px 16px",
