@@ -2104,6 +2104,29 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, recordChange, selectedEdgeId, setEdges, scheduleAutoSave],
   );
 
+  const setEdgeSide = useCallback(
+    (edgeId: string, end: "source" | "target", side: HandleSide) => {
+      if (readOnly) {
+        return;
+      }
+      pushHistory();
+      setEdges((current) =>
+        current.map((edge) =>
+          edge.id === edgeId
+            ? {
+                ...edge,
+                ...(end === "source"
+                  ? { sourceHandle: sourceHandleId(side) }
+                  : { targetHandle: targetHandleId(side) }),
+              }
+            : edge,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setEdges, scheduleAutoSave],
+  );
+
   // 검색 결과 선택 — 같은 스코프면 바로 포커스, 아니면 스코프 이동 후 포커스
   const handleSearchSelect = useCallback(
     (result: SearchResult) => {
@@ -2300,6 +2323,27 @@ function MapEditor({ mapId }: { mapId: number }) {
             : [];
       return [...groupActions, alignItem(ids, targetCount)];
     }
+    if (menu.kind === "edge") {
+      const edge = edges.find((e) => e.id === menu.targetId);
+      if (!edge || readOnly) {
+        return [];
+      }
+      return [
+        {
+          pad: true,
+          label: t("edge.sourceSide"),
+          current: sideFromHandleId(edge.sourceHandle, "right"),
+          onPick: (side: HandleSide) => setEdgeSide(edge.id, "source", side),
+        },
+        { divider: true },
+        {
+          pad: true,
+          label: t("edge.targetSide"),
+          current: sideFromHandleId(edge.targetHandle, "left"),
+          onPick: (side: HandleSide) => setEdgeSide(edge.id, "target", side),
+        },
+      ];
+    }
     if (menu.kind === "node") {
       const deleteItems: ContextMenuItem[] = readOnly
         ? []
@@ -2387,6 +2431,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     menu,
     readOnly,
     nodes,
+    edges,
+    setEdgeSide,
     handleAddNode,
     handleRecolor,
     applyNodesTransform,
