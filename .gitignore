@@ -13,6 +13,8 @@ Thumbs.db
 
 # Local sqlite DB (로컬 네이티브 개발용 — 서버는 postgres)
 *.db
+# 예외: 개발단계 확인용 더미 DB는 원격 작업 위해 추적(실데이터 없음)
+!backend/dev.db
 
 # Python
 .venv/
