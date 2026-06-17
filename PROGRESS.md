@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-17
+- 엣지 핸들 변 커스텀 — 엣지마다 시작/끝이 붙는 노드 변(상/하/좌/우)을 엣지 우클릭 십자 패드 2개(Start/End)로 변경(클릭해도 메뉴 유지). `source_side`/`target_side` 엣지 컬럼 영속(기본 우/좌, Pydantic `Literal` 검증), 노드는 4변 source·target 핸들(8개) 렌더(평소 은은·hover 강조), 엣지는 `sourceHandle`/`targetHandle`(`s-{side}`/`t-{side}`)로 연결. diff는 엣지를 source→target 계보로만 비교해 변은 비교 제외(diff.ts 무변경). 스키마는 1회 drop+recreate 필요. 백엔드 pytest(라운드트립·기본값·invalid 422) 통과, 프론트 tsc/lint/build green. (스펙: docs/superpowers/specs/2026-06-17-edge-handle-side-customization-design.md, 계획: docs/superpowers/plans/2026-06-17-edge-handle-side-customization.md)
 - 판단(decision) 분기 엣지 Yes/No 색상 구분 — 은은한 파스텔 블루(Yes `#6f93cc`)/레드(No `#cf7e84`) 토큰 신설, `styledEdges`에서 `branchKindOf(label)` 기준으로 stroke·화살표·라벨 알약(14% 틴트 배경+테두리) 색 적용. 기타 분기는 기본 톤 유지, 라벨 파생이라 영속 불필요. 선택 노드 강조(in=teal/out=orange)는 그대로 우선.
 - AI 채팅 패널 세로 스크롤 수정 — 메시지 영역 `flex-1`에 `min-h-0` 누락으로 컨테이너 밖으로 늘어나 스크롤 불가였음. `min-h-0` 추가 + 새 메시지 시 자동 하단 스크롤. 스크롤바는 `scrollbar-hidden` 유틸(globals.css)로 기본 숨김(동작은 유지).
 - 모달 외부클릭 닫기 버그 수정 — `onClick`(=mouseup)으로 닫아, 모달 내부 드래그를 바깥에서 떼면 백드롭 click이 발생해 잘못 닫혔음. 공용 `ModalBackdrop`(mousedown·click 모두 백드롭 자신일 때만 닫음)으로 5개 모달(dev-login·node-summary·group-bulk·approver-manager·edge-branch) 통일. edge-branch 기존 150ms `armed` 해킹은 이 가드로 대체·제거.
