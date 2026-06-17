@@ -104,6 +104,8 @@ class EdgeIn(BaseModel):
     source_node_id: str
     target_node_id: str
     label: str = ""
+    source_side: str = "right"
+    target_side: str = "left"
 
 
 class NodeOut(NodeIn):

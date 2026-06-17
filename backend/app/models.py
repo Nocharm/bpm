@@ -120,6 +120,9 @@ class Edge(Base):
     source_node_id: Mapped[str] = mapped_column(String(50))
     target_node_id: Mapped[str] = mapped_column(String(50))
     label: Mapped[str] = mapped_column(String(200), default="")
+    # 엣지 핸들이 붙는 노드 변 — 시각 전용, diff 비교 제외(2026-06-17)
+    source_side: Mapped[str] = mapped_column(String(10), default="right")
+    target_side: Mapped[str] = mapped_column(String(10), default="left")
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
 

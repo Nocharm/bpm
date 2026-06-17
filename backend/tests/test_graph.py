@@ -269,6 +269,51 @@ def test_node_referencing_unknown_group_rejected(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_edge_handle_side_roundtrips(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "hside-n1", "title": "A", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "hside-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+        ],
+        "edges": [
+            {
+                "id": "hside-e1",
+                "source_node_id": "hside-n1",
+                "target_node_id": "hside-n2",
+                "label": "",
+                "source_side": "top",
+                "target_side": "bottom",
+            }
+        ],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    edge = saved["edges"][0]
+    assert edge["source_side"] == "top"
+    assert edge["target_side"] == "bottom"
+
+
+def test_edge_handle_side_defaults(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "hdef-n1", "title": "A", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "hdef-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+        ],
+        "edges": [{"id": "hdef-e1", "source_node_id": "hdef-n1", "target_node_id": "hdef-n2"}],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    edge = saved["edges"][0]
+    assert edge["source_side"] == "right"
+    assert edge["target_side"] == "left"
+
+
 def test_removed_group_is_cleaned(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
