@@ -3,6 +3,8 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-18
+- 확인용 더미 1개 + DB 초기화 — `backend/scripts/seed_inline_demo.py`(`--reset`: 기존 맵 전체 삭제 후 **Start/End 포함 3단계 중첩 하위** 1개 생성 — 심사 › 승인 › 1·2차승인). 개발단계·실데이터 없음이라 `backend/dev.db`를 추적(`*.db`에 `!backend/dev.db` 예외)해 원격 작업용으로 커밋. ruff 통과.
+- 인라인 펼침 **모두 펼치기/접기 + 펼침 캡(Phase 4)** — 툴바에 하위 모두 펼치기(`UnfoldHorizontal`)/접기(`FoldHorizontal`) 버튼. 개별·모두 펼칠 때 노드수>300 또는 깊이>5면 확인 모달(`그래도 펼치기`/취소, `EXPANSION_LIMITS`·`checkExpansionLimits`). i18n 6키 추가. tsc/eslint/build green.
 - 인라인 펼침 영역 렌더 경량화(사용자 제안) — 흰 캔버스+dot-grid div → **세로선 2개 + 반투명 accent 5% 틴트**(깊을수록 틴트가 겹쳐 자연히 진해짐, 현재 캔버스 점 배경 그대로 비침). 깊이는 영역 좌상단 `›`×depth + 이름(클릭=접기)로 표시. `ChevronDown` import 제거. tsc/eslint/build green.
 - 인라인 펼침 **중첩(재귀) 지원** — 레인 안 자식 노드(`hasChildren`)의 토글로 다시 펼치면 그 안에 더 깊은 캔버스 레인이 삽입. `inlineComposition`을 `buildScope` 재귀로 재작성(루트=수동 배치, 자식 스코프=dagre 배치 후 재귀, depth>1은 원점 정규화 후 부모가 영역 안쪽으로 평행이동·세로 중앙). 깊이별 배경 틴트(accent (depth-1)×6%), `A→B`/게이트웨이/가로지르는 엣지/전체높이 레인/캡 계산은 깊이 무관 처리. tsc/eslint/build green.
 - 인라인 펼침 영역 시각 변경(사용자 피드백) — 그룹식 깊이 틴트 박스 → **삽입된 새 캔버스 느낌의 세로 레인**. 영역 배경은 콘텐츠 **상하 전체 높이**(전 노드 Y 범위 + 여백)로 뻗고, 흰 `surface` + dot-grid + 좌우 `divider`로 "새 캔버스가 끼워진" 모양. 자식은 A 세로 중앙에 배치. tsc/eslint/build green.

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, FoldHorizontal, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2, UnfoldHorizontal } from "lucide-react";
 import {
   addEdge,
   Background,
@@ -34,6 +34,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { GroupBox } from "@/components/group-box";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -113,7 +114,8 @@ import { exportCanvasPng } from "@/lib/export";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
-import { buildGatewayEdges } from "@/lib/inline-expand";
+import { EXPANSION_LIMITS } from "@/lib/expansion-config";
+import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -311,6 +313,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
   // 캔버스 인라인 펼친 노드 id 집합 — 아웃라인용 expandedOutline과 분리. 스코프/버전 전환 시 초기화.
   const [expandedInline, setExpandedInline] = useState<Set<string>>(new Set());
+  // 펼침 한도 초과 시 확인 모달 — next=적용 대기 집합
+  const [capPrompt, setCapPrompt] = useState<{
+    next: Set<string>;
+    nodeCount: number;
+    depth: number;
+  } | null>(null);
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -2552,18 +2560,57 @@ function MapEditor({ mapId }: { mapId: number }) {
     return counts;
   }, [comments]);
 
-  // 인라인 펼치기/접기 토글 — 순수 뷰(raw state·저장 무영향). 펼침/접힘만 토글, 캡은 Phase 4에서.
-  const toggleInlineExpand = useCallback((nodeId: string) => {
-    setExpandedInline((current) => {
-      const next = new Set(current);
+  // 인라인 펼치기/접기 토글 — 순수 뷰(raw state·저장 무영향). 펼칠 때 한도 초과면 확인 모달.
+  const toggleInlineExpand = useCallback(
+    (nodeId: string) => {
+      const next = new Set(expandedInline);
       if (next.has(nodeId)) {
         next.delete(nodeId);
-      } else {
-        next.add(nodeId);
+        setExpandedInline(next);
+        return;
       }
-      return next;
-    });
-  }, []);
+      next.add(nodeId);
+      if (fullGraph) {
+        const limits = checkExpansionLimits(fullGraph, next);
+        if (limits.exceeds) {
+          setCapPrompt({ next, nodeCount: limits.nodeCount, depth: limits.depth });
+          return;
+        }
+      }
+      setExpandedInline(next);
+    },
+    [expandedInline, fullGraph],
+  );
+
+  // 모두 펼치기 — fullGraph에서 하위를 가진 모든 노드. 모두 접기 — 비움.
+  const expandAll = useCallback(() => {
+    if (!fullGraph) {
+      return;
+    }
+    const next = new Set(
+      fullGraph.nodes
+        .map((node) => node.parent_node_id)
+        .filter((id): id is string => id != null),
+    );
+    if (next.size === 0) {
+      return;
+    }
+    const limits = checkExpansionLimits(fullGraph, next);
+    if (limits.exceeds) {
+      setCapPrompt({ next, nodeCount: limits.nodeCount, depth: limits.depth });
+      return;
+    }
+    setExpandedInline(next);
+  }, [fullGraph]);
+
+  const collapseAll = useCallback(() => setExpandedInline(new Set()), []);
+
+  const confirmCapPrompt = useCallback(() => {
+    if (capPrompt) {
+      setExpandedInline(capPrompt.next);
+    }
+    setCapPrompt(null);
+  }, [capPrompt]);
 
   // 인라인 펼침 합성(영역 컨테이너 모델, 중첩 재귀) — 펼친 노드 오른쪽에 하위 "캔버스 레인"을 삽입하고
   // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
@@ -3489,6 +3536,24 @@ function MapEditor({ mapId }: { mapId: number }) {
             <Redo2 size={16} strokeWidth={1.5} />
           </button>
 
+          <button
+            className={toolButton}
+            onClick={expandAll}
+            title={t("editor.expandAll")}
+            aria-label={t("editor.expandAll")}
+          >
+            <UnfoldHorizontal size={16} strokeWidth={1.5} />
+          </button>
+          <button
+            className={toolButton}
+            onClick={collapseAll}
+            disabled={expandedInline.size === 0}
+            title={t("editor.collapseAll")}
+            aria-label={t("editor.collapseAll")}
+          >
+            <FoldHorizontal size={16} strokeWidth={1.5} />
+          </button>
+
           <button className={toolButton} onClick={() => void handleExportPng()}>
             <Download size={16} strokeWidth={1.5} />PNG
           </button>
@@ -4279,6 +4344,42 @@ function MapEditor({ mapId }: { mapId: number }) {
       <ToastStack toasts={toasts} onDismiss={removeToast} />
       {branchPrompt && (
         <EdgeBranchModal onPick={handlePickBranch} onClose={() => setBranchPrompt(null)} />
+      )}
+      {capPrompt && (
+        <ModalBackdrop
+          onClose={() => setCapPrompt(null)}
+          className="fixed inset-0 z-[1100] flex items-center justify-center px-4"
+          style={{ background: "color-mix(in srgb, var(--color-ink) 12%, transparent)" }}
+        >
+          <div
+            className="w-full max-w-sm rounded-md border border-hairline bg-surface p-4"
+            style={{ boxShadow: "var(--shadow-lg)" }}
+          >
+            <h2 className="text-body-strong text-ink">{t("inline.capTitle")}</h2>
+            <p className="mt-2 text-caption text-ink-secondary">
+              {t("inline.capBody", {
+                nodes: capPrompt.nodeCount,
+                depth: capPrompt.depth,
+                maxNodes: EXPANSION_LIMITS.maxNodes,
+                maxDepth: EXPANSION_LIMITS.maxDepth,
+              })}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption hover:bg-surface-alt"
+                onClick={() => setCapPrompt(null)}
+              >
+                {t("inline.capCancel")}
+              </button>
+              <button
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-white hover:opacity-90"
+                onClick={confirmCapPrompt}
+              >
+                {t("inline.capProceed")}
+              </button>
+            </div>
+          </div>
+        </ModalBackdrop>
       )}
     </NodeActionsContext.Provider>
   );
