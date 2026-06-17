@@ -1,7 +1,7 @@
 // 캔버스 공용 타입 + 정렬/레이아웃 헬퍼 (순수 함수).
 
 import dagre from "@dagrejs/dagre";
-import { MarkerType, type Edge, type Node } from "@xyflow/react";
+import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -332,6 +332,42 @@ export function branchKindOf(label: unknown): BranchKind {
     return "no";
   }
   return "other";
+}
+
+// 엣지 핸들이 붙는 노드 변 — 엣지의 source/target 각각에 적용(2026-06-17)
+export type HandleSide = "left" | "right" | "top" | "bottom";
+
+const SIDE_TO_POSITION: Record<HandleSide, Position> = {
+  left: Position.Left,
+  right: Position.Right,
+  top: Position.Top,
+  bottom: Position.Bottom,
+};
+
+export function toPosition(side: HandleSide): Position {
+  return SIDE_TO_POSITION[side];
+}
+
+export function sourceHandleId(side: HandleSide): string {
+  return `s-${side}`;
+}
+
+export function targetHandleId(side: HandleSide): string {
+  return `t-${side}`;
+}
+
+const HANDLE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
+
+// "s-top"/"t-left" → "top"/"left". 미일치 시 fallback(구 데이터·null 대비).
+export function sideFromHandleId(
+  id: string | null | undefined,
+  fallback: HandleSide,
+): HandleSide {
+  if (!id) {
+    return fallback;
+  }
+  const side = id.replace(/^[st]-/, "");
+  return (HANDLE_SIDES as string[]).includes(side) ? (side as HandleSide) : fallback;
 }
 
 // 캔버스 내 이름 중복 방지 — 이미 쓰이는 이름이면 " (2)", " (3)"... 접미사를 붙여 고유화.
