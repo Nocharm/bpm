@@ -57,6 +57,9 @@ import {
   pickDropZone,
   rectWithExclusions,
   branchKindOf,
+  sideFromHandleId,
+  sourceHandleId,
+  targetHandleId,
   BRANCH_YES_LABEL,
   BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
@@ -66,6 +69,7 @@ import {
   type AppNode,
   type BranchKind,
   type DropZone,
+  type HandleSide,
   type NodeData,
   type OutlineEdge,
   type OutlineNode,
@@ -212,6 +216,8 @@ function toAppEdges(graph: Graph): Edge[] {
     source: edge.source_node_id,
     target: edge.target_node_id,
     label: edge.label || undefined,
+    sourceHandle: sourceHandleId((edge.source_side as HandleSide) || "right"),
+    targetHandle: targetHandleId((edge.target_side as HandleSide) || "left"),
   }));
 }
 
@@ -252,6 +258,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
         source_node_id: edge.source,
         target_node_id: edge.target,
         label: typeof edge.label === "string" ? edge.label : "",
+        source_side: sideFromHandleId(edge.sourceHandle, "right"),
+        target_side: sideFromHandleId(edge.targetHandle, "left"),
       })),
     groups: keptGroups.map((group) => ({
       id: group.id,
@@ -665,6 +673,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             source_node_id: source,
             target_node_id: target,
             label: edge.label,
+            source_side: "right",
+            target_side: "left",
           };
         })
         .filter((edge): edge is NonNullable<typeof edge> => edge !== null);

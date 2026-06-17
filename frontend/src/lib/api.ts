@@ -57,6 +57,8 @@ export interface GraphEdge {
   source_node_id: string;
   target_node_id: string;
   label: string;
+  source_side: string;
+  target_side: string;
 }
 
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)
