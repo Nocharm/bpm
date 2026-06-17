@@ -170,6 +170,21 @@ button:not(:disabled):active {
     drop-shadow(0 0 5px color-mix(in srgb, var(--color-edge-selected) 35%, transparent));
 }
 
+/* 핸들 — 노드당 8개라 평소엔 작게·은은하게, 노드 hover·연결 중에만 또렷하게 */
+.react-flow__handle {
+  width: 7px;
+  height: 7px;
+  background: var(--color-border-strong);
+  border: 1px solid var(--color-surface);
+  opacity: 0.4;
+  transition: opacity 120ms var(--ease-smooth);
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__handle:hover,
+.react-flow__handle.connectionindicator {
+  opacity: 1;
+}
+
 /* 드롭 영역 — 기준 셀 원형 링 + 원주 위 타일 등장 */
 @keyframes zone-ring-in {
   from {

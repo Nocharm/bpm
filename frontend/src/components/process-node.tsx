@@ -1,7 +1,8 @@
 "use client";
 
-import { Handle, type NodeProps, Position } from "@xyflow/react";
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
+
+import { Handle, type NodeProps } from "@xyflow/react";
 import {
   Building2,
   Clock,
@@ -15,7 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import type { AppNode, ProcessNodeType } from "@/lib/canvas";
+import { type AppNode, type HandleSide, type ProcessNodeType, toPosition } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
@@ -189,6 +190,22 @@ function DrillButton({ nodeId }: { nodeId: string }) {
   );
 }
 
+const NODE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
+
+// 4변 각각에 source·target 핸들(총 8개) — 엣지가 어느 변에든 붙도록. 어느 핸들에 붙을지는 엣지가 id로 지정.
+function NodeHandles() {
+  return (
+    <>
+      {NODE_SIDES.map((side) => (
+        <Fragment key={side}>
+          <Handle id={`t-${side}`} type="target" position={toPosition(side)} />
+          <Handle id={`s-${side}`} type="source" position={toPosition(side)} />
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
@@ -207,8 +224,7 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         className="group relative flex h-24 w-24 items-center justify-center"
         title={data.diffNote}
       >
-        <Handle type="target" position={Position.Left} />
-        {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
+          {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
           className={`absolute inset-3 rotate-45 rounded-sm transition-all duration-150 group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 group-hover:scale-105 group-hover:opacity-95 group-hover:shadow-md ${ring}`}
           style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
@@ -224,9 +240,9 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-        <Handle type="source" position={Position.Right} />
         {/* decision 노드는 하위 프로세스 생성 불가 — 기존 하위가 있을 때만 진입 버튼 */}
         {data.hasChildren && <DrillButton nodeId={id} />}
+        <NodeHandles />
       </div>
     );
   }
@@ -242,7 +258,6 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
       style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
       title={data.diffNote}
     >
-      <Handle type="target" position={Position.Left} />
       <div className="font-medium text-ink">
         <NodeTitle id={id} label={data.label} />
       </div>
@@ -255,8 +270,8 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-      <Handle type="source" position={Position.Right} />
       {(data.nodeType === "process" || data.hasChildren) && <DrillButton nodeId={id} />}
+      <NodeHandles />
     </div>
   );
 }
