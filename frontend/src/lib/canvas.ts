@@ -18,6 +18,8 @@ export type NodeData = {
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   groupIds: string[];
   hasChildren: boolean;
+  // 이 노드가 속한 스코프(parent_node_id). 인라인 펼침·scope-split 저장 식별용. null=루트, undefined=미지정(현재 스코프 취급)
+  scopeId?: string | null;
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";
   diffNote?: string;

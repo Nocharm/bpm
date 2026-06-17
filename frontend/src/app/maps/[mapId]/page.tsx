@@ -181,7 +181,7 @@ type MenuState = {
   targetId: string | null;
 };
 
-function toAppNodes(graph: Graph): AppNode[] {
+function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
   return graph.nodes.map((node) => ({
     id: node.id,
     type: "process",
@@ -197,6 +197,7 @@ function toAppNodes(graph: Graph): AppNode[] {
       duration: node.duration,
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
+      scopeId,
     },
   }));
 }
@@ -815,7 +816,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (!active) {
           return;
         }
-        setNodes(toAppNodes(graph));
+        // 현재 스코프 노드는 모두 currentParentId 스코프 소속 — scope-split 저장 식별용 태그
+        setNodes(toAppNodes(graph, currentParentId));
         setEdges(toAppEdges(graph));
         setGroups(graph.groups);
         // 전체 트리는 버전당 1회만 — 스코프 전환 시 기존 데이터 재사용(깜빡임 방지).
