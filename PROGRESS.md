@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-18
+- 하위 프로세스 생성(spec step 3 — 생성) — process 노드(하위 없음) 우클릭 **"하위 프로세스 생성"** → Start/작업/End + 직렬 엣지를 자식 스코프에 자동 생성(`saveGraph(versionId, graph, nodeId)`, 불변식 충족), 부모 `hasChildren` 반영 + `refreshFullGraph` + 인라인 자동 펼침 + 토스트. 하위 보유 노드는 기존 "열기"(창) 유지. i18n 6키(`ctx.createSubprocess`·`subprocess.*`). 페이로드는 기존 `buildGraph` 출력과 동형이라 스키마 일치. (후속: 후속없음 모달·삭제 불변식·레인 안 편집) tsc/eslint/build green.
 - 확인용 더미 1개 + DB 초기화 — `backend/scripts/seed_inline_demo.py`(`--reset`: 기존 맵 전체 삭제 후 **Start/End 포함 3단계 중첩 하위** 1개 생성 — 심사 › 승인 › 1·2차승인). 개발단계·실데이터 없음이라 `backend/dev.db`를 추적(`*.db`에 `!backend/dev.db` 예외)해 원격 작업용으로 커밋. ruff 통과.
 - 인라인 펼침 **모두 펼치기/접기 + 펼침 캡(Phase 4)** — 툴바에 하위 모두 펼치기(`UnfoldHorizontal`)/접기(`FoldHorizontal`) 버튼. 개별·모두 펼칠 때 노드수>300 또는 깊이>5면 확인 모달(`그래도 펼치기`/취소, `EXPANSION_LIMITS`·`checkExpansionLimits`). i18n 6키 추가. tsc/eslint/build green.
 - 인라인 펼침 영역 렌더 경량화(사용자 제안) — 흰 캔버스+dot-grid div → **세로선 2개 + 반투명 accent 5% 틴트**(깊을수록 틴트가 겹쳐 자연히 진해짐, 현재 캔버스 점 배경 그대로 비침). 깊이는 영역 좌상단 `›`×depth + 이름(클릭=접기)로 표시. `ChevronDown` import 제거. tsc/eslint/build green.

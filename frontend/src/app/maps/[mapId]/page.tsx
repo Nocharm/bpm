@@ -106,6 +106,7 @@ import {
   type Graph,
   type GraphEdge,
   type GraphGroup,
+  type GraphNode,
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
@@ -500,6 +501,86 @@ function MapEditor({ mapId }: { mapId: number }) {
       throw err;
     }
   }, [versionId, currentParentId, readOnly, refreshFullGraph]);
+
+  // 하위 프로세스 생성 — Start/작업/End를 자식 스코프에 자동 생성(불변식 충족)하고 인라인 펼침.
+  const createSubprocess = useCallback(
+    async (nodeId: string) => {
+      if (versionId === null) {
+        return;
+      }
+      const startId = genId();
+      const taskId = genId();
+      const endId = genId();
+      const mkNode = (
+        id: string,
+        title: string,
+        nodeType: string,
+        x: number,
+        order: number,
+      ): GraphNode => ({
+        id,
+        title,
+        description: "",
+        node_type: nodeType,
+        color: "",
+        assignee: "",
+        department: "",
+        system: "",
+        duration: "",
+        pos_x: x,
+        pos_y: 0,
+        sort_order: order,
+        group_ids: [],
+      });
+      const childGraph: Graph = {
+        nodes: [
+          mkNode(startId, t("subprocess.startTitle"), "start", 0, 0),
+          mkNode(taskId, t("subprocess.taskTitle"), "process", 240, 1),
+          mkNode(endId, t("subprocess.endTitle"), "end", 480, 2),
+        ],
+        edges: [
+          {
+            id: genId(),
+            source_node_id: startId,
+            target_node_id: taskId,
+            label: "",
+            source_side: "right",
+            target_side: "left",
+          },
+          {
+            id: genId(),
+            source_node_id: taskId,
+            target_node_id: endId,
+            label: "",
+            source_side: "right",
+            target_side: "left",
+          },
+        ],
+        groups: [],
+      };
+      try {
+        await saveGraph(versionId, childGraph, nodeId);
+        // 부모 노드는 이제 하위 보유 — state 반영(표시용, buildGraph 직렬화엔 무영향)
+        setNodes((current) =>
+          current.map((node) =>
+            node.id === nodeId
+              ? { ...node, data: { ...node.data, hasChildren: true } }
+              : node,
+          ),
+        );
+        refreshFullGraph();
+        setExpandedInline((current) => {
+          const next = new Set(current);
+          next.add(nodeId);
+          return next;
+        });
+        showToast(t("subprocess.created"));
+      } catch {
+        showToast(t("subprocess.createError"));
+      }
+    },
+    [versionId, t, refreshFullGraph, showToast, setNodes],
+  );
 
   const scheduleAutoSave = useCallback(() => {
     // AI 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
@@ -2447,11 +2528,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             },
             { divider: true },
           ];
-      // 하위 프로세스는 process 노드(또는 이미 하위를 가진 노드)만 — decision/start/end 제외
+      // 하위 있으면 "열기"(창 — 기존 편집), process+하위없으면 "생성"(Start/작업/End 자동 + 인라인 펼침)
       const targetNode = nodes.find((item) => item.id === menu.targetId);
-      const canHaveChild =
-        targetNode?.data.nodeType === "process" || (targetNode?.data.hasChildren ?? false);
-      const openChildItems: ContextMenuItem[] = canHaveChild
+      const hasKids = targetNode?.data.hasChildren ?? false;
+      const isProcessNode = targetNode?.data.nodeType === "process";
+      const openChildItems: ContextMenuItem[] = hasKids
         ? [
             {
               label: t("ctx.openChild"),
@@ -2464,7 +2545,19 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ]
-        : [];
+        : isProcessNode
+          ? [
+              {
+                label: t("ctx.createSubprocess"),
+                onSelect: () => {
+                  const node = nodesRef.current.find((item) => item.id === menu.targetId);
+                  if (node) {
+                    void createSubprocess(node.id);
+                  }
+                },
+              },
+            ]
+          : [];
       return [
         // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
         {
@@ -2513,6 +2606,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleRecolor,
     applyNodesTransform,
     handleDrillIn,
+    createSubprocess,
     handleExportPng,
     createGroupFromSelection,
     disbandGroup,
