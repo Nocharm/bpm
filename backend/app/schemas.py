@@ -97,6 +97,9 @@ class NodeIn(BaseModel):
         return [] if value is None else value
 
 
+HandleSide = Literal["top", "bottom", "left", "right"]
+
+
 class EdgeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,8 +107,8 @@ class EdgeIn(BaseModel):
     source_node_id: str
     target_node_id: str
     label: str = ""
-    source_side: str = "right"
-    target_side: str = "left"
+    source_side: HandleSide = "right"
+    target_side: HandleSide = "left"
 
 
 class NodeOut(NodeIn):

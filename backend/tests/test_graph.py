@@ -314,6 +314,26 @@ def test_edge_handle_side_defaults(client: TestClient) -> None:
     assert edge["target_side"] == "left"
 
 
+def test_edge_handle_side_invalid_rejected(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "hbad-n1", "title": "A", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "hbad-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+        ],
+        "edges": [
+            {
+                "id": "hbad-e1",
+                "source_node_id": "hbad-n1",
+                "target_node_id": "hbad-n2",
+                "source_side": "banana",
+            }
+        ],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 422
+
+
 def test_removed_group_is_cleaned(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
