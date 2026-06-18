@@ -3708,21 +3708,27 @@ function MapEditor({ mapId }: { mapId: number }) {
         void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
         return;
       }
-      // 다른 스코프 — 루트부터 해당 노드 부모까지 스코프 체인 구성 후 이동, 로드 후 포커싱
+      // 다른 스코프(하위) — 드릴인 창 대신 조상 체인을 인라인 펼쳐 해당 노드를 레인에 노출하고 포커싱.
       const chainIds: string[] = [];
       let cursor = scopeParentId;
       while (cursor !== null) {
         chainIds.unshift(cursor);
         cursor = flatById.get(cursor)?.parent_node_id ?? null;
       }
-      const chain: Scope[] = [{ parentId: null, title: mapName }];
-      for (const ancestorId of chainIds) {
-        chain.push({ parentId: ancestorId, title: flatById.get(ancestorId)?.title ?? "" });
-      }
-      focusNodeIdRef.current = id;
-      void navigateTo(chain);
+      setExpandedInline((prev) => {
+        const next = new Set(prev);
+        for (const ancestorId of chainIds) {
+          next.add(ancestorId); // 루트~부모까지 모두 펼쳐 중첩 레인으로 대상 노드 표시
+        }
+        return next;
+      });
+      setSelectedId(id);
+      // 합성·재배치가 반영된 다음 틱에 대상 노드로 포커싱(펼침 fitView보다 나중에 실행되도록 지연)
+      window.setTimeout(() => {
+        void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
+      }, 160);
     },
-    [fullGraph, currentParentId, mapName, reactFlow, navigateTo, setNodes],
+    [fullGraph, currentParentId, reactFlow, setNodes],
   );
 
   // 아웃라인 Tab 네비게이션 — 하위 프로세스가 있으면 펼쳐서 첫 자식으로 진입, 아니면 다음 행(병렬·다음 형제)
