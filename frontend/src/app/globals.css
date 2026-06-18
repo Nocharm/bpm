@@ -132,6 +132,7 @@ button:not(:disabled):active {
   }
 }
 
+
 /* 창 열림 — 마우스 지점(창 중앙)에서 확장되며 열리는 연출 */
 @keyframes window-open {
   from {

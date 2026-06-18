@@ -10,6 +10,7 @@ import {
   type Edge,
   MarkerType,
   type NodeTypes,
+  PanOnScrollMode,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -409,6 +410,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [deleteInvariantPrompt, setDeleteInvariantPrompt] = useState<string | null>(null);
   // 인라인 펼친 자식 노드의 낙관적 편집 오버레이(자식 id→바뀐 필드) — PUT 후 fullGraph가 반영, 스코프 전환 시 초기화.
   const [childEdits, setChildEdits] = useState<Map<string, Partial<NodeData>>>(new Map());
+  // 펼침/접힘 직후 잠깐 true — 노드 transform 전환(슬라이드 애니메이션) CSS 클래스 토글용
+  const [expandAnimating, setExpandAnimating] = useState(false);
+  // 사용자 펼침/접힘 — 전환(transition)은 "전환이 정의된 상태"가 먼저 칠해진 뒤 값이 바뀌어야 발동한다.
+  // 따라서 애니메이션 클래스를 먼저 켜고(렌더1) 다음 프레임에 위치(expandedInline)를 바꿔(렌더2) 슬라이드시킨다.
+  const commitExpanded = useCallback(
+    (next: Set<string> | ((current: Set<string>) => Set<string>)) => {
+      setExpandAnimating(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setExpandedInline(next));
+      });
+    },
+    [],
+  );
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -668,7 +682,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           ),
         );
         refreshFullGraph();
-        setExpandedInline((current) => {
+        commitExpanded((current) => {
           const next = new Set(current);
           next.add(nodeId);
           return next;
@@ -678,7 +692,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("subprocess.createError"));
       }
     },
-    [versionId, t, refreshFullGraph, showToast, setNodes],
+    [versionId, t, refreshFullGraph, showToast, setNodes, commitExpanded],
   );
 
   // 하위 생성 진입점 — 후속(나가는 엣지) 있으면 즉시 생성, 없으면 진행 방법 모달.
@@ -3017,7 +3031,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const next = new Set(expandedInline);
       if (next.has(nodeId)) {
         next.delete(nodeId);
-        setExpandedInline(next);
+        commitExpanded(next);
         return;
       }
       next.add(nodeId);
@@ -3028,9 +3042,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
       }
-      setExpandedInline(next);
+      commitExpanded(next);
     },
-    [expandedInline, fullGraph],
+    [expandedInline, fullGraph, commitExpanded],
   );
   // 컨텍스트 메뉴 등 위쪽 useMemo에서 호출하도록 ref로 노출(TDZ 회피)
   useEffect(() => {
@@ -3055,17 +3069,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       setCapPrompt({ next, nodeCount: limits.nodeCount, depth: limits.depth });
       return;
     }
-    setExpandedInline(next);
-  }, [fullGraph]);
+    commitExpanded(next);
+  }, [fullGraph, commitExpanded]);
 
-  const collapseAll = useCallback(() => setExpandedInline(new Set()), []);
+  const collapseAll = useCallback(() => commitExpanded(new Set()), [commitExpanded]);
 
   const confirmCapPrompt = useCallback(() => {
     if (capPrompt) {
-      setExpandedInline(capPrompt.next);
+      commitExpanded(capPrompt.next);
     }
     setCapPrompt(null);
-  }, [capPrompt]);
+  }, [capPrompt, commitExpanded]);
 
   // 인라인 펼침 합성(영역 컨테이너 모델, 중첩 재귀) — 펼친 노드 오른쪽에 하위 "캔버스 레인"을 삽입하고
   // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
@@ -3267,27 +3281,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds };
   }, [expandedInline, fullGraph, nodes, edges, childEdits]);
 
-  // 펼침 변경 시 펼친 서브프로세스(부모 + 그 인라인 자식)에 화면을 맞춤 — 전체 fit은 멀리 떨어진
-  // 노드까지 맞추느라 과도하게 축소돼 자식이 microscopic해지는 문제가 있어, 펼친 영역만 프레이밍한다.
+  // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
   useEffect(() => {
-    if (expandedInline.size === 0) {
+    if (!expandAnimating) {
       return;
     }
-    const timer = window.setTimeout(() => {
-      const rootIdSet = new Set(nodesRef.current.map((node) => node.id));
-      // getNodes() = 합성 노드(현재+자식). 펼친 앵커 + 자식(루트 아님)만 프레이밍.
-      const fitNodes = reactFlow
-        .getNodes()
-        .filter((node) => expandedInline.has(node.id) || !rootIdSet.has(node.id))
-        .map((node) => ({ id: node.id }));
-      void reactFlow.fitView(
-        fitNodes.length > 0
-          ? { nodes: fitNodes, padding: 0.3, duration: 400, maxZoom: 1.2 }
-          : { padding: 0.2, duration: 400 },
-      );
-    }, 80);
+    const timer = window.setTimeout(() => setExpandAnimating(false), 450);
     return () => window.clearTimeout(timer);
-  }, [expandedInline, reactFlow]);
+  }, [expandAnimating]);
 
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
@@ -3715,7 +3716,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         chainIds.unshift(cursor);
         cursor = flatById.get(cursor)?.parent_node_id ?? null;
       }
-      setExpandedInline((prev) => {
+      commitExpanded((prev) => {
         const next = new Set(prev);
         for (const ancestorId of chainIds) {
           next.add(ancestorId); // 루트~부모까지 모두 펼쳐 중첩 레인으로 대상 노드 표시
@@ -3723,12 +3724,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         return next;
       });
       setSelectedId(id);
-      // 합성·재배치가 반영된 다음 틱에 대상 노드로 포커싱(펼침 fitView보다 나중에 실행되도록 지연)
+      // 합성·재배치가 반영된 다음 틱에 대상 노드로 팬 — 줌은 현재 값 유지(자동 줌 변경 방지)
       window.setTimeout(() => {
-        void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
+        const zoom = reactFlow.getZoom();
+        void reactFlow.fitView({
+          nodes: [{ id }],
+          padding: 0.4,
+          minZoom: zoom,
+          maxZoom: zoom,
+          duration: 500,
+        });
       }, 160);
     },
-    [fullGraph, currentParentId, reactFlow, setNodes],
+    [fullGraph, currentParentId, reactFlow, setNodes, commitExpanded],
   );
 
   // 아웃라인 Tab 네비게이션 — 하위 프로세스가 있으면 펼쳐서 첫 자식으로 진입, 아니면 다음 행(병렬·다음 형제)
@@ -3879,6 +3887,9 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   return (
     <NodeActionsContext.Provider value={nodeActions}>
+      {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
+          globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
         <Link href="/" className="inline-flex items-center gap-1 text-caption text-accent hover:underline">
@@ -4170,7 +4181,10 @@ function MapEditor({ mapId }: { mapId: number }) {
               >
                 {active ? (
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
-                  <div className="h-full w-full bg-canvas" onContextMenu={(event) => event.preventDefault()}>
+                  <div
+                    className={`h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    onContextMenu={(event) => event.preventDefault()}
+                  >
                     <ReactFlow
                       nodes={displayNodes}
                       edges={styledEdges}
@@ -4274,6 +4288,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       panOnDrag={[1]}
                       panActivationKeyCode="Space"
                       deleteKeyCode={["Delete"]}
+                      // 휠 기본 = 캔버스 상하 이동(팬), Ctrl(또는 Cmd)+휠 = 줌 (사용자 요청)
+                      panOnScroll
+                      panOnScrollMode={PanOnScrollMode.Vertical}
+                      zoomOnScroll={false}
+                      zoomActivationKeyCode={["Control", "Meta"]}
                       {...(contentExtent
                         ? { nodeExtent: contentExtent, translateExtent: contentExtent }
                         : {})}
