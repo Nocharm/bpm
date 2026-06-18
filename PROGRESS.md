@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-18
+- 인라인 펼침 영역을 **캔버스 전체 높이 세로 레인**으로(사용자 피드백 #1) — 콘텐츠 높이 박스 → 보이는 뷰포트 위아래를 가득 채우는 세로선 2개. `InlineRegionBands`(신규, `useViewport`+`useStore(height)` 구독해 줌/팬 시 이 부분만 리렌더) 분리, ViewportPortal flow 좌표로 `topFlow=-y/zoom`·`bandHeight=height/zoom` 변환. 깊이 틴트 겹침·› 라벨(콘텐츠 상단, 클릭=접기)은 유지. tsc/lint/build green.
 - 우클릭 "하위 열기"도 **인라인 펼침**으로 전환(드릴인 창 제거 마무리) — 컨텍스트 메뉴 onSelect를 `toggleInlineExpand`(정의 순서상 위쪽 useMemo에선 `toggleInlineExpandRef`로 호출)로, 고아 `handleDrillIn` 제거. 이제 자식 여는 모든 경로(체브론·요약창·우클릭)가 인라인. tsc/lint/build green.
 - 피드백 수정 2건 — ① 드롭으로 하위 넣기(`moveToChild`): 대상이 비어있으면 A를 **Start→A→End**로 감싸 제대로 된 하위 프로세스 생성(불변식 충족), 이미 하위 있으면 기존처럼 추가. ② 요약창 "하위 열기"(`onOpenChild`)를 드릴인 **창 대신 인라인 펼침**(`toggleInlineExpand`)으로 전환, 고아 `handleOpenSummaryChild`·`handleDrillById` 제거(컨텍스트 메뉴 "열기"는 아직 창 — 사용자 확인 후 별도). tsc/lint/build green. ⚠️ 캔버스 수동 검증 필요.
 - 인라인 **레인 안 편집(Phase 3 최소 슬라이스)** — 펼친 자식 노드를 `selectable`로 풀고 **타이틀 더블클릭 인라인 리네임**을 자기 스코프에 저장(scope-split). `renameNode`가 현재 스코프에 없는 id면 `renameChildNode`로 분기: `getGraph(versionId, scopeId)`로 권위 그래프(노드+엣지+**그룹**) 받아 라벨만 바꿔 PUT(`VersionGraph`엔 그룹이 없어 fullGraph 재구성은 데이터 유실 → fetch 방식). 낙관적 `childEdits` 오버레이로 즉시 반영(실패 시 되돌림, 스코프 전환 시 초기화), `inlineComposition`이 오버레이 적용. 펼침/접기·현재 스코프 저장은 무영향(비-dirty 유지). 인스펙터/recolor/속성 편집·레인 내 삭제는 후속(편집 핸들러가 현재 스코프 `nodes`에 묶여 자식-인식 분기 필요). tsc/lint/build green. ⚠️ 캔버스 수동 검증 필요(브라우저 없음).

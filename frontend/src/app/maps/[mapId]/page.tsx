@@ -15,6 +15,8 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useStore,
+  useViewport,
   ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -195,6 +197,69 @@ type RegionBox = {
   width: number;
   height: number;
 };
+
+// 인라인 펼침 영역 — 세로선 2개 + 반투명 틴트가 보이는 캔버스를 위아래로 가득 채우는 "세로 레인".
+// 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더되고 에디터 본체는 영향 없음.
+function InlineRegionBands({
+  regions,
+  onCollapse,
+}: {
+  regions: RegionBox[];
+  onCollapse: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const { y, zoom } = useViewport();
+  const paneHeight = useStore((state) => state.height);
+  // ViewportPortal은 flow 좌표계 — 화면(0..paneHeight px)을 덮도록 flow 좌표로 변환
+  const topFlow = -y / zoom;
+  const bandHeight = paneHeight / zoom;
+  return (
+    <>
+      {regions.map((box) => (
+        <Fragment key={`region:${box.id}`}>
+          {/* 세로선 2개 + 반투명 틴트 — 화면 전체 높이. 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              transform: `translate(${box.x}px, ${topFlow}px)`,
+              width: box.width,
+              height: bandHeight,
+              zIndex: -1,
+              pointerEvents: "none",
+              background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
+              borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+              borderRight: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+            }}
+          />
+          {/* 깊이 표시(›×depth) + 이름 — 콘텐츠 상단 근처, 클릭 시 접기 */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              transform: `translate(${box.x + 6}px, ${box.y + 4}px)`,
+              zIndex: 1,
+            }}
+          >
+            <button
+              type="button"
+              className="pointer-events-auto inline-flex items-center gap-1 rounded-xs px-1 py-0.5 text-fine hover:bg-accent-tint"
+              title={t("node.collapseChildTitle")}
+              onClick={() => onCollapse(box.id)}
+            >
+              <span className="font-semibold tracking-tight text-accent">
+                {"›".repeat(box.depth)}
+              </span>
+              <span className="text-ink-secondary">{box.label || t("node.childBadge")}</span>
+            </button>
+          </div>
+        </Fragment>
+      ))}
+    </>
+  );
+}
 type MenuState = {
   x: number;
   y: number;
@@ -4075,52 +4140,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       fitView
                     >
                       <ViewportPortal>
-                        {inlineComposition?.regions.map((box) => (
-                          <Fragment key={`region:${box.id}`}>
-                            {/* 세로선 2개 + 반투명 틴트만 — 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
-                            <div
-                              style={{
-                                position: "absolute",
-                                left: 0,
-                                top: 0,
-                                transform: `translate(${box.x}px, ${box.y}px)`,
-                                width: box.width,
-                                height: box.height,
-                                zIndex: -1,
-                                pointerEvents: "none",
-                                background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
-                                borderLeft:
-                                  "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
-                                borderRight:
-                                  "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
-                              }}
-                            />
-                            {/* 깊이 표시(›×depth) + 이름 — 영역 좌상단, 클릭 시 접기 */}
-                            <div
-                              style={{
-                                position: "absolute",
-                                left: 0,
-                                top: 0,
-                                transform: `translate(${box.x + 6}px, ${box.y + 4}px)`,
-                                zIndex: 1,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                className="pointer-events-auto inline-flex items-center gap-1 rounded-xs px-1 py-0.5 text-fine hover:bg-accent-tint"
-                                title={t("node.collapseChildTitle")}
-                                onClick={() => toggleInlineExpand(box.id)}
-                              >
-                                <span className="font-semibold tracking-tight text-accent">
-                                  {"›".repeat(box.depth)}
-                                </span>
-                                <span className="text-ink-secondary">
-                                  {box.label || t("node.childBadge")}
-                                </span>
-                              </button>
-                            </div>
-                          </Fragment>
-                        ))}
+                        {inlineComposition && (
+                          <InlineRegionBands
+                            regions={inlineComposition.regions}
+                            onCollapse={toggleInlineExpand}
+                          />
+                        )}
                         {groupBoxes.map((box) => (
                           <Fragment key={box.id}>
                             {/* 반투명 박스 — 노드 뒤로, 멤버 적은 그룹이 위(z) */}
