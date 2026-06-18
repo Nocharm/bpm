@@ -3576,6 +3576,30 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
+  // 인라인 펼친 자식 노드는 React Flow가 prop-only로 렌더해 노드 이벤트(onNodeDoubleClick)·React onDoubleClick이
+  // 발화하지 않는다. 캔버스 컨테이너의 raw dblclick(capture)으로 자식 노드를 가로채 요약/편집 모달을 연다.
+  // 루트 노드는 React Flow가 정상 처리하므로 건드리지 않는다.
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const handleDblClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const nodeEl = target?.closest?.(".react-flow__node") as HTMLElement | null;
+      const id = nodeEl?.getAttribute("data-id");
+      if (!id || nodesRef.current.some((node) => node.id === id)) {
+        return; // 루트 노드/노드 밖 — React Flow 기본 처리
+      }
+      event.preventDefault();
+      event.stopPropagation(); // React Flow 더블클릭 줌 방지
+      setSelectedId(id);
+      setSummaryNodeId(id);
+    };
+    container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
+    return () => container.removeEventListener("dblclick", handleDblClick, true);
+  }, []);
+
   // 인스펙터 폭 로컬 영속
   useEffect(() => {
     window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
