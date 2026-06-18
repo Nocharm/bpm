@@ -117,7 +117,7 @@ import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
-import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
+import { buildGatewayEdges, checkExpansionLimits, checkScopeInvariant } from "@/lib/inline-expand";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -325,6 +325,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [subprocessPrompt, setSubprocessPrompt] = useState<string | null>(null);
   // 후속 노드 직접 선택 모드 — 클릭한 노드를 후속으로 연결 후 하위 생성(값=출발 노드 id)
   const [pendingSubprocessPick, setPendingSubprocessPick] = useState<string | null>(null);
+  // 삭제로 하위 프로세스 불변식이 깨질 때 — 통째 삭제 확인 모달(값=깨지는 자식 스코프 id = currentParentId)
+  const [deleteInvariantPrompt, setDeleteInvariantPrompt] = useState<string | null>(null);
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -820,6 +822,34 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [pendingSubprocessPick]);
+
+  // 삭제 불변식 확정 — 깨지는 자식 스코프를 통째로 비워(백엔드 cascade) 부모를 일반 노드로 되돌리고 상위로 복귀.
+  // navigateTo는 이동 전 현재 스코프를 자동 저장해 방금 비운 스코프를 되살리므로 직접 스코프를 pop한다.
+  const confirmDeleteSubprocess = useCallback(async () => {
+    const scopeId = deleteInvariantPrompt;
+    setDeleteInvariantPrompt(null);
+    if (scopeId === null || versionId === null) {
+      return;
+    }
+    try {
+      await saveGraph(versionId, { nodes: [], edges: [], groups: [] }, scopeId);
+    } catch {
+      showToast(t("subprocess.deleteError"));
+      return;
+    }
+    setExpandedInline((current) => {
+      const next = new Set(current);
+      next.delete(scopeId);
+      return next;
+    });
+    // 비운 스코프와 그 하위를 브레드크럼에서 제거하고 부모 스코프로 포커스 — 스코프 로드 effect가 부모를 새로 받음
+    const idx = scopes.findIndex((scope) => scope.parentId === scopeId);
+    const nextScopes = idx > 0 ? scopes.slice(0, idx) : scopes;
+    setScopes(nextScopes);
+    setActiveIndex(nextScopes.length - 1);
+    refreshFullGraph();
+    showToast(t("subprocess.reverted"));
+  }, [deleteInvariantPrompt, versionId, scopes, refreshFullGraph, showToast, t]);
 
   // 타이핑은 간격 안에서 한 스냅샷으로 묶고, 그 외 변경은 즉시 기록
   const recordChange = useCallback(
@@ -3946,9 +3976,22 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onSelectionDragStart={() => pushHistory()}
                       onSelectionDragStop={() => scheduleAutoSave()}
-                      onBeforeDelete={async () => {
+                      onBeforeDelete={async ({ nodes: toDelete }) => {
                         if (readOnly) {
                           return false;
+                        }
+                        // 자식 스코프(하위 프로세스)에서 마지막 Start/End/작업 삭제 → 불변식 깨짐.
+                        // 유효→무효 전이일 때만 가로채(레거시 미충족 스코프는 막지 않음) 통째 삭제 확인 모달로.
+                        if (currentParentId !== null && toDelete.length > 0) {
+                          const removing = new Set(toDelete.map((node) => node.id));
+                          const remaining = nodesRef.current.filter((node) => !removing.has(node.id));
+                          if (
+                            checkScopeInvariant(nodesRef.current) &&
+                            !checkScopeInvariant(remaining)
+                          ) {
+                            setDeleteInvariantPrompt(currentParentId);
+                            return false; // 네이티브 삭제 취소 — 확정 시 하위 통째 삭제로 처리
+                          }
                         }
                         pushHistory();
                         return true;
@@ -4624,6 +4667,23 @@ function MapEditor({ mapId }: { mapId: number }) {
         >
           {t("subprocess.pickHint")}
         </div>
+      )}
+      {deleteInvariantPrompt !== null && (
+        <ExpandInvariantModal
+          title={t("subprocess.deleteInvariantTitle")}
+          body={t("subprocess.deleteInvariantBody")}
+          onClose={() => setDeleteInvariantPrompt(null)}
+          actions={[
+            { label: t("subprocess.cancel"), onClick: () => setDeleteInvariantPrompt(null) },
+            {
+              label: t("subprocess.deleteInvariantConfirm"),
+              variant: "danger",
+              onClick: () => {
+                void confirmDeleteSubprocess();
+              },
+            },
+          ]}
+        />
       )}
     </NodeActionsContext.Provider>
   );
