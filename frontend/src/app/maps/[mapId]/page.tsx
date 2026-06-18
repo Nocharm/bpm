@@ -3106,11 +3106,17 @@ function MapEditor({ mapId }: { mapId: number }) {
           const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, target.id);
           // 자식은 선택·편집 허용. 위치는 파생이라 드래그/삭제는 불가. 편집 오버레이(라벨·속성)를 입힘.
           const edit = childEdits.get(app.id);
+          // 자식은 `nodes` state에 없어 React Flow가 측정 못 함 → 미측정 노드는 visibility:hidden으로 숨겨진다.
+          // 타입별 근사 크기를 measured로 직접 넣어 즉시 보이게 한다(레이아웃도 이 크기로 일관).
+          const size = nodeSizeOf(app.data.nodeType);
           return {
             ...app,
             draggable: false,
             selectable: true,
             deletable: false,
+            width: size.w,
+            height: size.h,
+            measured: { width: size.w, height: size.h },
             data: edit ? { ...app.data, ...edit } : app.data,
           };
         });
@@ -3261,14 +3267,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds };
   }, [expandedInline, fullGraph, nodes, edges, childEdits]);
 
-  // 펼침 변경 시 합성 레이아웃을 화면에 맞춤 — 자식이 화면 밖에 생겨도 보이도록(렌더 반영 후 한 틱 뒤)
+  // 펼침 변경 시 펼친 서브프로세스(부모 + 그 인라인 자식)에 화면을 맞춤 — 전체 fit은 멀리 떨어진
+  // 노드까지 맞추느라 과도하게 축소돼 자식이 microscopic해지는 문제가 있어, 펼친 영역만 프레이밍한다.
   useEffect(() => {
     if (expandedInline.size === 0) {
       return;
     }
     const timer = window.setTimeout(() => {
-      void reactFlow.fitView({ padding: 0.2, duration: 400 });
-    }, 60);
+      const rootIdSet = new Set(nodesRef.current.map((node) => node.id));
+      // getNodes() = 합성 노드(현재+자식). 펼친 앵커 + 자식(루트 아님)만 프레이밍.
+      const fitNodes = reactFlow
+        .getNodes()
+        .filter((node) => expandedInline.has(node.id) || !rootIdSet.has(node.id))
+        .map((node) => ({ id: node.id }));
+      void reactFlow.fitView(
+        fitNodes.length > 0
+          ? { nodes: fitNodes, padding: 0.3, duration: 400, maxZoom: 1.2 }
+          : { padding: 0.2, duration: 400 },
+      );
+    }, 80);
     return () => window.clearTimeout(timer);
   }, [expandedInline, reactFlow]);
 
