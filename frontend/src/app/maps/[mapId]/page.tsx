@@ -327,6 +327,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [pendingSubprocessPick, setPendingSubprocessPick] = useState<string | null>(null);
   // 삭제로 하위 프로세스 불변식이 깨질 때 — 통째 삭제 확인 모달(값=깨지는 자식 스코프 id = currentParentId)
   const [deleteInvariantPrompt, setDeleteInvariantPrompt] = useState<string | null>(null);
+  // 인라인 펼친 자식 노드의 낙관적 이름 편집 오버레이(자식 id→새 라벨) — PUT 후 fullGraph가 반영, 스코프 전환 시 초기화.
+  const [childEdits, setChildEdits] = useState<Map<string, string>>(new Map());
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -1080,6 +1082,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelectedEdgeId(null);
         setMenu(null);
         setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
+        setChildEdits(new Map()); // 자식 이름편집 오버레이도 초기화 — 새 스코프는 fullGraph가 권위
         historyRef.current = { past: [], future: [] };
         setHistorySize({ past: 0, future: 0 });
         lastTextEditAtRef.current = 0;
@@ -2366,11 +2369,58 @@ function MapEditor({ mapId }: { mapId: number }) {
     [summaryNodeId, patchNode],
   );
 
-  // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 라이브 노드만 적용, 편집 모드 해제.
+  // 인라인 펼친 자식 노드 이름 편집 → 자기 스코프에 저장(scope-split). fullGraph엔 그룹이 없어 재구성 불가하므로
+  // 권위 있는 자식 스코프 그래프를 받아 라벨만 바꿔 PUT. 낙관적 오버레이로 즉시 반영, 실패 시 되돌림.
+  const renameChildNode = useCallback(
+    async (id: string, label: string) => {
+      const tree = fullGraphRef.current;
+      if (versionId === null || tree === null) {
+        return;
+      }
+      const flat = tree.nodes.find((node) => node.id === id);
+      if (!flat || flat.parent_node_id === null) {
+        return; // 자식 스코프 노드만 — 그 외엔 무시
+      }
+      const scopeId = flat.parent_node_id;
+      const taken = tree.nodes
+        .filter((node) => node.parent_node_id === scopeId && node.id !== id)
+        .map((node) => node.title);
+      const unique = makeUniqueLabel(label, taken);
+      setChildEdits((current) => new Map(current).set(id, unique)); // 낙관적 반영
+      try {
+        const scopeGraph = await getGraph(versionId, scopeId);
+        await saveGraph(
+          versionId,
+          {
+            ...scopeGraph,
+            nodes: scopeGraph.nodes.map((node) =>
+              node.id === id ? { ...node, title: unique } : node,
+            ),
+          },
+          scopeId,
+        );
+        refreshFullGraph();
+      } catch {
+        setChildEdits((current) => {
+          const next = new Map(current);
+          next.delete(id);
+          return next;
+        });
+        showToast(t("err.save"));
+      }
+    },
+    [versionId, refreshFullGraph, showToast, t],
+  );
+
+  // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 현재 스코프 노드는 state, 펼친 자식은 scope-split 저장.
   const renameNode = useCallback(
     (id: string, label: string) => {
       setEditingNodeId(null);
-      if (readOnly || !nodesRef.current.some((node) => node.id === id)) {
+      if (readOnly) {
+        return;
+      }
+      if (!nodesRef.current.some((node) => node.id === id)) {
+        void renameChildNode(id, label); // 현재 스코프에 없으면 펼친 자식 — 자기 스코프에 저장
         return;
       }
       pushHistory();
@@ -2383,7 +2433,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       });
       scheduleAutoSave();
     },
-    [readOnly, pushHistory, setNodes, scheduleAutoSave],
+    [readOnly, pushHistory, setNodes, scheduleAutoSave, renameChildNode],
   );
 
   const updateSelectedEdgeLabel = useCallback(
@@ -2886,7 +2936,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         const kidApp = kidsFlat.map((flat) => {
           const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, target.id);
-          return { ...app, draggable: false, selectable: false, deletable: false };
+          // 자식은 선택·이름편집 허용(Phase 3 최소). 위치는 파생이라 드래그/삭제는 불가.
+          const editedLabel = childEdits.get(app.id);
+          return {
+            ...app,
+            draggable: false,
+            selectable: true,
+            deletable: false,
+            data: editedLabel === undefined ? app.data : { ...app.data, label: editedLabel },
+          };
         });
         const kidIds = new Set(kidsFlat.map((kid) => kid.id));
         const kidEdges = toAppEdges({
@@ -3033,7 +3091,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
 
     return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds };
-  }, [expandedInline, fullGraph, nodes, edges]);
+  }, [expandedInline, fullGraph, nodes, edges, childEdits]);
 
   // 펼침 변경 시 합성 레이아웃을 화면에 맞춤 — 자식이 화면 밖에 생겨도 보이도록(렌더 반영 후 한 틱 뒤)
   useEffect(() => {
