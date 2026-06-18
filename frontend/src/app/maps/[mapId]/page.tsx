@@ -1368,26 +1368,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [bounds, navigateTo, scopes, activeIndex],
   );
 
-  const handleDrillById = useCallback(
-    (nodeId: string, clientX: number, clientY: number) => {
-      const node = nodesRef.current.find((item) => item.id === nodeId);
-      if (node) {
-        handleDrillIn(node, clientX, clientY);
-      }
-    },
-    [handleDrillIn],
-  );
-
-  // 요약 모달의 "하위 프로세스 열기" — 모달 닫고 해당 노드 하위 캔버스로 진입
-  const handleOpenSummaryChild = useCallback(() => {
-    if (summaryNodeId === null) {
-      return;
-    }
-    const id = summaryNodeId;
-    setSummaryNodeId(null);
-    handleDrillById(id, window.innerWidth / 2, window.innerHeight / 2);
-  }, [summaryNodeId, handleDrillById]);
-
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
     async (index: number) => {
@@ -1827,15 +1807,67 @@ function MapEditor({ mapId }: { mapId: number }) {
       const aGraph = buildGraph([aNode], [], []).nodes[0];
       try {
         const child = await getGraph(versionId, bId);
-        await saveGraph(
-          versionId,
-          {
+        let childGraph: Graph;
+        if (child.nodes.length === 0) {
+          // B가 비어 있으면 Start → A → End 로 감싸 제대로 된 하위 프로세스 생성(불변식 충족)
+          const startId = genId();
+          const endId = genId();
+          const terminal = (
+            id: string,
+            titleKey: "subprocess.startTitle" | "subprocess.endTitle",
+            type: string,
+            x: number,
+            order: number,
+          ): GraphNode => ({
+            id,
+            title: t(titleKey),
+            description: "",
+            node_type: type,
+            color: "",
+            assignee: "",
+            department: "",
+            system: "",
+            duration: "",
+            pos_x: x,
+            pos_y: 0,
+            sort_order: order,
+            group_ids: [],
+          });
+          childGraph = {
+            nodes: [
+              terminal(startId, "subprocess.startTitle", "start", 0, 0),
+              { ...aGraph, group_ids: [], pos_x: 240, pos_y: 0, sort_order: 1 },
+              terminal(endId, "subprocess.endTitle", "end", 480, 2),
+            ],
+            edges: [
+              {
+                id: genId(),
+                source_node_id: startId,
+                target_node_id: aId,
+                label: "",
+                source_side: "right",
+                target_side: "left",
+              },
+              {
+                id: genId(),
+                source_node_id: aId,
+                target_node_id: endId,
+                label: "",
+                source_side: "right",
+                target_side: "left",
+              },
+            ],
+            groups: [],
+          };
+        } else {
+          // 이미 하위가 있으면 A를 그대로 추가(기존 동작)
+          childGraph = {
             nodes: [...child.nodes, { ...aGraph, group_ids: [] }],
             edges: child.edges,
             groups: child.groups,
-          },
-          bId,
-        );
+          };
+        }
+        await saveGraph(versionId, childGraph, bId);
       } catch (err) {
         setStatus(err instanceof Error ? err.message : t("err.moveChild"));
         return;
@@ -4372,7 +4404,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onClose={() => setSummaryNodeId(null)}
-                onOpenChild={handleOpenSummaryChild}
+                onOpenChild={() => {
+                  // 드릴인 창 대신 같은 캔버스에 인라인 펼침(드릴인 창 열기는 제거)
+                  const id = summaryNodeId;
+                  setSummaryNodeId(null);
+                  if (id !== null) {
+                    toggleInlineExpand(id);
+                  }
+                }}
               />
             );
           })()}
