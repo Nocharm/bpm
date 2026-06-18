@@ -139,6 +139,7 @@ const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
+const CHILD_SAVE_DEBOUNCE_MS = 700; // 자식 속성 편집 후 자식 스코프 PUT까지 대기(키 입력마다 저장 방지)
 const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
@@ -309,6 +310,20 @@ function toAppEdges(graph: Graph): Edge[] {
   }));
 }
 
+// 자식 스코프 저장용 — NodeData 패치(편집 오버레이)를 GraphNode 필드로 반영(label→title 등).
+function patchGraphNode(node: GraphNode, patch: Partial<NodeData>): GraphNode {
+  return {
+    ...node,
+    ...(patch.label !== undefined ? { title: patch.label } : {}),
+    ...(patch.description !== undefined ? { description: patch.description } : {}),
+    ...(patch.color !== undefined ? { color: patch.color } : {}),
+    ...(patch.assignee !== undefined ? { assignee: patch.assignee } : {}),
+    ...(patch.department !== undefined ? { department: patch.department } : {}),
+    ...(patch.system !== undefined ? { system: patch.system } : {}),
+    ...(patch.duration !== undefined ? { duration: patch.duration } : {}),
+  };
+}
+
 function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -392,8 +407,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [pendingSubprocessPick, setPendingSubprocessPick] = useState<string | null>(null);
   // 삭제로 하위 프로세스 불변식이 깨질 때 — 통째 삭제 확인 모달(값=깨지는 자식 스코프 id = currentParentId)
   const [deleteInvariantPrompt, setDeleteInvariantPrompt] = useState<string | null>(null);
-  // 인라인 펼친 자식 노드의 낙관적 이름 편집 오버레이(자식 id→새 라벨) — PUT 후 fullGraph가 반영, 스코프 전환 시 초기화.
-  const [childEdits, setChildEdits] = useState<Map<string, string>>(new Map());
+  // 인라인 펼친 자식 노드의 낙관적 편집 오버레이(자식 id→바뀐 필드) — PUT 후 fullGraph가 반영, 스코프 전환 시 초기화.
+  const [childEdits, setChildEdits] = useState<Map<string, Partial<NodeData>>>(new Map());
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -505,12 +520,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   const fullGraphVersionRef = useRef<number | null>(null);
   // toggleInlineExpand는 아래쪽에 정의돼 컨텍스트 메뉴 useMemo(위)에서 직접 못 씀(TDZ) — ref로 호출.
   const toggleInlineExpandRef = useRef<((nodeId: string) => void) | null>(null);
+  // 자식 편집 오버레이/디바운스 저장용 — 타이머·dirty 스코프·최신 오버레이 미러(저장 flush에서 읽음)
+  const childEditsRef = useRef<Map<string, Partial<NodeData>>>(new Map());
+  const dirtyChildScopesRef = useRef<Set<string>>(new Set());
+  const childSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     fullGraphRef.current = fullGraph;
   }, [fullGraph]);
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+  useEffect(() => {
+    childEditsRef.current = childEdits;
+  }, [childEdits]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -1149,7 +1171,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelectedEdgeId(null);
         setMenu(null);
         setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
-        setChildEdits(new Map()); // 자식 이름편집 오버레이도 초기화 — 새 스코프는 fullGraph가 권위
+        setChildEdits(new Map()); // 자식 편집 오버레이 초기화 — 새 스코프는 fullGraph가 권위
+        dirtyChildScopesRef.current.clear(); // 대기 중 자식 저장 취소(스코프 전환 시 stale 저장 방지)
+        if (childSaveTimerRef.current) {
+          clearTimeout(childSaveTimerRef.current);
+          childSaveTimerRef.current = null;
+        }
         historyRef.current = { past: [], future: [] };
         setHistorySize({ past: 0, future: 0 });
         lastTextEditAtRef.current = 0;
@@ -2371,6 +2398,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 언마운트 시 dwell 타이머 정리
   useEffect(() => clearDwell, [clearDwell]);
 
+  // 언마운트 시 자식 저장 디바운스 타이머 정리(언마운트 후 setState 경고 방지)
+  useEffect(
+    () => () => {
+      if (childSaveTimerRef.current) {
+        clearTimeout(childSaveTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const updateSelectedData = useCallback(
     (patch: Partial<NodeData>, fromTyping = false) => {
       if (readOnly) {
@@ -2412,20 +2449,122 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, recordChange, setNodes, scheduleAutoSave],
   );
 
-  // 정보 수정 모달 패치 — summaryNodeId 대상. 렌더 IIFE에서 ref 접근(react-hooks/refs) 피하려 useCallback로 분리.
+  // ── 인라인 펼친 자식 노드 편집 → 자기 스코프 저장(scope-split) ──────────
+  // fullGraph엔 그룹이 없어 재구성 불가 → getGraph로 권위 그래프(노드+엣지+그룹)를 받아 노드 필드만 덮어 PUT.
+  const flushChildScopeSaves = useCallback(async () => {
+    if (versionId === null) {
+      return;
+    }
+    const scopeIds = [...dirtyChildScopesRef.current];
+    dirtyChildScopesRef.current.clear();
+    if (scopeIds.length === 0) {
+      return;
+    }
+    const edits = childEditsRef.current; // 동기 시점 캡처 — 이후 await 중 오버레이가 초기화돼도 안전
+    let failed = false;
+    for (const scopeId of scopeIds) {
+      try {
+        const scopeGraph = await getGraph(versionId, scopeId);
+        const patched: Graph = {
+          ...scopeGraph,
+          nodes: scopeGraph.nodes.map((node) => {
+            const edit = edits.get(node.id);
+            return edit ? patchGraphNode(node, edit) : node;
+          }),
+        };
+        await saveGraph(versionId, patched, scopeId);
+      } catch {
+        failed = true;
+      }
+    }
+    if (failed) {
+      showToast(t("err.save"));
+    }
+    refreshFullGraph();
+  }, [versionId, refreshFullGraph, showToast, t]);
+
+  // 자식 속성 패치(이름 외) — 낙관적 오버레이 + 자식 스코프 디바운스 저장(키 입력마다 PUT 방지).
+  const patchChildNode = useCallback(
+    (id: string, patch: Partial<NodeData>) => {
+      const tree = fullGraphRef.current;
+      if (tree === null) {
+        return;
+      }
+      const flat = tree.nodes.find((node) => node.id === id);
+      if (!flat || flat.parent_node_id === null) {
+        return; // 자식 스코프 노드만
+      }
+      setChildEdits((current) => {
+        const next = new Map(current);
+        next.set(id, { ...(next.get(id) ?? {}), ...patch });
+        return next;
+      });
+      dirtyChildScopesRef.current.add(flat.parent_node_id);
+      if (childSaveTimerRef.current) {
+        clearTimeout(childSaveTimerRef.current);
+      }
+      childSaveTimerRef.current = setTimeout(() => {
+        childSaveTimerRef.current = null;
+        void flushChildScopeSaves();
+      }, CHILD_SAVE_DEBOUNCE_MS);
+    },
+    [flushChildScopeSaves],
+  );
+
+  // 자식 이름 확정(blur/Enter) — 스코프 내 중복 방지 후 오버레이 + 즉시 저장.
+  const renameChildNode = useCallback(
+    (id: string, label: string) => {
+      const tree = fullGraphRef.current;
+      if (tree === null) {
+        return;
+      }
+      const flat = tree.nodes.find((node) => node.id === id);
+      if (!flat || flat.parent_node_id === null) {
+        return;
+      }
+      const scopeId = flat.parent_node_id;
+      const taken = tree.nodes
+        .filter((node) => node.parent_node_id === scopeId && node.id !== id)
+        .map((node) => childEditsRef.current.get(node.id)?.label ?? node.title);
+      const unique = makeUniqueLabel(label, taken);
+      setChildEdits((current) => {
+        const next = new Map(current);
+        next.set(id, { ...(next.get(id) ?? {}), label: unique });
+        return next;
+      });
+      dirtyChildScopesRef.current.add(scopeId);
+      if (childSaveTimerRef.current) {
+        clearTimeout(childSaveTimerRef.current);
+        childSaveTimerRef.current = null;
+      }
+      void flushChildScopeSaves(); // 이름 확정은 즉시
+    },
+    [flushChildScopeSaves],
+  );
+
+  // 정보 수정 모달 패치 — summaryNodeId 대상. 현재 스코프 노드는 state, 펼친 자식은 scope-split.
   const handleSummaryPatch = useCallback(
     (patch: Partial<NodeData>) => {
-      if (summaryNodeId) {
+      if (summaryNodeId === null) {
+        return;
+      }
+      if (nodesRef.current.some((node) => node.id === summaryNodeId)) {
         patchNode(summaryNodeId, patch, true);
+      } else {
+        patchChildNode(summaryNodeId, patch);
       }
     },
-    [summaryNodeId, patchNode],
+    [summaryNodeId, patchNode, patchChildNode],
   );
 
   // 제목 입력 확정(blur) — 캔버스 내 다른 노드와 이름 중복 시 " (n)" 접미사로 고유화.
   const handleSummaryLabelCommit = useCallback(
     (label: string) => {
-      if (!summaryNodeId) {
+      if (summaryNodeId === null) {
+        return;
+      }
+      if (!nodesRef.current.some((node) => node.id === summaryNodeId)) {
+        renameChildNode(summaryNodeId, label); // 펼친 자식 — scope-split
         return;
       }
       const taken = nodesRef.current
@@ -2436,50 +2575,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         patchNode(summaryNodeId, { label: unique }, false);
       }
     },
-    [summaryNodeId, patchNode],
-  );
-
-  // 인라인 펼친 자식 노드 이름 편집 → 자기 스코프에 저장(scope-split). fullGraph엔 그룹이 없어 재구성 불가하므로
-  // 권위 있는 자식 스코프 그래프를 받아 라벨만 바꿔 PUT. 낙관적 오버레이로 즉시 반영, 실패 시 되돌림.
-  const renameChildNode = useCallback(
-    async (id: string, label: string) => {
-      const tree = fullGraphRef.current;
-      if (versionId === null || tree === null) {
-        return;
-      }
-      const flat = tree.nodes.find((node) => node.id === id);
-      if (!flat || flat.parent_node_id === null) {
-        return; // 자식 스코프 노드만 — 그 외엔 무시
-      }
-      const scopeId = flat.parent_node_id;
-      const taken = tree.nodes
-        .filter((node) => node.parent_node_id === scopeId && node.id !== id)
-        .map((node) => node.title);
-      const unique = makeUniqueLabel(label, taken);
-      setChildEdits((current) => new Map(current).set(id, unique)); // 낙관적 반영
-      try {
-        const scopeGraph = await getGraph(versionId, scopeId);
-        await saveGraph(
-          versionId,
-          {
-            ...scopeGraph,
-            nodes: scopeGraph.nodes.map((node) =>
-              node.id === id ? { ...node, title: unique } : node,
-            ),
-          },
-          scopeId,
-        );
-        refreshFullGraph();
-      } catch {
-        setChildEdits((current) => {
-          const next = new Map(current);
-          next.delete(id);
-          return next;
-        });
-        showToast(t("err.save"));
-      }
-    },
-    [versionId, refreshFullGraph, showToast, t],
+    [summaryNodeId, patchNode, renameChildNode],
   );
 
   // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 현재 스코프 노드는 state, 펼친 자식은 scope-split 저장.
@@ -3008,14 +3104,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         const kidApp = kidsFlat.map((flat) => {
           const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, target.id);
-          // 자식은 선택·이름편집 허용(Phase 3 최소). 위치는 파생이라 드래그/삭제는 불가.
-          const editedLabel = childEdits.get(app.id);
+          // 자식은 선택·편집 허용. 위치는 파생이라 드래그/삭제는 불가. 편집 오버레이(라벨·속성)를 입힘.
+          const edit = childEdits.get(app.id);
           return {
             ...app,
             draggable: false,
             selectable: true,
             deletable: false,
-            data: editedLabel === undefined ? app.data : { ...app.data, label: editedLabel },
+            data: edit ? { ...app.data, ...edit } : app.data,
           };
         });
         const kidIds = new Set(kidsFlat.map((kid) => kid.id));
@@ -4053,10 +4149,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
-                        // 이름 외 영역 더블클릭 = 요약창. 타이틀 더블클릭은 process-node가 stopPropagation해 이름 편집으로.
-                        if (!nodesRef.current.some((item) => item.id === node.id)) {
-                          return; // 인라인 자식은 보기 전용
-                        }
+                        // 이름 외 영역 더블클릭 = 요약/편집 모달(현재 스코프·펼친 자식 공용).
+                        // 타이틀 더블클릭은 process-node가 stopPropagation해 이름 편집으로.
                         setSelectedId(node.id);
                         setSummaryNodeId(node.id);
                       }}
@@ -4364,18 +4458,37 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
           <ShortcutLegend />
           {summaryNodeId && versionId !== null && (() => {
-            const node = nodes.find((n) => n.id === summaryNodeId);
+            // 현재 스코프 노드 우선, 없으면 인라인 펼친 자식 노드(편집 오버레이 반영된 합성 노드)
+            const node =
+              nodes.find((n) => n.id === summaryNodeId) ??
+              inlineComposition?.nodes.find((n) => n.id === summaryNodeId);
             if (!node) {
               return null;
             }
-            const predecessors = edges
-              .filter((edge) => edge.target === summaryNodeId)
-              .map((edge) => nodes.find((n) => n.id === edge.source)?.data.label ?? "")
-              .filter(Boolean);
-            const successors = edges
-              .filter((edge) => edge.source === summaryNodeId)
-              .map((edge) => nodes.find((n) => n.id === edge.target)?.data.label ?? "")
-              .filter(Boolean);
+            const isCurrentScopeNode = nodes.some((n) => n.id === summaryNodeId);
+            // 자식 노드는 현재 스코프 edges/nodes에 없으므로 fullGraph(전체 트리)에서 선후행 계산
+            const labelById = (id: string): string =>
+              isCurrentScopeNode
+                ? nodes.find((n) => n.id === id)?.data.label ?? ""
+                : fullGraph?.nodes.find((n) => n.id === id)?.title ?? "";
+            const predecessors = isCurrentScopeNode
+              ? edges
+                  .filter((edge) => edge.target === summaryNodeId)
+                  .map((edge) => labelById(edge.source))
+                  .filter(Boolean)
+              : (fullGraph?.edges ?? [])
+                  .filter((edge) => edge.target_node_id === summaryNodeId)
+                  .map((edge) => labelById(edge.source_node_id))
+                  .filter(Boolean);
+            const successors = isCurrentScopeNode
+              ? edges
+                  .filter((edge) => edge.source === summaryNodeId)
+                  .map((edge) => labelById(edge.target))
+                  .filter(Boolean)
+              : (fullGraph?.edges ?? [])
+                  .filter((edge) => edge.source_node_id === summaryNodeId)
+                  .map((edge) => labelById(edge.target_node_id))
+                  .filter(Boolean);
             const hasChildren = (fullGraph?.nodes ?? []).some((n) => n.parent_node_id === summaryNodeId);
             // 다중 태그 — 그룹 라벨들을 콤마로 합쳐 표시
             const groupLabels = node.data.groupIds

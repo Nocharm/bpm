@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-18
+- 펼친 자식 노드 **더블클릭 → 편집 모달**(사용자 피드백 #2) — 보기전용이던 자식을 현재 스코프 노드와 동일하게 더블클릭하면 요약/편집 모달이 뜨고 모든 필드 편집. `childEdits` 오버레이를 `Map<id, Partial<NodeData>>`로 확장, `handleSummaryPatch`/`LabelCommit`이 자식이면 `patchChildNode`(속성, **700ms 디바운스 저장**)/`renameChildNode`(이름, 즉시 저장)로 분기. 저장은 `getGraph(scopeId)`로 권위 그래프(노드+엣지+**그룹**)를 받아 `patchGraphNode`로 노드 필드만 덮어 PUT(fullGraph엔 그룹 없어 재구성 불가). `flushChildScopeSaves`가 dirty 스코프별 일괄 저장, 오버레이는 `childEditsRef`로 미러. 모달 node 조회·선후행은 자식이면 fullGraph 기준. 스코프 전환 시 타이머·dirty 정리. tsc/lint/build green. (※ 자식 속성 편집 후 700ms 내 스코프 이동 시 그 편집 유실 — 이름은 즉시 저장이라 안전.)
 - 인라인 펼침 영역을 **캔버스 전체 높이 세로 레인**으로(사용자 피드백 #1) — 콘텐츠 높이 박스 → 보이는 뷰포트 위아래를 가득 채우는 세로선 2개. `InlineRegionBands`(신규, `useViewport`+`useStore(height)` 구독해 줌/팬 시 이 부분만 리렌더) 분리, ViewportPortal flow 좌표로 `topFlow=-y/zoom`·`bandHeight=height/zoom` 변환. 깊이 틴트 겹침·› 라벨(콘텐츠 상단, 클릭=접기)은 유지. tsc/lint/build green.
 - 우클릭 "하위 열기"도 **인라인 펼침**으로 전환(드릴인 창 제거 마무리) — 컨텍스트 메뉴 onSelect를 `toggleInlineExpand`(정의 순서상 위쪽 useMemo에선 `toggleInlineExpandRef`로 호출)로, 고아 `handleDrillIn` 제거. 이제 자식 여는 모든 경로(체브론·요약창·우클릭)가 인라인. tsc/lint/build green.
 - 피드백 수정 2건 — ① 드롭으로 하위 넣기(`moveToChild`): 대상이 비어있으면 A를 **Start→A→End**로 감싸 제대로 된 하위 프로세스 생성(불변식 충족), 이미 하위 있으면 기존처럼 추가. ② 요약창 "하위 열기"(`onOpenChild`)를 드릴인 **창 대신 인라인 펼침**(`toggleInlineExpand`)으로 전환, 고아 `handleOpenSummaryChild`·`handleDrillById` 제거(컨텍스트 메뉴 "열기"는 아직 창 — 사용자 확인 후 별도). tsc/lint/build green. ⚠️ 캔버스 수동 검증 필요.
