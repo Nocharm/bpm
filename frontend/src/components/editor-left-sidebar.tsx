@@ -43,6 +43,12 @@ interface EditorLeftSidebarProps {
   onRenameNode: (id: string, label: string) => void;
   // Tab 네비게이션 — 다음 노드 선택(하위 프로세스 있으면 하위로 진입). 페이지가 트리로 계산.
   onSelectNext: (id: string) => void;
+  // Shift+Tab/↑ — 아웃라인의 이전(위) 노드 선택.
+  onSelectPrev: (id: string) => void;
+  // 방향키 →/← 및 F — 펼치기 / 하위프로세스 닫기 / 스마트 토글.
+  onExpand: (id: string) => void;
+  onCollapse: (id: string) => void;
+  onFold: (id: string) => void;
 }
 
 const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -65,17 +71,22 @@ export function EditorLeftSidebar({
   onRowContextMenu,
   onRenameNode,
   onSelectNext,
+  onSelectPrev,
+  onExpand,
+  onCollapse,
+  onFold,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
   const [nodeInfoOpen, setNodeInfoOpen] = useState(true);
   // 인라인 이름 편집 중인 행 — Esc 취소 시 blur 커밋 방지 가드
   const [editingId, setEditingId] = useState<string | null>(null);
   const cancelledRef = useRef(false);
-  // 편집 중 Tab → 저장 후 이동할 노드(blur에서 소비). 리스트 ref는 편집 종료 후 키 포커스 복귀용.
-  const pendingNavRef = useRef<string | null>(null);
+  // 편집 중 Tab/Shift+Tab → 저장 후 이동할 노드·방향(blur에서 소비). 리스트 ref는 편집 종료 후 키 포커스 복귀용.
+  const pendingNavRef = useRef<{ id: string; dir: "next" | "prev" } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // 선택 상태에서 Enter=편집 진입, Tab=다음 노드. 편집 중에는 input이 키를 처리하므로 무시.
+  // 선택 상태 키맵 — Enter=편집, Tab/↓=다음, Shift+Tab/↑=이전, →=펼치기, ←=닫기, F=스마트 토글.
+  // 편집 중에는 input이 키를 처리하므로 무시. 방향키·F는 stopPropagation으로 캔버스/전역 단축키와 분리.
   const handleListKey = (event: KeyboardEvent) => {
     if (editingId !== null || !selectedId) {
       return;
@@ -87,7 +98,35 @@ export function EditorLeftSidebar({
       }
     } else if (event.key === "Tab") {
       event.preventDefault();
+      if (event.shiftKey) {
+        onSelectPrev(selectedId);
+      } else {
+        onSelectNext(selectedId);
+      }
+      listRef.current?.focus();
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
       onSelectNext(selectedId);
+      listRef.current?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      onSelectPrev(selectedId);
+      listRef.current?.focus();
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      event.stopPropagation();
+      onExpand(selectedId);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCollapse(selectedId);
+    } else if (event.key.toLowerCase() === "f" && !event.ctrlKey && !event.metaKey) {
+      // 단축키 F만 가로채고 Ctrl/Cmd+F(브라우저 찾기)는 통과
+      event.preventDefault();
+      event.stopPropagation();
+      onFold(selectedId);
       listRef.current?.focus();
     }
   };
@@ -221,10 +260,11 @@ export function EditorLeftSidebar({
                         } else {
                           onRenameNode(item.id, value);
                         }
-                        const navId = pendingNavRef.current;
+                        const nav = pendingNavRef.current;
                         pendingNavRef.current = null;
-                        if (navId) {
-                          onSelectNext(navId); // Tab 저장 후 다음 노드
+                        if (nav) {
+                          // Tab 저장 후 이동 — 방향에 따라 다음/이전 노드
+                          (nav.dir === "prev" ? onSelectPrev : onSelectNext)(nav.id);
                         }
                         listRef.current?.focus(); // 키 포커스 복귀(연속 편집/이동)
                       }}
@@ -234,7 +274,11 @@ export function EditorLeftSidebar({
                           event.currentTarget.blur(); // 한번 더 Enter = 저장
                         } else if (event.key === "Tab") {
                           event.preventDefault();
-                          pendingNavRef.current = item.id; // 저장 후 다음 노드로
+                          // 저장 후 이동할 노드·방향 기록(Shift+Tab=이전)
+                          pendingNavRef.current = {
+                            id: item.id,
+                            dir: event.shiftKey ? "prev" : "next",
+                          };
                           event.currentTarget.blur();
                         } else if (event.key === "Escape") {
                           event.preventDefault();

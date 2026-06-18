@@ -2902,27 +2902,99 @@ function MapEditor({ mapId }: { mapId: number }) {
     [fullGraph, currentParentId, mapName, reactFlow, navigateTo, setNodes],
   );
 
-  // 아웃라인 Tab 네비게이션 — 하위 프로세스가 있으면 펼쳐서 첫 자식으로 진입, 아니면 다음 행(병렬·다음 형제)
+  // 아웃라인 Tab/↓ — 다음(아래) 가시 행으로 이동. 펼치기는 자동으로 하지 않는다(→/F가 담당).
   const handleOutlineNext = useCallback(
     (id: string) => {
       const idx = outline.findIndex((row) => row.id === id);
       if (idx === -1) {
         return;
       }
-      if (outline[idx].hasChildren) {
-        setExpandedOutline((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-        const children = (fullGraph?.nodes ?? [])
-          .filter((node) => node.parent_node_id === id)
-          .sort((a, b) => a.sort_order - b.sort_order);
-        if (children.length > 0) {
-          handleOutlineSelect(children[0].id);
-          return;
-        }
-      }
       const next = outline[idx + 1];
       if (next) {
         handleOutlineSelect(next.id);
       }
+    },
+    [outline, handleOutlineSelect],
+  );
+
+  // Shift+Tab/↑ — 아웃라인의 이전(위) 가시 행으로 이동. 첫 자식에선 idx-1이 곧 부모라 자연히 위로 올라간다.
+  const handleOutlinePrev = useCallback(
+    (id: string) => {
+      const idx = outline.findIndex((row) => row.id === id);
+      if (idx <= 0) {
+        return;
+      }
+      handleOutlineSelect(outline[idx - 1].id);
+    },
+    [outline, handleOutlineSelect],
+  );
+
+  // → 펼치기 — 자식 있고 접혀있을 때만(이동 없음).
+  const handleOutlineExpand = useCallback(
+    (id: string) => {
+      const row = outline.find((r) => r.id === id);
+      if (!row?.hasChildren || row.expanded) {
+        return;
+      }
+      setExpandedOutline((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+    },
+    [outline],
+  );
+
+  // ← 하위프로세스 닫기 — 자식 있고 펼쳐졌을 때만 접는다(부모 이동은 F가 담당).
+  const handleOutlineCollapse = useCallback(
+    (id: string) => {
+      const row = outline.find((r) => r.id === id);
+      if (!row?.hasChildren || !row.expanded) {
+        return;
+      }
+      setExpandedOutline((prev) => {
+        if (!prev.has(id)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    [outline],
+  );
+
+  // F 스마트 토글 — 접힘→펼치기, 펼쳐짐→첫 자식 이동, 말단→부모를 접으며 부모로 이동.
+  const handleOutlineFold = useCallback(
+    (id: string) => {
+      const idx = outline.findIndex((row) => row.id === id);
+      if (idx === -1) {
+        return;
+      }
+      const row = outline[idx];
+      if (row.hasChildren) {
+        if (row.expanded) {
+          // 펼쳐진 부모 → 첫 자식(바로 다음 행)으로 진입
+          const next = outline[idx + 1];
+          if (next) {
+            handleOutlineSelect(next.id);
+          }
+        } else {
+          setExpandedOutline((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+        }
+        return;
+      }
+      // 말단 — 부모로 돌아가며 부모를 접는다.
+      const parentId =
+        (fullGraph?.nodes ?? []).find((node) => node.id === id)?.parent_node_id ?? null;
+      if (parentId === null) {
+        return;
+      }
+      setExpandedOutline((prev) => {
+        if (!prev.has(parentId)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(parentId);
+        return next;
+      });
+      handleOutlineSelect(parentId);
     },
     [outline, fullGraph, handleOutlineSelect],
   );
@@ -3288,6 +3360,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           }}
           onRenameNode={renameNode}
           onSelectNext={handleOutlineNext}
+          onSelectPrev={handleOutlinePrev}
+          onExpand={handleOutlineExpand}
+          onCollapse={handleOutlineCollapse}
+          onFold={handleOutlineFold}
         />
         <div
           ref={canvasContainerRef}
