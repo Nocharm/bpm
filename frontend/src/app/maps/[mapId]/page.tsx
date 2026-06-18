@@ -402,10 +402,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     nodeCount: number;
     depth: number;
   } | null>(null);
-  // 하위 생성 시 후속(나가는 엣지) 없는 노드 — 진행 방법 확인 모달(값=대상 노드 id)
-  const [subprocessPrompt, setSubprocessPrompt] = useState<string | null>(null);
-  // 후속 노드 직접 선택 모드 — 클릭한 노드를 후속으로 연결 후 하위 생성(값=출발 노드 id)
-  const [pendingSubprocessPick, setPendingSubprocessPick] = useState<string | null>(null);
+  // 하위 생성 시 후속(나가는 엣지) 없는 노드 — 진행 방법 확인 모달. proceed=후속 확보 후 실행할 동작(생성/드롭 공용)
+  const [subprocessPrompt, setSubprocessPrompt] = useState<{
+    nodeId: string;
+    proceed: () => void;
+  } | null>(null);
+  // 후속 노드 직접 선택 모드 — 클릭한 노드를 후속으로 연결 후 proceed 실행
+  const [pendingSubprocessPick, setPendingSubprocessPick] = useState<{
+    sourceId: string;
+    proceed: () => void;
+  } | null>(null);
   // 삭제로 하위 프로세스 불변식이 깨질 때 — 통째 삭제 확인 모달(값=깨지는 자식 스코프 id = currentParentId)
   const [deleteInvariantPrompt, setDeleteInvariantPrompt] = useState<string | null>(null);
   // 인라인 펼친 자식 노드의 낙관적 편집 오버레이(자식 id→바뀐 필드) — PUT 후 fullGraph가 반영, 스코프 전환 시 초기화.
@@ -705,7 +711,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         void runCreateSubprocess(nodeId);
         return;
       }
-      setSubprocessPrompt(nodeId);
+      setSubprocessPrompt({ nodeId, proceed: () => void runCreateSubprocess(nodeId) });
     },
     [versionId, runCreateSubprocess],
   );
@@ -836,16 +842,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     setHistorySize({ past: history.past.length, future: 0 });
   }, []);
 
-  // 후속없음 모달 "종료 노드 추가" — 현재 스코프에 End 노드 + nodeId→End 엣지를 만들고 진행.
-  const handleCreateEndForSubprocess = useCallback(
-    (nodeId: string) => {
-      setSubprocessPrompt(null);
-      const source = nodesRef.current.find((node) => node.id === nodeId);
-      if (!source) {
-        return;
-      }
-      pushHistory();
-      const endId = genId();
+  // 후속없음 모달 "종료 노드 추가" — 현재 스코프에 End 노드 + nodeId→End 엣지를 만들고 proceed 실행(생성/드롭 공용).
+  const handleCreateEndForSubprocess = useCallback(() => {
+    const prompt = subprocessPrompt;
+    setSubprocessPrompt(null);
+    if (!prompt) {
+      return;
+    }
+    const nodeId = prompt.nodeId;
+    const source = nodesRef.current.find((node) => node.id === nodeId);
+    if (!source) {
+      return;
+    }
+    pushHistory();
+    const endId = genId();
       const endNode: AppNode = {
         id: endId,
         type: "process",
@@ -880,19 +890,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       ]);
       scheduleAutoSave();
-      void runCreateSubprocess(nodeId);
+      prompt.proceed();
     },
-    [pushHistory, setNodes, setEdges, scheduleAutoSave, runCreateSubprocess, t],
+    [subprocessPrompt, pushHistory, setNodes, setEdges, scheduleAutoSave, t],
   );
 
   // 후속 선택 모드에서 노드 클릭 — 클릭 노드를 후속으로 연결 후 하위 생성. 현재 스코프·자기 자신 아님만.
   const handleSubprocessPick = useCallback(
     (pickedId: string) => {
-      const sourceId = pendingSubprocessPick;
-      if (sourceId === null) {
+      const pending = pendingSubprocessPick;
+      if (pending === null) {
         return;
       }
-      if (pickedId === sourceId || !nodesRef.current.some((node) => node.id === pickedId)) {
+      if (pickedId === pending.sourceId || !nodesRef.current.some((node) => node.id === pickedId)) {
         return; // 인라인 자식·자기 자신은 후속 대상 불가
       }
       pushHistory();
@@ -901,7 +911,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         {
           ...EDGE_DEFAULTS,
           id: genId(),
-          source: sourceId,
+          source: pending.sourceId,
           target: pickedId,
           sourceHandle: sourceHandleId("right"),
           targetHandle: targetHandleId("left"),
@@ -909,9 +919,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       ]);
       setPendingSubprocessPick(null);
       scheduleAutoSave();
-      void runCreateSubprocess(sourceId);
+      pending.proceed();
     },
-    [pendingSubprocessPick, pushHistory, setEdges, scheduleAutoSave, runCreateSubprocess],
+    [pendingSubprocessPick, pushHistory, setEdges, scheduleAutoSave],
   );
 
   // 후속 선택 모드 — Esc로 취소
@@ -1855,7 +1865,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // A를 B의 하위 프로세스(자식 스코프)로 이동. 자식 스코프에 먼저 영속(재부모화)한 뒤
   // 현재 스코프에서 제거 — 순서 보장으로 현재 스코프 자동저장이 A를 삭제하지 않도록 함.
-  const moveToChild = useCallback(
+  const runMoveToChild = useCallback(
     async (aId: string, bId: string) => {
       if (versionId === null) {
         return;
@@ -1965,6 +1975,21 @@ function MapEditor({ mapId }: { mapId: number }) {
       refreshFullGraph();
     },
     [versionId, fullGraph, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
+  );
+
+  // 드롭으로 하위 만들기 진입점 — B에 후속(나가는 엣지) 있으면 즉시, 없으면 후속없음 모달(우클릭 생성과 동일 UX).
+  const moveToChild = useCallback(
+    (aId: string, bId: string) => {
+      if (versionId === null) {
+        return;
+      }
+      if (edgesRef.current.some((edge) => edge.source === bId)) {
+        void runMoveToChild(aId, bId);
+        return;
+      }
+      setSubprocessPrompt({ nodeId: bId, proceed: () => void runMoveToChild(aId, bId) });
+    },
+    [versionId, runMoveToChild],
   );
 
   const renameGroup = useCallback(
@@ -4923,15 +4948,15 @@ function MapEditor({ mapId }: { mapId: number }) {
             {
               label: t("subprocess.pickNode"),
               onClick: () => {
-                const nodeId = subprocessPrompt;
+                const prompt = subprocessPrompt;
                 setSubprocessPrompt(null);
-                setPendingSubprocessPick(nodeId);
+                setPendingSubprocessPick({ sourceId: prompt.nodeId, proceed: prompt.proceed });
               },
             },
             {
               label: t("subprocess.createEnd"),
               variant: "accent",
-              onClick: () => handleCreateEndForSubprocess(subprocessPrompt),
+              onClick: () => handleCreateEndForSubprocess(),
             },
           ]}
         />
