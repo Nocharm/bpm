@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-18
+- 하위 생성 **후속없음 모달**(Task 5.1 잔여) — `createSubprocess`가 후속(나가는 엣지) 유무를 검사: 있으면 즉시 생성, 없으면 `[취소]/[후속 노드 선택]/[종료 노드 추가]` 모달(`expand-invariant-modal.tsx` 공용 확인 다이얼로그 신설 — 5.2와 공용). "종료 노드 추가"=현재 스코프에 End+`P→End` 엣지 생성 후 진행, "후속 노드 선택"=선택 모드 진입(상단 힌트 배너·Esc/빈영역클릭 취소)→클릭 노드로 `P→picked` 연결 후 진행. 둘 다 `scheduleAutoSave`로 부모 스코프 영속(펼침 시 End→후속 게이트웨이 연결 보장). i18n 8키. tsc/lint/build green. ⚠️ 캔버스 수동 검증 필요.
 - 하위 프로세스 생성(spec step 3 — 생성) — process 노드(하위 없음) 우클릭 **"하위 프로세스 생성"** → Start/작업/End + 직렬 엣지를 자식 스코프에 자동 생성(`saveGraph(versionId, graph, nodeId)`, 불변식 충족), 부모 `hasChildren` 반영 + `refreshFullGraph` + 인라인 자동 펼침 + 토스트. 하위 보유 노드는 기존 "열기"(창) 유지. i18n 6키(`ctx.createSubprocess`·`subprocess.*`). 페이로드는 기존 `buildGraph` 출력과 동형이라 스키마 일치. (후속: 후속없음 모달·삭제 불변식·레인 안 편집) tsc/eslint/build green.
 - 확인용 더미 1개 + DB 초기화 — `backend/scripts/seed_inline_demo.py`(`--reset`: 기존 맵 전체 삭제 후 **Start/End 포함 3단계 중첩 하위** 1개 생성 — 심사 › 승인 › 1·2차승인). 개발단계·실데이터 없음이라 `backend/dev.db`를 추적(`*.db`에 `!backend/dev.db` 예외)해 원격 작업용으로 커밋. ruff 통과.
 - 인라인 펼침 **모두 펼치기/접기 + 펼침 캡(Phase 4)** — 툴바에 하위 모두 펼치기(`UnfoldHorizontal`)/접기(`FoldHorizontal`) 버튼. 개별·모두 펼칠 때 노드수>300 또는 깊이>5면 확인 모달(`그래도 펼치기`/취소, `EXPANSION_LIMITS`·`checkExpansionLimits`). i18n 6키 추가. tsc/eslint/build green.

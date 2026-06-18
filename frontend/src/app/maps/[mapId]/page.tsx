@@ -33,6 +33,7 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
+import { ExpandInvariantModal } from "@/components/expand-invariant-modal";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
@@ -320,6 +321,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     nodeCount: number;
     depth: number;
   } | null>(null);
+  // 하위 생성 시 후속(나가는 엣지) 없는 노드 — 진행 방법 확인 모달(값=대상 노드 id)
+  const [subprocessPrompt, setSubprocessPrompt] = useState<string | null>(null);
+  // 후속 노드 직접 선택 모드 — 클릭한 노드를 후속으로 연결 후 하위 생성(값=출발 노드 id)
+  const [pendingSubprocessPick, setPendingSubprocessPick] = useState<string | null>(null);
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -502,8 +507,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [versionId, currentParentId, readOnly, refreshFullGraph]);
 
-  // 하위 프로세스 생성 — Start/작업/End를 자식 스코프에 자동 생성(불변식 충족)하고 인라인 펼침.
-  const createSubprocess = useCallback(
+  // 하위 프로세스 실제 생성 — Start/작업/End를 자식 스코프에 자동 생성(불변식 충족)하고 인라인 펼침.
+  // 후속(나가는 엣지) 보장은 호출 전 createSubprocess 래퍼가 처리한다(펼침 시 End→후속 게이트웨이가 연결되도록).
+  const runCreateSubprocess = useCallback(
     async (nodeId: string) => {
       if (versionId === null) {
         return;
@@ -580,6 +586,21 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     },
     [versionId, t, refreshFullGraph, showToast, setNodes],
+  );
+
+  // 하위 생성 진입점 — 후속(나가는 엣지) 있으면 즉시 생성, 없으면 진행 방법 모달.
+  const createSubprocess = useCallback(
+    (nodeId: string) => {
+      if (versionId === null) {
+        return;
+      }
+      if (edgesRef.current.some((edge) => edge.source === nodeId)) {
+        void runCreateSubprocess(nodeId);
+        return;
+      }
+      setSubprocessPrompt(nodeId);
+    },
+    [versionId, runCreateSubprocess],
   );
 
   const scheduleAutoSave = useCallback(() => {
@@ -707,6 +728,98 @@ function MapEditor({ mapId }: { mapId: number }) {
     history.future = [];
     setHistorySize({ past: history.past.length, future: 0 });
   }, []);
+
+  // 후속없음 모달 "종료 노드 추가" — 현재 스코프에 End 노드 + nodeId→End 엣지를 만들고 진행.
+  const handleCreateEndForSubprocess = useCallback(
+    (nodeId: string) => {
+      setSubprocessPrompt(null);
+      const source = nodesRef.current.find((node) => node.id === nodeId);
+      if (!source) {
+        return;
+      }
+      pushHistory();
+      const endId = genId();
+      const endNode: AppNode = {
+        id: endId,
+        type: "process",
+        // 앵커 오른쪽에 배치(겹침 방지) — 출발 노드는 process라 폭 170 + 여백 50
+        position: { x: source.position.x + NODE_WIDTH + 50, y: source.position.y },
+        data: {
+          label: makeUniqueLabel(
+            t("subprocess.endTitle"),
+            nodesRef.current.map((node) => node.data.label),
+          ),
+          description: "",
+          nodeType: "end",
+          color: "",
+          assignee: "",
+          department: "",
+          system: "",
+          duration: "",
+          groupIds: [],
+          hasChildren: false,
+        },
+      };
+      setNodes((current) => [...current, endNode]);
+      setEdges((current) => [
+        ...current,
+        {
+          ...EDGE_DEFAULTS,
+          id: genId(),
+          source: nodeId,
+          target: endId,
+          sourceHandle: sourceHandleId("right"),
+          targetHandle: targetHandleId("left"),
+        },
+      ]);
+      scheduleAutoSave();
+      void runCreateSubprocess(nodeId);
+    },
+    [pushHistory, setNodes, setEdges, scheduleAutoSave, runCreateSubprocess, t],
+  );
+
+  // 후속 선택 모드에서 노드 클릭 — 클릭 노드를 후속으로 연결 후 하위 생성. 현재 스코프·자기 자신 아님만.
+  const handleSubprocessPick = useCallback(
+    (pickedId: string) => {
+      const sourceId = pendingSubprocessPick;
+      if (sourceId === null) {
+        return;
+      }
+      if (pickedId === sourceId || !nodesRef.current.some((node) => node.id === pickedId)) {
+        return; // 인라인 자식·자기 자신은 후속 대상 불가
+      }
+      pushHistory();
+      setEdges((current) => [
+        ...current,
+        {
+          ...EDGE_DEFAULTS,
+          id: genId(),
+          source: sourceId,
+          target: pickedId,
+          sourceHandle: sourceHandleId("right"),
+          targetHandle: targetHandleId("left"),
+        },
+      ]);
+      setPendingSubprocessPick(null);
+      scheduleAutoSave();
+      void runCreateSubprocess(sourceId);
+    },
+    [pendingSubprocessPick, pushHistory, setEdges, scheduleAutoSave, runCreateSubprocess],
+  );
+
+  // 후속 선택 모드 — Esc로 취소
+  useEffect(() => {
+    if (pendingSubprocessPick === null) {
+      return;
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPendingSubprocessPick(null);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [pendingSubprocessPick]);
 
   // 타이핑은 간격 안에서 한 스냅샷으로 묶고, 그 외 변경은 즉시 기록
   const recordChange = useCallback(
@@ -2552,7 +2665,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onSelect: () => {
                   const node = nodesRef.current.find((item) => item.id === menu.targetId);
                   if (node) {
-                    void createSubprocess(node.id);
+                    createSubprocess(node.id);
                   }
                 },
               },
@@ -3767,6 +3880,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
+                        // 후속 선택 모드면 이 클릭은 후속 지정 — 선택 대신 후속 연결 후 하위 생성
+                        if (pendingSubprocessPick) {
+                          handleSubprocessPick(node.id);
+                          return;
+                        }
                         // 인라인 펼친 자식 노드는 보기 전용 — 현재 스코프 노드만 선택
                         if (!nodesRef.current.some((item) => item.id === node.id)) {
                           return;
@@ -3792,6 +3910,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setMenu(null);
                         setPending(null);
                         setSummaryNodeId(null);
+                        setPendingSubprocessPick(null); // 빈 영역 클릭 = 후속 선택 취소
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
@@ -4474,6 +4593,37 @@ function MapEditor({ mapId }: { mapId: number }) {
             </div>
           </div>
         </ModalBackdrop>
+      )}
+      {subprocessPrompt && (
+        <ExpandInvariantModal
+          title={t("subprocess.noSuccessorTitle")}
+          body={t("subprocess.noSuccessorBody")}
+          onClose={() => setSubprocessPrompt(null)}
+          actions={[
+            { label: t("subprocess.cancel"), onClick: () => setSubprocessPrompt(null) },
+            {
+              label: t("subprocess.pickNode"),
+              onClick: () => {
+                const nodeId = subprocessPrompt;
+                setSubprocessPrompt(null);
+                setPendingSubprocessPick(nodeId);
+              },
+            },
+            {
+              label: t("subprocess.createEnd"),
+              variant: "accent",
+              onClick: () => handleCreateEndForSubprocess(subprocessPrompt),
+            },
+          ]}
+        />
+      )}
+      {pendingSubprocessPick && (
+        <div
+          className="pointer-events-none fixed left-1/2 top-20 z-[1100] -translate-x-1/2 rounded-full border border-accent bg-surface px-4 py-1.5 text-caption text-accent"
+          style={{ boxShadow: "var(--shadow-md)" }}
+        >
+          {t("subprocess.pickHint")}
+        </div>
       )}
     </NodeActionsContext.Provider>
   );
