@@ -438,6 +438,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // fullGraph가 어떤 버전의 트리인지 기록 — 스코프 전환 시 재요청 게이트용(버전 바뀌면 다시 받음)
   const fullGraphRef = useRef<VersionGraph | null>(null);
   const fullGraphVersionRef = useRef<number | null>(null);
+  // toggleInlineExpand는 아래쪽에 정의돼 컨텍스트 메뉴 useMemo(위)에서 직접 못 씀(TDZ) — ref로 호출.
+  const toggleInlineExpandRef = useRef<((nodeId: string) => void) | null>(null);
   useEffect(() => {
     fullGraphRef.current = fullGraph;
   }, [fullGraph]);
@@ -1337,35 +1339,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       setActiveIndex(nextScopes.length - 1);
     },
     [saveCurrentScope, t],
-  );
-
-  const handleDrillIn = useCallback(
-    (node: AppNode, clientX: number, clientY: number) => {
-      const childKey = node.id;
-      if (!windowGeomRef.current[childKey]) {
-        const w2 = Math.min(Math.min(760, Math.round(bounds.w * 0.82)), bounds.w);
-        const h2 = Math.min(Math.min(500, Math.round(bounds.h * 0.82)), bounds.h);
-        let cx = bounds.w / 2;
-        let cy = bounds.h / 2;
-        const el = canvasContainerRef.current;
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          cx = clientX - rect.left;
-          cy = clientY - rect.top;
-        }
-        const x = Math.min(Math.max(cx - w2 / 2, 0), Math.max(0, bounds.w - w2));
-        const y = Math.min(Math.max(cy - h2 / 2, 0), Math.max(0, bounds.h - h2));
-        setWindowGeom((m) => ({
-          ...m,
-          [childKey]: { x, y, w: w2, h: h2, minimized: false, maximized: false },
-        }));
-      }
-      void navigateTo([
-        ...scopes.slice(0, activeIndex + 1),
-        { parentId: node.id, title: node.data.label },
-      ]);
-    },
-    [bounds, navigateTo, scopes, activeIndex],
   );
 
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
@@ -2762,10 +2735,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             {
               label: t("ctx.openChild"),
               onSelect: () => {
-                // ref 조회는 이벤트 시점에 — 렌더 중 ref 접근 금지 (react-hooks/refs)
-                const node = nodesRef.current.find((item) => item.id === menu.targetId);
-                if (node) {
-                  handleDrillIn(node, menu.x, menu.y);
+                // 드릴인 창 대신 인라인 펼침/접기(toggleInlineExpand) — ref는 정의 순서(TDZ) 회피용
+                if (menu.targetId) {
+                  toggleInlineExpandRef.current?.(menu.targetId);
                 }
               },
             },
@@ -2830,7 +2802,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleAddNode,
     handleRecolor,
     applyNodesTransform,
-    handleDrillIn,
     createSubprocess,
     handleExportPng,
     createGroupFromSelection,
@@ -2900,6 +2871,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [expandedInline, fullGraph],
   );
+  // 컨텍스트 메뉴 등 위쪽 useMemo에서 호출하도록 ref로 노출(TDZ 회피)
+  useEffect(() => {
+    toggleInlineExpandRef.current = toggleInlineExpand;
+  }, [toggleInlineExpand]);
 
   // 모두 펼치기 — fullGraph에서 하위를 가진 모든 노드. 모두 접기 — 비움.
   const expandAll = useCallback(() => {
