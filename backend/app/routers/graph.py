@@ -115,9 +115,18 @@ async def get_full_graph(
     edge_rows = (
         await session.scalars(select(Edge).where(Edge.version_id == version_id))
     ).all()
+    # 하위 보유 여부 — 어떤 노드의 parent로 등장하는 id 집합. 인라인 펼침의 중첩 셰브론 표시에 필요.
+    parents_with_children = {
+        n.parent_node_id for n in node_rows if n.parent_node_id is not None
+    }
     return VersionGraphOut(
         nodes=[
-            FlatNodeOut.model_validate(n).model_copy(update={"group_ids": _node_group_ids(n)})
+            FlatNodeOut.model_validate(n).model_copy(
+                update={
+                    "group_ids": _node_group_ids(n),
+                    "has_children": n.id in parents_with_children,
+                }
+            )
             for n in node_rows
         ],
         edges=[EdgeIn.model_validate(e) for e in edge_rows],

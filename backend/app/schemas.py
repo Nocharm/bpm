@@ -120,6 +120,8 @@ class FlatNodeOut(NodeIn):
     # 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff, spec §7 Phase B)
     parent_node_id: str | None = None
     source_node_id: str | None = None
+    # 이 노드가 하위 캔버스를 가지는지 — 인라인 펼침의 중첩 셰브론 표시용 (계산 필드)
+    has_children: bool = False
 
 
 class GroupIn(BaseModel):
