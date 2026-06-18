@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
+## 2026-06-19
+- 드롭·삽입으로 만든 엣지가 화면에서 좌-좌로 붙던 버그 수정 — `withEdge`(canvas.ts)가 신규 엣지에 `sourceHandle`/`targetHandle`를 미설정해, 노드 핸들 8개 중 첫 렌더 핸들(left)로 폴백됐음. 반면 메뉴·`toAppEdges`·`buildGraph`는 right/left 폴백을 가정 → "선택은 우/좌인데 화면은 좌/좌"로 어긋남(저장→리로드 시 right/left로 점프). 기본 핸들 `s-right`/`t-left`를 명시(`sourceHandleId/targetHandleId` 재사용). 프론트 tsc/eslint green(런타임 시각 확인 미실행).
+
 ## 2026-06-17
 - 마이너 버그 수정 묶음. ① 언그룹→실행취소 시 그룹 미복원 — `Snapshot`이 `groups` 누락해 undo가 nodes만 복원하던 게 원인, 스냅샷·undo·redo에 `groups` 포함(disband·create 양쪽 정상화). ② 그룹 생성 로직 — 멤버 2명 미만이면 자동 제거(`pruneSmallGroups`, leaveGroup·노드삭제 경로 한정, 로드 데이터 불변), 선택 노드가 모두 한 그룹이면 생성 차단+토스트, 단일 노드 Ctrl+G 차단+토스트, 생성 즉시 이름 편집모드 진입(`GroupTitleBar autoEdit`), 그룹 자동삭제 시 토스트. ③ 노드 타입 변경 기능 삭제 — 인스펙터·요약모달 select를 읽기전용 표시로 교체(생성 시 타입 선택은 우클릭 메뉴 유지). ④ 토스트 재설계 — 우상단(Nav 아래) 슬라이드 인/아웃+스택(`toast-stack.tsx`, `var(--ease-spring/smooth)`). ⑤ 아웃라인 노드 삭제 지연 — stale `fullGraph` 병합이 삭제 노드를 되살리던 빈틈, 라이브 로드 후 현재 스코프는 라이브가 권위(즉시 반영). 프론트 tsc/lint/build green.
 - 엣지 핸들 변 커스텀 — 엣지마다 시작/끝이 붙는 노드 변(상/하/좌/우)을 엣지 우클릭 십자 패드 2개(Start/End)로 변경(클릭해도 메뉴 유지). `source_side`/`target_side` 엣지 컬럼 영속(기본 우/좌, Pydantic `Literal` 검증), 노드는 4변 source·target 핸들(8개) 렌더(평소 은은·hover 강조), 엣지는 `sourceHandle`/`targetHandle`(`s-{side}`/`t-{side}`)로 연결. diff는 엣지를 source→target 계보로만 비교해 변은 비교 제외(diff.ts 무변경). 스키마는 1회 drop+recreate 필요. 백엔드 pytest(라운드트립·기본값·invalid 422) 통과, 프론트 tsc/lint/build green. (스펙: docs/superpowers/specs/2026-06-17-edge-handle-side-customization-design.md, 계획: docs/superpowers/plans/2026-06-17-edge-handle-side-customization.md)
