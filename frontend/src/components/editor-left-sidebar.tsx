@@ -111,11 +111,50 @@ export function EditorLeftSidebar({
   // 편집 중 Tab/Shift+Tab → 저장 후 이동할 노드·방향(blur에서 소비). 리스트 ref는 편집 종료 후 키 포커스 복귀용.
   const pendingNavRef = useRef<{ id: string; dir: "next" | "prev" } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  // 선택된 아웃라인 행 — 선택 변경 시 보이도록 스크롤(키보드 이동으로 스크롤 영역 밖 이탈 방지).
+  // 선택된 아웃라인 행 — 선택 변경 시 가운데로 스크롤(경계가 아닌 중앙; 최상단 선택 시 0으로 clamp되어 맨 위로).
   const selectedRowRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
-    selectedRowRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    selectedRowRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
   }, [selectedId]);
+
+  // 사이드바 스크롤바 — 기본 숨김(scrollbar-hidden), 스크롤 중에만 커스텀 막대 페이드 인 → 멈추면 페이드 아웃.
+  const asideRef = useRef<HTMLElement>(null);
+  const hideThumbRef = useRef<number | null>(null);
+  const [scrollThumb, setScrollThumb] = useState<{
+    top: number;
+    height: number;
+    visible: boolean;
+  } | null>(null);
+  const handleSidebarScroll = () => {
+    const el = asideRef.current;
+    if (!el) {
+      return;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    if (scrollHeight <= clientHeight) {
+      setScrollThumb(null);
+      return;
+    }
+    // 막대 길이·위치는 뷰포트 비율로 계산. 막대가 스크롤 컨테이너 안의 absolute라 top에 scrollTop을 더해 시야에 고정.
+    const height = Math.max(24, (clientHeight / scrollHeight) * clientHeight);
+    const track = clientHeight - height;
+    const top = scrollTop + (scrollTop / (scrollHeight - clientHeight)) * track;
+    setScrollThumb({ top, height, visible: true });
+    if (hideThumbRef.current !== null) {
+      window.clearTimeout(hideThumbRef.current);
+    }
+    hideThumbRef.current = window.setTimeout(() => {
+      setScrollThumb((prev) => (prev ? { ...prev, visible: false } : prev));
+    }, 700);
+  };
+  useEffect(
+    () => () => {
+      if (hideThumbRef.current !== null) {
+        window.clearTimeout(hideThumbRef.current);
+      }
+    },
+    [],
+  );
 
   // 선택 상태 키맵 — Enter=편집, Tab/↓=다음, Shift+Tab/↑=이전, →=펼치기, ←=닫기, F=스마트 토글.
   // 편집 중에는 input이 키를 처리하므로 무시. 방향키·F는 stopPropagation으로 캔버스/전역 단축키와 분리.
@@ -205,7 +244,11 @@ export function EditorLeftSidebar({
   const bothCollapsed = !nodeInfoOpen && !navKeysOpen;
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2">
+    <aside
+      ref={asideRef}
+      onScroll={handleSidebarScroll}
+      className="scrollbar-hidden relative flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2"
+    >
       {/* 노드 정보 · 아웃라인 단축키 — 둘 다 접히면 한 줄에 나눠, 아니면 세로 스택(contents) */}
       <div className={bothCollapsed ? "mb-2 flex items-start gap-2" : "contents"}>
         {/* 노드에 표시할 정보 — 접기/펼치기, 상태 sessionStorage 영속 */}
@@ -420,6 +463,16 @@ export function EditorLeftSidebar({
             );
           })}
         </ul>
+      )}
+      {scrollThumb && (
+        <div
+          className="pointer-events-none absolute right-0.5 w-1 rounded-full bg-border-strong transition-opacity duration-300"
+          style={{
+            top: scrollThumb.top,
+            height: scrollThumb.height,
+            opacity: scrollThumb.visible ? 1 : 0,
+          }}
+        />
       )}
     </aside>
   );
