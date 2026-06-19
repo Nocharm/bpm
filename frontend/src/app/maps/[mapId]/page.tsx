@@ -1528,6 +1528,28 @@ function MapEditor({ mapId }: { mapId: number }) {
     [saveCurrentScope, t],
   );
 
+  // 포커스 모드 — 특정 노드의 스코프를 활성화하기 위한 스코프 체인(루트→…→그 노드). 검색 내비와 동일 패턴.
+  const buildScopesTo = useCallback(
+    (scopeNodeId: string): Scope[] => {
+      const fg = fullGraphRef.current;
+      if (!fg) {
+        return [{ parentId: null, title: mapName }];
+      }
+      const byId = new Map(fg.nodes.map((node) => [node.id, node]));
+      const chain: FlatNode[] = [];
+      let cur = byId.get(scopeNodeId);
+      while (cur) {
+        chain.unshift(cur);
+        cur = cur.parent_node_id ? byId.get(cur.parent_node_id) : undefined;
+      }
+      return [
+        { parentId: null, title: mapName },
+        ...chain.map((node) => ({ parentId: node.id, title: node.title })),
+      ];
+    },
+    [mapName],
+  );
+
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
     async (index: number) => {
@@ -4733,8 +4755,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                           handleSubprocessPick(node.id);
                           return;
                         }
-                        // 인라인 펼친 자식 노드는 보기 전용 — 현재 스코프 노드만 선택
+                        // 비활성 스코프(인라인 자식·조상 컨텍스트) 노드 클릭 → 그 스코프를 활성화(navigateTo). 포커스 모드 Step 3b.
                         if (!nodesRef.current.some((item) => item.id === node.id)) {
+                          const scopeId = node.data?.scopeId ?? null;
+                          if (scopeId !== null) {
+                            void navigateTo(buildScopesTo(scopeId));
+                          }
                           return;
                         }
                         setSelectedId(node.id);
