@@ -4765,6 +4765,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
                     className={`h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    // 편집 중인 스코프 깊이를 배경 틴트로 구분 — 깊을수록 진해져 "지금 몇 단계 하위인지" 인식(루트=틴트 없음). 인라인 영역과 동일한 accent 깊이 틴트 언어.
+                    style={
+                      activeIndex > 0
+                        ? {
+                            background: `color-mix(in srgb, var(--color-accent) ${Math.min(activeIndex * 6, 30)}%, var(--color-canvas))`,
+                          }
+                        : undefined
+                    }
                     onContextMenu={(event) => event.preventDefault()}
                   >
                     <ReactFlow
