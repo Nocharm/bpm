@@ -540,6 +540,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const childNodesRef = useRef<AppNode[]>([]);
+  // 펼침 합성(영역/스코프 오프셋)을 핸들러(handleAddNode 등 정의가 앞선)에서 읽기 위한 ref — TDZ 회피.
+  const inlineCompositionRef = useRef<{
+    regions: { id: string; x: number; width: number; depth: number }[];
+    scopeOffsets: Map<string, { x: number; y: number }>;
+  } | null>(null);
   const edgesRef = useRef<Edge[]>([]);
   const groupsRef = useRef<GraphGroup[]>([]);
   const windowGeomRef = useRef<Record<string, WindowGeom>>({});
@@ -1748,11 +1753,75 @@ function MapEditor({ mapId }: { mapId: number }) {
     [branchPrompt, createEdge, setEdges, scheduleAutoSave],
   );
 
+  // 자식 스코프에 새 노드 생성(스코프상대 위치) — fullGraph 낙관적 추가(materialize로 즉시 렌더) + 권위 그래프 PUT.
+  const addChildNode = useCallback(
+    async (scopeId: string, position: { x: number; y: number }) => {
+      if (versionId === null) {
+        return;
+      }
+      const id = genId();
+      const tree = fullGraphRef.current;
+      const siblingTitles = tree
+        ? tree.nodes.filter((node) => node.parent_node_id === scopeId).map((node) => node.title)
+        : [];
+      const base: GraphNode = {
+        id,
+        title: makeUniqueLabel(t("editor.newStep"), siblingTitles),
+        description: "",
+        node_type: "process",
+        color: "",
+        assignee: "",
+        department: "",
+        system: "",
+        duration: "",
+        pos_x: position.x,
+        pos_y: position.y,
+        sort_order: 0,
+        group_ids: [],
+      };
+      setFullGraph((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
+              nodes: [
+                ...prev.nodes,
+                { ...base, has_children: false, parent_node_id: scopeId, source_node_id: null },
+              ],
+            },
+      );
+      try {
+        const graph = await getGraph(versionId, scopeId);
+        await saveGraph(versionId, { ...graph, nodes: [...graph.nodes, base] }, scopeId);
+        refreshFullGraph();
+      } catch {
+        showToast(t("err.save"));
+      }
+    },
+    [versionId, refreshFullGraph, showToast, t, setFullGraph],
+  );
+
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
     (screen: { x: number; y: number } | null, nodeType: ProcessNodeType = "process") => {
       if (readOnly) {
         return;
+      }
+      // 펼침 중 클릭이 자식 영역 안이면 그 자식 스코프에 추가(스코프상대 위치로 변환)
+      const composition = inlineCompositionRef.current;
+      if (screen && composition) {
+        const point = reactFlow.screenToFlowPosition(screen);
+        const region = composition.regions
+          .filter((box) => point.x >= box.x && point.x <= box.x + box.width)
+          .sort((a, b) => b.depth - a.depth)[0];
+        const offset = region ? composition.scopeOffsets.get(region.id) : undefined;
+        if (region && offset) {
+          void addChildNode(region.id, {
+            x: point.x - offset.x - NODE_WIDTH / 2,
+            y: point.y - offset.y - NODE_HEIGHT / 2,
+          });
+          return;
+        }
       }
       pushHistory();
       const id = genId();
@@ -1800,7 +1869,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSelectedEdgeId(null);
       scheduleAutoSave();
     },
-    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t],
+    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t, addChildNode],
   );
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
@@ -3503,22 +3572,39 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     }
 
-    // 자식별 영역 오프셋(파생 절대위치 − fullGraph 스코프상대) — 드래그 후 절대→스코프상대 역변환용.
+    // 자식별 영역 오프셋(파생 절대위치 − fullGraph 스코프상대) — 드래그/추가 시 절대↔스코프상대 변환용.
+    // scopeOffsets: 같은 스코프 자식은 동일 오프셋 → 새 노드 추가 위치 변환에 사용.
     const childOffsets = new Map<string, { x: number; y: number }>();
+    const scopeOffsets = new Map<string, { x: number; y: number }>();
     for (const node of allNodes) {
       const sid = node.data.scopeId;
       if (sid != null && sid !== currentParentId) {
         const flat = fullGraph.nodes.find((entry) => entry.id === node.id);
         if (flat) {
-          childOffsets.set(node.id, {
+          const offset = {
             x: node.position.x - flat.pos_x,
             y: node.position.y - flat.pos_y,
-          });
+          };
+          childOffsets.set(node.id, offset);
+          scopeOffsets.set(sid, offset);
         }
       }
     }
-    return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds, childOffsets };
+    return {
+      nodes: allNodes,
+      childEdges,
+      gateways,
+      regions,
+      hiddenIds,
+      crossingIds,
+      childOffsets,
+      scopeOffsets,
+    };
   }, [expandedInline, fullGraph, nodes, edges, childEdits, currentParentId]);
+
+  useEffect(() => {
+    inlineCompositionRef.current = inlineComposition;
+  }, [inlineComposition]);
 
   // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
   useEffect(() => {
