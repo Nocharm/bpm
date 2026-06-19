@@ -13,7 +13,7 @@ import {
   PanelsTopLeft,
   Square,
 } from "lucide-react";
-import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useRef, useState } from "react";
+import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 
 import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -51,6 +51,10 @@ interface EditorLeftSidebarProps {
   onFold: (id: string) => void;
 }
 
+// 사이드바 카드 접힘 상태 — 새로고침해도 세션 동안 유지(sessionStorage).
+const SIDEBAR_NODE_INFO_KEY = "bpm.sidebar.nodeInfoOpen";
+const SIDEBAR_NAV_KEYS_KEY = "bpm.sidebar.navKeysOpen";
+
 const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeWidth?: number }>> = {
   start: Circle,
   process: Square,
@@ -77,13 +81,41 @@ export function EditorLeftSidebar({
   onFold,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
+  // 카드 접힘 — 기본 펼침으로 초기화 후 마운트 시 sessionStorage 복원(초기 SSR 렌더와 일치).
   const [nodeInfoOpen, setNodeInfoOpen] = useState(true);
+  const [navKeysOpen, setNavKeysOpen] = useState(true);
+  useEffect(() => {
+    const ni = window.sessionStorage.getItem(SIDEBAR_NODE_INFO_KEY);
+    const nk = window.sessionStorage.getItem(SIDEBAR_NAV_KEYS_KEY);
+    if (ni !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNodeInfoOpen(ni === "1"); // one-time hydration restore from sessionStorage
+    }
+    if (nk !== null) {
+      setNavKeysOpen(nk === "1"); // one-time hydration restore from sessionStorage
+    }
+  }, []);
+  const toggleNodeInfo = () => {
+    const next = !nodeInfoOpen;
+    window.sessionStorage.setItem(SIDEBAR_NODE_INFO_KEY, next ? "1" : "0");
+    setNodeInfoOpen(next);
+  };
+  const toggleNavKeys = () => {
+    const next = !navKeysOpen;
+    window.sessionStorage.setItem(SIDEBAR_NAV_KEYS_KEY, next ? "1" : "0");
+    setNavKeysOpen(next);
+  };
   // 인라인 이름 편집 중인 행 — Esc 취소 시 blur 커밋 방지 가드
   const [editingId, setEditingId] = useState<string | null>(null);
   const cancelledRef = useRef(false);
   // 편집 중 Tab/Shift+Tab → 저장 후 이동할 노드·방향(blur에서 소비). 리스트 ref는 편집 종료 후 키 포커스 복귀용.
   const pendingNavRef = useRef<{ id: string; dir: "next" | "prev" } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // 선택된 아웃라인 행 — 선택 변경 시 보이도록 스크롤(키보드 이동으로 스크롤 영역 밖 이탈 방지).
+  const selectedRowRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    selectedRowRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedId]);
 
   // 선택 상태 키맵 — Enter=편집, Tab/↓=다음, Shift+Tab/↑=이전, →=펼치기, ←=닫기, F=스마트 토글.
   // 편집 중에는 input이 키를 처리하므로 무시. 방향키·F는 stopPropagation으로 캔버스/전역 단축키와 분리.
@@ -150,90 +182,128 @@ export function EditorLeftSidebar({
   // 아웃라인 이동 단축키 안내 — 선택 노드 상태로 각 행 활성/비활성(고정 목록).
   const selIdx = selectedId ? outline.findIndex((row) => row.id === selectedId) : -1;
   const selRow = selIdx >= 0 ? outline[selIdx] : null;
-  const navShortcuts: { keys: string; label: string; active: boolean }[] = [
-    { keys: "↑", label: t("outlineNav.prev"), active: selIdx > 0 },
-    { keys: "↓", label: t("outlineNav.next"), active: selIdx >= 0 && selIdx < outline.length - 1 },
-    { keys: "→", label: t("outlineNav.expand"), active: !!selRow?.hasChildren && !selRow.expanded },
+  const navShortcuts: { keys: string[]; label: string; active: boolean }[] = [
+    { keys: ["↑", "⇧Tab"], label: t("outlineNav.prev"), active: selIdx > 0 },
     {
-      keys: "←",
+      keys: ["↓", "Tab"],
+      label: t("outlineNav.next"),
+      active: selIdx >= 0 && selIdx < outline.length - 1,
+    },
+    { keys: ["→"], label: t("outlineNav.expand"), active: !!selRow?.hasChildren && !selRow.expanded },
+    {
+      keys: ["←"],
       label: t("outlineNav.collapse"),
       active: !!selRow && ((selRow.hasChildren && selRow.expanded) || selRow.hierarchy),
     },
     {
-      keys: "F",
+      keys: ["F"],
       label: t("outlineNav.fold"),
       active: !!selRow && (selRow.hasChildren || selRow.hierarchy),
     },
   ];
+  // 둘 다 접히면 위아래가 아닌 같은 줄에 나눠 배치.
+  const bothCollapsed = !nodeInfoOpen && !navKeysOpen;
 
   return (
     <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2">
-      {/* 노드에 표시할 정보 — 아웃라인보다 위(바깥) 별도 섹션, 접기/펼치기 */}
-      <div className="mb-2 rounded-sm border border-hairline bg-surface-alt">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between p-2 text-fine text-ink-tertiary"
-          onClick={() => setNodeInfoOpen((value) => !value)}
-          aria-expanded={nodeInfoOpen}
+      {/* 노드 정보 · 아웃라인 단축키 — 둘 다 접히면 한 줄에 나눠, 아니면 세로 스택(contents) */}
+      <div className={bothCollapsed ? "mb-2 flex items-start gap-2" : "contents"}>
+        {/* 노드에 표시할 정보 — 접기/펼치기, 상태 sessionStorage 영속 */}
+        <div
+          className={`rounded-sm border border-hairline bg-surface-alt ${
+            bothCollapsed ? "min-w-0 flex-1" : "mb-2"
+          }`}
         >
-          <span>{t("sidebar.nodeInfo")}</span>
-          {nodeInfoOpen ? (
-            <ChevronDown size={14} strokeWidth={1.5} />
-          ) : (
-            <ChevronRight size={14} strokeWidth={1.5} />
-          )}
-        </button>
-        {nodeInfoOpen && (
-          <div className="flex flex-col gap-1 px-2 pb-2">
-            {NODE_DISPLAY_FIELDS.map((field) => {
-              const on = displayFields.includes(field);
-              return (
-                <div
-                  key={field}
-                  className="flex items-center justify-between text-fine text-ink-secondary"
-                >
-                  <span>{t(FIELD_LABEL_KEY[field])}</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={t(FIELD_LABEL_KEY[field])}
-                    onClick={() => onToggleDisplayField(field)}
-                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                      on ? "bg-accent" : "bg-border-strong"
-                    }`}
+          <button
+            type="button"
+            className="flex w-full min-w-0 items-center justify-between gap-1 p-2 text-fine text-ink-tertiary"
+            onClick={toggleNodeInfo}
+            aria-expanded={nodeInfoOpen}
+          >
+            <span className="truncate">{t("sidebar.nodeInfo")}</span>
+            {nodeInfoOpen ? (
+              <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+            ) : (
+              <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
+            )}
+          </button>
+          {nodeInfoOpen && (
+            <div className="flex flex-col gap-1 px-2 pb-2">
+              {NODE_DISPLAY_FIELDS.map((field) => {
+                const on = displayFields.includes(field);
+                return (
+                  <div
+                    key={field}
+                    className="flex items-center justify-between text-fine text-ink-secondary"
                   >
-                    <span
-                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                        on ? "left-3.5" : "left-0.5"
+                    <span>{t(FIELD_LABEL_KEY[field])}</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={t(FIELD_LABEL_KEY[field])}
+                      onClick={() => onToggleDisplayField(field)}
+                      className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                        on ? "bg-accent" : "bg-border-strong"
                       }`}
-                    />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                    >
+                      <span
+                        className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                          on ? "left-3.5" : "left-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-      {/* 아웃라인 이동 단축키 — 고정 안내, 선택 노드 상태로 활성/비활성(노드인포↔아웃라인 사이) */}
-      <div className="mb-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1.5">
-        <div className="mb-1 px-1 text-fine text-ink-tertiary">{t("outlineNav.title")}</div>
-        <ul className="flex flex-col gap-0.5">
-          {navShortcuts.map((shortcut) => (
-            <li
-              key={shortcut.keys}
-              className={`flex items-center justify-between gap-2 px-1 text-fine transition-opacity ${
-                shortcut.active ? "text-ink-secondary" : "opacity-40"
-              }`}
-            >
-              <span>{shortcut.label}</span>
-              <kbd className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary">
-                {shortcut.keys}
-              </kbd>
-            </li>
-          ))}
-        </ul>
+        {/* 아웃라인 이동 단축키 — 접기/펼치기(노드인포 카드와 동일), 선택 노드 상태로 행별 활성/흐림 */}
+        <div
+          className={`rounded-sm border border-hairline bg-surface-alt ${
+            bothCollapsed ? "min-w-0 flex-1" : "mb-2"
+          }`}
+        >
+          <button
+            type="button"
+            className="flex w-full min-w-0 items-center justify-between gap-1 p-2 text-fine text-ink-tertiary"
+            onClick={toggleNavKeys}
+            aria-expanded={navKeysOpen}
+          >
+            <span className="truncate">{t("outlineNav.title")}</span>
+            {navKeysOpen ? (
+              <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+            ) : (
+              <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
+            )}
+          </button>
+          {navKeysOpen && (
+            <ul className="flex flex-col gap-0.5 px-2 pb-2">
+              {navShortcuts.map((shortcut) => (
+                <li
+                  key={shortcut.label}
+                  className={`flex items-center justify-between gap-2 px-1 text-fine transition-opacity ${
+                    shortcut.active ? "text-ink-secondary" : "opacity-40"
+                  }`}
+                >
+                  <span className="truncate">{shortcut.label}</span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    {shortcut.keys.map((key) => (
+                      <kbd
+                        key={key}
+                        className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary"
+                      >
+                        {key}
+                      </kbd>
+                    ))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="mb-1 flex items-center justify-between">
@@ -265,6 +335,7 @@ export function EditorLeftSidebar({
               <Fragment key={item.id}>
                 {newBlock && <li role="separator" className="my-1 border-t border-divider" />}
                 <li
+                  ref={item.id === selectedId ? selectedRowRef : null}
                   className={`group flex items-center ${
                     item.hierarchy ? "border-l-2 border-accent-tint-border" : ""
                   }`}
