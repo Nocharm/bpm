@@ -539,6 +539,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
+  const childNodesRef = useRef<AppNode[]>([]);
   const edgesRef = useRef<Edge[]>([]);
   const groupsRef = useRef<GraphGroup[]>([]);
   const windowGeomRef = useRef<Record<string, WindowGeom>>({});
@@ -557,6 +558,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+  useEffect(() => {
+    childNodesRef.current = childNodes;
+  }, [childNodes]);
   useEffect(() => {
     childEditsRef.current = childEdits;
   }, [childEdits]);
@@ -1670,9 +1674,47 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pushHistory, setEdges, scheduleAutoSave],
   );
 
+  // 자식 간 연결 → 그 자식 스코프에 엣지 저장(fullGraph 낙관적 추가로 즉시 렌더 + 권위 그래프 PUT).
+  const createChildEdge = useCallback(
+    async (scopeId: string, connection: Connection, label: string) => {
+      if (versionId === null) {
+        return;
+      }
+      const edge: GraphEdge = {
+        id: genId(),
+        source_node_id: connection.source as string,
+        target_node_id: connection.target as string,
+        label,
+        source_side: sideFromHandleId(connection.sourceHandle, "right"),
+        target_side: sideFromHandleId(connection.targetHandle, "left"),
+      };
+      setFullGraph((prev) => (prev === null ? prev : { ...prev, edges: [...prev.edges, edge] }));
+      try {
+        const graph = await getGraph(versionId, scopeId);
+        await saveGraph(versionId, { ...graph, edges: [...graph.edges, edge] }, scopeId);
+        refreshFullGraph();
+      } catch {
+        showToast(t("err.save"));
+      }
+    },
+    [versionId, refreshFullGraph, showToast, t, setFullGraph],
+  );
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly) {
+        return;
+      }
+      // 자식 간 연결(같은 자식 스코프) → 그 스코프에 엣지 저장
+      const srcChild = childNodesRef.current.find((node) => node.id === connection.source);
+      const tgtChild = childNodesRef.current.find((node) => node.id === connection.target);
+      if (
+        srcChild &&
+        tgtChild &&
+        srcChild.data.scopeId != null &&
+        srcChild.data.scopeId === tgtChild.data.scopeId
+      ) {
+        void createChildEdge(srcChild.data.scopeId, connection, "");
         return;
       }
       // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
@@ -1683,7 +1725,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       createEdge(connection, "");
     },
-    [readOnly, createEdge],
+    [readOnly, createEdge, createChildEdge],
   );
 
   // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결은 엣지를 생성, 노드 드롭은 기존 엣지에 라벨만 부여.
@@ -3505,8 +3547,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             selectable: true,
             draggable: true,
             deletable: true,
+            connectable: true,
           }
-        : node;
+        : inlineComposition
+          ? { ...node, connectable: false } // 펼침 중 현재 스코프(프레임) 노드는 연결 비활성 — 자식만 연결
+          : node;
       const count = unresolvedCounts.get(display.id) ?? 0;
       return count === (display.data.commentCount ?? 0)
         ? display
@@ -4405,7 +4450,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       snapToGrid
                       snapGrid={[8, 8]}
                       nodesDraggable={!readOnly && expandedInline.size === 0}
-                      nodesConnectable={!readOnly && expandedInline.size === 0}
+                      nodesConnectable={!readOnly}
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
