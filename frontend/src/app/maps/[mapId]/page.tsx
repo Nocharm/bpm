@@ -573,6 +573,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const currentParentId =
     scopes[Math.min(activeIndex, scopes.length - 1)]?.parentId ?? null;
 
+  // 포커스 모드(A) — 제자리에서 "편집 활성"인 스코프(자식이면 그 인라인 레인이 활성). 기본=현재 스코프.
+  // 클릭으로 토글하되 navigateTo/카메라 없음 — 위치 고정, 활성↔비활성 구역만 바뀐다.
+  const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
+
   const scopeKey = (scope: Scope) => scope.parentId ?? "root";
 
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
@@ -604,6 +608,17 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     childNodesRef.current = childNodes;
   }, [childNodes]);
+  const activeScopeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeScopeIdRef.current = activeScopeId;
+  }, [activeScopeId]);
+  // 포커스(A) — 활성 자식 스코프가 접히면(더 이상 펼쳐져 있지 않으면) 현재 스코프로 복귀.
+  useEffect(() => {
+    if (activeScopeId !== null && activeScopeId !== currentParentId && !expandedInline.has(activeScopeId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 접힌 활성 스코프 정리(파생 상태 동기화)
+      setActiveScopeId(currentParentId);
+    }
+  }, [activeScopeId, currentParentId, expandedInline]);
   useEffect(() => {
     childEditsRef.current = childEdits;
   }, [childEdits]);
@@ -1324,6 +1339,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelectedEdgeId(null);
         setMenu(null);
         setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
+        setActiveScopeId(currentParentId); // 포커스(A) 활성 스코프를 새 현재 스코프로 리셋
         setChildEdits(new Map()); // 자식 편집 오버레이 초기화 — 새 스코프는 fullGraph가 권위
         dirtyChildScopesRef.current.clear(); // 대기 중 자식 저장 취소(스코프 전환 시 stale 저장 방지)
         if (childSaveTimerRef.current) {
@@ -1595,29 +1611,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       setActiveIndex(nextScopes.length - 1);
     },
     [saveCurrentScope, t],
-  );
-
-  // 포커스 모드 — 특정 노드의 스코프를 활성화하기 위한 스코프 체인(루트→…→그 노드). 검색 내비와 동일 패턴.
-  // scopeNodeId=null(루트 노드의 scopeId)이면 루트 체인만 반환 → 루트 복귀.
-  const buildScopesTo = useCallback(
-    (scopeNodeId: string | null): Scope[] => {
-      const fg = fullGraphRef.current;
-      if (!fg || scopeNodeId === null) {
-        return [{ parentId: null, title: mapName }];
-      }
-      const byId = new Map(fg.nodes.map((node) => [node.id, node]));
-      const chain: FlatNode[] = [];
-      let cur = byId.get(scopeNodeId);
-      while (cur) {
-        chain.unshift(cur);
-        cur = cur.parent_node_id ? byId.get(cur.parent_node_id) : undefined;
-      }
-      return [
-        { parentId: null, title: mapName },
-        ...chain.map((node) => ({ parentId: node.id, title: node.title })),
-      ];
-    },
-    [mapName],
   );
 
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
@@ -3785,23 +3778,37 @@ function MapEditor({ mapId }: { mapId: number }) {
       : null;
     const mapped = base.map((node) => {
       const stateChild = childById?.get(node.id);
-      const display = stateChild
-        ? {
-            ...stateChild,
-            // 드래그 중인 자식은 childNodes(절대)위치, 아니면 buildScope 파생위치
-            position: draggingChildIds.has(node.id) ? stateChild.position : node.position,
-            data: node.data,
-            // 포커스 모드 Step 1: 비활성(자식) 스코프는 읽기전용 dim — 활성 스코프(현재)만 편집.
-            // (스코프 활성화 시 네이티브 편집은 Step 3 navigateTo에서.)
-            selectable: false,
-            draggable: false,
-            deletable: false,
-            connectable: false,
-            style: { ...stateChild.style, opacity: INACTIVE_SCOPE_OPACITY },
-          }
-        : inlineComposition
-          ? { ...node, connectable: false } // 펼침 중 현재 스코프(프레임) 노드는 연결 비활성 — 자식만 연결
-          : node;
+      let display;
+      if (stateChild) {
+        // 자식(인라인) 노드 — 그 스코프가 활성이면 편집(불투명), 아니면 읽기전용 dim. 포커스(A) 토글.
+        const isActive = (node.data.scopeId ?? null) === activeScopeId;
+        display = {
+          ...stateChild,
+          // 드래그 중인 자식은 childNodes(절대)위치, 아니면 buildScope 파생위치
+          position: draggingChildIds.has(node.id) ? stateChild.position : node.position,
+          data: node.data,
+          selectable: isActive,
+          draggable: isActive,
+          deletable: isActive,
+          connectable: isActive,
+          style: { ...stateChild.style, opacity: isActive ? 1 : INACTIVE_SCOPE_OPACITY },
+        };
+      } else if (inlineComposition) {
+        // 프레임(현재 스코프) 노드 — 활성이면 편집, 비활성(자식 포커스 중)이면 읽기전용 dim.
+        const isActive = currentParentId === activeScopeId;
+        display = isActive
+          ? { ...node, connectable: true }
+          : {
+              ...node,
+              selectable: false,
+              draggable: false,
+              deletable: false,
+              connectable: false,
+              style: { ...node.style, opacity: INACTIVE_SCOPE_OPACITY },
+            };
+      } else {
+        display = node;
+      }
       const count = unresolvedCounts.get(display.id) ?? 0;
       return count === (display.data.commentCount ?? 0)
         ? display
@@ -3809,7 +3816,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds, ancestorContextNodes]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds, ancestorContextNodes, activeScopeId, currentParentId]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -4032,20 +4039,34 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { node, pan };
   }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
 
-  // 포커스(자식) 스코프 좌우 경계 — 활성 스코프를 "레인"으로 감싸는 세로선 위치(루트에선 없음).
-  const focusScopeBounds = useMemo<{ left: number; right: number } | null>(() => {
-    if (currentParentId === null || nodes.length === 0) {
+  // 포커스(A) — 활성 스코프가 자식(인라인 레인)일 때만 좌우 세로 경계선 + 깊이 틴트로 "레인" 표시.
+  const focusScopeBounds = useMemo<{ left: number; right: number; depth: number } | null>(() => {
+    if (activeScopeId === null || activeScopeId === currentParentId || !inlineComposition) {
+      return null;
+    }
+    const activeNodes = inlineComposition.nodes.filter(
+      (node) => (node.data.scopeId ?? null) === activeScopeId,
+    );
+    if (activeNodes.length === 0) {
       return null;
     }
     let minX = Infinity;
     let maxX = -Infinity;
-    for (const node of nodes) {
+    for (const node of activeNodes) {
       const w = nodeSizeOf(node.data.nodeType).w;
       minX = Math.min(minX, node.position.x);
       maxX = Math.max(maxX, node.position.x + w);
     }
-    return { left: minX - REGION_PAD, right: maxX + REGION_PAD };
-  }, [currentParentId, nodes]);
+    // 활성 스코프의 중첩 깊이(현재 스코프 기준) — 틴트 진하기
+    const byId = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
+    let depth = 0;
+    let cur: string | null = activeScopeId;
+    while (cur !== null && cur !== currentParentId && depth < 20) {
+      depth += 1;
+      cur = byId.get(cur)?.parent_node_id ?? null;
+    }
+    return { left: minX - REGION_PAD, right: maxX + REGION_PAD, depth };
+  }, [activeScopeId, currentParentId, inlineComposition, fullGraph]);
 
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
@@ -4132,8 +4153,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
-  // 포커스 모드 Step 4 — 비활성 스코프(인라인 자식·조상) 노드 더블클릭은 단일클릭과 동일하게 그 스코프를 활성화한다.
-  // (자식은 prop-only라 RF 노드 이벤트가 안 발화 → 캔버스 컨테이너 raw dblclick(capture)으로 가로챔. 루트 노드는 RF 기본 처리.)
+  // 포커스(A) — 자식(prop-only) 노드는 RF 노드 이벤트가 안 발화 → 캔버스 컨테이너 raw dblclick(capture)으로 가로챔.
+  // 비활성 자식 더블클릭=그 스코프 제자리 활성화, 활성 자식 더블클릭=요약/편집 모달. (프레임 노드는 RF onNodeDoubleClick 처리.)
   useEffect(() => {
     const container = canvasContainerRef.current;
     if (!container) {
@@ -4144,16 +4165,21 @@ function MapEditor({ mapId }: { mapId: number }) {
       const nodeEl = target?.closest?.(".react-flow__node") as HTMLElement | null;
       const id = nodeEl?.getAttribute("data-id");
       if (!id || nodesRef.current.some((node) => node.id === id)) {
-        return; // 현재 스코프 노드/노드 밖 — React Flow 기본 처리
+        return; // 현재 스코프(프레임) 노드/노드 밖 — React Flow 기본 처리
       }
       event.preventDefault();
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
-      const scopeId = fullGraphRef.current?.nodes.find((node) => node.id === id)?.parent_node_id ?? null;
-      void navigateTo(buildScopesTo(scopeId)); // 그 스코프를 활성 nodes로 전환(루트 노드=루트 복귀)
+      const scopeId = childNodesRef.current.find((node) => node.id === id)?.data.scopeId ?? null;
+      if (scopeId !== activeScopeIdRef.current) {
+        setActiveScopeId(scopeId); // 비활성 → 제자리 활성화(카메라/위치 변화 없음)
+      } else {
+        setSelectedId(id);
+        setSummaryNodeId(id); // 활성 자식 → 요약/편집 모달
+      }
     };
     container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
     return () => container.removeEventListener("dblclick", handleDblClick, true);
-  }, [navigateTo, buildScopesTo]);
+  }, []);
 
   // 인스펙터 폭 로컬 영속
   useEffect(() => {
@@ -4896,10 +4922,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                           handleSubprocessPick(node.id);
                           return;
                         }
-                        // 비활성 스코프(인라인 자식·조상 컨텍스트) 노드 클릭 → 그 스코프를 활성화(navigateTo). 포커스 모드 Step 3b.
-                        // 루트 노드(scopeId=null)는 루트 스코프로 복귀 — buildScopesTo(null)이 루트 체인 반환.
-                        if (!nodesRef.current.some((item) => item.id === node.id)) {
-                          void navigateTo(buildScopesTo(node.data?.scopeId ?? null));
+                        // 포커스(A) — 비활성 스코프 노드 클릭 시 그 스코프를 제자리에서 활성화(navigateTo·카메라 없음, 위치 고정).
+                        const nodeScope = node.data?.scopeId ?? null;
+                        if (nodeScope !== activeScopeId) {
+                          setActiveScopeId(nodeScope);
                           return;
                         }
                         setSelectedId(node.id);
@@ -5038,7 +5064,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <FocusScopeBands
                             left={focusScopeBounds.left}
                             right={focusScopeBounds.right}
-                            depth={activeIndex}
+                            depth={focusScopeBounds.depth}
                           />
                         )}
                         {groupBoxes.map((box) => (
