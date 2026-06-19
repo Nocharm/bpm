@@ -11,7 +11,8 @@
 - **Step 1 완료** (`faadd96`): 별도 `childNodes` state + materialize effect(펼친 부모의 자식 추가/제거) + displayNodes가 파생 자식을 childNodes 객체로 치환 + 커스텀 `handleNodesChange`(변경분 nodes/childNodes 분배) + 중첩 접힘 정리. **검증: 표시 픽셀 동일(단일·중첩), 자식 클릭→선택(이벤트 발화), 모달 자식 편집 저장 정상(회귀 0), 아웃라인 깨끗, 죽은 입력 0.**
 - **Step 2 완료** (`e9c4ae0`): 자식 `deletable:true` + Delete 시 `saveChildScopeAfterDelete`(getGraph→삭제 노드/엣지 제거→PUT, 그룹 보존) + fullGraph 낙관적 제거(materialize 재생성 방지). **검증: s-doc 선택+Delete → 화면 제거 + r-review 스코프 영속.** (테스트 중 `git checkout dev.db`가 실행 중 백엔드를 readonly로 만드는 함정 주의 — 백엔드 재시작 필요.)
 - **Step 3 이동(드래그) 완료** (`0f3776b`): buildScope가 자식을 dagre 재배치 대신 **저장된 pos_x/pos_y 사용**(드래그 영속·인라인=드릴인 일관) + `childTop`을 세로중심→**앵커 상단정렬**(단일행 초기표시 동일, 세로 드래그 재중심화 튐 제거) + `draggingChildIds`(드래그 중 childNodes 절대위치) + `onNodeDragStart`(자식이면 childNodes를 파생위치로 맞춰 점프 방지+플래그) + `onNodeDragStop`(절대→스코프상대 = childNodes.pos − `inlineComposition.childOffsets`, fullGraph 낙관적 갱신, 자식 스코프 PUT). **검증: 단일·중첩 이동·영속(접기/재펼침 포함), 튐 없음, 초기 단일행 표시 동일, 모달·삭제 회귀 0.**
-- **남은 편집 op**: 추가(영역 내 노드 생성→childNodes+scopeId+위치+저장), 연결(자식 간 엣지→child edges materialize+저장). 인라인 이름편집은 자식에서 in-node 입력 커밋이 불안정 → 모달 유지.
+- **Step 4 연결(엣지) 완료** (`33c0bbd`): 펼침 중 `nodesConnectable` 켜고(전역) 현재 스코프(프레임) 노드는 `connectable:false`로 막아 **자식만 연결**. `onConnect`가 같은 자식 스코프 연결을 `createChildEdge`로 라우팅 — fullGraph에 낙관적 추가(buildScope.childEdges로 즉시 렌더) + 자식 스코프 PUT(노드/그룹 보존). **검증: 자식↔자식 연결 즉시 렌더(8→9) + 자식 스코프 영속, root 무오염, 드래그 회귀 0.** 함정: Playwright 연결 드롭은 정밀도가 매우 flaky(여러 번 재시도해야 착지) — 핸들 박스 중심으로 mousedown→중간점→타겟 핸들 패턴.
+- **남은 편집 op**: 추가(영역 내 노드 생성→childNodes+scopeId+위치(스코프상대)+저장). 인라인 이름편집은 자식에서 in-node 입력 커밋이 불안정 → 모달 유지.
 
 ## 좌표·저장 모델 (핵심 결정)
 - **자식 = 진짜 state 노드.** `nodes` state에 `data.scopeId = 부모 id`로 태그, materialize 시점에 영역 위치로 배치.
