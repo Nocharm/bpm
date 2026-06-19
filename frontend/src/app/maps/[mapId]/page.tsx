@@ -4161,7 +4161,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, []);
 
-  // 아웃라인 클릭 — 노드가 속한 스코프로 이동 후, cubic ease(느림→빠름→느림)로 포커싱
+  // 노드가 화면 밖일 때만 현재 줌 유지한 채 부드럽게 가운데로 — 이미 보이면 이동 없음(매 클릭 점프/줌변경 방지).
+  const revealNodeIfOffscreen = useCallback(
+    (id: string) => {
+      const node = reactFlow.getNode(id);
+      if (!node) {
+        return;
+      }
+      const zoom = reactFlow.getZoom();
+      const vpt = reactFlow.getViewport();
+      const w = node.measured?.width ?? NODE_WIDTH;
+      const h = node.measured?.height ?? NODE_HEIGHT;
+      const sx = node.position.x * zoom + vpt.x;
+      const sy = node.position.y * zoom + vpt.y;
+      const margin = 48; // 화면 가장자리 여유 — 이 안이면 "보임"으로 간주
+      const visible =
+        sx >= margin &&
+        sy >= margin &&
+        sx + w * zoom <= paneWidth - margin &&
+        sy + h * zoom <= paneHeight - margin;
+      if (!visible) {
+        void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+          zoom,
+          duration: 500,
+        });
+      }
+    },
+    [reactFlow, paneWidth, paneHeight],
+  );
+
+  // 아웃라인 클릭 — 노드가 속한 스코프로 이동 후, 화면 밖일 때만 현재 줌으로 부드럽게 포커싱
   const handleOutlineSelect = useCallback(
     (id: string) => {
       const flatById = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
@@ -4176,8 +4205,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             node.selected === (node.id === id) ? node : { ...node, selected: node.id === id },
           ),
         );
-        // duration이 길수록 React Flow 기본 cubic-in-out 가감속이 또렷하게 보임
-        void reactFlow.fitView({ nodes: [{ id }], padding: 0.4, maxZoom: 1.3, duration: 700 });
+        // 화면에 이미 보이면 이동 없음, 밖일 때만 현재 줌으로 부드럽게 가운데(줌 강제 변경 제거 — 매 클릭 점프 방지)
+        revealNodeIfOffscreen(id);
         return;
       }
       // 다른 스코프(하위) — 드릴인 창 대신 조상 체인을 인라인 펼쳐 해당 노드를 레인에 노출하고 포커싱.
@@ -4207,7 +4236,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         });
       }, 160);
     },
-    [fullGraph, currentParentId, reactFlow, setNodes, commitExpanded],
+    [fullGraph, currentParentId, reactFlow, setNodes, commitExpanded, revealNodeIfOffscreen],
   );
 
   // 아웃라인 Tab/↓ — 다음(아래) 가시 행으로 이동. 펼치기는 자동으로 하지 않는다(→/F가 담당).
