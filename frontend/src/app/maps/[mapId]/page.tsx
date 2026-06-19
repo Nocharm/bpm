@@ -392,6 +392,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 펼친 자식 노드 — 메인 nodes(현재 스코프)와 분리해 둔다. React Flow가 측정·이벤트를 라우팅하도록 displayNodes에 포함하되,
   // nodes를 오염시키지 않아 아웃라인·저장·라우팅 등 기존 가정이 깨지지 않는다(회귀 0). scopeId = 펼친 부모 id.
   const [childNodes, setChildNodes] = useState<AppNode[]>([]);
+  // 드래그 중인 자식 id — 드래그 중엔 displayNodes가 childNodes(절대)위치를, 아니면 buildScope 파생위치를 쓴다.
+  const [draggingChildIds, setDraggingChildIds] = useState<Set<string>>(new Set());
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
@@ -2114,6 +2116,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     [versionId, refreshFullGraph, showToast, t],
   );
 
+  // 자식 드래그 후 그 자식의 스코프상대 좌표를 저장 — fullGraph 낙관적 갱신(즉시 파생 위치 반영) + 권위 그래프에 위치 PUT.
+  const saveChildScopeAfterDrag = useCallback(
+    async (scopeId: string, nodeId: string, pos: { x: number; y: number }) => {
+      if (versionId === null) {
+        return;
+      }
+      setFullGraph((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
+              nodes: prev.nodes.map((node) =>
+                node.id === nodeId ? { ...node, pos_x: pos.x, pos_y: pos.y } : node,
+              ),
+            },
+      );
+      try {
+        const graph = await getGraph(versionId, scopeId);
+        const nodes = graph.nodes.map((node) =>
+          node.id === nodeId ? { ...node, pos_x: pos.x, pos_y: pos.y } : node,
+        );
+        await saveGraph(versionId, { ...graph, nodes }, scopeId);
+        refreshFullGraph();
+      } catch {
+        showToast(t("err.save"));
+      }
+    },
+    [versionId, refreshFullGraph, showToast, t, setFullGraph],
+  );
+
   const handleNodesDelete = useCallback(
     (deleted: AppNode[]) => {
       const removed = new Set(deleted.map((node) => node.id));
@@ -3292,11 +3324,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           groups: [],
         }).map((edge) => ({ ...edge, selectable: false, deletable: false, focusable: false }));
         // 자식 스코프 로컬 LR 배치 후 재귀(자식 안의 펼침 처리)
-        const sub = buildScope(layoutWithDagre(kidApp, kidEdges), depth + 1);
+        // 자식은 dagre 재배치 대신 저장된 위치를 그대로 사용 — 드래그 편집이 영속되고 인라인=드릴인 레이아웃 일관.
+        const sub = buildScope(kidApp, depth + 1);
         const anchorSize = nodeSizeOf(anchor.data.nodeType);
         const regionW = sub.width + REGION_PAD * 2;
         const regionX = anchor.position.x + anchorSize.w + REGION_GAP;
-        const childTop = anchor.position.y + anchorSize.h / 2 - sub.height / 2;
+        // 영역 상단을 앵커 상단에 정렬(세로 중심정렬 아님) — 단일행 초기표시는 동일하고, 자식 세로 드래그 시 재중심화 튐을 없앤다.
+        const childTop = anchor.position.y;
         // A 바로 오른쪽 노드도 영역을 완전히 벗어나도록 앵커 폭 포함(겹침 방지)
         const footprint = anchorSize.w + regionW + REGION_GAP * 2;
         // 공간상 A보다 오른쪽 = 우측 이동(이 스코프 노드 + 먼저 배치된 자식/영역)
@@ -3427,8 +3461,22 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     }
 
-    return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds };
-  }, [expandedInline, fullGraph, nodes, edges, childEdits]);
+    // 자식별 영역 오프셋(파생 절대위치 − fullGraph 스코프상대) — 드래그 후 절대→스코프상대 역변환용.
+    const childOffsets = new Map<string, { x: number; y: number }>();
+    for (const node of allNodes) {
+      const sid = node.data.scopeId;
+      if (sid != null && sid !== currentParentId) {
+        const flat = fullGraph.nodes.find((entry) => entry.id === node.id);
+        if (flat) {
+          childOffsets.set(node.id, {
+            x: node.position.x - flat.pos_x,
+            y: node.position.y - flat.pos_y,
+          });
+        }
+      }
+    }
+    return { nodes: allNodes, childEdges, gateways, regions, hiddenIds, crossingIds, childOffsets };
+  }, [expandedInline, fullGraph, nodes, edges, childEdits, currentParentId]);
 
   // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
   useEffect(() => {
@@ -3451,10 +3499,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       const display = stateChild
         ? {
             ...stateChild,
-            position: node.position,
+            // 드래그 중인 자식은 childNodes(절대)위치, 아니면 buildScope 파생위치
+            position: draggingChildIds.has(node.id) ? stateChild.position : node.position,
             data: node.data,
             selectable: true,
-            draggable: false,
+            draggable: true,
             deletable: true,
           }
         : node;
@@ -3463,7 +3512,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? display
         : { ...display, data: { ...display.data, commentCount: count } };
     });
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -4400,11 +4449,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
                       onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
                       onNodeDragStart={(_, node) => {
+                        const sid = node.data.scopeId;
+                        if (sid != null && sid !== currentParentId) {
+                          // 자식 드래그 — childNodes를 파생(절대)위치로 맞춰 점프 방지 + 드래그 플래그
+                          setChildNodes((current) =>
+                            current.map((child) =>
+                              child.id === node.id ? { ...child, position: node.position } : child,
+                            ),
+                          );
+                          setDraggingChildIds((prev) => new Set(prev).add(node.id));
+                          return;
+                        }
                         pushHistory();
                         dragStartPosRef.current = { id: node.id, x: node.position.x, y: node.position.y };
                       }}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
+                        const sid = node.data.scopeId;
+                        if (sid != null && sid !== currentParentId) {
+                          // 자식 드래그 종료 — 절대→스코프상대 역변환(절대 − 영역 오프셋) 후 자식 스코프에 저장
+                          if (!readOnly) {
+                            const offset =
+                              inlineComposition?.childOffsets.get(node.id) ?? { x: 0, y: 0 };
+                            void saveChildScopeAfterDrag(sid, node.id, {
+                              x: node.position.x - offset.x,
+                              y: node.position.y - offset.y,
+                            });
+                          }
+                          setDraggingChildIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(node.id);
+                            return next;
+                          });
+                          clearDwell();
+                          setDropTarget(null);
+                          setGroupDropTarget(null);
+                          return;
+                        }
                         const drop = dropTargetRef.current;
                         if (
                           !readOnly &&
