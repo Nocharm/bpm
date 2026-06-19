@@ -150,6 +150,7 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
+const ANCESTOR_CONTEXT_GAP = 160; // 포커스 모드 — 활성 자식 스코프 좌측에 조상 스코프(dim 컨텍스트)를 떨어뜨리는 간격
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
@@ -3621,6 +3622,68 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => window.clearTimeout(timer);
   }, [expandAnimating]);
 
+  // 포커스 모드 Step 2 — 활성 스코프가 자식일 때(currentParentId≠null) 조상 스코프 노드를 읽기전용 dim 컨텍스트로 렌더.
+  // 활성 스코프(`nodes`)는 스코프상대 좌표라, 각 조상 스코프를 그 우변이 활성 스코프 좌측에 오도록 평행이동(상단 정렬). 깊이만큼 좌로 누적.
+  // fullGraph는 자식 state(`nodes`)에 없어 React Flow 미측정 → measured 직접 주입(레슨: 미측정=visibility:hidden).
+  const ancestorContextNodes = useMemo<AppNode[]>(() => {
+    if (currentParentId === null || inlineComposition || !fullGraph || nodes.length === 0) {
+      return [];
+    }
+    let aMinX = Infinity;
+    let aMinY = Infinity;
+    for (const node of nodes) {
+      aMinX = Math.min(aMinX, node.position.x);
+      aMinY = Math.min(aMinY, node.position.y);
+    }
+    const out: AppNode[] = [];
+    let anchorId: string | null = currentParentId; // 이 노드가 속한 스코프를 다음으로 그린다
+    let rightEdge = aMinX; // 다음 조상 스코프의 우변이 놓일 x(이 값 좌측으로)
+    let topRef = aMinY;
+    for (let guard = 0; guard < 20 && anchorId !== undefined; guard++) {
+      const selfFlat = fullGraph.nodes.find((flat) => flat.id === anchorId);
+      const parentScopeId = selfFlat?.parent_node_id ?? null; // anchorId를 담는 스코프
+      const siblings = fullGraph.nodes.filter((flat) => flat.parent_node_id === parentScopeId);
+      if (siblings.length === 0) {
+        break;
+      }
+      const built = siblings.map((flat) => {
+        const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, parentScopeId);
+        return { app, size: nodeSizeOf(app.data.nodeType) };
+      });
+      let pMinX = Infinity;
+      let pMinY = Infinity;
+      let pMaxX = -Infinity;
+      for (const { app, size } of built) {
+        pMinX = Math.min(pMinX, app.position.x);
+        pMinY = Math.min(pMinY, app.position.y);
+        pMaxX = Math.max(pMaxX, app.position.x + size.w);
+      }
+      const dx = rightEdge - ANCESTOR_CONTEXT_GAP - pMaxX; // 이 스코프 우변을 rightEdge 좌측으로
+      const dy = topRef - pMinY; // 상단 정렬
+      for (const { app, size } of built) {
+        out.push({
+          ...app,
+          position: { x: app.position.x + dx, y: app.position.y + dy },
+          selectable: false,
+          draggable: false,
+          deletable: false,
+          connectable: false,
+          width: size.w,
+          height: size.h,
+          measured: { width: size.w, height: size.h },
+          style: { opacity: INACTIVE_SCOPE_OPACITY },
+        });
+      }
+      if (parentScopeId === null) {
+        break; // 루트 스코프까지 그림
+      }
+      anchorId = parentScopeId;
+      rightEdge = pMinX + dx;
+      topRef = pMinY + dy;
+    }
+    return out;
+  }, [currentParentId, inlineComposition, fullGraph, nodes]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
@@ -3628,7 +3691,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     const childById = inlineComposition
       ? new Map(childNodes.map((node) => [node.id, node] as const))
       : null;
-    return base.map((node) => {
+    const mapped = base.map((node) => {
       const stateChild = childById?.get(node.id);
       const display = stateChild
         ? {
@@ -3652,7 +3715,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? display
         : { ...display, data: { ...display.data, commentCount: count } };
     });
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds]);
+    // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
+    return [...mapped, ...ancestorContextNodes];
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds, ancestorContextNodes]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -3847,6 +3912,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       maxX = Math.max(maxX, node.position.x + w);
       maxY = Math.max(maxY, node.position.y + h);
     }
+    // 조상 컨텍스트(좌측 dim)도 패닝 범위에 포함 — 안 그러면 translateExtent가 조상을 잘라 못 본다.
+    for (const node of ancestorContextNodes) {
+      const w = node.measured?.width ?? NODE_WIDTH;
+      const h = node.measured?.height ?? NODE_HEIGHT;
+      minX = Math.min(minX, node.position.x);
+      minY = Math.min(minY, node.position.y);
+      maxX = Math.max(maxX, node.position.x + w);
+      maxY = Math.max(maxY, node.position.y + h);
+    }
     const topLeftX = minX - EXTENT_TOPLEFT_MARGIN;
     const topLeftY = minY - EXTENT_TOPLEFT_MARGIN;
     // 노드 드래그 범위: 좌상단 바짝, 우하단은 성장 여유.
@@ -3865,7 +3939,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ],
     ];
     return { node, pan };
-  }, [nodes, inlineComposition, paneWidth, paneHeight]);
+  }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
 
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
