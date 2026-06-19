@@ -12,7 +12,15 @@
 - **Step 2 완료** (`e9c4ae0`): 자식 `deletable:true` + Delete 시 `saveChildScopeAfterDelete`(getGraph→삭제 노드/엣지 제거→PUT, 그룹 보존) + fullGraph 낙관적 제거(materialize 재생성 방지). **검증: s-doc 선택+Delete → 화면 제거 + r-review 스코프 영속.** (테스트 중 `git checkout dev.db`가 실행 중 백엔드를 readonly로 만드는 함정 주의 — 백엔드 재시작 필요.)
 - **Step 3 이동(드래그) 완료** (`0f3776b`): buildScope가 자식을 dagre 재배치 대신 **저장된 pos_x/pos_y 사용**(드래그 영속·인라인=드릴인 일관) + `childTop`을 세로중심→**앵커 상단정렬**(단일행 초기표시 동일, 세로 드래그 재중심화 튐 제거) + `draggingChildIds`(드래그 중 childNodes 절대위치) + `onNodeDragStart`(자식이면 childNodes를 파생위치로 맞춰 점프 방지+플래그) + `onNodeDragStop`(절대→스코프상대 = childNodes.pos − `inlineComposition.childOffsets`, fullGraph 낙관적 갱신, 자식 스코프 PUT). **검증: 단일·중첩 이동·영속(접기/재펼침 포함), 튐 없음, 초기 단일행 표시 동일, 모달·삭제 회귀 0.**
 - **Step 4 연결(엣지) 완료** (`33c0bbd`): 펼침 중 `nodesConnectable` 켜고(전역) 현재 스코프(프레임) 노드는 `connectable:false`로 막아 **자식만 연결**. `onConnect`가 같은 자식 스코프 연결을 `createChildEdge`로 라우팅 — fullGraph에 낙관적 추가(buildScope.childEdges로 즉시 렌더) + 자식 스코프 PUT(노드/그룹 보존). **검증: 자식↔자식 연결 즉시 렌더(8→9) + 자식 스코프 영속, root 무오염, 드래그 회귀 0.** 함정: Playwright 연결 드롭은 정밀도가 매우 flaky(여러 번 재시도해야 착지) — 핸들 박스 중심으로 mousedown→중간점→타겟 핸들 패턴.
-- **남은 편집 op**: 추가(영역 내 노드 생성→childNodes+scopeId+위치(스코프상대)+저장). 인라인 이름편집은 자식에서 in-node 입력 커밋이 불안정 → 모달 유지.
+- **Step 5 추가 완료** (`bc3cad5`): 펼침 중 영역 빈 공간 우클릭→노드타입 선택 시 그 자식 스코프에 추가. `handleAddNode`가 클릭 x를 포함하는 가장 깊은 region 탐지(`inlineComposition` regions, TDZ 회피 위해 `inlineCompositionRef`로 읽음) → region offset(`scopeOffsets`)으로 스코프상대 변환 → `addChildNode`(fullGraph 낙관적 추가→materialize 렌더 + 자식 스코프 PUT). region 밖 클릭은 기존 현재 스코프 추가. **검증: 새 노드 즉시 렌더(9→10) 클릭 위치에 + 자식 스코프 영속(4→5).** 인라인 이름편집은 자식 in-node 입력 커밋 불안정 → 모달 유지.
+
+## 캔버스/UX 항목
+- **캔버스 좌상단 고정 완료** (`87feada`): `contentExtent`(패닝/노드 범위)를 대칭 `EXTENT_MARGIN`(600) → 비대칭(좌상단 `EXTENT_TOPLEFT_MARGIN`=120, 우하단 600). 위/왼쪽 무한 패닝 방지, 아래/오른쪽 성장 여유. 검증: pan-up이 상단 경계에서 정지.
+- **하위영역 드롭존 — 미완(진단 기록, 큰 작업)**: 메인 캔버스 드롭존(`handleNodeDrag` 탐지 + `handleZoneDrop` 적용: swap/placeBeside/applyFlowEdges/충돌모달)은 현재 스코프 전용. 자식 적용 시 발견한 함정:
+  1. `screenRectOf`가 `nodesRef.find`(현재 스코프)라 자식은 null → 링 위치 못 잡음. **수정: `reactFlow.getNode(id)`(표시 위치, 모든 렌더 노드)** 사용.
+  2. `onNodeDrag`(handleNodeDrag)는 자식에도 발화함(테스트의 0은 **dev.db 오염**으로 드래그 자체가 안 된 것 — 깨끗하면 정상 83회 발화). nodesDraggable 변경 불필요.
+  3. **`reactFlow.getIntersectingNodes(node)`가 자식엔 항상 빈 결과**(RF 내부 — displayNodes swap 자식은 internal positionAbsolute 누락 추정) → 타겟 미탐지 → 링 안 뜸. **수동 형제 겹침 판정 필요**(dragged child rect vs 같은 scopeId 형제들의 getNode rect).
+  4. 적용: `onNodeDragStop` 자식 분기가 dropTarget 있으면 zone op을 **자식 스코프**에 적용+저장해야. swap(두 자식 위치 교환+저장)·insert(위치+자식스코프 엣지 재배선 via getGraph→변형→PUT)·충돌모달. 엣지 재배선이 가장 큼. 수백 줄 규모 → 단계별(탐지+swap 먼저, insert 후속) 권장.
 
 ## 좌표·저장 모델 (핵심 결정)
 - **자식 = 진짜 state 노드.** `nodes` state에 `data.scopeId = 부모 id`로 태그, materialize 시점에 영역 위치로 배치.
