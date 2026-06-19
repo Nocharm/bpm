@@ -3,12 +3,14 @@
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, FoldHorizontal, LayoutGrid, Lock, LogOut, Network, PanelRight, PencilLine, Redo2, Undo2, UnfoldHorizontal } from "lucide-react";
 import {
   addEdge,
+  applyNodeChanges,
   Background,
   BackgroundVariant,
   Controls,
   type Connection,
   type Edge,
   MarkerType,
+  type NodeChange,
   type NodeTypes,
   PanOnScrollMode,
   ReactFlow,
@@ -387,6 +389,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [bounds, setBounds] = useState({ w: 960, h: 640 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
+  // 펼친 자식 노드 — 메인 nodes(현재 스코프)와 분리해 둔다. React Flow가 측정·이벤트를 라우팅하도록 displayNodes에 포함하되,
+  // nodes를 오염시키지 않아 아웃라인·저장·라우팅 등 기존 가정이 깨지지 않는다(회귀 0). scopeId = 펼친 부모 id.
+  const [childNodes, setChildNodes] = useState<AppNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
@@ -556,6 +561,54 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+  // 펼친 노드의 자식을 childNodes로 materialize한다(React Flow 측정·이벤트용). 부모가 접히면 제거.
+  // 스코프/버전 전환 시 expandedInline이 비워지면 자동으로 모두 제거됨. 표시는 displayNodes가 buildScope 파생 위치로 합성.
+  useEffect(() => {
+    // deps에 childNodes가 없어 cascade 루프 없음(expandedInline/fullGraph 변화 시에만 동기화) — 안전한 의도된 setState
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setChildNodes((current) => {
+      const present = new Set(current.map((node) => node.id));
+      const toAdd: AppNode[] = [];
+      if (fullGraph) {
+        for (const expandedId of expandedInline) {
+          for (const flat of fullGraph.nodes) {
+            if (flat.parent_node_id === expandedId && !present.has(flat.id)) {
+              const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, expandedId);
+              toAdd.push({ ...app, selectable: true, draggable: false, deletable: false });
+            }
+          }
+        }
+      }
+      // 부모(scopeId)가 더 이상 펼쳐지지 않은 자식 제거
+      const kept = current.filter((node) => expandedInline.has(node.data.scopeId as string));
+      if (toAdd.length === 0 && kept.length === current.length) {
+        return current;
+      }
+      return [...kept, ...toAdd];
+    });
+  }, [expandedInline, fullGraph]);
+
+  // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<AppNode>[]) => {
+      if (childNodes.length === 0) {
+        onNodesChange(changes);
+        return;
+      }
+      const childIds = new Set(childNodes.map((node) => node.id));
+      const childChanges = changes.filter((change) => "id" in change && childIds.has(change.id));
+      const mainChanges = changes.filter(
+        (change) => !("id" in change) || !childIds.has(change.id),
+      );
+      if (mainChanges.length > 0) {
+        onNodesChange(mainChanges);
+      }
+      if (childChanges.length > 0) {
+        setChildNodes((current) => applyNodeChanges(childChanges, current));
+      }
+    },
+    [childNodes, onNodesChange],
+  );
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
@@ -3056,6 +3109,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       const next = new Set(expandedInline);
       if (next.has(nodeId)) {
         next.delete(nodeId);
+        // 중첩: 이 노드의 후손도 모두 접는다 — 안 그러면 후손의 childNodes가 고아로 남는다.
+        if (fullGraph) {
+          const parentOf = new Map(fullGraph.nodes.map((n) => [n.id, n.parent_node_id]));
+          const isDescendant = (id: string): boolean => {
+            let cursor = parentOf.get(id) ?? null;
+            while (cursor != null) {
+              if (cursor === nodeId) {
+                return true;
+              }
+              cursor = parentOf.get(cursor) ?? null;
+            }
+            return false;
+          };
+          for (const id of [...next]) {
+            if (isDescendant(id)) {
+              next.delete(id);
+            }
+          }
+        }
         commitExpanded(next);
         return;
       }
@@ -3318,13 +3390,28 @@ function MapEditor({ mapId }: { mapId: number }) {
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
+    // 파생 자식(prop-only) 대신 childNodes의 state 객체를 buildScope 파생 위치로 표시해야 RF가 측정·이벤트를 라우팅한다.
+    const childById = inlineComposition
+      ? new Map(childNodes.map((node) => [node.id, node] as const))
+      : null;
     return base.map((node) => {
-      const count = unresolvedCounts.get(node.id) ?? 0;
-      return count === (node.data.commentCount ?? 0)
-        ? node
-        : { ...node, data: { ...node.data, commentCount: count } };
+      const stateChild = childById?.get(node.id);
+      const display = stateChild
+        ? {
+            ...stateChild,
+            position: node.position,
+            data: node.data,
+            selectable: true,
+            draggable: false,
+            deletable: false,
+          }
+        : node;
+      const count = unresolvedCounts.get(display.id) ?? 0;
+      return count === (display.data.commentCount ?? 0)
+        ? display
+        : { ...display, data: { ...display.data, commentCount: count } };
     });
-  }, [nodes, inlineComposition, unresolvedCounts]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -4218,7 +4305,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       snapGrid={[8, 8]}
                       nodesDraggable={!readOnly && expandedInline.size === 0}
                       nodesConnectable={!readOnly && expandedInline.size === 0}
-                      onNodesChange={onNodesChange}
+                      onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
