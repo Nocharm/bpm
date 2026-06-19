@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-20
+- **자식 다중 선택 드래그 시 1개만 이동하던 버그 수정**(사용자 보고). 인라인 자식 드래그가 잡은 1개만 `draggingChildIds`에 넣어 나머지 선택 자식은 표시상 고정·드롭 후 원복됐음. `onNodeDragStart`에서 같은 스코프의 **선택된 자식 전부**를 draggingChildIds에 추가·파생위치 동기화, `onNodeDragStop`에서 **전부를 한 번의 getGraph→PUT로 배치 저장**(`saveChildScopeDragBatch`, 같은 스코프 다중 PUT 레이스 방지). Playwright(상대좌표): 자식 2개 박스선택 드래그 시 둘 다 이동 PASS(수정 전엔 1개만). 진단: 세션 read-only(체크아웃 락)는 별개 — 커밋 dev.db는 락 없음. tsc/eslint green.
 - **포커스 모드 A안 — 제자리 토글(navigateTo/카메라 제거)** (사용자 "줌·네비 없이 노드 위치 고정, 활성↔비활성 구역만 토글"). 클릭 시 navigateTo(캔버스 교체)로 위치/카메라가 바뀌던 것을, **`activeScopeId` 상태 토글**로 전환 — 인라인 펼침 합성은 그대로(위치 고정), 클릭한 스코프만 활성(불투명·편집)·나머지 dim. displayNodes가 `node.data.scopeId === activeScopeId`로 활성/비활성 게이팅(자식·프레임 공통), onNodeClick/raw-dblclick은 navigateTo 대신 `setActiveScopeId`. 활성 스코프 진입 시 카메라/위치 불변(scope-load 효과 미발화). `focusScopeBounds`를 activeScopeId 기준으로(레인+깊이 틴트), 접히면 현재 스코프 복귀 효과. `buildScopesTo` 제거(미사용). Playwright: 클릭 시 viewport 불변(-25,184,0.914)·s-doc 위치 불변(1155,511)·opacity 토글(0.4↔1)·활성 자식 드래그 PASS. (편집은 기존 인라인 scope-split — 드롭존/그룹/정렬은 후속 B) tsc/eslint green.
 
 ## 2026-06-19

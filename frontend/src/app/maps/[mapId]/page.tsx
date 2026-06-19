@@ -2320,26 +2320,30 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   // 자식 드래그 후 그 자식의 스코프상대 좌표를 저장 — fullGraph 낙관적 갱신(즉시 파생 위치 반영) + 권위 그래프에 위치 PUT.
-  const saveChildScopeAfterDrag = useCallback(
-    async (scopeId: string, nodeId: string, pos: { x: number; y: number }) => {
-      if (versionId === null) {
+  // 자식 스코프 드래그 저장 — 여러 노드를 한 번의 getGraph→PUT로(같은 스코프 다중 드래그 레이스 방지).
+  const saveChildScopeDragBatch = useCallback(
+    async (scopeId: string, moves: { id: string; pos: { x: number; y: number } }[]) => {
+      if (versionId === null || moves.length === 0) {
         return;
       }
+      const byId = new Map(moves.map((move) => [move.id, move.pos]));
       setFullGraph((prev) =>
         prev === null
           ? prev
           : {
               ...prev,
-              nodes: prev.nodes.map((node) =>
-                node.id === nodeId ? { ...node, pos_x: pos.x, pos_y: pos.y } : node,
-              ),
+              nodes: prev.nodes.map((node) => {
+                const pos = byId.get(node.id);
+                return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
+              }),
             },
       );
       try {
         const graph = await getGraph(versionId, scopeId);
-        const nodes = graph.nodes.map((node) =>
-          node.id === nodeId ? { ...node, pos_x: pos.x, pos_y: pos.y } : node,
-        );
+        const nodes = graph.nodes.map((node) => {
+          const pos = byId.get(node.id);
+          return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
+        });
         await saveGraph(versionId, { ...graph, nodes }, scopeId);
         refreshFullGraph();
       } catch {
@@ -4960,13 +4964,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodeDragStart={(_, node) => {
                         const sid = node.data.scopeId;
                         if (sid != null && sid !== currentParentId) {
-                          // 자식 드래그 — childNodes를 파생(절대)위치로 맞춰 점프 방지 + 드래그 플래그
+                          // 자식 드래그 — 잡은 것 + 같은 스코프의 선택된 자식 모두를 파생위치로 맞추고 드래그 플래그
+                          // (다중 선택 드래그 시 일부만 움직이던 버그 수정 — 선택 전체를 함께 이동/저장)
+                          const dragIds = new Set<string>();
                           setChildNodes((current) =>
-                            current.map((child) =>
-                              child.id === node.id ? { ...child, position: node.position } : child,
-                            ),
+                            current.map((child) => {
+                              const inScope = (child.data.scopeId ?? null) === sid;
+                              if (inScope && (child.id === node.id || child.selected)) {
+                                dragIds.add(child.id);
+                                const derived = inlineComposition?.nodes.find(
+                                  (n) => n.id === child.id,
+                                )?.position;
+                                return derived ? { ...child, position: derived } : child;
+                              }
+                              return child;
+                            }),
                           );
-                          setDraggingChildIds((prev) => new Set(prev).add(node.id));
+                          setDraggingChildIds((prev) => {
+                            const next = new Set(prev);
+                            dragIds.forEach((id) => next.add(id));
+                            return next;
+                          });
                           return;
                         }
                         pushHistory();
@@ -4976,20 +4994,33 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodeDragStop={(_, node) => {
                         const sid = node.data.scopeId;
                         if (sid != null && sid !== currentParentId) {
-                          // 자식 드래그 종료 — 절대→스코프상대 역변환(절대 − 영역 오프셋) 후 자식 스코프에 저장
+                          // 자식 드래그 종료 — 드래그된(선택된) 같은 스코프 자식 모두를 절대→스코프상대 변환 후 한 번에 저장.
                           if (!readOnly) {
-                            const offset =
-                              inlineComposition?.childOffsets.get(node.id) ?? { x: 0, y: 0 };
-                            void saveChildScopeAfterDrag(sid, node.id, {
-                              x: node.position.x - offset.x,
-                              y: node.position.y - offset.y,
-                            });
+                            const draggedIds = new Set(
+                              childNodesRef.current
+                                .filter(
+                                  (child) =>
+                                    child.selected && (child.data.scopeId ?? null) === sid,
+                                )
+                                .map((child) => child.id),
+                            );
+                            draggedIds.add(node.id); // 잡은 것 포함(단일 드래그도)
+                            const moves = childNodesRef.current
+                              .filter((child) => draggedIds.has(child.id))
+                              .map((child) => {
+                                const offset =
+                                  inlineComposition?.childOffsets.get(child.id) ?? {
+                                    x: 0,
+                                    y: 0,
+                                  };
+                                return {
+                                  id: child.id,
+                                  pos: { x: child.position.x - offset.x, y: child.position.y - offset.y },
+                                };
+                              });
+                            void saveChildScopeDragBatch(sid, moves);
                           }
-                          setDraggingChildIds((prev) => {
-                            const next = new Set(prev);
-                            next.delete(node.id);
-                            return next;
-                          });
+                          setDraggingChildIds(new Set()); // 드래그 종료 — 전부 해제
                           clearDwell();
                           setDropTarget(null);
                           setGroupDropTarget(null);
