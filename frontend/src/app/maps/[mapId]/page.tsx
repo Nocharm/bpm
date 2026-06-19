@@ -26,7 +26,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
@@ -266,6 +266,32 @@ function InlineRegionBands({
           </div>
         </Fragment>
       ))}
+    </>
+  );
+}
+
+// 포커스(navigateTo) 스코프의 좌우 세로 경계선 — 활성 스코프가 "무한 캔버스 속 레인"으로 보이게(인라인 펼침과 동일 언어).
+// 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더. 화면 전체 높이로 뻗는 세로선 2개.
+function FocusScopeBands({ left, right }: { left: number; right: number }) {
+  const { y, zoom } = useViewport();
+  const paneHeight = useStore((state) => state.height);
+  const topFlow = -y / zoom;
+  const bandHeight = paneHeight / zoom;
+  const lineStyle = (x: number): CSSProperties => ({
+    position: "absolute",
+    left: 0,
+    top: 0,
+    transform: `translate(${x}px, ${topFlow}px)`,
+    width: 0,
+    height: bandHeight,
+    borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+    zIndex: -1,
+    pointerEvents: "none",
+  });
+  return (
+    <>
+      <div style={lineStyle(left)} />
+      <div style={lineStyle(right)} />
     </>
   );
 }
@@ -4002,6 +4028,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { node, pan };
   }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
 
+  // 포커스(자식) 스코프 좌우 경계 — 활성 스코프를 "레인"으로 감싸는 세로선 위치(루트에선 없음).
+  const focusScopeBounds = useMemo<{ left: number; right: number } | null>(() => {
+    if (currentParentId === null || nodes.length === 0) {
+      return null;
+    }
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (const node of nodes) {
+      const w = nodeSizeOf(node.data.nodeType).w;
+      minX = Math.min(minX, node.position.x);
+      maxX = Math.max(maxX, node.position.x + w);
+    }
+    return { left: minX - REGION_PAD, right: maxX + REGION_PAD };
+  }, [currentParentId, nodes]);
+
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
     () =>
@@ -4995,6 +5036,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <InlineRegionBands
                             regions={inlineComposition.regions}
                             onCollapse={toggleInlineExpand}
+                          />
+                        )}
+                        {focusScopeBounds && (
+                          <FocusScopeBands
+                            left={focusScopeBounds.left}
+                            right={focusScopeBounds.right}
                           />
                         )}
                         {groupBoxes.map((box) => (
