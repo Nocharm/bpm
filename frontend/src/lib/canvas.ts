@@ -401,12 +401,23 @@ export function getOutgoingEdges(edges: Edge[], nodeId: string): Edge[] {
   return edges.filter((edge) => edge.source === nodeId);
 }
 
-// 자기루프·중복 없이 엣지 추가
+// 자기루프·중복 없이 엣지 추가. 기본 핸들 변을 명시(source=right/target=left) —
+// 미지정 시 React Flow가 첫 렌더 핸들(left)에 붙어, toAppEdges·buildGraph의 right/left 폴백과 어긋난다.
 function withEdge(edges: Edge[], source: string, target: string): Edge[] {
   if (source === target || edges.some((edge) => edge.source === source && edge.target === target)) {
     return edges;
   }
-  return [...edges, { ...EDGE_DEFAULTS, id: genId(), source, target }];
+  return [
+    ...edges,
+    {
+      ...EDGE_DEFAULTS,
+      id: genId(),
+      source,
+      target,
+      sourceHandle: sourceHandleId("right"),
+      targetHandle: targetHandleId("left"),
+    },
+  ];
 }
 
 /** A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B. */
