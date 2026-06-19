@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **BPM (Business Process Management) — 프로세스맵을 그리는 웹 서비스.** 현업이 노드/엣지로 계층형 프로세스 흐름을 시각적으로 작성·편집하고, As-Is/To-Be를 버전으로 관리·비교하는 도구. **기능 명세: `docs/spec.md`** (데이터 모델, UX, 구현 순서).
 
-> 상태: ⑤ Keycloak 인증 연동 완료 (AUTH_ENABLED 플래그 — 로컬 우회/서버 검증). 다음 단계: ⑥ 서버 docker-compose 배포.
+> 상태: ⑤ Keycloak 인증(AUTH_ENABLED 플래그) · ⑥ 서버 docker-compose 배포(포트 3333) 반영 완료. **현재 주력: 캔버스 에디터 UX 고도화 — 계층형 인라인 펼침/편집**(브랜치 `feat/canvas-view-improvements`, 다음 목표 "포커스 모드" — `docs/superpowers/plans/2026-06-19-active-scope-focus-mode.md`).
 > DB: 로컬 네이티브는 sqlite 파일(무설정), 서버 compose는 postgres. 스키마는 startup `create_all` (마이그레이션/Alembic은 후속).
+> ⚠️ **캔버스/에디터·인라인 계층 편집 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션.
 
 ## Commands
 
@@ -68,15 +69,25 @@ docker compose up -d --build   # 접속: http://<서버>:3333
 
 **인증 (확정):** 같은 서버의 기존 Keycloak(realm `ai-portal`) OIDC 사용. 주소는 하드코딩 금지 — `.env` 경유 (`docs/spec.md` §4).
 
-**예정 디렉터리 구조** (스캐폴딩 시 생성):
+**디렉터리 구조:**
 ```
-frontend/   # Next.js 앱
+frontend/   # Next.js 앱 (에디터: src/app/maps/[mapId]/page.tsx — ~5000줄 단일 컴포넌트)
 backend/    # Python API 서버 + requirements.txt / requirements-dev.txt
 nginx/      # 리버스 프록시 설정
+docs/       # spec.md, lessons/(시행착오 방지), superpowers/plans·specs/
 docker-compose.yml
 ```
 
 언어 규칙은 backend → `rules/languages/python.md`, frontend → `rules/languages/typescript.md` 적용. 컨테이너/설정 규칙은 `rules/backend/` 참고.
+
+## Lessons — 시행착오 방지
+
+캔버스 에디터(특히 **React Flow 계층형 인라인 편집**)에서 실측으로 얻은 교훈. **`frontend/src/app/maps/[mapId]/page.tsx`나 인라인 하위프로세스를 건드리기 전에 해당 카테고리를 먼저 읽을 것** (인덱스: `docs/lessons/README.md`).
+
+- [`docs/lessons/canvas-react-flow.md`](docs/lessons/canvas-react-flow.md) — 자식 노드는 메인 `nodes`에 합치지 말고 별도 `childNodes` state, prop-only 자식의 visibility/이벤트 함정, `getNode`/`getIntersectingNodes` 자식 한계, 펼침 중 인터랙션 게이팅.
+- [`docs/lessons/scope-save-and-coordinates.md`](docs/lessons/scope-save-and-coordinates.md) — 자식 스코프 저장 `getGraph→변형→PUT`(그룹 보존), fullGraph 낙관적 갱신, 스코프상대↔표시 좌표(`childOffsets`/`scopeOffsets`), buildScope는 dagre 대신 저장 pos.
+- [`docs/lessons/browser-verification.md`](docs/lessons/browser-verification.md) — Playwright+시스템 Chrome 검증, **dev.db 오염/readonly 함정**("0 events"는 코드 아닌 오염일 수 있음), 연결 드롭 flaky, node cwd.
+- [`docs/lessons/react-ts-patterns.md`](docs/lessons/react-ts-patterns.md) — useCallback deps TDZ → ref 미러, set-state-in-effect 린트, 큰 상태 모델은 메인 state 오염 금지.
 
 ## Operations / Deployment
 

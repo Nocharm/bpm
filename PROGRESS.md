@@ -8,6 +8,8 @@
 - **캔버스 좌상단 고정** — `contentExtent`(패닝/노드 범위)를 대칭 `EXTENT_MARGIN`(600)→비대칭(좌상단 `EXTENT_TOPLEFT_MARGIN`=120/우하단 600). 위·왼쪽 무한 패닝 방지, 아래·오른쪽 성장 여유.
 - **포커스 모드 설계(다음 세션)** — 최종 골 "깊이 무관 풀 편집(드롭존·그룹화·정렬 포함)". 통찰: 스코프 네비(`navigateTo`)로 어느 스코프든 `nodes`化하면 모든 기능 네이티브. 영역 클릭→그 스코프 활성(편집)+나머지 깊이 dim 읽기전용. 4단계 계획 `docs/superpowers/plans/2026-06-19-active-scope-focus-mode.md`. (드롭존 자식 적용 진단: `screenRectOf`는 getNode로 해결되나 `getIntersectingNodes`가 자식엔 빈 결과 → 수동 형제 겹침 판정 필요.)
 - ⚠️ 검증 함정(기록): dev.db는 테스트마다 오염 → 단계 검증 전 `git checkout dev.db`+백엔드 재시작(실행 중 checkout은 readonly 유발). 자식 RF 이벤트·onNodeDrag는 **깨끗한 db에서 정상**(0으로 보인 건 오염 탓). Playwright 연결 드롭은 매우 flaky.
+- 🐞 알려진 이슈(다음 세션 수정): **그룹/다중 선택 후 드래그 시 1개 노드만 이동**(선택된 전체가 아님). 사용자 실측. 의심: 커스텀 `handleNodesChange`의 nodes/childNodes 분배 또는 펼침 중 `draggable` 오버라이드가 다중-드래그 position change를 일부만 적용. 또는 기존(비펼침) 다중-드래그 자체 문제일 수도 — 펼침/비펼침 양쪽에서 재현 범위부터 확인.
+- 📚 레슨런 문서화 — `docs/lessons/`(canvas-react-flow·scope-save-and-coordinates·browser-verification·react-ts-patterns + README) 신설, CLAUDE.md에 "Lessons" 섹션으로 링크. CLAUDE.md 상태 줄 stale 수정(인증·배포 완료, 주력=캔버스 에디터 UX).
 
 ## 2026-06-18
 - 드롭으로 하위 만들기도 **후속없음 모달**을 타도록(사용자 피드백 #4) — `moveToChild`를 `runMoveToChild`(실제)+wrapper로 분리, B에 후속(나가는 엣지) 없으면 우클릭 생성과 동일 모달. 모달/픽 상태를 `{nodeId|sourceId, proceed}` continuation으로 일반화해 생성·드롭 공용(`handleCreateEndForSubprocess`·`handleSubprocessPick`이 `prompt.proceed()` 호출). Playwright로 신규 노드 우클릭→모달 `[Cancel·Pick successor·Add End node]`→"Add End node"→"Subprocess created" 검증. tsc/lint/build green.
