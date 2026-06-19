@@ -10,7 +10,7 @@
 ## 진행 상황 (별도 childNodes 방식 — 채택)
 - **Step 1 완료** (`faadd96`): 별도 `childNodes` state + materialize effect(펼친 부모의 자식 추가/제거) + displayNodes가 파생 자식을 childNodes 객체로 치환 + 커스텀 `handleNodesChange`(변경분 nodes/childNodes 분배) + 중첩 접힘 정리. **검증: 표시 픽셀 동일(단일·중첩), 자식 클릭→선택(이벤트 발화), 모달 자식 편집 저장 정상(회귀 0), 아웃라인 깨끗, 죽은 입력 0.**
 - **Step 2 완료** (`e9c4ae0`): 자식 `deletable:true` + Delete 시 `saveChildScopeAfterDelete`(getGraph→삭제 노드/엣지 제거→PUT, 그룹 보존) + fullGraph 낙관적 제거(materialize 재생성 방지). **검증: s-doc 선택+Delete → 화면 제거 + r-review 스코프 영속.** (테스트 중 `git checkout dev.db`가 실행 중 백엔드를 readonly로 만드는 함정 주의 — 백엔드 재시작 필요.)
-- **Step 3 이동(드래그) — 미완(핵심 통찰 기록)**: 드래그가 **영속되려면 buildScope가 자식을 dagre 재배치(`layoutWithDagre(kidApp, kidEdges)`, page.tsx ~3297)하지 말고 저장된 pos_x/pos_y를 써야** 한다(현재는 dagre라 저장해도 재배치로 되돌아감). 단 이건 인라인 표시 레이아웃을 dagre→저장위치로 바꿔 Step 1·2 baseline 위치가 달라진다(시드는 클린 플로우라 유사하지만 동일 아님). 배선: `draggingChildIds` state(드래그 중엔 childNodes 절대위치, 아니면 파생위치) + `onNodeDragStart`(자식이면 childNodes를 파생위치로 맞춰 점프 방지+플래그) + `onNodeDragStop`(절대→스코프상대 역변환=childNodes.pos − `inlineComposition.childOffsets`, fullGraph 낙관적 갱신, 자식 스코프 PUT). childOffsets = 파생절대 − fullGraph 스코프상대.
+- **Step 3 이동(드래그) 완료** (`0f3776b`): buildScope가 자식을 dagre 재배치 대신 **저장된 pos_x/pos_y 사용**(드래그 영속·인라인=드릴인 일관) + `childTop`을 세로중심→**앵커 상단정렬**(단일행 초기표시 동일, 세로 드래그 재중심화 튐 제거) + `draggingChildIds`(드래그 중 childNodes 절대위치) + `onNodeDragStart`(자식이면 childNodes를 파생위치로 맞춰 점프 방지+플래그) + `onNodeDragStop`(절대→스코프상대 = childNodes.pos − `inlineComposition.childOffsets`, fullGraph 낙관적 갱신, 자식 스코프 PUT). **검증: 단일·중첩 이동·영속(접기/재펼침 포함), 튐 없음, 초기 단일행 표시 동일, 모달·삭제 회귀 0.**
 - **남은 편집 op**: 추가(영역 내 노드 생성→childNodes+scopeId+위치+저장), 연결(자식 간 엣지→child edges materialize+저장). 인라인 이름편집은 자식에서 in-node 입력 커밋이 불안정 → 모달 유지.
 
 ## 좌표·저장 모델 (핵심 결정)
