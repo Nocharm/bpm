@@ -26,7 +26,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { type CSSProperties, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
@@ -270,28 +270,32 @@ function InlineRegionBands({
   );
 }
 
-// 포커스(navigateTo) 스코프의 좌우 세로 경계선 — 활성 스코프가 "무한 캔버스 속 레인"으로 보이게(인라인 펼침과 동일 언어).
-// 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더. 화면 전체 높이로 뻗는 세로선 2개.
-function FocusScopeBands({ left, right }: { left: number; right: number }) {
+// 포커스 스코프의 "레인" — 활성 스코프 좌우 세로 경계선 + 그 사이만 깊이 틴트(바깥은 부모/깊이0 바탕).
+// 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더. 화면 전체 높이로 뻗는다.
+function FocusScopeBands({ left, right, depth }: { left: number; right: number; depth: number }) {
   const { y, zoom } = useViewport();
   const paneHeight = useStore((state) => state.height);
   const topFlow = -y / zoom;
   const bandHeight = paneHeight / zoom;
-  const lineStyle = (x: number): CSSProperties => ({
-    position: "absolute",
-    left: 0,
-    top: 0,
-    transform: `translate(${x}px, ${topFlow}px)`,
-    width: 0,
-    height: bandHeight,
-    borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
-    zIndex: -1,
-    pointerEvents: "none",
-  });
+  const tint = Math.min(depth * 6, 30); // 깊을수록 진하게(인라인 영역과 동일 언어)
   return (
     <>
-      <div style={lineStyle(left)} />
-      <div style={lineStyle(right)} />
+      {/* 레인 틴트(세로선 사이만) + 좌우 세로선. 노드 뒤(z<0), 비상호작용 */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          transform: `translate(${left}px, ${topFlow}px)`,
+          width: right - left,
+          height: bandHeight,
+          background: `color-mix(in srgb, var(--color-accent) ${tint}%, transparent)`,
+          borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+          borderRight: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+          zIndex: -1,
+          pointerEvents: "none",
+        }}
+      />
     </>
   );
 }
@@ -4873,14 +4877,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
                     className={`h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
-                    // 편집 중인 스코프 깊이를 배경 틴트로 구분(루트=틴트 없음, 깊을수록 진해짐) — 인라인 영역과 동일한 accent 깊이 틴트.
-                    style={
-                      activeIndex > 0
-                        ? {
-                            background: `color-mix(in srgb, var(--color-accent) ${Math.min(activeIndex * 6, 30)}%, var(--color-canvas))`,
-                          }
-                        : undefined
-                    }
                     onContextMenu={(event) => event.preventDefault()}
                   >
                     <ReactFlow
@@ -5042,6 +5038,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <FocusScopeBands
                             left={focusScopeBounds.left}
                             right={focusScopeBounds.right}
+                            depth={activeIndex}
                           />
                         )}
                         {groupBoxes.map((box) => (
