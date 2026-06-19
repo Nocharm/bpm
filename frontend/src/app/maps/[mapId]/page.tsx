@@ -1528,10 +1528,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   // 포커스 모드 — 특정 노드의 스코프를 활성화하기 위한 스코프 체인(루트→…→그 노드). 검색 내비와 동일 패턴.
+  // scopeNodeId=null(루트 노드의 scopeId)이면 루트 체인만 반환 → 루트 복귀.
   const buildScopesTo = useCallback(
-    (scopeNodeId: string): Scope[] => {
+    (scopeNodeId: string | null): Scope[] => {
       const fg = fullGraphRef.current;
-      if (!fg) {
+      if (!fg || scopeNodeId === null) {
         return [{ parentId: null, title: mapName }];
       }
       const byId = new Map(fg.nodes.map((node) => [node.id, node]));
@@ -4061,9 +4062,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       event.preventDefault();
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
       const scopeId = fullGraphRef.current?.nodes.find((node) => node.id === id)?.parent_node_id ?? null;
-      if (scopeId !== null) {
-        void navigateTo(buildScopesTo(scopeId)); // 그 스코프를 활성 nodes로 전환(네이티브 편집)
-      }
+      void navigateTo(buildScopesTo(scopeId)); // 그 스코프를 활성 nodes로 전환(루트 노드=루트 복귀)
     };
     container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
     return () => container.removeEventListener("dblclick", handleDblClick, true);
@@ -4762,14 +4761,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
                     className={`h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
-                    // 편집 중인 스코프 깊이를 배경 틴트로 구분 — 깊을수록 진해져 "지금 몇 단계 하위인지" 인식(루트=틴트 없음). 인라인 영역과 동일한 accent 깊이 틴트 언어.
-                    style={
-                      activeIndex > 0
-                        ? {
-                            background: `color-mix(in srgb, var(--color-accent) ${Math.min(activeIndex * 6, 30)}%, var(--color-canvas))`,
-                          }
-                        : undefined
-                    }
                     onContextMenu={(event) => event.preventDefault()}
                   >
                     <ReactFlow
@@ -4790,11 +4781,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                           return;
                         }
                         // 비활성 스코프(인라인 자식·조상 컨텍스트) 노드 클릭 → 그 스코프를 활성화(navigateTo). 포커스 모드 Step 3b.
+                        // 루트 노드(scopeId=null)는 루트 스코프로 복귀 — buildScopesTo(null)이 루트 체인 반환.
                         if (!nodesRef.current.some((item) => item.id === node.id)) {
-                          const scopeId = node.data?.scopeId ?? null;
-                          if (scopeId !== null) {
-                            void navigateTo(buildScopesTo(scopeId));
-                          }
+                          void navigateTo(buildScopesTo(node.data?.scopeId ?? null));
                           return;
                         }
                         setSelectedId(node.id);
