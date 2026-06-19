@@ -1240,6 +1240,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     void refreshWorkflow(); // intentional: fetch workflow state when version changes
   }, [refreshWorkflow]);
 
+  // 직전에 로드한 스코프(currentParentId) — 스코프 전환 시에만 부드러운 카메라 이동을 트리거(첫 로드/버전변경 제외)
+  const prevScopeRef = useRef<string | null | undefined>(undefined);
+
   // 현재 스코프(version, parent) 캔버스 로드 — 히스토리/저장 상태도 새 스코프 기준으로 리셋
   useEffect(() => {
     if (versionId === null) {
@@ -1280,6 +1283,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           autoSaveTimerRef.current = null;
         }
         setSaveState("idle");
+        // 스코프 전환이면(첫 로드/버전 변경 제외) 새 스코프로 카메라를 부드럽게 이동 — 콘텐츠가 제자리에서
+        // 갑자기 바뀌어 시야가 길을 잃는 것 방지(포커스 모드 전환 연속화 A안).
+        const isScopeTransition =
+          prevScopeRef.current !== undefined && prevScopeRef.current !== currentParentId;
+        prevScopeRef.current = currentParentId;
         // 검색 점프 — 노드가 렌더된 다음 틱에 화면 중앙으로
         if (focusNodeIdRef.current) {
           const focusId = focusNodeIdRef.current;
@@ -1301,6 +1309,18 @@ function MapEditor({ mapId }: { mapId: number }) {
               maxZoom: 1.3,
             });
           }, 80);
+        } else if (isScopeTransition) {
+          const scopeNodeIds = graph.nodes.map((node) => ({ id: node.id }));
+          if (scopeNodeIds.length > 0) {
+            setTimeout(() => {
+              void reactFlow.fitView({
+                nodes: scopeNodeIds,
+                padding: 0.3,
+                duration: 600,
+                maxZoom: 1.2,
+              });
+            }, 100);
+          }
         }
       } catch (err) {
         if (active) {
