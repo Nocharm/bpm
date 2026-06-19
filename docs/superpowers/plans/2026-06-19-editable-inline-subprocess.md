@@ -1,6 +1,11 @@
 # 인라인 하위 프로세스 편집 가능화 — merge-into-state 리팩터 계획
 
-> 배경: 펼친 자식이 prop-only(파생 레이어)라 React Flow가 노드 이벤트·입력 이벤트를 라우팅하지 않음(브라우저 실측 확정). 이동/연결/추가/삭제/인라인편집을 바깥 캔버스처럼 하려면 자식을 진짜 `useNodesState` 노드로 합쳐야 한다.
+> 배경: 펼친 자식이 prop-only(파생 레이어)라 React Flow가 노드 이벤트·입력 이벤트를 라우팅하지 않음(브라우저 실측 확정). 이동/연결/추가/삭제/인라인편집을 바깥 캔버스처럼 하려면 자식을 진짜 RF-관리 state 노드로 합쳐야 한다.
+
+## 2026-06-19 1차 시도 결과 (검증된 학습 — 다음 시도에 반영)
+- **검증됨**: 자식을 RF-관리 state(`useNodesState`)에 넣으면 RF가 측정→**노드 이벤트(클릭/선택/드래그) 발화함**. 표시도 baseline과 픽셀 동일하게 유지 가능(buildScope는 현재 스코프만 입력, displayNodes가 state 자식으로 치환). 저장도 자식 제외 필터로 root 무오염·위치 보존 확인.
+- **실패/철회**: 자식을 **메인 `nodes` state에 합치는** 방식은 blast radius가 너무 넓다 — `nodes`=현재스코프를 가정하는 거의 모든 곳(아웃라인, 모달 편집 라우팅 `handleSummaryPatch/LabelCommit`, `renameNode`, `startRename`, `onNodeClick/DoubleClick`, 인스펙터, **자식 스코프 debounce flush 저장**)이 깨진다. 라우팅을 `isMaterializedChild`로 다 고쳐도 flush 저장이 안 돼(원인 미해결) 모달 편집이 깨졌고, 시간상 안전히 통합 불가 → 1차 시도 reset.
+- **다음 시도 권장 — 별도 `childNodes` state**: 메인 `nodes`는 현재 스코프 그대로 두고(=모든 기존 가정 유지·회귀 0), 자식은 **별도 `childNodes`** state(역시 RF가 측정하도록 displayNodes에 포함 + 커스텀 `onNodesChange`로 변경분을 nodes/childNodes로 분배). 이러면 아웃라인·저장·라우팅 등 `nodes` consumer를 전혀 안 건드린다(narrow blast radius). 자식 편집 저장만 scope-split로 별도 처리. 관련: [[inline-child-nodes-reactflow-gotcha]].
 
 ## 좌표·저장 모델 (핵심 결정)
 - **자식 = 진짜 state 노드.** `nodes` state에 `data.scopeId = 부모 id`로 태그, materialize 시점에 영역 위치로 배치.
