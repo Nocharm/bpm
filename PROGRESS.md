@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
+## 2026-06-19
+- 인라인 하위 프로세스 **편집 가능화 — 별도 `childNodes` state 방식**. (1차 "메인 nodes에 자식 합치기"는 아웃라인·모달 라우팅·자식 flush 저장 등 `nodes`=현재스코프 가정을 광범위 파손해 reset.) 자식을 RF-관리 **별도 state**에 두고 displayNodes 합성 + 커스텀 `onNodesChange`로 nodes/childNodes 분배 → RF 측정·노드 이벤트 발화하면서 **메인 nodes 무손상(회귀 0)**. 검증: 표시 픽셀 동일(단일·중첩)·자식 클릭 선택·모달 편집 저장·아웃라인 깨끗. 계획 `docs/superpowers/plans/2026-06-19-editable-inline-subprocess.md`.
+- 레인 안 자식 편집 4종(각 브라우저 검증, root 스코프 무오염) — **삭제**(`deletable`+`saveChildScopeAfterDelete` 자식스코프 PUT+fullGraph 낙관적 제거), **이동**(buildScope가 dagre 재배치 대신 **저장 pos 사용**+`childTop` 상단정렬로 튐 제거, 드래그 절대→`childOffsets`로 스코프상대 변환 저장), **연결**(펼침 중 `nodesConnectable` 켜고 프레임은 `connectable:false`, `onConnect`→`createChildEdge` 자식스코프 PUT·즉시 렌더), **추가**(영역 우클릭→가장 깊은 region 탐지→`scopeOffsets`로 스코프상대 변환→`addChildNode` 낙관적+PUT). 인라인 이름편집은 자식 in-node 입력 커밋 불안정 → 모달 유지.
+- **캔버스 좌상단 고정** — `contentExtent`(패닝/노드 범위)를 대칭 `EXTENT_MARGIN`(600)→비대칭(좌상단 `EXTENT_TOPLEFT_MARGIN`=120/우하단 600). 위·왼쪽 무한 패닝 방지, 아래·오른쪽 성장 여유.
+- **포커스 모드 설계(다음 세션)** — 최종 골 "깊이 무관 풀 편집(드롭존·그룹화·정렬 포함)". 통찰: 스코프 네비(`navigateTo`)로 어느 스코프든 `nodes`化하면 모든 기능 네이티브. 영역 클릭→그 스코프 활성(편집)+나머지 깊이 dim 읽기전용. 4단계 계획 `docs/superpowers/plans/2026-06-19-active-scope-focus-mode.md`. (드롭존 자식 적용 진단: `screenRectOf`는 getNode로 해결되나 `getIntersectingNodes`가 자식엔 빈 결과 → 수동 형제 겹침 판정 필요.)
+- ⚠️ 검증 함정(기록): dev.db는 테스트마다 오염 → 단계 검증 전 `git checkout dev.db`+백엔드 재시작(실행 중 checkout은 readonly 유발). 자식 RF 이벤트·onNodeDrag는 **깨끗한 db에서 정상**(0으로 보인 건 오염 탓). Playwright 연결 드롭은 매우 flaky.
+
 ## 2026-06-18
 - 드롭으로 하위 만들기도 **후속없음 모달**을 타도록(사용자 피드백 #4) — `moveToChild`를 `runMoveToChild`(실제)+wrapper로 분리, B에 후속(나가는 엣지) 없으면 우클릭 생성과 동일 모달. 모달/픽 상태를 `{nodeId|sourceId, proceed}` continuation으로 일반화해 생성·드롭 공용(`handleCreateEndForSubprocess`·`handleSubprocessPick`이 `prompt.proceed()` 호출). Playwright로 신규 노드 우클릭→모달 `[Cancel·Pick successor·Add End node]`→"Add End node"→"Subprocess created" 검증. tsc/lint/build green.
 - 인라인 펼침/접힘 UX 3종(사용자 요청) — ① **ease-in-out 슬라이드 애니메이션**: 펼침/접힘 시 다운스트림 노드 transform에 350ms `cubic-bezier(0.65,0,0.35,1)` 전환. `commitExpanded`가 애니메이션 클래스를 먼저 칠하고(rAF×2 뒤 `expandedInline` 변경) 전환을 발동. 규칙은 globals.css 대신 **raw `<style>`로 주입**(Turbopack dev가 `.react-flow__node` 대상 규칙을 purge해서). ② **펼침/접힘 줌 자동변경 제거**: 펼침 fitView 삭제, 아웃라인 나브 포커싱도 현재 줌 유지(minZoom=maxZoom). ③ **휠=캔버스 상하이동(`panOnScroll`+`Vertical`+`zoomOnScroll:false`), Ctrl/Cmd+휠=줌(`zoomActivationKeyCode`)**. Playwright(시스템 Chrome)로 dev·prod 모두 검증: 휠 dy≠0·dz=0, Ctrl+휠 dz≠0, 펼침 줌 2.0→2.0 불변, r-notify computed-x 826→999→1713→2048→2134 슬라이드 확인. tsc/lint/build green.
