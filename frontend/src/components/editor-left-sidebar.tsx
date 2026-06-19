@@ -111,10 +111,10 @@ export function EditorLeftSidebar({
   // 편집 중 Tab/Shift+Tab → 저장 후 이동할 노드·방향(blur에서 소비). 리스트 ref는 편집 종료 후 키 포커스 복귀용.
   const pendingNavRef = useRef<{ id: string; dir: "next" | "prev" } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  // 선택된 아웃라인 행 — 선택 변경 시 가운데로 스크롤(경계가 아닌 중앙; 최상단 선택 시 0으로 clamp되어 맨 위로).
+  // 선택된 아웃라인 행 — 선택 변경 시 가운데로 부드럽게(ease-in-out) 스크롤. 최상단 선택 시 0으로 clamp되어 맨 위로.
   const selectedRowRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
-    selectedRowRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
+    selectedRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
   }, [selectedId]);
 
   // 사이드바 스크롤바 — 기본 숨김(scrollbar-hidden), 스크롤 중에만 커스텀 막대 페이드 인 → 멈추면 페이드 아웃.
