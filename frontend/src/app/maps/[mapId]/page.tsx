@@ -574,7 +574,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           for (const flat of fullGraph.nodes) {
             if (flat.parent_node_id === expandedId && !present.has(flat.id)) {
               const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, expandedId);
-              toAdd.push({ ...app, selectable: true, draggable: false, deletable: false });
+              toAdd.push({ ...app, selectable: true, draggable: false, deletable: true });
             }
           }
         }
@@ -2088,13 +2088,65 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   // 노드 삭제 시 멤버가 2명 미만이 된 그룹 정리 — 삭제된 노드를 제외한 잔여 노드로 멤버 재계산.
+  // 자식 삭제 후 그 자식 스코프를 저장 — 권위 그래프(getGraph: 그룹 보존)에서 삭제 노드/엣지 제거 후 PUT.
+  const saveChildScopeAfterDelete = useCallback(
+    async (scopeId: string, removedIds: Set<string>) => {
+      if (versionId === null) {
+        return;
+      }
+      try {
+        const graph = await getGraph(versionId, scopeId);
+        const keptNodes = graph.nodes.filter((node) => !removedIds.has(node.id));
+        const keptIds = new Set(keptNodes.map((node) => node.id));
+        const keptEdges = graph.edges.filter(
+          (edge) => keptIds.has(edge.source_node_id) && keptIds.has(edge.target_node_id),
+        );
+        await saveGraph(
+          versionId,
+          { nodes: keptNodes, edges: keptEdges, groups: graph.groups },
+          scopeId,
+        );
+        refreshFullGraph();
+      } catch {
+        showToast(t("err.save"));
+      }
+    },
+    [versionId, refreshFullGraph, showToast, t],
+  );
+
   const handleNodesDelete = useCallback(
     (deleted: AppNode[]) => {
       const removed = new Set(deleted.map((node) => node.id));
       pruneSmallGroups(nodesRef.current.filter((node) => !removed.has(node.id)));
+      // 펼친 자식 삭제 → 각 자식 스코프에서 제거 후 PUT(현재 스코프 저장과 별개)
+      const childScopes = new Set(
+        deleted
+          .filter((node) => node.data.scopeId != null && node.data.scopeId !== currentParentId)
+          .map((node) => node.data.scopeId as string),
+      );
+      if (childScopes.size > 0) {
+        // fullGraph에서도 낙관적으로 제거 — 안 그러면 materialize effect가 삭제한 자식을 즉시 되살린다(저장 전).
+        setFullGraph((prev) => {
+          if (prev === null) {
+            return prev;
+          }
+          const keptNodes = prev.nodes.filter((node) => !removed.has(node.id));
+          const keptIds = new Set(keptNodes.map((node) => node.id));
+          return {
+            ...prev,
+            nodes: keptNodes,
+            edges: prev.edges.filter(
+              (edge) => keptIds.has(edge.source_node_id) && keptIds.has(edge.target_node_id),
+            ),
+          };
+        });
+      }
+      for (const scopeId of childScopes) {
+        void saveChildScopeAfterDelete(scopeId, removed);
+      }
       scheduleAutoSave();
     },
-    [pruneSmallGroups, scheduleAutoSave],
+    [pruneSmallGroups, scheduleAutoSave, currentParentId, saveChildScopeAfterDelete, setFullGraph],
   );
 
   // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 2명 미만이 되면 그룹 자동 제거.
@@ -3403,7 +3455,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             data: node.data,
             selectable: true,
             draggable: false,
-            deletable: false,
+            deletable: true,
           }
         : node;
       const count = unresolvedCounts.get(display.id) ?? 0;
