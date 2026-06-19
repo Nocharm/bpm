@@ -2941,46 +2941,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     [outline],
   );
 
-  // ← 하위프로세스 닫기 — 자식 있고 펼쳐졌을 때만 접는다(부모 이동은 F가 담당).
-  const handleOutlineCollapse = useCallback(
+  // 현재 노드의 부모를 접으며 그 부모로 이동 — F(말단)·←(닫을 게 없을 때) 공통.
+  const foldToParent = useCallback(
     (id: string) => {
-      const row = outline.find((r) => r.id === id);
-      if (!row?.hasChildren || !row.expanded) {
-        return;
-      }
-      setExpandedOutline((prev) => {
-        if (!prev.has(id)) {
-          return prev;
-        }
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    },
-    [outline],
-  );
-
-  // F 스마트 토글 — 접힘→펼치기, 펼쳐짐→첫 자식 이동, 말단→부모를 접으며 부모로 이동.
-  const handleOutlineFold = useCallback(
-    (id: string) => {
-      const idx = outline.findIndex((row) => row.id === id);
-      if (idx === -1) {
-        return;
-      }
-      const row = outline[idx];
-      if (row.hasChildren) {
-        if (row.expanded) {
-          // 펼쳐진 부모 → 첫 자식(바로 다음 행)으로 진입
-          const next = outline[idx + 1];
-          if (next) {
-            handleOutlineSelect(next.id);
-          }
-        } else {
-          setExpandedOutline((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-        }
-        return;
-      }
-      // 말단 — 부모로 돌아가며 부모를 접는다.
       const parentId =
         (fullGraph?.nodes ?? []).find((node) => node.id === id)?.parent_node_id ?? null;
       if (parentId === null) {
@@ -2996,7 +2959,48 @@ function MapEditor({ mapId }: { mapId: number }) {
       });
       handleOutlineSelect(parentId);
     },
-    [outline, fullGraph, handleOutlineSelect],
+    [fullGraph, handleOutlineSelect],
+  );
+
+  // ← — 펼쳐진 하위프로세스는 닫고, 닫을 게 없으면(말단·이미 접힘) 부모를 접으며 부모로 이동.
+  const handleOutlineCollapse = useCallback(
+    (id: string) => {
+      const row = outline.find((r) => r.id === id);
+      if (row?.hasChildren && row.expanded) {
+        setExpandedOutline((prev) => {
+          if (!prev.has(id)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        return;
+      }
+      foldToParent(id);
+    },
+    [outline, foldToParent],
+  );
+
+  // F 토글 — 자식 있으면 펼치기↔접기 토글, 말단이면 부모를 접으며 부모로 이동.
+  const handleOutlineFold = useCallback(
+    (id: string) => {
+      const row = outline.find((r) => r.id === id);
+      if (row?.hasChildren) {
+        setExpandedOutline((prev) => {
+          const next = new Set(prev);
+          if (row.expanded) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+          return next;
+        });
+        return;
+      }
+      foldToParent(id);
+    },
+    [outline, foldToParent],
   );
 
   // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.

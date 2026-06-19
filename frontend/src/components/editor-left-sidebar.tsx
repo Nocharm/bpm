@@ -147,6 +147,25 @@ export function EditorLeftSidebar({
     );
   }
 
+  // 아웃라인 이동 단축키 안내 — 선택 노드 상태로 각 행 활성/비활성(고정 목록).
+  const selIdx = selectedId ? outline.findIndex((row) => row.id === selectedId) : -1;
+  const selRow = selIdx >= 0 ? outline[selIdx] : null;
+  const navShortcuts: { keys: string; label: string; active: boolean }[] = [
+    { keys: "↑", label: t("outlineNav.prev"), active: selIdx > 0 },
+    { keys: "↓", label: t("outlineNav.next"), active: selIdx >= 0 && selIdx < outline.length - 1 },
+    { keys: "→", label: t("outlineNav.expand"), active: !!selRow?.hasChildren && !selRow.expanded },
+    {
+      keys: "←",
+      label: t("outlineNav.collapse"),
+      active: !!selRow && ((selRow.hasChildren && selRow.expanded) || selRow.hierarchy),
+    },
+    {
+      keys: "F",
+      label: t("outlineNav.fold"),
+      active: !!selRow && (selRow.hasChildren || selRow.hierarchy),
+    },
+  ];
+
   return (
     <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2">
       {/* 노드에 표시할 정보 — 아웃라인보다 위(바깥) 별도 섹션, 접기/펼치기 */}
@@ -195,6 +214,26 @@ export function EditorLeftSidebar({
             })}
           </div>
         )}
+      </div>
+
+      {/* 아웃라인 이동 단축키 — 고정 안내, 선택 노드 상태로 활성/비활성(노드인포↔아웃라인 사이) */}
+      <div className="mb-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1.5">
+        <div className="mb-1 px-1 text-fine text-ink-tertiary">{t("outlineNav.title")}</div>
+        <ul className="flex flex-col gap-0.5">
+          {navShortcuts.map((shortcut) => (
+            <li
+              key={shortcut.keys}
+              className={`flex items-center justify-between gap-2 px-1 text-fine transition-opacity ${
+                shortcut.active ? "text-ink-secondary" : "opacity-40"
+              }`}
+            >
+              <span>{shortcut.label}</span>
+              <kbd className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary">
+                {shortcut.keys}
+              </kbd>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="mb-1 flex items-center justify-between">
