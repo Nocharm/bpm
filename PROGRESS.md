@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
 ## 2026-06-19
+- 줌아웃 시 **캔버스 좌상단 고정이 풀리던 버그 수정** — `translateExtent`가 줌아웃 뷰포트(`pane/minZoom`)보다 작아지면 d3-zoom 기본 `constrain`(zoom.js: `dx1>dx0 ? (dx0+dx1)/2 …`)이 콘텐츠를 **가운데 정렬(centering)**해 좌상단 여백이 자랐음. `translateExtent` 우하단을 `pane/MIN_ZOOM` 이상으로 늘려 centering 원천 차단(`nodeExtent`는 콘텐츠 bbox 유지로 분리 — 노드를 빈 우하단으로 드래그하는 회귀 방지), `MIN_ZOOM` 상수화. Playwright(시스템 Chrome) A/B 실측: minZoom 좌/상 여백 295/334px(가운데 밀림)→24px(마진×스케일, 고정), 여백은 우/하단에만. 프론트 tsc/eslint green.
 - 인라인 하위 프로세스 **편집 가능화 — 별도 `childNodes` state 방식**. (1차 "메인 nodes에 자식 합치기"는 아웃라인·모달 라우팅·자식 flush 저장 등 `nodes`=현재스코프 가정을 광범위 파손해 reset.) 자식을 RF-관리 **별도 state**에 두고 displayNodes 합성 + 커스텀 `onNodesChange`로 nodes/childNodes 분배 → RF 측정·노드 이벤트 발화하면서 **메인 nodes 무손상(회귀 0)**. 검증: 표시 픽셀 동일(단일·중첩)·자식 클릭 선택·모달 편집 저장·아웃라인 깨끗. 계획 `docs/superpowers/plans/2026-06-19-editable-inline-subprocess.md`.
 - 레인 안 자식 편집 4종(각 브라우저 검증, root 스코프 무오염) — **삭제**(`deletable`+`saveChildScopeAfterDelete` 자식스코프 PUT+fullGraph 낙관적 제거), **이동**(buildScope가 dagre 재배치 대신 **저장 pos 사용**+`childTop` 상단정렬로 튐 제거, 드래그 절대→`childOffsets`로 스코프상대 변환 저장), **연결**(펼침 중 `nodesConnectable` 켜고 프레임은 `connectable:false`, `onConnect`→`createChildEdge` 자식스코프 PUT·즉시 렌더), **추가**(영역 우클릭→가장 깊은 region 탐지→`scopeOffsets`로 스코프상대 변환→`addChildNode` 낙관적+PUT). 인라인 이름편집은 자식 in-node 입력 커밋 불안정 → 모달 유지.
 - **캔버스 좌상단 고정** — `contentExtent`(패닝/노드 범위)를 대칭 `EXTENT_MARGIN`(600)→비대칭(좌상단 `EXTENT_TOPLEFT_MARGIN`=120/우하단 600). 위·왼쪽 무한 패닝 방지, 아래·오른쪽 성장 여유.
