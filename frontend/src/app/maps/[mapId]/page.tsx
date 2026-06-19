@@ -4683,9 +4683,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           {scopes.map((scope, index) => {
             const key = scopeKey(scope);
             const geom = windowGeom[key] ?? defaultGeom(index, bounds);
-            const active = index === activeIndex;
-            if (geom.minimized && index !== 0) {
-              return null; // 최소화 창은 아래 WindowDock으로 렌더
+            // 포커스 모드 — 루트(index 0)가 유일한 캔버스 호스트라 항상 active(드릴 깊이와 무관).
+            const active = index === 0 || index === activeIndex;
+            // 포커스 모드 — 드릴인 플로팅 창 억제. 캔버스는 항상 루트에 두고 활성 스코프는 currentParentId로 전환.
+            if (index !== 0) {
+              return null;
             }
             return (
               <ScopeWindow
