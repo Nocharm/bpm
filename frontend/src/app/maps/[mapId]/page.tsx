@@ -149,6 +149,7 @@ const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
+const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
@@ -3635,10 +3636,13 @@ function MapEditor({ mapId }: { mapId: number }) {
             // 드래그 중인 자식은 childNodes(절대)위치, 아니면 buildScope 파생위치
             position: draggingChildIds.has(node.id) ? stateChild.position : node.position,
             data: node.data,
-            selectable: true,
-            draggable: true,
-            deletable: true,
-            connectable: true,
+            // 포커스 모드 Step 1: 비활성(자식) 스코프는 읽기전용 dim — 활성 스코프(현재)만 편집.
+            // (스코프 활성화 시 네이티브 편집은 Step 3 navigateTo에서.)
+            selectable: false,
+            draggable: false,
+            deletable: false,
+            connectable: false,
+            style: { ...stateChild.style, opacity: INACTIVE_SCOPE_OPACITY },
           }
         : inlineComposition
           ? { ...node, connectable: false } // 펼침 중 현재 스코프(프레임) 노드는 연결 비활성 — 자식만 연결
@@ -3712,13 +3716,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       return currentStyled;
     }
     // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김, 아니면 맵 전역 type만 맞춤. 게이트웨이는 합성 시 스타일 완료.
-    const childStyled = inlineComposition.childEdges.map((edge) =>
-      hiddenIds?.has(edge.id)
-        ? ({ ...edge, hidden: true } as Edge)
-        : edge.type === edgeStyle
-          ? edge
-          : { ...edge, type: edgeStyle },
-    );
+    // 포커스 모드 Step 1: 비활성 스코프라 dim + 비선택(읽기전용).
+    const childStyled = inlineComposition.childEdges.map((edge) => {
+      if (hiddenIds?.has(edge.id)) {
+        return { ...edge, hidden: true } as Edge;
+      }
+      const typed = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
+      return {
+        ...typed,
+        selectable: false,
+        style: { ...typed.style, opacity: INACTIVE_SCOPE_OPACITY },
+      };
+    });
     const gatewayStyled = inlineComposition.gateways.map((edge) =>
       edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
     );
