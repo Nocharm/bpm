@@ -72,6 +72,17 @@ export function TopNav() {
                     {t("nav.adminPage")}
                   </button>
                 )}
+                {/* 유저 그룹 관리 페이지 / User group management */}
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/groups");
+                  }}
+                >
+                  {t("nav.groups")}
+                </button>
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
