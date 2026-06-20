@@ -20,7 +20,7 @@
 - **same fix twice → stop**: 같은 수정을 두 번 시도하면 중단·보고.
 - `Department.orgLevels`는 `string[]` 가변 — org 레벨 수 하드코딩 금지.
 - **Phase 1 종료 시 멈추고 사용자 확인**(설계 §11). Phase 2/3는 그 후 진행.
-- Phase 1 순수함수 검증: 새 테스트 러너 없이 `npx tsx`로 새너티 스크립트를 실행·관찰(스크립트는 커밋하지 않음) + `tsc`. UI 검증: `tsc/lint/build` + Playwright(시스템 Chrome) 실측(`docs/lessons/browser-verification.md` — 좀비 next dev/uvicorn `pkill -9 -f 'next dev|uvicorn app.main'` 후 클린 재기동, dev.db 오염 주의).
+- Phase 1 순수함수 검증: 새 테스트 러너 없이 `npx --yes tsx`로 새너티 스크립트를 실행·관찰(스크립트는 커밋하지 않음) + `tsc`. UI 검증: `tsc/lint/build` + Playwright(시스템 Chrome) 실측(`docs/lessons/browser-verification.md` — 좀비 next dev/uvicorn `pkill -9 -f 'next dev|uvicorn app.main'` 후 클린 재기동, dev.db 오염 주의).
 
 설계 문서: `docs/superpowers/specs/2026-06-20-permission-management-design.md`.
 
@@ -411,7 +411,7 @@ assert('editor downgrade gated', requiresDowngradeApproval('editor', 'viewer') =
 assert('viewer downgrade free', requiresDowngradeApproval('viewer', null) === false);
 console.log('ALL PASS');
 ```
-Run: `cd frontend && npx tsx _perm_sanity.ts`
+Run: `cd frontend && npx --yes tsx _perm_sanity.ts`
 Expected: 모든 `ok ...` + `ALL PASS`. (FAIL 시 로직 수정 — same fix twice면 중단·보고.)
 그다음: `rm frontend/_perm_sanity.ts` (커밋하지 않음).
 
@@ -452,7 +452,7 @@ git commit -m "feat(perm): pure permission judgment functions — 권한 순수 
 - [ ] **Step 1: store 작성**(액션은 위 시그니처대로, 각 액션은 불변 갱신 + emit).
 - [ ] **Step 2: 배럴 작성** — `permissions.ts`에서 types/seed/logic/store re-export.
 - [ ] **Step 3: tsc/lint 확인** — Run: `cd frontend && npx tsc --noEmit && npm run lint` → PASS.
-- [ ] **Step 4: 새너티(커밋 안 함)** — temp 스크립트로: addCollaborator(맵2, user.jung editor) 후 getEffectiveRole=editor; changeRole(맵2, g-core, editor→viewer) → gated:true & 요청 1건; decideRequest(approved) 후 그룹 권한 viewer 적용; transferOwner(맵2, user.lee) 후 메타 ownerId='user.lee' & admin.kim... (sysadmin이라 effrole owner 유지되므로 비-sysadmin owner로 검증: 맵1 user.lee→user.jung 이양 후 user.lee editor). Run `npx tsx`, 관찰, `rm`.
+- [ ] **Step 4: 새너티(커밋 안 함)** — temp 스크립트로: addCollaborator(맵2, user.jung editor) 후 getEffectiveRole=editor; changeRole(맵2, g-core, editor→viewer) → gated:true & 요청 1건; decideRequest(approved) 후 그룹 권한 viewer 적용; transferOwner(맵2, user.lee) 후 메타 ownerId='user.lee' & admin.kim... (sysadmin이라 effrole owner 유지되므로 비-sysadmin owner로 검증: 맵1 user.lee→user.jung 이양 후 user.lee editor). Run `npx --yes tsx`, 관찰, `rm`.
 - [ ] **Step 5: Commit**
 
 ```bash
