@@ -8,11 +8,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { usePermissions } from "@/lib/mock/permissions-store";
 import { isVisibleToUser } from "@/lib/mock/permissions-logic";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 export default function MapListPage() {
   const { t } = useI18n();
@@ -22,6 +24,15 @@ export default function MapListPage() {
   const [maps, setMaps] = useState<MapSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = useCallback((message: string) => {
+    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -119,9 +130,14 @@ export default function MapListPage() {
       {dialogOpen && (
         <CreateMapDialog
           onClose={() => setDialogOpen(false)}
-          onCreated={() => void refresh()}
+          onCreated={() => {
+            void refresh();
+            showToast(t("perm.createDialog.toastSuccess"));
+          }}
         />
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </main>
   );
 }

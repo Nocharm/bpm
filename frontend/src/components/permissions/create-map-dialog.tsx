@@ -54,7 +54,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [pendingApprover, setPendingApprover] = useState<string>(""); // 검색어 / search input
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // ── 공개범위 변경 시 뷰어→편집자 초기화 / reset pending role when switching to public ──
   const handleVisibilityChange = useCallback((v: MapVisibility) => {
@@ -67,24 +66,23 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   // ── 협업자 추가 / add collaborator ──
   const handleAddCollab = useCallback(() => {
     if (!pendingCollab) return;
-    // 중복 방지 / dedup
-    const alreadyIn = collaborators.some(
-      (c) => c.principalId === pendingCollab.principalId,
-    );
-    if (alreadyIn) return;
     const role: MapRole = visibility === "public" ? "editor" : pendingCollabRole;
-    setCollaborators((prev) => [
-      ...prev,
-      {
-        key: genId(),
-        principalType: pendingCollab.principalType,
-        principalId: pendingCollab.principalId,
-        displayName: pendingCollab.displayName,
-        role,
-      },
-    ]);
+    setCollaborators((prev) => {
+      // 중복 방지 / dedup
+      if (prev.some((c) => c.principalId === pendingCollab.principalId)) return prev;
+      return [
+        ...prev,
+        {
+          key: genId(),
+          principalType: pendingCollab.principalType,
+          principalId: pendingCollab.principalId,
+          displayName: pendingCollab.displayName,
+          role,
+        },
+      ];
+    });
     setPendingCollab(null);
-  }, [pendingCollab, pendingCollabRole, visibility, collaborators]);
+  }, [pendingCollab, pendingCollabRole, visibility]);
 
   // ── 협업자 제거 / remove collaborator ──
   const handleRemoveCollab = useCallback((key: string) => {
@@ -93,11 +91,9 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
 
   // ── 결재자 추가 (users only) / add approver (users only) ──
   const handleAddApprover = useCallback((userId: string, displayName: string) => {
-    const alreadyIn = approvers.some((a) => a.userId === userId);
-    if (alreadyIn) return;
-    setApprovers((prev) => [...prev, { key: genId(), userId, displayName }]);
+    setApprovers((prev) => prev.some((a) => a.userId === userId) ? prev : [...prev, { key: genId(), userId, displayName }]);
     setPendingApprover("");
-  }, [approvers]);
+  }, []);
 
   // ── 결재자 제거 / remove approver ──
   const handleRemoveApprover = useCallback((key: string) => {
@@ -126,12 +122,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
         })),
         approvers.map((a) => a.userId),
       );
-      setToastMsg(t("perm.createDialog.toastSuccess"));
-      // 짧은 지연 후 닫기 / close after brief moment
-      setTimeout(() => {
-        onCreated();
-        onClose();
-      }, 800);
+      onCreated();
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("err.createMap"));
       setSubmitting(false);
@@ -387,11 +379,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
 
         {/* 오류 / error */}
         {error && <p className="text-caption text-error">{error}</p>}
-
-        {/* 토스트 인라인 / inline toast */}
-        {toastMsg && (
-          <p className="text-caption text-added">{toastMsg}</p>
-        )}
 
         {/* 버튼 행 / action row */}
         <div className="flex items-center justify-end gap-2">
