@@ -1,4 +1,4 @@
-// 앱 전체 i18n — LangProvider + useI18n + t(key, vars). 기본 영어, localStorage 영속.
+// 앱 전체 i18n — LangProvider + useI18n + t(key, vars). 기본 한국어, localStorage 영속.
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { messages, type Lang, type MessageKey } from "@/lib/i18n-messages";
 
 const STORAGE_KEY = "bpm.lang";
-const DEFAULT_LANG: Lang = "en";
+const DEFAULT_LANG: Lang = "ko";
 
 interface I18nValue {
   lang: Lang;
