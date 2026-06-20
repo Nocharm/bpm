@@ -101,3 +101,25 @@ def test_rejects_self_reference(client: TestClient) -> None:
     )
     assert r.status_code == 422
     assert "순환" in r.json()["detail"]
+
+
+def test_library_lists_processes(client: TestClient) -> None:
+    client.post("/api/maps", json={"name": "재사용 프로세스"})
+    r = client.get("/api/library/processes")
+    assert r.status_code == 200
+    names = [p["name"] for p in r.json()]
+    assert "재사용 프로세스" in names
+
+
+def test_resolved_returns_pinned_graph(client: TestClient) -> None:
+    map_id, vid = _map_and_version(client, "lib-target")
+    client.put(
+        f"/api/versions/{vid}/graph",
+        json={"nodes": [{"id": "s", "node_type": "start"}], "edges": []},
+    )
+    r = client.get(
+        f"/api/library/processes/{map_id}/resolved",
+        params={"follow_latest": "false", "pinned": vid},
+    )
+    assert r.status_code == 200
+    assert [n["id"] for n in r.json()["nodes"]] == ["s"]

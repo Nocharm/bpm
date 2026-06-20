@@ -23,6 +23,29 @@ def validate_process(nodes: list[NodeIn]) -> None:
         raise ValueError(f"대표 끝은 1개여야 합니다 (현재 {len(primaries)}개).")
 
 
+async def resolve_linked_version(
+    session: AsyncSession,
+    map_id: int,
+    follow_latest: bool,
+    pinned_version_id: int | None,
+) -> int | None:
+    """렌더할 버전 id 결정 — follow_latest면 최신 발행본, 아니면 고정. (spec §5)"""
+    if not follow_latest and pinned_version_id is not None:
+        return pinned_version_id
+    published = await session.scalar(
+        select(MapVersion.id)
+        .where(MapVersion.map_id == map_id, MapVersion.status == "published")
+        .order_by(MapVersion.id.desc())
+    )
+    if published is not None:
+        return published
+    return await session.scalar(
+        select(MapVersion.id)
+        .where(MapVersion.map_id == map_id)
+        .order_by(MapVersion.id.desc())
+    )
+
+
 async def assert_no_cycle(
     session: AsyncSession, version_id: int, nodes: list[NodeIn]
 ) -> None:
