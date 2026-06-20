@@ -52,7 +52,7 @@ export default function SysadminPermissionsPage() {
     return (
       <div className="flex h-full items-center justify-center p-8">
         <p className="text-caption text-ink-tertiary">
-          권한 없음 (시스템 관리자 전용)
+          {t("perm.sysadmin.noPermission")}
         </p>
       </div>
     );

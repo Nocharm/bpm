@@ -105,7 +105,7 @@ export function ApproversPanel({ mapId, currentUserId, isOwner }: ApproversPanel
                       className="rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt"
                       onClick={() => toggleUserActive(a.userId)}
                     >
-                      [Dev] {isInactive ? "활성" : "비활성"}
+                      {isInactive ? t("perm.approversDevActive") : t("perm.approversDevInactive")}
                     </button>
 
                     {/* 제거 버튼 / Remove button */}

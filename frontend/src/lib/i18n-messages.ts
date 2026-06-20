@@ -477,6 +477,9 @@ const en = {
   "perm.approvals.toastApproved": "Approved.",
   "perm.approvals.toastRejected": "Rejected.",
   "perm.approvals.roleRemoved": "removed",
+  "perm.sysadmin.noPermission": "No access (system admins only)",
+  "perm.approversDevActive": "[Dev] Active",
+  "perm.approversDevInactive": "[Dev] Inactive",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -956,6 +959,9 @@ const ko: Record<MessageKey, string> = {
   "perm.approvals.toastApproved": "승인했습니다.",
   "perm.approvals.toastRejected": "반려했습니다.",
   "perm.approvals.roleRemoved": "제거",
+  "perm.sysadmin.noPermission": "권한 없음 (시스템 관리자 전용)",
+  "perm.approversDevActive": "[Dev] 활성",
+  "perm.approversDevInactive": "[Dev] 비활성",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

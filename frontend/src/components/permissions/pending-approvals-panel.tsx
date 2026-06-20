@@ -5,7 +5,7 @@
 
 import { useI18n } from "@/lib/i18n";
 import { usePermissions, decideRequest } from "@/lib/mock/permissions";
-import type { DowngradePayload, VisibilityChangePayload } from "@/lib/mock/permissions-types";
+import type { ApprovalKind, DowngradePayload, VisibilityChangePayload } from "@/lib/mock/permissions-types";
 import { genId } from "@/lib/id";
 import type { ToastItem } from "@/components/toast-stack";
 
@@ -36,7 +36,7 @@ export function PendingApprovalsPanel({ mapId, currentUserId, onToast }: Props) 
   }
 
   // 요청 내용 요약 — kind별 / Summarise request detail by kind.
-  function renderDetail(kind: string, payload: unknown): string {
+  function renderDetail(kind: ApprovalKind, payload: unknown): string {
     if (kind === "permission_downgrade") {
       const p = payload as DowngradePayload;
       const to = p.toRole ?? t("perm.approvals.roleRemoved");
