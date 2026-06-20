@@ -2,7 +2,7 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
-- **권한 관리(Permission Management) UI-first 설계 확정**(`feat/permission-management-ui`, 워크트리·`origin/main`이 아닌 캔버스 브랜치 기준). 코드 대조로 스코프 확정 — 버전게시 승인(흐름①)은 기존 실제 구현이나 미사용 → mock 신규(§7.5는 에디터 대신 settings에 배치), 맵 승인자 mock 통일, 실제 맵 리스트 + mapId-keyed mock 권한 오버레이, i18n는 기존 en+ko 따름. 백엔드·에디터(`maps/[mapId]/page.tsx`) 무변경. 3단계(Phase1 mock 기반→Phase2 맵 권한 UI→Phase3 그룹·sysadmin). 설계 `docs/superpowers/specs/2026-06-20-permission-management-design.md`.
+- **권한 관리(Permission Management) UI-first 설계 확정**(`feat/permission-management-ui`, 워크트리·`origin/main`이 아닌 캔버스 브랜치 기준). 코드 대조로 스코프 확정 — 버전게시 승인(흐름①)은 기존 실제 구현이나 미사용 → mock 신규(§7.5는 에디터 대신 settings에 배치), 맵 승인자 mock 통일, 실제 맵 리스트 + mapId-keyed mock 권한 오버레이, i18n는 기존 en+ko 따름. 백엔드·에디터(`maps/[mapId]/page.tsx`) 무변경. 3단계(Phase1 mock 기반→Phase2 맵 권한 UI→Phase3 그룹·sysadmin). 설계 `docs/superpowers/specs/2026-06-20-permission-management-design.md`, 구현 계획 `docs/superpowers/plans/2026-06-20-permission-management-ui.md`(Phase1 종료 시 stop-and-confirm).
 
 - **복잡한 깊이4 테스트 맵에 그룹·속성·디스크립션·분기 추가**(사용자 요청 후속). `scripts/seed_complex_demo.py` 확장 — 전 노드 description + 속성(담당자/부서/시스템/소요시간), 그룹 2개(루트 "핵심 개발"=기획·개발 / 개발 스코프 "엔지니어링"=설계·구현, `group_ids` JSON), 검증 스코프에 **decision 분기(품질 판정 마름모) + 엣지 라벨(통과/결함/재검증) + 핸들 변(source/target side) + 결함 수정 루프백**(y=420 분기 배치), 정돈된 좌표. 33노드/27엣지/2그룹. Playwright(map 2): 그룹 라벨·담당자 카드·description·decision·rework·엣지라벨 전부 렌더 확인.
 
