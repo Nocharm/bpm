@@ -3,7 +3,7 @@
 // 협업자 관리 패널 — 목록 조회, 역할 변경, 제거, 추가 / Collaborators management panel.
 
 import { useState } from "react";
-import { Building2, User, Users, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 import type { MapRole, PrincipalType } from "@/lib/mock/permissions";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/mock/permissions";
 import type { DowngradePayload } from "@/lib/mock/permissions";
 
-import { PrincipalPicker } from "./principal-picker";
+import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
 import type { PrincipalOption } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
 
@@ -27,13 +27,6 @@ interface CollaboratorsPanelProps {
   canEdit: boolean;
   /** 토스트 발행 콜백 / Callback to show a toast message. */
   onToast: (msg: string) => void;
-}
-
-// 피처럴 아이콘 / Principal type icon.
-function PrincipalIcon({ type }: { type: PrincipalType }) {
-  if (type === "user") return <User size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
-  if (type === "department") return <Building2 size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
-  return <Users size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
 }
 
 // 역할 표시명 해석 / Resolve principal display name from seed state.
@@ -124,7 +117,7 @@ function CollaboratorRow({
           className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
           onClick={handleRemove}
         >
-          <X size={14} strokeWidth={1.5} />
+          <X size={16} strokeWidth={1.5} />
         </button>
       )}
     </div>
@@ -223,14 +216,13 @@ export function CollaboratorsPanel({
   // 이미 부여된 principalId 집합 (피커 제외용) / Set of already-granted principalIds.
   const excludeIds = new Set(perms.map((p) => p.principalId));
 
-  if (perms.length === 0) {
-    return (
-      <p className="py-4 text-caption text-ink-tertiary">{t("perm.noCollaborators")}</p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-0.5">
+      {/* 빈 목록 안내 — 목록이 비어 있을 때만 / Empty-state message when no collaborators */}
+      {perms.length === 0 && (
+        <p className="py-4 text-caption text-ink-tertiary">{t("perm.noCollaborators")}</p>
+      )}
+
       {perms.map((perm) => (
         <CollaboratorRow
           key={`${perm.principalType}:${perm.principalId}`}

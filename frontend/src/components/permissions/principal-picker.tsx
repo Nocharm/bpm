@@ -45,10 +45,10 @@ function buildOptions(
   return [...userOpts, ...deptOpts, ...groupOpts];
 }
 
-function PrincipalIcon({ type }: { type: PrincipalType }) {
-  if (type === "user") return <User size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
-  if (type === "department") return <Building2 size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
-  return <Users size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
+export function PrincipalIcon({ type }: { type: PrincipalType }) {
+  if (type === "user") return <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
+  if (type === "department") return <Building2 size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
+  return <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
 }
 
 export function PrincipalPicker({
@@ -73,7 +73,7 @@ export function PrincipalPicker({
     <div className="flex flex-col gap-1">
       {/* 검색 입력 / Search input */}
       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
-        <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         <input
           type="text"
           className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
