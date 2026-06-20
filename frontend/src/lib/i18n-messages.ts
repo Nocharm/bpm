@@ -466,6 +466,17 @@ const en = {
   "perm.sysadmin.userSysadminTag": "Sysadmin",
   "perm.sysadmin.userSysadminNote": "env-managed",
   "perm.sysadmin.navLink": "System Admin",
+  // ── 결재 대기 탭 (per-map approver decide surface) / Pending approvals tab ──
+  "perm.tabPendingApprovals": "Pending Approvals",
+  "perm.approvals.empty": "No pending requests for this map.",
+  "perm.approvals.kindDowngrade": "Permission downgrade",
+  "perm.approvals.kindVisibility": "Visibility change",
+  "perm.approvals.requesterLabel": "Requested by",
+  "perm.approvals.approve": "Approve",
+  "perm.approvals.reject": "Reject",
+  "perm.approvals.toastApproved": "승인했습니다.",
+  "perm.approvals.toastRejected": "반려했습니다.",
+  "perm.approvals.roleRemoved": "removed",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -934,6 +945,17 @@ const ko: Record<MessageKey, string> = {
   "perm.sysadmin.userSysadminTag": "시스템 관리자",
   "perm.sysadmin.userSysadminNote": "환경 변수로 관리됨",
   "perm.sysadmin.navLink": "시스템 관리",
+  // ── 결재 대기 탭 / Pending approvals tab ──
+  "perm.tabPendingApprovals": "결재 대기",
+  "perm.approvals.empty": "이 맵에 대기 중인 요청이 없습니다.",
+  "perm.approvals.kindDowngrade": "권한 하향",
+  "perm.approvals.kindVisibility": "공개범위 변경",
+  "perm.approvals.requesterLabel": "요청자",
+  "perm.approvals.approve": "승인",
+  "perm.approvals.reject": "반려",
+  "perm.approvals.toastApproved": "승인했습니다.",
+  "perm.approvals.toastRejected": "반려했습니다.",
+  "perm.approvals.roleRemoved": "제거",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

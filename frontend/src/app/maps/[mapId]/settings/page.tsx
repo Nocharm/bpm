@@ -11,7 +11,7 @@ import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { getActiveApprovers, getEffectiveRole, getMapMeta, usePermissions } from "@/lib/mock/permissions";
+import { getActiveApprovers, getEffectiveRole, getMapMeta, isApprover, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
@@ -19,23 +19,27 @@ import { VisibilityControl } from "@/components/permissions/visibility-control";
 import { DangerZone } from "@/components/permissions/danger-zone";
 import { VersionsPublishPanel } from "@/components/permissions/versions-publish-panel";
 import { ReassignApproverModal } from "@/components/permissions/reassign-approver-modal";
+import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
 
-type TabId = "collaborators" | "approvers" | "visibility" | "versions" | "danger";
+type TabId = "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals";
 
 interface Tab {
   id: TabId;
-  labelKey: "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger";
+  labelKey: "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals";
 }
 
-const TABS: Tab[] = [
+// 전체 탭 목록 — approvals는 조건부 노출로 별도 처리 /
+// Full tab list — approvals is shown conditionally, filtered at render.
+const ALL_TABS: Tab[] = [
   { id: "collaborators", labelKey: "perm.tabCollaborators" },
   { id: "approvers", labelKey: "perm.tabApprovers" },
   { id: "visibility", labelKey: "perm.tabVisibility" },
   { id: "versions", labelKey: "perm.tabVersions" },
   { id: "danger", labelKey: "perm.tabDanger" },
+  { id: "approvals", labelKey: "perm.tabPendingApprovals" },
 ];
 
 // ── 메인 페이지 컴포넌트 / Main page component ────────────────────
@@ -101,6 +105,15 @@ export default function SettingsPage() {
     ? getMapMeta(permState, mapIdStr, currentMockUser.id)
     : null;
   const isPublic = mapMeta?.visibility === "public";
+
+  // 결재 대기 탭 가시성 — 맵 승인자 또는 sysadmin만 표시 /
+  // Pending approvals tab: visible only to map approvers or sysadmin.
+  const canDecide =
+    currentMockUser !== null &&
+    (currentMockUser.isSysadmin || isApprover(permState, currentMockUser.id, mapIdStr));
+
+  // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
+  const visibleTabs = ALL_TABS.filter((tab) => tab.id !== "approvals" || canDecide);
 
   // ── Dev 유저 전환 핸들러 / Dev user switch handler ────────────────
 
@@ -218,7 +231,7 @@ export default function SettingsPage() {
 
         {/* 탭 네비게이션 / Tab navigation */}
         <nav className="flex border-b border-hairline px-4">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -276,6 +289,13 @@ export default function SettingsPage() {
             // 위험 구역은 소유자 전용 — 비소유자에게 숨김 /
             // Danger zone is owner-only; hidden for non-owners.
             <p className="py-4 text-caption text-ink-tertiary">{t("perm.dangerReadOnly")}</p>
+          ) : activeTab === "approvals" && canDecide ? (
+            // 결재 대기 — 승인자·sysadmin 전용 / Pending approvals (approver or sysadmin only).
+            <PendingApprovalsPanel
+              mapId={mapIdStr}
+              currentUserId={currentMockUser.id}
+              onToast={(item) => showToast(item.message)}
+            />
           ) : null}
         </main>
       </div>
