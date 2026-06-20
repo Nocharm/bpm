@@ -243,3 +243,11 @@ button:not(:disabled):active {
     animation: none;
   }
 }
+
+/* 캔버스 select-none 안에서도 입력/텍스트영역은 텍스트 선택 허용(인라인 리네임·검색 등) */
+.select-none input,
+.select-none textarea,
+.select-none [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}

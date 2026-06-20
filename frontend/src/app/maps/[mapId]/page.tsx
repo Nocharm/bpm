@@ -272,15 +272,14 @@ function InlineRegionBands({
 
 // 포커스 스코프의 "레인" — 활성 스코프 좌우 세로 경계선 + 그 사이만 깊이 틴트(바깥은 부모/깊이0 바탕).
 // 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더. 화면 전체 높이로 뻗는다.
-function FocusScopeBands({ left, right, depth }: { left: number; right: number; depth: number }) {
+function FocusScopeBands({ left, right }: { left: number; right: number; depth: number }) {
   const { y, zoom } = useViewport();
   const paneHeight = useStore((state) => state.height);
   const topFlow = -y / zoom;
   const bandHeight = paneHeight / zoom;
-  const tint = Math.min(depth * 6, 30); // 깊을수록 진하게(인라인 영역과 동일 언어)
   return (
     <>
-      {/* 레인 틴트(세로선 사이만) + 좌우 세로선. 노드 뒤(z<0), 비상호작용 */}
+      {/* 레인 틴트(세로선 사이만) + 좌우 세로선 — 인라인 펼침(InlineRegionBands)과 동일: flat 5%, 중첩되면 겹쳐 진해짐. */}
       <div
         style={{
           position: "absolute",
@@ -289,7 +288,7 @@ function FocusScopeBands({ left, right, depth }: { left: number; right: number; 
           transform: `translate(${left}px, ${topFlow}px)`,
           width: right - left,
           height: bandHeight,
-          background: `color-mix(in srgb, var(--color-accent) ${tint}%, transparent)`,
+          background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
           borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
           borderRight: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
           zIndex: -1,
@@ -4931,7 +4930,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         />
         <div
           ref={canvasContainerRef}
-          className="relative flex-1 overflow-hidden bg-canvas"
+          // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
+          className="relative flex-1 select-none overflow-hidden bg-canvas"
         >
           {scopes.map((scope, index) => {
             const key = scopeKey(scope);
