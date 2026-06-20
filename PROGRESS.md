@@ -2,8 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
-## 2026-06-20
-- **복잡한 깊이4 테스트 맵 추가**(사용자 요청). `scripts/seed_complex_demo.py` — "제품 개발 프로세스"(map 2). 루트에 하위프로세스 보유 노드 3개(기획·개발·검증), **개발→구현→백엔드→DB설계로 깊이 4까지** 중첩, 31노드/24엣지. 기존 데모 맵(map 1)은 보존(같은 이름만 멱등 재생성). Playwright(map 2): 루트 하위보유 3개 확인, 깊이4 사슬 펼침(db-schema까지) 확인. dev.db 갱신 커밋.
+- **복잡한 깊이4 테스트 맵에 그룹·속성·디스크립션·분기 추가**(사용자 요청 후속). `scripts/seed_complex_demo.py` 확장 — 전 노드 description + 속성(담당자/부서/시스템/소요시간), 그룹 2개(루트 "핵심 개발"=기획·개발 / 개발 스코프 "엔지니어링"=설계·구현, `group_ids` JSON), 검증 스코프에 **decision 분기(품질 판정 마름모) + 엣지 라벨(통과/결함/재검증) + 핸들 변(source/target side) + 결함 수정 루프백**(y=420 분기 배치), 정돈된 좌표. 33노드/27엣지/2그룹. Playwright(map 2): 그룹 라벨·담당자 카드·description·decision·rework·엣지라벨 전부 렌더 확인.
+
+## 2026-06-20 (이전)
+- **복잡한 깊이4 테스트 맵 추가**(사용자 요청). `scripts/seed_complex_demo.py` — "제품 개발 프로세스"(map 2). 루트에 하위프로세스 보유 노드 3개(기획·개발·검증), **개발→구현→백엔드→DB설계로 깊이 4까지** 중첩. 기존 데모 맵(map 1)은 보존(같은 이름만 멱등 재생성). Playwright(map 2): 루트 하위보유 3개 확인, 깊이4 사슬 펼침(db-schema까지) 확인. dev.db 갱신 커밋.
 - **자식 클릭 포커스 시 펼쳐진 레이아웃이 왼쪽으로 붕괴하던 버그 수정**(사용자 피드백 — "좌우로 찢어져야할 노드가 왼쪽 정렬"). 중첩 펼침(심사 안에 승인 펼침) 상태에서 심사를 클릭 포커스하면 `navigateTo`의 스코프 로드 효과가 `setExpandedInline(new Set())`로 승인 펼침을 리셋 → 심사 종료가 far-right(2635)에서 compact(1594)로 붕괴. **수정:** 자식 클릭 포커스(`focusCamRef` 설정됨)일 땐 **새 스코프 하위의 펼침을 유지**(부모 체인이 currentParentId를 포함하는 펼침만 필터해 보존). 브레드크럼/검색(focusCamRef 없음)은 기존대로 전체 리셋. childNodes는 expandedInline→materialize 효과가 자동 동기화. Playwright: 중첩펼침→심사포커스 시 s-end **2635 유지**(spread 1699 유지), s-doc op 0.4→1(포커스됨), a-first 존재(승인 유지), breadcrumb 심사. tsc/eslint green.
 - **포커스 중 인라인 펼침 시 레인·조상 컨텍스트 깨지던 버그 수정**(사용자 피드백, Image 8). 깊이1 포커스 상태에서 하위(승인)를 펼치면 ① 깊이1 레인이 펼친 끝(밀려난 심사 종료·자식)을 못 따라감 ② 깊이0(루트) 컨텍스트가 통째로 사라짐 ③ 깊이2 틴트가 깊이1 레인 밖이라 안 겹침. **근본 원인:** (a) `focusScopeLanes` 현재 스코프 레인이 raw `nodes`(펼침 전) 기준 → 표시(`inlineComposition.nodes`) 기준으로 변경, (b) `ancestorContextNodes`가 `inlineComposition` 있으면 즉시 `[]` 반환 → 가드 제거 + 앵커를 표시 위치 기준으로. Playwright(depth1+승인펼침): 심사 레인 band r=1707→**2748**(s-end 2717 포함), 루트 r-* 5개 op=0.4로 복귀, 승인 영역(1574-2371)이 심사 레인(910-2748) 안에 중첩. tsc/eslint green. 좌상단 고정 제거는 사용자 만족(유지).
 - **캔버스 좌상단 고정 효과 제거**(사용자 요청 — 아웃라인 클릭 네비게이션이 있어 불필요). `contentExtent`의 비대칭(좌상단 바짝 + 우하단 minZoom 확장 → 줌아웃해도 centering 방지)을 **대칭 여백(EXTENT_MARGIN 사방 동일)**으로 교체 → 줌아웃 시 기본 centering 허용. Playwright: 21% 줌아웃 시 콘텐츠 중심 cx=752(뷰포트 중앙≈760)로 가운데 수축(좌상단 아님), focus-in 0px 유지(회귀 없음). 프레이밍 헬퍼(fitScopeTopLeft·frameScopeTopLeftKeepZoom)는 그대로 — 이상하면 후속. tsc/eslint green.
