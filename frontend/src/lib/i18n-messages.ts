@@ -303,6 +303,11 @@ const en = {
   "admin.title": "Employees",
   "admin.sync": "Sync all from AD",
   "admin.syncing": "Syncing…",
+  "library.title": "Process library",
+  "library.search": "Search…",
+  "library.cycleBlocked": "Would create a reference cycle",
+  "library.empty": "No processes",
+  "library.toggle": "Process library",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -608,6 +613,11 @@ const ko: Record<MessageKey, string> = {
   "admin.title": "직원 관리",
   "admin.sync": "AD 전체 동기화",
   "admin.syncing": "동기화 중…",
+  "library.title": "프로세스 라이브러리",
+  "library.search": "검색…",
+  "library.cycleBlocked": "순환 참조가 됩니다",
+  "library.empty": "프로세스 없음",
+  "library.toggle": "프로세스 라이브러리",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

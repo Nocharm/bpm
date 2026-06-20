@@ -39,6 +39,7 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
+import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
@@ -123,7 +124,7 @@ import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
-import { buildCompositeTree, deriveSubEnds } from "@/lib/subprocess-embed";
+import { buildCompositeTree, deriveSubEnds, type SubEnd } from "@/lib/subprocess-embed";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -499,6 +500,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(320);
@@ -2224,6 +2226,52 @@ function MapEditor({ mapId }: { mapId: number }) {
       applyFlowEdges(aId, bId, zone, true);
     },
     [swapNodes, addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+  );
+
+  // 라이브러리 패널에서 드래그한 맵을 캔버스에 드롭 → 하위프로세스 노드 생성
+  const handleLibraryDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      if (readOnly) return;
+      const raw = e.dataTransfer.getData("application/bpm-process");
+      if (!raw) return;
+      const linkedMapId = Number(raw);
+      const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
+      const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
+      const pinned = pinnedRaw ? Number(pinnedRaw) : null;
+      const position = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      let subEnds: SubEnd[] = [];
+      try {
+        const resolved = await getResolvedGraph(linkedMapId, false, pinned);
+        subEnds = deriveSubEnds(resolved);
+      } catch {
+        // subEnds 파생 실패 시 빈 채로 생성 — 백엔드가 핸들 없어도 저장 허용
+      }
+      const node: AppNode = {
+        id: genId(),
+        type: "process",
+        position,
+        data: {
+          label: mapName,
+          description: "",
+          nodeType: "subprocess",
+          color: "",
+          assignee: "",
+          department: "",
+          system: "",
+          duration: "",
+          groupIds: [],
+          hasChildren: false,
+          linkedMapId,
+          linkedVersionId: pinned,
+          followLatest: false,
+          subEnds,
+        },
+      };
+      setNodes((cur) => [...cur, node]);
+      scheduleAutoSave();
+    },
+    [readOnly, reactFlow, setNodes, scheduleAutoSave],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -4329,6 +4377,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           </button>
           <button
             className={toolButton}
+            onClick={() => setLibraryOpen((open) => !open)}
+            title={t("library.toggle")}
+            aria-label={t("library.toggle")}
+          >
+            <Network size={16} strokeWidth={1.5} />
+          </button>
+          <button
+            className={toolButton}
             onClick={() => setInspectorOpen((open) => !open)}
             title={t("editor.inspectorToggle")}
             aria-label={t("editor.inspectorToggle")}
@@ -4400,10 +4456,27 @@ function MapEditor({ mapId }: { mapId: number }) {
           onCollapse={handleOutlineCollapse}
           onFold={handleOutlineFold}
         />
+        {libraryOpen && (
+          <ProcessLibraryPanel
+            currentMapId={mapId}
+            onClose={() => setLibraryOpen(false)}
+          />
+        )}
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
           className="relative flex-1 select-none overflow-hidden bg-canvas"
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("application/bpm-process")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(e) => {
+            if (e.dataTransfer.types.includes("application/bpm-process")) {
+              void handleLibraryDrop(e);
+            }
+          }}
         >
           {scopes.map((scope, index) => {
             const key = scopeKey(scope);
