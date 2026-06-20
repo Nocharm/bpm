@@ -61,6 +61,31 @@ def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
     return created["id"], created["versions"][0]["id"]
 
 
+def test_rejects_indirect_cycle(client: TestClient) -> None:
+    a_id, a_vid = _map_and_version(client, "cycle-A")
+    b_id, b_vid = _map_and_version(client, "cycle-B")
+    # B → A (saved first, valid)
+    client.put(f"/api/versions/{b_vid}/graph", json={
+        "nodes": [
+            {"id": "s", "node_type": "start"},
+            {"id": "sub", "node_type": "subprocess", "linked_map_id": a_id},
+            {"id": "e", "node_type": "end", "is_primary_end": True},
+        ],
+        "edges": [],
+    })
+    # A → B now forms A→B→A → must be rejected
+    r = client.put(f"/api/versions/{a_vid}/graph", json={
+        "nodes": [
+            {"id": "s", "node_type": "start"},
+            {"id": "sub", "node_type": "subprocess", "linked_map_id": b_id},
+            {"id": "e", "node_type": "end", "is_primary_end": True},
+        ],
+        "edges": [],
+    })
+    assert r.status_code == 422
+    assert "순환" in r.json()["detail"]
+
+
 def test_rejects_self_reference(client: TestClient) -> None:
     map_id, vid = _map_and_version(client, "selfref")
     r = client.put(
