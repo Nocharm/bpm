@@ -175,7 +175,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
           </div>
           {eligible.length === 0 && (
             <p className="mt-2 text-fine text-ink-tertiary">
-              편집자 이상 협업자가 없으면 이전 불가합니다.
+              {t("perm.transferNoEligible")}
             </p>
           )}
         </div>

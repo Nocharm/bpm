@@ -354,6 +354,7 @@ const en = {
   "perm.transferConfirm": "Confirm transfer",
   "perm.transferCancel": "Cancel",
   "perm.transferToast": "Ownership transferred to {name}.",
+  "perm.transferNoEligible": "No editor-or-higher collaborator to transfer ownership to.",
   "perm.deleteTitle": "Delete Map",
   "perm.deleteHint": "Remove this map from the mock store. The real map persists on the backend.",
   "perm.deleteButton": "Delete map",
@@ -362,6 +363,7 @@ const en = {
   "perm.deleteConfirm": "Delete",
   "perm.deleteCancel": "Cancel",
   "perm.deleteToast": "Map removed from mock store.",
+  "perm.dangerReadOnly": "Owner only.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -718,6 +720,7 @@ const ko: Record<MessageKey, string> = {
   "perm.transferConfirm": "이전 확인",
   "perm.transferCancel": "취소",
   "perm.transferToast": "{name}에게 소유권이 이전되었습니다.",
+  "perm.transferNoEligible": "편집자 이상 협업자가 없어 소유권을 이전할 수 없습니다.",
   "perm.deleteTitle": "맵 삭제",
   "perm.deleteHint": "mock 스토어에서 이 맵을 제거합니다. 실제 맵은 백엔드에 남습니다.",
   "perm.deleteButton": "맵 삭제",
@@ -726,6 +729,7 @@ const ko: Record<MessageKey, string> = {
   "perm.deleteConfirm": "삭제",
   "perm.deleteCancel": "취소",
   "perm.deleteToast": "mock 스토어에서 맵을 제거했습니다.",
+  "perm.dangerReadOnly": "소유자 전용입니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

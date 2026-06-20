@@ -253,7 +253,7 @@ export default function SettingsPage() {
           ) : activeTab === "danger" ? (
             // 위험 구역은 소유자 전용 — 비소유자에게 숨김 /
             // Danger zone is owner-only; hidden for non-owners.
-            <p className="py-4 text-caption text-ink-tertiary">{t("perm.approversReadOnly")}</p>
+            <p className="py-4 text-caption text-ink-tertiary">{t("perm.dangerReadOnly")}</p>
           ) : null}
         </main>
       </div>
