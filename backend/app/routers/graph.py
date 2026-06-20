@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
 from app.auth import get_current_user
-from app.subprocess import validate_process
+from app.subprocess import assert_no_cycle, validate_process
 from app.checkout import is_locked_by_other
 from app.db import get_session
 from app.models import Comment, Edge, Group, MapVersion, Node
@@ -149,6 +149,11 @@ async def replace_graph(
 
     try:
         validate_process(payload.nodes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        await assert_no_cycle(session, version_id, payload.nodes)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -54,3 +54,25 @@ def test_accepts_valid_process(client: TestClient) -> None:
         },
     )
     assert r.status_code == 200
+
+
+def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
+    created = client.post("/api/maps", json={"name": name}).json()
+    return created["id"], created["versions"][0]["id"]
+
+
+def test_rejects_self_reference(client: TestClient) -> None:
+    map_id, vid = _map_and_version(client, "selfref")
+    r = client.put(
+        f"/api/versions/{vid}/graph",
+        json={
+            "nodes": [
+                {"id": "s", "node_type": "start"},
+                {"id": "sub", "node_type": "subprocess", "linked_map_id": map_id},
+                {"id": "e", "node_type": "end", "is_primary_end": True},
+            ],
+            "edges": [],
+        },
+    )
+    assert r.status_code == 422
+    assert "순환" in r.json()["detail"]
