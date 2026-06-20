@@ -310,13 +310,13 @@ function FocusScopeBands({
           pointerEvents: "none",
         }}
       />
-      {/* 깊이 표시(›×절대깊이) + 이름 — 인라인 펼침과 동일 언어. 비상호작용(노드 클릭 안 막음) */}
+      {/* 깊이 표시(›×절대깊이) + 이름 — 인라인 펼침과 동일 언어. 첫 노드 위(top-26)에 띄워 노드와 겹치지 않게. 비상호작용 */}
       <div
         style={{
           position: "absolute",
           left: 0,
           top: 0,
-          transform: `translate(${left + 6}px, ${top + 4}px)`,
+          transform: `translate(${left + 6}px, ${top - 26}px)`,
           zIndex: 1,
           pointerEvents: "none",
         }}
