@@ -4,7 +4,7 @@
 import type { Edge } from "@xyflow/react";
 
 import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
-import type { AppNode, ProcessNodeType } from "@/lib/canvas";
+import type { AppNode } from "@/lib/canvas";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 
 /** expanded에 속한 노드들의 후손(재귀) 노드 + 그 사이 엣지. 중첩 펼침 지원. */
@@ -141,30 +141,4 @@ export function checkExpansionLimits(
   };
 }
 
-/** 저장용: scopeId별 노드 묶음. 게이트웨이는 호출 전 제거되어야 함. */
-export function splitByScope(nodes: AppNode[]): Map<string | null, AppNode[]> {
-  const byScope = new Map<string | null, AppNode[]>();
-  for (const node of nodes) {
-    const key = node.data.scopeId ?? null;
-    byScope.set(key, [...(byScope.get(key) ?? []), node]);
-  }
-  return byScope;
-}
 
-/** 하위 프로세스 불변식: Start≥1, End≥1, 작업(process/decision)≥1. */
-export function checkScopeInvariant(scopeNodes: AppNode[]): boolean {
-  let starts = 0;
-  let ends = 0;
-  let works = 0;
-  for (const node of scopeNodes) {
-    const type: ProcessNodeType = node.data.nodeType;
-    if (type === "start") {
-      starts += 1;
-    } else if (type === "end") {
-      ends += 1;
-    } else {
-      works += 1;
-    }
-  }
-  return starts >= 1 && ends >= 1 && works >= 1;
-}

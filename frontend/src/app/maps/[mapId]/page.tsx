@@ -39,7 +39,6 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
-import { ExpandInvariantModal } from "@/components/expand-invariant-modal";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
@@ -114,7 +113,6 @@ import {
   type Graph,
   type GraphEdge,
   type GraphGroup,
-  type GraphNode,
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
@@ -124,7 +122,7 @@ import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
-import { buildGatewayEdges, checkExpansionLimits, checkScopeInvariant } from "@/lib/inline-expand";
+import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds } from "@/lib/subprocess-embed";
 import {
   NODE_DISPLAY_FIELDS,
@@ -147,7 +145,7 @@ const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
-const CHILD_SAVE_DEBOUNCE_MS = 700; // 자식 속성 편집 후 자식 스코프 PUT까지 대기(키 입력마다 저장 방지)
+
 const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
@@ -395,19 +393,7 @@ function toAppEdges(graph: Graph): Edge[] {
   }));
 }
 
-// 자식 스코프 저장용 — NodeData 패치(편집 오버레이)를 GraphNode 필드로 반영(label→title 등).
-function patchGraphNode(node: GraphNode, patch: Partial<NodeData>): GraphNode {
-  return {
-    ...node,
-    ...(patch.label !== undefined ? { title: patch.label } : {}),
-    ...(patch.description !== undefined ? { description: patch.description } : {}),
-    ...(patch.color !== undefined ? { color: patch.color } : {}),
-    ...(patch.assignee !== undefined ? { assignee: patch.assignee } : {}),
-    ...(patch.department !== undefined ? { department: patch.department } : {}),
-    ...(patch.system !== undefined ? { system: patch.system } : {}),
-    ...(patch.duration !== undefined ? { duration: patch.duration } : {}),
-  };
-}
+
 
 function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
@@ -480,8 +466,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 펼친 자식 노드 — 메인 nodes(현재 스코프)와 분리해 둔다. React Flow가 측정·이벤트를 라우팅하도록 displayNodes에 포함하되,
   // nodes를 오염시키지 않아 아웃라인·저장·라우팅 등 기존 가정이 깨지지 않는다(회귀 0). scopeId = 펼친 부모 id.
   const [childNodes, setChildNodes] = useState<AppNode[]>([]);
-  // 드래그 중인 자식 id — 드래그 중엔 displayNodes가 childNodes(절대)위치를, 아니면 buildScope 파생위치를 쓴다.
-  const [draggingChildIds, setDraggingChildIds] = useState<Set<string>>(new Set());
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
@@ -500,20 +484,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     nodeCount: number;
     depth: number;
   } | null>(null);
-  // 하위 생성 시 후속(나가는 엣지) 없는 노드 — 진행 방법 확인 모달. proceed=후속 확보 후 실행할 동작(생성/드롭 공용)
-  const [subprocessPrompt, setSubprocessPrompt] = useState<{
-    nodeId: string;
-    proceed: () => void;
-  } | null>(null);
-  // 후속 노드 직접 선택 모드 — 클릭한 노드를 후속으로 연결 후 proceed 실행
-  const [pendingSubprocessPick, setPendingSubprocessPick] = useState<{
-    sourceId: string;
-    proceed: () => void;
-  } | null>(null);
-  // 삭제로 하위 프로세스 불변식이 깨질 때 — 통째 삭제 확인 모달(값=깨지는 자식 스코프 id = currentParentId)
-  const [deleteInvariantPrompt, setDeleteInvariantPrompt] = useState<string | null>(null);
-  // 인라인 펼친 자식 노드의 낙관적 편집 오버레이(자식 id→바뀐 필드) — PUT 후 fullGraph가 반영, 스코프 전환 시 초기화.
-  const [childEdits, setChildEdits] = useState<Map<string, Partial<NodeData>>>(new Map());
   // 펼침/접힘 직후 잠깐 true — 노드 transform 전환(슬라이드 애니메이션) CSS 클래스 토글용
   const [expandAnimating, setExpandAnimating] = useState(false);
   // 사용자 펼침/접힘 — 전환(transition)은 "전환이 정의된 상태"가 먼저 칠해진 뒤 값이 바뀌어야 발동한다.
@@ -651,10 +621,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   const fullGraphVersionRef = useRef<number | null>(null);
   // toggleInlineExpand는 아래쪽에 정의돼 컨텍스트 메뉴 useMemo(위)에서 직접 못 씀(TDZ) — ref로 호출.
   const toggleInlineExpandRef = useRef<((nodeId: string) => void) | null>(null);
-  // 자식 편집 오버레이/디바운스 저장용 — 타이머·dirty 스코프·최신 오버레이 미러(저장 flush에서 읽음)
-  const childEditsRef = useRef<Map<string, Partial<NodeData>>>(new Map());
-  const dirtyChildScopesRef = useRef<Set<string>>(new Set());
-  const childSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 합성 트리 — 루트 평면 그래프 + 펼친 하위프로세스의 링크맵 resolved를 합성 parent_node_id 자식으로 끼움.
   // 기존 fullGraph 소비자(materialize·inlineComposition·조상컨텍스트·펼침 한도 등)는 그대로 이 값을 읽는다.
   const fullGraph = useMemo<VersionGraph | null>(() => {
@@ -729,9 +695,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       setActiveScopeId(currentParentId);
     }
   }, [activeScopeId, currentParentId, expandedInline]);
-  useEffect(() => {
-    childEditsRef.current = childEdits;
-  }, [childEdits]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -837,7 +800,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       await saveGraph(
         versionId,
         buildGraph(nodesRef.current, edgesRef.current, groupsRef.current),
-        currentParentId,
       );
       dirtyRef.current = false;
       setSaveState("saved");
@@ -846,111 +808,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSaveState("error");
       throw err;
     }
-  }, [versionId, currentParentId, readOnly, refreshFullGraph]);
-
-  // 하위 프로세스 실제 생성 — Start/작업/End를 자식 스코프에 자동 생성(불변식 충족)하고 인라인 펼침.
-  // 후속(나가는 엣지) 보장은 호출 전 createSubprocess 래퍼가 처리한다(펼침 시 End→후속 게이트웨이가 연결되도록).
-  const runCreateSubprocess = useCallback(
-    async (nodeId: string) => {
-      if (versionId === null) {
-        return;
-      }
-      const startId = genId();
-      const taskId = genId();
-      const endId = genId();
-      const mkNode = (
-        id: string,
-        title: string,
-        nodeType: string,
-        x: number,
-        order: number,
-      ): GraphNode => ({
-        id,
-        title,
-        description: "",
-        node_type: nodeType,
-        color: "",
-        assignee: "",
-        department: "",
-        system: "",
-        duration: "",
-        pos_x: x,
-        pos_y: 0,
-        sort_order: order,
-        group_ids: [],
-        linked_map_id: null,
-        follow_latest: false,
-        linked_version_id: null,
-        is_primary_end: false,
-      });
-      const childGraph: Graph = {
-        nodes: [
-          mkNode(startId, t("subprocess.startTitle"), "start", 0, 0),
-          mkNode(taskId, t("subprocess.taskTitle"), "process", 240, 1),
-          mkNode(endId, t("subprocess.endTitle"), "end", 480, 2),
-        ],
-        edges: [
-          {
-            id: genId(),
-            source_node_id: startId,
-            target_node_id: taskId,
-            label: "",
-            source_side: "right",
-            target_side: "left",
-            source_handle: null,
-            target_handle: null,
-          },
-          {
-            id: genId(),
-            source_node_id: taskId,
-            target_node_id: endId,
-            label: "",
-            source_side: "right",
-            target_side: "left",
-            source_handle: null,
-            target_handle: null,
-          },
-        ],
-        groups: [],
-      };
-      try {
-        await saveGraph(versionId, childGraph, nodeId);
-        // 부모 노드는 이제 하위 보유 — state 반영(표시용, buildGraph 직렬화엔 무영향)
-        setNodes((current) =>
-          current.map((node) =>
-            node.id === nodeId
-              ? { ...node, data: { ...node.data, hasChildren: true } }
-              : node,
-          ),
-        );
-        refreshFullGraph();
-        commitExpanded((current) => {
-          const next = new Set(current);
-          next.add(nodeId);
-          return next;
-        });
-        showToast(t("subprocess.created"));
-      } catch {
-        showToast(t("subprocess.createError"));
-      }
-    },
-    [versionId, t, refreshFullGraph, showToast, setNodes, commitExpanded],
-  );
-
-  // 하위 생성 진입점 — 후속(나가는 엣지) 있으면 즉시 생성, 없으면 진행 방법 모달.
-  const createSubprocess = useCallback(
-    (nodeId: string) => {
-      if (versionId === null) {
-        return;
-      }
-      if (edgesRef.current.some((edge) => edge.source === nodeId)) {
-        void runCreateSubprocess(nodeId);
-        return;
-      }
-      setSubprocessPrompt({ nodeId, proceed: () => void runCreateSubprocess(nodeId) });
-    },
-    [versionId, runCreateSubprocess],
-  );
+  }, [versionId, readOnly, refreshFullGraph]);
 
   const scheduleAutoSave = useCallback(() => {
     // AI 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
@@ -1077,130 +935,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     history.future = [];
     setHistorySize({ past: history.past.length, future: 0 });
   }, []);
-
-  // 후속없음 모달 "종료 노드 추가" — 현재 스코프에 End 노드 + nodeId→End 엣지를 만들고 proceed 실행(생성/드롭 공용).
-  const handleCreateEndForSubprocess = useCallback(() => {
-    const prompt = subprocessPrompt;
-    setSubprocessPrompt(null);
-    if (!prompt) {
-      return;
-    }
-    const nodeId = prompt.nodeId;
-    const source = nodesRef.current.find((node) => node.id === nodeId);
-    if (!source) {
-      return;
-    }
-    pushHistory();
-    const endId = genId();
-      const endNode: AppNode = {
-        id: endId,
-        type: "process",
-        // 앵커 오른쪽에 배치(겹침 방지) — 출발 노드는 process라 폭 170 + 여백 50
-        position: { x: source.position.x + NODE_WIDTH + 50, y: source.position.y },
-        data: {
-          label: makeUniqueLabel(
-            t("subprocess.endTitle"),
-            nodesRef.current.map((node) => node.data.label),
-          ),
-          description: "",
-          nodeType: "end",
-          color: "",
-          assignee: "",
-          department: "",
-          system: "",
-          duration: "",
-          groupIds: [],
-          hasChildren: false,
-        },
-      };
-      setNodes((current) => [...current, endNode]);
-      setEdges((current) => [
-        ...current,
-        {
-          ...EDGE_DEFAULTS,
-          id: genId(),
-          source: nodeId,
-          target: endId,
-          sourceHandle: sourceHandleId("right"),
-          targetHandle: targetHandleId("left"),
-        },
-      ]);
-      scheduleAutoSave();
-      prompt.proceed();
-    },
-    [subprocessPrompt, pushHistory, setNodes, setEdges, scheduleAutoSave, t],
-  );
-
-  // 후속 선택 모드에서 노드 클릭 — 클릭 노드를 후속으로 연결 후 하위 생성. 현재 스코프·자기 자신 아님만.
-  const handleSubprocessPick = useCallback(
-    (pickedId: string) => {
-      const pending = pendingSubprocessPick;
-      if (pending === null) {
-        return;
-      }
-      if (pickedId === pending.sourceId || !nodesRef.current.some((node) => node.id === pickedId)) {
-        return; // 인라인 자식·자기 자신은 후속 대상 불가
-      }
-      pushHistory();
-      setEdges((current) => [
-        ...current,
-        {
-          ...EDGE_DEFAULTS,
-          id: genId(),
-          source: pending.sourceId,
-          target: pickedId,
-          sourceHandle: sourceHandleId("right"),
-          targetHandle: targetHandleId("left"),
-        },
-      ]);
-      setPendingSubprocessPick(null);
-      scheduleAutoSave();
-      pending.proceed();
-    },
-    [pendingSubprocessPick, pushHistory, setEdges, scheduleAutoSave],
-  );
-
-  // 후속 선택 모드 — Esc로 취소
-  useEffect(() => {
-    if (pendingSubprocessPick === null) {
-      return;
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPendingSubprocessPick(null);
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [pendingSubprocessPick]);
-
-  // 삭제 불변식 확정 — 깨지는 자식 스코프를 통째로 비워(백엔드 cascade) 부모를 일반 노드로 되돌리고 상위로 복귀.
-  // navigateTo는 이동 전 현재 스코프를 자동 저장해 방금 비운 스코프를 되살리므로 직접 스코프를 pop한다.
-  const confirmDeleteSubprocess = useCallback(async () => {
-    const scopeId = deleteInvariantPrompt;
-    setDeleteInvariantPrompt(null);
-    if (scopeId === null || versionId === null) {
-      return;
-    }
-    try {
-      await saveGraph(versionId, { nodes: [], edges: [], groups: [] }, scopeId);
-    } catch {
-      showToast(t("subprocess.deleteError"));
-      return;
-    }
-    setExpandedInline((current) => {
-      const next = new Set(current);
-      next.delete(scopeId);
-      return next;
-    });
-    // 비운 스코프와 그 하위를 브레드크럼에서 제거하고 부모 스코프로 포커스 — 스코프 로드 effect가 부모를 새로 받음
-    const idx = scopes.findIndex((scope) => scope.parentId === scopeId);
-    const nextScopes = idx > 0 ? scopes.slice(0, idx) : scopes;
-    setScopes(nextScopes);
-    setActiveIndex(nextScopes.length - 1);
-    refreshFullGraph();
-    showToast(t("subprocess.reverted"));
-  }, [deleteInvariantPrompt, versionId, scopes, refreshFullGraph, showToast, t]);
 
   // 타이핑은 간격 안에서 한 스냅샷으로 묶고, 그 외 변경은 즉시 기록
   const recordChange = useCallback(
@@ -1447,7 +1181,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     let active = true;
     void (async () => {
       try {
-        const graph = await getGraph(versionId, currentParentId);
+        const graph = await getGraph(versionId);
         if (!active) {
           return;
         }
@@ -1502,12 +1236,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           setExpandedInline(new Set()); // 재로딩/버전 변경 시 모두 접힘으로 시작(spec 5.2)
         }
         setActiveScopeId(currentParentId); // 포커스(A) 활성 스코프를 새 현재 스코프로 리셋
-        setChildEdits(new Map()); // 자식 편집 오버레이 초기화 — 새 스코프는 fullGraph가 권위
-        dirtyChildScopesRef.current.clear(); // 대기 중 자식 저장 취소(스코프 전환 시 stale 저장 방지)
-        if (childSaveTimerRef.current) {
-          clearTimeout(childSaveTimerRef.current);
-          childSaveTimerRef.current = null;
-        }
         historyRef.current = { past: [], future: [] };
         setHistorySize({ past: 0, future: 0 });
         lastTextEditAtRef.current = 0;
@@ -1970,49 +1698,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pushHistory, setEdges, scheduleAutoSave],
   );
 
-  // 자식 간 연결 → 그 자식 스코프에 엣지 저장(fullGraph 낙관적 추가로 즉시 렌더 + 권위 그래프 PUT).
-  const createChildEdge = useCallback(
-    async (scopeId: string, connection: Connection, label: string) => {
-      if (versionId === null) {
-        return;
-      }
-      const edge: GraphEdge = {
-        id: genId(),
-        source_node_id: connection.source as string,
-        target_node_id: connection.target as string,
-        label,
-        source_side: sideFromHandleId(connection.sourceHandle, "right"),
-        target_side: sideFromHandleId(connection.targetHandle, "left"),
-        source_handle: connection.sourceHandle ?? null,
-        target_handle: connection.targetHandle ?? null,
-      };
-      setRootGraph((prev) => (prev === null ? prev : { ...prev, edges: [...prev.edges, edge] }));
-      try {
-        const graph = await getGraph(versionId, scopeId);
-        await saveGraph(versionId, { ...graph, edges: [...graph.edges, edge] }, scopeId);
-        refreshFullGraph();
-      } catch {
-        showToast(t("err.save"));
-      }
-    },
-    [versionId, refreshFullGraph, showToast, t, setRootGraph],
-  );
-
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly) {
-        return;
-      }
-      // 자식 간 연결(같은 자식 스코프) → 그 스코프에 엣지 저장
-      const srcChild = childNodesRef.current.find((node) => node.id === connection.source);
-      const tgtChild = childNodesRef.current.find((node) => node.id === connection.target);
-      if (
-        srcChild &&
-        tgtChild &&
-        srcChild.data.scopeId != null &&
-        srcChild.data.scopeId === tgtChild.data.scopeId
-      ) {
-        void createChildEdge(srcChild.data.scopeId, connection, "");
         return;
       }
       // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
@@ -2023,7 +1711,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       createEdge(connection, "");
     },
-    [readOnly, createEdge, createChildEdge],
+    [readOnly, createEdge],
   );
 
   // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결은 엣지를 생성, 노드 드롭은 기존 엣지에 라벨만 부여.
@@ -2046,79 +1734,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     [branchPrompt, createEdge, setEdges, scheduleAutoSave],
   );
 
-  // 자식 스코프에 새 노드 생성(스코프상대 위치) — fullGraph 낙관적 추가(materialize로 즉시 렌더) + 권위 그래프 PUT.
-  const addChildNode = useCallback(
-    async (scopeId: string, position: { x: number; y: number }) => {
-      if (versionId === null) {
-        return;
-      }
-      const id = genId();
-      const tree = fullGraphRef.current;
-      const siblingTitles = tree
-        ? tree.nodes.filter((node) => node.parent_node_id === scopeId).map((node) => node.title)
-        : [];
-      const base: GraphNode = {
-        id,
-        title: makeUniqueLabel(t("editor.newStep"), siblingTitles),
-        description: "",
-        node_type: "process",
-        color: "",
-        assignee: "",
-        department: "",
-        system: "",
-        duration: "",
-        pos_x: position.x,
-        pos_y: position.y,
-        sort_order: 0,
-        group_ids: [],
-        linked_map_id: null,
-        follow_latest: false,
-        linked_version_id: null,
-        is_primary_end: false,
-      };
-      setRootGraph((prev) =>
-        prev === null
-          ? prev
-          : {
-              ...prev,
-              nodes: [
-                ...prev.nodes,
-                { ...base, has_children: false, parent_node_id: scopeId, source_node_id: null },
-              ],
-            },
-      );
-      try {
-        const graph = await getGraph(versionId, scopeId);
-        await saveGraph(versionId, { ...graph, nodes: [...graph.nodes, base] }, scopeId);
-        refreshFullGraph();
-      } catch {
-        showToast(t("err.save"));
-      }
-    },
-    [versionId, refreshFullGraph, showToast, t, setRootGraph],
-  );
-
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
     (screen: { x: number; y: number } | null, nodeType: ProcessNodeType = "process") => {
       if (readOnly) {
         return;
-      }
-      // 펼침 중 클릭이 자식 영역 안이면 그 자식 스코프에 추가(스코프상대 위치로 변환)
-      const composition = inlineCompositionRef.current;
-      if (screen && composition) {
-        const point = reactFlow.screenToFlowPosition(screen);
-        const region = composition.regions
-          .filter((box) => point.x >= box.x && point.x <= box.x + box.width)
-          .sort((a, b) => b.depth - a.depth)[0];
-        const offset = region ? composition.scopeOffsets.get(region.id) : undefined;
-        if (region && offset) {
-          void addChildNode(region.id, {
-            x: point.x - offset.x - NODE_WIDTH / 2,
-            y: point.y - offset.y - NODE_HEIGHT / 2,
-          });
-          return;
-        }
       }
       pushHistory();
       const id = genId();
@@ -2166,7 +1786,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSelectedEdgeId(null);
       scheduleAutoSave();
     },
-    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t, addChildNode],
+    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t],
   );
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
@@ -2326,143 +1946,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setNodes, scheduleAutoSave],
   );
 
-  // A를 B의 하위 프로세스(자식 스코프)로 이동. 자식 스코프에 먼저 영속(재부모화)한 뒤
-  // 현재 스코프에서 제거 — 순서 보장으로 현재 스코프 자동저장이 A를 삭제하지 않도록 함.
-  const runMoveToChild = useCallback(
-    async (aId: string, bId: string) => {
-      if (versionId === null) {
-        return;
-      }
-      const aNode = nodesRef.current.find((node) => node.id === aId);
-      if (!aNode) {
-        return;
-      }
-      // 사이클 방지 — B가 A의 하위(=A가 B의 조상)면 거부. 전체 그래프로 B의 조상 체인 확인.
-      if (aId === bId) {
-        return;
-      }
-      // 하위 프로세스는 process 노드만 가질 수 있음 — decision/start/end는 거부
-      const bNode = nodesRef.current.find((node) => node.id === bId);
-      if (bNode && bNode.data.nodeType !== "process") {
-        setStatus(t("err.childOnlyProcess"));
-        return;
-      }
-      const parentById = new Map(
-        (fullGraph?.nodes ?? []).map((node) => [node.id, node.parent_node_id]),
-      );
-      for (let anc = parentById.get(bId) ?? null; anc !== null; anc = parentById.get(anc) ?? null) {
-        if (anc === aId) {
-          setStatus(t("err.moveChildCycle"));
-          return;
-        }
-      }
-      const aGraph = buildGraph([aNode], [], []).nodes[0];
-      try {
-        const child = await getGraph(versionId, bId);
-        let childGraph: Graph;
-        if (child.nodes.length === 0) {
-          // B가 비어 있으면 Start → A → End 로 감싸 제대로 된 하위 프로세스 생성(불변식 충족)
-          const startId = genId();
-          const endId = genId();
-          const terminal = (
-            id: string,
-            titleKey: "subprocess.startTitle" | "subprocess.endTitle",
-            type: string,
-            x: number,
-            order: number,
-          ): GraphNode => ({
-            id,
-            title: t(titleKey),
-            description: "",
-            node_type: type,
-            color: "",
-            assignee: "",
-            department: "",
-            system: "",
-            duration: "",
-            pos_x: x,
-            pos_y: 0,
-            sort_order: order,
-            group_ids: [],
-            linked_map_id: null,
-            follow_latest: false,
-            linked_version_id: null,
-            is_primary_end: false,
-          });
-          childGraph = {
-            nodes: [
-              terminal(startId, "subprocess.startTitle", "start", 0, 0),
-              { ...aGraph, group_ids: [], pos_x: 240, pos_y: 0, sort_order: 1 },
-              terminal(endId, "subprocess.endTitle", "end", 480, 2),
-            ],
-            edges: [
-              {
-                id: genId(),
-                source_node_id: startId,
-                target_node_id: aId,
-                label: "",
-                source_side: "right",
-                target_side: "left",
-                source_handle: null,
-                target_handle: null,
-              },
-              {
-                id: genId(),
-                source_node_id: aId,
-                target_node_id: endId,
-                label: "",
-                source_side: "right",
-                target_side: "left",
-                source_handle: null,
-                target_handle: null,
-              },
-            ],
-            groups: [],
-          };
-        } else {
-          // 이미 하위가 있으면 A를 그대로 추가(기존 동작)
-          childGraph = {
-            nodes: [...child.nodes, { ...aGraph, group_ids: [] }],
-            edges: child.edges,
-            groups: child.groups,
-          };
-        }
-        await saveGraph(versionId, childGraph, bId);
-      } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.moveChild"));
-        return;
-      }
-      setNodes((current) =>
-        current
-          .filter((node) => node.id !== aId)
-          .map((node) =>
-            node.id === bId ? { ...node, data: { ...node.data, hasChildren: true } } : node,
-          ),
-      );
-      // A에 연결된 현재 스코프 엣지 제거 — 안 하면 저장 시 payload 미존재 노드 참조로 422
-      setEdges((current) => current.filter((edge) => edge.source !== aId && edge.target !== aId));
-      setSelectedId((sel) => (sel === aId ? null : sel));
-      scheduleAutoSave();
-      refreshFullGraph();
-    },
-    [versionId, fullGraph, setNodes, setEdges, scheduleAutoSave, refreshFullGraph, t],
-  );
-
-  // 드롭으로 하위 만들기 진입점 — B에 후속(나가는 엣지) 있으면 즉시, 없으면 후속없음 모달(우클릭 생성과 동일 UX).
-  const moveToChild = useCallback(
-    (aId: string, bId: string) => {
-      if (versionId === null) {
-        return;
-      }
-      if (edgesRef.current.some((edge) => edge.source === bId)) {
-        void runMoveToChild(aId, bId);
-        return;
-      }
-      setSubprocessPrompt({ nodeId: bId, proceed: () => void runMoveToChild(aId, bId) });
-    },
-    [versionId, runMoveToChild],
-  );
-
   const renameGroup = useCallback(
     (groupId: string, label: string) => {
       setGroups((current) => {
@@ -2505,100 +1988,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setGroups, showToast, t],
   );
 
-  // 노드 삭제 시 멤버가 2명 미만이 된 그룹 정리 — 삭제된 노드를 제외한 잔여 노드로 멤버 재계산.
-  // 자식 삭제 후 그 자식 스코프를 저장 — 권위 그래프(getGraph: 그룹 보존)에서 삭제 노드/엣지 제거 후 PUT.
-  const saveChildScopeAfterDelete = useCallback(
-    async (scopeId: string, removedIds: Set<string>) => {
-      if (versionId === null) {
-        return;
-      }
-      try {
-        const graph = await getGraph(versionId, scopeId);
-        const keptNodes = graph.nodes.filter((node) => !removedIds.has(node.id));
-        const keptIds = new Set(keptNodes.map((node) => node.id));
-        const keptEdges = graph.edges.filter(
-          (edge) => keptIds.has(edge.source_node_id) && keptIds.has(edge.target_node_id),
-        );
-        await saveGraph(
-          versionId,
-          { nodes: keptNodes, edges: keptEdges, groups: graph.groups },
-          scopeId,
-        );
-        refreshFullGraph();
-      } catch {
-        showToast(t("err.save"));
-      }
-    },
-    [versionId, refreshFullGraph, showToast, t],
-  );
-
-  // 자식 드래그 후 그 자식의 스코프상대 좌표를 저장 — fullGraph 낙관적 갱신(즉시 파생 위치 반영) + 권위 그래프에 위치 PUT.
-  // 자식 스코프 드래그 저장 — 여러 노드를 한 번의 getGraph→PUT로(같은 스코프 다중 드래그 레이스 방지).
-  const saveChildScopeDragBatch = useCallback(
-    async (scopeId: string, moves: { id: string; pos: { x: number; y: number } }[]) => {
-      if (versionId === null || moves.length === 0) {
-        return;
-      }
-      const byId = new Map(moves.map((move) => [move.id, move.pos]));
-      setRootGraph((prev) =>
-        prev === null
-          ? prev
-          : {
-              ...prev,
-              nodes: prev.nodes.map((node) => {
-                const pos = byId.get(node.id);
-                return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
-              }),
-            },
-      );
-      try {
-        const graph = await getGraph(versionId, scopeId);
-        const nodes = graph.nodes.map((node) => {
-          const pos = byId.get(node.id);
-          return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
-        });
-        await saveGraph(versionId, { ...graph, nodes }, scopeId);
-        refreshFullGraph();
-      } catch {
-        showToast(t("err.save"));
-      }
-    },
-    [versionId, refreshFullGraph, showToast, t, setRootGraph],
-  );
-
   const handleNodesDelete = useCallback(
     (deleted: AppNode[]) => {
       const removed = new Set(deleted.map((node) => node.id));
       pruneSmallGroups(nodesRef.current.filter((node) => !removed.has(node.id)));
-      // 펼친 자식 삭제 → 각 자식 스코프에서 제거 후 PUT(현재 스코프 저장과 별개)
-      const childScopes = new Set(
-        deleted
-          .filter((node) => node.data.scopeId != null && node.data.scopeId !== currentParentId)
-          .map((node) => node.data.scopeId as string),
-      );
-      if (childScopes.size > 0) {
-        // fullGraph에서도 낙관적으로 제거 — 안 그러면 materialize effect가 삭제한 자식을 즉시 되살린다(저장 전).
-        setRootGraph((prev) => {
-          if (prev === null) {
-            return prev;
-          }
-          const keptNodes = prev.nodes.filter((node) => !removed.has(node.id));
-          const keptIds = new Set(keptNodes.map((node) => node.id));
-          return {
-            ...prev,
-            nodes: keptNodes,
-            edges: prev.edges.filter(
-              (edge) => keptIds.has(edge.source_node_id) && keptIds.has(edge.target_node_id),
-            ),
-          };
-        });
-      }
-      for (const scopeId of childScopes) {
-        void saveChildScopeAfterDelete(scopeId, removed);
-      }
       scheduleAutoSave();
     },
-    [pruneSmallGroups, scheduleAutoSave, currentParentId, saveChildScopeAfterDelete, setRootGraph],
+    [pruneSmallGroups, scheduleAutoSave],
   );
 
   // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 2명 미만이 되면 그룹 자동 제거.
@@ -2813,10 +2209,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         addToGroup(aId, bId);
         return;
       }
-      if (zone === "child") {
-        void moveToChild(aId, bId);
-        return;
-      }
       placeBeside(aId, bId, zone);
       scheduleAutoSave();
       const conflict =
@@ -2831,7 +2223,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [swapNodes, addToGroup, moveToChild, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+    [swapNodes, addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -2994,16 +2386,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 언마운트 시 dwell 타이머 정리
   useEffect(() => clearDwell, [clearDwell]);
 
-  // 언마운트 시 자식 저장 디바운스 타이머 정리(언마운트 후 setState 경고 방지)
-  useEffect(
-    () => () => {
-      if (childSaveTimerRef.current) {
-        clearTimeout(childSaveTimerRef.current);
-      }
-    },
-    [],
-  );
-
   const updateSelectedData = useCallback(
     (patch: Partial<NodeData>, fromTyping = false) => {
       if (readOnly) {
@@ -3045,122 +2427,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, recordChange, setNodes, scheduleAutoSave],
   );
 
-  // ── 인라인 펼친 자식 노드 편집 → 자기 스코프 저장(scope-split) ──────────
-  // fullGraph엔 그룹이 없어 재구성 불가 → getGraph로 권위 그래프(노드+엣지+그룹)를 받아 노드 필드만 덮어 PUT.
-  const flushChildScopeSaves = useCallback(async () => {
-    if (versionId === null) {
-      return;
-    }
-    const scopeIds = [...dirtyChildScopesRef.current];
-    dirtyChildScopesRef.current.clear();
-    if (scopeIds.length === 0) {
-      return;
-    }
-    const edits = childEditsRef.current; // 동기 시점 캡처 — 이후 await 중 오버레이가 초기화돼도 안전
-    let failed = false;
-    for (const scopeId of scopeIds) {
-      try {
-        const scopeGraph = await getGraph(versionId, scopeId);
-        const patched: Graph = {
-          ...scopeGraph,
-          nodes: scopeGraph.nodes.map((node) => {
-            const edit = edits.get(node.id);
-            return edit ? patchGraphNode(node, edit) : node;
-          }),
-        };
-        await saveGraph(versionId, patched, scopeId);
-      } catch {
-        failed = true;
-      }
-    }
-    if (failed) {
-      showToast(t("err.save"));
-    }
-    refreshFullGraph();
-  }, [versionId, refreshFullGraph, showToast, t]);
-
-  // 자식 속성 패치(이름 외) — 낙관적 오버레이 + 자식 스코프 디바운스 저장(키 입력마다 PUT 방지).
-  const patchChildNode = useCallback(
-    (id: string, patch: Partial<NodeData>) => {
-      const tree = fullGraphRef.current;
-      if (tree === null) {
-        return;
-      }
-      const flat = tree.nodes.find((node) => node.id === id);
-      if (!flat || flat.parent_node_id === null) {
-        return; // 자식 스코프 노드만
-      }
-      setChildEdits((current) => {
-        const next = new Map(current);
-        next.set(id, { ...(next.get(id) ?? {}), ...patch });
-        return next;
-      });
-      dirtyChildScopesRef.current.add(flat.parent_node_id);
-      if (childSaveTimerRef.current) {
-        clearTimeout(childSaveTimerRef.current);
-      }
-      childSaveTimerRef.current = setTimeout(() => {
-        childSaveTimerRef.current = null;
-        void flushChildScopeSaves();
-      }, CHILD_SAVE_DEBOUNCE_MS);
-    },
-    [flushChildScopeSaves],
-  );
-
-  // 자식 이름 확정(blur/Enter) — 스코프 내 중복 방지 후 오버레이 + 즉시 저장.
-  const renameChildNode = useCallback(
-    (id: string, label: string) => {
-      const tree = fullGraphRef.current;
-      if (tree === null) {
-        return;
-      }
-      const flat = tree.nodes.find((node) => node.id === id);
-      if (!flat || flat.parent_node_id === null) {
-        return;
-      }
-      const scopeId = flat.parent_node_id;
-      const taken = tree.nodes
-        .filter((node) => node.parent_node_id === scopeId && node.id !== id)
-        .map((node) => childEditsRef.current.get(node.id)?.label ?? node.title);
-      const unique = makeUniqueLabel(label, taken);
-      setChildEdits((current) => {
-        const next = new Map(current);
-        next.set(id, { ...(next.get(id) ?? {}), label: unique });
-        return next;
-      });
-      dirtyChildScopesRef.current.add(scopeId);
-      if (childSaveTimerRef.current) {
-        clearTimeout(childSaveTimerRef.current);
-        childSaveTimerRef.current = null;
-      }
-      void flushChildScopeSaves(); // 이름 확정은 즉시
-    },
-    [flushChildScopeSaves],
-  );
-
   // 정보 수정 모달 패치 — summaryNodeId 대상. 현재 스코프 노드는 state, 펼친 자식은 scope-split.
   const handleSummaryPatch = useCallback(
     (patch: Partial<NodeData>) => {
       if (summaryNodeId === null) {
         return;
       }
-      if (nodesRef.current.some((node) => node.id === summaryNodeId)) {
-        patchNode(summaryNodeId, patch, true);
-      } else {
-        patchChildNode(summaryNodeId, patch);
-      }
+      patchNode(summaryNodeId, patch, true);
     },
-    [summaryNodeId, patchNode, patchChildNode],
+    [summaryNodeId, patchNode],
   );
 
   // 제목 입력 확정(blur) — 캔버스 내 다른 노드와 이름 중복 시 " (n)" 접미사로 고유화.
   const handleSummaryLabelCommit = useCallback(
     (label: string) => {
       if (summaryNodeId === null) {
-        return;
-      }
-      if (!nodesRef.current.some((node) => node.id === summaryNodeId)) {
-        renameChildNode(summaryNodeId, label); // 펼친 자식 — scope-split
         return;
       }
       const taken = nodesRef.current
@@ -3171,7 +2452,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         patchNode(summaryNodeId, { label: unique }, false);
       }
     },
-    [summaryNodeId, patchNode, renameChildNode],
+    [summaryNodeId, patchNode],
   );
 
   // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 현재 스코프 노드는 state, 펼친 자식은 scope-split 저장.
@@ -3179,10 +2460,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     (id: string, label: string) => {
       setEditingNodeId(null);
       if (readOnly) {
-        return;
-      }
-      if (!nodesRef.current.some((node) => node.id === id)) {
-        void renameChildNode(id, label); // 현재 스코프에 없으면 펼친 자식 — 자기 스코프에 저장
         return;
       }
       pushHistory();
@@ -3195,7 +2472,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       });
       scheduleAutoSave();
     },
-    [readOnly, pushHistory, setNodes, scheduleAutoSave, renameChildNode],
+    [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
   const updateSelectedEdgeLabel = useCallback(
@@ -3486,7 +2763,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 하위 있으면 "열기"(창 — 기존 편집), process+하위없으면 "생성"(Start/작업/End 자동 + 인라인 펼침)
       const targetNode = nodes.find((item) => item.id === menu.targetId);
       const hasKids = targetNode?.data.hasChildren ?? false;
-      const isProcessNode = targetNode?.data.nodeType === "process";
       const openChildItems: ContextMenuItem[] = hasKids
         ? [
             {
@@ -3499,19 +2775,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ]
-        : isProcessNode
-          ? [
-              {
-                label: t("ctx.createSubprocess"),
-                onSelect: () => {
-                  const node = nodesRef.current.find((item) => item.id === menu.targetId);
-                  if (node) {
-                    createSubprocess(node.id);
-                  }
-                },
-              },
-            ]
-          : [];
+        : [];
       return [
         // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
         {
@@ -3559,7 +2823,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleAddNode,
     handleRecolor,
     applyNodesTransform,
-    createSubprocess,
     handleExportPng,
     createGroupFromSelection,
     disbandGroup,
@@ -3719,8 +2982,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         const kidApp = kidsFlat.map((flat) => {
           const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, target.id);
-          // 자식은 선택·편집 허용. 위치는 파생이라 드래그/삭제는 불가. 편집 오버레이(라벨·속성)를 입힘.
-          const edit = childEdits.get(app.id);
+          // 자식은 선택 허용. 위치는 파생이라 드래그/삭제는 불가.
           // 자식은 `nodes` state에 없어 React Flow가 측정 못 함 → 미측정 노드는 visibility:hidden으로 숨겨진다.
           // 타입별 근사 크기를 measured로 직접 넣어 즉시 보이게 한다(레이아웃도 이 크기로 일관).
           const size = nodeSizeOf(app.data.nodeType);
@@ -3733,7 +2995,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             width: size.w,
             height: size.h,
             measured: { width: size.w, height: size.h },
-            data: edit ? { ...app.data, ...edit } : app.data,
+            data: app.data,
           });
         });
         const kidIds = new Set(kidsFlat.map((kid) => kid.id));
@@ -3910,7 +3172,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       childOffsets,
       scopeOffsets,
     };
-  }, [expandedInline, fullGraph, nodes, edges, childEdits, currentParentId, injectSubEnds]);
+  }, [expandedInline, fullGraph, nodes, edges, currentParentId, injectSubEnds]);
 
   useEffect(() => {
     inlineCompositionRef.current = inlineComposition;
@@ -4014,18 +3276,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       const stateChild = childById?.get(node.id);
       let display;
       if (stateChild) {
-        // 자식(인라인) 노드 — 그 스코프가 활성이면 편집(불투명), 아니면 읽기전용 dim. 포커스(A) 토글.
-        const isActive = (node.data.scopeId ?? null) === activeScopeId;
+        // 자식(인라인) 노드 — 읽기전용 dim. 드래그/삭제/연결 불가.
         display = {
           ...stateChild,
-          // 드래그 중인 자식은 childNodes(절대)위치, 아니면 buildScope 파생위치
-          position: draggingChildIds.has(node.id) ? stateChild.position : node.position,
+          position: node.position,
           data: node.data,
-          selectable: isActive,
-          draggable: isActive,
-          deletable: isActive,
-          connectable: isActive,
-          style: { ...stateChild.style, opacity: isActive ? 1 : INACTIVE_SCOPE_OPACITY },
+          selectable: true,
+          draggable: false,
+          deletable: false,
+          connectable: false,
+          style: { ...stateChild.style, opacity: INACTIVE_SCOPE_OPACITY },
         };
       } else if (inlineComposition) {
         // 프레임(현재 스코프) 노드 — 활성이면 편집, 비활성(자식 포커스 중)이면 읽기전용 dim.
@@ -4053,7 +3313,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds, ancestorContextNodes, activeScopeId, currentParentId, injectSubEnds]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, ancestorContextNodes, activeScopeId, currentParentId, injectSubEnds]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -5192,11 +4452,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
-                        // 후속 선택 모드면 이 클릭은 후속 지정 — 선택 대신 후속 연결 후 하위 생성
-                        if (pendingSubprocessPick) {
-                          handleSubprocessPick(node.id);
-                          return;
-                        }
                         // 포커스(Path 2) — 다른 스코프 노드 클릭 시 그 스코프를 navigateTo로 진짜 nodes化(네이티브 풀편집).
                         // 카메라 보정: 클릭 노드의 "현재 표시 위치 − 저장(스코프상대) 위치"만큼 카메라를 옮겨
                         // 그 노드(=스코프)가 제자리에 남게 한다. 자식 진입·루트 복귀(exit) 양쪽 모두 제자리.
@@ -5234,7 +4489,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setMenu(null);
                         setPending(null);
                         setSummaryNodeId(null);
-                        setPendingSubprocessPick(null); // 빈 영역 클릭 = 후속 선택 취소
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
@@ -5245,70 +4499,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
                       onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
                       onNodeDragStart={(_, node) => {
-                        const sid = node.data.scopeId;
-                        if (sid != null && sid !== currentParentId) {
-                          // 자식 드래그 — 잡은 것 + 같은 스코프의 선택된 자식 모두를 파생위치로 맞추고 드래그 플래그
-                          // (다중 선택 드래그 시 일부만 움직이던 버그 수정 — 선택 전체를 함께 이동/저장)
-                          const dragIds = new Set<string>();
-                          setChildNodes((current) =>
-                            current.map((child) => {
-                              const inScope = (child.data.scopeId ?? null) === sid;
-                              if (inScope && (child.id === node.id || child.selected)) {
-                                dragIds.add(child.id);
-                                const derived = inlineComposition?.nodes.find(
-                                  (n) => n.id === child.id,
-                                )?.position;
-                                return derived ? { ...child, position: derived } : child;
-                              }
-                              return child;
-                            }),
-                          );
-                          setDraggingChildIds((prev) => {
-                            const next = new Set(prev);
-                            dragIds.forEach((id) => next.add(id));
-                            return next;
-                          });
-                          return;
-                        }
                         pushHistory();
                         dragStartPosRef.current = { id: node.id, x: node.position.x, y: node.position.y };
                       }}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
-                        const sid = node.data.scopeId;
-                        if (sid != null && sid !== currentParentId) {
-                          // 자식 드래그 종료 — 드래그된(선택된) 같은 스코프 자식 모두를 절대→스코프상대 변환 후 한 번에 저장.
-                          if (!readOnly) {
-                            const draggedIds = new Set(
-                              childNodesRef.current
-                                .filter(
-                                  (child) =>
-                                    child.selected && (child.data.scopeId ?? null) === sid,
-                                )
-                                .map((child) => child.id),
-                            );
-                            draggedIds.add(node.id); // 잡은 것 포함(단일 드래그도)
-                            const moves = childNodesRef.current
-                              .filter((child) => draggedIds.has(child.id))
-                              .map((child) => {
-                                const offset =
-                                  inlineComposition?.childOffsets.get(child.id) ?? {
-                                    x: 0,
-                                    y: 0,
-                                  };
-                                return {
-                                  id: child.id,
-                                  pos: { x: child.position.x - offset.x, y: child.position.y - offset.y },
-                                };
-                              });
-                            void saveChildScopeDragBatch(sid, moves);
-                          }
-                          setDraggingChildIds(new Set()); // 드래그 종료 — 전부 해제
-                          clearDwell();
-                          setDropTarget(null);
-                          setGroupDropTarget(null);
-                          return;
-                        }
                         const drop = dropTargetRef.current;
                         if (
                           !readOnly &&
@@ -5329,22 +4524,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onSelectionDragStart={() => pushHistory()}
                       onSelectionDragStop={() => scheduleAutoSave()}
-                      onBeforeDelete={async ({ nodes: toDelete }) => {
+                      onBeforeDelete={async () => {
                         if (readOnly) {
                           return false;
-                        }
-                        // 자식 스코프(하위 프로세스)에서 마지막 Start/End/작업 삭제 → 불변식 깨짐.
-                        // 유효→무효 전이일 때만 가로채(레거시 미충족 스코프는 막지 않음) 통째 삭제 확인 모달로.
-                        if (currentParentId !== null && toDelete.length > 0) {
-                          const removing = new Set(toDelete.map((node) => node.id));
-                          const remaining = nodesRef.current.filter((node) => !removing.has(node.id));
-                          if (
-                            checkScopeInvariant(nodesRef.current) &&
-                            !checkScopeInvariant(remaining)
-                          ) {
-                            setDeleteInvariantPrompt(currentParentId);
-                            return false; // 네이티브 삭제 취소 — 확정 시 하위 통째 삭제로 처리
-                          }
                         }
                         pushHistory();
                         return true;
@@ -5717,7 +4899,6 @@ function MapEditor({ mapId }: { mapId: number }) {
             >
               <AiChatPanel
                 versionId={versionId}
-                parent={currentParentId}
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 onGraphProposal={applyAiProposal}
@@ -6010,54 +5191,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           </div>
         </ModalBackdrop>
       )}
-      {subprocessPrompt && (
-        <ExpandInvariantModal
-          title={t("subprocess.noSuccessorTitle")}
-          body={t("subprocess.noSuccessorBody")}
-          onClose={() => setSubprocessPrompt(null)}
-          actions={[
-            { label: t("subprocess.cancel"), onClick: () => setSubprocessPrompt(null) },
-            {
-              label: t("subprocess.pickNode"),
-              onClick: () => {
-                const prompt = subprocessPrompt;
-                setSubprocessPrompt(null);
-                setPendingSubprocessPick({ sourceId: prompt.nodeId, proceed: prompt.proceed });
-              },
-            },
-            {
-              label: t("subprocess.createEnd"),
-              variant: "accent",
-              onClick: () => handleCreateEndForSubprocess(),
-            },
-          ]}
-        />
-      )}
-      {pendingSubprocessPick && (
-        <div
-          className="pointer-events-none fixed left-1/2 top-20 z-[1100] -translate-x-1/2 rounded-full border border-accent bg-surface px-4 py-1.5 text-caption text-accent"
-          style={{ boxShadow: "var(--shadow-md)" }}
-        >
-          {t("subprocess.pickHint")}
-        </div>
-      )}
-      {deleteInvariantPrompt !== null && (
-        <ExpandInvariantModal
-          title={t("subprocess.deleteInvariantTitle")}
-          body={t("subprocess.deleteInvariantBody")}
-          onClose={() => setDeleteInvariantPrompt(null)}
-          actions={[
-            { label: t("subprocess.cancel"), onClick: () => setDeleteInvariantPrompt(null) },
-            {
-              label: t("subprocess.deleteInvariantConfirm"),
-              variant: "danger",
-              onClick: () => {
-                void confirmDeleteSubprocess();
-              },
-            },
-          ]}
-        />
-      )}
+
     </NodeActionsContext.Provider>
   );
 }

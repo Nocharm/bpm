@@ -14,7 +14,6 @@ interface ChatMessage {
 
 interface AiChatPanelProps {
   versionId: number;
-  parent: string | null;
   aiEnabled: boolean;
   canEdit: boolean;
   onGraphProposal: (proposal: AiProposal) => void;
@@ -22,7 +21,6 @@ interface AiChatPanelProps {
 
 export function AiChatPanel({
   versionId,
-  parent,
   aiEnabled,
   canEdit,
   onGraphProposal,
@@ -73,7 +71,7 @@ export function AiChatPanel({
       content: message.content,
     }));
     try {
-      const proposal = await aiChat(versionId, parent, instruction, history, model || null);
+      const proposal = await aiChat(versionId, instruction, history, model || null);
       setMessages((prev) => [...prev, { role: "assistant", content: proposal.message }]);
       if (proposal.kind === "graph") {
         onGraphProposal(proposal);

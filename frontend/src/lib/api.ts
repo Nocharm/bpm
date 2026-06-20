@@ -192,8 +192,7 @@ export function deleteMap(mapId: number): Promise<void> {
   return request<void>(`/maps/${mapId}`, { method: "DELETE" });
 }
 
-export function getGraph(versionId: number, parentId: string | null = null): Promise<Graph> {
-  void parentId; // 평면 모델 — 스코프 파라미터 무시(Task 6에서 콜사이트와 함께 제거)
+export function getGraph(versionId: number): Promise<Graph> {
   return request<Graph>(`/versions/${versionId}/graph`);
 }
 
@@ -261,8 +260,7 @@ export function deleteComment(commentId: number): Promise<void> {
   return request<void>(`/comments/${commentId}`, { method: "DELETE" });
 }
 
-export function saveGraph(versionId: number, graph: Graph, parentId: string | null = null): Promise<Graph> {
-  void parentId;
+export function saveGraph(versionId: number, graph: Graph): Promise<Graph> {
   return request<Graph>(`/versions/${versionId}/graph`, {
     method: "PUT",
     body: JSON.stringify(graph),
@@ -404,12 +402,10 @@ export interface AiChatTurn {
 
 export function aiChat(
   versionId: number,
-  parent: string | null,
   instruction: string,
   history: AiChatTurn[],
   model: string | null,
 ): Promise<AiProposal> {
-  void parent; // 평면 모델 — backend AiChatRequest에 parent 없음(Task 6에서 콜사이트와 함께 제거)
   return request<AiProposal>(`/versions/${versionId}/ai/chat`, {
     method: "POST",
     body: JSON.stringify({ instruction, history, model }),
