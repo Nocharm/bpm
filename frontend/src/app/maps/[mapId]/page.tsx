@@ -3276,7 +3276,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       const stateChild = childById?.get(node.id);
       let display;
       if (stateChild) {
-        // 자식(인라인) 노드 — 읽기전용 dim. 드래그/삭제/연결 불가.
+        // 자식(인라인) 노드 — 읽기전용 dim. 드래그/삭제/연결 불가. 선택 시 선명하게 표시.
+        const childOpacity = stateChild.selected ? 1 : INACTIVE_SCOPE_OPACITY;
         display = {
           ...stateChild,
           position: node.position,
@@ -3285,7 +3286,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           draggable: false,
           deletable: false,
           connectable: false,
-          style: { ...stateChild.style, opacity: INACTIVE_SCOPE_OPACITY },
+          style: { ...stateChild.style, opacity: childOpacity },
         };
       } else if (inlineComposition) {
         // 프레임(현재 스코프) 노드 — 활성이면 편집, 비활성(자식 포커스 중)이면 읽기전용 dim.
@@ -4452,6 +4453,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => {
+                        // 인라인 자식(읽기전용) — 클릭 시 선택만(React Flow 기본). 탐색 없음.
+                        if (node.data?.scopeId != null) return;
                         // 포커스(Path 2) — 다른 스코프 노드 클릭 시 그 스코프를 navigateTo로 진짜 nodes化(네이티브 풀편집).
                         // 카메라 보정: 클릭 노드의 "현재 표시 위치 − 저장(스코프상대) 위치"만큼 카메라를 옮겨
                         // 그 노드(=스코프)가 제자리에 남게 한다. 자식 진입·루트 복귀(exit) 양쪽 모두 제자리.
@@ -4492,6 +4495,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
+                        // 인라인 자식(읽기전용)은 컨텍스트 메뉴 열지 않음.
+                        if (node.data?.scopeId != null) {
+                          event.preventDefault();
+                          return;
+                        }
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                         openMenu(event, "node", node.id);
