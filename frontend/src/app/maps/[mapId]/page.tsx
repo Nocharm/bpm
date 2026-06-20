@@ -3832,15 +3832,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         return { app, size: nodeSizeOf(app.data.nodeType) };
       });
       const xs: number[] = new Array(built.length);
-      // 포커스 노드(현재 스코프) — 활성 영역 바로 왼쪽. 앞 형제는 그 왼쪽으로, 뒤 형제는 활성 영역 오른쪽으로.
+      // 포커스 노드(현재 스코프) — 활성 영역 바로 왼쪽. 앞·뒤 형제는 stored X 상대 간격을 보존(비균일 배치도 펼친 뷰와 일치).
+      const focusStoredX = built[focusIdx].app.position.x;
       xs[focusIdx] = region.minX - GAP - built[focusIdx].size.w;
       for (let i = focusIdx - 1; i >= 0; i--) {
-        xs[i] = xs[i + 1] - GAP - built[i].size.w;
+        xs[i] = xs[focusIdx] + (built[i].app.position.x - focusStoredX); // 앞 형제: 포커스 노드 기준 상대
       }
-      let rx = region.maxX + GAP;
       for (let i = focusIdx + 1; i < built.length; i++) {
-        xs[i] = rx;
-        rx += built[i].size.w + GAP;
+        // 뒤 형제: 활성 영역 오른쪽 + 포커스 노드 기준 stored X 상대(펼친 뷰와 일치 — 영역이 포커스 노드를 대체).
+        xs[i] = region.maxX + (built[i].app.position.x - focusStoredX);
       }
       // 세로: 스코프 내부 상대 y를 보존(포커스 노드를 활성 행에 정렬). 직선 흐름이면 모두 aMinY, 분기는 유지.
       const focusStoredY = built[focusIdx].app.position.y;
