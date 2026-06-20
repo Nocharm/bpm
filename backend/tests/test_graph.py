@@ -116,7 +116,7 @@ def test_full_graph_returns_all_nodes(client: TestClient) -> None:
     full = client.get(f"/api/versions/{version_id}/graph/all").json()
 
     by_id = {n["id"]: n for n in full["nodes"]}
-    assert {"p", "c"}.issubset(set(by_id))
+    assert set(by_id) == {"s", "p", "c"}
     assert by_id["p"]["source_node_id"] is None
 
 
@@ -125,7 +125,7 @@ def test_invalid_color_rejected(client: TestClient) -> None:
 
     response = client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "n1", "color": "red"}], "edges": []},
+        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "n1", "color": "red"}], "edges": []},
     )
 
     assert response.status_code == 422
@@ -169,17 +169,18 @@ def test_all_nodes_coexist_in_flat_graph(client: TestClient) -> None:
 
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert {"p", "c"}.issubset({n["id"] for n in saved["nodes"]})
+    assert {n["id"] for n in saved["nodes"]} == {"s", "p", "c"}
 
 
 def test_removing_nodes_cleans_up(client: TestClient) -> None:
     version_id = _create_version(client)
+    # start node required for non-empty graph to pass validation
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "p", "title": "p"}, {"id": "c", "title": "c"}], "edges": []},
+        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "p", "title": "p"}, {"id": "c", "title": "c"}], "edges": []},
     )
 
-    # 노드 제거 → 이후 조회에서 사라져야 함
+    # 노드 제거 → 이후 조회에서 사라져야 함 (빈 그래프는 start 불필요)
     client.put(
         f"/api/versions/{version_id}/graph",
         json={"nodes": [], "edges": []},
@@ -354,7 +355,7 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
     assert saved["groups"] == []
-    assert saved["nodes"][0]["group_ids"] == []
+    assert next(n for n in saved["nodes"] if n["id"] == "n1")["group_ids"] == []
 
 
 def test_graph_is_flat_per_version(client: TestClient) -> None:
@@ -365,8 +366,8 @@ def test_graph_is_flat_per_version(client: TestClient) -> None:
         json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "a"}, {"id": "b"}, {"id": "c"}], "edges": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    assert {"a", "b", "c"}.issubset({n["id"] for n in saved["nodes"]})
-    assert "has_children" not in saved["nodes"][0]  # 계층 개념 제거
+    assert {n["id"] for n in saved["nodes"]} == {"s", "a", "b", "c"}
+    assert all("has_children" not in n for n in saved["nodes"])  # 계층 개념 제거
 
 
 def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
