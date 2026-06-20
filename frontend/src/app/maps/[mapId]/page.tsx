@@ -4091,24 +4091,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       maxX = Math.max(maxX, node.position.x + w);
       maxY = Math.max(maxY, node.position.y + h);
     }
-    const topLeftX = minX - EXTENT_TOPLEFT_MARGIN;
-    const topLeftY = minY - EXTENT_TOPLEFT_MARGIN;
-    // 노드 드래그 범위: 좌상단 바짝, 우하단은 성장 여유.
-    const node: [[number, number], [number, number]] = [
-      [topLeftX, topLeftY],
+    // 대칭 여백 — 좌상단 고정 없이 콘텐츠 사방에 동일 여백(줌아웃 시 기본 centering 허용). 패닝·노드 동일 extent.
+    const extent: [[number, number], [number, number]] = [
+      [minX - EXTENT_MARGIN, minY - EXTENT_MARGIN],
       [maxX + EXTENT_MARGIN, maxY + EXTENT_MARGIN],
     ];
-    // 패닝 범위: 좌상단은 콘텐츠에 바짝(왼쪽위 고정 — 위/왼쪽으로 콘텐츠가 가운데로 안 밀림), 우하단은
-    // minZoom 뷰포트(pane/MIN_ZOOM) 이상으로 넉넉히 — 줌아웃해도 뷰포트가 extent를 못 넘어 centering 방지.
-    const pan: [[number, number], [number, number]] = [
-      [topLeftX, topLeftY],
-      [
-        Math.max(maxX + EXTENT_MARGIN, topLeftX + paneWidth / MIN_ZOOM),
-        Math.max(maxY + EXTENT_MARGIN, topLeftY + paneHeight / MIN_ZOOM),
-      ],
-    ];
-    return { node, pan };
-  }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
+    return { node: extent, pan: extent };
+  }, [nodes, inlineComposition, ancestorContextNodes]);
 
   // 현재 스코프의 절대깊이(루트=0) — 인라인 펼침 셰브론을 절대깊이 기준으로 맞춰 포커스 레인과 통일.
   const currentScopeDepth = useMemo(() => {
