@@ -96,6 +96,7 @@ import {
   getGraph,
   getMap,
   getMe,
+  getResolvedGraph,
   getWorkflowState,
   listComments,
   publishVersion,
@@ -124,6 +125,7 @@ import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits, checkScopeInvariant } from "@/lib/inline-expand";
+import { buildCompositeTree, deriveSubEnds } from "@/lib/subprocess-embed";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -335,6 +337,17 @@ type MenuState = {
   targetId: string | null;
 };
 
+// 링크맵 임베드 캐시 키 — 맵 + (최신 추종 | 핀 버전). null=비하위프로세스. 같은 맵/버전 임베드는 캐시 공유.
+function linkKey(n: {
+  linked_map_id: number | null;
+  follow_latest: boolean;
+  linked_version_id: number | null;
+}): string | null {
+  return n.linked_map_id == null
+    ? null
+    : `${n.linked_map_id}:${n.follow_latest ? "latest" : (n.linked_version_id ?? "latest")}`;
+}
+
 function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
   return graph.nodes.map((node) => ({
     id: node.id,
@@ -473,8 +486,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
   const [newGroupId, setNewGroupId] = useState<string | null>(null);
-  // 아웃라인 전체 그래프(하위 프로세스 펼치기용) + 펼친 노드 집합
-  const [fullGraph, setFullGraph] = useState<VersionGraph | null>(null);
+  // 루트 버전의 평면 그래프(getFullGraph) — 합성 트리(fullGraph)의 뿌리. 백엔드는 parent_node_id를 안 보내므로 null 취급.
+  const [rootGraph, setRootGraph] = useState<VersionGraph | null>(null);
+  // 링크맵 resolved 그래프 캐시 — linkKey(맵+버전)별. 임베드 자식·subEnds 소스. resolved는 버전당 불변이라 무효화 없음.
+  const [resolvedCache, setResolvedCache] = useState<Map<string, Graph>>(new Map());
+  const inFlightRef = useRef<Set<string>>(new Set());
   const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
   // 캔버스 인라인 펼친 노드 id 집합 — 아웃라인용 expandedOutline과 분리. 스코프/버전 전환 시 초기화.
   const [expandedInline, setExpandedInline] = useState<Set<string>>(new Set());
@@ -639,9 +655,63 @@ function MapEditor({ mapId }: { mapId: number }) {
   const childEditsRef = useRef<Map<string, Partial<NodeData>>>(new Map());
   const dirtyChildScopesRef = useRef<Set<string>>(new Set());
   const childSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 합성 트리 — 루트 평면 그래프 + 펼친 하위프로세스의 링크맵 resolved를 합성 parent_node_id 자식으로 끼움.
+  // 기존 fullGraph 소비자(materialize·inlineComposition·조상컨텍스트·펼침 한도 등)는 그대로 이 값을 읽는다.
+  const fullGraph = useMemo<VersionGraph | null>(() => {
+    if (!rootGraph) {
+      return null;
+    }
+    const rootFlat = rootGraph.nodes.map((n) => ({ ...n, parent_node_id: null }));
+    const getEmbed = (node: FlatNode): Graph | null => {
+      const k = linkKey(node);
+      return k ? (resolvedCache.get(k) ?? null) : null;
+    };
+    return buildCompositeTree(rootFlat, rootGraph.edges, expandedInline, getEmbed);
+  }, [rootGraph, expandedInline, resolvedCache]);
   useEffect(() => {
     fullGraphRef.current = fullGraph;
   }, [fullGraph]);
+  // 보이는 하위프로세스(루트는 항상, 임베드는 부모 펼침 후)의 resolved를 선로드 → subEnds/핸들이 펼치기 전 채워지고,
+  // 캐시가 차면 fullGraph 재계산→다음 레벨 임베드 노드 등장→effect 재실행→그 레벨 로드(중첩 수렴). 캐시/in-flight 가드로 무한루프 방지.
+  useEffect(() => {
+    if (!fullGraph) {
+      return;
+    }
+    for (const n of fullGraph.nodes) {
+      if (n.node_type !== "subprocess" || n.linked_map_id == null) {
+        continue;
+      }
+      const k = linkKey(n);
+      if (!k || resolvedCache.has(k) || inFlightRef.current.has(k)) {
+        continue;
+      }
+      inFlightRef.current.add(k);
+      void getResolvedGraph(n.linked_map_id, n.follow_latest, n.linked_version_id)
+        .then((g) => setResolvedCache((prev) => new Map(prev).set(k, g)))
+        .catch(() => undefined)
+        .finally(() => inFlightRef.current.delete(k));
+    }
+  }, [fullGraph, resolvedCache]);
+  // 하위프로세스 노드에 subEnds 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
+  // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
+  const injectSubEnds = useCallback(
+    (node: AppNode): AppNode => {
+      if (node.data.nodeType !== "subprocess") {
+        return node;
+      }
+      const k = linkKey({
+        linked_map_id: node.data.linkedMapId ?? null,
+        follow_latest: node.data.followLatest ?? false,
+        linked_version_id: node.data.linkedVersionId ?? null,
+      });
+      const resolved = k ? resolvedCache.get(k) : undefined;
+      if (!resolved) {
+        return node;
+      }
+      return { ...node, data: { ...node.data, subEnds: deriveSubEnds(resolved) } };
+    },
+    [resolvedCache],
+  );
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -678,7 +748,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           for (const flat of fullGraph.nodes) {
             if (flat.parent_node_id === expandedId && !present.has(flat.id)) {
               const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, expandedId);
-              toAdd.push({ ...app, selectable: true, draggable: false, deletable: true });
+              // 중첩 하위프로세스 자식도 펼침 가능하게 subEnds 주입(캐시 있으면)
+              toAdd.push(injectSubEnds({ ...app, selectable: true, draggable: false, deletable: true }));
             }
           }
         }
@@ -690,7 +761,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       return [...kept, ...toAdd];
     });
-  }, [expandedInline, fullGraph]);
+  }, [expandedInline, fullGraph, injectSubEnds]);
 
   // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
   const handleNodesChange = useCallback(
@@ -731,7 +802,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     const fetchedVersion = versionId;
     void getFullGraph(fetchedVersion)
       .then((graph) => {
-        setFullGraph(graph);
+        setRootGraph(graph);
         fullGraphVersionRef.current = fetchedVersion; // 캐시된 트리가 속한 버전을 기록 — 게이트의 버전 불일치 판정용
       })
       .catch(() => undefined);
@@ -1915,7 +1986,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         source_handle: connection.sourceHandle ?? null,
         target_handle: connection.targetHandle ?? null,
       };
-      setFullGraph((prev) => (prev === null ? prev : { ...prev, edges: [...prev.edges, edge] }));
+      setRootGraph((prev) => (prev === null ? prev : { ...prev, edges: [...prev.edges, edge] }));
       try {
         const graph = await getGraph(versionId, scopeId);
         await saveGraph(versionId, { ...graph, edges: [...graph.edges, edge] }, scopeId);
@@ -1924,7 +1995,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("err.save"));
       }
     },
-    [versionId, refreshFullGraph, showToast, t, setFullGraph],
+    [versionId, refreshFullGraph, showToast, t, setRootGraph],
   );
 
   const onConnect = useCallback(
@@ -2005,7 +2076,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         linked_version_id: null,
         is_primary_end: false,
       };
-      setFullGraph((prev) =>
+      setRootGraph((prev) =>
         prev === null
           ? prev
           : {
@@ -2024,7 +2095,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("err.save"));
       }
     },
-    [versionId, refreshFullGraph, showToast, t, setFullGraph],
+    [versionId, refreshFullGraph, showToast, t, setRootGraph],
   );
 
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
@@ -2469,7 +2540,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       const byId = new Map(moves.map((move) => [move.id, move.pos]));
-      setFullGraph((prev) =>
+      setRootGraph((prev) =>
         prev === null
           ? prev
           : {
@@ -2492,7 +2563,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("err.save"));
       }
     },
-    [versionId, refreshFullGraph, showToast, t, setFullGraph],
+    [versionId, refreshFullGraph, showToast, t, setRootGraph],
   );
 
   const handleNodesDelete = useCallback(
@@ -2507,7 +2578,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       if (childScopes.size > 0) {
         // fullGraph에서도 낙관적으로 제거 — 안 그러면 materialize effect가 삭제한 자식을 즉시 되살린다(저장 전).
-        setFullGraph((prev) => {
+        setRootGraph((prev) => {
           if (prev === null) {
             return prev;
           }
@@ -2527,7 +2598,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       scheduleAutoSave();
     },
-    [pruneSmallGroups, scheduleAutoSave, currentParentId, saveChildScopeAfterDelete, setFullGraph],
+    [pruneSmallGroups, scheduleAutoSave, currentParentId, saveChildScopeAfterDelete, setRootGraph],
   );
 
   // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 2명 미만이 되면 그룹 자동 제거.
@@ -3653,7 +3724,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           // 자식은 `nodes` state에 없어 React Flow가 측정 못 함 → 미측정 노드는 visibility:hidden으로 숨겨진다.
           // 타입별 근사 크기를 measured로 직접 넣어 즉시 보이게 한다(레이아웃도 이 크기로 일관).
           const size = nodeSizeOf(app.data.nodeType);
-          return {
+          // 중첩 하위프로세스 자식도 펼침 가능하게 subEnds 주입(캐시 있으면)
+          return injectSubEnds({
             ...app,
             draggable: false,
             selectable: true,
@@ -3662,7 +3734,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             height: size.h,
             measured: { width: size.w, height: size.h },
             data: edit ? { ...app.data, ...edit } : app.data,
-          };
+          });
         });
         const kidIds = new Set(kidsFlat.map((kid) => kid.id));
         const kidEdges = toAppEdges({
@@ -3838,7 +3910,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       childOffsets,
       scopeOffsets,
     };
-  }, [expandedInline, fullGraph, nodes, edges, childEdits, currentParentId]);
+  }, [expandedInline, fullGraph, nodes, edges, childEdits, currentParentId, injectSubEnds]);
 
   useEffect(() => {
     inlineCompositionRef.current = inlineComposition;
@@ -3972,13 +4044,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         display = node;
       }
       const count = unresolvedCounts.get(display.id) ?? 0;
-      return count === (display.data.commentCount ?? 0)
-        ? display
-        : { ...display, data: { ...display.data, commentCount: count } };
+      const withCount =
+        count === (display.data.commentCount ?? 0)
+          ? display
+          : { ...display, data: { ...display.data, commentCount: count } };
+      // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
+      return injectSubEnds(withCount);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds, ancestorContextNodes, activeScopeId, currentParentId]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, draggingChildIds, ancestorContextNodes, activeScopeId, currentParentId, injectSubEnds]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
