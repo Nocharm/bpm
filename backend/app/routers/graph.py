@@ -240,6 +240,10 @@ async def replace_graph(
             existing.sort_order = node.sort_order
             existing.group_ids = list(node.group_ids)
             existing.group_id = None  # 레거시 단일 소속 정리 — group_ids로 일원화
+            existing.linked_map_id = node.linked_map_id
+            existing.follow_latest = node.follow_latest
+            existing.linked_version_id = node.linked_version_id
+            existing.is_primary_end = node.is_primary_end
         else:
             session.add(Node(version_id=version_id, **node.model_dump()))
     for edge in payload.edges:
