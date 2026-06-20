@@ -13,7 +13,7 @@ from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
 from app.models import MapVersion
-from app.routers.graph import _load_scope
+from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal
 from app.settings import settings
 
@@ -72,7 +72,7 @@ async def ai_chat(
         and is_checkout_active(version, now)
         and version.checked_out_by == user
     )
-    current = await _load_scope(session, version_id, payload.parent)
+    current = await _load_graph(session, version_id)
     messages = build_messages(
         get_manual(), current, can_edit, payload.instruction, payload.history
     )

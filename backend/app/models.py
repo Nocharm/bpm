@@ -82,10 +82,6 @@ class Node(Base):
     version_id: Mapped[int] = mapped_column(
         ForeignKey("map_versions.id", ondelete="CASCADE")
     )
-    # 상하(계층): 부모 노드의 하위 캔버스에 속함. null=버전 최상위 캔버스 (spec §1)
-    parent_node_id: Mapped[str | None] = mapped_column(
-        ForeignKey("nodes.id", ondelete="CASCADE"), default=None
-    )
     title: Mapped[str] = mapped_column(String(200), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     node_type: Mapped[str] = mapped_column(String(50), default="process")

@@ -1,13 +1,11 @@
-"""Canvas graph read / full-replace, scoped by parent node (docs/spec.md §1, §3.1).
+"""Canvas graph read / full-replace, flat per version (docs/spec.md §1, §3.1).
 
-각 캔버스는 (version, parent_node_id) 스코프. parent=None 은 버전 최상위 캔버스,
-parent=<node id> 는 그 노드의 하위 프로세스맵. 저장은 해당 스코프만 교체해 다른 계층을 보존한다.
+그래프는 version 단위 평면 저장. GET/PUT /versions/{id}/graph 가 버전 전체를 다룬다.
 """
 
-from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,56 +36,29 @@ def _node_group_ids(node: Node) -> list[str]:
     return [node.group_id] if node.group_id else []
 
 
-async def _load_scope(
-    session: AsyncSession, version_id: int, parent_node_id: str | None
-) -> GraphOut:
+async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
     node_rows = (
         await session.scalars(
-            select(Node)
-            .where(Node.version_id == version_id, Node.parent_node_id == parent_node_id)
-            .order_by(Node.sort_order)
+            select(Node).where(Node.version_id == version_id).order_by(Node.sort_order)
         )
     ).all()
     node_ids = [n.id for n in node_rows]
-
-    parents_with_children: set[str] = set()
     edges: list[EdgeIn] = []
     if node_ids:
-        parents_with_children = set(
-            (
-                await session.scalars(
-                    select(Node.parent_node_id).where(
-                        Node.version_id == version_id,
-                        Node.parent_node_id.in_(node_ids),
-                    )
-                )
-            ).all()
-        )
         edge_rows = (
             await session.scalars(
                 select(Edge).where(
-                    Edge.version_id == version_id,
-                    Edge.source_node_id.in_(node_ids),
+                    Edge.version_id == version_id, Edge.source_node_id.in_(node_ids)
                 )
             )
         ).all()
         edges = [EdgeIn.model_validate(e) for e in edge_rows]
-
     nodes = [
-        NodeOut.model_validate(n).model_copy(
-            update={
-                "has_children": n.id in parents_with_children,
-                "group_ids": _node_group_ids(n),
-            }
-        )
+        NodeOut.model_validate(n).model_copy(update={"group_ids": _node_group_ids(n)})
         for n in node_rows
     ]
     group_rows = (
-        await session.scalars(
-            select(Group).where(
-                Group.version_id == version_id, Group.parent_node_id == parent_node_id
-            )
-        )
+        await session.scalars(select(Group).where(Group.version_id == version_id))
     ).all()
     groups = [GroupIn.model_validate(g) for g in group_rows]
     return GraphOut(nodes=nodes, edges=edges, groups=groups)
@@ -105,7 +76,7 @@ async def get_full_graph(
     version_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> VersionGraphOut:
-    """버전 전체(모든 계층) 노드/엣지 — 노드 검색·버전 diff 용 (spec §7 Phase B)."""
+    """버전 전체 노드/엣지 — 노드 검색·버전 diff 용 (spec §7 Phase B)."""
     await _get_version_or_404(session, version_id)
     node_rows = (
         await session.scalars(
@@ -115,17 +86,10 @@ async def get_full_graph(
     edge_rows = (
         await session.scalars(select(Edge).where(Edge.version_id == version_id))
     ).all()
-    # 하위 보유 여부 — 어떤 노드의 parent로 등장하는 id 집합. 인라인 펼침의 중첩 셰브론 표시에 필요.
-    parents_with_children = {
-        n.parent_node_id for n in node_rows if n.parent_node_id is not None
-    }
     return VersionGraphOut(
         nodes=[
             FlatNodeOut.model_validate(n).model_copy(
-                update={
-                    "group_ids": _node_group_ids(n),
-                    "has_children": n.id in parents_with_children,
-                }
+                update={"group_ids": _node_group_ids(n)}
             )
             for n in node_rows
         ],
@@ -136,26 +100,23 @@ async def get_full_graph(
 @router.get("/{version_id}/graph", response_model=GraphOut)
 async def get_graph(
     version_id: int,
-    parent: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
     await _get_version_or_404(session, version_id)
-    return await _load_scope(session, version_id, parent)
+    return await _load_graph(session, version_id)
 
 
 @router.put("/{version_id}/graph", response_model=GraphOut)
 async def replace_graph(
     version_id: int,
     payload: GraphIn,
-    parent: str | None = Query(default=None),
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
-    """한 캔버스 스코프(version, parent)만 교체. 다른 계층의 노드/엣지는 보존."""
+    """버전의 전체 그래프를 교체."""
     version = await _get_version_or_404(session, version_id)
 
-    # 승인 워크플로우 — 편집 가능 상태(draft/rejected)만 저장 허용. submit이 체크아웃을
-    # 해제하므로 잠금만으론 pending/approved/published 쓰기를 못 막는다 (design 2026-06-14)
+    # 승인 워크플로우 — 편집 가능 상태(draft/rejected)만 저장 허용
     if not workflow.is_editable_status(version.status):
         raise HTTPException(
             status_code=409, detail=f"version is {version.status} — not editable"
@@ -167,13 +128,6 @@ async def replace_graph(
             status_code=423,
             detail=f"version checked out by {version.checked_out_by}",
         )
-
-    if parent is not None:
-        parent_node = await session.get(Node, parent)
-        if parent_node is None or parent_node.version_id != version_id:
-            raise HTTPException(
-                status_code=404, detail=f"parent node {parent} not in version"
-            )
 
     payload_ids = {n.id for n in payload.nodes}
     for edge in payload.edges:
@@ -192,66 +146,39 @@ async def replace_graph(
                     detail=f"node {node.id} references a group not in the payload",
                 )
 
+    # 버전 전체 노드를 payload로 교체 — 사라진 노드의 엣지·코멘트도 정리
     existing_ids = set(
         (
             await session.scalars(
-                select(Node.id).where(
-                    Node.version_id == version_id,
-                    Node.parent_node_id == parent,
-                )
+                select(Node.id).where(Node.version_id == version_id)
             )
         ).all()
     )
-
-    # 이 스코프에서 사라진 노드 → 하위 서브트리까지 재귀 삭제 (계층 고아 방지)
     removed = existing_ids - payload_ids
     if removed:
-        pairs = (
-            await session.execute(
-                select(Node.id, Node.parent_node_id).where(
-                    Node.version_id == version_id
-                )
-            )
-        ).all()
-        children: dict[str | None, list[str]] = defaultdict(list)
-        for node_id, parent_id in pairs:
-            children[parent_id].append(node_id)
-        to_delete: set[str] = set()
-        stack = list(removed)
-        while stack:
-            current = stack.pop()
-            if current in to_delete:
-                continue
-            to_delete.add(current)
-            stack.extend(children.get(current, []))
         await session.execute(
             delete(Edge).where(
                 or_(
-                    Edge.source_node_id.in_(to_delete),
-                    Edge.target_node_id.in_(to_delete),
+                    Edge.source_node_id.in_(removed),
+                    Edge.target_node_id.in_(removed),
                 )
             )
         )
-        await session.execute(delete(Node).where(Node.id.in_(to_delete)))
         # 삭제 노드의 코멘트 정리 — sqlite는 FK pragma 비활성이라 명시적으로 수행
-        await session.execute(delete(Comment).where(Comment.node_id.in_(to_delete)))
-        # 삭제되는 하위 캔버스의 그룹 정리 (group은 node FK가 없어 명시적으로 수행)
-        await session.execute(delete(Group).where(Group.parent_node_id.in_(to_delete)))
+        await session.execute(delete(Comment).where(Comment.node_id.in_(removed)))
+        await session.execute(delete(Node).where(Node.id.in_(removed)))
 
-    # 이 스코프(형제) 엣지를 비우고 payload로 재삽입
+    # 남은 노드들의 엣지를 비우고 payload로 재삽입
     if existing_ids:
         await session.execute(
             delete(Edge).where(Edge.source_node_id.in_(existing_ids))
         )
 
-    # 그룹도 이 스코프만 교체 — 사라진 그룹 삭제 후 payload upsert
+    # 그룹도 버전 단위 교체
     existing_group_ids = set(
         (
             await session.scalars(
-                select(Group.id).where(
-                    Group.version_id == version_id,
-                    Group.parent_node_id == parent,
-                )
+                select(Group.id).where(Group.version_id == version_id)
             )
         ).all()
     )
@@ -270,7 +197,6 @@ async def replace_graph(
         existing_group = await session.get(Group, group.id)
         if existing_group is not None:
             existing_group.version_id = version_id
-            existing_group.parent_node_id = parent
             existing_group.parent_group_id = parent_group_id
             existing_group.label = group.label
             existing_group.color = group.color
@@ -279,19 +205,17 @@ async def replace_graph(
                 Group(
                     id=group.id,
                     version_id=version_id,
-                    parent_node_id=parent,
                     parent_group_id=parent_group_id,
                     label=group.label,
                     color=group.color,
                 )
             )
 
-    # 노드는 upsert — 유지되는 노드를 지우지 않아 자식 계층이 끊기지 않는다
+    # 노드 upsert
     for node in payload.nodes:
         existing = await session.get(Node, node.id)
         if existing is not None:
             existing.version_id = version_id
-            existing.parent_node_id = parent
             existing.title = node.title
             existing.description = node.description
             existing.node_type = node.node_type
@@ -306,9 +230,9 @@ async def replace_graph(
             existing.group_ids = list(node.group_ids)
             existing.group_id = None  # 레거시 단일 소속 정리 — group_ids로 일원화
         else:
-            session.add(Node(version_id=version_id, parent_node_id=parent, **node.model_dump()))
+            session.add(Node(version_id=version_id, **node.model_dump()))
     for edge in payload.edges:
         session.add(Edge(version_id=version_id, **edge.model_dump()))
 
     await session.commit()
-    return await _load_scope(session, version_id, parent)
+    return await _load_graph(session, version_id)

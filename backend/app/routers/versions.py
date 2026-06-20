@@ -39,16 +39,14 @@ router = APIRouter(
 async def _clone_graph(
     session: AsyncSession, source: MapVersion, target_version_id: int
 ) -> None:
-    """source 버전의 노드/엣지를 새 ID로 깊은 복사. 계층(parent)·엣지 참조를 재매핑한다."""
+    """source 버전의 노드/엣지를 새 ID로 깊은 복사. 엣지/그룹 참조를 재매핑한다."""
     id_map = {node.id: uuid.uuid4().hex for node in source.nodes}
 
-    # 1차: parent=None으로 먼저 삽입 (postgres 자기참조 FK 순서 문제 회피)
     cloned: dict[str, Node] = {}
     for node in source.nodes:
         clone = Node(
             id=id_map[node.id],
             version_id=target_version_id,
-            parent_node_id=None,
             title=node.title,
             description=node.description,
             node_type=node.node_type,
@@ -67,23 +65,13 @@ async def _clone_graph(
         cloned[node.id] = clone
     await session.flush()
 
-    # 2차: 계층 포인터 채우기
-    for node in source.nodes:
-        if node.parent_node_id is not None:
-            cloned[node.id].parent_node_id = id_map[node.parent_node_id]
-
-    # 3차: 그룹 복제(새 ID) + 노드 멤버십(group_id) 재매핑. parent_node_id는 노드 id_map으로 리맵.
+    # 그룹 복제(새 ID) + 노드 멤버십(group_id) 재매핑
     group_id_map = {group.id: uuid.uuid4().hex for group in source.groups}
     for group in source.groups:
         session.add(
             Group(
                 id=group_id_map[group.id],
                 version_id=target_version_id,
-                parent_node_id=(
-                    id_map[group.parent_node_id]
-                    if group.parent_node_id is not None
-                    else None
-                ),
                 # 중첩 상위 그룹도 새 ID로 리맵 (없으면 None)
                 parent_group_id=(
                     group_id_map.get(group.parent_group_id)

@@ -21,32 +21,23 @@ def test_create_plain_version(client: TestClient) -> None:
 def test_create_version_clones_graph(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
-    # 계층 포함 그래프를 source 버전에 저장
+    # 평면 그래프를 source 버전에 저장
     client.put(
         f"/api/versions/{source_version}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}], "edges": []},
-    )
-    client.put(
-        f"/api/versions/{source_version}/graph?parent=p",
-        json={"nodes": [{"id": "c", "title": "승인"}], "edges": []},
+        json={"nodes": [{"id": "p", "title": "발주"}, {"id": "c", "title": "승인"}], "edges": []},
     )
 
     clone = client.post(
         f"/api/maps/{created['id']}/versions",
         json={"label": "To-Be", "source_version_id": source_version},
     ).json()
-    top = client.get(f"/api/versions/{clone['id']}/graph").json()
+    cloned_graph = client.get(f"/api/versions/{clone['id']}/graph").json()
 
     # 구조는 같지만 노드 ID는 새로 발급 (원본과 충돌하지 않음)
-    assert len(top["nodes"]) == 1
-    assert top["nodes"][0]["has_children"] is True
-    assert top["nodes"][0]["id"] != "p"
-    cloned_parent = top["nodes"][0]["id"]
-    child = client.get(
-        f"/api/versions/{clone['id']}/graph?parent={cloned_parent}"
-    ).json()
-    assert len(child["nodes"]) == 1
-    assert child["nodes"][0]["id"] != "c"
+    assert len(cloned_graph["nodes"]) == 2
+    cloned_ids = {n["id"] for n in cloned_graph["nodes"]}
+    assert "p" not in cloned_ids
+    assert "c" not in cloned_ids
 
 
 def test_clone_preserves_groups_and_membership(client: TestClient) -> None:

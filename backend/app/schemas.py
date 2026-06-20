@@ -120,16 +120,12 @@ class EdgeIn(BaseModel):
 
 
 class NodeOut(NodeIn):
-    # 이 노드가 하위 캔버스(자식 노드)를 가지는지 — 드릴다운 표시용 (계산 필드, 입력 시 무시)
-    has_children: bool = False
+    pass
 
 
 class FlatNodeOut(NodeIn):
-    # 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff, spec §7 Phase B)
-    parent_node_id: str | None = None
+    # 전체 그래프 조회용 — 계보 정보 포함 (검색·버전 diff, spec §7 Phase B)
     source_node_id: str | None = None
-    # 이 노드가 하위 캔버스를 가지는지 — 인라인 펼침의 중첩 셰브론 표시용 (계산 필드)
-    has_children: bool = False
 
 
 class GroupIn(BaseModel):
@@ -238,7 +234,6 @@ class AiChatTurn(BaseModel):
 
 
 class AiChatRequest(BaseModel):
-    parent: str | None = None
     instruction: str = Field(min_length=1, max_length=2000)
     history: list[AiChatTurn] = Field(default_factory=list, max_length=20)
     # 사용할 모델 id — 없으면 서버 기본(settings.ai_model). 프론트가 /ai/models에서 선택

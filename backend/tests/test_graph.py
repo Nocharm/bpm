@@ -96,23 +96,17 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
     assert node["duration"] == "2일"
 
 
-def test_full_graph_returns_all_scopes(client: TestClient) -> None:
+def test_full_graph_returns_all_nodes(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}], "edges": []},
-    )
-    client.put(
-        f"/api/versions/{version_id}/graph?parent=p",
-        json={"nodes": [{"id": "c", "title": "승인"}], "edges": []},
+        json={"nodes": [{"id": "p", "title": "발주"}, {"id": "c", "title": "승인"}], "edges": []},
     )
 
     full = client.get(f"/api/versions/{version_id}/graph/all").json()
 
     by_id = {n["id"]: n for n in full["nodes"]}
     assert set(by_id) == {"p", "c"}
-    assert by_id["p"]["parent_node_id"] is None
-    assert by_id["c"]["parent_node_id"] == "p"
     assert by_id["p"]["source_node_id"] is None
 
 
@@ -149,54 +143,38 @@ def test_graph_for_missing_version_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_child_scope_is_isolated_from_parent(client: TestClient) -> None:
-    version_id = _create_version(client)
-    # 최상위에 부모 노드 p
-    client.put(
-        f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}], "edges": []},
-    )
-    # p의 하위 캔버스에 자식 노드 c
-    client.put(
-        f"/api/versions/{version_id}/graph?parent=p",
-        json={"nodes": [{"id": "c", "title": "승인요청"}], "edges": []},
-    )
-
-    top = client.get(f"/api/versions/{version_id}/graph").json()
-    child = client.get(f"/api/versions/{version_id}/graph?parent=p").json()
-
-    # 최상위는 p만, 자식 저장이 최상위를 덮어쓰지 않음
-    assert [n["id"] for n in top["nodes"]] == ["p"]
-    assert top["nodes"][0]["has_children"] is True
-    assert [n["id"] for n in child["nodes"]] == ["c"]
-
-
-def test_removing_node_deletes_descendants(client: TestClient) -> None:
+def test_all_nodes_coexist_in_flat_graph(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "p", "title": "p"}], "edges": []},
-    )
-    client.put(
-        f"/api/versions/{version_id}/graph?parent=p",
-        json={"nodes": [{"id": "c", "title": "c"}], "edges": []},
+        json={"nodes": [{"id": "p", "title": "발주"}, {"id": "c", "title": "승인요청"}], "edges": []},
     )
 
-    # 최상위에서 p 제거 → c(하위)도 함께 삭제돼야 함
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    assert {n["id"] for n in saved["nodes"]} == {"p", "c"}
+
+
+def test_removing_nodes_cleans_up(client: TestClient) -> None:
+    version_id = _create_version(client)
+    client.put(
+        f"/api/versions/{version_id}/graph",
+        json={"nodes": [{"id": "p", "title": "p"}, {"id": "c", "title": "c"}], "edges": []},
+    )
+
+    # 노드 제거 → 이후 조회에서 사라져야 함
     client.put(
         f"/api/versions/{version_id}/graph",
         json={"nodes": [], "edges": []},
     )
-    child = client.get(f"/api/versions/{version_id}/graph?parent=p").json()
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert child == {"nodes": [], "edges": [], "groups": []}
+    assert saved == {"nodes": [], "edges": [], "groups": []}
 
 
-def test_put_with_unknown_parent_404(client: TestClient) -> None:
-    version_id = _create_version(client)
-
+def test_put_missing_version_404(client: TestClient) -> None:
     response = client.put(
-        f"/api/versions/{version_id}/graph?parent=ghost",
+        "/api/versions/999999/graph",
         json={"nodes": [], "edges": []},
     )
 
@@ -353,6 +331,18 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
 
     assert saved["groups"] == []
     assert saved["nodes"][0]["group_ids"] == []
+
+
+def test_graph_is_flat_per_version(client: TestClient) -> None:
+    version_id = _create_version(client)
+    # 예전엔 parent 스코프로 분리됐던 노드들이 이제 한 평면에 공존
+    client.put(
+        f"/api/versions/{version_id}/graph",
+        json={"nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}], "edges": []},
+    )
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    assert {n["id"] for n in saved["nodes"]} == {"a", "b", "c"}
+    assert "has_children" not in saved["nodes"][0]  # 계층 개념 제거
 
 
 def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
