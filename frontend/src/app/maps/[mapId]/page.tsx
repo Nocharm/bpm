@@ -352,6 +352,10 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
+      linkedMapId: node.linked_map_id,
+      followLatest: node.follow_latest,
+      linkedVersionId: node.linked_version_id,
+      isPrimaryEnd: node.is_primary_end,
     },
   }));
 }
@@ -372,8 +376,9 @@ function toAppEdges(graph: Graph): Edge[] {
     source: edge.source_node_id,
     target: edge.target_node_id,
     label: edge.label || undefined,
-    sourceHandle: sourceHandleId((edge.source_side as HandleSide) || "right"),
-    targetHandle: targetHandleId((edge.target_side as HandleSide) || "left"),
+    // 백엔드가 raw handle id를 보내면 우선 사용(subprocess end 핸들); 없으면 side에서 파생
+    sourceHandle: edge.source_handle ?? sourceHandleId((edge.source_side as HandleSide) || "right"),
+    targetHandle: edge.target_handle ?? targetHandleId((edge.target_side as HandleSide) || "left"),
   }));
 }
 
@@ -419,6 +424,10 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       sort_order: index,
       // 보존된 그룹만 남김(고아 태그 제거)
       group_ids: node.data.groupIds.filter((gid) => groupIds.has(gid)),
+      linked_map_id: node.data.linkedMapId ?? null,
+      follow_latest: node.data.followLatest ?? false,
+      linked_version_id: node.data.linkedVersionId ?? null,
+      is_primary_end: node.data.isPrimaryEnd ?? false,
     })),
     // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거
     edges: edges
@@ -430,6 +439,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
         label: typeof edge.label === "string" ? edge.label : "",
         source_side: sideFromHandleId(edge.sourceHandle, "right"),
         target_side: sideFromHandleId(edge.targetHandle, "left"),
+        source_handle: edge.sourceHandle ?? null,
+        target_handle: edge.targetHandle ?? null,
       })),
     groups: keptGroups.map((group) => ({
       id: group.id,
@@ -796,6 +807,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         pos_y: 0,
         sort_order: order,
         group_ids: [],
+        linked_map_id: null,
+        follow_latest: false,
+        linked_version_id: null,
+        is_primary_end: false,
       });
       const childGraph: Graph = {
         nodes: [
@@ -811,6 +826,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             label: "",
             source_side: "right",
             target_side: "left",
+            source_handle: null,
+            target_handle: null,
           },
           {
             id: genId(),
@@ -819,6 +836,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             label: "",
             source_side: "right",
             target_side: "left",
+            source_handle: null,
+            target_handle: null,
           },
         ],
         groups: [],
@@ -1177,6 +1196,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           pos_y: 0,
           sort_order: 0,
           group_ids: [],
+          linked_map_id: null,
+          follow_latest: false,
+          linked_version_id: null,
+          is_primary_end: false,
         };
       });
       const gedges = proposal.edges
@@ -1191,6 +1214,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             label: edge.label,
             source_side: "right",
             target_side: "left",
+            source_handle: null,
+            target_handle: null,
           };
         })
         .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
@@ -1887,6 +1912,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         label,
         source_side: sideFromHandleId(connection.sourceHandle, "right"),
         target_side: sideFromHandleId(connection.targetHandle, "left"),
+        source_handle: connection.sourceHandle ?? null,
+        target_handle: connection.targetHandle ?? null,
       };
       setFullGraph((prev) => (prev === null ? prev : { ...prev, edges: [...prev.edges, edge] }));
       try {
@@ -1973,6 +2000,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         pos_y: position.y,
         sort_order: 0,
         group_ids: [],
+        linked_map_id: null,
+        follow_latest: false,
+        linked_version_id: null,
+        is_primary_end: false,
       };
       setFullGraph((prev) =>
         prev === null
@@ -2282,6 +2313,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             pos_y: 0,
             sort_order: order,
             group_ids: [],
+            linked_map_id: null,
+            follow_latest: false,
+            linked_version_id: null,
+            is_primary_end: false,
           });
           childGraph = {
             nodes: [
@@ -2297,6 +2332,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 label: "",
                 source_side: "right",
                 target_side: "left",
+                source_handle: null,
+                target_handle: null,
               },
               {
                 id: genId(),
@@ -2305,6 +2342,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 label: "",
                 source_side: "right",
                 target_side: "left",
+                source_handle: null,
+                target_handle: null,
               },
             ],
             groups: [],

@@ -44,6 +44,12 @@ export interface GraphNode {
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   group_ids: string[];
   has_children?: boolean;
+  // 하위프로세스 참조 (node_type==="subprocess")
+  linked_map_id: number | null;
+  follow_latest: boolean;
+  linked_version_id: number | null;
+  // 대표 끝 (node_type==="end")
+  is_primary_end: boolean;
 }
 
 // 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff)
@@ -59,6 +65,8 @@ export interface GraphEdge {
   label: string;
   source_side: string;
   target_side: string;
+  source_handle: string | null;
+  target_handle: string | null;
 }
 
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)
@@ -133,6 +141,28 @@ export function getMap(mapId: number): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}`);
 }
 
+export interface LibraryProcess {
+  map_id: number;
+  name: string;
+  latest_version_id: number | null;
+  latest_published_version_id: number | null;
+  refs: number[];
+}
+
+export function listLibraryProcesses(): Promise<LibraryProcess[]> {
+  return request<LibraryProcess[]>("/library/processes");
+}
+
+export function getResolvedGraph(
+  mapId: number,
+  followLatest: boolean,
+  pinned: number | null,
+): Promise<Graph> {
+  const params = new URLSearchParams({ follow_latest: String(followLatest) });
+  if (pinned !== null) params.set("pinned", String(pinned));
+  return request<Graph>(`/library/processes/${mapId}/resolved?${params.toString()}`);
+}
+
 export function createVersion(
   mapId: number,
   label: string,
@@ -162,15 +192,9 @@ export function deleteMap(mapId: number): Promise<void> {
   return request<void>(`/maps/${mapId}`, { method: "DELETE" });
 }
 
-function scopeQuery(parentId: string | null): string {
-  return parentId ? `?parent=${encodeURIComponent(parentId)}` : "";
-}
-
-export function getGraph(
-  versionId: number,
-  parentId: string | null = null,
-): Promise<Graph> {
-  return request<Graph>(`/versions/${versionId}/graph${scopeQuery(parentId)}`);
+export function getGraph(versionId: number, parentId: string | null = null): Promise<Graph> {
+  void parentId; // 평면 모델 — 스코프 파라미터 무시(Task 6에서 콜사이트와 함께 제거)
+  return request<Graph>(`/versions/${versionId}/graph`);
 }
 
 export function getFullGraph(versionId: number): Promise<VersionGraph> {
@@ -237,12 +261,9 @@ export function deleteComment(commentId: number): Promise<void> {
   return request<void>(`/comments/${commentId}`, { method: "DELETE" });
 }
 
-export function saveGraph(
-  versionId: number,
-  graph: Graph,
-  parentId: string | null = null,
-): Promise<Graph> {
-  return request<Graph>(`/versions/${versionId}/graph${scopeQuery(parentId)}`, {
+export function saveGraph(versionId: number, graph: Graph, parentId: string | null = null): Promise<Graph> {
+  void parentId;
+  return request<Graph>(`/versions/${versionId}/graph`, {
     method: "PUT",
     body: JSON.stringify(graph),
   });
@@ -388,9 +409,10 @@ export function aiChat(
   history: AiChatTurn[],
   model: string | null,
 ): Promise<AiProposal> {
+  void parent; // 평면 모델 — backend AiChatRequest에 parent 없음(Task 6에서 콜사이트와 함께 제거)
   return request<AiProposal>(`/versions/${versionId}/ai/chat`, {
     method: "POST",
-    body: JSON.stringify({ parent, instruction, history, model }),
+    body: JSON.stringify({ instruction, history, model }),
   });
 }
 

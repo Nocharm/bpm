@@ -26,11 +26,19 @@ export type NodeData = {
   hasDescendantChange?: boolean;
   // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
   commentCount?: number;
+  // 하위프로세스 참조 (nodeType==="subprocess")
+  linkedMapId?: number | null;
+  followLatest?: boolean;
+  linkedVersionId?: number | null;
+  // 대표 끝 (nodeType==="end")
+  isPrimaryEnd?: boolean;
+  // 연결된 맵의 최신 버전이 핀된 버전과 다를 때 true — UI 업데이트 알림용
+  updateAvailable?: boolean;
 };
 
 export type AppNode = Node<NodeData>;
 
-export type ProcessNodeType = "process" | "decision" | "start" | "end";
+export type ProcessNodeType = "process" | "decision" | "start" | "end" | "subprocess";
 
 // 노드 타입 선택지 — 값은 백엔드 node_type 컬럼에 그대로 저장 (spec §7 Phase A)
 export const NODE_TYPE_OPTIONS: { value: ProcessNodeType; labelKey: MessageKey }[] = [
@@ -46,6 +54,7 @@ export function normalizeNodeType(value: string): ProcessNodeType {
     case "decision":
     case "start":
     case "end":
+    case "subprocess":
       return value;
     default:
       return "process";
@@ -67,6 +76,8 @@ export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } 
     case "start":
     case "end":
       return { w: 96, h: 40 };
+    case "subprocess":
+      return { w: 180, h: 64 };
     default:
       return { w: NODE_WIDTH, h: NODE_HEIGHT };
   }

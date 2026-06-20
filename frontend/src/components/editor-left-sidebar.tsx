@@ -60,6 +60,7 @@ const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeW
   process: Square,
   decision: Diamond,
   end: CircleDot,
+  subprocess: Square,
 };
 
 export function EditorLeftSidebar({

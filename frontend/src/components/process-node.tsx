@@ -35,6 +35,7 @@ const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
   decision: "nodeType.decision",
   start: "nodeType.start",
   end: "nodeType.end",
+  subprocess: "nodeType.process",
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
@@ -126,6 +127,7 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   decision: "#c7a062", // amber
   start: "#84a07c", // sage
   end: "#c2849a", // rose
+  subprocess: "#909098", // stone — subprocess 전용 렌더러 없을 때 fallback
 };
 
 // 파스텔 fill — 저장된 stroke color에서 파생(데이터 모델 무변경)
