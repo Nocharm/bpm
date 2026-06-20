@@ -305,6 +305,7 @@ const en = {
   "perm.tabCollaborators": "Collaborators",
   "perm.tabApprovers": "Approvers",
   "perm.tabVisibility": "Visibility",
+  "perm.tabVersions": "Versions",
   "perm.tabDanger": "Danger Zone",
   "perm.tabPlaceholder": "To be implemented in the next step.",
   "perm.noAccess": "You don't have access to this map.",
@@ -384,6 +385,15 @@ const en = {
   "perm.createDialog.cancelBtn": "Cancel",
   "perm.createDialog.noUser": "No user selected. Please log in.",
   "perm.createDialog.toastSuccess": "Map created.",
+  // ── 버전 게시 탭 / Versions tab ──
+  "perm.version.hint": "Request approval to publish a version, then publish after approval.",
+  "perm.version.noVersions": "No versions yet.",
+  "perm.version.request": "Request approval",
+  "perm.version.approve": "Approve",
+  "perm.version.reject": "Reject",
+  "perm.version.publish": "Publish",
+  "perm.version.waitingApproval": "Awaiting approval",
+  "perm.version.approvedWaiting": "Approved (awaiting publish)",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -691,6 +701,7 @@ const ko: Record<MessageKey, string> = {
   "perm.tabCollaborators": "협업자",
   "perm.tabApprovers": "결재자",
   "perm.tabVisibility": "공개 범위",
+  "perm.tabVersions": "버전",
   "perm.tabDanger": "위험 구역",
   "perm.tabPlaceholder": "다음 단계에서 구현됩니다.",
   "perm.noAccess": "이 맵에 대한 접근 권한이 없습니다.",
@@ -770,6 +781,15 @@ const ko: Record<MessageKey, string> = {
   "perm.createDialog.cancelBtn": "취소",
   "perm.createDialog.noUser": "로그인된 사용자가 없습니다.",
   "perm.createDialog.toastSuccess": "맵이 생성되었습니다.",
+  // ── 버전 게시 탭 / Versions tab ──
+  "perm.version.hint": "버전 게시 승인을 요청한 뒤 승인 후 게시합니다.",
+  "perm.version.noVersions": "버전이 없습니다.",
+  "perm.version.request": "승인 요청",
+  "perm.version.approve": "승인",
+  "perm.version.reject": "반려",
+  "perm.version.publish": "게시",
+  "perm.version.waitingApproval": "승인 대기 중",
+  "perm.version.approvedWaiting": "승인됨 (게시 대기)",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

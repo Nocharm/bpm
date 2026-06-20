@@ -17,21 +17,23 @@ import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
 import { VisibilityControl } from "@/components/permissions/visibility-control";
 import { DangerZone } from "@/components/permissions/danger-zone";
+import { VersionsPublishPanel } from "@/components/permissions/versions-publish-panel";
 import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
 
-type TabId = "collaborators" | "approvers" | "visibility" | "danger";
+type TabId = "collaborators" | "approvers" | "visibility" | "versions" | "danger";
 
 interface Tab {
   id: TabId;
-  labelKey: "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabDanger";
+  labelKey: "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger";
 }
 
 const TABS: Tab[] = [
   { id: "collaborators", labelKey: "perm.tabCollaborators" },
   { id: "approvers", labelKey: "perm.tabApprovers" },
   { id: "visibility", labelKey: "perm.tabVisibility" },
+  { id: "versions", labelKey: "perm.tabVersions" },
   { id: "danger", labelKey: "perm.tabDanger" },
 ];
 
@@ -243,6 +245,12 @@ export default function SettingsPage() {
               currentUserId={currentMockUser.id}
               isOwner={isOwner}
               onToast={showToast}
+            />
+          ) : activeTab === "versions" ? (
+            <VersionsPublishPanel
+              mapId={mapIdStr}
+              currentUserId={currentMockUser.id}
+              canEdit={canEdit}
             />
           ) : activeTab === "danger" && isOwner ? (
             <DangerZone

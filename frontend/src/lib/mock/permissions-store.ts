@@ -20,6 +20,10 @@ export interface VersionFlowEntry {
   status: 'draft' | 'pending' | 'approved' | 'published' | 'rejected';
   requestedBy: string;
   label: string;
+  /** 승인·반려한 사용자 ID (approve/reject 시 기록) / User who approved or rejected. */
+  approvedBy?: string;
+  /** 최종 게시한 사용자 ID (publish 시 기록) / User who published. */
+  publishedBy?: string;
 }
 
 export type StoreState = SeedState & {
@@ -420,6 +424,62 @@ export function requestVersionPublish(
     versionFlow: {
       ...state.versionFlow,
       [versionId]: { status: 'pending', requestedBy: by, label },
+    },
+  };
+  emit();
+}
+
+/**
+ * 버전 게시 승인 — pending → approved (단일 승인자 단순화 / single-approver simplification) /
+ * Approve a pending version publish request; moves status to 'approved'.
+ * Guard: only transitions from 'pending'.
+ */
+export function approveVersionPublish(versionId: string, by: string): void {
+  const entry = state.versionFlow[versionId];
+  if (!entry || entry.status !== 'pending') return;
+  state = {
+    ...state,
+    versionFlow: {
+      ...state.versionFlow,
+      [versionId]: { ...entry, status: 'approved', approvedBy: by },
+    },
+  };
+  emit();
+}
+
+/**
+ * 버전 게시 반려 — pending → rejected /
+ * Reject a pending version publish request; moves status to 'rejected'.
+ * Guard: only transitions from 'pending'.
+ */
+export function rejectVersionPublish(versionId: string, by: string): void {
+  const entry = state.versionFlow[versionId];
+  if (!entry || entry.status !== 'pending') return;
+  state = {
+    ...state,
+    versionFlow: {
+      ...state.versionFlow,
+      [versionId]: { ...entry, status: 'rejected', approvedBy: by },
+    },
+  };
+  emit();
+}
+
+/**
+ * 버전 최종 게시 — approved → published (요청자만 가능, UI에서 게이팅) /
+ * Publish an approved version; moves status to 'published'.
+ * Guard: only transitions from 'approved'. UI gates that 'by' is the requester.
+ */
+export function publishVersionFlow(versionId: string, by: string): void {
+  const entry = state.versionFlow[versionId];
+  if (!entry || entry.status !== 'approved') return;
+  // UI가 호출 전 by === entry.requestedBy 임을 확인; publishedBy로 기록 /
+  // UI confirms by === entry.requestedBy before calling; recorded as publishedBy.
+  state = {
+    ...state,
+    versionFlow: {
+      ...state.versionFlow,
+      [versionId]: { ...entry, status: 'published', publishedBy: by },
     },
   };
   emit();
