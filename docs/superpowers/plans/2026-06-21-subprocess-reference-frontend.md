@@ -180,21 +180,23 @@ In `GraphEdge` (after `target_side`):
   target_handle: string | null;
 ```
 
-- [ ] **Step 2: Drop the dead `parent` scoping + add library fns in `api.ts`**
+- [ ] **Step 2: Neutralize the dead `parent` scoping + add library fns in `api.ts`**
 
-Delete `scopeQuery` (165-167). Change `getGraph`/`saveGraph` to drop the `parentId` param:
+The backend GET/PUT `/versions/{id}/graph` no longer reads `?parent=` (flat per version). **Keep the `parentId`/`parent` parameters on the signatures** (page.tsx still has ~10 callers passing them — those callers are removed in Task 6; removing the param now would break `tsc`). Just stop USING the param: delete `scopeQuery` (165-167) and the `${scopeQuery(parentId)}` interpolation, so the URL is always clean and `parentId` is accepted-but-ignored:
 ```typescript
-export function getGraph(versionId: number): Promise<Graph> {
+export function getGraph(versionId: number, parentId: string | null = null): Promise<Graph> {
+  void parentId; // 평면 모델 — 스코프 파라미터 무시(Task 6에서 콜사이트와 함께 제거)
   return request<Graph>(`/versions/${versionId}/graph`);
 }
-export function saveGraph(versionId: number, graph: Graph): Promise<Graph> {
+export function saveGraph(versionId: number, graph: Graph, parentId: string | null = null): Promise<Graph> {
+  void parentId;
   return request<Graph>(`/versions/${versionId}/graph`, {
     method: "PUT",
     body: JSON.stringify(graph),
   });
 }
 ```
-Change `aiChat` to drop the `parent` argument (backend `AiChatRequest` no longer has it — confirm in `backend/app/schemas.py:236`): remove the `parent` param and the `parent` field from the JSON body.
+For `aiChat`: keep the `parent` param on the signature (callers pass it) but drop `parent` from the JSON body (backend `AiChatRequest` no longer has it — confirm `backend/app/schemas.py:236`; Pydantic ignores the extra field anyway, but send a clean body). Add `void parent;` to silence the unused-param lint. Task 6 removes these vestigial params with their call sites.
 
 Add (near `getMap`):
 ```typescript
@@ -576,7 +578,7 @@ In `displayNodes` (3895-3942): embedded children become `selectable:true` (for c
 
 - [ ] **Step 3: Simplify `saveCurrentScope`**
 
-`saveCurrentScope` (742-767) currently passes `currentParentId` to `saveGraph`. In the new model only the root is editable; remove the `currentParentId` argument (Task 2 dropped it from `saveGraph`). When the active scope is a read-only deep view (Task 7), `saveCurrentScope` must no-op — add `if (currentScopeIsReadOnly) return;` (Task 7 defines that flag; for Task 6 the only scope is root, so saving root is correct).
+`saveCurrentScope` (742-767) currently passes `currentParentId` to `saveGraph`. In the new model only the root is editable; once all child-editing call sites above are deleted, remove the now-vestigial optional `parentId`/`parent` params from `getGraph`/`saveGraph`/`aiChat` in `api.ts` (Task 2 kept them only for transitional compilation) and update `saveCurrentScope` + the scope-load `getGraph` call to the 2-arg/clean form. Run `git grep -n 'getGraph(\|saveGraph(\|aiChat(' src/app/maps/[mapId]/page.tsx` to confirm no caller still passes a scope arg before removing the params. When the active scope is a read-only deep view (Task 7), `saveCurrentScope` must no-op — add `if (currentScopeIsReadOnly) return;` (Task 7 defines that flag; for Task 6 the only scope is root, so saving root is correct).
 
 - [ ] **Step 4: Verify**
 
