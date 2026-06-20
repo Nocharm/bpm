@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import MapVersion, ProcessMap
+from app.models import MapVersion, Node, ProcessMap
 from app.routers.graph import _load_graph
 from app.schemas import GraphOut
 from app.subprocess import resolve_linked_version
@@ -18,8 +18,8 @@ router = APIRouter(
 
 @router.get("/processes")
 async def list_processes(session: AsyncSession = Depends(get_session)) -> list[dict]:
-    # Single grouped query — avoids N+1 (one SELECT per map).
-    rows = (
+    # 맵별 최신/최신발행 버전 — 단일 그룹 쿼리(N+1 회피).
+    latest_rows = (
         await session.execute(
             select(ProcessMap.id, ProcessMap.name, func.max(MapVersion.id))
             .outerjoin(MapVersion, MapVersion.map_id == ProcessMap.id)
@@ -27,7 +27,36 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
             .order_by(ProcessMap.name)
         )
     ).all()
-    return [{"map_id": mid, "name": name, "latest_version_id": latest} for mid, name, latest in rows]
+    pub_rows = (
+        await session.execute(
+            select(MapVersion.map_id, func.max(MapVersion.id))
+            .where(MapVersion.status == "published")
+            .group_by(MapVersion.map_id)
+        )
+    ).all()
+    published = {mid: vid for mid, vid in pub_rows}
+    # 맵별 참조 맵 집합 — 전 버전 노드의 linked_map_id 합집합(순환 차단 클로저와 동일 소스).
+    ref_rows = (
+        await session.execute(
+            select(MapVersion.map_id, Node.linked_map_id)
+            .join(Node, Node.version_id == MapVersion.id)
+            .where(Node.linked_map_id.is_not(None))
+            .distinct()
+        )
+    ).all()
+    refs: dict[int, list[int]] = {}
+    for mid, linked in ref_rows:
+        refs.setdefault(mid, []).append(linked)
+    return [
+        {
+            "map_id": mid,
+            "name": name,
+            "latest_version_id": latest,
+            "latest_published_version_id": published.get(mid),
+            "refs": sorted(refs.get(mid, [])),
+        }
+        for mid, name, latest in latest_rows
+    ]
 
 
 @router.get("/processes/{map_id}/resolved", response_model=GraphOut)

@@ -1,6 +1,9 @@
 """하위프로세스 검증·순환·해석 테스트."""
 
+import pytest
 from fastapi.testclient import TestClient
+
+from app.settings import settings
 
 
 def _new_version(client: TestClient, name: str = "p") -> int:
@@ -123,3 +126,49 @@ def test_resolved_returns_pinned_graph(client: TestClient) -> None:
     )
     assert r.status_code == 200
     assert [n["id"] for n in r.json()["nodes"]] == ["s"]
+
+
+def _make_map(client: TestClient, name: str) -> dict:
+    """Create a map and return its full JSON (id + versions list)."""
+    return client.post("/api/maps", json={"name": name}).json()
+
+
+def _make_map_with_published(
+    client: TestClient, name: str, monkeypatch: pytest.MonkeyPatch
+) -> dict:
+    """Create a map and publish its first version. Returns {map_id, published_version_id}."""
+    created = client.post("/api/maps", json={"name": name}).json()
+    map_id = created["id"]
+    version_id = created["versions"][0]["id"]
+    # Workflow: set approvers → checkout → submit → approve (as "boss") → publish
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["boss"]})
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    client.post(f"/api/versions/{version_id}/submit")
+    monkeypatch.setattr(settings, "dev_user", "boss")
+    client.post(f"/api/versions/{version_id}/approve")
+    monkeypatch.setattr(settings, "dev_user", "local-dev")
+    client.post(f"/api/versions/{version_id}/publish")
+    return {"map_id": map_id, "published_version_id": version_id}
+
+
+def test_library_list_includes_published_and_refs(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # map A: published version; map B: draft referencing A → B.refs == [A.map_id]
+    a = _make_map_with_published(client, name="lib-A-pub", monkeypatch=monkeypatch)
+    b = _make_map(client, name="lib-B-ref")
+    b_map_id = b["id"]
+    b_ver = b["versions"][0]["id"]
+    client.put(f"/api/versions/{b_ver}/graph", json={
+        "nodes": [
+            {"id": "s", "node_type": "start", "title": "S"},
+            {"id": "sub", "node_type": "subprocess", "title": "call A",
+             "linked_map_id": a["map_id"]},
+        ],
+        "edges": [],
+    })
+    rows = client.get("/api/library/processes").json()
+    by_id = {r["map_id"]: r for r in rows}
+    assert by_id[a["map_id"]]["latest_published_version_id"] == a["published_version_id"]
+    assert by_id[b_map_id]["refs"] == [a["map_id"]]
+    assert by_id[a["map_id"]]["refs"] == []
