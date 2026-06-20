@@ -353,3 +353,39 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
 
     assert saved["groups"] == []
     assert saved["nodes"][0]["group_ids"] == []
+
+
+def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {
+                "id": "sub",
+                "title": "결재",
+                "node_type": "subprocess",
+                "linked_map_id": 999,
+                "follow_latest": True,
+                "sort_order": 1,
+            },
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
+        ],
+        "edges": [
+            {
+                "id": "x1",
+                "source_node_id": "sub",
+                "target_node_id": "e",
+                "source_handle": "__primary__",
+            }
+        ],
+    }
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    sub = next(n for n in saved["nodes"] if n["id"] == "sub")
+    assert sub["node_type"] == "subprocess"
+    assert sub["linked_map_id"] == 999
+    assert sub["follow_latest"] is True
+    end = next(n for n in saved["nodes"] if n["id"] == "e")
+    assert end["is_primary_end"] is True
+    assert saved["edges"][0]["source_handle"] == "__primary__"

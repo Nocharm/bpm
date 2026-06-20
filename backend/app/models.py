@@ -105,6 +105,13 @@ class Node(Base):
     group_id: Mapped[str | None] = mapped_column(String(50), default=None)
     # 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속 (design 2026-06-15). JSON 배열
     group_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # 하위프로세스 노드(node_type="subprocess") — 다른 프로세스를 참조(Call Activity)
+    linked_map_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    follow_latest: Mapped[bool] = mapped_column(Boolean, default=False)
+    # follow_latest=False면 고정 버전. True면 무시하고 렌더 시 최신 발행본 해석.
+    linked_version_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    # 끝 노드(node_type="end") — 대표 끝(프로세스당 1개, 버전업에도 유지되는 주 출구)
+    is_primary_end: Mapped[bool] = mapped_column(Boolean, default=False)
 
     version: Mapped[MapVersion] = relationship(back_populates="nodes")
 
@@ -123,6 +130,9 @@ class Edge(Base):
     # 엣지 핸들이 붙는 노드 변 — 시각 전용, diff 비교 제외(2026-06-17)
     source_side: Mapped[str] = mapped_column(String(10), default="right")
     target_side: Mapped[str] = mapped_column(String(10), default="left")
+    # 다중 출구 식별 — 하위프로세스 노드의 끝별 출력 핸들 id(대표끝="__primary__", 그 외=끝 이름)
+    source_handle: Mapped[str | None] = mapped_column(String(200), default=None)
+    target_handle: Mapped[str | None] = mapped_column(String(200), default=None)
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
 

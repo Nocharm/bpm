@@ -89,6 +89,12 @@ class NodeIn(BaseModel):
     sort_order: int = 0
     # 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
     group_ids: list[str] = Field(default_factory=list)
+    # 하위프로세스 참조 (node_type="subprocess")
+    linked_map_id: int | None = None
+    follow_latest: bool = False
+    linked_version_id: int | None = None
+    # 대표 끝 (node_type="end")
+    is_primary_end: bool = False
 
     @field_validator("group_ids", mode="before")
     @classmethod
@@ -109,6 +115,8 @@ class EdgeIn(BaseModel):
     label: str = ""
     source_side: HandleSide = "right"
     target_side: HandleSide = "left"
+    source_handle: str | None = None
+    target_handle: str | None = None
 
 
 class NodeOut(NodeIn):
