@@ -5767,6 +5767,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                 placeholder={t("editor.durationPlaceholder")}
               />
             </details>
+            {selectedNode.data.nodeType === "end" && (
+              <label className="mb-3 flex items-center gap-2 text-caption text-ink-secondary">
+                <input
+                  type="checkbox"
+                  checked={selectedNode.data.isPrimaryEnd ?? false}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateSelectedData({ isPrimaryEnd: event.target.checked }, true)
+                  }
+                />
+                {t("node.primaryEnd")}
+              </label>
+            )}
             <details open className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
               <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
                 {t("editor.comments")}

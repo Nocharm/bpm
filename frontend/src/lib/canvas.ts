@@ -5,6 +5,7 @@ import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
+import type { SubEnd } from "@/lib/subprocess-embed";
 
 export type NodeData = {
   label: string;
@@ -34,6 +35,8 @@ export type NodeData = {
   isPrimaryEnd?: boolean;
   // 연결된 맵의 최신 버전이 핀된 버전과 다를 때 true — UI 업데이트 알림용
   updateAvailable?: boolean;
+  // 링크된 맵의 끝 노드 목록 — 렌더 시 파생, 퍼시스트 안 함 (nodeType==="subprocess")
+  subEnds?: SubEnd[];
 };
 
 export type AppNode = Node<NodeData>;

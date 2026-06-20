@@ -2,7 +2,7 @@
 
 import { Fragment, useRef } from "react";
 
-import { Handle, type NodeProps } from "@xyflow/react";
+import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
   Building2,
   ChevronDown,
@@ -14,6 +14,7 @@ import {
   Server,
   Tag,
   User,
+  Workflow,
   Zap,
 } from "lucide-react";
 
@@ -21,6 +22,11 @@ import { type AppNode, type HandleSide, type ProcessNodeType, toPosition } from 
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import {
+  PRIMARY_END_HANDLE,
+  SUBPROCESS_IN_HANDLE,
+  type SubEnd,
+} from "@/lib/subprocess-embed";
 
 const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
   assignee: User,
@@ -35,7 +41,7 @@ const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
   decision: "nodeType.decision",
   start: "nodeType.start",
   end: "nodeType.end",
-  subprocess: "nodeType.process",
+  subprocess: "nodeType.subprocess",
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
@@ -127,7 +133,7 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   decision: "#c7a062", // amber
   start: "#84a07c", // sage
   end: "#c2849a", // rose
-  subprocess: "#909098", // stone — subprocess 전용 렌더러 없을 때 fallback
+  subprocess: "#7c6adc", // violet
 };
 
 // 파스텔 fill — 저장된 stroke color에서 파생(데이터 모델 무변경)
@@ -198,6 +204,29 @@ function ExpandToggleButton({ nodeId }: { nodeId: string }) {
   );
 }
 
+// 하위프로세스 노드의 핸들 — 좌측 단일 입력, 우측 끝 노드별 출력 (끝 없으면 단일 PRIMARY_END_HANDLE)
+function SubprocessHandles({ ends }: { ends: SubEnd[] }) {
+  return (
+    <>
+      <Handle id={SUBPROCESS_IN_HANDLE} type="target" position={Position.Left} />
+      {ends.length === 0 ? (
+        <Handle id={PRIMARY_END_HANDLE} type="source" position={Position.Right} />
+      ) : (
+        ends.map((end, i) => (
+          <Handle
+            key={end.key}
+            id={end.key}
+            type="source"
+            position={Position.Right}
+            style={{ top: `${((i + 1) / (ends.length + 1)) * 100}%` }}
+            title={end.title}
+          />
+        ))
+      )}
+    </>
+  );
+}
+
 const NODE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
 
 // 4변 각각에 source·target 핸들(총 8개) — 엣지가 어느 변에든 붙도록. 어느 핸들에 붙을지는 엣지가 id로 지정.
@@ -225,6 +254,33 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
     : selected
       ? "ring-2 ring-accent"
       : "";
+
+  if (data.nodeType === "subprocess") {
+    return (
+      <div
+        className={`group relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:scale-[1.02] hover:opacity-95 hover:shadow-md ${ring}`}
+        style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
+        title={data.diffNote}
+      >
+        <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-ink">
+            <NodeTitle id={id} label={data.label} />
+          </div>
+          {data.updateAvailable && (
+            <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+              {t("subprocess.updateAvailable")}
+            </div>
+          )}
+        </div>
+        {data.hasDescendantChange && <DescendantChangeBadge />}
+        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {(data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />}
+        <SubprocessHandles ends={data.subEnds ?? []} />
+      </div>
+    );
+  }
 
   if (data.nodeType === "decision") {
     return (
