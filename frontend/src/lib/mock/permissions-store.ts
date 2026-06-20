@@ -126,9 +126,11 @@ export function changeRole(
   by: string,
 ): { gated: boolean } {
   const existing = findPermission(mapId, principalType, principalId);
-  const currentRole = existing?.role ?? null;
+  // 존재하지 않는 권한 변경 → no-op / No-op if no grant exists (only addCollaborator creates grants).
+  if (!existing) return { gated: false };
+  const currentRole = existing.role;
 
-  if (currentRole && requiresDowngradeApproval(currentRole, toRole)) {
+  if (requiresDowngradeApproval(currentRole, toRole)) {
     // 게이트: 승인 요청 생성 / Gated: create approval request.
     const payload: DowngradePayload = {
       principalType,
@@ -174,9 +176,11 @@ export function removeCollaborator(
   by: string,
 ): { gated: boolean } {
   const existing = findPermission(mapId, principalType, principalId);
-  const currentRole = existing?.role ?? null;
+  // 존재하지 않는 권한 제거 → no-op / No-op if grant does not exist.
+  if (!existing) return { gated: false };
+  const currentRole = existing.role;
 
-  if (currentRole && requiresDowngradeApproval(currentRole, null)) {
+  if (requiresDowngradeApproval(currentRole, null)) {
     // 게이트: 승인 요청 생성(toRole=null = 제거) / Gated: removal request.
     const payload: DowngradePayload = {
       principalType,

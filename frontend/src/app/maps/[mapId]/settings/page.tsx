@@ -1,0 +1,227 @@
+"use client";
+
+// 맵 설정 화면 — 권한 관리 탭 셸 / Map settings page: tabbed shell for permission management.
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+
+import { getMap } from "@/lib/api";
+import { setCurrentUser } from "@/lib/current-user";
+import { LOCAL_USERS } from "@/lib/dev-auth";
+import { useI18n } from "@/lib/i18n";
+import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
+import { getEffectiveRole, usePermissions } from "@/lib/mock/permissions";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
+import { genId } from "@/lib/id";
+
+// ── 탭 정의 / Tab definitions ────────────────────────────────────
+
+type TabId = "collaborators" | "approvers" | "visibility" | "danger";
+
+interface Tab {
+  id: TabId;
+  labelKey: "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabDanger";
+}
+
+const TABS: Tab[] = [
+  { id: "collaborators", labelKey: "perm.tabCollaborators" },
+  { id: "approvers", labelKey: "perm.tabApprovers" },
+  { id: "visibility", labelKey: "perm.tabVisibility" },
+  { id: "danger", labelKey: "perm.tabDanger" },
+];
+
+// ── 메인 페이지 컴포넌트 / Main page component ────────────────────
+
+export default function SettingsPage() {
+  const params = useParams<{ mapId: string }>();
+  const mapIdStr = params.mapId;
+  const { t } = useI18n();
+
+  // 맵 이름 (read-only display) — 실패 시 id 표시 / Show map name; fall back to id on error.
+  const [mapName, setMapName] = useState<string>(mapIdStr);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const detail = await getMap(Number(mapIdStr));
+        if (active) setMapName(detail.name);
+      } catch {
+        // 이름 조회 실패 시 id 유지 — display-only / Keep id on fetch failure (display only).
+      }
+    })();
+    return () => { active = false; };
+  }, [mapIdStr]);
+
+  // 탭 상태 / Active tab state.
+  const [activeTab, setActiveTab] = useState<TabId>("collaborators");
+
+  // 토스트 상태 / Toast state.
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  function showToast(message: string) {
+    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  }
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // Dev 유저 전환 모달 / Dev user switcher state.
+  const [showDevSwitcher, setShowDevSwitcher] = useState(false);
+
+  // 현재 mock 유저 + 권한 상태 / Current mock user and permission state.
+  const currentMockUser = useCurrentMockUser();
+  const permState = usePermissions();
+
+  // 유효 역할 계산 — sysadmin은 owner 취급 / Compute effective role; sysadmin = owner.
+  const effectiveRole = currentMockUser
+    ? currentMockUser.isSysadmin
+      ? "owner"
+      : getEffectiveRole(permState, currentMockUser.id, mapIdStr)
+    : null;
+
+  // editor 이상 여부 / Whether current user is editor+.
+  const canEdit =
+    effectiveRole === "editor" ||
+    effectiveRole === "owner";
+
+  // ── Dev 유저 전환 핸들러 / Dev user switch handler ────────────────
+
+  function handlePickDevUser(loginId: string) {
+    const found = LOCAL_USERS.find((u) => u.loginId === loginId);
+    if (found) {
+      setCurrentUser({
+        loginId: found.loginId,
+        name: found.name,
+        email: null,
+        role: found.role,
+        department: found.department,
+      });
+    }
+    setShowDevSwitcher(false);
+  }
+
+  // ── 렌더 / Render ─────────────────────────────────────────────
+
+  // 접근 권한 없음 / No access at all.
+  if (currentMockUser && effectiveRole === null) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3">
+        <p className="text-caption text-ink-tertiary">{t("perm.noAccess")}</p>
+        <Link href={`/maps/${mapIdStr}`} className="text-caption text-accent hover:underline">
+          {t("perm.backToEditor")}
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Dev 유저 전환 드롭다운 / Dev user switcher dropdown (inline, no new modal) */}
+      {showDevSwitcher && (
+        <div
+          className="fixed inset-0 z-[1100]"
+          onClick={() => setShowDevSwitcher(false)}
+        >
+          <div
+            className="absolute right-4 top-14 w-72 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 text-caption-strong text-ink">{t("perm.devSwitcher")}</p>
+            <div className="flex flex-col gap-1">
+              {LOCAL_USERS.map((user) => (
+                <button
+                  key={user.loginId}
+                  type="button"
+                  className="flex items-center justify-between rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => handlePickDevUser(user.loginId)}
+                >
+                  <span>
+                    {user.name}{" "}
+                    <span className="text-ink-tertiary">({user.loginId})</span>
+                  </span>
+                  <span className="text-fine text-ink-tertiary">
+                    {user.department}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex h-full flex-col">
+        {/* 헤더 / Header */}
+        <header className="flex flex-wrap items-center gap-4 border-b border-hairline px-4 py-2">
+          <Link href={`/maps/${mapIdStr}`} className="text-caption text-accent hover:underline">
+            {t("perm.backToEditor")}
+          </Link>
+          <h1 className="text-tagline font-medium text-ink">
+            {mapName} — {t("perm.settingsTitle")}
+          </h1>
+          <div className="ml-auto flex items-center gap-2">
+            {/* 현재 mock 유저 표시 / Show current mock user */}
+            {currentMockUser && (
+              <span className="text-fine text-ink-tertiary">
+                {currentMockUser.name} · {effectiveRole ?? "—"}
+              </span>
+            )}
+            {/* [Dev] 유저 전환 버튼 / [Dev] switcher button */}
+            <button
+              type="button"
+              className="rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt"
+              onClick={() => setShowDevSwitcher((v) => !v)}
+            >
+              {t("perm.devSwitcher")}
+            </button>
+          </div>
+        </header>
+
+        {/* 읽기 전용 알림 / Read-only notice */}
+        {effectiveRole === "viewer" && (
+          <div className="border-b border-hairline bg-surface-pearl px-4 py-2 text-caption text-ink-secondary">
+            {t("perm.readOnly")}
+          </div>
+        )}
+
+        {/* 탭 네비게이션 / Tab navigation */}
+        <nav className="flex border-b border-hairline px-4">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`px-4 py-2.5 text-caption transition-colors ${
+                activeTab === tab.id
+                  ? "border-b-2 border-accent text-accent"
+                  : "text-ink-tertiary hover:text-ink"
+              }`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {t(tab.labelKey)}
+            </button>
+          ))}
+        </nav>
+
+        {/* 탭 콘텐츠 / Tab content */}
+        <main className="flex-1 overflow-y-auto px-4 py-4">
+          {activeTab === "collaborators" && currentMockUser ? (
+            <CollaboratorsPanel
+              mapId={mapIdStr}
+              currentUserId={currentMockUser.id}
+              canEdit={canEdit}
+              onToast={showToast}
+            />
+          ) : activeTab === "collaborators" ? (
+            // 유저 로드 전 / Before user resolves.
+            <p className="text-caption text-ink-tertiary">…</p>
+          ) : (
+            // 다른 탭 플레이스홀더 / Placeholder for future tabs.
+            <p className="py-4 text-caption text-ink-tertiary">{t("perm.tabPlaceholder")}</p>
+          )}
+        </main>
+      </div>
+    </>
+  );
+}
