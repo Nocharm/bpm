@@ -418,22 +418,6 @@ export function requestVersionPublish(
       [versionId]: { status: 'pending', requestedBy: by, label },
     },
   };
-  // 승인 요청도 생성 (후속 approve/publish 트랜지션은 LATER task) /
-  // Also append an ApprovalRequest (approve/publish transitions are a LATER task).
-  state = {
-    ...state,
-    requests: [
-      ...state.requests,
-      {
-        id: genId(),
-        mapId,
-        kind: 'version_publish',
-        payload: { versionId, label },
-        requestedBy: by,
-        status: 'pending',
-      },
-    ],
-  };
   emit();
 }
 
