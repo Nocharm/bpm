@@ -3782,12 +3782,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 활성 스코프(`nodes`)는 스코프상대 좌표라, 각 조상 스코프를 그 우변이 활성 스코프 좌측에 오도록 평행이동(상단 정렬). 깊이만큼 좌로 누적.
   // fullGraph는 자식 state(`nodes`)에 없어 React Flow 미측정 → measured 직접 주입(레슨: 미측정=visibility:hidden).
   const ancestorContextNodes = useMemo<AppNode[]>(() => {
-    if (currentParentId === null || inlineComposition || !fullGraph || nodes.length === 0) {
+    // 인라인 펼침 중에도 조상 컨텍스트를 그린다(펼치면 깊이0이 사라지던 버그) — 앵커는 "표시" 위치(합성된 nodes) 기준.
+    const anchorNodes = inlineComposition ? inlineComposition.nodes : nodes;
+    if (currentParentId === null || !fullGraph || anchorNodes.length === 0) {
       return [];
     }
     let aMinX = Infinity;
     let aMinY = Infinity;
-    for (const node of nodes) {
+    for (const node of anchorNodes) {
       aMinX = Math.min(aMinX, node.position.x);
       aMinY = Math.min(aMinY, node.position.y);
     }
@@ -4146,10 +4148,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       return { left: minX - REGION_PAD, right: maxX + REGION_PAD, top: minY };
     };
     const lanes: { left: number; right: number; top: number; depth: number; label: string }[] = [];
-    // 현재(활성) 스코프
-    if (nodes.length > 0) {
+    // 현재(활성) 스코프 — 펼침 중이면 합성·재배치된 "표시" 위치 기준이라야 레인이 펼친 끝(밀려난 노드·자식)까지 따라간다.
+    const currentScopeNodes = inlineComposition ? inlineComposition.nodes : nodes;
+    if (currentScopeNodes.length > 0) {
       lanes.push({
-        ...boundsOf(nodes),
+        ...boundsOf(currentScopeNodes),
         depth: depthOf(currentParentId),
         label: byId.get(currentParentId)?.title ?? "",
       });
@@ -4169,7 +4172,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       lanes.push({ ...boundsOf(ns), depth: depthOf(sid), label: byId.get(sid)?.title ?? "" });
     }
     return lanes;
-  }, [currentParentId, nodes, ancestorContextNodes, fullGraph]);
+  }, [currentParentId, nodes, inlineComposition, ancestorContextNodes, fullGraph]);
 
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
