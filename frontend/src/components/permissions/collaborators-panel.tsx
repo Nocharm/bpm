@@ -27,6 +27,8 @@ interface CollaboratorsPanelProps {
   canEdit: boolean;
   /** 토스트 발행 콜백 / Callback to show a toast message. */
   onToast: (msg: string) => void;
+  /** 공개 맵이면 viewer 그랜트 비활성 — 전원 열람 가능 / Disable viewer role when map is public. */
+  viewerGrantDisabled?: boolean;
 }
 
 // 역할 표시명 해석 / Resolve principal display name from seed state.
@@ -130,21 +132,25 @@ function AddCollaboratorForm({
   mapId,
   currentUserId,
   excludeIds,
+  viewerGrantDisabled,
 }: {
   mapId: string;
   currentUserId: string;
   excludeIds: Set<string>;
+  /** 공개 맵이면 viewer 선택 비활성 / Disable viewer option on public maps. */
+  viewerGrantDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const state = usePermissions();
   const [selected, setSelected] = useState<PrincipalOption | null>(null);
-  const [role, setRole] = useState<"viewer" | "editor">("viewer");
+  // 공개 맵이면 editor 기본값 / Default to editor on public maps (viewer disabled).
+  const [role, setRole] = useState<"viewer" | "editor">(viewerGrantDisabled ? "editor" : "viewer");
 
   function handleAdd() {
     if (!selected) return;
     addCollaborator(mapId, selected.principalType, selected.principalId, role, currentUserId);
     setSelected(null);
-    setRole("viewer");
+    setRole(viewerGrantDisabled ? "editor" : "viewer");
   }
 
   return (
@@ -171,7 +177,11 @@ function AddCollaboratorForm({
             value={role}
             onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
           >
-            <option value="viewer">{t("perm.roleViewer")}</option>
+            {/* 공개 맵은 전원 열람 가능 → viewer 비활성 / Public map: viewer disabled */}
+            <option value="viewer" disabled={viewerGrantDisabled}>
+              {t("perm.roleViewer")}
+              {viewerGrantDisabled ? ` — ${t("perm.visibilityViewerNote")}` : ""}
+            </option>
             <option value="editor">{t("perm.roleEditor")}</option>
           </select>
 
@@ -193,6 +203,7 @@ export function CollaboratorsPanel({
   currentUserId,
   canEdit,
   onToast,
+  viewerGrantDisabled = false,
 }: CollaboratorsPanelProps) {
   const { t } = useI18n();
   const state = usePermissions();
@@ -243,6 +254,7 @@ export function CollaboratorsPanel({
           mapId={mapId}
           currentUserId={currentUserId}
           excludeIds={excludeIds}
+          viewerGrantDisabled={viewerGrantDisabled}
         />
       )}
     </div>

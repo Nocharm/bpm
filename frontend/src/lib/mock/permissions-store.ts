@@ -524,3 +524,22 @@ export function toggleUserActive(userId: string): void {
   };
   emit();
 }
+
+// ── 맵 mock 삭제 ─────────────────────────────────────────────
+
+/**
+ * 맵 mock 삭제 — mapMeta·permissions·approvers·requests에서 해당 mapId 항목 제거 /
+ * Mock-delete a map: remove overlay entries for mapId from meta, permissions, approvers, requests.
+ * versionFlow는 versionId 키이므로 건드리지 않음 / versionFlow is keyed by versionId — left intact.
+ * 실제 백엔드 맵은 그대로 유지됨 (mock 전용) / Real backend map is unaffected (mock only).
+ */
+export function deleteMapMock(mapId: string): void {
+  state = {
+    ...state,
+    mapMeta: state.mapMeta.filter((m) => m.mapId !== mapId),
+    permissions: state.permissions.filter((p) => p.mapId !== mapId),
+    approvers: state.approvers.filter((a) => a.mapId !== mapId),
+    requests: state.requests.filter((r) => r.mapId !== mapId),
+  };
+  emit();
+}

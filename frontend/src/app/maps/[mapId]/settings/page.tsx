@@ -11,9 +11,12 @@ import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { getEffectiveRole, usePermissions } from "@/lib/mock/permissions";
+import { getEffectiveRole, getMapMeta, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
+import { ApproversPanel } from "@/components/permissions/approvers-panel";
+import { VisibilityControl } from "@/components/permissions/visibility-control";
+import { DangerZone } from "@/components/permissions/danger-zone";
 import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
@@ -84,6 +87,17 @@ export default function SettingsPage() {
   const canEdit =
     effectiveRole === "editor" ||
     effectiveRole === "owner";
+
+  // 소유자 여부 — Approvers/Visibility/Danger는 소유자 전용 /
+  // Owner-only: Approvers, Visibility, Danger tabs gated to owner.
+  const isOwner = effectiveRole === "owner";
+
+  // 현재 맵의 가시성 — 공개이면 viewer 그랜트 비활성 /
+  // Map visibility: disable viewer grants on public maps.
+  const mapMeta = currentMockUser
+    ? getMapMeta(permState, mapIdStr, currentMockUser.id)
+    : null;
+  const isPublic = mapMeta?.visibility === "public";
 
   // ── Dev 유저 전환 핸들러 / Dev user switch handler ────────────────
 
@@ -206,20 +220,41 @@ export default function SettingsPage() {
 
         {/* 탭 콘텐츠 / Tab content */}
         <main className="flex-1 overflow-y-auto px-4 py-4">
-          {activeTab === "collaborators" && currentMockUser ? (
+          {!currentMockUser ? (
+            // 유저 로드 전 / Before user resolves.
+            <p className="text-caption text-ink-tertiary">…</p>
+          ) : activeTab === "collaborators" ? (
             <CollaboratorsPanel
               mapId={mapIdStr}
               currentUserId={currentMockUser.id}
               canEdit={canEdit}
               onToast={showToast}
+              viewerGrantDisabled={isPublic}
             />
-          ) : activeTab === "collaborators" ? (
-            // 유저 로드 전 / Before user resolves.
-            <p className="text-caption text-ink-tertiary">…</p>
-          ) : (
-            // 다른 탭 플레이스홀더 / Placeholder for future tabs.
-            <p className="py-4 text-caption text-ink-tertiary">{t("perm.tabPlaceholder")}</p>
-          )}
+          ) : activeTab === "approvers" ? (
+            <ApproversPanel
+              mapId={mapIdStr}
+              currentUserId={currentMockUser.id}
+              isOwner={isOwner}
+            />
+          ) : activeTab === "visibility" ? (
+            <VisibilityControl
+              mapId={mapIdStr}
+              currentUserId={currentMockUser.id}
+              isOwner={isOwner}
+              onToast={showToast}
+            />
+          ) : activeTab === "danger" && isOwner ? (
+            <DangerZone
+              mapId={mapIdStr}
+              currentUserId={currentMockUser.id}
+              onToast={showToast}
+            />
+          ) : activeTab === "danger" ? (
+            // 위험 구역은 소유자 전용 — 비소유자에게 숨김 /
+            // Danger zone is owner-only; hidden for non-owners.
+            <p className="py-4 text-caption text-ink-tertiary">{t("perm.approversReadOnly")}</p>
+          ) : null}
         </main>
       </div>
     </>
