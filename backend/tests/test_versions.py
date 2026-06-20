@@ -24,7 +24,14 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     # 평면 그래프를 source 버전에 저장
     client.put(
         f"/api/versions/{source_version}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}, {"id": "c", "title": "승인"}], "edges": []},
+        json={
+            "nodes": [
+                {"id": "s", "title": "시작", "node_type": "start"},
+                {"id": "p", "title": "발주"},
+                {"id": "c", "title": "승인"},
+            ],
+            "edges": [],
+        },
     )
 
     clone = client.post(
@@ -34,7 +41,7 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     cloned_graph = client.get(f"/api/versions/{clone['id']}/graph").json()
 
     # 구조는 같지만 노드 ID는 새로 발급 (원본과 충돌하지 않음)
-    assert len(cloned_graph["nodes"]) == 2
+    assert len(cloned_graph["nodes"]) == 3
     cloned_ids = {n["id"] for n in cloned_graph["nodes"]}
     assert "p" not in cloned_ids
     assert "c" not in cloned_ids
@@ -46,7 +53,10 @@ def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
     client.put(
         f"/api/versions/{source_version}/graph",
         json={
-            "nodes": [{"id": "n1", "title": "A", "group_ids": ["g1"]}],
+            "nodes": [
+                {"id": "s", "node_type": "start"},
+                {"id": "n1", "title": "A", "group_ids": ["g1"]},
+            ],
             "edges": [],
             "groups": [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}],
         },
@@ -63,7 +73,8 @@ def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
     cloned_group_id = top["groups"][0]["id"]
     assert cloned_group_id != "g1"
     assert top["groups"][0]["label"] == "영업팀"
-    assert top["nodes"][0]["group_ids"] == [cloned_group_id]
+    n1 = next(n for n in top["nodes"] if n["title"] == "A")
+    assert n1["group_ids"] == [cloned_group_id]
 
 
 def test_clone_records_source_lineage(client: TestClient) -> None:
@@ -71,7 +82,7 @@ def test_clone_records_source_lineage(client: TestClient) -> None:
     source_version = created["versions"][0]["id"]
     client.put(
         f"/api/versions/{source_version}/graph",
-        json={"nodes": [{"id": "orig", "title": "원본"}], "edges": []},
+        json={"nodes": [{"id": "orig", "title": "원본", "node_type": "start"}], "edges": []},
     )
 
     clone1 = client.post(
@@ -95,7 +106,7 @@ def test_clone_leaves_source_untouched(client: TestClient) -> None:
     source_version = created["versions"][0]["id"]
     client.put(
         f"/api/versions/{source_version}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}], "edges": []},
+        json={"nodes": [{"id": "p", "title": "발주", "node_type": "start"}], "edges": []},
     )
 
     client.post(

@@ -1,0 +1,56 @@
+"""하위프로세스 검증·순환·해석 테스트."""
+
+from fastapi.testclient import TestClient
+
+
+def _new_version(client: TestClient, name: str = "p") -> int:
+    return client.post("/api/maps", json={"name": name}).json()["versions"][0]["id"]
+
+
+def test_rejects_two_starts(client: TestClient) -> None:
+    vid = _new_version(client)
+    r = client.put(
+        f"/api/versions/{vid}/graph",
+        json={
+            "nodes": [
+                {"id": "s1", "node_type": "start"},
+                {"id": "s2", "node_type": "start"},
+            ],
+            "edges": [],
+        },
+    )
+    assert r.status_code == 422
+    assert "시작" in r.json()["detail"]
+
+
+def test_rejects_duplicate_end_names(client: TestClient) -> None:
+    vid = _new_version(client)
+    r = client.put(
+        f"/api/versions/{vid}/graph",
+        json={
+            "nodes": [
+                {"id": "s", "node_type": "start"},
+                {"id": "e1", "title": "종료", "node_type": "end"},
+                {"id": "e2", "title": "종료", "node_type": "end"},
+            ],
+            "edges": [],
+        },
+    )
+    assert r.status_code == 422
+    assert "끝" in r.json()["detail"]
+
+
+def test_accepts_valid_process(client: TestClient) -> None:
+    vid = _new_version(client)
+    r = client.put(
+        f"/api/versions/{vid}/graph",
+        json={
+            "nodes": [
+                {"id": "s", "node_type": "start"},
+                {"id": "e1", "title": "승인", "node_type": "end", "is_primary_end": True},
+                {"id": "e2", "title": "반려", "node_type": "end"},
+            ],
+            "edges": [],
+        },
+    )
+    assert r.status_code == 200

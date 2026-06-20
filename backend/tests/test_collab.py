@@ -18,7 +18,7 @@ def _create_version(client: TestClient) -> int:
 def _put_single_node(client: TestClient, version_id: int) -> None:
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "n1", "title": "결재"}], "edges": []},
+        json={"nodes": [{"id": "s1", "node_type": "start"}, {"id": "n1", "title": "결재"}], "edges": []},
     )
 
 

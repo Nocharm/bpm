@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
 from app.auth import get_current_user
+from app.subprocess import validate_process
 from app.checkout import is_locked_by_other
 from app.db import get_session
 from app.models import Comment, Edge, Group, MapVersion, Node
@@ -145,6 +146,11 @@ async def replace_graph(
                     status_code=422,
                     detail=f"node {node.id} references a group not in the payload",
                 )
+
+    try:
+        validate_process(payload.nodes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # 버전 전체 노드를 payload로 교체 — 사라진 노드의 엣지·코멘트도 정리
     existing_ids = set(

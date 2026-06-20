@@ -21,7 +21,7 @@ def test_replace_graph_roundtrips(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
-            {"id": "n1", "title": "시작", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "n1", "title": "시작", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
             {"id": "n2", "title": "검토", "pos_x": 200, "pos_y": 0, "sort_order": 1},
         ],
         "edges": [
@@ -42,12 +42,12 @@ def test_replace_graph_overwrites_previous(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "a", "title": "A"}], "edges": []},
+        json={"nodes": [{"id": "a", "title": "A", "node_type": "start"}], "edges": []},
     )
 
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "b", "title": "B"}], "edges": []},
+        json={"nodes": [{"id": "b", "title": "B", "node_type": "start"}], "edges": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
@@ -58,7 +58,8 @@ def test_node_type_and_color_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
-            {"id": "n1", "title": "분기", "node_type": "decision", "color": "#3b82f6"}
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "분기", "node_type": "decision", "color": "#3b82f6"},
         ],
         "edges": [],
     }
@@ -66,14 +67,16 @@ def test_node_type_and_color_roundtrip(client: TestClient) -> None:
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert saved["nodes"][0]["node_type"] == "decision"
-    assert saved["nodes"][0]["color"] == "#3b82f6"
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert n1["node_type"] == "decision"
+    assert n1["color"] == "#3b82f6"
 
 
 def test_bpm_attributes_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
             {
                 "id": "n1",
                 "title": "발주",
@@ -81,7 +84,7 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
                 "department": "구매팀",
                 "system": "ERP",
                 "duration": "2일",
-            }
+            },
         ],
         "edges": [],
     }
@@ -89,7 +92,7 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    node = saved["nodes"][0]
+    node = next(n for n in saved["nodes"] if n["id"] == "n1")
     assert node["assignee"] == "김담당"
     assert node["department"] == "구매팀"
     assert node["system"] == "ERP"
@@ -100,13 +103,20 @@ def test_full_graph_returns_all_nodes(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}, {"id": "c", "title": "승인"}], "edges": []},
+        json={
+            "nodes": [
+                {"id": "s", "title": "시작", "node_type": "start"},
+                {"id": "p", "title": "발주"},
+                {"id": "c", "title": "승인"},
+            ],
+            "edges": [],
+        },
     )
 
     full = client.get(f"/api/versions/{version_id}/graph/all").json()
 
     by_id = {n["id"]: n for n in full["nodes"]}
-    assert set(by_id) == {"p", "c"}
+    assert {"p", "c"}.issubset(set(by_id))
     assert by_id["p"]["source_node_id"] is None
 
 
@@ -147,12 +157,19 @@ def test_all_nodes_coexist_in_flat_graph(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "p", "title": "발주"}, {"id": "c", "title": "승인요청"}], "edges": []},
+        json={
+            "nodes": [
+                {"id": "s", "title": "시작", "node_type": "start"},
+                {"id": "p", "title": "발주"},
+                {"id": "c", "title": "승인요청"},
+            ],
+            "edges": [],
+        },
     )
 
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert {n["id"] for n in saved["nodes"]} == {"p", "c"}
+    assert {"p", "c"}.issubset({n["id"] for n in saved["nodes"]})
 
 
 def test_removing_nodes_cleans_up(client: TestClient) -> None:
@@ -185,6 +202,7 @@ def test_group_roundtrips_with_membership(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start"},
             {"id": "n1", "title": "A", "group_ids": ["g1"]},
             {"id": "n2", "title": "B", "group_ids": ["g1", "g2"]},
         ],
@@ -199,24 +217,27 @@ def test_group_roundtrips_with_membership(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
     assert put_response.status_code == 200
-    assert saved["groups"][0] == {
+    groups_by_id = {g["id"]: g for g in saved["groups"]}
+    assert groups_by_id["g1"] == {
         "id": "g1",
         "parent_group_id": None,
         "label": "영업팀",
         "color": "#6a41ff",
     }
     # 다중 그룹(태그) 멤버십 왕복
-    assert {n["id"]: n["group_ids"] for n in saved["nodes"]} == {
-        "n1": ["g1"],
-        "n2": ["g1", "g2"],
-    }
+    nodes_by_id = {n["id"]: n for n in saved["nodes"]}
+    assert nodes_by_id["n1"]["group_ids"] == ["g1"]
+    assert nodes_by_id["n2"]["group_ids"] == ["g1", "g2"]
 
 
 def test_nested_groups_roundtrip_and_sanitize(client: TestClient) -> None:
     """중첩 그룹(parent_group_id) 왕복 + 고아/자기참조 상위는 None으로 정리."""
     version_id = _create_version(client)
     graph = {
-        "nodes": [{"id": "n1", "title": "A", "group_ids": ["child"]}],
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "A", "group_ids": ["child"]},
+        ],
         "edges": [],
         "groups": [
             {"id": "parent", "label": "부서", "color": ""},
@@ -251,7 +272,7 @@ def test_edge_handle_side_roundtrips(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
-            {"id": "hside-n1", "title": "A", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "hside-n1", "title": "A", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
             {"id": "hside-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
         ],
         "edges": [
@@ -278,7 +299,7 @@ def test_edge_handle_side_defaults(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {
         "nodes": [
-            {"id": "hdef-n1", "title": "A", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "hdef-n1", "title": "A", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
             {"id": "hdef-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
         ],
         "edges": [{"id": "hdef-e1", "source_node_id": "hdef-n1", "target_node_id": "hdef-n2"}],
@@ -317,7 +338,10 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
     client.put(
         f"/api/versions/{version_id}/graph",
         json={
-            "nodes": [{"id": "n1", "group_ids": ["g1"]}],
+            "nodes": [
+                {"id": "s", "node_type": "start"},
+                {"id": "n1", "group_ids": ["g1"]},
+            ],
             "edges": [],
             "groups": [{"id": "g1", "label": "팀", "color": ""}],
         },
@@ -325,7 +349,7 @@ def test_removed_group_is_cleaned(client: TestClient) -> None:
     # 그룹 해제 — group_ids 비움 + groups 비움
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "n1"}], "edges": [], "groups": []},
+        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "n1"}], "edges": [], "groups": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
@@ -338,10 +362,10 @@ def test_graph_is_flat_per_version(client: TestClient) -> None:
     # 예전엔 parent 스코프로 분리됐던 노드들이 이제 한 평면에 공존
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}], "edges": []},
+        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "a"}, {"id": "b"}, {"id": "c"}], "edges": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    assert {n["id"] for n in saved["nodes"]} == {"a", "b", "c"}
+    assert {"a", "b", "c"}.issubset({n["id"] for n in saved["nodes"]})
     assert "has_children" not in saved["nodes"][0]  # 계층 개념 제거
 
 
