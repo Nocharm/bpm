@@ -1,17 +1,27 @@
 "use client";
 
+// 홈 — 프로세스맵 목록 (공개범위 필터링) + 맵 생성 다이얼로그 /
+// Home: map list filtered by mock visibility + map creation dialog.
+
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
-import { createMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
+import { usePermissions } from "@/lib/mock/permissions-store";
+import { isVisibleToUser } from "@/lib/mock/permissions-logic";
+import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 
 export default function MapListPage() {
   const { t } = useI18n();
+  const permState = usePermissions();
+  const currentUser = useCurrentMockUser();
+
   const [maps, setMaps] = useState<MapSummary[]>([]);
-  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -40,20 +50,6 @@ export default function MapListPage() {
     };
   }, [t]);
 
-  const handleCreate = useCallback(async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
-    try {
-      await createMap(trimmed);
-      setName("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.createMap"));
-    }
-  }, [name, refresh, t]);
-
   const handleDelete = useCallback(
     async (mapId: number) => {
       try {
@@ -66,38 +62,42 @@ export default function MapListPage() {
     [refresh, t],
   );
 
+  // 공개범위 필터 — currentUser가 null이면 전체 노출(안전 폴백) /
+  // Visibility filter — show all when currentUser is null (safety fallback).
+  const visibleMaps = useMemo(() => {
+    if (!currentUser) return maps;
+    return maps.filter((m) => {
+      const mapId = String(m.id);
+      // isVisibleToUser covers sysadmin (returns true), public maps, and explicit grants.
+      // created_by fallback: pre-existing maps with no mock overlay are visible to their creator.
+      return (
+        isVisibleToUser(permState, currentUser.id, mapId) ||
+        m.created_by === currentUser.id
+      );
+    });
+  }, [maps, permState, currentUser]);
+
   return (
     <main className="mx-auto max-w-2xl p-8">
       <h1 className="mb-6 text-tagline text-ink">BPM — {t("home.title")}</h1>
 
-      <div className="mb-6 flex gap-2">
-        <input
-          className="flex-1 rounded-sm border border-hairline px-3 py-2 text-caption"
-          placeholder={t("home.newMapPlaceholder")}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              void handleCreate();
-            }
-          }}
-        />
+      <div className="mb-6">
         <button
-          className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1 text-caption-strong text-on-accent hover:bg-accent-focus"
-          onClick={() => void handleCreate()}
+          className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
+          onClick={() => setDialogOpen(true)}
         >
           <Plus size={16} strokeWidth={1.5} />
-          {t("home.create")}
+          {t("perm.createDialog.title")}
         </button>
       </div>
 
       {error && <p className="mb-4 text-caption text-error">{error}</p>}
 
       <ul className="divide-y divide-divider rounded-sm border border-hairline bg-surface">
-        {maps.length === 0 && (
+        {visibleMaps.length === 0 && (
           <li className="p-4 text-caption text-ink-tertiary">{t("home.empty")}</li>
         )}
-        {maps.map((processMap) => (
+        {visibleMaps.map((processMap) => (
           <li key={processMap.id} className="flex items-center justify-between p-4 hover:bg-surface-alt">
             <Link
               href={`/maps/${processMap.id}`}
@@ -115,6 +115,13 @@ export default function MapListPage() {
           </li>
         ))}
       </ul>
+
+      {dialogOpen && (
+        <CreateMapDialog
+          onClose={() => setDialogOpen(false)}
+          onCreated={() => void refresh()}
+        />
+      )}
     </main>
   );
 }

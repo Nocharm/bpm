@@ -364,6 +364,26 @@ const en = {
   "perm.deleteCancel": "Cancel",
   "perm.deleteToast": "Map removed from mock store.",
   "perm.dangerReadOnly": "Owner only.",
+  // ── 맵 생성 다이얼로그 / Map creation dialog ──
+  "perm.createDialog.title": "New map",
+  "perm.createDialog.namePlaceholder": "Map name",
+  "perm.createDialog.nameLabel": "Name",
+  "perm.createDialog.visibilityLabel": "Visibility",
+  "perm.createDialog.visibilityPublic": "Public",
+  "perm.createDialog.visibilityPrivate": "Private",
+  "perm.createDialog.visibilityViewerNote": "Public map — everyone can view. Only Editor role can be added.",
+  "perm.createDialog.collaboratorsLabel": "Initial collaborators",
+  "perm.createDialog.collaboratorRoleViewer": "Viewer",
+  "perm.createDialog.collaboratorRoleEditor": "Editor",
+  "perm.createDialog.collaboratorRoleViewerDisabled": "Viewer (public map already grants view access)",
+  "perm.createDialog.addBtn": "Add",
+  "perm.createDialog.approversLabel": "Required approvers (≥1)",
+  "perm.createDialog.approversHint": "At least one approver required before creating.",
+  "perm.createDialog.approverPickerPlaceholder": "Search approver by name…",
+  "perm.createDialog.createBtn": "Create",
+  "perm.createDialog.cancelBtn": "Cancel",
+  "perm.createDialog.noUser": "No user selected. Please log in.",
+  "perm.createDialog.toastSuccess": "Map created.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -730,6 +750,26 @@ const ko: Record<MessageKey, string> = {
   "perm.deleteCancel": "취소",
   "perm.deleteToast": "mock 스토어에서 맵을 제거했습니다.",
   "perm.dangerReadOnly": "소유자 전용입니다.",
+  // ── 맵 생성 다이얼로그 / Map creation dialog ──
+  "perm.createDialog.title": "새 맵 만들기",
+  "perm.createDialog.namePlaceholder": "맵 이름",
+  "perm.createDialog.nameLabel": "이름",
+  "perm.createDialog.visibilityLabel": "공개 범위",
+  "perm.createDialog.visibilityPublic": "공개",
+  "perm.createDialog.visibilityPrivate": "비공개",
+  "perm.createDialog.visibilityViewerNote": "공개 맵은 전원 열람 가능. 편집자 역할만 추가할 수 있습니다.",
+  "perm.createDialog.collaboratorsLabel": "초기 협업자",
+  "perm.createDialog.collaboratorRoleViewer": "뷰어",
+  "perm.createDialog.collaboratorRoleEditor": "편집자",
+  "perm.createDialog.collaboratorRoleViewerDisabled": "뷰어 (공개 맵은 기본 열람 가능)",
+  "perm.createDialog.addBtn": "추가",
+  "perm.createDialog.approversLabel": "결재자 (1명 이상 필수)",
+  "perm.createDialog.approversHint": "맵 생성 전 결재자를 1명 이상 지정해야 합니다.",
+  "perm.createDialog.approverPickerPlaceholder": "결재자 이름으로 검색…",
+  "perm.createDialog.createBtn": "생성",
+  "perm.createDialog.cancelBtn": "취소",
+  "perm.createDialog.noUser": "로그인된 사용자가 없습니다.",
+  "perm.createDialog.toastSuccess": "맵이 생성되었습니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
