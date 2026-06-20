@@ -160,8 +160,6 @@ class Group(Base):
     version_id: Mapped[int] = mapped_column(
         ForeignKey("map_versions.id", ondelete="CASCADE")
     )
-    # 그룹이 놓인 캔버스 스코프 — 노드 parent_node_id와 동일 의미. FK 미설정(그래프 일괄 교체 순서 의존 제거)
-    parent_node_id: Mapped[str | None] = mapped_column(String(50), default=None)
     # 상위 그룹 — 중첩(그룹 안 그룹). 같은 스코프 내 다른 그룹 id, null=최상위. FK 미설정(앱 관리)
     parent_group_id: Mapped[str | None] = mapped_column(String(50), default=None)
     label: Mapped[str] = mapped_column(String(200), default="")
