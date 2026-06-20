@@ -1382,10 +1382,21 @@ function MapEditor({ mapId }: { mapId: number }) {
             });
           }, 80);
         } else if (isScopeTransition) {
-          // 스코프 전환 — 줌은 그대로 두고(커졌다작았다 방지) 새 스코프를 좌상단에 맞춰 부드럽게 이동.
-          const scopeNodeIds = graph.nodes.map((node) => node.id);
-          if (scopeNodeIds.length > 0) {
-            setTimeout(() => frameScopeTopLeftKeepZoom(scopeNodeIds, 600), 100);
+          const cam = focusCamRef.current;
+          focusCamRef.current = null;
+          if (cam) {
+            // 포커스(Path 2) — 카메라를 offset×zoom만큼 옮겨 navigateTo한 자식이 레인 자리에 그대로(시각적 무이동).
+            void reactFlow.setViewport({
+              x: cam.vp.x + cam.shift.x * cam.vp.zoom,
+              y: cam.vp.y + cam.shift.y * cam.vp.zoom,
+              zoom: cam.vp.zoom,
+            });
+          } else {
+            // 검색/브레드크럼 — 줌 유지한 채 새 스코프로 부드럽게 이동.
+            const scopeNodeIds = graph.nodes.map((node) => node.id);
+            if (scopeNodeIds.length > 0) {
+              setTimeout(() => frameScopeTopLeftKeepZoom(scopeNodeIds, 600), 100);
+            }
           }
         }
       } catch (err) {
@@ -1612,6 +1623,32 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [saveCurrentScope, t],
   );
+
+  // 특정 노드의 스코프를 활성화하는 스코프 체인(루트→…→그 노드). null이면 루트.
+  const buildScopesTo = useCallback(
+    (scopeNodeId: string | null): Scope[] => {
+      const fg = fullGraphRef.current;
+      if (!fg || scopeNodeId === null) {
+        return [{ parentId: null, title: mapName }];
+      }
+      const byId = new Map(fg.nodes.map((node) => [node.id, node]));
+      const chain: FlatNode[] = [];
+      let cur = byId.get(scopeNodeId);
+      while (cur) {
+        chain.unshift(cur);
+        cur = cur.parent_node_id ? byId.get(cur.parent_node_id) : undefined;
+      }
+      return [
+        { parentId: null, title: mapName },
+        ...chain.map((node) => ({ parentId: node.id, title: node.title })),
+      ];
+    },
+    [mapName],
+  );
+
+  // 포커스(Path 2) — 자식을 navigateTo로 진짜 nodes化하되, 카메라를 offset×zoom만큼 옮겨 자식이 레인 자리에
+  // 그대로 보이게(시각적 무이동). 편집·저장은 네이티브(스코프상대 좌표 그대로). 스코프 로드 효과가 이 ref를 읽어 적용.
+  const focusCamRef = useRef<{ shift: { x: number; y: number }; vp: { x: number; y: number; zoom: number } } | null>(null);
 
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
@@ -4044,33 +4081,28 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
 
   // 포커스(A) — 활성 스코프가 자식(인라인 레인)일 때만 좌우 세로 경계선 + 깊이 틴트로 "레인" 표시.
+  // 포커스(Path 2) — 자식 스코프에 들어가 있으면(currentParentId≠null) 현재 스코프(`nodes`)를 레인으로 감싼다.
   const focusScopeBounds = useMemo<{ left: number; right: number; depth: number } | null>(() => {
-    if (activeScopeId === null || activeScopeId === currentParentId || !inlineComposition) {
-      return null;
-    }
-    const activeNodes = inlineComposition.nodes.filter(
-      (node) => (node.data.scopeId ?? null) === activeScopeId,
-    );
-    if (activeNodes.length === 0) {
+    if (currentParentId === null || nodes.length === 0) {
       return null;
     }
     let minX = Infinity;
     let maxX = -Infinity;
-    for (const node of activeNodes) {
+    for (const node of nodes) {
       const w = nodeSizeOf(node.data.nodeType).w;
       minX = Math.min(minX, node.position.x);
       maxX = Math.max(maxX, node.position.x + w);
     }
-    // 활성 스코프의 중첩 깊이(현재 스코프 기준) — 틴트 진하기
+    // currentParentId의 중첩 깊이 — 틴트 진하기
     const byId = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
     let depth = 0;
-    let cur: string | null = activeScopeId;
-    while (cur !== null && cur !== currentParentId && depth < 20) {
+    let cur: string | null = currentParentId;
+    while (cur !== null && depth < 20) {
       depth += 1;
       cur = byId.get(cur)?.parent_node_id ?? null;
     }
     return { left: minX - REGION_PAD, right: maxX + REGION_PAD, depth };
-  }, [activeScopeId, currentParentId, inlineComposition, fullGraph]);
+  }, [currentParentId, nodes, fullGraph]);
 
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
@@ -4173,17 +4205,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       event.preventDefault();
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
+      // 포커스(Path 2) — 비활성 자식 더블클릭 = 단일클릭과 동일하게 그 스코프로 navigateTo + 카메라 보정(제자리).
       const scopeId = childNodesRef.current.find((node) => node.id === id)?.data.scopeId ?? null;
-      if (scopeId !== activeScopeIdRef.current) {
-        setActiveScopeId(scopeId); // 비활성 → 제자리 활성화(카메라/위치 변화 없음)
-      } else {
-        setSelectedId(id);
-        setSummaryNodeId(id); // 활성 자식 → 요약/편집 모달
+      const offset =
+        scopeId !== null ? inlineCompositionRef.current?.scopeOffsets.get(scopeId) : undefined;
+      if (offset) {
+        focusCamRef.current = { shift: offset, vp: reactFlow.getViewport() };
       }
+      void navigateTo(buildScopesTo(scopeId));
     };
     container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
     return () => container.removeEventListener("dblclick", handleDblClick, true);
-  }, []);
+  }, [navigateTo, buildScopesTo, reactFlow]);
 
   // 인스펙터 폭 로컬 영속
   useEffect(() => {
@@ -4926,10 +4959,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                           handleSubprocessPick(node.id);
                           return;
                         }
-                        // 포커스(A) — 비활성 스코프 노드 클릭 시 그 스코프를 제자리에서 활성화(navigateTo·카메라 없음, 위치 고정).
+                        // 포커스(Path 2) — 다른 스코프 노드 클릭 시 그 스코프를 navigateTo로 진짜 nodes化(네이티브 풀편집).
+                        // 자식이면 scopeOffsets만큼 카메라를 옮겨 레인 자리에 그대로 보이게(시각적 무이동).
                         const nodeScope = node.data?.scopeId ?? null;
-                        if (nodeScope !== activeScopeId) {
-                          setActiveScopeId(nodeScope);
+                        if (nodeScope !== currentParentId) {
+                          const offset =
+                            nodeScope !== null
+                              ? inlineComposition?.scopeOffsets.get(nodeScope)
+                              : undefined;
+                          if (offset) {
+                            focusCamRef.current = { shift: offset, vp: reactFlow.getViewport() };
+                          }
+                          void navigateTo(buildScopesTo(nodeScope));
                           return;
                         }
                         setSelectedId(node.id);
