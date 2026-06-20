@@ -2,6 +2,7 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). 한 줄 요약만 — 상세는 git 이력·`docs/superpowers/specs/`·`docs/spec.md` 참조.
 
+- **포커스 시 조상이 활성 영역을 "감싸도록" — 편집 뷰 = 모두 펼친 뷰**(사용자 /goal, 선택: Path 2 유지). 근본 원인: 깊은 스코프로 드릴인하면 `ancestorContextNodes`가 조상을 **compact(좌측 누적)**로 재배치 → 펼친 뷰의 "감싸기"(im-be→[백엔드]→im-end)가 무너져 노드가 왼쪽으로 몰림. **수정:** ancestorContextNodes를 재귀 감싸기로 재작성 — 부모 스코프의 포커스 노드 자리를 활성 영역으로 치환(앞 형제=왼쪽, 뒤 형제=오른쪽), 그 범위를 다음 상위 조상의 활성 영역으로. `ANCESTOR_CONTEXT_GAP` 제거. Playwright(구현 포커스 깊이2): 조상 개발 dv-integ(1196)·dv-end(1278) **>** 활성 im-end(1140)=오른쪽 감쌈, dv-impl(799) **<** im-start(881)=왼쪽 → WRAP PASS. tsc/eslint green.
 - **복잡한 깊이4 테스트 맵에 그룹·속성·디스크립션·분기 추가**(사용자 요청 후속). `scripts/seed_complex_demo.py` 확장 — 전 노드 description + 속성(담당자/부서/시스템/소요시간), 그룹 2개(루트 "핵심 개발"=기획·개발 / 개발 스코프 "엔지니어링"=설계·구현, `group_ids` JSON), 검증 스코프에 **decision 분기(품질 판정 마름모) + 엣지 라벨(통과/결함/재검증) + 핸들 변(source/target side) + 결함 수정 루프백**(y=420 분기 배치), 정돈된 좌표. 33노드/27엣지/2그룹. Playwright(map 2): 그룹 라벨·담당자 카드·description·decision·rework·엣지라벨 전부 렌더 확인.
 
 ## 2026-06-20 (이전)

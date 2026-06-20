@@ -151,7 +151,6 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
-const ANCESTOR_CONTEXT_GAP = 160; // 포커스 모드 — 활성 자식 스코프 좌측에 조상 스코프(dim 컨텍스트)를 떨어뜨리는 간격
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
 const ZONE_TILE_W = 84;
 const ZONE_TILE_H = 58;
@@ -3804,41 +3803,52 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (currentParentId === null || !fullGraph || anchorNodes.length === 0) {
       return [];
     }
+    // 활성 스코프(현재 표시)의 가로 범위 — 조상들이 이 영역을 감싸도록 배치
     let aMinX = Infinity;
+    let aMaxX = -Infinity;
     let aMinY = Infinity;
     for (const node of anchorNodes) {
+      const w = nodeSizeOf(node.data.nodeType).w;
       aMinX = Math.min(aMinX, node.position.x);
+      aMaxX = Math.max(aMaxX, node.position.x + w);
       aMinY = Math.min(aMinY, node.position.y);
     }
+    const byId = new Map(fullGraph.nodes.map((flat) => [flat.id, flat]));
+    const GAP = 60; // 인접 노드 가로 간격(인라인 펼침과 동일 언어)
     const out: AppNode[] = [];
-    let anchorId: string | null = currentParentId; // 이 노드가 속한 스코프를 다음으로 그린다
-    let rightEdge = aMinX; // 다음 조상 스코프의 우변이 놓일 x(이 값 좌측으로)
-    let topRef = aMinY;
-    for (let guard = 0; guard < 20 && anchorId !== undefined; guard++) {
-      const selfFlat = fullGraph.nodes.find((flat) => flat.id === anchorId);
-      const parentScopeId = selfFlat?.parent_node_id ?? null; // anchorId를 담는 스코프
-      const siblings = fullGraph.nodes.filter((flat) => flat.parent_node_id === parentScopeId);
-      if (siblings.length === 0) {
+    let focusId: string | null = currentParentId; // 이 노드를 담는 부모 스코프를 활성 영역 둘레에 그린다
+    let region = { minX: aMinX, maxX: aMaxX };
+    for (let guard = 0; guard < 20 && focusId !== null; guard++) {
+      const parentScopeId: string | null = byId.get(focusId)?.parent_node_id ?? null; // focusId를 담는 스코프
+      const siblings = fullGraph.nodes
+        .filter((flat) => (flat.parent_node_id ?? null) === parentScopeId)
+        .sort((a, b) => a.pos_x - b.pos_x);
+      const focusIdx = siblings.findIndex((flat) => flat.id === focusId);
+      if (focusIdx < 0) {
         break;
       }
       const built = siblings.map((flat) => {
         const [app] = toAppNodes({ nodes: [flat], edges: [], groups: [] }, parentScopeId);
         return { app, size: nodeSizeOf(app.data.nodeType) };
       });
-      let pMinX = Infinity;
-      let pMinY = Infinity;
-      let pMaxX = -Infinity;
-      for (const { app, size } of built) {
-        pMinX = Math.min(pMinX, app.position.x);
-        pMinY = Math.min(pMinY, app.position.y);
-        pMaxX = Math.max(pMaxX, app.position.x + size.w);
+      const xs: number[] = new Array(built.length);
+      // 포커스 노드(현재 스코프) — 활성 영역 바로 왼쪽. 앞 형제는 그 왼쪽으로, 뒤 형제는 활성 영역 오른쪽으로.
+      xs[focusIdx] = region.minX - GAP - built[focusIdx].size.w;
+      for (let i = focusIdx - 1; i >= 0; i--) {
+        xs[i] = xs[i + 1] - GAP - built[i].size.w;
       }
-      const dx = rightEdge - ANCESTOR_CONTEXT_GAP - pMaxX; // 이 스코프 우변을 rightEdge 좌측으로
-      const dy = topRef - pMinY; // 상단 정렬
-      for (const { app, size } of built) {
+      let rx = region.maxX + GAP;
+      for (let i = focusIdx + 1; i < built.length; i++) {
+        xs[i] = rx;
+        rx += built[i].size.w + GAP;
+      }
+      let lvMinX = Infinity;
+      let lvMaxX = -Infinity;
+      for (let i = 0; i < built.length; i++) {
+        const { app, size } = built[i];
         out.push({
           ...app,
-          position: { x: app.position.x + dx, y: app.position.y + dy },
+          position: { x: xs[i], y: aMinY },
           selectable: false,
           draggable: false,
           deletable: false,
@@ -3848,13 +3858,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           measured: { width: size.w, height: size.h },
           style: { opacity: INACTIVE_SCOPE_OPACITY },
         });
+        lvMinX = Math.min(lvMinX, xs[i]);
+        lvMaxX = Math.max(lvMaxX, xs[i] + size.w);
       }
+      region = { minX: lvMinX, maxX: lvMaxX }; // 이 레벨의 범위가 다음(상위) 조상의 활성 영역
       if (parentScopeId === null) {
         break; // 루트 스코프까지 그림
       }
-      anchorId = parentScopeId;
-      rightEdge = pMinX + dx;
-      topRef = pMinY + dy;
+      focusId = parentScopeId;
     }
     return out;
   }, [currentParentId, inlineComposition, fullGraph, nodes]);
