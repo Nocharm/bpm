@@ -84,7 +84,9 @@ export default function GroupsPage() {
   // 멤버 추가 — dept + user만 허용 / Add member (department or user only, not group).
   function handleMemberSelect(opt: PrincipalOption) {
     if (opt.principalType === "group") return; // 그룹은 제외 / exclude groups
-    if (members.some((m) => m.id === opt.principalId)) return;
+    // 복합키(type:id)로 중복 체크 — id 단독 비교 시 dept/user 같은 id 충돌 /
+    // Dedup by composite type:id — id-only check collides when dept and user share the same raw id.
+    if (members.some((m) => m.type === opt.principalType && m.id === opt.principalId)) return;
     setMembers((prev) => [
       ...prev,
       { type: opt.principalType as "department" | "user", id: opt.principalId, displayName: opt.displayName },
@@ -98,8 +100,10 @@ export default function GroupsPage() {
     setManagers((prev) => [...prev, { id: opt.principalId, displayName: opt.displayName }]);
   }
 
-  function removeMember(id: string) {
-    setMembers((prev) => prev.filter((m) => m.id !== id));
+  function removeMember(type: "department" | "user", id: string) {
+    // 복합키로 제거 — id 단독이면 같은 id의 다른 타입 엔트리도 제거됨 /
+    // Remove by composite type:id to avoid removing entries of the other type with the same id.
+    setMembers((prev) => prev.filter((m) => !(m.type === type && m.id === id)));
   }
 
   function removeManager(id: string) {
@@ -122,7 +126,8 @@ export default function GroupsPage() {
   // 제출 비활성 조건 / Disable submit until name non-empty AND ≥1 manager.
   const submitDisabled = !name.trim() || managers.length === 0;
 
-  // 멤버 피커용 excludeIds — 이미 추가된 멤버 제외 / ExcludeIds for member picker.
+  // 멤버 피커용 excludeIds — id 기반(PrincipalPicker가 principalId로만 비교). dept/user 동일 id 희귀 케이스는 옵션만 희미하게 표시되는 정도라 허용. /
+  // Picker-level exclusion is id-only (PrincipalPicker compares by principalId). Same-id across types is rare and only hides a picker option — acceptable.
   const memberExcludeIds = new Set(members.map((m) => m.id));
   // 관리자 피커용 excludeIds / ExcludeIds for manager picker.
   const managerExcludeIds = new Set(managers.map((m) => m.id));
@@ -211,14 +216,14 @@ export default function GroupsPage() {
                 <div className="mb-1 flex flex-wrap gap-1">
                   {members.map((m) => (
                     <span
-                      key={m.id}
+                      key={`${m.type}:${m.id}`}
                       className="flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
                     >
                       {m.displayName}
                       <button
                         type="button"
                         className="text-ink-tertiary hover:text-error"
-                        onClick={() => removeMember(m.id)}
+                        onClick={() => removeMember(m.type, m.id)}
                         aria-label={t("perm.group.removeBtn")}
                       >
                         ×
