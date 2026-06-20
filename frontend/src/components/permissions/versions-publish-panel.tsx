@@ -67,10 +67,7 @@ export function VersionsPublishPanel({
     return () => {
       active = false;
     };
-  // versionsProp은 fetch 경로에서 사용하지 않음 — 의존성 포함하면 재실행 불필요한 트리거 /
-  // Intentionally omit versionsProp from deps: it gates the effect but the fetch path doesn't use it.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapId]);
+  }, [mapId, versionsProp]);
 
   // props 우선, 없으면 내부 fetch 결과 / Prefer prop; fall back to internal fetch result.
   const versions = versionsProp ?? fetchedVersions;
