@@ -1367,11 +1367,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
-        // 자식 클릭 포커스(focusCamRef)면 새 스코프 "하위"의 펼침을 유지 — 안 그러면 펼쳐서 좌우로 벌어졌던 노드가
-        // 포커스 순간 접히며 왼쪽으로 붕괴(레이아웃 점프). 브레드크럼/검색 등(focusCamRef 없음)은 기존대로 모두 접힘.
-        if (focusCamRef.current && fullGraphRef.current) {
+        // 스코프 네비게이션(들고나기)이면 펼침을 유지 — "접히지 않고 활성 영역만 이동". 첫 로드/버전 변경만 모두 접힘.
+        const prevScope = prevScopeRef.current; // 직전 스코프(아직 갱신 전)
+        const isScopeNav =
+          prevScope !== undefined &&
+          prevScope !== currentParentId &&
+          fullGraphVersionRef.current === versionId;
+        if (isScopeNav && fullGraphRef.current) {
           const byId = new Map(fullGraphRef.current.nodes.map((flat) => [flat.id, flat]));
-          const isUnderCurrent = (nodeId: string): boolean => {
+          // x가 새 스코프(currentParentId)의 (엄격) 하위인가 — 루트면 전부 하위
+          const isUnder = (nodeId: string): boolean => {
+            if (currentParentId === null) {
+              return true;
+            }
             let cur = byId.get(nodeId)?.parent_node_id ?? null;
             for (let guard = 0; cur !== null && guard < 20; guard++) {
               if (cur === currentParentId) {
@@ -1381,9 +1389,21 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
             return false;
           };
-          setExpandedInline((prev) => new Set([...prev].filter(isUnderCurrent)));
+          setExpandedInline((prev) => {
+            const next = new Set([...prev].filter(isUnder)); // 1) 새 스코프 하위 펼침 유지(들어갈 때 붕괴 방지)
+            // 2) 나가기(직전 스코프가 새 스코프 하위)면 드릴 경로(직전 스코프→새 스코프 사이)를 펼쳐 유지
+            //    → 떠난 스코프가 접히지 않고 인라인으로 보임(활성 영역만 이동).
+            if (prevScope !== null && prevScope !== undefined && isUnder(prevScope)) {
+              let cur: string | null = prevScope;
+              for (let guard = 0; cur !== null && cur !== currentParentId && guard < 20; guard++) {
+                next.add(cur);
+                cur = byId.get(cur)?.parent_node_id ?? null;
+              }
+            }
+            return next;
+          });
         } else {
-          setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
+          setExpandedInline(new Set()); // 재로딩/버전 변경 시 모두 접힘으로 시작(spec 5.2)
         }
         setActiveScopeId(currentParentId); // 포커스(A) 활성 스코프를 새 현재 스코프로 리셋
         setChildEdits(new Map()); // 자식 편집 오버레이 초기화 — 새 스코프는 fullGraph가 권위
