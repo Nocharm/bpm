@@ -394,6 +394,11 @@ const en = {
   "perm.version.publish": "Publish",
   "perm.version.waitingApproval": "Awaiting approval",
   "perm.version.approvedWaiting": "Approved (awaiting publish)",
+  // ── 승인자 재지정 강제 모달 / Forced reassign-approver modal ──
+  "perm.reassign.title": "활성 승인자 없음",
+  "perm.reassign.desc": "활성 승인자가 없습니다. 승인 흐름을 위해 최소 1명의 활성 승인자를 지정해야 합니다.",
+  "perm.reassign.pickPlaceholder": "승인자로 지정할 사용자 선택",
+  "perm.reassign.confirm": "지정",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -790,6 +795,11 @@ const ko: Record<MessageKey, string> = {
   "perm.version.publish": "게시",
   "perm.version.waitingApproval": "승인 대기 중",
   "perm.version.approvedWaiting": "승인됨 (게시 대기)",
+  // ── 승인자 재지정 강제 모달 / Forced reassign-approver modal ──
+  "perm.reassign.title": "활성 승인자 없음",
+  "perm.reassign.desc": "활성 승인자가 없습니다. 승인 흐름을 위해 최소 1명의 활성 승인자를 지정해야 합니다.",
+  "perm.reassign.pickPlaceholder": "승인자로 지정할 사용자 선택",
+  "perm.reassign.confirm": "지정",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

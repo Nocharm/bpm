@@ -11,13 +11,14 @@ import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { getEffectiveRole, getMapMeta, usePermissions } from "@/lib/mock/permissions";
+import { getActiveApprovers, getEffectiveRole, getMapMeta, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
 import { VisibilityControl } from "@/components/permissions/visibility-control";
 import { DangerZone } from "@/components/permissions/danger-zone";
 import { VersionsPublishPanel } from "@/components/permissions/versions-publish-panel";
+import { ReassignApproverModal } from "@/components/permissions/reassign-approver-modal";
 import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
@@ -131,9 +132,22 @@ export default function SettingsPage() {
     );
   }
 
+  // 소유자이고 활성 승인자가 0명이면 강제 모달 표시 /
+  // Show forced modal when owner has zero active approvers.
+  const showForcedReassign =
+    isOwner &&
+    currentMockUser !== null &&
+    getActiveApprovers(permState, mapIdStr).length === 0;
+
   return (
     <>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      {/* 승인자 재지정 강제 모달 — 탭 무관하게 오버레이 /
+          Forced reassign modal: overlays regardless of active tab. */}
+      {showForcedReassign && currentMockUser && (
+        <ReassignApproverModal mapId={mapIdStr} by={currentMockUser.id} />
+      )}
 
       {/* Dev 유저 전환 드롭다운 / Dev user switcher dropdown (inline, no new modal) */}
       {showDevSwitcher && (
