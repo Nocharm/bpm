@@ -1368,7 +1368,24 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelectedId(null);
         setSelectedEdgeId(null);
         setMenu(null);
-        setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
+        // 자식 클릭 포커스(focusCamRef)면 새 스코프 "하위"의 펼침을 유지 — 안 그러면 펼쳐서 좌우로 벌어졌던 노드가
+        // 포커스 순간 접히며 왼쪽으로 붕괴(레이아웃 점프). 브레드크럼/검색 등(focusCamRef 없음)은 기존대로 모두 접힘.
+        if (focusCamRef.current && fullGraphRef.current) {
+          const byId = new Map(fullGraphRef.current.nodes.map((flat) => [flat.id, flat]));
+          const isUnderCurrent = (nodeId: string): boolean => {
+            let cur = byId.get(nodeId)?.parent_node_id ?? null;
+            for (let guard = 0; cur !== null && guard < 20; guard++) {
+              if (cur === currentParentId) {
+                return true;
+              }
+              cur = byId.get(cur)?.parent_node_id ?? null;
+            }
+            return false;
+          };
+          setExpandedInline((prev) => new Set([...prev].filter(isUnderCurrent)));
+        } else {
+          setExpandedInline(new Set()); // 재로딩/스코프 전환 시 모두 접힘으로 시작(spec 5.2)
+        }
         setActiveScopeId(currentParentId); // 포커스(A) 활성 스코프를 새 현재 스코프로 리셋
         setChildEdits(new Map()); // 자식 편집 오버레이 초기화 — 새 스코프는 fullGraph가 권위
         dirtyChildScopesRef.current.clear(); // 대기 중 자식 저장 취소(스코프 전환 시 stale 저장 방지)
