@@ -4080,29 +4080,53 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { node, pan };
   }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
 
-  // 포커스(A) — 활성 스코프가 자식(인라인 레인)일 때만 좌우 세로 경계선 + 깊이 틴트로 "레인" 표시.
-  // 포커스(Path 2) — 자식 스코프에 들어가 있으면(currentParentId≠null) 현재 스코프(`nodes`)를 레인으로 감싼다.
-  const focusScopeBounds = useMemo<{ left: number; right: number; depth: number } | null>(() => {
-    if (currentParentId === null || nodes.length === 0) {
-      return null;
+  // 포커스(Path 2) — 자식 스코프에 들어가 있으면, 현재 스코프 + 보이는 조상 스코프(깊이≥1)를 각각 레인으로 감싼다.
+  // 깊이별로 다른 틴트 → 중첩 레인(깊이2에서 깊이1 레인이 사라지지 않게). 루트(깊이0)는 틴트 없음.
+  const focusScopeLanes = useMemo<{ left: number; right: number; depth: number }[]>(() => {
+    if (currentParentId === null) {
+      return [];
     }
-    let minX = Infinity;
-    let maxX = -Infinity;
-    for (const node of nodes) {
-      const w = nodeSizeOf(node.data.nodeType).w;
-      minX = Math.min(minX, node.position.x);
-      maxX = Math.max(maxX, node.position.x + w);
-    }
-    // currentParentId의 중첩 깊이 — 틴트 진하기
     const byId = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
-    let depth = 0;
-    let cur: string | null = currentParentId;
-    while (cur !== null && depth < 20) {
-      depth += 1;
-      cur = byId.get(cur)?.parent_node_id ?? null;
+    const depthOf = (scopeId: string | null): number => {
+      let d = 0;
+      let cur = scopeId;
+      while (cur !== null && d < 20) {
+        d += 1;
+        cur = byId.get(cur)?.parent_node_id ?? null;
+      }
+      return d;
+    };
+    const boundsOf = (ns: AppNode[]) => {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (const node of ns) {
+        const w = nodeSizeOf(node.data.nodeType).w;
+        minX = Math.min(minX, node.position.x);
+        maxX = Math.max(maxX, node.position.x + w);
+      }
+      return { left: minX - REGION_PAD, right: maxX + REGION_PAD };
+    };
+    const lanes: { left: number; right: number; depth: number }[] = [];
+    // 현재(활성) 스코프
+    if (nodes.length > 0) {
+      lanes.push({ ...boundsOf(nodes), depth: depthOf(currentParentId) });
     }
-    return { left: minX - REGION_PAD, right: maxX + REGION_PAD, depth };
-  }, [currentParentId, nodes, fullGraph]);
+    // 보이는 조상 스코프들 — 스코프별로 묶어 각자 레인(깊이0=루트는 제외)
+    const byScope = new Map<string, AppNode[]>();
+    for (const node of ancestorContextNodes) {
+      const sid = node.data.scopeId ?? null;
+      if (sid === null) {
+        continue;
+      }
+      const arr = byScope.get(sid) ?? [];
+      arr.push(node);
+      byScope.set(sid, arr);
+    }
+    for (const [sid, ns] of byScope) {
+      lanes.push({ ...boundsOf(ns), depth: depthOf(sid) });
+    }
+    return lanes;
+  }, [currentParentId, nodes, ancestorContextNodes, fullGraph]);
 
   // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
   const selectedGroupIds = useMemo(
@@ -4207,10 +4231,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
       // 포커스(Path 2) — 비활성 자식 더블클릭 = 단일클릭과 동일하게 그 스코프로 navigateTo + 카메라 보정(제자리).
       const scopeId = childNodesRef.current.find((node) => node.id === id)?.data.scopeId ?? null;
-      const offset =
-        scopeId !== null ? inlineCompositionRef.current?.scopeOffsets.get(scopeId) : undefined;
-      if (offset) {
-        focusCamRef.current = { shift: offset, vp: reactFlow.getViewport() };
+      const rendered = reactFlow.getNode(id)?.position;
+      const stored = fullGraphRef.current?.nodes.find((n) => n.id === id);
+      if (rendered && stored) {
+        focusCamRef.current = {
+          shift: { x: rendered.x - stored.pos_x, y: rendered.y - stored.pos_y },
+          vp: reactFlow.getViewport(),
+        };
       }
       void navigateTo(buildScopesTo(scopeId));
     };
@@ -4960,15 +4987,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                           return;
                         }
                         // 포커스(Path 2) — 다른 스코프 노드 클릭 시 그 스코프를 navigateTo로 진짜 nodes化(네이티브 풀편집).
-                        // 자식이면 scopeOffsets만큼 카메라를 옮겨 레인 자리에 그대로 보이게(시각적 무이동).
+                        // 카메라 보정: 클릭 노드의 "현재 표시 위치 − 저장(스코프상대) 위치"만큼 카메라를 옮겨
+                        // 그 노드(=스코프)가 제자리에 남게 한다. 자식 진입·루트 복귀(exit) 양쪽 모두 제자리.
                         const nodeScope = node.data?.scopeId ?? null;
                         if (nodeScope !== currentParentId) {
-                          const offset =
-                            nodeScope !== null
-                              ? inlineComposition?.scopeOffsets.get(nodeScope)
-                              : undefined;
-                          if (offset) {
-                            focusCamRef.current = { shift: offset, vp: reactFlow.getViewport() };
+                          const stored = fullGraph?.nodes.find((n) => n.id === node.id);
+                          if (stored) {
+                            focusCamRef.current = {
+                              shift: {
+                                x: node.position.x - stored.pos_x,
+                                y: node.position.y - stored.pos_y,
+                              },
+                              vp: reactFlow.getViewport(),
+                            };
                           }
                           void navigateTo(buildScopesTo(nodeScope));
                           return;
@@ -5132,13 +5163,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                             onCollapse={toggleInlineExpand}
                           />
                         )}
-                        {focusScopeBounds && (
+                        {focusScopeLanes.map((lane, index) => (
                           <FocusScopeBands
-                            left={focusScopeBounds.left}
-                            right={focusScopeBounds.right}
-                            depth={focusScopeBounds.depth}
+                            key={`lane:${lane.depth}:${index}`}
+                            left={lane.left}
+                            right={lane.right}
+                            depth={lane.depth}
                           />
-                        )}
+                        ))}
                         {groupBoxes.map((box) => (
                           <Fragment key={box.id}>
                             {/* 반투명 박스 — 노드 뒤로, 멤버 적은 그룹이 위(z) */}
