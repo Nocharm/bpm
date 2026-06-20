@@ -474,8 +474,8 @@ const en = {
   "perm.approvals.requesterLabel": "Requested by",
   "perm.approvals.approve": "Approve",
   "perm.approvals.reject": "Reject",
-  "perm.approvals.toastApproved": "승인했습니다.",
-  "perm.approvals.toastRejected": "반려했습니다.",
+  "perm.approvals.toastApproved": "Approved.",
+  "perm.approvals.toastRejected": "Rejected.",
   "perm.approvals.roleRemoved": "removed",
 } as const;
 
