@@ -3855,8 +3855,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           draggable: false,
           deletable: false,
           connectable: false,
-          width: size.w,
-          height: size.h,
+          // measured만 주입(미측정=visibility:hidden 회피). width/height 프롭은 강제하지 않아 DOM은 내용 기반
+          // 오토사이징 → 활성 노드와 동일 폭(강제 시 nodeSizeOf 근사 170으로 미세하게 넓어짐).
           measured: { width: size.w, height: size.h },
           style: { opacity: INACTIVE_SCOPE_OPACITY },
         });
