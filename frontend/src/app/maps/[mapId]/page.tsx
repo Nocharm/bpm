@@ -3842,13 +3842,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         xs[i] = rx;
         rx += built[i].size.w + GAP;
       }
+      // 세로: 스코프 내부 상대 y를 보존(포커스 노드를 활성 행에 정렬). 직선 흐름이면 모두 aMinY, 분기는 유지.
+      const focusStoredY = built[focusIdx].app.position.y;
       let lvMinX = Infinity;
       let lvMaxX = -Infinity;
       for (let i = 0; i < built.length; i++) {
         const { app, size } = built[i];
         out.push({
           ...app,
-          position: { x: xs[i], y: aMinY },
+          position: { x: xs[i], y: aMinY + (app.position.y - focusStoredY) },
           selectable: false,
           draggable: false,
           deletable: false,
