@@ -23,6 +23,12 @@ export function getGroupMembership(state: SeedState, userId: string): string[] {
     .map((g) => g.id);
 }
 
+/** 승인자 여부 — 활성 상태 무관, 맵 승인자 목록 포함 여부만 확인
+ *  Approver membership check — ignores active status (design §5). */
+export function isApprover(state: SeedState, userId: string, mapId: string): boolean {
+  return state.approvers.some((a) => a.mapId === mapId && a.userId === userId);
+}
+
 export function getEffectiveRole(state: SeedState, userId: string, mapId: string): MapRole | null {
   const user = state.users.find((u) => u.id === userId);
   if (user?.isSysadmin) return 'owner';
@@ -38,9 +44,14 @@ export function getEffectiveRole(state: SeedState, userId: string, mapId: string
     ? applicable.reduce((acc, p) => (roleRank(p.role) > roleRank(acc) ? p.role : acc), applicable[0].role)
     : null;
   if (!best && meta.visibility === 'public') best = 'viewer';
+  // 설계 §5: 승인자는 암묵적 viewer — 기존 역할이 없을 때만 올림 (상위 역할 하향 없음)
+  // Design §5: approvers are implicit viewers — floor to viewer only when no role computed (never caps higher).
+  if (!best && isApprover(state, userId, mapId)) best = 'viewer';
   return best;
 }
 
+/** 승인자는 getEffectiveRole에서 viewer로 올라오므로 별도 처리 불필요
+ *  Approvers are covered via getEffectiveRole (§5 floor) — no redundant check needed. */
 export function isVisibleToUser(state: SeedState, userId: string, mapId: string): boolean {
   return getEffectiveRole(state, userId, mapId) !== null;
 }
