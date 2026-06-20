@@ -211,9 +211,11 @@ type RegionBox = {
 // 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더되고 에디터 본체는 영향 없음.
 function InlineRegionBands({
   regions,
+  baseDepth,
   onCollapse,
 }: {
   regions: RegionBox[];
+  baseDepth: number; // 현재 스코프의 절대깊이 — 셰브론을 절대깊이(루트 기준)로 표시해 포커스 레인과 통일
   onCollapse: (id: string) => void;
 }) {
   const { t } = useI18n();
@@ -259,7 +261,7 @@ function InlineRegionBands({
               onClick={() => onCollapse(box.id)}
             >
               <span className="font-semibold tracking-tight text-accent">
-                {"›".repeat(box.depth)}
+                {"›".repeat(baseDepth + box.depth)}
               </span>
               <span className="text-ink-secondary">{box.label || t("node.childBadge")}</span>
             </button>
@@ -272,7 +274,20 @@ function InlineRegionBands({
 
 // 포커스 스코프의 "레인" — 활성 스코프 좌우 세로 경계선 + 그 사이만 깊이 틴트(바깥은 부모/깊이0 바탕).
 // 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더. 화면 전체 높이로 뻗는다.
-function FocusScopeBands({ left, right }: { left: number; right: number; depth: number }) {
+function FocusScopeBands({
+  left,
+  right,
+  top,
+  depth,
+  label,
+}: {
+  left: number;
+  right: number;
+  top: number;
+  depth: number;
+  label: string;
+}) {
+  const { t } = useI18n();
   const { y, zoom } = useViewport();
   const paneHeight = useStore((state) => state.height);
   const topFlow = -y / zoom;
@@ -295,6 +310,22 @@ function FocusScopeBands({ left, right }: { left: number; right: number; depth: 
           pointerEvents: "none",
         }}
       />
+      {/* 깊이 표시(›×절대깊이) + 이름 — 인라인 펼침과 동일 언어. 비상호작용(노드 클릭 안 막음) */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          transform: `translate(${left + 6}px, ${top + 4}px)`,
+          zIndex: 1,
+          pointerEvents: "none",
+        }}
+      >
+        <span className="inline-flex items-center gap-1 rounded-xs px-1 py-0.5 text-fine">
+          <span className="font-semibold tracking-tight text-accent">{"›".repeat(depth)}</span>
+          <span className="text-ink-secondary">{label || t("node.childBadge")}</span>
+        </span>
+      </div>
     </>
   );
 }
@@ -4079,13 +4110,31 @@ function MapEditor({ mapId }: { mapId: number }) {
     return { node, pan };
   }, [nodes, inlineComposition, paneWidth, paneHeight, ancestorContextNodes]);
 
+  // 현재 스코프의 절대깊이(루트=0) — 인라인 펼침 셰브론을 절대깊이 기준으로 맞춰 포커스 레인과 통일.
+  const currentScopeDepth = useMemo(() => {
+    if (currentParentId === null) {
+      return 0;
+    }
+    const byId = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
+    let d = 0;
+    let cur: string | null = currentParentId;
+    while (cur !== null && d < 20) {
+      d += 1;
+      cur = byId.get(cur)?.parent_node_id ?? null;
+    }
+    return d;
+  }, [currentParentId, fullGraph]);
+
   // 포커스(Path 2) — 자식 스코프에 들어가 있으면, 현재 스코프 + 보이는 조상 스코프(깊이≥1)를 각각 레인으로 감싼다.
   // 깊이별로 다른 틴트 → 중첩 레인(깊이2에서 깊이1 레인이 사라지지 않게). 루트(깊이0)는 틴트 없음.
-  const focusScopeLanes = useMemo<{ left: number; right: number; depth: number }[]>(() => {
+  const focusScopeLanes = useMemo<
+    { left: number; right: number; top: number; depth: number; label: string }[]
+  >(() => {
     if (currentParentId === null) {
       return [];
     }
     const byId = new Map((fullGraph?.nodes ?? []).map((node) => [node.id, node]));
+    // 절대깊이(루트=0) — 인라인 펼침(InlineRegionBands)과 같은 기준이라 같은 스코프는 같은 셰브론.
     const depthOf = (scopeId: string | null): number => {
       let d = 0;
       let cur = scopeId;
@@ -4098,17 +4147,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     const boundsOf = (ns: AppNode[]) => {
       let minX = Infinity;
       let maxX = -Infinity;
+      let minY = Infinity;
       for (const node of ns) {
         const w = nodeSizeOf(node.data.nodeType).w;
         minX = Math.min(minX, node.position.x);
         maxX = Math.max(maxX, node.position.x + w);
+        minY = Math.min(minY, node.position.y);
       }
-      return { left: minX - REGION_PAD, right: maxX + REGION_PAD };
+      return { left: minX - REGION_PAD, right: maxX + REGION_PAD, top: minY };
     };
-    const lanes: { left: number; right: number; depth: number }[] = [];
+    const lanes: { left: number; right: number; top: number; depth: number; label: string }[] = [];
     // 현재(활성) 스코프
     if (nodes.length > 0) {
-      lanes.push({ ...boundsOf(nodes), depth: depthOf(currentParentId) });
+      lanes.push({
+        ...boundsOf(nodes),
+        depth: depthOf(currentParentId),
+        label: byId.get(currentParentId)?.title ?? "",
+      });
     }
     // 보이는 조상 스코프들 — 스코프별로 묶어 각자 레인(깊이0=루트는 제외)
     const byScope = new Map<string, AppNode[]>();
@@ -4122,7 +4177,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       byScope.set(sid, arr);
     }
     for (const [sid, ns] of byScope) {
-      lanes.push({ ...boundsOf(ns), depth: depthOf(sid) });
+      lanes.push({ ...boundsOf(ns), depth: depthOf(sid), label: byId.get(sid)?.title ?? "" });
     }
     return lanes;
   }, [currentParentId, nodes, ancestorContextNodes, fullGraph]);
@@ -5160,6 +5215,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {inlineComposition && (
                           <InlineRegionBands
                             regions={inlineComposition.regions}
+                            baseDepth={currentScopeDepth}
                             onCollapse={toggleInlineExpand}
                           />
                         )}
@@ -5168,7 +5224,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                             key={`lane:${lane.depth}:${index}`}
                             left={lane.left}
                             right={lane.right}
+                            top={lane.top}
                             depth={lane.depth}
+                            label={lane.label}
                           />
                         ))}
                         {groupBoxes.map((box) => (
