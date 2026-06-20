@@ -395,10 +395,10 @@ const en = {
   "perm.version.waitingApproval": "Awaiting approval",
   "perm.version.approvedWaiting": "Approved (awaiting publish)",
   // ── 승인자 재지정 강제 모달 / Forced reassign-approver modal ──
-  "perm.reassign.title": "활성 승인자 없음",
-  "perm.reassign.desc": "활성 승인자가 없습니다. 승인 흐름을 위해 최소 1명의 활성 승인자를 지정해야 합니다.",
-  "perm.reassign.pickPlaceholder": "승인자로 지정할 사용자 선택",
-  "perm.reassign.confirm": "지정",
+  "perm.reassign.title": "No active approver",
+  "perm.reassign.desc": "This map has no active approver. Assign at least one active approver to keep the approval flow working.",
+  "perm.reassign.pickPlaceholder": "Select a user to add as approver",
+  "perm.reassign.confirm": "Assign approver",
 } as const;
 
 export type MessageKey = keyof typeof en;

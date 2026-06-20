@@ -39,7 +39,7 @@ export function ReassignApproverModal({ mapId, by }: ReassignApproverModalProps)
   function handleConfirm() {
     if (!selectedUserId) return;
     // 기존 결재자 유지하며 선택 유저 추가 / Keep existing approvers, append newly picked one.
-    const newIds = [...Array.from(assignedIds), selectedUserId];
+    const newIds = [...assignedIds, selectedUserId];
     setApprovers(mapId, newIds, by);
     // 부모의 파생 조건(isOwner && activeApprovers.length === 0)이 false가 되어
     // 모달이 자동으로 언마운트됨 / Parent's derived condition flips false → modal auto-unmounts.
