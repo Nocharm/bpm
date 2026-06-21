@@ -194,7 +194,31 @@ const COMMENT_POLL_MS = 5_000; // 코멘트 "실시간" 폴링 주기 (spec §7 
 
 const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
 
-type Scope = { parentId: string | null; title: string };
+// 스코프 = 편집 가능한 루트(평면 그래프) 또는 읽기전용 딥뷰(드릴인한 하위프로세스의 링크맵).
+// hostId는 합성 트리에서 그 임베드 자식들의 parent_node_id이므로 currentParentId 앵커로 그대로 쓰인다.
+type Scope =
+  | { kind: "root"; title: string }
+  | {
+      kind: "sub";
+      hostId: string;
+      mapId: number;
+      pinned: number | null;
+      followLatest: boolean;
+      title: string;
+    };
+// 스코프의 렌더 앵커 id — 루트=null, 딥뷰=호스트 id(합성 트리 자식의 parent_node_id).
+const scopeHostId = (scope: Scope): string | null =>
+  scope.kind === "sub" ? scope.hostId : null;
+
+// 합성 트리의 호스트(하위프로세스) FlatNode → 읽기전용 딥뷰 스코프. 링크 메타는 host 노드에 실려 있다.
+const flatToSubScope = (flat: FlatNode): Scope => ({
+  kind: "sub",
+  hostId: flat.id,
+  mapId: flat.linked_map_id ?? 0,
+  pinned: flat.linked_version_id,
+  followLatest: flat.follow_latest,
+  title: flat.title,
+});
 type SearchResult = { node: FlatNode; path: string; scopes: Scope[] };
 type Snapshot = { nodes: AppNode[]; edges: Edge[]; groups: GraphGroup[] };
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -459,7 +483,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [mapName, setMapName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [versionId, setVersionId] = useState<number | null>(null);
-  const [scopes, setScopes] = useState<Scope[]>([{ parentId: null, title: "홈" }]);
+  const [scopes, setScopes] = useState<Scope[]>([{ kind: "root", title: "홈" }]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [windowGeom, setWindowGeom] = useState<Record<string, WindowGeom>>({});
   const [zOrder, setZOrder] = useState<string[]>([]);
@@ -602,22 +626,24 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 캔버스 컨테이너 픽셀 크기(리사이즈 시에만 변경 — 줌/팬엔 불변) — translateExtent 우하단 확장 계산용
   const paneWidth = useStore((state) => state.width);
   const paneHeight = useStore((state) => state.height);
-  const currentParentId =
-    scopes[Math.min(activeIndex, scopes.length - 1)]?.parentId ?? null;
+  const currentScope = scopes[Math.min(activeIndex, scopes.length - 1)];
+  // 현재 스코프가 딥뷰(하위프로세스 링크맵)면 읽기전용 — 편집/저장 경로를 모두 차단.
+  const currentScopeIsReadOnly = currentScope?.kind === "sub";
+  // 렌더 머신(inlineComposition/ancestorContextNodes/breadcrumb)이 읽는 단일 앵커.
+  // 딥뷰면 hostId(=합성 트리 자식의 parent_node_id), 루트면 null. 매핑이 전부이고 새 변수를 스레드하지 않는다.
+  const currentParentId = currentScope?.kind === "sub" ? currentScope.hostId : null;
 
-  // 포커스 모드(A) — 제자리에서 "편집 활성"인 스코프(자식이면 그 인라인 레인이 활성). 기본=현재 스코프.
-  // 클릭으로 토글하되 navigateTo/카메라 없음 — 위치 고정, 활성↔비활성 구역만 바뀐다.
-  const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
-
-  const scopeKey = (scope: Scope) => scope.parentId ?? "root";
+  const scopeKey = (scope: Scope) => scopeHostId(scope) ?? "root";
 
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const childNodesRef = useRef<AppNode[]>([]);
-  // 펼침 합성(영역/스코프 오프셋)을 핸들러(handleAddNode 등 정의가 앞선)에서 읽기 위한 ref — TDZ 회피.
+  // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
+  // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
     regions: { id: string; x: number; width: number; depth: number }[];
     scopeOffsets: Map<string, { x: number; y: number }>;
+    rootOffsets: Map<string, { x: number; y: number }>;
   } | null>(null);
   const edgesRef = useRef<Edge[]>([]);
   const groupsRef = useRef<GraphGroup[]>([]);
@@ -627,7 +653,18 @@ function MapEditor({ mapId }: { mapId: number }) {
   const fullGraphVersionRef = useRef<number | null>(null);
   // toggleInlineExpand는 아래쪽에 정의돼 컨텍스트 메뉴 useMemo(위)에서 직접 못 씀(TDZ) — ref로 호출.
   const toggleInlineExpandRef = useRef<((nodeId: string) => void) | null>(null);
-  // 합성 트리 — 루트 평면 그래프 + 펼친 하위프로세스의 링크맵 resolved를 합성 parent_node_id 자식으로 끼움.
+  // 합성 트리에 끼울 호스트 — 인라인 펼침 ∪ 드릴 경로(딥뷰)의 호스트. 딥뷰 스코프의 호스트 자식이
+  // 합성 트리에 namespaced id로 존재해야 ancestorContextNodes/딥뷰 로드가 그 체인을 앵커할 수 있다.
+  const hostsToEmbed = useMemo(() => {
+    const set = new Set(expandedInline);
+    for (const scope of scopes) {
+      if (scope.kind === "sub") {
+        set.add(scope.hostId);
+      }
+    }
+    return set;
+  }, [expandedInline, scopes]);
+  // 합성 트리 — 루트 평면 그래프 + 펼친/드릴인 하위프로세스의 링크맵 resolved를 합성 parent_node_id 자식으로 끼움.
   // 기존 fullGraph 소비자(materialize·inlineComposition·조상컨텍스트·펼침 한도 등)는 그대로 이 값을 읽는다.
   const fullGraph = useMemo<VersionGraph | null>(() => {
     if (!rootGraph) {
@@ -638,8 +675,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       const k = linkKey(node);
       return k ? (resolvedCache.get(k) ?? null) : null;
     };
-    return buildCompositeTree(rootFlat, rootGraph.edges, expandedInline, getEmbed);
-  }, [rootGraph, expandedInline, resolvedCache]);
+    return buildCompositeTree(rootFlat, rootGraph.edges, hostsToEmbed, getEmbed);
+  }, [rootGraph, hostsToEmbed, resolvedCache]);
   useEffect(() => {
     fullGraphRef.current = fullGraph;
   }, [fullGraph]);
@@ -706,17 +743,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     childNodesRef.current = childNodes;
   }, [childNodes]);
-  const activeScopeIdRef = useRef<string | null>(null);
+  // saveCurrentScope(useCallback)가 stale 클로저 없이 읽기전용 여부를 읽도록 ref 미러 — dep 추가 회피.
+  const currentScopeIsReadOnlyRef = useRef<boolean>(false);
   useEffect(() => {
-    activeScopeIdRef.current = activeScopeId;
-  }, [activeScopeId]);
-  // 포커스(A) — 활성 자식 스코프가 접히면(더 이상 펼쳐져 있지 않으면) 현재 스코프로 복귀.
-  useEffect(() => {
-    if (activeScopeId !== null && activeScopeId !== currentParentId && !expandedInline.has(activeScopeId)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 접힌 활성 스코프 정리(파생 상태 동기화)
-      setActiveScopeId(currentParentId);
-    }
-  }, [activeScopeId, currentParentId, expandedInline]);
+    currentScopeIsReadOnlyRef.current = currentScopeIsReadOnly;
+  }, [currentScopeIsReadOnly]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -748,11 +779,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [expandedInline, fullGraph, injectSubEnds]);
 
+  // 펼침이 footprint-shift한 루트 노드의 position 변경(드래그)을 저장 좌표로 되돌린다 — RF가 보고하는 위치는
+  // "표시(=저장+오프셋)"이므로 rootOffsets를 빼서 nodes state를 항상 저장 좌표로 유지(다음 재파생 이중쉬프트 방지).
+  const unshiftRootPosition = useCallback(
+    (changes: NodeChange<AppNode>[]): NodeChange<AppNode>[] => {
+      const rootOffsets = inlineCompositionRef.current?.rootOffsets;
+      if (!rootOffsets || rootOffsets.size === 0) {
+        return changes;
+      }
+      return changes.map((change) => {
+        if (change.type !== "position" || !change.position) {
+          return change;
+        }
+        const off = rootOffsets.get(change.id);
+        if (!off) {
+          return change;
+        }
+        return {
+          ...change,
+          position: { x: change.position.x - off.x, y: change.position.y - off.y },
+        };
+      });
+    },
+    [],
+  );
+
   // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
       if (childNodes.length === 0) {
-        onNodesChange(changes);
+        onNodesChange(unshiftRootPosition(changes));
         return;
       }
       const childIds = new Set(childNodes.map((node) => node.id));
@@ -761,13 +817,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         (change) => !("id" in change) || !childIds.has(change.id),
       );
       if (mainChanges.length > 0) {
-        onNodesChange(mainChanges);
+        onNodesChange(unshiftRootPosition(mainChanges));
       }
       if (childChanges.length > 0) {
         setChildNodes((current) => applyNodeChanges(childChanges, current));
       }
     },
-    [childNodes, onNodesChange],
+    [childNodes, onNodesChange, unshiftRootPosition],
   );
   useEffect(() => {
     groupsRef.current = groups;
@@ -814,6 +870,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const saveCurrentScope = useCallback(async () => {
     // AI 미리보기 중에는 저장 생략 — Apply 전 자동 영속화 방지
     if (aiPreviewRef.current) return;
+    // 딥뷰(읽기전용 하위프로세스 스코프)는 영속 대상이 아님 — 자동/블러/디바운스 저장 모두 차단.
+    if (currentScopeIsReadOnlyRef.current) return;
     // 읽기 전용(타인 체크아웃)이면 저장 자체를 생략 — 스코프 이동은 계속 가능
     if (versionId === null || readOnly) {
       return;
@@ -1129,7 +1187,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapOwner(detail.created_by);
         setVersions(detail.versions);
         setVersionId(detail.versions[0].id);
-        setScopes([{ parentId: null, title: detail.name }]);
+        setScopes([{ kind: "root", title: detail.name }]);
         setActiveIndex(0);
       } catch (err) {
         if (active) {
@@ -1199,27 +1257,85 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 직전에 로드한 스코프(currentParentId) — 스코프 전환 시에만 부드러운 카메라 이동을 트리거(첫 로드/버전변경 제외)
   const prevScopeRef = useRef<string | null | undefined>(undefined);
+  // 마지막으로 완전히 로드한 스코프 키(version:parent) — fullGraph 변화만으로 effect가 재실행될 때
+  // 같은 스코프 재로딩(히스토리/펼침 리셋 회귀)을 막는 가드. 딥뷰는 자식이 늦게 도착하면 다시 들어와 채운다.
+  const loadedScopeKeyRef = useRef<string | null>(null);
 
   // 현재 스코프(version, parent) 캔버스 로드 — 히스토리/저장 상태도 새 스코프 기준으로 리셋
   useEffect(() => {
     if (versionId === null) {
       return;
     }
+    const scopeLoadKey = `${versionId}:${currentParentId ?? "root"}`;
+    const isScopeChange = loadedScopeKeyRef.current !== scopeLoadKey;
+    // 같은 스코프인데 effect가 재실행됐다면 fullGraph 변화 때문 — 루트(권위 로드)는 다시 안 받는다.
+    // 딥뷰만 자식이 늦게 합성 트리에 들어온 경우를 채우려 통과시킨다(아래에서 자식 유무로 한 번 더 게이트).
+    if (!isScopeChange && currentParentId === null) {
+      return;
+    }
     let active = true;
     void (async () => {
       try {
-        const graph = await getGraph(versionId);
-        if (!active) {
-          return;
+        // 로드되는 스코프 노드 id들 — 카메라 프레이밍에 쓴다(루트=권위 그래프, 딥뷰=합성 트리 자식).
+        let scopeNodeIds: string[];
+        if (currentParentId === null) {
+          // 루트 스코프 — 편집 가능한 권위 그래프(평면)를 그대로 로드.
+          const graph = await getGraph(versionId);
+          if (!active) {
+            return;
+          }
+          // 현재 스코프 노드는 모두 currentParentId(=null) 스코프 소속 — scope-split 저장 식별용 태그
+          setNodes(toAppNodes(graph, currentParentId));
+          setEdges(toAppEdges(graph));
+          setGroups(graph.groups);
+          scopeNodeIds = graph.nodes.map((node) => node.id);
+        } else {
+          // 딥뷰(읽기전용) — getResolvedGraph로 재로드하지 않는다(원본 id는 합성 트리 namespaced 체인에
+          // 앵커 못함). 합성 트리에서 host의 자식(이미 namespaced)을 필터해 읽기전용으로 표시.
+          const tree = fullGraphRef.current;
+          const kids = tree
+            ? tree.nodes.filter((flat) => flat.parent_node_id === currentParentId)
+            : [];
+          // 자식이 아직 합성 트리에 없으면(resolved 그래프 로딩 중) 그대로 둔다 — fullGraph 갱신 시 effect 재실행.
+          if (kids.length === 0) {
+            return;
+          }
+          const kidIds = new Set(kids.map((flat) => flat.id));
+          const subEdges = tree
+            ? tree.edges.filter(
+                (edge) =>
+                  kidIds.has(edge.source_node_id) && kidIds.has(edge.target_node_id),
+              )
+            : [];
+          setNodes(
+            toAppNodes({ nodes: kids, edges: [], groups: [] }, currentParentId).map((node) => ({
+              ...node,
+              draggable: false,
+              selectable: true,
+              deletable: false,
+              connectable: false,
+            })),
+          );
+          setEdges(
+            toAppEdges({ nodes: [], edges: subEdges, groups: [] }).map((edge) => ({
+              ...edge,
+              selectable: false,
+              deletable: false,
+              focusable: false,
+            })),
+          );
+          setGroups([]);
+          scopeNodeIds = kids.map((flat) => flat.id);
         }
-        // 현재 스코프 노드는 모두 currentParentId 스코프 소속 — scope-split 저장 식별용 태그
-        setNodes(toAppNodes(graph, currentParentId));
-        setEdges(toAppEdges(graph));
-        setGroups(graph.groups);
+        loadedScopeKeyRef.current = scopeLoadKey;
         // 전체 트리는 버전당 1회만 — 스코프 전환 시 기존 데이터 재사용(깜빡임 방지).
         // 버전이 바뀌면 stale 트리이므로 다시 받는다.
         if (fullGraphRef.current === null || fullGraphVersionRef.current !== versionId) {
           refreshFullGraph();
+        }
+        // 자식이 늦게 채워진 재실행(같은 딥뷰 스코프)이면 리셋/펼침/카메라는 건너뛰고 노드만 채운다.
+        if (!isScopeChange) {
+          return;
         }
         setSelectedId(null);
         setSelectedEdgeId(null);
@@ -1262,7 +1378,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         } else {
           setExpandedInline(new Set()); // 재로딩/버전 변경 시 모두 접힘으로 시작(spec 5.2)
         }
-        setActiveScopeId(currentParentId); // 포커스(A) 활성 스코프를 새 현재 스코프로 리셋
         historyRef.current = { past: [], future: [] };
         setHistorySize({ past: 0, future: 0 });
         lastTextEditAtRef.current = 0;
@@ -1310,7 +1425,6 @@ function MapEditor({ mapId }: { mapId: number }) {
             });
           } else {
             // 검색/브레드크럼 — 줌 유지한 채 새 스코프로 부드럽게 이동.
-            const scopeNodeIds = graph.nodes.map((node) => node.id);
             if (scopeNodeIds.length > 0) {
               setTimeout(() => frameScopeTopLeftKeepZoom(scopeNodeIds, 600), 100);
             }
@@ -1325,7 +1439,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => {
       active = false;
     };
-  }, [versionId, currentParentId, setNodes, setEdges, reactFlow, refreshFullGraph, t, frameScopeTopLeftKeepZoom]);
+    // fullGraph: 딥뷰 진입 직후 host의 자식이 resolved 로딩으로 늦게 합성 트리에 들어오면 effect를 재실행해 채운다.
+    // 루트 스코프에선 위 scopeKey 가드가 fullGraph-only 재실행을 무시하므로 권위 재로딩 회귀는 없다.
+  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, t, frameScopeTopLeftKeepZoom]);
 
   // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
   // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
@@ -1358,8 +1474,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               node,
               path: [mapName, ...ancestors.map((item) => item.title)].join(" › "),
               scopes: [
-                { parentId: null, title: mapName },
-                ...ancestors.map((item) => ({ parentId: item.id, title: item.title })),
+                { kind: "root", title: mapName } as Scope,
+                ...ancestors.map(flatToSubScope),
               ],
             };
           }),
@@ -1526,14 +1642,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     setZOrder((order) => [...order.filter((k) => k !== key), key]);
   }, []);
 
-  // 계층 진입/이탈 시 현재 스코프를 저장하고 이동 (편집 손실 방지)
+  // 계층 진입/이탈 시 현재 스코프를 저장하고 이동 (편집 손실 방지). 읽기전용 딥뷰를 떠날 땐 저장 생략.
   const navigateTo = useCallback(
     async (nextScopes: Scope[]) => {
-      try {
-        await saveCurrentScope();
-      } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.save"));
-        return;
+      // 딥뷰(읽기전용)에선 저장할 변경이 없음 — saveCurrentScope 자체도 ref 가드로 no-op이지만 명시적으로도 건너뛴다.
+      if (!currentScopeIsReadOnlyRef.current) {
+        try {
+          await saveCurrentScope();
+        } catch (err) {
+          setStatus(err instanceof Error ? err.message : t("err.save"));
+          return;
+        }
       }
       setScopes(nextScopes);
       setActiveIndex(nextScopes.length - 1);
@@ -1546,7 +1665,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     (scopeNodeId: string | null): Scope[] => {
       const fg = fullGraphRef.current;
       if (!fg || scopeNodeId === null) {
-        return [{ parentId: null, title: mapName }];
+        return [{ kind: "root", title: mapName }];
       }
       const byId = new Map(fg.nodes.map((node) => [node.id, node]));
       const chain: FlatNode[] = [];
@@ -1555,10 +1674,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         chain.unshift(cur);
         cur = cur.parent_node_id ? byId.get(cur.parent_node_id) : undefined;
       }
-      return [
-        { parentId: null, title: mapName },
-        ...chain.map((node) => ({ parentId: node.id, title: node.title })),
-      ];
+      return [{ kind: "root", title: mapName }, ...chain.map(flatToSubScope)];
     },
     [mapName],
   );
@@ -1566,6 +1682,22 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 포커스(Path 2) — 자식을 navigateTo로 진짜 nodes化하되, 카메라를 offset×zoom만큼 옮겨 자식이 레인 자리에
   // 그대로 보이게(시각적 무이동). 편집·저장은 네이티브(스코프상대 좌표 그대로). 스코프 로드 효과가 이 ref를 읽어 적용.
   const focusCamRef = useRef<{ shift: { x: number; y: number }; vp: { x: number; y: number; zoom: number } } | null>(null);
+
+  // 하위프로세스 드릴인(딥뷰) — 그 호스트의 링크맵을 읽기전용 활성 영역으로 연다. 더블클릭이 호출.
+  // 카메라 보정(focusCamRef 쓰기)은 호출 측(이벤트 핸들러/effect)에서 한다 — 렌더 중/useCallback 내 ref 변경 금지 룰 회피.
+  const isDrillableHost = useCallback((hostNodeId: string): boolean => {
+    const host = fullGraphRef.current?.nodes.find((n) => n.id === hostNodeId);
+    return !!host && host.node_type === "subprocess" && host.linked_map_id != null;
+  }, []);
+  const drillIntoSubprocess = useCallback(
+    (hostNodeId: string) => {
+      if (!isDrillableHost(hostNodeId)) {
+        return; // 하위프로세스가 아니거나 링크 없음 — 드릴 불가
+      }
+      void navigateTo(buildScopesTo(hostNodeId));
+    },
+    [isDrillableHost, navigateTo, buildScopesTo],
+  );
 
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
@@ -1627,7 +1759,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       setVersionId(nextVersionId);
-      setScopes([{ parentId: null, title: mapName }]);
+      setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     },
     [saveCurrentScope, mapName, t],
@@ -1647,7 +1779,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const detail = await getMap(mapId);
       setVersions(detail.versions);
       setVersionId(created.id);
-      setScopes([{ parentId: null, title: mapName }]);
+      setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.createVersion"));
@@ -1684,7 +1816,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const detail = await getMap(mapId);
       setVersions(detail.versions);
       setVersionId(detail.versions[0].id);
-      setScopes([{ parentId: null, title: mapName }]);
+      setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
@@ -2649,7 +2781,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSearchQuery("");
       setSearchResults([]);
       const targetScope = result.scopes[result.scopes.length - 1];
-      if (targetScope.parentId === currentParentId) {
+      if (scopeHostId(targetScope) === currentParentId) {
         setSelectedId(result.node.id);
         setSelectedEdgeId(null);
         void reactFlow.fitView({
@@ -3275,6 +3407,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     // scopeOffsets: 같은 스코프 자식은 동일 오프셋 → 새 노드 추가 위치 변환에 사용.
     const childOffsets = new Map<string, { x: number; y: number }>();
     const scopeOffsets = new Map<string, { x: number; y: number }>();
+    // rootOffsets: 펼침이 footprint-shift한 "루트 프레임" 노드의 (표시 − 저장) — 루트 드래그 영속 시 빼서
+    // 이중 쉬프트(다음 재파생에서 또 밀림)를 막는다. childOffsets와 동일 패턴, 단 기준은 nodes state(=저장 좌표).
+    const rootOffsets = new Map<string, { x: number; y: number }>();
+    const savedRootPos = new Map(nodes.map((node) => [node.id, node.position]));
     for (const node of allNodes) {
       const sid = node.data.scopeId;
       if (sid != null && sid !== currentParentId) {
@@ -3287,6 +3423,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           childOffsets.set(node.id, offset);
           scopeOffsets.set(sid, offset);
         }
+      } else if (rootIds.has(node.id)) {
+        const saved = savedRootPos.get(node.id);
+        if (saved) {
+          rootOffsets.set(node.id, {
+            x: node.position.x - saved.x,
+            y: node.position.y - saved.y,
+          });
+        }
       }
     }
     return {
@@ -3298,6 +3442,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       crossingIds,
       childOffsets,
       scopeOffsets,
+      rootOffsets,
     };
   }, [expandedInline, fullGraph, nodes, edges, currentParentId, injectSubEnds]);
 
@@ -3416,18 +3561,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           style: { ...stateChild.style, opacity: childOpacity },
         };
       } else if (inlineComposition) {
-        // 프레임(현재 스코프) 노드 — 활성이면 편집, 비활성(자식 포커스 중)이면 읽기전용 dim.
-        const isActive = currentParentId === activeScopeId;
-        display = isActive
-          ? { ...node, connectable: true }
-          : {
+        // 프레임(현재 스코프) 노드 — 루트(편집 가능)면 편집, 딥뷰(읽기전용)면 선택만 가능한 읽기전용.
+        display = currentScopeIsReadOnly
+          ? {
               ...node,
-              selectable: false,
               draggable: false,
+              selectable: true,
               deletable: false,
               connectable: false,
-              style: { ...node.style, opacity: INACTIVE_SCOPE_OPACITY },
-            };
+            }
+          : { ...node, connectable: true };
       } else {
         display = node;
       }
@@ -3441,7 +3584,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, ancestorContextNodes, activeScopeId, currentParentId, injectSubEnds]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, ancestorContextNodes, currentScopeIsReadOnly, injectSubEnds]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -3811,8 +3954,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
-  // 포커스(A) — 자식(prop-only) 노드는 RF 노드 이벤트가 안 발화 → 캔버스 컨테이너 raw dblclick(capture)으로 가로챔.
-  // 비활성 자식 더블클릭=그 스코프 제자리 활성화, 활성 자식 더블클릭=요약/편집 모달. (프레임 노드는 RF onNodeDoubleClick 처리.)
+  // 임베드 자식(prop-only)은 RF 노드 이벤트가 안 발화 → 캔버스 컨테이너 raw dblclick(capture)으로 가로챔.
+  // 읽기전용 임베드 자식이 하위프로세스 호스트면 더블클릭=한 단계 더 드릴인(딥뷰). 아니면 무시(편집 불가).
   useEffect(() => {
     const container = canvasContainerRef.current;
     if (!container) {
@@ -3823,25 +3966,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       const nodeEl = target?.closest?.(".react-flow__node") as HTMLElement | null;
       const id = nodeEl?.getAttribute("data-id");
       if (!id || nodesRef.current.some((node) => node.id === id)) {
-        return; // 현재 스코프(프레임) 노드/노드 밖 — React Flow 기본 처리
+        return; // 현재 스코프(프레임) 노드/노드 밖 — React Flow 기본(onNodeDoubleClick) 처리
       }
       event.preventDefault();
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
-      // 포커스(Path 2) — 비활성 자식 더블클릭 = 단일클릭과 동일하게 그 스코프로 navigateTo + 카메라 보정(제자리).
-      const scopeId = childNodesRef.current.find((node) => node.id === id)?.data.scopeId ?? null;
+      // 임베드 자식이 하위프로세스 호스트면 그 링크맵으로 한 단계 드릴인(spec §6 순차 펼침).
+      // 카메라 보정 — host의 표시 위치−저장 위치만큼 옮겨 드릴 후에도 제자리(카메라 점프 없음). effect 내라 ref 쓰기 허용.
+      const host = fullGraphRef.current?.nodes.find((n) => n.id === id);
       const rendered = reactFlow.getNode(id)?.position;
-      const stored = fullGraphRef.current?.nodes.find((n) => n.id === id);
-      if (rendered && stored) {
+      if (host && rendered) {
         focusCamRef.current = {
-          shift: { x: rendered.x - stored.pos_x, y: rendered.y - stored.pos_y },
+          shift: { x: rendered.x - host.pos_x, y: rendered.y - host.pos_y },
           vp: reactFlow.getViewport(),
         };
       }
-      void navigateTo(buildScopesTo(scopeId));
+      drillIntoSubprocess(id);
     };
     container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
     return () => container.removeEventListener("dblclick", handleDblClick, true);
-  }, [navigateTo, buildScopesTo, reactFlow]);
+  }, [drillIntoSubprocess, reactFlow]);
 
   // 인스펙터 폭 로컬 영속
   useEffect(() => {
@@ -3903,8 +4046,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 활성 스코프 경로(드릴인한 노드들)는 항상 펼쳐 현재 위치가 보이도록 합성.
     const effectiveExpanded = new Set(expandedOutline);
     for (const scope of scopes) {
-      if (scope.parentId !== null) {
-        effectiveExpanded.add(scope.parentId);
+      const host = scopeHostId(scope);
+      if (host !== null) {
+        effectiveExpanded.add(host);
       }
     }
     return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
@@ -4274,7 +4418,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
         <nav className="flex items-center gap-1 text-sm">
           {scopes.map((scope, index) => (
-            <span key={scope.parentId ?? "root"} className="flex items-center gap-1">
+            <span key={scopeKey(scope)} className="flex items-center gap-1">
               {index > 0 && <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />}
               <button
                 className={
@@ -4599,7 +4743,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       nodeTypes={nodeTypes}
                       snapToGrid
                       snapGrid={[8, 8]}
-                      nodesDraggable={!readOnly && expandedInline.size === 0}
+                      nodesDraggable={!readOnly}
                       nodesConnectable={!readOnly}
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
@@ -4629,8 +4773,23 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
-                        // 이름 외 영역 더블클릭 = 요약/편집 모달(현재 스코프·펼친 자식 공용).
-                        // 타이틀 더블클릭은 process-node가 stopPropagation해 이름 편집으로.
+                        // 하위프로세스 노드 더블클릭 = 그 링크맵으로 읽기전용 딥뷰 드릴인(spec §6).
+                        if (node.data?.nodeType === "subprocess" && node.data?.linkedMapId != null) {
+                          // 카메라 보정 — 노드의 표시−저장 위치만큼 옮겨 드릴 후 제자리(인라인 JSX라 ref 쓰기 허용).
+                          const stored = fullGraph?.nodes.find((n) => n.id === node.id);
+                          if (stored) {
+                            focusCamRef.current = {
+                              shift: {
+                                x: node.position.x - stored.pos_x,
+                                y: node.position.y - stored.pos_y,
+                              },
+                              vp: reactFlow.getViewport(),
+                            };
+                          }
+                          drillIntoSubprocess(node.id);
+                          return;
+                        }
+                        // 그 외 — 이름 외 영역 더블클릭 = 요약/편집 모달. 타이틀 더블클릭은 process-node가 이름 편집으로.
                         setSelectedId(node.id);
                         setSummaryNodeId(node.id);
                       }}
@@ -4817,7 +4976,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     </ReactFlow>
                   </div>
                 ) : (
-                  <ScopePreview fullGraph={fullGraph} scopeParentId={scope.parentId} />
+                  <ScopePreview fullGraph={fullGraph} scopeParentId={scopeHostId(scope)} />
                 )}
               </ScopeWindow>
             );

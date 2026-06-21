@@ -4,7 +4,8 @@ import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-const ctx = await browser.newContext();
+// 펼치면 footprint shift로 루트 노드가 우측으로 밀려 기본 뷰포트를 벗어난다 → 넉넉한 뷰포트 + fitView로 화면 안에 둔다.
+const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
 await ctx.addInitScript(() => window.localStorage.setItem("bpm.devUser", "admin"));
 const page = await ctx.newPage();
 const errors = [];
@@ -44,18 +45,37 @@ await page.waitForTimeout(2000);
 
 const afterExpand = await readRoot();
 
-// 실제 드래그 — c-done을 우측으로 60px
+// 펼침 후 c-done이 우측으로 밀려 화면 밖일 수 있다 → ctrl+휠로 줌아웃해 전체 폭을 화면 안에 넣는다.
+// (RF는 ctrl+wheel을 줌으로 처리. 앱 fitView 컨트롤은 줌 유지·좌상단 정렬이라 넓은 콘텐츠를 못 담음.)
+const pane = await page.locator(".react-flow__pane").boundingBox();
+if (pane) {
+  const cx = pane.x + pane.width / 2;
+  const cy = pane.y + pane.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.keyboard.down("Control");
+  for (let i = 0; i < 5; i++) {
+    await page.mouse.wheel(0, 200); // 양수 deltaY + ctrl = 줌아웃
+    await page.waitForTimeout(70);
+  }
+  await page.keyboard.up("Control");
+}
+await page.waitForTimeout(600);
+
+// 실제 드래그 — c-done을 좌상단으로(화면 안쪽 방향) 이동
 const box = await page.locator('.react-flow__node[data-id="c-done"]').boundingBox();
+const onScreen = box && box.x > 0 && box.x < 1400 && box.y > 0 && box.y < 900;
 let dragMoved = false;
-if (box) {
+const transformBeforeDrag = onScreen ? (await readRoot())?.transform : null;
+if (onScreen) {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.move(box.x + box.width / 2 - 80, box.y + box.height / 2 - 50, { steps: 8 });
   await page.mouse.up();
   await page.waitForTimeout(800);
   const afterDrag = await readRoot();
-  dragMoved = afterDrag && afterExpand && afterDrag.transform !== afterExpand.transform;
+  dragMoved = afterDrag && transformBeforeDrag != null && afterDrag.transform !== transformBeforeDrag;
 }
+console.log("c-done on-screen for drag:", onScreen);
 
 await page.screenshot({ path: "/tmp/bpm-repro-root-edit.png", fullPage: false });
 await browser.close();
