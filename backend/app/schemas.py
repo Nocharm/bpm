@@ -283,6 +283,31 @@ class SyncSummaryOut(BaseModel):
     excluded: int
 
 
+# ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
+
+class AdminUserOut(BaseModel):
+    """시스템 관리 콘솔용 — sysadmin only / Richer employee row for admin console."""
+
+    login_id: str
+    name: str
+    department: str
+    role: str          # 'admin' | 'user'
+    is_sysadmin: bool
+    org_levels: list[str]  # non-null org_l1..org_l5 in root→leaf order
+
+
+class AdminDeptOut(BaseModel):
+    """부서 행 — 관리 콘솔 department-table / Department row for admin console."""
+
+    name: str          # leaf segment (display label)
+    org_levels: list[str]  # full path levels root→leaf (variable depth)
+
+
+class AdminDirectoryOut(BaseModel):
+    users: list[AdminUserOut]
+    departments: list[AdminDeptOut]
+
+
 # ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
 
 class DirectoryUserOut(BaseModel):

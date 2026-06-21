@@ -1,18 +1,33 @@
 "use client";
 
-// 사용자 목록 (읽기 전용) — 이름·로그인ID·부서·상태·시스템 관리자 태그 /
-// User list (read-only) — name, login ID, department, status, sysadmin tag.
-// isSysadmin is READ-ONLY: displayed as a tag, no grant/revoke toggle (env-managed).
+// 사용자 목록 (읽기 전용) — 이름·로그인ID·부서·시스템 관리자 태그 /
+// User list (read-only) — name, login ID, department, sysadmin tag.
+// isSysadmin reflects the SERVER is_sysadmin flag (env-managed, no toggle).
+// Status column omitted: no real active flag until Task 2.
 
+import { useEffect, useState } from "react";
+
+import { type AdminUser, getAdminUsers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { usePermissions } from "@/lib/mock/permissions";
 
 export function UserTable() {
   const { t } = useI18n();
-  const state = usePermissions();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // 부서 id → name 맵 / Department id → name map for display.
-  const deptMap = new Map(state.departments.map((d) => [d.id, d.name]));
+  useEffect(() => {
+    getAdminUsers()
+      .then((data) => setUsers(data.users))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
+  if (error) {
+    return (
+      <div className="text-caption text-error">
+        Failed to load users: {error}
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -28,15 +43,12 @@ export function UserTable() {
             <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
               {t("perm.sysadmin.userColDept")}
             </th>
-            <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
-              {t("perm.sysadmin.userColStatus")}
-            </th>
           </tr>
         </thead>
         <tbody>
-          {state.users.map((user) => (
+          {users.map((user) => (
             <tr
-              key={user.id}
+              key={user.login_id}
               className="border-b border-hairline last:border-0 hover:bg-surface-alt"
             >
               <td className="py-2 pr-4">
@@ -44,7 +56,7 @@ export function UserTable() {
                   <span className="text-ink">{user.name}</span>
                   {/* 시스템 관리자 태그 — 읽기 전용 (env 관리) /
                       Sysadmin tag — read-only, env-managed, no toggle. */}
-                  {user.isSysadmin && (
+                  {user.is_sysadmin && (
                     <span
                       className="rounded-sm border border-accent px-1.5 py-0.5 text-fine text-accent"
                       title={t("perm.sysadmin.userSysadminNote")}
@@ -54,23 +66,8 @@ export function UserTable() {
                   )}
                 </div>
               </td>
-              <td className="py-2 pr-4 font-mono text-ink-secondary">{user.id}</td>
-              <td className="py-2 pr-4 text-ink-secondary">
-                {deptMap.get(user.departmentId) ?? user.departmentId}
-              </td>
-              <td className="py-2 pr-4">
-                <span
-                  className={`rounded-sm border px-1.5 py-0.5 text-fine ${
-                    user.status === "active"
-                      ? "border-added text-added"
-                      : "border-error text-error"
-                  }`}
-                >
-                  {user.status === "active"
-                    ? t("perm.sysadmin.userStatusActive")
-                    : t("perm.sysadmin.userStatusInactive")}
-                </span>
-              </td>
+              <td className="py-2 pr-4 font-mono text-ink-secondary">{user.login_id}</td>
+              <td className="py-2 pr-4 text-ink-secondary">{user.department}</td>
             </tr>
           ))}
         </tbody>

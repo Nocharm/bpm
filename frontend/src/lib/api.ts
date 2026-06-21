@@ -497,6 +497,32 @@ export function getDirectory(): Promise<Directory> {
   return request<Directory>("/directory");
 }
 
+// ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
+
+export interface AdminUser {
+  login_id: string;
+  name: string;
+  department: string;
+  role: string;        // 'admin' | 'user'
+  is_sysadmin: boolean;
+  org_levels: string[];
+}
+
+export interface AdminDept {
+  name: string;        // leaf segment
+  org_levels: string[];
+}
+
+export interface AdminDirectory {
+  users: AdminUser[];
+  departments: AdminDept[];
+}
+
+/** sysadmin 전용 — 관리 콘솔 직원·부서 목록 (영문, 풍부한 필드). active 플래그는 Task 2까지 없음. */
+export function getAdminUsers(): Promise<AdminDirectory> {
+  return request<AdminDirectory>("/admin/users");
+}
+
 export interface NotificationItem {
   id: number;
   type: string;

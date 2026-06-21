@@ -11,6 +11,7 @@ from app.db import get_session, init_models
 from app.models import Employee
 from app.permissions.logic import is_sysadmin
 from app.routers import (
+    admin,
     ai,
     approvers,
     comments,
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="BPM API", lifespan=lifespan)
+app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
