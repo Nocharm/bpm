@@ -5,7 +5,11 @@ import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
-import type { SubEnd } from "@/lib/subprocess-embed";
+import {
+  PRIMARY_END_HANDLE,
+  SUBPROCESS_IN_HANDLE,
+  type SubEnd,
+} from "@/lib/subprocess-embed";
 
 export type NodeData = {
   label: string;
@@ -434,6 +438,37 @@ function withEdge(edges: Edge[], source: string, target: string): Edge[] {
   ];
 }
 
+/**
+ * 엣지의 source/target 핸들을 현재 끝점 노드 타입에 맞춘다 — 드롭존/삽입/swap 경로 전용.
+ * 하위프로세스(subprocess) 끝점은 전용 핸들(in=입력 / __primary__=대표끝 출력)을 써야 RF가 붙인다.
+ * 끝점이 하위프로세스가 아니게 되면(swap 등) 남은 전용 핸들을 변 기본값으로 되돌린다.
+ * onConnect(수동 핸들 드래그)와 decision 분기 라벨 source는 건드리지 않는다(이 함수는 드롭존만 호출).
+ */
+export function withSubprocessHandles(
+  edge: Edge,
+  isSubprocess: (nodeId: string) => boolean,
+): Edge {
+  const targetSub = isSubprocess(edge.target);
+  const sourceSub = isSubprocess(edge.source);
+  let targetHandle = edge.targetHandle;
+  let sourceHandle = edge.sourceHandle;
+  if (targetSub) {
+    targetHandle = SUBPROCESS_IN_HANDLE;
+  } else if (targetHandle === SUBPROCESS_IN_HANDLE) {
+    // 더 이상 하위프로세스가 아닌데 in 핸들이 남음(swap) → 변 기본값으로
+    targetHandle = targetHandleId("left");
+  }
+  if (sourceSub) {
+    sourceHandle = PRIMARY_END_HANDLE;
+  } else if (sourceHandle === PRIMARY_END_HANDLE) {
+    sourceHandle = sourceHandleId("right");
+  }
+  if (targetHandle === edge.targetHandle && sourceHandle === edge.sourceHandle) {
+    return edge;
+  }
+  return { ...edge, sourceHandle, targetHandle };
+}
+
 /** A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B. */
 export function insertNodeBefore(
   edges: Edge[],
@@ -743,8 +778,8 @@ export function rectWithExclusions(base: Rect, intruders: Rect[], members: Rect[
 }
 
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
-// 8방향 앵커 위에 배치: 좌=front/우=back/상=group/하=child/좌하(SW)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
-export type DropZone = "front" | "back" | "group" | "child" | "swap";
+// 앵커 위에 배치: 좌=front/우=back/상=group/좌하(SW)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
+export type DropZone = "front" | "back" | "group" | "swap";
 
 // 대각선 앵커 거리 — 원주 위 45° 지점
 const DIAG = Math.SQRT1_2; // ≈0.707
@@ -762,7 +797,6 @@ export function pickDropZone(
     { zone: "front", x: cx - radius, y: cy },
     { zone: "back", x: cx + radius, y: cy },
     { zone: "group", x: cx, y: cy - radius },
-    { zone: "child", x: cx, y: cy + radius },
     // 좌하단(SW) = 두 노드 위치+연결 교환
     { zone: "swap", x: cx - radius * DIAG, y: cy + radius * DIAG },
   ];

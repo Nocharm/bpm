@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, FoldHorizontal, LayoutGrid, Lock, LogOut, Maximize, Network, PanelRight, PencilLine, Redo2, Undo2, UnfoldHorizontal } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Download, FoldHorizontal, LayoutGrid, Lock, LogOut, Maximize, Network, PanelRight, PencilLine, Redo2, Undo2, UnfoldHorizontal } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -64,6 +64,7 @@ import {
   getOutgoingEdges,
   insertNodeBefore,
   insertNodeAfter,
+  withSubprocessHandles,
   pickDropZone,
   rectWithExclusions,
   branchKindOf,
@@ -2029,10 +2030,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       const current = edgesRef.current;
       const isDecision = (nodeId: string): boolean =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "decision";
-      const next =
+      const isSubprocess = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      const inserted =
         zone === "front"
           ? insertNodeBefore(current, aId, bId, rewire)
           : insertNodeAfter(current, aId, bId, rewire, isDecision(bId));
+      // 삽입/재연결로 끝점이 하위프로세스가 된 엣지는 전용 핸들(in/__primary__)로 보정 — 안 그러면 RF가 못 붙임.
+      const next = inserted.map((edge) => withSubprocessHandles(edge, isSubprocess));
       setEdges(next);
       // 마름모에서 새로 출발하는(라벨 없는) 엣지가 생겼으면 분기 라벨 모달을 띄운다.
       const beforeIds = new Set(current.map((edge) => edge.id));
@@ -2353,13 +2358,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         });
       });
       // 엣지 연결 상태도 교환 — A의 연결은 B로, B의 연결은 A로
+      const isSubprocess = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
       setEdges((current) =>
         current.map((edge) => {
           const source = edge.source === aId ? bId : edge.source === bId ? aId : edge.source;
           const target = edge.target === aId ? bId : edge.target === bId ? aId : edge.target;
-          return source === edge.source && target === edge.target
-            ? edge
-            : { ...edge, source, target };
+          if (source === edge.source && target === edge.target) {
+            return edge;
+          }
+          // 끝점이 바뀌었으니 핸들을 새 끝점 타입에 맞춘다(하위프로세스 ↔ 일반).
+          return withSubprocessHandles({ ...edge, source, target }, isSubprocess);
         }),
       );
       scheduleAutoSave();
@@ -5166,13 +5175,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                 { zone: "front", Icon: ArrowLeft, x: cx - radius, y: cy, label: t("dropzone.front") },
                 { zone: "back", Icon: ArrowRight, x: cx + radius, y: cy, label: t("dropzone.back") },
                 { zone: "group", Icon: Boxes, x: cx, y: cy - radius, label: t("dropzone.group") },
-                { zone: "child", Icon: CornerDownRight, x: cx, y: cy + radius, label: t("dropzone.child") },
                 // 좌하단(SW) 대각 — 위치+연결 교환
                 { zone: "swap", Icon: ArrowLeftRight, x: cx - radius * Math.SQRT1_2, y: cy + radius * Math.SQRT1_2, label: t("dropzone.swap") },
               ] as const;
-              // 하위로 넣기는 process 노드 타깃만 — decision/start/end면 child 타일을 숨기지 않고 비활성 표시
-              const childAllowed =
-                nodes.find((node) => node.id === dropTarget.id)?.data.nodeType === "process";
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
                   {/* 기준 셀(B) 원형 링 */}
@@ -5181,17 +5186,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                     style={{ left: cx - radius, top: cy - radius, width: radius * 2, height: radius * 2 }}
                   />
                   {tiles.map(({ zone, Icon, x, y, label }) => {
-                    const disabled = zone === "child" && !childAllowed;
-                    const active = dropTarget.zone === zone && !disabled;
+                    const active = dropTarget.zone === zone;
                     return (
                     <div
                       key={zone}
                       className={`zone-pop absolute flex flex-col items-center justify-center gap-1 rounded-md border px-2 text-center shadow-md ${
-                        disabled
-                          ? "border-dashed border-hairline bg-surface/70 text-ink-tertiary opacity-40"
-                          : active
-                            ? "border-accent bg-accent-tint text-accent"
-                            : "border-hairline bg-surface/95 text-ink-tertiary"
+                        active
+                          ? "border-accent bg-accent-tint text-accent"
+                          : "border-hairline bg-surface/95 text-ink-tertiary"
                       }`}
                       style={{ left: x - tileW / 2, top: y - tileH / 2, width: tileW, height: tileH }}
                     >
