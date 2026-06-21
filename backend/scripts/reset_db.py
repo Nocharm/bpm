@@ -44,7 +44,17 @@ async def main() -> None:
         f"groups(active={summary['active_group']}, pending={summary['pending_group']})"
     )
 
-    # 5. 확인 — 테이블 존재 + 핵심 카운트
+    # 5. 3중첩 데모 시드 (ADDITIVE — 깊이-3 드릴인 A→B→C 체인, 마스킹 비대칭용 L3=user.choi)
+    from scripts.seed_nesting_demo import seed_nesting_demo
+
+    async with SessionLocal() as session:
+        nest = await seed_nesting_demo(session)
+    print(
+        f"seed    nesting demo — L1(map={nest['l1_map']}) → L2(map={nest['l2_map']}) "
+        f"→ L3(map={nest['l3_map']})"
+    )
+
+    # 6. 확인 — 테이블 존재 + 핵심 카운트
     async with SessionLocal() as session:
         emp_count = (await session.execute(text("SELECT count(*) FROM employees"))).scalar()
         perm_count = (await session.execute(text("SELECT count(*) FROM map_permissions"))).scalar()
@@ -60,6 +70,47 @@ async def main() -> None:
         f"verify  employees={emp_count}, map_permissions={perm_count}, "
         f"approval_requests={ar_count}, user_groups={grp_count}, "
         f"map_approvers={appr_count}, pending_versions={pending_ver}"
+    )
+
+    # 7. 3중첩 링크/소유 확인 — L1→L2→L3 subprocess 링크 + L3 소유자 user.choi
+    async with SessionLocal() as session:
+        l1_links = (
+            await session.execute(
+                text(
+                    "SELECT linked_map_id FROM nodes WHERE id='n1-sub'"
+                )
+            )
+        ).scalar()
+        l2_links = (
+            await session.execute(
+                text("SELECT linked_map_id FROM nodes WHERE id='n2-sub'")
+            )
+        ).scalar()
+        l3_owner = (
+            await session.execute(
+                text(
+                    "SELECT owner_id FROM process_maps "
+                    "WHERE name='Nesting L3 — Leaf'"
+                )
+            )
+        ).scalar()
+        l2_map_id = (
+            await session.execute(
+                text(
+                    "SELECT id FROM process_maps WHERE name='Nesting L2 — embeds L3'"
+                )
+            )
+        ).scalar()
+        l3_map_id = (
+            await session.execute(
+                text("SELECT id FROM process_maps WHERE name='Nesting L3 — Leaf'")
+            )
+        ).scalar()
+    print(
+        f"verify  nesting — L1.sub→map {l1_links} (==L2 {l2_map_id}: "
+        f"{l1_links == l2_map_id}), L2.sub→map {l2_links} (==L3 {l3_map_id}: "
+        f"{l2_links == l3_map_id}), L3 owner={l3_owner} (==user.choi: "
+        f"{l3_owner == 'user.choi'})"
     )
 
 

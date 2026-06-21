@@ -312,7 +312,10 @@ export function buildOutline(
       // 하위프로세스(참조) 노드는 임베드 전이라 outline 입력에 자식이 없어도 항상 펼치기 대상으로 표시한다 —
       // 행 펼침이 inline-embed를 트리거(toggleInlineExpand)해 그때 자식이 들어온다. 일반 노드는 기존대로 실제 자식 보유 시.
       const nodeType = typeOf.get(entry.id) ?? "process";
-      const hasChildren = parentsWithChildren.has(entry.id) || nodeType === "subprocess";
+      // 마스킹: 잠긴 링크맵은 여기서 false로 펼침 화살표 억제 예정 — 지금은 subprocess면 true.
+      // Masking: locked linked-maps will return false here to suppress the expand arrow — true for any subprocess now.
+      const isSubprocessExpandable = (type: string): boolean => type === "subprocess";
+      const hasChildren = parentsWithChildren.has(entry.id) || isSubprocessExpandable(nodeType);
       const isExpanded = hasChildren && expanded.has(entry.id);
       const block = hierarchyLevel === 0 ? entry.blockIndex : inheritedBlock;
       rows.push({

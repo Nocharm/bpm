@@ -1716,6 +1716,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 카메라 보정(focusCamRef 쓰기)은 호출 측(이벤트 핸들러/effect)에서 한다 — 렌더 중/useCallback 내 ref 변경 금지 룰 회피.
   const isDrillableHost = useCallback((hostNodeId: string): boolean => {
     const host = fullGraphRef.current?.nodes.find((n) => n.id === hostNodeId);
+    // 마스킹: 여기에 링크맵 권한 검사 추가 예정 — 지금은 구조(subprocess+linked_map_id) 검사만.
+    // Masking: linked-map permission check goes here next — structural (subprocess+linked_map_id) only for now.
     return !!host && host.node_type === "subprocess" && host.linked_map_id != null;
   }, []);
   const drillIntoSubprocess = useCallback(
@@ -3299,9 +3301,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     return counts;
   }, [comments]);
 
+  // 마스킹 잠금 자리 — 권한 없는 링크맵은 여기서 false 반환 예정(지금은 항상 허용).
+  // Masking seam: locked linked-maps return false here later (always allow now).
+  // nodeId is intentionally unused now — the masking task inspects it to gate locked maps.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const canExpand = useCallback((nodeId: string): boolean => true, []);
+
   // 인라인 펼치기/접기 토글 — 순수 뷰(raw state·저장 무영향). 펼칠 때 한도 초과면 확인 모달.
   const toggleInlineExpand = useCallback(
     (nodeId: string) => {
+      // 마스킹 게이트(현재 no-op, 항상 허용) — 펼침/컨텍스트 open child/아웃라인 subprocess 모두 여기로 수렴.
+      if (!canExpand(nodeId)) {
+        return;
+      }
       const next = new Set(expandedInline);
       if (next.has(nodeId)) {
         next.delete(nodeId);
@@ -3337,7 +3349,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       commitExpanded(next);
     },
-    [expandedInline, fullGraph, commitExpanded],
+    [expandedInline, fullGraph, commitExpanded, canExpand],
   );
   // 컨텍스트 메뉴 등 위쪽 useMemo에서 호출하도록 ref로 노출(TDZ 회피)
   useEffect(() => {
