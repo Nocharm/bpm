@@ -1385,14 +1385,20 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
             return false;
           };
+          // 명시적 접기 의도를 로컬로 캡처 후 ref 즉시 클리어 — 한 사이클만 적용(다음 펼침에 잔존 차단 없음, R1).
+          const collapseIntent = collapseIntentRef.current;
+          collapseIntentRef.current = new Set();
           setExpandedInline((prev) => {
-            const next = new Set([...prev].filter(isUnder)); // 1) 새 스코프 하위 펼침 유지(들어갈 때 붕괴 방지)
+            // 1) 새 스코프 하위 펼침 유지(들어갈 때 붕괴 방지) + 명시 접기 host 제외
+            const next = new Set([...prev].filter((h) => isUnder(h) && !collapseIntent.has(h)));
             // 2) 나가기(직전 스코프가 새 스코프 하위)면 드릴 경로(직전 스코프→새 스코프 사이)를 펼쳐 유지
-            //    → 떠난 스코프가 접히지 않고 인라인으로 보임(활성 영역만 이동).
+            //    → 떠난 스코프가 접히지 않고 인라인으로 보임(활성 영역만 이동). 단, 명시 접기 host는 re-add 건너뜀.
             if (prevScope !== null && prevScope !== undefined && isUnder(prevScope)) {
               let cur: string | null = prevScope;
               for (let guard = 0; cur !== null && cur !== currentParentId && guard < 20; guard++) {
-                next.add(cur);
+                if (!collapseIntent.has(cur)) {
+                  next.add(cur);
+                }
                 cur = byId.get(cur)?.parent_node_id ?? null;
               }
             }
@@ -1763,6 +1769,34 @@ function MapEditor({ mapId }: { mapId: number }) {
       void navigateTo(scopes.slice(0, index));
     },
     [navigateTo, scopes],
+  );
+
+  // 명시적 접기 의도 — 이 사이클 동안 scope-load effect가 re-add/keep하지 말아야 할 host들. 사용 즉시 클리어.
+  // Explicit-collapse intent: hosts the scope-load effect must NOT re-inline THIS cycle. Cleared immediately after use.
+  const collapseIntentRef = useRef<Set<string>>(new Set());
+
+  // 하위프로세스 행 접기 — 드릴인(scopes)으로 펼친 host면 스코프를 pop하며 가드 표시(effect가 re-inline 안 함),
+  // 인라인으로만 펼친 host면 기존 토글로 제거. 펼치기 방향은 기존 경로 유지(이 헬퍼는 접기 전용).
+  const collapseSubprocessRow = useCallback(
+    (id: string) => {
+      const scopeIdx = scopes.findIndex((s) => scopeHostId(s) === id);
+      if (scopeIdx > 0) {
+        // idx 0 = root; >0 = drilled via scopes
+        // 이 host + 그 하위 스코프 host 전체(결정 ②: 중간 접기=하위 닫힘)를 가드에 표시.
+        for (const s of scopes.slice(scopeIdx)) {
+          const h = scopeHostId(s);
+          if (h != null) {
+            collapseIntentRef.current.add(h);
+          }
+        }
+        void navigateTo(scopes.slice(0, scopeIdx)); // scope pop → triggers the scope-load effect, which consumes the guard
+        return;
+      }
+      if (expandedInline.has(id)) {
+        toggleInlineExpandRef.current?.(id); // 인라인으로만 펼친 경우 — 기존 토글로 제거(effect 무관)
+      }
+    },
+    [scopes, navigateTo, expandedInline],
   );
 
   const handleBreadcrumb = useCallback(
@@ -4228,7 +4262,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     (id: string) => {
       // 하위프로세스 행 펼침/접힘은 캔버스 버튼과 동일하게 inline-embed 토글(자식 로드) — outline-local 토글 아님.
       if (isSubprocessRow(id)) {
-        toggleInlineExpandRef.current?.(id);
+        if (scopes.some((s) => scopeHostId(s) === id)) {
+          collapseSubprocessRow(id); // 드릴인된 host 토글 = 접기(스코프 pop, 가드)
+        } else {
+          toggleInlineExpandRef.current?.(id);
+        }
         return;
       }
       setExpandedOutline((prev) => {
@@ -4241,7 +4279,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return next;
       });
     },
-    [isSubprocessRow],
+    [isSubprocessRow, scopes, collapseSubprocessRow],
   );
 
   // 노드가 화면 밖일 때만 현재 줌 유지한 채 부드럽게 가운데로 — 이미 보이면 이동 없음(매 클릭 점프/줌변경 방지).
@@ -4421,7 +4459,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const row = outline.find((r) => r.id === id);
       if (row?.hasChildren && row.expanded) {
         if (isSubprocessRow(id)) {
-          toggleInlineExpandRef.current?.(id);
+          collapseSubprocessRow(id); // 드릴인/인라인 모드 인지 접기
           return;
         }
         setExpandedOutline((prev) => {
@@ -4436,7 +4474,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       foldToParent(id);
     },
-    [outline, foldToParent, isSubprocessRow],
+    [outline, foldToParent, isSubprocessRow, collapseSubprocessRow],
   );
 
   // F 토글 — 자식 있으면 펼치기↔접기 토글, 말단이면 부모를 접으며 부모로 이동.
@@ -4445,7 +4483,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       const row = outline.find((r) => r.id === id);
       if (row?.hasChildren) {
         if (isSubprocessRow(id)) {
-          toggleInlineExpandRef.current?.(id);
+          if (scopes.some((s) => scopeHostId(s) === id)) {
+            collapseSubprocessRow(id); // 드릴인된 host = 접기(스코프 pop, 가드)
+          } else {
+            toggleInlineExpandRef.current?.(id);
+          }
           return;
         }
         setExpandedOutline((prev) => {
@@ -4461,7 +4503,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       foldToParent(id);
     },
-    [outline, foldToParent, isSubprocessRow],
+    [outline, foldToParent, isSubprocessRow, scopes, collapseSubprocessRow],
   );
 
   // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.
