@@ -233,6 +233,9 @@ type RegionBox = {
   height: number;
 };
 
+// 드래그 비활성 시 dragLiveById 기본값 — 매 렌더 새 Map 생성을 막아 displayNodes memo가 불필요 재계산되지 않게.
+const EMPTY_DRAG_LIVE: ReadonlyMap<string, { x: number; y: number }> = new Map();
+
 // 인라인 펼침 영역 — 세로선 2개 + 반투명 틴트가 보이는 캔버스를 위아래로 가득 채우는 "세로 레인".
 // 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더되고 에디터 본체는 영향 없음.
 function InlineRegionBands({
@@ -596,6 +599,18 @@ function MapEditor({ mapId }: { mapId: number }) {
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 드래그 시작 시점의 노드 위치 — 위치 교환(swap) 시 드래그 노드의 원래 자리 복원용
   const dragStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  // 펼침 중 루트 드래그: 드래그 중인 노드별 라이브 표시좌표(커서 1:1 추종). 드래그 중에만 항목 존재.
+  // state로 둬야 displayNodes가 매 프레임 재렌더돼 커서를 따라온다(ref면 안 됨).
+  const [dragLiveById, setDragLiveById] = useState<ReadonlyMap<string, { x: number; y: number }>>(
+    EMPTY_DRAG_LIVE,
+  );
+  const dragLiveByIdRef = useRef(dragLiveById); // 핸들러에서 stale 없이 최신 라이브 맵 읽기용
+  // 드래그 시작 시 캡처한 노드별 (저장좌표, footprint 오프셋) — 드롭 시 표시→저장 환산에 사용.
+  const dragStartOffsetRef = useRef<Map<string, { offset: { x: number; y: number } }>>(new Map());
+  // footprint-shift된 루트 노드의 position write를 nodes state에서 차단할 id 집합. 드래그 시작 시 채우고,
+  // 드롭 후 몇 프레임까지 유지한다. RF는 표시좌표(=저장+offset)를 controlled nodes로 받아 드롭 직후 마지막
+  // position 변경으로 돌려보내는데, 이게 새면 표시좌표가 저장좌표로 기록돼 재파생에서 또 밀린다(이중쉬프트).
+  const suppressPosIdsRef = useRef<Set<string>>(new Set());
   const dragCursorRef = useRef({ x: 0, y: 0 }); // 컨테이너 상대 커서 — 타일 적중 판정용
   // 기존 엣지 충돌 시 유지/삽입 되묻기 팝오버
   const [pending, setPending] = useState<{
@@ -779,27 +794,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [expandedInline, fullGraph, injectSubEnds]);
 
-  // 펼침이 footprint-shift한 루트 노드의 position 변경(드래그)을 저장 좌표로 되돌린다 — RF가 보고하는 위치는
-  // "표시(=저장+오프셋)"이므로 rootOffsets를 빼서 nodes state를 항상 저장 좌표로 유지(다음 재파생 이중쉬프트 방지).
-  const unshiftRootPosition = useCallback(
+  // 펼침 중 루트 드래그: 드래그 중인 노드의 position 변경은 nodes state에 쓰지 않고 버린다(저장 좌표 동결).
+  // 라이브 표시좌표는 dragLiveById가 따로 추적하고 displayNodes가 직접 렌더한다 → 커서 1:1 추종, 매 프레임
+  // offset 보정으로 인한 튐 없음. 표시→저장 환산은 드롭 시점(onNodeDragStop)에 한 번만. select/dimensions/remove
+  // 등 비-position 변경은 그대로 통과.
+  const dropDraggingPositions = useCallback(
     (changes: NodeChange<AppNode>[]): NodeChange<AppNode>[] => {
-      const rootOffsets = inlineCompositionRef.current?.rootOffsets;
-      if (!rootOffsets || rootOffsets.size === 0) {
+      const suppress = suppressPosIdsRef.current;
+      if (suppress.size === 0) {
         return changes;
       }
-      return changes.map((change) => {
-        if (change.type !== "position" || !change.position) {
-          return change;
-        }
-        const off = rootOffsets.get(change.id);
-        if (!off) {
-          return change;
-        }
-        return {
-          ...change,
-          position: { x: change.position.x - off.x, y: change.position.y - off.y },
-        };
-      });
+      return changes.filter(
+        (change) => !(change.type === "position" && "id" in change && suppress.has(change.id)),
+      );
     },
     [],
   );
@@ -808,7 +815,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
       if (childNodes.length === 0) {
-        onNodesChange(unshiftRootPosition(changes));
+        onNodesChange(dropDraggingPositions(changes));
         return;
       }
       const childIds = new Set(childNodes.map((node) => node.id));
@@ -817,13 +824,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         (change) => !("id" in change) || !childIds.has(change.id),
       );
       if (mainChanges.length > 0) {
-        onNodesChange(unshiftRootPosition(mainChanges));
+        onNodesChange(dropDraggingPositions(mainChanges));
       }
       if (childChanges.length > 0) {
         setChildNodes((current) => applyNodeChanges(childChanges, current));
       }
     },
-    [childNodes, onNodesChange, unshiftRootPosition],
+    [childNodes, onNodesChange, dropDraggingPositions],
   );
   useEffect(() => {
     groupsRef.current = groups;
@@ -834,6 +841,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     groupDropTargetRef.current = groupDropTarget;
   }, [groupDropTarget]);
+  useEffect(() => {
+    dragLiveByIdRef.current = dragLiveById;
+  }, [dragLiveById]);
 
   // 아웃라인 하위 펼치기용 전체 그래프 — 비핵심이라 실패해도 조용히 무시(아웃라인만 영향)
   const refreshFullGraph = useCallback(() => {
@@ -2533,6 +2543,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
+      // 펼침 중 추적 대상 루트 드래그면 RF가 보고하는 표시좌표를 라이브 맵에 반영 → 커서 1:1 추종.
+      if (dragStartOffsetRef.current.has(node.id)) {
+        const pos = node.position;
+        setDragLiveById((cur) => {
+          const next = new Map(cur);
+          next.set(node.id, { x: pos.x, y: pos.y });
+          return next;
+        });
+      }
       const clientX = "touches" in event ? (event.touches[0]?.clientX ?? 0) : event.clientX;
       const clientY = "touches" in event ? (event.touches[0]?.clientY ?? 0) : event.clientY;
       const mouse = reactFlow.screenToFlowPosition({ x: clientX, y: clientY });
@@ -2586,6 +2605,89 @@ function MapEditor({ mapId }: { mapId: number }) {
       setGroupDropTarget((cur) => (cur === gid ? cur : gid));
     },
     [readOnly, reactFlow, clearDwell, activateZone, findGroupAt],
+  );
+
+  // 펼침 중 루트 드래그 시작 캡처 — 노드별 footprint 오프셋을 기록하고 라이브 표시좌표를 시드.
+  // 펼침이 없으면(rootOffsets 없음) 일반 드래그라 추적 안 함 → 기존 경로 그대로.
+  const captureRootDragStart = useCallback((dragged: AppNode[]) => {
+    const composition = inlineCompositionRef.current;
+    const rootOffsets = composition?.rootOffsets;
+    if (!rootOffsets || rootOffsets.size === 0) {
+      return;
+    }
+    const offsets = new Map<string, { offset: { x: number; y: number } }>();
+    const live = new Map<string, { x: number; y: number }>();
+    for (const node of dragged) {
+      const offset = rootOffsets.get(node.id);
+      if (!offset) {
+        continue; // 펼침에 안 밀린 노드(offset 0 미등록 포함은 아래에서 0 처리)
+      }
+      offsets.set(node.id, { offset });
+      // RF가 보고하는 node.position은 이미 표시좌표(=저장+offset). 그대로 라이브 시드.
+      live.set(node.id, { x: node.position.x, y: node.position.y });
+    }
+    if (offsets.size === 0) {
+      return;
+    }
+    dragStartOffsetRef.current = offsets;
+    suppressPosIdsRef.current = new Set(offsets.keys());
+    setDragLiveById(live);
+  }, []);
+
+  // 펼침 중 루트 드래그 종료 — 표시좌표를 저장좌표로 환산하거나(유효), 무효(펼친 레인 위)면 취소(원위치).
+  // 반환 `tracked`: 펼침 추적 드래그였는지(false면 호출부가 기존 일반 드래그 경로를 그대로 실행).
+  //       `committed`: 유효 드롭으로 새 저장좌표를 커밋했는지(취소면 false → 호출부는 zone/collision/save 모두 생략).
+  const finalizeRootDrag = useCallback(
+    (): { tracked: boolean; committed: boolean } => {
+      const offsets = dragStartOffsetRef.current;
+      if (offsets.size === 0) {
+        return { tracked: false, committed: false };
+      }
+      const live = dragLiveByIdRef.current;
+      const regions = inlineCompositionRef.current?.regions ?? [];
+      // 무효 판정: 노드 표시중심 x가 펼친 레인(full-height 세로밴드)의 x..x+width 안이면 취소.
+      const isInvalid = (id: string, dropDisplay: { x: number; y: number }): boolean => {
+        const node = nodesRef.current.find((n) => n.id === id);
+        const w = node ? nodeSizeOf(node.data.nodeType).w : NODE_WIDTH;
+        const centerX = dropDisplay.x + w / 2;
+        return regions.some((r) => centerX >= r.x && centerX <= r.x + r.width);
+      };
+      let committed = false;
+      const savedById = new Map<string, { x: number; y: number }>();
+      for (const [id, { offset }] of offsets) {
+        const dropDisplay = live.get(id);
+        if (!dropDisplay) {
+          continue;
+        }
+        if (isInvalid(id, dropDisplay)) {
+          continue; // 취소 — nodes state는 드래그 내내 동결돼 있어 원위치 유지. 저장 안 함.
+        }
+        savedById.set(id, { x: dropDisplay.x - offset.x, y: dropDisplay.y - offset.y });
+        committed = true;
+      }
+      if (savedById.size > 0) {
+        setNodes((current) =>
+          current.map((node) => {
+            const saved = savedById.get(node.id);
+            return saved ? { ...node, position: saved } : node;
+          }),
+        );
+      }
+      // 라이브/오프셋 정리 → displayNodes가 다시 inlineComposition 파생좌표로 복귀(취소면 원위치, 유효면 새 저장좌표 기준).
+      // suppressPosIdsRef는 드롭 직후 RF의 마지막 position 변경(표시좌표)까지 막아야 하므로 몇 프레임 뒤 해제.
+      const finalizedIds = new Set(offsets.keys());
+      dragStartOffsetRef.current = new Map();
+      setDragLiveById(EMPTY_DRAG_LIVE);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          for (const id of finalizedIds) {
+            suppressPosIdsRef.current.delete(id);
+          }
+        }),
+      );
+      return { tracked: true, committed };
+    },
+    [setNodes],
   );
 
   // 언마운트 시 dwell 타이머 정리
@@ -3562,6 +3664,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         };
       } else if (inlineComposition) {
         // 프레임(현재 스코프) 노드 — 루트(편집 가능)면 편집, 딥뷰(읽기전용)면 선택만 가능한 읽기전용.
+        // 드래그 중인 루트는 라이브 표시좌표로 덮어써 커서를 1:1 추종(footprint 쉬프트 무시).
+        const live = dragLiveById.get(node.id);
         display = currentScopeIsReadOnly
           ? {
               ...node,
@@ -3570,7 +3674,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               deletable: false,
               connectable: false,
             }
-          : { ...node, connectable: true };
+          : live
+            ? { ...node, position: live, connectable: true }
+            : { ...node, connectable: true };
       } else {
         display = node;
       }
@@ -3584,7 +3690,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, ancestorContextNodes, currentScopeIsReadOnly, injectSubEnds]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, ancestorContextNodes, currentScopeIsReadOnly, dragLiveById, injectSubEnds]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -4820,29 +4926,60 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodeDragStart={(_, node) => {
                         pushHistory();
                         dragStartPosRef.current = { id: node.id, x: node.position.x, y: node.position.y };
+                        captureRootDragStart([node]);
                       }}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
-                        const drop = dropTargetRef.current;
-                        if (
-                          !readOnly &&
-                          drop &&
-                          drop.id !== node.id &&
-                          drop.zone !== null
-                        ) {
-                          handleZoneDrop(node.id, drop.id, drop.zone);
-                        } else if (!readOnly && groupDropTargetRef.current) {
-                          addToGroupId(node.id, groupDropTargetRef.current);
-                        } else if (!readOnly) {
-                          setNodes((current) => resolveCollision(current, node.id));
-                          scheduleAutoSave();
+                        // 펼침 중 추적 드래그면 표시→저장 환산/무효취소를 먼저 확정.
+                        const { tracked, committed } = finalizeRootDrag();
+                        // 추적 드래그인데 무효(취소)면 zone/group/collision/save 모두 생략 — 원위치 복귀만.
+                        if (!tracked || committed) {
+                          const drop = dropTargetRef.current;
+                          if (
+                            !readOnly &&
+                            drop &&
+                            drop.id !== node.id &&
+                            drop.zone !== null
+                          ) {
+                            handleZoneDrop(node.id, drop.id, drop.zone);
+                          } else if (!readOnly && groupDropTargetRef.current) {
+                            addToGroupId(node.id, groupDropTargetRef.current);
+                          } else if (!readOnly) {
+                            setNodes((current) => resolveCollision(current, node.id));
+                            scheduleAutoSave();
+                          }
                         }
                         clearDwell();
                         setDropTarget(null);
                         setGroupDropTarget(null);
                       }}
-                      onSelectionDragStart={() => pushHistory()}
-                      onSelectionDragStop={() => scheduleAutoSave()}
+                      onSelectionDragStart={(_, nodes) => {
+                        pushHistory();
+                        captureRootDragStart(nodes);
+                      }}
+                      onSelectionDrag={(_, nodes) => {
+                        // 다중선택 드래그 — onNodeDrag가 안 발화하므로 여기서 라이브 표시좌표를 갱신.
+                        const tracked = dragStartOffsetRef.current;
+                        if (tracked.size === 0) {
+                          return;
+                        }
+                        setDragLiveById((cur) => {
+                          const next = new Map(cur);
+                          for (const node of nodes) {
+                            if (tracked.has(node.id)) {
+                              next.set(node.id, { x: node.position.x, y: node.position.y });
+                            }
+                          }
+                          return next;
+                        });
+                      }}
+                      onSelectionDragStop={() => {
+                        const { tracked, committed } = finalizeRootDrag();
+                        // 추적 드래그인데 전부 무효(취소)면 저장 생략. 그 외엔 기존대로 autosave.
+                        if (!tracked || committed) {
+                          scheduleAutoSave();
+                        }
+                      }}
                       onBeforeDelete={async () => {
                         if (readOnly) {
                           return false;
