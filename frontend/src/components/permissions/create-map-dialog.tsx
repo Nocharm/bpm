@@ -4,8 +4,8 @@
 // Map creation dialog: name, visibility, initial collaborators, required approvers.
 // 맵은 createMap()으로 생성(서버 기본 private), 협업자는 addMapPermission(), 결재자는 setApprovers().
 // 공개 범위는 생성 시 항상 private — 공개 전환은 Visibility 탭에서 승인 절차로 한다.
-// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 mock 시드 (Layer 4 Task 0). /
-// Display names / picker: users+departments from real /api/directory; groups still mock (Task 3/4).
+// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 실 active 그룹 (Layer 4 Task 4). /
+// Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
@@ -15,19 +15,35 @@ import {
   addMapPermission,
   createMap,
   getDirectory,
+  listGroups,
   setApprovers as setMapApprovers,
   type DirectoryUser,
   type DirectoryDept,
+  type Group,
 } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { usePermissions } from "@/lib/mock/permissions-store";
 import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
-import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
+import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
+
+// 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
+// Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
+function toPickerGroups(groups: Group[]): UserGroup[] {
+  return groups
+    .filter((g) => g.status === "active")
+    .map((g) => ({
+      id: String(g.id),
+      name: g.name,
+      description: g.description,
+      status: "active" as const,
+      managerIds: [],
+      members: [],
+    }));
+}
 
 // ── 내부 타입 ───────────────────────────────────────────────────
 
@@ -52,19 +68,20 @@ interface Props {
 
 export function CreateMapDialog({ onClose, onCreated }: Props) {
   const { t } = useI18n();
-  const state = usePermissions();
   const currentUser = useCurrentMockUser();
 
-  // ── 실 디렉터리 — 마운트 시 1회 조회 (Layer 4 Task 0) /
-  // Real directory: fetch once on mount; fall back to empty arrays if error.
+  // ── 실 디렉터리 + active 그룹 — 마운트 시 1회 조회 (Layer 4 Task 0/4) /
+  // Real directory + active groups: fetch once on mount; fall back to empty arrays on error.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   useEffect(() => {
     let active = true;
-    void getDirectory().then((dir) => {
+    void Promise.all([getDirectory(), listGroups()]).then(([dir, groupRows]) => {
       if (active) {
         setDirUsers(dir.users);
         setDirDepts(dir.departments);
+        setGroups(groupRows);
       }
     });
     return () => { active = false; };
@@ -287,7 +304,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
               <PrincipalPicker
                 users={pickerUsers}
                 departments={pickerDepts}
-                groups={state.groups}
+                groups={toPickerGroups(groups)}
                 excludeIds={collabExcludeIds}
                 onSelect={(opt) => setPendingCollab(opt)}
               />

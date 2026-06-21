@@ -497,6 +497,105 @@ export function getDirectory(): Promise<Directory> {
   return request<Directory>("/directory");
 }
 
+// ── 사용자 그룹 관리 API (Layer 4 Task 3b/4) ────────────────────────────────
+
+export type GroupStatus = "pending" | "active" | "rejected";
+export type GroupMemberType = "user" | "department";
+
+export interface GroupMember {
+  id: number;          // member PK — DELETE 경로에 사용 / member primary key for removal
+  member_type: GroupMemberType;
+  member_id: string;   // user→login_id, department→org_path string
+}
+
+export interface Group {
+  id: number;
+  name: string;
+  description: string;
+  status: GroupStatus;
+  created_by: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  members: GroupMember[];
+  managers: string[];  // manager login_ids
+}
+
+export interface GroupMemberInput {
+  member_type: GroupMemberType;
+  member_id: string;
+}
+
+/** 그룹 목록 — sysadmin은 전체, 그 외는 active + 본인 생성 pending(서버 가시성 규칙). */
+export function listGroups(): Promise<Group[]> {
+  return request<Group[]>("/groups");
+}
+
+/** 그룹 생성 요청 — status=pending. 멤버 ≥2 필수(서버 422). 생성자는 자동 관리자. */
+export function createGroup(
+  name: string,
+  description: string,
+  members: GroupMemberInput[],
+  managers: string[],
+): Promise<Group> {
+  return request<Group>("/groups", {
+    method: "POST",
+    body: JSON.stringify({ name, description, members, managers }),
+  });
+}
+
+export function getGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}`);
+}
+
+/** 멤버 추가 — 관리자/sysadmin, active 그룹만. 중복은 409. department member_id = org_path string. */
+export function addGroupMember(
+  groupId: number,
+  member: GroupMemberInput,
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/members`, {
+    method: "POST",
+    body: JSON.stringify(member),
+  });
+}
+
+/** 멤버 제거 — member PK(GroupMember.id)로 삭제. 관리자/sysadmin, active 그룹만. */
+export function removeGroupMember(
+  groupId: number,
+  memberPk: number,
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/members/${memberPk}`, {
+    method: "DELETE",
+  });
+}
+
+/** 관리자 집합 교체 — login_id 배열. 최소 1명(빈 배열 422). */
+export function setGroupManagers(
+  groupId: number,
+  managers: string[],
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/managers`, {
+    method: "PUT",
+    body: JSON.stringify({ managers }),
+  });
+}
+
+/** sysadmin 승인 대기열 — pending 그룹만. sysadmin 외 403. */
+export function listPendingGroups(): Promise<Group[]> {
+  return request<Group[]>("/groups/pending");
+}
+
+/** 그룹 생성 요청 결정 — sysadmin only. approve→active, reject→rejected. */
+export function decideGroup(
+  groupId: number,
+  decision: "approve" | "reject",
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
 // ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
 
 export interface AdminUser {

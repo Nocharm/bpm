@@ -337,7 +337,6 @@ const en = {
   "perm.toastGated": "Approval request sent.",
   "perm.noCollaborators": "No collaborators yet.",
   "perm.backToEditor": "← Back to editor",
-  "perm.groupLayer4Note": "Group grants are stored but take effect from Layer 4.",
   // ── 결재자(Approvers) / Approvers tab ──
   "perm.approversTitle": "Approvers",
   "perm.approversHint": "Approvers must all approve before a version can be published.",
@@ -425,6 +424,7 @@ const en = {
   "perm.group.descLabel": "Description",
   "perm.group.descPlaceholder": "Group purpose…",
   "perm.group.membersLabel": "Members (departments / users)",
+  "perm.group.minMembersHint": "A group requires at least 2 members.",
   "perm.group.managersLabel": "Group managers (≥1 required)",
   "perm.group.managerPickerPlaceholder": "Search manager by name…",
   "perm.group.memberPickerPlaceholder": "Search member by name or initial consonant…",
@@ -836,7 +836,6 @@ const ko: Record<MessageKey, string> = {
   "perm.toastGated": "승인 요청을 보냈습니다.",
   "perm.noCollaborators": "협업자가 없습니다.",
   "perm.backToEditor": "← 편집기로 돌아가기",
-  "perm.groupLayer4Note": "그룹 권한은 저장되지만 Layer 4부터 적용됩니다.",
   // ── 결재자(Approvers) / Approvers tab ──
   "perm.approversTitle": "결재자",
   "perm.approversHint": "모든 결재자가 승인해야 버전을 게시할 수 있습니다.",
@@ -924,6 +923,7 @@ const ko: Record<MessageKey, string> = {
   "perm.group.descLabel": "설명",
   "perm.group.descPlaceholder": "그룹 용도…",
   "perm.group.membersLabel": "멤버 (부서 · 개인)",
+  "perm.group.minMembersHint": "그룹에는 멤버가 2명 이상 필요합니다.",
   "perm.group.managersLabel": "그룹 관리자 (1명 이상 필수)",
   "perm.group.managerPickerPlaceholder": "관리자 이름으로 검색…",
   "perm.group.memberPickerPlaceholder": "이름 또는 초성으로 검색…",

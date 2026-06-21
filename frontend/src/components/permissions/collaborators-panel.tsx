@@ -4,8 +4,8 @@
 // Collaborators panel wired to the real Layer-2 permissions API.
 // 서버가 진실: 모든 변경은 API 호출 후 목록을 재조회해 반영한다. 다운그레이드/에디터제거는
 // pending 응답을 받으면 역할을 즉시 바꾸지 않고 "승인 대기"만 표시한다(낙관적 갱신 금지).
-// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 mock 시드 (Layer 4 Task 0). /
-// Display names / picker: users+departments from real /api/directory; groups still mock (Task 3/4).
+// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 실 active 그룹(Layer 4 Task 4). /
+// Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
@@ -14,21 +14,37 @@ import {
   addMapPermission,
   changeMapPermission,
   getDirectory,
+  listGroups,
   listMapPermissions,
   removeMapPermission,
   type DirectoryDept,
   type DirectoryUser,
+  type Group,
   type MapPermission as ApiPermission,
   type MapRole,
   type PrincipalType,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { usePermissions } from "@/lib/mock/permissions";
-import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
+import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 
 import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
 import type { PrincipalOption } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
+
+// 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
+// Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
+function toPickerGroups(groups: Group[]): UserGroup[] {
+  return groups
+    .filter((g) => g.status === "active")
+    .map((g) => ({
+      id: String(g.id),
+      name: g.name,
+      description: g.description,
+      status: "active" as const,
+      managerIds: [],
+      members: [],
+    }));
+}
 
 interface CollaboratorsPanelProps {
   mapId: string;
@@ -42,30 +58,22 @@ interface CollaboratorsPanelProps {
   viewerGrantDisabled?: boolean;
 }
 
-// 표시명 해석 — 실 디렉터리 우선, 없으면 mock 시드, 없으면 principalId 폴백 /
-// Resolve display name: real directory first, then mock seed, then id.
+// 표시명 해석 — 실 디렉터리/그룹 우선, 없으면 principalId 폴백 /
+// Resolve display name from real directory (users/depts) and real groups; fall back to id.
 function resolvePrincipalName(
   principalType: PrincipalType,
   principalId: string,
   dirUsers: DirectoryUser[],
   dirDepts: DirectoryDept[],
-  mockState: ReturnType<typeof usePermissions>,
+  groups: Group[],
 ): string {
   if (principalType === "user") {
-    return (
-      dirUsers.find((u) => u.id === principalId)?.name ??
-      mockState.users.find((u) => u.id === principalId)?.name ??
-      principalId
-    );
+    return dirUsers.find((u) => u.id === principalId)?.name ?? principalId;
   }
   if (principalType === "department") {
-    return (
-      dirDepts.find((d) => d.id === principalId)?.name ??
-      mockState.departments.find((d) => d.id === principalId)?.name ??
-      principalId
-    );
+    return dirDepts.find((d) => d.id === principalId)?.name ?? principalId;
   }
-  return mockState.groups.find((g) => g.id === principalId)?.name ?? principalId;
+  return groups.find((g) => String(g.id) === principalId)?.name ?? principalId;
 }
 
 // 개별 행 — 이름, 아이콘, 역할, 변경/제거 컨트롤 / Individual permission row.
@@ -76,6 +84,7 @@ function CollaboratorRow({
   isPending,
   dirUsers,
   dirDepts,
+  groups,
   onChangeRole,
   onRemove,
 }: {
@@ -85,13 +94,13 @@ function CollaboratorRow({
   isPending: boolean;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
+  groups: Group[];
   onChangeRole: (perm: ApiPermission, toRole: MapRole) => void;
   onRemove: (perm: ApiPermission) => void;
 }) {
   const { t } = useI18n();
-  const mockState = usePermissions();
   const principalType = perm.principal_type as PrincipalType;
-  const displayName = resolvePrincipalName(principalType, perm.principal_id, dirUsers, dirDepts, mockState);
+  const displayName = resolvePrincipalName(principalType, perm.principal_id, dirUsers, dirDepts, groups);
   const role = perm.role as MapRole;
   const isOwner = role === "owner";
   // 자기 자신 행은 역할/제거 비활성 / Disable controls on own row.
@@ -143,6 +152,7 @@ function AddCollaboratorForm({
   viewerGrantDisabled,
   dirUsers,
   dirDepts,
+  groups,
   onAdd,
 }: {
   excludeIds: Set<string>;
@@ -152,6 +162,8 @@ function AddCollaboratorForm({
   dirUsers: DirectoryUser[];
   /** 실 디렉터리 부서 / Real directory departments for the picker. */
   dirDepts: DirectoryDept[];
+  /** 실 active 그룹 / Real active groups for the picker. */
+  groups: Group[];
   onAdd: (
     principalType: PrincipalType,
     principalId: string,
@@ -159,7 +171,6 @@ function AddCollaboratorForm({
   ) => void;
 }) {
   const { t } = useI18n();
-  const state = usePermissions();
   const [selected, setSelected] = useState<PrincipalOption | null>(null);
   // 공개 맵이면 editor 기본값 / Default to editor on public maps (viewer disabled).
   const [role, setRole] = useState<"viewer" | "editor">(viewerGrantDisabled ? "editor" : "viewer");
@@ -197,7 +208,7 @@ function AddCollaboratorForm({
       <PrincipalPicker
         users={pickerUsers}
         departments={pickerDepts}
-        groups={state.groups}
+        groups={toPickerGroups(groups)}
         excludeIds={excludeIds}
         onSelect={setSelected}
       />
@@ -231,11 +242,6 @@ function AddCollaboratorForm({
               {t("perm.addButton")}
             </button>
           </div>
-
-          {/* 그룹 권한은 저장되나 Layer 4부터 적용 / Group grants stored but effective from Layer 4 */}
-          {selected.principalType === "group" && (
-            <p className="text-fine text-ink-tertiary">{t("perm.groupLayer4Note")}</p>
-          )}
         </div>
       )}
     </div>
@@ -262,6 +268,9 @@ export function CollaboratorsPanel({
   // Real directory for picker candidates and display-name resolution.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+  // 실 active 그룹 — 그룹 협업자 옵션·표시명 (Layer 4 Task 4) /
+  // Real active groups for group collaborator options and display names.
+  const [groups, setGroups] = useState<Group[]>([]);
 
   const reload = useCallback(async () => {
     try {
@@ -278,14 +287,16 @@ export function CollaboratorsPanel({
     let active = true;
     void (async () => {
       try {
-        const [rows, dir] = await Promise.all([
+        const [rows, dir, groupRows] = await Promise.all([
           listMapPermissions(mapIdNum),
           getDirectory(),
+          listGroups(),
         ]);
         if (active) {
           setPerms(rows);
           setDirUsers(dir.users);
           setDirDepts(dir.departments);
+          setGroups(groupRows);
         }
       } catch (err) {
         if (active) onToast(err instanceof Error ? err.message : String(err));
@@ -367,6 +378,7 @@ export function CollaboratorsPanel({
           isPending={pendingIds.has(perm.id)}
           dirUsers={dirUsers}
           dirDepts={dirDepts}
+          groups={groups}
           onChangeRole={handleChangeRole}
           onRemove={handleRemove}
         />
@@ -379,6 +391,7 @@ export function CollaboratorsPanel({
           viewerGrantDisabled={viewerGrantDisabled}
           dirUsers={dirUsers}
           dirDepts={dirDepts}
+          groups={groups}
           onAdd={handleAdd}
         />
       )}
