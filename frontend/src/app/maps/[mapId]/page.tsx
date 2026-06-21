@@ -1091,24 +1091,42 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── AI 제안 미리보기 / 적용 / 취소 ─────────────────────
   const applyAiProposal = useCallback(
     (proposal: AiProposal) => {
+      // Phase 2: graph(전체 교체)만 적용. ops/walkthrough/analysis는 Phase 3~5(패널이 폴백 렌더)
+      if (proposal.kind !== "graph") return;
+      // 그룹 임시키 → 실제 id (노드 group_key·그룹 parent_key 해석용)
+      const groupKeyToId = new Map<string, string>();
+      for (const group of proposal.groups) {
+        groupKeyToId.set(group.key, genId());
+      }
+      const ggroups: GraphGroup[] = proposal.groups.map((group) => {
+        const id = groupKeyToId.get(group.key) ?? genId();
+        const parentId = group.parent_key
+          ? groupKeyToId.get(group.parent_key) ?? null
+          : null;
+        return { id, parent_group_id: parentId, label: group.label, color: group.color };
+      });
+
       const keyToId = new Map<string, string>();
       const gnodes = proposal.nodes.map((node) => {
         const id = genId();
         keyToId.set(node.key, id);
+        // AI가 준 메타를 실제 노드에 반영 — 미제공은 빈값 (D1 생성=교체)
+        const attr = node.attributes;
+        const groupId = node.group_key ? groupKeyToId.get(node.group_key) : undefined;
         return {
           id,
           title: node.title,
           description: node.description,
           node_type: node.node_type,
-          color: "",
-          assignee: "",
-          department: "",
-          system: "",
-          duration: "",
+          color: attr?.color ?? "",
+          assignee: attr?.assignee ?? "",
+          department: attr?.department ?? "",
+          system: attr?.system ?? "",
+          duration: attr?.duration ?? "",
           pos_x: 0,
           pos_y: 0,
           sort_order: 0,
-          group_ids: [],
+          group_ids: groupId ? [groupId] : [],
           linked_map_id: null,
           follow_latest: false,
           linked_version_id: null,
@@ -1133,16 +1151,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         })
         .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
 
-      const graph = { nodes: gnodes, edges: gedges, groups: [] };
+      const graph = { nodes: gnodes, edges: gedges, groups: ggroups };
       const laidOut = layoutWithDagre(toAppNodes(graph), toAppEdges(graph));
 
       pushHistory(); // Discard = undo restores the pre-preview state
       aiPreviewRef.current = true;
       setNodes(laidOut);
       setEdges(toAppEdges(graph));
+      setGroups(ggroups);
       setAiPreviewActive(true);
     },
-    [pushHistory, setNodes, setEdges],
+    [pushHistory, setNodes, setEdges, setGroups],
   );
 
   const commitAiPreview = useCallback(() => {

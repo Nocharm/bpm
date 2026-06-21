@@ -72,7 +72,9 @@ export function AiChatPanel({
     }));
     try {
       const proposal = await aiChat(versionId, instruction, history, model || null);
-      setMessages((prev) => [...prev, { role: "assistant", content: proposal.message }]);
+      // graph/answer만 활성 — 빈 message(핸들러 없는 kind)는 미지원 안내로 폴백 (규칙 ③b)
+      const content = proposal.message || t("ai.unsupportedKind");
+      setMessages((prev) => [...prev, { role: "assistant", content }]);
       if (proposal.kind === "graph") {
         onGraphProposal(proposal);
       }

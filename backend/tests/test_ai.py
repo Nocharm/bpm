@@ -287,3 +287,214 @@ def test_ai_models_fallback_to_default_on_error(
 
     assert resp.status_code == 200
     assert resp.json()["models"] == ["/default-model"]
+
+
+# === Phase 2: 계약 5종 확장 ===
+
+
+def test_proposal_graph_carries_attributes_and_group() -> None:
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "graph",
+            "message": "ok",
+            "groups": [{"key": "g1", "label": "구매팀"}],
+            "nodes": [
+                {
+                    "key": "a",
+                    "title": "발주",
+                    "node_type": "process",
+                    "attributes": {"assignee": "김철수", "department": "구매팀"},
+                    "group_key": "g1",
+                }
+            ],
+            "edges": [],
+        }
+    )
+    assert proposal.nodes[0].attributes is not None
+    assert proposal.nodes[0].attributes.assignee == "김철수"
+    assert proposal.nodes[0].group_key == "g1"
+    assert proposal.groups[0].label == "구매팀"
+
+
+def test_proposal_rejects_unknown_group_key() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas import AiProposal
+
+    with pytest.raises(ValidationError):
+        AiProposal.model_validate(
+            {
+                "kind": "graph",
+                "message": "x",
+                "nodes": [
+                    {"key": "a", "title": "A", "node_type": "process", "group_key": "ghost"}
+                ],
+                "edges": [],
+            }
+        )
+
+
+def test_proposal_walkthrough_parses() -> None:
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "walkthrough",
+            "message": "투어",
+            "steps": [{"order": 1, "node_id": "n1", "narration": "여기서 시작"}],
+        }
+    )
+    assert proposal.kind == "walkthrough"
+    assert proposal.steps[0].node_id == "n1"
+
+
+def test_proposal_analysis_parses() -> None:
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "analysis",
+            "message": "분석",
+            "findings": [
+                {
+                    "severity": "high",
+                    "category": "cycle",
+                    "node_ids": ["n1", "n2"],
+                    "message": "순환",
+                    "suggestion": "끊으세요",
+                }
+            ],
+        }
+    )
+    assert proposal.findings[0].severity == "high"
+    assert proposal.findings[0].node_ids == ["n1", "n2"]
+
+
+def test_proposal_ops_parses() -> None:
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "ops",
+            "message": "수정",
+            "ops": [
+                {"action": "relabel", "node_id": "n1", "title": "새 제목"},
+                {"action": "connect", "source": "n1", "target": "n2", "label": "예"},
+            ],
+        }
+    )
+    assert proposal.kind == "ops"
+    assert proposal.ops[0].action == "relabel"
+
+
+def test_serialize_graph_exposes_node_id_attributes_and_groups() -> None:
+    # 계약 규칙 ②: 직렬화가 캐노니컬 node_id를 노출(ops/편집 생명선) + 어트리뷰트·그룹 포함
+    from app.ai_prompt import build_messages
+    from app.schemas import GraphOut, GroupIn, NodeOut
+
+    graph = GraphOut(
+        nodes=[
+            NodeOut(
+                id="N_real_1",
+                title="발주 승인",
+                node_type="process",
+                assignee="김철수",
+                department="구매팀",
+                group_ids=["G1"],
+            )
+        ],
+        edges=[],
+        groups=[GroupIn(id="G1", label="구매")],
+    )
+    system = build_messages("M", graph, True, "?", [])[0]["content"]
+    assert "N_real_1" in system  # 캐노니컬 id 노출 (규칙 ②)
+    assert "담당=김철수" in system
+    assert "그룹=G1" in system
+    assert "구매" in system  # groups 섹션 라벨
+
+
+def test_ai_graph_proposal_preserves_attributes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    version_id = _draft_version_checked_out(client)
+    content = json.dumps(
+        {
+            "kind": "graph",
+            "message": "ok",
+            "groups": [{"key": "g1", "label": "구매팀"}],
+            "nodes": [
+                {
+                    "key": "a",
+                    "title": "발주",
+                    "node_type": "process",
+                    "attributes": {"assignee": "김철수"},
+                    "group_key": "g1",
+                }
+            ],
+            "edges": [],
+        }
+    )
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(content))
+
+    resp = client.post(
+        f"/api/versions/{version_id}/ai/chat", json={"instruction": "그려줘"}
+    )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["nodes"][0]["attributes"]["assignee"] == "김철수"
+    assert body["nodes"][0]["group_key"] == "g1"
+    assert body["groups"][0]["label"] == "구매팀"
+
+
+def test_ai_ops_downgraded_when_not_editable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    version_id = created["versions"][0]["id"]  # 체크아웃 안 함 → can_edit False
+    content = json.dumps(
+        {"kind": "ops", "message": "x", "ops": [{"action": "remove", "node_id": "n1"}]}
+    )
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(content))
+
+    resp = client.post(
+        f"/api/versions/{version_id}/ai/chat", json={"instruction": "지워"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "answer"  # 편집계열(ops) 다운그레이드
+
+
+def test_ai_analysis_surfaces_unknown_node(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    version_id = _draft_version_checked_out(client)  # 빈 그래프
+    content = json.dumps(
+        {
+            "kind": "analysis",
+            "message": "분석 결과",
+            "findings": [
+                {
+                    "severity": "low",
+                    "category": "orphan",
+                    "node_ids": ["ghost"],
+                    "message": "고아",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(content))
+
+    resp = client.post(
+        f"/api/versions/{version_id}/ai/chat", json={"instruction": "분석해"}
+    )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["kind"] == "analysis"  # read-only — 다운그레이드 안 됨
+    assert "ghost" in body["message"]  # 누락 참조 표면화 (규칙 ④)

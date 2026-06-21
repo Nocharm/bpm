@@ -644,11 +644,23 @@ export function markNotificationRead(id: number): Promise<NotificationItem> {
 
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
 
+export interface AiNodeAttributes {
+  assignee: string;
+  department: string;
+  system: string;
+  duration: string;
+  color: string;
+}
+
 export interface AiNode {
   key: string;
   title: string;
   node_type: string;
   description: string;
+  // 선택 메타 — 미제공이면 null (apply가 빈값/기존값으로 처리, D1)
+  attributes: AiNodeAttributes | null;
+  // 소속 그룹 — AiProposal.groups[].key 참조. null=무소속
+  group_key: string | null;
 }
 
 export interface AiEdge {
@@ -657,11 +669,58 @@ export interface AiEdge {
   label: string;
 }
 
+// 그룹(레인/박스) 제안 — key는 노드 group_key가 참조하는 임시키
+export interface AiGroup {
+  key: string;
+  label: string;
+  color: string;
+  parent_key: string | null;
+}
+
+export type AiOpAction = "add" | "remove" | "connect" | "relabel" | "set_attr";
+
+// 증분 편집 연산 (D1 하이브리드) — 실제 적용은 Phase 3
+export interface AiOp {
+  action: AiOpAction;
+  node_id: string | null;
+  node: AiNode | null;
+  source: string | null;
+  target: string | null;
+  label: string | null;
+  title: string | null;
+  attributes: AiNodeAttributes | null;
+}
+
+// 워크스루 단계 (Phase 5)
+export interface AiStep {
+  order: number;
+  node_id: string;
+  narration: string;
+}
+
+export type AiSeverity = "high" | "medium" | "low";
+
+// 분석 결과 항목 (Phase 4)
+export interface AiFinding {
+  severity: AiSeverity;
+  category: string;
+  node_ids: string[];
+  message: string;
+  suggestion: string;
+}
+
+export type AiProposalKind = "graph" | "answer" | "walkthrough" | "analysis" | "ops";
+
 export interface AiProposal {
-  kind: "graph" | "answer";
+  // 판별 5종 — graph/answer 활성, ops/walkthrough/analysis는 타입만(Phase 3~5 활성)
+  kind: AiProposalKind;
   message: string;
   nodes: AiNode[];
   edges: AiEdge[];
+  groups: AiGroup[];
+  ops: AiOp[];
+  steps: AiStep[];
+  findings: AiFinding[];
 }
 
 export interface AiChatTurn {

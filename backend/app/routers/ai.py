@@ -22,6 +22,38 @@ router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current
 logger = logging.getLogger(__name__)
 
 _NOT_EDITABLE_MSG = "이 버전은 편집할 수 없어 그래프를 적용할 수 없습니다. 도움말만 가능합니다."
+_UNKNOWN_NODES_MSG = "참고: 현재 맵에 없는 노드를 참조했습니다 — {ids}"
+
+
+def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
+    """proposal이 참조하는 기존 node_id 중 현 그래프에 없는 것 — drop 대신 표면화 (계약 규칙 ④).
+
+    ops의 add는 새 임시키라 유효 참조로 인정. graph/answer는 대상 아님(빈 리스트).
+    """
+    known = set(valid_ids)
+    referenced: list[str] = []
+    if proposal.kind == "ops":
+        for op in proposal.ops:
+            if op.action == "add" and op.node is not None:
+                known.add(op.node.key)
+        for op in proposal.ops:
+            if op.action in ("remove", "relabel", "set_attr") and op.node_id:
+                referenced.append(op.node_id)
+            elif op.action == "connect":
+                referenced += [ref for ref in (op.source, op.target) if ref]
+    elif proposal.kind == "walkthrough":
+        referenced = [step.node_id for step in proposal.steps]
+    elif proposal.kind == "analysis":
+        referenced = [nid for finding in proposal.findings for nid in finding.node_ids]
+    else:
+        return []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for node_id in referenced:
+        if node_id not in known and node_id not in seen:
+            seen.add(node_id)
+            missing.append(node_id)
+    return missing
 
 
 def _extract_json(text: str) -> str:
@@ -78,9 +110,14 @@ async def ai_chat(
     )
 
     proposal = await _ask_and_validate(messages, payload.model)
-    # 편집 불가인데 그래프를 제안하면 적용 불가 — answer로 다운그레이드 (실제 적용 가드는 saveGraph가 최종 enforce)
-    if proposal.kind == "graph" and not can_edit:
+    # 편집 불가인데 편집계열(graph/ops)을 제안하면 적용 불가 — answer로 다운그레이드 (최종 가드는 saveGraph)
+    if proposal.kind in ("graph", "ops") and not can_edit:
         return AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
+    # 현 그래프에 없는 node_id 참조는 drop하지 말고 message로 표면화 (계약 규칙 ④)
+    missing = _missing_node_ids(proposal, {node.id for node in current.nodes})
+    if missing:
+        warning = _UNKNOWN_NODES_MSG.format(ids=", ".join(missing))
+        proposal.message = f"{proposal.message}\n{warning}" if proposal.message else warning
     return proposal
 
 
