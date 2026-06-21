@@ -1,0 +1,413 @@
+"use client";
+
+// 맵 생성 다이얼로그 — 이름·공개범위·초기협업자·결재자 설정 후 실제 맵 생성 + mock 권한 오버레이 등록 /
+// Map creation dialog: name, visibility, initial collaborators, required approvers.
+// Real map created via createMap(); mock overlay attached via createMapPermission().
+
+import { createPortal } from "react-dom";
+import { useCallback, useState } from "react";
+import { X, Globe, Lock, User } from "lucide-react";
+
+import { createMap } from "@/lib/api";
+import { genId } from "@/lib/id";
+import { useI18n } from "@/lib/i18n";
+import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
+import { usePermissions, createMapPermission } from "@/lib/mock/permissions-store";
+import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
+import { ModalBackdrop } from "@/components/modal-backdrop";
+import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
+import type { PrincipalOption } from "@/components/permissions/principal-picker";
+
+// ── 내부 타입 ───────────────────────────────────────────────────
+
+interface CollaboratorEntry {
+  key: string; // 목록 렌더링 key — genId() / list render key
+  principalType: PrincipalType;
+  principalId: string;
+  displayName: string;
+  role: MapRole; // viewer | editor (owner은 자동 부여)
+}
+
+interface ApproverEntry {
+  key: string;
+  userId: string;
+  displayName: string;
+}
+
+interface Props {
+  onClose: () => void;
+  onCreated: () => void; // 생성 후 목록 갱신 콜백 / callback to refresh list after creation
+}
+
+export function CreateMapDialog({ onClose, onCreated }: Props) {
+  const { t } = useI18n();
+  const state = usePermissions();
+  const currentUser = useCurrentMockUser();
+
+  // ── 폼 상태 / form state ──
+  const [name, setName] = useState("");
+  const [visibility, setVisibility] = useState<MapVisibility>("private");
+  const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
+  const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
+  const [pendingCollab, setPendingCollab] = useState<PrincipalOption | null>(null);
+  const [pendingCollabRole, setPendingCollabRole] = useState<"viewer" | "editor">("viewer");
+  const [pendingApprover, setPendingApprover] = useState<string>(""); // 검색어 / search input
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── 공개범위 변경 시 뷰어→편집자 초기화 / reset pending role when switching to public ──
+  const handleVisibilityChange = useCallback((v: MapVisibility) => {
+    setVisibility(v);
+    if (v === "public" && pendingCollabRole === "viewer") {
+      setPendingCollabRole("editor");
+    }
+  }, [pendingCollabRole]);
+
+  // ── 협업자 추가 / add collaborator ──
+  const handleAddCollab = useCallback(() => {
+    if (!pendingCollab) return;
+    const role: MapRole = visibility === "public" ? "editor" : pendingCollabRole;
+    setCollaborators((prev) => {
+      // 중복 방지 / dedup
+      if (prev.some((c) => c.principalId === pendingCollab.principalId)) return prev;
+      return [
+        ...prev,
+        {
+          key: genId(),
+          principalType: pendingCollab.principalType,
+          principalId: pendingCollab.principalId,
+          displayName: pendingCollab.displayName,
+          role,
+        },
+      ];
+    });
+    setPendingCollab(null);
+  }, [pendingCollab, pendingCollabRole, visibility]);
+
+  // ── 협업자 제거 / remove collaborator ──
+  const handleRemoveCollab = useCallback((key: string) => {
+    setCollaborators((prev) => prev.filter((c) => c.key !== key));
+  }, []);
+
+  // ── 결재자 추가 (users only) / add approver (users only) ──
+  const handleAddApprover = useCallback((userId: string, displayName: string) => {
+    setApprovers((prev) => prev.some((a) => a.userId === userId) ? prev : [...prev, { key: genId(), userId, displayName }]);
+    setPendingApprover("");
+  }, []);
+
+  // ── 결재자 제거 / remove approver ──
+  const handleRemoveApprover = useCallback((key: string) => {
+    setApprovers((prev) => prev.filter((a) => a.key !== key));
+  }, []);
+
+  // ── 생성 / create ──
+  const handleCreate = useCallback(async () => {
+    if (!currentUser) return;
+    const trimmed = name.trim();
+    if (!trimmed || approvers.length === 0) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      // 1. 실제 맵 생성 / real map create
+      const detail = await createMap(trimmed);
+      // 2. mock 권한 오버레이 / mock permission overlay
+      createMapPermission(
+        String(detail.id),
+        currentUser.id,
+        visibility,
+        collaborators.map((c) => ({
+          principalType: c.principalType,
+          principalId: c.principalId,
+          role: c.role,
+        })),
+        approvers.map((a) => a.userId),
+      );
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("err.createMap"));
+      setSubmitting(false);
+    }
+  }, [currentUser, name, visibility, collaborators, approvers, onCreated, onClose, t]);
+
+  // ── 버튼 활성 / button enabled ──
+  const canCreate =
+    currentUser !== null &&
+    name.trim().length > 0 &&
+    approvers.length >= 1 &&
+    !submitting;
+
+  // ── 결재자 picker용 — users only, 이미 추가된 사람 제외 / user-only picker, exclude already added ──
+  const approverExcludeIds = new Set(approvers.map((a) => a.userId));
+  const allUsers = state.users.filter(
+    (u) => u.status === "active" && !approverExcludeIds.has(u.id),
+  );
+  const filteredApproverUsers = pendingApprover.trim()
+    ? allUsers.filter((u) =>
+        u.name.includes(pendingApprover) || u.id.includes(pendingApprover),
+      )
+    : allUsers;
+
+  // ── 협업자 picker 제외 목록 / collab picker exclude set ──
+  const collabExcludeIds = new Set(
+    collaborators.map((c) => c.principalId).concat(currentUser ? [currentUser.id] : []),
+  );
+
+  const dialog = (
+    <ModalBackdrop
+      onClose={onClose}
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20"
+    >
+      <div className="relative flex w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
+        {/* 헤더 / header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-body-strong text-ink">{t("perm.createDialog.title")}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt"
+            aria-label={t("perm.createDialog.cancelBtn")}
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        {/* 사용자 없음 경고 / no user warning */}
+        {!currentUser && (
+          <p className="text-caption text-error">{t("perm.createDialog.noUser")}</p>
+        )}
+
+        {/* 이름 / name */}
+        <div className="flex flex-col gap-1">
+          <label className="text-caption text-ink-secondary">
+            {t("perm.createDialog.nameLabel")}
+          </label>
+          <input
+            type="text"
+            className="rounded-sm border border-hairline bg-surface px-3 py-1.5 text-body text-ink outline-none placeholder:text-ink-tertiary focus:border-accent"
+            placeholder={t("perm.createDialog.namePlaceholder")}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleCreate();
+            }}
+            disabled={submitting}
+            autoFocus
+          />
+        </div>
+
+        {/* 공개 범위 / visibility */}
+        <div className="flex flex-col gap-1">
+          <span className="text-caption text-ink-secondary">
+            {t("perm.createDialog.visibilityLabel")}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleVisibilityChange("private")}
+              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                visibility === "private"
+                  ? "border-accent bg-accent-tint text-accent"
+                  : "border-hairline text-ink hover:bg-surface-alt"
+              }`}
+              disabled={submitting}
+            >
+              <Lock size={16} strokeWidth={1.5} />
+              {t("perm.createDialog.visibilityPrivate")}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleVisibilityChange("public")}
+              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                visibility === "public"
+                  ? "border-accent bg-accent-tint text-accent"
+                  : "border-hairline text-ink hover:bg-surface-alt"
+              }`}
+              disabled={submitting}
+            >
+              <Globe size={16} strokeWidth={1.5} />
+              {t("perm.createDialog.visibilityPublic")}
+            </button>
+          </div>
+          {visibility === "public" && (
+            <p className="text-fine text-ink-tertiary">
+              {t("perm.createDialog.visibilityViewerNote")}
+            </p>
+          )}
+        </div>
+
+        {/* 초기 협업자 / initial collaborators */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-caption text-ink-secondary">
+            {t("perm.createDialog.collaboratorsLabel")}
+          </span>
+          {/* picker + role + 추가 버튼 / picker + role + add button */}
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <PrincipalPicker
+                users={state.users}
+                departments={state.departments}
+                groups={state.groups}
+                excludeIds={collabExcludeIds}
+                onSelect={(opt) => setPendingCollab(opt)}
+              />
+            </div>
+            {/* 역할 선택 / role select */}
+            <select
+              className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none"
+              value={visibility === "public" ? "editor" : pendingCollabRole}
+              onChange={(e) => setPendingCollabRole(e.target.value as "viewer" | "editor")}
+              disabled={submitting || visibility === "public"}
+              title={visibility === "public" ? t("perm.createDialog.collaboratorRoleViewerDisabled") : undefined}
+            >
+              {visibility !== "public" && (
+                <option value="viewer">{t("perm.createDialog.collaboratorRoleViewer")}</option>
+              )}
+              <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleAddCollab}
+              disabled={!pendingCollab || submitting}
+              className="rounded-sm border border-hairline px-3 py-1 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+            >
+              {t("perm.createDialog.addBtn")}
+            </button>
+          </div>
+          {/* 선택된 협업자 표시 / selected collaborator display */}
+          {pendingCollab && (
+            <div className="flex items-center gap-1.5 rounded-sm border border-accent bg-accent-tint px-2 py-1 text-caption text-accent">
+              <PrincipalIcon type={pendingCollab.principalType} />
+              <span>{pendingCollab.displayName}</span>
+            </div>
+          )}
+          {/* 추가된 협업자 목록 / added collaborators list */}
+          {collaborators.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {collaborators.map((c) => (
+                <li
+                  key={c.key}
+                  className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                >
+                  <PrincipalIcon type={c.principalType} />
+                  <span className="flex-1">{c.displayName}</span>
+                  <span className="text-fine text-ink-tertiary">
+                    {c.role === "editor"
+                      ? t("perm.createDialog.collaboratorRoleEditor")
+                      : t("perm.createDialog.collaboratorRoleViewer")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCollab(c.key)}
+                    className="text-ink-tertiary hover:text-ink"
+                    aria-label={t("perm.removeButton")}
+                    disabled={submitting}
+                  >
+                    <X size={16} strokeWidth={1.5} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* 결재자 / approvers */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-caption text-ink-secondary">
+            {t("perm.createDialog.approversLabel")}
+          </span>
+          {/* 검색 입력 / search input */}
+          <div className="relative flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
+              <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <input
+                type="text"
+                className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
+                placeholder={t("perm.createDialog.approverPickerPlaceholder")}
+                value={pendingApprover}
+                onChange={(e) => setPendingApprover(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            {/* 드롭다운 결과 / dropdown results */}
+            {pendingApprover.trim() && filteredApproverUsers.length > 0 && (
+              <div className="flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-md">
+                {filteredApproverUsers.slice(0, 8).map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    className="flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                    onClick={() => handleAddApprover(u.id, u.name)}
+                  >
+                    <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    <span>{u.name}</span>
+                    <span className="ml-auto text-fine text-ink-tertiary">{u.id}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* 추가된 결재자 목록 / added approvers list */}
+          {approvers.length === 0 && (
+            <p className="text-fine text-ink-tertiary">
+              {t("perm.createDialog.approversHint")}
+            </p>
+          )}
+          {approvers.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {approvers.map((a) => (
+                <li
+                  key={a.key}
+                  className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                >
+                  <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="flex-1">{a.displayName}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveApprover(a.key)}
+                    className="text-ink-tertiary hover:text-ink"
+                    aria-label={t("perm.removeButton")}
+                    disabled={submitting}
+                  >
+                    <X size={16} strokeWidth={1.5} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* 오류 / error */}
+        {error && <p className="text-caption text-error">{error}</p>}
+
+        {/* 버튼 행 / action row */}
+        <div className="flex items-center justify-end gap-2">
+          {!canCreate && approvers.length === 0 && name.trim().length > 0 && (
+            <p className="mr-auto text-fine text-error">
+              {t("perm.createDialog.approversHint")}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-sm border border-hairline px-4 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+          >
+            {t("perm.createDialog.cancelBtn")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={!canCreate}
+            className="rounded-sm bg-accent px-4 py-1.5 text-caption text-surface hover:opacity-90 disabled:opacity-40"
+          >
+            {submitting ? "…" : t("perm.createDialog.createBtn")}
+          </button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(dialog, document.body);
+}

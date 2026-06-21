@@ -11,7 +11,7 @@ export const LOCAL_USERS: LocalUser[] = [
   { loginId: "admin.kim", name: "김관리", department: "프로세스혁신팀", role: "admin" },
   { loginId: "user.lee", name: "이업무", department: "구매팀", role: "user" },
   { loginId: "user.park", name: "박담당", department: "인사팀", role: "user" },
-  { loginId: "user.choi", name: "최실무", department: "생산관리팀", role: "user" },
+  { loginId: "user.choi", name: "최실무", department: "프로세스혁신팀", role: "user" },
   { loginId: "user.jung", name: "정사용", department: "품질팀", role: "user" },
 ];
 

@@ -9,6 +9,7 @@ import { setDevUser } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
+import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { NotificationBell } from "@/components/notification-bell";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
@@ -21,6 +22,7 @@ export function TopNav() {
     getCurrentUser,
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
+  const mockUser = useCurrentMockUser();
   const [open, setOpen] = useState(false);
 
   const onLogout = async () => {
@@ -72,6 +74,30 @@ export function TopNav() {
                     {t("nav.adminPage")}
                   </button>
                 )}
+                {/* sysadmin 전용 권한 관리 콘솔 / Sysadmin-only permissions console */}
+                {mockUser?.isSysadmin && (
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                    onClick={() => {
+                      setOpen(false);
+                      router.push("/admin/permissions");
+                    }}
+                  >
+                    {t("perm.sysadmin.navLink")}
+                  </button>
+                )}
+                {/* 유저 그룹 관리 페이지 / User group management */}
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/groups");
+                  }}
+                >
+                  {t("nav.groups")}
+                </button>
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
