@@ -9,6 +9,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions import logic
+from app.permissions.access import get_effective_role
 from app.permissions.deps import require_map_role
 from app.schemas import MapCreate, MapDetailOut, MapOut, MapUpdate
 
@@ -33,7 +34,9 @@ async def list_maps(
     )
     is_admin = logic.is_sysadmin(user)
     if is_admin:
-        return maps  # sysadmin → 전 맵 owner, 필터 불필요(쿼리도 생략)
+        for m in maps:
+            m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)
+        return maps  # 필터 불필요(쿼리도 생략)
 
     emp = await session.get(Employee, user)
     emp_org_path = (
@@ -63,10 +66,10 @@ async def list_maps(
         ).all()
     )
 
-    return [
-        m
-        for m in maps
-        if logic.is_visible(
+    # 가시성 필터와 my_role 노출을 한 번의 effective_role 계산으로 처리 (이중 계산 회피).
+    visible: list[ProcessMap] = []
+    for m in maps:
+        role = logic.effective_role(
             user,
             False,  # is_admin True는 위에서 조기 반환
             emp_org_path,
@@ -74,7 +77,10 @@ async def list_maps(
             perms_by_map.get(m.id, []),
             m.id in approver_map_ids,
         )
-    ]
+        if role is not None:  # is_visible == (effective_role is not None)
+            m.my_role = role
+            visible.append(m)
+    return visible
 
 
 @router.post("", response_model=MapDetailOut, status_code=201)
@@ -106,6 +112,7 @@ async def create_map(
     )
     await session.commit()
     await session.refresh(new_map, attribute_names=["versions"])
+    new_map.my_role = "owner"  # 생성자는 owner 권한 행 부여됨
     return new_map
 
 
@@ -115,13 +122,17 @@ async def create_map(
     dependencies=[Depends(require_map_role("viewer"))],
 )
 async def get_map(
-    map_id: int, session: AsyncSession = Depends(get_session)
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
 ) -> ProcessMap:
     found_map = await session.get(
         ProcessMap, map_id, options=[selectinload(ProcessMap.versions)]
     )
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    # 호출자의 서버 산정 역할을 응답에 부착 — 프론트 게이팅 단일 소스
+    found_map.my_role = await get_effective_role(session, user, map_id)
     return found_map
 
 

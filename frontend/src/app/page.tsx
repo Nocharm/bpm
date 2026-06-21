@@ -10,16 +10,11 @@ import { Plus, Trash2 } from "lucide-react";
 import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
-import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { usePermissions } from "@/lib/mock/permissions-store";
-import { isVisibleToUser } from "@/lib/mock/permissions-logic";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 export default function MapListPage() {
   const { t } = useI18n();
-  const permState = usePermissions();
-  const currentUser = useCurrentMockUser();
 
   const [maps, setMaps] = useState<MapSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -73,20 +68,12 @@ export default function MapListPage() {
     [refresh, t],
   );
 
-  // 공개범위 필터 — currentUser가 null이면 전체 노출(안전 폴백) /
-  // Visibility filter — show all when currentUser is null (safety fallback).
-  const visibleMaps = useMemo(() => {
-    if (!currentUser) return maps;
-    return maps.filter((m) => {
-      const mapId = String(m.id);
-      // isVisibleToUser covers sysadmin (returns true), public maps, and explicit grants.
-      // created_by fallback: pre-existing maps with no mock overlay are visible to their creator.
-      return (
-        isVisibleToUser(permState, currentUser.id, mapId) ||
-        m.created_by === currentUser.id
-      );
-    });
-  }, [maps, permState, currentUser]);
+  // 가시성은 서버가 이미 적용(GET /maps는 접근 가능한 맵만 반환, my_role 동봉) — 클라 재계산 폐기 /
+  // Server already filters GET /maps by access and sets my_role; no client recompute.
+  const visibleMaps = useMemo(
+    () => maps.filter((m) => m.my_role !== null),
+    [maps],
+  );
 
   return (
     <main className="mx-auto max-w-2xl p-8">

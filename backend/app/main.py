@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session, init_models
 from app.models import Employee
+from app.permissions.logic import is_sysadmin
 from app.routers import (
     ai,
     approvers,
@@ -73,4 +74,5 @@ async def get_me(
         name=emp.name if emp else login_id,
         role=emp.role if emp else "user",
         department=emp.department if emp else "",
+        is_sysadmin=is_sysadmin(login_id),
     )

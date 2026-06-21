@@ -7,12 +7,14 @@ export interface LocalUser {
   role: "admin" | "user";
 }
 
+// 표시명·부서는 백엔드 영문 시드(app/ad/service.LOCAL_USERS)와 정렬 — /api/me와 일치 /
+// Display name/department aligned to the backend English seed so the switcher matches /api/me.
 export const LOCAL_USERS: LocalUser[] = [
-  { loginId: "admin.kim", name: "김관리", department: "프로세스혁신팀", role: "admin" },
-  { loginId: "user.lee", name: "이업무", department: "구매팀", role: "user" },
-  { loginId: "user.park", name: "박담당", department: "인사팀", role: "user" },
-  { loginId: "user.choi", name: "최실무", department: "프로세스혁신팀", role: "user" },
-  { loginId: "user.jung", name: "정사용", department: "품질팀", role: "user" },
+  { loginId: "admin.kim", name: "Junho Kim", department: "Process Innovation Team", role: "admin" },
+  { loginId: "user.lee", name: "Minjae Lee", department: "Sourcing Team 1", role: "user" },
+  { loginId: "user.park", name: "Soyeon Park", department: "Sourcing Team 1", role: "user" },
+  { loginId: "user.choi", name: "Daehyun Choi", department: "Sourcing Team 2", role: "user" },
+  { loginId: "user.jung", name: "Hana Jung", department: "Procurement Office", role: "user" },
 ];
 
 const KEY = "bpm.devUser";

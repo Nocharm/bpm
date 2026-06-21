@@ -53,7 +53,7 @@ def test_me_uses_dev_user_header(client: TestClient) -> None:
     body = res.json()
     assert body["username"] == "admin.kim"
     assert body["role"] == "admin"
-    assert body["department"] == "프로세스혁신팀"
+    assert body["department"] == "Process Innovation Team"
 
 
 def test_me_falls_back_for_unknown_user(client: TestClient) -> None:

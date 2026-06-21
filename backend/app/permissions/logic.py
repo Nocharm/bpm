@@ -29,10 +29,10 @@ def belongs_to_department(emp_org_path: str, principal_id: str) -> bool:
     """직원이 principal_id 부서(또는 그 하위)에 속하는지 판정.
 
     정확 일치(exact) 또는 prefix + "/" 경계로 비교 — 부분 문자열 오검출 방지.
-    예: principal='경영지원본부/구매실'
-      '경영지원본부/구매실'          → True  (exact)
-      '경영지원본부/구매실/구매1팀'  → True  (prefix/)
-      '경영지원본부/구매실무'        → False (경계 없는 부분 일치)
+    예: principal='Management Support Division/Procurement Office'
+      '…/Procurement Office'                  → True  (exact)
+      '…/Procurement Office/Sourcing Team 1'  → True  (prefix/)
+      '…/ProcurementOffice'                   → False (경계 없는 부분 일치)
     """
     return emp_org_path == principal_id or emp_org_path.startswith(principal_id + "/")
 

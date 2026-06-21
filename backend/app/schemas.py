@@ -117,6 +117,8 @@ class MapOut(BaseModel):
     created_by: str | None
     created_at: datetime
     updated_at: datetime
+    # 호출자의 서버 산정 유효 역할 — 프론트 게이팅 단일 소스 (클라 재계산 폐기)
+    my_role: str | None = None
 
 
 class MapDetailOut(MapOut):
@@ -258,6 +260,8 @@ class MeOut(BaseModel):
     name: str
     role: str
     department: str
+    # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
+    is_sysadmin: bool
 
 
 class EmployeeOut(BaseModel):

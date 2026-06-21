@@ -17,18 +17,21 @@ from app.permissions.logic import (
 # ---------------------------------------------------------------------------
 # 시드 유저 org_path 상수 (service.py LOCAL_USERS 값과 동기)
 # ---------------------------------------------------------------------------
-PATH_KIM = org_path("경영지원본부", "프로세스혁신실", "프로세스혁신팀", None, None, "프로세스혁신팀")
-PATH_LEE = org_path("경영지원본부", "구매실", "구매1팀", None, None, "구매1팀")
-PATH_PARK = org_path("경영지원본부", "구매실", "구매1팀", None, None, "구매1팀")
-PATH_CHOI = org_path("경영지원본부", "구매실", "구매2팀", None, None, "구매2팀")
-PATH_JUNG = org_path("경영지원본부", "구매실", None, None, None, "구매실")
+DIV = "Management Support Division"
+PROC = f"{DIV}/Procurement Office"
+
+PATH_KIM = org_path(DIV, "Process Innovation Office", "Process Innovation Team", None, None, "Process Innovation Team")
+PATH_LEE = org_path(DIV, "Procurement Office", "Sourcing Team 1", None, None, "Sourcing Team 1")
+PATH_PARK = org_path(DIV, "Procurement Office", "Sourcing Team 1", None, None, "Sourcing Team 1")
+PATH_CHOI = org_path(DIV, "Procurement Office", "Sourcing Team 2", None, None, "Sourcing Team 2")
+PATH_JUNG = org_path(DIV, "Procurement Office", None, None, None, "Procurement Office")
 
 # 기대 경로 문자열
-assert PATH_LEE == "경영지원본부/구매실/구매1팀"
-assert PATH_PARK == "경영지원본부/구매실/구매1팀"
-assert PATH_CHOI == "경영지원본부/구매실/구매2팀"
-assert PATH_JUNG == "경영지원본부/구매실"
-assert PATH_KIM == "경영지원본부/프로세스혁신실/프로세스혁신팀"
+assert PATH_LEE == f"{PROC}/Sourcing Team 1"
+assert PATH_PARK == f"{PROC}/Sourcing Team 1"
+assert PATH_CHOI == f"{PROC}/Sourcing Team 2"
+assert PATH_JUNG == PROC
+assert PATH_KIM == f"{DIV}/Process Innovation Office/Process Innovation Team"
 
 
 # ---------------------------------------------------------------------------
@@ -85,52 +88,53 @@ class TestRequiresDowngradeApproval:
 # ---------------------------------------------------------------------------
 
 class TestBelongsToDepartment:
-    # principal: 구매1팀 (leaf) → lee/park True, 나머지 False
+    # principal: Sourcing Team 1 (leaf) → lee/park True, 나머지 False
     def test_leaf_principal_lee(self) -> None:
-        assert belongs_to_department(PATH_LEE, "경영지원본부/구매실/구매1팀") is True
+        assert belongs_to_department(PATH_LEE, f"{PROC}/Sourcing Team 1") is True
 
     def test_leaf_principal_park(self) -> None:
-        assert belongs_to_department(PATH_PARK, "경영지원본부/구매실/구매1팀") is True
+        assert belongs_to_department(PATH_PARK, f"{PROC}/Sourcing Team 1") is True
 
     def test_leaf_principal_choi_false(self) -> None:
-        assert belongs_to_department(PATH_CHOI, "경영지원본부/구매실/구매1팀") is False
+        assert belongs_to_department(PATH_CHOI, f"{PROC}/Sourcing Team 1") is False
 
     def test_leaf_principal_jung_false(self) -> None:
-        assert belongs_to_department(PATH_JUNG, "경영지원본부/구매실/구매1팀") is False
+        assert belongs_to_department(PATH_JUNG, f"{PROC}/Sourcing Team 1") is False
 
     def test_leaf_principal_kim_false(self) -> None:
-        assert belongs_to_department(PATH_KIM, "경영지원본부/구매실/구매1팀") is False
+        assert belongs_to_department(PATH_KIM, f"{PROC}/Sourcing Team 1") is False
 
-    # principal: 구매실 (mid) → lee/park/choi True, jung True (exact), kim False
+    # principal: Procurement Office (mid) → lee/park/choi True, jung True (exact), kim False
     def test_mid_principal_lee(self) -> None:
-        assert belongs_to_department(PATH_LEE, "경영지원본부/구매실") is True
+        assert belongs_to_department(PATH_LEE, PROC) is True
 
     def test_mid_principal_park(self) -> None:
-        assert belongs_to_department(PATH_PARK, "경영지원본부/구매실") is True
+        assert belongs_to_department(PATH_PARK, PROC) is True
 
     def test_mid_principal_choi(self) -> None:
-        assert belongs_to_department(PATH_CHOI, "경영지원본부/구매실") is True
+        assert belongs_to_department(PATH_CHOI, PROC) is True
 
     def test_mid_principal_jung_exact(self) -> None:
-        # jung's path IS 경영지원본부/구매실 (exact match)
-        assert belongs_to_department(PATH_JUNG, "경영지원본부/구매실") is True
+        # jung's path IS Management Support Division/Procurement Office (exact match)
+        assert belongs_to_department(PATH_JUNG, PROC) is True
 
     def test_mid_principal_kim_false(self) -> None:
-        assert belongs_to_department(PATH_KIM, "경영지원본부/구매실") is False
+        assert belongs_to_department(PATH_KIM, PROC) is False
 
-    # principal: 경영지원본부 (root) → all 5 True
+    # principal: Management Support Division (root) → all 5 True
     def test_root_principal_all_true(self) -> None:
         for path in [PATH_KIM, PATH_LEE, PATH_PARK, PATH_CHOI, PATH_JUNG]:
-            assert belongs_to_department(path, "경영지원본부") is True
+            assert belongs_to_department(path, DIV) is True
 
-    # 경계 체크 — 비슷한 이름의 다른 부서는 매치 안 됨
+    # 경계 체크 — 비슷한 이름의 다른 부서는 매치 안 됨 ('Procurement' ≠ 'Procurement Office')
     def test_no_false_positive_partial_name(self) -> None:
-        # '경영지원본부/구매' 는 '경영지원본부/구매실/...' 과 다름 — '/' 경계 필수
-        assert belongs_to_department("경영지원본부/구매실/구매1팀", "경영지원본부/구매") is False
-        assert belongs_to_department("경영지원본부/구매실", "경영지원본부/구매") is False
+        # '…/Procurement' 는 '…/Procurement Office/...' 와 다름 — '/' 경계 필수
+        boundary = f"{DIV}/Procurement"
+        assert belongs_to_department(f"{PROC}/Sourcing Team 1", boundary) is False
+        assert belongs_to_department(PROC, boundary) is False
 
     def test_exact_match(self) -> None:
-        assert belongs_to_department("경영지원본부/구매실", "경영지원본부/구매실") is True
+        assert belongs_to_department(PROC, PROC) is True
 
 
 # ---------------------------------------------------------------------------
@@ -173,27 +177,27 @@ class TestEffectiveRole:
         perms = [("user", "user.lee", "editor")]
         assert self._role(perms=perms) == "editor"
 
-    # 5. department grant editor on 구매실 → lee/park/choi/jung editor, kim None
+    # 5. department grant editor on Procurement Office → lee/park/choi/jung editor, kim None
     def test_dept_grant_editor_lee(self) -> None:
-        perms = [("department", "경영지원본부/구매실", "editor")]
+        perms = [("department", PROC, "editor")]
         assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False) == "editor"
 
     def test_dept_grant_editor_park(self) -> None:
-        perms = [("department", "경영지원본부/구매실", "editor")]
+        perms = [("department", PROC, "editor")]
         assert effective_role("user.park", False, PATH_PARK, PRIVATE, perms, False) == "editor"
 
     def test_dept_grant_editor_choi(self) -> None:
-        perms = [("department", "경영지원본부/구매실", "editor")]
+        perms = [("department", PROC, "editor")]
         assert effective_role("user.choi", False, PATH_CHOI, PRIVATE, perms, False) == "editor"
 
     def test_dept_grant_editor_jung(self) -> None:
-        # jung's path == 경영지원본부/구매실 (exact match)
-        perms = [("department", "경영지원본부/구매실", "editor")]
+        # jung's path == Management Support Division/Procurement Office (exact match)
+        perms = [("department", PROC, "editor")]
         assert effective_role("user.jung", False, PATH_JUNG, PRIVATE, perms, False) == "editor"
 
     def test_dept_grant_editor_kim_none(self) -> None:
-        # kim은 프로세스혁신실 소속 → 구매실 권한 적용 안 됨
-        perms = [("department", "경영지원본부/구매실", "editor")]
+        # kim은 Process Innovation Office 소속 → Procurement Office 권한 적용 안 됨
+        perms = [("department", PROC, "editor")]
         assert effective_role("admin.kim", False, PATH_KIM, PRIVATE, perms, False) is None
 
     # 6. approver, 권한 없음, private → viewer floor
@@ -218,13 +222,13 @@ class TestEffectiveRole:
     def test_highest_wins_user_viewer_dept_editor(self) -> None:
         perms = [
             ("user", "user.lee", "viewer"),
-            ("department", "경영지원본부/구매실", "editor"),
+            ("department", PROC, "editor"),
         ]
         assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False) == "editor"
 
     def test_highest_wins_dept_viewer_user_owner(self) -> None:
         perms = [
-            ("department", "경영지원본부/구매실", "viewer"),
+            ("department", PROC, "viewer"),
             ("user", "user.lee", "owner"),
         ]
         assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False) == "owner"

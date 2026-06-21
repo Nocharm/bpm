@@ -243,13 +243,15 @@ def test_graph_sysadmin_still_needs_checkout(
 
 
 def test_department_grant_editor(client: TestClient, enforce: None) -> None:
-    """구매실 editor 부여 → lee/park/choi/jung은 PATCH 가능, kim은 403."""
-    map_id = seed_map(grants=[("department", "경영지원본부/구매실", "editor")])
-    seed_employee("lee", ("경영지원본부", "구매실", "구매1팀"))
-    seed_employee("park", ("경영지원본부", "구매실", "구매1팀"))
-    seed_employee("choi", ("경영지원본부", "구매실", "구매2팀"))
-    seed_employee("jung", ("경영지원본부", "구매실", None))  # exact match
-    seed_employee("kim", ("경영지원본부", "프로세스혁신실", "프로세스혁신팀"))
+    """Procurement Office editor 부여 → lee/park/choi/jung은 PATCH 가능, kim은 403."""
+    div = "Management Support Division"
+    proc = f"{div}/Procurement Office"
+    map_id = seed_map(grants=[("department", proc, "editor")])
+    seed_employee("lee", (div, "Procurement Office", "Sourcing Team 1"))
+    seed_employee("park", (div, "Procurement Office", "Sourcing Team 1"))
+    seed_employee("choi", (div, "Procurement Office", "Sourcing Team 2"))
+    seed_employee("jung", (div, "Procurement Office", None))  # exact match
+    seed_employee("kim", (div, "Process Innovation Office", "Process Innovation Team"))
 
     for u in ("lee", "park", "choi", "jung"):
         act_as(u)

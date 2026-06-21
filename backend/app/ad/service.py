@@ -12,32 +12,39 @@ from app.models import Employee
 from app.settings import settings
 
 # 로컬 임시 유저 5명 (auth OFF). loginId는 '.' 포함·'_' 미포함(필터 비충돌), name 무 '_'.
-# 3가지 패턴: ① lee==park(동일 팀), ② choi(같은 구매실 prefix, 다른 팀), ③ jung(l3 없음 → 상위 prefix).
+# AD-aligned English data — login_id(=sAMAccountName) 불변, name/title/org만 영문화.
+# 3가지 패턴: ① lee==park(same team), ② choi(same Procurement Office prefix, diff team),
+#             ③ jung(no l3 → parent Procurement Office prefix).
 LOCAL_USERS: list[dict] = [
     {
-        "login_id": "admin.kim", "name": "김관리", "title": "팀장", "role": "admin",
-        "org_l1": "경영지원본부", "org_l2": "프로세스혁신실", "org_l3": "프로세스혁신팀",
-        "org_l4": None, "org_l5": None, "department": "프로세스혁신팀",
+        "login_id": "admin.kim", "name": "Junho Kim", "title": "Manager", "role": "admin",
+        "org_l1": "Management Support Division", "org_l2": "Process Innovation Office",
+        "org_l3": "Process Innovation Team",
+        "org_l4": None, "org_l5": None, "department": "Process Innovation Team",
     },
     {
-        "login_id": "user.lee", "name": "이업무", "title": "선임", "role": "user",
-        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": "구매1팀",
-        "org_l4": None, "org_l5": None, "department": "구매1팀",
+        "login_id": "user.lee", "name": "Minjae Lee", "title": "Senior", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": "Sourcing Team 1",
+        "org_l4": None, "org_l5": None, "department": "Sourcing Team 1",
     },
     {
-        "login_id": "user.park", "name": "박담당", "title": "사원", "role": "user",
-        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": "구매1팀",
-        "org_l4": None, "org_l5": None, "department": "구매1팀",
+        "login_id": "user.park", "name": "Soyeon Park", "title": "Associate", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": "Sourcing Team 1",
+        "org_l4": None, "org_l5": None, "department": "Sourcing Team 1",
     },
     {
-        "login_id": "user.choi", "name": "최실무", "title": "책임", "role": "user",
-        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": "구매2팀",
-        "org_l4": None, "org_l5": None, "department": "구매2팀",
+        "login_id": "user.choi", "name": "Daehyun Choi", "title": "Principal", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": "Sourcing Team 2",
+        "org_l4": None, "org_l5": None, "department": "Sourcing Team 2",
     },
     {
-        "login_id": "user.jung", "name": "정사용", "title": "선임", "role": "user",
-        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": None,
-        "org_l4": None, "org_l5": None, "department": "구매실",
+        "login_id": "user.jung", "name": "Hana Jung", "title": "Senior", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": None,
+        "org_l4": None, "org_l5": None, "department": "Procurement Office",
     },
 ]
 
