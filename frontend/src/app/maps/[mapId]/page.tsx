@@ -99,6 +99,7 @@ import {
   getResolvedGraph,
   getWorkflowState,
   listComments,
+  listLibraryProcesses,
   publishVersion,
   rejectVersion,
   releaseCheckout,
@@ -114,6 +115,7 @@ import {
   type Graph,
   type GraphEdge,
   type GraphGroup,
+  type LibraryProcess,
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
@@ -124,7 +126,7 @@ import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
-import { buildCompositeTree, deriveSubEnds, type SubEnd } from "@/lib/subprocess-embed";
+import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
   NODE_DISPLAY_FIELDS,
   NodeActionsContext,
@@ -475,6 +477,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [rootGraph, setRootGraph] = useState<VersionGraph | null>(null);
   // 링크맵 resolved 그래프 캐시 — linkKey(맵+버전)별. 임베드 자식·subEnds 소스. resolved는 버전당 불변이라 무효화 없음.
   const [resolvedCache, setResolvedCache] = useState<Map<string, Graph>>(new Map());
+  // 라이브러리 프로세스 목록 — 버전 업데이트 뱃지·팔로우-최신 UI에 사용
+  const [libraryList, setLibraryList] = useState<LibraryProcess[]>([]);
   const inFlightRef = useRef<Set<string>>(new Set());
   const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
   // 캔버스 인라인 펼친 노드 id 집합 — 아웃라인용 expandedOutline과 분리. 스코프/버전 전환 시 초기화.
@@ -660,7 +664,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         .finally(() => inFlightRef.current.delete(k));
     }
   }, [fullGraph, resolvedCache]);
-  // 하위프로세스 노드에 subEnds 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
+  // map_id → LibraryProcess 룩업 맵 — 업데이트 뱃지 계산용
+  const libByMap = useMemo(() => {
+    const m = new Map<number, LibraryProcess>();
+    for (const row of libraryList) {
+      m.set(row.map_id, row);
+    }
+    return m;
+  }, [libraryList]);
+
+  // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
   // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
   const injectSubEnds = useCallback(
     (node: AppNode): AppNode => {
@@ -673,12 +686,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         linked_version_id: node.data.linkedVersionId ?? null,
       });
       const resolved = k ? resolvedCache.get(k) : undefined;
+      // updateAvailable: pinned 버전이 있고 라이브러리에 더 최신 발행본이 있는 경우
+      const lib = node.data.linkedMapId != null ? libByMap.get(node.data.linkedMapId) : undefined;
+      const updateAvailable =
+        !node.data.followLatest &&
+        node.data.linkedVersionId != null &&
+        lib?.latest_published_version_id != null &&
+        lib.latest_published_version_id > node.data.linkedVersionId;
       if (!resolved) {
-        return node;
+        return { ...node, data: { ...node.data, updateAvailable } };
       }
-      return { ...node, data: { ...node.data, subEnds: deriveSubEnds(resolved) } };
+      return { ...node, data: { ...node.data, subEnds: deriveSubEnds(resolved), updateAvailable } };
     },
-    [resolvedCache],
+    [resolvedCache, libByMap],
   );
   useEffect(() => {
     nodesRef.current = nodes;
@@ -772,6 +792,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       })
       .catch(() => undefined);
   }, [versionId]);
+  // 라이브러리 목록 마운트 시 1회 로드 — 업데이트 뱃지·팔로우-최신 UI용
+  useEffect(() => {
+    void listLibraryProcesses().then(setLibraryList).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     windowGeomRef.current = windowGeom;
   }, [windowGeom]);
@@ -2450,6 +2475,60 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
     },
     [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
+  );
+
+  // 하위프로세스 "최신으로 업데이트" — linkedVersionId를 latest_published_version_id로 갱신,
+  // resolved 그래프 재fetch, subEnds 재파생, 끊어진 보조 출구 엣지 경고 토스트
+  const handleUpdateSubprocess = useCallback(
+    (nodeId: string) => {
+      if (readOnly) return;
+      const node = nodesRef.current.find((n) => n.id === nodeId);
+      if (!node || node.data.linkedMapId == null) return;
+      const lib = libByMap.get(node.data.linkedMapId);
+      if (lib?.latest_published_version_id == null) return;
+      const newVersionId = lib.latest_published_version_id;
+      recordChange(false);
+      void getResolvedGraph(node.data.linkedMapId, false, newVersionId).then((resolved) => {
+        const newSubEnds = deriveSubEnds(resolved);
+        const validHandles = new Set<string>([
+          PRIMARY_END_HANDLE,
+          ...newSubEnds.map((e) => e.key),
+        ]);
+        // 새 linkKey로 캐시 저장 — 다음 injectSubEnds가 쓸 수 있게
+        const newKey = `${node.data.linkedMapId}:${newVersionId}`;
+        setResolvedCache((prev) => new Map(prev).set(newKey, resolved));
+        // 끊어진 보조 출구 엣지 감지 — source가 이 노드이고 sourceHandle이 새 끝에 없는 엣지
+        setEdges((currentEdges) => {
+          const broken = currentEdges.filter(
+            (e) =>
+              e.source === nodeId &&
+              e.sourceHandle != null &&
+              !validHandles.has(e.sourceHandle),
+          );
+          if (broken.length > 0) {
+            showToast(t("subprocess.endRebindWarn"));
+          }
+          return currentEdges;
+        });
+        setNodes((current) =>
+          current.map((n) =>
+            n.id === nodeId
+              ? {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    linkedVersionId: newVersionId,
+                    subEnds: newSubEnds,
+                    updateAvailable: false,
+                  },
+                }
+              : n,
+          ),
+        );
+        scheduleAutoSave();
+      });
+    },
+    [readOnly, libByMap, recordChange, setResolvedCache, setEdges, setNodes, scheduleAutoSave, showToast, t],
   );
 
   // 우클릭 색 스와치 → 선택 노드 색 변경 (우클릭 시 해당 노드가 selectedId가 됨)
@@ -5116,6 +5195,31 @@ function MapEditor({ mapId }: { mapId: number }) {
                 />
                 {t("node.primaryEnd")}
               </label>
+            )}
+            {selectedNode.data.nodeType === "subprocess" && (
+              <div className="mb-3 flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-caption text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    checked={selectedNode.data.followLatest ?? false}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      updateSelectedData({ followLatest: event.target.checked }, false)
+                    }
+                  />
+                  {t("subprocess.followLatest")}
+                </label>
+                {selectedNode.data.updateAvailable && (
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    className="rounded-sm border border-hairline bg-accent-tint px-3 py-1 text-caption text-accent hover:bg-surface-alt disabled:opacity-50"
+                    onClick={() => handleUpdateSubprocess(selectedNode.id)}
+                  >
+                    {t("subprocess.update")}
+                  </button>
+                )}
+              </div>
             )}
             <details open className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
               <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
