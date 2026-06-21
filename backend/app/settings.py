@@ -12,6 +12,9 @@ class Settings(BaseSettings):
 
     # 인증 — 로컬은 Keycloak 접근 불가하므로 기본 비활성(우회). 서버에서만 True.
     auth_enabled: bool = False
+    # dev-only: auth OFF에서도 X-Dev-User의 실제 권한을 계산해 로컬 역할 검증.
+    # 기본 False = 현행 동작(전원 sysadmin). True로 설정 시 BPM_SYSADMINS 외엔 실제 역할 적용.
+    dev_enforce_permissions: bool = False
     # 예: http://182.199.63.71:8080/realms/ai-portal (하드코딩 금지 — .env 경유)
     keycloak_issuer: str = ""
     # 토큰 aud 검증값. 비우면 aud 검증 생략 (Keycloak 기본 토큰은 aud=account 등 가변)

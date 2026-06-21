@@ -40,10 +40,11 @@ def belongs_to_department(emp_org_path: str, principal_id: str) -> bool:
 def is_sysadmin(login_id: str) -> bool:
     """BPM 시스템 관리자 판정.
 
-    auth OFF(로컬 개발) 시엔 전원 True — 로컬 잠금 방지, mock parity.
-    auth ON 시엔 BPM_SYSADMINS 목록에 있는 경우만 True.
+    auth OFF + dev_enforce_permissions OFF → 전원 True (로컬 잠금 방지, 현행 동작).
+    auth OFF + dev_enforce_permissions ON  → BPM_SYSADMINS 목록만 True (로컬 권한 시뮬레이션).
+    auth ON                                → BPM_SYSADMINS 목록만 True.
     """
-    if not settings.auth_enabled:
+    if (not settings.auth_enabled) and (not settings.dev_enforce_permissions):
         return True
     return login_id in settings.sysadmin_login_ids()
 

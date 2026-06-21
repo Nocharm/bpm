@@ -236,9 +236,10 @@ class TestEffectiveRole:
 
 class TestIsSysadmin:
     def test_auth_off_always_true(self) -> None:
-        # auth_enabled 기본값 False — 모든 login_id가 True
+        # auth_enabled 기본값 False + dev_enforce_permissions 기본값 False → 전원 True
         from app.settings import settings
         assert settings.auth_enabled is False
+        assert settings.dev_enforce_permissions is False
         assert is_sysadmin("anyone") is True
         assert is_sysadmin("user.lee") is True
         assert is_sysadmin("unknown.user") is True
@@ -257,6 +258,28 @@ class TestIsSysadmin:
         monkeypatch.setattr(settings, "auth_enabled", True)
         monkeypatch.setattr(settings, "bpm_sysadmins", "")
         assert is_sysadmin("admin.kim") is False
+
+    def test_dev_enforce_auth_off_non_sysadmin_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # auth OFF + dev_enforce_permissions ON → BPM_SYSADMINS 목록만 True
+        from app.settings import settings
+        monkeypatch.setattr(settings, "auth_enabled", False)
+        monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+        monkeypatch.setattr(settings, "bpm_sysadmins", "admin.kim")
+        assert is_sysadmin("admin.kim") is True   # sysadmin member → True
+        assert is_sysadmin("user.lee") is False   # non-member → False
+        assert is_sysadmin("anyone") is False     # non-member → False
+
+    def test_dev_enforce_false_auth_off_all_sysadmin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # dev_enforce_permissions OFF(기본) → auth OFF에선 전원 True (회귀 없음)
+        from app.settings import settings
+        monkeypatch.setattr(settings, "auth_enabled", False)
+        monkeypatch.setattr(settings, "dev_enforce_permissions", False)
+        monkeypatch.setattr(settings, "bpm_sysadmins", "admin.kim")
+        assert is_sysadmin("user.lee") is True    # 플래그 OFF → 전원 True
 
 
 # ---------------------------------------------------------------------------

@@ -356,6 +356,63 @@ def test_create_grants_owner_to_creator(client: TestClient, enforce: None) -> No
     assert client.delete(f"/api/maps/{map_id}").status_code == 204
 
 
+# ── DEV_ENFORCE_PERMISSIONS 시뮬레이션 (auth OFF + 플래그 ON) ─
+
+
+@pytest.fixture
+def dev_enforce(client: TestClient) -> Iterator[None]:
+    """auth OFF + dev_enforce_permissions ON + sysadmin 1명 지정. 정리 시 복원."""
+    prev_auth = settings.auth_enabled
+    prev_enforce = settings.dev_enforce_permissions
+    prev_sys = settings.bpm_sysadmins
+    settings.auth_enabled = False
+    settings.dev_enforce_permissions = True
+    settings.bpm_sysadmins = SYSADMIN
+    yield
+    settings.auth_enabled = prev_auth
+    settings.dev_enforce_permissions = prev_enforce
+    settings.bpm_sysadmins = prev_sys
+    app.dependency_overrides.pop(auth_mod.get_current_user, None)
+
+
+def test_dev_enforce_non_sysadmin_no_grant_403(
+    client: TestClient, dev_enforce: None
+) -> None:
+    """auth OFF + 플래그 ON: 권한 없는 비-sysadmin X-Dev-User → private 맵 403."""
+    map_id = seed_map(visibility="private")
+    act_as("user.lee")
+    assert client.get(f"/api/maps/{map_id}").status_code == 403
+
+
+def test_dev_enforce_non_sysadmin_with_owner_grant_200(
+    client: TestClient, dev_enforce: None
+) -> None:
+    """auth OFF + 플래그 ON: owner grant 있는 비-sysadmin X-Dev-User → 200."""
+    map_id = seed_map(visibility="private", grants=[("user", "user.lee", "owner")])
+    act_as("user.lee")
+    assert client.get(f"/api/maps/{map_id}").status_code == 200
+
+
+def test_dev_enforce_sysadmin_member_200(
+    client: TestClient, dev_enforce: None
+) -> None:
+    """auth OFF + 플래그 ON: BPM_SYSADMINS 멤버 → 권한 없어도 owner 취급 → 200."""
+    map_id = seed_map(visibility="private")
+    act_as(SYSADMIN)
+    assert client.get(f"/api/maps/{map_id}").status_code == 200
+
+
+def test_dev_enforce_flag_off_no_lock(client: TestClient) -> None:
+    """플래그 OFF(기본): auth OFF에선 전원 sysadmin → private 맵도 200 (회귀 없음)."""
+    # dev_enforce_permissions=False가 기본값 — enforce fixture 없이 호출
+    map_id = seed_map(visibility="private")
+    act_as("user.lee")
+    try:
+        assert client.get(f"/api/maps/{map_id}").status_code == 200
+    finally:
+        app.dependency_overrides.pop(auth_mod.get_current_user, None)
+
+
 # ── AUTH-OFF 비회귀 (everyone sysadmin → 게이트 전부 열림) ────
 
 
