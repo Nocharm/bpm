@@ -11,6 +11,8 @@ import { usePermissions } from './permissions';
  * Build a mock User from the SERVER current user; seed only fills action-only fields
  * (departmentId/status) for the still-mock management actions (Task 2 replaces them).
  * id/name/isSysadmin은 서버 값이 단일 소스 — seed에 없어도 신원은 서버로 결정.
+ * Kept: internal helper for useCurrentMockUser below; no external callers.
+ * 유지: 아래 useCurrentMockUser의 내부 헬퍼. 외부 호출자 없음.
  */
 export function buildCurrentMockUser(
   state: SeedState,
@@ -33,6 +35,9 @@ export function buildCurrentMockUser(
 /**
  * 서버 currentUser 구독 + mock store를 합쳐 현재 User를 반환 /
  * Hook returning the current mock User, sourced from the server currentUser singleton.
+ * Kept: current-user hook surface used by settings, admin, and groups pages.
+ * To be renamed/folded when server returns a full User shape directly.
+ * 유지: settings·admin·groups 페이지가 사용하는 현재 유저 훅. 서버가 User 전체를 반환하면 대체 예정.
  */
 export function useCurrentMockUser(): User | null {
   const state = usePermissions();
