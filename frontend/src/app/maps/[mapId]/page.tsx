@@ -4201,8 +4201,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         effectiveExpanded.add(host);
       }
     }
+    // 캔버스에서 인라인 임베드된 하위프로세스도 아웃라인에서 펼친 것으로 표시 → 임베드된 자식이 아웃라인에 나타난다.
+    for (const host of expandedInline) {
+      effectiveExpanded.add(host);
+    }
     return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
-  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, scopes]);
+  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, expandedInline, scopes]);
 
   // 스코프 전환 중 라이브 nodes 공백 구간엔 직전 비어있지 않은 outline을 고스트로 유지(깜빡임 방지).
   // 비어있지 않을 때만 갱신 → 공백 구간엔 마지막 good 값을 그대로 렌더해 "사라졌다 뜨는" 현상 제거.
@@ -4214,17 +4218,31 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [outline]);
 
-  const handleToggleExpand = useCallback((id: string) => {
-    setExpandedOutline((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+  // 아웃라인 행이 하위프로세스(참조) 호스트인지 — 펼침이 캔버스 인라인 임베드를 트리거해야 자식이 로드된다.
+  const isSubprocessRow = useCallback(
+    (id: string): boolean => outline.find((r) => r.id === id)?.nodeType === "subprocess",
+    [outline],
+  );
+
+  const handleToggleExpand = useCallback(
+    (id: string) => {
+      // 하위프로세스 행 펼침/접힘은 캔버스 버튼과 동일하게 inline-embed 토글(자식 로드) — outline-local 토글 아님.
+      if (isSubprocessRow(id)) {
+        toggleInlineExpandRef.current?.(id);
+        return;
       }
-      return next;
-    });
-  }, []);
+      setExpandedOutline((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+    },
+    [isSubprocessRow],
+  );
 
   // 노드가 화면 밖일 때만 현재 줌 유지한 채 부드럽게 가운데로 — 이미 보이면 이동 없음(매 클릭 점프/줌변경 방지).
   const revealNodeIfOffscreen = useCallback(
@@ -4360,16 +4378,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     [outline, handleOutlineSelect],
   );
 
-  // → 펼치기 — 자식 있고 접혀있을 때만(이동 없음).
+  // → 펼치기 — 자식 있고 접혀있을 때만(이동 없음). 하위프로세스는 inline-embed 토글로 자식 로드.
   const handleOutlineExpand = useCallback(
     (id: string) => {
       const row = outline.find((r) => r.id === id);
       if (!row?.hasChildren || row.expanded) {
         return;
       }
+      if (isSubprocessRow(id)) {
+        toggleInlineExpandRef.current?.(id);
+        return;
+      }
       setExpandedOutline((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     },
-    [outline],
+    [outline, isSubprocessRow],
   );
 
   // 현재 노드의 부모를 접으며 그 부모로 이동 — F(말단)·←(닫을 게 없을 때) 공통.
@@ -4398,6 +4420,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     (id: string) => {
       const row = outline.find((r) => r.id === id);
       if (row?.hasChildren && row.expanded) {
+        if (isSubprocessRow(id)) {
+          toggleInlineExpandRef.current?.(id);
+          return;
+        }
         setExpandedOutline((prev) => {
           if (!prev.has(id)) {
             return prev;
@@ -4410,7 +4436,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       foldToParent(id);
     },
-    [outline, foldToParent],
+    [outline, foldToParent, isSubprocessRow],
   );
 
   // F 토글 — 자식 있으면 펼치기↔접기 토글, 말단이면 부모를 접으며 부모로 이동.
@@ -4418,6 +4444,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     (id: string) => {
       const row = outline.find((r) => r.id === id);
       if (row?.hasChildren) {
+        if (isSubprocessRow(id)) {
+          toggleInlineExpandRef.current?.(id);
+          return;
+        }
         setExpandedOutline((prev) => {
           const next = new Set(prev);
           if (row.expanded) {
@@ -4431,7 +4461,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       foldToParent(id);
     },
-    [outline, foldToParent],
+    [outline, foldToParent, isSubprocessRow],
   );
 
   // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.

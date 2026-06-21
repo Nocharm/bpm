@@ -309,13 +309,16 @@ export function buildOutline(
         continue;
       }
       emitted.add(entry.id);
-      const hasChildren = parentsWithChildren.has(entry.id);
+      // 하위프로세스(참조) 노드는 임베드 전이라 outline 입력에 자식이 없어도 항상 펼치기 대상으로 표시한다 —
+      // 행 펼침이 inline-embed를 트리거(toggleInlineExpand)해 그때 자식이 들어온다. 일반 노드는 기존대로 실제 자식 보유 시.
+      const nodeType = typeOf.get(entry.id) ?? "process";
+      const hasChildren = parentsWithChildren.has(entry.id) || nodeType === "subprocess";
       const isExpanded = hasChildren && expanded.has(entry.id);
       const block = hierarchyLevel === 0 ? entry.blockIndex : inheritedBlock;
       rows.push({
         id: entry.id,
         label: labelOf.get(entry.id) ?? "",
-        nodeType: typeOf.get(entry.id) ?? "process",
+        nodeType,
         hasChildren,
         expanded: isExpanded,
         hierarchy: hierarchyLevel > 0,
