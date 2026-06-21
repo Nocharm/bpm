@@ -77,13 +77,18 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [groups, setGroups] = useState<Group[]>([]);
   useEffect(() => {
     let active = true;
-    void Promise.all([getDirectory(), listGroups()]).then(([dir, groupRows]) => {
-      if (active) {
-        setDirUsers(dir.users);
-        setDirDepts(dir.departments);
-        setGroups(groupRows);
-      }
-    });
+    void Promise.all([getDirectory(), listGroups()])
+      .then(([dir, groupRows]) => {
+        if (active) {
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+          setGroups(groupRows);
+        }
+      })
+      .catch((err) => {
+        // Fall back to empty arrays so pickers still render (create dialog has no onToast).
+        console.warn("Directory/groups fetch failed; pickers will be empty.", err);
+      });
     return () => { active = false; };
   }, []);
 

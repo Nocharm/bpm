@@ -7,7 +7,6 @@ import type {
   PrincipalType,
   MapRole,
   MapPermission,
-  MapApprover,
   DowngradePayload,
   VisibilityChangePayload,
 } from './permissions-types';
@@ -152,22 +151,5 @@ export function decideRequest(
         : r,
     ),
   };
-  emit();
-}
-
-// ── 승인자 액션 ───────────────────────────────────────────────
-// Kept: reassign-approver-modal.tsx still imports setApprovers from this mock store
-// (inline approver reassignment UI). To be replaced with real API call when modal is wired.
-// reassign-approver-modal.tsx 가 setApprovers를 이 mock 스토어에서 임포트함(인라인 승인자 재지정 UI).
-// 모달을 실 API로 연결할 때 대체 예정.
-
-/**
- * 맵 승인자 교체 — 기존 항목 삭제 후 신규 삽입 /
- * Replace all approvers for a map.
- */
-export function setApprovers(mapId: string, userIds: string[], by: string): void {
-  const others = state.approvers.filter((a) => a.mapId !== mapId);
-  const fresh: MapApprover[] = userIds.map((userId) => ({ mapId, userId, assignedBy: by }));
-  state = { ...state, approvers: [...others, ...fresh] };
   emit();
 }
