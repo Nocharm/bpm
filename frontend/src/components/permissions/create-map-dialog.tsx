@@ -1,18 +1,20 @@
 "use client";
 
-// 맵 생성 다이얼로그 — 이름·공개범위·초기협업자·결재자 설정 후 실제 맵 생성 + mock 권한 오버레이 등록 /
+// 맵 생성 다이얼로그 — 이름·공개범위·초기협업자·결재자 설정 후 실 API로 맵 생성 /
 // Map creation dialog: name, visibility, initial collaborators, required approvers.
-// Real map created via createMap(); mock overlay attached via createMapPermission().
+// 맵은 createMap()으로 생성(서버 기본 private), 협업자는 addMapPermission(), 결재자는 setApprovers().
+// 공개 범위는 생성 시 항상 private — 공개 전환은 Visibility 탭에서 승인 절차로 한다.
+// 표시명·피커 후보는 아직 Layer-4 디렉터리 API가 없어 mock 시드를 사용한다.
 
 import { createPortal } from "react-dom";
 import { useCallback, useState } from "react";
 import { X, Globe, Lock, User } from "lucide-react";
 
-import { createMap } from "@/lib/api";
+import { addMapPermission, createMap, setApprovers as setMapApprovers } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { usePermissions, createMapPermission } from "@/lib/mock/permissions-store";
+import { usePermissions } from "@/lib/mock/permissions-store";
 import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
@@ -108,27 +110,23 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      // 1. 실제 맵 생성 / real map create
+      // 1. 맵 생성 — 생성자가 owner(서버 부여), 기본 가시성 private / Real map create (owner = creator).
       const detail = await createMap(trimmed);
-      // 2. mock 권한 오버레이 / mock permission overlay
-      createMapPermission(
-        String(detail.id),
-        currentUser.id,
-        visibility,
-        collaborators.map((c) => ({
-          principalType: c.principalType,
-          principalId: c.principalId,
-          role: c.role,
-        })),
-        approvers.map((a) => a.userId),
-      );
+      // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators (applied immediately).
+      for (const c of collaborators) {
+        // owner은 생성자에게 이미 부여됨 → viewer/editor만 / Owner already granted; only viewer/editor here.
+        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
+        await addMapPermission(detail.id, c.principalType, c.principalId, role);
+      }
+      // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
+      await setMapApprovers(detail.id, approvers.map((a) => a.userId));
       onCreated();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("err.createMap"));
       setSubmitting(false);
     }
-  }, [currentUser, name, visibility, collaborators, approvers, onCreated, onClose, t]);
+  }, [currentUser, name, collaborators, approvers, onCreated, onClose, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =

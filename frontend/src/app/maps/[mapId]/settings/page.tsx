@@ -11,14 +11,13 @@ import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS, storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { getActiveApprovers, getMapMeta, isApprover, usePermissions } from "@/lib/mock/permissions";
+import { isApprover, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
 import { VisibilityControl } from "@/components/permissions/visibility-control";
 import { DangerZone } from "@/components/permissions/danger-zone";
 import { VersionsPublishPanel } from "@/components/permissions/versions-publish-panel";
-import { ReassignApproverModal } from "@/components/permissions/reassign-approver-modal";
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { genId } from "@/lib/id";
 
@@ -52,6 +51,8 @@ export default function SettingsPage() {
   // 맵 이름 + 서버 산정 역할(my_role) — 실패 시 id 표시 / Map name + server my_role; fall back to id.
   const [mapName, setMapName] = useState<string>(mapIdStr);
   const [serverRole, setServerRole] = useState<"viewer" | "editor" | "owner" | null>(null);
+  // 서버 진실 가시성 — Visibility 화면·viewerGrantDisabled 단일 소스 / Server-truth visibility.
+  const [visibility, setVisibility] = useState<"public" | "private">("private");
   // 역할 로드 완료 여부 — 로드 전 false "No access" 깜빡임 방지 / gate no-access screen until loaded.
   const [roleLoaded, setRoleLoaded] = useState(false);
   useEffect(() => {
@@ -63,6 +64,7 @@ export default function SettingsPage() {
         if (active) {
           setMapName(detail.name);
           setServerRole(detail.my_role);
+          setVisibility(detail.visibility);
         }
       } catch {
         // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
@@ -109,12 +111,9 @@ export default function SettingsPage() {
   // Owner-only: Approvers, Visibility, Danger tabs gated to owner.
   const isOwner = effectiveRole === "owner";
 
-  // 현재 맵의 가시성 — 공개이면 viewer 그랜트 비활성 /
-  // Map visibility: disable viewer grants on public maps.
-  const mapMeta = currentMockUser
-    ? getMapMeta(permState, mapIdStr, currentMockUser.id)
-    : null;
-  const isPublic = mapMeta?.visibility === "public";
+  // 공개 맵이면 viewer 그랜트 비활성 — 서버 진실 가시성 기준 /
+  // Disable viewer grants on public maps (from server-truth visibility).
+  const isPublic = visibility === "public";
 
   // 결재 대기 탭 가시성 — 맵 승인자 또는 sysadmin만 표시 /
   // Pending approvals tab: visible only to map approvers or sysadmin.
@@ -162,22 +161,9 @@ export default function SettingsPage() {
     );
   }
 
-  // 소유자이고 활성 승인자가 0명이면 강제 모달 표시 /
-  // Show forced modal when owner has zero active approvers.
-  const showForcedReassign =
-    isOwner &&
-    currentMockUser !== null &&
-    getActiveApprovers(permState, mapIdStr).length === 0;
-
   return (
     <>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
-
-      {/* 승인자 재지정 강제 모달 — 탭 무관하게 오버레이 /
-          Forced reassign modal: overlays regardless of active tab. */}
-      {showForcedReassign && currentMockUser && (
-        <ReassignApproverModal mapId={mapIdStr} by={currentMockUser.id} />
-      )}
 
       {/* Dev 유저 전환 드롭다운 / Dev user switcher dropdown (inline, no new modal) */}
       {showDevSwitcher && (
@@ -280,13 +266,13 @@ export default function SettingsPage() {
           ) : activeTab === "approvers" ? (
             <ApproversPanel
               mapId={mapIdStr}
-              currentUserId={currentMockUser.id}
               isOwner={isOwner}
+              onToast={showToast}
             />
           ) : activeTab === "visibility" ? (
             <VisibilityControl
               mapId={mapIdStr}
-              currentUserId={currentMockUser.id}
+              visibility={visibility}
               isOwner={isOwner}
               onToast={showToast}
             />

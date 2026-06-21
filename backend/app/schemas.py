@@ -119,6 +119,8 @@ class MapOut(BaseModel):
     updated_at: datetime
     # 호출자의 서버 산정 유효 역할 — 프론트 게이팅 단일 소스 (클라 재계산 폐기)
     my_role: str | None = None
+    # 맵 공개 범위 — Visibility 화면이 서버 진실을 표시·토글하기 위한 읽기 전용 노출
+    visibility: str = "private"
 
 
 class MapDetailOut(MapOut):

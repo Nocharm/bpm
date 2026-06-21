@@ -24,6 +24,8 @@ export interface MapSummary {
   updated_at: string;
   // 서버가 산정한 호출자의 유효 역할 — 게이팅 단일 소스 (클라 재계산 폐기)
   my_role: "viewer" | "editor" | "owner" | null;
+  // 맵 공개 범위 — Visibility 화면 표시·토글의 서버 진실
+  visibility: "public" | "private";
 }
 
 export interface MapDetail extends MapSummary {
@@ -356,6 +358,108 @@ export function setApprovers(mapId: number, userIds: string[]): Promise<string[]
     method: "PUT",
     body: JSON.stringify({ user_ids: userIds }),
   });
+}
+
+// ── 권한 관리 (collaborators / owner-transfer / visibility, Layer 2) ──────
+
+export type PrincipalType = "user" | "department" | "group";
+export type MapRole = "viewer" | "editor" | "owner";
+
+export interface MapPermission {
+  id: number;
+  principal_type: string;
+  principal_id: string;
+  role: string;
+  granted_by: string;
+}
+
+// PATCH/DELETE 응답 봉투 — 다운그레이드/에디터제거는 즉시 적용 대신 pending 요청.
+// pending=true 면 approval_request 만 채워지고 grant 는 그대로 (서버 진실 = 변경 없음).
+export interface PermissionMutationResult {
+  pending: boolean;
+  permission?: MapPermission;
+  deleted?: boolean;
+  approval_request?: ApprovalRequest;
+}
+
+export interface ApprovalRequest {
+  id: number;
+  map_id: number;
+  kind: string;
+  payload: Record<string, unknown>;
+  requested_by: string;
+  status: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export function listMapPermissions(mapId: number): Promise<MapPermission[]> {
+  return request<MapPermission[]>(`/maps/${mapId}/permissions`);
+}
+
+export function addMapPermission(
+  mapId: number,
+  principalType: PrincipalType,
+  principalId: string,
+  role: "viewer" | "editor",
+): Promise<MapPermission> {
+  return request<MapPermission>(`/maps/${mapId}/permissions`, {
+    method: "POST",
+    body: JSON.stringify({
+      principal_type: principalType,
+      principal_id: principalId,
+      role,
+    }),
+  });
+}
+
+export function changeMapPermission(
+  mapId: number,
+  permissionId: number,
+  role: MapRole,
+): Promise<PermissionMutationResult> {
+  return request<PermissionMutationResult>(
+    `/maps/${mapId}/permissions/${permissionId}`,
+    { method: "PATCH", body: JSON.stringify({ role }) },
+  );
+}
+
+export function removeMapPermission(
+  mapId: number,
+  permissionId: number,
+): Promise<PermissionMutationResult> {
+  return request<PermissionMutationResult>(
+    `/maps/${mapId}/permissions/${permissionId}`,
+    { method: "DELETE" },
+  );
+}
+
+// 소유권 이전 — 즉시 적용. owner-1 불변식은 서버가 보장(클라 검증 폐기).
+export function transferMapOwner(
+  mapId: number,
+  newOwner: string,
+): Promise<{ owner_id: string; transferred: boolean }> {
+  return request<{ owner_id: string; transferred: boolean }>(
+    `/maps/${mapId}/transfer-owner`,
+    { method: "POST", body: JSON.stringify({ new_owner: newOwner }) },
+  );
+}
+
+// 가시성 변경 — 즉시 적용 안 됨. pending ApprovalRequest 반환(승인 시 적용).
+export function requestVisibilityChange(
+  mapId: number,
+  toVisibility: "public" | "private",
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/visibility-request`, {
+    method: "POST",
+    body: JSON.stringify({ to_visibility: toVisibility }),
+  });
+}
+
+// 맵의 승인 요청 목록 — collaborators 패널의 pending 다운그레이드 표시에 사용.
+export function listApprovalRequests(mapId: number): Promise<ApprovalRequest[]> {
+  return request<ApprovalRequest[]>(`/maps/${mapId}/approval-requests`);
 }
 
 export interface NotificationItem {
