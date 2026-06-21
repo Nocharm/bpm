@@ -93,6 +93,56 @@ class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
 
 
+# ── 사용자 그룹 관리 (Layer 4 Task 3b) ──────────────────────────
+
+MemberType = Literal["user", "department"]
+
+
+class MemberIn(BaseModel):
+    member_type: MemberType
+    # user→login_id; department→org_path 문자열 (존재 검증 없음 — 디렉터리 규약)
+    member_id: str = Field(min_length=1, max_length=200)
+
+
+class MemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    member_type: str
+    member_id: str
+
+
+class GroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    # 생성 시 ≥2 멤버 필수 (managers 는 별개) — 검증은 라우터에서 422
+    members: list[MemberIn] = Field(default_factory=list)
+    # 추가 관리자 login_id 들. 생성자는 자동으로 관리자에 포함된다
+    managers: list[str] = Field(default_factory=list)
+
+
+class ManagersIn(BaseModel):
+    # 관리자 집합 교체 — 최소 1명 (빈 배열은 라우터에서 422)
+    managers: list[str] = Field(default_factory=list)
+
+
+class GroupDecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class GroupOut(BaseModel):
+    id: int
+    name: str
+    description: str
+    status: str
+    created_by: str
+    approved_by: str | None
+    approved_at: datetime | None
+    created_at: datetime
+    members: list[MemberOut]
+    managers: list[str]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     status: str

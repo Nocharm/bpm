@@ -13,11 +13,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Comment, MapApprover, MapVersion
+from app.models import Comment, MapApprover, MapVersion, UserGroupManager
 from app.permissions import logic
 from app.permissions.access import assert_map_role
 
 Dep = Callable[..., Coroutine[Any, Any, None]]
+
+
+async def is_group_manager(
+    session: AsyncSession, group_id: int, login_id: str
+) -> bool:
+    """login_id 가 그룹의 관리자(user_group_managers)인지 (Layer 4 Task 3b)."""
+    return (
+        await session.scalar(
+            select(UserGroupManager.id).where(
+                UserGroupManager.group_id == group_id,
+                UserGroupManager.user_id == login_id,
+            )
+        )
+    ) is not None
+
+
+async def assert_group_manager_or_sysadmin(
+    session: AsyncSession, login_id: str, group_id: int
+) -> None:
+    """그룹 관리자 또는 sysadmin 이 아니면 403 (멤버 add/remove·관리자 set 게이트)."""
+    if logic.is_sysadmin(login_id):
+        return
+    if await is_group_manager(session, group_id, login_id):
+        return
+    raise HTTPException(status_code=403, detail="group manager or sysadmin only")
 
 
 async def is_map_approver(session: AsyncSession, login_id: str, map_id: int) -> bool:

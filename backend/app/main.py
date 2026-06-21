@@ -18,6 +18,7 @@ from app.routers import (
     directory,
     employees,
     graph,
+    groups,
     library,
     maps,
     notifications,
@@ -54,6 +55,7 @@ app.include_router(approvers.router)
 app.include_router(notifications.router)
 app.include_router(library.router)
 app.include_router(permissions.router)
+app.include_router(groups.router)
 
 
 @app.get("/api/health")
