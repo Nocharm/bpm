@@ -12,6 +12,7 @@ from app import workflow
 from app.auth import get_current_user
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
+from app.permissions.deps import require_version_map_role
 from app.models import (
     Edge,
     Group,
@@ -149,7 +150,11 @@ async def create_version(
     return new_version
 
 
-@router.patch("/versions/{version_id}", response_model=VersionOut)
+@router.patch(
+    "/versions/{version_id}",
+    response_model=VersionOut,
+    dependencies=[Depends(require_version_map_role("editor"))],
+)
 async def rename_version(
     version_id: int,
     payload: VersionUpdate,

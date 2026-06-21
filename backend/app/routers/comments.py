@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import Comment, MapVersion, Node
+from app.permissions.deps import require_comment_map_role, require_version_map_role
 from app.schemas import CommentCreate, CommentOut, CommentUpdate
 
 router = APIRouter(
@@ -47,7 +48,10 @@ async def list_comments(
 
 
 @router.post(
-    "/versions/{version_id}/comments", response_model=CommentOut, status_code=201
+    "/versions/{version_id}/comments",
+    response_model=CommentOut,
+    status_code=201,
+    dependencies=[Depends(require_version_map_role("viewer"))],
 )
 async def create_comment(
     version_id: int,
@@ -70,7 +74,11 @@ async def create_comment(
     return comment
 
 
-@router.patch("/comments/{comment_id}", response_model=CommentOut)
+@router.patch(
+    "/comments/{comment_id}",
+    response_model=CommentOut,
+    dependencies=[Depends(require_comment_map_role("viewer"))],
+)
 async def update_comment(
     comment_id: int,
     payload: CommentUpdate,

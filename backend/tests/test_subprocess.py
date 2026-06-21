@@ -7,7 +7,10 @@ from app.settings import settings
 
 
 def _new_version(client: TestClient, name: str = "p") -> int:
-    return client.post("/api/maps", json={"name": name}).json()["versions"][0]["id"]
+    version_id = client.post("/api/maps", json={"name": name}).json()["versions"][0]["id"]
+    # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    return version_id
 
 
 def test_rejects_two_starts(client: TestClient) -> None:
@@ -61,7 +64,10 @@ def test_accepts_valid_process(client: TestClient) -> None:
 
 def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
     created = client.post("/api/maps", json={"name": name}).json()
-    return created["id"], created["versions"][0]["id"]
+    version_id = created["versions"][0]["id"]
+    # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    return created["id"], version_id
 
 
 def test_rejects_indirect_cycle(client: TestClient) -> None:
@@ -159,6 +165,7 @@ def test_library_list_includes_published_and_refs(
     b = _make_map(client, name="lib-B-ref")
     b_map_id = b["id"]
     b_ver = b["versions"][0]["id"]
+    client.post(f"/api/versions/{b_ver}/checkout", json={})  # PUT /graph는 체크아웃 필요
     client.put(f"/api/versions/{b_ver}/graph", json={
         "nodes": [
             {"id": "s", "node_type": "start", "title": "S"},
