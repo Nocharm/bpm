@@ -47,6 +47,8 @@ class EmployeeFields:
     org_l1: str | None
     org_l2: str | None
     org_l3: str | None
+    org_l4: str | None
+    org_l5: str | None
     department: str
     role: str
 
@@ -76,6 +78,8 @@ def to_employee_fields(raw: client.RawUser) -> EmployeeFields | None:
         org_l1=org.org_l1,
         org_l2=org.org_l2,
         org_l3=org.org_l3,
+        org_l4=org.org_l4,
+        org_l5=org.org_l5,
         department=org.department,
         role=resolve_role(login_id),
     )
@@ -93,6 +97,8 @@ async def _upsert(session: AsyncSession, fields: EmployeeFields) -> Employee:
     emp.org_l1 = fields.org_l1
     emp.org_l2 = fields.org_l2
     emp.org_l3 = fields.org_l3
+    emp.org_l4 = fields.org_l4
+    emp.org_l5 = fields.org_l5
     emp.department = fields.department
     return emp
 
