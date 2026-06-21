@@ -275,3 +275,55 @@ class ApprovalRequest(Base):
         DateTime(timezone=True), default=None
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class UserGroup(Base):
+    """사용자 그룹 — map_permissions의 principal_type='group' 대상 (Layer 4 §3a).
+
+    map_permissions.principal_id 는 이 그룹의 id(정수)를 문자열로 보관한다.
+    status='active' 그룹만 권한 판정에 적용된다(pending/rejected는 무시).
+    """
+
+    __tablename__ = "user_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    # 'pending' | 'active' | 'rejected'
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_by: Mapped[str] = mapped_column(String(100))
+    approved_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class UserGroupMember(Base):
+    """그룹 구성원 — user(login_id) 또는 department(org_path 문자열, Layer-1 규약).
+
+    department 멤버의 member_id 는 belongs_to_department 와 동일한 org_path 문자열이다.
+    """
+
+    __tablename__ = "user_group_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_groups.id", ondelete="CASCADE")
+    )
+    # 'user' | 'department'
+    member_type: Mapped[str] = mapped_column(String(20))
+    # user→login_id; department→org_path 문자열
+    member_id: Mapped[str] = mapped_column(String(200))
+
+
+class UserGroupManager(Base):
+    """그룹 관리자 — 그룹 멤버십을 관리하는 사용자(login_id)."""
+
+    __tablename__ = "user_group_managers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_groups.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[str] = mapped_column(String(100))

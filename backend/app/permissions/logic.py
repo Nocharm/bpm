@@ -61,12 +61,15 @@ def effective_role(
     visibility: str,
     permissions: list[Permission],
     is_approver: bool,
+    user_group_ids: set[str],
 ) -> str | None:
     """맵에 대한 유효 역할 판정 (mock getEffectiveRole parity).
 
     우선순위 (상위가 먼저):
     1. sysadmin → 'owner'
-    2. 적용되는 map_permissions 중 최고 역할 (user/department; group은 Layer 4 — 무시)
+    2. 적용되는 map_permissions 중 최고 역할 (user/department/group — 그룹은
+       principal_id ∈ user_group_ids 일 때만 적용; user_group_ids 는 호출자가 속한
+       ACTIVE 그룹 id들의 문자열 집합으로 caller가 주입한다 — 순수성 유지)
     3. visibility == 'public' → 'viewer' baseline
     4. is_approver → 'viewer' floor (2/3 에서 역할 없을 때만)
     5. None (접근 불가)
@@ -75,15 +78,17 @@ def effective_role(
     if is_sysadmin_flag:
         return "owner"
 
-    # 2. 적용 가능한 권한 중 최고 역할
+    # 2. 적용 가능한 권한 중 최고 역할 — group은 caller가 속한 active 그룹일 때만
     best: str | None = None
     for ptype, pid, role in permissions:
         if ptype == "user" and pid == login_id:
             pass  # applicable
         elif ptype == "department" and belongs_to_department(emp_org_path, pid):
             pass  # applicable
+        elif ptype == "group" and pid in user_group_ids:
+            pass  # applicable — 호출자가 이 active 그룹의 멤버
         else:
-            continue  # group → ignored (Layer 4)
+            continue  # 비적용 (다른 user/dept, 또는 미가입 group)
         if role_rank(role) > role_rank(best):
             best = role
 
@@ -109,10 +114,19 @@ def is_visible(
     visibility: str,
     permissions: list[Permission],
     is_approver: bool,
+    user_group_ids: set[str],
 ) -> bool:
     """effective_role is not None."""
     return (
-        effective_role(login_id, is_sysadmin_flag, emp_org_path, visibility, permissions, is_approver)
+        effective_role(
+            login_id,
+            is_sysadmin_flag,
+            emp_org_path,
+            visibility,
+            permissions,
+            is_approver,
+            user_group_ids,
+        )
         is not None
     )
 

@@ -155,8 +155,11 @@ class TestEffectiveRole:
         visibility: str = PRIVATE,
         perms: list = NO_PERMS,
         approver: bool = False,
+        group_ids: set[str] | None = None,
     ) -> str | None:
-        return effective_role(login_id, sysadmin, path, visibility, perms, approver)
+        return effective_role(
+            login_id, sysadmin, path, visibility, perms, approver, group_ids or set()
+        )
 
     # 1. sysadmin → owner (무조건)
     def test_sysadmin_always_owner(self) -> None:
@@ -180,25 +183,25 @@ class TestEffectiveRole:
     # 5. department grant editor on Procurement Office → lee/park/choi/jung editor, kim None
     def test_dept_grant_editor_lee(self) -> None:
         perms = [("department", PROC, "editor")]
-        assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False) == "editor"
+        assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False, set()) == "editor"
 
     def test_dept_grant_editor_park(self) -> None:
         perms = [("department", PROC, "editor")]
-        assert effective_role("user.park", False, PATH_PARK, PRIVATE, perms, False) == "editor"
+        assert effective_role("user.park", False, PATH_PARK, PRIVATE, perms, False, set()) == "editor"
 
     def test_dept_grant_editor_choi(self) -> None:
         perms = [("department", PROC, "editor")]
-        assert effective_role("user.choi", False, PATH_CHOI, PRIVATE, perms, False) == "editor"
+        assert effective_role("user.choi", False, PATH_CHOI, PRIVATE, perms, False, set()) == "editor"
 
     def test_dept_grant_editor_jung(self) -> None:
         # jung's path == Management Support Division/Procurement Office (exact match)
         perms = [("department", PROC, "editor")]
-        assert effective_role("user.jung", False, PATH_JUNG, PRIVATE, perms, False) == "editor"
+        assert effective_role("user.jung", False, PATH_JUNG, PRIVATE, perms, False, set()) == "editor"
 
     def test_dept_grant_editor_kim_none(self) -> None:
         # kim은 Process Innovation Office 소속 → Procurement Office 권한 적용 안 됨
         perms = [("department", PROC, "editor")]
-        assert effective_role("admin.kim", False, PATH_KIM, PRIVATE, perms, False) is None
+        assert effective_role("admin.kim", False, PATH_KIM, PRIVATE, perms, False, set()) is None
 
     # 6. approver, 권한 없음, private → viewer floor
     def test_approver_floor(self) -> None:
@@ -209,14 +212,22 @@ class TestEffectiveRole:
         perms = [("user", "user.lee", "owner")]
         assert self._role(perms=perms) == "owner"
 
-    # 8. group grant → IGNORED (Layer 4 defer)
-    def test_group_grant_ignored(self) -> None:
-        perms = [("group", "some-group-id", "owner")]
-        assert self._role(perms=perms) is None  # private + no effective user/dept
+    # 8. group grant — caller가 그 그룹(active) 멤버일 때만 적용 (Layer 4)
+    def test_group_grant_applies_when_member(self) -> None:
+        perms = [("group", "7", "owner")]
+        # principal_id가 user_group_ids에 있으면 적용
+        assert self._role(perms=perms, group_ids={"7"}) == "owner"
+
+    def test_group_grant_ignored_when_not_member(self) -> None:
+        perms = [("group", "7", "owner")]
+        # 빈 집합(미가입) → private + 적용 권한 없음 → None
+        assert self._role(perms=perms) is None
+        assert self._role(perms=perms, group_ids={"99"}) is None  # 다른 그룹만 가입
 
     def test_group_grant_ignored_public_stays_viewer(self) -> None:
-        perms = [("group", "some-group-id", "owner")]
-        assert self._role(visibility=PUBLIC, perms=perms) == "viewer"  # baseline only
+        perms = [("group", "7", "owner")]
+        # 미가입이면 group grant 무시 → public baseline viewer만
+        assert self._role(visibility=PUBLIC, perms=perms) == "viewer"
 
     # 9. 복수 권한 — 최고 역할 wins
     def test_highest_wins_user_viewer_dept_editor(self) -> None:
@@ -224,14 +235,14 @@ class TestEffectiveRole:
             ("user", "user.lee", "viewer"),
             ("department", PROC, "editor"),
         ]
-        assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False) == "editor"
+        assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False, set()) == "editor"
 
     def test_highest_wins_dept_viewer_user_owner(self) -> None:
         perms = [
             ("department", PROC, "viewer"),
             ("user", "user.lee", "owner"),
         ]
-        assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False) == "owner"
+        assert effective_role("user.lee", False, PATH_LEE, PRIVATE, perms, False, set()) == "owner"
 
 
 # ---------------------------------------------------------------------------
@@ -304,10 +315,10 @@ class TestWrappers:
         assert can_comment(None) is False
 
     def test_is_visible_public(self) -> None:
-        assert is_visible("user.lee", False, PATH_LEE, PUBLIC, [], False) is True
+        assert is_visible("user.lee", False, PATH_LEE, PUBLIC, [], False, set()) is True
 
     def test_is_visible_private_no_access(self) -> None:
-        assert is_visible("user.lee", False, PATH_LEE, PRIVATE, [], False) is False
+        assert is_visible("user.lee", False, PATH_LEE, PRIVATE, [], False, set()) is False
 
     def test_is_visible_sysadmin(self) -> None:
-        assert is_visible("user.lee", True, PATH_LEE, PRIVATE, [], False) is True
+        assert is_visible("user.lee", True, PATH_LEE, PRIVATE, [], False, set()) is True

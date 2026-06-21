@@ -8,8 +8,45 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
-from app.models import Employee, MapApprover, MapPermission, ProcessMap
+from app.models import (
+    Employee,
+    MapApprover,
+    MapPermission,
+    ProcessMap,
+    UserGroup,
+    UserGroupMember,
+)
 from app.permissions import logic
+
+
+async def get_user_active_group_ids(
+    session: AsyncSession, login_id: str, emp_org_path: str
+) -> set[str]:
+    """호출자가 속한 ACTIVE 사용자 그룹 id 집합(문자열).
+
+    멤버십: user 멤버(member_id==login_id) 또는 department 멤버
+    (belongs_to_department(emp_org_path, member_id), Layer-2 규약의 org_path 문자열).
+    status='active' 그룹만 — pending/rejected 는 제외.
+    """
+    rows = (
+        await session.execute(
+            select(
+                UserGroupMember.group_id,
+                UserGroupMember.member_type,
+                UserGroupMember.member_id,
+            ).join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+            .where(UserGroup.status == "active")
+        )
+    ).all()
+    group_ids: set[str] = set()
+    for group_id, member_type, member_id in rows:
+        if member_type == "user" and member_id == login_id:
+            group_ids.add(str(group_id))
+        elif member_type == "department" and logic.belongs_to_department(
+            emp_org_path, member_id
+        ):
+            group_ids.add(str(group_id))
+    return group_ids
 
 
 async def get_effective_role(
@@ -50,6 +87,8 @@ async def get_effective_role(
         )
     ) is not None
 
+    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
+
     return logic.effective_role(
         login_id,
         logic.is_sysadmin(login_id),
@@ -57,6 +96,7 @@ async def get_effective_role(
         found_map.visibility,
         permissions,
         is_approver,
+        user_group_ids,
     )
 
 

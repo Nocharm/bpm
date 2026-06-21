@@ -9,7 +9,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions import logic
-from app.permissions.access import get_effective_role
+from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.deps import require_map_role
 from app.schemas import MapCreate, MapDetailOut, MapOut, MapUpdate
 
@@ -65,6 +65,8 @@ async def list_maps(
             )
         ).all()
     )
+    # 호출자가 속한 active 그룹 id — 맵 무관이라 루프 밖에서 1회만 산정
+    user_group_ids = await get_user_active_group_ids(session, user, emp_org_path)
 
     # 가시성 필터와 my_role 노출을 한 번의 effective_role 계산으로 처리 (이중 계산 회피).
     visible: list[ProcessMap] = []
@@ -76,6 +78,7 @@ async def list_maps(
             m.visibility,
             perms_by_map.get(m.id, []),
             m.id in approver_map_ids,
+            user_group_ids,
         )
         if role is not None:  # is_visible == (effective_role is not None)
             m.my_role = role
