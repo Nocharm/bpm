@@ -21,6 +21,10 @@ AI_MODEL=/gpt-oss-120b
 AI_TIMEOUT_SECONDS=60
 ```
 
+> 로컬 개발: 온프레미스 vLLM 대신 **공개 OpenAI 호환 API**로도 검증 가능 — 같은 `AI_*` 변수에 값만 교체.
+> 예) OpenAI `AI_BASE_URL=https://api.openai.com/v1` · `AI_MODEL=gpt-4o-mini`, Groq `AI_BASE_URL=https://api.groq.com/openai/v1`.
+> 로컬 네이티브는 `backend/`에서 uvicorn을 띄우므로 **`backend/.env`**가 로드된다(또는 아래 shell export 사용). 루트 `.env`는 docker-compose 전용.
+
 아래 테스트 명령은 이 값들을 셸 환경변수로 export했다고 가정한다.
 
 ```bash
