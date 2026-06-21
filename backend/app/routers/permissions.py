@@ -1,0 +1,351 @@
+"""권한 관리 API — collaborators CRUD·owner 이전·가시성 변경·승인 요청 (design 2026-06-21 §5).
+
+다운그레이드(editor→viewer/제거)와 가시성 변경은 즉시 적용하지 않고 ApprovalRequest 로
+지연한다. 승인자/sysadmin 이 decide 로 approve 할 때 payload 를 적용한다.
+group principal 은 저장만 되고 effective_role 은 아직 무시(Layer 4) — 부여는 허용.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth import get_current_user
+from app.db import get_session
+from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
+from app.permissions import logic
+from app.permissions.deps import (
+    assert_approver_or_sysadmin,
+    require_approver_or_sysadmin,
+    require_map_role,
+)
+from app.schemas import (
+    ApprovalRequestOut,
+    DecisionIn,
+    OwnerTransferIn,
+    PermissionCreate,
+    PermissionOut,
+    PermissionPatch,
+    VisibilityRequestIn,
+)
+
+router = APIRouter(
+    prefix="/api", tags=["permissions"], dependencies=[Depends(get_current_user)]
+)
+
+
+async def _get_map_or_404(session: AsyncSession, map_id: int) -> ProcessMap:
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    return found_map
+
+
+# ── A. Collaborators ──────────────────────────────────────────
+
+
+@router.get(
+    "/maps/{map_id}/permissions",
+    response_model=list[PermissionOut],
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def list_permissions(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> list[MapPermission]:
+    await _get_map_or_404(session, map_id)
+    rows = await session.scalars(
+        select(MapPermission)
+        .where(MapPermission.map_id == map_id)
+        .order_by(MapPermission.id)
+    )
+    return list(rows.all())
+
+
+@router.post(
+    "/maps/{map_id}/permissions",
+    response_model=PermissionOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def add_permission(
+    map_id: int,
+    payload: PermissionCreate,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapPermission:
+    """grant 추가 — 즉시 적용. group 도 저장하나 effective_role 은 무시(Layer 4)."""
+    await _get_map_or_404(session, map_id)
+    existing = await session.scalar(
+        select(MapPermission).where(
+            MapPermission.map_id == map_id,
+            MapPermission.principal_type == payload.principal_type,
+            MapPermission.principal_id == payload.principal_id,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409, detail="grant already exists — use PATCH to change role"
+        )
+    grant = MapPermission(
+        map_id=map_id,
+        principal_type=payload.principal_type,
+        principal_id=payload.principal_id,
+        role=payload.role,
+        granted_by=user,
+    )
+    session.add(grant)
+    await session.commit()
+    await session.refresh(grant)
+    return grant
+
+
+@router.patch(
+    "/maps/{map_id}/permissions/{permission_id}",
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def update_permission(
+    map_id: int,
+    permission_id: int,
+    payload: PermissionPatch,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """role 변경. 다운그레이드(editor→viewer)면 승인 지연, 그 외 즉시 적용.
+
+    owner grant 는 여기서 변경 불가 → owner 이전 경로(§B)로만.
+    """
+    grant = await _get_grant_or_404(session, map_id, permission_id)
+    if grant.role == "owner":
+        raise HTTPException(
+            status_code=409, detail="owner grant changes go through owner transfer"
+        )
+    new_role = payload.role
+    if new_role == "owner":
+        raise HTTPException(
+            status_code=409, detail="promote to owner via owner transfer"
+        )
+    if logic.requires_downgrade_approval(grant.role, new_role):
+        req = ApprovalRequest(
+            map_id=map_id,
+            kind="permission_downgrade",
+            payload={
+                "permission_id": permission_id,
+                "principal_type": grant.principal_type,
+                "principal_id": grant.principal_id,
+                "from_role": grant.role,
+                "to_role": new_role,
+            },
+            requested_by=user,
+            status="pending",
+        )
+        session.add(req)
+        await session.commit()
+        await session.refresh(req)
+        # 지연 — 아직 적용 안 됨. pending 마커로 응답
+        return {"pending": True, "approval_request": _serialize_request(req)}
+    grant.role = new_role
+    await session.commit()
+    await session.refresh(grant)
+    return {"pending": False, "permission": PermissionOut.model_validate(grant).model_dump()}
+
+
+@router.delete(
+    "/maps/{map_id}/permissions/{permission_id}",
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def delete_permission(
+    map_id: int,
+    permission_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """grant 제거. editor 제거는 승인 지연, viewer 등은 즉시. owner 는 거부(이전 경로)."""
+    grant = await _get_grant_or_404(session, map_id, permission_id)
+    if grant.role == "owner":
+        raise HTTPException(
+            status_code=409, detail="owner grant removal goes through owner transfer"
+        )
+    if logic.requires_downgrade_approval(grant.role, None):
+        req = ApprovalRequest(
+            map_id=map_id,
+            kind="permission_downgrade",
+            payload={
+                "permission_id": permission_id,
+                "principal_type": grant.principal_type,
+                "principal_id": grant.principal_id,
+                "from_role": grant.role,
+                "to_role": None,
+            },
+            requested_by=user,
+            status="pending",
+        )
+        session.add(req)
+        await session.commit()
+        await session.refresh(req)
+        return {"pending": True, "approval_request": _serialize_request(req)}
+    await session.delete(grant)
+    await session.commit()
+    return {"pending": False, "deleted": True}
+
+
+async def _get_grant_or_404(
+    session: AsyncSession, map_id: int, permission_id: int
+) -> MapPermission:
+    grant = await session.get(MapPermission, permission_id)
+    if grant is None or grant.map_id != map_id:
+        raise HTTPException(status_code=404, detail=f"permission {permission_id} not found")
+    return grant
+
+
+# ── B. Owner transfer ─────────────────────────────────────────
+
+
+@router.post(
+    "/maps/{map_id}/transfer-owner",
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def transfer_owner(
+    map_id: int,
+    payload: OwnerTransferIn,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """소유권 이전 — 즉시. 기존 owner grant → editor, new_owner grant → owner, owner_id 갱신.
+
+    new_owner 는 현재 editor+ 보유자여야 한다. 결과적으로 owner grant 는 정확히 1개 남는다.
+    """
+    found_map = await _get_map_or_404(session, map_id)
+    new_owner = payload.new_owner
+
+    grants = list(
+        (
+            await session.scalars(
+                select(MapPermission).where(MapPermission.map_id == map_id)
+            )
+        ).all()
+    )
+    # new_owner 의 기존 user grant 찾기 — editor+ 여야 이전 가능
+    new_owner_grant = next(
+        (g for g in grants if g.principal_type == "user" and g.principal_id == new_owner),
+        None,
+    )
+    if new_owner_grant is None or logic.role_rank(new_owner_grant.role) < logic.role_rank("editor"):
+        raise HTTPException(
+            status_code=409, detail="new_owner must already hold editor or higher"
+        )
+
+    # 기존 owner grant 전부 editor 로 강등 (정상 상태에선 1개, 방어적으로 전부 처리)
+    for g in grants:
+        if g.role == "owner":
+            g.role = "editor"
+    new_owner_grant.role = "owner"
+    found_map.owner_id = new_owner
+    await session.commit()
+    return {
+        "owner_id": new_owner,
+        "transferred": True,
+    }
+
+
+# ── C. Visibility request ─────────────────────────────────────
+
+
+@router.post(
+    "/maps/{map_id}/visibility-request",
+    response_model=ApprovalRequestOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def request_visibility_change(
+    map_id: int,
+    payload: VisibilityRequestIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ApprovalRequest:
+    """가시성 변경 요청 — 즉시 적용하지 않고 승인 지연(§5)."""
+    await _get_map_or_404(session, map_id)
+    req = ApprovalRequest(
+        map_id=map_id,
+        kind="visibility_change",
+        payload={"to_visibility": payload.to_visibility},
+        requested_by=user,
+        status="pending",
+    )
+    session.add(req)
+    await session.commit()
+    await session.refresh(req)
+    return req
+
+
+# ── D. Approval requests — list + decide ──────────────────────
+
+
+@router.get(
+    "/maps/{map_id}/approval-requests",
+    response_model=list[ApprovalRequestOut],
+    dependencies=[Depends(require_approver_or_sysadmin())],
+)
+async def list_approval_requests(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> list[ApprovalRequest]:
+    await _get_map_or_404(session, map_id)
+    rows = await session.scalars(
+        select(ApprovalRequest)
+        .where(ApprovalRequest.map_id == map_id)
+        .order_by(ApprovalRequest.created_at.desc())
+    )
+    return list(rows.all())
+
+
+@router.post("/approval-requests/{request_id}/decide", response_model=ApprovalRequestOut)
+async def decide_approval_request(
+    request_id: int,
+    payload: DecisionIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ApprovalRequest:
+    """승인 요청 결정 — approve 면 payload 적용 후 applied, reject 면 변경 없이 rejected.
+
+    게이트: 해당 요청 맵의 승인자 또는 sysadmin (경로가 request_id 라 런타임 판정).
+    """
+    req = await session.get(ApprovalRequest, request_id)
+    if req is None:
+        raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
+    await assert_approver_or_sysadmin(session, user, req.map_id)
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"request already {req.status}")
+
+    req.decided_by = user
+    req.decided_at = _now()
+    if payload.decision == "reject":
+        req.status = "rejected"
+        await session.commit()
+        await session.refresh(req)
+        return req
+
+    # approve → payload 적용
+    await _apply_request(session, req)
+    req.status = "applied"
+    await session.commit()
+    await session.refresh(req)
+    return req
+
+
+async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
+    """승인된 요청의 payload 를 실제 데이터에 적용 (downgrade / visibility_change)."""
+    if req.kind == "permission_downgrade":
+        permission_id = req.payload.get("permission_id")
+        to_role = req.payload.get("to_role")
+        grant = await session.get(MapPermission, permission_id)
+        if grant is None or grant.map_id != req.map_id:
+            return  # 멱등 — grant 가 이미 사라졌으면 그대로 applied
+        if to_role is None:
+            await session.delete(grant)
+        else:
+            grant.role = to_role
+    elif req.kind == "visibility_change":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is not None:
+            found_map.visibility = req.payload.get("to_visibility")
+
+
+def _serialize_request(req: ApprovalRequest) -> dict:
+    return ApprovalRequestOut.model_validate(req).model_dump(mode="json")

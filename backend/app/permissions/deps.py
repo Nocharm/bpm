@@ -8,14 +8,38 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from fastapi import Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Comment, MapVersion
+from app.models import Comment, MapApprover, MapVersion
+from app.permissions import logic
 from app.permissions.access import assert_map_role
 
 Dep = Callable[..., Coroutine[Any, Any, None]]
+
+
+async def is_map_approver(session: AsyncSession, login_id: str, map_id: int) -> bool:
+    """login_id 가 map_id 의 지정 승인자인지."""
+    return (
+        await session.scalar(
+            select(MapApprover.user_id).where(
+                MapApprover.map_id == map_id, MapApprover.user_id == login_id
+            )
+        )
+    ) is not None
+
+
+async def assert_approver_or_sysadmin(
+    session: AsyncSession, login_id: str, map_id: int
+) -> None:
+    """맵의 지정 승인자 또는 sysadmin 이 아니면 403 (승인 요청 조회/결정 게이트, brief §D)."""
+    if logic.is_sysadmin(login_id):
+        return
+    if await is_map_approver(session, login_id, map_id):
+        return
+    raise HTTPException(status_code=403, detail="approver or sysadmin only")
 
 
 def require_map_role(min_role: str) -> Dep:
@@ -62,5 +86,18 @@ def require_comment_map_role(min_role: str) -> Dep:
         if version is None:
             raise HTTPException(status_code=404, detail="comment's version not found")
         await assert_map_role(session, user, version.map_id, min_role)
+
+    return dep
+
+
+def require_approver_or_sysadmin() -> Dep:
+    """경로의 map_id 에 대해 지정 승인자 또는 sysadmin 을 요구한다 (승인 요청 조회)."""
+
+    async def dep(
+        map_id: int,
+        user: str = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ) -> None:
+        await assert_approver_or_sysadmin(session, user, map_id)
 
     return dep

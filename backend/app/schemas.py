@@ -40,6 +40,59 @@ class ApproversUpdate(BaseModel):
     user_ids: list[str]
 
 
+# ── 권한 관리 (collaborators / owner-transfer / visibility / approvals, Task 4) ──
+
+PrincipalType = Literal["user", "department", "group"]
+Role = Literal["viewer", "editor", "owner"]
+
+
+class PermissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    principal_type: str
+    principal_id: str
+    role: str
+    granted_by: str
+
+
+class PermissionCreate(BaseModel):
+    principal_type: PrincipalType
+    principal_id: str = Field(min_length=1, max_length=200)
+    # owner 부여는 owner-transfer 경로로만 — 여기선 viewer/editor만 허용
+    role: Literal["viewer", "editor"]
+
+
+class PermissionPatch(BaseModel):
+    role: Role
+
+
+class OwnerTransferIn(BaseModel):
+    new_owner: str = Field(min_length=1, max_length=100)
+
+
+class VisibilityRequestIn(BaseModel):
+    to_visibility: Literal["public", "private"]
+
+
+class ApprovalRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    map_id: int
+    kind: str
+    payload: dict
+    requested_by: str
+    status: str
+    decided_by: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     status: str

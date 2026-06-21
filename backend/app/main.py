@@ -9,7 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session, init_models
 from app.models import Employee
-from app.routers import ai, approvers, comments, employees, graph, library, maps, notifications, versions
+from app.routers import (
+    ai,
+    approvers,
+    comments,
+    employees,
+    graph,
+    library,
+    maps,
+    notifications,
+    permissions,
+    versions,
+)
 from app.schemas import MeOut
 from app.settings import settings
 
@@ -37,6 +48,7 @@ app.include_router(employees.router)
 app.include_router(approvers.router)
 app.include_router(notifications.router)
 app.include_router(library.router)
+app.include_router(permissions.router)
 
 
 @app.get("/api/health")

@@ -46,6 +46,7 @@ async def set_approvers(
     await session.execute(delete(MapApprover).where(MapApprover.map_id == map_id))
     unique_ids = sorted({uid for uid in payload.user_ids if uid})
     for uid in unique_ids:
-        session.add(MapApprover(map_id=map_id, user_id=uid))
+        # assigned_by — 감사 추적용(§9-3). 게이트 모델 재정비는 Task 4 이후로 보류
+        session.add(MapApprover(map_id=map_id, user_id=uid, assigned_by=user))
     await session.commit()
     return unique_ids
