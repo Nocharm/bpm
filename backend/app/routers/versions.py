@@ -60,6 +60,12 @@ async def _clone_graph(
             pos_x=node.pos_x,
             pos_y=node.pos_y,
             sort_order=node.sort_order,
+            # 하위프로세스 참조 필드 — 복제 시 그대로 이전 (Call Activity 링크 보존)
+            linked_map_id=node.linked_map_id,
+            follow_latest=node.follow_latest,
+            linked_version_id=node.linked_version_id,
+            # 대표 끝 플래그 보존
+            is_primary_end=node.is_primary_end,
         )
         session.add(clone)
         cloned[node.id] = clone
@@ -98,6 +104,12 @@ async def _clone_graph(
                 source_node_id=id_map[edge.source_node_id],
                 target_node_id=id_map[edge.target_node_id],
                 label=edge.label,
+                # 시각 방향 (pre-existing gap — source_side/target_side도 함께 보존)
+                source_side=edge.source_side,
+                target_side=edge.target_side,
+                # 다중 출구 핸들 식별자 보존 (이 브랜치 신규 필드)
+                source_handle=edge.source_handle,
+                target_handle=edge.target_handle,
             )
         )
 

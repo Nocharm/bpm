@@ -115,8 +115,8 @@ class EdgeIn(BaseModel):
     label: str = ""
     source_side: HandleSide = "right"
     target_side: HandleSide = "left"
-    source_handle: str | None = None
-    target_handle: str | None = None
+    source_handle: str | None = Field(default=None, max_length=200)
+    target_handle: str | None = Field(default=None, max_length=200)
 
 
 class NodeOut(NodeIn):

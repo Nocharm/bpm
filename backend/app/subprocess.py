@@ -8,7 +8,10 @@ from app.schemas import NodeIn
 
 
 def validate_process(nodes: list[NodeIn]) -> None:
-    """프로세스 그래프 규칙 검증 — 위반 시 ValueError. (spec §3.3)"""
+    """프로세스 그래프 규칙 검증 + 대표 끝 기본값 설정 — 위반 시 ValueError. (spec §3.3)
+
+    끝 노드가 있고 is_primary_end 미지정(0개)이면 sort_order 최소 끝을 대표로 기본 지정.
+    """
     if not nodes:
         return
     starts = [n for n in nodes if n.node_type == "start"]
@@ -21,6 +24,10 @@ def validate_process(nodes: list[NodeIn]) -> None:
     primaries = [e for e in ends if e.is_primary_end]
     if len(primaries) > 1:
         raise ValueError(f"대표 끝은 1개여야 합니다 (현재 {len(primaries)}개).")
+    # spec §3.3: 끝이 있는데 대표가 없으면 sort_order 최소(동점은 payload 순서) 끝을 기본 지정
+    if ends and not primaries:
+        first_end = min(ends, key=lambda e: e.sort_order)
+        first_end.is_primary_end = True
 
 
 async def resolve_linked_version(
