@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     ldap_user_filter: str = ""  # 비우면 기본 enumerate 필터
     # admin role을 부여할 loginId(콤마 구분). 비우면 AD 유저는 전부 user
     system_admin_login_ids: str = ""
+    # BPM 시스템 관리자 loginId(콤마 구분). auth OFF 시엔 전원 sysadmin 취급(로컬 잠금 방지).
+    bpm_sysadmins: str = ""
 
     @property
     def ldap_enabled(self) -> bool:
@@ -51,6 +53,9 @@ class Settings(BaseSettings):
 
     def admin_login_ids(self) -> set[str]:
         return {x.strip() for x in self.system_admin_login_ids.split(",") if x.strip()}
+
+    def sysadmin_login_ids(self) -> set[str]:
+        return {x.strip() for x in self.bpm_sysadmins.split(",") if x.strip()}
 
 
 settings = Settings()

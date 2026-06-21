@@ -12,12 +12,33 @@ from app.models import Employee
 from app.settings import settings
 
 # 로컬 임시 유저 5명 (auth OFF). loginId는 '.' 포함·'_' 미포함(필터 비충돌), name 무 '_'.
-LOCAL_USERS: list[dict[str, str]] = [
-    {"login_id": "admin.kim", "name": "김관리", "title": "팀장", "department": "프로세스혁신팀", "role": "admin"},
-    {"login_id": "user.lee", "name": "이업무", "title": "선임", "department": "구매팀", "role": "user"},
-    {"login_id": "user.park", "name": "박담당", "title": "사원", "department": "인사팀", "role": "user"},
-    {"login_id": "user.choi", "name": "최실무", "title": "책임", "department": "생산관리팀", "role": "user"},
-    {"login_id": "user.jung", "name": "정사용", "title": "선임", "department": "품질팀", "role": "user"},
+# 3가지 패턴: ① lee==park(동일 팀), ② choi(같은 구매실 prefix, 다른 팀), ③ jung(l3 없음 → 상위 prefix).
+LOCAL_USERS: list[dict] = [
+    {
+        "login_id": "admin.kim", "name": "김관리", "title": "팀장", "role": "admin",
+        "org_l1": "경영지원본부", "org_l2": "프로세스혁신실", "org_l3": "프로세스혁신팀",
+        "org_l4": None, "org_l5": None, "department": "프로세스혁신팀",
+    },
+    {
+        "login_id": "user.lee", "name": "이업무", "title": "선임", "role": "user",
+        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": "구매1팀",
+        "org_l4": None, "org_l5": None, "department": "구매1팀",
+    },
+    {
+        "login_id": "user.park", "name": "박담당", "title": "사원", "role": "user",
+        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": "구매1팀",
+        "org_l4": None, "org_l5": None, "department": "구매1팀",
+    },
+    {
+        "login_id": "user.choi", "name": "최실무", "title": "책임", "role": "user",
+        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": "구매2팀",
+        "org_l4": None, "org_l5": None, "department": "구매2팀",
+    },
+    {
+        "login_id": "user.jung", "name": "정사용", "title": "선임", "role": "user",
+        "org_l1": "경영지원본부", "org_l2": "구매실", "org_l3": None,
+        "org_l4": None, "org_l5": None, "department": "구매실",
+    },
 ]
 
 
@@ -26,16 +47,18 @@ async def seed_local_employees(session: AsyncSession) -> None:
     for spec in LOCAL_USERS:
         emp = await session.get(Employee, spec["login_id"])
         if emp is None:
-            session.add(
-                Employee(
-                    login_id=spec["login_id"],
-                    name=spec["name"],
-                    title=spec["title"],
-                    department=spec["department"],
-                    role=spec["role"],
-                    source="local",
-                )
-            )
+            emp = Employee(login_id=spec["login_id"], source="local")
+            session.add(emp)
+        # 매번 갱신 — 스키마 변경(org_l* 추가) 후에도 기존 행이 채워지도록
+        emp.name = spec["name"]
+        emp.title = spec["title"]
+        emp.role = spec["role"]
+        emp.org_l1 = spec["org_l1"]
+        emp.org_l2 = spec["org_l2"]
+        emp.org_l3 = spec["org_l3"]
+        emp.org_l4 = spec["org_l4"]
+        emp.org_l5 = spec["org_l5"]
+        emp.department = spec["department"]
     await session.commit()
 
 
