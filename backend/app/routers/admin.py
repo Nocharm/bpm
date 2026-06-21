@@ -24,9 +24,8 @@ async def get_admin_users(
 ) -> AdminDirectoryOut:
     """sysadmin 전용 — 전 직원 + 부서 목록 (영문, 풍부한 필드).
 
-    Sysadmin-only. Returns all employees with org_levels + per-user is_sysadmin flag,
-    plus a derived department list (distinct leaf paths with full org_levels).
-    `active` status is omitted — no real flag exists until Task 2.
+    Sysadmin-only. Returns all employees with org_levels + per-user is_sysadmin flag
+    + real active status (from AD userAccountControl, Task 2), plus a derived department list.
     """
     if not is_sysadmin(login_id):
         raise HTTPException(status_code=403, detail="sysadmin required")
@@ -48,6 +47,7 @@ async def get_admin_users(
                 role=emp.role,
                 is_sysadmin=is_sysadmin(emp.login_id),
                 org_levels=levels,
+                active=emp.active,
             )
         )
         if levels:

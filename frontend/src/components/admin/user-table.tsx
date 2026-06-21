@@ -1,9 +1,9 @@
 "use client";
 
-// 사용자 목록 (읽기 전용) — 이름·로그인ID·부서·시스템 관리자 태그 /
-// User list (read-only) — name, login ID, department, sysadmin tag.
+// 사용자 목록 (읽기 전용) — 이름·로그인ID·부서·상태·시스템 관리자 태그 /
+// User list (read-only) — name, login ID, department, status, sysadmin tag.
 // isSysadmin reflects the SERVER is_sysadmin flag (env-managed, no toggle).
-// Status column omitted: no real active flag until Task 2.
+// active reflects employees.active (AD userAccountControl bit 0x2, Task 2).
 
 import { useEffect, useState } from "react";
 
@@ -43,6 +43,9 @@ export function UserTable() {
             <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
               {t("perm.sysadmin.userColDept")}
             </th>
+            <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
+              {t("perm.sysadmin.userColStatus")}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -68,6 +71,16 @@ export function UserTable() {
               </td>
               <td className="py-2 pr-4 font-mono text-ink-secondary">{user.login_id}</td>
               <td className="py-2 pr-4 text-ink-secondary">{user.department}</td>
+              <td className="py-2 pr-4">
+                {/* AD active status — derived from userAccountControl bit 0x2 */}
+                <span
+                  className={user.active ? "text-ink" : "text-ink-secondary"}
+                >
+                  {user.active
+                    ? t("perm.sysadmin.userStatusActive")
+                    : t("perm.sysadmin.userStatusInactive")}
+                </span>
+              </td>
             </tr>
           ))}
         </tbody>

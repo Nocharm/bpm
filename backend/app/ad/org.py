@@ -65,6 +65,17 @@ def org_path(
     return "/".join(levels) if levels else department
 
 
+def is_active(uac: int | None) -> bool:
+    """Derive account active status from userAccountControl.
+
+    AD bit 0x2 (ACCOUNTDISABLE) set → account disabled → active=False.
+    Missing uac (attribute not returned by AD) → treated as active (conservative default).
+    """
+    if uac is None:
+        return True
+    return not bool(uac & 0x2)
+
+
 def is_excluded(org_l1: str | None, login_id: str, name: str) -> bool:
     if org_l1 in EXCLUDED_ORG_L1:
         return True

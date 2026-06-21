@@ -506,6 +506,7 @@ export interface AdminUser {
   role: string;        // 'admin' | 'user'
   is_sysadmin: boolean;
   org_levels: string[];
+  active: boolean;     // false = AD account disabled (userAccountControl bit 0x2)
 }
 
 export interface AdminDept {
@@ -518,7 +519,7 @@ export interface AdminDirectory {
   departments: AdminDept[];
 }
 
-/** sysadmin 전용 — 관리 콘솔 직원·부서 목록 (영문, 풍부한 필드). active 플래그는 Task 2까지 없음. */
+/** sysadmin 전용 — 관리 콘솔 직원·부서 목록 (영문, 풍부한 필드). active = AD userAccountControl 기반 (Task 2). */
 export function getAdminUsers(): Promise<AdminDirectory> {
   return request<AdminDirectory>("/admin/users");
 }

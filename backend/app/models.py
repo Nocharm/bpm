@@ -230,6 +230,9 @@ class Employee(Base):
     org_l4: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l5: Mapped[str | None] = mapped_column(String(200), default=None)
     department: Mapped[str] = mapped_column(String(200), default="")
+    # AD-derived fields (Task 2) — active from userAccountControl bit 0x2; email from mail attr.
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

@@ -294,6 +294,7 @@ class AdminUserOut(BaseModel):
     role: str          # 'admin' | 'user'
     is_sysadmin: bool
     org_levels: list[str]  # non-null org_l1..org_l5 in root→leaf order
+    active: bool       # False = AD account disabled (userAccountControl bit 0x2)
 
 
 class AdminDeptOut(BaseModel):

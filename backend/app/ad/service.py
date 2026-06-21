@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ad import client
-from app.ad.org import is_excluded, parse_org
+from app.ad.org import is_active, is_excluded, parse_org
 from app.models import Employee
 from app.settings import settings
 
@@ -66,6 +66,9 @@ async def seed_local_employees(session: AsyncSession) -> None:
         emp.org_l4 = spec["org_l4"]
         emp.org_l5 = spec["org_l5"]
         emp.department = spec["department"]
+        # Dev users are always active; placeholder email for local testing
+        emp.active = True
+        emp.email = f"{spec['login_id']}@corp"
     await session.commit()
 
 
@@ -81,6 +84,8 @@ class EmployeeFields:
     org_l5: str | None
     department: str
     role: str
+    active: bool        # derived from AD userAccountControl bit 0x2
+    email: str          # derived from AD mail attribute (empty string if absent)
 
 
 @dataclass(frozen=True)
@@ -112,6 +117,8 @@ def to_employee_fields(raw: client.RawUser) -> EmployeeFields | None:
         org_l5=org.org_l5,
         department=org.department,
         role=resolve_role(login_id),
+        active=is_active(raw.user_account_control),
+        email=raw.mail or "",
     )
 
 
@@ -130,6 +137,8 @@ async def _upsert(session: AsyncSession, fields: EmployeeFields) -> Employee:
     emp.org_l4 = fields.org_l4
     emp.org_l5 = fields.org_l5
     emp.department = fields.department
+    emp.active = fields.active
+    emp.email = fields.email
     return emp
 
 

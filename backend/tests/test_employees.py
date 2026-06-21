@@ -27,14 +27,19 @@ def test_to_employee_fields_maps_and_filters() -> None:
         display_name="홍길동",
         title="책임",
         distinguished_name="CN=H,OU=TeamA,OU=DeptB,OU=SAMSUNGBIOLOGICS,DC=corp",
+        user_account_control=None,
+        mail=None,
+        member_of=[],
     )
     fields = to_employee_fields(raw)
     assert fields is not None
     assert fields.login_id == "hong.gildong"
     assert fields.department == "TeamA"  # 루트→리프 중 가장 깊은 레벨
     assert fields.role == "user"
+    assert fields.active is True   # uac=None → active
+    assert fields.email == ""      # mail=None → ""
 
-    excluded = RawUser("nodot", "이름", "", "OU=TeamA,DC=corp")  # loginId에 '.' 없음
+    excluded = RawUser("nodot", "이름", "", "OU=TeamA,DC=corp", None, None, [])  # loginId에 '.' 없음
     assert to_employee_fields(excluded) is None
 
 
@@ -95,8 +100,8 @@ def test_sync_mocked_filters_and_guards(client: TestClient, monkeypatch) -> None
     monkeypatch.setattr(settings, "ldap_user_search_base", "dc=corp")
     monkeypatch.setattr(service, "_last_full_sync_at", None)  # 가드 리셋
     raws = [
-        RawUser("new.user", "신규", "사원", "OU=TeamA,DC=corp"),
-        RawUser("nodot", "제외", "", "OU=TeamA,DC=corp"),  # loginId '.' 없음 → 제외
+        RawUser("new.user", "신규", "사원", "OU=TeamA,DC=corp", 0x200, "new@corp", []),
+        RawUser("nodot", "제외", "", "OU=TeamA,DC=corp", None, None, []),  # loginId '.' 없음 → 제외
     ]
     monkeypatch.setattr(ldap_client, "fetch_all_users", lambda: raws)
 
