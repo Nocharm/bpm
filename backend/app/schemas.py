@@ -40,6 +40,109 @@ class ApproversUpdate(BaseModel):
     user_ids: list[str]
 
 
+# ── 권한 관리 (collaborators / owner-transfer / visibility / approvals, Task 4) ──
+
+PrincipalType = Literal["user", "department", "group"]
+Role = Literal["viewer", "editor", "owner"]
+
+
+class PermissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    principal_type: str
+    principal_id: str
+    role: str
+    granted_by: str
+
+
+class PermissionCreate(BaseModel):
+    principal_type: PrincipalType
+    principal_id: str = Field(min_length=1, max_length=200)
+    # owner 부여는 owner-transfer 경로로만 — 여기선 viewer/editor만 허용
+    role: Literal["viewer", "editor"]
+
+
+class PermissionPatch(BaseModel):
+    role: Role
+
+
+class OwnerTransferIn(BaseModel):
+    new_owner: str = Field(min_length=1, max_length=100)
+
+
+class VisibilityRequestIn(BaseModel):
+    to_visibility: Literal["public", "private"]
+
+
+class ApprovalRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    map_id: int
+    kind: str
+    payload: dict
+    requested_by: str
+    status: str
+    decided_by: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+# ── 사용자 그룹 관리 (Layer 4 Task 3b) ──────────────────────────
+
+MemberType = Literal["user", "department"]
+
+
+class MemberIn(BaseModel):
+    member_type: MemberType
+    # user→login_id; department→org_path 문자열 (존재 검증 없음 — 디렉터리 규약)
+    member_id: str = Field(min_length=1, max_length=200)
+
+
+class MemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    member_type: str
+    member_id: str
+
+
+class GroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    # 생성 시 ≥2 멤버 필수 (managers 는 별개) — 검증은 라우터에서 422
+    members: list[MemberIn] = Field(default_factory=list)
+    # 추가 관리자 login_id 들. 생성자는 자동으로 관리자에 포함된다
+    managers: list[str] = Field(default_factory=list)
+
+
+class ManagersIn(BaseModel):
+    # 관리자 집합 교체 — 최소 1명 (빈 배열은 라우터에서 422)
+    managers: list[str] = Field(default_factory=list)
+
+
+class GroupDecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class GroupOut(BaseModel):
+    id: int
+    name: str
+    description: str
+    status: str
+    created_by: str
+    approved_by: str | None
+    approved_at: datetime | None
+    created_at: datetime
+    members: list[MemberOut]
+    managers: list[str]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     status: str
@@ -64,6 +167,10 @@ class MapOut(BaseModel):
     created_by: str | None
     created_at: datetime
     updated_at: datetime
+    # 호출자의 서버 산정 유효 역할 — 프론트 게이팅 단일 소스 (클라 재계산 폐기)
+    my_role: str | None = None
+    # 맵 공개 범위 — Visibility 화면이 서버 진실을 표시·토글하기 위한 읽기 전용 노출
+    visibility: str = "private"
 
 
 class MapDetailOut(MapOut):
@@ -205,6 +312,8 @@ class MeOut(BaseModel):
     name: str
     role: str
     department: str
+    # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
+    is_sysadmin: bool
 
 
 class EmployeeOut(BaseModel):
@@ -222,6 +331,54 @@ class SyncSummaryOut(BaseModel):
     scanned: int
     upserted: int
     excluded: int
+
+
+# ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
+
+class AdminUserOut(BaseModel):
+    """시스템 관리 콘솔용 — sysadmin only / Richer employee row for admin console."""
+
+    login_id: str
+    name: str
+    department: str
+    role: str          # 'admin' | 'user'
+    is_sysadmin: bool
+    org_levels: list[str]  # non-null org_l1..org_l5 in root→leaf order
+    active: bool       # False = AD account disabled (userAccountControl bit 0x2)
+
+
+class AdminDeptOut(BaseModel):
+    """부서 행 — 관리 콘솔 department-table / Department row for admin console."""
+
+    name: str          # leaf segment (display label)
+    org_levels: list[str]  # full path levels root→leaf (variable depth)
+
+
+class AdminDirectoryOut(BaseModel):
+    users: list[AdminUserOut]
+    departments: list[AdminDeptOut]
+
+
+# ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
+
+class DirectoryUserOut(BaseModel):
+    """협업자 피커용 — 인증 사용자 누구나 조회 가능 / For picker; any authenticated user."""
+
+    id: str       # login_id
+    name: str     # English display name
+    department: str
+
+
+class DirectoryDeptOut(BaseModel):
+    """부서 principal 후보 — principalId = org_path 문자열 / dept principal; id = org_path string."""
+
+    id: str       # org_path ("l1/l2/l3" or leaf segment)
+    name: str     # leaf segment (display label)
+
+
+class DirectoryOut(BaseModel):
+    users: list[DirectoryUserOut]
+    departments: list[DirectoryDeptOut]
 
 
 AI_NODE_TYPES = {"start", "process", "decision", "end"}

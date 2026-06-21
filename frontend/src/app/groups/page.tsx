@@ -1,32 +1,39 @@
 "use client";
 
-// 유저 그룹 목록 + 생성 요청 페이지 / User group list and create-request page.
+// 유저 그룹 목록 + 생성 요청 페이지 (실 API) / User group list and create-request page (real API).
+// 서버가 진실 — 목록은 GET /api/groups, 생성은 POST /api/groups. 변경 후 재조회한다(낙관적 갱신 금지).
+// 멤버 피커는 실 디렉터리(getDirectory). 생성 시 ≥2 멤버 필수(클라 차단 + 서버 422).
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Users } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import {
+  createGroup,
+  getDirectory,
+  listGroups,
+  type DirectoryDept,
+  type DirectoryUser,
+  type Group,
+  type GroupStatus,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { genId } from "@/lib/id";
-import {
-  usePermissions,
-  requestGroup,
-} from "@/lib/mock/permissions";
-import type { UserGroup } from "@/lib/mock/permissions";
+import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
 
-// 그룹 상태 pill — UserGroup.status는 VersionStatus와 달리 "active"를 포함 /
-// Group status pill: UserGroup.status includes "active" unlike VersionStatus.
-function GroupStatusBadge({ status }: { status: UserGroup["status"] }) {
+// 그룹 상태 pill — Group.status는 pending/active/rejected /
+// Group status pill: pending / active / rejected.
+function GroupStatusBadge({ status }: { status: GroupStatus }) {
   const { t } = useI18n();
-  const styles: Record<UserGroup["status"], string> = {
+  const styles: Record<GroupStatus, string> = {
     active: "border-added text-added",
     pending: "border-changed text-changed",
     rejected: "border-error text-error",
   };
-  const labels: Record<UserGroup["status"], string> = {
+  const labels: Record<GroupStatus, string> = {
     active: t("perm.group.statusActive"),
     pending: t("perm.group.statusPending"),
     rejected: t("perm.group.statusRejected"),
@@ -38,19 +45,24 @@ function GroupStatusBadge({ status }: { status: UserGroup["status"] }) {
   );
 }
 
-// 멤버 피커 아이템 — PrincipalOption에서 type을 'department'|'user'로 제한 /
-// Member picker item restricted to department and user types.
+// 멤버 피커 아이템 — dept 또는 user / Member entry restricted to department or user.
 type MemberEntry = { type: "department" | "user"; id: string; displayName: string };
 
-// 관리자 피커 아이템 — user만 허용 / Manager picker item restricted to user only.
+// 관리자 피커 아이템 — user만 / Manager entry restricted to user only.
 type ManagerEntry = { id: string; displayName: string };
 
 export default function GroupsPage() {
   const { t } = useI18n();
-  const state = usePermissions();
 
-  // 다이얼로그 열림 / Dialog open state
+  // 서버 그룹 목록 / Server-sourced group list.
+  const [groups, setGroups] = useState<Group[]>([]);
+  // 실 디렉터리 — 피커 후보 / Real directory for picker candidates.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+
+  // 다이얼로그 / Dialog open state
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // 생성 요청 폼 / Create-request form state
   const [name, setName] = useState("");
@@ -69,6 +81,53 @@ export default function GroupsPage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }
 
+  const reloadGroups = useCallback(async () => {
+    try {
+      setGroups(await listGroups());
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  // 초기 로드 — 그룹 목록 + 디렉터리 / Initial load: groups + directory.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [groupRows, dir] = await Promise.all([listGroups(), getDirectory()]);
+        if (active) {
+          setGroups(groupRows);
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+        }
+      } catch (err) {
+        if (active) addToast(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 실 디렉터리를 피커 prop 형식으로 변환 (미사용 필드 stub) /
+  // Adapt real directory to picker's MockUser / Department shapes.
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+  }));
+
   function openDialog() {
     setName("");
     setDescription("");
@@ -81,11 +140,10 @@ export default function GroupsPage() {
     setDialogOpen(false);
   }
 
-  // 멤버 추가 — dept + user만 허용 / Add member (department or user only, not group).
+  // 멤버 추가 — dept + user만 / Add member (department or user only).
   function handleMemberSelect(opt: PrincipalOption) {
-    if (opt.principalType === "group") return; // 그룹은 제외 / exclude groups
-    // 복합키(type:id)로 중복 체크 — id 단독 비교 시 dept/user 같은 id 충돌 /
-    // Dedup by composite type:id — id-only check collides when dept and user share the same raw id.
+    if (opt.principalType === "group") return;
+    // 복합키(type:id)로 중복 체크 / Dedup by composite type:id.
     if (members.some((m) => m.type === opt.principalType && m.id === opt.principalId)) return;
     setMembers((prev) => [
       ...prev,
@@ -101,8 +159,6 @@ export default function GroupsPage() {
   }
 
   function removeMember(type: "department" | "user", id: string) {
-    // 복합키로 제거 — id 단독이면 같은 id의 다른 타입 엔트리도 제거됨 /
-    // Remove by composite type:id to avoid removing entries of the other type with the same id.
     setMembers((prev) => prev.filter((m) => !(m.type === type && m.id === id)));
   }
 
@@ -110,26 +166,33 @@ export default function GroupsPage() {
     setManagers((prev) => prev.filter((m) => m.id !== id));
   }
 
-  // 제출 — requestGroup 호출 / Submit — call requestGroup.
-  function handleSubmit() {
-    if (!name.trim() || managers.length === 0) return;
-    requestGroup(
-      name.trim(),
-      description.trim(),
-      members.map((m) => ({ type: m.type, id: m.id })),
-      managers.map((m) => m.id),
-    );
-    addToast(t("perm.group.toastRequested"));
-    closeDialog();
+  // 제출 — createGroup 호출 후 목록 재조회 / Submit — createGroup then refetch list.
+  async function handleSubmit() {
+    if (submitDisabled) return;
+    setSubmitting(true);
+    try {
+      await createGroup(
+        name.trim(),
+        description.trim(),
+        members.map((m) => ({ member_type: m.type, member_id: m.id })),
+        managers.map((m) => m.id),
+      );
+      addToast(t("perm.group.toastRequested"));
+      closeDialog();
+      await reloadGroups();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  // 제출 비활성 조건 / Disable submit until name non-empty AND ≥1 manager.
-  const submitDisabled = !name.trim() || managers.length === 0;
+  // 제출 비활성 — 이름 필수 + 멤버 ≥2 (서버 규칙) + 관리자 ≥1 / Disable until name, ≥2 members, ≥1 manager.
+  const submitDisabled =
+    !name.trim() || members.length < 2 || managers.length === 0 || submitting;
 
-  // 멤버 피커용 excludeIds — id 기반(PrincipalPicker가 principalId로만 비교). dept/user 동일 id 희귀 케이스는 옵션만 희미하게 표시되는 정도라 허용. /
-  // Picker-level exclusion is id-only (PrincipalPicker compares by principalId). Same-id across types is rare and only hides a picker option — acceptable.
+  // 피커 제외 — id 기반(PrincipalPicker가 principalId로만 비교) / Picker exclusion (id-only).
   const memberExcludeIds = new Set(members.map((m) => m.id));
-  // 관리자 피커용 excludeIds / ExcludeIds for manager picker.
   const managerExcludeIds = new Set(managers.map((m) => m.id));
 
   return (
@@ -152,11 +215,11 @@ export default function GroupsPage() {
       </div>
 
       {/* 그룹 목록 / Group list */}
-      {state.groups.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="text-caption text-ink-tertiary">{t("perm.group.noGroups")}</p>
       ) : (
         <div className="flex flex-col gap-1">
-          {state.groups.map((group) => (
+          {groups.map((group) => (
             <Link
               key={group.id}
               href={`/groups/${group.id}`}
@@ -232,14 +295,18 @@ export default function GroupsPage() {
                   ))}
                 </div>
               )}
-              {/* dept + user만 허용 — groups: [] 전달 / Pass groups: [] to restrict to dept+user only. */}
+              {/* dept + user만 — groups: [] / Pass groups: [] to restrict to dept+user. */}
               <PrincipalPicker
-                users={state.users}
-                departments={state.departments}
+                users={pickerUsers}
+                departments={pickerDepts}
                 groups={[]}
                 excludeIds={memberExcludeIds}
                 onSelect={handleMemberSelect}
               />
+              {/* ≥2 멤버 안내 — 미달이면 표시 / Min-2 hint when below threshold. */}
+              {members.length < 2 && (
+                <p className="text-fine text-error">{t("perm.group.minMembersHint")}</p>
+              )}
             </div>
 
             {/* 관리자 (user만) / Managers (user only) */}
@@ -265,9 +332,9 @@ export default function GroupsPage() {
                   ))}
                 </div>
               )}
-              {/* user만 허용 — departments: [], groups: [] 전달 / Pass departments: [], groups: [] to restrict to user only. */}
+              {/* user만 — departments: [], groups: [] / Pass empty to restrict to user. */}
               <PrincipalPicker
-                users={state.users}
+                users={pickerUsers}
                 departments={[]}
                 groups={[]}
                 excludeIds={managerExcludeIds}
@@ -287,7 +354,7 @@ export default function GroupsPage() {
               <button
                 type="button"
                 className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                onClick={handleSubmit}
+                onClick={() => void handleSubmit()}
                 disabled={submitDisabled}
               >
                 {t("perm.group.submitBtn")}

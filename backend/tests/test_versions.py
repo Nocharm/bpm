@@ -21,7 +21,8 @@ def test_create_plain_version(client: TestClient) -> None:
 def test_create_version_clones_graph(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
-    # 평면 그래프를 source 버전에 저장
+    # 평면 그래프를 source 버전에 저장 — PUT /graph는 체크아웃 보유자만
+    client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
         json={
@@ -50,6 +51,7 @@ def test_create_version_clones_graph(client: TestClient) -> None:
 def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
         json={
@@ -80,6 +82,7 @@ def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
 def test_clone_records_source_lineage(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
         json={"nodes": [{"id": "orig", "title": "원본", "node_type": "start"}], "edges": []},
@@ -104,6 +107,7 @@ def test_clone_records_source_lineage(client: TestClient) -> None:
 def test_clone_leaves_source_untouched(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
         json={"nodes": [{"id": "p", "title": "발주", "node_type": "start"}], "edges": []},

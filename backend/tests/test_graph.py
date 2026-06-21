@@ -5,7 +5,10 @@ from fastapi.testclient import TestClient
 
 def _create_version(client: TestClient) -> int:
     created = client.post("/api/maps", json={"name": "graph map"}).json()
-    return created["versions"][0]["id"]
+    version_id = created["versions"][0]["id"]
+    # PUT /graph는 이제 호출자가 체크아웃을 쥐고 있어야 한다 — 실제 편집 워크플로우 재현
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    return version_id
 
 
 def test_new_version_has_empty_graph(client: TestClient) -> None:

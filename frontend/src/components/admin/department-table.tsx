@@ -1,30 +1,44 @@
 "use client";
 
-// 부서 테이블 — 기본: 부서명·코드. 디버그 토글 시 가변 orgLevels 컬럼 노출 /
-// Department table — default: name + code. Debug toggle reveals variable-length orgLevels columns.
+// 부서 테이블 — 기본: 부서명. 디버그 토글 시 가변 orgLevels 컬럼 노출 /
+// Department table — default: name. Debug toggle reveals variable-length orgLevels columns.
 // orgLevels depth is VARIABLE — max depth computed at runtime, never hardcoded.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { type AdminDept, getAdminUsers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { usePermissions } from "@/lib/mock/permissions";
 
 export function DepartmentTable() {
   const { t } = useI18n();
-  const state = usePermissions();
+  const [departments, setDepartments] = useState<AdminDept[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [showOrg, setShowOrg] = useState(false);
 
-  const departments = state.departments;
+  useEffect(() => {
+    getAdminUsers()
+      .then((data) => setDepartments(data.departments))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
 
   // orgLevels 최대 깊이 동적 계산 — 절대 하드코딩 금지 /
   // Compute max orgLevels length dynamically across all departments.
   const maxOrgDepth = departments.reduce(
-    (max, d) => Math.max(max, d.orgLevels.length),
+    (max, d) => Math.max(max, d.org_levels.length),
     0,
   );
 
   // Org 컬럼 인덱스 배열 (0-based, label은 1-based) /
   // Column index array for orgLevels (0-based; labels are 1-based).
   const orgColIndices = Array.from({ length: maxOrgDepth }, (_, i) => i);
+
+  if (error) {
+    return (
+      <div className="text-caption text-error">
+        Failed to load departments: {error}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -46,9 +60,6 @@ export function DepartmentTable() {
               <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
                 {t("perm.sysadmin.deptColName")}
               </th>
-              <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
-                {t("perm.sysadmin.deptColCode")}
-              </th>
               {showOrg &&
                 orgColIndices.map((i) => (
                   <th
@@ -61,17 +72,16 @@ export function DepartmentTable() {
             </tr>
           </thead>
           <tbody>
-            {departments.map((dept) => (
+            {departments.map((dept, idx) => (
               <tr
-                key={dept.id}
+                key={idx}
                 className="border-b border-hairline last:border-0 hover:bg-surface-alt"
               >
                 <td className="py-2 pr-4 text-ink">{dept.name}</td>
-                <td className="py-2 pr-4 font-mono text-ink-secondary">{dept.code}</td>
                 {showOrg &&
                   orgColIndices.map((i) => (
                     <td key={i} className="py-2 pr-4 text-ink-tertiary">
-                      {dept.orgLevels[i] ?? ""}
+                      {dept.org_levels[i] ?? ""}
                     </td>
                   ))}
               </tr>

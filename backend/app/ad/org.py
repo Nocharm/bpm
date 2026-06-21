@@ -18,6 +18,8 @@ class OrgLevels:
     org_l1: str | None
     org_l2: str | None
     org_l3: str | None
+    org_l4: str | None
+    org_l5: str | None
     department: str
 
 
@@ -36,12 +38,42 @@ def parse_org(dn: str) -> OrgLevels:
     leaf_to_root = _extract_ou_values(dn)
     kept = [ou for ou in leaf_to_root if ou not in EXCLUDED_OU_TOKENS]
     root_to_leaf = list(reversed(kept))
-    top3 = root_to_leaf[:3]  # 3개 초과면 루트 쪽 3개
-    l1 = top3[0] if len(top3) > 0 else None
-    l2 = top3[1] if len(top3) > 1 else None
-    l3 = top3[2] if len(top3) > 2 else None
-    department = l3 or l2 or l1 or ""
-    return OrgLevels(l1, l2, l3, department)
+    top5 = root_to_leaf[:5]  # 5개 초과면 루트 쪽 5개
+    l1 = top5[0] if len(top5) > 0 else None
+    l2 = top5[1] if len(top5) > 1 else None
+    l3 = top5[2] if len(top5) > 2 else None
+    l4 = top5[3] if len(top5) > 3 else None
+    l5 = top5[4] if len(top5) > 4 else None
+    department = l5 or l4 or l3 or l2 or l1 or ""
+    return OrgLevels(l1, l2, l3, l4, l5, department)
+
+
+def org_path(
+    l1: str | None,
+    l2: str | None,
+    l3: str | None,
+    l4: str | None,
+    l5: str | None,
+    department: str,
+) -> str:
+    """조직 레벨을 루트→리프 "/" 구분 문자열로. 모두 None이면 department 반환.
+
+    부서 principal_id 규약: 관리자는 이 문자열로 부서에 권한을 부여하고,
+    Task 2 매처가 emp.org_path == P 또는 startswith(P + "/") 로 소속 판정.
+    """
+    levels = [lv for lv in (l1, l2, l3, l4, l5) if lv is not None]
+    return "/".join(levels) if levels else department
+
+
+def is_active(uac: int | None) -> bool:
+    """Derive account active status from userAccountControl.
+
+    AD bit 0x2 (ACCOUNTDISABLE) set → account disabled → active=False.
+    Missing uac (attribute not returned by AD) → treated as active (conservative default).
+    """
+    if uac is None:
+        return True
+    return not bool(uac & 0x2)
 
 
 def is_excluded(org_l1: str | None, login_id: str, name: str) -> bool:

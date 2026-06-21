@@ -60,3 +60,30 @@ def test_delete_map_then_get_404(client: TestClient) -> None:
 
     assert delete_response.status_code == 204
     assert get_response.status_code == 404
+
+
+def test_get_map_includes_my_role(client: TestClient) -> None:
+    # 서버가 호출자의 유효 역할을 노출 — 프론트 게이팅 단일 소스 (auth OFF → sysadmin owner)
+    created = client.post("/api/maps", json={"name": "with role"}).json()
+
+    body = client.get(f"/api/maps/{created['id']}").json()
+
+    assert "my_role" in body
+    assert body["my_role"] == "owner"
+
+
+def test_list_maps_includes_my_role(client: TestClient) -> None:
+    created = client.post("/api/maps", json={"name": "list role"}).json()
+
+    body = client.get("/api/maps").json()
+
+    item = next(m for m in body if m["id"] == created["id"])
+    assert item["my_role"] == "owner"
+
+
+def test_me_includes_is_sysadmin(client: TestClient) -> None:
+    # /api/me 가 is_sysadmin 노출 — sysadmin-only UI 게이팅 (auth OFF 기본 → True)
+    body = client.get("/api/me").json()
+
+    assert "is_sysadmin" in body
+    assert body["is_sysadmin"] is True

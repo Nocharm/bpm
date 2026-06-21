@@ -16,6 +16,8 @@ def _create_version(client: TestClient) -> int:
 
 
 def _put_single_node(client: TestClient, version_id: int) -> None:
+    # PUT /graph는 체크아웃 보유자만 — 노드 시드도 체크아웃 후 저장
+    client.post(f"/api/versions/{version_id}/checkout", json={})
     client.put(
         f"/api/versions/{version_id}/graph",
         json={"nodes": [{"id": "s1", "node_type": "start"}, {"id": "n1", "title": "결재"}], "edges": []},

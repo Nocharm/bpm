@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.auth import get_current_user
 from app.subprocess import assert_no_cycle, validate_process
-from app.checkout import is_locked_by_other
+from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.models import Comment, Edge, Group, MapVersion, Node
+from app.permissions.deps import require_version_map_role
 from app.schemas import (
     EdgeIn,
     FlatNodeOut,
@@ -107,7 +108,11 @@ async def get_graph(
     return await _load_graph(session, version_id)
 
 
-@router.put("/{version_id}/graph", response_model=GraphOut)
+@router.put(
+    "/{version_id}/graph",
+    response_model=GraphOut,
+    dependencies=[Depends(require_version_map_role("editor"))],
+)
 async def replace_graph(
     version_id: int,
     payload: GraphIn,
@@ -123,11 +128,17 @@ async def replace_graph(
             status_code=409, detail=f"version is {version.status} — not editable"
         )
 
-    # 체크아웃 잠금 — 다른 사용자가 편집 중이면 저장 거부 (spec §7 Phase C)
-    if is_locked_by_other(version, user, datetime.now(timezone.utc)):
+    # 체크아웃 보유 강제 — 저장하려면 호출자가 활성 체크아웃을 쥐고 있어야 한다.
+    # 권한 게이트(editor+)와 별개의 동시편집 규칙이라 sysadmin도 우회하지 못한다.
+    now = datetime.now(timezone.utc)
+    if is_locked_by_other(version, user, now):
         raise HTTPException(
             status_code=423,
             detail=f"version checked out by {version.checked_out_by}",
+        )
+    if not (is_checkout_active(version, now) and version.checked_out_by == user):
+        raise HTTPException(
+            status_code=409, detail="must hold checkout to edit"
         )
 
     payload_ids = {n.id for n in payload.nodes}

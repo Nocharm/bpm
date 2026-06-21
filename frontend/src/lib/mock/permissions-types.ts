@@ -6,6 +6,11 @@ export type MapVisibility = 'public' | 'private';
 export type ApprovalKind = 'version_publish' | 'permission_downgrade' | 'visibility_change';
 export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'applied';
 
+// Kept: Department/User/UserGroup/PrincipalType are used by principal-picker.tsx, create-map-dialog.tsx,
+// collaborators-panel.tsx, and groups pages to adapt directory/group data into the picker shape.
+// To be replaced when the picker accepts server types directly.
+// 유지: 피커 어댑터(collaborators-panel, create-map-dialog, principal-picker, groups 페이지)가 사용.
+// 서버 타입을 피커가 직접 수용하면 대체 예정.
 export interface Department {       // AD 동기화 / synced from AD
   id: string;
   code: string;
@@ -76,8 +81,4 @@ export interface DowngradePayload {
 export interface VisibilityChangePayload {
   from: MapVisibility;
   to: MapVisibility;
-}
-export interface VersionPublishPayload {
-  versionId: string;
-  label: string;
 }

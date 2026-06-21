@@ -1,23 +1,50 @@
 "use client";
 
-// 협업자 관리 패널 — 목록 조회, 역할 변경, 제거, 추가 / Collaborators management panel.
+// 협업자 관리 패널 — 서버 권한 목록 조회·역할 변경·제거·추가 (실 API) /
+// Collaborators panel wired to the real Layer-2 permissions API.
+// 서버가 진실: 모든 변경은 API 호출 후 목록을 재조회해 반영한다. 다운그레이드/에디터제거는
+// pending 응답을 받으면 역할을 즉시 바꾸지 않고 "승인 대기"만 표시한다(낙관적 갱신 금지).
+// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 실 active 그룹(Layer 4 Task 4). /
+// Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { useI18n } from "@/lib/i18n";
-import type { MapRole, PrincipalType } from "@/lib/mock/permissions";
 import {
-  addCollaborator,
-  changeRole,
-  removeCollaborator,
-  usePermissions,
-} from "@/lib/mock/permissions";
-import type { DowngradePayload } from "@/lib/mock/permissions";
+  addMapPermission,
+  changeMapPermission,
+  getDirectory,
+  listGroups,
+  listMapPermissions,
+  removeMapPermission,
+  type DirectoryDept,
+  type DirectoryUser,
+  type Group,
+  type MapPermission as ApiPermission,
+  type MapRole,
+  type PrincipalType,
+} from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
+import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 
 import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
 import type { PrincipalOption } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
+
+// 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
+// Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
+function toPickerGroups(groups: Group[]): UserGroup[] {
+  return groups
+    .filter((g) => g.status === "active")
+    .map((g) => ({
+      id: String(g.id),
+      name: g.name,
+      description: g.description,
+      status: "active" as const,
+      managerIds: [],
+      members: [],
+    }));
+}
 
 interface CollaboratorsPanelProps {
   mapId: string;
@@ -31,61 +58,54 @@ interface CollaboratorsPanelProps {
   viewerGrantDisabled?: boolean;
 }
 
-// 역할 표시명 해석 / Resolve principal display name from seed state.
-function usePrincipalName(
+// 표시명 해석 — 실 디렉터리/그룹 우선, 없으면 principalId 폴백 /
+// Resolve display name from real directory (users/depts) and real groups; fall back to id.
+function resolvePrincipalName(
   principalType: PrincipalType,
   principalId: string,
+  dirUsers: DirectoryUser[],
+  dirDepts: DirectoryDept[],
+  groups: Group[],
 ): string {
-  const state = usePermissions();
   if (principalType === "user") {
-    return state.users.find((u) => u.id === principalId)?.name ?? principalId;
+    return dirUsers.find((u) => u.id === principalId)?.name ?? principalId;
   }
   if (principalType === "department") {
-    return state.departments.find((d) => d.id === principalId)?.name ?? principalId;
+    return dirDepts.find((d) => d.id === principalId)?.name ?? principalId;
   }
-  return state.groups.find((g) => g.id === principalId)?.name ?? principalId;
+  return groups.find((g) => String(g.id) === principalId)?.name ?? principalId;
 }
 
-// 개별 행 컴포넌트 — 이름, 아이콘, 역할, 변경/제거 컨트롤 / Individual permission row.
+// 개별 행 — 이름, 아이콘, 역할, 변경/제거 컨트롤 / Individual permission row.
 function CollaboratorRow({
-  mapId,
-  principalType,
-  principalId,
-  role,
+  perm,
   currentUserId,
   canEdit,
   isPending,
-  onToast,
+  dirUsers,
+  dirDepts,
+  groups,
+  onChangeRole,
+  onRemove,
 }: {
-  mapId: string;
-  principalType: PrincipalType;
-  principalId: string;
-  role: MapRole;
+  perm: ApiPermission;
   currentUserId: string;
   canEdit: boolean;
   isPending: boolean;
-  onToast: (msg: string) => void;
+  dirUsers: DirectoryUser[];
+  dirDepts: DirectoryDept[];
+  groups: Group[];
+  onChangeRole: (perm: ApiPermission, toRole: MapRole) => void;
+  onRemove: (perm: ApiPermission) => void;
 }) {
   const { t } = useI18n();
-  const displayName = usePrincipalName(principalType, principalId);
+  const principalType = perm.principal_type as PrincipalType;
+  const displayName = resolvePrincipalName(principalType, perm.principal_id, dirUsers, dirDepts, groups);
+  const role = perm.role as MapRole;
   const isOwner = role === "owner";
   // 자기 자신 행은 역할/제거 비활성 / Disable controls on own row.
-  const isSelf = principalType === "user" && principalId === currentUserId;
+  const isSelf = principalType === "user" && perm.principal_id === currentUserId;
   const controlsDisabled = !canEdit || isOwner || isSelf;
-
-  function handleRoleChange(toRole: MapRole) {
-    const result = changeRole(mapId, principalType, principalId, toRole, currentUserId);
-    if (result.gated) {
-      onToast(t("perm.toastGated"));
-    }
-  }
-
-  function handleRemove() {
-    const result = removeCollaborator(mapId, principalType, principalId, currentUserId);
-    if (result.gated) {
-      onToast(t("perm.toastGated"));
-    }
-  }
 
   return (
     <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-alt">
@@ -104,7 +124,7 @@ function CollaboratorRow({
         <select
           className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
           value={role}
-          onChange={(e) => handleRoleChange(e.target.value as MapRole)}
+          onChange={(e) => onChangeRole(perm, e.target.value as MapRole)}
         >
           <option value="viewer">{t("perm.roleViewer")}</option>
           <option value="editor">{t("perm.roleEditor")}</option>
@@ -117,7 +137,7 @@ function CollaboratorRow({
           type="button"
           title={t("perm.removeButton")}
           className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-          onClick={handleRemove}
+          onClick={() => onRemove(perm)}
         >
           <X size={16} strokeWidth={1.5} />
         </button>
@@ -126,29 +146,57 @@ function CollaboratorRow({
   );
 }
 
-// 협업자 추가 폼 / Add-collaborator form.
-// addCollaborator는 게이트 없음 — onToast 불필요 / addCollaborator is always immediate; no toast needed.
+// 협업자 추가 폼 — 추가는 즉시 적용(서버) / Add-collaborator form; add is applied immediately by the server.
 function AddCollaboratorForm({
-  mapId,
-  currentUserId,
   excludeIds,
   viewerGrantDisabled,
+  dirUsers,
+  dirDepts,
+  groups,
+  onAdd,
 }: {
-  mapId: string;
-  currentUserId: string;
   excludeIds: Set<string>;
   /** 공개 맵이면 viewer 선택 비활성 / Disable viewer option on public maps. */
   viewerGrantDisabled?: boolean;
+  /** 실 디렉터리 사용자 / Real directory users for the picker. */
+  dirUsers: DirectoryUser[];
+  /** 실 디렉터리 부서 / Real directory departments for the picker. */
+  dirDepts: DirectoryDept[];
+  /** 실 active 그룹 / Real active groups for the picker. */
+  groups: Group[];
+  onAdd: (
+    principalType: PrincipalType,
+    principalId: string,
+    role: "viewer" | "editor",
+  ) => void;
 }) {
   const { t } = useI18n();
-  const state = usePermissions();
   const [selected, setSelected] = useState<PrincipalOption | null>(null);
   // 공개 맵이면 editor 기본값 / Default to editor on public maps (viewer disabled).
   const [role, setRole] = useState<"viewer" | "editor">(viewerGrantDisabled ? "editor" : "viewer");
 
+  // 실 디렉터리 데이터를 피커 prop 형식으로 변환 — 미사용 필드는 빈 값으로 채움.
+  // Adapt real directory data to picker's MockUser / Department shapes (unused fields stubbed).
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+  }));
+
   function handleAdd() {
     if (!selected) return;
-    addCollaborator(mapId, selected.principalType, selected.principalId, role, currentUserId);
+    onAdd(selected.principalType, selected.principalId, role);
     setSelected(null);
     setRole(viewerGrantDisabled ? "editor" : "viewer");
   }
@@ -158,40 +206,42 @@ function AddCollaboratorForm({
       <p className="text-caption-strong text-ink">{t("perm.addCollaborator")}</p>
 
       <PrincipalPicker
-        users={state.users}
-        departments={state.departments}
-        groups={state.groups}
+        users={pickerUsers}
+        departments={pickerDepts}
+        groups={toPickerGroups(groups)}
         excludeIds={excludeIds}
         onSelect={setSelected}
       />
 
       {/* 선택된 principal 표시 / Selected principal chip */}
       {selected && (
-        <div className="flex items-center gap-2">
-          <span className="flex-1 text-caption text-ink">{selected.displayName}</span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-caption text-ink">{selected.displayName}</span>
 
-          {/* 역할 선택 / Role select */}
-          <label className="text-fine text-ink-tertiary">{t("perm.addRoleLabel")}</label>
-          <select
-            className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
-            value={role}
-            onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
-          >
-            {/* 공개 맵은 전원 열람 가능 → viewer 비활성 / Public map: viewer disabled */}
-            <option value="viewer" disabled={viewerGrantDisabled}>
-              {t("perm.roleViewer")}
-              {viewerGrantDisabled ? ` — ${t("perm.visibilityViewerNote")}` : ""}
-            </option>
-            <option value="editor">{t("perm.roleEditor")}</option>
-          </select>
+            {/* 역할 선택 / Role select */}
+            <label className="text-fine text-ink-tertiary">{t("perm.addRoleLabel")}</label>
+            <select
+              className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
+              value={role}
+              onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
+            >
+              {/* 공개 맵은 전원 열람 가능 → viewer 비활성 / Public map: viewer disabled */}
+              <option value="viewer" disabled={viewerGrantDisabled}>
+                {t("perm.roleViewer")}
+                {viewerGrantDisabled ? ` — ${t("perm.visibilityViewerNote")}` : ""}
+              </option>
+              <option value="editor">{t("perm.roleEditor")}</option>
+            </select>
 
-          <button
-            type="button"
-            className="rounded-sm bg-accent px-2 py-0.5 text-fine text-on-accent hover:bg-accent-focus"
-            onClick={handleAdd}
-          >
-            {t("perm.addButton")}
-          </button>
+            <button
+              type="button"
+              className="rounded-sm bg-accent px-2 py-0.5 text-fine text-on-accent hover:bg-accent-focus"
+              onClick={handleAdd}
+            >
+              {t("perm.addButton")}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -206,55 +256,143 @@ export function CollaboratorsPanel({
   viewerGrantDisabled = false,
 }: CollaboratorsPanelProps) {
   const { t } = useI18n();
-  const state = usePermissions();
+  const mapIdNum = Number(mapId);
 
-  // 이 맵의 권한 목록 / Permissions for this map.
-  const perms = state.permissions.filter((p) => p.mapId === mapId);
+  // 서버 권한 목록 / Server-sourced permissions list.
+  const [perms, setPerms] = useState<ApiPermission[]>([]);
+  // 다운그레이드/제거 요청이 pending 인 permission id 집합 — mutation 응답에서 채움.
+  // 서버 진실(역할 미변경)은 perms 가 그대로 유지하고, 이 집합은 "승인 대기" 배지만 구동한다.
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 
-  // 승인 대기 중인 permission_downgrade 요청 목록 / Pending downgrade requests for this map.
-  const pendingDowngrades = state.requests.filter(
-    (r) => r.mapId === mapId && r.kind === "permission_downgrade" && r.status === "pending",
+  // 실 디렉터리 — 피커 후보와 표시명 해석에 사용 (Layer 4 Task 0) /
+  // Real directory for picker candidates and display-name resolution.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+  // 실 active 그룹 — 그룹 협업자 옵션·표시명 (Layer 4 Task 4) /
+  // Real active groups for group collaborator options and display names.
+  const [groups, setGroups] = useState<Group[]>([]);
+
+  const reload = useCallback(async () => {
+    try {
+      const rows = await listMapPermissions(mapIdNum);
+      setPerms(rows);
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : String(err));
+    }
+  }, [mapIdNum, onToast]);
+
+  // 초기 로드 — 인라인 async + active 가드(언마운트 후 setState 방지) /
+  // Initial load: inline async with an active guard (avoids set-state-after-unmount).
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [rows, dir, groupRows] = await Promise.all([
+          listMapPermissions(mapIdNum),
+          getDirectory(),
+          listGroups(),
+        ]);
+        if (active) {
+          setPerms(rows);
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+          setGroups(groupRows);
+        }
+      } catch (err) {
+        if (active) onToast(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [mapIdNum, onToast]);
+
+  const handleAdd = useCallback(
+    async (
+      principalType: PrincipalType,
+      principalId: string,
+      role: "viewer" | "editor",
+    ) => {
+      try {
+        await addMapPermission(mapIdNum, principalType, principalId, role);
+        await reload();
+      } catch (err) {
+        onToast(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [mapIdNum, reload, onToast],
   );
 
-  // principal별 pending 여부 판단 / Check if a principal has a pending downgrade.
-  function hasPending(principalType: PrincipalType, principalId: string): boolean {
-    return pendingDowngrades.some((r) => {
-      const p = r.payload as DowngradePayload;
-      return p.principalType === principalType && p.principalId === principalId;
-    });
-  }
+  const handleChangeRole = useCallback(
+    async (perm: ApiPermission, toRole: MapRole) => {
+      try {
+        const result = await changeMapPermission(mapIdNum, perm.id, toRole);
+        if (result.pending) {
+          // 지연 — 역할 미변경. "승인 대기" 표시만 / Pending: role unchanged, show badge only.
+          setPendingIds((prev) => new Set(prev).add(perm.id));
+          onToast(t("perm.toastGated"));
+        } else {
+          await reload();
+        }
+      } catch (err) {
+        onToast(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [mapIdNum, reload, onToast, t],
+  );
+
+  const handleRemove = useCallback(
+    async (perm: ApiPermission) => {
+      try {
+        const result = await removeMapPermission(mapIdNum, perm.id);
+        if (result.pending) {
+          // 에디터 제거는 승인 지연 — 행 유지, "승인 대기" 표시 / Editor removal gated: keep row, show badge.
+          setPendingIds((prev) => new Set(prev).add(perm.id));
+          onToast(t("perm.toastGated"));
+        } else {
+          await reload();
+        }
+      } catch (err) {
+        onToast(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [mapIdNum, reload, onToast, t],
+  );
 
   // 이미 부여된 principalId 집합 (피커 제외용) / Set of already-granted principalIds.
-  const excludeIds = new Set(perms.map((p) => p.principalId));
+  const excludeIds = new Set(perms.map((p) => p.principal_id));
 
   return (
     <div className="flex flex-col gap-0.5">
-      {/* 빈 목록 안내 — 목록이 비어 있을 때만 / Empty-state message when no collaborators */}
+      {/* 빈 목록 안내 / Empty-state message when no collaborators */}
       {perms.length === 0 && (
         <p className="py-4 text-caption text-ink-tertiary">{t("perm.noCollaborators")}</p>
       )}
 
       {perms.map((perm) => (
         <CollaboratorRow
-          key={`${perm.principalType}:${perm.principalId}`}
-          mapId={mapId}
-          principalType={perm.principalType}
-          principalId={perm.principalId}
-          role={perm.role}
+          key={perm.id}
+          perm={perm}
           currentUserId={currentUserId}
           canEdit={canEdit}
-          isPending={hasPending(perm.principalType, perm.principalId)}
-          onToast={onToast}
+          isPending={pendingIds.has(perm.id)}
+          dirUsers={dirUsers}
+          dirDepts={dirDepts}
+          groups={groups}
+          onChangeRole={handleChangeRole}
+          onRemove={handleRemove}
         />
       ))}
 
       {/* 협업자 추가 폼 — 편집자 이상만 / Add form for editor+ only */}
       {canEdit && (
         <AddCollaboratorForm
-          mapId={mapId}
-          currentUserId={currentUserId}
           excludeIds={excludeIds}
           viewerGrantDisabled={viewerGrantDisabled}
+          dirUsers={dirUsers}
+          dirDepts={dirDepts}
+          groups={groups}
+          onAdd={handleAdd}
         />
       )}
     </div>

@@ -7,17 +7,45 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ad import client
-from app.ad.org import is_excluded, parse_org
+from app.ad.org import is_active, is_excluded, parse_org
 from app.models import Employee
 from app.settings import settings
 
 # 로컬 임시 유저 5명 (auth OFF). loginId는 '.' 포함·'_' 미포함(필터 비충돌), name 무 '_'.
-LOCAL_USERS: list[dict[str, str]] = [
-    {"login_id": "admin.kim", "name": "김관리", "title": "팀장", "department": "프로세스혁신팀", "role": "admin"},
-    {"login_id": "user.lee", "name": "이업무", "title": "선임", "department": "구매팀", "role": "user"},
-    {"login_id": "user.park", "name": "박담당", "title": "사원", "department": "인사팀", "role": "user"},
-    {"login_id": "user.choi", "name": "최실무", "title": "책임", "department": "생산관리팀", "role": "user"},
-    {"login_id": "user.jung", "name": "정사용", "title": "선임", "department": "품질팀", "role": "user"},
+# AD-aligned English data — login_id(=sAMAccountName) 불변, name/title/org만 영문화.
+# 3가지 패턴: ① lee==park(same team), ② choi(same Procurement Office prefix, diff team),
+#             ③ jung(no l3 → parent Procurement Office prefix).
+LOCAL_USERS: list[dict] = [
+    {
+        "login_id": "admin.kim", "name": "Junho Kim", "title": "Manager", "role": "admin",
+        "org_l1": "Management Support Division", "org_l2": "Process Innovation Office",
+        "org_l3": "Process Innovation Team",
+        "org_l4": None, "org_l5": None, "department": "Process Innovation Team",
+    },
+    {
+        "login_id": "user.lee", "name": "Minjae Lee", "title": "Senior", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": "Sourcing Team 1",
+        "org_l4": None, "org_l5": None, "department": "Sourcing Team 1",
+    },
+    {
+        "login_id": "user.park", "name": "Soyeon Park", "title": "Associate", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": "Sourcing Team 1",
+        "org_l4": None, "org_l5": None, "department": "Sourcing Team 1",
+    },
+    {
+        "login_id": "user.choi", "name": "Daehyun Choi", "title": "Principal", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": "Sourcing Team 2",
+        "org_l4": None, "org_l5": None, "department": "Sourcing Team 2",
+    },
+    {
+        "login_id": "user.jung", "name": "Hana Jung", "title": "Senior", "role": "user",
+        "org_l1": "Management Support Division", "org_l2": "Procurement Office",
+        "org_l3": None,
+        "org_l4": None, "org_l5": None, "department": "Procurement Office",
+    },
 ]
 
 
@@ -26,16 +54,21 @@ async def seed_local_employees(session: AsyncSession) -> None:
     for spec in LOCAL_USERS:
         emp = await session.get(Employee, spec["login_id"])
         if emp is None:
-            session.add(
-                Employee(
-                    login_id=spec["login_id"],
-                    name=spec["name"],
-                    title=spec["title"],
-                    department=spec["department"],
-                    role=spec["role"],
-                    source="local",
-                )
-            )
+            emp = Employee(login_id=spec["login_id"], source="local")
+            session.add(emp)
+        # 매번 갱신 — 스키마 변경(org_l* 추가) 후에도 기존 행이 채워지도록
+        emp.name = spec["name"]
+        emp.title = spec["title"]
+        emp.role = spec["role"]
+        emp.org_l1 = spec["org_l1"]
+        emp.org_l2 = spec["org_l2"]
+        emp.org_l3 = spec["org_l3"]
+        emp.org_l4 = spec["org_l4"]
+        emp.org_l5 = spec["org_l5"]
+        emp.department = spec["department"]
+        # Dev users are always active; placeholder email for local testing
+        emp.active = True
+        emp.email = f"{spec['login_id']}@corp"
     await session.commit()
 
 
@@ -47,8 +80,12 @@ class EmployeeFields:
     org_l1: str | None
     org_l2: str | None
     org_l3: str | None
+    org_l4: str | None
+    org_l5: str | None
     department: str
     role: str
+    active: bool        # derived from AD userAccountControl bit 0x2
+    email: str          # derived from AD mail attribute (empty string if absent)
 
 
 @dataclass(frozen=True)
@@ -76,8 +113,12 @@ def to_employee_fields(raw: client.RawUser) -> EmployeeFields | None:
         org_l1=org.org_l1,
         org_l2=org.org_l2,
         org_l3=org.org_l3,
+        org_l4=org.org_l4,
+        org_l5=org.org_l5,
         department=org.department,
         role=resolve_role(login_id),
+        active=is_active(raw.user_account_control),
+        email=raw.mail or "",
     )
 
 
@@ -93,7 +134,11 @@ async def _upsert(session: AsyncSession, fields: EmployeeFields) -> Employee:
     emp.org_l1 = fields.org_l1
     emp.org_l2 = fields.org_l2
     emp.org_l3 = fields.org_l3
+    emp.org_l4 = fields.org_l4
+    emp.org_l5 = fields.org_l5
     emp.department = fields.department
+    emp.active = fields.active
+    emp.email = fields.email
     return emp
 
 

@@ -1,35 +1,43 @@
 "use client";
 
-// 유저 그룹 상세 — 멤버·관리자 조회 및 편집 / User group detail: view and edit members and managers.
+// 유저 그룹 상세 (실 API) — 멤버·관리자 조회 및 편집 / User group detail (real API).
+// 서버가 진실: 로드는 GET /api/groups/{id}, 멤버 add/remove·관리자 PUT는 실 API.
+// 각 변경은 갱신된 그룹을 응답으로 받아 state에 반영(낙관적 갱신 없음). 권한/상태 위반은
+// 서버가 403/409/422로 막고, 메시지를 토스트로 노출한다. 표시명은 실 디렉터리에서 해석.
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { User, Building2 } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
-import { useI18n } from "@/lib/i18n";
-import { genId } from "@/lib/id";
 import {
-  usePermissions,
   addGroupMember,
+  getDirectory,
+  getGroup,
   removeGroupMember,
   setGroupManagers,
-} from "@/lib/mock/permissions";
-import type { UserGroup } from "@/lib/mock/permissions";
+  type DirectoryDept,
+  type DirectoryUser,
+  type Group,
+  type GroupMember,
+  type GroupStatus,
+} from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
+import { genId } from "@/lib/id";
+import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 
-// 그룹 상태 pill — UserGroup.status는 VersionStatus와 달리 "active"를 포함 /
-// Group status pill: UserGroup.status includes "active" unlike VersionStatus.
-function GroupStatusBadge({ status }: { status: UserGroup["status"] }) {
+// 그룹 상태 pill / Group status pill.
+function GroupStatusBadge({ status }: { status: GroupStatus }) {
   const { t } = useI18n();
-  const styles: Record<UserGroup["status"], string> = {
+  const styles: Record<GroupStatus, string> = {
     active: "border-added text-added",
     pending: "border-changed text-changed",
     rejected: "border-error text-error",
   };
-  const labels: Record<UserGroup["status"], string> = {
+  const labels: Record<GroupStatus, string> = {
     active: t("perm.group.statusActive"),
     pending: t("perm.group.statusPending"),
     rejected: t("perm.group.statusRejected"),
@@ -48,33 +56,20 @@ function MemberTypeIcon({ type }: { type: "department" | "user" }) {
   return <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
 }
 
-// 멤버 표시명 해석 — dept/user 이름 매핑 / Resolve member display name from dept or user.
-function useMemberDisplayName(
-  type: "department" | "user",
-  id: string,
-  state: ReturnType<typeof usePermissions>,
-): string {
-  if (type === "department") {
-    return state.departments.find((d) => d.id === id)?.name ?? id;
-  }
-  return state.users.find((u) => u.id === id)?.name ?? id;
-}
-
 interface MemberRowProps {
-  type: "department" | "user";
-  id: string;
-  state: ReturnType<typeof usePermissions>;
+  member: GroupMember;
+  displayName: string;
   canEdit: boolean;
   onRemove: () => void;
 }
 
-function MemberRow({ type, id, state, canEdit, onRemove }: MemberRowProps) {
+function MemberRow({ member, displayName, canEdit, onRemove }: MemberRowProps) {
   const { t } = useI18n();
-  const name = useMemberDisplayName(type, id, state);
+  const type = member.member_type;
   return (
     <div className="flex items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
       <MemberTypeIcon type={type} />
-      <span className="flex-1 text-caption text-ink">{name}</span>
+      <span className="flex-1 text-caption text-ink">{displayName}</span>
       <span className="text-fine text-ink-tertiary">
         {type === "department" ? t("perm.principalDept") : t("perm.principalUser")}
       </span>
@@ -91,15 +86,22 @@ function MemberRow({ type, id, state, canEdit, onRemove }: MemberRowProps) {
   );
 }
 
-// 관리자 추가 다이얼로그 / Manager-add dialog.
-interface ManagerPickerDialogProps {
-  state: ReturnType<typeof usePermissions>;
+// 피커 다이얼로그 공통 래퍼 / Shared picker dialog wrapper.
+function PickerDialog({
+  title,
+  pickerUsers,
+  pickerDepts,
+  excludeIds,
+  onSelect,
+  onClose,
+}: {
+  title: string;
+  pickerUsers: MockUser[];
+  pickerDepts: Department[];
   excludeIds: Set<string>;
   onSelect: (opt: PrincipalOption) => void;
   onClose: () => void;
-}
-
-function ManagerPickerDialog({ state, excludeIds, onSelect, onClose }: ManagerPickerDialogProps) {
+}) {
   const { t } = useI18n();
   return (
     <ModalBackdrop
@@ -107,57 +109,13 @@ function ManagerPickerDialog({ state, excludeIds, onSelect, onClose }: ManagerPi
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
     >
       <div className="flex w-[380px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md border border-hairline bg-surface p-5 shadow-lg">
-        <p className="text-body-strong text-ink">{t("perm.group.addManagerBtn")}</p>
-        {/* user만 허용 — departments: [], groups: [] / User-only picker. */}
+        <p className="text-body-strong text-ink">{title}</p>
         <PrincipalPicker
-          users={state.users}
-          departments={[]}
+          users={pickerUsers}
+          departments={pickerDepts}
           groups={[]}
           excludeIds={excludeIds}
           onSelect={(opt) => {
-            onSelect(opt);
-            onClose();
-          }}
-        />
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-            onClick={onClose}
-          >
-            {t("perm.group.cancelBtn")}
-          </button>
-        </div>
-      </div>
-    </ModalBackdrop>
-  );
-}
-
-// 멤버 추가 다이얼로그 / Member-add dialog.
-interface MemberPickerDialogProps {
-  state: ReturnType<typeof usePermissions>;
-  excludeIds: Set<string>;
-  onSelect: (opt: PrincipalOption) => void;
-  onClose: () => void;
-}
-
-function MemberPickerDialog({ state, excludeIds, onSelect, onClose }: MemberPickerDialogProps) {
-  const { t } = useI18n();
-  return (
-    <ModalBackdrop
-      onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
-    >
-      <div className="flex w-[380px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md border border-hairline bg-surface p-5 shadow-lg">
-        <p className="text-body-strong text-ink">{t("perm.group.addMemberBtn")}</p>
-        {/* dept + user만 허용 — groups: [] / Dept+user picker, no groups. */}
-        <PrincipalPicker
-          users={state.users}
-          departments={state.departments}
-          groups={[]}
-          excludeIds={excludeIds}
-          onSelect={(opt) => {
-            if (opt.principalType === "group") return;
             onSelect(opt);
             onClose();
           }}
@@ -182,9 +140,15 @@ export default function GroupDetailPage({
   params: Promise<{ groupId: string }>;
 }) {
   const { groupId } = use(params);
+  const groupIdNum = Number(groupId);
   const { t } = useI18n();
-  const state = usePermissions();
   const currentUser = useCurrentMockUser();
+
+  const [group, setGroup] = useState<Group | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  // 실 디렉터리 — 표시명 해석 + 피커 후보 / Real directory for names and picker.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
@@ -198,9 +162,62 @@ export default function GroupDetailPage({
     setToasts((prev) => prev.filter((item) => item.id !== id));
   }
 
-  const foundGroup = state.groups.find((g) => g.id === groupId);
+  const reload = useCallback(async () => {
+    try {
+      setGroup(await getGroup(groupIdNum));
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+    }
+  }, [groupIdNum]);
 
-  if (!foundGroup) {
+  // 초기 로드 — 그룹 + 디렉터리 / Initial load: group + directory.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [g, dir] = await Promise.all([getGroup(groupIdNum), getDirectory()]);
+        if (active) {
+          setGroup(g);
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+        }
+      } catch {
+        // 가시성 규칙상 404(존재 은닉) 포함 — not-found 화면으로 / 404 hides existence per server rule.
+        if (active) setLoadError(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [groupIdNum]);
+
+  // 디렉터리를 피커 prop 형식으로 변환 / Adapt directory to picker shapes.
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+  }));
+
+  // 멤버 표시명 해석 — 실 디렉터리 우선, 없으면 id 폴백 / Resolve member name from directory.
+  function resolveMemberName(member: GroupMember): string {
+    if (member.member_type === "department") {
+      return dirDepts.find((d) => d.id === member.member_id)?.name ?? member.member_id;
+    }
+    return dirUsers.find((u) => u.id === member.member_id)?.name ?? member.member_id;
+  }
+
+  if (loadError) {
     return (
       <div className="flex flex-1 flex-col gap-3 p-6">
         <Link href="/groups" className="text-caption text-accent hover:underline">
@@ -211,50 +228,85 @@ export default function GroupDetailPage({
     );
   }
 
-  // TS 클로저 내 narrowing 유지용 — foundGroup은 위 guard 이후 undefined 불가 /
-  // Capture as const so TS narrows it to UserGroup inside closures below.
-  const group: UserGroup = foundGroup;
+  if (group === null) {
+    return (
+      <div className="flex flex-1 flex-col gap-3 p-6">
+        <Link href="/groups" className="text-caption text-accent hover:underline">
+          {t("perm.group.backToList")}
+        </Link>
+        <p className="text-caption text-ink-tertiary">…</p>
+      </div>
+    );
+  }
 
-  // 편집 권한 판정 — 그룹 관리자 또는 시스템 관리자 /
-  // Can edit if current user is a group manager or sysadmin.
-  const isGroupManager = currentUser != null && group.managerIds.includes(currentUser.id);
+  // 편집 권한 판정 — 그룹 관리자 또는 sysadmin + active 그룹. 서버가 최종 강제(403/409) /
+  // Client gate mirrors the server: group manager or sysadmin AND active. Server enforces too.
+  const isGroupManager = currentUser != null && group.managers.includes(currentUser.id);
   const isSysadmin = currentUser?.isSysadmin ?? false;
   const canEdit = (isGroupManager || isSysadmin) && group.status === "active";
-  // pending/rejected 그룹은 편집 불가 — active 이후에만 멤버 변경 허용 /
-  // Pending/rejected groups: read-only until active (no edits until approved).
 
-  const memberExcludeIds = new Set(group.members.map((m) => m.id));
-  const managerExcludeIds = new Set(group.managerIds);
+  const memberExcludeIds = new Set(group.members.map((m) => m.member_id));
+  const managerExcludeIds = new Set(group.managers);
 
-  function handleAddMember(opt: PrincipalOption) {
+  async function handleAddMember(opt: PrincipalOption) {
     if (opt.principalType === "group") return;
-    addGroupMember(groupId, {
-      type: opt.principalType as "department" | "user",
-      id: opt.principalId,
-    });
-    addToast(t("perm.group.toastMemberAdded"));
+    try {
+      const updated = await addGroupMember(groupIdNum, {
+        member_type: opt.principalType as "department" | "user",
+        member_id: opt.principalId,
+      });
+      setGroup(updated);
+      addToast(t("perm.group.toastMemberAdded"));
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+      await reload();
+    }
   }
 
-  function handleRemoveMember(type: "department" | "user", id: string) {
-    removeGroupMember(groupId, { type, id });
-    addToast(t("perm.group.toastMemberRemoved"));
+  async function handleRemoveMember(memberPk: number) {
+    try {
+      const updated = await removeGroupMember(groupIdNum, memberPk);
+      setGroup(updated);
+      addToast(t("perm.group.toastMemberRemoved"));
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+      await reload();
+    }
   }
 
-  function handleAddManager(opt: PrincipalOption) {
-    if (opt.principalType !== "user") return;
-    const newIds = [...group.managerIds, opt.principalId];
-    setGroupManagers(groupId, newIds);
-    addToast(t("perm.group.toastManagersUpdated"));
+  async function handleAddManager(opt: PrincipalOption) {
+    if (opt.principalType !== "user" || group === null) return;
+    try {
+      const updated = await setGroupManagers(groupIdNum, [
+        ...group.managers,
+        opt.principalId,
+      ]);
+      setGroup(updated);
+      addToast(t("perm.group.toastManagersUpdated"));
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+      await reload();
+    }
   }
 
-  function handleRemoveManager(userId: string) {
-    const newIds = group.managerIds.filter((id) => id !== userId);
-    setGroupManagers(groupId, newIds);
-    addToast(t("perm.group.toastManagersUpdated"));
+  async function handleRemoveManager(userId: string) {
+    if (group === null) return;
+    try {
+      const updated = await setGroupManagers(
+        groupIdNum,
+        group.managers.filter((id) => id !== userId),
+      );
+      setGroup(updated);
+      addToast(t("perm.group.toastManagersUpdated"));
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err));
+      await reload();
+    }
   }
 
-  // 읽기 전용 안내 메시지 / Read-only notice based on status and permissions.
+  // 읽기 전용 안내 / Read-only notice based on status and permissions.
   function buildReadOnlyNotice(): string | null {
+    if (group === null) return null;
     if (group.status === "pending") return t("perm.group.readOnlyPending");
     if (group.status === "rejected") return t("perm.group.readOnlyRejected");
     if (!canEdit && currentUser != null) return t("perm.group.noPermission");
@@ -309,12 +361,11 @@ export default function GroupDetailPage({
           <div className="flex flex-col gap-1">
             {group.members.map((m) => (
               <MemberRow
-                key={`${m.type}:${m.id}`}
-                type={m.type}
-                id={m.id}
-                state={state}
+                key={m.id}
+                member={m}
+                displayName={resolveMemberName(m)}
                 canEdit={canEdit}
-                onRemove={() => handleRemoveMember(m.type, m.id)}
+                onRemove={() => void handleRemoveMember(m.id)}
               />
             ))}
           </div>
@@ -335,24 +386,24 @@ export default function GroupDetailPage({
             </button>
           )}
         </div>
-        {group.managerIds.length === 0 ? (
+        {group.managers.length === 0 ? (
           <p className="text-fine text-ink-tertiary">{t("perm.group.noManagers")}</p>
         ) : (
           <div className="flex flex-col gap-1">
-            {group.managerIds.map((userId) => {
-              const user = state.users.find((u) => u.id === userId);
+            {group.managers.map((userId) => {
+              const name = dirUsers.find((u) => u.id === userId)?.name ?? userId;
               return (
                 <div
                   key={userId}
                   className="flex items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2"
                 >
                   <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  <span className="flex-1 text-caption text-ink">{user?.name ?? userId}</span>
+                  <span className="flex-1 text-caption text-ink">{name}</span>
                   {canEdit && (
                     <button
                       type="button"
                       className="text-fine text-ink-tertiary hover:text-error"
-                      onClick={() => handleRemoveManager(userId)}
+                      onClick={() => void handleRemoveManager(userId)}
                     >
                       {t("perm.group.removeBtn")}
                     </button>
@@ -364,22 +415,26 @@ export default function GroupDetailPage({
         )}
       </div>
 
-      {/* 멤버 추가 다이얼로그 / Member add dialog */}
+      {/* 멤버 추가 다이얼로그 — dept + user / Member add dialog (dept + user) */}
       {memberDialogOpen && (
-        <MemberPickerDialog
-          state={state}
+        <PickerDialog
+          title={t("perm.group.addMemberBtn")}
+          pickerUsers={pickerUsers}
+          pickerDepts={pickerDepts}
           excludeIds={memberExcludeIds}
-          onSelect={handleAddMember}
+          onSelect={(opt) => void handleAddMember(opt)}
           onClose={() => setMemberDialogOpen(false)}
         />
       )}
 
-      {/* 관리자 추가 다이얼로그 / Manager add dialog */}
+      {/* 관리자 추가 다이얼로그 — user만 / Manager add dialog (user only) */}
       {managerDialogOpen && (
-        <ManagerPickerDialog
-          state={state}
+        <PickerDialog
+          title={t("perm.group.addManagerBtn")}
+          pickerUsers={pickerUsers}
+          pickerDepts={[]}
           excludeIds={managerExcludeIds}
-          onSelect={handleAddManager}
+          onSelect={(opt) => void handleAddManager(opt)}
           onClose={() => setManagerDialogOpen(false)}
         />
       )}

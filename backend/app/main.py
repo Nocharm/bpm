@@ -9,7 +9,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session, init_models
 from app.models import Employee
-from app.routers import ai, approvers, comments, employees, graph, library, maps, notifications, versions
+from app.permissions.logic import is_sysadmin
+from app.routers import (
+    admin,
+    ai,
+    approvers,
+    comments,
+    directory,
+    employees,
+    graph,
+    groups,
+    library,
+    maps,
+    notifications,
+    permissions,
+    versions,
+)
 from app.schemas import MeOut
 from app.settings import settings
 
@@ -28,15 +43,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="BPM API", lifespan=lifespan)
+app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
 app.include_router(graph.router)
 app.include_router(comments.router)
+app.include_router(directory.router)
 app.include_router(employees.router)
 app.include_router(approvers.router)
 app.include_router(notifications.router)
 app.include_router(library.router)
+app.include_router(permissions.router)
+app.include_router(groups.router)
 
 
 @app.get("/api/health")
@@ -61,4 +80,5 @@ async def get_me(
         name=emp.name if emp else login_id,
         role=emp.role if emp else "user",
         department=emp.department if emp else "",
+        is_sysadmin=is_sysadmin(login_id),
     )

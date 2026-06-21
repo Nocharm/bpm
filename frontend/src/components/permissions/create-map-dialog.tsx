@@ -1,22 +1,49 @@
 "use client";
 
-// 맵 생성 다이얼로그 — 이름·공개범위·초기협업자·결재자 설정 후 실제 맵 생성 + mock 권한 오버레이 등록 /
+// 맵 생성 다이얼로그 — 이름·공개범위·초기협업자·결재자 설정 후 실 API로 맵 생성 /
 // Map creation dialog: name, visibility, initial collaborators, required approvers.
-// Real map created via createMap(); mock overlay attached via createMapPermission().
+// 맵은 createMap()으로 생성(서버 기본 private), 협업자는 addMapPermission(), 결재자는 setApprovers().
+// 공개 범위는 생성 시 항상 private — 공개 전환은 Visibility 탭에서 승인 절차로 한다.
+// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 실 active 그룹 (Layer 4 Task 4). /
+// Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { createPortal } from "react-dom";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { X, Globe, Lock, User } from "lucide-react";
 
-import { createMap } from "@/lib/api";
+import {
+  addMapPermission,
+  createMap,
+  getDirectory,
+  listGroups,
+  setApprovers as setMapApprovers,
+  type DirectoryUser,
+  type DirectoryDept,
+  type Group,
+} from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { usePermissions, createMapPermission } from "@/lib/mock/permissions-store";
 import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
+import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
+
+// 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
+// Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
+function toPickerGroups(groups: Group[]): UserGroup[] {
+  return groups
+    .filter((g) => g.status === "active")
+    .map((g) => ({
+      id: String(g.id),
+      name: g.name,
+      description: g.description,
+      status: "active" as const,
+      managerIds: [],
+      members: [],
+    }));
+}
 
 // ── 내부 타입 ───────────────────────────────────────────────────
 
@@ -41,8 +68,48 @@ interface Props {
 
 export function CreateMapDialog({ onClose, onCreated }: Props) {
   const { t } = useI18n();
-  const state = usePermissions();
   const currentUser = useCurrentMockUser();
+
+  // ── 실 디렉터리 + active 그룹 — 마운트 시 1회 조회 (Layer 4 Task 0/4) /
+  // Real directory + active groups: fetch once on mount; fall back to empty arrays on error.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  useEffect(() => {
+    let active = true;
+    void Promise.all([getDirectory(), listGroups()])
+      .then(([dir, groupRows]) => {
+        if (active) {
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+          setGroups(groupRows);
+        }
+      })
+      .catch((err) => {
+        // Fall back to empty arrays so pickers still render (create dialog has no onToast).
+        console.warn("Directory/groups fetch failed; pickers will be empty.", err);
+      });
+    return () => { active = false; };
+  }, []);
+
+  // 실 디렉터리 데이터를 피커 prop 형식으로 변환 (미사용 필드 빈 값으로 채움) /
+  // Adapt real directory data to picker's MockUser / Department shapes.
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+  }));
 
   // ── 폼 상태 / form state ──
   const [name, setName] = useState("");
@@ -108,27 +175,23 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      // 1. 실제 맵 생성 / real map create
+      // 1. 맵 생성 — 생성자가 owner(서버 부여), 기본 가시성 private / Real map create (owner = creator).
       const detail = await createMap(trimmed);
-      // 2. mock 권한 오버레이 / mock permission overlay
-      createMapPermission(
-        String(detail.id),
-        currentUser.id,
-        visibility,
-        collaborators.map((c) => ({
-          principalType: c.principalType,
-          principalId: c.principalId,
-          role: c.role,
-        })),
-        approvers.map((a) => a.userId),
-      );
+      // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators (applied immediately).
+      for (const c of collaborators) {
+        // owner은 생성자에게 이미 부여됨 → viewer/editor만 / Owner already granted; only viewer/editor here.
+        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
+        await addMapPermission(detail.id, c.principalType, c.principalId, role);
+      }
+      // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
+      await setMapApprovers(detail.id, approvers.map((a) => a.userId));
       onCreated();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("err.createMap"));
       setSubmitting(false);
     }
-  }, [currentUser, name, visibility, collaborators, approvers, onCreated, onClose, t]);
+  }, [currentUser, name, collaborators, approvers, onCreated, onClose, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -137,11 +200,10 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     approvers.length >= 1 &&
     !submitting;
 
-  // ── 결재자 picker용 — users only, 이미 추가된 사람 제외 / user-only picker, exclude already added ──
+  // ── 결재자 picker용 — users only, 이미 추가된 사람 제외 (실 디렉터리 사용) /
+  // Approver picker: real directory users, exclude already-added.
   const approverExcludeIds = new Set(approvers.map((a) => a.userId));
-  const allUsers = state.users.filter(
-    (u) => u.status === "active" && !approverExcludeIds.has(u.id),
-  );
+  const allUsers = dirUsers.filter((u) => !approverExcludeIds.has(u.id));
   const filteredApproverUsers = pendingApprover.trim()
     ? allUsers.filter((u) =>
         u.name.includes(pendingApprover) || u.id.includes(pendingApprover),
@@ -245,9 +307,9 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <div className="flex gap-2">
             <div className="flex-1">
               <PrincipalPicker
-                users={state.users}
-                departments={state.departments}
-                groups={state.groups}
+                users={pickerUsers}
+                departments={pickerDepts}
+                groups={toPickerGroups(groups)}
                 excludeIds={collabExcludeIds}
                 onSelect={(opt) => setPendingCollab(opt)}
               />

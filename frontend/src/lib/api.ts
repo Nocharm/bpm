@@ -22,6 +22,10 @@ export interface MapSummary {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // 서버가 산정한 호출자의 유효 역할 — 게이팅 단일 소스 (클라 재계산 폐기)
+  my_role: "viewer" | "editor" | "owner" | null;
+  // 맵 공개 범위 — Visibility 화면 표시·토글의 서버 진실
+  visibility: "public" | "private";
 }
 
 export interface MapDetail extends MapSummary {
@@ -284,6 +288,8 @@ export interface Me {
   name: string;
   role: "admin" | "user";
   department: string;
+  // BPM 시스템 관리자 여부 — sysadmin-only UI 게이팅 단일 소스
+  is_sysadmin: boolean;
 }
 
 export function getMe(): Promise<Me> {
@@ -352,6 +358,269 @@ export function setApprovers(mapId: number, userIds: string[]): Promise<string[]
     method: "PUT",
     body: JSON.stringify({ user_ids: userIds }),
   });
+}
+
+// ── 권한 관리 (collaborators / owner-transfer / visibility, Layer 2) ──────
+
+export type PrincipalType = "user" | "department" | "group";
+export type MapRole = "viewer" | "editor" | "owner";
+
+export interface MapPermission {
+  id: number;
+  principal_type: string;
+  principal_id: string;
+  role: string;
+  granted_by: string;
+}
+
+// PATCH/DELETE 응답 봉투 — 다운그레이드/에디터제거는 즉시 적용 대신 pending 요청.
+// pending=true 면 approval_request 만 채워지고 grant 는 그대로 (서버 진실 = 변경 없음).
+export interface PermissionMutationResult {
+  pending: boolean;
+  permission?: MapPermission;
+  deleted?: boolean;
+  approval_request?: ApprovalRequest;
+}
+
+export interface ApprovalRequest {
+  id: number;
+  map_id: number;
+  kind: string;
+  payload: Record<string, unknown>;
+  requested_by: string;
+  status: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export function listMapPermissions(mapId: number): Promise<MapPermission[]> {
+  return request<MapPermission[]>(`/maps/${mapId}/permissions`);
+}
+
+export function addMapPermission(
+  mapId: number,
+  principalType: PrincipalType,
+  principalId: string,
+  role: "viewer" | "editor",
+): Promise<MapPermission> {
+  return request<MapPermission>(`/maps/${mapId}/permissions`, {
+    method: "POST",
+    body: JSON.stringify({
+      principal_type: principalType,
+      principal_id: principalId,
+      role,
+    }),
+  });
+}
+
+export function changeMapPermission(
+  mapId: number,
+  permissionId: number,
+  role: MapRole,
+): Promise<PermissionMutationResult> {
+  return request<PermissionMutationResult>(
+    `/maps/${mapId}/permissions/${permissionId}`,
+    { method: "PATCH", body: JSON.stringify({ role }) },
+  );
+}
+
+export function removeMapPermission(
+  mapId: number,
+  permissionId: number,
+): Promise<PermissionMutationResult> {
+  return request<PermissionMutationResult>(
+    `/maps/${mapId}/permissions/${permissionId}`,
+    { method: "DELETE" },
+  );
+}
+
+// 소유권 이전 — 즉시 적용. owner-1 불변식은 서버가 보장(클라 검증 폐기).
+export function transferMapOwner(
+  mapId: number,
+  newOwner: string,
+): Promise<{ owner_id: string; transferred: boolean }> {
+  return request<{ owner_id: string; transferred: boolean }>(
+    `/maps/${mapId}/transfer-owner`,
+    { method: "POST", body: JSON.stringify({ new_owner: newOwner }) },
+  );
+}
+
+// 가시성 변경 — 즉시 적용 안 됨. pending ApprovalRequest 반환(승인 시 적용).
+export function requestVisibilityChange(
+  mapId: number,
+  toVisibility: "public" | "private",
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/visibility-request`, {
+    method: "POST",
+    body: JSON.stringify({ to_visibility: toVisibility }),
+  });
+}
+
+// 맵의 승인 요청 목록 — collaborators 패널의 pending 다운그레이드 표시에 사용.
+export function listApprovalRequests(mapId: number): Promise<ApprovalRequest[]> {
+  return request<ApprovalRequest[]>(`/maps/${mapId}/approval-requests`);
+}
+
+// 승인 요청 결정 — approve 면 서버가 payload(권한 하향/가시성)를 즉시 적용, reject 면 변경 없음.
+// 서버 진실: 호출 후 요청 목록·영향받은 맵 데이터를 재조회한다(낙관적 갱신 금지).
+export function decideApprovalRequest(
+  requestId: number,
+  decision: "approve" | "reject",
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/approval-requests/${requestId}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
+// ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
+
+export interface DirectoryUser {
+  id: string;        // login_id
+  name: string;      // English display name
+  department: string;
+}
+
+export interface DirectoryDept {
+  id: string;        // org_path string (e.g. "Management Support Division/Procurement Office")
+  name: string;      // leaf segment
+}
+
+export interface Directory {
+  users: DirectoryUser[];
+  departments: DirectoryDept[];
+}
+
+/** 인증 사용자 공개 디렉터리 — 협업자 피커 후보 (real employees + dept org-paths). */
+export function getDirectory(): Promise<Directory> {
+  return request<Directory>("/directory");
+}
+
+// ── 사용자 그룹 관리 API (Layer 4 Task 3b/4) ────────────────────────────────
+
+export type GroupStatus = "pending" | "active" | "rejected";
+export type GroupMemberType = "user" | "department";
+
+export interface GroupMember {
+  id: number;          // member PK — DELETE 경로에 사용 / member primary key for removal
+  member_type: GroupMemberType;
+  member_id: string;   // user→login_id, department→org_path string
+}
+
+export interface Group {
+  id: number;
+  name: string;
+  description: string;
+  status: GroupStatus;
+  created_by: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  members: GroupMember[];
+  managers: string[];  // manager login_ids
+}
+
+export interface GroupMemberInput {
+  member_type: GroupMemberType;
+  member_id: string;
+}
+
+/** 그룹 목록 — sysadmin은 전체, 그 외는 active + 본인 생성 pending(서버 가시성 규칙). */
+export function listGroups(): Promise<Group[]> {
+  return request<Group[]>("/groups");
+}
+
+/** 그룹 생성 요청 — status=pending. 멤버 ≥2 필수(서버 422). 생성자는 자동 관리자. */
+export function createGroup(
+  name: string,
+  description: string,
+  members: GroupMemberInput[],
+  managers: string[],
+): Promise<Group> {
+  return request<Group>("/groups", {
+    method: "POST",
+    body: JSON.stringify({ name, description, members, managers }),
+  });
+}
+
+export function getGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}`);
+}
+
+/** 멤버 추가 — 관리자/sysadmin, active 그룹만. 중복은 409. department member_id = org_path string. */
+export function addGroupMember(
+  groupId: number,
+  member: GroupMemberInput,
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/members`, {
+    method: "POST",
+    body: JSON.stringify(member),
+  });
+}
+
+/** 멤버 제거 — member PK(GroupMember.id)로 삭제. 관리자/sysadmin, active 그룹만. */
+export function removeGroupMember(
+  groupId: number,
+  memberPk: number,
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/members/${memberPk}`, {
+    method: "DELETE",
+  });
+}
+
+/** 관리자 집합 교체 — login_id 배열. 최소 1명(빈 배열 422). */
+export function setGroupManagers(
+  groupId: number,
+  managers: string[],
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/managers`, {
+    method: "PUT",
+    body: JSON.stringify({ managers }),
+  });
+}
+
+/** sysadmin 승인 대기열 — pending 그룹만. sysadmin 외 403. */
+export function listPendingGroups(): Promise<Group[]> {
+  return request<Group[]>("/groups/pending");
+}
+
+/** 그룹 생성 요청 결정 — sysadmin only. approve→active, reject→rejected. */
+export function decideGroup(
+  groupId: number,
+  decision: "approve" | "reject",
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
+// ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
+
+export interface AdminUser {
+  login_id: string;
+  name: string;
+  department: string;
+  role: string;        // 'admin' | 'user'
+  is_sysadmin: boolean;
+  org_levels: string[];
+  active: boolean;     // false = AD account disabled (userAccountControl bit 0x2)
+}
+
+export interface AdminDept {
+  name: string;        // leaf segment
+  org_levels: string[];
+}
+
+export interface AdminDirectory {
+  users: AdminUser[];
+  departments: AdminDept[];
+}
+
+/** sysadmin 전용 — 관리 콘솔 직원·부서 목록 (영문, 풍부한 필드). active = AD userAccountControl 기반 (Task 2). */
+export function getAdminUsers(): Promise<AdminDirectory> {
+  return request<AdminDirectory>("/admin/users");
 }
 
 export interface NotificationItem {

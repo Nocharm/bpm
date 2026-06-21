@@ -21,6 +21,10 @@ class ProcessMap(Base):
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 공개 범위 — 'public'=모두 열람, 'private'=권한자만 (Task 3/5에서 게이트 적용)
+    visibility: Mapped[str] = mapped_column(String(20), default="private")
+    # 맵 소유자 login_id — 생성 시점에 created_by로 설정 예정(Task 3/5 wiring)
+    owner_id: Mapped[str | None] = mapped_column(String(100), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -177,6 +181,8 @@ class MapApprover(Base):
         ForeignKey("process_maps.id", ondelete="CASCADE"), primary_key=True
     )
     user_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    # 감사 추적 — 누가 이 승인자를 지정했는지 (§9-3)
+    assigned_by: Mapped[str | None] = mapped_column(String(100), default=None)
 
 
 class VersionApproval(Base):
@@ -221,8 +227,103 @@ class Employee(Base):
     org_l1: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l2: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l3: Mapped[str | None] = mapped_column(String(200), default=None)
+    org_l4: Mapped[str | None] = mapped_column(String(200), default=None)
+    org_l5: Mapped[str | None] = mapped_column(String(200), default=None)
     department: Mapped[str] = mapped_column(String(200), default="")
+    # AD-derived fields (Task 2) — active from userAccountControl bit 0x2; email from mail attr.
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
+
+
+class MapPermission(Base):
+    """맵별 접근 권한 행 — principal(사용자/부서/그룹)에게 role 부여 (design 2026-06-21 §2.1)."""
+
+    __tablename__ = "map_permissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
+    # 'user' | 'department' | 'group'
+    principal_type: Mapped[str] = mapped_column(String(20))
+    # user→login_id; department→org_path 문자열; group→그룹 식별자(Task 4까지 판정 미사용)
+    principal_id: Mapped[str] = mapped_column(String(200))
+    # 'viewer' | 'editor' | 'owner'
+    role: Mapped[str] = mapped_column(String(20))
+    granted_by: Mapped[str] = mapped_column(String(100))  # 부여자 login_id
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ApprovalRequest(Base):
+    """권한 다운그레이드·가시성 변경 승인 요청 — 버전 게시 승인은 version_approvals 사용 (§2.1)."""
+
+    __tablename__ = "approval_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
+    # 'permission_downgrade' | 'visibility_change'
+    kind: Mapped[str] = mapped_column(String(30))
+    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility}
+    payload: Mapped[dict] = mapped_column(JSON)
+    requested_by: Mapped[str] = mapped_column(String(100))
+    # 'pending' | 'approved' | 'rejected' | 'applied'
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    decided_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class UserGroup(Base):
+    """사용자 그룹 — map_permissions의 principal_type='group' 대상 (Layer 4 §3a).
+
+    map_permissions.principal_id 는 이 그룹의 id(정수)를 문자열로 보관한다.
+    status='active' 그룹만 권한 판정에 적용된다(pending/rejected는 무시).
+    """
+
+    __tablename__ = "user_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    # 'pending' | 'active' | 'rejected'
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_by: Mapped[str] = mapped_column(String(100))
+    approved_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class UserGroupMember(Base):
+    """그룹 구성원 — user(login_id) 또는 department(org_path 문자열, Layer-1 규약).
+
+    department 멤버의 member_id 는 belongs_to_department 와 동일한 org_path 문자열이다.
+    """
+
+    __tablename__ = "user_group_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_groups.id", ondelete="CASCADE")
+    )
+    # 'user' | 'department'
+    member_type: Mapped[str] = mapped_column(String(20))
+    # user→login_id; department→org_path 문자열
+    member_id: Mapped[str] = mapped_column(String(200))
+
+
+class UserGroupManager(Base):
+    """그룹 관리자 — 그룹 멤버십을 관리하는 사용자(login_id)."""
+
+    __tablename__ = "user_group_managers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_groups.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[str] = mapped_column(String(100))

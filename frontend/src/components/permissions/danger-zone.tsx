@@ -1,17 +1,22 @@
 "use client";
 
-// 위험 구역 — 소유권 이전, 맵 mock 삭제 / Danger zone: ownership transfer and mock map delete.
+// 위험 구역 — 소유권 이전·맵 삭제 (실 API) /
+// Danger zone wired to the real Layer-2 transfer-owner and map-delete endpoints.
+// 소유권 이전은 즉시 적용. owner-1 불변식은 서버가 보장하므로 클라 검증은 두지 않고
+// 확인 모달만 유지한다. 삭제는 DELETE 후 홈으로 이동한다.
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  deleteMap,
+  listMapPermissions,
+  transferMapOwner,
+  type MapPermission,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ModalBackdrop } from "@/components/modal-backdrop";
-import {
-  deleteMapMock,
-  transferOwner,
-  usePermissions,
-} from "@/lib/mock/permissions";
+import { usePermissions } from "@/lib/mock/permissions";
 
 interface DangerZoneProps {
   mapId: string;
@@ -33,47 +38,74 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
   const { t } = useI18n();
   const router = useRouter();
   const state = usePermissions();
+  const mapIdNum = Number(mapId);
 
-  // 소유권 이전 대상 선택 / Transfer target user selection.
+  // 서버 권한 목록 — 이전 대상 후보(editor 이상 user) 도출에 사용 / Server perms for transfer targets.
+  const [perms, setPerms] = useState<MapPermission[]>([]);
+
   const [transferTarget, setTransferTarget] = useState("");
   const [showTransferModal, setShowTransferModal] = useState(false);
-
-  // 맵 삭제 확인 모달 / Delete confirm modal.
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // 소유권 이전 대상 후보 — editor 이상인 유저(현 소유자 제외) /
-  // Eligible transfer targets: users with editor+ role on this map, excluding current owner.
-  const eligible = state.permissions
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const rows = await listMapPermissions(mapIdNum);
+        if (active) setPerms(rows);
+      } catch (err) {
+        if (active) onToast(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [mapIdNum, onToast]);
+
+  // 표시명 해석 — mock 시드 사용 / Resolve display name from mock seed.
+  const userName = useCallback(
+    (userId: string): string => state.users.find((u) => u.id === userId)?.name ?? userId,
+    [state.users],
+  );
+
+  // 이전 대상 후보 — editor 이상 user(현재 유저 제외) / Eligible targets: editor+ users, excluding self.
+  const eligible = perms
     .filter(
       (p) =>
-        p.mapId === mapId &&
-        p.principalType === "user" &&
+        p.principal_type === "user" &&
         (p.role === "editor" || p.role === "owner") &&
-        p.principalId !== currentUserId,
+        p.principal_id !== currentUserId,
     )
-    .map((p) => {
-      const user = state.users.find((u) => u.id === p.principalId);
-      return { userId: p.principalId, name: user?.name ?? p.principalId };
-    });
+    .map((p) => ({ userId: p.principal_id, name: userName(p.principal_id) }));
 
-  // 이전 대상 표시명 / Display name of transfer target.
   const targetName =
     eligible.find((e) => e.userId === transferTarget)?.name ?? transferTarget;
 
-  function handleTransferConfirm() {
+  async function handleTransferConfirm() {
     if (!transferTarget) return;
-    transferOwner(mapId, transferTarget, currentUserId);
-    onToast(sub(t("perm.transferToast"), { name: targetName }));
-    setShowTransferModal(false);
-    setTransferTarget("");
+    try {
+      await transferMapOwner(mapIdNum, transferTarget);
+      onToast(sub(t("perm.transferToast"), { name: targetName }));
+      setShowTransferModal(false);
+      setTransferTarget("");
+      // 이전 후 자신의 역할은 editor로 강등 — 설정 화면을 떠나 편집기로 / Demoted to editor: leave settings.
+      router.push(`/maps/${mapId}`);
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : String(err));
+      setShowTransferModal(false);
+    }
   }
 
-  function handleDeleteConfirm() {
-    deleteMapMock(mapId);
-    onToast(t("perm.deleteToast"));
-    setShowDeleteModal(false);
-    // mock 삭제 후 홈으로 이동 / Redirect to home after mock delete.
-    router.push("/");
+  async function handleDeleteConfirm() {
+    try {
+      await deleteMap(mapIdNum);
+      onToast(t("perm.deleteToast"));
+      setShowDeleteModal(false);
+      router.push("/");
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : String(err));
+      setShowDeleteModal(false);
+    }
   }
 
   return (
@@ -102,7 +134,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
               <button
                 type="button"
                 className="rounded-sm bg-error px-3 py-1.5 text-caption text-on-accent hover:opacity-90"
-                onClick={handleTransferConfirm}
+                onClick={() => void handleTransferConfirm()}
               >
                 {t("perm.transferConfirm")}
               </button>
@@ -135,7 +167,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
               <button
                 type="button"
                 className="rounded-sm bg-error px-3 py-1.5 text-caption text-on-accent hover:opacity-90"
-                onClick={handleDeleteConfirm}
+                onClick={() => void handleDeleteConfirm()}
               >
                 {t("perm.deleteConfirm")}
               </button>
@@ -180,7 +212,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
           )}
         </div>
 
-        {/* ── 맵 mock 삭제 / Mock map delete ── */}
+        {/* ── 맵 삭제 / Map delete ── */}
         <div className="rounded-sm border border-error p-3">
           <p className="mb-1 text-caption-strong text-error">{t("perm.deleteTitle")}</p>
           <p className="mb-3 text-fine text-ink-tertiary">{t("perm.deleteHint")}</p>

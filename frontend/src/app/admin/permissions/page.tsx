@@ -2,7 +2,7 @@
 
 // sysadmin 전용 권한 관리 콘솔 (§7.4) — 승인 큐 · 부서 · 사용자 /
 // Sysadmin-only permissions console: approval queue, department table, user list.
-// Gate: isSysadmin (mock User). Non-sysadmin sees a notice, no redirect.
+// Gate: isSysadmin from server /api/me (via useCurrentMockUser). Non-sysadmin sees a notice, no redirect.
 
 import { useState } from "react";
 

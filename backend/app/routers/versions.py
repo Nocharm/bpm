@@ -12,8 +12,10 @@ from app import workflow
 from app.auth import get_current_user
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
+from app.permissions.deps import require_version_map_role
 from app.models import (
     Edge,
+    Employee,
     Group,
     MapApprover,
     MapVersion,
@@ -149,7 +151,11 @@ async def create_version(
     return new_version
 
 
-@router.patch("/versions/{version_id}", response_model=VersionOut)
+@router.patch(
+    "/versions/{version_id}",
+    response_model=VersionOut,
+    dependencies=[Depends(require_version_map_role("editor"))],
+)
 async def rename_version(
     version_id: int,
     payload: VersionUpdate,
@@ -250,8 +256,22 @@ async def delete_version(
 
 
 async def _load_approvers(session: AsyncSession, map_id: int) -> list[str]:
+    """Return ACTIVE approvers for a map (LEFT JOIN employees.active).
+
+    Approvers without an employee row (e.g. set before AD sync) are treated as active —
+    consistent with the missing-uac conservative rule. Only approvers with an explicit
+    employees.active=False are excluded.
+    The submit-gate 'no approvers → 409' now means 'no ACTIVE approvers'.
+    """
     rows = await session.scalars(
-        select(MapApprover.user_id).where(MapApprover.map_id == map_id)
+        select(MapApprover.user_id)
+        .outerjoin(Employee, Employee.login_id == MapApprover.user_id)
+        .where(
+            MapApprover.map_id == map_id,
+            # NULL (no employee row) → treated as active; False → excluded
+            (Employee.active.is_(None)) | (Employee.active.is_(True)),
+        )
+        .order_by(MapApprover.user_id)
     )
     return list(rows.all())
 

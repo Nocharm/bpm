@@ -1,0 +1,44 @@
+"""GET /api/directory — 인증 사용자 공개 디렉터리 엔드포인트 테스트 (Layer 4 Task 0)."""
+
+from fastapi.testclient import TestClient
+
+
+def test_directory_accessible_by_non_admin(client: TestClient) -> None:
+    """non-admin 사용자가 200을 받고 영문 사용자 목록 + 부서 org-path 를 반환받는다."""
+    # user.lee는 일반 user role
+    res = client.get("/api/directory", headers={"X-Dev-User": "user.lee"})
+    assert res.status_code == 200
+
+    body = res.json()
+    user_ids = [u["id"] for u in body["users"]]
+    dept_ids = [d["id"] for d in body["departments"]]
+
+    # 5명 이상의 영문 사용자 시드가 포함되어야 한다 / At least 5 English users from seed.
+    assert len(body["users"]) >= 5
+
+    # 영문 이름 확인 (한글 이름은 없어야 함) / English names only — no Korean.
+    for u in body["users"]:
+        assert not any(
+            "가" <= ch <= "힣" for ch in u["name"]
+        ), f"Korean name found in directory: {u['name']}"
+
+    # login_id 포함 여부 / login_ids present.
+    assert "user.lee" in user_ids
+    assert "admin.kim" in user_ids
+
+    # 부서 org-path 목록 — Management Support Division(l1)이 포함되어야 함 /
+    # Department org-paths include l1 prefix.
+    assert "Management Support Division" in dept_ids
+
+    # Procurement Office(l2) 프리픽스 포함 / l2 prefix included.
+    assert "Management Support Division/Procurement Office" in dept_ids
+
+    # 리프 팀(Sourcing Team 1)도 포함 / leaf team included.
+    assert "Management Support Division/Procurement Office/Sourcing Team 1" in dept_ids
+
+
+def test_directory_admin_also_accessible(client: TestClient) -> None:
+    """admin 사용자도 정상 접근 / admin can also access the directory."""
+    res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    assert len(res.json()["users"]) >= 5
