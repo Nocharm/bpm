@@ -283,6 +283,28 @@ class SyncSummaryOut(BaseModel):
     excluded: int
 
 
+# ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
+
+class DirectoryUserOut(BaseModel):
+    """협업자 피커용 — 인증 사용자 누구나 조회 가능 / For picker; any authenticated user."""
+
+    id: str       # login_id
+    name: str     # English display name
+    department: str
+
+
+class DirectoryDeptOut(BaseModel):
+    """부서 principal 후보 — principalId = org_path 문자열 / dept principal; id = org_path string."""
+
+    id: str       # org_path ("l1/l2/l3" or leaf segment)
+    name: str     # leaf segment (display label)
+
+
+class DirectoryOut(BaseModel):
+    users: list[DirectoryUserOut]
+    departments: list[DirectoryDeptOut]
+
+
 AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 

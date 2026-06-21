@@ -4,7 +4,8 @@
 // Collaborators panel wired to the real Layer-2 permissions API.
 // 서버가 진실: 모든 변경은 API 호출 후 목록을 재조회해 반영한다. 다운그레이드/에디터제거는
 // pending 응답을 받으면 역할을 즉시 바꾸지 않고 "승인 대기"만 표시한다(낙관적 갱신 금지).
-// 표시명·피커 후보는 아직 Layer-4 디렉터리 API가 없어 mock 시드를 사용한다.
+// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 mock 시드 (Layer 4 Task 0). /
+// Display names / picker: users+departments from real /api/directory; groups still mock (Task 3/4).
 
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
@@ -12,14 +13,18 @@ import { X } from "lucide-react";
 import {
   addMapPermission,
   changeMapPermission,
+  getDirectory,
   listMapPermissions,
   removeMapPermission,
+  type DirectoryDept,
+  type DirectoryUser,
   type MapPermission as ApiPermission,
   type MapRole,
   type PrincipalType,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/mock/permissions";
+import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
 
 import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
 import type { PrincipalOption } from "./principal-picker";
@@ -37,20 +42,30 @@ interface CollaboratorsPanelProps {
   viewerGrantDisabled?: boolean;
 }
 
-// 표시명 해석 — mock 시드(디렉터리) 사용. 미일치 시 principalId 폴백 /
-// Resolve principal display name from mock seed directory; fall back to id.
-function usePrincipalName(
+// 표시명 해석 — 실 디렉터리 우선, 없으면 mock 시드, 없으면 principalId 폴백 /
+// Resolve display name: real directory first, then mock seed, then id.
+function resolvePrincipalName(
   principalType: PrincipalType,
   principalId: string,
+  dirUsers: DirectoryUser[],
+  dirDepts: DirectoryDept[],
+  mockState: ReturnType<typeof usePermissions>,
 ): string {
-  const state = usePermissions();
   if (principalType === "user") {
-    return state.users.find((u) => u.id === principalId)?.name ?? principalId;
+    return (
+      dirUsers.find((u) => u.id === principalId)?.name ??
+      mockState.users.find((u) => u.id === principalId)?.name ??
+      principalId
+    );
   }
   if (principalType === "department") {
-    return state.departments.find((d) => d.id === principalId)?.name ?? principalId;
+    return (
+      dirDepts.find((d) => d.id === principalId)?.name ??
+      mockState.departments.find((d) => d.id === principalId)?.name ??
+      principalId
+    );
   }
-  return state.groups.find((g) => g.id === principalId)?.name ?? principalId;
+  return mockState.groups.find((g) => g.id === principalId)?.name ?? principalId;
 }
 
 // 개별 행 — 이름, 아이콘, 역할, 변경/제거 컨트롤 / Individual permission row.
@@ -59,6 +74,8 @@ function CollaboratorRow({
   currentUserId,
   canEdit,
   isPending,
+  dirUsers,
+  dirDepts,
   onChangeRole,
   onRemove,
 }: {
@@ -66,12 +83,15 @@ function CollaboratorRow({
   currentUserId: string;
   canEdit: boolean;
   isPending: boolean;
+  dirUsers: DirectoryUser[];
+  dirDepts: DirectoryDept[];
   onChangeRole: (perm: ApiPermission, toRole: MapRole) => void;
   onRemove: (perm: ApiPermission) => void;
 }) {
   const { t } = useI18n();
+  const mockState = usePermissions();
   const principalType = perm.principal_type as PrincipalType;
-  const displayName = usePrincipalName(principalType, perm.principal_id);
+  const displayName = resolvePrincipalName(principalType, perm.principal_id, dirUsers, dirDepts, mockState);
   const role = perm.role as MapRole;
   const isOwner = role === "owner";
   // 자기 자신 행은 역할/제거 비활성 / Disable controls on own row.
@@ -121,11 +141,17 @@ function CollaboratorRow({
 function AddCollaboratorForm({
   excludeIds,
   viewerGrantDisabled,
+  dirUsers,
+  dirDepts,
   onAdd,
 }: {
   excludeIds: Set<string>;
   /** 공개 맵이면 viewer 선택 비활성 / Disable viewer option on public maps. */
   viewerGrantDisabled?: boolean;
+  /** 실 디렉터리 사용자 / Real directory users for the picker. */
+  dirUsers: DirectoryUser[];
+  /** 실 디렉터리 부서 / Real directory departments for the picker. */
+  dirDepts: DirectoryDept[];
   onAdd: (
     principalType: PrincipalType,
     principalId: string,
@@ -137,6 +163,25 @@ function AddCollaboratorForm({
   const [selected, setSelected] = useState<PrincipalOption | null>(null);
   // 공개 맵이면 editor 기본값 / Default to editor on public maps (viewer disabled).
   const [role, setRole] = useState<"viewer" | "editor">(viewerGrantDisabled ? "editor" : "viewer");
+
+  // 실 디렉터리 데이터를 피커 prop 형식으로 변환 — 미사용 필드는 빈 값으로 채움.
+  // Adapt real directory data to picker's MockUser / Department shapes (unused fields stubbed).
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+  }));
 
   function handleAdd() {
     if (!selected) return;
@@ -150,8 +195,8 @@ function AddCollaboratorForm({
       <p className="text-caption-strong text-ink">{t("perm.addCollaborator")}</p>
 
       <PrincipalPicker
-        users={state.users}
-        departments={state.departments}
+        users={pickerUsers}
+        departments={pickerDepts}
         groups={state.groups}
         excludeIds={excludeIds}
         onSelect={setSelected}
@@ -213,6 +258,11 @@ export function CollaboratorsPanel({
   // 서버 진실(역할 미변경)은 perms 가 그대로 유지하고, 이 집합은 "승인 대기" 배지만 구동한다.
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
 
+  // 실 디렉터리 — 피커 후보와 표시명 해석에 사용 (Layer 4 Task 0) /
+  // Real directory for picker candidates and display-name resolution.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+
   const reload = useCallback(async () => {
     try {
       const rows = await listMapPermissions(mapIdNum);
@@ -228,8 +278,15 @@ export function CollaboratorsPanel({
     let active = true;
     void (async () => {
       try {
-        const rows = await listMapPermissions(mapIdNum);
-        if (active) setPerms(rows);
+        const [rows, dir] = await Promise.all([
+          listMapPermissions(mapIdNum),
+          getDirectory(),
+        ]);
+        if (active) {
+          setPerms(rows);
+          setDirUsers(dir.users);
+          setDirDepts(dir.departments);
+        }
       } catch (err) {
         if (active) onToast(err instanceof Error ? err.message : String(err));
       }
@@ -308,6 +365,8 @@ export function CollaboratorsPanel({
           currentUserId={currentUserId}
           canEdit={canEdit}
           isPending={pendingIds.has(perm.id)}
+          dirUsers={dirUsers}
+          dirDepts={dirDepts}
           onChangeRole={handleChangeRole}
           onRemove={handleRemove}
         />
@@ -318,6 +377,8 @@ export function CollaboratorsPanel({
         <AddCollaboratorForm
           excludeIds={excludeIds}
           viewerGrantDisabled={viewerGrantDisabled}
+          dirUsers={dirUsers}
+          dirDepts={dirDepts}
           onAdd={handleAdd}
         />
       )}

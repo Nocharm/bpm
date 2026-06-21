@@ -474,6 +474,29 @@ export function decideApprovalRequest(
   });
 }
 
+// ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
+
+export interface DirectoryUser {
+  id: string;        // login_id
+  name: string;      // English display name
+  department: string;
+}
+
+export interface DirectoryDept {
+  id: string;        // org_path string (e.g. "Management Support Division/Procurement Office")
+  name: string;      // leaf segment
+}
+
+export interface Directory {
+  users: DirectoryUser[];
+  departments: DirectoryDept[];
+}
+
+/** 인증 사용자 공개 디렉터리 — 협업자 피커 후보 (real employees + dept org-paths). */
+export function getDirectory(): Promise<Directory> {
+  return request<Directory>("/directory");
+}
+
 export interface NotificationItem {
   id: number;
   type: string;

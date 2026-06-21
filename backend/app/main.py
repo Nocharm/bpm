@@ -14,6 +14,7 @@ from app.routers import (
     ai,
     approvers,
     comments,
+    directory,
     employees,
     graph,
     library,
@@ -45,6 +46,7 @@ app.include_router(maps.router)
 app.include_router(versions.router)
 app.include_router(graph.router)
 app.include_router(comments.router)
+app.include_router(directory.router)
 app.include_router(employees.router)
 app.include_router(approvers.router)
 app.include_router(notifications.router)

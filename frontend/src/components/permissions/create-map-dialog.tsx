@@ -4,18 +4,27 @@
 // Map creation dialog: name, visibility, initial collaborators, required approvers.
 // 맵은 createMap()으로 생성(서버 기본 private), 협업자는 addMapPermission(), 결재자는 setApprovers().
 // 공개 범위는 생성 시 항상 private — 공개 전환은 Visibility 탭에서 승인 절차로 한다.
-// 표시명·피커 후보는 아직 Layer-4 디렉터리 API가 없어 mock 시드를 사용한다.
+// 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 mock 시드 (Layer 4 Task 0). /
+// Display names / picker: users+departments from real /api/directory; groups still mock (Task 3/4).
 
 import { createPortal } from "react-dom";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { X, Globe, Lock, User } from "lucide-react";
 
-import { addMapPermission, createMap, setApprovers as setMapApprovers } from "@/lib/api";
+import {
+  addMapPermission,
+  createMap,
+  getDirectory,
+  setApprovers as setMapApprovers,
+  type DirectoryUser,
+  type DirectoryDept,
+} from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { usePermissions } from "@/lib/mock/permissions-store";
 import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
+import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
@@ -45,6 +54,40 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const { t } = useI18n();
   const state = usePermissions();
   const currentUser = useCurrentMockUser();
+
+  // ── 실 디렉터리 — 마운트 시 1회 조회 (Layer 4 Task 0) /
+  // Real directory: fetch once on mount; fall back to empty arrays if error.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
+  useEffect(() => {
+    let active = true;
+    void getDirectory().then((dir) => {
+      if (active) {
+        setDirUsers(dir.users);
+        setDirDepts(dir.departments);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  // 실 디렉터리 데이터를 피커 prop 형식으로 변환 (미사용 필드 빈 값으로 채움) /
+  // Adapt real directory data to picker's MockUser / Department shapes.
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+  }));
 
   // ── 폼 상태 / form state ──
   const [name, setName] = useState("");
@@ -135,11 +178,10 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     approvers.length >= 1 &&
     !submitting;
 
-  // ── 결재자 picker용 — users only, 이미 추가된 사람 제외 / user-only picker, exclude already added ──
+  // ── 결재자 picker용 — users only, 이미 추가된 사람 제외 (실 디렉터리 사용) /
+  // Approver picker: real directory users, exclude already-added.
   const approverExcludeIds = new Set(approvers.map((a) => a.userId));
-  const allUsers = state.users.filter(
-    (u) => u.status === "active" && !approverExcludeIds.has(u.id),
-  );
+  const allUsers = dirUsers.filter((u) => !approverExcludeIds.has(u.id));
   const filteredApproverUsers = pendingApprover.trim()
     ? allUsers.filter((u) =>
         u.name.includes(pendingApprover) || u.id.includes(pendingApprover),
@@ -243,8 +285,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <div className="flex gap-2">
             <div className="flex-1">
               <PrincipalPicker
-                users={state.users}
-                departments={state.departments}
+                users={pickerUsers}
+                departments={pickerDepts}
                 groups={state.groups}
                 excludeIds={collabExcludeIds}
                 onSelect={(opt) => setPendingCollab(opt)}
