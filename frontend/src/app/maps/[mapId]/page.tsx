@@ -426,6 +426,17 @@ function toAppEdges(graph: Graph): Edge[] {
 
 
 
+/** 저장 x에서의 표시 오프셋 = 저장 x보다 왼쪽(저장 x 기준)에 있는 펼침 앵커들의 footprint 합. */
+function offsetAtX(savedX: number, steps: { x: number; footprint: number }[]): number {
+  let sum = 0;
+  for (const s of steps) {
+    if (s.x < savedX) {
+      sum += s.footprint;
+    }
+  }
+  return sum;
+}
+
 function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -660,6 +671,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     regions: { id: string; x: number; width: number; depth: number }[];
     scopeOffsets: Map<string, { x: number; y: number }>;
     rootOffsets: Map<string, { x: number; y: number }>;
+    rootShiftSteps: { x: number; footprint: number }[];
   } | null>(null);
   const edgesRef = useRef<Edge[]>([]);
   const groupsRef = useRef<GraphGroup[]>([]);
@@ -2653,7 +2665,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         return { tracked: false, committed: false };
       }
       const live = dragLiveByIdRef.current;
-      const regions = inlineCompositionRef.current?.regions ?? [];
+      const composition = inlineCompositionRef.current;
+      const regions = composition?.regions ?? [];
+      const steps = composition?.rootShiftSteps ?? [];
       // 무효 판정: 노드 표시중심 x가 펼친 레인(full-height 세로밴드)의 x..x+width 안이면 취소.
       const isInvalid = (id: string, dropDisplay: { x: number; y: number }): boolean => {
         const node = nodesRef.current.find((n) => n.id === id);
@@ -2671,7 +2685,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (isInvalid(id, dropDisplay)) {
           continue; // 취소 — nodes state는 드래그 내내 동결돼 있어 원위치 유지. 저장 안 함.
         }
-        savedById.set(id, { x: dropDisplay.x - offset.x, y: dropDisplay.y - offset.y });
+        // x는 드롭 위치 오프셋으로 환산(드래그 시작 오프셋 아님) — 펼침 영역 경계를 가로지르면 두 오프셋이 달라
+        // footprint만큼 빗나간다. dropDisplay.x = sx + offsetAtX(sx) 의 고정점을 풀어 저장 x(sx)를 구한다.
+        // 단조 계단함수라 앵커 수 이내로 수렴.
+        let sx = dropDisplay.x;
+        for (let i = 0; i < steps.length + 1; i += 1) {
+          const nsx = dropDisplay.x - offsetAtX(sx, steps);
+          if (nsx === sx) {
+            break;
+          }
+          sx = nsx;
+        }
+        savedById.set(id, { x: sx, y: dropDisplay.y - offset.y });
         committed = true;
       }
       if (savedById.size > 0) {
@@ -3324,6 +3349,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     const tree = fullGraph;
     const rootIds = new Set(nodes.map((node) => node.id));
 
+    // 루트 스코프(depth 1) 펼침 앵커별 footprint-shift 단계 — 각 {저장 x, footprint}.
+    // 드롭 좌표 환산 시 "이 저장 x에서의 표시 오프셋"을 위치 의존으로 재계산하기 위함(드래그 시작 오프셋이 아닌
+    // 드롭 위치 오프셋으로 환산 → 영역 경계를 가로지른 드래그가 footprint만큼 빗나가지 않게). x는 저장 좌표.
+    const rootShiftSteps: { x: number; footprint: number }[] = [];
+
     // 한 스코프를 배치 — 펼친 노드마다 하위 스코프를 재귀 배치해 오른쪽에 영역으로 삽입.
     // 입력 노드는 이미 배치돼 있음(루트=수동, 자식=dagre). depth>1이면 결과를 원점 정규화해 부모가 평행이동.
     const buildScope = (
@@ -3386,6 +3416,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         const childTop = anchor.position.y;
         // A 바로 오른쪽 노드도 영역을 완전히 벗어나도록 앵커 폭 포함(겹침 방지)
         const footprint = anchorSize.w + regionW + REGION_GAP * 2;
+        // 루트 스코프 앵커만 기록 — x는 저장 좌표(target은 원본 nodes 항목이라 미쉬프트). 드롭 환산용.
+        if (depth === 1) {
+          rootShiftSteps.push({ x: target.position.x, footprint });
+        }
         // 공간상 A보다 오른쪽 = 우측 이동(이 스코프 노드 + 먼저 배치된 자식/영역)
         for (const node of placed.values()) {
           if (node.position.x > anchor.position.x) {
@@ -3554,6 +3588,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       childOffsets,
       scopeOffsets,
       rootOffsets,
+      rootShiftSteps,
     };
   }, [expandedInline, fullGraph, nodes, edges, currentParentId, injectSubEnds]);
 
