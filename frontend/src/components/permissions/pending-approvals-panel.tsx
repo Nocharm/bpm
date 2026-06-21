@@ -1,52 +1,108 @@
 "use client";
 
-// 맵별 결재 대기 패널 — 승인자·sysadmin 전용 / Per-map pending approvals panel (approver or sysadmin only).
-// ③ 권한 하향 / ④ 공개범위 변경 요청만 표시 — version_publish는 버전 탭에서, owner-transfer는 confirm 모달에서 처리.
+// 맵별 결재 대기 패널 — 승인자·sysadmin 전용, 실 API / Per-map pending approvals panel (approver/sysadmin), real API.
+// ③ 권한 하향 / ④ 공개범위 변경 요청만 표시 — version_publish는 버전 탭, owner-transfer는 confirm 모달에서 처리.
+// 서버 진실: approve 시 서버가 권한 하향/가시성 변경을 적용한다. 결정 후 요청 목록을 재조회한다(낙관적 갱신 금지).
 
+import { useCallback, useEffect, useState } from "react";
+
+import {
+  decideApprovalRequest,
+  listApprovalRequests,
+  type ApprovalRequest,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { usePermissions, decideRequest } from "@/lib/mock/permissions";
-import type { ApprovalKind, DowngradePayload, VisibilityChangePayload } from "@/lib/mock/permissions-types";
-import { genId } from "@/lib/id";
 import type { ToastItem } from "@/components/toast-stack";
+import { genId } from "@/lib/id";
 
 interface Props {
   mapId: string;
-  currentUserId: string;
+  /** 결정 후 호출 — 호스트가 맵/협업자 데이터를 재조회하도록 / Called after a decision so the host can refetch map data. */
+  onDecided?: () => void;
   onToast: (item: ToastItem) => void;
 }
 
-export function PendingApprovalsPanel({ mapId, currentUserId, onToast }: Props) {
+export function PendingApprovalsPanel({ mapId, onDecided, onToast }: Props) {
   const { t } = useI18n();
-  const state = usePermissions();
+  const mapIdNum = Number(mapId);
 
-  // 이 맵의 ③④ 대기 요청만 필터 / Filter only ③④ pending requests for this map.
-  const pendingRequests = state.requests.filter(
+  // 서버 결재 요청 목록 / Server-sourced approval requests.
+  const [requests, setRequests] = useState<ApprovalRequest[]>([]);
+  // 결정 진행 중인 요청 id — 더블클릭/중복 결정 방지 / Ids being decided, to disable buttons.
+  const [decidingIds, setDecidingIds] = useState<Set<number>>(new Set());
+
+  const reload = useCallback(async () => {
+    try {
+      const rows = await listApprovalRequests(mapIdNum);
+      setRequests(rows);
+    } catch (err) {
+      onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [mapIdNum, onToast]);
+
+  // 초기 로드 — active 가드로 언마운트 후 setState 방지 / Initial load with an unmount guard.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const rows = await listApprovalRequests(mapIdNum);
+        if (active) setRequests(rows);
+      } catch (err) {
+        if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [mapIdNum, onToast]);
+
+  const handleDecide = useCallback(
+    async (requestId: number, decision: "approve" | "reject") => {
+      setDecidingIds((prev) => new Set(prev).add(requestId));
+      try {
+        await decideApprovalRequest(requestId, decision);
+        // 서버가 적용함 — 목록 + 호스트의 맵 데이터(역할/가시성) 재조회 / Server applied; refetch list + host map data.
+        await reload();
+        onDecided?.();
+        onToast({
+          id: genId(),
+          message:
+            decision === "approve"
+              ? t("perm.approvals.toastApproved")
+              : t("perm.approvals.toastRejected"),
+        });
+      } catch (err) {
+        onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+      } finally {
+        setDecidingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(requestId);
+          return next;
+        });
+      }
+    },
+    [reload, onDecided, onToast, t],
+  );
+
+  // 이 맵의 ③④ 대기 요청만 / Only pending ③④ requests for this map.
+  const pendingRequests = requests.filter(
     (r) =>
-      r.mapId === mapId &&
       r.status === "pending" &&
       (r.kind === "permission_downgrade" || r.kind === "visibility_change"),
   );
 
-  function handleDecide(requestId: string, decision: "approved" | "rejected") {
-    decideRequest(requestId, decision, currentUserId);
-    onToast({
-      id: genId(),
-      message: decision === "approved" ? t("perm.approvals.toastApproved") : t("perm.approvals.toastRejected"),
-    });
-  }
-
   // 요청 내용 요약 — kind별 / Summarise request detail by kind.
-  function renderDetail(kind: ApprovalKind, payload: unknown): string {
-    if (kind === "permission_downgrade") {
-      const p = payload as DowngradePayload;
-      const to = p.toRole ?? t("perm.approvals.roleRemoved");
-      return `${p.principalType}:${p.principalId}  ${p.fromRole} → ${to}`;
+  function renderDetail(req: ApprovalRequest): string {
+    if (req.kind === "permission_downgrade") {
+      const p = req.payload;
+      const from = String(p.from_role ?? "");
+      const to = p.to_role == null ? t("perm.approvals.roleRemoved") : String(p.to_role);
+      return `${String(p.principal_type)}:${String(p.principal_id)}  ${from} → ${to}`;
     }
-    if (kind === "visibility_change") {
-      const p = payload as VisibilityChangePayload;
-      return `${p.from} → ${p.to}`;
+    if (req.kind === "visibility_change") {
+      return String(req.payload.to_visibility ?? "");
     }
-    return String(payload);
+    return JSON.stringify(req.payload);
   }
 
   if (pendingRequests.length === 0) {
@@ -64,7 +120,8 @@ export function PendingApprovalsPanel({ mapId, currentUserId, onToast }: Props) 
           req.kind === "permission_downgrade"
             ? t("perm.approvals.kindDowngrade")
             : t("perm.approvals.kindVisibility");
-        const detail = renderDetail(req.kind, req.payload);
+        const detail = renderDetail(req);
+        const isDeciding = decidingIds.has(req.id);
 
         return (
           <div
@@ -81,7 +138,7 @@ export function PendingApprovalsPanel({ mapId, currentUserId, onToast }: Props) 
               </div>
               {/* 요청자 / Requester */}
               <span className="text-fine text-ink-tertiary">
-                {t("perm.approvals.requesterLabel")}: {req.requestedBy}
+                {t("perm.approvals.requesterLabel")}: {req.requested_by}
               </span>
             </div>
 
@@ -89,15 +146,17 @@ export function PendingApprovalsPanel({ mapId, currentUserId, onToast }: Props) 
             <div className="ml-4 flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                className="rounded-sm border border-added px-2.5 py-1 text-fine text-added hover:bg-surface-alt"
-                onClick={() => handleDecide(req.id, "approved")}
+                disabled={isDeciding}
+                className="rounded-sm border border-added px-2.5 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-50"
+                onClick={() => void handleDecide(req.id, "approve")}
               >
                 {t("perm.approvals.approve")}
               </button>
               <button
                 type="button"
-                className="rounded-sm border border-error px-2.5 py-1 text-fine text-error hover:bg-surface-alt"
-                onClick={() => handleDecide(req.id, "rejected")}
+                disabled={isDeciding}
+                className="rounded-sm border border-error px-2.5 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-50"
+                onClick={() => void handleDecide(req.id, "reject")}
               >
                 {t("perm.approvals.reject")}
               </button>

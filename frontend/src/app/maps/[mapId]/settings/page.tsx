@@ -2,7 +2,7 @@
 
 // 맵 설정 화면 — 권한 관리 탭 셸 / Map settings page: tabbed shell for permission management.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -55,6 +55,20 @@ export default function SettingsPage() {
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   // 역할 로드 완료 여부 — 로드 전 false "No access" 깜빡임 방지 / gate no-access screen until loaded.
   const [roleLoaded, setRoleLoaded] = useState(false);
+
+  // 맵 데이터 재조회 — 결재 승인 후 역할/가시성이 바뀌었을 수 있어 재호출(서버 진실) /
+  // Refetch map data; role/visibility may have changed after an approval was applied server-side.
+  const refreshMap = useCallback(async () => {
+    try {
+      const detail = await getMap(Number(mapIdStr));
+      setMapName(detail.name);
+      setServerRole(detail.my_role);
+      setVisibility(detail.visibility);
+    } catch {
+      // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
+    }
+  }, [mapIdStr]);
+
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -281,6 +295,7 @@ export default function SettingsPage() {
               mapId={mapIdStr}
               currentUserId={currentMockUser.id}
               canEdit={canEdit}
+              onToast={showToast}
             />
           ) : activeTab === "danger" && isOwner ? (
             <DangerZone
@@ -294,9 +309,10 @@ export default function SettingsPage() {
             <p className="py-4 text-caption text-ink-tertiary">{t("perm.dangerReadOnly")}</p>
           ) : activeTab === "approvals" && canDecide ? (
             // 결재 대기 — 승인자·sysadmin 전용 / Pending approvals (approver or sysadmin only).
+            // 결정 후 맵 데이터(역할/가시성) 재조회 — 서버가 적용했으므로 협업자/공개범위 탭의 진실 갱신.
             <PendingApprovalsPanel
               mapId={mapIdStr}
-              currentUserId={currentMockUser.id}
+              onDecided={() => void refreshMap()}
               onToast={(item) => showToast(item.message)}
             />
           ) : null}

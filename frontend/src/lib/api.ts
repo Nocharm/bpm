@@ -462,6 +462,18 @@ export function listApprovalRequests(mapId: number): Promise<ApprovalRequest[]> 
   return request<ApprovalRequest[]>(`/maps/${mapId}/approval-requests`);
 }
 
+// 승인 요청 결정 — approve 면 서버가 payload(권한 하향/가시성)를 즉시 적용, reject 면 변경 없음.
+// 서버 진실: 호출 후 요청 목록·영향받은 맵 데이터를 재조회한다(낙관적 갱신 금지).
+export function decideApprovalRequest(
+  requestId: number,
+  decision: "approve" | "reject",
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/approval-requests/${requestId}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
 export interface NotificationItem {
   id: number;
   type: string;

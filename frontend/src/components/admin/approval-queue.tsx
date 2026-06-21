@@ -1,7 +1,10 @@
 "use client";
 
-// 시스템 관리자 승인 큐 — 그룹 생성 + 권한 하향 + 공개범위 변경 /
-// Sysadmin approval queue: group creation + permission downgrade + visibility change.
+// 시스템 관리자 승인 큐 — 그룹 생성(mock, Layer 4) + 권한 하향/공개범위 변경(mock 미리보기) /
+// Sysadmin approval queue: group creation (mock, Layer 4) + permission/visibility requests (mock preview).
+// REAL vs MOCK: 맵 권한·가시성 결재의 실 API(decide)는 맵별 설정 화면(PendingApprovalsPanel)에서 처리한다.
+// 여기 MAP 요청은 mock 그대로 둔다 — 백엔드에 cross-map 결재 목록 엔드포인트가 없어 전역 큐를 실 API로 채울 수 없음(Layer 4 보고).
+// REAL map decisions live in the per-map settings panel; this console has no cross-map list endpoint, so MAP rows stay mock.
 // Owner-transfer is excluded (handled by confirm modal, not a queue item).
 // version_publish is absent from state.requests (lives in versionFlow) — excluded by design.
 
@@ -106,6 +109,13 @@ export function ApprovalQueue({ currentUserId, onToast }: Props) {
           </div>
         </div>
       ))}
+
+      {/* 맵 권한·가시성 요청은 mock 미리보기 — 실 결재는 맵별 설정 화면에서 / Map rows are a mock preview; real decisions are per-map. */}
+      {pendingRequests.length > 0 && (
+        <p className="px-1 pt-1 text-fine text-ink-tertiary">
+          {t("perm.sysadmin.mapMockNote")}
+        </p>
+      )}
 
       {/* 권한·가시성 변경 요청 / Permission & visibility change requests */}
       {pendingRequests.map((req) => {
