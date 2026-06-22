@@ -4,7 +4,13 @@
 import { Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { aiChat, getAiModels, type AiChatTurn, type AiProposal } from "@/lib/api";
+import {
+  aiChat,
+  getAiModels,
+  type AiChatTurn,
+  type AiFinding,
+  type AiProposal,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 interface ChatMessage {
@@ -18,6 +24,7 @@ interface AiChatPanelProps {
   canEdit: boolean;
   onGraphProposal: (proposal: AiProposal) => void;
   onOpsProposal: (proposal: AiProposal) => void;
+  onHighlightNode: (nodeId: string) => void;
 }
 
 export function AiChatPanel({
@@ -26,6 +33,7 @@ export function AiChatPanel({
   canEdit,
   onGraphProposal,
   onOpsProposal,
+  onHighlightNode,
 }: AiChatPanelProps) {
   const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -33,6 +41,7 @@ export function AiChatPanel({
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
+  const [findings, setFindings] = useState<AiFinding[]>([]); // 최근 analysis 결과 (Phase 4)
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 새 메시지·생각중 표시가 추가되면 항상 최신(하단)으로 스크롤
@@ -77,6 +86,7 @@ export function AiChatPanel({
       // graph/ops/answer 활성 — 빈 message(핸들러 없는 kind)는 미지원 안내로 폴백 (규칙 ③b)
       const content = proposal.message || t("ai.unsupportedKind");
       setMessages((prev) => [...prev, { role: "assistant", content }]);
+      setFindings(proposal.kind === "analysis" ? proposal.findings : []);
       if (proposal.kind === "graph") {
         onGraphProposal(proposal);
       } else if (proposal.kind === "ops") {
@@ -135,6 +145,35 @@ export function AiChatPanel({
           ))}
           {busy && <li className="self-start text-fine text-ink-tertiary">{t("ai.thinking")}</li>}
         </ul>
+        {findings.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1">
+            {findings.map((finding, index) => (
+              <li key={`finding-${index}`}>
+                {/* finding 클릭 → 해당 노드 캔버스 하이라이트 (D4: 설명+하이라이트만) */}
+                <button
+                  type="button"
+                  className="w-full rounded-sm border border-hairline bg-surface-alt p-2 text-left hover:bg-surface-pearl disabled:opacity-60"
+                  onClick={() => onHighlightNode(finding.node_ids[0])}
+                  disabled={finding.node_ids.length === 0}
+                >
+                  <span
+                    className={`text-caption-strong ${
+                      finding.severity === "high" ? "text-error" : "text-ink-tertiary"
+                    }`}
+                  >
+                    [{finding.severity}] {finding.category}
+                  </span>
+                  <span className="mt-0.5 block text-fine text-ink">{finding.message}</span>
+                  {finding.suggestion && (
+                    <span className="mt-0.5 block text-fine text-ink-tertiary">
+                      → {finding.suggestion}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="flex items-end gap-1 border-t border-hairline p-2">
         <textarea

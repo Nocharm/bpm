@@ -1285,6 +1285,27 @@ function MapEditor({ mapId }: { mapId: number }) {
     undo(); // restore the snapshot pushed in applyAiProposal
   }, [undo]);
 
+  // ── AI 노드 포커스/하이라이트 — 분석 finding·워크스루 공용 (Phase 4 신설, Phase 5 재사용) ──
+  const highlightNode = useCallback(
+    (nodeId: string) => {
+      setSelectedId(nodeId);
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected === (node.id === nodeId)
+            ? node
+            : { ...node, selected: node.id === nodeId },
+        ),
+      );
+      void reactFlow.fitView({
+        nodes: [{ id: nodeId }],
+        padding: 0.4,
+        duration: 400,
+        maxZoom: 1.3,
+      });
+    },
+    [reactFlow, setNodes],
+  );
+
   // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지. Ctrl+K는 검색 포커스.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -5554,6 +5575,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 onGraphProposal={applyAiProposal}
                 onOpsProposal={applyAiOps}
+                onHighlightNode={highlightNode}
               />
             </ScopeWindow>
           )}

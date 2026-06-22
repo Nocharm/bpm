@@ -549,3 +549,47 @@ def test_ai_ops_passes_through_when_editable(
     assert resp.status_code == 200
     assert body["kind"] == "ops"  # 편집 가능 → ops 통과(다운그레이드 안 됨)
     assert body["ops"][0]["action"] == "add"
+
+
+# === Phase 4: 분석(analysis, read-only) ===
+
+
+def test_structure_hints_detects_orphan_and_cycle() -> None:
+    from app.ai_prompt import _structure_hints
+    from app.schemas import EdgeIn, GraphOut, NodeOut
+
+    graph = GraphOut(
+        nodes=[
+            NodeOut(id="a", title="A"),
+            NodeOut(id="b", title="B"),
+            NodeOut(id="c", title="C"),  # 고아(연결 없음)
+        ],
+        edges=[
+            EdgeIn(id="e1", source_node_id="a", target_node_id="b"),
+            EdgeIn(id="e2", source_node_id="b", target_node_id="a"),  # a↔b 순환
+        ],
+        groups=[],
+    )
+    hints = _structure_hints(graph)
+    assert any("고아" in hint and "c" in hint for hint in hints)
+    assert any("순환" in hint for hint in hints)
+
+
+def test_ai_analysis_allowed_when_not_editable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    version_id = created["versions"][0]["id"]  # 체크아웃 안 함 → 비편집
+    monkeypatch.setattr(
+        ai_client,
+        "call_ai",
+        _fake_ai(json.dumps({"kind": "analysis", "message": "분석", "findings": []})),
+    )
+
+    resp = client.post(
+        f"/api/versions/{version_id}/ai/chat", json={"instruction": "분석해"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "analysis"  # read-only — 비편집에도 통과
