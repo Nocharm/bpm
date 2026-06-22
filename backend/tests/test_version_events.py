@@ -164,6 +164,10 @@ def test_get_map_serializes_versions_with_events(client: TestClient) -> None:
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
 
+    # create_map도 MapDetailOut을 반환 — POST 응답 자체에 events가 직렬화되는지 확인
+    # (lazy 기본 전략에서 events eager-load가 빠지면 이 경로가 MissingGreenlet로 깨짐)
+    assert created["versions"][0]["events"][0]["event_type"] == "created"
+
     detail = client.get(f"/api/maps/{map_id}").json()
     version = next(v for v in detail["versions"] if v["id"] == version_id)
 

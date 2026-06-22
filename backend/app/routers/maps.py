@@ -8,11 +8,11 @@ from sqlalchemy.orm import selectinload
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
-from app.version_events import record_version_event
 from app.permissions import logic
 from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.deps import require_map_role
 from app.schemas import MapCreate, MapDetailOut, MapOut, MapUpdate
+from app.version_events import record_version_event
 
 router = APIRouter(
     prefix="/api/maps", tags=["maps"], dependencies=[Depends(get_current_user)]
@@ -128,6 +128,9 @@ async def create_map(
     )
     await session.commit()
     await session.refresh(new_map, attribute_names=["versions"])
+    # versions[].events를 미리 로드 — MapDetailOut 직렬화 시 lazy-load(MissingGreenlet) 방지
+    for version in new_map.versions:
+        await session.refresh(version, attribute_names=["events"])
     new_map.my_role = "owner"  # 생성자는 owner 권한 행 부여됨
     return new_map
 

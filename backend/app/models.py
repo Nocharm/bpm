@@ -77,7 +77,7 @@ class MapVersion(Base):
         cascade="all, delete-orphan"
     )
     events: Mapped[list["VersionEvent"]] = relationship(
-        cascade="all, delete-orphan", order_by="VersionEvent.created_at", lazy="selectin"
+        cascade="all, delete-orphan", order_by="VersionEvent.created_at"
     )
 
 
