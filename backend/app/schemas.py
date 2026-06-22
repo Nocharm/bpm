@@ -404,11 +404,25 @@ class AiModelsOut(BaseModel):
     models: list[str]
 
 
+class AiNodeAttributes(BaseModel):
+    """노드 비즈니스 메타 (선택) — NodeIn과 동일 제약. AI 생성/제안에 실어 보냄 (Phase 2)."""
+
+    assignee: str = Field(default="", max_length=100)
+    department: str = Field(default="", max_length=100)
+    system: str = Field(default="", max_length=100)
+    duration: str = Field(default="", max_length=50)
+    color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
+
+
 class AiNode(BaseModel):
     key: str = Field(min_length=1, max_length=50)
     title: str = Field(min_length=1, max_length=200)
     node_type: str = "process"
     description: str = ""
+    # 선택 메타 — 미제공이면 None (apply가 빈값/기존값으로 처리, D1)
+    attributes: AiNodeAttributes | None = None
+    # 소속 그룹 — AiProposal.groups[].key 참조 (단일 태그). null=무소속
+    group_key: str | None = Field(default=None, max_length=50)
 
 
 class AiEdge(BaseModel):
@@ -417,15 +431,71 @@ class AiEdge(BaseModel):
     label: str = ""
 
 
+class AiGroup(BaseModel):
+    """그룹(레인/박스) 제안 — key는 노드 group_key가 참조하는 임시키 (Phase 2)."""
+
+    key: str = Field(min_length=1, max_length=50)
+    label: str = Field(default="", max_length=200)
+    color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
+    parent_key: str | None = Field(default=None, max_length=50)
+
+
+AiOpAction = Literal["add", "remove", "connect", "relabel", "set_attr"]
+
+
+class AiOp(BaseModel):
+    """증분 편집 연산 (D1 하이브리드 편집 경로). node_id는 [현재 그래프]의 캐노니컬 id.
+
+    구조만 정의 — node_id 교차검증·실제 적용은 라우터/프론트(Phase 3). action별 사용 필드:
+    add(node) · remove(node_id) · connect(source/target/label) · relabel(node_id/title)
+    · set_attr(node_id/attributes).
+    """
+
+    action: AiOpAction
+    node_id: str | None = None
+    node: AiNode | None = None
+    source: str | None = None
+    target: str | None = None
+    label: str | None = None
+    title: str | None = None
+    attributes: AiNodeAttributes | None = None
+
+
+class AiStep(BaseModel):
+    """워크스루 단계 (Phase 5). node_id는 현 그래프의 캐노니컬 id."""
+
+    order: int
+    node_id: str
+    narration: str = ""
+
+
+AiSeverity = Literal["high", "medium", "low"]
+
+
+class AiFinding(BaseModel):
+    """분석 결과 항목 (Phase 4). node_ids는 현 그래프의 캐노니컬 id."""
+
+    severity: AiSeverity
+    category: str = Field(max_length=50)
+    node_ids: list[str] = Field(default_factory=list)
+    message: str
+    suggestion: str = ""
+
+
 class AiProposal(BaseModel):
-    # 판별 타입 — graph: 순서도 제안, answer: 사용법 텍스트 (design 2026-06-15)
-    kind: Literal["graph", "answer"]
+    # 판별 타입 5종 — graph/answer는 활성, ops/walkthrough/analysis는 정의만(Phase 3~5 활성)
+    kind: Literal["graph", "answer", "walkthrough", "analysis", "ops"]
     message: str = ""
     nodes: list[AiNode] = Field(default_factory=list)
     edges: list[AiEdge] = Field(default_factory=list)
+    groups: list[AiGroup] = Field(default_factory=list)
+    ops: list[AiOp] = Field(default_factory=list)
+    steps: list[AiStep] = Field(default_factory=list)
+    findings: list[AiFinding] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_graph_integrity(self) -> "AiProposal":
+        # graph만 구조 검증 — ops/walkthrough/analysis의 node_id 교차검증은 라우터(현 그래프 필요)
         if self.kind != "graph":
             return self
         keys = [node.key for node in self.nodes]
@@ -438,6 +508,17 @@ class AiProposal(BaseModel):
         for edge in self.edges:
             if edge.source not in keyset or edge.target not in keyset:
                 raise ValueError("edge references unknown node key")
+        # 그룹 키 유일성 + node.group_key / group.parent_key 참조 무결성
+        group_keys = [group.key for group in self.groups]
+        if len(group_keys) != len(set(group_keys)):
+            raise ValueError("duplicate group keys")
+        group_keyset = set(group_keys)
+        for node in self.nodes:
+            if node.group_key is not None and node.group_key not in group_keyset:
+                raise ValueError(f"node references unknown group key: {node.group_key}")
+        for group in self.groups:
+            if group.parent_key is not None and group.parent_key not in group_keyset:
+                raise ValueError(f"group references unknown parent key: {group.parent_key}")
         return self
 
 

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
@@ -12,7 +13,7 @@ from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
-from app.models import MapVersion
+from app.models import Employee, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal
 from app.settings import settings
@@ -22,6 +23,54 @@ router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current
 logger = logging.getLogger(__name__)
 
 _NOT_EDITABLE_MSG = "이 버전은 편집할 수 없어 그래프를 적용할 수 없습니다. 도움말만 가능합니다."
+_UNKNOWN_NODES_MSG = "참고: 현재 맵에 없는 노드를 참조했습니다 — {ids}"
+
+
+def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
+    """proposal이 참조하는 기존 node_id 중 현 그래프에 없는 것 — drop 대신 표면화 (계약 규칙 ④).
+
+    ops의 add는 새 임시키라 유효 참조로 인정. graph/answer는 대상 아님(빈 리스트).
+    """
+    known = set(valid_ids)
+    referenced: list[str] = []
+    if proposal.kind == "ops":
+        for op in proposal.ops:
+            if op.action == "add" and op.node is not None:
+                known.add(op.node.key)
+        for op in proposal.ops:
+            if op.action in ("remove", "relabel", "set_attr") and op.node_id:
+                referenced.append(op.node_id)
+            elif op.action == "connect":
+                referenced += [ref for ref in (op.source, op.target) if ref]
+    elif proposal.kind == "walkthrough":
+        referenced = [step.node_id for step in proposal.steps]
+    elif proposal.kind == "analysis":
+        referenced = [nid for finding in proposal.findings for nid in finding.node_ids]
+    else:
+        return []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for node_id in referenced:
+        if node_id not in known and node_id not in seen:
+            seen.add(node_id)
+            missing.append(node_id)
+    return missing
+
+
+_DIRECTORY_LIMIT = 100  # 프롬프트 크기 가드 — 대규모 AD 스케일링은 Phase 7
+
+
+async def _load_directory(session: AsyncSession) -> list[str]:
+    """담당자/부서 매칭용 활성 직원 디렉터리 (D2) — 'name | department' 라인."""
+    emps = (
+        await session.scalars(
+            select(Employee)
+            .where(Employee.active)
+            .order_by(Employee.name)
+            .limit(_DIRECTORY_LIMIT)
+        )
+    ).all()
+    return [f"{emp.name} | {emp.department}" for emp in emps if emp.name]
 
 
 def _extract_json(text: str) -> str:
@@ -73,14 +122,20 @@ async def ai_chat(
         and version.checked_out_by == user
     )
     current = await _load_graph(session, version_id)
+    directory = await _load_directory(session)
     messages = build_messages(
-        get_manual(), current, can_edit, payload.instruction, payload.history
+        get_manual(), current, can_edit, payload.instruction, payload.history, directory
     )
 
     proposal = await _ask_and_validate(messages, payload.model)
-    # 편집 불가인데 그래프를 제안하면 적용 불가 — answer로 다운그레이드 (실제 적용 가드는 saveGraph가 최종 enforce)
-    if proposal.kind == "graph" and not can_edit:
+    # 편집 불가인데 편집계열(graph/ops)을 제안하면 적용 불가 — answer로 다운그레이드 (최종 가드는 saveGraph)
+    if proposal.kind in ("graph", "ops") and not can_edit:
         return AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
+    # 현 그래프에 없는 node_id 참조는 drop하지 말고 message로 표면화 (계약 규칙 ④)
+    missing = _missing_node_ids(proposal, {node.id for node in current.nodes})
+    if missing:
+        warning = _UNKNOWN_NODES_MSG.format(ids=", ".join(missing))
+        proposal.message = f"{proposal.message}\n{warning}" if proposal.message else warning
     return proposal
 
 

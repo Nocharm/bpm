@@ -110,6 +110,8 @@ import {
   submitVersion,
   updateComment,
   withdrawVersion,
+  type AiNode,
+  type AiNodeAttributes,
   type AiProposal,
   type CheckoutState,
   type CommentItem,
@@ -117,6 +119,7 @@ import {
   type Graph,
   type GraphEdge,
   type GraphGroup,
+  type GraphNode,
   type LibraryProcess,
   type VersionGraph,
   type VersionSummary,
@@ -437,6 +440,31 @@ function offsetAtX(savedX: number, steps: { x: number; footprint: number }[]): n
   }
   return sum;
 }
+
+// AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
+function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined): GraphNode {
+  const attr = node.attributes;
+  return {
+    id,
+    title: node.title,
+    description: node.description,
+    node_type: node.node_type,
+    color: attr?.color ?? "",
+    assignee: attr?.assignee ?? "",
+    department: attr?.department ?? "",
+    system: attr?.system ?? "",
+    duration: attr?.duration ?? "",
+    pos_x: 0,
+    pos_y: 0,
+    sort_order: 0,
+    group_ids: groupId ? [groupId] : [],
+    linked_map_id: null,
+    follow_latest: false,
+    linked_version_id: null,
+    is_primary_end: false,
+  };
+}
+
 
 function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
@@ -1117,29 +1145,28 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── AI 제안 미리보기 / 적용 / 취소 ─────────────────────
   const applyAiProposal = useCallback(
     (proposal: AiProposal) => {
+      // Phase 2: graph(전체 교체)만 적용. ops/walkthrough/analysis는 Phase 3~5(패널이 폴백 렌더)
+      if (proposal.kind !== "graph") return;
+      // 그룹 임시키 → 실제 id (노드 group_key·그룹 parent_key 해석용)
+      const groupKeyToId = new Map<string, string>();
+      for (const group of proposal.groups) {
+        groupKeyToId.set(group.key, genId());
+      }
+      const ggroups: GraphGroup[] = proposal.groups.map((group) => {
+        const id = groupKeyToId.get(group.key) ?? genId();
+        const parentId = group.parent_key
+          ? groupKeyToId.get(group.parent_key) ?? null
+          : null;
+        return { id, parent_group_id: parentId, label: group.label, color: group.color };
+      });
+
       const keyToId = new Map<string, string>();
       const gnodes = proposal.nodes.map((node) => {
         const id = genId();
         keyToId.set(node.key, id);
-        return {
-          id,
-          title: node.title,
-          description: node.description,
-          node_type: node.node_type,
-          color: "",
-          assignee: "",
-          department: "",
-          system: "",
-          duration: "",
-          pos_x: 0,
-          pos_y: 0,
-          sort_order: 0,
-          group_ids: [],
-          linked_map_id: null,
-          follow_latest: false,
-          linked_version_id: null,
-          is_primary_end: false,
-        };
+        // AI가 준 메타를 실제 노드에 반영 — 미제공은 빈값 (D1 생성=교체)
+        const groupId = node.group_key ? groupKeyToId.get(node.group_key) : undefined;
+        return aiNodeToGraphNode(node, id, groupId);
       });
       const gedges = proposal.edges
         .map((edge) => {
@@ -1159,13 +1186,114 @@ function MapEditor({ mapId }: { mapId: number }) {
         })
         .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
 
-      const graph = { nodes: gnodes, edges: gedges, groups: [] };
+      const graph = { nodes: gnodes, edges: gedges, groups: ggroups };
       const laidOut = layoutWithDagre(toAppNodes(graph), toAppEdges(graph));
 
       pushHistory(); // Discard = undo restores the pre-preview state
       aiPreviewRef.current = true;
       setNodes(laidOut);
       setEdges(toAppEdges(graph));
+      setGroups(ggroups);
+      setAiPreviewActive(true);
+    },
+    [pushHistory, setNodes, setEdges, setGroups],
+  );
+
+  // ── AI 증분 편집(ops) 적용 — 기존 좌표·색·담당자·그룹 보존 (D1 편집 경로) ──
+  const applyAiOps = useCallback(
+    (proposal: AiProposal) => {
+      if (proposal.kind !== "ops") return;
+      const existingGroupIds = new Set(groupsRef.current.map((group) => group.id));
+      const removed = new Set<string>();
+      const relabels = new Map<string, string>();
+      const setAttrs = new Map<string, AiNodeAttributes>();
+      const addedGraphNodes: GraphNode[] = [];
+      const keyToId = new Map<string, string>(); // add 임시키 → 새 id
+      const connectEdges: GraphEdge[] = [];
+
+      // add 먼저 — 이후 connect가 새 키를 참조할 수 있게
+      for (const op of proposal.ops) {
+        if (op.action === "add" && op.node) {
+          const id = genId();
+          keyToId.set(op.node.key, id);
+          const gid =
+            op.node.group_key && existingGroupIds.has(op.node.group_key)
+              ? op.node.group_key
+              : undefined;
+          addedGraphNodes.push(aiNodeToGraphNode(op.node, id, gid));
+        }
+      }
+      const resolve = (ref: string | null): string | null =>
+        ref ? keyToId.get(ref) ?? ref : null;
+
+      for (const op of proposal.ops) {
+        if (op.action === "remove" && op.node_id) {
+          removed.add(op.node_id);
+        } else if (op.action === "relabel" && op.node_id && op.title != null) {
+          relabels.set(op.node_id, op.title);
+        } else if (op.action === "set_attr" && op.node_id && op.attributes) {
+          setAttrs.set(op.node_id, op.attributes);
+        } else if (op.action === "connect") {
+          const source = resolve(op.source);
+          const target = resolve(op.target);
+          if (source && target) {
+            connectEdges.push({
+              id: genId(),
+              source_node_id: source,
+              target_node_id: target,
+              label: op.label ?? "",
+              source_side: "right",
+              target_side: "left",
+              source_handle: null,
+              target_handle: null,
+            });
+          }
+        }
+      }
+
+      // 기존 노드: remove 제외 + relabel/set_attr 적용 (좌표·나머지 보존)
+      const existingNodes = nodesRef.current
+        .filter((node) => !removed.has(node.id))
+        .map((node) => {
+          const title = relabels.get(node.id);
+          const attr = setAttrs.get(node.id);
+          if (title === undefined && attr === undefined) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...(title !== undefined ? { label: title } : {}),
+              ...(attr
+                ? {
+                    color: attr.color,
+                    assignee: attr.assignee,
+                    department: attr.department,
+                    system: attr.system,
+                    duration: attr.duration,
+                  }
+                : {}),
+            },
+          };
+        });
+      // 추가 노드: 기존 아래로 배치 — 기존 좌표는 불변
+      const addedNodes = toAppNodes({ nodes: addedGraphNodes, edges: [], groups: [] });
+      const baseY =
+        existingNodes.reduce((max, node) => Math.max(max, node.position.y), 0) + 140;
+      addedNodes.forEach((node, index) => {
+        node.position = { x: 80, y: baseY + index * 120 };
+      });
+      const finalNodes = [...existingNodes, ...addedNodes];
+      const finalEdges = [
+        ...edgesRef.current.filter(
+          (edge) => !removed.has(edge.source) && !removed.has(edge.target),
+        ),
+        ...toAppEdges({ nodes: [], edges: connectEdges, groups: [] }),
+      ];
+
+      pushHistory(); // Discard = undo restores the pre-preview state
+      aiPreviewRef.current = true;
+      setNodes(finalNodes);
+      setEdges(finalEdges);
       setAiPreviewActive(true);
     },
     [pushHistory, setNodes, setEdges],
@@ -1182,6 +1310,27 @@ function MapEditor({ mapId }: { mapId: number }) {
     setAiPreviewActive(false);
     undo(); // restore the snapshot pushed in applyAiProposal
   }, [undo]);
+
+  // ── AI 노드 포커스/하이라이트 — 분석 finding·워크스루 공용 (Phase 4 신설, Phase 5 재사용) ──
+  const highlightNode = useCallback(
+    (nodeId: string) => {
+      setSelectedId(nodeId);
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected === (node.id === nodeId)
+            ? node
+            : { ...node, selected: node.id === nodeId },
+        ),
+      );
+      void reactFlow.fitView({
+        nodes: [{ id: nodeId }],
+        padding: 0.4,
+        duration: 400,
+        maxZoom: 1.3,
+      });
+    },
+    [reactFlow, setNodes],
+  );
 
   // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지. Ctrl+K는 검색 포커스.
   useEffect(() => {
@@ -5468,6 +5617,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 onGraphProposal={applyAiProposal}
+                onOpsProposal={applyAiOps}
+                onHighlightNode={highlightNode}
               />
             </ScopeWindow>
           )}
