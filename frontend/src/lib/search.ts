@@ -24,10 +24,6 @@ const CHOSUNG_ROMAN = [
   "g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s",
   "ss", "", "j", "jj", "ch", "k", "t", "p", "h",
 ];
-const CHOSUNG_CHARS = [
-  "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
-  "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
-];
 const HANGUL_BASE = 0xac00;
 const HANGUL_LAST = 0xd7a3;
 const PER_CHOSUNG = 588;
@@ -112,7 +108,7 @@ function splitTerms(query: string): string[] {
 function mergeRanges(ranges: MatchRange[]): MatchRange[] {
   if (ranges.length <= 1) return ranges;
   const sorted = [...ranges].sort((a, b) => a.start - b.start || a.end - b.end);
-  const out: MatchRange[] = [sorted[0]];
+  const out: MatchRange[] = [{ ...sorted[0] }];
   for (let i = 1; i < sorted.length; i++) {
     const prev = out[out.length - 1];
     const cur = sorted[i];
