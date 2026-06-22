@@ -2,6 +2,8 @@
 
 `frontend/src/app/maps/[mapId]/page.tsx`의 인라인 펼침(하위프로세스를 레인으로 펼쳐 보는 뷰) + React Flow(@xyflow/react v12) 작업에서 실측한 것들.
 
+> ⚠️ 하위프로세스 참조 모델에서 임베드 자식은 **읽기전용**이 됐다 — 자식 *편집* 관련(2번 in-node 입력 커밋 등)은 역사적 기록. 렌더/측정/이벤트/드롭존 함정은 읽기전용 임베드에도 유효.
+
 ## 1. 자식 노드는 메인 `nodes`에 합치지 말 것 → 별도 `childNodes` state
 - 펼친 자식을 **메인 `nodes` state에 합치면 안 됨.** `nodes` = 현재 스코프라는 가정이 코드 전반(아웃라인, 모달 편집 라우팅 `handleSummaryPatch/LabelCommit`, `renameNode`, 인스펙터, 자식 스코프 flush 저장 등)에 깔려 있어 광범위하게 깨진다(blast radius). 1차로 이 방식을 시도했다가 flush 저장이 깨지는 등 회귀가 너무 넓어 전부 reset했다.
 - **정답: 별도 `childNodes` state.** 메인 `nodes`는 현재 스코프 그대로(=기존 가정 유지, 회귀 0). 자식은 `childNodes`에 두고:
