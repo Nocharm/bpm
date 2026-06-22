@@ -121,3 +121,19 @@ def test_reject_records_event_with_reason(client: TestClient) -> None:
     event_type, note = _run(read)
     assert event_type == "rejected"
     assert note == "needs work"
+
+
+def test_get_map_serializes_versions_with_events(client: TestClient) -> None:
+    created = client.post("/api/maps", json={"name": "evt serialize"}).json()
+    map_id = created["id"]
+    version_id = created["versions"][0]["id"]
+
+    detail = client.get(f"/api/maps/{map_id}").json()
+    version = next(v for v in detail["versions"] if v["id"] == version_id)
+
+    assert "created_at" in version and version["created_at"]
+    assert isinstance(version["events"], list)
+    types = [e["event_type"] for e in version["events"]]
+    assert types == ["created"]
+    evt = version["events"][0]
+    assert {"id", "event_type", "actor", "note", "created_at"} <= set(evt.keys())

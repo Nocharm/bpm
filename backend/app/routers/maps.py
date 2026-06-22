@@ -143,7 +143,9 @@ async def get_map(
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
     found_map = await session.get(
-        ProcessMap, map_id, options=[selectinload(ProcessMap.versions)]
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
     )
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")

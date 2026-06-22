@@ -24,6 +24,22 @@ class VersionOut(BaseModel):
     status: str
     submitted_by: str | None
     reject_reason: str | None
+    created_at: datetime
+
+
+class VersionEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_type: str
+    actor: str
+    note: str | None
+    created_at: datetime
+
+
+class VersionDetailOut(VersionOut):
+    # 상세 응답 전용 — 워크플로 단건 응답(VersionOut)에는 events를 싣지 않아 lazy-load 회피
+    events: list[VersionEventOut]
 
 
 class VersionCreate(BaseModel):
@@ -176,7 +192,7 @@ class MapOut(BaseModel):
 
 
 class MapDetailOut(MapOut):
-    versions: list[VersionOut]
+    versions: list[VersionDetailOut]
 
 
 class NodeIn(BaseModel):
