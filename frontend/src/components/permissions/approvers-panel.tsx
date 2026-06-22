@@ -3,15 +3,16 @@
 // 결재자 관리 패널 — 서버 결재자 목록 조회·추가·제거 (실 API) /
 // Approvers panel wired to the real Layer-2 approvers API.
 // 추가/제거는 전체 목록을 PUT 으로 교체한 뒤 재조회해 반영한다(서버 진실).
-// 표시명은 아직 Layer-4 디렉터리 API가 없어 mock 시드를 사용한다.
-// active/inactive 토글은 백엔드가 없어(Layer 4) 비활성화한다. "결재자 0" 경고는 목록 비어있음 기준.
+// 표시명은 디렉터리 API 우선, 미일치 시 mock 시드 폴백.
+// 결재자 0 경고는 목록 비어있음 기준.
 
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { listApprovers, setApprovers } from "@/lib/api";
+import { getDirectory, listApprovers, setApprovers, type DirectoryUser } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/mock/permissions";
+import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 
 interface ApproversPanelProps {
   mapId: string;
@@ -28,13 +29,30 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
 
   // 서버 결재자 userId 목록 / Server-sourced approver userIds.
   const [approverIds, setApproverIds] = useState<string[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
+
+  // 디렉터리 사용자 목록 / Directory users for picker.
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  useEffect(() => {
+    let active = true;
+    void getDirectory()
+      .then((d) => { if (active) setDirUsers(d.users); })
+      .catch(() => { /* picker falls back to empty */ });
+    return () => { active = false; };
+  }, []);
 
   // 표시명 해석 — mock 시드 사용, 미일치 시 id 폴백 / Resolve display name from mock seed.
   const userName = useCallback(
     (userId: string): string => state.users.find((u) => u.id === userId)?.name ?? userId,
     [state.users],
   );
+
+  // 디렉터리 우선 표시명, 폴백 mock / Directory-first name resolver.
+  const pickerUsers = dirUsers.map((u) => ({
+    id: u.id, name: u.name, email: "", departmentId: "",
+    status: "active" as const, isSysadmin: false,
+  }));
+  const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
+  const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? userName(id);
 
   const reload = useCallback(async () => {
     try {
@@ -64,23 +82,6 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
   // Active-0 warning is now list-emptiness (server has no active concept yet — Layer 4).
   const hasNone = approverIds.length === 0;
 
-  // 현재 결재자 집합 / Set of already-assigned approver userIds.
-  const assignedIds = new Set(approverIds);
-  // 추가 가능한 사용자 — 미지정 유저만 / Users not yet assigned.
-  const eligible = state.users.filter((u) => !assignedIds.has(u.id));
-
-  const handleAdd = useCallback(async () => {
-    if (!selectedUserId) return;
-    const newIds = [...approverIds, selectedUserId];
-    try {
-      await setApprovers(mapIdNum, newIds);
-      await reload();
-      setSelectedUserId("");
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
-    }
-  }, [selectedUserId, approverIds, mapIdNum, reload, onToast]);
-
   const handleRemove = useCallback(
     async (userId: string) => {
       const newIds = approverIds.filter((id) => id !== userId);
@@ -108,39 +109,27 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         </div>
       )}
 
-      {/* 결재자 목록 / Approver list */}
+      {/* 결재자 목록 — 필 형태 / Approver list as pills */}
       {approverIds.length > 0 && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {approverIds.map((userId) => (
-            <div
+            <span
               key={userId}
-              className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-alt"
+              data-id={`approver-pill-${userId}`}
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
             >
-              {/* 이름 / Name */}
-              <span className="flex-1 text-caption text-ink">{userName(userId)}</span>
-
+              {dirName(userId)}
               {isOwner && (
-                <>
-                  {/* 활성 토글 — 백엔드 없음(Layer 4), 비활성 / Active toggle: no backend (Layer 4), disabled */}
-                  <span
-                    className="cursor-not-allowed rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary opacity-50"
-                    title={t("perm.approversToggleLayer4")}
-                  >
-                    {t("perm.approversToggle")}
-                  </span>
-
-                  {/* 제거 버튼 / Remove button */}
-                  <button
-                    type="button"
-                    title={t("perm.removeButton")}
-                    className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-                    onClick={() => void handleRemove(userId)}
-                  >
-                    <X size={16} strokeWidth={1.5} />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  title={t("perm.removeButton")}
+                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
+                  onClick={() => void handleRemove(userId)}
+                >
+                  <X size={14} strokeWidth={1.5} />
+                </button>
               )}
-            </div>
+            </span>
           ))}
         </div>
       )}
@@ -150,32 +139,28 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         <p className="text-fine text-ink-tertiary">{t("perm.approversReadOnly")}</p>
       )}
 
-      {/* 결재자 추가 폼 — 소유자만 / Add form: owner only */}
+      {/* 결재자 추가 — 소유자만, PrincipalPicker 사용 / Add form: owner only, uses PrincipalPicker */}
       {isOwner && (
         <div className="mt-2 flex flex-col gap-2 border-t border-hairline pt-3">
           <p className="text-caption-strong text-ink">{t("perm.approversAdd")}</p>
-          <div className="flex items-center gap-2">
-            <select
-              className="flex-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-            >
-              <option value="">{t("perm.transferPickPlaceholder")}</option>
-              {eligible.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.id})
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={!selectedUserId}
-              className="rounded-sm bg-accent px-2 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
-              onClick={() => void handleAdd()}
-            >
-              {t("perm.addButton")}
-            </button>
-          </div>
+          <PrincipalPicker
+            users={pickerUsers}
+            departments={[]}
+            groups={[]}
+            excludeIds={new Set(approverIds)}
+            userDepartments={userDepartments}
+            onSelect={(opt: PrincipalOption) => {
+              if (opt.principalType !== "user") return;
+              void (async () => {
+                try {
+                  await setApprovers(mapIdNum, [...approverIds, opt.principalId]);
+                  await reload();
+                } catch (err) {
+                  onToast(err instanceof Error ? err.message : String(err));
+                }
+              })();
+            }}
+          />
         </div>
       )}
     </div>
