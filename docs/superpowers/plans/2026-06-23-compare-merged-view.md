@@ -15,7 +15,7 @@
 - **아이콘**: Lucide 16px strokeWidth 1.5, 이모지 금지.
 - **TS strict**: `any` 금지, `@ts-ignore` 금지. 함수명은 동사 시작.
 - **id 생성 금지 경로**: 이 작업은 노드/엣지 id를 새로 만들지 않음(계보 키 재사용). 만들 일 있으면 `genId()`(`@/lib/id`).
-- **테스트 하네스 없음**: 프론트엔드에 단위 테스트 프레임워크(vitest/jest/playwright)가 **설치돼 있지 않다**. 검증은 (1) `npm run lint` (2) `npm run build`(tsc) (3) 브라우저 실측 — 시드 `seed_compare_demo`의 "Version Comparison Demo (As-Is / To-Be)" 맵이 알려진 오라클(**added 1 · removed 1 · changed 2**, `PROGRESS.md` 2026-06-22 seed 항목). 가짜 테스트 스위트를 만들지 말 것.
+- **테스트**: 프론트엔드에 단위 테스트 프레임워크가 없었으므로 **vitest를 새로 셋업**(사용자 요청, Task 1 Step 0). 순수 로직 `merge-diff.ts`는 vitest 단위 테스트로 검증(node 환경, `@` alias). UI/렌더는 (1) `npm run lint` (2) `npm run build`(tsc) (3) 브라우저 실측으로 — 시드 `seed_compare_demo`의 "Version Comparison Demo (As-Is / To-Be)" 맵이 알려진 오라클(**added 1 · removed 1 · changed 2**, `PROGRESS.md` 2026-06-22 seed 항목). vitest는 devDependency(프로덕션 Docker 이미지 미포함).
 - **줄바꿈 LF 고정**.
 - **data-id 정책**: 신규/리디자인 구조 요소에 `data-id` 부여(추후 타게팅, 메모리 `frontend-data-id-convention`). 본 화면의 캔버스/변경목록/범례 컨테이너에 부여.
 
