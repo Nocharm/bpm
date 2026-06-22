@@ -16,15 +16,13 @@ import {
   type MapPermission,
 } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { VersionTimeline } from "@/components/maps/version-timeline";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { MapRole } from "@/lib/mock/permissions";
-import {
-  VERSION_STATUS_LABEL,
-  VERSION_STATUS_STYLE,
-  visibilityPillClass,
-} from "@/lib/version-status";
+import { visibilityPillClass } from "@/lib/version-status";
 
 // 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
 const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
@@ -57,6 +55,8 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   // 내가 속한 그룹 id(문자열) — 멤버 하이라이트용 / my group ids for the "mine" highlight.
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
+  // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -119,9 +119,16 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
         </Link>
       </div>
 
-      {detail.description && (
-        <p className="text-caption text-ink-tertiary">{detail.description}</p>
-      )}
+      <div
+        data-id="map-detail-description"
+        className="rounded-sm border border-hairline bg-surface p-3 text-caption text-ink"
+      >
+        {detail.description ? (
+          detail.description
+        ) : (
+          <span className="text-ink-tertiary">{t("home.descEmpty")}</span>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 text-fine text-ink-tertiary">
         {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
@@ -134,26 +141,14 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
       {/* 버전 · 허용 인원 — 좌우 배치 / Versions and members side by side */}
       <div className="flex flex-wrap gap-4">
         {/* 버전 + 승인 상태 / Versions with approval status */}
-        <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+        <div data-id="map-detail-versions" className="flex min-w-[12rem] flex-1 flex-col gap-1">
           <p className="text-fine uppercase tracking-wide text-ink-tertiary">
             {t("home.versions")}
           </p>
           {detail.versions.length === 0 ? (
             <p className="text-caption text-ink-tertiary">{t("perm.version.noVersions")}</p>
           ) : (
-            detail.versions.map((version) => (
-              <div
-                key={version.id}
-                className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
-              >
-                <span className="min-w-0 truncate text-caption text-ink">{version.label}</span>
-                <span
-                  className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
-                >
-                  {t(VERSION_STATUS_LABEL[version.status])}
-                </span>
-              </div>
-            ))
+            <VersionTimeline versions={detail.versions} />
           )}
         </div>
 
@@ -213,12 +208,6 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
       <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline p-3">
         <div className="flex items-center gap-2">
           <Link
-            href={`/maps/${detail.id}`}
-            className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
-          >
-            {t("home.open")}
-          </Link>
-          <Link
             href={`/maps/${detail.id}/settings`}
             className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
           >
@@ -228,13 +217,28 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
         {isOwner && onDelete && (
           <button
             type="button"
+            data-id="map-detail-delete"
             className="rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"
-            onClick={() => onDelete(detail.id)}
+            onClick={() => setConfirmDelete(true)}
           >
             {t("home.delete")}
           </button>
         )}
       </div>
+      {confirmDelete && onDelete && (
+        <ConfirmDialog
+          title={t("home.confirmDeleteTitle")}
+          message={t("home.confirmDeleteMessage")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          danger
+          onConfirm={() => {
+            setConfirmDelete(false);
+            onDelete(detail.id);
+          }}
+          onClose={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }
