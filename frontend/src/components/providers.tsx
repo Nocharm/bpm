@@ -89,8 +89,12 @@ function DevGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const stored = getStoredDevUser();
 
+  // dev 유저도 렌더 단계에서 동기 반영 — 자식 페이지의 fetch effect가 DevGate effect보다 먼저 실행되는
+  // 레이스(첫 GET /maps가 X-Dev-User 없이 나가 local-dev 폴백→403→빈 캔버스) 방지.
+  // AuthGate의 setAuthToken(렌더 단계 동기 호출)과 동일한 패턴.
+  setDevUser(stored);
+
   useEffect(() => {
-    setDevUser(stored);
     if (stored) {
       void publishMe();
     } else {

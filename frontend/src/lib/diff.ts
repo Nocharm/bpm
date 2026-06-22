@@ -40,7 +40,7 @@ export interface VersionDiff {
 }
 
 // 비교 대상 필드 → ChangedField 키 매핑 — 위치(pos)는 의미 변경이 아니므로 제외
-const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
+export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["title", "title"],
   ["description", "description"],
   ["node_type", "type"],
@@ -52,7 +52,7 @@ const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
 ];
 
 // 계보 키 — 복제본은 원본 노드 ID를 공유한다
-function getLineageKey(node: FlatNode): string {
+export function getLineageKey(node: FlatNode): string {
   return node.source_node_id ?? node.id;
 }
 
