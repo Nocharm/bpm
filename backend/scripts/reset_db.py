@@ -44,7 +44,17 @@ async def main() -> None:
         f"groups(active={summary['active_group']}, pending={summary['pending_group']})"
     )
 
-    # 5. 확인 — 테이블 존재 + 핵심 카운트
+    # 5. 버전 비교 데모 시드 (ADDITIVE — As-Is/To-Be 한 맵, 비교 화면용)
+    from scripts.seed_compare_demo import seed_compare_demo
+
+    async with SessionLocal() as session:
+        cmp_summary = await seed_compare_demo(session)
+    print(
+        f"seed    compare demo — map {cmp_summary['map']} "
+        f"(As-Is v{cmp_summary['asis']} / To-Be v{cmp_summary['tobe']})"
+    )
+
+    # 6. 확인 — 테이블 존재 + 핵심 카운트
     async with SessionLocal() as session:
         emp_count = (await session.execute(text("SELECT count(*) FROM employees"))).scalar()
         perm_count = (await session.execute(text("SELECT count(*) FROM map_permissions"))).scalar()

@@ -28,7 +28,8 @@ cd backend
 | 1. 스키마 재생성 | `drop_all` + `create_all` — **모든 테이블 삭제 후 재생성**. 컬럼 추가 등 스키마 변경을 반영하는 유일한 경로 |
 | 2. 직원 시드 | `seed_local_employees` (LOCAL_USERS 5명: admin.kim / user.lee·park·choi·jung, org_l* 포함 영문) |
 | 3. 참조 데모 맵 | `seed_reference_demo` — 하위프로세스 참조(Call Activity) 모델 데모 맵 4개 |
-| 4. 권한 데모 | `seed_permission_demo` (ADDITIVE) — RBAC 워크플로 데모 엔터티 |
+| 4. 권한 데모 | `seed_permission_demo` (ADDITIVE) — RBAC 워크플로 데모 엔터티 (맵마다 초기 "As-Is" 버전 포함) |
+| 5. 버전 비교 데모 | `seed_compare_demo` (ADDITIVE) — As-Is/To-Be 2버전 맵 1개 (비교 화면용) |
 
 > **`create_all`은 기존 테이블의 컬럼을 ALTER하지 않는다.** 모델에 컬럼을 추가했으면 기존 DB에는 반영 안 됨 → `reset_db`(drop 포함)로 재생성하거나 dev.db 파일을 지워야 한다. 마이그레이션(Alembic)은 후속.
 
@@ -43,6 +44,12 @@ cd backend
 | 배송 | published v1·v2 | 끝 동일한 안전 버전업 (v2 최신) |
 | 결제 | published v1 | 자동추종(`follow_latest`) 대상 |
 | 주문 이행 | draft (편집) | 위 3맵을 링크 — 고정 v1 + follow-latest + 업데이트 배지 시연 |
+
+### 버전 비교 데모 (`seed_compare_demo`, ADDITIVE)
+맵 **"Version Comparison Demo (As-Is / To-Be)"** 1개 — 같은 맵에 `As-Is`(published)·`To-Be`(draft) 두 버전. To-Be 노드의 `source_node_id`를 As-Is 노드에 이어(diff 계보) 비교 화면(`/maps/{id}/compare`)에서 하이라이트가 실제로 표시된다:
+- **추가**(초록): 품질 점검 · **삭제**(빨강): 수기 승인 · **변경**(노랑): 신용 검토(담당자), 출고→출고/배송(이름·부서)
+
+public 맵이라 권한 강제 모드에서도 누구나 viewer로 비교를 열 수 있다.
 
 ### 권한 데모 (`seed_permission_demo`, ADDITIVE)
 LOCAL_USERS/참조데모를 건드리지 않고 RBAC 워크플로만 추가. 데모 전용 비활성 승인자 `user.former` 1명을 여기서 삽입(LOCAL_USERS 아님).
