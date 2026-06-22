@@ -16,6 +16,9 @@ import type { MapRole } from "@/lib/mock/permissions";
 interface MapCardProps {
   map: MapSummary;
   onDelete: (mapId: number) => void;
+  // 마스터-디테일 선택 — 클릭 시 우측 상세 패널 대상 / select for the detail panel.
+  selected?: boolean;
+  onSelect?: (mapId: number) => void;
 }
 
 // principal_type → 아이콘 / principal icon.
@@ -25,7 +28,7 @@ function PrincipalIcon({ type }: { type: string }) {
   return <User size={12} strokeWidth={1.5} />;
 }
 
-export function MapCard({ map, onDelete }: MapCardProps) {
+export function MapCard({ map, onDelete, selected = false, onSelect }: MapCardProps) {
   const { t } = useI18n();
 
   const isOwner = map.my_role === "owner";
@@ -52,7 +55,12 @@ export function MapCard({ map, onDelete }: MapCardProps) {
   }, [map.id, members]);
 
   return (
-    <li className="group relative rounded-sm border border-hairline bg-surface p-4 hover:bg-surface-alt">
+    <li
+      className={`group relative rounded-sm border bg-surface p-4 hover:bg-surface-alt ${
+        selected ? "border-accent ring-1 ring-accent" : "border-hairline"
+      }`}
+      onClick={() => onSelect?.(map.id)}
+    >
       {/* 호버 시 액션 — 더보기 + (owner)삭제 / Hover actions: More + (owner) Delete */}
       <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
         <Link

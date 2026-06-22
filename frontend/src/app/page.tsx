@@ -11,6 +11,7 @@ import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { MapCard } from "@/components/maps/map-card";
+import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 export default function MapListPage() {
@@ -20,6 +21,8 @@ export default function MapListPage() {
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // 마스터-디테일 선택 / selected map for the detail panel.
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const showToast = useCallback((message: string) => {
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
@@ -75,11 +78,19 @@ export default function MapListPage() {
     [maps],
   );
 
-  return (
-    <main className="mx-auto max-w-2xl p-8">
-      <h1 className="mb-6 text-tagline text-ink">BPM — {t("home.title")}</h1>
+  // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
+  // Derive selection: fall back to the first map when none/stale (no effect needed).
+  const effectiveSelected =
+    selectedId !== null && visibleMaps.some((m) => m.id === selectedId)
+      ? selectedId
+      : (visibleMaps[0]?.id ?? null);
 
-      <div className="mb-6">
+  return (
+    // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
+    <div className="flex h-full min-h-0 flex-col p-6">
+      {/* 헤더 — 제목 좌 · New map 우상단 / Title left, New map top-right */}
+      <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
+        <h1 className="text-tagline text-ink">BPM — {t("home.title")}</h1>
         <button
           className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
           onClick={() => setDialogOpen(true)}
@@ -89,23 +100,34 @@ export default function MapListPage() {
         </button>
       </div>
 
-      {error && <p className="mb-4 text-caption text-error">{error}</p>}
+      {error && <p className="mb-3 shrink-0 text-caption text-error">{error}</p>}
 
-      {visibleMaps.length === 0 ? (
-        <p className="rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
-          {t("home.empty")}
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {visibleMaps.map((processMap) => (
-            <MapCard
-              key={processMap.id}
-              map={processMap}
-              onDelete={(id) => void handleDelete(id)}
-            />
-          ))}
-        </ul>
-      )}
+      {/* 마스터-디테일 — 리스트(내부 스크롤) + 넓을 때(xl) 우측 상세 / List (scrolls) + detail on wide screens */}
+      <div className="flex min-h-0 flex-1 gap-4">
+        {visibleMaps.length === 0 ? (
+          <p className="flex-1 rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+            {t("home.empty")}
+          </p>
+        ) : (
+          <ul className="flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+            {visibleMaps.map((processMap) => (
+              <MapCard
+                key={processMap.id}
+                map={processMap}
+                onDelete={(id) => void handleDelete(id)}
+                selected={effectiveSelected === processMap.id}
+                onSelect={setSelectedId}
+              />
+            ))}
+          </ul>
+        )}
+
+        {effectiveSelected !== null && (
+          <aside className="hidden w-80 shrink-0 overflow-y-auto rounded-sm border border-hairline bg-surface-alt p-4 xl:block">
+            <MapDetailCard key={effectiveSelected} mapId={effectiveSelected} />
+          </aside>
+        )}
+      </div>
 
       {dialogOpen && (
         <CreateMapDialog
@@ -118,6 +140,6 @@ export default function MapListPage() {
       )}
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
-    </main>
+    </div>
   );
 }
