@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   CornerDownRight,
+  Lock,
   type LucideIcon,
   MessageSquare,
   Server,
@@ -177,6 +178,19 @@ function DescendantChangeBadge() {
   );
 }
 
+// 잠긴 하위프로세스 뱃지 — 권한 없는 링크맵은 펼침/드릴 대신 자물쇠 표시(봉인 박스). ExpandToggleButton 자리를 대체.
+function LockedBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      className="absolute -right-2 -top-2 rounded-xs border border-hairline bg-surface p-0.5 text-ink-secondary shadow-sm"
+      title={t("subprocess.locked")}
+    >
+      <Lock size={16} strokeWidth={1.5} />
+    </span>
+  );
+}
+
 // 호버 시 노드 우상단에 뜨는 인라인 펼치기/접기 토글 — onToggleExpand 있을 때만(compare 등에서는 숨김)
 function ExpandToggleButton({ nodeId }: { nodeId: string }) {
   const { t } = useI18n();
@@ -276,7 +290,12 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-        {(data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />}
+        {data.locked ? (
+          <LockedBadge />
+        ) : (
+          (data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />
+        )}
+        {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨 */}
         <SubprocessHandles ends={data.subEnds ?? []} />
       </div>
     );

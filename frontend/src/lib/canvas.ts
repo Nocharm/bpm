@@ -41,6 +41,9 @@ export type NodeData = {
   updateAvailable?: boolean;
   // 링크된 맵의 끝 노드 목록 — 렌더 시 파생, 퍼시스트 안 함 (nodeType==="subprocess")
   subEnds?: SubEnd[];
+  // 링크맵 resolved가 잠김(권한 없음)으로 판정됨 — 펼침/드릴 봉인 + Lock 뱃지. 렌더 시 파생.
+  // Linked-map resolved as locked (no access) — seals expand/drill + shows Lock badge. Derived at render.
+  locked?: boolean;
 };
 
 export type AppNode = Node<NodeData>;
@@ -142,6 +145,8 @@ export interface OutlineNode {
   parentId: string | null; // 계층(하위 프로세스) 부모 — null=최상위 스코프
   label: string;
   nodeType: ProcessNodeType;
+  // 잠긴 링크맵(권한 없음) — buildOutline이 펼침 화살표를 억제 / locked linked-map: suppresses the expand arrow
+  locked?: boolean;
 }
 export interface OutlineEdge {
   source: string;
@@ -285,6 +290,7 @@ export function buildOutline(
   );
   const labelOf = new Map(nodes.map((node) => [node.id, node.label]));
   const typeOf = new Map(nodes.map((node) => [node.id, node.nodeType]));
+  const lockedOf = new Map(nodes.map((node) => [node.id, node.locked ?? false]));
 
   const rows: OutlineRow[] = [];
   // 계층 사이클(부모가 자기 하위를 가리킴) 가드 — 같은 스코프 재진입 시 중단해 무한 재귀 방지
@@ -312,10 +318,11 @@ export function buildOutline(
       // 하위프로세스(참조) 노드는 임베드 전이라 outline 입력에 자식이 없어도 항상 펼치기 대상으로 표시한다 —
       // 행 펼침이 inline-embed를 트리거(toggleInlineExpand)해 그때 자식이 들어온다. 일반 노드는 기존대로 실제 자식 보유 시.
       const nodeType = typeOf.get(entry.id) ?? "process";
-      // 마스킹: 잠긴 링크맵은 여기서 false로 펼침 화살표 억제 예정 — 지금은 subprocess면 true.
-      // Masking: locked linked-maps will return false here to suppress the expand arrow — true for any subprocess now.
-      const isSubprocessExpandable = (type: string): boolean => type === "subprocess";
-      const hasChildren = parentsWithChildren.has(entry.id) || isSubprocessExpandable(nodeType);
+      // 마스킹: 잠긴 링크맵은 펼침 화살표 억제 / Masking: locked linked-maps suppress the expand arrow.
+      const isSubprocessExpandable = (type: string, locked: boolean): boolean => type === "subprocess" && !locked;
+      const hasChildren =
+        parentsWithChildren.has(entry.id) ||
+        isSubprocessExpandable(nodeType, lockedOf.get(entry.id) ?? false);
       const isExpanded = hasChildren && expanded.has(entry.id);
       const block = hierarchyLevel === 0 ? entry.blockIndex : inheritedBlock;
       rows.push({
