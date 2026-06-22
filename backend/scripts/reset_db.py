@@ -9,11 +9,47 @@
 
 import asyncio
 
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal, engine
-from app.models import Base
+from app.models import Base, MapVersion, ProcessMap, VersionEvent
 from scripts.seed_reference_demo import main as seed_demo
+
+
+async def backfill_version_events(session: AsyncSession) -> int:
+    """created 이벤트가 없는 버전에 created_at 기준 created 1건을 합성한다 (멱등). 반환=추가 건수."""
+    have_created = set(
+        (
+            await session.scalars(
+                select(VersionEvent.version_id).where(
+                    VersionEvent.event_type == "created"
+                )
+            )
+        ).all()
+    )
+    rows = (
+        await session.execute(
+            select(MapVersion, ProcessMap.owner_id, ProcessMap.created_by).join(
+                ProcessMap, ProcessMap.id == MapVersion.map_id
+            )
+        )
+    ).all()
+    added = 0
+    for version, owner_id, created_by in rows:
+        if version.id in have_created:
+            continue
+        session.add(
+            VersionEvent(
+                version_id=version.id,
+                event_type="created",
+                actor=owner_id or created_by or "unknown",
+                created_at=version.created_at,
+            )
+        )
+        added += 1
+    await session.commit()
+    return added
 
 async def main() -> None:
     # 1. 스키마 재생성
@@ -44,7 +80,12 @@ async def main() -> None:
         f"groups(active={summary['active_group']}, pending={summary['pending_group']})"
     )
 
-    # 5. 버전 비교 데모 시드 (ADDITIVE — As-Is/To-Be 한 맵, 비교 화면용)
+    # 5. 버전 created 이벤트 백필 (멱등 — 시드가 만든 버전들에 타임라인 시작점 부여)
+    async with SessionLocal() as session:
+        added = await backfill_version_events(session)
+    print(f"backfill version 'created' events: {added}건")
+
+    # 6. 버전 비교 데모 시드 (ADDITIVE — As-Is/To-Be 한 맵, 비교 화면용)
     from scripts.seed_compare_demo import seed_compare_demo
 
     async with SessionLocal() as session:

@@ -123,6 +123,42 @@ def test_reject_records_event_with_reason(client: TestClient) -> None:
     assert note == "needs work"
 
 
+def test_backfill_created_events_idempotent(client: TestClient) -> None:
+    from scripts.reset_db import backfill_version_events
+
+    async def seed_legacy(session) -> int:
+        m = ProcessMap(name="legacy map", owner_id="legacy.owner")
+        m.versions.append(MapVersion(label="As-Is"))
+        session.add(m)
+        await session.flush()
+        return m.versions[0].id
+
+    vid = _run(seed_legacy)  # 직접 시드 — create_map 엔드포인트를 거치지 않아 created 이벤트 없음
+
+    async def run_backfill(session) -> int:
+        return await backfill_version_events(session)
+
+    first = _run(run_backfill)
+    second = _run(run_backfill)
+
+    async def read(session) -> tuple[int, str]:
+        rows = (
+            await session.scalars(
+                select(VersionEvent).where(
+                    VersionEvent.version_id == vid,
+                    VersionEvent.event_type == "created",
+                )
+            )
+        ).all()
+        return len(rows), rows[0].actor
+
+    count, actor = _run(read)
+    assert first >= 1
+    assert second == 0
+    assert count == 1
+    assert actor == "legacy.owner"
+
+
 def test_get_map_serializes_versions_with_events(client: TestClient) -> None:
     created = client.post("/api/maps", json={"name": "evt serialize"}).json()
     map_id = created["id"]
