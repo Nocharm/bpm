@@ -43,6 +43,15 @@ def test_list_maps_includes_created(client: TestClient) -> None:
     assert any(m["id"] == created["id"] for m in response.json())
 
 
+def test_list_maps_includes_latest_version_status(client: TestClient) -> None:
+    """목록은 최신 버전 상태를 동봉 — 신규 맵은 기본 As-Is 버전이라 'draft'."""
+    created = client.post("/api/maps", json={"name": "상태확인"}).json()
+
+    row = next(m for m in client.get("/api/maps").json() if m["id"] == created["id"])
+
+    assert row["latest_version_status"] == "draft"
+
+
 def test_update_map_changes_name(client: TestClient) -> None:
     created = client.post("/api/maps", json={"name": "old"}).json()
 

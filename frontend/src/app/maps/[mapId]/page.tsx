@@ -39,6 +39,7 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
+import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -5650,8 +5651,11 @@ function MapEditor({ mapId }: { mapId: number }) {
               </>
             ) : (
               <div className="text-caption text-ink-secondary">
+                {/* 아무것도 선택 안 됨 — 상단에 맵 상세 카드(가시성·역할·버전·멤버) / no selection: map detail at top */}
+                <div className="mb-4 border-b border-hairline pb-4">
+                  <MapDetailCard mapId={mapId} showFooter={false} />
+                </div>
                 <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
-                <h2 className="text-caption-strong text-ink">{mapName}</h2>
                 <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>
                 {groups.length > 0 && (
                   <div className="mt-3">

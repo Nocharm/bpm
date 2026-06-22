@@ -12,6 +12,11 @@ import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/a
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MapRole } from "@/lib/mock/permissions";
+import {
+  VERSION_STATUS_LABEL,
+  VERSION_STATUS_STYLE,
+  visibilityPillClass,
+} from "@/lib/version-status";
 
 interface MapCardProps {
   map: MapSummary;
@@ -75,9 +80,19 @@ export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
         <p className="mt-0.5 line-clamp-1 text-caption text-ink-tertiary">{map.description}</p>
       )}
 
+      {/* 우측 아래 — 가장 최신 버전 상태 필 / latest version status pill, bottom-right */}
+      {map.latest_version_status && (
+        <span
+          className={`absolute bottom-3 right-3 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[map.latest_version_status]}`}
+        >
+          {t(VERSION_STATUS_LABEL[map.latest_version_status])}
+        </span>
+      )}
+
       {/* 메타 한 줄 (왼쪽 아래) / Small meta line, bottom-left */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-fine text-ink-tertiary">
-        <span className="rounded-sm border border-hairline px-1.5 py-0.5">
+      <div className="mt-2 flex flex-wrap items-center gap-2 pr-16 text-fine text-ink-tertiary">
+        {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
+        <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(map.visibility)}`}>
           {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
         </span>
         {map.my_role && <RoleBadge role={map.my_role as MapRole} />}

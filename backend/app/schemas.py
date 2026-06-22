@@ -171,6 +171,8 @@ class MapOut(BaseModel):
     my_role: str | None = None
     # 맵 공개 범위 — Visibility 화면이 서버 진실을 표시·토글하기 위한 읽기 전용 노출
     visibility: str = "private"
+    # 최신 버전(최대 id)의 워크플로 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
+    latest_version_status: str | None = None
 
 
 class MapDetailOut(MapOut):

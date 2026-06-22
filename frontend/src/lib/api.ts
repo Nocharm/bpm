@@ -26,6 +26,8 @@ export interface MapSummary {
   my_role: "viewer" | "editor" | "owner" | null;
   // 맵 공개 범위 — Visibility 화면 표시·토글의 서버 진실
   visibility: "public" | "private";
+  // 최신 버전(최대 id) 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
+  latest_version_status: VersionStatus | null;
 }
 
 export interface MapDetail extends MapSummary {

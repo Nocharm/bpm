@@ -1,41 +1,30 @@
 "use client";
 
-// 선택된 맵 상세 카드 — 가시성·역할·버전(승인 상태) 요약. 홈의 마스터-디테일 우측 패널 /
-// Selected-map detail card: visibility, role, and version (approval-status) summary.
-// 데이터는 getMap(MapDetail.versions) 하나로 — 백엔드 추가 없음. 선택 변경 시 key로 remount.
+// 선택된 맵 상세 — 가시성·역할·버전(승인 상태)·허용 인원. 홈 우측 패널 + 에디터 인스펙터 빈 상태 공용 /
+// Map detail: visibility, role, versions (approval status), allowed members.
+// 데이터는 getMap(+editor+면 listMapPermissions/listGroups). 선택 변경 시 key로 remount.
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Building2, User, Users } from "lucide-react";
 
 import {
   getMap,
+  listGroups,
   listMapPermissions,
   type MapDetail,
   type MapPermission,
-  type VersionStatus,
 } from "@/lib/api";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { MapRole } from "@/lib/mock/permissions";
-
-const STATUS_LABEL: Record<VersionStatus, MessageKey> = {
-  draft: "home.verStatus.draft",
-  pending: "home.verStatus.pending",
-  approved: "home.verStatus.approved",
-  published: "home.verStatus.published",
-  rejected: "home.verStatus.rejected",
-};
-
-// 상태별 스타일 — 토큰만(raw hex 금지) / status pill styles, tokens only.
-const STATUS_STYLE: Record<VersionStatus, string> = {
-  draft: "border-hairline text-ink-tertiary",
-  pending: "border-changed text-changed",
-  approved: "border-accent text-accent",
-  published: "border-added text-added",
-  rejected: "border-error text-error",
-};
+import {
+  VERSION_STATUS_LABEL,
+  VERSION_STATUS_STYLE,
+  visibilityPillClass,
+} from "@/lib/version-status";
 
 // 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
 const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
@@ -53,15 +42,21 @@ function PrincipalIcon({ type }: { type: string }) {
 
 interface MapDetailCardProps {
   mapId: number;
-  onDelete: (mapId: number) => void;
+  // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
+  showFooter?: boolean;
+  onDelete?: (mapId: number) => void;
 }
 
-export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
+export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailCardProps) {
   const { t } = useI18n();
+  const loginId =
+    useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null)?.loginId ?? null;
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 허용 인원 — my_role이 editor+ 일 때만 조회(서버 게이트와 동일) / members, editor+ only.
   const [members, setMembers] = useState<MapPermission[] | null>(null);
+  // 내가 속한 그룹 id(문자열) — 멤버 하이라이트용 / my group ids for the "mine" highlight.
+  const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -71,10 +66,22 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
         setDetail(d);
         if (d.my_role === "editor" || d.my_role === "owner") {
           try {
-            const rows = await listMapPermissions(mapId);
-            if (active) setMembers(rows);
+            const [perms, groups] = await Promise.all([listMapPermissions(mapId), listGroups()]);
+            if (!active) return;
+            setMembers(perms);
+            if (loginId) {
+              setMyGroupIds(
+                new Set(
+                  groups
+                    .filter((g) =>
+                      g.members.some((m) => m.member_type === "user" && m.member_id === loginId),
+                    )
+                    .map((g) => String(g.id)),
+                ),
+              );
+            }
           } catch {
-            // 멤버 조회 실패(권한/네트워크)는 무시 — 섹션만 비표시 / ignore; section hidden.
+            // 멤버/그룹 조회 실패는 무시 — 섹션만 비표시 / ignore; section hidden.
           }
         }
       })
@@ -84,7 +91,7 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
     return () => {
       active = false;
     };
-  }, [mapId]);
+  }, [mapId, loginId]);
 
   if (error) {
     return <p className="p-4 text-caption text-error">{error}</p>;
@@ -95,10 +102,13 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
 
   const isOwner = detail.my_role === "owner";
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* 스크롤 콘텐츠 / Scrollable content */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+  // 나의 소속(직접 user 그랜트 / 내가 속한 그룹) 여부 — 하이라이트 / is this grant "mine"?
+  const isMine = (perm: MapPermission): boolean =>
+    (perm.principal_type === "user" && perm.principal_id === loginId) ||
+    (perm.principal_type === "group" && myGroupIds.has(perm.principal_id));
+
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
         <Link
@@ -114,7 +124,8 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
       )}
 
       <div className="flex flex-wrap items-center gap-2 text-fine text-ink-tertiary">
-        <span className="rounded-sm border border-hairline px-1.5 py-0.5">
+        {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
+        <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(detail.visibility)}`}>
           {t(detail.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
         </span>
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
@@ -137,16 +148,16 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
               >
                 <span className="min-w-0 truncate text-caption text-ink">{version.label}</span>
                 <span
-                  className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${STATUS_STYLE[version.status]}`}
+                  className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                 >
-                  {t(STATUS_LABEL[version.status])}
+                  {t(VERSION_STATUS_LABEL[version.status])}
                 </span>
               </div>
             ))
           )}
         </div>
 
-        {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서 / grouped members */}
+        {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
         {members !== null && (
           <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
             <p className="text-fine uppercase tracking-wide text-ink-tertiary">
@@ -155,7 +166,6 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
             {members.length === 0 ? (
               <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
             ) : (
-              // gap-3 = 그룹 사이 스페이서 / spacer between groups.
               <div className="flex flex-col gap-3">
                 {MEMBER_GROUPS.map((g) => {
                   const rows = members.filter((m) => m.principal_type === g.type);
@@ -166,7 +176,12 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
                       {rows.map((perm) => (
                         <div
                           key={perm.id}
-                          className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
+                          // 나의 소속이면 투명도 조절한 악센트 배경으로 하이라이트 / highlight my grants.
+                          className={`flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 ${
+                            isMine(perm)
+                              ? "border-accent bg-accent/10"
+                              : "border-hairline bg-surface"
+                          }`}
                         >
                           <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
                             <PrincipalIcon type={perm.principal_type} />
@@ -183,9 +198,18 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
           </div>
         )}
       </div>
-      </div>
+    </>
+  );
 
-      {/* 하단 고정 버튼바 — 왼쪽: 열기·맵 설정 / 오른쪽: 삭제(owner) / Pinned footer */}
+  // 에디터 인스펙터(footer 없음) — 부모 스크롤에 자연 배치 / embedded: flow in parent, no footer.
+  if (!showFooter) {
+    return <div className="flex flex-col gap-3">{body}</div>;
+  }
+
+  // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">{body}</div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline p-3">
         <div className="flex items-center gap-2">
           <Link
@@ -201,7 +225,7 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
             {t("perm.settingsTitle")}
           </Link>
         </div>
-        {isOwner && (
+        {isOwner && onDelete && (
           <button
             type="button"
             className="rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"

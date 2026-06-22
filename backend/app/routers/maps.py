@@ -33,9 +33,18 @@ async def list_maps(
         ).all()
     )
     is_admin = logic.is_sysadmin(user)
+    # 맵별 최신 버전(최대 id) 상태 — 홈 카드 표시용. 한 번의 쿼리로 N+1 회피.
+    latest_status: dict[int, str] = {}
+    for mid, status in (
+        await session.execute(
+            select(MapVersion.map_id, MapVersion.status).order_by(MapVersion.id)
+        )
+    ).all():
+        latest_status[mid] = status  # id 오름차순 → 마지막이 최신
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)
+            m.latest_version_status = latest_status.get(m.id)
         return maps  # 필터 불필요(쿼리도 생략)
 
     emp = await session.get(Employee, user)
@@ -82,6 +91,7 @@ async def list_maps(
         )
         if role is not None:  # is_visible == (effective_role is not None)
             m.my_role = role
+            m.latest_version_status = latest_status.get(m.id)
             visible.append(m)
     return visible
 
