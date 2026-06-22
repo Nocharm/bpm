@@ -28,7 +28,7 @@ cd backend
 | 1. 스키마 재생성 | `drop_all` + `create_all` — **모든 테이블 삭제 후 재생성**. 컬럼 추가 등 스키마 변경을 반영하는 유일한 경로 |
 | 2. 직원 시드 | `seed_local_employees` (LOCAL_USERS 5명: admin.kim / user.lee·park·choi·jung, org_l* 포함 영문) |
 | 3. 참조 데모 맵 | `seed_reference_demo` — 하위프로세스 참조(Call Activity) 모델 데모 맵 4개 |
-| 4. 권한 데모 | `seed_permission_demo` (ADDITIVE) — RBAC 워크플로 데모 엔터티 (맵마다 초기 "As-Is" 버전 포함) |
+| 4. 권한 데모 | `seed_permission_demo` (ADDITIVE) — RBAC 워크플로 데모 엔터티 (맵마다 노드 흐름 포함) |
 | 5. 버전 비교 데모 | `seed_compare_demo` (ADDITIVE) — As-Is/To-Be 2버전 맵 1개 (비교 화면용) |
 
 > **`create_all`은 기존 테이블의 컬럼을 ALTER하지 않는다.** 모델에 컬럼을 추가했으면 기존 DB에는 반영 안 됨 → `reset_db`(drop 포함)로 재생성하거나 dev.db 파일을 지워야 한다. 마이그레이션(Alembic)은 후속.
@@ -57,9 +57,9 @@ LOCAL_USERS/참조데모를 건드리지 않고 RBAC 워크플로만 추가. 데
 - 가시성 대비 맵 2 (Public / Private)
 - "Roles & Principals Demo" — user/department/group 3종 협업자 grant + pending 2건(권한 다운그레이드·가시성 변경) + 활성(`user.jung`)·비활성(`user.former`) 승인자
 - 그룹 2 — active "Approved Cross-Team Group"(맵에 grant→상속) + pending "Proposed Review Group"(sysadmin 승인 큐)
-- "Version Workflow Demo" — published v1 + pending v2(제출자 `user.lee`)
+- "Version Workflow Demo" — published v1 + pending v2(제출자 `user.lee`). v1↔v2도 계보로 이어져 **비교 화면에서 추가(Test)·변경(Release→Release & Notify)** 표시.
 
-화면으로 따라가는 8단계 투어는 **[`permission-demo-walkthrough.md`](permission-demo-walkthrough.md)** 참고.
+모든 권한 데모 맵은 노드 흐름을 갖는다(빈 맵 아님). 화면으로 따라가는 8단계 투어는 **[`permission-demo-walkthrough.md`](permission-demo-walkthrough.md)** 참고.
 
 ## 부분 시드 (선택)
 

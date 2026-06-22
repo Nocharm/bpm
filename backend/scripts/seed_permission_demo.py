@@ -23,10 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.models import (
     ApprovalRequest,
+    Edge,
     Employee,
     MapApprover,
     MapPermission,
     MapVersion,
+    Node,
     ProcessMap,
     UserGroup,
     UserGroupManager,
@@ -65,6 +67,59 @@ async def _add_inactive_approver(session: AsyncSession) -> None:
     await session.flush()
 
 
+# Linear flow layout — top-level flat nodes (diff has no parent "location" change).
+_X0 = 80.0
+_STEP = 200.0
+_NODE_Y = 200.0
+
+# step = (suffix, title, node_type). Demo flows are English to match the map names.
+Step = tuple[str, str, str]
+
+
+def _build_flow(
+    version_id: int,
+    prefix: str,
+    steps: list[Step],
+    *,
+    lineage_prefix: str | None = None,
+) -> list:
+    """Build a linear start→…→end flow. Node ids are f'{prefix}-{suffix}' (globally unique).
+
+    lineage_prefix: set source_node_id = f'{lineage_prefix}-{suffix}' so a later version
+    is matched to the earlier one by the compare diff (source_node_id ?? id). A suffix with
+    no counterpart in the earlier version → 'added'; an earlier suffix dropped here → 'removed'.
+    """
+    rows: list = []
+    for i, (suffix, title, ntype) in enumerate(steps):
+        nid = f"{prefix}-{suffix}"
+        rows.append(
+            Node(
+                id=nid,
+                version_id=version_id,
+                title=title,
+                node_type=ntype,
+                pos_x=_X0 + _STEP * i,
+                pos_y=_NODE_Y,
+                sort_order=i,
+                is_primary_end=(ntype == "end"),
+                source_node_id=(f"{lineage_prefix}-{suffix}" if lineage_prefix else None),
+            )
+        )
+        if i > 0:
+            prev = f"{prefix}-{steps[i - 1][0]}"
+            rows.append(
+                Edge(
+                    id=f"{prefix}-e{i}",
+                    version_id=version_id,
+                    source_node_id=prev,
+                    target_node_id=nid,
+                    source_side="right",
+                    target_side="left",
+                )
+            )
+    return rows
+
+
 async def _create_map(
     session: AsyncSession,
     *,
@@ -73,6 +128,7 @@ async def _create_map(
     owner: str,
     visibility: str,
     seed_version: bool = True,
+    steps: list[Step] | None = None,
 ) -> ProcessMap:
     """Create a ProcessMap (owner_id/created_by set) + an owner MapPermission row.
 
@@ -80,6 +136,7 @@ async def _create_map(
     editor. Every map needs ≥1 version (the create_map router seeds one too) — without
     it the editor crashes on `versions[0].id`. The version-workflow map manages its own
     v1/v2, so it passes seed_version=False.
+    steps: if given, populate the seeded version with a linear flow (so the map isn't empty).
     """
     pm = ProcessMap(
         name=name,
@@ -100,7 +157,11 @@ async def _create_map(
         )
     )
     if seed_version:
-        session.add(MapVersion(map_id=pm.id, label="As-Is"))
+        version = MapVersion(map_id=pm.id, label="As-Is")
+        session.add(version)
+        await session.flush()
+        if steps:
+            session.add_all(_build_flow(version.id, f"m{pm.id}a", steps))
     return pm
 
 
@@ -154,6 +215,13 @@ async def _seed_roles_map(session: AsyncSession, active_group_id: int) -> Proces
         description="Collaborators span user / department / group principals across roles.",
         owner="user.lee",
         visibility="private",
+        steps=[
+            ("start", "Start", "start"),
+            ("intake", "Intake", "process"),
+            ("assess", "Assess", "process"),
+            ("decide", "Decision", "decision"),
+            ("done", "Done", "end"),
+        ],
     )
     # Collaborators: user editor/viewer + department editor + group editor (3 principal types).
     # park_grant is captured so the pending downgrade request can reference its id.
@@ -236,6 +304,27 @@ async def _seed_version_workflow_map(session: AsyncSession) -> ProcessMap:
     v2 = MapVersion(map_id=pm.id, label="v2", status=workflow.PENDING, submitted_by="user.lee")
     session.add(v2)
     await session.flush()
+
+    # v1/v2 content with lineage so comparing them (compare screen) shows real diffs:
+    #   added: Test  ·  changed: Release → Release & Notify (title).
+    v1_steps: list[Step] = [
+        ("start", "Start", "start"),
+        ("plan", "Plan", "process"),
+        ("build", "Build", "process"),
+        ("release", "Release", "process"),
+        ("done", "Done", "end"),
+    ]
+    v2_steps: list[Step] = [
+        ("start", "Start", "start"),
+        ("plan", "Plan", "process"),
+        ("build", "Build", "process"),
+        ("test", "Test", "process"),  # added in v2
+        ("release", "Release & Notify", "process"),  # changed title
+        ("done", "Done", "end"),
+    ]
+    session.add_all(_build_flow(v1.id, f"m{pm.id}v1", v1_steps))
+    session.add_all(_build_flow(v2.id, f"m{pm.id}v2", v2_steps, lineage_prefix=f"m{pm.id}v1"))
+    await session.flush()
     return pm
 
 
@@ -253,6 +342,12 @@ async def seed_permission_demo(session: AsyncSession) -> dict[str, int]:
         description="visibility=public — every authenticated user gets viewer.",
         owner="user.lee",
         visibility="public",
+        steps=[
+            ("start", "Start", "start"),
+            ("submit", "Submit Request", "process"),
+            ("review", "Public Review", "process"),
+            ("done", "Done", "end"),
+        ],
     )
     private_map = await _create_map(
         session,
@@ -260,6 +355,13 @@ async def seed_permission_demo(session: AsyncSession) -> dict[str, int]:
         description="visibility=private with no extra grants — invisible to non-grantees.",
         owner="user.lee",
         visibility="private",
+        steps=[
+            ("start", "Start", "start"),
+            ("draft", "Draft", "process"),
+            ("review", "Internal Review", "process"),
+            ("approve", "Approve", "process"),
+            ("done", "Done", "end"),
+        ],
     )
 
     active_group_id, pending_group_id = await _seed_groups(session)
