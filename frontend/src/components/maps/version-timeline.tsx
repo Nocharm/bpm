@@ -76,7 +76,7 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
                       <span className="text-ink">{evt.actor}</span>
                       <span className="text-fine text-ink-tertiary">{formatStamp(evt.created_at)}</span>
                       {evt.note && (
-                        <span className="basis-full text-fine text-ink-tertiary">"{evt.note}"</span>
+                        <span className="basis-full text-fine text-ink-tertiary">“{evt.note}”</span>
                       )}
                     </span>
                   </li>
