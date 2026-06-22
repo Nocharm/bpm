@@ -1,12 +1,11 @@
 "use client";
 
-// 홈 프로세스맵 카드 — 이름·메타 한 줄(가시성·역할·허용 인원 드롭다운) + 호버 시 더보기/삭제 /
-// Home process-map card: name, a small meta line (visibility · role · allowed-members
-// dropdown), and hover-revealed More/Delete actions.
+// 홈 프로세스맵 카드 — 클릭=선택(우측 상세). 타이틀은 더 이상 에디터로 직행하지 않음(열기는 상세에서) /
+// Home map card: click selects it (detail panel). The title no longer navigates — open from detail.
+// 카드 자체 액션은 삭제(owner)만. 가시성·역할·허용 인원은 메타 한 줄.
 
-import Link from "next/link";
 import { useCallback, useState } from "react";
-import { Building2, ChevronDown, MoreHorizontal, Trash2, User, Users } from "lucide-react";
+import { Building2, ChevronDown, Trash2, User, Users } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
 import { RoleBadge } from "@/components/permissions/role-badge";
@@ -61,32 +60,25 @@ export function MapCard({ map, onDelete, selected = false, onSelect }: MapCardPr
       }`}
       onClick={() => onSelect?.(map.id)}
     >
-      {/* 호버 시 액션 — 더보기 + (owner)삭제 / Hover actions: More + (owner) Delete */}
-      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-        <Link
-          href={`/maps/${map.id}/settings`}
-          className="inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-ink-tertiary hover:bg-surface hover:text-ink"
-          aria-label={t("home.more")}
-          title={t("home.more")}
-        >
-          <MoreHorizontal size={16} strokeWidth={1.5} />
-        </Link>
-        {isOwner && (
+      {/* 호버 시 삭제(owner) — 열기/설정은 상세 패널로 이동 / Hover delete (owner); open/settings live in detail */}
+      {isOwner && (
+        <div className="absolute right-3 top-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-error hover:bg-surface"
             aria-label={t("home.delete")}
             title={t("home.delete")}
-            onClick={() => onDelete(map.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(map.id);
+            }}
           >
             <Trash2 size={16} strokeWidth={1.5} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <Link href={`/maps/${map.id}`} className="text-body-strong text-ink hover:underline">
-        {map.name}
-      </Link>
+      <span className="block truncate pr-6 text-body-strong text-ink">{map.name}</span>
       {map.description && (
         <p className="mt-0.5 line-clamp-1 text-caption text-ink-tertiary">{map.description}</p>
       )}
@@ -103,7 +95,10 @@ export function MapCard({ map, onDelete, selected = false, onSelect }: MapCardPr
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 hover:bg-surface hover:text-ink"
-              onClick={toggleMembers}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMembers();
+              }}
             >
               <Users size={12} strokeWidth={1.5} />
               {t("home.viewMembers")}

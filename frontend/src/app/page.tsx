@@ -87,9 +87,9 @@ export default function MapListPage() {
 
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
-    <div className="flex h-full min-h-0 flex-col p-6">
+    <div className="flex h-full min-h-0 flex-col px-8 py-6">
       {/* 헤더 — 제목 좌 · New map 우상단 / Title left, New map top-right */}
-      <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
+      <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
         <h1 className="text-tagline text-ink">BPM — {t("home.title")}</h1>
         <button
           className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
@@ -100,17 +100,19 @@ export default function MapListPage() {
         </button>
       </div>
 
-      {error && <p className="mb-3 shrink-0 text-caption text-error">{error}</p>}
+      {error && (
+        <p className="mx-auto mb-3 w-full max-w-[72rem] shrink-0 text-caption text-error">{error}</p>
+      )}
 
-      {/* 마스터-디테일 — 리스트(내부 스크롤) + 넓을 때(xl) 우측 상세 / List (scrolls) + detail on wide screens */}
-      <div className="flex min-h-0 flex-1 gap-4">
+      {/* 마스터-디테일 — 리스트·상세 같은 폭(flex-1+동일 max-w), min-w로 안 깨지게, 전체 max-w로 중앙 /
+          List + detail share equal width (flex-1, same max-w), min-w guards wrapping, centered by max-w. */}
+      <div className="mx-auto flex min-h-0 w-full max-w-[72rem] flex-1 gap-4">
         {visibleMaps.length === 0 ? (
-          <p className="flex-1 rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+          <p className="min-w-[18rem] max-w-[34rem] flex-1 rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
             {t("home.empty")}
           </p>
         ) : (
-          // 리스트는 적당한 폭으로 제한(카드가 과하게 넓지 않게) / list capped so cards aren't too wide
-          <ul className="flex w-full min-w-0 max-w-sm shrink-0 flex-col gap-2 overflow-y-auto pr-1">
+          <ul className="flex min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2 overflow-y-auto pr-1">
             {visibleMaps.map((processMap) => (
               <MapCard
                 key={processMap.id}
@@ -124,9 +126,13 @@ export default function MapListPage() {
         )}
 
         {effectiveSelected !== null && (
-          // 상세는 남는 폭을 채움(타임라인·멤버 공간) / detail fills remaining width
-          <aside className="hidden min-w-0 flex-1 overflow-y-auto rounded-sm border border-hairline bg-surface-alt p-4 xl:block">
-            <MapDetailCard key={effectiveSelected} mapId={effectiveSelected} />
+          // 상세 — 리스트와 같은 폭. 내부 스크롤·하단 버튼바는 MapDetailCard가 처리 / equal width; scroll+footer inside
+          <aside className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex">
+            <MapDetailCard
+              key={effectiveSelected}
+              mapId={effectiveSelected}
+              onDelete={(id) => void handleDelete(id)}
+            />
           </aside>
         )}
       </div>

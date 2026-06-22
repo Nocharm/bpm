@@ -44,7 +44,12 @@ function PrincipalIcon({ type }: { type: string }) {
   return <User size={12} strokeWidth={1.5} />;
 }
 
-export function MapDetailCard({ mapId }: { mapId: number }) {
+interface MapDetailCardProps {
+  mapId: number;
+  onDelete: (mapId: number) => void;
+}
+
+export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
   const { t } = useI18n();
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,14 +80,18 @@ export function MapDetailCard({ mapId }: { mapId: number }) {
   }, [mapId]);
 
   if (error) {
-    return <p className="text-caption text-error">{error}</p>;
+    return <p className="p-4 text-caption text-error">{error}</p>;
   }
   if (!detail) {
-    return <p className="text-caption text-ink-tertiary">…</p>;
+    return <p className="p-4 text-caption text-ink-tertiary">…</p>;
   }
 
+  const isOwner = detail.my_role === "owner";
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* 스크롤 콘텐츠 / Scrollable content */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
         <Link
@@ -152,6 +161,34 @@ export function MapDetailCard({ mapId }: { mapId: number }) {
           )}
         </div>
       )}
+      </div>
+
+      {/* 하단 고정 버튼바 — 왼쪽: 열기·맵 설정 / 오른쪽: 삭제(owner) / Pinned footer */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline p-3">
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/maps/${detail.id}`}
+            className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+          >
+            {t("home.open")}
+          </Link>
+          <Link
+            href={`/maps/${detail.id}/settings`}
+            className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+          >
+            {t("perm.settingsTitle")}
+          </Link>
+        </div>
+        {isOwner && (
+          <button
+            type="button"
+            className="rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"
+            onClick={() => onDelete(detail.id)}
+          >
+            {t("home.delete")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
