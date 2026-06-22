@@ -9,7 +9,7 @@
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
-import { X, Globe, Lock, User } from "lucide-react";
+import { X, Globe, Lock } from "lucide-react";
 
 import {
   addMapPermission,
@@ -119,7 +119,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
   const [pendingCollab, setPendingCollab] = useState<PrincipalOption | null>(null);
   const [pendingCollabRole, setPendingCollabRole] = useState<"viewer" | "editor">("viewer");
-  const [pendingApprover, setPendingApprover] = useState<string>(""); // 검색어 / search input
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -160,7 +159,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   // ── 결재자 추가 (users only) / add approver (users only) ──
   const handleAddApprover = useCallback((userId: string, displayName: string) => {
     setApprovers((prev) => prev.some((a) => a.userId === userId) ? prev : [...prev, { key: genId(), userId, displayName }]);
-    setPendingApprover("");
   }, []);
 
   // ── 결재자 제거 / remove approver ──
@@ -201,15 +199,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     approvers.length >= 1 &&
     !submitting;
 
-  // ── 결재자 picker용 — users only, 이미 추가된 사람 제외 (실 디렉터리 사용) /
-  // Approver picker: real directory users, exclude already-added.
-  const approverExcludeIds = new Set(approvers.map((a) => a.userId));
-  const allUsers = dirUsers.filter((u) => !approverExcludeIds.has(u.id));
-  const filteredApproverUsers = pendingApprover.trim()
-    ? allUsers.filter((u) =>
-        u.name.includes(pendingApprover) || u.id.includes(pendingApprover),
-      )
-    : allUsers;
+  // ── 부서 조회 맵 (사용자 ID → 부서명) / department lookup map for picker ──
+  const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
 
   // ── 협업자 picker 제외 목록 / collab picker exclude set ──
   const collabExcludeIds = new Set(
@@ -327,6 +318,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 departments={pickerDepts}
                 groups={toPickerGroups(groups)}
                 excludeIds={collabExcludeIds}
+                userDepartments={userDepartments}
                 onSelect={(opt) => setPendingCollab(opt)}
               />
             </div>
@@ -394,64 +386,36 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}
           </span>
-          {/* 검색 입력 / search input */}
-          <div className="relative flex flex-col gap-1">
-            <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
-              <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-              <input
-                type="text"
-                className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-                placeholder={t("perm.createDialog.approverPickerPlaceholder")}
-                value={pendingApprover}
-                onChange={(e) => setPendingApprover(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            {/* 드롭다운 결과 / dropdown results */}
-            {pendingApprover.trim() && filteredApproverUsers.length > 0 && (
-              <div className="flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-md">
-                {filteredApproverUsers.slice(0, 8).map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    className="flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                    onClick={() => handleAddApprover(u.id, u.name)}
-                  >
-                    <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                    <span>{u.name}</span>
-                    <span className="ml-auto text-fine text-ink-tertiary">{u.id}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* 추가된 결재자 목록 / added approvers list */}
-          {approvers.length === 0 && (
-            <p className="text-fine text-ink-tertiary">
-              {t("perm.createDialog.approversHint")}
-            </p>
-          )}
+          {/* 결재자 picker (users only) + 선택된 결재자 pills / approver picker + selected pills */}
+          <PrincipalPicker
+            users={pickerUsers}
+            departments={[]}
+            groups={[]}
+            excludeIds={new Set(approvers.map((a) => a.userId))}
+            userDepartments={userDepartments}
+            onSelect={(opt) => {
+              if (opt.principalType === "user") handleAddApprover(opt.principalId, opt.displayName);
+            }}
+          />
           {approvers.length > 0 && (
-            <ul className="flex flex-col gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {approvers.map((a) => (
-                <li
+                <span
                   key={a.key}
-                  className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                  data-id={`create-approver-pill-${a.userId}`}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
                 >
-                  <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  <span className="flex-1">{a.displayName}</span>
+                  {a.displayName}
                   <button
                     type="button"
+                    className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
                     onClick={() => handleRemoveApprover(a.key)}
-                    className="text-ink-tertiary hover:text-ink"
-                    aria-label={t("perm.removeButton")}
-                    disabled={submitting}
                   >
-                    <X size={16} strokeWidth={1.5} />
+                    <X size={14} strokeWidth={1.5} />
                   </button>
-                </li>
+                </span>
               ))}
-            </ul>
+            </div>
           )}
         </div>
 

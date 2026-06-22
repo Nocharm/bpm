@@ -105,6 +105,16 @@ async def main() -> None:
         f"→ L3(map={nest['l3_map']})"
     )
 
+    # 7. 워크플로 불변식 정규화 (멱등 — 시드가 남긴 불가능 상태 보정: owner·승인자·submitted_by·승인이력)
+    from scripts.seed_invariants import normalize_workflow_invariants
+
+    async with SessionLocal() as session:
+        norm = await normalize_workflow_invariants(session)
+    print(
+        f"normalize invariants — owners={norm['owners_set']}, approvers={norm['approvers_added']}, "
+        f"submitters={norm['submitters_set']}, approvals={norm['approvals_added']}"
+    )
+
     # 6. 확인 — 테이블 존재 + 핵심 카운트
     async with SessionLocal() as session:
         emp_count = (await session.execute(text("SELECT count(*) FROM employees"))).scalar()

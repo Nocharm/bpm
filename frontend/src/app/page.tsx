@@ -4,9 +4,10 @@
 // Home: map list filtered by mock visibility + map creation dialog.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 
 import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { filterByQuery } from "@/lib/search";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
@@ -23,6 +24,7 @@ export default function MapListPage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [mapQuery, setMapQuery] = useState("");
 
   const showToast = useCallback((message: string) => {
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
@@ -78,6 +80,16 @@ export default function MapListPage() {
     [maps],
   );
 
+  // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
+  const mapHits = useMemo(
+    () =>
+      filterByQuery(visibleMaps, mapQuery, (m) => [
+        { field: "name", text: m.name },
+        { field: "description", text: m.description ?? "" },
+      ]),
+    [visibleMaps, mapQuery],
+  );
+
   // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
   // Derive selection: fall back to the first map when none/stale (no effect needed).
   const effectiveSelected =
@@ -88,11 +100,22 @@ export default function MapListPage() {
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
-      {/* 헤더 — 제목 좌 · New map 우상단 / Title left, New map top-right */}
+      {/* 헤더 — 제목 좌 · 검색 중앙 · New map 우상단 / Title left, search center, New map top-right */}
       <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
+          <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          <input
+            type="text"
+            data-id="home-map-search"
+            className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
+            placeholder={t("home.searchPlaceholder")}
+            value={mapQuery}
+            onChange={(e) => setMapQuery(e.target.value)}
+          />
+        </div>
         <button
-          className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
+          className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
           onClick={() => setDialogOpen(true)}
         >
           <Plus size={16} strokeWidth={1.5} />
@@ -107,18 +130,19 @@ export default function MapListPage() {
       {/* 마스터-디테일 — 리스트·상세 같은 폭(flex-1+동일 max-w), min-w로 안 깨지게, 전체 max-w로 중앙 /
           List + detail share equal width (flex-1, same max-w), min-w guards wrapping, centered by max-w. */}
       <div className="mx-auto flex min-h-0 w-full max-w-[72rem] flex-1 gap-4">
-        {visibleMaps.length === 0 ? (
+        {mapHits.length === 0 ? (
           <p className="min-w-[18rem] max-w-[34rem] flex-1 rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
             {t("home.empty")}
           </p>
         ) : (
           <ul className="flex min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2 overflow-y-auto pr-1">
-            {visibleMaps.map((processMap) => (
+            {mapHits.map(({ item: processMap, matches }) => (
               <li key={processMap.id} className="flex flex-col">
                 <MapCard
                   map={processMap}
                   selected={effectiveSelected === processMap.id}
                   onSelect={setSelectedId}
+                  nameRanges={matches.find((m) => m.field === "name")?.ranges ?? []}
                 />
                 {/* 폭이 좁을 때(< xl)만 — 선택 카드 아래 펼침 아코디언 / inline accordion below the selected card on narrow screens */}
                 <div
