@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-23
+- **브랜딩 풀네임화 — "BPM" 약자 → "Business Process Map"** — 탭 타이틀(`layout.tsx`), 홈 h1(`page.tsx`, +`data-id="home-title"`), i18n `app.name`·`login.title`(en/ko). 사용자 요청. (i18n 부분은 Task 7 커밋 dec9ef8에 동봉됨, layout/page는 별도 커밋.)
 - **맵 카드·상세정보 개편 — 설계·계획 수립 (feat/map-card-detail-redesign)** — 카드(이름=같은탭 열기·우상단=새탭·description 숨김), 상세(description 경계박스·버전 git-log 타임라인·footer Open 삭제·삭제 확인모달·좁은폭 카드아래 아코디언), description 입력 복원(생성 다이얼로그+설정 Details 탭), 버전 생애주기 이벤트 로그(신규 `version_events` 테이블·created/submitted/approved/rejected/published 누가·언제). 설계 `docs/superpowers/specs/2026-06-23-map-card-detail-redesign-design.md`, 계획(13태스크) `docs/superpowers/plans/2026-06-23-map-card-detail-redesign.md`. 구현은 subagent-driven 진행 중.
 
 ## 2026-06-22

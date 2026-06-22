@@ -90,7 +90,7 @@ export default function MapListPage() {
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       {/* 헤더 — 제목 좌 · New map 우상단 / Title left, New map top-right */}
       <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
-        <h1 className="text-tagline text-ink">BPM — {t("home.title")}</h1>
+        <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
         <button
           className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
           onClick={() => setDialogOpen(true)}
