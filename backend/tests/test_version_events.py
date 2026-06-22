@@ -50,3 +50,74 @@ def test_version_event_relationship_orders_by_created_at(client: TestClient) -> 
         return [e.event_type for e in events]
 
     assert _run(read) == ["created", "submitted"]
+
+
+def test_create_map_records_created_event(client: TestClient) -> None:
+    created = client.post("/api/maps", json={"name": "evt create"}).json()
+    version_id = created["versions"][0]["id"]
+
+    async def read(session) -> list[tuple[str, str]]:
+        rows = (
+            await session.scalars(
+                select(VersionEvent).where(VersionEvent.version_id == version_id)
+            )
+        ).all()
+        return [(e.event_type, e.actor) for e in rows]
+
+    events = _run(read)
+    assert ("created", "local-dev") in events  # settings.dev_user 기본값
+
+
+def test_full_lifecycle_records_events(client: TestClient) -> None:
+    from app.settings import settings
+
+    created = client.post("/api/maps", json={"name": "evt lifecycle"}).json()
+    map_id = created["id"]
+    version_id = created["versions"][0]["id"]
+
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": [settings.dev_user]})
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    client.post(f"/api/versions/{version_id}/submit")
+    client.post(f"/api/versions/{version_id}/approve")
+    client.post(f"/api/versions/{version_id}/publish")
+
+    async def read(session) -> list[str]:
+        rows = (
+            await session.scalars(
+                select(VersionEvent)
+                .where(VersionEvent.version_id == version_id)
+                .order_by(VersionEvent.created_at, VersionEvent.id)
+            )
+        ).all()
+        return [e.event_type for e in rows]
+
+    assert _run(read) == ["created", "submitted", "approved", "published"]
+
+
+def test_reject_records_event_with_reason(client: TestClient) -> None:
+    from app.settings import settings
+
+    created = client.post("/api/maps", json={"name": "evt reject"}).json()
+    map_id = created["id"]
+    version_id = created["versions"][0]["id"]
+
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": [settings.dev_user]})
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    client.post(f"/api/versions/{version_id}/submit")
+    client.post(f"/api/versions/{version_id}/reject", json={"reason": "needs work"})
+
+    async def read(session) -> tuple[str, str | None]:
+        row = (
+            await session.scalars(
+                select(VersionEvent)
+                .where(
+                    VersionEvent.version_id == version_id,
+                    VersionEvent.event_type == "rejected",
+                )
+            )
+        ).one()
+        return row.event_type, row.note
+
+    event_type, note = _run(read)
+    assert event_type == "rejected"
+    assert note == "needs work"
