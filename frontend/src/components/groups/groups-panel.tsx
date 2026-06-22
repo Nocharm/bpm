@@ -1,7 +1,8 @@
 "use client";
 
-// 유저 그룹 목록 + 생성 요청 페이지 (실 API) / User group list and create-request page (real API).
-// 서버가 진실 — 목록은 GET /api/groups, 생성은 POST /api/groups. 변경 후 재조회한다(낙관적 갱신 금지).
+// 유저 그룹 목록 + 생성 요청 — 설정 콘솔 "Groups" 탭 (이전 /groups 페이지에서 추출) /
+// User group list + create-request, rendered as the Settings console "Groups" tab.
+// 서버가 진실 — 목록 GET /api/groups, 생성 POST /api/groups. 변경 후 재조회(낙관적 갱신 금지).
 // 멤버 피커는 실 디렉터리(getDirectory). 생성 시 ≥2 멤버 필수(클라 차단 + 서버 422).
 
 import Link from "next/link";
@@ -51,7 +52,7 @@ type MemberEntry = { type: "department" | "user"; id: string; displayName: strin
 // 관리자 피커 아이템 — user만 / Manager entry restricted to user only.
 type ManagerEntry = { id: string; displayName: string };
 
-export default function GroupsPage() {
+export function GroupsPanel() {
   const { t } = useI18n();
 
   // 서버 그룹 목록 / Server-sourced group list.
@@ -196,7 +197,7 @@ export default function GroupsPage() {
   const managerExcludeIds = new Set(managers.map((m) => m.id));
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* 헤더 / Header */}

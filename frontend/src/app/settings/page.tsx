@@ -1,8 +1,9 @@
 "use client";
 
-// 통합 어드민 콘솔 — 직원 디렉터리(admin) + 권한 콘솔(sysadmin)을 좌측 세로 탭으로 묶음.
-// Unified admin console: directory (role=admin) + permissions (sysadmin), left tab rail.
-// 게이트는 권한별 카테고리 노출 — 둘 다 없으면 안내. 서버 엔드포인트가 최종 보호.
+// 설정 콘솔 — 누구나 접근. 좌측 세로 탭이 권한별로 다르게 노출 /
+// Settings console: everyone can open it; the left tab rail differs by permission.
+//   Groups(모두) · Directory/조직(role=admin) · Permissions/권한(sysadmin)
+// 백엔드 무변경 — 서버 엔드포인트 가드(require_admin·sysadmin)가 최종 보호.
 
 import { Fragment, useState, useSyncExternalStore } from "react";
 
@@ -10,6 +11,7 @@ import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { GroupsPanel } from "@/components/groups/groups-panel";
 import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
@@ -17,8 +19,8 @@ import { UserTable } from "@/components/admin/user-table";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
-type TabId = "employees" | "queue" | "depts" | "users";
-type Access = "admin" | "sysadmin";
+type TabId = "employees" | "queue" | "depts" | "users" | "groups";
+type Access = "everyone" | "admin" | "sysadmin";
 
 interface Category {
   labelKey: MessageKey;
@@ -26,6 +28,8 @@ interface Category {
   tabs: { id: TabId; labelKey: MessageKey }[];
 }
 
+// 순서: admin/sysadmin 카테고리가 앞, Groups(모두)는 뒤 — 일반 유저는 Groups만 보인다 /
+// Order: admin/sysadmin categories first, Groups (everyone) last.
 const CATEGORIES: Category[] = [
   {
     labelKey: "admin.catDirectory",
@@ -41,11 +45,16 @@ const CATEGORIES: Category[] = [
       { id: "users", labelKey: "perm.sysadmin.tabUsers" },
     ],
   },
+  {
+    labelKey: "nav.groups",
+    access: "everyone",
+    tabs: [{ id: "groups", labelKey: "perm.group.pageTitle" }],
+  },
 ];
 
 // ── 메인 / Main ────────────────────────────────────────────────────
 
-export default function AdminConsolePage() {
+export default function SettingsPage() {
   const { t } = useI18n();
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
@@ -54,19 +63,18 @@ export default function AdminConsolePage() {
   const showToast = (item: ToastItem) => setToasts((prev) => [item, ...prev]);
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id));
 
-  const canAccess = (access: Access): boolean =>
-    access === "admin" ? user?.role === "admin" : Boolean(user?.isSysadmin);
+  const canAccess = (access: Access): boolean => {
+    if (access === "everyone") return true;
+    if (access === "admin") return user?.role === "admin";
+    return Boolean(user?.isSysadmin);
+  };
 
   const visibleCategories = CATEGORIES.filter((c) => canAccess(c.access));
   const allTabs = visibleCategories.flatMap((c) => c.tabs);
 
-  // 권한 없음 — 둘 다 아니면 안내 / No access to any category.
+  // Groups(모두) 카테고리가 항상 있어 비는 경우는 없지만, 방어적으로 / Defensive guard.
   if (allTabs.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <p className="text-caption text-ink-tertiary">{t("admin.noAccess")}</p>
-      </div>
-    );
+    return null;
   }
 
   // activeTab이 비었거나 더 이상 가시 범위가 아니면 첫 가용 탭으로 폴백 /
@@ -81,9 +89,9 @@ export default function AdminConsolePage() {
       <div className="flex h-full">
         {/* 좌측 세로 탭 레일 — 카테고리별 스페이서로 구분 / Left tab rail, categories spaced */}
         <aside className="flex w-52 shrink-0 flex-col border-r border-hairline bg-surface p-3">
-          <h1 className="px-3 pb-3 text-body-strong text-ink">{t("admin.consoleTitle")}</h1>
+          <h1 className="px-3 pb-3 text-body-strong text-ink">{t("nav.settings")}</h1>
           {visibleCategories.map((cat) => (
-            <Fragment key={cat.labelKey}>
+            <Fragment key={cat.labelKey + cat.access}>
               <p className="px-3 pb-1 pt-4 text-fine uppercase tracking-wide text-ink-tertiary">
                 {t(cat.labelKey)}
               </p>
@@ -107,6 +115,7 @@ export default function AdminConsolePage() {
 
         {/* 탭 콘텐츠 / Tab content */}
         <main className="flex-1 overflow-y-auto p-6">
+          {current === "groups" && <GroupsPanel />}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" && user && (
             <ApprovalQueue currentUserId={user.loginId} onToast={showToast} />

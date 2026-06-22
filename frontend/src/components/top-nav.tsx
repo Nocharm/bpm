@@ -60,29 +60,16 @@ export function TopNav() {
             <>
               <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
               <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg">
-                {/* 통합 어드민 콘솔 — admin(직원) 또는 sysadmin(권한) 둘 중 하나면 노출 / Unified admin console */}
-                {(user.role === "admin" || user.isSysadmin) && (
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                    onClick={() => {
-                      setOpen(false);
-                      router.push("/admin");
-                    }}
-                  >
-                    {t("nav.adminPage")}
-                  </button>
-                )}
-                {/* 유저 그룹 관리 페이지 / User group management */}
+                {/* 설정 콘솔 — 누구나 접근(왼쪽 탭이 권한별로 다름). 그룹·어드민·권한 surface를 흡수 / Settings console (everyone) */}
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
                   onClick={() => {
                     setOpen(false);
-                    router.push("/groups");
+                    router.push("/settings");
                   }}
                 >
-                  {t("nav.groups")}
+                  {t("nav.settings")}
                 </button>
                 <button
                   type="button"

@@ -220,7 +220,7 @@ export default function GroupDetailPage({
   if (loadError) {
     return (
       <div className="flex flex-1 flex-col gap-3 p-6">
-        <Link href="/groups" className="text-caption text-accent hover:underline">
+        <Link href="/settings" className="text-caption text-accent hover:underline">
           {t("perm.group.backToList")}
         </Link>
         <p className="text-caption text-ink-tertiary">{t("perm.group.notFound")}</p>
@@ -231,7 +231,7 @@ export default function GroupDetailPage({
   if (group === null) {
     return (
       <div className="flex flex-1 flex-col gap-3 p-6">
-        <Link href="/groups" className="text-caption text-accent hover:underline">
+        <Link href="/settings" className="text-caption text-accent hover:underline">
           {t("perm.group.backToList")}
         </Link>
         <p className="text-caption text-ink-tertiary">…</p>
@@ -319,7 +319,7 @@ export default function GroupDetailPage({
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* 뒤로가기 / Back link */}
-      <Link href="/groups" className="text-caption text-accent hover:underline">
+      <Link href="/settings" className="text-caption text-accent hover:underline">
         {t("perm.group.backToList")}
       </Link>
 
