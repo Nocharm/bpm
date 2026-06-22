@@ -4914,7 +4914,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {active ? (
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
-                    className={`h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    className={`relative h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
                   >
                     <ReactFlow
@@ -5171,12 +5171,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </Fragment>
                         ))}
                       </ViewportPortal>
-                      <Background
-                        variant={BackgroundVariant.Dots}
-                        gap={20}
-                        size={1.8}
-                        color="var(--color-canvas-dot)"
-                      />
+                      {/* 편집 가능 시에만 모눈(dot) 배경. 뷰모드는 점 없이 워터마크로 표시(아래) */}
+                      {!readOnly && (
+                        <Background
+                          variant={BackgroundVariant.Dots}
+                          gap={20}
+                          size={1.8}
+                          color="var(--color-canvas-dot)"
+                        />
+                      )}
                       <Controls showFitView={false}>
                         {/* 기본 fit(가운데 정렬+스냅) 대신 좌상단 정렬 fit — 왼쪽위 고정 일관 */}
                         <ControlButton onClick={fitScopeTopLeft} title={t("editor.fitView")}>
@@ -5185,6 +5188,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </Controls>
                       <CanvasZoomScale />
                     </ReactFlow>
+                    {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}
+                    {readOnly && (
+                      <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
+                        <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest text-ink-tertiary opacity-[0.07]">
+                          {t("editor.viewOnly")}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <ScopePreview fullGraph={fullGraph} scopeParentId={scopeHostId(scope)} />

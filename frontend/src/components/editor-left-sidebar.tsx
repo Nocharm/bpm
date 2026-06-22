@@ -11,8 +11,10 @@ import {
   CircleDot,
   Diamond,
   PanelsTopLeft,
+  Settings,
   Square,
 } from "lucide-react";
+import Link from "next/link";
 import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 
 import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
@@ -205,7 +207,7 @@ export function EditorLeftSidebar({
 
   if (collapsed) {
     return (
-      <div className="flex w-9 shrink-0 flex-col items-center border-r border-hairline bg-surface py-2">
+      <div className="flex h-full w-9 shrink-0 flex-col items-center border-r border-hairline bg-surface py-2">
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -215,6 +217,15 @@ export function EditorLeftSidebar({
         >
           <PanelsTopLeft size={16} strokeWidth={1.5} />
         </button>
+        {/* 하단 고정 — 설정 진입 (접힌 상태에서도 왼쪽 아래 유지) / Settings, pinned bottom-left */}
+        <Link
+          href="/settings"
+          className="mt-auto rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+          title={t("nav.settings")}
+          aria-label={t("nav.settings")}
+        >
+          <Settings size={16} strokeWidth={1.5} />
+        </Link>
       </div>
     );
   }
@@ -475,6 +486,14 @@ export function EditorLeftSidebar({
           }}
         />
       )}
+      {/* 하단 고정 — 설정 진입. 내용이 길어 스크롤돼도 sticky로 왼쪽 아래 유지 / Settings, pinned bottom */}
+      <Link
+        href="/settings"
+        className="sticky bottom-0 mt-auto flex items-center gap-2 border-t border-hairline bg-surface px-2 py-2 text-caption text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+      >
+        <Settings size={16} strokeWidth={1.5} className="shrink-0" />
+        <span className="truncate">{t("nav.settings")}</span>
+      </Link>
     </aside>
   );
 }
