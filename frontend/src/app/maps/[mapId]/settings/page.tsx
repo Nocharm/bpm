@@ -179,14 +179,14 @@ export default function SettingsPage() {
     <>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Dev 유저 전환 드롭다운 / Dev user switcher dropdown (inline, no new modal) */}
+      {/* Dev 유저 전환 드롭다운 — 좌하단 스위처 버튼 기준 / Dev user switcher (anchored bottom-left) */}
       {showDevSwitcher && (
         <div
           className="fixed inset-0 z-[1100]"
           onClick={() => setShowDevSwitcher(false)}
         >
           <div
-            className="absolute right-4 top-14 w-72 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+            className="absolute bottom-14 left-3 w-72 rounded-md border border-hairline bg-surface p-3 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-2 text-caption-strong text-ink">{t("perm.devSwitcher")}</p>
@@ -212,60 +212,64 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="flex h-full flex-col">
-        {/* 헤더 / Header */}
-        <header className="flex flex-wrap items-center gap-4 border-b border-hairline px-4 py-2">
-          <Link href={`/maps/${mapIdStr}`} className="text-caption text-accent hover:underline">
-            {t("perm.backToEditor")}
+      {/* 설정 페이지(/settings)와 동일한 좌측 세로 탭 레일 + 우측 콘텐츠 / Left tab rail + right content, like /settings */}
+      <div className="flex h-full">
+        <aside className="flex w-56 shrink-0 flex-col border-r border-hairline bg-surface p-3">
+          <Link
+            href={`/maps/${mapIdStr}`}
+            className="px-1 pb-2 text-fine text-accent hover:underline"
+          >
+            ← {t("perm.backToEditor")}
           </Link>
-          <h1 className="text-tagline font-medium text-ink">
-            {mapName} — {t("perm.settingsTitle")}
+          <h1 className="truncate px-1 text-body-strong text-ink" title={mapName}>
+            {mapName}
           </h1>
-          <div className="ml-auto flex items-center gap-2">
-            {/* 현재 mock 유저 표시 / Show current mock user */}
-            {currentMockUser && (
-              <span className="text-fine text-ink-tertiary">
-                {currentMockUser.name} · {effectiveRole ?? "—"}
-              </span>
-            )}
-            {/* [Dev] 유저 전환 버튼 / [Dev] switcher button */}
-            <button
-              type="button"
-              className="rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt"
-              onClick={() => setShowDevSwitcher((v) => !v)}
-            >
-              {t("perm.devSwitcher")}
-            </button>
-          </div>
-        </header>
+          <p className="px-1 pb-2 text-fine uppercase tracking-wide text-ink-tertiary">
+            {t("perm.settingsTitle")}
+          </p>
 
-        {/* 읽기 전용 알림 / Read-only notice */}
-        {effectiveRole === "viewer" && (
-          <div className="border-b border-hairline bg-surface-pearl px-4 py-2 text-caption text-ink-secondary">
-            {t("perm.readOnly")}
-          </div>
-        )}
-
-        {/* 탭 네비게이션 / Tab navigation */}
-        <nav className="flex border-b border-hairline px-4">
+          {/* 탭 버튼 (좌측 정렬) / Tab buttons (left-aligned) */}
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`px-4 py-2.5 text-caption transition-colors ${
+              className={`rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
                 activeTab === tab.id
-                  ? "border-b-2 border-accent text-accent"
-                  : "text-ink-tertiary hover:text-ink"
+                  ? "bg-accent-tint text-accent"
+                  : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
               {t(tab.labelKey)}
             </button>
           ))}
-        </nav>
+
+          {/* 하단 — 현재 유저 + [Dev] 전환 / Bottom: current user + dev switcher */}
+          <div className="mt-auto flex flex-col gap-1 pt-3">
+            {currentMockUser && (
+              <span className="px-1 text-fine text-ink-tertiary">
+                {currentMockUser.name} · {effectiveRole ?? "—"}
+              </span>
+            )}
+            <button
+              type="button"
+              className="rounded-sm border border-hairline px-2 py-1 text-fine text-ink-tertiary hover:bg-surface-alt"
+              onClick={() => setShowDevSwitcher((v) => !v)}
+            >
+              {t("perm.devSwitcher")}
+            </button>
+          </div>
+        </aside>
 
         {/* 탭 콘텐츠 / Tab content */}
-        <main className="flex-1 overflow-y-auto px-4 py-4">
+        <main className="flex-1 overflow-y-auto p-6">
+          {/* 읽기 전용 알림 / Read-only notice */}
+          {effectiveRole === "viewer" && (
+            <div className="mb-4 rounded-sm border border-hairline bg-surface-pearl px-3 py-2 text-caption text-ink-secondary">
+              {t("perm.readOnly")}
+            </div>
+          )}
+
           {!currentMockUser ? (
             // 유저 로드 전 / Before user resolves.
             <p className="text-caption text-ink-tertiary">…</p>
