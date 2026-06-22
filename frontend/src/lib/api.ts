@@ -88,6 +88,9 @@ export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
   groups: GraphGroup[];
+  // 권한 마스킹 — getResolvedGraph가 viewer 미만 호출자에게 200 + 빈 그래프 + locked:true 반환.
+  // Permission masking — getResolvedGraph returns 200 + empty graph + locked:true for below-viewer callers.
+  locked?: boolean;
 }
 
 export interface VersionGraph {

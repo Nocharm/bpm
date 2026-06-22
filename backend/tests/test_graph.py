@@ -17,7 +17,7 @@ def test_new_version_has_empty_graph(client: TestClient) -> None:
     response = client.get(f"/api/versions/{version_id}/graph")
 
     assert response.status_code == 200
-    assert response.json() == {"nodes": [], "edges": [], "groups": []}
+    assert response.json() == {"nodes": [], "edges": [], "groups": [], "locked": False}
 
 
 def test_replace_graph_roundtrips(client: TestClient) -> None:
@@ -190,7 +190,7 @@ def test_removing_nodes_cleans_up(client: TestClient) -> None:
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert saved == {"nodes": [], "edges": [], "groups": []}
+    assert saved == {"nodes": [], "edges": [], "groups": [], "locked": False}
 
 
 def test_put_missing_version_404(client: TestClient) -> None:

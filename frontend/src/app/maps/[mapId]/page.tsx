@@ -517,6 +517,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [rootGraph, setRootGraph] = useState<VersionGraph | null>(null);
   // 링크맵 resolved 그래프 캐시 — linkKey(맵+버전)별. 임베드 자식·subEnds 소스. resolved는 버전당 불변이라 무효화 없음.
   const [resolvedCache, setResolvedCache] = useState<Map<string, Graph>>(new Map());
+  // 잠긴 링크맵 키 집합 — resolved 응답 body가 locked:true면 기록(캐시엔 안 넣음). 펼침/드릴 봉인·Lock 뱃지의 단일 소스.
+  // Locked linked-map keys — recorded when a resolved response body has locked:true (not cached). Single source for sealing expand/drill + Lock badge.
+  const [lockedKeys, setLockedKeys] = useState<Set<string>>(new Set());
+  const lockedKeysRef = useRef<Set<string>>(new Set());
   // 라이브러리 프로세스 목록 — 버전 업데이트 뱃지·팔로우-최신 UI에 사용
   const [libraryList, setLibraryList] = useState<LibraryProcess[]>([]);
   const inFlightRef = useRef<Set<string>>(new Set());
@@ -724,16 +728,25 @@ function MapEditor({ mapId }: { mapId: number }) {
         continue;
       }
       const k = linkKey(n);
-      if (!k || resolvedCache.has(k) || inFlightRef.current.has(k)) {
+      if (!k || resolvedCache.has(k) || lockedKeys.has(k) || inFlightRef.current.has(k)) {
         continue;
       }
       inFlightRef.current.add(k);
       void getResolvedGraph(n.linked_map_id, n.follow_latest, n.linked_version_id)
-        .then((g) => setResolvedCache((prev) => new Map(prev).set(k, g)))
-        .catch(() => undefined)
+        // 잠금은 status가 아니라 응답 body(g.locked)로 판정 — Task1은 403이 아닌 200+빈 그래프를 반환.
+        // Judge lock from the response BODY (g.locked), not status — Task1 returns 200+empty, not 403.
+        .then((g) => {
+          if (g.locked) {
+            // 캐시엔 안 넣음 → getEmbed null → buildCompositeTree가 자식 없는 봉인 호스트 유지.
+            setLockedKeys((prev) => (prev.has(k) ? prev : new Set(prev).add(k)));
+          } else {
+            setResolvedCache((prev) => new Map(prev).set(k, g));
+          }
+        })
+        .catch(() => undefined) // 실제 네트워크/5xx만 — 잠금은 위 .then에서 처리
         .finally(() => inFlightRef.current.delete(k));
     }
-  }, [fullGraph, resolvedCache]);
+  }, [fullGraph, resolvedCache, lockedKeys]);
   // map_id → LibraryProcess 룩업 맵 — 업데이트 뱃지 계산용
   const libByMap = useMemo(() => {
     const m = new Map<number, LibraryProcess>();
@@ -755,7 +768,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         follow_latest: node.data.followLatest ?? false,
         linked_version_id: node.data.linkedVersionId ?? null,
       });
-      const resolved = k ? resolvedCache.get(k) : undefined;
       // updateAvailable: pinned 버전이 있고 라이브러리에 더 최신 발행본이 있는 경우
       const lib = node.data.linkedMapId != null ? libByMap.get(node.data.linkedMapId) : undefined;
       const updateAvailable =
@@ -763,12 +775,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         node.data.linkedVersionId != null &&
         lib?.latest_published_version_id != null &&
         lib.latest_published_version_id > node.data.linkedVersionId;
+      // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
+      if (k != null && lockedKeys.has(k)) {
+        return { ...node, data: { ...node.data, locked: true, updateAvailable } };
+      }
+      const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
         return { ...node, data: { ...node.data, updateAvailable } };
       }
       return { ...node, data: { ...node.data, subEnds: deriveSubEnds(resolved), updateAvailable } };
     },
-    [resolvedCache, libByMap],
+    [resolvedCache, libByMap, lockedKeys],
   );
   useEffect(() => {
     nodesRef.current = nodes;
@@ -776,6 +793,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     childNodesRef.current = childNodes;
   }, [childNodes]);
+  // lockedKeys ref 미러 — canExpand/isDrillableHost(deps []) 콜백이 stale 없이 최신 잠금 집합을 읽도록.
+  useEffect(() => {
+    lockedKeysRef.current = lockedKeys;
+  }, [lockedKeys]);
   // saveCurrentScope(useCallback)가 stale 클로저 없이 읽기전용 여부를 읽도록 ref 미러 — dep 추가 회피.
   const currentScopeIsReadOnlyRef = useRef<boolean>(false);
   useEffect(() => {
@@ -1390,14 +1411,20 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
             return false;
           };
+          // 명시적 접기 의도를 로컬로 캡처 후 ref 즉시 클리어 — 한 사이클만 적용(다음 펼침에 잔존 차단 없음, R1).
+          const collapseIntent = collapseIntentRef.current;
+          collapseIntentRef.current = new Set();
           setExpandedInline((prev) => {
-            const next = new Set([...prev].filter(isUnder)); // 1) 새 스코프 하위 펼침 유지(들어갈 때 붕괴 방지)
+            // 1) 새 스코프 하위 펼침 유지(들어갈 때 붕괴 방지) + 명시 접기 host 제외
+            const next = new Set([...prev].filter((h) => isUnder(h) && !collapseIntent.has(h)));
             // 2) 나가기(직전 스코프가 새 스코프 하위)면 드릴 경로(직전 스코프→새 스코프 사이)를 펼쳐 유지
-            //    → 떠난 스코프가 접히지 않고 인라인으로 보임(활성 영역만 이동).
+            //    → 떠난 스코프가 접히지 않고 인라인으로 보임(활성 영역만 이동). 단, 명시 접기 host는 re-add 건너뜀.
             if (prevScope !== null && prevScope !== undefined && isUnder(prevScope)) {
               let cur: string | null = prevScope;
               for (let guard = 0; cur !== null && cur !== currentParentId && guard < 20; guard++) {
-                next.add(cur);
+                if (!collapseIntent.has(cur)) {
+                  next.add(cur);
+                }
                 cur = byId.get(cur)?.parent_node_id ?? null;
               }
             }
@@ -1715,7 +1742,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 카메라 보정(focusCamRef 쓰기)은 호출 측(이벤트 핸들러/effect)에서 한다 — 렌더 중/useCallback 내 ref 변경 금지 룰 회피.
   const isDrillableHost = useCallback((hostNodeId: string): boolean => {
     const host = fullGraphRef.current?.nodes.find((n) => n.id === hostNodeId);
-    return !!host && host.node_type === "subprocess" && host.linked_map_id != null;
+    if (!host || host.node_type !== "subprocess" || host.linked_map_id == null) {
+      return false;
+    }
+    // 마스킹: 구조 검사 + 링크맵 권한 검사 — 잠긴 링크맵은 드릴 불가.
+    // Masking: structural check + linked-map permission check — locked linked-maps cannot drill.
+    const k = linkKey(host);
+    return !(k != null && lockedKeysRef.current.has(k));
   }, []);
   const drillIntoSubprocess = useCallback(
     (hostNodeId: string) => {
@@ -1770,6 +1803,33 @@ function MapEditor({ mapId }: { mapId: number }) {
     [navigateTo, scopes],
   );
 
+  // 명시적 접기 의도 — 이 사이클 동안 scope-load effect가 re-add/keep하지 말아야 할 host들. 사용 즉시 클리어.
+  // Explicit-collapse intent: hosts the scope-load effect must NOT re-inline THIS cycle. Cleared immediately after use.
+  const collapseIntentRef = useRef<Set<string>>(new Set());
+
+  // 하위프로세스 행 접기 — 드릴인(scopes)으로 펼친 host면 스코프를 pop하며 가드 표시(effect가 re-inline 안 함),
+  // 인라인으로만 펼친 host면 기존 토글로 제거. 펼치기 방향은 기존 경로 유지(이 헬퍼는 접기 전용).
+  const collapseSubprocessRow = useCallback(
+    (id: string) => {
+      const scopeIdx = scopes.findIndex((s) => scopeHostId(s) === id);
+      if (scopeIdx > 0) {
+        // idx 0 = root; >0 = drilled via scopes
+        // 이 host + 그 하위 스코프 host 전체(결정 ②: 중간 접기=하위 닫힘)를 가드에 표시.
+        for (const s of scopes.slice(scopeIdx)) {
+          const h = scopeHostId(s);
+          if (h != null) {
+            collapseIntentRef.current.add(h);
+          }
+        }
+        void navigateTo(scopes.slice(0, scopeIdx)); // scope pop → triggers the scope-load effect, which consumes the guard
+        return;
+      }
+      if (expandedInline.has(id)) {
+        toggleInlineExpandRef.current?.(id); // 인라인으로만 펼친 경우 — 기존 토글로 제거(effect 무관)
+      }
+    },
+    [scopes, navigateTo, expandedInline],
+  );
   // 버전 전환 — 현재 스코프 저장 후 루트로 리셋해 새 버전 캔버스를 로드
   const switchVersion = useCallback(
     async (nextVersionId: number) => {
@@ -2848,6 +2908,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     [summaryNodeId, patchNode],
   );
 
+  // 요약 패널 "하위 열기" — 드릴인 창 대신 같은 캔버스에 인라인 펼침. toggleInlineExpand는 아래에서 정의(TDZ)·ref를
+  // 읽으므로 ref 미러로 호출(인라인 JSX 화살표에서 직접 호출 시 react-hooks/refs 경고). useCallback 내부라 ref 접근 허용.
+  const handleSummaryOpenChild = useCallback(() => {
+    const id = summaryNodeId;
+    setSummaryNodeId(null);
+    if (id !== null) {
+      toggleInlineExpandRef.current?.(id);
+    }
+  }, [summaryNodeId]);
+
   // 인라인 이름 편집 커밋(캔버스 노드·아웃라인 공용) — 현재 스코프 노드는 state, 펼친 자식은 scope-split 저장.
   const renameNode = useCallback(
     (id: string, label: string) => {
@@ -3263,9 +3333,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     return counts;
   }, [comments]);
 
+  // 마스킹 게이트 — 잠긴 링크맵은 펼침 불가(canvas 펼침·컨텍스트 open child·아웃라인 subprocess 모두 여기로 수렴).
+  // Masking gate: locked linked-maps cannot expand (canvas expand · context open-child · outline subprocess all converge here).
+  const canExpand = useCallback((nodeId: string): boolean => {
+    const node = fullGraphRef.current?.nodes.find((n) => n.id === nodeId);
+    const k = node ? linkKey(node) : null;
+    return !(k != null && lockedKeysRef.current.has(k));
+  }, []);
+
   // 인라인 펼치기/접기 토글 — 순수 뷰(raw state·저장 무영향). 펼칠 때 한도 초과면 확인 모달.
   const toggleInlineExpand = useCallback(
     (nodeId: string) => {
+      // 마스킹 게이트(현재 no-op, 항상 허용) — 펼침/컨텍스트 open child/아웃라인 subprocess 모두 여기로 수렴.
+      if (!canExpand(nodeId)) {
+        return;
+      }
       const next = new Set(expandedInline);
       if (next.has(nodeId)) {
         next.delete(nodeId);
@@ -3301,7 +3383,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       commitExpanded(next);
     },
-    [expandedInline, fullGraph, commitExpanded],
+    [expandedInline, fullGraph, commitExpanded, canExpand],
   );
   // 컨텍스트 메뉴 등 위쪽 useMemo에서 호출하도록 ref로 노출(TDZ 회피)
   useEffect(() => {
@@ -4092,8 +4174,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       const target = event.target as HTMLElement | null;
       const nodeEl = target?.closest?.(".react-flow__node") as HTMLElement | null;
       const id = nodeEl?.getAttribute("data-id");
-      if (!id || nodesRef.current.some((node) => node.id === id)) {
-        return; // 현재 스코프(프레임) 노드/노드 밖 — React Flow 기본(onNodeDoubleClick) 처리
+      if (!id) {
+        return; // 노드 밖 — React Flow 기본 처리
+      }
+      // 프레임(현재 스코프) 노드 분기: 루트(편집 가능, scopeId=null) 노드는 RF onNodeDoubleClick가
+      // 드릴/이름편집을 처리하므로 그대로 위임. 딥뷰(읽기전용, scopeId!=null) 프레임 노드는
+      // RF가 더블클릭을 발화하지 않아(측정/읽기전용 차이) 딥드릴(L2→L3)이 죽는다 → 여기서 직접 드릴.
+      // Frame-node split: root (editable, scopeId=null) → defer to RF onNodeDoubleClick (drill + rename).
+      // Deep-view (read-only, scopeId!=null) frame nodes → RF doesn't fire dblclick, so drill here.
+      const frameNode = nodesRef.current.find((node) => node.id === id);
+      if (frameNode && frameNode.data?.scopeId == null) {
+        return; // 루트 편집 프레임 노드 — React Flow 기본(onNodeDoubleClick) 처리
       }
       event.preventDefault();
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
@@ -4132,6 +4223,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       parentId: currentParentId,
       label: node.data.label,
       nodeType: node.data.nodeType,
+      // 라이브 노드는 injectSubEnds가 채운 data.locked를 그대로 사용 / live nodes reuse data.locked set by injectSubEnds
+      locked: node.data.locked,
     }));
     const outlineEdges: OutlineEdge[] = edges.map((edge) => ({
       source: edge.source,
@@ -4149,11 +4242,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           continue;
         }
         seenNodes.add(flat.id);
+        const flatKey = linkKey(flat);
         outlineNodes.push({
           id: flat.id,
           parentId: flat.parent_node_id,
           label: flat.title,
           nodeType: normalizeNodeType(flat.node_type),
+          // 임베드/심층 노드는 라이브 data가 없으므로 linkKey를 lockedKeys로 직접 조회 / embedded/deep nodes: look up linkKey in lockedKeys directly
+          locked: flatKey != null && lockedKeys.has(flatKey),
         });
       }
       const seenEdges = new Set(outlineEdges.map((edge) => `${edge.source} ${edge.target}`));
@@ -4183,7 +4279,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       effectiveExpanded.add(host);
     }
     return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
-  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, expandedInline, scopes]);
+  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, expandedInline, scopes, lockedKeys]);
 
   // 스코프 전환 중 라이브 nodes 공백 구간엔 직전 비어있지 않은 outline을 고스트로 유지(깜빡임 방지).
   // 비어있지 않을 때만 갱신 → 공백 구간엔 마지막 good 값을 그대로 렌더해 "사라졌다 뜨는" 현상 제거.
@@ -4205,7 +4301,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     (id: string) => {
       // 하위프로세스 행 펼침/접힘은 캔버스 버튼과 동일하게 inline-embed 토글(자식 로드) — outline-local 토글 아님.
       if (isSubprocessRow(id)) {
-        toggleInlineExpandRef.current?.(id);
+        if (scopes.some((s) => scopeHostId(s) === id)) {
+          collapseSubprocessRow(id); // 드릴인된 host 토글 = 접기(스코프 pop, 가드)
+        } else {
+          toggleInlineExpandRef.current?.(id);
+        }
         return;
       }
       setExpandedOutline((prev) => {
@@ -4218,7 +4318,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return next;
       });
     },
-    [isSubprocessRow],
+    [isSubprocessRow, scopes, collapseSubprocessRow],
   );
 
   // 노드가 화면 밖일 때만 현재 줌 유지한 채 부드럽게 가운데로 — 이미 보이면 이동 없음(매 클릭 점프/줌변경 방지).
@@ -4398,7 +4498,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const row = outline.find((r) => r.id === id);
       if (row?.hasChildren && row.expanded) {
         if (isSubprocessRow(id)) {
-          toggleInlineExpandRef.current?.(id);
+          collapseSubprocessRow(id); // 드릴인/인라인 모드 인지 접기
           return;
         }
         setExpandedOutline((prev) => {
@@ -4413,7 +4513,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       foldToParent(id);
     },
-    [outline, foldToParent, isSubprocessRow],
+    [outline, foldToParent, isSubprocessRow, collapseSubprocessRow],
   );
 
   // F 토글 — 자식 있으면 펼치기↔접기 토글, 말단이면 부모를 접으며 부모로 이동.
@@ -4422,7 +4522,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       const row = outline.find((r) => r.id === id);
       if (row?.hasChildren) {
         if (isSubprocessRow(id)) {
-          toggleInlineExpandRef.current?.(id);
+          if (scopes.some((s) => scopeHostId(s) === id)) {
+            collapseSubprocessRow(id); // 드릴인된 host = 접기(스코프 pop, 가드)
+          } else {
+            toggleInlineExpandRef.current?.(id);
+          }
           return;
         }
         setExpandedOutline((prev) => {
@@ -4438,7 +4542,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       foldToParent(id);
     },
-    [outline, foldToParent, isSubprocessRow],
+    [outline, foldToParent, isSubprocessRow, scopes, collapseSubprocessRow],
   );
 
   // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.
@@ -5318,14 +5422,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onClose={() => setSummaryNodeId(null)}
-                onOpenChild={() => {
-                  // 드릴인 창 대신 같은 캔버스에 인라인 펼침(드릴인 창 열기는 제거)
-                  const id = summaryNodeId;
-                  setSummaryNodeId(null);
-                  if (id !== null) {
-                    toggleInlineExpand(id);
-                  }
-                }}
+                onOpenChild={handleSummaryOpenChild}
               />
             );
           })()}
