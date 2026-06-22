@@ -16,10 +16,11 @@ import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
 import { UserTable } from "@/components/admin/user-table";
+import { TableViewer } from "@/components/admin/table-viewer";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
-type TabId = "employees" | "queue" | "depts" | "users" | "groups";
+type TabId = "employees" | "queue" | "depts" | "users" | "tables" | "groups";
 type Access = "everyone" | "admin" | "sysadmin";
 
 interface Category {
@@ -44,6 +45,11 @@ const CATEGORIES: Category[] = [
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
       { id: "users", labelKey: "perm.sysadmin.tabUsers" },
     ],
+  },
+  {
+    labelKey: "admin.catDatabase",
+    access: "sysadmin",
+    tabs: [{ id: "tables", labelKey: "db.tablesTab" }],
   },
   {
     labelKey: "nav.groups",
@@ -122,6 +128,7 @@ export default function SettingsPage() {
           )}
           {current === "depts" && <DepartmentTable />}
           {current === "users" && <UserTable />}
+          {current === "tables" && <TableViewer />}
         </main>
       </div>
     </>

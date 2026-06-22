@@ -319,6 +319,41 @@ export function syncEmployees(): Promise<SyncSummary> {
   return request<SyncSummary>("/employees/sync", { method: "POST" });
 }
 
+// ── 어드민 테이블 뷰어 (sysadmin 전용, 읽기전용) / Admin table viewer ──
+
+export interface TableData {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface TableQuery {
+  page?: number;
+  size?: number;
+  sort?: string;
+  order?: "asc" | "desc";
+  q?: string;
+}
+
+export function listDbTables(): Promise<string[]> {
+  return request<string[]>("/admin/tables");
+}
+
+export function getDbTable(name: string, query: TableQuery = {}): Promise<TableData> {
+  const params = new URLSearchParams();
+  if (query.page) params.set("page", String(query.page));
+  if (query.size) params.set("size", String(query.size));
+  if (query.sort) params.set("sort", query.sort);
+  if (query.order) params.set("order", query.order);
+  if (query.q) params.set("q", query.q);
+  const qs = params.toString();
+  return request<TableData>(
+    `/admin/tables/${encodeURIComponent(name)}${qs ? `?${qs}` : ""}`,
+  );
+}
+
 export function getWorkflowState(versionId: number): Promise<WorkflowState> {
   return request<WorkflowState>(`/versions/${versionId}/workflow`);
 }

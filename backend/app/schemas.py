@@ -1,7 +1,7 @@
 """Pydantic request/response models — API boundary validation."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -436,3 +436,13 @@ class AiProposal(BaseModel):
             if edge.source not in keyset or edge.target not in keyset:
                 raise ValueError("edge references unknown node key")
         return self
+
+
+class TableDataOut(BaseModel):
+    """admin 테이블 뷰어 — 선택 테이블의 페이징/정렬/필터된 행 / Paginated table rows for the admin viewer."""
+
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    total: int
+    page: int
+    size: int
