@@ -109,7 +109,8 @@ export default function MapListPage() {
             {t("home.empty")}
           </p>
         ) : (
-          <ul className="flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+          // 리스트는 적당한 폭으로 제한(카드가 과하게 넓지 않게) / list capped so cards aren't too wide
+          <ul className="flex w-full min-w-0 max-w-sm shrink-0 flex-col gap-2 overflow-y-auto pr-1">
             {visibleMaps.map((processMap) => (
               <MapCard
                 key={processMap.id}
@@ -123,7 +124,8 @@ export default function MapListPage() {
         )}
 
         {effectiveSelected !== null && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto rounded-sm border border-hairline bg-surface-alt p-4 xl:block">
+          // 상세는 남는 폭을 채움(타임라인·멤버 공간) / detail fills remaining width
+          <aside className="hidden min-w-0 flex-1 overflow-y-auto rounded-sm border border-hairline bg-surface-alt p-4 xl:block">
             <MapDetailCard key={effectiveSelected} mapId={effectiveSelected} />
           </aside>
         )}

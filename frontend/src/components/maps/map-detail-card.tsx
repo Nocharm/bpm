@@ -6,8 +6,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Building2, User, Users } from "lucide-react";
 
-import { getMap, type MapDetail, type VersionStatus } from "@/lib/api";
+import {
+  getMap,
+  listMapPermissions,
+  type MapDetail,
+  type MapPermission,
+  type VersionStatus,
+} from "@/lib/api";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -30,16 +37,34 @@ const STATUS_STYLE: Record<VersionStatus, string> = {
   rejected: "border-error text-error",
 };
 
+// principal_type → 아이콘 / principal icon.
+function PrincipalIcon({ type }: { type: string }) {
+  if (type === "department") return <Building2 size={12} strokeWidth={1.5} />;
+  if (type === "group") return <Users size={12} strokeWidth={1.5} />;
+  return <User size={12} strokeWidth={1.5} />;
+}
+
 export function MapDetailCard({ mapId }: { mapId: number }) {
   const { t } = useI18n();
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 허용 인원 — my_role이 editor+ 일 때만 조회(서버 게이트와 동일) / members, editor+ only.
+  const [members, setMembers] = useState<MapPermission[] | null>(null);
 
   useEffect(() => {
     let active = true;
     void getMap(mapId)
-      .then((d) => {
-        if (active) setDetail(d);
+      .then(async (d) => {
+        if (!active) return;
+        setDetail(d);
+        if (d.my_role === "editor" || d.my_role === "owner") {
+          try {
+            const rows = await listMapPermissions(mapId);
+            if (active) setMembers(rows);
+          } catch {
+            // 멤버 조회 실패(권한/네트워크)는 무시 — 섹션만 비표시 / ignore; section hidden.
+          }
+        }
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : String(err));
@@ -102,6 +127,31 @@ export function MapDetailCard({ mapId }: { mapId: number }) {
           ))
         )}
       </div>
+
+      {/* 허용 인원 / Allowed members (editor+ only) */}
+      {members !== null && (
+        <div className="flex flex-col gap-1">
+          <p className="text-fine uppercase tracking-wide text-ink-tertiary">
+            {t("home.members")}
+          </p>
+          {members.length === 0 ? (
+            <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
+          ) : (
+            members.map((perm) => (
+              <div
+                key={perm.id}
+                className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
+              >
+                <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
+                  <PrincipalIcon type={perm.principal_type} />
+                  <span className="truncate">{perm.principal_id}</span>
+                </span>
+                <RoleBadge role={perm.role as MapRole} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
