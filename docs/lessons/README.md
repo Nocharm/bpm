@@ -1,6 +1,8 @@
 # Lessons — 시행착오 방지
 
-이 프로젝트(특히 **캔버스 에디터 / React Flow 계층형 인라인 편집**) 작업에서 실측으로 얻은 교훈. 같은 시행착오를 반복하지 않도록 카테고리별로 정리한다. **캔버스/에디터(`frontend/src/app/maps/[mapId]/page.tsx`)나 인라인 하위프로세스를 건드리기 전에 해당 문서를 먼저 읽을 것.**
+이 프로젝트의 캔버스 에디터(React Flow) 작업에서 실측으로 얻은 교훈. **캔버스/에디터(`frontend/src/app/maps/[mapId]/page.tsx`)를 건드리기 전에 해당 문서를 먼저 읽을 것.**
+
+> ⚠️ 인라인 계층 *편집*(자식 노드 직접 편집·자식 스코프 저장)은 **하위프로세스 참조 모델**에서 제거됐다 — 임베드 자식은 읽기전용. 자식-편집/스코프-저장 항목은 주로 역사적 기록이나, React Flow 렌더/좌표/드롭존/검증 함정은 읽기전용 임베드에도 유효.
 
 | 문서 | 언제 읽나 |
 |------|-----------|
@@ -9,4 +11,4 @@
 | [browser-verification.md](browser-verification.md) | Playwright로 캔버스 동작을 검증할 때 (dev.db 오염 함정 필독) |
 | [react-ts-patterns.md](react-ts-patterns.md) | useCallback deps/TDZ, ref 미러, 큰 상태 모델 변경 시 |
 
-> 진행 중 설계/계획은 `docs/superpowers/plans/` 참조 (예: 포커스 모드 `2026-06-19-active-scope-focus-mode.md`).
+> 설계/계획 기록은 `docs/superpowers/plans·specs/`(날짜별 스냅샷), 진행 현황은 `PROGRESS.md` 참조.

@@ -1,59 +1,87 @@
-# DB 초기화 & 더미 시드
+# DB 초기화 & 데모 시드
 
-로컬/서버 DB를 비우고 더미 프로세스맵 3세트를 채우는 방법. 데모·QA·버전 비교 화면 확인용.
+로컬/서버 DB를 비우고 데모 데이터를 채우는 방법. 데모·QA·화면 검증용. **서비스 미런칭 상태라 리셋은 자유롭게 가능** — 단 운영 데이터가 생긴 뒤에는 금지(아래 ⚠️).
 
-스크립트: `backend/scripts/seed_dummy.py`
+진입점: **`backend/scripts/reset_db.py`** (단일 명령으로 전체 리셋+시드). 부분 시드는 `seed_reference_demo.py`·`seed_permission_demo.py`.
 
-## 무엇이 만들어지나
+## 한 줄 리셋
 
-`--reset` 실행 시 **기존 맵을 전부 삭제**(cascade로 버전·노드·엣지·코멘트·그룹 정리)한 뒤 아래 3세트를 새로 생성한다.
-
-| 세트 | 내용 | 버전 수 | 특징 |
-|------|------|--------|------|
-| 구매 프로세스 | 4단계 드릴다운 + 평가 병렬 | 6 | 복잡 (계층 깊음) |
-| 신규 입사자 온보딩 | 3단계 + 준비작업 병렬 | 5 | 중간 |
-| 경비 정산 | 2단계, 대부분 직렬 | 4 | 단순 |
-
-각 세트는 base 트리에 버전별 누적 델타(edit/drop/add)를 적용해 As-Is→To-Be 계보를 만든다. `source_node_id` 계보를 전파하므로 **버전 비교 화면에서 added/removed/changed가 실제로 표시**된다.
-
-## 대상 DB
-
-`settings.database_url`(env `DATABASE_URL`)을 그대로 사용한다.
-
-- **로컬 네이티브**: 기본 무설정 sqlite 파일 `backend/dev.db` — 별도 설정 없이 바로 실행.
-- **서버 / 로컬 Postgres**: `.env`의 `DATABASE_URL`을 Postgres로 교체하면 그 DB에 시드된다 (`.env.example` 참고).
-
-스키마는 스크립트가 `init_models()`(startup `create_all`과 동일)로 보장하므로, 빈 DB에서도 테이블이 자동 생성된다.
-
-## 실행
-
-backend/ 에서 가상환경 활성화 후 실행한다. 의존성 설치는 `CLAUDE.md`의 Commands 참고.
+backend/ 에서 가상환경 활성화 후 (의존성 설치는 `CLAUDE.md` Commands 참고):
 
 ```bash
 # === bash (macOS/Linux) ===
 cd backend
-.venv/bin/python -m scripts.seed_dummy --reset            # 초기화 후 3세트 생성
-.venv/bin/python -m scripts.seed_dummy --reset --verify   # 생성 + 인접 버전 diff 개수 출력
+.venv/bin/python -m scripts.reset_db
 ```
-
 ```powershell
 # === PowerShell (Windows) ===
 cd backend
-.venv\Scripts\python -m scripts.seed_dummy --reset
-.venv\Scripts\python -m scripts.seed_dummy --reset --verify
+.venv\Scripts\python -m scripts.reset_db
 ```
 
-### 플래그
+성공 시 콘솔에 `schema drop_all+create_all` → `seed employees 5명` → 참조 데모 맵 → `seed permission demo` → `verify employees=6, map_permissions=…` 요약이 출력된다(employees는 직원5 + 비활성 승인자 데모 1 = 6).
 
-| 플래그 | 동작 |
-|--------|------|
-| (없음) | 기존 맵이 있으면 `abort` 출력 후 중단 (데이터 보존). 빈 DB면 3세트 생성. |
-| `--reset` | 기존 맵 전체 삭제 후 3세트 재생성 = **DB 초기화**. |
-| `--verify` | 시드 후 세트별 인접 버전 diff(추가/삭제/변경) 개수를 출력해 계보가 제대로 잡혔는지 확인. |
+## reset_db가 하는 일 (4단계)
 
-> ⚠️ `--reset` 은 해당 DB의 **모든 맵을 삭제**한다. 운영 데이터가 있는 DB에는 실행하지 말 것.
+| 단계 | 내용 |
+|------|------|
+| 1. 스키마 재생성 | `drop_all` + `create_all` — **모든 테이블 삭제 후 재생성**. 컬럼 추가 등 스키마 변경을 반영하는 유일한 경로 |
+| 2. 직원 시드 | `seed_local_employees` (LOCAL_USERS 5명: admin.kim / user.lee·park·choi·jung, org_l* 포함 영문) |
+| 3. 참조 데모 맵 | `seed_reference_demo` — 하위프로세스 참조(Call Activity) 모델 데모 맵 4개 |
+| 4. 권한 데모 | `seed_permission_demo` (ADDITIVE) — RBAC 워크플로 데모 엔터티 |
 
-## 검증
+> **`create_all`은 기존 테이블의 컬럼을 ALTER하지 않는다.** 모델에 컬럼을 추가했으면 기존 DB에는 반영 안 됨 → `reset_db`(drop 포함)로 재생성하거나 dev.db 파일을 지워야 한다. 마이그레이션(Alembic)은 후속.
 
-- 콘솔에 세트별 `seed ...` 요약과 (`--verify` 시) `verify 인접 버전 diff:` 블록이 출력되면 성공.
-- 앱 실행 후(`npm run dev` + backend) 맵 목록에 3개가 보이고, 버전 비교 화면에서 변경 하이라이트가 표시되는지 확인.
+## 시드되는 데모
+
+### 참조 데모 맵 (`seed_reference_demo`)
+하위프로세스 참조 모델 — 평면 노드 + 다른 맵 링크 — 의 검증 픽스처. 한 흐름에서 임베드·읽기전용 드릴인·다중 출구(대표끝/분기끝)·고정 참조·자동추종(`follow_latest`)·버전 업데이트 배지를 모두 보여준다.
+
+| 맵 | 상태 | 역할 |
+|----|------|------|
+| 주문 처리 | published v1 | 다중 출구(완료=대표끝 / 취소=분기끝) 링크 대상 |
+| 배송 | published v1·v2 | 끝 동일한 안전 버전업 (v2 최신) |
+| 결제 | published v1 | 자동추종(`follow_latest`) 대상 |
+| 주문 이행 | draft (편집) | 위 3맵을 링크 — 고정 v1 + follow-latest + 업데이트 배지 시연 |
+
+### 권한 데모 (`seed_permission_demo`, ADDITIVE)
+LOCAL_USERS/참조데모를 건드리지 않고 RBAC 워크플로만 추가. 데모 전용 비활성 승인자 `user.former` 1명을 여기서 삽입(LOCAL_USERS 아님).
+
+- 가시성 대비 맵 2 (Public / Private)
+- "Roles & Principals Demo" — user/department/group 3종 협업자 grant + pending 2건(권한 다운그레이드·가시성 변경) + 활성(`user.jung`)·비활성(`user.former`) 승인자
+- 그룹 2 — active "Approved Cross-Team Group"(맵에 grant→상속) + pending "Proposed Review Group"(sysadmin 승인 큐)
+- "Version Workflow Demo" — published v1 + pending v2(제출자 `user.lee`)
+
+화면으로 따라가는 8단계 투어는 **[`permission-demo-walkthrough.md`](permission-demo-walkthrough.md)** 참고.
+
+## 부분 시드 (선택)
+
+빈 DB에 한 종류만 채울 때. **둘 다 reset 없이 실행하면** 기존 행과 충돌할 수 있으니, 보통 `reset_db`를 쓴다.
+
+```bash
+# 참조 데모 맵만 (dev.db를 먼저 지울 것 — create_all은 컬럼을 ALTER하지 않음)
+rm -f dev.db && .venv/bin/python -m scripts.seed_reference_demo
+```
+```powershell
+Remove-Item dev.db; .venv\Scripts\python -m scripts.seed_reference_demo
+```
+
+## 대상 DB
+
+`settings.database_url`(env `DATABASE_URL`)을 그대로 쓴다.
+
+- **로컬 네이티브**: 기본 무설정 sqlite 파일 `backend/dev.db` — 바로 실행.
+- **로컬 Postgres / 서버**: `.env`의 `DATABASE_URL`을 Postgres로 교체하면 그 DB에 시드된다 (`.env.example` 참고).
+
+> ⚠️ `reset_db`는 1단계 `drop_all`로 대상 DB의 **모든 테이블을 삭제**한다. 운영 데이터가 있는 DB(서버 postgres)에는 절대 실행하지 말 것. 스크립트는 dev.db(sqlite) 전용으로 설계됨.
+
+## 권한 강제 모드로 검증
+
+기본은 전원 sysadmin(잠금 우회). 실제 역할로 권한 화면을 검증하려면 백엔드를 권한 시뮬레이션으로 띄운다:
+
+```bash
+DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bin/uvicorn app.main:app --reload --port 8000
+```
+
+- `DEV_ENFORCE_PERMISSIONS=true`: `BPM_SYSADMINS` 외 사용자는 실제 effective_role 적용.
+- dev 유저 전환은 로그인 화면 스위처(`bpm.devUser`에 저장). 자세한 시나리오는 walkthrough Step 0~7.

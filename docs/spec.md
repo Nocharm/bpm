@@ -8,31 +8,34 @@
 |------|------|
 | **ProcessMap** | 프로세스맵 문서 단위 (예: "구매 프로세스"). 버전들을 묶는 컨테이너 |
 | **Version** | 맵의 스냅샷. 라벨(As-Is, To-Be, 자유 입력)을 가지며 각각 독립 편집. 버전 간 비교 화면 제공 |
-| **Node** | 프로세스 단계. 한 버전에 속하며, 다른 노드의 하위 맵에 속할 수 있음 (계층) |
-| **Edge** | 노드 간 선후(흐름) 연결. 같은 캔버스(같은 부모) 내 노드끼리만 연결 |
+| **Node** | 프로세스 단계. 한 버전에 속하는 **평면** 노드. `node_type="subprocess"`면 다른 맵을 참조(Call Activity) |
+| **Edge** | 노드 간 선후(흐름) 연결. 같은 버전 캔버스 내 노드끼리만 연결 |
 
 **관계 두 축:**
-- **선후 (sequence)** — Edge로 표현. 같은 레벨 캔버스 안에서 화살표 연결
-- **상하 (hierarchy)** — `parent_node_id`로 표현. 노드가 자신의 하위 프로세스맵(자식 노드들의 캔버스)을 가짐. **깊이 무제한** (재귀)
+- **선후 (sequence)** — Edge로 표현. 같은 버전 캔버스 안에서 화살표 연결
+- **상하 (hierarchy)** — **하위프로세스 참조 모델(Call Activity)**. 옛 인라인 계층(`parent_node_id`)은 폐기 — subprocess 노드가 `linked_map_id`로 다른 맵을 링크하고, 그 맵을 읽기전용으로 인라인 임베드/드릴인한다. 편집은 루트 맵에서만, 임베드 자식은 읽기전용. 설계: `docs/superpowers/specs/2026-06-20-subprocess-reference-model-design.md`
 
 ## 2. 데이터 모델 (초안)
 
 ```
-process_maps   id, name, description, created_by, created_at, updated_at
+process_maps   id, name, description, created_by, created_at, updated_at,
+               owner_id, visibility(private/public)        # 권한 (RBAC, 후속 절)
 map_versions   id, map_id(FK), label(As-Is/To-Be/custom), created_by, created_at, updated_at,
+               status(draft/pending/approved/rejected/published),  # 버전 게시 워크플로
                checked_out_by, checked_out_at              # 체크아웃 잠금 (§7 Phase C)
-nodes          id, version_id(FK), parent_node_id(FK nodes, null=최상위 캔버스),
-               title, description, node_type, pos_x, pos_y, sort_order,
+nodes          id, version_id(FK), title, description, node_type, pos_x, pos_y, sort_order,
                color,                                      # 노드 색 지정 (§7 Phase A)
                assignee, department, system, duration,     # BPM 속성 (§7 Phase B)
-               source_node_id                              # 복제 출처 — diff 계보 매칭 (§7 Phase B)
-edges          id, version_id(FK), source_node_id(FK), target_node_id(FK), label
-comments       id, version_id(FK), node_id(FK nodes), author, body,
-               resolved, created_at                        # 노드 코멘트 (§7 Phase C)
+               source_node_id,                             # 복제 출처 — diff 계보 매칭 (§7 Phase B)
+               group_id, group_ids,                        # 업무 그룹(다중 태그) 소속
+               linked_map_id, linked_version_id, follow_latest,  # subprocess 참조(Call Activity)
+               is_primary_end                              # 대표 끝(프로세스당 1개, 버전업 유지)
+edges          id, version_id(FK), source_node_id, target_node_id, label  # node FK 없이 앱 계층 검증
+comments       id, version_id(FK), node_id, author, body, resolved, created_at  # 노드 코멘트 (§7 Phase C)
 ```
 
-- 계층 탐색: `parent_node_id = X`인 노드들 = 노드 X의 하위 캔버스
-- 버전 생성: 기존 버전(예: As-Is)의 노드/엣지 전체를 깊은 복사해 새 라벨(To-Be)로 생성
+- 노드는 평면(버전 스코프) — 계층은 subprocess 노드의 `linked_map_id` 참조로 표현(§1).
+- 버전 생성: 기존 버전(예: As-Is)의 노드/엣지 전체를 깊은 복사해 새 라벨(To-Be)로 생성. 권한·버전 워크플로 데이터 모델은 권한 설계 문서 참조(`docs/superpowers/specs/2026-06-20-permission-management-design.md`).
 
 ## 3. 화면 / UX
 
@@ -89,7 +92,9 @@ comments       id, version_id(FK), node_id(FK nodes), author, body,
 4. ~~**버전 관리 + 비교 화면**~~ ✅ — 버전 복제(깊은 복사, ID 재발급)/이름변경/삭제, 두 버전 나란히 읽기 전용 비교
 5. ~~**Keycloak 인증 연동**~~ ✅ — OIDC 로그인 + JWT 검증, AUTH_ENABLED 플래그로 로컬 우회
 6. ~~**기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업~~ ✅
-7. **서버 docker-compose 배포 (3333)** — 런북 `docs/deploy.md`. compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+7. ~~**서버 docker-compose 배포 (3333)**~~ ✅ — 런북 `docs/deploy.md`(Keycloak 로그인 + 사내 AD 동기화 포함). compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+8. ~~**하위프로세스 참조 모델(Call Activity)**~~ ✅ — 인라인 계층 편집(`parent_node_id`) 폐기 → 평면 노드 + 다른 맵 링크(읽기전용 임베드·드릴인). 설계 `…/2026-06-20-subprocess-reference-model-design.md`
+9. ~~**권한 관리(RBAC) 백엔드**~~ ✅ — 맵 가시성/소유자/협업자(user·dept·group 3종 principal)·승인자·버전 게시 워크플로·유저그룹. 게이트는 `DEV_ENFORCE_PERMISSIONS`로 로컬 검증. 설계 `…/2026-06-20-permission-management-design.md`
 
 ## 7. 기능 확장 (2026-06-12 확정)
 

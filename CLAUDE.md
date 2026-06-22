@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **BPM (Business Process Management) — 프로세스맵을 그리는 웹 서비스.** 현업이 노드/엣지로 계층형 프로세스 흐름을 시각적으로 작성·편집하고, As-Is/To-Be를 버전으로 관리·비교하는 도구. **기능 명세: `docs/spec.md`** (데이터 모델, UX, 구현 순서).
 
-> 상태: ⑤ Keycloak 인증(AUTH_ENABLED 플래그) · ⑥ 서버 docker-compose 배포(포트 3333) 반영 완료. **현재 주력: 캔버스 에디터 UX 고도화 — 계층형 인라인 펼침/편집**(브랜치 `feat/canvas-view-improvements`, 다음 목표 "포커스 모드" — `docs/superpowers/plans/2026-06-19-active-scope-focus-mode.md`).
-> DB: 로컬 네이티브는 sqlite 파일(무설정), 서버 compose는 postgres. 스키마는 startup `create_all` (마이그레이션/Alembic은 후속).
-> ⚠️ **캔버스/에디터·인라인 계층 편집 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션.
+> 상태(메인 기준): ⑤ Keycloak 인증 · ⑥ docker-compose 배포(3333) · ⑦ **하위프로세스 참조 모델(Call Activity)** — 인라인 계층 편집(`parent_node_id`) 폐기, 평면 노드 + 다른 맵 링크(읽기전용 임베드) · ⑧ **권한 관리(RBAC) 백엔드** 머지 완료(맵 가시성·협업자·승인자·버전 워크플로·유저그룹). 진행 현황은 `PROGRESS.md`, 구현 순서는 `docs/spec.md` §6.
+> DB: 로컬 네이티브는 sqlite 파일(무설정), 서버 compose는 postgres. 스키마는 startup `create_all`(마이그레이션 후속). **DB 초기화·데모 시드: `docs/db-seed.md`**(`python -m scripts.reset_db`).
+> ⚠️ **캔버스/에디터 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션. (단, 인라인 계층 *편집*은 ⑦에서 제거됨 → 읽기전용 임베드. lessons는 React Flow/좌표/검증 함정 위주로 유효.)
 
 ## Commands
 
@@ -82,7 +82,7 @@ docker-compose.yml
 
 ## Lessons — 시행착오 방지
 
-캔버스 에디터(특히 **React Flow 계층형 인라인 편집**)에서 실측으로 얻은 교훈. **`frontend/src/app/maps/[mapId]/page.tsx`나 인라인 하위프로세스를 건드리기 전에 해당 카테고리를 먼저 읽을 것** (인덱스: `docs/lessons/README.md`).
+캔버스 에디터(React Flow)에서 실측으로 얻은 교훈. **`frontend/src/app/maps/[mapId]/page.tsx`를 건드리기 전에 해당 카테고리를 먼저 읽을 것** (인덱스: `docs/lessons/README.md`). 인라인 계층 *편집*은 하위프로세스 참조 모델(⑦)에서 제거됨 — 임베드 자식은 읽기전용이라 아래 자식-편집/스코프-저장 항목은 주로 **역사적 기록**이나, React Flow 렌더/좌표/검증 함정은 읽기전용 임베드에도 유효.
 
 - [`docs/lessons/canvas-react-flow.md`](docs/lessons/canvas-react-flow.md) — 자식 노드는 메인 `nodes`에 합치지 말고 별도 `childNodes` state, prop-only 자식의 visibility/이벤트 함정, `getNode`/`getIntersectingNodes` 자식 한계, 펼침 중 인터랙션 게이팅.
 - [`docs/lessons/scope-save-and-coordinates.md`](docs/lessons/scope-save-and-coordinates.md) — 자식 스코프 저장 `getGraph→변형→PUT`(그룹 보존), fullGraph 낙관적 갱신, 스코프상대↔표시 좌표(`childOffsets`/`scopeOffsets`), buildScope는 dagre 대신 저장 pos.

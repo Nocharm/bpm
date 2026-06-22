@@ -4,7 +4,7 @@
 
 - 노드(단계)·엣지(선후 흐름)로 프로세스를 시각 편집 — React Flow 캔버스
 - 노드를 다른 노드 위로 끌어 **앞/뒤(흐름 삽입)·그룹·하위로 넣기** 드롭 영역 (커서 위치 기반, 원형 + 4방향 타일)
-- 하위 프로세스맵 진입 (계단식 창 스택 + 브레드크럼, 깊이 무제한) — 비활성 창은 경량 정적 프리뷰
+- 하위프로세스 노드가 **다른 맵을 참조**(Call Activity) — 읽기전용 인라인 임베드 + 드릴인, 고정 버전 또는 최신 자동추종
 - **업무 그룹**(부서/담당자) 묶음 — 이름·색 지정, 그룹 전체 이동, 멤버 나가기
 - 좌측 **아웃라인 트리**(분기 들여쓰기 + 하위 펼치기, 클릭 시 해당 노드로 포커싱)
 - 자동 정렬(선후 기준 레이아웃) 및 선택 노드 맞춤/등간격 정렬
@@ -66,6 +66,19 @@ npm run dev
 .venv\Scripts\python -m pytest tests/ -q
 .venv\Scripts\ruff check app/ tests/
 ```
+
+## 데이터 초기화 / 데모 시드
+
+서비스 미런칭 상태 — DB를 비우고 데모 데이터를 채울 수 있다. backend/ 에서:
+
+```bash
+.venv/bin/python -m scripts.reset_db        # drop+create + 직원 + 참조데모맵 + 권한데모
+```
+```powershell
+.venv\Scripts\python -m scripts.reset_db
+```
+
+> 전체 동작·부분 시드·권한 강제 검증은 **[`docs/db-seed.md`](docs/db-seed.md)**, RBAC 화면 투어는 [`docs/permission-demo-walkthrough.md`](docs/permission-demo-walkthrough.md).
 
 ## 서버 배포 (docker-compose)
 
