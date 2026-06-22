@@ -4161,8 +4161,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       const target = event.target as HTMLElement | null;
       const nodeEl = target?.closest?.(".react-flow__node") as HTMLElement | null;
       const id = nodeEl?.getAttribute("data-id");
-      if (!id || nodesRef.current.some((node) => node.id === id)) {
-        return; // 현재 스코프(프레임) 노드/노드 밖 — React Flow 기본(onNodeDoubleClick) 처리
+      if (!id) {
+        return; // 노드 밖 — React Flow 기본 처리
+      }
+      // 프레임(현재 스코프) 노드 분기: 루트(편집 가능, scopeId=null) 노드는 RF onNodeDoubleClick가
+      // 드릴/이름편집을 처리하므로 그대로 위임. 딥뷰(읽기전용, scopeId!=null) 프레임 노드는
+      // RF가 더블클릭을 발화하지 않아(측정/읽기전용 차이) 딥드릴(L2→L3)이 죽는다 → 여기서 직접 드릴.
+      // Frame-node split: root (editable, scopeId=null) → defer to RF onNodeDoubleClick (drill + rename).
+      // Deep-view (read-only, scopeId!=null) frame nodes → RF doesn't fire dblclick, so drill here.
+      const frameNode = nodesRef.current.find((node) => node.id === id);
+      if (frameNode && frameNode.data?.scopeId == null) {
+        return; // 루트 편집 프레임 노드 — React Flow 기본(onNodeDoubleClick) 처리
       }
       event.preventDefault();
       event.stopPropagation(); // React Flow 더블클릭 줌 방지
