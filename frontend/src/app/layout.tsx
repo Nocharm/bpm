@@ -6,7 +6,7 @@ import { Providers } from "@/components/providers";
 import { TopNav } from "@/components/top-nav";
 
 export const metadata: Metadata = {
-  title: "BPM — Business Process Management",
+  title: "Business Process Map",
   description: "계층형 프로세스맵 작성·편집 도구",
 };
 

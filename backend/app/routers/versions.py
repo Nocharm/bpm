@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app import workflow
 from app.auth import get_current_user
+from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.permissions.deps import require_version_map_role
@@ -120,6 +121,7 @@ async def _clone_graph(
 async def create_version(
     map_id: int,
     payload: VersionCreate,
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
     found_map = await session.get(ProcessMap, map_id)
@@ -146,6 +148,7 @@ async def create_version(
             )
         await _clone_graph(session, source, new_version.id)
 
+    record_version_event(session, new_version.id, "created", user)
     await session.commit()
     await session.refresh(new_version)
     return new_version
@@ -343,6 +346,7 @@ async def submit_version(
         version_id=version_id,
         message=f"{user} requested approval for '{version.label}'",
     )
+    record_version_event(session, version_id, "submitted", user)
     await session.commit()
     await session.refresh(version)
     return version
@@ -377,6 +381,7 @@ async def approve_version(
     if existing is None:
         session.add(VersionApproval(version_id=version_id, approver=user))
         await session.flush()
+        record_version_event(session, version_id, "approved", user)
 
     approved_count = await session.scalar(
         select(func.count())
@@ -432,6 +437,7 @@ async def reject_version(
             version_id=version_id,
             message=f"'{version.label}' was rejected: {payload.reason}",
         )
+    record_version_event(session, version_id, "rejected", user, note=payload.reason)
     await session.commit()
     await session.refresh(version)
     return version
@@ -473,6 +479,7 @@ async def publish_version(
         version_id=version_id,
         message=f"'{version.label}' was published",
     )
+    record_version_event(session, version_id, "published", user)
     await session.commit()
     await session.refresh(version)
     return version

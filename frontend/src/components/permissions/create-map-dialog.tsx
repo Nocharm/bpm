@@ -113,6 +113,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
 
   // ── 폼 상태 / form state ──
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<MapVisibility>("private");
   const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
@@ -176,7 +177,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setError(null);
     try {
       // 1. 맵 생성 — 생성자가 owner(서버 부여), 기본 가시성 private / Real map create (owner = creator).
-      const detail = await createMap(trimmed);
+      const detail = await createMap(trimmed, description.trim());
       // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators (applied immediately).
       for (const c of collaborators) {
         // owner은 생성자에게 이미 부여됨 → viewer/editor만 / Owner already granted; only viewer/editor here.
@@ -191,7 +192,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
       setError(err instanceof Error ? err.message : t("err.createMap"));
       setSubmitting(false);
     }
-  }, [currentUser, name, collaborators, approvers, onCreated, onClose, t]);
+  }, [currentUser, name, description, collaborators, approvers, onCreated, onClose, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -255,6 +256,21 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
             }}
             disabled={submitting}
             autoFocus
+          />
+        </div>
+
+        {/* 설명 / description */}
+        <div className="flex flex-col gap-1">
+          <label className="text-caption text-ink-secondary">
+            {t("perm.createDialog.descriptionLabel")}
+          </label>
+          <textarea
+            data-id="create-map-description"
+            className="min-h-[4rem] resize-y rounded-sm border border-hairline bg-surface px-3 py-1.5 text-body text-ink outline-none placeholder:text-ink-tertiary focus:border-accent"
+            placeholder={t("perm.createDialog.descriptionPlaceholder")}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={submitting}
           />
         </div>
 

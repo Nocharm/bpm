@@ -12,6 +12,7 @@ from app.permissions import logic
 from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.deps import require_map_role
 from app.schemas import MapCreate, MapDetailOut, MapOut, MapUpdate
+from app.version_events import record_version_event
 
 router = APIRouter(
     prefix="/api/maps", tags=["maps"], dependencies=[Depends(get_current_user)]
@@ -113,6 +114,8 @@ async def create_map(
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
     await session.flush()
+    # 초기 버전 생성 이벤트 — 버전 히스토리 타임라인 시작점
+    record_version_event(session, new_map.versions[0].id, "created", user)
     # 생성자에게 owner 권한 행 부여 — enforcement ON에서 본인 맵 잠금 방지 (brief §C)
     session.add(
         MapPermission(
@@ -125,6 +128,9 @@ async def create_map(
     )
     await session.commit()
     await session.refresh(new_map, attribute_names=["versions"])
+    # versions[].events를 미리 로드 — MapDetailOut 직렬화 시 lazy-load(MissingGreenlet) 방지
+    for version in new_map.versions:
+        await session.refresh(version, attribute_names=["events"])
     new_map.my_role = "owner"  # 생성자는 owner 권한 행 부여됨
     return new_map
 
@@ -140,7 +146,9 @@ async def get_map(
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
     found_map = await session.get(
-        ProcessMap, map_id, options=[selectinload(ProcessMap.versions)]
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
     )
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")

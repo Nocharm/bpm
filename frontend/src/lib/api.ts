@@ -13,6 +13,20 @@ export interface VersionSummary {
   status: VersionStatus;
   submitted_by: string | null;
   reject_reason: string | null;
+  created_at: string;
+}
+
+// 버전 생애주기 이벤트 — git-log 타임라인 행 / version lifecycle event.
+export interface VersionEvent {
+  id: number;
+  event_type: string;
+  actor: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface VersionDetail extends VersionSummary {
+  events: VersionEvent[];
 }
 
 export interface MapSummary {
@@ -31,7 +45,7 @@ export interface MapSummary {
 }
 
 export interface MapDetail extends MapSummary {
-  versions: VersionSummary[];
+  versions: VersionDetail[];
 }
 
 export interface GraphNode {
@@ -139,10 +153,20 @@ export function listMaps(): Promise<MapSummary[]> {
   return request<MapSummary[]>("/maps");
 }
 
-export function createMap(name: string): Promise<MapDetail> {
+export function createMap(name: string, description = ""): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export function updateMap(
+  mapId: number,
+  patch: { name?: string; description?: string },
+): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
   });
 }
 

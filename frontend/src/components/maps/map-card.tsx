@@ -58,27 +58,34 @@ export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
   }, [map.id, members]);
 
   return (
-    <li
+    <div
       className={`group relative cursor-pointer select-none rounded-sm border bg-surface p-4 hover:bg-surface-alt ${
         selected ? "border-accent ring-1 ring-accent" : "border-hairline"
       }`}
       onClick={() => onSelect?.(map.id)}
     >
-      {/* 호버 시 바로 열기 — 에디터로 직행(삭제는 상세 패널로 이동) / Hover quick-open (delete lives in detail) */}
-      <Link
+      {/* 호버 시 새 탭으로 열기 / Hover: open in a new tab */}
+      <a
+        data-id="map-card-open-newtab"
         href={`/maps/${map.id}`}
+        target="_blank"
+        rel="noopener"
         className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface hover:text-ink group-hover:opacity-100 focus-within:opacity-100"
-        aria-label={t("home.open")}
-        title={t("home.open")}
+        aria-label={t("home.openNewWindow")}
+        title={t("home.openNewWindow")}
         onClick={(e) => e.stopPropagation()}
       >
         <ExternalLink size={16} strokeWidth={1.5} />
-      </Link>
+      </a>
 
-      <span className="block truncate pr-6 text-body-strong text-ink">{map.name}</span>
-      {map.description && (
-        <p className="mt-0.5 line-clamp-1 text-caption text-ink-tertiary">{map.description}</p>
-      )}
+      <Link
+        data-id="map-card-name"
+        href={`/maps/${map.id}`}
+        className="block truncate pr-6 text-body-strong text-ink hover:text-accent hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {map.name}
+      </Link>
 
       {/* 우측 아래 — 가장 최신 버전 상태 필 / latest version status pill, bottom-right */}
       {map.latest_version_status && (
@@ -147,6 +154,6 @@ export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
           </div>
         )}
       </div>
-    </li>
+    </div>
   );
 }
