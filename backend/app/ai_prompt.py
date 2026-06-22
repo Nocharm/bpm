@@ -34,12 +34,16 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
    "node_ids":[<관련 기존 id>],"message":<문제점>,"suggestion":<개선안>}]}
 [구조 힌트]가 주어지면 우선 반영하세요. node_ids는 [현재 그래프]의 기존 id만 사용.
 
+[walkthrough — 단계별 안내 (읽기 전용, 편집 권한 불필요)]
+{"kind":"walkthrough","message":<요약>,"steps":[
+  {"order":1,"node_id":<기존 id>,"narration":<설명>}]}
+순서는 [현재 그래프]의 흐름(시작→끝)을 따르고, node_id는 기존 id만 사용.
+
 [규칙]
 1. graph의 edges·group_key는 같은 응답의 key 참조. ops의 node_id·source·target은 [현재 그래프]의 기존 id를 그대로 쓰고, 같은 배치에서 add한 노드는 그 새 key로 참조하세요. 좌표는 넣지 마세요(자동 배치).
 2. 담당자/부서(attributes)는 [조직 디렉터리]의 실제 인물·부서와 매칭해 채우고, 디렉터리에 없거나 모르면 빈 문자열로 두세요(지어내지 말 것).
 3. [현재 그래프]에 없는 노드를 참조하지 말고, 부득이하면 message에 그 사실을 적으세요.
-4. node_type="subprocess" 노드는 다른 맵의 읽기전용 참조 — 내부를 편집(ops 대상)하지 말고 루트만 다루세요.
-5. walkthrough 종류는 아직 사용하지 마세요(추후 활성)."""
+4. node_type="subprocess" 노드는 다른 맵의 읽기전용 참조 — 내부를 편집(ops 대상)하지 말고 루트만 다루세요."""
 
 
 def _serialize_node(node: NodeOut) -> str:
@@ -128,7 +132,7 @@ def build_system_prompt(
     edit_note = (
         "사용자는 현재 이 맵을 편집할 수 있습니다(graph/ops 가능)."
         if can_edit
-        else "사용자는 편집 권한이 없습니다 — graph/ops는 만들지 말고 answer 또는 analysis(읽기 전용)로만 답하세요."
+        else "사용자는 편집 권한이 없습니다 — graph/ops는 만들지 말고 answer/analysis/walkthrough(읽기 전용)로만 답하세요."
     )
     dir_block = "\n".join(f"- {line}" for line in (directory or [])) or "(없음)"
     hints = _structure_hints(current_graph)

@@ -593,3 +593,34 @@ def test_ai_analysis_allowed_when_not_editable(
 
     assert resp.status_code == 200
     assert resp.json()["kind"] == "analysis"  # read-only — 비편집에도 통과
+
+
+# === Phase 5: 워크스루(walkthrough, read-only) ===
+
+
+def test_ai_walkthrough_allowed_when_not_editable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    version_id = created["versions"][0]["id"]  # 체크아웃 안 함 → 비편집
+    monkeypatch.setattr(
+        ai_client,
+        "call_ai",
+        _fake_ai(
+            json.dumps(
+                {
+                    "kind": "walkthrough",
+                    "message": "투어",
+                    "steps": [{"order": 1, "node_id": "n1", "narration": "시작"}],
+                }
+            )
+        ),
+    )
+
+    resp = client.post(
+        f"/api/versions/{version_id}/ai/chat", json={"instruction": "설명해줘"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "walkthrough"  # read-only — 비편집에도 통과
