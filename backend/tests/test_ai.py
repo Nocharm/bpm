@@ -498,3 +498,54 @@ def test_ai_analysis_surfaces_unknown_node(
     assert resp.status_code == 200
     assert body["kind"] == "analysis"  # read-only — 다운그레이드 안 됨
     assert "ghost" in body["message"]  # 누락 참조 표면화 (규칙 ④)
+
+
+# === Phase 3: 생성(그룹/어트리뷰트) + 편집 ops ===
+
+
+def test_build_system_prompt_includes_directory() -> None:
+    # D2: 담당자/부서 매칭용 조직 디렉터리가 시스템 프롬프트에 주입
+    from app.ai_prompt import build_messages
+    from app.schemas import GraphOut
+
+    graph = GraphOut(nodes=[], edges=[], groups=[])
+    system = build_messages(
+        "M", graph, True, "?", [], ["김철수 | 구매팀", "이영희 | 영업팀"]
+    )[0]["content"]
+    assert "조직 디렉터리" in system
+    assert "김철수 | 구매팀" in system
+
+
+def test_ai_ops_passes_through_when_editable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    version_id = _draft_version_checked_out(client)  # can_edit True
+    content = json.dumps(
+        {
+            "kind": "ops",
+            "message": "추가했어요",
+            "ops": [
+                {
+                    "action": "add",
+                    "node": {
+                        "key": "n1",
+                        "title": "승인",
+                        "node_type": "process",
+                        "attributes": None,
+                        "group_key": None,
+                    },
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(content))
+
+    resp = client.post(
+        f"/api/versions/{version_id}/ai/chat", json={"instruction": "승인 추가해"}
+    )
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["kind"] == "ops"  # 편집 가능 → ops 통과(다운그레이드 안 됨)
+    assert body["ops"][0]["action"] == "add"

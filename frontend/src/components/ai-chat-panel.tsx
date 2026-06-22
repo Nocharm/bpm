@@ -17,6 +17,7 @@ interface AiChatPanelProps {
   aiEnabled: boolean;
   canEdit: boolean;
   onGraphProposal: (proposal: AiProposal) => void;
+  onOpsProposal: (proposal: AiProposal) => void;
 }
 
 export function AiChatPanel({
@@ -24,6 +25,7 @@ export function AiChatPanel({
   aiEnabled,
   canEdit,
   onGraphProposal,
+  onOpsProposal,
 }: AiChatPanelProps) {
   const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -72,11 +74,13 @@ export function AiChatPanel({
     }));
     try {
       const proposal = await aiChat(versionId, instruction, history, model || null);
-      // graph/answer만 활성 — 빈 message(핸들러 없는 kind)는 미지원 안내로 폴백 (규칙 ③b)
+      // graph/ops/answer 활성 — 빈 message(핸들러 없는 kind)는 미지원 안내로 폴백 (규칙 ③b)
       const content = proposal.message || t("ai.unsupportedKind");
       setMessages((prev) => [...prev, { role: "assistant", content }]);
       if (proposal.kind === "graph") {
         onGraphProposal(proposal);
+      } else if (proposal.kind === "ops") {
+        onOpsProposal(proposal);
       }
     } catch (err) {
       setMessages((prev) => [

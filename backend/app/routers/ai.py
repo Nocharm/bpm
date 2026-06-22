@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
@@ -12,7 +13,7 @@ from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
-from app.models import MapVersion
+from app.models import Employee, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal
 from app.settings import settings
@@ -54,6 +55,22 @@ def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
             seen.add(node_id)
             missing.append(node_id)
     return missing
+
+
+_DIRECTORY_LIMIT = 100  # 프롬프트 크기 가드 — 대규모 AD 스케일링은 Phase 7
+
+
+async def _load_directory(session: AsyncSession) -> list[str]:
+    """담당자/부서 매칭용 활성 직원 디렉터리 (D2) — 'name | department' 라인."""
+    emps = (
+        await session.scalars(
+            select(Employee)
+            .where(Employee.active)
+            .order_by(Employee.name)
+            .limit(_DIRECTORY_LIMIT)
+        )
+    ).all()
+    return [f"{emp.name} | {emp.department}" for emp in emps if emp.name]
 
 
 def _extract_json(text: str) -> str:
@@ -105,8 +122,9 @@ async def ai_chat(
         and version.checked_out_by == user
     )
     current = await _load_graph(session, version_id)
+    directory = await _load_directory(session)
     messages = build_messages(
-        get_manual(), current, can_edit, payload.instruction, payload.history
+        get_manual(), current, can_edit, payload.instruction, payload.history, directory
     )
 
     proposal = await _ask_and_validate(messages, payload.model)

@@ -5,22 +5,35 @@ from app.schemas import AiChatTurn, GraphOut, NodeOut
 _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 반드시 JSON 한 개만 반환하세요(설명 텍스트 금지).
 
-[활성 모드 — 지금은 아래 둘만 방출하세요]
-- 순서도 생성/편집: {"kind":"graph","message":<한국어 설명>,
-    "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
-    "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-              "attributes":{"assignee":"","department":"","system":"","duration":"","color":""},
-              "group_key":<groups의 key 또는 null>}],
-    "edges":[{"source":<key>,"target":<key>,"label":""}]}
-- 사용법/질문 답변: {"kind":"answer","message":<한국어 답변>}
+[모드 선택]
+- 빈 캔버스이거나 "그려/만들어/새로" 처럼 처음부터 생성 → graph(전체).
+- [현재 그래프]가 비어있지 않고 "추가/바꿔/삭제/이동/연결" 처럼 일부만 편집 → ops(증분). 기존 노드의 좌표·색·담당자·그룹은 그대로 보존됩니다.
+- 사용법/질문 → answer.
+
+[graph — 전체 생성]
+{"kind":"graph","message":<설명>,
+ "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
+ "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
+           "attributes":{"assignee":"","department":"","system":"","duration":"","color":""},
+           "group_key":<groups의 key 또는 null>}],
+ "edges":[{"source":<key>,"target":<key>,"label":""}]}
+예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end (각 노드 담당자 매칭).
+
+[ops — 증분 편집]
+{"kind":"ops","message":<설명>,"ops":[
+  {"action":"add","node":{"key":<새임시키>,"title":...,"node_type":...,"attributes":{...},"group_key":null}},
+  {"action":"connect","source":<기존id또는새키>,"target":<기존id또는새키>,"label":""},
+  {"action":"relabel","node_id":<기존id>,"title":<새제목>},
+  {"action":"set_attr","node_id":<기존id>,"attributes":{"assignee":"홍길동"}},
+  {"action":"remove","node_id":<기존id>}]}
+예) "견적 검토 뒤에 '승인' 추가해" → add(승인) + connect(견적검토 id → 승인 새키).
 
 [규칙]
-1. edges의 source/target와 node.group_key는 같은 응답 안의 key를 참조합니다. 좌표는 넣지 마세요(자동 배치).
-2. 노드 id 규칙: 신규 노드는 새 임시 key. [현재 그래프]의 기존 노드를 유지/수정할 때는 그 노드의 id를 key로 그대로 쓰고, 기존 attributes·group·제목을 보존하세요(빈값으로 덮어쓰지 말 것).
-3. attributes(담당자/부서/시스템/소요시간)는 아는 경우만 채우고, 모르면 빈 문자열로 두세요. 지어내지 마세요.
-4. [현재 그래프]에 없는 노드를 참조하지 말고, 부득이하면 message에 그 사실을 적으세요.
-5. node_type="subprocess" 로 표시된 노드는 다른 맵의 읽기전용 참조입니다 — 내부는 편집 대상이 아니며 루트만 편집합니다.
-6. ops/walkthrough/analysis 종류는 아직 사용하지 마세요(추후 활성)."""
+1. graph의 edges·group_key는 같은 응답의 key 참조. ops의 node_id·source·target은 [현재 그래프]의 기존 id를 그대로 쓰고, 같은 배치에서 add한 노드는 그 새 key로 참조하세요. 좌표는 넣지 마세요(자동 배치).
+2. 담당자/부서(attributes)는 [조직 디렉터리]의 실제 인물·부서와 매칭해 채우고, 디렉터리에 없거나 모르면 빈 문자열로 두세요(지어내지 말 것).
+3. [현재 그래프]에 없는 노드를 참조하지 말고, 부득이하면 message에 그 사실을 적으세요.
+4. node_type="subprocess" 노드는 다른 맵의 읽기전용 참조 — 내부를 편집(ops 대상)하지 말고 루트만 다루세요.
+5. walkthrough/analysis 종류는 아직 사용하지 마세요(추후 활성)."""
 
 
 def _serialize_node(node: NodeOut) -> str:
@@ -62,14 +75,21 @@ def _serialize_graph(graph: GraphOut) -> str:
     )
 
 
-def build_system_prompt(manual: str, current_graph: GraphOut, can_edit: bool) -> str:
+def build_system_prompt(
+    manual: str,
+    current_graph: GraphOut,
+    can_edit: bool,
+    directory: list[str] | None = None,
+) -> str:
     edit_note = (
-        "사용자는 현재 이 맵을 편집할 수 있습니다."
+        "사용자는 현재 이 맵을 편집할 수 있습니다(graph/ops 가능)."
         if can_edit
-        else "사용자는 현재 편집 권한이 없으니 그래프를 그리지 말고 kind=answer로만 답하세요."
+        else "사용자는 편집 권한이 없습니다 — graph/ops를 만들지 말고 kind=answer로만 답하세요."
     )
+    dir_block = "\n".join(f"- {line}" for line in (directory or [])) or "(없음)"
     return (
         f"{_INSTRUCTIONS}\n{edit_note}\n\n"
+        f"[조직 디렉터리 — 담당자/부서는 여기서 매칭]\n{dir_block}\n\n"
         f"[현재 그래프]\n{_serialize_graph(current_graph)}\n\n"
         f"[제품 매뉴얼]\n{manual}"
     )
@@ -81,9 +101,13 @@ def build_messages(
     can_edit: bool,
     instruction: str,
     history: list[AiChatTurn],
+    directory: list[str] | None = None,
 ) -> list[dict]:
     messages: list[dict] = [
-        {"role": "system", "content": build_system_prompt(manual, current_graph, can_edit)}
+        {
+            "role": "system",
+            "content": build_system_prompt(manual, current_graph, can_edit, directory),
+        }
     ]
     for turn in history:
         messages.append({"role": turn.role, "content": turn.content})

@@ -109,6 +109,8 @@ import {
   submitVersion,
   updateComment,
   withdrawVersion,
+  type AiNode,
+  type AiNodeAttributes,
   type AiProposal,
   type CheckoutState,
   type CommentItem,
@@ -116,6 +118,7 @@ import {
   type Graph,
   type GraphEdge,
   type GraphGroup,
+  type GraphNode,
   type LibraryProcess,
   type VersionGraph,
   type VersionSummary,
@@ -436,6 +439,31 @@ function offsetAtX(savedX: number, steps: { x: number; footprint: number }[]): n
   }
   return sum;
 }
+
+// AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
+function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined): GraphNode {
+  const attr = node.attributes;
+  return {
+    id,
+    title: node.title,
+    description: node.description,
+    node_type: node.node_type,
+    color: attr?.color ?? "",
+    assignee: attr?.assignee ?? "",
+    department: attr?.department ?? "",
+    system: attr?.system ?? "",
+    duration: attr?.duration ?? "",
+    pos_x: 0,
+    pos_y: 0,
+    sort_order: 0,
+    group_ids: groupId ? [groupId] : [],
+    linked_map_id: null,
+    follow_latest: false,
+    linked_version_id: null,
+    is_primary_end: false,
+  };
+}
+
 
 function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
@@ -1111,27 +1139,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         const id = genId();
         keyToId.set(node.key, id);
         // AI가 준 메타를 실제 노드에 반영 — 미제공은 빈값 (D1 생성=교체)
-        const attr = node.attributes;
         const groupId = node.group_key ? groupKeyToId.get(node.group_key) : undefined;
-        return {
-          id,
-          title: node.title,
-          description: node.description,
-          node_type: node.node_type,
-          color: attr?.color ?? "",
-          assignee: attr?.assignee ?? "",
-          department: attr?.department ?? "",
-          system: attr?.system ?? "",
-          duration: attr?.duration ?? "",
-          pos_x: 0,
-          pos_y: 0,
-          sort_order: 0,
-          group_ids: groupId ? [groupId] : [],
-          linked_map_id: null,
-          follow_latest: false,
-          linked_version_id: null,
-          is_primary_end: false,
-        };
+        return aiNodeToGraphNode(node, id, groupId);
       });
       const gedges = proposal.edges
         .map((edge) => {
@@ -1162,6 +1171,106 @@ function MapEditor({ mapId }: { mapId: number }) {
       setAiPreviewActive(true);
     },
     [pushHistory, setNodes, setEdges, setGroups],
+  );
+
+  // ── AI 증분 편집(ops) 적용 — 기존 좌표·색·담당자·그룹 보존 (D1 편집 경로) ──
+  const applyAiOps = useCallback(
+    (proposal: AiProposal) => {
+      if (proposal.kind !== "ops") return;
+      const existingGroupIds = new Set(groupsRef.current.map((group) => group.id));
+      const removed = new Set<string>();
+      const relabels = new Map<string, string>();
+      const setAttrs = new Map<string, AiNodeAttributes>();
+      const addedGraphNodes: GraphNode[] = [];
+      const keyToId = new Map<string, string>(); // add 임시키 → 새 id
+      const connectEdges: GraphEdge[] = [];
+
+      // add 먼저 — 이후 connect가 새 키를 참조할 수 있게
+      for (const op of proposal.ops) {
+        if (op.action === "add" && op.node) {
+          const id = genId();
+          keyToId.set(op.node.key, id);
+          const gid =
+            op.node.group_key && existingGroupIds.has(op.node.group_key)
+              ? op.node.group_key
+              : undefined;
+          addedGraphNodes.push(aiNodeToGraphNode(op.node, id, gid));
+        }
+      }
+      const resolve = (ref: string | null): string | null =>
+        ref ? keyToId.get(ref) ?? ref : null;
+
+      for (const op of proposal.ops) {
+        if (op.action === "remove" && op.node_id) {
+          removed.add(op.node_id);
+        } else if (op.action === "relabel" && op.node_id && op.title != null) {
+          relabels.set(op.node_id, op.title);
+        } else if (op.action === "set_attr" && op.node_id && op.attributes) {
+          setAttrs.set(op.node_id, op.attributes);
+        } else if (op.action === "connect") {
+          const source = resolve(op.source);
+          const target = resolve(op.target);
+          if (source && target) {
+            connectEdges.push({
+              id: genId(),
+              source_node_id: source,
+              target_node_id: target,
+              label: op.label ?? "",
+              source_side: "right",
+              target_side: "left",
+              source_handle: null,
+              target_handle: null,
+            });
+          }
+        }
+      }
+
+      // 기존 노드: remove 제외 + relabel/set_attr 적용 (좌표·나머지 보존)
+      const existingNodes = nodesRef.current
+        .filter((node) => !removed.has(node.id))
+        .map((node) => {
+          const title = relabels.get(node.id);
+          const attr = setAttrs.get(node.id);
+          if (title === undefined && attr === undefined) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...(title !== undefined ? { label: title } : {}),
+              ...(attr
+                ? {
+                    color: attr.color,
+                    assignee: attr.assignee,
+                    department: attr.department,
+                    system: attr.system,
+                    duration: attr.duration,
+                  }
+                : {}),
+            },
+          };
+        });
+      // 추가 노드: 기존 아래로 배치 — 기존 좌표는 불변
+      const addedNodes = toAppNodes({ nodes: addedGraphNodes, edges: [], groups: [] });
+      const baseY =
+        existingNodes.reduce((max, node) => Math.max(max, node.position.y), 0) + 140;
+      addedNodes.forEach((node, index) => {
+        node.position = { x: 80, y: baseY + index * 120 };
+      });
+      const finalNodes = [...existingNodes, ...addedNodes];
+      const finalEdges = [
+        ...edgesRef.current.filter(
+          (edge) => !removed.has(edge.source) && !removed.has(edge.target),
+        ),
+        ...toAppEdges({ nodes: [], edges: connectEdges, groups: [] }),
+      ];
+
+      pushHistory(); // Discard = undo restores the pre-preview state
+      aiPreviewRef.current = true;
+      setNodes(finalNodes);
+      setEdges(finalEdges);
+      setAiPreviewActive(true);
+    },
+    [pushHistory, setNodes, setEdges],
   );
 
   const commitAiPreview = useCallback(() => {
@@ -5444,6 +5553,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 onGraphProposal={applyAiProposal}
+                onOpsProposal={applyAiOps}
               />
             </ScopeWindow>
           )}
