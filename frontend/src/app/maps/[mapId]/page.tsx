@@ -4840,6 +4840,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <EditorLeftSidebar
           collapsed={leftCollapsed}
           onToggleCollapse={() => setLeftCollapsed((value) => !value)}
+          mapId={mapId}
           selectedId={selectedId}
           outline={displayOutline}
           onSelectNode={handleOutlineSelect}
