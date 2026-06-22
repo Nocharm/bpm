@@ -76,6 +76,26 @@ class MapVersion(Base):
     approvals: Mapped[list["VersionApproval"]] = relationship(
         cascade="all, delete-orphan"
     )
+    events: Mapped[list["VersionEvent"]] = relationship(
+        cascade="all, delete-orphan", order_by="VersionEvent.created_at"
+    )
+
+
+class VersionEvent(Base):
+    """버전 생애주기 이벤트 로그 — created/submitted/approved/rejected/published (누가·언제). git-log 타임라인 소스."""
+
+    __tablename__ = "version_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("map_versions.id", ondelete="CASCADE"), index=True
+    )
+    # created|submitted|approved|rejected|published
+    event_type: Mapped[str] = mapped_column(String(20))
+    actor: Mapped[str] = mapped_column(String(100))
+    # 거절 사유 등 부가 텍스트
+    note: Mapped[str | None] = mapped_column(String(500), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Node(Base):
