@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-22
+- **서버 시드 활성화** — `backend/Dockerfile`에 `COPY scripts/ scripts/` 추가(시드 스크립트가 이미지에 없어 컨테이너에서 `reset_db` 불가였음). 이제 서버에서 `docker compose up -d --build backend` 후 `docker compose exec backend python -m scripts.reset_db`로 시드. `db-seed.md`에 "서버(docker-compose)에서 시드" 섹션, `deploy.md` §3에 포인터 추가.
 - **md 문서 최신화 + 압축**(메인 기준) — `db-seed.md` 전면 재작성(stale `seed_dummy.py`→실제 `reset_db.py` 4단계: drop/create+직원+참조데모+권한데모, 부분 시드·권한 강제 검증), `deploy.md`+`deploy-auth-ad.md` 단일 런북 병합, `spec.md` 데이터모델·구현순서 최신화(parent_node_id 폐기→subprocess 참조·RBAC), CLAUDE.md 상태줄·README·lessons 현행화, `PROGRESS.md` 한 줄 요약으로 압축(175→약55줄).
 
 ## 2026-06-21

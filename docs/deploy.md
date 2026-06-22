@@ -77,6 +77,7 @@ docker compose up -d --build
 - `AUTH_ENABLED`/`KEYCLOAK_*`는 frontend **빌드 타임**에 `NEXT_PUBLIC_*`로 번들 인라인된다 → 값 변경 시 `--build` 필수(§7).
 - `LDAP_*`는 backend **런타임** 환경변수 → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영.
 - DB 스키마는 backend 起動 시 `create_all`로 생성(마이그레이션은 후속).
+- **데모 데이터 시드**(선택, 미런칭 빈 DB일 때): 시드 스크립트는 backend 이미지에 포함돼 있다 → `docker compose exec backend python -m scripts.reset_db`. ⚠️ `reset_db`는 `drop_all`로 전체 삭제 후 재시드 — 데이터가 있으면 날아간다. 상세·부분 시드는 `docs/db-seed.md`.
 
 ## 4. 헬스체크 + 인증/AD 검증
 

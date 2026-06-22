@@ -73,7 +73,26 @@ Remove-Item dev.db; .venv\Scripts\python -m scripts.seed_reference_demo
 - **로컬 네이티브**: 기본 무설정 sqlite 파일 `backend/dev.db` — 바로 실행.
 - **로컬 Postgres / 서버**: `.env`의 `DATABASE_URL`을 Postgres로 교체하면 그 DB에 시드된다 (`.env.example` 참고).
 
-> ⚠️ `reset_db`는 1단계 `drop_all`로 대상 DB의 **모든 테이블을 삭제**한다. 운영 데이터가 있는 DB(서버 postgres)에는 절대 실행하지 말 것. 스크립트는 dev.db(sqlite) 전용으로 설계됨.
+> ⚠️ `reset_db`는 1단계 `drop_all`로 대상 DB의 **모든 테이블을 삭제**한다. 운영 데이터가 있는 DB에는 절대 실행하지 말 것 — 데모/QA용 빈 DB에서만.
+
+## 서버(docker-compose)에서 시드
+
+서버는 compose/postgres 환경이고 `DATABASE_URL`이 컨테이너 안에서 자동으로 postgres(`db:5432`)를 가리키므로, **backend 컨테이너 안에서** 같은 스크립트를 돌리면 된다. 시드 스크립트는 backend 이미지에 포함돼 있다(`backend/Dockerfile`의 `COPY scripts/ scripts/`).
+
+저장소 루트(docker-compose.yml 위치)에서:
+
+```bash
+git pull                                  # 스크립트 포함 최신 이미지 소스
+docker compose up -d --build backend      # scripts/가 포함된 이미지로 재빌드
+docker compose exec backend python -m scripts.reset_db
+```
+
+성공 시 컨테이너 로그에 `schema drop_all+create_all` → `seed employees` → 참조 데모 → `seed permission demo` → `verify …` 요약이 출력된다.
+
+> ⚠️ 서버에서도 `reset_db`는 postgres의 **모든 테이블을 삭제**한다(`drop_all`). 미런칭 데모 서버라 데이터가 없을 때만 안전. 스키마를 두고 데모만 추가하려면 `reset_db` 대신 빈 DB에 `scripts.seed_reference_demo`(+`scripts.seed_permission_demo`)만 돌린다.
+>
+> 이미지를 재빌드하기 싫으면 호스트 스크립트를 일회용 컨테이너에 마운트해도 된다:
+> `docker compose run --rm -v "$(pwd)/backend/scripts:/app/scripts" backend python -m scripts.reset_db`
 
 ## 권한 강제 모드로 검증
 
