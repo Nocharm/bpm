@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-22
+- **feat(seed): 버전 비교 데모 맵 추가** — `seed_compare_demo`(reset_db ADDITIVE 5단계) 신설. "Version Comparison Demo (As-Is / To-Be)" 맵 1개에 As-Is(published)·To-Be(draft) 2버전, To-Be `source_node_id`로 As-Is 계보 연결 → 비교 화면에서 추가(품질 점검)/삭제(수기 승인)/변경(신용 검토 담당자·출고→출고/배송) 하이라이트. 검증: reset_db 후 diff 규칙 재현 = added 1·removed 1·changed 2. db-seed.md 갱신.
 - **fix(seed): 권한 데모 맵 버전 누락 → 에디터 크래시 수정** — `seed_permission_demo._create_map`이 버전 없이 맵 생성 → Public/Private/Roles 맵을 열면 에디터 `versions[0].id`에서 `cannot read properties of undefined (reading 'id')`. 정상 `create_map` 라우터처럼 초기 "As-Is" 버전을 시드(`seed_version=True` 기본, Version Workflow 맵만 자체 v1/v2라 False). 검증: reset_db 후 8개 맵 전부 ≥1 버전(이전 5/6/7 = 0).
 - **서버 시드 활성화** — `backend/Dockerfile`에 `COPY scripts/ scripts/` 추가(시드 스크립트가 이미지에 없어 컨테이너에서 `reset_db` 불가였음). 이제 서버에서 `docker compose up -d --build backend` 후 `docker compose exec backend python -m scripts.reset_db`로 시드. `db-seed.md`에 "서버(docker-compose)에서 시드" 섹션, `deploy.md` §3에 포인터 추가.
 - **md 문서 최신화 + 압축**(메인 기준) — `db-seed.md` 전면 재작성(stale `seed_dummy.py`→실제 `reset_db.py` 4단계: drop/create+직원+참조데모+권한데모, 부분 시드·권한 강제 검증), `deploy.md`+`deploy-auth-ad.md` 단일 런북 병합, `spec.md` 데이터모델·구현순서 최신화(parent_node_id 폐기→subprocess 참조·RBAC), CLAUDE.md 상태줄·README·lessons 현행화, `PROGRESS.md` 한 줄 요약으로 압축(175→약55줄).
