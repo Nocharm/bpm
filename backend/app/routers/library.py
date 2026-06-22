@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import MapVersion, Node, ProcessMap
+from app.permissions.access import get_effective_role
+from app.permissions.logic import role_rank
 from app.routers.graph import _load_graph
 from app.schemas import GraphOut
 from app.subprocess import resolve_linked_version
@@ -64,8 +66,14 @@ async def resolved_graph(
     map_id: int,
     follow_latest: bool = Query(False),
     pinned: int | None = Query(None),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
+    # 마스킹(옵션1 완전 잠금): viewer 미만은 자식 그래프를 만들지 않고 잠금 응답 — 데이터 자체를 안 싣는다.
+    # Masking (full lock): below-viewer never builds the child graph — return empty locked payload.
+    role = await get_effective_role(session, user, map_id)
+    if role_rank(role) < role_rank("viewer"):
+        return GraphOut(nodes=[], edges=[], locked=True)
     version_id = await resolve_linked_version(session, map_id, follow_latest, pinned)
     if version_id is None:
         raise HTTPException(status_code=404, detail="해석할 버전이 없습니다.")

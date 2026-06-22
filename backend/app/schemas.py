@@ -255,6 +255,7 @@ class GraphOut(BaseModel):
     nodes: list[NodeOut]
     edges: list[EdgeIn]
     groups: list[GroupIn] = []
+    locked: bool = False  # True → caller is below viewer; empty payload, no graph built
 
 
 class VersionGraphOut(BaseModel):
