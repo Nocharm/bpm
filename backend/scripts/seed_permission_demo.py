@@ -72,8 +72,15 @@ async def _create_map(
     description: str,
     owner: str,
     visibility: str,
+    seed_version: bool = True,
 ) -> ProcessMap:
-    """Create a ProcessMap (owner_id/created_by set) + an owner MapPermission row."""
+    """Create a ProcessMap (owner_id/created_by set) + an owner MapPermission row.
+
+    seed_version: append an initial "As-Is" version so the map is openable in the
+    editor. Every map needs ≥1 version (the create_map router seeds one too) — without
+    it the editor crashes on `versions[0].id`. The version-workflow map manages its own
+    v1/v2, so it passes seed_version=False.
+    """
     pm = ProcessMap(
         name=name,
         description=description,
@@ -92,6 +99,8 @@ async def _create_map(
             granted_by=owner,
         )
     )
+    if seed_version:
+        session.add(MapVersion(map_id=pm.id, label="As-Is"))
     return pm
 
 
@@ -215,6 +224,7 @@ async def _seed_version_workflow_map(session: AsyncSession) -> ProcessMap:
         description="Publish workflow mid-flight: a published v1 and a pending v2 awaiting approval.",
         owner="user.lee",
         visibility="private",
+        seed_version=False,  # manages its own v1/v2 below
     )
     # Approver required so the pending state is valid (submit gate needs an active approver).
     session.add(MapApprover(map_id=pm.id, user_id="user.jung", assigned_by="user.lee"))
