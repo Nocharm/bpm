@@ -624,3 +624,25 @@ def test_ai_walkthrough_allowed_when_not_editable(
 
     assert resp.status_code == 200
     assert resp.json()["kind"] == "walkthrough"  # read-only — 비편집에도 통과
+
+
+# === Phase 6: 매뉴얼 안내 ===
+
+
+def test_manual_covers_ai_features() -> None:
+    from app.manual import get_manual
+
+    manual = get_manual()
+    for topic in ["분석", "워크스루", "하위 프로세스 참조", "승인"]:
+        assert topic in manual
+
+
+def test_answer_grounding_instruction_in_prompt() -> None:
+    from app.ai_prompt import build_messages
+    from app.schemas import GraphOut
+
+    system = build_messages(
+        "MANUAL_BODY", GraphOut(nodes=[], edges=[], groups=[]), True, "?", []
+    )[0]["content"]
+    assert "MANUAL_BODY" in system  # 매뉴얼 주입
+    assert "모른다" in system  # answer 근거/범위 밖 규칙
