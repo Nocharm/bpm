@@ -37,6 +37,13 @@ const STATUS_STYLE: Record<VersionStatus, string> = {
   rejected: "border-error text-error",
 };
 
+// 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
+const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
+  { type: "user", labelKey: "home.memberUser" },
+  { type: "department", labelKey: "home.memberDept" },
+  { type: "group", labelKey: "home.memberGroup" },
+];
+
 // principal_type → 아이콘 / principal icon.
 function PrincipalIcon({ type }: { type: string }) {
   if (type === "department") return <Building2 size={12} strokeWidth={1.5} />;
@@ -113,54 +120,69 @@ export function MapDetailCard({ mapId, onDelete }: MapDetailCardProps) {
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
       </div>
 
-      {/* 버전 + 승인 상태 / Versions with approval status */}
-      <div className="flex flex-col gap-1">
-        <p className="text-fine uppercase tracking-wide text-ink-tertiary">
-          {t("home.versions")}
-        </p>
-        {detail.versions.length === 0 ? (
-          <p className="text-caption text-ink-tertiary">{t("perm.version.noVersions")}</p>
-        ) : (
-          detail.versions.map((version) => (
-            <div
-              key={version.id}
-              className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
-            >
-              <span className="min-w-0 truncate text-caption text-ink">{version.label}</span>
-              <span
-                className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${STATUS_STYLE[version.status]}`}
-              >
-                {t(STATUS_LABEL[version.status])}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* 허용 인원 / Allowed members (editor+ only) */}
-      {members !== null && (
-        <div className="flex flex-col gap-1">
+      {/* 버전 · 허용 인원 — 좌우 배치 / Versions and members side by side */}
+      <div className="flex flex-wrap gap-4">
+        {/* 버전 + 승인 상태 / Versions with approval status */}
+        <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
           <p className="text-fine uppercase tracking-wide text-ink-tertiary">
-            {t("home.members")}
+            {t("home.versions")}
           </p>
-          {members.length === 0 ? (
-            <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
+          {detail.versions.length === 0 ? (
+            <p className="text-caption text-ink-tertiary">{t("perm.version.noVersions")}</p>
           ) : (
-            members.map((perm) => (
+            detail.versions.map((version) => (
               <div
-                key={perm.id}
+                key={version.id}
                 className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
               >
-                <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
-                  <PrincipalIcon type={perm.principal_type} />
-                  <span className="truncate">{perm.principal_id}</span>
+                <span className="min-w-0 truncate text-caption text-ink">{version.label}</span>
+                <span
+                  className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${STATUS_STYLE[version.status]}`}
+                >
+                  {t(STATUS_LABEL[version.status])}
                 </span>
-                <RoleBadge role={perm.role as MapRole} />
               </div>
             ))
           )}
         </div>
-      )}
+
+        {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서 / grouped members */}
+        {members !== null && (
+          <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+            <p className="text-fine uppercase tracking-wide text-ink-tertiary">
+              {t("home.members")}
+            </p>
+            {members.length === 0 ? (
+              <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
+            ) : (
+              // gap-3 = 그룹 사이 스페이서 / spacer between groups.
+              <div className="flex flex-col gap-3">
+                {MEMBER_GROUPS.map((g) => {
+                  const rows = members.filter((m) => m.principal_type === g.type);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div key={g.type} className="flex flex-col gap-1">
+                      <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
+                      {rows.map((perm) => (
+                        <div
+                          key={perm.id}
+                          className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
+                            <PrincipalIcon type={perm.principal_type} />
+                            <span className="truncate">{perm.principal_id}</span>
+                          </span>
+                          <RoleBadge role={perm.role as MapRole} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       </div>
 
       {/* 하단 고정 버튼바 — 왼쪽: 열기·맵 설정 / 오른쪽: 삭제(owner) / Pinned footer */}

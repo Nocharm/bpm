@@ -117,7 +117,6 @@ export default function MapListPage() {
               <MapCard
                 key={processMap.id}
                 map={processMap}
-                onDelete={(id) => void handleDelete(id)}
                 selected={effectiveSelected === processMap.id}
                 onSelect={setSelectedId}
               />

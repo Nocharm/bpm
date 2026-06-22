@@ -4,8 +4,9 @@
 // Home map card: click selects it (detail panel). The title no longer navigates — open from detail.
 // 카드 자체 액션은 삭제(owner)만. 가시성·역할·허용 인원은 메타 한 줄.
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
-import { Building2, ChevronDown, Trash2, User, Users } from "lucide-react";
+import { Building2, ChevronDown, ExternalLink, User, Users } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
 import { RoleBadge } from "@/components/permissions/role-badge";
@@ -14,7 +15,6 @@ import type { MapRole } from "@/lib/mock/permissions";
 
 interface MapCardProps {
   map: MapSummary;
-  onDelete: (mapId: number) => void;
   // 마스터-디테일 선택 — 클릭 시 우측 상세 패널 대상 / select for the detail panel.
   selected?: boolean;
   onSelect?: (mapId: number) => void;
@@ -27,10 +27,9 @@ function PrincipalIcon({ type }: { type: string }) {
   return <User size={12} strokeWidth={1.5} />;
 }
 
-export function MapCard({ map, onDelete, selected = false, onSelect }: MapCardProps) {
+export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
   const { t } = useI18n();
 
-  const isOwner = map.my_role === "owner";
   // 인원 목록 조회는 서버에서 editor+ 게이트 — viewer 카드엔 버튼 미노출 / list-permissions is editor+ gated.
   const canViewMembers = map.my_role === "editor" || map.my_role === "owner";
 
@@ -60,23 +59,16 @@ export function MapCard({ map, onDelete, selected = false, onSelect }: MapCardPr
       }`}
       onClick={() => onSelect?.(map.id)}
     >
-      {/* 호버 시 삭제(owner) — 열기/설정은 상세 패널로 이동 / Hover delete (owner); open/settings live in detail */}
-      {isOwner && (
-        <div className="absolute right-3 top-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-error hover:bg-surface"
-            aria-label={t("home.delete")}
-            title={t("home.delete")}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(map.id);
-            }}
-          >
-            <Trash2 size={16} strokeWidth={1.5} />
-          </button>
-        </div>
-      )}
+      {/* 호버 시 바로 열기 — 에디터로 직행(삭제는 상세 패널로 이동) / Hover quick-open (delete lives in detail) */}
+      <Link
+        href={`/maps/${map.id}`}
+        className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface hover:text-ink group-hover:opacity-100 focus-within:opacity-100"
+        aria-label={t("home.open")}
+        title={t("home.open")}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ExternalLink size={16} strokeWidth={1.5} />
+      </Link>
 
       <span className="block truncate pr-6 text-body-strong text-ink">{map.name}</span>
       {map.description && (
