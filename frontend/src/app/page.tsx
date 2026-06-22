@@ -3,14 +3,14 @@
 // 홈 — 프로세스맵 목록 (공개범위 필터링) + 맵 생성 다이얼로그 /
 // Home: map list filtered by mock visibility + map creation dialog.
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
+import { MapCard } from "@/components/maps/map-card";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 export default function MapListPage() {
@@ -91,28 +91,21 @@ export default function MapListPage() {
 
       {error && <p className="mb-4 text-caption text-error">{error}</p>}
 
-      <ul className="divide-y divide-divider rounded-sm border border-hairline bg-surface">
-        {visibleMaps.length === 0 && (
-          <li className="p-4 text-caption text-ink-tertiary">{t("home.empty")}</li>
-        )}
-        {visibleMaps.map((processMap) => (
-          <li key={processMap.id} className="flex items-center justify-between p-4 hover:bg-surface-alt">
-            <Link
-              href={`/maps/${processMap.id}`}
-              className="text-body-strong text-ink hover:underline"
-            >
-              {processMap.name}
-            </Link>
-            <button
-              className="inline-flex items-center gap-1 text-caption text-error hover:bg-surface-alt"
-              onClick={() => void handleDelete(processMap.id)}
-            >
-              <Trash2 size={16} strokeWidth={1.5} />
-              {t("home.delete")}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {visibleMaps.length === 0 ? (
+        <p className="rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+          {t("home.empty")}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {visibleMaps.map((processMap) => (
+            <MapCard
+              key={processMap.id}
+              map={processMap}
+              onDelete={(id) => void handleDelete(id)}
+            />
+          ))}
+        </ul>
+      )}
 
       {dialogOpen && (
         <CreateMapDialog
