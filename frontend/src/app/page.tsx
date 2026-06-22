@@ -114,19 +114,41 @@ export default function MapListPage() {
         ) : (
           <ul className="flex min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2 overflow-y-auto pr-1">
             {visibleMaps.map((processMap) => (
-              <MapCard
-                key={processMap.id}
-                map={processMap}
-                selected={effectiveSelected === processMap.id}
-                onSelect={setSelectedId}
-              />
+              <li key={processMap.id} className="flex flex-col">
+                <MapCard
+                  map={processMap}
+                  selected={effectiveSelected === processMap.id}
+                  onSelect={setSelectedId}
+                />
+                {/* 폭이 좁을 때(< xl)만 — 선택 카드 아래 펼침 아코디언 / inline accordion below the selected card on narrow screens */}
+                <div
+                  data-id="map-detail-accordion"
+                  className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth xl:hidden ${
+                    effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                  }`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    {effectiveSelected === processMap.id && (
+                      <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
+                        <MapDetailCard
+                          mapId={processMap.id}
+                          onDelete={(id) => void handleDelete(id)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </li>
             ))}
           </ul>
         )}
 
         {effectiveSelected !== null && (
-          // 상세 — 리스트와 같은 폭. 내부 스크롤·하단 버튼바는 MapDetailCard가 처리 / equal width; scroll+footer inside
-          <aside className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex">
+          // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
+          <aside
+            data-id="map-detail-aside"
+            className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
+          >
             <MapDetailCard
               key={effectiveSelected}
               mapId={effectiveSelected}
