@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { isApprover, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
 import { VisibilityControl } from "@/components/permissions/visibility-control";
@@ -23,16 +24,17 @@ import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
 
-type TabId = "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals";
+type TabId = "details" | "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals";
 
 interface Tab {
   id: TabId;
-  labelKey: "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals";
+  labelKey: "perm.tabDetails" | "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals";
 }
 
 // 전체 탭 목록 — approvals는 조건부 노출로 별도 처리 /
 // Full tab list — approvals is shown conditionally, filtered at render.
 const ALL_TABS: Tab[] = [
+  { id: "details", labelKey: "perm.tabDetails" },
   { id: "collaborators", labelKey: "perm.tabCollaborators" },
   { id: "approvers", labelKey: "perm.tabApprovers" },
   { id: "visibility", labelKey: "perm.tabVisibility" },
@@ -90,7 +92,7 @@ export default function SettingsPage() {
   }, [mapIdStr]);
 
   // 탭 상태 / Active tab state.
-  const [activeTab, setActiveTab] = useState<TabId>("collaborators");
+  const [activeTab, setActiveTab] = useState<TabId>("details");
 
   // 토스트 상태 / Toast state.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -273,6 +275,8 @@ export default function SettingsPage() {
           {!currentMockUser ? (
             // 유저 로드 전 / Before user resolves.
             <p className="text-caption text-ink-tertiary">…</p>
+          ) : activeTab === "details" ? (
+            <MapDetailsPanel mapId={mapIdStr} canEdit={canEdit} onToast={showToast} />
           ) : activeTab === "collaborators" ? (
             <CollaboratorsPanel
               mapId={mapIdStr}
