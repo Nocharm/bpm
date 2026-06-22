@@ -59,7 +59,7 @@ export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
 
   return (
     <li
-      className={`group relative rounded-sm border bg-surface p-4 hover:bg-surface-alt ${
+      className={`group relative cursor-pointer select-none rounded-sm border bg-surface p-4 hover:bg-surface-alt ${
         selected ? "border-accent ring-1 ring-accent" : "border-hairline"
       }`}
       onClick={() => onSelect?.(map.id)}

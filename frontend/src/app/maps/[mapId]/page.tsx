@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Download, FoldHorizontal, LayoutGrid, Lock, LogOut, Maximize, Network, PanelRight, PencilLine, Redo2, Undo2, UnfoldHorizontal } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown, Download, LayoutGrid, Lock, LogOut, Maximize, Network, PanelLeft, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -546,6 +546,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  // 우측 인스펙터 하단 탭 패널 — 승인/버전/다운로드/맵 디자인 (툴바에서 옮긴 컨트롤 수납)
+  const [bottomTab, setBottomTab] = useState<"approval" | "version" | "download" | "design">("approval");
+  // 좌상단 맵 이름 드롭다운(목록·루트로)
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(320);
   // 대시보드 패널 높이(px) — 사용자 조절, localStorage 영속
@@ -1764,13 +1768,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       void navigateTo(scopes.slice(0, index));
     },
     [navigateTo, scopes],
-  );
-
-  const handleBreadcrumb = useCallback(
-    (index: number) => {
-      void focusScope(index);
-    },
-    [focusScope],
   );
 
   // 버전 전환 — 현재 스코프 저장 후 루트로 리셋해 새 버전 캔버스를 로드
@@ -3311,28 +3308,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     toggleInlineExpandRef.current = toggleInlineExpand;
   }, [toggleInlineExpand]);
 
-  // 모두 펼치기 — fullGraph에서 하위를 가진 모든 노드. 모두 접기 — 비움.
-  const expandAll = useCallback(() => {
-    if (!fullGraph) {
-      return;
-    }
-    const next = new Set(
-      fullGraph.nodes
-        .map((node) => node.parent_node_id)
-        .filter((id): id is string => id != null),
-    );
-    if (next.size === 0) {
-      return;
-    }
-    const limits = checkExpansionLimits(fullGraph, next);
-    if (limits.exceeds) {
-      setCapPrompt({ next, nodeCount: limits.nodeCount, depth: limits.depth });
-      return;
-    }
-    commitExpanded(next);
-  }, [fullGraph, commitExpanded]);
-
-  const collapseAll = useCallback(() => commitExpanded(new Set()), [commitExpanded]);
+  // 모두 펼치기/접기 버튼은 제거됨(제 기능 못 함) — 개별 노드 펼침만 유지 / removed all-expand/collapse buttons.
 
   const confirmCapPrompt = useCallback(() => {
     if (capPrompt) {
@@ -4593,32 +4569,58 @@ function MapEditor({ mapId }: { mapId: number }) {
       <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
-        <Link href="/" className="inline-flex items-center gap-1 text-caption text-accent hover:underline">
-          <ArrowLeft size={16} strokeWidth={1.5} />{t("editor.backToList")}
-        </Link>
-
-        <nav className="flex items-center gap-1 text-sm">
-          {scopes.map((scope, index) => (
-            <span key={scopeKey(scope)} className="flex items-center gap-1">
-              {index > 0 && <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />}
-              <button
-                className={
-                  index === scopes.length - 1
-                    ? "font-medium text-ink"
-                    : "text-accent hover:underline"
-                }
-                onClick={() => handleBreadcrumb(index)}
-              >
-                {scope.title}
-              </button>
-            </span>
-          ))}
-        </nav>
-
+        {/* 좌상단 — 아웃라인 토글(사이드바에서 이동) + 맵 이름 드롭다운(목록/루트로). 브레드크럼 제거 */}
+        <button
+          type="button"
+          className={toolButton}
+          onClick={() => setLeftCollapsed((v) => !v)}
+          title={leftCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+          aria-label={leftCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+        >
+          <PanelLeft size={16} strokeWidth={1.5} />
+        </button>
         <div className="relative">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
+            onClick={() => setMapMenuOpen((v) => !v)}
+            title={t("editor.mapMenu")}
+          >
+            <span className="max-w-[16rem] truncate">{mapName}</span>
+            <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+          </button>
+          {mapMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-[1000]" onClick={() => setMapMenuOpen(false)} />
+              <div className="absolute left-0 z-[1001] mt-1 w-44 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+                <Link
+                  href="/"
+                  className="flex items-center gap-1 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => setMapMenuOpen(false)}
+                >
+                  <ArrowLeft size={14} strokeWidth={1.5} />{t("editor.backToList")}
+                </Link>
+                {scopes.length > 1 && (
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                    onClick={() => {
+                      setMapMenuOpen(false);
+                      void navigateTo(scopes.slice(0, 1));
+                    }}
+                  >
+                    {t("editor.toRoot")}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="relative mx-auto">
           <input
             ref={searchInputRef}
-            className="w-56 rounded-sm border border-hairline px-2 py-1 text-caption"
+            className="w-72 rounded-sm border border-hairline px-2 py-1 text-caption"
             placeholder={t("editor.searchPlaceholder")}
             value={searchQuery}
             onChange={(event) => {
@@ -4668,7 +4670,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {/* 툴바 최소화 — 버전·PNG·엣지스타일·펼치기는 우측 하단 탭 패널로 이동 / minimized toolbar */}
+        <div className="flex flex-wrap items-center gap-2">
           {readOnly && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
@@ -4700,18 +4703,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           {saveState === "error" && (
             <span className="text-caption text-error">{t("editor.saveError")}</span>
           )}
-          <select
-            className="rounded-sm border border-hairline px-2 py-1 text-caption"
-            value={versionId ?? ""}
-            onChange={(event) => void switchVersion(Number(event.target.value))}
-            aria-label={t("editor.versionSelectAria")}
-          >
-            {versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                {version.label}
-              </option>
-            ))}
-          </select>
           {managingApprovers && (
             <ApproverManager
               mapId={mapId}
@@ -4719,28 +4710,6 @@ function MapEditor({ mapId }: { mapId: number }) {
               onSaved={() => void refreshWorkflow()}
             />
           )}
-          <button className={toolButton} onClick={() => void handleCreateVersion()}>
-            {t("editor.newVersion")}
-          </button>
-          <button className={toolButton} onClick={() => void handleRenameVersion()}>
-            {t("editor.rename")}
-          </button>
-          <button
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
-            onClick={() => void handleDeleteVersion()}
-            disabled={versions.length <= 1 || readOnly}
-          >
-            {t("editor.deleteVersion")}
-          </button>
-          <Link
-            href={`/maps/${mapId}/compare`}
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-          >
-            {t("editor.compare")}
-          </Link>
-
-          <span className="mx-1 h-5 w-px bg-hairline" />
-
           <button
             className={toolButton}
             onClick={undo}
@@ -4756,28 +4725,6 @@ function MapEditor({ mapId }: { mapId: number }) {
             title={t("editor.redoTitle")}
           >
             <Redo2 size={16} strokeWidth={1.5} />
-          </button>
-
-          <button
-            className={toolButton}
-            onClick={expandAll}
-            title={t("editor.expandAll")}
-            aria-label={t("editor.expandAll")}
-          >
-            <UnfoldHorizontal size={16} strokeWidth={1.5} />
-          </button>
-          <button
-            className={toolButton}
-            onClick={collapseAll}
-            disabled={expandedInline.size === 0}
-            title={t("editor.collapseAll")}
-            aria-label={t("editor.collapseAll")}
-          >
-            <FoldHorizontal size={16} strokeWidth={1.5} />
-          </button>
-
-          <button className={toolButton} onClick={() => void handleExportPng()}>
-            <Download size={16} strokeWidth={1.5} />PNG
           </button>
           <button
             className={toolButton}
@@ -4795,20 +4742,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           >
             <PanelRight size={16} strokeWidth={1.5} />
           </button>
-          {/* 엣지 스타일 — 맵 전역(모든 엣지 일괄 적용) */}
-          <select
-            className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
-            value={edgeStyle}
-            onChange={(event) =>
-              setEdgeStyle(event.target.value as "default" | "smoothstep" | "straight")
-            }
-            title={t("editor.edgeStyle")}
-            aria-label={t("editor.edgeStyle")}
-          >
-            <option value="default">{t("edgeStyle.curve")}</option>
-            <option value="smoothstep">{t("edgeStyle.step")}</option>
-            <option value="straight">{t("edgeStyle.straight")}</option>
-          </select>
           {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
           <button
             type="button"
@@ -5686,27 +5619,122 @@ function MapEditor({ mapId }: { mapId: number }) {
                   title={t("dash.resize")}
                 />
                 <div
-                  className="shrink-0 overflow-hidden"
+                  className="flex shrink-0 flex-col overflow-hidden"
                   style={{ height: dashboardHeight }}
                 >
-                  <WorkflowDashboard
-                    versionLabel={currentVersion.label}
-                    status={currentVersion.status}
-                    submittedBy={currentVersion.submitted_by}
-                    rejectReason={currentVersion.reject_reason}
-                    workflow={workflow}
-                    isCheckoutHolder={checkout?.mine ?? false}
-                    isApprover={isApprover}
-                    isSubmitter={isSubmitter}
-                    hasApproved={hasApproved}
-                    isMapOwner={isMapOwner}
-                    onSubmit={() => void runTransition(submitVersion)}
-                    onApprove={() => void runTransition(approveVersion)}
-                    onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
-                    onPublish={() => void runTransition(publishVersion)}
-                    onWithdraw={() => void runTransition(withdrawVersion)}
-                    onManageApprovers={() => setManagingApprovers(true)}
-                  />
+                  {/* 우측 하단 탭 — 툴바에서 옮긴 컨트롤 수납 / bottom tab panel: moved toolbar controls */}
+                  <div className="flex shrink-0 border-b border-hairline px-1">
+                    {(
+                      [
+                        ["approval", "editor.tabApproval"],
+                        ["version", "editor.tabVersion"],
+                        ["download", "editor.tabDownload"],
+                        ["design", "editor.tabDesign"],
+                      ] as const
+                    ).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={`px-3 py-1.5 text-fine transition-colors ${
+                          bottomTab === id
+                            ? "border-b-2 border-accent text-accent"
+                            : "text-ink-tertiary hover:text-ink"
+                        }`}
+                        onClick={() => setBottomTab(id)}
+                      >
+                        {t(label)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    {bottomTab === "approval" && (
+                      <WorkflowDashboard
+                        versionLabel={currentVersion.label}
+                        status={currentVersion.status}
+                        submittedBy={currentVersion.submitted_by}
+                        rejectReason={currentVersion.reject_reason}
+                        workflow={workflow}
+                        isCheckoutHolder={checkout?.mine ?? false}
+                        isApprover={isApprover}
+                        isSubmitter={isSubmitter}
+                        hasApproved={hasApproved}
+                        isMapOwner={isMapOwner}
+                        onSubmit={() => void runTransition(submitVersion)}
+                        onApprove={() => void runTransition(approveVersion)}
+                        onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
+                        onPublish={() => void runTransition(publishVersion)}
+                        onWithdraw={() => void runTransition(withdrawVersion)}
+                        onManageApprovers={() => setManagingApprovers(true)}
+                      />
+                    )}
+
+                    {bottomTab === "version" && (
+                      <div className="flex flex-col gap-2 p-3">
+                        <label className="text-fine text-ink-tertiary">{t("editor.currentVersion")}</label>
+                        <select
+                          className="rounded-sm border border-hairline px-2 py-1 text-caption"
+                          value={versionId ?? ""}
+                          onChange={(event) => void switchVersion(Number(event.target.value))}
+                          aria-label={t("editor.versionSelectAria")}
+                        >
+                          {versions.map((version) => (
+                            <option key={version.id} value={version.id}>
+                              {version.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex flex-wrap gap-2">
+                          <button className={toolButton} onClick={() => void handleCreateVersion()}>
+                            {t("editor.newVersion")}
+                          </button>
+                          <button className={toolButton} onClick={() => void handleRenameVersion()}>
+                            {t("editor.rename")}
+                          </button>
+                          <button
+                            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
+                            onClick={() => void handleDeleteVersion()}
+                            disabled={versions.length <= 1 || readOnly}
+                          >
+                            {t("editor.deleteVersion")}
+                          </button>
+                          <Link
+                            href={`/maps/${mapId}/compare`}
+                            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                          >
+                            {t("editor.compare")}
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+
+                    {bottomTab === "download" && (
+                      <div className="p-3">
+                        <button className={toolButton} onClick={() => void handleExportPng()}>
+                          <Download size={16} strokeWidth={1.5} />PNG
+                        </button>
+                      </div>
+                    )}
+
+                    {bottomTab === "design" && (
+                      <div className="flex flex-col gap-2 p-3">
+                        <label className="text-fine text-ink-tertiary">{t("editor.edgeStyle")}</label>
+                        {/* 엣지 스타일 — 맵 전역(모든 엣지 일괄 적용) */}
+                        <select
+                          className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+                          value={edgeStyle}
+                          onChange={(event) =>
+                            setEdgeStyle(event.target.value as "default" | "smoothstep" | "straight")
+                          }
+                          aria-label={t("editor.edgeStyle")}
+                        >
+                          <option value="default">{t("edgeStyle.curve")}</option>
+                          <option value="smoothstep">{t("edgeStyle.step")}</option>
+                          <option value="straight">{t("edgeStyle.straight")}</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
             )}

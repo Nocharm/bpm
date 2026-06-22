@@ -5,7 +5,6 @@
 
 import {
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Circle,
   CircleDot,
@@ -364,17 +363,9 @@ export function EditorLeftSidebar({
         </div>
       </div>
 
-      <div className="mb-1 flex items-center justify-between">
-        <span className="px-1 text-caption-strong text-ink">{t("sidebar.outline")}</span>
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-          title={t("sidebar.collapse")}
-          aria-label={t("sidebar.collapse")}
-        >
-          <ChevronLeft size={16} strokeWidth={1.5} />
-        </button>
+      {/* 닫기 버튼은 에디터 헤더 좌상단으로 이동 — 여기선 라벨만 / collapse moved to header */}
+      <div className="mb-1 px-1">
+        <span className="text-caption-strong text-ink">{t("sidebar.outline")}</span>
       </div>
 
       {outline.length === 0 ? (
