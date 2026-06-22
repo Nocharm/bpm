@@ -9,9 +9,11 @@ import { useCallback, useState } from "react";
 import { Building2, ChevronDown, ExternalLink, User, Users } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
+import { Highlight } from "@/components/highlight";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MapRole } from "@/lib/mock/permissions";
+import type { MatchRange } from "@/lib/search";
 import {
   VERSION_STATUS_LABEL,
   VERSION_STATUS_STYLE,
@@ -23,6 +25,7 @@ interface MapCardProps {
   // 마스터-디테일 선택 — 클릭 시 우측 상세 패널 대상 / select for the detail panel.
   selected?: boolean;
   onSelect?: (mapId: number) => void;
+  nameRanges?: MatchRange[];
 }
 
 // principal_type → 아이콘 / principal icon.
@@ -32,7 +35,7 @@ function PrincipalIcon({ type }: { type: string }) {
   return <User size={12} strokeWidth={1.5} />;
 }
 
-export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
+export function MapCard({ map, selected = false, onSelect, nameRanges }: MapCardProps) {
   const { t } = useI18n();
 
   // 인원 목록 조회는 서버에서 editor+ 게이트 — viewer 카드엔 버튼 미노출 / list-permissions is editor+ gated.
@@ -84,7 +87,7 @@ export function MapCard({ map, selected = false, onSelect }: MapCardProps) {
         className="block truncate pr-6 text-body-strong text-ink hover:text-accent hover:underline"
         onClick={(e) => e.stopPropagation()}
       >
-        {map.name}
+        <Highlight text={map.name} ranges={nameRanges ?? []} />
       </Link>
 
       {/* 우측 아래 — 가장 최신 버전 상태 필 / latest version status pill, bottom-right */}
