@@ -2,7 +2,7 @@
 
 // 마우스 커서 위치에 뜨는 컨텍스트 메뉴 — 캔버스/노드/엣지 우클릭 공용 (spec §7 Phase A).
 
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { HandleSide } from "@/lib/canvas";
@@ -11,7 +11,6 @@ import type { HandleSide } from "@/lib/canvas";
 export type ContextMenuItem =
   | { divider: true }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
-  | { pad: true; label: string; current: HandleSide; onPick: (side: HandleSide) => void }
   | {
       edgeSides: true;
       sourceLabel: string;
@@ -154,8 +153,6 @@ function MenuList({
           <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
         ) : "colors" in item ? (
           <ColorRow key={`colors-${index}`} item={item} onClose={onClose} />
-        ) : "pad" in item ? (
-          <CrossPad key={`pad-${index}`} item={item} />
         ) : "edgeSides" in item ? (
           <EdgeSidesPad key={`edgesides-${index}`} item={item} />
         ) : "submenu" in item ? (
@@ -231,44 +228,6 @@ function ColorRow({
           {item.moreLabel ?? "…"}
         </button>
       )}
-    </div>
-  );
-}
-
-// 십자 방향 패드 — 버튼 위치가 실제 노드 변에 매핑. 클릭해도 메뉴는 닫지 않음(연속 조정).
-const PAD_BUTTONS: { side: HandleSide; icon: LucideIcon; col: string; row: string }[] = [
-  { side: "top", icon: ArrowUp, col: "col-start-2", row: "row-start-1" },
-  { side: "left", icon: ArrowLeft, col: "col-start-1", row: "row-start-2" },
-  { side: "right", icon: ArrowRight, col: "col-start-3", row: "row-start-2" },
-  { side: "bottom", icon: ArrowDown, col: "col-start-2", row: "row-start-3" },
-];
-
-function CrossPad({
-  item,
-}: {
-  item: { label: string; current: HandleSide; onPick: (side: HandleSide) => void };
-}) {
-  return (
-    <div className="px-3 py-1.5">
-      <p className="mb-1 text-fine text-ink-tertiary">{item.label}</p>
-      <div className="grid w-[84px] grid-cols-3 grid-rows-3 gap-0.5">
-        {PAD_BUTTONS.map(({ side, icon: Icon, col, row }) => (
-          <button
-            key={side}
-            type="button"
-            // 메뉴 유지 — onClose 호출하지 않음. 바깥 클릭(mousedown 가드)·Esc로만 닫힘.
-            onClick={() => item.onPick(side)}
-            aria-label={side}
-            className={`flex h-6 w-6 items-center justify-center rounded-xs border ${col} ${row} ${
-              item.current === side
-                ? "border-accent bg-accent-tint text-accent"
-                : "border-hairline text-ink-tertiary hover:bg-surface-alt"
-            }`}
-          >
-            <Icon size={13} strokeWidth={1.5} />
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
