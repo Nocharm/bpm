@@ -2120,6 +2120,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, createEdge],
   );
 
+  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가(출발 전용), 끝 노드는 출발(나가는 연결) 불가(도착 전용)
+  const isValidConnection = useCallback((connection: Connection | Edge): boolean => {
+    const sourceType = nodesRef.current.find((node) => node.id === connection.source)?.data
+      .nodeType;
+    const targetType = nodesRef.current.find((node) => node.id === connection.target)?.data
+      .nodeType;
+    if (targetType === "start") return false;
+    if (sourceType === "end") return false;
+    return true;
+  }, []);
+
   // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결은 엣지를 생성, 노드 드롭은 기존 엣지에 라벨만 부여.
   const handlePickBranch = useCallback(
     (kind: BranchKind) => {
@@ -5154,6 +5165,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
+                      isValidConnection={isValidConnection}
                       onNodeClick={(_, node) => {
                         // 인라인 자식(읽기전용) — 클릭 시 선택만(React Flow 기본). 탐색 없음.
                         if (node.data?.scopeId != null) return;

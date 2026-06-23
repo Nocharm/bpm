@@ -3,6 +3,8 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-24
+- **fix(editor): 하위프로세스 인라인 펼침 진출 게이트웨이 우측 출발 (main 직접)** — 라이브러리 하위프로세스를 펼치면 끝노드→다음 노드 엣지가 끝노드 **왼쪽**에서 나가던 버그. 근본원인: `lib/inline-expand.ts` `makeGateway`가 게이트웨이 엣지를 **sourceHandle 미지정**으로 생성 → React Flow가 진출(끝→후속) 엣지를 끝노드 첫 source 핸들(좌)에 붙임. 수정: 진출 게이트웨이 `sourceHandle=s-right`/`targetHandle=t-left`, 진입은 `targetHandle=t-left`. vitest `inline-expand.test.ts` 신규(2). 검증: vitest 16·tsc 0·lint clean·build OK.
+- **feat(editor): 시작=출발 전용·끝=도착 전용 연결 제약 (main 직접)** — `isValidConnection` 추가 — 시작 노드로 들어오는 연결(target=start) 차단, 끝 노드에서 나가는 연결(source=end) 차단. 수동 드래그 연결에만 적용(게이트웨이·기존 엣지 무영향). 검증: tsc 0·lint clean·build OK.
 - **chore(git): dev.db 추적 제외** — `.gitignore`의 `!backend/dev.db` 부정 규칙 제거(`*.db`로 무시), `git rm --cached backend/dev.db`로 추적 해제. 로컬 파일은 유지·시드로 재생성. (원격 작업용 더미DB 추적 정책 폐기.)
 
 ## 2026-06-23
