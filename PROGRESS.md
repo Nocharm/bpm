@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-06-24
+- **chore(git): dev.db 추적 제외** — `.gitignore`의 `!backend/dev.db` 부정 규칙 제거(`*.db`로 무시), `git rm --cached backend/dev.db`로 추적 해제. 로컬 파일은 유지·시드로 재생성. (원격 작업용 더미DB 추적 정책 폐기.)
+
 ## 2026-06-23
 - **feat(editor): 엣지 우클릭 메뉴 개편 — Start|End 테두리-클릭 면 선택 + 라벨편집·삭제 + 더블클릭 라벨편집 (main 직접)** — 기존 화살표 십자패드(CrossPad) 면 선택을 **Start(좌)·End(우) 박스의 테두리(상/우/하/좌)를 클릭**해 출발/도착 면을 고르는 위젯으로 교체(`context-menu.tsx` 신규 `edgeSides` 아이템 + `wide` 패널 옵션, 선택 변=악센트). 그 아래 **라벨 편집·엣지 삭제** 항목 추가. **엣지 더블클릭=라벨 편집 모드**(엣지 선택+인스펙터 라벨 입력 포커스, `startEdgeLabelEdit`+input ref). i18n `edge.startBox`·`edge.endBox`·`edge.editLabel`. 미사용이 된 `CrossPad`/`pad` 아이템·`PAD_BUTTONS`·Arrow 아이콘 import 데드코드 제거. 검증: tsc 0·eslint clean·build OK(수동 브라우저 확인 권장).
 - **fix(editor): 엣지 수동 연결 시 source=오른쪽/target=왼쪽 기본 고정 (main 직접)** — `createEdge`(onConnect 경로)가 잡은 핸들 면을 그대로 써서 끝 노드를 후속으로 끌면 시작이 왼쪽이 되던 버그. 근본원인: 자동 경로(`withEdge`/insert)는 이미 s-right 명시인데 수동만 `connection` 핸들 그대로 spread. 수정: createEdge에서 source=`s-right`/target=`t-left` 기본 고정, 예외 decision source(분기 분산)·subprocess 끝점(전용 in/__primary__ 핸들)은 잡은 핸들 유지. 검증: tsc 0·eslint clean(수동 브라우저 확인 권장). 면 변경 UI는 후속 엣지 우클릭 메뉴(작업중).
