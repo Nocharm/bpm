@@ -4,7 +4,7 @@
 import type { Edge } from "@xyflow/react";
 
 import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
-import type { AppNode } from "@/lib/canvas";
+import { sourceHandleId, targetHandleId, type AppNode } from "@/lib/canvas";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 
 /** expanded에 속한 노드들의 후손(재귀) 노드 + 그 사이 엣지. 중첩 펼침 지원. */
@@ -93,22 +93,33 @@ export function buildGatewayEdges(
       .filter((edge) => edge.source === parent)
       .map((edge) => edge.target);
     for (const entry of entries) {
-      gateways.push(makeGateway(parent, entry.id));
+      // 진입(host→start) — 도착은 좌측 변. 출발 핸들은 host(subprocess) 기본(우측 PRIMARY_END)로 폴백.
+      gateways.push(makeGateway(parent, entry.id, undefined, targetHandleId("left")));
     }
     for (const exit of exits) {
       for (const target of successors) {
-        gateways.push(makeGateway(exit.id, target));
+        // 진출(끝노드→후속) — 출발은 우측 변(기본), 도착은 좌측 변. 핸들 미지정 시 RF가 첫 핸들(좌)에 붙던 버그 수정.
+        gateways.push(
+          makeGateway(exit.id, target, sourceHandleId("right"), targetHandleId("left")),
+        );
       }
     }
   }
   return gateways;
 }
 
-function makeGateway(source: string, target: string): Edge {
+function makeGateway(
+  source: string,
+  target: string,
+  sourceHandle?: string,
+  targetHandle?: string,
+): Edge {
   return {
     id: `${GATEWAY_PREFIX}${source}->${target}`,
     source,
     target,
+    sourceHandle,
+    targetHandle,
     data: { gateway: true },
   };
 }
