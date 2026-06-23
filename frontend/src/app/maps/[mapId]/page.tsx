@@ -2076,9 +2076,26 @@ function MapEditor({ mapId }: { mapId: number }) {
   const createEdge = useCallback(
     (connection: Connection, label: string) => {
       pushHistory();
+      // 기본 출발/도착 면을 source=오른쪽 / target=왼쪽으로 고정 — 잡은 핸들 면에 의존하지 않게
+      // (끝 노드를 후속으로 끌면 왼쪽 핸들이 잡혀 시작이 왼쪽이 되던 문제). 면 변경은 엣지 우클릭 메뉴로.
+      // 예외: decision(분기를 여러 면에 분산) source·subprocess(전용 in/__primary__ 핸들) 끝점은 잡은 핸들 유지.
+      const sourceNode = nodesRef.current.find((n) => n.id === connection.source);
+      const targetNode = nodesRef.current.find((n) => n.id === connection.target);
+      const keepSource =
+        sourceNode?.data.nodeType === "decision" || sourceNode?.data.nodeType === "subprocess";
+      const keepTarget = targetNode?.data.nodeType === "subprocess";
+      const sourceHandle = keepSource ? connection.sourceHandle : sourceHandleId("right");
+      const targetHandle = keepTarget ? connection.targetHandle : targetHandleId("left");
       setEdges((current) =>
         addEdge(
-          { ...EDGE_DEFAULTS, ...connection, id: genId(), label: label || undefined },
+          {
+            ...EDGE_DEFAULTS,
+            ...connection,
+            sourceHandle,
+            targetHandle,
+            id: genId(),
+            label: label || undefined,
+          },
           current,
         ),
       );
