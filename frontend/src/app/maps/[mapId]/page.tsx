@@ -3145,6 +3145,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setEdges, scheduleAutoSave],
   );
 
+  // 엣지 라벨 편집 모드 진입 — 엣지 선택 후 인스펙터 라벨 입력에 포커스(더블클릭·우클릭 메뉴 공용)
+  const edgeLabelInputRef = useRef<HTMLInputElement>(null);
+  const startEdgeLabelEdit = useCallback((edgeId: string) => {
+    setSelectedId(null);
+    setSummaryNodeId(null);
+    setSelectedEdgeId(edgeId);
+    // 인스펙터 라벨 입력이 마운트된 뒤 포커스 (분기 엣지는 입력이 비활성 — 분기 버튼으로 편집)
+    setTimeout(() => {
+      edgeLabelInputRef.current?.focus();
+      edgeLabelInputRef.current?.select();
+    }, 0);
+  }, []);
+
   // 검색 결과 선택 — 같은 스코프면 바로 포커스, 아니면 스코프 이동 후 포커스
   const handleSearchSelect = useCallback(
     (result: SearchResult) => {
@@ -3348,17 +3361,24 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       return [
         {
-          pad: true,
-          label: t("edge.sourceSide"),
-          current: sideFromHandleId(edge.sourceHandle, "right"),
-          onPick: (side: HandleSide) => setEdgeSide(edge.id, "source", side),
+          edgeSides: true,
+          sourceLabel: t("edge.startBox"),
+          targetLabel: t("edge.endBox"),
+          sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
+          targetSide: sideFromHandleId(edge.targetHandle, "left"),
+          onPickSource: (side: HandleSide) => setEdgeSide(edge.id, "source", side),
+          onPickTarget: (side: HandleSide) => setEdgeSide(edge.id, "target", side),
         },
         { divider: true },
         {
-          pad: true,
-          label: t("edge.targetSide"),
-          current: sideFromHandleId(edge.targetHandle, "left"),
-          onPick: (side: HandleSide) => setEdgeSide(edge.id, "target", side),
+          label: t("edge.editLabel"),
+          onSelect: () => startEdgeLabelEdit(edge.id),
+        },
+        {
+          label: t("ctx.delete"),
+          shortcut: "Del",
+          danger: true,
+          onSelect: () => void reactFlow.deleteElements({ edges: [{ id: edge.id }] }),
         },
       ];
     }
@@ -3449,6 +3469,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     nodes,
     edges,
     setEdgeSide,
+    startEdgeLabelEdit,
     handleAddNode,
     handleRecolor,
     applyNodesTransform,
@@ -5182,6 +5203,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(edge.id);
                         setSelectedId(null);
                       }}
+                      onEdgeDoubleClick={(_, edge) => startEdgeLabelEdit(edge.id)}
                       onPaneClick={() => {
                         setSelectedId(null);
                         setSelectedEdgeId(null);
@@ -5439,6 +5461,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               x={menu.x}
               y={menu.y}
               items={menuItems}
+              wide={menu.kind === "edge"}
               onClose={() => setMenu(null)}
             />
           )}
@@ -5840,6 +5863,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             )}
             <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
             <input
+              ref={edgeLabelInputRef}
               className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
               value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
               disabled={readOnly || (selectedEdgeBranch !== null && selectedEdgeBranch !== "other")}

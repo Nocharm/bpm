@@ -12,6 +12,15 @@ export type ContextMenuItem =
   | { divider: true }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
   | { pad: true; label: string; current: HandleSide; onPick: (side: HandleSide) => void }
+  | {
+      edgeSides: true;
+      sourceLabel: string;
+      targetLabel: string;
+      sourceSide: HandleSide;
+      targetSide: HandleSide;
+      onPickSource: (side: HandleSide) => void;
+      onPickTarget: (side: HandleSide) => void;
+    }
   | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string; submenu: ContextMenuItem[]; disabled?: boolean }
   | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
 
@@ -20,19 +29,23 @@ interface ContextMenuProps {
   y: number;
   items: ContextMenuItem[];
   onClose: () => void;
+  /** 넓은 패널 — Start/End 면 선택 위젯처럼 폭이 필요한 메뉴(엣지)용 */
+  wide?: boolean;
 }
 
 // 화면 가장자리 잘림 보정용 추정치 — w-48(192px), 항목 높이 32px
 const MENU_WIDTH = 192;
+const WIDE_MENU_WIDTH = 256;
 const ITEM_HEIGHT = 32;
 const EDGE_MARGIN = 10;
 const PANEL_CLASS = "w-48 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
+const WIDE_PANEL_CLASS = "w-64 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
 // 단축키 힌트 — 숏컷 레전드(shortcut-legend.tsx)의 kbd와 동일한 디자인
 const KBD_CLASS =
   "rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary";
 
 // 우측/하단 잘림 보정, 바깥 클릭·ESC로 닫힘.
-export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   // 키보드로 펼친 하위 메뉴(날개)의 상위 인덱스 — 메뉴 가속기 경로(예: A → 정렬, 그 뒤 T)
   const [kbSub, setKbSub] = useState<number | null>(null);
@@ -109,11 +122,16 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   }, [items, kbSub, onClose]);
 
   const menuHeight = items.length * ITEM_HEIGHT + 8;
-  const left = Math.min(x, window.innerWidth - MENU_WIDTH - EDGE_MARGIN);
+  const width = wide ? WIDE_MENU_WIDTH : MENU_WIDTH;
+  const left = Math.min(x, window.innerWidth - width - EDGE_MARGIN);
   const top = Math.min(y, window.innerHeight - menuHeight - EDGE_MARGIN);
 
   return (
-    <div ref={menuRef} className={`fixed z-[1200] ${PANEL_CLASS}`} style={{ left, top }}>
+    <div
+      ref={menuRef}
+      className={`fixed z-[1200] ${wide ? WIDE_PANEL_CLASS : PANEL_CLASS}`}
+      style={{ left, top }}
+    >
       <MenuList items={items} onClose={onClose} kbSub={kbSub} />
     </div>
   );
@@ -138,6 +156,8 @@ function MenuList({
           <ColorRow key={`colors-${index}`} item={item} onClose={onClose} />
         ) : "pad" in item ? (
           <CrossPad key={`pad-${index}`} item={item} />
+        ) : "edgeSides" in item ? (
+          <EdgeSidesPad key={`edgesides-${index}`} item={item} />
         ) : "submenu" in item ? (
           <SubmenuItem
             key={item.label}
@@ -249,6 +269,65 @@ function CrossPad({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// 엣지 끝점 면 선택 — 작은 박스의 테두리(상/우/하/좌)를 클릭해 그 변을 선택. 선택 변은 악센트.
+// 메뉴 유지 — onClose 호출하지 않음(연속 조정). Start(=source)·End(=target) 두 박스를 가로로 둔다.
+const SIDE_BORDERS: { side: HandleSide; cls: string }[] = [
+  { side: "top", cls: "left-1.5 right-1.5 top-0 h-1" },
+  { side: "bottom", cls: "left-1.5 right-1.5 bottom-0 h-1" },
+  { side: "left", cls: "top-1.5 bottom-1.5 left-0 w-1" },
+  { side: "right", cls: "top-1.5 bottom-1.5 right-0 w-1" },
+];
+
+function SideBox({
+  label,
+  current,
+  onPick,
+}: {
+  label: string;
+  current: HandleSide;
+  onPick: (side: HandleSide) => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-fine text-ink-tertiary">{label}</span>
+      <div className="relative h-11 w-11 rounded-sm border border-hairline bg-surface-alt">
+        {SIDE_BORDERS.map(({ side, cls }) => (
+          <button
+            key={side}
+            type="button"
+            aria-label={side}
+            // 메뉴 유지 — 바깥 클릭(mousedown 가드)·Esc로만 닫힘.
+            onClick={() => onPick(side)}
+            className={`absolute ${cls} rounded-full ${
+              current === side ? "bg-accent" : "bg-divider hover:bg-accent-tint"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EdgeSidesPad({
+  item,
+}: {
+  item: {
+    sourceLabel: string;
+    targetLabel: string;
+    sourceSide: HandleSide;
+    targetSide: HandleSide;
+    onPickSource: (side: HandleSide) => void;
+    onPickTarget: (side: HandleSide) => void;
+  };
+}) {
+  return (
+    <div className="flex items-start justify-center gap-5 px-3 py-2">
+      <SideBox label={item.sourceLabel} current={item.sourceSide} onPick={item.onPickSource} />
+      <SideBox label={item.targetLabel} current={item.targetSide} onPick={item.onPickTarget} />
     </div>
   );
 }
