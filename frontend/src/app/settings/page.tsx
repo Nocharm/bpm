@@ -71,7 +71,7 @@ export default function SettingsPage() {
 
   const canAccess = (access: Access): boolean => {
     if (access === "everyone") return true;
-    if (access === "admin") return user?.role === "admin";
+    // admin 권한은 시스템 관리자(sysadmin)가 흡수 (F6) — admin/sysadmin 모두 sysadmin 게이트.
     return Boolean(user?.isSysadmin);
   };
 

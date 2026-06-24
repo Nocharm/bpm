@@ -1,12 +1,27 @@
 """Employee 모델·동기화·엔드포인트 테스트."""
 
 import asyncio
+from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models import Employee
+from app.settings import settings
+
+
+@pytest.fixture
+def sysadmin_enforced() -> Iterator[None]:
+    """auth OFF + dev_enforce_permissions ON + sysadmin=admin.kim — sysadmin 게이트 차별화. 정리 시 복원."""
+    prev_enforce = settings.dev_enforce_permissions
+    prev_sys = settings.bpm_sysadmins
+    settings.dev_enforce_permissions = True
+    settings.bpm_sysadmins = "admin.kim"
+    yield
+    settings.dev_enforce_permissions = prev_enforce
+    settings.bpm_sysadmins = prev_sys
 
 
 def test_employees_table_created(client: TestClient) -> None:
@@ -69,15 +84,15 @@ def test_me_falls_back_for_unknown_user(client: TestClient) -> None:
     assert body["role"] == "user"  # employees에 없으면 기본 user
 
 
-def test_employees_list_requires_admin(client: TestClient) -> None:
-    # 일반 유저 → 403, admin → 200
+def test_employees_list_requires_admin(client: TestClient, sysadmin_enforced: None) -> None:
+    # 일반 유저(비-sysadmin) → 403, sysadmin(admin.kim) → 200 (F6: admin 흡수)
     assert client.get("/api/employees", headers={"X-Dev-User": "user.lee"}).status_code == 403
     res = client.get("/api/employees", headers={"X-Dev-User": "admin.kim"})
     assert res.status_code == 200
     assert len(res.json()) >= 5
 
 
-def test_sync_requires_admin(client: TestClient) -> None:
+def test_sync_requires_admin(client: TestClient, sysadmin_enforced: None) -> None:
     assert client.post("/api/employees/sync", headers={"X-Dev-User": "user.lee"}).status_code == 403
 
 
