@@ -17,6 +17,9 @@ export type ContextMenuItem =
       targetLabel: string;
       sourceSide: HandleSide;
       targetSide: HandleSide;
+      // 하위프로세스(라이브러리) 끝점은 입력=좌/출력=우 고정 — 면 선택을 잠근다
+      sourceLocked?: boolean;
+      targetLocked?: boolean;
       onPickSource: (side: HandleSide) => void;
       onPickTarget: (side: HandleSide) => void;
     }
@@ -245,29 +248,59 @@ function SideBox({
   label,
   current,
   onPick,
+  locked = false,
 }: {
   label: string;
   current: HandleSide;
   onPick: (side: HandleSide) => void;
+  locked?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
       <span className="text-fine text-ink-tertiary">{label}</span>
-      <div className="relative h-11 w-11 rounded-sm border border-hairline bg-surface-alt">
+      <div
+        className={`relative h-11 w-11 rounded-sm border border-hairline bg-surface-alt ${
+          locked ? "opacity-60" : ""
+        }`}
+        title={locked ? "Subprocess: fixed side" : undefined}
+      >
         {SIDE_BORDERS.map(({ side, cls }) => (
           <button
             key={side}
             type="button"
             aria-label={side}
-            // 메뉴 유지 — 바깥 클릭(mousedown 가드)·Esc로만 닫힘.
-            onClick={() => onPick(side)}
+            disabled={locked}
+            // 메뉴 유지 — 바깥 클릭(mousedown 가드)·Esc로만 닫힘. 잠금 시 현재 면만 표시, 클릭 불가.
+            onClick={locked ? undefined : () => onPick(side)}
             className={`absolute ${cls} rounded-full ${
-              current === side ? "bg-accent" : "bg-divider hover:bg-accent-tint"
-            }`}
+              current === side
+                ? "bg-accent"
+                : locked
+                  ? "bg-divider"
+                  : "bg-divider hover:bg-accent-tint"
+            } ${locked ? "cursor-default" : ""}`}
           />
         ))}
       </div>
     </div>
+  );
+}
+
+// 두 박스 사이의 엣지 모양 — 캔버스 엣지(점선 + 화살촉)를 축약해 source→target 방향을 보인다.
+function EdgeShape() {
+  return (
+    <svg width="40" height="12" viewBox="0 0 40 12" className="self-end mb-3 text-ink-tertiary" aria-hidden>
+      <line
+        x1="1"
+        y1="6"
+        x2="32"
+        y2="6"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeDasharray="4 3"
+      />
+      <path d="M32 2 L39 6 L32 10 Z" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -279,14 +312,27 @@ function EdgeSidesPad({
     targetLabel: string;
     sourceSide: HandleSide;
     targetSide: HandleSide;
+    sourceLocked?: boolean;
+    targetLocked?: boolean;
     onPickSource: (side: HandleSide) => void;
     onPickTarget: (side: HandleSide) => void;
   };
 }) {
   return (
-    <div className="flex items-start justify-center gap-5 px-3 py-2">
-      <SideBox label={item.sourceLabel} current={item.sourceSide} onPick={item.onPickSource} />
-      <SideBox label={item.targetLabel} current={item.targetSide} onPick={item.onPickTarget} />
+    <div className="flex items-start justify-center gap-3 px-3 py-2">
+      <SideBox
+        label={item.sourceLabel}
+        current={item.sourceSide}
+        onPick={item.onPickSource}
+        locked={item.sourceLocked}
+      />
+      <EdgeShape />
+      <SideBox
+        label={item.targetLabel}
+        current={item.targetSide}
+        onPick={item.onPickTarget}
+        locked={item.targetLocked}
+      />
     </div>
   );
 }

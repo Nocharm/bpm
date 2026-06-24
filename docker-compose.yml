@@ -43,6 +43,8 @@ services:
       LDAP_START_TLS: ${LDAP_START_TLS:-false}
       LDAP_USER_FILTER: ${LDAP_USER_FILTER:-}
       SYSTEM_ADMIN_LOGIN_IDS: ${SYSTEM_ADMIN_LOGIN_IDS:-}
+      # BPM 시스템 관리자 loginId(콤마 구분) — 누락 시 서버에 sysadmin 부재(auth ON에선 전원 비관리자)
+      BPM_SYSADMINS: ${BPM_SYSADMINS:-}
     depends_on:
       db:
         condition: service_healthy

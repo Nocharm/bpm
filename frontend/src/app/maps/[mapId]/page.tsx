@@ -38,6 +38,7 @@ import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
+import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
@@ -72,6 +73,7 @@ import {
   sideFromHandleId,
   sourceHandleId,
   targetHandleId,
+  violatesTerminalRule,
   BRANCH_YES_LABEL,
   BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
@@ -588,6 +590,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  // 더블클릭으로 캔버스 가운데 인라인 편집 박스를 띄울 엣지 — 인스펙터 라벨 입력과 동시 표시
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
+  // 편집 박스 위치(엣지 중점, canvasContainerRef 기준) — 이벤트 시점에 계산해 둠(렌더 중 ref 접근 금지)
+  const [editingEdgePos, setEditingEdgePos] = useState<{ left: number; top: number } | null>(null);
   // 판단 노드에서 분기(Yes/No/기타) 라벨을 기다리는 대상.
   // connection: 핸들 드래그(엣지 미생성, 선택 시 생성) / edge: 노드 드롭으로 이미 생성된 엣지에 라벨 부여
   const [branchPrompt, setBranchPrompt] = useState<
@@ -639,6 +645,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     id: string;
     zone: DropZone | null;
     rect: ScreenRect;
+    // 시작/끝 규칙 위반으로 비활성화된 흐름존 — 활성 시점에 계산(렌더 중 ref 접근 회피)
+    frontBlocked: boolean;
+    backBlocked: boolean;
   } | null>(null);
   // 드래그 노드가 기존 그룹 박스 빈 영역 위에 머무는 중 — 합류 대상 그룹 id(펄스 강조)
   const [groupDropTarget, setGroupDropTarget] = useState<string | null>(null);
@@ -646,6 +655,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const groupDropTargetRef = useRef<string | null>(null);
   const dwellRef = useRef<{ id: string; since: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 현재 드래그 중인 노드 id — 드롭존 흐름 규칙(시작/끝) 판정에 드래그 노드 타입이 필요
+  const draggedNodeIdRef = useRef<string | null>(null);
   // 드래그 시작 시점의 노드 위치 — 위치 교환(swap) 시 드래그 노드의 원래 자리 복원용
   const dragStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
   // 펼침 중 루트 드래그: 드래그 중인 노드별 라이브 표시좌표(커서 1:1 추종). 드래그 중에만 항목 존재.
@@ -2126,10 +2137,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       .nodeType;
     const targetType = nodesRef.current.find((node) => node.id === connection.target)?.data
       .nodeType;
-    if (targetType === "start") return false;
-    if (sourceType === "end") return false;
-    return true;
+    return !violatesTerminalRule(sourceType, targetType);
   }, []);
+
+  // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
+  // 핸들 드래그(isValidConnection)와 동일 규칙을 드롭존에도 적용 (양방향 모두 고려).
+  const flowZoneViolates = useCallback(
+    (draggedId: string, targetId: string, zone: DropZone): boolean => {
+      const draggedType = nodesRef.current.find((node) => node.id === draggedId)?.data.nodeType;
+      const targetType = nodesRef.current.find((node) => node.id === targetId)?.data.nodeType;
+      if (zone === "front") {
+        return violatesTerminalRule(draggedType, targetType);
+      }
+      if (zone === "back") {
+        return violatesTerminalRule(targetType, draggedType);
+      }
+      return false;
+    },
+    [],
+  );
 
   // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결은 엣지를 생성, 노드 드롭은 기존 엣지에 라벨만 부여.
   const handlePickBranch = useCallback(
@@ -2634,6 +2660,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         addToGroup(aId, bId);
         return;
       }
+      // 흐름 삽입(front/back)이 시작/끝 규칙을 어기면 드롭 무효 — activateZone에서 이미 zone을 죽이지만 방어적으로 차단.
+      if (flowZoneViolates(aId, bId, zone)) {
+        return;
+      }
       placeBeside(aId, bId, zone);
       scheduleAutoSave();
       const conflict =
@@ -2648,7 +2678,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [swapNodes, addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf],
+    [swapNodes, addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf, flowZoneViolates],
   );
 
   // 라이브러리 패널에서 드래그한 맵을 캔버스에 드롭 → 하위프로세스 노드 생성
@@ -2783,13 +2813,27 @@ function MapEditor({ mapId }: { mapId: number }) {
       const rect = ensureRingVisible(found);
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
-      const zone = pickDropZone(cursorX, cursorY, cx, cy, rect.radius, ZONE_TILE_W, ZONE_TILE_H);
+      let zone = pickDropZone(cursorX, cursorY, cx, cy, rect.radius, ZONE_TILE_W, ZONE_TILE_H);
+      // 시작/끝 규칙을 어기는 흐름존(front/back)은 비활성화 — 드롭해도 엣지가 생기지 않게 zone을 무효로.
+      // 차단 여부는 이벤트 시점에 계산해 dropTarget에 저장(렌더에서 ref 접근 회피, 타일 흐림 표시용).
+      const draggedId = draggedNodeIdRef.current;
+      const frontBlocked = !!draggedId && flowZoneViolates(draggedId, targetId, "front");
+      const backBlocked = !!draggedId && flowZoneViolates(draggedId, targetId, "back");
+      if ((zone === "front" && frontBlocked) || (zone === "back" && backBlocked)) {
+        zone = null;
+      }
       setGroupDropTarget((cur) => (cur ? null : cur)); // 노드 대상이 그룹 박스 hover보다 우선
       setDropTarget((cur) =>
-        cur && cur.id === targetId && cur.zone === zone ? cur : { id: targetId, zone, rect },
+        cur &&
+        cur.id === targetId &&
+        cur.zone === zone &&
+        cur.frontBlocked === frontBlocked &&
+        cur.backBlocked === backBlocked
+          ? cur
+          : { id: targetId, zone, rect, frontBlocked, backBlocked },
       );
     },
-    [screenRectOf, ensureRingVisible],
+    [screenRectOf, ensureRingVisible, flowZoneViolates],
   );
 
   // 드래그 중 — 커서 위치(현재 마우스) 기준으로 판정.
@@ -2799,6 +2843,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
+      draggedNodeIdRef.current = node.id; // 흐름존 규칙 판정용 — 현재 드래그 노드 추적
       // 펼침 중 추적 대상 루트 드래그면 RF가 보고하는 표시좌표를 라이브 맵에 반영 → 커서 1:1 추종.
       if (dragStartOffsetRef.current.has(node.id)) {
         const pos = node.position;
@@ -3156,18 +3201,77 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setEdges, scheduleAutoSave],
   );
 
-  // 엣지 라벨 편집 모드 진입 — 엣지 선택 후 인스펙터 라벨 입력에 포커스(더블클릭·우클릭 메뉴 공용)
+  // 엣지 라벨 편집 모드 진입 — 엣지 선택 + 인스펙터 라벨 포커스 + 캔버스 가운데 인라인 박스(더블클릭·우클릭 공용)
   const edgeLabelInputRef = useRef<HTMLInputElement>(null);
-  const startEdgeLabelEdit = useCallback((edgeId: string) => {
-    setSelectedId(null);
-    setSummaryNodeId(null);
-    setSelectedEdgeId(edgeId);
-    // 인스펙터 라벨 입력이 마운트된 뒤 포커스 (분기 엣지는 입력이 비활성 — 분기 버튼으로 편집)
-    setTimeout(() => {
-      edgeLabelInputRef.current?.focus();
-      edgeLabelInputRef.current?.select();
-    }, 0);
+  const startEdgeLabelEdit = useCallback(
+    (edgeId: string) => {
+      setSelectedId(null);
+      setSummaryNodeId(null);
+      setSelectedEdgeId(edgeId);
+      setEditingEdgeId(edgeId);
+      // 엣지 중점 위치를 이벤트 시점에 계산(ref 접근 허용 — 렌더 중엔 금지). 끝점 변 중앙의 중간점.
+      const edge = edgesRef.current.find((e) => e.id === edgeId);
+      const srcRect = edge ? screenRectOf(edge.source) : null;
+      const tgtRect = edge ? screenRectOf(edge.target) : null;
+      if (edge && srcRect && tgtRect) {
+        const pointOf = (rect: ScreenRect, side: HandleSide): { x: number; y: number } => {
+          const midX = rect.left + rect.width / 2;
+          const midY = rect.top + rect.height / 2;
+          if (side === "left") return { x: rect.left, y: midY };
+          if (side === "right") return { x: rect.left + rect.width, y: midY };
+          if (side === "top") return { x: midX, y: rect.top };
+          return { x: midX, y: rect.top + rect.height }; // bottom
+        };
+        const from = pointOf(srcRect, sideFromHandleId(edge.sourceHandle, "right"));
+        const to = pointOf(tgtRect, sideFromHandleId(edge.targetHandle, "left"));
+        setEditingEdgePos({ left: (from.x + to.x) / 2, top: (from.y + to.y) / 2 });
+      } else {
+        setEditingEdgePos(null);
+      }
+      // 인스펙터 라벨 입력이 마운트된 뒤 포커스 (분기 엣지는 입력이 비활성 — 분기 버튼으로 편집)
+      setTimeout(() => {
+        edgeLabelInputRef.current?.focus();
+        edgeLabelInputRef.current?.select();
+      }, 0);
+    },
+    [screenRectOf],
+  );
+
+  // 가운데 인라인 박스에서 라벨 커밋 — 값 적용 후 편집 종료. Esc 취소는 cancelEdgeLabelEdit.
+  const commitEdgeLabel = useCallback(
+    (edgeId: string, label: string) => {
+      setEditingEdgeId(null);
+      setEditingEdgePos(null);
+      if (readOnly) {
+        return;
+      }
+      pushHistory();
+      setEdges((current) =>
+        current.map((edge) =>
+          edge.id === edgeId ? { ...edge, label: label.trim() || undefined } : edge,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setEdges, scheduleAutoSave],
+  );
+
+  const cancelEdgeLabelEdit = useCallback(() => {
+    setEditingEdgeId(null);
+    setEditingEdgePos(null);
   }, []);
+
+  // 가운데 편집 박스 초기값 — 현재 스코프(edges)에 편집 대상 엣지가 있을 때만. (렌더 IIFE 회피)
+  const editingEdgeInitial = useMemo<string | null>(() => {
+    if (!editingEdgeId) {
+      return null;
+    }
+    const edge = edges.find((e) => e.id === editingEdgeId);
+    if (!edge) {
+      return null;
+    }
+    return typeof edge.label === "string" ? edge.label : "";
+  }, [editingEdgeId, edges]);
 
   // 검색 결과 선택 — 같은 스코프면 바로 포커스, 아니면 스코프 이동 후 포커스
   const handleSearchSelect = useCallback(
@@ -3370,6 +3474,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!edge || readOnly) {
         return [];
       }
+      // 하위프로세스(라이브러리) 끝점은 전용 핸들(in=좌/__primary__=우) 고정 → 면 선택 잠금
+      const sourceLocked =
+        nodes.find((n) => n.id === edge.source)?.data.nodeType === "subprocess";
+      const targetLocked =
+        nodes.find((n) => n.id === edge.target)?.data.nodeType === "subprocess";
       return [
         {
           edgeSides: true,
@@ -3377,6 +3486,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           targetLabel: t("edge.endBox"),
           sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
           targetSide: sideFromHandleId(edge.targetHandle, "left"),
+          sourceLocked,
+          targetLocked,
           onPickSource: (side: HandleSide) => setEdgeSide(edge.id, "source", side),
           onPickTarget: (side: HandleSide) => setEdgeSide(edge.id, "target", side),
         },
@@ -5265,6 +5376,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         clearDwell();
                         setDropTarget(null);
                         setGroupDropTarget(null);
+                        draggedNodeIdRef.current = null;
                       }}
                       onSelectionDragStart={(_, nodes) => {
                         pushHistory();
@@ -5503,13 +5615,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                   />
                   {tiles.map(({ zone, Icon, x, y, label }) => {
                     const active = dropTarget.zone === zone;
+                    // 시작/끝 규칙을 어기는 흐름존은 비활성 표시(흐림) — 드롭해도 무효
+                    const blocked =
+                      (zone === "front" && dropTarget.frontBlocked) ||
+                      (zone === "back" && dropTarget.backBlocked);
                     return (
                     <div
                       key={zone}
                       className={`zone-pop absolute flex flex-col items-center justify-center gap-1 rounded-md border px-2 text-center shadow-md ${
-                        active
-                          ? "border-accent bg-accent-tint text-accent"
-                          : "border-hairline bg-surface/95 text-ink-tertiary"
+                        blocked
+                          ? "border-hairline bg-surface/60 text-ink-tertiary opacity-40"
+                          : active
+                            ? "border-accent bg-accent-tint text-accent"
+                            : "border-hairline bg-surface/95 text-ink-tertiary"
                       }`}
                       style={{ left: x - tileW / 2, top: y - tileH / 2, width: tileW, height: tileH }}
                     >
@@ -5521,6 +5639,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                 </div>
               );
             })()}
+          {/* 엣지 더블클릭 → 엣지 중점에 인라인 라벨 편집 박스 (인스펙터 입력과 동시) */}
+          {editingEdgeId && editingEdgePos && editingEdgeInitial !== null && (
+            <EdgeLabelEditor
+              key={editingEdgeId}
+              left={editingEdgePos.left}
+              top={editingEdgePos.top}
+              initial={editingEdgeInitial}
+              onCommit={(value) => commitEdgeLabel(editingEdgeId, value)}
+              onCancel={cancelEdgeLabelEdit}
+            />
+          )}
           {pending && (
             <div
               className="absolute z-[1110] flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"

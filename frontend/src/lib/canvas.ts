@@ -403,6 +403,28 @@ export function sideFromHandleId(
   return (HANDLE_SIDES as string[]).includes(side) ? (side as HandleSide) : fallback;
 }
 
+// 시작/끝 노드 연결 규칙 — 시작은 도착 불가(출발 전용), 끝은 출발 불가(도착 전용).
+// source→target 방향 엣지가 이 규칙을 어기는지 판정 (핸들 드래그·드롭존 흐름삽입 공용).
+export function violatesTerminalRule(
+  source: ProcessNodeType | undefined,
+  target: ProcessNodeType | undefined,
+): boolean {
+  return target === "start" || source === "end";
+}
+
+// 시작/끝 노드의 표시 라벨은 i18n·사용자 라벨과 무관하게 항상 영문 고정값.
+const TERMINAL_DEFAULT_LABELS = new Set(["start", "end", "시작", "종료"]);
+
+/** 시작/끝 노드 표시명 — 항상 "Start"/"End", 사용자 지정 라벨이 있으면 괄호로 덧붙인다(한영 전환 무관). */
+export function terminalDisplayLabel(nodeType: ProcessNodeType, label: string): string {
+  const base = nodeType === "start" ? "Start" : "End";
+  const custom = label.trim();
+  if (!custom || TERMINAL_DEFAULT_LABELS.has(custom.toLowerCase())) {
+    return base;
+  }
+  return `${base} (${custom})`;
+}
+
 // 캔버스 내 이름 중복 방지 — 이미 쓰이는 이름이면 " (2)", " (3)"... 접미사를 붙여 고유화.
 // 빈/공백 이름은 예외(여러 미명명 노드·그룹 허용). 비교는 trim 기준.
 export function makeUniqueLabel(desired: string, taken: string[]): string {

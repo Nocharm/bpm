@@ -19,7 +19,13 @@ import {
   Zap,
 } from "lucide-react";
 
-import { type AppNode, type HandleSide, type ProcessNodeType, toPosition } from "@/lib/canvas";
+import {
+  type AppNode,
+  type HandleSide,
+  type ProcessNodeType,
+  terminalDisplayLabel,
+  toPosition,
+} from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
@@ -75,7 +81,16 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 
 // 노드 타이틀 — 더블클릭 인라인 편집(editingNodeId 일치 시 입력 모드). 평상시 호버에 I-beam 커서.
 // 타이틀 더블클릭만 이름 편집으로 진입(stopPropagation) — 이름 외 영역은 노드 요약창으로.
-function NodeTitle({ id, label }: { id: string; label: string }) {
+// displayLabel: 표시 전용(시작/끝의 "Start (라벨)"). 편집 입력은 항상 원본 label을 다룬다.
+function NodeTitle({
+  id,
+  label,
+  displayLabel,
+}: {
+  id: string;
+  label: string;
+  displayLabel?: string;
+}) {
   const { editingNodeId, onStartRename, onRename, onCancelRename } = useNodeActions();
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
@@ -123,7 +138,7 @@ function NodeTitle({ id, label }: { id: string; label: string }) {
           : undefined
       }
     >
-      {label}
+      {displayLabel ?? label}
     </span>
   );
 }
@@ -342,7 +357,13 @@ export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
       title={data.diffNote}
     >
       <div className="font-medium text-ink">
-        <NodeTitle id={id} label={data.label} />
+        <NodeTitle
+          id={id}
+          label={data.label}
+          displayLabel={
+            isTerminal ? terminalDisplayLabel(data.nodeType, data.label) : undefined
+          }
+        />
       </div>
       <NodeFields data={data} />
       {data.hasChildren && (
