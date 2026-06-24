@@ -7,9 +7,21 @@ from dataclasses import dataclass
 EXCLUDED_OU_TOKENS = frozenset(
     {"BioLogics Users", "BioLogics Groups", "SAMSUNGBIOLOGICS", "President & CEO"}
 )
-# org_l1이 이 중 하나면 동기화 제외
+# org_l1이 이 중 하나면 동기화 제외 — 대소문자 정확 일치
 EXCLUDED_ORG_L1 = frozenset(
-    {"Partners", "Partner", "External users", "delete", "Client", "TEST", "View"}
+    {
+        "Partners",
+        "Partner",
+        "External users",
+        "External Users",
+        "Application Users",
+        "HR",
+        "Service",
+        "delete",
+        "Client",
+        "TEST",
+        "View",
+    }
 )
 
 
