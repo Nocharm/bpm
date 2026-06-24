@@ -128,6 +128,18 @@ async def create_version(
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
 
+    # 맵당 draft 1개 제한 — 진행중인 수정본(draft)이 있으면 새 버전 생성 차단 (request #11)
+    existing_draft = await session.scalar(
+        select(func.count())
+        .select_from(MapVersion)
+        .where(MapVersion.map_id == map_id, MapVersion.status == workflow.DRAFT)
+    )
+    if existing_draft:
+        raise HTTPException(
+            status_code=409,
+            detail="map already has a draft version — submit or delete it before creating a new one",
+        )
+
     new_version = MapVersion(map_id=map_id, label=payload.label)
     session.add(new_version)
     await session.flush()
