@@ -65,6 +65,7 @@ import {
   getIncomingEdges,
   getOutgoingEdges,
   hasReciprocalEdge,
+  removeOutgoingEdges,
   insertNodeBefore,
   insertNodeAfter,
   withSubprocessHandles,
@@ -2098,6 +2099,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       const keepTarget = targetNode?.data.nodeType === "subprocess";
       const sourceHandle = keepSource ? connection.sourceHandle : sourceHandleId("right");
       const targetHandle = keepTarget ? connection.targetHandle : targetHandleId("left");
+      // 출력 1개 고정 — decision(분기)만 다중 출력 허용, 그 외는 기존 출력 엣지를 새 연결로 자동 스왑.
+      const sourceIsDecision = sourceNode?.data.nodeType === "decision";
+      const willSwap =
+        !sourceIsDecision &&
+        !!connection.source &&
+        getOutgoingEdges(edgesRef.current, connection.source).length > 0;
       setEdges((current) =>
         addEdge(
           {
@@ -2108,12 +2115,15 @@ function MapEditor({ mapId }: { mapId: number }) {
             id: genId(),
             label: label || undefined,
           },
-          current,
+          willSwap && connection.source ? removeOutgoingEdges(current, connection.source) : current,
         ),
       );
+      if (willSwap) {
+        showToast(t("edge.outputSwapped"));
+      }
       scheduleAutoSave();
     },
-    [pushHistory, setEdges, scheduleAutoSave],
+    [pushHistory, setEdges, scheduleAutoSave, showToast, t],
   );
 
   const onConnect = useCallback(

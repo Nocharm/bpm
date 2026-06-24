@@ -6,6 +6,7 @@ import type { Edge } from "@xyflow/react";
 import {
   hasReciprocalEdge,
   insertNodeAfter,
+  removeOutgoingEdges,
   terminalDisplayLabel,
   violatesTerminalRule,
 } from "@/lib/canvas";
@@ -58,5 +59,21 @@ describe("hasReciprocalEdge (prevents A↔B 2-node cycle)", () => {
   it("withEdge (via insertNodeAfter) refuses to create the reverse edge", () => {
     // insertNodeAfter(edges, 'A', 'B') builds B→A, the reciprocal of A→B → rejected
     expect(insertNodeAfter(edges, "A", "B", false)).toHaveLength(1);
+  });
+});
+
+describe("removeOutgoingEdges (single-output auto-swap)", () => {
+  const edges = [
+    { id: "e1", source: "A", target: "B" },
+    { id: "e2", source: "C", target: "A" },
+  ] as Edge[];
+
+  it("drops every edge leaving the given source", () => {
+    const next = removeOutgoingEdges(edges, "A");
+    expect(next.map((e) => e.id)).toEqual(["e2"]); // A→B 제거, C→A 유지
+  });
+
+  it("returns the same edges when the source has no outgoing edge", () => {
+    expect(removeOutgoingEdges(edges, "B")).toHaveLength(2);
   });
 });

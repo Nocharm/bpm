@@ -459,6 +459,11 @@ export function hasReciprocalEdge(edges: Edge[], source: string, target: string)
   return edges.some((edge) => edge.source === target && edge.target === source);
 }
 
+/** source에서 나가는 엣지를 모두 제거 — 출력 1개 고정(자동 스왑)용. decision 제외는 호출부 책임. */
+export function removeOutgoingEdges(edges: Edge[], sourceId: string): Edge[] {
+  return edges.filter((edge) => edge.source !== sourceId);
+}
+
 // 자기루프·중복 없이 엣지 추가. 기본 핸들 변을 명시(source=right/target=left) —
 // 미지정 시 React Flow가 첫 렌더 핸들(left)에 붙어, toAppEdges·buildGraph의 right/left 폴백과 어긋난다.
 function withEdge(edges: Edge[], source: string, target: string): Edge[] {
