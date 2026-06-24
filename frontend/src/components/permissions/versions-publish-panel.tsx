@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { StatusBadge } from "@/components/status-badge";
+import { PromptDialog } from "@/components/prompt-dialog";
 
 // ── 타입 / Types ─────────────────────────────────────────────
 
@@ -163,6 +164,9 @@ function VersionRow({
     [reload, onToast],
   );
 
+  // 반려 모달 표시 — 훅이라 조기 반환 위에 둔다(rules-of-hooks)
+  const [rejecting, setRejecting] = useState(false);
+
   if (wf === null) {
     return (
       <div className="flex items-center gap-3 rounded-sm border border-hairline bg-surface px-3 py-2.5">
@@ -178,16 +182,10 @@ function VersionRow({
   // 이번 사이클에 본인이 이미 승인했는지 / Whether this user already approved this cycle.
   const hasApproved = wf.approvals.includes(currentUserId);
 
-  // 반려 — 사유 필수(서버 RejectIn min_length=1) / Reject requires a reason (server enforces non-empty).
-  function handleReject() {
-    const reason = window.prompt(t("perm.version.rejectReasonPrompt"));
-    if (reason === null) return; // 취소 / cancelled
-    const trimmed = reason.trim();
-    if (trimmed.length === 0) {
-      onToast?.(t("perm.version.rejectReasonRequired"));
-      return;
-    }
-    void runAction(() => rejectVersion(versionId, trimmed));
+  // 반려 — 사유 필수(서버 RejectIn min_length=1). 네이티브 prompt 대신 플로팅 모달(빈 값 제출 비활성).
+  function submitReject(reason: string) {
+    setRejecting(false);
+    void runAction(() => rejectVersion(versionId, reason));
   }
 
   return (
@@ -237,7 +235,7 @@ function VersionRow({
               type="button"
               disabled={busy}
               className="flex items-center gap-1 rounded-sm border border-error px-2 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-50"
-              onClick={handleReject}
+              onClick={() => setRejecting(true)}
             >
               <XCircle size={16} strokeWidth={1.5} />
               {t("perm.version.reject")}
@@ -288,6 +286,18 @@ function VersionRow({
 
         {/* published: 별도 액션 없음 / published: no actions */}
       </div>
+      {rejecting && (
+        <PromptDialog
+          title={t("perm.version.reject")}
+          label={t("perm.version.rejectReasonPrompt")}
+          placeholder={t("perm.version.rejectReasonPrompt")}
+          confirmLabel={t("perm.version.reject")}
+          cancelLabel={t("common.cancel")}
+          multiline
+          onConfirm={submitReject}
+          onClose={() => setRejecting(false)}
+        />
+      )}
     </div>
   );
 }

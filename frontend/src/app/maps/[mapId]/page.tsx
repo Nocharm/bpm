@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown, Download, LayoutGrid, Lock, LogOut, Maximize, Network, PanelLeft, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, LayoutGrid, Lock, LogOut, Maximize, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -44,6 +44,9 @@ import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PromptDialog } from "@/components/prompt-dialog";
+import { Tooltip } from "@/components/tooltip";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -2010,52 +2013,67 @@ function MapEditor({ mapId }: { mapId: number }) {
     [saveCurrentScope, mapName, t],
   );
 
-  const handleCreateVersion = useCallback(async () => {
+  // 네이티브 prompt/confirm 대신 플로팅 모달 — 버전 생성/이름변경 입력, 삭제 확인.
+  const [versionDialog, setVersionDialog] = useState<{ mode: "create" | "rename" } | null>(null);
+  const [deleteVersionOpen, setDeleteVersionOpen] = useState(false);
+
+  // 트리비얼 핸들러는 plain 함수로 — React Compiler 자동 메모(수동 useCallback은 setter 추론과 충돌).
+  const handleCreateVersion = () => {
     if (versionId === null) {
       return;
     }
-    const label = window.prompt(t("prompt.newVersionName"), "To-Be");
-    if (!label?.trim()) {
-      return;
-    }
-    try {
-      await saveCurrentScope();
-      const created = await createVersion(mapId, label.trim(), versionId);
-      const detail = await getMap(mapId);
-      setVersions(detail.versions);
-      setVersionId(created.id);
-      setScopes([{ kind: "root", title: mapName }]);
-      setActiveIndex(0);
-    } catch (err) {
-      // 진행 중 드래프트가 있으면 새 버전 생성 차단(409) — 토스트로 안내 (request #11)
-      const msg = err instanceof Error ? err.message : "";
-      showToast(msg.includes("409") ? t("err.versionDraftExists") : t("err.createVersion"));
-    }
-  }, [versionId, mapId, mapName, saveCurrentScope, showToast, t]);
+    setVersionDialog({ mode: "create" });
+  };
 
-  const handleRenameVersion = useCallback(async () => {
+  const handleRenameVersion = () => {
     if (versionId === null) {
       return;
     }
-    const current = versions.find((version) => version.id === versionId);
-    const label = window.prompt(t("prompt.renameVersion"), current?.label ?? "");
-    if (!label?.trim()) {
+    setVersionDialog({ mode: "rename" });
+  };
+
+  // 버전 생성/이름변경 모달 제출 — mode에 따라 분기
+  const submitVersionDialog = async (label: string) => {
+    if (versionId === null || versionDialog === null) {
       return;
     }
-    try {
-      await renameVersion(versionId, label.trim());
-      const detail = await getMap(mapId);
-      setVersions(detail.versions);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.renameVersion"));
+    const mode = versionDialog.mode;
+    setVersionDialog(null);
+    if (mode === "create") {
+      try {
+        await saveCurrentScope();
+        const created = await createVersion(mapId, label, versionId);
+        const detail = await getMap(mapId);
+        setVersions(detail.versions);
+        setVersionId(created.id);
+        setScopes([{ kind: "root", title: mapName }]);
+        setActiveIndex(0);
+      } catch (err) {
+        // 진행 중 드래프트가 있으면 새 버전 생성 차단(409) — 토스트로 안내 (request #11)
+        const msg = err instanceof Error ? err.message : "";
+        showToast(msg.includes("409") ? t("err.versionDraftExists") : t("err.createVersion"));
+      }
+    } else {
+      try {
+        await renameVersion(versionId, label);
+        const detail = await getMap(mapId);
+        setVersions(detail.versions);
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.renameVersion"));
+      }
     }
-  }, [versionId, versions, mapId, t]);
+  };
 
-  const handleDeleteVersion = useCallback(async () => {
+  const handleDeleteVersion = () => {
     if (versionId === null || versions.length <= 1) {
       return;
     }
-    if (!window.confirm(t("prompt.deleteVersionConfirm"))) {
+    setDeleteVersionOpen(true);
+  };
+
+  const confirmDeleteVersion = async () => {
+    setDeleteVersionOpen(false);
+    if (versionId === null || versions.length <= 1) {
       return;
     }
     try {
@@ -2068,7 +2086,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
     }
-  }, [versionId, versions, mapId, mapName, t]);
+  };
 
   // 워크플로우 전이 — updated VersionSummary를 versions에 머지하고 workflow 갱신
   const runTransition = useCallback(
@@ -5251,7 +5269,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
           <button
             type="button"
-            className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
             onClick={() => {
               // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
               if (!aiOpen) {
@@ -5264,7 +5282,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             }}
             title={t("ai.toggle")}
           >
-            {t("ai.toggle")}
+            <Sparkles size={16} strokeWidth={1.5} />
+            AI
           </button>
           <button
             className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
@@ -6154,20 +6173,31 @@ function MapEditor({ mapId }: { mapId: number }) {
                         ["download", "editor.tabDownload"],
                         ["design", "editor.tabDesign"],
                       ] as const
-                    ).map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className={`px-3 py-1.5 text-fine transition-colors ${
-                          bottomTab === id
-                            ? "border-b-2 border-accent text-accent"
-                            : "text-ink-tertiary hover:text-ink"
-                        }`}
-                        onClick={() => setBottomTab(id)}
-                      >
-                        {t(label)}
-                      </button>
-                    ))}
+                    ).map(([id, label]) => {
+                      const TabIcon =
+                        id === "approval"
+                          ? Bell
+                          : id === "version"
+                            ? GitBranch
+                            : id === "download"
+                              ? Download
+                              : Palette;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-fine transition-colors ${
+                            bottomTab === id
+                              ? "border-b-2 border-accent text-accent"
+                              : "text-ink-tertiary hover:text-ink"
+                          }`}
+                          onClick={() => setBottomTab(id)}
+                        >
+                          <TabIcon size={14} strokeWidth={1.5} />
+                          {t(label)}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="min-h-0 flex-1 overflow-y-auto">
@@ -6208,25 +6238,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                           ))}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          <button className={toolButton} onClick={() => void handleCreateVersion()}>
-                            {t("editor.newVersion")}
-                          </button>
-                          <button className={toolButton} onClick={() => void handleRenameVersion()}>
-                            {t("editor.rename")}
-                          </button>
-                          <button
-                            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
-                            onClick={() => void handleDeleteVersion()}
-                            disabled={versions.length <= 1 || readOnly}
-                          >
-                            {t("editor.deleteVersion")}
-                          </button>
-                          <Link
-                            href={`/maps/${mapId}/compare`}
-                            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-                          >
-                            {t("editor.compare")}
-                          </Link>
+                          <Tooltip label={t("editor.newVersion")}>
+                            <button
+                              className={toolButton}
+                              aria-label={t("editor.newVersion")}
+                              onClick={() => void handleCreateVersion()}
+                            >
+                              <Plus size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={t("editor.rename")}>
+                            <button
+                              className={toolButton}
+                              aria-label={t("editor.rename")}
+                              onClick={() => void handleRenameVersion()}
+                            >
+                              <PencilLine size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={t("editor.deleteVersion")}>
+                            <button
+                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
+                              aria-label={t("editor.deleteVersion")}
+                              onClick={() => void handleDeleteVersion()}
+                              disabled={versions.length <= 1 || readOnly}
+                            >
+                              <Trash2 size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={t("editor.compare")}>
+                            <Link
+                              href={`/maps/${mapId}/compare`}
+                              aria-label={t("editor.compare")}
+                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                            >
+                              <GitCompare size={16} strokeWidth={1.5} />
+                            </Link>
+                          </Tooltip>
                         </div>
                       </div>
                     )}
@@ -6267,6 +6315,36 @@ function MapEditor({ mapId }: { mapId: number }) {
       </div>
       </div>
       <ToastStack toasts={toasts} onDismiss={removeToast} />
+      {versionDialog && (
+        <PromptDialog
+          title={versionDialog.mode === "create" ? t("editor.newVersion") : t("editor.rename")}
+          label={
+            versionDialog.mode === "create"
+              ? t("prompt.newVersionName")
+              : t("prompt.renameVersion")
+          }
+          defaultValue={
+            versionDialog.mode === "create"
+              ? "To-Be"
+              : (versions.find((version) => version.id === versionId)?.label ?? "")
+          }
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={(value) => void submitVersionDialog(value)}
+          onClose={() => setVersionDialog(null)}
+        />
+      )}
+      {deleteVersionOpen && (
+        <ConfirmDialog
+          title={t("editor.deleteVersion")}
+          message={t("prompt.deleteVersionConfirm")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          danger
+          onConfirm={() => void confirmDeleteVersion()}
+          onClose={() => setDeleteVersionOpen(false)}
+        />
+      )}
       {branchPrompt && (
         <EdgeBranchModal onPick={handlePickBranch} onClose={() => setBranchPrompt(null)} />
       )}

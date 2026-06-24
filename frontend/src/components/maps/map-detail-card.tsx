@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Building2, Copy, User, Users } from "lucide-react";
+import { ArrowUpRight, Building2, Copy, Settings, Trash2, User, Users } from "lucide-react";
 
 import {
   copyMap,
@@ -118,8 +118,9 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
         <Link
           href={`/maps/${detail.id}`}
-          className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
+          className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
         >
+          <ArrowUpRight size={14} strokeWidth={1.5} />
           {t("home.open")}
         </Link>
       </div>
@@ -231,8 +232,9 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
         <div className="flex items-center gap-2">
           <Link
             href={`/maps/${detail.id}/settings`}
-            className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
           >
+            <Settings size={14} strokeWidth={1.5} />
             {t("perm.settingsTitle")}
           </Link>
           {hasApprovedVersion && (
@@ -252,9 +254,10 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
           <button
             type="button"
             data-id="map-detail-delete"
-            className="rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"
+            className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"
             onClick={() => setConfirmDelete(true)}
           >
+            <Trash2 size={14} strokeWidth={1.5} />
             {t("home.delete")}
           </button>
         )}
