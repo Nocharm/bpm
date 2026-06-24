@@ -126,6 +126,15 @@ def effective_role_of(map_id: int, user: str) -> str | None:
     return _seed(_get)  # type: ignore[return-value]
 
 
+def first_version_id(map_id: int) -> int:
+    async def _get(session) -> int:
+        return await session.scalar(
+            select(MapVersion.id).where(MapVersion.map_id == map_id).order_by(MapVersion.id)
+        )
+
+    return _seed(_get)  # type: ignore[return-value]
+
+
 # ── A. Collaborators ──────────────────────────────────────────
 
 
@@ -178,6 +187,34 @@ def test_change_to_viewer_on_public_map_409(client: TestClient, enforce: None) -
     act_as("owner.u")
     r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
     assert r.status_code == 409
+
+
+def test_eligible_assignees_private_filters(client: TestClient, enforce: None) -> None:
+    """비공개 맵: viewer+ 직원만 담당자 후보 (F5). 권한 없는 직원은 제외."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+    vid = first_version_id(map_id)
+    act_as("owner.u")
+    res = client.get(f"/api/versions/{vid}/eligible-assignees")
+    assert res.status_code == 200
+    ids = {u["id"] for u in res.json()["users"]}
+    assert "user.lee" in ids  # viewer 부여 → 후보
+    assert "user.park" not in ids  # 권한 없음 → 제외
+    assert "user.choi" not in ids  # 권한 없음 → 제외
+    assert isinstance(res.json()["departments"], list)
+
+
+def test_eligible_assignees_public_all(client: TestClient, enforce: None) -> None:
+    """공개 맵: 전원 열람 가능 → 모든 직원이 담당자 후보 (F5)."""
+    map_id = seed_map(visibility="public", grants=[("user", "owner.u", "owner")])
+    vid = first_version_id(map_id)
+    act_as("owner.u")
+    res = client.get(f"/api/versions/{vid}/eligible-assignees")
+    assert res.status_code == 200
+    ids = {u["id"] for u in res.json()["users"]}
+    assert {"user.lee", "user.park", "user.choi"} <= ids
 
 
 def test_change_role_upgrade_immediate(client: TestClient, enforce: None) -> None:

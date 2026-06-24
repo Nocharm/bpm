@@ -13,20 +13,26 @@ from app.auth import get_current_user
 from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
+from app.permissions import logic
 from app.permissions.deps import require_version_map_role
 from app.models import (
     Edge,
     Employee,
     Group,
     MapApprover,
+    MapPermission,
     MapVersion,
     Node,
     ProcessMap,
+    UserGroup,
+    UserGroupMember,
     VersionApproval,
 )
 from app.schemas import (
     CheckoutIn,
     CheckoutOut,
+    DirectoryUserOut,
+    EligibleAssigneesOut,
     RejectIn,
     VersionCreate,
     VersionOut,
@@ -167,6 +173,91 @@ async def create_version(
     await session.commit()
     await session.refresh(new_version)
     return new_version
+
+
+@router.get(
+    "/versions/{version_id}/eligible-assignees",
+    response_model=EligibleAssigneesOut,
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
+async def list_eligible_assignees(
+    version_id: int, session: AsyncSession = Depends(get_session)
+) -> EligibleAssigneesOut:
+    """노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원만 (F5, 자유입력 폐기).
+
+    공개 맵은 전원 열람이라 모든 직원이 후보. 비공개는 effective_role>=viewer 인 직원만.
+    effective_role 순수 함수를 직원별로 재사용(앱 권한 모델과 동일) — 데이터는 1회씩만 로드.
+    """
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    found_map = await session.get(ProcessMap, version.map_id)
+    employees = list((await session.scalars(select(Employee).order_by(Employee.name))).all())
+
+    if found_map is not None and found_map.visibility == "public":
+        eligible = employees
+    else:
+        visibility = found_map.visibility if found_map is not None else "private"
+        perm_rows = (
+            await session.execute(
+                select(
+                    MapPermission.principal_type,
+                    MapPermission.principal_id,
+                    MapPermission.role,
+                ).where(MapPermission.map_id == version.map_id)
+            )
+        ).all()
+        permissions: list[logic.Permission] = [(p, pid, role) for p, pid, role in perm_rows]
+        approver_ids = set(
+            (
+                await session.scalars(
+                    select(MapApprover.user_id).where(MapApprover.map_id == version.map_id)
+                )
+            ).all()
+        )
+        # 모든 active 그룹 멤버십 1회 로드 → 직원별 그룹 소속을 메모리에서 판정 (N+1 회피)
+        member_rows = (
+            await session.execute(
+                select(
+                    UserGroupMember.group_id,
+                    UserGroupMember.member_type,
+                    UserGroupMember.member_id,
+                )
+                .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+                .where(UserGroup.status == "active")
+            )
+        ).all()
+        eligible = []
+        for emp in employees:
+            emp_org_path = logic.org_path(
+                emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department
+            )
+            group_ids: set[str] = set()
+            for gid, member_type, member_id in member_rows:
+                if member_type == "user" and member_id == emp.login_id:
+                    group_ids.add(str(gid))
+                elif member_type == "department" and logic.belongs_to_department(
+                    emp_org_path, member_id
+                ):
+                    group_ids.add(str(gid))
+            role = logic.effective_role(
+                emp.login_id,
+                logic.is_sysadmin(emp.login_id),
+                emp_org_path,
+                visibility,
+                permissions,
+                emp.login_id in approver_ids,
+                group_ids,
+            )
+            if role is not None:  # None=접근 불가, 그 외(viewer+)는 후보
+                eligible.append(emp)
+
+    users = [
+        DirectoryUserOut(id=e.login_id, name=e.name or e.login_id, department=e.department or "")
+        for e in eligible
+    ]
+    departments = sorted({e.department for e in eligible if e.department})
+    return EligibleAssigneesOut(users=users, departments=departments)
 
 
 @router.patch(

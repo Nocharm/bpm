@@ -8,7 +8,14 @@ import { useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ScopePreview } from "@/components/scope-preview";
-import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
+import {
+  createComment,
+  getEligibleAssignees,
+  listComments,
+  type CommentItem,
+  type EligibleAssignees,
+  type VersionGraph,
+} from "@/lib/api";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 
@@ -87,7 +94,26 @@ export function NodeSummaryModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colorExpanded, setColorExpanded] = useState(false);
+  // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
+  const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   const attrValues = { assignee, department, system, duration };
+
+  useEffect(() => {
+    if (readOnly) {
+      return;
+    }
+    let active = true;
+    void getEligibleAssignees(versionId)
+      .then((e) => {
+        if (active) setEligible(e);
+      })
+      .catch(() => {
+        /* 실패 시 현재 값만 유지 노출 */
+      });
+    return () => {
+      active = false;
+    };
+  }, [versionId, readOnly]);
   const shownColors =
     colorExpanded || colorPresets.length <= COLOR_COLLAPSED
       ? colorPresets
@@ -215,21 +241,54 @@ export function NodeSummaryModal({
                   )}
                 </div>
               </div>
-              {/* BPM 속성 */}
+              {/* BPM 속성 — 담당자/부서는 조회권한 보유자만 선택(F5), system/duration은 자유입력 */}
               {ATTR_FIELDS.map(({ key, labelKey }) => (
                 <div key={key} className="flex items-center gap-2">
                   <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
-                  <input
-                    className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                    value={attrValues[key]}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (key === "assignee") onPatch({ assignee: value });
-                      else if (key === "department") onPatch({ department: value });
-                      else if (key === "system") onPatch({ system: value });
-                      else onPatch({ duration: value });
-                    }}
-                  />
+                  {key === "assignee" ? (
+                    <select
+                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                      value={assignee}
+                      onChange={(event) => onPatch({ assignee: event.target.value })}
+                    >
+                      <option value="">{t("summary.none")}</option>
+                      {/* 기존 값이 후보에 없으면(레거시/권한변경) 현재 값을 유지 노출 */}
+                      {assignee && !(eligible?.users ?? []).some((u) => u.name === assignee) && (
+                        <option value={assignee}>{assignee}</option>
+                      )}
+                      {(eligible?.users ?? []).map((u) => (
+                        <option key={u.id} value={u.name}>
+                          {u.department ? `${u.name} · ${u.department}` : u.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : key === "department" ? (
+                    <select
+                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                      value={department}
+                      onChange={(event) => onPatch({ department: event.target.value })}
+                    >
+                      <option value="">{t("summary.none")}</option>
+                      {department && !(eligible?.departments ?? []).includes(department) && (
+                        <option value={department}>{department}</option>
+                      )}
+                      {(eligible?.departments ?? []).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                      value={attrValues[key]}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (key === "system") onPatch({ system: value });
+                        else onPatch({ duration: value });
+                      }}
+                    />
+                  )}
                 </div>
               ))}
               {groupLabel && (

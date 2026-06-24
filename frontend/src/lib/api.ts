@@ -168,6 +168,15 @@ export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
   });
 }
 
+// 노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 부서 (F5, 자유입력 폐기)
+export interface EligibleAssignees {
+  users: { id: string; name: string; department: string }[];
+  departments: string[];
+}
+export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
+  return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
+}
+
 export function updateMap(
   mapId: number,
   patch: { name?: string; description?: string },

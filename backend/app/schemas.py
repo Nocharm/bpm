@@ -405,6 +405,13 @@ class DirectoryOut(BaseModel):
     departments: list[DirectoryDeptOut]
 
 
+class EligibleAssigneesOut(BaseModel):
+    """노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 직원들의 부서 (F5)."""
+
+    users: list[DirectoryUserOut]
+    departments: list[str]
+
+
 AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 
