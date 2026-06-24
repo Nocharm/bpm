@@ -31,6 +31,7 @@ import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permiss
 import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
 import type { PrincipalOption } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
+import { SkeletonRows } from "./loading-skeleton";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
 // Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
@@ -272,6 +273,8 @@ export function CollaboratorsPanel({
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   // 맵의 지정 승인자 login_id 목록 — 다운그레이드가 지연될 때 "누가 승인 가능한지" 안내에 사용.
   const [approverIds, setApproverIds] = useState<string[]>([]);
+  // 초기 로드 중 — 데이터 도착 전 "협업자 없음" 대신 스켈레톤 표시 (F8).
+  const [loading, setLoading] = useState(true);
 
   // 실 디렉터리 — 피커 후보와 표시명 해석에 사용 (Layer 4 Task 0) /
   // Real directory for picker candidates and display-name resolution.
@@ -317,6 +320,8 @@ export function CollaboratorsPanel({
         }
       } catch (err) {
         if (active) onToast(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) setLoading(false);
       }
     })();
     return () => {
@@ -381,8 +386,11 @@ export function CollaboratorsPanel({
 
   return (
     <div className="flex flex-col gap-0.5">
-      {/* 빈 목록 안내 / Empty-state message when no collaborators */}
-      {perms.length === 0 && (
+      {/* 로딩 중 스켈레톤 / Skeleton while loading (F8) */}
+      {loading && <SkeletonRows />}
+
+      {/* 빈 목록 안내 — 로딩 끝난 뒤에만 / Empty-state only after load */}
+      {!loading && perms.length === 0 && (
         <p className="py-4 text-caption text-ink-tertiary">{t("perm.noCollaborators")}</p>
       )}
 

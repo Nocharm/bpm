@@ -13,6 +13,7 @@ import { getDirectory, listApprovers, setApprovers, type DirectoryUser } from "@
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/mock/permissions";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import { SkeletonPills } from "@/components/permissions/loading-skeleton";
 
 interface ApproversPanelProps {
   mapId: string;
@@ -29,6 +30,8 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
 
   // 서버 결재자 userId 목록 / Server-sourced approver userIds.
   const [approverIds, setApproverIds] = useState<string[]>([]);
+  // 초기 로드 중 — 데이터 도착 전 "결재자 0" 경고 대신 스켈레톤 표시 (F8).
+  const [loading, setLoading] = useState(true);
 
   // 디렉터리 사용자 목록 / Directory users for picker.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
@@ -71,6 +74,8 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         if (active) setApproverIds(ids);
       } catch (err) {
         if (active) onToast(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) setLoading(false);
       }
     })();
     return () => {
@@ -102,8 +107,11 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         <p className="mt-0.5 text-fine text-ink-tertiary">{t("perm.approversHint")}</p>
       </div>
 
-      {/* 결재자 0 경고 배너 / Empty-list warning banner */}
-      {hasNone && (
+      {/* 로딩 중 스켈레톤 / Skeleton while loading (F8) */}
+      {loading && <SkeletonPills />}
+
+      {/* 결재자 0 경고 배너 — 로딩 끝난 뒤에만 / Empty-list warning, only after load */}
+      {!loading && hasNone && (
         <div className="rounded-sm border border-error bg-error/10 px-3 py-2 text-caption text-error">
           {t("perm.approversWarn")}
         </div>
