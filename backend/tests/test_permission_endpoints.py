@@ -163,25 +163,60 @@ def test_change_role_upgrade_immediate(client: TestClient, enforce: None) -> Non
     assert grant_role(map_id, "bob") == "editor"
 
 
-def test_change_role_downgrade_deferred(client: TestClient, enforce: None) -> None:
-    """editor→viewer 는 pending approval_request 만 만들고 role 은 그대로."""
-    map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
+def test_change_role_downgrade_deferred_non_owner(client: TestClient, enforce: None) -> None:
+    """비-오너(editor) 행위자의 editor→viewer 는 pending approval_request 만 만들고 role 은 그대로."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")
     r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
     assert r.status_code == 200
     assert r.json()["pending"] is True
     assert grant_role(map_id, "ed") == "editor"  # 아직 적용 안 됨
 
 
-def test_remove_editor_deferred_grant_present(client: TestClient, enforce: None) -> None:
+def test_remove_editor_deferred_grant_present_non_owner(client: TestClient, enforce: None) -> None:
+    """비-오너(editor) 행위자의 editor 제거는 승인 지연 — 행 유지."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    r = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
+    assert r.status_code == 200
+    assert r.json()["pending"] is True
+    assert grant_role(map_id, "ed") == "editor"  # 아직 제거 안 됨
+
+
+def test_owner_downgrade_editor_immediate(client: TestClient, enforce: None) -> None:
+    """오너가 editor→viewer 다운그레이드 시 승인 없이 즉시 적용 (request #10)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
+    gid = grant_id(map_id, "ed")
+    act_as("owner.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200
+    assert r.json()["pending"] is False
+    assert grant_role(map_id, "ed") == "viewer"  # 즉시 적용
+
+
+def test_owner_remove_editor_immediate(client: TestClient, enforce: None) -> None:
+    """오너가 editor 제거 시 승인 없이 즉시 삭제 (request #10)."""
     map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
     gid = grant_id(map_id, "ed")
     act_as("owner.u")
     r = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
     assert r.status_code == 200
-    assert r.json()["pending"] is True
-    assert grant_role(map_id, "ed") == "editor"  # 아직 제거 안 됨
+    assert r.json()["pending"] is False
+    assert grant_role(map_id, "ed") is None  # 즉시 제거
 
 
 def test_remove_viewer_immediate(client: TestClient, enforce: None) -> None:
@@ -320,11 +355,15 @@ def test_approval_list_visible_to_approver_403_to_others(
 
 def test_decide_approve_downgrade_applies(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 다운그레이드 승인 지연
     # editor→viewer 지연 요청 생성
     pend = client.patch(
         f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
@@ -341,11 +380,15 @@ def test_decide_approve_downgrade_applies(client: TestClient, enforce: None) -> 
 
 def test_decide_approve_removal_applies(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 제거 승인 지연
     pend = client.delete(f"/api/maps/{map_id}/permissions/{gid}").json()
     req_id = pend["approval_request"]["id"]
     act_as("appr")
@@ -375,11 +418,15 @@ def test_decide_approve_visibility_flips(client: TestClient, enforce: None) -> N
 
 def test_decide_reject_leaves_unchanged(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 다운그레이드 승인 지연
     pend = client.patch(
         f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
     ).json()
@@ -393,11 +440,15 @@ def test_decide_reject_leaves_unchanged(client: TestClient, enforce: None) -> No
 
 def test_decide_non_approver_403(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 다운그레이드 승인 지연
     pend = client.patch(
         f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
     ).json()

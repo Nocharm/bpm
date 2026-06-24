@@ -13,6 +13,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
 from app.permissions import logic
+from app.permissions.access import get_effective_role
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
     require_approver_or_sysadmin,
@@ -123,7 +124,9 @@ async def update_permission(
         raise HTTPException(
             status_code=409, detail="promote to owner via owner transfer"
         )
-    if logic.requires_downgrade_approval(grant.role, new_role):
+    # 오너(=sysadmin 포함, effective_role 단계에서 owner로 해석)는 다운그레이드 승인 없이 즉시 적용
+    actor_role = await get_effective_role(session, user, map_id)
+    if logic.requires_downgrade_approval(grant.role, new_role) and actor_role != "owner":
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -164,7 +167,9 @@ async def delete_permission(
         raise HTTPException(
             status_code=409, detail="owner grant removal goes through owner transfer"
         )
-    if logic.requires_downgrade_approval(grant.role, None):
+    # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
+    actor_role = await get_effective_role(session, user, map_id)
+    if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
