@@ -5,13 +5,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app import workflow
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions import logic
 from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.deps import require_map_role
-from app.schemas import MapCreate, MapDetailOut, MapOut, MapUpdate
+from app.routers.versions import clone_graph
+from app.schemas import MapCopy, MapCreate, MapDetailOut, MapOut, MapUpdate
 from app.version_events import record_version_event
 
 router = APIRouter(
@@ -132,6 +134,75 @@ async def create_map(
     for version in new_map.versions:
         await session.refresh(version, attribute_names=["events"])
     new_map.my_role = "owner"  # 생성자는 owner 권한 행 부여됨
+    return new_map
+
+
+@router.post(
+    "/{map_id}/copy",
+    response_model=MapDetailOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def copy_map(
+    map_id: int,
+    payload: MapCopy,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """승인본(approved/published) 기준으로 맵 복사 — 새 맵의 초기 draft에 그래프 복제 (request #12).
+
+    복사 가능 조건: 원본 맵에 승인된 버전이 1개 이상. 없으면 409.
+    """
+    source_map = await session.get(ProcessMap, map_id)
+    if source_map is None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    # 최신 승인본 1개 — 그래프 즉시 클론을 위해 nodes/edges/groups eager-load
+    source_version = (
+        await session.scalars(
+            select(MapVersion)
+            .where(
+                MapVersion.map_id == map_id,
+                MapVersion.status.in_([workflow.APPROVED, workflow.PUBLISHED]),
+            )
+            .order_by(MapVersion.id.desc())
+            .limit(1)
+            .options(
+                selectinload(MapVersion.nodes),
+                selectinload(MapVersion.edges),
+                selectinload(MapVersion.groups),
+            )
+        )
+    ).first()
+    if source_version is None:
+        raise HTTPException(status_code=409, detail="map has no approved version to copy")
+
+    new_map = ProcessMap(
+        name=payload.name or f"{source_map.name} (Copy)",
+        description=source_map.description,
+        created_by=user,
+        owner_id=user,
+        visibility="private",
+    )
+    new_version = MapVersion(label="As-Is")
+    new_map.versions.append(new_version)
+    session.add(new_map)
+    await session.flush()
+    await clone_graph(session, source_version, new_version.id)
+    record_version_event(session, new_version.id, "created", user)
+    session.add(
+        MapPermission(
+            map_id=new_map.id,
+            principal_type="user",
+            principal_id=user,
+            role="owner",
+            granted_by=user,
+        )
+    )
+    await session.commit()
+    await session.refresh(new_map, attribute_names=["versions"])
+    for version in new_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    new_map.my_role = "owner"
     return new_map
 
 

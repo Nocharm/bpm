@@ -160,6 +160,14 @@ export function createMap(name: string, description = ""): Promise<MapDetail> {
   });
 }
 
+// 승인본(approved/published) 기준 맵 복사 — 새 private 맵의 초기 draft에 그래프 복제 (F12)
+export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/copy`, {
+    method: "POST",
+    body: JSON.stringify(name ? { name } : {}),
+  });
+}
+
 export function updateMap(
   mapId: number,
   patch: { name?: string; description?: string },

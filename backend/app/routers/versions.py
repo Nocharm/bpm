@@ -39,10 +39,13 @@ router = APIRouter(
 )
 
 
-async def _clone_graph(
+async def clone_graph(
     session: AsyncSession, source: MapVersion, target_version_id: int
 ) -> None:
-    """source 버전의 노드/엣지를 새 ID로 깊은 복사. 엣지/그룹 참조를 재매핑한다."""
+    """source 버전의 노드/엣지를 새 ID로 깊은 복사. 엣지/그룹 참조를 재매핑한다.
+
+    버전 클론(create_version)과 맵 복사(maps.copy_map, F12)에서 공용.
+    """
     id_map = {node.id: uuid.uuid4().hex for node in source.nodes}
 
     cloned: dict[str, Node] = {}
@@ -158,7 +161,7 @@ async def create_version(
             raise HTTPException(
                 status_code=404, detail="source version not found in this map"
             )
-        await _clone_graph(session, source, new_version.id)
+        await clone_graph(session, source, new_version.id)
 
     record_version_event(session, new_version.id, "created", user)
     await session.commit()

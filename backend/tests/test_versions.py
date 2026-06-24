@@ -186,3 +186,34 @@ def test_cannot_delete_last_version(client: TestClient) -> None:
     response = client.delete(f"/api/versions/{only_version}")
 
     assert response.status_code == 409
+
+
+def test_copy_map_from_approved(client: TestClient) -> None:
+    created = _create_map(client)
+    src_version = created["versions"][0]["id"]
+    client.post(f"/api/versions/{src_version}/checkout", json={})
+    client.put(
+        f"/api/versions/{src_version}/graph",
+        json={
+            "nodes": [{"id": "s", "node_type": "start"}, {"id": "p", "title": "발주"}],
+            "edges": [],
+        },
+    )
+    _approve_version(src_version)  # 승인본 — 복사 기준 (request #12)
+
+    copy = client.post(f"/api/maps/{created['id']}/copy", json={"name": "복사본"})
+    assert copy.status_code == 201
+    body = copy.json()
+    assert body["name"] == "복사본"
+    assert body["my_role"] == "owner"
+    # 새 맵의 초기 버전은 편집 가능한 draft, 승인본 그래프가 복제됨
+    new_version = body["versions"][0]
+    assert new_version["status"] == "draft"
+    cloned = client.get(f"/api/versions/{new_version['id']}/graph").json()
+    assert len(cloned["nodes"]) == 2
+
+
+def test_copy_map_without_approved_409(client: TestClient) -> None:
+    created = _create_map(client)  # 초기 As-Is 는 draft → 승인본 없음
+    response = client.post(f"/api/maps/{created['id']}/copy", json={})
+    assert response.status_code == 409

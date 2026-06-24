@@ -11,6 +11,11 @@ class MapCreate(BaseModel):
     description: str = ""
 
 
+class MapCopy(BaseModel):
+    # 새 맵 이름 — 비우면 "<원본명> (Copy)" (F12 승인본 복사)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class MapUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None

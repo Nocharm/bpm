@@ -5,10 +5,12 @@
 // 데이터는 getMap(+editor+면 listMapPermissions/listGroups). 선택 변경 시 key로 remount.
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Building2, User, Users } from "lucide-react";
+import { Building2, Copy, User, Users } from "lucide-react";
 
 import {
+  copyMap,
   getMap,
   listGroups,
   listMapPermissions,
@@ -57,6 +59,9 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 승인본 복사 진행 중 / copying-from-approved in progress (F12).
+  const [copying, setCopying] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     let active = true;
@@ -201,6 +206,23 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
     return <div className="flex flex-col gap-3">{body}</div>;
   }
 
+  // 승인본(approved/published)이 있어야 복사 가능 — 없으면 버튼 숨김(백엔드 409 회피) /
+  // Copy needs an approved/published version; hide otherwise (avoids backend 409).
+  const hasApprovedVersion = detail.versions.some(
+    (v) => v.status === "approved" || v.status === "published",
+  );
+  const handleCopy = async () => {
+    if (copying) return;
+    setCopying(true);
+    try {
+      const created = await copyMap(detail.id);
+      router.push(`/maps/${created.id}`); // 새 맵 에디터로 이동 — 성공 시 언마운트되므로 copying 리셋 불필요
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setCopying(false);
+    }
+  };
+
   // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -213,6 +235,18 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
           >
             {t("perm.settingsTitle")}
           </Link>
+          {hasApprovedVersion && (
+            <button
+              type="button"
+              data-id="map-detail-copy"
+              disabled={copying}
+              className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface disabled:opacity-40"
+              onClick={() => void handleCopy()}
+            >
+              <Copy size={14} strokeWidth={1.5} />
+              {t("home.copyFromApproved")}
+            </button>
+          )}
         </div>
         {isOwner && onDelete && (
           <button
