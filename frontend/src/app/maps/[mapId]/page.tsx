@@ -64,6 +64,7 @@ import {
   resolveCollision,
   getIncomingEdges,
   getOutgoingEdges,
+  hasReciprocalEdge,
   insertNodeBefore,
   insertNodeAfter,
   withSubprocessHandles,
@@ -2131,13 +2132,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, createEdge],
   );
 
-  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가(출발 전용), 끝 노드는 출발(나가는 연결) 불가(도착 전용)
+  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가/끝 노드는 출발 불가(터미널) + A↔B 2노드 회귀 금지(분기는 Decision 사용)
   const isValidConnection = useCallback((connection: Connection | Edge): boolean => {
     const sourceType = nodesRef.current.find((node) => node.id === connection.source)?.data
       .nodeType;
     const targetType = nodesRef.current.find((node) => node.id === connection.target)?.data
       .nodeType;
-    return !violatesTerminalRule(sourceType, targetType);
+    if (violatesTerminalRule(sourceType, targetType)) {
+      return false;
+    }
+    if (
+      connection.source &&
+      connection.target &&
+      hasReciprocalEdge(edgesRef.current, connection.source, connection.target)
+    ) {
+      return false;
+    }
+    return true;
   }, []);
 
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
