@@ -2025,9 +2025,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.createVersion"));
+      // 진행 중 드래프트가 있으면 새 버전 생성 차단(409) — 토스트로 안내 (request #11)
+      const msg = err instanceof Error ? err.message : "";
+      showToast(msg.includes("409") ? t("err.versionDraftExists") : t("err.createVersion"));
     }
-  }, [versionId, mapId, mapName, saveCurrentScope, t]);
+  }, [versionId, mapId, mapName, saveCurrentScope, showToast, t]);
 
   const handleRenameVersion = useCallback(async () => {
     if (versionId === null) {
@@ -2131,6 +2133,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
+      // A↔B 1:1 회귀 차단 — 역행은 Decision 노드로 우회하도록 안내(토스트)
+      if (
+        connection.source &&
+        connection.target &&
+        hasReciprocalEdge(edgesRef.current, connection.source, connection.target)
+      ) {
+        showToast(t("edge.reciprocalBlocked"));
+        return;
+      }
       // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
       const source = nodesRef.current.find((node) => node.id === connection.source);
       if (source?.data.nodeType === "decision") {
@@ -2139,26 +2150,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       createEdge(connection, "");
     },
-    [readOnly, createEdge],
+    [readOnly, createEdge, showToast, t],
   );
 
-  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가/끝 노드는 출발 불가(터미널) + A↔B 2노드 회귀 금지(분기는 Decision 사용)
+  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가/끝 노드는 출발 불가(터미널).
+  // A↔B 회귀는 여기서 막지 않고 onConnect에서 토스트로 안내(Decision 우회 유도).
   const isValidConnection = useCallback((connection: Connection | Edge): boolean => {
     const sourceType = nodesRef.current.find((node) => node.id === connection.source)?.data
       .nodeType;
     const targetType = nodesRef.current.find((node) => node.id === connection.target)?.data
       .nodeType;
-    if (violatesTerminalRule(sourceType, targetType)) {
-      return false;
-    }
-    if (
-      connection.source &&
-      connection.target &&
-      hasReciprocalEdge(edgesRef.current, connection.source, connection.target)
-    ) {
-      return false;
-    }
-    return true;
+    return !violatesTerminalRule(sourceType, targetType);
   }, []);
 
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
@@ -2685,6 +2687,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (flowZoneViolates(aId, bId, zone)) {
         return;
       }
+      // A↔B 1:1 회귀 차단(드롭) — front=A→B / back=B→A. 역행은 Decision 우회 안내.
+      const newSource = zone === "front" ? aId : bId;
+      const newTarget = zone === "front" ? bId : aId;
+      if (hasReciprocalEdge(edgesRef.current, newSource, newTarget)) {
+        showToast(t("edge.reciprocalBlocked"));
+        return;
+      }
       placeBeside(aId, bId, zone);
       scheduleAutoSave();
       const conflict =
@@ -2693,13 +2702,31 @@ function MapEditor({ mapId }: { mapId: number }) {
           : getOutgoingEdges(edgesRef.current, bId).some((edge) => edge.target !== aId);
       const rect = conflict ? screenRectOf(bId) : null;
       if (conflict && rect) {
+        // 출력 1개 고정 — back 삽입에서 비-decision B는 분기(keep=2번째 출력) 불가 → 자동 흐름 삽입(rewire)만.
+        const bIsDecision =
+          nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
+        if (zone === "back" && !bIsDecision) {
+          applyFlowEdges(aId, bId, zone, true);
+          showToast(t("edge.outputSwapped"));
+          return;
+        }
         setPending({ mode: zone, aId, bId, rect });
         return;
       }
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [swapNodes, addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf, flowZoneViolates],
+    [
+      swapNodes,
+      addToGroup,
+      placeBeside,
+      applyFlowEdges,
+      scheduleAutoSave,
+      screenRectOf,
+      flowZoneViolates,
+      showToast,
+      t,
+    ],
   );
 
   // 라이브러리 패널에서 드래그한 맵을 캔버스에 드롭 → 하위프로세스 노드 생성
