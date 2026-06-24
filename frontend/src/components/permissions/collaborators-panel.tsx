@@ -14,6 +14,7 @@ import {
   addMapPermission,
   changeMapPermission,
   getDirectory,
+  listApprovers,
   listGroups,
   listMapPermissions,
   removeMapPermission,
@@ -263,6 +264,8 @@ export function CollaboratorsPanel({
   // 다운그레이드/제거 요청이 pending 인 permission id 집합 — mutation 응답에서 채움.
   // 서버 진실(역할 미변경)은 perms 가 그대로 유지하고, 이 집합은 "승인 대기" 배지만 구동한다.
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  // 맵의 지정 승인자 login_id 목록 — 다운그레이드가 지연될 때 "누가 승인 가능한지" 안내에 사용.
+  const [approverIds, setApproverIds] = useState<string[]>([]);
 
   // 실 디렉터리 — 피커 후보와 표시명 해석에 사용 (Layer 4 Task 0) /
   // Real directory for picker candidates and display-name resolution.
@@ -271,6 +274,12 @@ export function CollaboratorsPanel({
   // 실 active 그룹 — 그룹 협업자 옵션·표시명 (Layer 4 Task 4) /
   // Real active groups for group collaborator options and display names.
   const [groups, setGroups] = useState<Group[]>([]);
+
+  // 승인 권한자 표시명 — 지정 승인자 login_id → 디렉터리 표시명, 없으면 안내 문구(시스템 관리자 포함).
+  const approverDisplayNames =
+    approverIds.length > 0
+      ? approverIds.map((id) => dirUsers.find((u) => u.id === id)?.name ?? id).join(", ")
+      : t("perm.approversNone");
 
   const reload = useCallback(async () => {
     try {
@@ -287,16 +296,18 @@ export function CollaboratorsPanel({
     let active = true;
     void (async () => {
       try {
-        const [rows, dir, groupRows] = await Promise.all([
+        const [rows, dir, groupRows, approvers] = await Promise.all([
           listMapPermissions(mapIdNum),
           getDirectory(),
           listGroups(),
+          listApprovers(mapIdNum),
         ]);
         if (active) {
           setPerms(rows);
           setDirUsers(dir.users);
           setDirDepts(dir.departments);
           setGroups(groupRows);
+          setApproverIds(approvers);
         }
       } catch (err) {
         if (active) onToast(err instanceof Error ? err.message : String(err));
@@ -328,9 +339,9 @@ export function CollaboratorsPanel({
       try {
         const result = await changeMapPermission(mapIdNum, perm.id, toRole);
         if (result.pending) {
-          // 지연 — 역할 미변경. "승인 대기" 표시만 / Pending: role unchanged, show badge only.
+          // 지연 — 역할 미변경. "승인 대기" 표시 + 승인 권한자 안내 / Pending: show badge + who can approve.
           setPendingIds((prev) => new Set(prev).add(perm.id));
-          onToast(t("perm.toastGated"));
+          onToast(t("perm.toastGatedBy", { names: approverDisplayNames }));
         } else {
           await reload();
         }
@@ -338,7 +349,7 @@ export function CollaboratorsPanel({
         onToast(err instanceof Error ? err.message : String(err));
       }
     },
-    [mapIdNum, reload, onToast, t],
+    [mapIdNum, reload, onToast, t, approverDisplayNames],
   );
 
   const handleRemove = useCallback(
@@ -346,9 +357,9 @@ export function CollaboratorsPanel({
       try {
         const result = await removeMapPermission(mapIdNum, perm.id);
         if (result.pending) {
-          // 에디터 제거는 승인 지연 — 행 유지, "승인 대기" 표시 / Editor removal gated: keep row, show badge.
+          // 에디터 제거는 승인 지연 — 행 유지, "승인 대기" + 승인 권한자 안내 / Gated: keep row, show who can approve.
           setPendingIds((prev) => new Set(prev).add(perm.id));
-          onToast(t("perm.toastGated"));
+          onToast(t("perm.toastGatedBy", { names: approverDisplayNames }));
         } else {
           await reload();
         }
@@ -356,7 +367,7 @@ export function CollaboratorsPanel({
         onToast(err instanceof Error ? err.message : String(err));
       }
     },
-    [mapIdNum, reload, onToast, t],
+    [mapIdNum, reload, onToast, t, approverDisplayNames],
   );
 
   // 이미 부여된 principalId 집합 (피커 제외용) / Set of already-granted principalIds.

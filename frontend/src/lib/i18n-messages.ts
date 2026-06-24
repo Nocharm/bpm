@@ -392,6 +392,8 @@ const en = {
   "perm.addButton": "Add",
   "perm.removeButton": "Remove",
   "perm.toastGated": "Approval request sent.",
+  "perm.toastGatedBy": "Approval pending — can be approved by: {names}",
+  "perm.approversNone": "a designated approver or a system admin",
   "perm.noCollaborators": "No collaborators yet.",
   "perm.backToEditor": "← Back to editor",
   // ── 결재자(Approvers) / Approvers tab ──
@@ -954,6 +956,8 @@ const ko: Record<MessageKey, string> = {
   "perm.addButton": "추가",
   "perm.removeButton": "제거",
   "perm.toastGated": "승인 요청을 보냈습니다.",
+  "perm.toastGatedBy": "승인 대기 — 승인 가능: {names}",
+  "perm.approversNone": "지정 승인자 또는 시스템 관리자",
   "perm.noCollaborators": "협업자가 없습니다.",
   "perm.backToEditor": "← 편집기로 돌아가기",
   // ── 결재자(Approvers) / Approvers tab ──
