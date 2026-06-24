@@ -151,6 +151,35 @@ def test_add_duplicate_grant_409(client: TestClient, enforce: None) -> None:
     assert r.status_code == 409
 
 
+def test_add_viewer_on_public_map_409(client: TestClient, enforce: None) -> None:
+    """퍼블릭 맵은 viewer 부여 불가 — editor만 (request #9)."""
+    map_id = seed_map(visibility="public", grants=[("user", "owner.u", "owner")])
+    act_as("owner.u")
+    blocked = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={"principal_type": "user", "principal_id": "bob", "role": "viewer"},
+    )
+    assert blocked.status_code == 409
+    # editor 부여는 허용
+    allowed = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={"principal_type": "user", "principal_id": "bob", "role": "editor"},
+    )
+    assert allowed.status_code == 201
+
+
+def test_change_to_viewer_on_public_map_409(client: TestClient, enforce: None) -> None:
+    """퍼블릭 맵에서 editor→viewer 변경 불가 (request #9)."""
+    map_id = seed_map(
+        visibility="public",
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("owner.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 409
+
+
 def test_change_role_upgrade_immediate(client: TestClient, enforce: None) -> None:
     map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "bob", "viewer")])
     gid = grant_id(map_id, "bob")

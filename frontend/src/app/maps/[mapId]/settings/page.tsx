@@ -127,6 +127,10 @@ export default function SettingsPage() {
   // Owner-only: Approvers, Visibility, Danger tabs gated to owner.
   const isOwner = effectiveRole === "owner";
 
+  // 퍼블릭 맵은 전원 열람이라 viewer 지정 불가 — editor만 부여 가능 (선택지 없음) /
+  // Public maps are visible to everyone → no viewer grants (editor only).
+  const isPublic = visibility === "public";
+
   // 결재 대기 탭 가시성 — 맵 승인자 또는 sysadmin만 표시 /
   // Pending approvals tab: visible only to map approvers or sysadmin.
   const canDecide =
@@ -279,7 +283,7 @@ export default function SettingsPage() {
               currentUserId={currentMockUser.id}
               canEdit={canEdit}
               onToast={showToast}
-              viewerGrantDisabled={false}
+              viewerGrantDisabled={isPublic}
             />
           ) : activeTab === "approvers" ? (
             <ApproversPanel

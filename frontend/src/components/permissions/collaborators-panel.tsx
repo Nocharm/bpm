@@ -83,6 +83,7 @@ function CollaboratorRow({
   currentUserId,
   canEdit,
   isPending,
+  viewerGrantDisabled,
   dirUsers,
   dirDepts,
   groups,
@@ -93,6 +94,9 @@ function CollaboratorRow({
   currentUserId: string;
   canEdit: boolean;
   isPending: boolean;
+  /** 퍼블릭 맵이면 viewer 선택지 숨김 — 단, 현재 역할이 viewer면 표시(editor로 교정 가능) /
+   * Public map: hide viewer option (unless this grant is already viewer, so it can be fixed to editor). */
+  viewerGrantDisabled?: boolean;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
   groups: Group[];
@@ -127,7 +131,10 @@ function CollaboratorRow({
           value={role}
           onChange={(e) => onChangeRole(perm, e.target.value as MapRole)}
         >
-          <option value="viewer">{t("perm.roleViewer")}</option>
+          {/* 퍼블릭 맵은 viewer 선택지 숨김 — 단 기존 viewer는 표시(editor로 교정 가능) */}
+          {(!viewerGrantDisabled || role === "viewer") && (
+            <option value="viewer">{t("perm.roleViewer")}</option>
+          )}
           <option value="editor">{t("perm.roleEditor")}</option>
         </select>
       )}
@@ -227,11 +234,10 @@ function AddCollaboratorForm({
               value={role}
               onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
             >
-              {/* 공개 맵은 전원 열람 가능 → viewer 비활성 / Public map: viewer disabled */}
-              <option value="viewer" disabled={viewerGrantDisabled}>
-                {t("perm.roleViewer")}
-                {viewerGrantDisabled ? ` — ${t("perm.visibilityViewerNote")}` : ""}
-              </option>
+              {/* 퍼블릭 맵은 viewer 선택지 자체를 숨김 — editor만 / Public map: no viewer option, editor only */}
+              {!viewerGrantDisabled && (
+                <option value="viewer">{t("perm.roleViewer")}</option>
+              )}
               <option value="editor">{t("perm.roleEditor")}</option>
             </select>
 
@@ -387,6 +393,7 @@ export function CollaboratorsPanel({
           currentUserId={currentUserId}
           canEdit={canEdit}
           isPending={pendingIds.has(perm.id)}
+          viewerGrantDisabled={viewerGrantDisabled}
           dirUsers={dirUsers}
           dirDepts={dirDepts}
           groups={groups}
