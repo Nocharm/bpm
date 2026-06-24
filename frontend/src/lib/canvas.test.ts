@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { Edge } from "@xyflow/react";
 
 import {
+  getNextNodeAlongFlow,
+  getPrevNodeAlongFlow,
   hasReciprocalEdge,
   insertNodeAfter,
   removeOutgoingEdges,
@@ -75,5 +77,22 @@ describe("removeOutgoingEdges (single-output auto-swap)", () => {
 
   it("returns the same edges when the source has no outgoing edge", () => {
     expect(removeOutgoingEdges(edges, "B")).toHaveLength(2);
+  });
+});
+
+describe("flow stepper helpers (F14)", () => {
+  const edges = [
+    { id: "e1", source: "A", target: "B" },
+    { id: "e2", source: "B", target: "C" },
+  ] as Edge[];
+
+  it("getNextNodeAlongFlow follows the outgoing edge", () => {
+    expect(getNextNodeAlongFlow(edges, "A")).toBe("B");
+    expect(getNextNodeAlongFlow(edges, "C")).toBeNull(); // 끝 노드 → 없음
+  });
+
+  it("getPrevNodeAlongFlow follows the incoming edge", () => {
+    expect(getPrevNodeAlongFlow(edges, "C")).toBe("B");
+    expect(getPrevNodeAlongFlow(edges, "A")).toBeNull(); // 시작 노드 → 없음
   });
 });

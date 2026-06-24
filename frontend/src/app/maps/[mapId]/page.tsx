@@ -64,6 +64,8 @@ import {
   resolveCollision,
   getIncomingEdges,
   getOutgoingEdges,
+  getNextNodeAlongFlow,
+  getPrevNodeAlongFlow,
   hasReciprocalEdge,
   removeOutgoingEdges,
   insertNodeBefore,
@@ -4981,6 +4983,49 @@ function MapEditor({ mapId }: { mapId: number }) {
     createGroupFromSelection,
     handleExportPng,
   ]);
+
+  // F14 플로우 따라가기 — 노드 선택 후 ] = 다음 / [ = 이전 노드로 엣지 하이라이트가 흐름을 따라 이동.
+  // 아웃라인이 방향키를 쓰므로 bracket 키로 충돌 회피. 입력/모달 중엔 무시.
+  useEffect(() => {
+    const onStep = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (event.code !== "BracketRight" && event.code !== "BracketLeft") {
+        return;
+      }
+      if (
+        event.target instanceof HTMLElement &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+      ) {
+        return;
+      }
+      if (!selectedId) {
+        return;
+      }
+      const nextId =
+        event.code === "BracketRight"
+          ? getNextNodeAlongFlow(edgesRef.current, selectedId)
+          : getPrevNodeAlongFlow(edgesRef.current, selectedId);
+      if (!nextId) {
+        return;
+      }
+      event.preventDefault();
+      setSelectedId(nextId);
+      setNodes((current) => current.map((node) => ({ ...node, selected: node.id === nextId })));
+      const node = reactFlow.getNode(nextId);
+      if (node) {
+        const w = node.measured?.width ?? NODE_WIDTH;
+        const h = node.measured?.height ?? NODE_HEIGHT;
+        void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+          duration: 350,
+          zoom: reactFlow.getZoom(),
+        });
+      }
+    };
+    window.addEventListener("keydown", onStep);
+    return () => window.removeEventListener("keydown", onStep);
+  }, [selectedId, reactFlow, setNodes, setSelectedId]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
