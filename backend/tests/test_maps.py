@@ -13,6 +13,19 @@ def test_create_map_returns_default_version(client: TestClient) -> None:
     assert body["versions"][0]["label"] == "As-Is"
 
 
+def test_create_map_defaults_private(client: TestClient) -> None:
+    created = client.post("/api/maps", json={"name": "default vis map"}).json()
+    assert created["visibility"] == "private"
+
+
+def test_create_map_honors_public_visibility(client: TestClient) -> None:
+    """생성 시 public 선택이 반영돼야 함 (핫픽스: 항상 private로 생성되던 버그)."""
+    created = client.post(
+        "/api/maps", json={"name": "public at create", "visibility": "public"}
+    ).json()
+    assert created["visibility"] == "public"
+
+
 def test_get_map_returns_created_map(client: TestClient) -> None:
     created = client.post("/api/maps", json={"name": "발주"}).json()
 

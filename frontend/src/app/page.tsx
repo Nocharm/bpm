@@ -26,6 +26,8 @@ export default function MapListPage() {
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapQuery, setMapQuery] = useState("");
+  // 가시성 필터 탭 — ALL/Public/Private
+  const [visFilter, setVisFilter] = useState<"all" | "public" | "private">("all");
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -114,14 +116,20 @@ export default function MapListPage() {
     [maps],
   );
 
+  // 가시성 필터 탭 적용 / apply visibility filter tab.
+  const filteredMaps = useMemo(
+    () => (visFilter === "all" ? visibleMaps : visibleMaps.filter((m) => m.visibility === visFilter)),
+    [visibleMaps, visFilter],
+  );
+
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
   const mapHits = useMemo(
     () =>
-      filterByQuery(visibleMaps, mapQuery, (m) => [
+      filterByQuery(filteredMaps, mapQuery, (m) => [
         { field: "name", text: m.name },
         { field: "description", text: m.description ?? "" },
       ]),
-    [visibleMaps, mapQuery],
+    [filteredMaps, mapQuery],
   );
 
   // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
@@ -134,19 +142,43 @@ export default function MapListPage() {
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
-      {/* 헤더 — 제목 좌 · 검색 중앙 · New map 우상단 / Title left, search center, New map top-right */}
+      {/* 검색 — 최상단 풀폭 / search bar at the very top */}
+      <div className="mx-auto mb-3 flex w-full max-w-[72rem] shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
+        <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <input
+          type="text"
+          data-id="home-map-search"
+          className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
+          placeholder={t("home.searchPlaceholder")}
+          value={mapQuery}
+          onChange={(e) => setMapQuery(e.target.value)}
+        />
+      </div>
+
+      {/* 제목 · 가시성 필터(ALL/Public/Private) · New map / title, filter tabs, New map */}
       <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
-          <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <input
-            type="text"
-            data-id="home-map-search"
-            className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-            placeholder={t("home.searchPlaceholder")}
-            value={mapQuery}
-            onChange={(e) => setMapQuery(e.target.value)}
-          />
+        <div
+          data-id="home-visibility-filter"
+          className="flex items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+        >
+          {(["all", "public", "private"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={visFilter === f}
+              className={`rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                visFilter === f
+                  ? "bg-accent-tint text-accent"
+                  : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+              }`}
+              onClick={() => setVisFilter(f)}
+            >
+              {f === "all"
+                ? t("home.filterAll")
+                : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+            </button>
+          ))}
         </div>
         <button
           className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"

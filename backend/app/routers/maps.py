@@ -151,7 +151,7 @@ async def create_map(
         description=payload.description,
         created_by=user,
         owner_id=user,
-        visibility="private",
+        visibility=payload.visibility,  # 생성자가 고른 초기 공개 범위(기본 private)
     )
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)

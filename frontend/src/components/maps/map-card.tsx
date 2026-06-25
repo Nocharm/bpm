@@ -103,38 +103,42 @@ export function MapCard({
         <ExternalLink size={16} strokeWidth={1.5} />
       </a>
 
-      {/* 타이틀 텍스트로만 열림(히트박스 축소) — 우측 여백 클릭은 카드 선택으로 빠짐 */}
-      <Link
-        data-id="map-card-name"
-        href={`/maps/${map.id}`}
-        className="inline-block max-w-[calc(100%-2rem)] truncate align-top text-body-strong text-ink hover:text-accent hover:underline"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Highlight text={map.name} ranges={nameRanges ?? []} />
-      </Link>
-
-      {/* 우측 아래 — 가장 최신 버전 상태 필 / latest version status pill, bottom-right */}
-      {map.latest_version_status && (
-        <span
-          className={`absolute bottom-3 right-3 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[map.latest_version_status]}`}
+      {/* 타이틀 + 최신 버전 상태(이름 바로 우측) — 타이틀 텍스트로만 열림(히트박스 축소) */}
+      <div className="flex items-center gap-2 pr-6">
+        <Link
+          data-id="map-card-name"
+          href={`/maps/${map.id}`}
+          className="min-w-0 truncate text-body-strong text-ink hover:text-accent hover:underline"
+          onClick={(e) => e.stopPropagation()}
         >
-          {t(VERSION_STATUS_LABEL[map.latest_version_status])}
-        </span>
-      )}
+          <Highlight text={map.name} ranges={nameRanges ?? []} />
+        </Link>
+        {map.latest_version_status && (
+          <span
+            data-id="map-card-status"
+            className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[map.latest_version_status]}`}
+          >
+            {t(VERSION_STATUS_LABEL[map.latest_version_status])}
+          </span>
+        )}
+      </div>
 
-      {/* 메타 한 줄 (왼쪽 아래) / Small meta line, bottom-left */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 pr-16 text-fine text-ink-tertiary">
-        {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
-        <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(map.visibility)}`}>
-          {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
-        </span>
-        {map.my_role && <RoleBadge role={map.my_role as MapRole} />}
+      {/* 메타 한 줄 — 좌: 가시성·역할 / 우: 승인멤버 (구 상태필 자리) */}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-fine text-ink-tertiary">
+          {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
+          <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(map.visibility)}`}>
+            {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+          </span>
+          {map.my_role && <RoleBadge role={map.my_role as MapRole} />}
+        </div>
 
         {canViewMembers && (
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 hover:bg-surface hover:text-ink"
+              data-id="map-card-members"
+              className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface hover:text-ink"
               onClick={(e) => {
                 e.stopPropagation();
                 toggleMembers();
@@ -153,7 +157,8 @@ export function MapCard({
               <>
                 {/* 바깥 클릭 닫기 / click-away */}
                 <div className="fixed inset-0 z-[1000]" onClick={() => setMembersOpen(false)} />
-                <div className="absolute left-0 z-[1001] mt-1 max-h-64 w-64 overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg">
+                {/* 카드 하단이라 위로(bottom-full) + 우측 정렬(right-0)로 카드 안에 유지 */}
+                <div className="absolute bottom-full right-0 z-[1001] mb-1 max-h-64 w-64 overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg">
                   {membersError ? (
                     <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
                   ) : members === null ? (
