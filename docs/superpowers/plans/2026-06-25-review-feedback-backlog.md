@@ -2,7 +2,7 @@
 
 > 브랜치 `feat/flow-rbac-improvements`의 **검토 현황 + 후속 백로그**. 커밋 단위 로그는 `PROGRESS.md`,
 > 원래 15개 항목 계획은 `2026-06-24-process-flow-rbac-improvements.md` 참조.
-> 자동 검증 기준선(매 커밋): backend pytest **315** · ruff clean · frontend tsc 0 · eslint 0 error · vitest **36** · build OK.
+> 자동 검증 기준선(매 커밋): backend pytest **316** · ruff clean · frontend tsc 0 · eslint 0 error · vitest **36** · build OK.
 
 ---
 
@@ -75,6 +75,12 @@
 | AP 계층 | 생성 다이얼로그 부서 협업자를 **org_path 하위(센터→하위 팀/그룹 전원)**까지 후보 포함(말단명→org_path 매핑 + prefix) |
 | 설정 협업자 추가 | 맵 설정 CollaboratorsPanel도 **선택 즉시 추가**(Add 버튼 제거), 역할은 picker 옆 토글(public이면 editor 정적) |
 
+### E. 5차 수정
+| 항목 | 내용 |
+|------|------|
+| 역할 라벨 영어 고정 | 한↔영 전환 중 레이아웃 깨짐 방지 — `perm.roleOwner/Editor/Viewer` + `collaboratorRole{Viewer,Editor}` 5개 키의 KO값을 **Owner/Editor/Viewer**로(전 화면 i18n 키 경유) |
+| 로그인 기록 수집 | (부가 기능) 사용자 현황조사용 `login_records` 테이블 + `/api/me` 호출 시 1건 기록. 모델 `LoginRecord`(login_id·name·occurred_at). **집계·리포트·중복제거는 후속**(현재 raw 기록만). startup create_all로 테이블 자동 생성 |
+
 ---
 
 ## 3. 결정 사항 (확정)
@@ -91,3 +97,4 @@
 - **PV** (가시성 스테이징 저장+미리보기) — 구현됨, **검토 보류**. 전(全) 설정 일괄 스테이징은 후속 과제.
 - **AP** (승인자 viewer+ 제한, 소속 자격 포함) — 구현됨, **검토 보류**.
 - **AP 메모**: 설정 화면은 서버 `effective_role`/`belongs_to_department`가 상위조직(센터) 하위 전원을 prefix로 포함. 생성 다이얼로그는 맵 부재로 클라 산정 — 4차에서 말단명→org_path 매핑 + prefix로 상위조직 하위 전원 후보화(말단명 유니크 가정). 두 항목 검토 재개 시 §1 표 갱신.
+- **로그인 기록 후속**: 현재 raw 기록만 수집(`login_records`). 후속 후보 — 일자별 중복제거 / 집계·리포트 엔드포인트(`/api/admin/login-records`) / 현황 화면(맵 오너십과 조인) / IP·UA 필드. 방식 확정 후 진행.
