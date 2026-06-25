@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ScopePreview } from "@/components/scope-preview";
+import { SearchSelect } from "@/components/search-select";
 import {
   createComment,
   getEligibleAssignees,
@@ -246,38 +247,28 @@ export function NodeSummaryModal({
                 <div key={key} className="flex items-center gap-2">
                   <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
                   {key === "assignee" ? (
-                    <select
-                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                    <SearchSelect
                       value={assignee}
-                      onChange={(event) => onPatch({ assignee: event.target.value })}
-                    >
-                      <option value="">{t("summary.none")}</option>
-                      {/* 기존 값이 후보에 없으면(레거시/권한변경) 현재 값을 유지 노출 */}
-                      {assignee && !(eligible?.users ?? []).some((u) => u.name === assignee) && (
-                        <option value={assignee}>{assignee}</option>
-                      )}
-                      {(eligible?.users ?? []).map((u) => (
-                        <option key={u.id} value={u.name}>
-                          {u.department ? `${u.name} · ${u.department}` : u.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={(eligible?.users ?? []).map((u) => ({
+                        value: u.name,
+                        label: u.name,
+                        sub: u.department || undefined,
+                      }))}
+                      emptyLabel={t("summary.none")}
+                      placeholder={t("field.searchPlaceholder")}
+                      onChange={(value) => onPatch({ assignee: value })}
+                    />
                   ) : key === "department" ? (
-                    <select
-                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                    <SearchSelect
                       value={department}
-                      onChange={(event) => onPatch({ department: event.target.value })}
-                    >
-                      <option value="">{t("summary.none")}</option>
-                      {department && !(eligible?.departments ?? []).includes(department) && (
-                        <option value={department}>{department}</option>
-                      )}
-                      {(eligible?.departments ?? []).map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
+                      options={(eligible?.departments ?? []).map((d) => ({
+                        value: d,
+                        label: d,
+                      }))}
+                      emptyLabel={t("summary.none")}
+                      placeholder={t("field.searchPlaceholder")}
+                      onChange={(value) => onPatch({ department: value })}
+                    />
                   ) : (
                     <input
                       className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"

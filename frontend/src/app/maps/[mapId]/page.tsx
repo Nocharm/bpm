@@ -39,6 +39,7 @@ import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
+import { EdgeSelectModal } from "@/components/edge-select-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -68,6 +69,8 @@ import {
   resolveCollision,
   getIncomingEdges,
   getOutgoingEdges,
+  getNextNodeAlongFlow,
+  getPrevNodeAlongFlow,
   getFlowPathForward,
   getFlowPathBackward,
   hasReciprocalEdge,
@@ -618,6 +621,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
   const [edgeAction, setEdgeAction] = useState<
     { source: string; target: string; at: { x: number; y: number } } | null
+  >(null);
+  // 다중 출력 노드에 삽입 시 — 어느 출력선으로 들어갈지 선택 (F1). source 출력선 중 1개 픽.
+  const [edgeSelect, setEdgeSelect] = useState<
+    | {
+        source: string;
+        target: string;
+        options: { edgeId: string; label: string }[];
+        at: { x: number; y: number };
+      }
+    | null
   >(null);
   // 마지막 포인터 화면 좌표 — 모달을 마우스 위치에 띄워 동선 최소화.
   const pointerScreenRef = useRef({ x: 0, y: 0 });
@@ -2742,12 +2755,24 @@ function MapEditor({ mapId }: { mapId: number }) {
           : getOutgoingEdges(edgesRef.current, bId).some((edge) => edge.target !== aId);
       const rect = conflict ? screenRectOf(bId) : null;
       if (conflict && rect) {
-        // 출력 1개 고정 — back 삽입에서 비-decision B는 분기(keep=2번째 출력) 불가 → 자동 흐름 삽입(rewire)만.
-        const bIsDecision =
-          nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
-        if (zone === "back" && !bIsDecision) {
-          // 출력 1개 충돌 — 삽입/교체/취소 모달(마우스 위치). source=B(드롭 대상), target=A(드래그 노드).
-          setEdgeAction({ source: bId, target: aId, at: { ...pointerScreenRef.current } });
+        if (zone === "back") {
+          // B의 기존 출력선(A행 제외). 2개 이상(분기/다중출력)이면 어느 선에 끼울지 선택 모달,
+          // 1개면 삽입/교체/취소 모달. source=B(드롭 대상), target=A(드래그 노드).
+          const bOut = getOutgoingEdges(edgesRef.current, bId).filter((edge) => edge.target !== aId);
+          const at = { ...pointerScreenRef.current };
+          if (bOut.length >= 2) {
+            const options = bOut.map((edge) => {
+              const targetTitle =
+                nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+              return {
+                edgeId: edge.id,
+                label: edge.label ? `${edge.label} → ${targetTitle}` : `→ ${targetTitle}`,
+              };
+            });
+            setEdgeSelect({ source: bId, target: aId, options, at });
+            return;
+          }
+          setEdgeAction({ source: bId, target: aId, at });
           return;
         }
         setPending({ mode: zone, aId, bId, rect });
@@ -5068,11 +5093,43 @@ function MapEditor({ mapId }: { mapId: number }) {
     [edgeAction, pushHistory, setEdges, scheduleAutoSave],
   );
 
-  // F14 플로우 따라가기 — 노드 선택 후 Tab=하이라이트 경로를 전방으로 늘림, Shift+Tab=줄임→초기→후방으로 늘림.
-  // 뷰는 그대로(패닝 없음). reach>=0 전방 (reach+1)엣지, <0 전방1+후방(-reach)엣지. 입력/아웃라인 포커스 중엔 제외.
+  // 다중 출력 노드 삽입 — 선택한 출력선(source→X)에 끼워넣기: source→target→X (해당 선만, 라벨 보존, 다른 분기 유지).
+  const applyEdgeSelect = useCallback(
+    (edgeId: string) => {
+      if (edgeSelect === null) {
+        return;
+      }
+      const { source, target } = edgeSelect;
+      setEdgeSelect(null);
+      pushHistory();
+      const isSub = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      setEdges((current) => {
+        const picked = current.find((edge) => edge.id === edgeId);
+        if (!picked) {
+          return current;
+        }
+        const x = picked.target;
+        const pickedLabel = picked.label;
+        let next = current.filter((edge) => edge.id !== edgeId); // source→X 제거
+        next = insertNodeAfter(next, target, source, false); // source→target
+        next = insertNodeAfter(next, x, target, false); // target→X
+        // 분기 라벨은 source→target(첫 구간)에 보존
+        next = next.map((edge) =>
+          edge.source === source && edge.target === target ? { ...edge, label: pickedLabel } : edge,
+        );
+        return next.map((edge) => withSubprocessHandles(edge, isSub));
+      });
+      scheduleAutoSave();
+    },
+    [edgeSelect, pushHistory, setEdges, scheduleAutoSave],
+  );
+
+  // F14 — 노드 선택 후 ]=하이라이트 경로 전방 확장 / [=축소→초기→후방 확장(뷰 고정).
+  // Tab/Shift+Tab=흐름상 다음/이전 노드로 포커스 이동(+중앙). 입력/아웃라인 포커스 중엔 제외(아웃라인 Tab 보존).
   useEffect(() => {
     const onFlowKey = (event: KeyboardEvent) => {
-      if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
       const target = event.target;
@@ -5082,22 +5139,46 @@ function MapEditor({ mapId }: { mapId: number }) {
           target.isContentEditable ||
           target.closest("[data-editor-outline]") !== null)
       ) {
-        return; // 입력/아웃라인 포커스 중엔 기본 Tab 동작
+        return; // 입력/아웃라인 포커스 중엔 기본 동작(아웃라인 Tab 보존)
       }
       if (!selectedId) {
         return;
       }
-      event.preventDefault();
-      const delta = event.shiftKey ? -1 : 1;
-      // anchor가 현재 선택과 다르면 0에서 시작(선택 변경 후 첫 입력) — set-state-in-effect 회피용 파생 리셋
-      setFlow((prev) => {
-        const base = prev.anchor === selectedId ? prev.reach : 0;
-        return { anchor: selectedId, reach: base + delta };
-      });
+      // [ ] : 흐름 하이라이트 경로 증감 (뷰 고정). anchor≠선택이면 0에서 시작(파생 리셋).
+      if (event.key === "]" || event.key === "[") {
+        event.preventDefault();
+        const delta = event.key === "]" ? 1 : -1;
+        setFlow((prev) => {
+          const base = prev.anchor === selectedId ? prev.reach : 0;
+          return { anchor: selectedId, reach: base + delta };
+        });
+        return;
+      }
+      // Tab / Shift+Tab : 흐름상 다음/이전 노드로 포커스 이동(+화면 중앙으로).
+      if (event.key === "Tab") {
+        const nextId = event.shiftKey
+          ? getPrevNodeAlongFlow(edgesRef.current, selectedId)
+          : getNextNodeAlongFlow(edgesRef.current, selectedId);
+        if (!nextId) {
+          return;
+        }
+        event.preventDefault();
+        setSelectedId(nextId);
+        setNodes((current) => current.map((node) => ({ ...node, selected: node.id === nextId })));
+        const node = reactFlow.getNode(nextId);
+        if (node) {
+          const w = node.measured?.width ?? NODE_WIDTH;
+          const h = node.measured?.height ?? NODE_HEIGHT;
+          void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+            duration: 350,
+            zoom: reactFlow.getZoom(),
+          });
+        }
+      }
     };
     window.addEventListener("keydown", onFlowKey);
     return () => window.removeEventListener("keydown", onFlowKey);
-  }, [selectedId]);
+  }, [selectedId, reactFlow, setNodes, setSelectedId]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
@@ -6412,6 +6493,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           onInsert={() => applyEdgeAction("insert")}
           onReplace={() => applyEdgeAction("replace")}
           onClose={() => setEdgeAction(null)}
+        />
+      )}
+      {edgeSelect && (
+        <EdgeSelectModal
+          position={edgeSelect.at}
+          options={edgeSelect.options}
+          onPick={(edgeId) => applyEdgeSelect(edgeId)}
+          onClose={() => setEdgeSelect(null)}
         />
       )}
       {capPrompt && (
