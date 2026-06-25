@@ -171,6 +171,16 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setCollaborators((prev) => prev.filter((c) => c.key !== key));
   }, []);
 
+  // ── 추가된 협업자 권한 클릭 토글 (생성 단계, viewer↔editor) — public은 editor 고정 (#9) ──
+  const handleToggleCollabRole = (key: string) => {
+    if (visibility === "public") return;
+    setCollaborators((prev) =>
+      prev.map((c) =>
+        c.key === key ? { ...c, role: c.role === "editor" ? "viewer" : "editor" } : c,
+      ),
+    );
+  };
+
   // ── 결재자 추가 (users only) / add approver (users only) ──
   const handleAddApprover = useCallback((userId: string, displayName: string) => {
     setApprovers((prev) => prev.some((a) => a.userId === userId) ? prev : [...prev, { key: genId(), userId, displayName }]);
@@ -336,8 +346,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.collaboratorsLabel")}
           </span>
-          {/* picker + role + 추가 버튼 / picker + role + add button */}
-          <div className="flex gap-2">
+          {/* picker + role + 추가 버튼 — items-start로 드롭다운 플로팅 시 우측 컨트롤 안 늘어남 (#9) */}
+          <div className="flex items-start gap-2">
             <div className="flex-1">
               <PrincipalPicker
                 users={pickerUsers}
@@ -386,12 +396,19 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                   className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
                 >
                   <PrincipalIcon type={c.principalType} />
-                  <span className="flex-1">{c.displayName}</span>
-                  <span className="text-fine text-ink-tertiary">
+                  <span className="flex-1 truncate">{c.displayName}</span>
+                  {/* 권한 클릭 토글(생성 단계) — public은 editor 고정 (#9) */}
+                  <button
+                    type="button"
+                    disabled={submitting || visibility === "public"}
+                    onClick={() => handleToggleCollabRole(c.key)}
+                    title={t("perm.createDialog.clickToToggleRole")}
+                    className="rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
+                  >
                     {c.role === "editor"
                       ? t("perm.createDialog.collaboratorRoleEditor")
                       : t("perm.createDialog.collaboratorRoleViewer")}
-                  </span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleRemoveCollab(c.key)}

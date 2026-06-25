@@ -1,11 +1,20 @@
 "use client";
 
-// 맵 소유자가 승인자 목록을 편집 (design 2026-06-14)
+// 맵 소유자가 승인자 목록을 편집 — 캔버스 우하단 승인 워크플로에서 호출.
+// 디자인은 맵 생성 다이얼로그의 승인자 지정과 통일: PrincipalPicker(viewer+ 자격자) + 선택 목록 (#4).
+
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
-import { listApprovers, setApprovers } from "@/lib/api";
+import {
+  listApprovers,
+  listEligibleApprovers,
+  setApprovers,
+  type DirectoryUser,
+} from "@/lib/api";
+import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import { useI18n } from "@/lib/i18n";
 
 interface ApproverManagerProps {
@@ -16,14 +25,18 @@ interface ApproverManagerProps {
 
 export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProps) {
   const { t } = useI18n();
-  const [text, setText] = useState("");
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    void listApprovers(mapId)
-      .then((ids) => {
-        if (alive) setText(ids.join("\n"));
+    void Promise.all([listApprovers(mapId), listEligibleApprovers(mapId)])
+      .then(([ids, users]) => {
+        if (alive) {
+          setSelected(ids);
+          setDirUsers(users);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -40,13 +53,21 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
+  // 승인자 후보 = viewer+ 자격자(서버) — 생성 다이얼로그/설정 승인자 picker와 동일.
+  const pickerUsers = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+  }));
+  const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
+  const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? id;
+
   const handleSave = async () => {
-    const ids = text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
     try {
-      const saved = await setApprovers(mapId, ids);
+      const saved = await setApprovers(mapId, selected);
       onSaved(saved);
       onClose();
     } catch (err) {
@@ -54,10 +75,6 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
     }
   };
 
-  const btn =
-    "rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt disabled:opacity-40";
-
-  // document.body로 포털 — 에디터 캔버스/창의 스택 컨텍스트 밖에서 최상단 렌더
   return createPortal(
     <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
@@ -65,23 +82,73 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
       onClose={onClose}
     >
       <div
-        className="w-80 rounded-md bg-surface p-4 shadow-lg"
+        className="flex w-96 flex-col gap-2 rounded-md bg-surface p-4 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="text-body-strong text-ink">{t("approvers.title")}</p>
-        <p className="mt-1 text-fine text-ink-tertiary">{t("approvers.hint")}</p>
-        <textarea
-          className="mt-2 w-full rounded-sm border border-hairline p-2 text-caption"
-          rows={5}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
+        <div>
+          <p className="text-body-strong text-ink">{t("approvers.title")}</p>
+          <p className="mt-0.5 text-fine text-ink-tertiary">{t("approvers.hint")}</p>
+        </div>
+
+        {/* 승인자 추가 picker (users only) — 생성 다이얼로그와 동일 */}
+        <PrincipalPicker
+          users={pickerUsers}
+          departments={[]}
+          groups={[]}
+          excludeIds={new Set(selected)}
+          userDepartments={userDepartments}
+          onSelect={(opt) => {
+            if (opt.principalType === "user") {
+              setSelected((prev) =>
+                prev.includes(opt.principalId) ? prev : [...prev, opt.principalId],
+              );
+            }
+          }}
         />
-        {error && <p className="mt-1 text-fine text-error">{error}</p>}
-        <div className="mt-3 flex justify-end gap-2">
-          <button type="button" className={btn} onClick={onClose}>
+
+        {/* 선택된 승인자 목록 */}
+        {selected.length > 0 ? (
+          <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+            {selected.map((id) => (
+              <li
+                key={id}
+                className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+              >
+                <PrincipalIcon type="user" />
+                <span className="min-w-0 flex-1 truncate">
+                  {dirName(id)}
+                  <span className="text-ink-tertiary"> ({id})</span>
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                  aria-label={t("perm.removeButton")}
+                  onClick={() => setSelected((prev) => prev.filter((x) => x !== id))}
+                >
+                  <X size={14} strokeWidth={1.5} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-1 text-fine text-ink-tertiary">{t("approvers.empty")}</p>
+        )}
+
+        {error && <p className="text-fine text-error">{error}</p>}
+
+        <div className="mt-1 flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+            onClick={onClose}
+          >
             {t("approvers.cancel")}
           </button>
-          <button type="button" className={btn} onClick={() => void handleSave()}>
+          <button
+            type="button"
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+            onClick={() => void handleSave()}
+          >
             {t("approvers.save")}
           </button>
         </div>

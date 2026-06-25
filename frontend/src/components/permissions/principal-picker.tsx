@@ -113,7 +113,8 @@ export function PrincipalPicker({
   };
 
   return (
-    <div className="flex flex-col gap-1">
+    // relative — 결과 목록을 absolute로 띄워(플로팅) 주변 레이아웃을 밀지 않음 (#9 / SR-4)
+    <div className="relative flex flex-col">
       {/* 검색 입력 / Search input */}
       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
         <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -129,9 +130,9 @@ export function PrincipalPicker({
           onKeyDown={onKeyDown}
         />
       </div>
-      {/* 결과 목록 (최대 8개) / Results list (max 8) */}
+      {/* 결과 목록 (최대 8개) — absolute 플로팅 / floating results, max 8 */}
       {query.trim() && (
-        <div className="flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-md">
+        <div className="absolute left-0 right-0 top-full z-[1001] mt-1 flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg">
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
             const idRanges: MatchRange[] = matches.find((m) => m.field === "id")?.ranges ?? [];
