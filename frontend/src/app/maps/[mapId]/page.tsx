@@ -38,6 +38,7 @@ import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
+import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -610,8 +611,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 판단 노드에서 분기(Yes/No/기타) 라벨을 기다리는 대상.
   // connection: 핸들 드래그(엣지 미생성, 선택 시 생성) / edge: 노드 드롭으로 이미 생성된 엣지에 라벨 부여
   const [branchPrompt, setBranchPrompt] = useState<
-    { kind: "connection"; connection: Connection } | { kind: "edge"; edgeId: string } | null
+    | { kind: "connection"; connection: Connection; at: { x: number; y: number } }
+    | { kind: "edge"; edgeId: string; at: { x: number; y: number } }
+    | null
   >(null);
+  // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
+  const [edgeAction, setEdgeAction] = useState<
+    { source: string; target: string; at: { x: number; y: number } } | null
+  >(null);
+  // 마지막 포인터 화면 좌표 — 모달을 마우스 위치에 띄워 동선 최소화.
+  const pointerScreenRef = useRef({ x: 0, y: 0 });
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -2127,12 +2136,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const keepTarget = targetNode?.data.nodeType === "subprocess";
       const sourceHandle = keepSource ? connection.sourceHandle : sourceHandleId("right");
       const targetHandle = keepTarget ? connection.targetHandle : targetHandleId("left");
-      // 출력 1개 고정 — decision(분기)만 다중 출력 허용, 그 외는 기존 출력 엣지를 새 연결로 자동 스왑.
-      const sourceIsDecision = sourceNode?.data.nodeType === "decision";
-      const willSwap =
-        !sourceIsDecision &&
-        !!connection.source &&
-        getOutgoingEdges(edgesRef.current, connection.source).length > 0;
+      // 출력 1개 충돌(이미 출력 있음)은 onConnect에서 삽입/교체/취소 모달로 처리 — 여기선 단순 추가.
       setEdges((current) =>
         addEdge(
           {
@@ -2143,15 +2147,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             id: genId(),
             label: label || undefined,
           },
-          willSwap && connection.source ? removeOutgoingEdges(current, connection.source) : current,
+          current,
         ),
       );
-      if (willSwap) {
-        showToast(t("edge.outputSwapped"));
-      }
       scheduleAutoSave();
     },
-    [pushHistory, setEdges, scheduleAutoSave, showToast, t],
+    [pushHistory, setEdges, scheduleAutoSave],
   );
 
   const onConnect = useCallback(
@@ -2171,7 +2172,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
       const source = nodesRef.current.find((node) => node.id === connection.source);
       if (source?.data.nodeType === "decision") {
-        setBranchPrompt({ kind: "connection", connection });
+        setBranchPrompt({
+          kind: "connection",
+          connection,
+          at: { ...pointerScreenRef.current },
+        });
+        return;
+      }
+      // 출력 1개 — 이미 출력이 있으면 삽입/교체/취소 모달(마우스 위치). 없으면 즉시 생성.
+      if (connection.source && getOutgoingEdges(edgesRef.current, connection.source).length > 0) {
+        setEdgeAction({
+          source: connection.source,
+          target: connection.target ?? "",
+          at: { ...pointerScreenRef.current },
+        });
         return;
       }
       createEdge(connection, "");
@@ -2367,7 +2381,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         (edge) => !beforeIds.has(edge.id) && !edge.label && isDecision(edge.source),
       );
       if (fresh) {
-        setBranchPrompt({ kind: "edge", edgeId: fresh.id });
+        setBranchPrompt({ kind: "edge", edgeId: fresh.id, at: { ...pointerScreenRef.current } });
       }
       scheduleAutoSave();
     },
@@ -2732,8 +2746,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         const bIsDecision =
           nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
         if (zone === "back" && !bIsDecision) {
-          applyFlowEdges(aId, bId, zone, true);
-          showToast(t("edge.outputSwapped"));
+          // 출력 1개 충돌 — 삽입/교체/취소 모달(마우스 위치). source=B(드롭 대상), target=A(드래그 노드).
+          setEdgeAction({ source: bId, target: aId, at: { ...pointerScreenRef.current } });
           return;
         }
         setPending({ mode: zone, aId, bId, rect });
@@ -5019,6 +5033,41 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPng,
   ]);
 
+  // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      pointerScreenRef.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  // 출력 1개 충돌 모달 선택 — 삽입(흐름에 끼움) / 교체(기존 대체). source의 기존 출력 기준.
+  const applyEdgeAction = useCallback(
+    (action: "insert" | "replace") => {
+      if (edgeAction === null) {
+        return;
+      }
+      const { source, target } = edgeAction;
+      setEdgeAction(null);
+      if (!target) {
+        return;
+      }
+      pushHistory();
+      const isSub = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      setEdges((current) => {
+        // insert: source→target + source의 기존 출력을 target 뒤로 재연결(흐름 삽입).
+        // replace: source의 기존 출력 제거 후 source→target만.
+        const base = action === "replace" ? removeOutgoingEdges(current, source) : current;
+        const next = insertNodeAfter(base, target, source, action === "insert");
+        return next.map((edge) => withSubprocessHandles(edge, isSub));
+      });
+      scheduleAutoSave();
+    },
+    [edgeAction, pushHistory, setEdges, scheduleAutoSave],
+  );
+
   // F14 플로우 따라가기 — 노드 선택 후 Tab=하이라이트 경로를 전방으로 늘림, Shift+Tab=줄임→초기→후방으로 늘림.
   // 뷰는 그대로(패닝 없음). reach>=0 전방 (reach+1)엣지, <0 전방1+후방(-reach)엣지. 입력/아웃라인 포커스 중엔 제외.
   useEffect(() => {
@@ -6351,7 +6400,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         />
       )}
       {branchPrompt && (
-        <EdgeBranchModal onPick={handlePickBranch} onClose={() => setBranchPrompt(null)} />
+        <EdgeBranchModal
+          onPick={handlePickBranch}
+          onClose={() => setBranchPrompt(null)}
+          position={branchPrompt.at}
+        />
+      )}
+      {edgeAction && (
+        <EdgeActionModal
+          position={edgeAction.at}
+          onInsert={() => applyEdgeAction("insert")}
+          onReplace={() => applyEdgeAction("replace")}
+          onClose={() => setEdgeAction(null)}
+        />
       )}
       {capPrompt && (
         <ModalBackdrop
