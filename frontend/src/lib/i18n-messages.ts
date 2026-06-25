@@ -435,6 +435,10 @@ const en = {
   "perm.visibilityToastRequested": "Visibility change requested. Awaiting approval.",
   "perm.visibilityViewerNote": "Public map — all users can view.",
   "perm.visibilityReadOnly": "You don't have permission to change visibility (owner-only).",
+  "perm.visibilityCurrent": "current",
+  "perm.visibilityApply": "Apply change",
+  "perm.visibilityPreviewPublic": "Going public lets everyone view this map; existing viewer grants are removed on approval.",
+  "perm.visibilityPreviewPrivate": "Going private restricts viewing to granted users only.",
   // ── 위험 구역(Danger) / Danger zone tab ──
   "perm.dangerTitle": "Danger Zone",
   "perm.transferTitle": "Transfer Ownership",
@@ -1019,6 +1023,10 @@ const ko: Record<MessageKey, string> = {
   "perm.visibilityToastRequested": "공개 범위 변경을 요청했습니다. 승인 대기 중입니다.",
   "perm.visibilityViewerNote": "공개 맵은 전원 열람 가능.",
   "perm.visibilityReadOnly": "공개 범위 변경 권한이 없습니다 (소유자 전용).",
+  "perm.visibilityCurrent": "현재",
+  "perm.visibilityApply": "변경 적용",
+  "perm.visibilityPreviewPublic": "퍼블릭으로 전환하면 모든 사용자가 열람할 수 있고, 기존 뷰어 권한은 승인 시 제거됩니다.",
+  "perm.visibilityPreviewPrivate": "프라이빗으로 전환하면 권한이 부여된 사용자만 열람합니다.",
   // ── 위험 구역(Danger) / Danger zone tab ──
   "perm.dangerTitle": "위험 구역",
   "perm.transferTitle": "소유권 이전",

@@ -1,49 +1,46 @@
 "use client";
 
-// 맵 공개 범위 제어 — 현재 값 표시, 소유자 토글, 승인 대기 표시 (실 API) /
-// Map visibility control wired to the real Layer-2 visibility-request API.
-// 변경은 즉시 적용되지 않는다: POST 가 pending ApprovalRequest 를 반환하면 현재 값은 그대로
-// 두고(서버 진실) "승인 대기"만 표시한다(낙관적 적용 금지).
+// 맵 공개 범위 제어 — 즉시 적용 대신 "스테이징 + 변경 적용" (PV). 적용 버튼 근처에 바뀌는 내용 미리보기.
+// 변경은 visibility-request(승인 워크플로) 경유 — 적용 시 pending 마커만 표시(낙관적 적용 금지).
+// 퍼블릭 전환 시 잔존 viewer 그랜트는 승인 적용 시 서버가 제거(PV).
 
 import { useState } from "react";
 
 import { requestVisibilityChange, type MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
+type Visibility = MapSummary["visibility"];
+
 interface VisibilityControlProps {
   mapId: string;
-  /** 서버 진실 현재 가시성 — getMap 응답에서 전달 / Current visibility from getMap (server truth). */
-  visibility: MapSummary["visibility"];
-  /** 소유자 여부 — false면 읽기 전용 / Whether current user is owner; false = read-only. */
+  /** 서버 진실 현재 가시성 / current visibility (server truth). */
+  visibility: Visibility;
+  /** 소유자 여부 — false면 읽기 전용. */
   isOwner: boolean;
-  /** 토스트 발행 콜백 / Callback to show a toast. */
   onToast: (msg: string) => void;
 }
 
-export function VisibilityControl({
-  mapId,
-  visibility,
-  isOwner,
-  onToast,
-}: VisibilityControlProps) {
+export function VisibilityControl({ mapId, visibility, isOwner, onToast }: VisibilityControlProps) {
   const { t } = useI18n();
   const mapIdNum = Number(mapId);
 
-  // 변경 요청을 보낸 직후 pending — POST 응답(status="pending")에서 설정 /
-  // Pending flag set from the POST response (status="pending"); not optimistic on visibility.
+  // 선택만 스테이징 — 적용 버튼을 눌러야 요청 전송 (PV)
+  const [staged, setStaged] = useState<Visibility>(visibility);
   const [pending, setPending] = useState(false);
+  const changed = staged !== visibility;
 
-  async function handleToggle() {
-    if (!isOwner || pending) return;
-    const target: MapSummary["visibility"] = visibility === "public" ? "private" : "public";
+  async function handleApply() {
+    if (!isOwner || pending || !changed) return;
     try {
-      const req = await requestVisibilityChange(mapIdNum, target);
+      const req = await requestVisibilityChange(mapIdNum, staged);
       if (req.status === "pending") setPending(true);
       onToast(t("perm.visibilityToastRequested"));
     } catch (err) {
       onToast(err instanceof Error ? err.message : String(err));
     }
   }
+
+  const options: Visibility[] = ["private", "public"];
 
   return (
     <div className="flex flex-col gap-4">
@@ -52,40 +49,57 @@ export function VisibilityControl({
         <p className="mt-0.5 text-fine text-ink-tertiary">{t("perm.visibilityHint")}</p>
       </div>
 
-      <div className="flex items-center gap-3">
-        {/* 현재 값 표시 — 서버 진실(변경 미적용) / Current value (server truth, unchanged) */}
+      {isOwner ? (
+        <div className="flex items-center gap-1.5">
+          {options.map((v) => (
+            <button
+              key={v}
+              type="button"
+              disabled={pending}
+              aria-pressed={staged === v}
+              className={`rounded-sm border px-2.5 py-1 text-caption disabled:cursor-not-allowed disabled:opacity-40 ${
+                staged === v
+                  ? "border-accent bg-accent-tint text-accent"
+                  : "border-hairline text-ink hover:bg-surface-alt"
+              }`}
+              onClick={() => setStaged(v)}
+            >
+              {v === "public" ? t("perm.visibilityPublic") : t("perm.visibilityPrivate")}
+              {v === visibility ? ` · ${t("perm.visibilityCurrent")}` : ""}
+            </button>
+          ))}
+        </div>
+      ) : (
         <span className="rounded-sm border border-hairline px-2 py-1 text-caption text-ink">
           {visibility === "public" ? t("perm.visibilityPublic") : t("perm.visibilityPrivate")}
         </span>
-
-        {/* 승인 대기 배지 / Pending indicator */}
-        {pending && (
-          <span className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
-            {t("perm.visibilityPending")}
-          </span>
-        )}
-
-        {/* 토글 버튼 — 소유자만, 대기 중이면 비활성 / Toggle: owner-only, disabled while pending */}
-        {isOwner && (
-          <button
-            type="button"
-            disabled={pending}
-            className="rounded-sm border border-hairline px-2 py-1 text-caption text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => void handleToggle()}
-          >
-            {visibility === "public"
-              ? `→ ${t("perm.visibilityPrivate")}`
-              : `→ ${t("perm.visibilityPublic")}`}
-          </button>
-        )}
-      </div>
-
-      {/* 공개 맵 안내 — 뷰어 그랜트 불필요 / Note about viewer grants on public maps */}
-      {visibility === "public" && (
-        <p className="text-fine text-ink-tertiary">{t("perm.visibilityViewerNote")}</p>
       )}
 
-      {/* 비소유자 읽기 전용 안내 / Read-only notice for non-owners */}
+      {/* 변경 미리보기 + 적용 버튼 — 적용 버튼 근처에 바뀌는 내용 노출 (PV) */}
+      {isOwner && changed && !pending && (
+        <div className="flex flex-col gap-2 rounded-sm border border-hairline bg-surface-alt p-3">
+          <p className="text-fine text-ink-secondary">
+            {staged === "public"
+              ? t("perm.visibilityPreviewPublic")
+              : t("perm.visibilityPreviewPrivate")}
+          </p>
+          <button
+            type="button"
+            data-id="visibility-apply"
+            className="self-start rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus"
+            onClick={() => void handleApply()}
+          >
+            {t("perm.visibilityApply")}
+          </button>
+        </div>
+      )}
+
+      {pending && (
+        <span className="self-start rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
+          {t("perm.visibilityPending")}
+        </span>
+      )}
+
       {!isOwner && (
         <p className="text-fine text-ink-tertiary">{t("perm.visibilityReadOnly")}</p>
       )}

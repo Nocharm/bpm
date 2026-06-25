@@ -122,27 +122,30 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         </div>
       )}
 
-      {/* 결재자 목록 — 필 형태 / Approver list as pills */}
+      {/* 결재자 목록 — 아이디·이름 카드 그리드 (ST) */}
       {approverIds.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {approverIds.map((userId) => (
-            <span
+            <div
               key={userId}
-              data-id={`approver-pill-${userId}`}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
+              data-id={`approver-card-${userId}`}
+              className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-3 py-2 shadow-sm"
             >
-              {dirName(userId)}
+              <span className="min-w-0">
+                <span className="block truncate text-caption text-ink">{dirName(userId)}</span>
+                <span className="block truncate text-fine text-ink-tertiary">{userId}</span>
+              </span>
               {isOwner && (
                 <button
                   type="button"
                   title={t("perm.removeButton")}
-                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
+                  className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
                   onClick={() => void handleRemove(userId)}
                 >
                   <X size={14} strokeWidth={1.5} />
                 </button>
               )}
-            </span>
+            </div>
           ))}
         </div>
       )}

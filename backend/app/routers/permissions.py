@@ -362,7 +362,20 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
     elif req.kind == "visibility_change":
         found_map = await session.get(ProcessMap, req.map_id)
         if found_map is not None:
-            found_map.visibility = req.payload.get("to_visibility")
+            to_vis = req.payload.get("to_visibility")
+            found_map.visibility = to_vis
+            # 퍼블릭 전환 시 잔존 viewer 그랜트 제거 — 전원 열람이라 불필요 (PV)
+            if to_vis == "public":
+                viewer_grants = (
+                    await session.scalars(
+                        select(MapPermission).where(
+                            MapPermission.map_id == req.map_id,
+                            MapPermission.role == "viewer",
+                        )
+                    )
+                ).all()
+                for grant in viewer_grants:
+                    await session.delete(grant)
 
 
 def _serialize_request(req: ApprovalRequest) -> dict:

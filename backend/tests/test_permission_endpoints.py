@@ -496,6 +496,24 @@ def test_decide_approve_visibility_flips(client: TestClient, enforce: None) -> N
     assert visibility == "public"  # flip 적용
 
 
+def test_visibility_public_removes_viewer_grants(client: TestClient, enforce: None) -> None:
+    """private→public 승인 적용 시 잔존 viewer 그랜트 제거 (PV)."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "vw", "viewer")],
+        approvers=["appr"],
+    )
+    act_as("owner.u")
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    act_as("appr")
+    client.post(f"/api/approval-requests/{req['id']}/decide", json={"decision": "approve"})
+    _, visibility = map_owner_and_visibility(map_id)
+    assert visibility == "public"
+    assert grant_role(map_id, "vw") is None  # viewer 그랜트 제거됨
+
+
 def test_decide_reject_leaves_unchanged(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
         grants=[
