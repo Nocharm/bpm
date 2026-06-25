@@ -29,6 +29,10 @@ class ProcessMap(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
+    # 소프트 삭제 시각 — None=정상, 값 있으면 휴지통(1주 내 복구 가능, 이후 lazy 영구삭제) (DL)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"

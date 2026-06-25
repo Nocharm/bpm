@@ -71,11 +71,12 @@ export default function MapListPage() {
       try {
         await deleteMap(mapId);
         await refresh();
+        showToast(t("home.deletedToast")); // 휴지통 이동 + 복구 안내 (DL)
       } catch (err) {
         setError(err instanceof Error ? err.message : t("err.deleteMap"));
       }
     },
-    [refresh, t],
+    [refresh, showToast, t],
   );
 
   // 복사 버튼(맵 상세) → 이름 입력 모달 오픈

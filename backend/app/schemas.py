@@ -194,6 +194,8 @@ class MapOut(BaseModel):
     visibility: str = "private"
     # 최신 버전(최대 id)의 워크플로 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
     latest_version_status: str | None = None
+    # 소프트삭제 시각 — 휴지통(삭제 예정) 목록 표시용. 정상 맵은 None (DL)
+    deleted_at: datetime | None = None
 
 
 class MapDetailOut(MapOut):

@@ -85,6 +85,20 @@ def test_delete_map_then_get_404(client: TestClient) -> None:
     assert get_response.status_code == 404
 
 
+def test_delete_is_soft_and_restorable(client: TestClient) -> None:
+    """삭제는 소프트삭제 — 목록/조회 제외, 휴지통에 노출, 복구하면 되살아남 (DL)."""
+    created = client.post("/api/maps", json={"name": "soft delete map"}).json()
+    mid = created["id"]
+    assert client.delete(f"/api/maps/{mid}").status_code == 204
+    # 일반 조회·목록에서 제외
+    assert client.get(f"/api/maps/{mid}").status_code == 404
+    assert all(m["id"] != mid for m in client.get("/api/maps").json())
+    # 휴지통(삭제 예정)엔 노출되고 복구 가능
+    assert any(m["id"] == mid for m in client.get("/api/maps/deleted/list").json())
+    assert client.post(f"/api/maps/{mid}/restore").status_code == 200
+    assert client.get(f"/api/maps/{mid}").status_code == 200
+
+
 def test_get_map_includes_my_role(client: TestClient) -> None:
     # 서버가 호출자의 유효 역할을 노출 — 프론트 게이팅 단일 소스 (auth OFF → sysadmin owner)
     created = client.post("/api/maps", json={"name": "with role"}).json()

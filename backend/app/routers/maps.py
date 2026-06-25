@@ -1,5 +1,7 @@
 """Process map CRUD endpoints (docs/spec.md §3.5)."""
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +26,25 @@ router = APIRouter(
     prefix="/api/maps", tags=["maps"], dependencies=[Depends(get_current_user)]
 )
 
+# 소프트삭제 후 복구 가능 기간 — 경과분은 조회 시 lazy 영구삭제 (DL)
+RECOVERY_WINDOW = timedelta(days=7)
+
+
+async def _purge_expired(session: AsyncSession) -> None:
+    """복구 기간(7일) 경과한 소프트삭제 맵을 영구 삭제 (별도 배치 없이 조회 시 lazy 정리)."""
+    cutoff = datetime.now(timezone.utc) - RECOVERY_WINDOW
+    expired = (
+        await session.scalars(
+            select(ProcessMap).where(
+                ProcessMap.deleted_at.is_not(None), ProcessMap.deleted_at < cutoff
+            )
+        )
+    ).all()
+    if expired:
+        for stale_map in expired:
+            await session.delete(stale_map)
+        await session.commit()
+
 
 async def _assert_unique_name(
     session: AsyncSession, name: str, exclude_map_id: int | None = None
@@ -41,12 +62,15 @@ async def list_maps(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> list[ProcessMap]:
+    await _purge_expired(session)  # 7일 경과 소프트삭제분 정리 (DL lazy)
     # 가시성 필터 — 사용자 권한/승인자/부서를 한 번씩만 로드해 맵별 effective_role을
-    # 메모리에서 계산(N+1 회피). role이 None(접근 불가)인 맵은 제외.
+    # 메모리에서 계산(N+1 회피). role이 None(접근 불가)인 맵은 제외. 소프트삭제 맵 제외.
     maps = list(
         (
             await session.scalars(
-                select(ProcessMap).order_by(ProcessMap.updated_at.desc())
+                select(ProcessMap)
+                .where(ProcessMap.deleted_at.is_(None))
+                .order_by(ProcessMap.updated_at.desc())
             )
         ).all()
     )
@@ -255,7 +279,7 @@ async def get_map(
         map_id,
         options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
     )
-    if found_map is None:
+    if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     # 호출자의 서버 산정 역할을 응답에 부착 — 프론트 게이팅 단일 소스
     found_map.my_role = await get_effective_role(session, user, map_id)
@@ -289,8 +313,44 @@ async def update_map(
     dependencies=[Depends(require_map_role("owner"))],
 )
 async def delete_map(map_id: int, session: AsyncSession = Depends(get_session)) -> None:
+    # 소프트 삭제 — 즉시 제거 대신 deleted_at 기록(1주 내 복구 가능, DL).
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.deleted_at = datetime.now(timezone.utc)
+    await session.commit()
+
+
+@router.get("/deleted/list", response_model=list[MapOut])
+async def list_deleted_maps(
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> list[ProcessMap]:
+    """휴지통 — 소프트삭제된 맵. 오너는 본인 것만, sysadmin은 전체 (DL). 조회 시 만료분 정리."""
+    await _purge_expired(session)
+    is_admin = logic.is_sysadmin(user)
+    query = select(ProcessMap).where(ProcessMap.deleted_at.is_not(None))
+    if not is_admin:
+        query = query.where(ProcessMap.owner_id == user)
+    rows = list((await session.scalars(query.order_by(ProcessMap.deleted_at.desc()))).all())
+    for row in rows:
+        row.my_role = "owner"  # 휴지통 표시용
+    return rows
+
+
+@router.post(
+    "/{map_id}/restore",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def restore_map(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> ProcessMap:
+    """소프트삭제 맵 복구 — deleted_at 해제. 오너(또는 sysadmin)만 (require_map_role owner)."""
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    await session.delete(found_map)
+    found_map.deleted_at = None
     await session.commit()
+    await session.refresh(found_map)
+    return found_map

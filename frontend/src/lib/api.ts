@@ -42,6 +42,8 @@ export interface MapSummary {
   visibility: "public" | "private";
   // 최신 버전(최대 id) 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
   latest_version_status: VersionStatus | null;
+  // 소프트삭제 시각 — 휴지통(삭제 예정) 목록에서만 채워짐 (DL)
+  deleted_at?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -236,6 +238,14 @@ export function renameVersion(
 
 export function deleteVersion(versionId: number): Promise<void> {
   return request<void>(`/versions/${versionId}`, { method: "DELETE" });
+}
+
+// 휴지통(삭제 예정) — 소프트삭제 맵 목록(오너 본인/sysadmin 전체) + 복구 (DL)
+export function listDeletedMaps(): Promise<MapSummary[]> {
+  return request<MapSummary[]>("/maps/deleted/list");
+}
+export function restoreMap(mapId: number): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/restore`, { method: "POST" });
 }
 
 export function deleteMap(mapId: number): Promise<void> {
