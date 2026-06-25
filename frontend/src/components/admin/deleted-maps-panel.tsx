@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 
 import { listDeletedMaps, restoreMap, type MapSummary } from "@/lib/api";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
 export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }) {
@@ -60,7 +61,7 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
                 <span className="block truncate text-caption text-ink">{m.name}</span>
                 {m.deleted_at && (
                   <span className="text-fine text-ink-tertiary">
-                    {t("trash.deletedAt")}: {new Date(m.deleted_at).toLocaleString()}
+                    {t("trash.deletedAt")}: {formatKst(m.deleted_at)}
                   </span>
                 )}
               </span>

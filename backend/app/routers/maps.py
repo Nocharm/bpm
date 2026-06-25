@@ -1,6 +1,6 @@
 """Process map CRUD endpoints (docs/spec.md §3.5)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import workflow
+from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
@@ -39,7 +40,7 @@ RECOVERY_WINDOW = timedelta(days=7)
 
 async def _purge_expired(session: AsyncSession) -> None:
     """복구 기간(7일) 경과한 소프트삭제 맵을 영구 삭제 (별도 배치 없이 조회 시 lazy 정리)."""
-    cutoff = datetime.now(timezone.utc) - RECOVERY_WINDOW
+    cutoff = now_kst() - RECOVERY_WINDOW
     expired = (
         await session.scalars(
             select(ProcessMap).where(
@@ -332,7 +333,7 @@ async def delete_map(map_id: int, session: AsyncSession = Depends(get_session)) 
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    found_map.deleted_at = datetime.now(timezone.utc)
+    found_map.deleted_at = now_kst()
     await session.commit()
 
 

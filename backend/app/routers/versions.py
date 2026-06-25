@@ -1,7 +1,6 @@
 """Version management — create (optionally cloning), rename, delete, checkout (docs/spec.md §3.4, §7)."""
 
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import workflow
+from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
@@ -236,7 +236,7 @@ async def acquire_checkout(
             status_code=409, detail=f"version is {version.status} — not editable"
         )
 
-    now = datetime.now(timezone.utc)
+    now = now_kst()
     if is_locked_by_other(version, user, now) and not payload.force:
         return CheckoutOut(
             checked_out_by=version.checked_out_by,
@@ -281,7 +281,7 @@ async def delete_version(
         )
 
     # 다른 사용자가 편집 중인 버전은 삭제 불가 (spec §7 Phase C)
-    if is_locked_by_other(version, user, datetime.now(timezone.utc)):
+    if is_locked_by_other(version, user, now_kst()):
         raise HTTPException(
             status_code=423,
             detail=f"version checked out by {version.checked_out_by}",
@@ -363,7 +363,7 @@ async def submit_version(
         raise HTTPException(
             status_code=409, detail=f"cannot submit from status {version.status}"
         )
-    now = datetime.now(timezone.utc)
+    now = now_kst()
     if not (is_checkout_active(version, now) and version.checked_out_by == user):
         raise HTTPException(status_code=403, detail="only the checkout holder can submit")
 
@@ -547,7 +547,7 @@ async def withdraw_version(
 
     version.status = workflow.DRAFT
     version.checked_out_by = user
-    version.checked_out_at = datetime.now(timezone.utc)
+    version.checked_out_at = now_kst()
     await session.commit()
     await session.refresh(version)
     return version

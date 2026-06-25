@@ -79,7 +79,9 @@
 | 항목 | 내용 |
 |------|------|
 | 역할 라벨 영어 고정 | 한↔영 전환 중 레이아웃 깨짐 방지 — `perm.roleOwner/Editor/Viewer` + `collaboratorRole{Viewer,Editor}` 5개 키의 KO값을 **Owner/Editor/Viewer**로(전 화면 i18n 키 경유) |
+| 승인 대기 상태 영어 고정 | 상태 라벨 5개(`home.verStatus.pending`·`perm.rolePending`·`group.statusPending`·`visibilityPending`·`version.waitingApproval`) KO값을 영어로(Pending/Pending approval/Approval pending/Awaiting approval). 토스트·문장형은 한글 유지 |
 | 로그인 기록 수집 | (부가 기능) 사용자 현황조사용 `login_records` 테이블 + `/api/me` 호출 시 1건 기록. 모델 `LoginRecord`(login_id·name·occurred_at). **집계·리포트·중복제거는 후속**(현재 raw 기록만). startup create_all로 테이블 자동 생성 |
+| 타임스탬프 KST 기준 | 공용 `app/clock.py`(KST=UTC+9)로 백엔드 시각 생성 통일(models._now·라우터). `checkout._as_aware`는 naive를 KST로(만료 9h skew 버그 수정). 프론트 `lib/datetime.formatKst/Short`(Asia/Seoul)로 표시 — 브라우저 tz 무관 KST |
 
 ---
 

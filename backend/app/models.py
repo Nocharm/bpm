@@ -1,13 +1,15 @@
 """SQLAlchemy ORM models — process maps, versions, nodes, edges (docs/spec.md §2)."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.clock import now as _now_kst
+
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return _now_kst()  # 타임스탬프 기준시 KST (app.clock)
 
 
 class Base(DeclarativeBase):
