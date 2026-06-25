@@ -33,14 +33,15 @@ interface Tab {
 
 // 전체 탭 목록 — approvals는 조건부 노출로 별도 처리 /
 // Full tab list — approvals is shown conditionally, filtered at render.
+// 순서: 정보 > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 위험 구역
 const ALL_TABS: Tab[] = [
   { id: "details", labelKey: "perm.tabDetails" },
+  { id: "visibility", labelKey: "perm.tabVisibility" },
   { id: "collaborators", labelKey: "perm.tabCollaborators" },
   { id: "approvers", labelKey: "perm.tabApprovers" },
-  { id: "visibility", labelKey: "perm.tabVisibility" },
   { id: "versions", labelKey: "perm.tabVersions" },
-  { id: "danger", labelKey: "perm.tabDanger" },
   { id: "approvals", labelKey: "perm.tabPendingApprovals" },
+  { id: "danger", labelKey: "perm.tabDanger" },
 ];
 
 // ── 메인 페이지 컴포넌트 / Main page component ────────────────────

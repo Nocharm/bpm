@@ -476,15 +476,23 @@ export function getPrevNodeAlongFlow(edges: Edge[], nodeId: string): string | nu
 
 /** startId에서 첫 출력 엣지를 hops번 따라간 전방 경로의 엣지 id들 (F14). 끝/사이클에서 중단. */
 export function getFlowPathForward(edges: Edge[], startId: string, hops: number): string[] {
+  // BFS — 분기가 있으면 모든 분기 엣지를 hops 레벨까지 일괄 수집 (F14 분기 일괄 하이라이트).
+  // 직선 흐름이면 기존과 동일한 단일 경로/순서.
   const ids: string[] = [];
   const seen = new Set<string>([startId]);
-  let cur = startId;
+  let frontier = [startId];
   for (let i = 0; i < hops; i++) {
-    const next = getOutgoingEdges(edges, cur)[0];
-    if (!next || seen.has(next.target)) break;
-    ids.push(next.id);
-    seen.add(next.target);
-    cur = next.target;
+    const nextFrontier: string[] = [];
+    for (const cur of frontier) {
+      for (const edge of getOutgoingEdges(edges, cur)) {
+        if (seen.has(edge.target)) continue; // 사이클/이미 방문한 합류 노드 차단
+        ids.push(edge.id);
+        seen.add(edge.target);
+        nextFrontier.push(edge.target);
+      }
+    }
+    if (nextFrontier.length === 0) break;
+    frontier = nextFrontier;
   }
   return ids;
 }

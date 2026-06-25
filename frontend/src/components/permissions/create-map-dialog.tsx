@@ -233,10 +233,27 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   );
 
   // ── 승인자 후보 (AP, 생성 시점엔 맵이 없어 클라 산정) ──
-  // public=전원 열람이라 모든 직원 후보. private=생성자+선택한 user 협업자만(부서/그룹 확장은 설정에서).
+  // public=전원 열람이라 모든 직원 후보. private=생성자 + 선택한 협업자(user) +
+  // 협업자로 추가된 부서의 부서원 + 그룹의 멤버(그들의 소속/그룹이 뷰어+ 권한을 가지므로).
+  const deptCollabNames = new Set(
+    collaborators.filter((c) => c.principalType === "department").map((c) => c.displayName),
+  );
+  const groupCollabIds = new Set(
+    collaborators.filter((c) => c.principalType === "group").map((c) => c.principalId),
+  );
+  const groupMemberIds = new Set<string>();
+  for (const g of groups) {
+    if (groupCollabIds.has(String(g.id))) {
+      for (const m of g.members) {
+        if (m.member_type === "user") groupMemberIds.add(m.member_id);
+      }
+    }
+  }
   const approverEligibleIds = new Set<string>([
     ...(currentUser ? [currentUser.id] : []),
     ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
+    ...dirUsers.filter((u) => deptCollabNames.has(u.department)).map((u) => u.id),
+    ...groupMemberIds,
   ]);
   const approverPickerUsers =
     visibility === "public"
@@ -358,19 +375,25 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 onSelect={(opt) => setPendingCollab(opt)}
               />
             </div>
-            {/* 역할 선택 / role select */}
-            <select
-              className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none"
-              value={visibility === "public" ? "editor" : pendingCollabRole}
-              onChange={(e) => setPendingCollabRole(e.target.value as "viewer" | "editor")}
-              disabled={submitting || visibility === "public"}
-              title={visibility === "public" ? t("perm.createDialog.collaboratorRoleViewerDisabled") : undefined}
-            >
-              {visibility !== "public" && (
+            {/* 역할 선택 — public이면 editor 1옵션이라 드롭다운 대신 정적 표시(화살표 없음, PV) */}
+            {visibility === "public" ? (
+              <span
+                className="rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary"
+                title={t("perm.createDialog.collaboratorRoleViewerDisabled")}
+              >
+                {t("perm.createDialog.collaboratorRoleEditor")}
+              </span>
+            ) : (
+              <select
+                className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none"
+                value={pendingCollabRole}
+                onChange={(e) => setPendingCollabRole(e.target.value as "viewer" | "editor")}
+                disabled={submitting}
+              >
                 <option value="viewer">{t("perm.createDialog.collaboratorRoleViewer")}</option>
-              )}
-              <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
-            </select>
+                <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
+              </select>
+            )}
             <button
               type="button"
               onClick={handleAddCollab}

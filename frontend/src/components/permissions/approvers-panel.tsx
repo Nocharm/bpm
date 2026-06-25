@@ -127,36 +127,32 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         </div>
       )}
 
-      {/* 결재자 카드 그리드 — 정사각형 고정 크기(소속 개수 무관), 이름·아이디·소속(최대5) (ST) */}
+      {/* 결재자 카드 그리드 — 직사각형 고정 크기(소속 개수 무관, ~2/3 축소), 이름·아이디·소속(최대5) (ST) */}
       {approverIds.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {approverIds.map((userId) => (
             <div
               key={userId}
               data-id={`approver-card-${userId}`}
-              className="relative flex aspect-square flex-col rounded-md border border-hairline bg-surface p-3 shadow-sm"
+              className="relative flex aspect-[4/3] flex-col overflow-hidden rounded-md border border-hairline bg-surface p-2 shadow-sm"
             >
               {isOwner && (
                 <button
                   type="button"
                   title={t("perm.removeButton")}
-                  className="absolute right-1.5 top-1.5 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                  className="absolute right-1 top-1 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
                   onClick={() => void handleRemove(userId)}
                 >
-                  <X size={14} strokeWidth={1.5} />
+                  <X size={12} strokeWidth={1.5} />
                 </button>
               )}
-              <span className="truncate pr-5 text-caption-strong text-ink">{dirName(userId)}</span>
+              <span className="truncate pr-4 text-caption text-ink">{dirName(userId)}</span>
               <span className="truncate text-fine text-ink-tertiary">{userId}</span>
               {/* 소속(센터/부서/팀/그룹/파트) — 최대 5, 아래 공간 확보(카드 크기 동일) */}
-              <div className="mt-auto flex flex-col gap-0.5 overflow-hidden">
+              <div className="mt-auto flex flex-col overflow-hidden">
                 {dirOrg(userId).map((seg, idx) => (
-                  <span
-                    key={idx}
-                    className="flex items-center gap-1 truncate text-fine text-ink-tertiary"
-                  >
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-ink-tertiary/40" />
-                    <span className="truncate">{seg}</span>
+                  <span key={idx} className="truncate text-fine text-ink-tertiary">
+                    {seg}
                   </span>
                 ))}
               </div>

@@ -119,6 +119,15 @@ describe("flow path highlight (F14 — growing/shrinking)", () => {
     expect(getFlowPathBackward(edges, "D", 99)).toEqual(["e3", "e2", "e1"]);
   });
 
+  it("getFlowPathForward highlights all branches at a decision (F14)", () => {
+    // D --yes--> Y, D --no--> N (분기) → 1홉에 두 분기 엣지 모두
+    const branched = [
+      { id: "b1", source: "D", target: "Y" },
+      { id: "b2", source: "D", target: "N" },
+    ] as Edge[];
+    expect(getFlowPathForward(branched, "D", 1).sort()).toEqual(["b1", "b2"]);
+  });
+
   it("stops on a cycle instead of looping forever", () => {
     const cyclic = [
       { id: "x", source: "A", target: "B" },

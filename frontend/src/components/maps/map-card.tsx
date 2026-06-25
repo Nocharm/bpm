@@ -5,7 +5,8 @@
 // 카드 자체 액션은 삭제(owner)만. 가시성·역할·허용 인원은 메타 한 줄.
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Building2, ChevronDown, ExternalLink, User, Users } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
@@ -60,21 +61,39 @@ export function MapCard({
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
+  // 멤버 팝오버는 body 포털(fixed)로 — 리스트 overflow에 잘리거나 z-index에 가리지 않게.
+  const membersBtnRef = useRef<HTMLButtonElement>(null);
+  const [membersPos, setMembersPos] = useState<{ left: number; bottom: number } | null>(null);
 
-  const toggleMembers = useCallback(() => {
-    setMembersOpen((open) => {
-      const next = !open;
-      // 처음 열 때만 lazy fetch / lazy-fetch on first open.
-      if (next && members === null) {
-        void listMapPermissions(map.id)
-          .then((rows) => setMembers(rows))
-          .catch((err) =>
-            setMembersError(err instanceof Error ? err.message : String(err)),
-          );
-      }
-      return next;
-    });
-  }, [map.id, members]);
+  // 스크롤/리사이즈 시 위치가 어긋나므로 닫음
+  useEffect(() => {
+    if (!membersOpen) return;
+    const close = () => setMembersOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [membersOpen]);
+
+  const toggleMembers = () => {
+    if (membersOpen) {
+      setMembersOpen(false);
+      return;
+    }
+    const rect = membersBtnRef.current?.getBoundingClientRect();
+    if (rect) {
+      // 버튼 오른쪽 위로 펼침 — right 정렬(left=rect.right + translateX -100%), bottom=버튼 위.
+      setMembersPos({ left: rect.right, bottom: window.innerHeight - rect.top + 4 });
+    }
+    setMembersOpen(true);
+    if (members === null) {
+      void listMapPermissions(map.id)
+        .then((rows) => setMembers(rows))
+        .catch((err) => setMembersError(err instanceof Error ? err.message : String(err)));
+    }
+  };
 
   return (
     <div
@@ -134,8 +153,9 @@ export function MapCard({
         </div>
 
         {canViewMembers && (
-          <div className="relative shrink-0">
+          <div className="shrink-0">
             <button
+              ref={membersBtnRef}
               type="button"
               data-id="map-card-members"
               className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface hover:text-ink"
@@ -153,35 +173,48 @@ export function MapCard({
               />
             </button>
 
-            {membersOpen && (
-              <>
-                {/* 바깥 클릭 닫기 / click-away */}
-                <div className="fixed inset-0 z-[1000]" onClick={() => setMembersOpen(false)} />
-                {/* 카드 하단이라 위로(bottom-full) + 우측 정렬(right-0)로 카드 안에 유지 */}
-                <div className="absolute bottom-full right-0 z-[1001] mb-1 max-h-64 w-64 overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg">
-                  {membersError ? (
-                    <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
-                  ) : members === null ? (
-                    <p className="px-3 py-1.5 text-fine text-ink-tertiary">…</p>
-                  ) : members.length === 0 ? (
-                    <p className="px-3 py-1.5 text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
-                  ) : (
-                    members.map((perm) => (
-                      <div
-                        key={perm.id}
-                        className="flex items-center justify-between gap-2 px-3 py-1.5"
-                      >
-                        <span className="flex min-w-0 items-center gap-1.5 text-fine text-ink">
-                          <PrincipalIcon type={perm.principal_type} />
-                          <span className="truncate">{perm.principal_id}</span>
-                        </span>
-                        <RoleBadge role={perm.role as MapRole} />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
+            {membersOpen &&
+              membersPos &&
+              createPortal(
+                <>
+                  {/* 바깥 클릭 닫기 / click-away */}
+                  <div
+                    className="fixed inset-0 z-[1200]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMembersOpen(false);
+                    }}
+                  />
+                  {/* body 포털(fixed) — 리스트 overflow/z-index 무관하게 항상 보임 */}
+                  <div
+                    className="fixed z-[1201] max-h-64 w-64 -translate-x-full overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                    style={{ left: membersPos.left, bottom: membersPos.bottom }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {membersError ? (
+                      <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
+                    ) : members === null ? (
+                      <p className="px-3 py-1.5 text-fine text-ink-tertiary">…</p>
+                    ) : members.length === 0 ? (
+                      <p className="px-3 py-1.5 text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
+                    ) : (
+                      members.map((perm) => (
+                        <div
+                          key={perm.id}
+                          className="flex items-center justify-between gap-2 px-3 py-1.5"
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5 text-fine text-ink">
+                            <PrincipalIcon type={perm.principal_type} />
+                            <span className="truncate">{perm.principal_id}</span>
+                          </span>
+                          <RoleBadge role={perm.role as MapRole} />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>,
+                document.body,
+              )}
           </div>
         )}
       </div>

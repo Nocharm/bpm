@@ -11,6 +11,7 @@ import {
   Boxes,
   Building2,
   Copy,
+  Hand,
   Landmark,
   Settings,
   Trash2,
@@ -66,14 +67,15 @@ const LEVEL_ICONS = [Landmark, Building2, Users, UsersRound, Boxes];
 function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
   if (perm.principal_type === "user") {
     if (isMe) {
-      // 본인 — 유저 아이콘 대신 'me' 배지(아이콘과 동급 크기, 큰 이질감 없게)
+      // 본인 — 손든 사람 아이콘 + 작은 ME, 악센트 선색으로 강조(아이콘과 동급 크기)
       return (
         <span
           data-id="member-me-badge"
           title="me"
-          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-accent text-[8px] font-semibold uppercase leading-none text-on-accent"
+          className="inline-flex shrink-0 items-center gap-px text-accent"
         >
-          me
+          <Hand size={13} strokeWidth={2} />
+          <span className="text-[7px] font-bold leading-none">ME</span>
         </span>
       );
     }
