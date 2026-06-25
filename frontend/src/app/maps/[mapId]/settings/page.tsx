@@ -155,6 +155,7 @@ export default function SettingsPage() {
         email: null,
         role: me.role,
         department: me.department,
+        orgPath: me.org_path,
         isSysadmin: me.is_sysadmin,
       });
     } catch {

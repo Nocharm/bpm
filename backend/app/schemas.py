@@ -336,6 +336,8 @@ class MeOut(BaseModel):
     name: str
     role: str
     department: str
+    # 부서 소속 판정용 org_path(루트→리프, "A/B/C") — 프론트 멤버 하이라이트(HM-2)
+    org_path: str = ""
     # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
     is_sysadmin: bool
 

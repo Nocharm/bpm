@@ -106,7 +106,7 @@ function PickerDialog({
   return (
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
     >
       <div className="flex w-[380px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md border border-hairline bg-surface p-5 shadow-lg">
         <p className="text-body-strong text-ink">{title}</p>

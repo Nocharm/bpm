@@ -6,6 +6,8 @@ export interface CurrentUser {
   loginId: string;
   role: "admin" | "user";
   department: string;
+  // 부서 소속 판정용 org_path(루트→리프, "A/B/C") — 상세 멤버 하이라이트(HM-2)
+  orgPath: string;
   // 서버(/api/me)가 산정한 BPM 시스템 관리자 여부 — sysadmin-only UI 게이팅 단일 소스
   isSysadmin: boolean;
 }

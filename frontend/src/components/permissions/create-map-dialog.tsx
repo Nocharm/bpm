@@ -210,7 +210,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const dialog = (
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
     >
       <div className="relative flex w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}

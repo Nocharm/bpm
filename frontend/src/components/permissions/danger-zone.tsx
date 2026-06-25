@@ -114,7 +114,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
       {showTransferModal && (
         <ModalBackdrop
           onClose={() => setShowTransferModal(false)}
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
         >
           <div className="w-80 rounded-md border border-hairline bg-surface p-4 shadow-lg">
             <p className="mb-2 text-caption-strong text-ink">
@@ -147,7 +147,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
       {showDeleteModal && (
         <ModalBackdrop
           onClose={() => setShowDeleteModal(false)}
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
         >
           <div className="w-80 rounded-md border border-hairline bg-surface p-4 shadow-lg">
             <p className="mb-2 text-caption-strong text-ink">

@@ -48,7 +48,7 @@ export function ExpandInvariantModal({
 
   return createPortal(
     <ModalBackdrop
-      className="fixed inset-0 z-[1200] flex items-center justify-center px-4"
+      className="fixed inset-0 z-[1200] flex items-center justify-center px-4 backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 12%, transparent)" }}
       onClose={onClose}
     >

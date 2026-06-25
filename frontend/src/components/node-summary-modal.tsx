@@ -167,7 +167,7 @@ export function NodeSummaryModal({
 
   return (
     <ModalBackdrop
-      className="absolute inset-0 z-[1200] flex items-center justify-center"
+      className="absolute inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >

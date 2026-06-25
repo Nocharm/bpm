@@ -6506,7 +6506,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       {capPrompt && (
         <ModalBackdrop
           onClose={() => setCapPrompt(null)}
-          className="fixed inset-0 z-[1100] flex items-center justify-center px-4"
+          className="fixed inset-0 z-[1100] flex items-center justify-center px-4 backdrop-blur-sm"
           style={{ background: "color-mix(in srgb, var(--color-ink) 12%, transparent)" }}
         >
           <div

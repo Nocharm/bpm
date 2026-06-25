@@ -103,10 +103,11 @@ export function MapCard({
         <ExternalLink size={16} strokeWidth={1.5} />
       </a>
 
+      {/* 타이틀 텍스트로만 열림(히트박스 축소) — 우측 여백 클릭은 카드 선택으로 빠짐 */}
       <Link
         data-id="map-card-name"
         href={`/maps/${map.id}`}
-        className="block truncate pr-6 text-body-strong text-ink hover:text-accent hover:underline"
+        className="inline-block max-w-[calc(100%-2rem)] truncate align-top text-body-strong text-ink hover:text-accent hover:underline"
         onClick={(e) => e.stopPropagation()}
       >
         <Highlight text={map.name} ranges={nameRanges ?? []} />

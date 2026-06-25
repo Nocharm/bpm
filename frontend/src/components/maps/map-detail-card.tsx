@@ -54,8 +54,9 @@ export function MapDetailCard({
   onCopy,
 }: MapDetailCardProps) {
   const { t } = useI18n();
-  const loginId =
-    useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null)?.loginId ?? null;
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const loginId = me?.loginId ?? null;
+  const orgPath = me?.orgPath ?? "";
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 허용 인원 — my_role이 editor+ 일 때만 조회(서버 게이트와 동일) / members, editor+ only.
@@ -109,10 +110,14 @@ export function MapDetailCard({
 
   const isOwner = detail.my_role === "owner";
 
-  // 나의 소속(직접 user 그랜트 / 내가 속한 그룹) 여부 — 하이라이트 / is this grant "mine"?
+  // 나의 소속(직접 user / 내 그룹 / 내 부서) 여부 — 하이라이트 / is this grant "mine"?
+  // 부서: org_path 정확일치 또는 prefix("…/") 경계 (belongs_to_department 규약, HM-2).
   const isMine = (perm: MapPermission): boolean =>
     (perm.principal_type === "user" && perm.principal_id === loginId) ||
-    (perm.principal_type === "group" && myGroupIds.has(perm.principal_id));
+    (perm.principal_type === "group" && myGroupIds.has(perm.principal_id)) ||
+    (perm.principal_type === "department" &&
+      orgPath !== "" &&
+      (orgPath === perm.principal_id || orgPath.startsWith(`${perm.principal_id}/`)));
 
   const body = (
     <>

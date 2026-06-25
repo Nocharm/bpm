@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session, init_models
 from app.models import Employee
-from app.permissions.logic import is_sysadmin
+from app.permissions.logic import is_sysadmin, org_path
 from app.routers import (
     admin,
     ai,
@@ -80,5 +80,11 @@ async def get_me(
         name=emp.name if emp else login_id,
         role=emp.role if emp else "user",
         department=emp.department if emp else "",
+        # 부서 소속 판정용 org_path(루트→리프) — 프론트 멤버 하이라이트(HM-2)
+        org_path=(
+            org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
+            if emp
+            else ""
+        ),
         is_sysadmin=is_sysadmin(login_id),
     )

@@ -60,7 +60,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
   // document.body로 포털 — 에디터 캔버스/창의 스택 컨텍스트 밖에서 최상단 렌더
   return createPortal(
     <ModalBackdrop
-      className="fixed inset-0 z-[1200] flex items-center justify-center"
+      className="fixed inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >

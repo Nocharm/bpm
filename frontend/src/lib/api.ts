@@ -334,6 +334,8 @@ export interface Me {
   name: string;
   role: "admin" | "user";
   department: string;
+  // 부서 소속 판정용 org_path(루트→리프) — 상세 멤버 하이라이트(HM-2)
+  org_path: string;
   // BPM 시스템 관리자 여부 — sysadmin-only UI 게이팅 단일 소스
   is_sysadmin: boolean;
 }
