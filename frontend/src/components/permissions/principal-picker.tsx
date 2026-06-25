@@ -77,13 +77,18 @@ export function PrincipalPicker({
     (o) => !excludeIds.has(o.principalId),
   );
 
+  // 검색 한정: 유저=이름+아이디 / 부서·그룹=부서명·그룹명(displayName)만.
+  // 유저를 소속 부서/그룹으로 매칭하지 않음 — "AI dev" 검색 시 그룹원들이 결과를 채워
+  // 정작 'AI dev' 그룹이 slice(8) 밖으로 밀려나던 문제 방지.
   const hits = query.trim()
-    ? filterByQuery(all, query, (o) => [
-        { field: "name", text: o.displayName },
-        { field: "dept", text: o.department ?? "" },
-        // 사용자는 아이디(loginId)도 검색 대상 (SR-2)
-        { field: "id", text: o.principalType === "user" ? o.principalId : "" },
-      ])
+    ? filterByQuery(all, query, (o) =>
+        o.principalType === "user"
+          ? [
+              { field: "name", text: o.displayName },
+              { field: "id", text: o.principalId },
+            ]
+          : [{ field: "name", text: o.displayName }],
+      )
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
   const visible = hits.slice(0, 8);
 

@@ -252,8 +252,9 @@ export function NodeSummaryModal({
                       options={(eligible?.users ?? []).map((u) => ({
                         value: u.name,
                         label: u.name,
-                        // 아이디·부서 동시 노출 + 검색 대상(SR-2)
+                        // 아이디·부서 표시(표시 전용) / 검색은 이름+아이디만(부서 제외)
                         sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
+                        keywords: u.id,
                       }))}
                       emptyLabel={t("summary.none")}
                       placeholder={t("field.searchPlaceholder")}

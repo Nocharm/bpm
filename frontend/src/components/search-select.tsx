@@ -13,7 +13,8 @@ import { filterByQuery } from "@/lib/search";
 export interface SelectOption {
   value: string;
   label: string;
-  sub?: string; // 보조 표기 + 검색 대상(예: 아이디 · 부서)
+  sub?: string; // 보조 표기(표시 전용, 예: 아이디 · 부서) — 검색 대상 아님
+  keywords?: string; // 추가 검색어(표시 안 함, 예: 아이디). label과 함께 검색
 }
 
 export function SearchSelect({
@@ -34,9 +35,10 @@ export function SearchSelect({
   const [active, setActive] = useState(0); // 0=미지정, 1..n=hits
   const listRef = useRef<HTMLDivElement>(null);
 
+  // 검색은 label + keywords만 — sub(부서 등)는 표시 전용(검색 제외).
   const hits = filterByQuery(options, query, (option) => [
     { field: "label", text: option.label },
-    ...(option.sub ? [{ field: "sub", text: option.sub }] : []),
+    ...(option.keywords ? [{ field: "keywords", text: option.keywords }] : []),
   ]);
   // 내비 대상: [미지정, ...hits]
   const navCount = 1 + hits.length;
