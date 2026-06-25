@@ -118,7 +118,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [visibility, setVisibility] = useState<MapVisibility>("private");
   const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
-  const [pendingCollab, setPendingCollab] = useState<PrincipalOption | null>(null);
   const [pendingCollabRole, setPendingCollabRole] = useState<"viewer" | "editor">("viewer");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,25 +144,23 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     }
   };
 
-  // ── 협업자 추가 / add collaborator ──
-  const handleAddCollab = () => {
-    if (!pendingCollab) return;
+  // ── 협업자 추가 — 드롭다운에서 선택(클릭/Enter) 즉시 현재 역할로 추가(별도 Add 버튼 없음) ──
+  const addCollaborator = (opt: PrincipalOption) => {
     const role: MapRole = visibility === "public" ? "editor" : pendingCollabRole;
-    setCollaborators((prev) => {
-      // 중복 방지 / dedup
-      if (prev.some((c) => c.principalId === pendingCollab.principalId)) return prev;
-      return [
-        ...prev,
-        {
-          key: genId(),
-          principalType: pendingCollab.principalType,
-          principalId: pendingCollab.principalId,
-          displayName: pendingCollab.displayName,
-          role,
-        },
-      ];
-    });
-    setPendingCollab(null);
+    setCollaborators((prev) =>
+      prev.some((c) => c.principalId === opt.principalId)
+        ? prev // 중복 방지 / dedup
+        : [
+            ...prev,
+            {
+              key: genId(),
+              principalType: opt.principalType,
+              principalId: opt.principalId,
+              displayName: opt.displayName,
+              role,
+            },
+          ],
+    );
   };
 
   // ── 협업자 제거 / remove collaborator ──
@@ -363,7 +360,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.collaboratorsLabel")}
           </span>
-          {/* picker + role + 추가 버튼 — items-start로 드롭다운 플로팅 시 우측 컨트롤 안 늘어남 (#9) */}
+          {/* picker + role — 선택한 역할로 드롭다운 선택 즉시 추가(Add 버튼 없음). items-start로 드롭다운 플로팅 시 역할 컨트롤 안 늘어남 */}
           <div className="flex items-start gap-2">
             <div className="flex-1">
               <PrincipalPicker
@@ -372,7 +369,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 groups={toPickerGroups(groups)}
                 excludeIds={collabExcludeIds}
                 userDepartments={userDepartments}
-                onSelect={(opt) => setPendingCollab(opt)}
+                onSelect={addCollaborator}
               />
             </div>
             {/* 역할 선택 — public이면 editor 1옵션이라 드롭다운 대신 정적 표시(화살표 없음, PV) */}
@@ -394,22 +391,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
               </select>
             )}
-            <button
-              type="button"
-              onClick={handleAddCollab}
-              disabled={!pendingCollab || submitting}
-              className="rounded-sm border border-hairline px-3 py-1 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
-            >
-              {t("perm.createDialog.addBtn")}
-            </button>
           </div>
-          {/* 선택된 협업자 표시 / selected collaborator display */}
-          {pendingCollab && (
-            <div className="flex items-center gap-1.5 rounded-sm border border-accent bg-accent-tint px-2 py-1 text-caption text-accent">
-              <PrincipalIcon type={pendingCollab.principalType} />
-              <span>{pendingCollab.displayName}</span>
-            </div>
-          )}
           {/* 추가된 협업자 목록 / added collaborators list */}
           {collaborators.length > 0 && (
             <ul className="flex flex-col gap-1">
