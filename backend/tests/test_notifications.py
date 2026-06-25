@@ -6,8 +6,14 @@ from fastapi.testclient import TestClient
 from app.settings import settings
 
 
+_notif_seq = 0
+
+
 def _pending_version(client: TestClient, approvers: list[str]) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": "notif map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _notif_seq
+    _notif_seq += 1
+    created = client.post("/api/maps", json={"name": f"notif map {_notif_seq}"}).json()
     map_id, version_id = created["id"], created["versions"][0]["id"]
     client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": approvers})
     client.post(f"/api/versions/{version_id}/checkout", json={})

@@ -5,12 +5,10 @@
 // 데이터는 getMap(+editor+면 listMapPermissions/listGroups). 선택 변경 시 key로 remount.
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, Building2, Copy, Settings, Trash2, User, Users } from "lucide-react";
 
 import {
-  copyMap,
   getMap,
   listGroups,
   listMapPermissions,
@@ -45,9 +43,16 @@ interface MapDetailCardProps {
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
   showFooter?: boolean;
   onDelete?: (mapId: number) => void;
+  // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
+  onCopy?: (mapId: number, name: string) => void;
 }
 
-export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailCardProps) {
+export function MapDetailCard({
+  mapId,
+  showFooter = true,
+  onDelete,
+  onCopy,
+}: MapDetailCardProps) {
   const { t } = useI18n();
   const loginId =
     useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null)?.loginId ?? null;
@@ -59,9 +64,6 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // 승인본 복사 진행 중 / copying-from-approved in progress (F12).
-  const [copying, setCopying] = useState(false);
-  const router = useRouter();
 
   useEffect(() => {
     let active = true;
@@ -212,17 +214,6 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
   const hasApprovedVersion = detail.versions.some(
     (v) => v.status === "approved" || v.status === "published",
   );
-  const handleCopy = async () => {
-    if (copying) return;
-    setCopying(true);
-    try {
-      const created = await copyMap(detail.id);
-      router.push(`/maps/${created.id}`); // 새 맵 에디터로 이동 — 성공 시 언마운트되므로 copying 리셋 불필요
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setCopying(false);
-    }
-  };
 
   // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
   return (
@@ -237,13 +228,12 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
             <Settings size={14} strokeWidth={1.5} />
             {t("perm.settingsTitle")}
           </Link>
-          {hasApprovedVersion && (
+          {hasApprovedVersion && onCopy && (
             <button
               type="button"
               data-id="map-detail-copy"
-              disabled={copying}
-              className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface disabled:opacity-40"
-              onClick={() => void handleCopy()}
+              className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+              onClick={() => onCopy(detail.id, detail.name)}
             >
               <Copy size={14} strokeWidth={1.5} />
               {t("home.copyFromApproved")}

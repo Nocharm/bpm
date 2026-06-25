@@ -22,8 +22,20 @@ def _approve_version(version_id: int) -> None:
     asyncio.run(_run())
 
 
+_sub_seq = 0
+
+
+def _unique(name: str) -> str:
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _sub_seq
+    _sub_seq += 1
+    return f"{name} {_sub_seq}"
+
+
 def _new_version(client: TestClient, name: str = "p") -> int:
-    version_id = client.post("/api/maps", json={"name": name}).json()["versions"][0]["id"]
+    version_id = (
+        client.post("/api/maps", json={"name": _unique(name)}).json()["versions"][0]["id"]
+    )
     # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})
     return version_id
@@ -79,7 +91,7 @@ def test_accepts_valid_process(client: TestClient) -> None:
 
 
 def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": name}).json()
+    created = client.post("/api/maps", json={"name": _unique(name)}).json()
     version_id = created["versions"][0]["id"]
     # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})

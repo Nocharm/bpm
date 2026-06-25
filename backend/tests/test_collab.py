@@ -10,8 +10,14 @@ from fastapi.testclient import TestClient
 from app.settings import settings
 
 
+_collab_seq = 0
+
+
 def _create_version(client: TestClient) -> int:
-    created = client.post("/api/maps", json={"name": "collab map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _collab_seq
+    _collab_seq += 1
+    created = client.post("/api/maps", json={"name": f"collab map {_collab_seq}"}).json()
     return created["versions"][0]["id"]
 
 
@@ -112,7 +118,7 @@ def test_expired_checkout_is_not_a_lock(
 def test_delete_version_rejected_while_locked_by_other(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    created = client.post("/api/maps", json={"name": "collab map"}).json()
+    created = client.post("/api/maps", json={"name": "collab map delete-locked"}).json()
     version_id = created["versions"][0]["id"]
     # 삭제 가능하도록 두 번째 버전 생성 후, 첫 버전을 잠금
     client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})

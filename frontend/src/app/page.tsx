@@ -6,13 +6,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 
-import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery } from "@/lib/search";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
+import { PromptDialog } from "@/components/prompt-dialog";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 export default function MapListPage() {
@@ -25,6 +26,10 @@ export default function MapListPage() {
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapQuery, setMapQuery] = useState("");
+  // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
+  const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
 
   const showToast = useCallback((message: string) => {
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
@@ -71,6 +76,34 @@ export default function MapListPage() {
       }
     },
     [refresh, t],
+  );
+
+  // 복사 버튼(맵 상세) → 이름 입력 모달 오픈
+  const handleCopyOpen = useCallback((mapId: number, name: string) => {
+    setCopyError(null);
+    setCopyTarget({ id: mapId, name });
+  }, []);
+
+  // 복사 모달 제출 — 중복 이름이면 모달 유지하고 error 표시, 성공하면 목록 갱신 + 새 카드 강조.
+  const handleCopySubmit = useCallback(
+    async (name: string) => {
+      if (copyTarget === null) {
+        return;
+      }
+      try {
+        const created = await copyMap(copyTarget.id, name);
+        setCopyTarget(null);
+        setCopyError(null);
+        await refresh();
+        setSelectedId(created.id);
+        setHighlightId(created.id);
+        showToast(t("home.copyCreated"));
+        window.setTimeout(() => setHighlightId(null), 2500); // 쉬머 후 해제
+      } catch (err) {
+        setCopyError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [copyTarget, refresh, showToast, t],
   );
 
   // 가시성은 서버가 이미 적용(GET /maps는 접근 가능한 맵만 반환, my_role 동봉) — 클라 재계산 폐기 /
@@ -141,6 +174,7 @@ export default function MapListPage() {
                 <MapCard
                   map={processMap}
                   selected={effectiveSelected === processMap.id}
+                  highlighted={highlightId === processMap.id}
                   onSelect={setSelectedId}
                   nameRanges={matches.find((m) => m.field === "name")?.ranges ?? []}
                 />
@@ -157,6 +191,7 @@ export default function MapListPage() {
                         <MapDetailCard
                           mapId={processMap.id}
                           onDelete={(id) => void handleDelete(id)}
+                          onCopy={handleCopyOpen}
                         />
                       </div>
                     )}
@@ -177,6 +212,7 @@ export default function MapListPage() {
               key={effectiveSelected}
               mapId={effectiveSelected}
               onDelete={(id) => void handleDelete(id)}
+              onCopy={handleCopyOpen}
             />
           </aside>
         )}
@@ -188,6 +224,22 @@ export default function MapListPage() {
           onCreated={() => {
             void refresh();
             showToast(t("perm.createDialog.toastSuccess"));
+          }}
+        />
+      )}
+
+      {copyTarget && (
+        <PromptDialog
+          title={t("home.copyTitle")}
+          label={t("home.copyNameLabel")}
+          defaultValue={`${copyTarget.name} (Copy)`}
+          confirmLabel={t("home.copyFromApproved")}
+          cancelLabel={t("common.cancel")}
+          error={copyError}
+          onConfirm={(name) => void handleCopySubmit(name)}
+          onClose={() => {
+            setCopyTarget(null);
+            setCopyError(null);
           }}
         />
       )}

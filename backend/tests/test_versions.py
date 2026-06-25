@@ -8,8 +8,14 @@ from app.db import SessionLocal
 from app.models import MapVersion
 
 
+_map_seq = 0
+
+
 def _create_map(client: TestClient) -> dict:
-    return client.post("/api/maps", json={"name": "version map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크라 호출마다 고유 이름 사용
+    global _map_seq
+    _map_seq += 1
+    return client.post("/api/maps", json={"name": f"version map {_map_seq}"}).json()
 
 
 def _approve_version(version_id: int) -> None:

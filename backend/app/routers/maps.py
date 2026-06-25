@@ -21,6 +21,17 @@ router = APIRouter(
 )
 
 
+async def _assert_unique_name(
+    session: AsyncSession, name: str, exclude_map_id: int | None = None
+) -> None:
+    """프로세스맵 이름 전역 중복 금지 (생성·복사·이름변경 공통). 중복이면 409."""
+    query = select(ProcessMap.id).where(ProcessMap.name == name)
+    if exclude_map_id is not None:
+        query = query.where(ProcessMap.id != exclude_map_id)
+    if await session.scalar(query) is not None:
+        raise HTTPException(status_code=409, detail="map name already exists")
+
+
 @router.get("", response_model=list[MapOut])
 async def list_maps(
     session: AsyncSession = Depends(get_session),
@@ -106,6 +117,7 @@ async def create_map(
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
     # 맵 생성 시 기본 버전(As-Is) 1개를 함께 만든다 — 캔버스는 버전에 귀속 (spec §1)
+    await _assert_unique_name(session, payload.name)
     new_map = ProcessMap(
         name=payload.name,
         description=payload.description,
@@ -176,8 +188,10 @@ async def copy_map(
     if source_version is None:
         raise HTTPException(status_code=409, detail="map has no approved version to copy")
 
+    copy_name = payload.name or f"{source_map.name} (Copy)"
+    await _assert_unique_name(session, copy_name)
     new_map = ProcessMap(
-        name=payload.name or f"{source_map.name} (Copy)",
+        name=copy_name,
         description=source_map.description,
         created_by=user,
         owner_id=user,
@@ -240,6 +254,7 @@ async def update_map(
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     if payload.name is not None:
+        await _assert_unique_name(session, payload.name, exclude_map_id=map_id)
         found_map.name = payload.name
     if payload.description is not None:
         found_map.description = payload.description

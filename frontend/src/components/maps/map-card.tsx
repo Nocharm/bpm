@@ -5,7 +5,7 @@
 // 카드 자체 액션은 삭제(owner)만. 가시성·역할·허용 인원은 메타 한 줄.
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Building2, ChevronDown, ExternalLink, User, Users } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
@@ -26,6 +26,8 @@ interface MapCardProps {
   selected?: boolean;
   onSelect?: (mapId: number) => void;
   nameRanges?: MatchRange[];
+  // 복사 직후 강조 — 쉬머 링 + 자동 스크롤 (F12).
+  highlighted?: boolean;
 }
 
 // principal_type → 아이콘 / principal icon.
@@ -35,8 +37,22 @@ function PrincipalIcon({ type }: { type: string }) {
   return <User size={12} strokeWidth={1.5} />;
 }
 
-export function MapCard({ map, selected = false, onSelect, nameRanges }: MapCardProps) {
+export function MapCard({
+  map,
+  selected = false,
+  onSelect,
+  nameRanges,
+  highlighted = false,
+}: MapCardProps) {
   const { t } = useI18n();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // 강조되면 화면으로 스크롤 (복사 직후 새 카드로 이동)
+  useEffect(() => {
+    if (highlighted) {
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlighted]);
 
   // 인원 목록 조회는 서버에서 editor+ 게이트 — viewer 카드엔 버튼 미노출 / list-permissions is editor+ gated.
   const canViewMembers = map.my_role === "editor" || map.my_role === "owner";
@@ -62,8 +78,14 @@ export function MapCard({ map, selected = false, onSelect, nameRanges }: MapCard
 
   return (
     <div
+      ref={rootRef}
+      data-id="map-card"
       className={`group relative cursor-pointer select-none rounded-sm border bg-surface p-4 hover:bg-surface-alt ${
-        selected ? "border-accent ring-1 ring-accent" : "border-hairline"
+        highlighted
+          ? "animate-pulse border-accent ring-2 ring-accent"
+          : selected
+            ? "border-accent ring-1 ring-accent"
+            : "border-hairline"
       }`}
       onClick={() => onSelect?.(map.id)}
     >

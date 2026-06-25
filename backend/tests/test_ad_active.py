@@ -123,8 +123,14 @@ def test_admin_users_response_has_active_field(client: TestClient) -> None:
 
 # ── inactive approver judgment ───────────────────────────────────────────────
 
+_aa_seq = 0
+
+
 def _create_map_with_version(client: TestClient) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": "active-approver test map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _aa_seq
+    _aa_seq += 1
+    created = client.post("/api/maps", json={"name": f"active-approver test map {_aa_seq}"}).json()
     return created["id"], created["versions"][0]["id"]
 
 

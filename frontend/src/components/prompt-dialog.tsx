@@ -18,6 +18,8 @@ interface PromptDialogProps {
   cancelLabel: string;
   /** true면 textarea (예: 반려 사유) */
   multiline?: boolean;
+  /** 제출 실패 안내(예: 이름 중복) — 표시되면 모달 유지 */
+  error?: string | null;
   onConfirm: (value: string) => void;
   onClose: () => void;
 }
@@ -30,6 +32,7 @@ export function PromptDialog({
   confirmLabel,
   cancelLabel,
   multiline = false,
+  error,
   onConfirm,
   onClose,
 }: PromptDialogProps) {
@@ -83,6 +86,7 @@ export function PromptDialog({
             }}
           />
         )}
+        {error && <p className="text-fine text-error">{error}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"

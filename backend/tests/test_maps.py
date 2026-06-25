@@ -34,6 +34,20 @@ def test_create_map_rejects_blank_name(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_create_map_rejects_duplicate_name(client: TestClient) -> None:
+    client.post("/api/maps", json={"name": "중복맵A"})
+    response = client.post("/api/maps", json={"name": "중복맵A"})
+    assert response.status_code == 409
+
+
+def test_update_map_rejects_duplicate_name(client: TestClient) -> None:
+    client.post("/api/maps", json={"name": "기존맵A"})
+    other = client.post("/api/maps", json={"name": "다른맵A"}).json()
+    # 다른 맵 이름으로 변경 → 409, 자기 자신 이름 유지는 허용
+    assert client.patch(f"/api/maps/{other['id']}", json={"name": "기존맵A"}).status_code == 409
+    assert client.patch(f"/api/maps/{other['id']}", json={"name": "다른맵A"}).status_code == 200
+
+
 def test_list_maps_includes_created(client: TestClient) -> None:
     created = client.post("/api/maps", json={"name": "검수"}).json()
 
