@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **BPM (Business Process Management) — 프로세스맵을 그리는 웹 서비스.** 현업이 노드/엣지로 계층형 프로세스 흐름을 시각적으로 작성·편집하고, As-Is/To-Be를 버전으로 관리·비교하는 도구. **기능 명세: `docs/spec.md`** (데이터 모델, UX, 구현 순서).
 
-> 상태(메인 기준): ⑤ Keycloak 인증 · ⑥ docker-compose 배포(3333) · ⑦ **하위프로세스 참조 모델(Call Activity)** — 인라인 계층 편집(`parent_node_id`) 폐기, 평면 노드 + 다른 맵 링크(읽기전용 임베드) · ⑧ **권한 관리(RBAC) 백엔드** 머지 완료(맵 가시성·협업자·승인자·버전 워크플로·유저그룹). 진행 현황은 `PROGRESS.md`, 구현 순서는 `docs/spec.md` §6.
+> 상태(메인 기준): ⑤ Keycloak 인증 · ⑥ docker-compose 배포(3333) · ⑦ **하위프로세스 참조 모델(Call Activity)** — 인라인 계층 편집(`parent_node_id`) 폐기, 평면 노드 + 다른 맵 링크(읽기전용 임베드) · ⑧ **권한 관리(RBAC) 백엔드**(맵 가시성·협업자·승인자·버전 워크플로·유저그룹) · ⑨ **플로우 규칙(F1 디시전 드롭·F14 흐름 하이라이트)·Settings v2(가시성 스테이징·승인자 카드)·맵 소프트삭제+휴지통·타임스탬프 KST(`backend/app/clock.py`)·로그인 기록(`login_records`)·역할/상태 i18n 영어 고정** 머지 완료. 진행 현황은 `PROGRESS.md`, 구현 순서는 `docs/spec.md` §6.
 > DB: 로컬 네이티브는 sqlite 파일(무설정), 서버 compose는 postgres. 스키마는 startup `create_all`(마이그레이션 후속). **DB 초기화·데모 시드: `docs/db-seed.md`**(`python -m scripts.reset_db`).
 > ⚠️ **캔버스/에디터 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션. (단, 인라인 계층 *편집*은 ⑦에서 제거됨 → 읽기전용 임베드. lessons는 React Flow/좌표/검증 함정 위주로 유효.)
 
@@ -71,7 +71,7 @@ docker compose up -d --build   # 접속: http://<서버>:3333
 
 **디렉터리 구조:**
 ```
-frontend/   # Next.js 앱 (에디터: src/app/maps/[mapId]/page.tsx — ~5000줄 단일 컴포넌트)
+frontend/   # Next.js 앱 (에디터: src/app/maps/[mapId]/page.tsx — ~6700줄 단일 컴포넌트)
 backend/    # Python API 서버 + requirements.txt / requirements-dev.txt
 nginx/      # 리버스 프록시 설정
 docs/       # spec.md, lessons/(시행착오 방지), superpowers/plans·specs/
