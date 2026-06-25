@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
+import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
@@ -196,10 +197,14 @@ export default function MapListPage() {
       {/* 마스터-디테일 — 리스트·상세 같은 폭(flex-1+동일 max-w), min-w로 안 깨지게, 전체 max-w로 중앙 /
           List + detail share equal width (flex-1, same max-w), min-w guards wrapping, centered by max-w. */}
       <div className="mx-auto flex min-h-0 w-full max-w-[72rem] flex-1 gap-4">
-        {mapHits.length === 0 ? (
-          <p className="min-w-[18rem] max-w-[34rem] flex-1 rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+        {visibleMaps.length === 0 ? (
+          /* 맵이 하나도 없음 — 풀폭 환영 화면(상세 자리까지 차지) */
+          <WelcomePlaceholder onCreate={() => setDialogOpen(true)} />
+        ) : mapHits.length === 0 ? (
+          /* 필터/검색 결과 없음 */
+          <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
             {t("home.empty")}
-          </p>
+          </div>
         ) : (
           <ul className="flex min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2 overflow-y-auto pr-1">
             {mapHits.map(({ item: processMap, matches }) => (

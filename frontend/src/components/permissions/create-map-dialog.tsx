@@ -27,6 +27,7 @@ import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
 
@@ -121,13 +122,26 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [pendingCollabRole, setPendingCollabRole] = useState<"viewer" | "editor">("viewer");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
+  const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
 
-  // ── 공개범위 변경 시 뷰어→편집자 초기화 / reset pending role when switching to public ──
+  // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
-  const handleVisibilityChange = (v: MapVisibility) => {
+  const applyVisibilityChange = (v: MapVisibility) => {
     setVisibility(v);
+    setApprovers([]); // 후보군 변경 → 승인자 초기화
     if (v === "public" && pendingCollabRole === "viewer") {
       setPendingCollabRole("editor");
+    }
+  };
+
+  // ── 공개범위 변경 — 승인자가 이미 있으면 초기화 안내 모달, 없으면 바로 적용 ──
+  const handleVisibilityChange = (v: MapVisibility) => {
+    if (v === visibility) return;
+    if (approvers.length > 0) {
+      setPendingVisibility(v);
+    } else {
+      applyVisibilityChange(v);
     }
   };
 
@@ -208,13 +222,16 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     collaborators.map((c) => c.principalId).concat(currentUser ? [currentUser.id] : []),
   );
 
-  // ── 승인자 후보 = 생성자 + 선택한 user 협업자만 (AP, 생성 시점엔 맵이 없어 클라 산정) ──
-  // 부서/그룹 협업자의 멤버 확장은 생성 후 맵 설정(서버 eligible)에서.
+  // ── 승인자 후보 (AP, 생성 시점엔 맵이 없어 클라 산정) ──
+  // public=전원 열람이라 모든 직원 후보. private=생성자+선택한 user 협업자만(부서/그룹 확장은 설정에서).
   const approverEligibleIds = new Set<string>([
     ...(currentUser ? [currentUser.id] : []),
     ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
   ]);
-  const approverPickerUsers = pickerUsers.filter((u) => approverEligibleIds.has(u.id));
+  const approverPickerUsers =
+    visibility === "public"
+      ? pickerUsers
+      : pickerUsers.filter((u) => approverEligibleIds.has(u.id));
 
   const dialog = (
     <ModalBackdrop
@@ -282,19 +299,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => handleVisibilityChange("private")}
-              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
-                visibility === "private"
-                  ? "border-accent bg-accent-tint text-accent"
-                  : "border-hairline text-ink hover:bg-surface-alt"
-              }`}
-              disabled={submitting}
-            >
-              <Lock size={16} strokeWidth={1.5} />
-              {t("perm.createDialog.visibilityPrivate")}
-            </button>
-            <button
-              type="button"
               onClick={() => handleVisibilityChange("public")}
               className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
                 visibility === "public"
@@ -305,6 +309,19 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
             >
               <Globe size={16} strokeWidth={1.5} />
               {t("perm.createDialog.visibilityPublic")}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleVisibilityChange("private")}
+              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                visibility === "private"
+                  ? "border-accent bg-accent-tint text-accent"
+                  : "border-hairline text-ink hover:bg-surface-alt"
+              }`}
+              disabled={submitting}
+            >
+              <Lock size={16} strokeWidth={1.5} />
+              {t("perm.createDialog.visibilityPrivate")}
             </button>
           </div>
           {visibility === "public" && (
@@ -461,5 +478,24 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   );
 
   if (typeof document === "undefined") return null;
-  return createPortal(dialog, document.body);
+  return createPortal(
+    <>
+      {dialog}
+      {/* 공개범위 변경 시 승인자 초기화 안내 → 확인하면 변경+초기화 */}
+      {pendingVisibility && (
+        <ConfirmDialog
+          title={t("perm.createDialog.visibilityResetTitle")}
+          message={t("perm.createDialog.visibilityResetMessage")}
+          confirmLabel={t("perm.createDialog.visibilityResetConfirm")}
+          cancelLabel={t("perm.createDialog.cancelBtn")}
+          onConfirm={() => {
+            applyVisibilityChange(pendingVisibility);
+            setPendingVisibility(null);
+          }}
+          onClose={() => setPendingVisibility(null)}
+        />
+      )}
+    </>,
+    document.body,
+  );
 }
