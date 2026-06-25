@@ -143,44 +143,9 @@ export default function MapListPage() {
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
-      {/* 검색 — 최상단 풀폭 / search bar at the very top */}
-      <div className="mx-auto mb-3 flex w-full max-w-[72rem] shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
-        <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-        <input
-          type="text"
-          data-id="home-map-search"
-          className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-          placeholder={t("home.searchPlaceholder")}
-          value={mapQuery}
-          onChange={(e) => setMapQuery(e.target.value)}
-        />
-      </div>
-
-      {/* 제목 · 가시성 필터(ALL/Public/Private) · New map / title, filter tabs, New map */}
+      {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
-        <div
-          data-id="home-visibility-filter"
-          className="flex items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
-        >
-          {(["all", "public", "private"] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={visFilter === f}
-              className={`rounded-sm px-2.5 py-1 text-caption transition-colors ${
-                visFilter === f
-                  ? "bg-accent-tint text-accent"
-                  : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-              }`}
-              onClick={() => setVisFilter(f)}
-            >
-              {f === "all"
-                ? t("home.filterAll")
-                : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
-            </button>
-          ))}
-        </div>
         <button
           className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
           onClick={() => setDialogOpen(true)}
@@ -200,13 +165,50 @@ export default function MapListPage() {
         {visibleMaps.length === 0 ? (
           /* 맵이 하나도 없음 — 풀폭 환영 화면(상세 자리까지 차지) */
           <WelcomePlaceholder onCreate={() => setDialogOpen(true)} />
-        ) : mapHits.length === 0 ? (
-          /* 필터/검색 결과 없음 */
-          <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
-            {t("home.empty")}
-          </div>
         ) : (
-          <ul className="flex min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2 overflow-y-auto pr-1">
+          <>
+            {/* 좌측 리스트 컬럼 — 상단에 검색·필터탭(같은 폭), 아래 리스트 (#5) */}
+            <div className="flex min-h-0 min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2">
+              <div className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
+                <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                <input
+                  type="text"
+                  data-id="home-map-search"
+                  className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
+                  placeholder={t("home.searchPlaceholder")}
+                  value={mapQuery}
+                  onChange={(e) => setMapQuery(e.target.value)}
+                />
+              </div>
+              <div
+                data-id="home-visibility-filter"
+                className="flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+              >
+                {(["all", "public", "private"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={visFilter === f}
+                    className={`flex-1 rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                      visFilter === f
+                        ? "bg-accent-tint text-accent"
+                        : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                    }`}
+                    onClick={() => setVisFilter(f)}
+                  >
+                    {f === "all"
+                      ? t("home.filterAll")
+                      : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+                  </button>
+                ))}
+              </div>
+              {mapHits.length === 0 ? (
+                /* 필터/검색 결과 없음 */
+                <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+                  {t("home.empty")}
+                </div>
+              ) : (
+                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
             {mapHits.map(({ item: processMap, matches }) => (
               <li key={processMap.id} className="flex flex-col">
                 <MapCard
@@ -237,22 +239,25 @@ export default function MapListPage() {
                 </div>
               </li>
             ))}
-          </ul>
-        )}
+                </ul>
+              )}
+            </div>
 
-        {effectiveSelected !== null && (
-          // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
-          <aside
-            data-id="map-detail-aside"
-            className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
-          >
-            <MapDetailCard
-              key={effectiveSelected}
-              mapId={effectiveSelected}
-              onDelete={(id) => void handleDelete(id)}
-              onCopy={handleCopyOpen}
-            />
-          </aside>
+            {effectiveSelected !== null && (
+              // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
+              <aside
+                data-id="map-detail-aside"
+                className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
+              >
+                <MapDetailCard
+                  key={effectiveSelected}
+                  mapId={effectiveSelected}
+                  onDelete={(id) => void handleDelete(id)}
+                  onCopy={handleCopyOpen}
+                />
+              </aside>
+            )}
+          </>
         )}
       </div>
 

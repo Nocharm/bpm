@@ -1881,9 +1881,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     try {
       await saveCurrentScope();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.save"));
+      // 저장 실패(예: 시작/끝 노드 없음)는 상단 배너 대신 토스트로 안내 (#7)
+      showToast(err instanceof Error ? err.message : t("err.save"));
     }
-  }, [saveCurrentScope, t]);
+  }, [saveCurrentScope, showToast, t]);
 
   const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
     const step = 36;
@@ -2296,10 +2297,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           type: "process",
           position,
           data: {
-            label: makeUniqueLabel(
-              t("editor.newStep"),
-              current.map((node) => node.data.label),
-            ),
+            // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
+            label:
+              nodeType === "start" || nodeType === "end"
+                ? ""
+                : makeUniqueLabel(
+                    t("editor.newStep"),
+                    current.map((node) => node.data.label),
+                  ),
             description: "",
             nodeType,
             color: "",
@@ -5968,6 +5973,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               left={editingEdgePos.left}
               top={editingEdgePos.top}
               initial={editingEdgeInitial}
+              placeholder={t("editor.edgeLabelPlaceholder")}
               onCommit={(value) => commitEdgeLabel(editingEdgeId, value)}
               onCancel={cancelEdgeLabelEdit}
             />
@@ -6338,7 +6344,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               <div className="text-caption text-ink-secondary">
                 {/* 아무것도 선택 안 됨 — 상단에 맵 상세 카드(가시성·역할·버전·멤버) / no selection: map detail at top */}
                 <div className="mb-4 border-b border-hairline pb-4">
-                  <MapDetailCard mapId={mapId} showFooter={false} />
+                  {/* 에디터에선 이미 이 맵이라 Open 버튼 숨김 (#6) */}
+                  <MapDetailCard mapId={mapId} showFooter={false} hideOpen />
                 </div>
                 <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
                 <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>

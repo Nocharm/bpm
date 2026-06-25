@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import {
+  getDirectory,
   getMap,
   listGroups,
   listMapPermissions,
@@ -87,6 +88,8 @@ interface MapDetailCardProps {
   mapId: number;
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
   showFooter?: boolean;
+  // 헤더 Open 버튼 숨김 — 에디터에선 이미 그 맵을 보고 있어 무의미 (#6).
+  hideOpen?: boolean;
   onDelete?: (mapId: number) => void;
   // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
   onCopy?: (mapId: number, name: string) => void;
@@ -95,6 +98,7 @@ interface MapDetailCardProps {
 export function MapDetailCard({
   mapId,
   showFooter = true,
+  hideOpen = false,
   onDelete,
   onCopy,
 }: MapDetailCardProps) {
@@ -108,6 +112,8 @@ export function MapDetailCard({
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   // 내가 속한 그룹 id(문자열) — 멤버 하이라이트용 / my group ids for the "mine" highlight.
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
+  // loginId → 표시명 — 멤버(유저) 행을 "이름(아이디)"로 보여주기 위함 (#5)
+  const [nameById, setNameById] = useState<Map<string, string>>(new Map());
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -119,9 +125,14 @@ export function MapDetailCard({
         setDetail(d);
         if (d.my_role === "editor" || d.my_role === "owner") {
           try {
-            const [perms, groups] = await Promise.all([listMapPermissions(mapId), listGroups()]);
+            const [perms, groups, dir] = await Promise.all([
+              listMapPermissions(mapId),
+              listGroups(),
+              getDirectory(),
+            ]);
             if (!active) return;
             setMembers(perms);
+            setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
             if (loginId) {
               setMyGroupIds(
                 new Set(
@@ -168,13 +179,15 @@ export function MapDetailCard({
     <>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
-        <Link
-          href={`/maps/${detail.id}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
-        >
-          <ArrowUpRight size={14} strokeWidth={1.5} />
-          {t("home.open")}
-        </Link>
+        {!hideOpen && (
+          <Link
+            href={`/maps/${detail.id}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
+          >
+            <ArrowUpRight size={14} strokeWidth={1.5} />
+            {t("home.open")}
+          </Link>
+        )}
       </div>
 
       <div
@@ -250,11 +263,21 @@ export function MapDetailCard({
                               perm={perm}
                               isMe={perm.principal_type === "user" && perm.principal_id === loginId}
                             />
-                            {/* 부서는 말단 조직만 표시 (HM-3) */}
-                            <span className="truncate">
-                              {perm.principal_type === "department"
-                                ? deptLeaf(perm.principal_id)
-                                : perm.principal_id}
+                            {/* 부서=말단만(HM-3) · 유저=이름(아이디 회색), 길면 말줄임 (#5) */}
+                            <span className="min-w-0 truncate">
+                              {perm.principal_type === "department" ? (
+                                deptLeaf(perm.principal_id)
+                              ) : perm.principal_type === "user" ? (
+                                <>
+                                  {nameById.get(perm.principal_id) ?? perm.principal_id}
+                                  <span className="text-ink-tertiary">
+                                    {" "}
+                                    ({perm.principal_id})
+                                  </span>
+                                </>
+                              ) : (
+                                perm.principal_id
+                              )}
                             </span>
                           </span>
                           <RoleBadge role={perm.role as MapRole} />
