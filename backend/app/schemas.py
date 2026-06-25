@@ -9,6 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class MapCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
+    # 생성 시 초기 공개 범위 — 생성자=owner라 즉시 반영(승인 워크플로 불필요)
+    visibility: Literal["private", "public"] = "private"
+
+
+class MapCopy(BaseModel):
+    # 새 맵 이름 — 비우면 "<원본명> (Copy)" (F12 승인본 복사)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class MapUpdate(BaseModel):
@@ -189,6 +196,8 @@ class MapOut(BaseModel):
     visibility: str = "private"
     # 최신 버전(최대 id)의 워크플로 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
     latest_version_status: str | None = None
+    # 소프트삭제 시각 — 휴지통(삭제 예정) 목록 표시용. 정상 맵은 None (DL)
+    deleted_at: datetime | None = None
 
 
 class MapDetailOut(MapOut):
@@ -331,6 +340,8 @@ class MeOut(BaseModel):
     name: str
     role: str
     department: str
+    # 부서 소속 판정용 org_path(루트→리프, "A/B/C") — 프론트 멤버 하이라이트(HM-2)
+    org_path: str = ""
     # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
     is_sysadmin: bool
 
@@ -388,6 +399,12 @@ class DirectoryUserOut(BaseModel):
     department: str
 
 
+class EligibleApproverOut(DirectoryUserOut):
+    """승인자 후보 — 디렉터리 기본 + 소속 경로(승인자 카드 표시용, ST)."""
+
+    org_path: str = ""  # 루트→리프 조직 경로(센터/부서/팀/그룹/파트)
+
+
 class DirectoryDeptOut(BaseModel):
     """부서 principal 후보 — principalId = org_path 문자열 / dept principal; id = org_path string."""
 
@@ -398,6 +415,13 @@ class DirectoryDeptOut(BaseModel):
 class DirectoryOut(BaseModel):
     users: list[DirectoryUserOut]
     departments: list[DirectoryDeptOut]
+
+
+class EligibleAssigneesOut(BaseModel):
+    """노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 직원들의 부서 (F5)."""
+
+    users: list[DirectoryUserOut]
+    departments: list[str]
 
 
 AI_NODE_TYPES = {"start", "process", "decision", "end"}

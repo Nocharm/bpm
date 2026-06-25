@@ -1,7 +1,6 @@
 """Version management — create (optionally cloning), rename, delete, checkout (docs/spec.md §3.4, §7)."""
 
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
@@ -9,10 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import workflow
+from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
+from app.permissions.access import get_eligible_users
 from app.permissions.deps import require_version_map_role
 from app.models import (
     Edge,
@@ -27,6 +28,8 @@ from app.models import (
 from app.schemas import (
     CheckoutIn,
     CheckoutOut,
+    DirectoryUserOut,
+    EligibleAssigneesOut,
     RejectIn,
     VersionCreate,
     VersionOut,
@@ -39,10 +42,13 @@ router = APIRouter(
 )
 
 
-async def _clone_graph(
+async def clone_graph(
     session: AsyncSession, source: MapVersion, target_version_id: int
 ) -> None:
-    """source 버전의 노드/엣지를 새 ID로 깊은 복사. 엣지/그룹 참조를 재매핑한다."""
+    """source 버전의 노드/엣지를 새 ID로 깊은 복사. 엣지/그룹 참조를 재매핑한다.
+
+    버전 클론(create_version)과 맵 복사(maps.copy_map, F12)에서 공용.
+    """
     id_map = {node.id: uuid.uuid4().hex for node in source.nodes}
 
     cloned: dict[str, Node] = {}
@@ -128,6 +134,18 @@ async def create_version(
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
 
+    # 맵당 draft 1개 제한 — 진행중인 수정본(draft)이 있으면 새 버전 생성 차단 (request #11)
+    existing_draft = await session.scalar(
+        select(func.count())
+        .select_from(MapVersion)
+        .where(MapVersion.map_id == map_id, MapVersion.status == workflow.DRAFT)
+    )
+    if existing_draft:
+        raise HTTPException(
+            status_code=409,
+            detail="map already has a draft version — submit or delete it before creating a new one",
+        )
+
     new_version = MapVersion(map_id=map_id, label=payload.label)
     session.add(new_version)
     await session.flush()
@@ -146,12 +164,37 @@ async def create_version(
             raise HTTPException(
                 status_code=404, detail="source version not found in this map"
             )
-        await _clone_graph(session, source, new_version.id)
+        await clone_graph(session, source, new_version.id)
 
     record_version_event(session, new_version.id, "created", user)
     await session.commit()
     await session.refresh(new_version)
     return new_version
+
+
+@router.get(
+    "/versions/{version_id}/eligible-assignees",
+    response_model=EligibleAssigneesOut,
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
+async def list_eligible_assignees(
+    version_id: int, session: AsyncSession = Depends(get_session)
+) -> EligibleAssigneesOut:
+    """노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원만 (F5, 자유입력 폐기).
+
+    공개 맵은 전원 열람이라 모든 직원이 후보. 비공개는 effective_role>=viewer 인 직원만.
+    effective_role 순수 함수를 직원별로 재사용(앱 권한 모델과 동일) — 데이터는 1회씩만 로드.
+    """
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    eligible = await get_eligible_users(session, version.map_id)
+    users = [
+        DirectoryUserOut(id=e.login_id, name=e.name or e.login_id, department=e.department or "")
+        for e in eligible
+    ]
+    departments = sorted({e.department for e in eligible if e.department})
+    return EligibleAssigneesOut(users=users, departments=departments)
 
 
 @router.patch(
@@ -193,7 +236,7 @@ async def acquire_checkout(
             status_code=409, detail=f"version is {version.status} — not editable"
         )
 
-    now = datetime.now(timezone.utc)
+    now = now_kst()
     if is_locked_by_other(version, user, now) and not payload.force:
         return CheckoutOut(
             checked_out_by=version.checked_out_by,
@@ -238,7 +281,7 @@ async def delete_version(
         )
 
     # 다른 사용자가 편집 중인 버전은 삭제 불가 (spec §7 Phase C)
-    if is_locked_by_other(version, user, datetime.now(timezone.utc)):
+    if is_locked_by_other(version, user, now_kst()):
         raise HTTPException(
             status_code=423,
             detail=f"version checked out by {version.checked_out_by}",
@@ -320,7 +363,7 @@ async def submit_version(
         raise HTTPException(
             status_code=409, detail=f"cannot submit from status {version.status}"
         )
-    now = datetime.now(timezone.utc)
+    now = now_kst()
     if not (is_checkout_active(version, now) and version.checked_out_by == user):
         raise HTTPException(status_code=403, detail="only the checkout holder can submit")
 
@@ -504,7 +547,7 @@ async def withdraw_version(
 
     version.status = workflow.DRAFT
     version.checked_out_by = user
-    version.checked_out_at = datetime.now(timezone.utc)
+    version.checked_out_at = now_kst()
     await session.commit()
     await session.refresh(version)
     return version

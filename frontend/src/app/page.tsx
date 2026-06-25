@@ -6,13 +6,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 
-import { deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery } from "@/lib/search";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
+import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
+import { PromptDialog } from "@/components/prompt-dialog";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 export default function MapListPage() {
@@ -25,6 +27,12 @@ export default function MapListPage() {
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapQuery, setMapQuery] = useState("");
+  // 가시성 필터 탭 — ALL/Public/Private
+  const [visFilter, setVisFilter] = useState<"all" | "public" | "private">("all");
+  // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
+  const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
 
   const showToast = useCallback((message: string) => {
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
@@ -66,11 +74,40 @@ export default function MapListPage() {
       try {
         await deleteMap(mapId);
         await refresh();
+        showToast(t("home.deletedToast")); // 휴지통 이동 + 복구 안내 (DL)
       } catch (err) {
         setError(err instanceof Error ? err.message : t("err.deleteMap"));
       }
     },
-    [refresh, t],
+    [refresh, showToast, t],
+  );
+
+  // 복사 버튼(맵 상세) → 이름 입력 모달 오픈
+  const handleCopyOpen = useCallback((mapId: number, name: string) => {
+    setCopyError(null);
+    setCopyTarget({ id: mapId, name });
+  }, []);
+
+  // 복사 모달 제출 — 중복 이름이면 모달 유지하고 error 표시, 성공하면 목록 갱신 + 새 카드 강조.
+  const handleCopySubmit = useCallback(
+    async (name: string) => {
+      if (copyTarget === null) {
+        return;
+      }
+      try {
+        const created = await copyMap(copyTarget.id, name);
+        setCopyTarget(null);
+        setCopyError(null);
+        await refresh();
+        setSelectedId(created.id);
+        setHighlightId(created.id);
+        showToast(t("home.copyCreated"));
+        window.setTimeout(() => setHighlightId(null), 2500); // 쉬머 후 해제
+      } catch (err) {
+        setCopyError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [copyTarget, refresh, showToast, t],
   );
 
   // 가시성은 서버가 이미 적용(GET /maps는 접근 가능한 맵만 반환, my_role 동봉) — 클라 재계산 폐기 /
@@ -80,14 +117,20 @@ export default function MapListPage() {
     [maps],
   );
 
+  // 가시성 필터 탭 적용 / apply visibility filter tab.
+  const filteredMaps = useMemo(
+    () => (visFilter === "all" ? visibleMaps : visibleMaps.filter((m) => m.visibility === visFilter)),
+    [visibleMaps, visFilter],
+  );
+
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
   const mapHits = useMemo(
     () =>
-      filterByQuery(visibleMaps, mapQuery, (m) => [
+      filterByQuery(filteredMaps, mapQuery, (m) => [
         { field: "name", text: m.name },
         { field: "description", text: m.description ?? "" },
       ]),
-    [visibleMaps, mapQuery],
+    [filteredMaps, mapQuery],
   );
 
   // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
@@ -100,20 +143,9 @@ export default function MapListPage() {
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
-      {/* 헤더 — 제목 좌 · 검색 중앙 · New map 우상단 / Title left, search center, New map top-right */}
+      {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
-          <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <input
-            type="text"
-            data-id="home-map-search"
-            className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-            placeholder={t("home.searchPlaceholder")}
-            value={mapQuery}
-            onChange={(e) => setMapQuery(e.target.value)}
-          />
-        </div>
         <button
           className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
           onClick={() => setDialogOpen(true)}
@@ -130,17 +162,59 @@ export default function MapListPage() {
       {/* 마스터-디테일 — 리스트·상세 같은 폭(flex-1+동일 max-w), min-w로 안 깨지게, 전체 max-w로 중앙 /
           List + detail share equal width (flex-1, same max-w), min-w guards wrapping, centered by max-w. */}
       <div className="mx-auto flex min-h-0 w-full max-w-[72rem] flex-1 gap-4">
-        {mapHits.length === 0 ? (
-          <p className="min-w-[18rem] max-w-[34rem] flex-1 rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
-            {t("home.empty")}
-          </p>
+        {visibleMaps.length === 0 ? (
+          /* 맵이 하나도 없음 — 풀폭 환영 화면(상세 자리까지 차지) */
+          <WelcomePlaceholder onCreate={() => setDialogOpen(true)} />
         ) : (
-          <ul className="flex min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2 overflow-y-auto pr-1">
+          <>
+            {/* 좌측 리스트 컬럼 — 상단에 검색·필터탭(같은 폭), 아래 리스트 (#5) */}
+            <div className="flex min-h-0 min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2">
+              <div className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
+                <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                <input
+                  type="text"
+                  data-id="home-map-search"
+                  className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
+                  placeholder={t("home.searchPlaceholder")}
+                  value={mapQuery}
+                  onChange={(e) => setMapQuery(e.target.value)}
+                />
+              </div>
+              <div
+                data-id="home-visibility-filter"
+                className="flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+              >
+                {(["all", "public", "private"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={visFilter === f}
+                    className={`flex-1 rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                      visFilter === f
+                        ? "bg-accent-tint text-accent"
+                        : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                    }`}
+                    onClick={() => setVisFilter(f)}
+                  >
+                    {f === "all"
+                      ? t("home.filterAll")
+                      : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+                  </button>
+                ))}
+              </div>
+              {mapHits.length === 0 ? (
+                /* 필터/검색 결과 없음 */
+                <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+                  {t("home.empty")}
+                </div>
+              ) : (
+                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
             {mapHits.map(({ item: processMap, matches }) => (
               <li key={processMap.id} className="flex flex-col">
                 <MapCard
                   map={processMap}
                   selected={effectiveSelected === processMap.id}
+                  highlighted={highlightId === processMap.id}
                   onSelect={setSelectedId}
                   nameRanges={matches.find((m) => m.field === "name")?.ranges ?? []}
                 />
@@ -157,6 +231,7 @@ export default function MapListPage() {
                         <MapDetailCard
                           mapId={processMap.id}
                           onDelete={(id) => void handleDelete(id)}
+                          onCopy={handleCopyOpen}
                         />
                       </div>
                     )}
@@ -164,21 +239,25 @@ export default function MapListPage() {
                 </div>
               </li>
             ))}
-          </ul>
-        )}
+                </ul>
+              )}
+            </div>
 
-        {effectiveSelected !== null && (
-          // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
-          <aside
-            data-id="map-detail-aside"
-            className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
-          >
-            <MapDetailCard
-              key={effectiveSelected}
-              mapId={effectiveSelected}
-              onDelete={(id) => void handleDelete(id)}
-            />
-          </aside>
+            {effectiveSelected !== null && (
+              // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
+              <aside
+                data-id="map-detail-aside"
+                className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
+              >
+                <MapDetailCard
+                  key={effectiveSelected}
+                  mapId={effectiveSelected}
+                  onDelete={(id) => void handleDelete(id)}
+                  onCopy={handleCopyOpen}
+                />
+              </aside>
+            )}
+          </>
         )}
       </div>
 
@@ -188,6 +267,22 @@ export default function MapListPage() {
           onCreated={() => {
             void refresh();
             showToast(t("perm.createDialog.toastSuccess"));
+          }}
+        />
+      )}
+
+      {copyTarget && (
+        <PromptDialog
+          title={t("home.copyTitle")}
+          label={t("home.copyNameLabel")}
+          defaultValue={`${copyTarget.name} (Copy)`}
+          confirmLabel={t("home.copyFromApproved")}
+          cancelLabel={t("common.cancel")}
+          error={copyError}
+          onConfirm={(name) => void handleCopySubmit(name)}
+          onClose={() => {
+            setCopyTarget(null);
+            setCopyError(null);
           }}
         />
       )}

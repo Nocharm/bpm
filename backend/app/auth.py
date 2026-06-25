@@ -8,10 +8,8 @@ from functools import lru_cache
 
 import jwt
 from fastapi import Depends, Header, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
-from app.models import Employee
+from app.permissions.logic import is_sysadmin
 from app.settings import settings
 
 
@@ -53,19 +51,8 @@ def get_current_user(
     return username
 
 
-async def get_current_employee(
-    login_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Employee:
-    """현재 사용자 Employee. 행이 없으면 임시 Employee(role=user, 미영속)."""
-    emp = await session.get(Employee, login_id)
-    if emp is None:
-        return Employee(login_id=login_id, name=login_id, source="ad", role="user", department="")
-    return emp
-
-
-async def require_admin(emp: Employee = Depends(get_current_employee)) -> Employee:
-    """role=admin 아니면 403."""
-    if emp.role != "admin":
-        raise HTTPException(status_code=403, detail="admin only")
-    return emp
+async def require_sysadmin(login_id: str = Depends(get_current_user)) -> str:
+    """시스템 관리자(sysadmin)만 — 기존 admin 권한을 흡수 (F6, 2026-06-24). 아니면 403."""
+    if not is_sysadmin(login_id):
+        raise HTTPException(status_code=403, detail="system admin only")
+    return login_id

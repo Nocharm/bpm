@@ -6,9 +6,22 @@
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Building2, User, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  Boxes,
+  Building2,
+  Copy,
+  Hand,
+  Landmark,
+  Settings,
+  Trash2,
+  User,
+  Users,
+  UsersRound,
+} from "lucide-react";
 
 import {
+  getDirectory,
   getMap,
   listGroups,
   listMapPermissions,
@@ -16,7 +29,7 @@ import {
   type MapPermission,
 } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
@@ -31,30 +44,78 @@ const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "group", labelKey: "home.memberGroup" },
 ];
 
-// principal_type → 아이콘 / principal icon.
-function PrincipalIcon({ type }: { type: string }) {
-  if (type === "department") return <Building2 size={12} strokeWidth={1.5} />;
-  if (type === "group") return <Users size={12} strokeWidth={1.5} />;
-  return <User size={12} strokeWidth={1.5} />;
+// 부서 org_path("A/B/C")의 말단 세그먼트만 / leaf segment of a dept org_path (HM-3).
+function deptLeaf(orgPath: string): string {
+  const parts = orgPath.split("/");
+  return parts[parts.length - 1] || orgPath;
+}
+
+// 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
+function deptLevelRank(leaf: string): number {
+  const s = leaf.toLowerCase();
+  if (s.includes("센터") || s.includes("center")) return 0;
+  if (s.includes("팀") || s.includes("team")) return 2;
+  if (s.includes("그룹") || s.includes("group")) return 3;
+  if (s.includes("파트") || s.includes("part")) return 4;
+  return 1; // 담당(Department) / 그 외 기본
+}
+
+// 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
+const LEVEL_ICONS = [Landmark, Building2, Users, UsersRound, Boxes];
+
+// 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
+function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
+  if (perm.principal_type === "user") {
+    if (isMe) {
+      // 본인 — 손든 사람 아이콘 + 작은 ME, 악센트 선색으로 강조(아이콘과 동급 크기)
+      return (
+        <span
+          data-id="member-me-badge"
+          title="me"
+          className="inline-flex shrink-0 items-center gap-px text-accent"
+        >
+          <Hand size={13} strokeWidth={2} />
+          <span className="text-[7px] font-bold leading-none">ME</span>
+        </span>
+      );
+    }
+    return <User size={12} strokeWidth={1.5} />;
+  }
+  if (perm.principal_type === "group") return <UsersRound size={12} strokeWidth={1.5} />;
+  const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(perm.principal_id))] ?? Building2;
+  return <Icon size={12} strokeWidth={1.5} />;
 }
 
 interface MapDetailCardProps {
   mapId: number;
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
   showFooter?: boolean;
+  // 헤더 Open 버튼 숨김 — 에디터에선 이미 그 맵을 보고 있어 무의미 (#6).
+  hideOpen?: boolean;
   onDelete?: (mapId: number) => void;
+  // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
+  onCopy?: (mapId: number, name: string) => void;
 }
 
-export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailCardProps) {
+export function MapDetailCard({
+  mapId,
+  showFooter = true,
+  hideOpen = false,
+  onDelete,
+  onCopy,
+}: MapDetailCardProps) {
   const { t } = useI18n();
-  const loginId =
-    useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null)?.loginId ?? null;
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const loginId = me?.loginId ?? null;
+  const orgPath = me?.orgPath ?? "";
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 허용 인원 — my_role이 editor+ 일 때만 조회(서버 게이트와 동일) / members, editor+ only.
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   // 내가 속한 그룹 id(문자열) — 멤버 하이라이트용 / my group ids for the "mine" highlight.
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
+  // loginId → 표시명 — 멤버(유저) 행을 "이름(아이디)"로 보여주기 위함 (#5)
+  const [nameById, setNameById] = useState<Map<string, string>>(new Map());
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -66,9 +127,14 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
         setDetail(d);
         if (d.my_role === "editor" || d.my_role === "owner") {
           try {
-            const [perms, groups] = await Promise.all([listMapPermissions(mapId), listGroups()]);
+            const [perms, groups, dir] = await Promise.all([
+              listMapPermissions(mapId),
+              listGroups(),
+              getDirectory(),
+            ]);
             if (!active) return;
             setMembers(perms);
+            setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
             if (loginId) {
               setMyGroupIds(
                 new Set(
@@ -102,21 +168,28 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
 
   const isOwner = detail.my_role === "owner";
 
-  // 나의 소속(직접 user 그랜트 / 내가 속한 그룹) 여부 — 하이라이트 / is this grant "mine"?
+  // 나의 소속(직접 user / 내 그룹 / 내 부서) 여부 — 하이라이트 / is this grant "mine"?
+  // 부서: org_path 정확일치 또는 prefix("…/") 경계 (belongs_to_department 규약, HM-2).
   const isMine = (perm: MapPermission): boolean =>
     (perm.principal_type === "user" && perm.principal_id === loginId) ||
-    (perm.principal_type === "group" && myGroupIds.has(perm.principal_id));
+    (perm.principal_type === "group" && myGroupIds.has(perm.principal_id)) ||
+    (perm.principal_type === "department" &&
+      orgPath !== "" &&
+      (orgPath === perm.principal_id || orgPath.startsWith(`${perm.principal_id}/`)));
 
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
-        <Link
-          href={`/maps/${detail.id}`}
-          className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
-        >
-          {t("home.open")}
-        </Link>
+        {!hideOpen && (
+          <Link
+            href={`/maps/${detail.id}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
+          >
+            <ArrowUpRight size={14} strokeWidth={1.5} />
+            {t("home.open")}
+          </Link>
+        )}
       </div>
 
       <div
@@ -163,8 +236,17 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
             ) : (
               <div className="flex flex-col gap-3">
                 {MEMBER_GROUPS.map((g) => {
-                  const rows = members.filter((m) => m.principal_type === g.type);
-                  if (rows.length === 0) return null;
+                  const unsorted = members.filter((m) => m.principal_type === g.type);
+                  if (unsorted.length === 0) return null;
+                  // 부서는 레벨 순(센터>담당>팀>그룹>파트)으로 정렬 (HM-3)
+                  const rows =
+                    g.type === "department"
+                      ? [...unsorted].sort(
+                          (a, b) =>
+                            deptLevelRank(deptLeaf(a.principal_id)) -
+                            deptLevelRank(deptLeaf(b.principal_id)),
+                        )
+                      : unsorted;
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
@@ -179,8 +261,26 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
                           }`}
                         >
                           <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
-                            <PrincipalIcon type={perm.principal_type} />
-                            <span className="truncate">{perm.principal_id}</span>
+                            <MemberIcon
+                              perm={perm}
+                              isMe={perm.principal_type === "user" && perm.principal_id === loginId}
+                            />
+                            {/* 부서=말단만(HM-3) · 유저=이름(아이디 회색), 길면 말줄임 (#5) */}
+                            <span className="min-w-0 truncate">
+                              {perm.principal_type === "department" ? (
+                                deptLeaf(perm.principal_id)
+                              ) : perm.principal_type === "user" ? (
+                                <>
+                                  {nameById.get(perm.principal_id) ?? perm.principal_id}
+                                  <span className="text-ink-tertiary">
+                                    {" "}
+                                    ({perm.principal_id})
+                                  </span>
+                                </>
+                              ) : (
+                                perm.principal_id
+                              )}
+                            </span>
                           </span>
                           <RoleBadge role={perm.role as MapRole} />
                         </div>
@@ -201,6 +301,12 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
     return <div className="flex flex-col gap-3">{body}</div>;
   }
 
+  // 승인본(approved/published)이 있어야 복사 가능 — 없으면 버튼 숨김(백엔드 409 회피) /
+  // Copy needs an approved/published version; hide otherwise (avoids backend 409).
+  const hasApprovedVersion = detail.versions.some(
+    (v) => v.status === "approved" || v.status === "published",
+  );
+
   // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -209,29 +315,38 @@ export function MapDetailCard({ mapId, showFooter = true, onDelete }: MapDetailC
         <div className="flex items-center gap-2">
           <Link
             href={`/maps/${detail.id}/settings`}
-            className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
           >
+            <Settings size={14} strokeWidth={1.5} />
             {t("perm.settingsTitle")}
           </Link>
+          {hasApprovedVersion && onCopy && (
+            <button
+              type="button"
+              data-id="map-detail-copy"
+              className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+              onClick={() => onCopy(detail.id, detail.name)}
+            >
+              <Copy size={14} strokeWidth={1.5} />
+              {t("home.copyFromApproved")}
+            </button>
+          )}
         </div>
         {isOwner && onDelete && (
           <button
             type="button"
             data-id="map-detail-delete"
-            className="rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"
+            className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-caption text-error hover:bg-surface"
             onClick={() => setConfirmDelete(true)}
           >
+            <Trash2 size={14} strokeWidth={1.5} />
             {t("home.delete")}
           </button>
         )}
       </div>
       {confirmDelete && onDelete && (
-        <ConfirmDialog
-          title={t("home.confirmDeleteTitle")}
-          message={t("home.confirmDeleteMessage")}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
-          danger
+        <DeleteMapDialog
+          mapName={detail.name}
           onConfirm={() => {
             setConfirmDelete(false);
             onDelete(detail.id);

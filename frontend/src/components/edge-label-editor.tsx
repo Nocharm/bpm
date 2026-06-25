@@ -9,20 +9,30 @@ interface EdgeLabelEditorProps {
   left: number;
   top: number;
   initial: string;
+  placeholder?: string;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }
 
-export function EdgeLabelEditor({ left, top, initial, onCommit, onCancel }: EdgeLabelEditorProps) {
+export function EdgeLabelEditor({
+  left,
+  top,
+  initial,
+  placeholder,
+  onCommit,
+  onCancel,
+}: EdgeLabelEditorProps) {
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
   return (
     <input
       autoFocus
       defaultValue={initial}
-      // nodrag — 입력 중 React Flow가 패닝/노드 드래그하지 않게
-      className="nodrag absolute z-[1120] -translate-x-1/2 -translate-y-1/2 rounded-xs border border-accent bg-surface px-1 py-0.5 text-center text-caption text-ink shadow-md"
-      style={{ left, top, minWidth: 80 }}
+      placeholder={placeholder}
+      // nodrag — 입력 중 React Flow가 패닝/노드 드래그하지 않게.
+      // 빈 라벨도 입력 모드임이 또렷하도록: 굵은 accent ring + accent 캐럿 + placeholder (#1)
+      className="nodrag absolute z-[1120] -translate-x-1/2 -translate-y-1/2 rounded-sm border border-accent bg-surface px-2 py-1 text-center text-caption text-ink caret-accent shadow-lg outline-none ring-2 ring-accent/40 placeholder:text-ink-tertiary"
+      style={{ left, top, minWidth: 110 }}
       onFocus={(event) => event.currentTarget.select()}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}

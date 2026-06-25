@@ -454,10 +454,78 @@ export function getOutgoingEdges(edges: Edge[], nodeId: string): Edge[] {
   return edges.filter((edge) => edge.source === nodeId);
 }
 
+/** source→target 추가 시 A↔B 2노드 사이클이 되는지 — 이미 target→source 엣지가 있으면 true. */
+export function hasReciprocalEdge(edges: Edge[], source: string, target: string): boolean {
+  return edges.some((edge) => edge.source === target && edge.target === source);
+}
+
+/** source에서 나가는 엣지를 모두 제거 — 출력 1개 고정(자동 스왑)용. decision 제외는 호출부 책임. */
+export function removeOutgoingEdges(edges: Edge[], sourceId: string): Edge[] {
+  return edges.filter((edge) => edge.source !== sourceId);
+}
+
+/** 흐름상 다음 노드 — nodeId의 첫 출력 엣지 target (F14 스테퍼). 없으면 null. */
+export function getNextNodeAlongFlow(edges: Edge[], nodeId: string): string | null {
+  return getOutgoingEdges(edges, nodeId)[0]?.target ?? null;
+}
+
+/** 흐름상 이전 노드 — nodeId의 첫 입력 엣지 source (F14 스테퍼). 없으면 null. */
+export function getPrevNodeAlongFlow(edges: Edge[], nodeId: string): string | null {
+  return getIncomingEdges(edges, nodeId)[0]?.source ?? null;
+}
+
+/** startId에서 첫 출력 엣지를 hops번 따라간 전방 경로의 엣지 id들 (F14). 끝/사이클에서 중단. */
+export function getFlowPathForward(edges: Edge[], startId: string, hops: number): string[] {
+  // BFS — 분기가 있으면 모든 분기 엣지를 hops 레벨까지 일괄 수집 (F14 분기 일괄 하이라이트).
+  // 직선 흐름이면 기존과 동일한 단일 경로/순서.
+  const ids: string[] = [];
+  const seen = new Set<string>([startId]);
+  let frontier = [startId];
+  for (let i = 0; i < hops; i++) {
+    const nextFrontier: string[] = [];
+    for (const cur of frontier) {
+      for (const edge of getOutgoingEdges(edges, cur)) {
+        if (seen.has(edge.target)) continue; // 사이클/이미 방문한 합류 노드 차단
+        ids.push(edge.id);
+        seen.add(edge.target);
+        nextFrontier.push(edge.target);
+      }
+    }
+    if (nextFrontier.length === 0) break;
+    frontier = nextFrontier;
+  }
+  return ids;
+}
+
+/** startId로 거슬러 올라간 후방 경로의 엣지 id들 (F14). BFS로 분기(합류)도 일괄. 시작/사이클에서 중단. */
+export function getFlowPathBackward(edges: Edge[], startId: string, hops: number): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>([startId]);
+  let frontier = [startId];
+  for (let i = 0; i < hops; i++) {
+    const nextFrontier: string[] = [];
+    for (const cur of frontier) {
+      for (const edge of getIncomingEdges(edges, cur)) {
+        if (seen.has(edge.source)) continue; // 사이클/이미 방문 차단
+        ids.push(edge.id);
+        seen.add(edge.source);
+        nextFrontier.push(edge.source);
+      }
+    }
+    if (nextFrontier.length === 0) break;
+    frontier = nextFrontier;
+  }
+  return ids;
+}
+
 // 자기루프·중복 없이 엣지 추가. 기본 핸들 변을 명시(source=right/target=left) —
 // 미지정 시 React Flow가 첫 렌더 핸들(left)에 붙어, toAppEdges·buildGraph의 right/left 폴백과 어긋난다.
 function withEdge(edges: Edge[], source: string, target: string): Edge[] {
-  if (source === target || edges.some((edge) => edge.source === source && edge.target === target)) {
+  if (
+    source === target ||
+    edges.some((edge) => edge.source === source && edge.target === target) ||
+    hasReciprocalEdge(edges, source, target)
+  ) {
     return edges;
   }
   return [

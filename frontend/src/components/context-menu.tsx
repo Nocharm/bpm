@@ -192,8 +192,8 @@ function MenuList({
   );
 }
 
-// 색 스와치 행 — 기본 1줄(5개)만 노출하고 "더보기"로 전체 팔레트 펼침.
-const COLOR_COLLAPSED = 5;
+// 색 스와치 행 — 타입별 세트(≤6)를 한 번에 노출(접기/더보기 없음, #8).
+const COLOR_COLLAPSED = 6;
 function ColorRow({
   item,
   onClose,
@@ -235,72 +235,61 @@ function ColorRow({
   );
 }
 
-// 엣지 끝점 면 선택 — 작은 박스의 테두리(상/우/하/좌)를 클릭해 그 변을 선택. 선택 변은 악센트.
-// 메뉴 유지 — onClose 호출하지 않음(연속 조정). Start(=source)·End(=target) 두 박스를 가로로 둔다.
+// 엣지 끝점 면 선택 — 박스 테두리(상/우/하/좌)를 클릭해 그 변을 선택. 선택 변은 악센트.
+// 메뉴 유지 — onClose 호출하지 않음(연속 조정). 박스 사이 커넥터가 선택한 면을 반영(#3).
+const BOX_W = 64;
+const BOX_H = 28;
+const GAP = 52;
+const LABEL_H = 16;
+const PAD_W = BOX_W * 2 + GAP;
+const PAD_H = LABEL_H + BOX_H;
+
+// 히트박스 키움 — 변 strip 두께 8px(클릭 쉬움)
 const SIDE_BORDERS: { side: HandleSide; cls: string }[] = [
-  { side: "top", cls: "left-1.5 right-1.5 top-0 h-1" },
-  { side: "bottom", cls: "left-1.5 right-1.5 bottom-0 h-1" },
-  { side: "left", cls: "top-1.5 bottom-1.5 left-0 w-1" },
-  { side: "right", cls: "top-1.5 bottom-1.5 right-0 w-1" },
+  { side: "top", cls: "left-2 right-2 top-0 h-2" },
+  { side: "bottom", cls: "left-2 right-2 bottom-0 h-2" },
+  { side: "left", cls: "top-2 bottom-2 left-0 w-2" },
+  { side: "right", cls: "top-2 bottom-2 right-0 w-2" },
 ];
 
+// 선택한 면의 박스 경계 위 앵커 좌표(pad 좌표계) — 커넥터 끝점 계산용.
+function sideAnchor(side: HandleSide, x0: number): { x: number; y: number } {
+  const cx = x0 + BOX_W / 2;
+  const cy = LABEL_H + BOX_H / 2;
+  if (side === "top") return { x: cx, y: LABEL_H };
+  if (side === "bottom") return { x: cx, y: LABEL_H + BOX_H };
+  if (side === "left") return { x: x0, y: cy };
+  return { x: x0 + BOX_W, y: cy }; // right
+}
+
 function SideBox({
-  label,
   current,
   onPick,
   locked = false,
 }: {
-  label: string;
   current: HandleSide;
   onPick: (side: HandleSide) => void;
   locked?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-fine text-ink-tertiary">{label}</span>
-      <div
-        className={`relative h-11 w-11 rounded-sm border border-hairline bg-surface-alt ${
-          locked ? "opacity-60" : ""
-        }`}
-        title={locked ? "Subprocess: fixed side" : undefined}
-      >
-        {SIDE_BORDERS.map(({ side, cls }) => (
-          <button
-            key={side}
-            type="button"
-            aria-label={side}
-            disabled={locked}
-            // 메뉴 유지 — 바깥 클릭(mousedown 가드)·Esc로만 닫힘. 잠금 시 현재 면만 표시, 클릭 불가.
-            onClick={locked ? undefined : () => onPick(side)}
-            className={`absolute ${cls} rounded-full ${
-              current === side
-                ? "bg-accent"
-                : locked
-                  ? "bg-divider"
-                  : "bg-divider hover:bg-accent-tint"
-            } ${locked ? "cursor-default" : ""}`}
-          />
-        ))}
-      </div>
+    <div
+      className={`relative rounded-sm border border-hairline bg-surface-alt ${locked ? "opacity-60" : ""}`}
+      style={{ width: BOX_W, height: BOX_H }}
+      title={locked ? "Subprocess: fixed side" : undefined}
+    >
+      {SIDE_BORDERS.map(({ side, cls }) => (
+        <button
+          key={side}
+          type="button"
+          aria-label={side}
+          disabled={locked}
+          onClick={locked ? undefined : () => onPick(side)}
+          className={`absolute ${cls} rounded-sm ${
+            current === side ? "bg-accent" : locked ? "bg-divider" : "bg-divider hover:bg-accent-tint"
+          } ${locked ? "cursor-default" : ""}`}
+        />
+      ))}
     </div>
-  );
-}
-
-// 두 박스 사이의 엣지 모양 — 캔버스 엣지(점선 + 화살촉)를 축약해 source→target 방향을 보인다.
-function EdgeShape() {
-  return (
-    <svg width="40" height="12" viewBox="0 0 40 12" className="self-end mb-3 text-ink-tertiary" aria-hidden>
-      <line
-        x1="1"
-        y1="6"
-        x2="32"
-        y2="6"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeDasharray="4 3"
-      />
-      <path d="M32 2 L39 6 L32 10 Z" fill="currentColor" />
-    </svg>
   );
 }
 
@@ -318,21 +307,55 @@ function EdgeSidesPad({
     onPickTarget: (side: HandleSide) => void;
   };
 }) {
+  const srcX0 = 0;
+  const tgtX0 = BOX_W + GAP;
+  const from = sideAnchor(item.sourceSide, srcX0);
+  const to = sideAnchor(item.targetSide, tgtX0);
   return (
-    <div className="flex items-start justify-center gap-3 px-3 py-2">
-      <SideBox
-        label={item.sourceLabel}
-        current={item.sourceSide}
-        onPick={item.onPickSource}
-        locked={item.sourceLocked}
-      />
-      <EdgeShape />
-      <SideBox
-        label={item.targetLabel}
-        current={item.targetSide}
-        onPick={item.onPickTarget}
-        locked={item.targetLocked}
-      />
+    <div className="px-3 py-2">
+      <div className="relative mx-auto" style={{ width: PAD_W, height: PAD_H }}>
+        {/* 라벨(박스 위 중앙) */}
+        <span
+          className="absolute truncate text-center text-fine text-ink-tertiary"
+          style={{ left: srcX0, top: 0, width: BOX_W }}
+        >
+          {item.sourceLabel}
+        </span>
+        <span
+          className="absolute truncate text-center text-fine text-ink-tertiary"
+          style={{ left: tgtX0, top: 0, width: BOX_W }}
+        >
+          {item.targetLabel}
+        </span>
+        {/* 선택한 면을 잇는 커넥터(점선+화살촉) — 면 변경 시 함께 바뀜 (#3) */}
+        <svg
+          className="pointer-events-none absolute inset-0 text-ink-tertiary"
+          width={PAD_W}
+          height={PAD_H}
+          aria-hidden
+        >
+          <defs>
+            <marker id="edgeSidesArrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
+            </marker>
+          </defs>
+          <path
+            d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeDasharray="4 3"
+            fill="none"
+            markerEnd="url(#edgeSidesArrow)"
+          />
+        </svg>
+        {/* 박스(커넥터 위) */}
+        <div className="absolute" style={{ left: srcX0, top: LABEL_H }}>
+          <SideBox current={item.sourceSide} onPick={item.onPickSource} locked={item.sourceLocked} />
+        </div>
+        <div className="absolute" style={{ left: tgtX0, top: LABEL_H }}>
+          <SideBox current={item.targetSide} onPick={item.onPickTarget} locked={item.targetLocked} />
+        </div>
+      </div>
     </div>
   );
 }

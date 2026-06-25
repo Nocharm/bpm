@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { usePermissions } from "@/lib/mock/permissions";
 
 interface DangerZoneProps {
@@ -114,7 +115,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
       {showTransferModal && (
         <ModalBackdrop
           onClose={() => setShowTransferModal(false)}
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
         >
           <div className="w-80 rounded-md border border-hairline bg-surface p-4 shadow-lg">
             <p className="mb-2 text-caption-strong text-ink">
@@ -143,37 +144,12 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
         </ModalBackdrop>
       )}
 
-      {/* 맵 삭제 확인 모달 / Delete confirm modal */}
+      {/* 맵 삭제 확인 — 시각적 안내 모달 (DL) */}
       {showDeleteModal && (
-        <ModalBackdrop
+        <DeleteMapDialog
+          onConfirm={() => void handleDeleteConfirm()}
           onClose={() => setShowDeleteModal(false)}
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30"
-        >
-          <div className="w-80 rounded-md border border-hairline bg-surface p-4 shadow-lg">
-            <p className="mb-2 text-caption-strong text-ink">
-              {t("perm.deleteConfirmTitle")}
-            </p>
-            <p className="mb-4 text-caption text-ink-secondary">
-              {t("perm.deleteConfirmBody")}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                onClick={() => setShowDeleteModal(false)}
-              >
-                {t("perm.deleteCancel")}
-              </button>
-              <button
-                type="button"
-                className="rounded-sm bg-error px-3 py-1.5 text-caption text-on-accent hover:opacity-90"
-                onClick={() => void handleDeleteConfirm()}
-              >
-                {t("perm.deleteConfirm")}
-              </button>
-            </div>
-          </div>
-        </ModalBackdrop>
+        />
       )}
 
       <div className="flex flex-col gap-6">

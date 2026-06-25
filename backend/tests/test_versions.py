@@ -1,14 +1,50 @@
 """Version create/clone/rename/delete tests."""
 
+import asyncio
+
 from fastapi.testclient import TestClient
+
+from app.db import SessionLocal
+from app.models import MapVersion
+
+
+_map_seq = 0
 
 
 def _create_map(client: TestClient) -> dict:
-    return client.post("/api/maps", json={"name": "version map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크라 호출마다 고유 이름 사용
+    global _map_seq
+    _map_seq += 1
+    return client.post("/api/maps", json={"name": f"version map {_map_seq}"}).json()
+
+
+def _approve_version(version_id: int) -> None:
+    """버전 status 를 직접 approved 로 설정 — 'draft 1개 제한' 가드를 위해 소스 draft 해소용."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            version = await session.get(MapVersion, version_id)
+            version.status = "approved"
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def test_create_version_blocked_when_draft_exists(client: TestClient) -> None:
+    created = _create_map(client)  # 초기 As-Is 는 draft
+    # 초기 draft 가 있으므로 새 버전 생성은 409 (맵당 draft 1개 제한, request #11)
+    blocked = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})
+    assert blocked.status_code == 409
+
+    # As-Is 를 승인해 draft 를 해소하면 새 버전 생성이 허용된다
+    _approve_version(created["versions"][0]["id"])
+    allowed = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})
+    assert allowed.status_code == 201
 
 
 def test_create_plain_version(client: TestClient) -> None:
     created = _create_map(client)
+    _approve_version(created["versions"][0]["id"])  # 초기 draft 해소 → 새 버전 허용
 
     response = client.post(
         f"/api/maps/{created['id']}/versions", json={"label": "To-Be"}
@@ -34,6 +70,7 @@ def test_create_version_clones_graph(client: TestClient) -> None:
             "edges": [],
         },
     )
+    _approve_version(source_version)  # draft 해소 → 클론용 새 버전 허용
 
     clone = client.post(
         f"/api/maps/{created['id']}/versions",
@@ -63,6 +100,7 @@ def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
             "groups": [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}],
         },
     )
+    _approve_version(source_version)  # draft 해소 → 클론용 새 버전 허용
 
     clone = client.post(
         f"/api/maps/{created['id']}/versions",
@@ -87,12 +125,14 @@ def test_clone_records_source_lineage(client: TestClient) -> None:
         f"/api/versions/{source_version}/graph",
         json={"nodes": [{"id": "orig", "title": "원본", "node_type": "start"}], "edges": []},
     )
+    _approve_version(source_version)  # 소스 draft 해소 → clone1 생성 허용
 
     clone1 = client.post(
         f"/api/maps/{created['id']}/versions",
         json={"label": "To-Be", "source_version_id": source_version},
     ).json()
     clone1_nodes = client.get(f"/api/versions/{clone1['id']}/graph/all").json()["nodes"]
+    _approve_version(clone1["id"])  # clone1 draft 해소 → clone2 생성 허용
     clone2 = client.post(
         f"/api/maps/{created['id']}/versions",
         json={"label": "To-Be-2", "source_version_id": clone1["id"]},
@@ -112,6 +152,7 @@ def test_clone_leaves_source_untouched(client: TestClient) -> None:
         f"/api/versions/{source_version}/graph",
         json={"nodes": [{"id": "p", "title": "발주", "node_type": "start"}], "edges": []},
     )
+    _approve_version(source_version)  # draft 해소 → 클론용 새 버전 허용
 
     client.post(
         f"/api/maps/{created['id']}/versions",
@@ -134,6 +175,7 @@ def test_rename_version(client: TestClient) -> None:
 
 def test_delete_version(client: TestClient) -> None:
     created = _create_map(client)
+    _approve_version(created["versions"][0]["id"])  # 초기 draft 해소 → 추가 버전 생성 허용
     extra = client.post(
         f"/api/maps/{created['id']}/versions", json={"label": "To-Be"}
     ).json()
@@ -149,4 +191,35 @@ def test_cannot_delete_last_version(client: TestClient) -> None:
 
     response = client.delete(f"/api/versions/{only_version}")
 
+    assert response.status_code == 409
+
+
+def test_copy_map_from_approved(client: TestClient) -> None:
+    created = _create_map(client)
+    src_version = created["versions"][0]["id"]
+    client.post(f"/api/versions/{src_version}/checkout", json={})
+    client.put(
+        f"/api/versions/{src_version}/graph",
+        json={
+            "nodes": [{"id": "s", "node_type": "start"}, {"id": "p", "title": "발주"}],
+            "edges": [],
+        },
+    )
+    _approve_version(src_version)  # 승인본 — 복사 기준 (request #12)
+
+    copy = client.post(f"/api/maps/{created['id']}/copy", json={"name": "복사본"})
+    assert copy.status_code == 201
+    body = copy.json()
+    assert body["name"] == "복사본"
+    assert body["my_role"] == "owner"
+    # 새 맵의 초기 버전은 편집 가능한 draft, 승인본 그래프가 복제됨
+    new_version = body["versions"][0]
+    assert new_version["status"] == "draft"
+    cloned = client.get(f"/api/versions/{new_version['id']}/graph").json()
+    assert len(cloned["nodes"]) == 2
+
+
+def test_copy_map_without_approved_409(client: TestClient) -> None:
+    created = _create_map(client)  # 초기 As-Is 는 draft → 승인본 없음
+    response = client.post(f"/api/maps/{created['id']}/copy", json={})
     assert response.status_code == 409

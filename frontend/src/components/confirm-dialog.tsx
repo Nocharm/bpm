@@ -29,7 +29,7 @@ export function ConfirmDialog({
   return createPortal(
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20"
+      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
     >
       <div
         data-id="confirm-dialog"

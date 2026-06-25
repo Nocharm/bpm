@@ -1,13 +1,13 @@
 """AI 채팅 — 순서도 생성/편집 제안 + 사용법 안내 (design 2026-06-15)."""
 
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
+from app.clock import now as now_kst
 from app.ai_prompt import build_messages
 from app.auth import get_current_user
 from app.checkout import is_checkout_active
@@ -115,7 +115,7 @@ async def ai_chat(
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
 
-    now = datetime.now(timezone.utc)
+    now = now_kst()
     can_edit = (
         workflow.is_editable_status(version.status)
         and is_checkout_active(version, now)

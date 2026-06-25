@@ -57,3 +57,13 @@ def test_is_excluded_rules() -> None:
     assert is_excluded("Sales", "nodot", "Name") is True  # loginId에 '.' 없음
     assert is_excluded("Sales", "a.b", "Bad_Name") is True  # name에 '_' 포함
     assert is_excluded("Sales", "a.b", "Good Name") is False
+
+
+def test_is_excluded_added_org_l1_blocklist() -> None:
+    # 신규 제외 조직 — AD 동기화 대상에서 빠져야 한다 (request #15)
+    assert is_excluded("Application Users", "a.b", "Name") is True
+    assert is_excluded("HR", "a.b", "Name") is True
+    assert is_excluded("Service", "a.b", "Name") is True
+    assert is_excluded("External Users", "a.b", "Name") is True
+    # 기존 비제외 조직은 그대로 통과
+    assert is_excluded("Sales", "a.b", "Good Name") is False

@@ -10,8 +10,14 @@ from fastapi.testclient import TestClient
 from app.settings import settings
 
 
+_wf_seq = 0
+
+
 def _create_map_with_version(client: TestClient) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": "wf map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _wf_seq
+    _wf_seq += 1
+    created = client.post("/api/maps", json={"name": f"wf map {_wf_seq}"}).json()
     return created["id"], created["versions"][0]["id"]
 
 

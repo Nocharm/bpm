@@ -39,6 +39,7 @@ async function publishMe(): Promise<void> {
       loginId: me.username,
       role: me.role,
       department: me.department,
+      orgPath: me.org_path,
       isSysadmin: me.is_sysadmin,
     });
   } catch {

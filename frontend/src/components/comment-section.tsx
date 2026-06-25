@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 
 import type { CommentItem } from "@/lib/api";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
 interface CommentSectionProps {
@@ -46,7 +47,7 @@ export function CommentSection({
             }`}
           >
             <div className="text-caption text-ink-tertiary">
-              {comment.author} · {new Date(comment.created_at).toLocaleString()}
+              {comment.author} · {formatKst(comment.created_at)}
             </div>
             <p
               className={`whitespace-pre-wrap ${

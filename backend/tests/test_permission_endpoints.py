@@ -126,6 +126,15 @@ def effective_role_of(map_id: int, user: str) -> str | None:
     return _seed(_get)  # type: ignore[return-value]
 
 
+def first_version_id(map_id: int) -> int:
+    async def _get(session) -> int:
+        return await session.scalar(
+            select(MapVersion.id).where(MapVersion.map_id == map_id).order_by(MapVersion.id)
+        )
+
+    return _seed(_get)  # type: ignore[return-value]
+
+
 # ── A. Collaborators ──────────────────────────────────────────
 
 
@@ -151,6 +160,77 @@ def test_add_duplicate_grant_409(client: TestClient, enforce: None) -> None:
     assert r.status_code == 409
 
 
+def test_add_viewer_on_public_map_409(client: TestClient, enforce: None) -> None:
+    """퍼블릭 맵은 viewer 부여 불가 — editor만 (request #9)."""
+    map_id = seed_map(visibility="public", grants=[("user", "owner.u", "owner")])
+    act_as("owner.u")
+    blocked = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={"principal_type": "user", "principal_id": "bob", "role": "viewer"},
+    )
+    assert blocked.status_code == 409
+    # editor 부여는 허용
+    allowed = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={"principal_type": "user", "principal_id": "bob", "role": "editor"},
+    )
+    assert allowed.status_code == 201
+
+
+def test_change_to_viewer_on_public_map_409(client: TestClient, enforce: None) -> None:
+    """퍼블릭 맵에서 editor→viewer 변경 불가 (request #9)."""
+    map_id = seed_map(
+        visibility="public",
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("owner.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 409
+
+
+def test_eligible_assignees_private_filters(client: TestClient, enforce: None) -> None:
+    """비공개 맵: viewer+ 직원만 담당자 후보 (F5). 권한 없는 직원은 제외."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+    vid = first_version_id(map_id)
+    act_as("owner.u")
+    res = client.get(f"/api/versions/{vid}/eligible-assignees")
+    assert res.status_code == 200
+    ids = {u["id"] for u in res.json()["users"]}
+    assert "user.lee" in ids  # viewer 부여 → 후보
+    assert "user.park" not in ids  # 권한 없음 → 제외
+    assert "user.choi" not in ids  # 권한 없음 → 제외
+    assert isinstance(res.json()["departments"], list)
+
+
+def test_eligible_approvers_private_filters(client: TestClient, enforce: None) -> None:
+    """승인자 후보도 viewer+ 자격자만 (AP) — 담당자 후보와 동일 자격."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+    act_as("owner.u")
+    res = client.get(f"/api/maps/{map_id}/eligible-approvers")
+    assert res.status_code == 200
+    ids = {u["id"] for u in res.json()}
+    assert "user.lee" in ids
+    assert "user.park" not in ids
+
+
+def test_eligible_assignees_public_all(client: TestClient, enforce: None) -> None:
+    """공개 맵: 전원 열람 가능 → 모든 직원이 담당자 후보 (F5)."""
+    map_id = seed_map(visibility="public", grants=[("user", "owner.u", "owner")])
+    vid = first_version_id(map_id)
+    act_as("owner.u")
+    res = client.get(f"/api/versions/{vid}/eligible-assignees")
+    assert res.status_code == 200
+    ids = {u["id"] for u in res.json()["users"]}
+    assert {"user.lee", "user.park", "user.choi"} <= ids
+
+
 def test_change_role_upgrade_immediate(client: TestClient, enforce: None) -> None:
     map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "bob", "viewer")])
     gid = grant_id(map_id, "bob")
@@ -163,25 +243,60 @@ def test_change_role_upgrade_immediate(client: TestClient, enforce: None) -> Non
     assert grant_role(map_id, "bob") == "editor"
 
 
-def test_change_role_downgrade_deferred(client: TestClient, enforce: None) -> None:
-    """editor→viewer 는 pending approval_request 만 만들고 role 은 그대로."""
-    map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
+def test_change_role_downgrade_deferred_non_owner(client: TestClient, enforce: None) -> None:
+    """비-오너(editor) 행위자의 editor→viewer 는 pending approval_request 만 만들고 role 은 그대로."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")
     r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
     assert r.status_code == 200
     assert r.json()["pending"] is True
     assert grant_role(map_id, "ed") == "editor"  # 아직 적용 안 됨
 
 
-def test_remove_editor_deferred_grant_present(client: TestClient, enforce: None) -> None:
+def test_remove_editor_deferred_grant_present_non_owner(client: TestClient, enforce: None) -> None:
+    """비-오너(editor) 행위자의 editor 제거는 승인 지연 — 행 유지."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    r = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
+    assert r.status_code == 200
+    assert r.json()["pending"] is True
+    assert grant_role(map_id, "ed") == "editor"  # 아직 제거 안 됨
+
+
+def test_owner_downgrade_editor_immediate(client: TestClient, enforce: None) -> None:
+    """오너가 editor→viewer 다운그레이드 시 승인 없이 즉시 적용 (request #10)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
+    gid = grant_id(map_id, "ed")
+    act_as("owner.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200
+    assert r.json()["pending"] is False
+    assert grant_role(map_id, "ed") == "viewer"  # 즉시 적용
+
+
+def test_owner_remove_editor_immediate(client: TestClient, enforce: None) -> None:
+    """오너가 editor 제거 시 승인 없이 즉시 삭제 (request #10)."""
     map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
     gid = grant_id(map_id, "ed")
     act_as("owner.u")
     r = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
     assert r.status_code == 200
-    assert r.json()["pending"] is True
-    assert grant_role(map_id, "ed") == "editor"  # 아직 제거 안 됨
+    assert r.json()["pending"] is False
+    assert grant_role(map_id, "ed") is None  # 즉시 제거
 
 
 def test_remove_viewer_immediate(client: TestClient, enforce: None) -> None:
@@ -320,11 +435,15 @@ def test_approval_list_visible_to_approver_403_to_others(
 
 def test_decide_approve_downgrade_applies(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 다운그레이드 승인 지연
     # editor→viewer 지연 요청 생성
     pend = client.patch(
         f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
@@ -341,11 +460,15 @@ def test_decide_approve_downgrade_applies(client: TestClient, enforce: None) -> 
 
 def test_decide_approve_removal_applies(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 제거 승인 지연
     pend = client.delete(f"/api/maps/{map_id}/permissions/{gid}").json()
     req_id = pend["approval_request"]["id"]
     act_as("appr")
@@ -373,13 +496,35 @@ def test_decide_approve_visibility_flips(client: TestClient, enforce: None) -> N
     assert visibility == "public"  # flip 적용
 
 
+def test_visibility_public_removes_viewer_grants(client: TestClient, enforce: None) -> None:
+    """private→public 승인 적용 시 잔존 viewer 그랜트 제거 (PV)."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "vw", "viewer")],
+        approvers=["appr"],
+    )
+    act_as("owner.u")
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    act_as("appr")
+    client.post(f"/api/approval-requests/{req['id']}/decide", json={"decision": "approve"})
+    _, visibility = map_owner_and_visibility(map_id)
+    assert visibility == "public"
+    assert grant_role(map_id, "vw") is None  # viewer 그랜트 제거됨
+
+
 def test_decide_reject_leaves_unchanged(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 다운그레이드 승인 지연
     pend = client.patch(
         f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
     ).json()
@@ -393,11 +538,15 @@ def test_decide_reject_leaves_unchanged(client: TestClient, enforce: None) -> No
 
 def test_decide_non_approver_403(client: TestClient, enforce: None) -> None:
     map_id = seed_map(
-        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ],
         approvers=["appr"],
     )
     gid = grant_id(map_id, "ed")
-    act_as("owner.u")
+    act_as("actor.ed")  # 비-오너 행위자 → 다운그레이드 승인 지연
     pend = client.patch(
         f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
     ).json()

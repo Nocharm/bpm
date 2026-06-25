@@ -42,6 +42,8 @@ export interface MapSummary {
   visibility: "public" | "private";
   // 최신 버전(최대 id) 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
   latest_version_status: VersionStatus | null;
+  // 소프트삭제 시각 — 휴지통(삭제 예정) 목록에서만 채워짐 (DL)
+  deleted_at?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -153,11 +155,32 @@ export function listMaps(): Promise<MapSummary[]> {
   return request<MapSummary[]>("/maps");
 }
 
-export function createMap(name: string, description = ""): Promise<MapDetail> {
+export function createMap(
+  name: string,
+  description = "",
+  visibility: MapSummary["visibility"] = "private",
+): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, visibility }),
   });
+}
+
+// 승인본(approved/published) 기준 맵 복사 — 새 private 맵의 초기 draft에 그래프 복제 (F12)
+export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/copy`, {
+    method: "POST",
+    body: JSON.stringify(name ? { name } : {}),
+  });
+}
+
+// 노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 부서 (F5, 자유입력 폐기)
+export interface EligibleAssignees {
+  users: { id: string; name: string; department: string }[];
+  departments: string[];
+}
+export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
+  return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
 }
 
 export function updateMap(
@@ -219,6 +242,14 @@ export function renameVersion(
 
 export function deleteVersion(versionId: number): Promise<void> {
   return request<void>(`/versions/${versionId}`, { method: "DELETE" });
+}
+
+// 휴지통(삭제 예정) — 소프트삭제 맵 목록(오너 본인/sysadmin 전체) + 복구 (DL)
+export function listDeletedMaps(): Promise<MapSummary[]> {
+  return request<MapSummary[]>("/maps/deleted/list");
+}
+export function restoreMap(mapId: number): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/restore`, { method: "POST" });
 }
 
 export function deleteMap(mapId: number): Promise<void> {
@@ -317,6 +348,8 @@ export interface Me {
   name: string;
   role: "admin" | "user";
   department: string;
+  // 부서 소속 판정용 org_path(루트→리프) — 상세 멤버 하이라이트(HM-2)
+  org_path: string;
   // BPM 시스템 관리자 여부 — sysadmin-only UI 게이팅 단일 소스
   is_sysadmin: boolean;
 }
@@ -415,6 +448,11 @@ export function withdrawVersion(versionId: number): Promise<VersionSummary> {
 
 export function listApprovers(mapId: number): Promise<string[]> {
   return request<string[]>(`/maps/${mapId}/approvers`);
+}
+
+// 승인자 지정 후보 — 맵 조회권한(viewer+) 보유 직원만 (AP)
+export function listEligibleApprovers(mapId: number): Promise<DirectoryUser[]> {
+  return request<DirectoryUser[]>(`/maps/${mapId}/eligible-approvers`);
 }
 
 export function setApprovers(mapId: number, userIds: string[]): Promise<string[]> {
@@ -544,6 +582,7 @@ export interface DirectoryUser {
   id: string;        // login_id
   name: string;      // English display name
   department: string;
+  org_path?: string; // 루트→리프 조직 경로(승인자 카드 소속 표시, ST). 미채움 시 ""
 }
 
 export interface DirectoryDept {

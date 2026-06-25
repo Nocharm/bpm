@@ -71,20 +71,50 @@ export function PrincipalPicker({
 }: PrincipalPickerProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
 
   const all = buildOptions(users, departments, groups, userDepartments).filter(
     (o) => !excludeIds.has(o.principalId),
   );
 
+  // 검색 한정: 유저=이름+아이디 / 부서·그룹=부서명·그룹명(displayName)만.
+  // 유저를 소속 부서/그룹으로 매칭하지 않음 — "AI dev" 검색 시 그룹원들이 결과를 채워
+  // 정작 'AI dev' 그룹이 slice(8) 밖으로 밀려나던 문제 방지.
   const hits = query.trim()
-    ? filterByQuery(all, query, (o) => [
-        { field: "name", text: o.displayName },
-        { field: "dept", text: o.department ?? "" },
-      ])
+    ? filterByQuery(all, query, (o) =>
+        o.principalType === "user"
+          ? [
+              { field: "name", text: o.displayName },
+              { field: "id", text: o.principalId },
+            ]
+          : [{ field: "name", text: o.displayName }],
+      )
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
+  const visible = hits.slice(0, 8);
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (visible.length === 0) return;
+    if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
+      event.preventDefault();
+      setActive((a) => Math.min(a + 1, visible.length - 1));
+    } else if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
+      event.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const opt = visible[active]?.item;
+      if (opt) {
+        onSelect(opt);
+        setQuery("");
+      }
+    } else if (event.key === "Escape") {
+      setQuery("");
+    }
+  };
 
   return (
-    <div className="flex flex-col gap-1">
+    // relative — 결과 목록을 absolute로 띄워(플로팅) 주변 레이아웃을 밀지 않음 (#9 / SR-4)
+    <div className="relative flex flex-col">
       {/* 검색 입력 / Search input */}
       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
         <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -93,32 +123,47 @@ export function PrincipalPicker({
           className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
           placeholder={t("perm.addPickerPlaceholder")}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+          }}
+          onKeyDown={onKeyDown}
         />
       </div>
-      {/* 결과 목록 (최대 8개) / Results list (max 8) */}
+      {/* 결과 목록 (최대 8개) — absolute 플로팅 / floating results, max 8 */}
       {query.trim() && (
-        <div className="flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-md">
-          {hits.slice(0, 8).map(({ item: opt, matches }) => {
+        <div className="absolute left-0 right-0 top-full z-[1001] mt-1 flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg">
+          {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
+            const idRanges: MatchRange[] = matches.find((m) => m.field === "id")?.ranges ?? [];
             return (
               <button
                 key={`${opt.principalType}:${opt.principalId}`}
                 type="button"
-                className="flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                className={`flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt ${
+                  active === idx ? "bg-surface-alt" : ""
+                }`}
+                onMouseEnter={() => setActive(idx)}
                 onClick={() => {
                   onSelect(opt);
                   setQuery("");
                 }}
               >
                 <PrincipalIcon type={opt.principalType} />
-                <span>
+                <span className="min-w-0 truncate">
                   <Highlight text={opt.displayName} ranges={nameRanges} />
-                  {opt.department && (
+                  {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
+                  {opt.principalType === "user" && (
+                    <span className="ml-1.5 text-fine text-ink-tertiary">
+                      <Highlight text={opt.principalId} ranges={idRanges} />
+                      {opt.department ? ` · ${opt.department}` : ""}
+                    </span>
+                  )}
+                  {opt.principalType !== "user" && opt.department && (
                     <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
                   )}
                 </span>
-                <span className="ml-auto text-fine text-ink-tertiary">
+                <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
                   {t(
                     opt.principalType === "user"
                       ? "perm.principalUser"

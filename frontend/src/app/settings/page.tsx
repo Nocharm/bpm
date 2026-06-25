@@ -8,6 +8,7 @@
 import { Fragment, useState, useSyncExternalStore } from "react";
 
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -17,10 +18,11 @@ import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
 import { UserTable } from "@/components/admin/user-table";
 import { TableViewer } from "@/components/admin/table-viewer";
+import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
-type TabId = "employees" | "queue" | "depts" | "users" | "tables" | "groups";
+type TabId = "employees" | "queue" | "depts" | "users" | "tables" | "groups" | "trash";
 type Access = "everyone" | "admin" | "sysadmin";
 
 interface Category {
@@ -56,6 +58,12 @@ const CATEGORIES: Category[] = [
     access: "everyone",
     tabs: [{ id: "groups", labelKey: "perm.group.pageTitle" }],
   },
+  {
+    // 휴지통(삭제 예정) — 누구나(오너 본인것만), sysadmin은 전체 (DL)
+    labelKey: "trash.category",
+    access: "everyone",
+    tabs: [{ id: "trash", labelKey: "trash.tab" }],
+  },
 ];
 
 // ── 메인 / Main ────────────────────────────────────────────────────
@@ -71,7 +79,7 @@ export default function SettingsPage() {
 
   const canAccess = (access: Access): boolean => {
     if (access === "everyone") return true;
-    if (access === "admin") return user?.role === "admin";
+    // admin 권한은 시스템 관리자(sysadmin)가 흡수 (F6) — admin/sysadmin 모두 sysadmin 게이트.
     return Boolean(user?.isSysadmin);
   };
 
@@ -129,6 +137,9 @@ export default function SettingsPage() {
           {current === "depts" && <DepartmentTable />}
           {current === "users" && <UserTable />}
           {current === "tables" && <TableViewer />}
+          {current === "trash" && (
+            <DeletedMapsPanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
         </main>
       </div>
     </>

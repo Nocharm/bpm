@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronDown, Download, LayoutGrid, Lock, LogOut, Maximize, Network, PanelLeft, PanelRight, PencilLine, Redo2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, LayoutGrid, Lock, LogOut, Maximize, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -38,12 +38,18 @@ import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
+import { EdgeActionModal } from "@/components/edge-action-modal";
+import { EdgeSelectModal } from "@/components/edge-select-modal";
+import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PromptDialog } from "@/components/prompt-dialog";
+import { Tooltip } from "@/components/tooltip";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -64,6 +70,12 @@ import {
   resolveCollision,
   getIncomingEdges,
   getOutgoingEdges,
+  getNextNodeAlongFlow,
+  getPrevNodeAlongFlow,
+  getFlowPathForward,
+  getFlowPathBackward,
+  hasReciprocalEdge,
+  removeOutgoingEdges,
   insertNodeBefore,
   insertNodeAfter,
   withSubprocessHandles,
@@ -180,6 +192,18 @@ const COLOR_PRESETS = [
   "#9183c0", // violet
   "#909098", // stone
 ];
+
+// 노드 타입별 사용 가능 색 세트 (#8) — 첫 항목 ""=타입 기본색.
+// 메인 6 · start/end 3 · 분기(decision) 4. 헥스는 인스펙터에서 아이콘→입력으로 별도 지정.
+const NODE_COLORS = ["", "#6e84a3", "#5e988f", "#84a07c", "#c7a062", "#c58a6b"]; // 6
+const TERMINAL_COLORS = ["", "#5e988f", "#c58a6b"]; // 3 (start/end)
+const DECISION_COLORS = ["", "#c7a062", "#9183c0", "#c2849a"]; // 4 (decision)
+
+function colorsForType(nodeType: string | undefined): string[] {
+  if (nodeType === "start" || nodeType === "end") return TERMINAL_COLORS;
+  if (nodeType === "decision") return DECISION_COLORS;
+  return NODE_COLORS;
+}
 
 // 그룹 전용 팔레트 — 노드보다 깊은 "존/라벨" 톤(노드 색과 분리해 묶음 영역을 구분)
 const GROUP_COLOR_PRESETS = [
@@ -590,6 +614,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
+  const [flow, setFlow] = useState<{ anchor: string | null; reach: number }>({
+    anchor: null,
+    reach: 0,
+  });
+  const flowReach = flow.anchor === selectedId ? flow.reach : 0;
   // 더블클릭으로 캔버스 가운데 인라인 편집 박스를 띄울 엣지 — 인스펙터 라벨 입력과 동시 표시
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   // 편집 박스 위치(엣지 중점, canvasContainerRef 기준) — 이벤트 시점에 계산해 둠(렌더 중 ref 접근 금지)
@@ -597,11 +627,41 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 판단 노드에서 분기(Yes/No/기타) 라벨을 기다리는 대상.
   // connection: 핸들 드래그(엣지 미생성, 선택 시 생성) / edge: 노드 드롭으로 이미 생성된 엣지에 라벨 부여
   const [branchPrompt, setBranchPrompt] = useState<
-    { kind: "connection"; connection: Connection } | { kind: "edge"; edgeId: string } | null
+    | { kind: "connection"; connection: Connection; at: { x: number; y: number } }
+    | { kind: "edge"; edgeId: string; at: { x: number; y: number } }
+    | null
   >(null);
+  // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
+  const [edgeAction, setEdgeAction] = useState<
+    { source: string; target: string; at: { x: number; y: number } } | null
+  >(null);
+  // 다중 출력 노드에 삽입 시 — 어느 출력선으로 들어갈지 선택 (F1). source 출력선 중 1개 픽.
+  const [edgeSelect, setEdgeSelect] = useState<
+    | {
+        source: string;
+        target: string;
+        options: { edgeId: string; label: string }[];
+        at: { x: number; y: number };
+      }
+    | null
+  >(null);
+  // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
+  const [decisionDrop, setDecisionDrop] = useState<
+    | {
+        aId: string;
+        bId: string;
+        options: { edgeId: string; label: string }[];
+        at: { x: number; y: number };
+      }
+    | null
+  >(null);
+  // 마지막 포인터 화면 좌표 — 모달을 마우스 위치에 띄워 동선 최소화.
+  const pointerScreenRef = useRef({ x: 0, y: 0 });
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
+  const [showHexInput, setShowHexInput] = useState(false);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -1835,9 +1895,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     try {
       await saveCurrentScope();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.save"));
+      // 저장 실패(예: 시작/끝 노드 없음)는 상단 배너 대신 토스트로 안내 (#7)
+      showToast(err instanceof Error ? err.message : t("err.save"));
     }
-  }, [saveCurrentScope, t]);
+  }, [saveCurrentScope, showToast, t]);
 
   const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
     const step = 36;
@@ -2006,50 +2067,67 @@ function MapEditor({ mapId }: { mapId: number }) {
     [saveCurrentScope, mapName, t],
   );
 
-  const handleCreateVersion = useCallback(async () => {
+  // 네이티브 prompt/confirm 대신 플로팅 모달 — 버전 생성/이름변경 입력, 삭제 확인.
+  const [versionDialog, setVersionDialog] = useState<{ mode: "create" | "rename" } | null>(null);
+  const [deleteVersionOpen, setDeleteVersionOpen] = useState(false);
+
+  // 트리비얼 핸들러는 plain 함수로 — React Compiler 자동 메모(수동 useCallback은 setter 추론과 충돌).
+  const handleCreateVersion = () => {
     if (versionId === null) {
       return;
     }
-    const label = window.prompt(t("prompt.newVersionName"), "To-Be");
-    if (!label?.trim()) {
-      return;
-    }
-    try {
-      await saveCurrentScope();
-      const created = await createVersion(mapId, label.trim(), versionId);
-      const detail = await getMap(mapId);
-      setVersions(detail.versions);
-      setVersionId(created.id);
-      setScopes([{ kind: "root", title: mapName }]);
-      setActiveIndex(0);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.createVersion"));
-    }
-  }, [versionId, mapId, mapName, saveCurrentScope, t]);
+    setVersionDialog({ mode: "create" });
+  };
 
-  const handleRenameVersion = useCallback(async () => {
+  const handleRenameVersion = () => {
     if (versionId === null) {
       return;
     }
-    const current = versions.find((version) => version.id === versionId);
-    const label = window.prompt(t("prompt.renameVersion"), current?.label ?? "");
-    if (!label?.trim()) {
+    setVersionDialog({ mode: "rename" });
+  };
+
+  // 버전 생성/이름변경 모달 제출 — mode에 따라 분기
+  const submitVersionDialog = async (label: string) => {
+    if (versionId === null || versionDialog === null) {
       return;
     }
-    try {
-      await renameVersion(versionId, label.trim());
-      const detail = await getMap(mapId);
-      setVersions(detail.versions);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.renameVersion"));
+    const mode = versionDialog.mode;
+    setVersionDialog(null);
+    if (mode === "create") {
+      try {
+        await saveCurrentScope();
+        const created = await createVersion(mapId, label, versionId);
+        const detail = await getMap(mapId);
+        setVersions(detail.versions);
+        setVersionId(created.id);
+        setScopes([{ kind: "root", title: mapName }]);
+        setActiveIndex(0);
+      } catch (err) {
+        // 진행 중 드래프트가 있으면 새 버전 생성 차단(409) — 토스트로 안내 (request #11)
+        const msg = err instanceof Error ? err.message : "";
+        showToast(msg.includes("409") ? t("err.versionDraftExists") : t("err.createVersion"));
+      }
+    } else {
+      try {
+        await renameVersion(versionId, label);
+        const detail = await getMap(mapId);
+        setVersions(detail.versions);
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : t("err.renameVersion"));
+      }
     }
-  }, [versionId, versions, mapId, t]);
+  };
 
-  const handleDeleteVersion = useCallback(async () => {
+  const handleDeleteVersion = () => {
     if (versionId === null || versions.length <= 1) {
       return;
     }
-    if (!window.confirm(t("prompt.deleteVersionConfirm"))) {
+    setDeleteVersionOpen(true);
+  };
+
+  const confirmDeleteVersion = async () => {
+    setDeleteVersionOpen(false);
+    if (versionId === null || versions.length <= 1) {
       return;
     }
     try {
@@ -2062,7 +2140,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
     }
-  }, [versionId, versions, mapId, mapName, t]);
+  };
 
   // 워크플로우 전이 — updated VersionSummary를 versions에 머지하고 workflow 갱신
   const runTransition = useCallback(
@@ -2097,6 +2175,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const keepTarget = targetNode?.data.nodeType === "subprocess";
       const sourceHandle = keepSource ? connection.sourceHandle : sourceHandleId("right");
       const targetHandle = keepTarget ? connection.targetHandle : targetHandleId("left");
+      // 출력 1개 충돌(이미 출력 있음)은 onConnect에서 삽입/교체/취소 모달로 처리 — 여기선 단순 추가.
       setEdges((current) =>
         addEdge(
           {
@@ -2120,18 +2199,41 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
+      // A↔B 1:1 회귀 차단 — 역행은 Decision 노드로 우회하도록 안내(토스트)
+      if (
+        connection.source &&
+        connection.target &&
+        hasReciprocalEdge(edgesRef.current, connection.source, connection.target)
+      ) {
+        showToast(t("edge.reciprocalBlocked"));
+        return;
+      }
       // 판단(decision) 노드에서 나가는 연결 → Yes/No/기타 선택 모달, 그 외는 즉시 생성
       const source = nodesRef.current.find((node) => node.id === connection.source);
       if (source?.data.nodeType === "decision") {
-        setBranchPrompt({ kind: "connection", connection });
+        setBranchPrompt({
+          kind: "connection",
+          connection,
+          at: { ...pointerScreenRef.current },
+        });
+        return;
+      }
+      // 출력 1개 — 이미 출력이 있으면 삽입/교체/취소 모달(마우스 위치). 없으면 즉시 생성.
+      if (connection.source && getOutgoingEdges(edgesRef.current, connection.source).length > 0) {
+        setEdgeAction({
+          source: connection.source,
+          target: connection.target ?? "",
+          at: { ...pointerScreenRef.current },
+        });
         return;
       }
       createEdge(connection, "");
     },
-    [readOnly, createEdge],
+    [readOnly, createEdge, showToast, t],
   );
 
-  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가(출발 전용), 끝 노드는 출발(나가는 연결) 불가(도착 전용)
+  // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가/끝 노드는 출발 불가(터미널).
+  // A↔B 회귀는 여기서 막지 않고 onConnect에서 토스트로 안내(Decision 우회 유도).
   const isValidConnection = useCallback((connection: Connection | Edge): boolean => {
     const sourceType = nodesRef.current.find((node) => node.id === connection.source)?.data
       .nodeType;
@@ -2209,10 +2311,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           type: "process",
           position,
           data: {
-            label: makeUniqueLabel(
-              t("editor.newStep"),
-              current.map((node) => node.data.label),
-            ),
+            // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
+            label:
+              nodeType === "start" || nodeType === "end"
+                ? ""
+                : makeUniqueLabel(
+                    t("editor.newStep"),
+                    current.map((node) => node.data.label),
+                  ),
             description: "",
             nodeType,
             color: "",
@@ -2318,7 +2424,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         (edge) => !beforeIds.has(edge.id) && !edge.label && isDecision(edge.source),
       );
       if (fresh) {
-        setBranchPrompt({ kind: "edge", edgeId: fresh.id });
+        setBranchPrompt({ kind: "edge", edgeId: fresh.id, at: { ...pointerScreenRef.current } });
       }
       scheduleAutoSave();
     },
@@ -2664,6 +2770,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (flowZoneViolates(aId, bId, zone)) {
         return;
       }
+      // A↔B 1:1 회귀 차단(드롭) — front=A→B / back=B→A. 역행은 Decision 우회 안내.
+      const newSource = zone === "front" ? aId : bId;
+      const newTarget = zone === "front" ? bId : aId;
+      if (hasReciprocalEdge(edgesRef.current, newSource, newTarget)) {
+        showToast(t("edge.reciprocalBlocked"));
+        return;
+      }
       placeBeside(aId, bId, zone);
       scheduleAutoSave();
       const conflict =
@@ -2672,13 +2785,50 @@ function MapEditor({ mapId }: { mapId: number }) {
           : getOutgoingEdges(edgesRef.current, bId).some((edge) => edge.target !== aId);
       const rect = conflict ? screenRectOf(bId) : null;
       if (conflict && rect) {
+        if (zone === "back") {
+          // B의 기존 출력선(A행 제외). source=B(드롭 대상), target=A(드래그 노드).
+          const bOut = getOutgoingEdges(edgesRef.current, bId).filter((edge) => edge.target !== aId);
+          const at = { ...pointerScreenRef.current };
+          const options = bOut.map((edge) => {
+            const targetTitle =
+              nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+            return {
+              edgeId: edge.id,
+              label: edge.label ? `${edge.label} → ${targetTitle}` : `→ ${targetTitle}`,
+            };
+          });
+          const bIsDecision =
+            nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
+          // 디시전 노드 + 출력 ≥1 → 분기/인터셉트/취소 (F1)
+          if (bIsDecision) {
+            setDecisionDrop({ aId, bId, options, at });
+            return;
+          }
+          // 비-디시전: 2개 이상이면 어느 선에 끼울지 선택, 1개면 삽입/교체/취소.
+          if (bOut.length >= 2) {
+            setEdgeSelect({ source: bId, target: aId, options, at });
+            return;
+          }
+          setEdgeAction({ source: bId, target: aId, at });
+          return;
+        }
         setPending({ mode: zone, aId, bId, rect });
         return;
       }
       // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
       applyFlowEdges(aId, bId, zone, true);
     },
-    [swapNodes, addToGroup, placeBeside, applyFlowEdges, scheduleAutoSave, screenRectOf, flowZoneViolates],
+    [
+      swapNodes,
+      addToGroup,
+      placeBeside,
+      applyFlowEdges,
+      scheduleAutoSave,
+      screenRectOf,
+      flowZoneViolates,
+      showToast,
+      t,
+    ],
   );
 
   // 라이브러리 패널에서 드래그한 맵을 캔버스에 드롭 → 하위프로세스 노드 생성
@@ -3226,13 +3376,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         const to = pointOf(tgtRect, sideFromHandleId(edge.targetHandle, "left"));
         setEditingEdgePos({ left: (from.x + to.x) / 2, top: (from.y + to.y) / 2 });
       } else {
+        // 인라인 박스를 못 띄울 때만 인스펙터 라벨 입력에 포커스 —
+        // 인라인 박스가 뜰 땐 그쪽이 autoFocus 유지(인스펙터가 포커스를 뺏어 즉시 blur→커밋되던 문제, A1)
         setEditingEdgePos(null);
+        setTimeout(() => {
+          edgeLabelInputRef.current?.focus();
+          edgeLabelInputRef.current?.select();
+        }, 0);
       }
-      // 인스펙터 라벨 입력이 마운트된 뒤 포커스 (분기 엣지는 입력이 비활성 — 분기 버튼으로 편집)
-      setTimeout(() => {
-        edgeLabelInputRef.current?.focus();
-        edgeLabelInputRef.current?.select();
-      }, 0);
     },
     [screenRectOf],
   );
@@ -3524,7 +3675,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? []
         : [
             {
-              colors: COLOR_PRESETS,
+              // 노드 타입별 색 세트 (#8) — 메인6·start/end3·분기4
+              colors: colorsForType(
+                nodes.find((item) => item.id === menu.targetId)?.data.nodeType,
+              ),
               current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
               onPick: handleRecolor,
               moreLabel: t("editor.moreColors"),
@@ -4108,6 +4262,15 @@ function MapEditor({ mapId }: { mapId: number }) {
   const styledEdges = useMemo(() => {
     const hiddenIds = inlineComposition?.hiddenIds;
     const crossingIds = inlineComposition?.crossingIds;
+    // F14 플로우 경로 하이라이트 — 선택 노드에서 전방 (reach+1)홉 / 후방 (-reach)홉 엣지 집합.
+    const fwdHops = flowReach >= 0 ? flowReach + 1 : 1;
+    const bwdHops = flowReach < 0 ? -flowReach : 0;
+    const forwardIds = selectedId
+      ? new Set(getFlowPathForward(edges, selectedId, fwdHops))
+      : new Set<string>();
+    const backwardIds = selectedId
+      ? new Set(getFlowPathBackward(edges, selectedId, bwdHops))
+      : new Set<string>();
     const currentStyled = edges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
@@ -4147,12 +4310,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!selectedId) {
         return next;
       }
-      const stroke =
-        edge.target === selectedId
-          ? "var(--color-edge-in)"
-          : edge.source === selectedId
-            ? "var(--color-edge-out)"
-            : null;
+      // 즉시 이웃(in/out) + F14 확장 경로(전방/후방) 하이라이트. 후방 우선(edge-in).
+      const isBackward = edge.target === selectedId || backwardIds.has(edge.id);
+      const isForward = edge.source === selectedId || forwardIds.has(edge.id);
+      const stroke = isBackward
+        ? "var(--color-edge-in)"
+        : isForward
+          ? "var(--color-edge-out)"
+          : null;
       if (!stroke) {
         return next;
       }
@@ -4182,7 +4347,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
     );
     return [...currentStyled, ...childStyled, ...gatewayStyled];
-  }, [edges, selectedId, edgeStyle, inlineComposition]);
+  }, [edges, selectedId, edgeStyle, inlineComposition, flowReach]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -4865,7 +5030,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // 모달 열림 중엔 무시
-      if (summaryNodeId || bulkEditGroupId || branchPrompt || managingApprovers || pending) {
+      if (
+        summaryNodeId ||
+        bulkEditGroupId ||
+        branchPrompt ||
+        decisionDrop ||
+        managingApprovers ||
+        pending
+      ) {
         return;
       }
       const count = nodesRef.current.filter((node) => node.selected).length;
@@ -4927,12 +5099,184 @@ function MapEditor({ mapId }: { mapId: number }) {
     summaryNodeId,
     bulkEditGroupId,
     branchPrompt,
+    decisionDrop,
     managingApprovers,
     pending,
     applyNodesTransform,
     createGroupFromSelection,
     handleExportPng,
   ]);
+
+  // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      pointerScreenRef.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  // 출력 1개 충돌 모달 선택 — 삽입(흐름에 끼움) / 교체(기존 대체). source의 기존 출력 기준.
+  const applyEdgeAction = useCallback(
+    (action: "insert" | "replace") => {
+      if (edgeAction === null) {
+        return;
+      }
+      const { source, target } = edgeAction;
+      setEdgeAction(null);
+      if (!target) {
+        return;
+      }
+      pushHistory();
+      const isSub = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      setEdges((current) => {
+        // insert: source→target + source의 기존 출력을 target 뒤로 재연결(흐름 삽입).
+        // replace: source의 기존 출력 제거 후 source→target만.
+        const base = action === "replace" ? removeOutgoingEdges(current, source) : current;
+        const next = insertNodeAfter(base, target, source, action === "insert");
+        return next.map((edge) => withSubprocessHandles(edge, isSub));
+      });
+      scheduleAutoSave();
+    },
+    [edgeAction, pushHistory, setEdges, scheduleAutoSave],
+  );
+
+  // 선택한 출력선(source→X)에 끼워넣기: source→target→X (해당 선만, 라벨 보존, 다른 분기 유지).
+  const interceptIntoEdge = useCallback(
+    (source: string, target: string, edgeId: string) => {
+      pushHistory();
+      const isSub = (nodeId: string): boolean =>
+        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      setEdges((current) => {
+        const picked = current.find((edge) => edge.id === edgeId);
+        if (!picked) {
+          return current;
+        }
+        const x = picked.target;
+        const pickedLabel = picked.label;
+        let next = current.filter((edge) => edge.id !== edgeId); // source→X 제거
+        next = insertNodeAfter(next, target, source, false); // source→target
+        next = insertNodeAfter(next, x, target, false); // target→X
+        // 분기 라벨은 source→target(첫 구간)에 보존
+        next = next.map((edge) =>
+          edge.source === source && edge.target === target ? { ...edge, label: pickedLabel } : edge,
+        );
+        return next.map((edge) => withSubprocessHandles(edge, isSub));
+      });
+      scheduleAutoSave();
+    },
+    [pushHistory, setEdges, scheduleAutoSave],
+  );
+
+  // 다중 출력 노드 삽입 — 선택 모달에서 고른 출력선에 끼워넣기.
+  const applyEdgeSelect = useCallback(
+    (edgeId: string) => {
+      if (edgeSelect === null) {
+        return;
+      }
+      const { source, target } = edgeSelect;
+      setEdgeSelect(null);
+      interceptIntoEdge(source, target, edgeId);
+    },
+    [edgeSelect, interceptIntoEdge],
+  );
+
+  // 디시전 드롭 모달: 인터셉트 — 출력선 ≥2면 선택 모달, 1개면 그 선에 바로 끼움 (F1).
+  const applyDecisionIntercept = useCallback(() => {
+    if (decisionDrop === null) {
+      return;
+    }
+    const { aId, bId, options, at } = decisionDrop;
+    setDecisionDrop(null);
+    if (options.length >= 2) {
+      setEdgeSelect({ source: bId, target: aId, options, at });
+      return;
+    }
+    if (options.length === 1) {
+      interceptIntoEdge(bId, aId, options[0].edgeId);
+    }
+  }, [decisionDrop, interceptIntoEdge]);
+
+  // 디시전 드롭 모달: 분기 — B→A 새 출력선 추가(자동 yes/no/기타 라벨 모달) (F1).
+  const applyDecisionBranch = useCallback(() => {
+    if (decisionDrop === null) {
+      return;
+    }
+    const { aId, bId } = decisionDrop;
+    setDecisionDrop(null);
+    applyFlowEdges(aId, bId, "back", false);
+  }, [decisionDrop, applyFlowEdges]);
+
+  // F14 — 노드 선택 후 ]=하이라이트 경로 전방 확장 / [=축소→초기→후방 확장(뷰 고정).
+  // Tab/Shift+Tab=흐름상 다음/이전 노드로 포커스 이동(+중앙). 입력/아웃라인 포커스 중엔 제외(아웃라인 Tab 보존).
+  useEffect(() => {
+    const onFlowKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+          target.isContentEditable ||
+          target.closest("[data-editor-outline]") !== null)
+      ) {
+        return; // 입력/아웃라인 포커스 중엔 기본 동작(아웃라인 Tab 보존)
+      }
+      if (!selectedId) {
+        return;
+      }
+      // [ ] : 흐름 하이라이트 경로 증감 (뷰 고정). anchor≠선택이면 0에서 시작(파생 리셋).
+      if (event.key === "]" || event.key === "[") {
+        event.preventDefault();
+        const delta = event.key === "]" ? 1 : -1;
+        const edges = edgesRef.current;
+        // reach 값에 해당하는 하이라이트 노드 수 — 4225~4231의 hop 산정과 동일하게.
+        const reachCount = (r: number): number => {
+          const fwd = r >= 0 ? r + 1 : 1;
+          const bwd = r < 0 ? -r : 0;
+          return new Set([
+            ...getFlowPathForward(edges, selectedId, fwd),
+            ...getFlowPathBackward(edges, selectedId, bwd),
+          ]).size;
+        };
+        setFlow((prev) => {
+          const base = prev.anchor === selectedId ? prev.reach : 0;
+          const next = base + delta;
+          // 실제 끝/처음에 도달하면 더 증가/감소하지 않음 (F14) — 노드 수가 안 변하면 클램프.
+          if (reachCount(next) === reachCount(base)) {
+            return prev.anchor === selectedId ? prev : { anchor: selectedId, reach: 0 };
+          }
+          return { anchor: selectedId, reach: next };
+        });
+        return;
+      }
+      // Tab / Shift+Tab : 흐름상 다음/이전 노드로 포커스 이동(+화면 중앙으로).
+      if (event.key === "Tab") {
+        const nextId = event.shiftKey
+          ? getPrevNodeAlongFlow(edgesRef.current, selectedId)
+          : getNextNodeAlongFlow(edgesRef.current, selectedId);
+        if (!nextId) {
+          return;
+        }
+        event.preventDefault();
+        setSelectedId(nextId);
+        setNodes((current) => current.map((node) => ({ ...node, selected: node.id === nextId })));
+        const node = reactFlow.getNode(nextId);
+        if (node) {
+          const w = node.measured?.width ?? NODE_WIDTH;
+          const h = node.measured?.height ?? NODE_HEIGHT;
+          void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+            duration: 350,
+            zoom: reactFlow.getZoom(),
+          });
+        }
+      }
+    };
+    window.addEventListener("keydown", onFlowKey);
+    return () => window.removeEventListener("keydown", onFlowKey);
+  }, [selectedId, reactFlow, setNodes, setSelectedId]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
@@ -5158,7 +5502,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
           <button
             type="button"
-            className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
             onClick={() => {
               // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
               if (!aiOpen) {
@@ -5171,7 +5515,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             }}
             title={t("ai.toggle")}
           >
-            {t("ai.toggle")}
+            <Sparkles size={16} strokeWidth={1.5} />
+            AI
           </button>
           <button
             className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
@@ -5333,6 +5678,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setMenu(null);
                         setPending(null);
                         setSummaryNodeId(null);
+                        setFlow({ anchor: null, reach: 0 }); // 흐름 하이라이트 초기화(재선택 시 잔존 방지, F14)
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
@@ -5646,6 +5992,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               left={editingEdgePos.left}
               top={editingEdgePos.top}
               initial={editingEdgeInitial}
+              placeholder={t("editor.edgeLabelPlaceholder")}
               onCommit={(value) => commitEdgeLabel(editingEdgeId, value)}
               onCancel={cancelEdgeLabelEdit}
             />
@@ -5844,8 +6191,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               )}
             </div>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {COLOR_PRESETS.map((preset) => (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              {/* 타입별 색 세트 (#8) */}
+              {colorsForType(selectedNode.data.nodeType).map((preset) => (
                 <button
                   key={preset || "default"}
                   title={preset || t("editor.defaultColor")}
@@ -5860,25 +6208,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                   onClick={() => updateSelectedData({ color: preset })}
                 />
               ))}
+              {/* 헥스 직접 입력은 필요 시에만 — 아이콘 클릭으로 입력칸 토글 (#8) */}
+              {!readOnly && (
+                <button
+                  type="button"
+                  title={t("editor.hexToggle")}
+                  aria-label={t("editor.hexToggle")}
+                  aria-pressed={showHexInput}
+                  className={`flex h-5 w-5 items-center justify-center rounded-xs border ${
+                    showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
+                  } hover:bg-surface-alt`}
+                  onClick={() => setShowHexInput((v) => !v)}
+                >
+                  <Palette size={12} strokeWidth={1.5} />
+                </button>
+              )}
             </div>
-            <input
-              key={`${selectedNode.id}-${selectedNode.data.color}`}
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              defaultValue={selectedNode.data.color}
-              disabled={readOnly}
-              placeholder={t("editor.hexPlaceholder")}
-              onBlur={(event) => {
-                const value = event.target.value.trim();
-                if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
-                  updateSelectedData({ color: value });
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-              }}
-            />
+            {showHexInput && (
+              <input
+                key={`${selectedNode.id}-${selectedNode.data.color}`}
+                autoFocus
+                className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
+                defaultValue={selectedNode.data.color}
+                disabled={readOnly}
+                placeholder={t("editor.hexPlaceholder")}
+                onBlur={(event) => {
+                  const value = event.target.value.trim();
+                  if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
+                    updateSelectedData({ color: value });
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+            )}
             <details className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
               <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
                 {t("editor.bpmAttrs")}
@@ -6016,7 +6382,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               <div className="text-caption text-ink-secondary">
                 {/* 아무것도 선택 안 됨 — 상단에 맵 상세 카드(가시성·역할·버전·멤버) / no selection: map detail at top */}
                 <div className="mb-4 border-b border-hairline pb-4">
-                  <MapDetailCard mapId={mapId} showFooter={false} />
+                  {/* 에디터에선 이미 이 맵이라 Open 버튼 숨김 (#6) */}
+                  <MapDetailCard mapId={mapId} showFooter={false} hideOpen />
                 </div>
                 <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
                 <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>
@@ -6061,20 +6428,31 @@ function MapEditor({ mapId }: { mapId: number }) {
                         ["download", "editor.tabDownload"],
                         ["design", "editor.tabDesign"],
                       ] as const
-                    ).map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className={`px-3 py-1.5 text-fine transition-colors ${
-                          bottomTab === id
-                            ? "border-b-2 border-accent text-accent"
-                            : "text-ink-tertiary hover:text-ink"
-                        }`}
-                        onClick={() => setBottomTab(id)}
-                      >
-                        {t(label)}
-                      </button>
-                    ))}
+                    ).map(([id, label]) => {
+                      const TabIcon =
+                        id === "approval"
+                          ? Bell
+                          : id === "version"
+                            ? GitBranch
+                            : id === "download"
+                              ? Download
+                              : Palette;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-fine transition-colors ${
+                            bottomTab === id
+                              ? "border-b-2 border-accent text-accent"
+                              : "text-ink-tertiary hover:text-ink"
+                          }`}
+                          onClick={() => setBottomTab(id)}
+                        >
+                          <TabIcon size={14} strokeWidth={1.5} />
+                          {t(label)}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="min-h-0 flex-1 overflow-y-auto">
@@ -6115,25 +6493,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                           ))}
                         </select>
                         <div className="flex flex-wrap gap-2">
-                          <button className={toolButton} onClick={() => void handleCreateVersion()}>
-                            {t("editor.newVersion")}
-                          </button>
-                          <button className={toolButton} onClick={() => void handleRenameVersion()}>
-                            {t("editor.rename")}
-                          </button>
-                          <button
-                            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
-                            onClick={() => void handleDeleteVersion()}
-                            disabled={versions.length <= 1 || readOnly}
-                          >
-                            {t("editor.deleteVersion")}
-                          </button>
-                          <Link
-                            href={`/maps/${mapId}/compare`}
-                            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-                          >
-                            {t("editor.compare")}
-                          </Link>
+                          <Tooltip label={t("editor.newVersion")}>
+                            <button
+                              className={toolButton}
+                              aria-label={t("editor.newVersion")}
+                              onClick={() => void handleCreateVersion()}
+                            >
+                              <Plus size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={t("editor.rename")}>
+                            <button
+                              className={toolButton}
+                              aria-label={t("editor.rename")}
+                              onClick={() => void handleRenameVersion()}
+                            >
+                              <PencilLine size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={t("editor.deleteVersion")}>
+                            <button
+                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
+                              aria-label={t("editor.deleteVersion")}
+                              onClick={() => void handleDeleteVersion()}
+                              disabled={versions.length <= 1 || readOnly}
+                            >
+                              <Trash2 size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={t("editor.compare")}>
+                            <Link
+                              href={`/maps/${mapId}/compare`}
+                              aria-label={t("editor.compare")}
+                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                            >
+                              <GitCompare size={16} strokeWidth={1.5} />
+                            </Link>
+                          </Tooltip>
                         </div>
                       </div>
                     )}
@@ -6174,13 +6570,71 @@ function MapEditor({ mapId }: { mapId: number }) {
       </div>
       </div>
       <ToastStack toasts={toasts} onDismiss={removeToast} />
+      {versionDialog && (
+        <PromptDialog
+          title={versionDialog.mode === "create" ? t("editor.newVersion") : t("editor.rename")}
+          label={
+            versionDialog.mode === "create"
+              ? t("prompt.newVersionName")
+              : t("prompt.renameVersion")
+          }
+          defaultValue={
+            versionDialog.mode === "create"
+              ? "To-Be"
+              : (versions.find((version) => version.id === versionId)?.label ?? "")
+          }
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={(value) => void submitVersionDialog(value)}
+          onClose={() => setVersionDialog(null)}
+        />
+      )}
+      {deleteVersionOpen && (
+        <ConfirmDialog
+          title={t("editor.deleteVersion")}
+          message={t("prompt.deleteVersionConfirm")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          danger
+          onConfirm={() => void confirmDeleteVersion()}
+          onClose={() => setDeleteVersionOpen(false)}
+        />
+      )}
       {branchPrompt && (
-        <EdgeBranchModal onPick={handlePickBranch} onClose={() => setBranchPrompt(null)} />
+        <EdgeBranchModal
+          onPick={handlePickBranch}
+          onClose={() => setBranchPrompt(null)}
+          position={branchPrompt.at}
+        />
+      )}
+      {edgeAction && (
+        <EdgeActionModal
+          position={edgeAction.at}
+          onInsert={() => applyEdgeAction("insert")}
+          onReplace={() => applyEdgeAction("replace")}
+          onClose={() => setEdgeAction(null)}
+        />
+      )}
+      {edgeSelect && (
+        <EdgeSelectModal
+          position={edgeSelect.at}
+          options={edgeSelect.options}
+          onPick={(edgeId) => applyEdgeSelect(edgeId)}
+          onClose={() => setEdgeSelect(null)}
+        />
+      )}
+      {decisionDrop && (
+        <EdgeDecisionModal
+          position={decisionDrop.at}
+          onBranch={applyDecisionBranch}
+          onIntercept={applyDecisionIntercept}
+          onClose={() => setDecisionDrop(null)}
+        />
       )}
       {capPrompt && (
         <ModalBackdrop
           onClose={() => setCapPrompt(null)}
-          className="fixed inset-0 z-[1100] flex items-center justify-center px-4"
+          className="fixed inset-0 z-[1100] flex items-center justify-center px-4 backdrop-blur-sm"
           style={{ background: "color-mix(in srgb, var(--color-ink) 12%, transparent)" }}
         >
           <div

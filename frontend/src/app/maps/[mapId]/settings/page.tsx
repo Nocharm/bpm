@@ -2,7 +2,7 @@
 
 // 맵 설정 화면 — 권한 관리 탭 셸 / Map settings page: tabbed shell for permission management.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -33,14 +33,15 @@ interface Tab {
 
 // 전체 탭 목록 — approvals는 조건부 노출로 별도 처리 /
 // Full tab list — approvals is shown conditionally, filtered at render.
+// 순서: 정보 > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 위험 구역
 const ALL_TABS: Tab[] = [
   { id: "details", labelKey: "perm.tabDetails" },
+  { id: "visibility", labelKey: "perm.tabVisibility" },
   { id: "collaborators", labelKey: "perm.tabCollaborators" },
   { id: "approvers", labelKey: "perm.tabApprovers" },
-  { id: "visibility", labelKey: "perm.tabVisibility" },
   { id: "versions", labelKey: "perm.tabVersions" },
-  { id: "danger", labelKey: "perm.tabDanger" },
   { id: "approvals", labelKey: "perm.tabPendingApprovals" },
+  { id: "danger", labelKey: "perm.tabDanger" },
 ];
 
 // ── 메인 페이지 컴포넌트 / Main page component ────────────────────
@@ -91,8 +92,9 @@ export default function SettingsPage() {
     return () => { active = false; };
   }, [mapIdStr]);
 
-  // 탭 상태 / Active tab state.
-  const [activeTab, setActiveTab] = useState<TabId>("details");
+  // 활성 섹션(좌측 내비 하이라이트) — 탭 전환 없이 단일 스크롤 페이지 앵커 스크롤 (ST).
+  const [activeSection, setActiveSection] = useState<TabId>("details");
+  const mainRef = useRef<HTMLDivElement>(null);
 
   // 토스트 상태 / Toast state.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -127,8 +129,8 @@ export default function SettingsPage() {
   // Owner-only: Approvers, Visibility, Danger tabs gated to owner.
   const isOwner = effectiveRole === "owner";
 
-  // 공개 맵이면 viewer 그랜트 비활성 — 서버 진실 가시성 기준 /
-  // Disable viewer grants on public maps (from server-truth visibility).
+  // 퍼블릭 맵은 전원 열람이라 viewer 지정 불가 — editor만 부여 가능 (선택지 없음) /
+  // Public maps are visible to everyone → no viewer grants (editor only).
   const isPublic = visibility === "public";
 
   // 결재 대기 탭 가시성 — 맵 승인자 또는 sysadmin만 표시 /
@@ -139,6 +141,31 @@ export default function SettingsPage() {
 
   // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
   const visibleTabs = ALL_TABS.filter((tab) => tab.id !== "approvals" || canDecide);
+  const sectionKey = visibleTabs.map((tab) => tab.id).join(",");
+
+  // 스크롤 위치로 활성 섹션 추적 — 좌측 내비 하이라이트 (ST). IO 콜백 setState라 set-state-in-effect 비해당.
+  useEffect(() => {
+    const root = mainRef.current;
+    if (!root) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const top = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (top) {
+          setActiveSection(top.target.id.replace("sec-", "") as TabId);
+        }
+      },
+      { root, rootMargin: "0px 0px -65% 0px", threshold: 0 },
+    );
+    sectionKey.split(",").forEach((id) => {
+      const el = document.getElementById(`sec-${id}`);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [sectionKey]);
 
   // ── Dev 유저 전환 핸들러 / Dev user switch handler ────────────────
 
@@ -155,6 +182,7 @@ export default function SettingsPage() {
         email: null,
         role: me.role,
         department: me.department,
+        orgPath: me.org_path,
         isSysadmin: me.is_sysadmin,
       });
     } catch {
@@ -230,17 +258,21 @@ export default function SettingsPage() {
             {t("perm.settingsTitle")}
           </p>
 
-          {/* 탭 버튼 (좌측 정렬) / Tab buttons (left-aligned) */}
+          {/* 섹션 앵커 내비 — 클릭 시 해당 섹션으로 스크롤(단일 페이지) (ST) */}
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               className={`rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
-                activeTab === tab.id
+                activeSection === tab.id
                   ? "bg-accent-tint text-accent"
                   : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
               }`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() =>
+                document
+                  .getElementById(`sec-${tab.id}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
             >
               {t(tab.labelKey)}
             </button>
@@ -263,8 +295,8 @@ export default function SettingsPage() {
           </div>
         </aside>
 
-        {/* 탭 콘텐츠 / Tab content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* 단일 스크롤 콘텐츠 — 모든 섹션을 위→아래로 나열, 좌측 내비로 스크롤 (ST) */}
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-6">
           {/* 읽기 전용 알림 / Read-only notice */}
           {effectiveRole === "viewer" && (
             <div className="mb-4 rounded-sm border border-hairline bg-surface-pearl px-3 py-2 text-caption text-ink-secondary">
@@ -273,57 +305,67 @@ export default function SettingsPage() {
           )}
 
           {!currentMockUser ? (
-            // 유저 로드 전 / Before user resolves.
             <p className="text-caption text-ink-tertiary">…</p>
-          ) : activeTab === "details" ? (
-            <MapDetailsPanel mapId={mapIdStr} canEdit={canEdit} onToast={showToast} />
-          ) : activeTab === "collaborators" ? (
-            <CollaboratorsPanel
-              mapId={mapIdStr}
-              currentUserId={currentMockUser.id}
-              canEdit={canEdit}
-              onToast={showToast}
-              viewerGrantDisabled={isPublic}
-            />
-          ) : activeTab === "approvers" ? (
-            <ApproversPanel
-              mapId={mapIdStr}
-              isOwner={isOwner}
-              onToast={showToast}
-            />
-          ) : activeTab === "visibility" ? (
-            <VisibilityControl
-              mapId={mapIdStr}
-              visibility={visibility}
-              isOwner={isOwner}
-              onToast={showToast}
-            />
-          ) : activeTab === "versions" ? (
-            <VersionsPublishPanel
-              mapId={mapIdStr}
-              currentUserId={currentMockUser.id}
-              canEdit={canEdit}
-              onToast={showToast}
-            />
-          ) : activeTab === "danger" && isOwner ? (
-            <DangerZone
-              mapId={mapIdStr}
-              currentUserId={currentMockUser.id}
-              onToast={showToast}
-            />
-          ) : activeTab === "danger" ? (
-            // 위험 구역은 소유자 전용 — 비소유자에게 숨김 /
-            // Danger zone is owner-only; hidden for non-owners.
-            <p className="py-4 text-caption text-ink-tertiary">{t("perm.dangerReadOnly")}</p>
-          ) : activeTab === "approvals" && canDecide ? (
-            // 결재 대기 — 승인자·sysadmin 전용 / Pending approvals (approver or sysadmin only).
-            // 결정 후 맵 데이터(역할/가시성) 재조회 — 서버가 적용했으므로 협업자/공개범위 탭의 진실 갱신.
-            <PendingApprovalsPanel
-              mapId={mapIdStr}
-              onDecided={() => void refreshMap()}
-              onToast={(item) => showToast(item.message)}
-            />
-          ) : null}
+          ) : (
+            <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-24">
+              {visibleTabs.map((tab) => (
+                <section
+                  key={tab.id}
+                  id={`sec-${tab.id}`}
+                  className="flex scroll-mt-6 flex-col gap-3"
+                >
+                  <h2 className="border-b border-hairline pb-2 text-body-strong text-ink">
+                    {t(tab.labelKey)}
+                  </h2>
+                  {tab.id === "details" ? (
+                    <MapDetailsPanel mapId={mapIdStr} canEdit={canEdit} onToast={showToast} />
+                  ) : tab.id === "collaborators" ? (
+                    <CollaboratorsPanel
+                      mapId={mapIdStr}
+                      currentUserId={currentMockUser.id}
+                      canEdit={canEdit}
+                      onToast={showToast}
+                      viewerGrantDisabled={isPublic}
+                    />
+                  ) : tab.id === "approvers" ? (
+                    <ApproversPanel mapId={mapIdStr} isOwner={isOwner} onToast={showToast} />
+                  ) : tab.id === "visibility" ? (
+                    <VisibilityControl
+                      mapId={mapIdStr}
+                      visibility={visibility}
+                      isOwner={isOwner}
+                      onToast={showToast}
+                    />
+                  ) : tab.id === "versions" ? (
+                    <VersionsPublishPanel
+                      mapId={mapIdStr}
+                      currentUserId={currentMockUser.id}
+                      canEdit={canEdit}
+                      onToast={showToast}
+                    />
+                  ) : tab.id === "danger" ? (
+                    isOwner ? (
+                      <DangerZone
+                        mapId={mapIdStr}
+                        currentUserId={currentMockUser.id}
+                        onToast={showToast}
+                      />
+                    ) : (
+                      <p className="py-4 text-caption text-ink-tertiary">
+                        {t("perm.dangerReadOnly")}
+                      </p>
+                    )
+                  ) : tab.id === "approvals" && canDecide ? (
+                    <PendingApprovalsPanel
+                      mapId={mapIdStr}
+                      onDecided={() => void refreshMap()}
+                      onToast={(item) => showToast(item.message)}
+                    />
+                  ) : null}
+                </section>
+              ))}
+            </div>
+          )}
         </main>
       </div>
     </>

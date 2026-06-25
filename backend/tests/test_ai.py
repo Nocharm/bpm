@@ -8,6 +8,15 @@ from fastapi.testclient import TestClient
 from app import ai_client
 from app.settings import settings
 
+_ai_seq = 0
+
+
+def _ai_map(client: TestClient) -> dict:
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _ai_seq
+    _ai_seq += 1
+    return client.post("/api/maps", json={"name": f"ai map {_ai_seq}"}).json()
+
 
 def test_ai_settings_default_disabled() -> None:
     assert settings.ai_enabled is False
@@ -97,7 +106,7 @@ def _fake_ai(content: str):
 
 
 def _draft_version_checked_out(client: TestClient) -> int:
-    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    created = _ai_map(client)
     version_id = created["versions"][0]["id"]
     client.post(f"/api/versions/{version_id}/checkout", json={})
     return version_id
@@ -157,7 +166,7 @@ def test_ai_graph_downgraded_when_not_editable(
 ) -> None:
     _enable_ai(monkeypatch)
     # 체크아웃하지 않은 버전 → can_edit False
-    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    created = _ai_map(client)
     version_id = created["versions"][0]["id"]
     content = json.dumps(
         {
@@ -454,7 +463,7 @@ def test_ai_ops_downgraded_when_not_editable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_ai(monkeypatch)
-    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    created = _ai_map(client)
     version_id = created["versions"][0]["id"]  # 체크아웃 안 함 → can_edit False
     content = json.dumps(
         {"kind": "ops", "message": "x", "ops": [{"action": "remove", "node_id": "n1"}]}
@@ -579,7 +588,7 @@ def test_ai_analysis_allowed_when_not_editable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_ai(monkeypatch)
-    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    created = _ai_map(client)
     version_id = created["versions"][0]["id"]  # 체크아웃 안 함 → 비편집
     monkeypatch.setattr(
         ai_client,
@@ -602,7 +611,7 @@ def test_ai_walkthrough_allowed_when_not_editable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_ai(monkeypatch)
-    created = client.post("/api/maps", json={"name": "ai map"}).json()
+    created = _ai_map(client)
     version_id = created["versions"][0]["id"]  # 체크아웃 안 함 → 비편집
     monkeypatch.setattr(
         ai_client,

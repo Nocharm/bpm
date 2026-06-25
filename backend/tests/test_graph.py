@@ -3,8 +3,14 @@
 from fastapi.testclient import TestClient
 
 
+_graph_seq = 0
+
+
 def _create_version(client: TestClient) -> int:
-    created = client.post("/api/maps", json={"name": "graph map"}).json()
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _graph_seq
+    _graph_seq += 1
+    created = client.post("/api/maps", json={"name": f"graph map {_graph_seq}"}).json()
     version_id = created["versions"][0]["id"]
     # PUT /graph는 이제 호출자가 체크아웃을 쥐고 있어야 한다 — 실제 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})

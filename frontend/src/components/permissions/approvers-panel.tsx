@@ -9,10 +9,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { getDirectory, listApprovers, setApprovers, type DirectoryUser } from "@/lib/api";
+import {
+  listApprovers,
+  listEligibleApprovers,
+  setApprovers,
+  type DirectoryUser,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/mock/permissions";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import { SkeletonPills } from "@/components/permissions/loading-skeleton";
 
 interface ApproversPanelProps {
   mapId: string;
@@ -29,16 +35,18 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
 
   // 서버 결재자 userId 목록 / Server-sourced approver userIds.
   const [approverIds, setApproverIds] = useState<string[]>([]);
+  // 초기 로드 중 — 데이터 도착 전 "결재자 0" 경고 대신 스켈레톤 표시 (F8).
+  const [loading, setLoading] = useState(true);
 
-  // 디렉터리 사용자 목록 / Directory users for picker.
+  // 승인자 후보 = 맵 조회권한(viewer+) 보유 직원만 (AP) — 전체 디렉터리 대신 자격자 목록.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   useEffect(() => {
     let active = true;
-    void getDirectory()
-      .then((d) => { if (active) setDirUsers(d.users); })
+    void listEligibleApprovers(mapIdNum)
+      .then((users) => { if (active) setDirUsers(users); })
       .catch(() => { /* picker falls back to empty */ });
     return () => { active = false; };
-  }, []);
+  }, [mapIdNum]);
 
   // 표시명 해석 — mock 시드 사용, 미일치 시 id 폴백 / Resolve display name from mock seed.
   const userName = useCallback(
@@ -53,6 +61,11 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
   }));
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
   const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? userName(id);
+  // 소속 경로 세그먼트(센터/부서/팀/그룹/파트) — 최대 5 (ST 승인자 카드)
+  const dirOrg = (id: string): string[] => {
+    const path = dirUsers.find((u) => u.id === id)?.org_path ?? "";
+    return path ? path.split("/").slice(0, 5) : [];
+  };
 
   const reload = useCallback(async () => {
     try {
@@ -71,6 +84,8 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         if (active) setApproverIds(ids);
       } catch (err) {
         if (active) onToast(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) setLoading(false);
       }
     })();
     return () => {
@@ -102,34 +117,46 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         <p className="mt-0.5 text-fine text-ink-tertiary">{t("perm.approversHint")}</p>
       </div>
 
-      {/* 결재자 0 경고 배너 / Empty-list warning banner */}
-      {hasNone && (
+      {/* 로딩 중 스켈레톤 / Skeleton while loading (F8) */}
+      {loading && <SkeletonPills />}
+
+      {/* 결재자 0 경고 배너 — 로딩 끝난 뒤에만 / Empty-list warning, only after load */}
+      {!loading && hasNone && (
         <div className="rounded-sm border border-error bg-error/10 px-3 py-2 text-caption text-error">
           {t("perm.approversWarn")}
         </div>
       )}
 
-      {/* 결재자 목록 — 필 형태 / Approver list as pills */}
+      {/* 결재자 카드 그리드 — 직사각형 고정 크기(소속 개수 무관, ~2/3 축소), 이름·아이디·소속(최대5) (ST) */}
       {approverIds.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {approverIds.map((userId) => (
-            <span
+            <div
               key={userId}
-              data-id={`approver-pill-${userId}`}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
+              data-id={`approver-card-${userId}`}
+              className="relative flex aspect-[4/3] flex-col overflow-hidden rounded-md border border-hairline bg-surface p-2 shadow-sm"
             >
-              {dirName(userId)}
               {isOwner && (
                 <button
                   type="button"
                   title={t("perm.removeButton")}
-                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
+                  className="absolute right-1 top-1 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
                   onClick={() => void handleRemove(userId)}
                 >
-                  <X size={14} strokeWidth={1.5} />
+                  <X size={12} strokeWidth={1.5} />
                 </button>
               )}
-            </span>
+              <span className="truncate pr-4 text-caption text-ink">{dirName(userId)}</span>
+              <span className="truncate text-fine text-ink-tertiary">{userId}</span>
+              {/* 소속(센터/부서/팀/그룹/파트) — 최대 5, 아래 공간 확보(카드 크기 동일) */}
+              <div className="mt-auto flex flex-col overflow-hidden">
+                {dirOrg(userId).map((seg, idx) => (
+                  <span key={idx} className="truncate text-fine text-ink-tertiary">
+                    {seg}
+                  </span>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}

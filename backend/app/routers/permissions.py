@@ -13,6 +13,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
 from app.permissions import logic
+from app.permissions.access import get_effective_role
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
     require_approver_or_sysadmin,
@@ -73,7 +74,13 @@ async def add_permission(
     session: AsyncSession = Depends(get_session),
 ) -> MapPermission:
     """grant 추가 — 즉시 적용. group 도 저장하나 effective_role 은 무시(Layer 4)."""
-    await _get_map_or_404(session, map_id)
+    found_map = await _get_map_or_404(session, map_id)
+    # 퍼블릭 맵은 전원 열람이라 viewer 부여 불가 — editor만 (request #9)
+    if payload.role == "viewer" and found_map.visibility == "public":
+        raise HTTPException(
+            status_code=409,
+            detail="public maps grant editor only — everyone can already view",
+        )
     existing = await session.scalar(
         select(MapPermission).where(
             MapPermission.map_id == map_id,
@@ -123,7 +130,16 @@ async def update_permission(
         raise HTTPException(
             status_code=409, detail="promote to owner via owner transfer"
         )
-    if logic.requires_downgrade_approval(grant.role, new_role):
+    # 퍼블릭 맵은 전원 열람이라 viewer 변경 불가 — editor만 (request #9)
+    found_map = await _get_map_or_404(session, map_id)
+    if new_role == "viewer" and found_map.visibility == "public":
+        raise HTTPException(
+            status_code=409,
+            detail="public maps grant editor only — everyone can already view",
+        )
+    # 오너(=sysadmin 포함, effective_role 단계에서 owner로 해석)는 다운그레이드 승인 없이 즉시 적용
+    actor_role = await get_effective_role(session, user, map_id)
+    if logic.requires_downgrade_approval(grant.role, new_role) and actor_role != "owner":
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -164,7 +180,9 @@ async def delete_permission(
         raise HTTPException(
             status_code=409, detail="owner grant removal goes through owner transfer"
         )
-    if logic.requires_downgrade_approval(grant.role, None):
+    # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
+    actor_role = await get_effective_role(session, user, map_id)
+    if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -344,7 +362,20 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
     elif req.kind == "visibility_change":
         found_map = await session.get(ProcessMap, req.map_id)
         if found_map is not None:
-            found_map.visibility = req.payload.get("to_visibility")
+            to_vis = req.payload.get("to_visibility")
+            found_map.visibility = to_vis
+            # 퍼블릭 전환 시 잔존 viewer 그랜트 제거 — 전원 열람이라 불필요 (PV)
+            if to_vis == "public":
+                viewer_grants = (
+                    await session.scalars(
+                        select(MapPermission).where(
+                            MapPermission.map_id == req.map_id,
+                            MapPermission.role == "viewer",
+                        )
+                    )
+                ).all()
+                for grant in viewer_grants:
+                    await session.delete(grant)
 
 
 def _serialize_request(req: ApprovalRequest) -> dict:

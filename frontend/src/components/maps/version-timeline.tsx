@@ -5,6 +5,7 @@
 import { Check, GitCommit, Send, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
+import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -26,12 +27,8 @@ const EVENT_LABEL: Record<string, MessageKey> = {
   published: "home.verEvent.published",
 };
 
-// created_at(ISO) → "MM-DD HH:mm" 절대 표기 (의존성 없이) / compact absolute timestamp.
-function formatStamp(iso: string): string {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
+// created_at(ISO) → "MM-DD HH:mm" KST 절대 표기 / compact absolute timestamp (KST).
+const formatStamp = formatKstShort;
 
 export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
   const { t } = useI18n();

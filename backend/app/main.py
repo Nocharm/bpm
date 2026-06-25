@@ -4,12 +4,14 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.clock import now as now_kst
 from app.db import get_session, init_models
-from app.models import Employee
-from app.permissions.logic import is_sysadmin
+from app.models import Employee, LoginRecord
+from app.permissions.logic import is_sysadmin, org_path
 from app.routers import (
     admin,
     ai,
@@ -74,11 +76,28 @@ async def get_me(
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)
+    # 로그인/활동 기록 — 현황조사용. /me는 앱 로드(새 탭·새로고침·토큰갱신)마다 호출되므로
+    # 하루 1건으로 중복제거(KST 기준 자정 이후 기록 없을 때만 추가) = "그날 접속" 단위.
+    day_start = now_kst().replace(hour=0, minute=0, second=0, microsecond=0)
+    already = await session.scalar(
+        select(LoginRecord.id)
+        .where(LoginRecord.login_id == login_id, LoginRecord.occurred_at >= day_start)
+        .limit(1)
+    )
+    if already is None:
+        session.add(LoginRecord(login_id=login_id, name=emp.name if emp else None))
+        await session.commit()
     return MeOut(
         username=login_id,
         ai_enabled=settings.ai_enabled,
         name=emp.name if emp else login_id,
         role=emp.role if emp else "user",
         department=emp.department if emp else "",
+        # 부서 소속 판정용 org_path(루트→리프) — 프론트 멤버 하이라이트(HM-2)
+        org_path=(
+            org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
+            if emp
+            else ""
+        ),
         is_sysadmin=is_sysadmin(login_id),
     )

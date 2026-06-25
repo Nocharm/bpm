@@ -65,7 +65,23 @@ function allOccurrences(haystack: string, needle: string): number[] {
   return starts;
 }
 
-/** 한 term이 text에 매치하면 원문 기준 range 배열, 아니면 null. 우선순위 부분일치→초성→로마자. */
+// 부분 시퀀스 — query 글자들이 text에 "순서대로"(연속 아님) 등장하면 각 글자 range, 아니면 null.
+function subsequenceMatch(text: string, term: string): MatchRange[] | null {
+  const t = term.trim().toLowerCase();
+  if (!t) return null;
+  const lower = text.toLowerCase();
+  const ranges: MatchRange[] = [];
+  let pos = 0;
+  for (const ch of t) {
+    const idx = lower.indexOf(ch, pos);
+    if (idx === -1) return null;
+    ranges.push({ start: idx, end: idx + 1 });
+    pos = idx + 1;
+  }
+  return ranges;
+}
+
+/** 한 term이 text에 매치하면 원문 기준 range 배열, 아니면 null. 우선순위 부분일치→초성→로마자→subsequence. */
 export function matchTerm(text: string, term: string): MatchRange[] | null {
   const trimmed = term.trim();
   if (!trimmed) return null;
@@ -98,7 +114,22 @@ export function matchTerm(text: string, term: string): MatchRange[] | null {
     }
   }
 
-  return null;
+  // 4) 부분 시퀀스 (순서만 맞으면) — 최후순위 (SR-3)
+  return subsequenceMatch(text, trimmed);
+}
+
+// 매치 품질 순위 (낮을수록 우선): 0 정확 · 1 접두 · 2 부분 · 3 초성/로마자 · 4 subsequence · ∞ 불일치.
+function termFieldRank(text: string, term: string): number {
+  const t = term.trim().toLowerCase();
+  if (!t) return Infinity;
+  const lower = text.toLowerCase();
+  if (lower === t) return 0;
+  if (lower.startsWith(t)) return 1;
+  if (lower.includes(t)) return 2;
+  if (isChosungQuery(term) && allOccurrences(extractChosung(text), term.trim()).length) return 3;
+  if (isLatinQuery(term) && allOccurrences(toRomanInitials(text).roman, t).length) return 3;
+  if (subsequenceMatch(text, term)) return 4;
+  return Infinity;
 }
 
 function splitTerms(query: string): string[] {
@@ -131,32 +162,40 @@ export function filterByQuery<T>(
   if (terms.length === 0) {
     return items.map((item) => ({ item, matches: [] }));
   }
-  const hits: SearchHit<T>[] = [];
+  const ranked: { hit: SearchHit<T>; rank: number }[] = [];
   for (const item of items) {
     const fields = getFields(item);
     const perField = new Map<string, MatchRange[]>();
     let allTermsMatched = true;
+    let worstTermRank = 0; // 모든 term이 매치해야 하므로 가장 약한 term이 품질을 좌우 (SR-3 정렬)
     for (const term of terms) {
       let termMatched = false;
+      let bestFieldRank = Infinity;
       for (const f of fields) {
         const ranges = matchTerm(f.text, term);
         if (ranges) {
           termMatched = true;
           perField.set(f.field, [...(perField.get(f.field) ?? []), ...ranges]);
         }
+        bestFieldRank = Math.min(bestFieldRank, termFieldRank(f.text, term));
       }
       if (!termMatched) {
         allTermsMatched = false;
         break;
       }
+      worstTermRank = Math.max(worstTermRank, bestFieldRank);
     }
     if (allTermsMatched) {
       const matches: FieldMatch[] = [...perField.entries()].map(([field, ranges]) => ({
         field,
         ranges: mergeRanges(ranges),
       }));
-      hits.push({ item, matches });
+      ranked.push({ hit: { item, matches }, rank: worstTermRank });
     }
   }
-  return hits;
+  // 품질 순위 오름차순(정확>접두>부분>초성/로마자>subsequence). 동순위는 입력 순서 유지(안정).
+  return ranked
+    .map((r, i) => ({ ...r, i }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((r) => r.hit);
 }

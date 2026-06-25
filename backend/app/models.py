@@ -1,13 +1,15 @@
 """SQLAlchemy ORM models — process maps, versions, nodes, edges (docs/spec.md §2)."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.clock import now as _now_kst
+
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return _now_kst()  # 타임스탬프 기준시 KST (app.clock)
 
 
 class Base(DeclarativeBase):
@@ -28,6 +30,10 @@ class ProcessMap(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    # 소프트 삭제 시각 — None=정상, 값 있으면 휴지통(1주 내 복구 가능, 이후 lazy 영구삭제) (DL)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
     )
 
     versions: Mapped[list["MapVersion"]] = relationship(
@@ -347,3 +353,17 @@ class UserGroupManager(Base):
         ForeignKey("user_groups.id", ondelete="CASCADE")
     )
     user_id: Mapped[str] = mapped_column(String(100))
+
+
+class LoginRecord(Base):
+    """로그인/활동 기록 — 사용자 현황조사용. /api/me 호출 시 1건 기록(집계·리포트는 후속)."""
+
+    __tablename__ = "login_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    # 조회 편의용 표시명 스냅샷(없으면 None)
+    name: Mapped[str | None] = mapped_column(String(200), default=None)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, index=True
+    )

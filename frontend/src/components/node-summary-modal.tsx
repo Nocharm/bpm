@@ -8,7 +8,15 @@ import { useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ScopePreview } from "@/components/scope-preview";
-import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
+import { SearchSelect } from "@/components/search-select";
+import {
+  createComment,
+  getEligibleAssignees,
+  listComments,
+  type CommentItem,
+  type EligibleAssignees,
+  type VersionGraph,
+} from "@/lib/api";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 
@@ -87,7 +95,26 @@ export function NodeSummaryModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colorExpanded, setColorExpanded] = useState(false);
+  // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
+  const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   const attrValues = { assignee, department, system, duration };
+
+  useEffect(() => {
+    if (readOnly) {
+      return;
+    }
+    let active = true;
+    void getEligibleAssignees(versionId)
+      .then((e) => {
+        if (active) setEligible(e);
+      })
+      .catch(() => {
+        /* 실패 시 현재 값만 유지 노출 */
+      });
+    return () => {
+      active = false;
+    };
+  }, [versionId, readOnly]);
   const shownColors =
     colorExpanded || colorPresets.length <= COLOR_COLLAPSED
       ? colorPresets
@@ -140,7 +167,7 @@ export function NodeSummaryModal({
 
   return (
     <ModalBackdrop
-      className="absolute inset-0 z-[1200] flex items-center justify-center"
+      className="absolute inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >
@@ -215,21 +242,46 @@ export function NodeSummaryModal({
                   )}
                 </div>
               </div>
-              {/* BPM 속성 */}
+              {/* BPM 속성 — 담당자/부서는 조회권한 보유자만 선택(F5), system/duration은 자유입력 */}
               {ATTR_FIELDS.map(({ key, labelKey }) => (
                 <div key={key} className="flex items-center gap-2">
                   <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
-                  <input
-                    className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                    value={attrValues[key]}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (key === "assignee") onPatch({ assignee: value });
-                      else if (key === "department") onPatch({ department: value });
-                      else if (key === "system") onPatch({ system: value });
-                      else onPatch({ duration: value });
-                    }}
-                  />
+                  {key === "assignee" ? (
+                    <SearchSelect
+                      value={assignee}
+                      options={(eligible?.users ?? []).map((u) => ({
+                        value: u.name,
+                        label: u.name,
+                        // 아이디·부서 표시(표시 전용) / 검색은 이름+아이디만(부서 제외)
+                        sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
+                        keywords: u.id,
+                      }))}
+                      emptyLabel={t("summary.none")}
+                      placeholder={t("field.searchPlaceholder")}
+                      onChange={(value) => onPatch({ assignee: value })}
+                    />
+                  ) : key === "department" ? (
+                    <SearchSelect
+                      value={department}
+                      options={(eligible?.departments ?? []).map((d) => ({
+                        value: d,
+                        label: d,
+                      }))}
+                      emptyLabel={t("summary.none")}
+                      placeholder={t("field.searchPlaceholder")}
+                      onChange={(value) => onPatch({ department: value })}
+                    />
+                  ) : (
+                    <input
+                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                      value={attrValues[key]}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (key === "system") onPatch({ system: value });
+                        else onPatch({ duration: value });
+                      }}
+                    />
+                  )}
                 </div>
               ))}
               {groupLabel && (

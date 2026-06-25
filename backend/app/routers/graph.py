@@ -3,13 +3,12 @@
 그래프는 version 단위 평면 저장. GET/PUT /versions/{id}/graph 가 버전 전체를 다룬다.
 """
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.subprocess import assert_no_cycle, validate_process
 from app.checkout import is_checkout_active, is_locked_by_other
@@ -130,7 +129,7 @@ async def replace_graph(
 
     # 체크아웃 보유 강제 — 저장하려면 호출자가 활성 체크아웃을 쥐고 있어야 한다.
     # 권한 게이트(editor+)와 별개의 동시편집 규칙이라 sysadmin도 우회하지 못한다.
-    now = datetime.now(timezone.utc)
+    now = now_kst()
     if is_locked_by_other(version, user, now):
         raise HTTPException(
             status_code=423,

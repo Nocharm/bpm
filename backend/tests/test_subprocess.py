@@ -1,13 +1,41 @@
 """하위프로세스 검증·순환·해석 테스트."""
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
+from app.models import MapVersion
 from app.settings import settings
 
 
+def _approve_version(version_id: int) -> None:
+    """버전 status 를 직접 approved 로 설정 — 'draft 1개 제한' 가드를 위해 클론 소스 draft 해소용."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            version = await session.get(MapVersion, version_id)
+            version.status = "approved"
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+_sub_seq = 0
+
+
+def _unique(name: str) -> str:
+    # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
+    global _sub_seq
+    _sub_seq += 1
+    return f"{name} {_sub_seq}"
+
+
 def _new_version(client: TestClient, name: str = "p") -> int:
-    version_id = client.post("/api/maps", json={"name": name}).json()["versions"][0]["id"]
+    version_id = (
+        client.post("/api/maps", json={"name": _unique(name)}).json()["versions"][0]["id"]
+    )
     # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})
     return version_id
@@ -63,7 +91,7 @@ def test_accepts_valid_process(client: TestClient) -> None:
 
 
 def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": name}).json()
+    created = client.post("/api/maps", json={"name": _unique(name)}).json()
     version_id = created["versions"][0]["id"]
     # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})
@@ -212,6 +240,7 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
         ],
     })
     assert r.status_code == 200, r.json()
+    _approve_version(src_vid)  # draft 해소 → 클론용 새 버전 허용 (draft 1개 제한 가드)
 
     # Clone by creating a new version with source_version_id
     clone_r = client.post(f"/api/maps/{src_map_id}/versions", json={
