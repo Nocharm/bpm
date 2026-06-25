@@ -374,6 +374,7 @@ export function EditorLeftSidebar({
         <ul
           ref={listRef}
           tabIndex={-1}
+          data-editor-outline
           onKeyDown={handleListKey}
           className="flex flex-col gap-0.5 outline-none"
         >

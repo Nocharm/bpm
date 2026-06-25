@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { Edge } from "@xyflow/react";
 
 import {
+  getFlowPathBackward,
+  getFlowPathForward,
   getNextNodeAlongFlow,
   getPrevNodeAlongFlow,
   hasReciprocalEdge,
@@ -94,5 +96,34 @@ describe("flow stepper helpers (F14)", () => {
   it("getPrevNodeAlongFlow follows the incoming edge", () => {
     expect(getPrevNodeAlongFlow(edges, "C")).toBe("B");
     expect(getPrevNodeAlongFlow(edges, "A")).toBeNull(); // 시작 노드 → 없음
+  });
+});
+
+describe("flow path highlight (F14 — growing/shrinking)", () => {
+  // A → B → C → D
+  const edges = [
+    { id: "e1", source: "A", target: "B" },
+    { id: "e2", source: "B", target: "C" },
+    { id: "e3", source: "C", target: "D" },
+  ] as Edge[];
+
+  it("getFlowPathForward returns N forward edges, stops at the end", () => {
+    expect(getFlowPathForward(edges, "A", 1)).toEqual(["e1"]);
+    expect(getFlowPathForward(edges, "A", 2)).toEqual(["e1", "e2"]);
+    expect(getFlowPathForward(edges, "A", 99)).toEqual(["e1", "e2", "e3"]); // 끝에서 중단
+  });
+
+  it("getFlowPathBackward returns N backward edges, stops at the start", () => {
+    expect(getFlowPathBackward(edges, "D", 1)).toEqual(["e3"]);
+    expect(getFlowPathBackward(edges, "D", 2)).toEqual(["e3", "e2"]);
+    expect(getFlowPathBackward(edges, "D", 99)).toEqual(["e3", "e2", "e1"]);
+  });
+
+  it("stops on a cycle instead of looping forever", () => {
+    const cyclic = [
+      { id: "x", source: "A", target: "B" },
+      { id: "y", source: "B", target: "A" },
+    ] as Edge[];
+    expect(getFlowPathForward(cyclic, "A", 99)).toEqual(["x"]); // A→B, then B→A revisits A → stop
   });
 });

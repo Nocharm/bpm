@@ -474,6 +474,36 @@ export function getPrevNodeAlongFlow(edges: Edge[], nodeId: string): string | nu
   return getIncomingEdges(edges, nodeId)[0]?.source ?? null;
 }
 
+/** startId에서 첫 출력 엣지를 hops번 따라간 전방 경로의 엣지 id들 (F14). 끝/사이클에서 중단. */
+export function getFlowPathForward(edges: Edge[], startId: string, hops: number): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>([startId]);
+  let cur = startId;
+  for (let i = 0; i < hops; i++) {
+    const next = getOutgoingEdges(edges, cur)[0];
+    if (!next || seen.has(next.target)) break;
+    ids.push(next.id);
+    seen.add(next.target);
+    cur = next.target;
+  }
+  return ids;
+}
+
+/** startId로 들어오는 첫 입력 엣지를 hops번 거슬러 올라간 후방 경로의 엣지 id들 (F14). 시작/사이클에서 중단. */
+export function getFlowPathBackward(edges: Edge[], startId: string, hops: number): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>([startId]);
+  let cur = startId;
+  for (let i = 0; i < hops; i++) {
+    const prev = getIncomingEdges(edges, cur)[0];
+    if (!prev || seen.has(prev.source)) break;
+    ids.push(prev.id);
+    seen.add(prev.source);
+    cur = prev.source;
+  }
+  return ids;
+}
+
 // 자기루프·중복 없이 엣지 추가. 기본 핸들 변을 명시(source=right/target=left) —
 // 미지정 시 React Flow가 첫 렌더 핸들(left)에 붙어, toAppEdges·buildGraph의 right/left 폴백과 어긋난다.
 function withEdge(edges: Edge[], source: string, target: string): Edge[] {

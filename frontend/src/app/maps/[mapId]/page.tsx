@@ -67,8 +67,8 @@ import {
   resolveCollision,
   getIncomingEdges,
   getOutgoingEdges,
-  getNextNodeAlongFlow,
-  getPrevNodeAlongFlow,
+  getFlowPathForward,
+  getFlowPathBackward,
   hasReciprocalEdge,
   removeOutgoingEdges,
   insertNodeBefore,
@@ -597,6 +597,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
+  const [flow, setFlow] = useState<{ anchor: string | null; reach: number }>({
+    anchor: null,
+    reach: 0,
+  });
+  const flowReach = flow.anchor === selectedId ? flow.reach : 0;
   // 더블클릭으로 캔버스 가운데 인라인 편집 박스를 띄울 엣지 — 인스펙터 라벨 입력과 동시 표시
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   // 편집 박스 위치(엣지 중점, canvasContainerRef 기준) — 이벤트 시점에 계산해 둠(렌더 중 ref 접근 금지)
@@ -4176,6 +4182,15 @@ function MapEditor({ mapId }: { mapId: number }) {
   const styledEdges = useMemo(() => {
     const hiddenIds = inlineComposition?.hiddenIds;
     const crossingIds = inlineComposition?.crossingIds;
+    // F14 플로우 경로 하이라이트 — 선택 노드에서 전방 (reach+1)홉 / 후방 (-reach)홉 엣지 집합.
+    const fwdHops = flowReach >= 0 ? flowReach + 1 : 1;
+    const bwdHops = flowReach < 0 ? -flowReach : 0;
+    const forwardIds = selectedId
+      ? new Set(getFlowPathForward(edges, selectedId, fwdHops))
+      : new Set<string>();
+    const backwardIds = selectedId
+      ? new Set(getFlowPathBackward(edges, selectedId, bwdHops))
+      : new Set<string>();
     const currentStyled = edges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
@@ -4215,12 +4230,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!selectedId) {
         return next;
       }
-      const stroke =
-        edge.target === selectedId
-          ? "var(--color-edge-in)"
-          : edge.source === selectedId
-            ? "var(--color-edge-out)"
-            : null;
+      // 즉시 이웃(in/out) + F14 확장 경로(전방/후방) 하이라이트. 후방 우선(edge-in).
+      const isBackward = edge.target === selectedId || backwardIds.has(edge.id);
+      const isForward = edge.source === selectedId || forwardIds.has(edge.id);
+      const stroke = isBackward
+        ? "var(--color-edge-in)"
+        : isForward
+          ? "var(--color-edge-out)"
+          : null;
       if (!stroke) {
         return next;
       }
@@ -4250,7 +4267,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
     );
     return [...currentStyled, ...childStyled, ...gatewayStyled];
-  }, [edges, selectedId, edgeStyle, inlineComposition]);
+  }, [edges, selectedId, edgeStyle, inlineComposition, flowReach]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -5002,48 +5019,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPng,
   ]);
 
-  // F14 플로우 따라가기 — 노드 선택 후 ] = 다음 / [ = 이전 노드로 엣지 하이라이트가 흐름을 따라 이동.
-  // 아웃라인이 방향키를 쓰므로 bracket 키로 충돌 회피. 입력/모달 중엔 무시.
+  // F14 플로우 따라가기 — 노드 선택 후 Tab=하이라이트 경로를 전방으로 늘림, Shift+Tab=줄임→초기→후방으로 늘림.
+  // 뷰는 그대로(패닝 없음). reach>=0 전방 (reach+1)엣지, <0 전방1+후방(-reach)엣지. 입력/아웃라인 포커스 중엔 제외.
   useEffect(() => {
-    const onStep = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+    const onFlowKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
-      if (event.code !== "BracketRight" && event.code !== "BracketLeft") {
-        return;
-      }
+      const target = event.target;
       if (
-        event.target instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+        target instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+          target.isContentEditable ||
+          target.closest("[data-editor-outline]") !== null)
       ) {
-        return;
+        return; // 입력/아웃라인 포커스 중엔 기본 Tab 동작
       }
       if (!selectedId) {
         return;
       }
-      const nextId =
-        event.code === "BracketRight"
-          ? getNextNodeAlongFlow(edgesRef.current, selectedId)
-          : getPrevNodeAlongFlow(edgesRef.current, selectedId);
-      if (!nextId) {
-        return;
-      }
       event.preventDefault();
-      setSelectedId(nextId);
-      setNodes((current) => current.map((node) => ({ ...node, selected: node.id === nextId })));
-      const node = reactFlow.getNode(nextId);
-      if (node) {
-        const w = node.measured?.width ?? NODE_WIDTH;
-        const h = node.measured?.height ?? NODE_HEIGHT;
-        void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
-          duration: 350,
-          zoom: reactFlow.getZoom(),
-        });
-      }
+      const delta = event.shiftKey ? -1 : 1;
+      // anchor가 현재 선택과 다르면 0에서 시작(선택 변경 후 첫 입력) — set-state-in-effect 회피용 파생 리셋
+      setFlow((prev) => {
+        const base = prev.anchor === selectedId ? prev.reach : 0;
+        return { anchor: selectedId, reach: base + delta };
+      });
     };
-    window.addEventListener("keydown", onStep);
-    return () => window.removeEventListener("keydown", onStep);
-  }, [selectedId, reactFlow, setNodes, setSelectedId]);
+    window.addEventListener("keydown", onFlowKey);
+    return () => window.removeEventListener("keydown", onFlowKey);
+  }, [selectedId]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
