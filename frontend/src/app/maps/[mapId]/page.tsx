@@ -193,6 +193,18 @@ const COLOR_PRESETS = [
   "#909098", // stone
 ];
 
+// 노드 타입별 사용 가능 색 세트 (#8) — 첫 항목 ""=타입 기본색.
+// 메인 6 · start/end 3 · 분기(decision) 4. 헥스는 인스펙터에서 아이콘→입력으로 별도 지정.
+const NODE_COLORS = ["", "#6e84a3", "#5e988f", "#84a07c", "#c7a062", "#c58a6b"]; // 6
+const TERMINAL_COLORS = ["", "#5e988f", "#c58a6b"]; // 3 (start/end)
+const DECISION_COLORS = ["", "#c7a062", "#9183c0", "#c2849a"]; // 4 (decision)
+
+function colorsForType(nodeType: string | undefined): string[] {
+  if (nodeType === "start" || nodeType === "end") return TERMINAL_COLORS;
+  if (nodeType === "decision") return DECISION_COLORS;
+  return NODE_COLORS;
+}
+
 // 그룹 전용 팔레트 — 노드보다 깊은 "존/라벨" 톤(노드 색과 분리해 묶음 영역을 구분)
 const GROUP_COLOR_PRESETS = [
   "#4a5a8c", // indigo
@@ -648,6 +660,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
+  const [showHexInput, setShowHexInput] = useState(false);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -3660,7 +3674,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? []
         : [
             {
-              colors: COLOR_PRESETS,
+              // 노드 타입별 색 세트 (#8) — 메인6·start/end3·분기4
+              colors: colorsForType(
+                nodes.find((item) => item.id === menu.targetId)?.data.nodeType,
+              ),
               current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
               onPick: handleRecolor,
               moreLabel: t("editor.moreColors"),
@@ -6172,8 +6189,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               )}
             </div>
             <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {COLOR_PRESETS.map((preset) => (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              {/* 타입별 색 세트 (#8) */}
+              {colorsForType(selectedNode.data.nodeType).map((preset) => (
                 <button
                   key={preset || "default"}
                   title={preset || t("editor.defaultColor")}
@@ -6188,25 +6206,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                   onClick={() => updateSelectedData({ color: preset })}
                 />
               ))}
+              {/* 헥스 직접 입력은 필요 시에만 — 아이콘 클릭으로 입력칸 토글 (#8) */}
+              {!readOnly && (
+                <button
+                  type="button"
+                  title={t("editor.hexToggle")}
+                  aria-label={t("editor.hexToggle")}
+                  aria-pressed={showHexInput}
+                  className={`flex h-5 w-5 items-center justify-center rounded-xs border ${
+                    showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
+                  } hover:bg-surface-alt`}
+                  onClick={() => setShowHexInput((v) => !v)}
+                >
+                  <Palette size={12} strokeWidth={1.5} />
+                </button>
+              )}
             </div>
-            <input
-              key={`${selectedNode.id}-${selectedNode.data.color}`}
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              defaultValue={selectedNode.data.color}
-              disabled={readOnly}
-              placeholder={t("editor.hexPlaceholder")}
-              onBlur={(event) => {
-                const value = event.target.value.trim();
-                if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
-                  updateSelectedData({ color: value });
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-              }}
-            />
+            {showHexInput && (
+              <input
+                key={`${selectedNode.id}-${selectedNode.data.color}`}
+                autoFocus
+                className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
+                defaultValue={selectedNode.data.color}
+                disabled={readOnly}
+                placeholder={t("editor.hexPlaceholder")}
+                onBlur={(event) => {
+                  const value = event.target.value.trim();
+                  if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
+                    updateSelectedData({ color: value });
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+            )}
             <details className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
               <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
                 {t("editor.bpmAttrs")}

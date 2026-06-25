@@ -192,8 +192,8 @@ function MenuList({
   );
 }
 
-// 색 스와치 행 — 기본 1줄(5개)만 노출하고 "더보기"로 전체 팔레트 펼침.
-const COLOR_COLLAPSED = 5;
+// 색 스와치 행 — 타입별 세트(≤6)를 한 번에 노출(접기/더보기 없음, #8).
+const COLOR_COLLAPSED = 6;
 function ColorRow({
   item,
   onClose,
@@ -259,7 +259,8 @@ function SideBox({
     <div className="flex flex-col items-center gap-1">
       <span className="text-fine text-ink-tertiary">{label}</span>
       <div
-        className={`relative h-11 w-11 rounded-sm border border-hairline bg-surface-alt ${
+        // 가로로 길고 낮게 — 상하 공간 절약 (#3)
+        className={`relative h-7 w-16 rounded-sm border border-hairline bg-surface-alt ${
           locked ? "opacity-60" : ""
         }`}
         title={locked ? "Subprocess: fixed side" : undefined}
@@ -289,7 +290,7 @@ function SideBox({
 // 두 박스 사이의 엣지 모양 — 캔버스 엣지(점선 + 화살촉)를 축약해 source→target 방향을 보인다.
 function EdgeShape() {
   return (
-    <svg width="40" height="12" viewBox="0 0 40 12" className="self-end mb-3 text-ink-tertiary" aria-hidden>
+    <svg width="40" height="12" viewBox="0 0 40 12" className="self-center text-ink-tertiary" aria-hidden>
       <line
         x1="1"
         y1="6"
@@ -319,7 +320,7 @@ function EdgeSidesPad({
   };
 }) {
   return (
-    <div className="flex items-start justify-center gap-3 px-3 py-2">
+    <div className="flex items-center justify-center gap-3 px-3 py-2">
       <SideBox
         label={item.sourceLabel}
         current={item.sourceSide}
