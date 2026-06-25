@@ -4,9 +4,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.clock import now as now_kst
 from app.db import get_session, init_models
 from app.models import Employee, LoginRecord
 from app.permissions.logic import is_sysadmin, org_path
@@ -74,9 +76,17 @@ async def get_me(
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)
-    # 로그인/활동 기록 1건 — 사용자 현황조사용(집계는 후속). /me는 앱 로드 시 호출됨.
-    session.add(LoginRecord(login_id=login_id, name=emp.name if emp else None))
-    await session.commit()
+    # 로그인/활동 기록 — 현황조사용. /me는 앱 로드(새 탭·새로고침·토큰갱신)마다 호출되므로
+    # 하루 1건으로 중복제거(KST 기준 자정 이후 기록 없을 때만 추가) = "그날 접속" 단위.
+    day_start = now_kst().replace(hour=0, minute=0, second=0, microsecond=0)
+    already = await session.scalar(
+        select(LoginRecord.id)
+        .where(LoginRecord.login_id == login_id, LoginRecord.occurred_at >= day_start)
+        .limit(1)
+    )
+    if already is None:
+        session.add(LoginRecord(login_id=login_id, name=emp.name if emp else None))
+        await session.commit()
     return MeOut(
         username=login_id,
         ai_enabled=settings.ai_enabled,

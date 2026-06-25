@@ -84,8 +84,8 @@ def test_me_falls_back_for_unknown_user(client: TestClient) -> None:
     assert body["role"] == "user"  # employees에 없으면 기본 user
 
 
-def test_me_records_login(client: TestClient) -> None:
-    """/api/me 호출 시 LoginRecord 1건 기록 — 현황조사용."""
+def test_me_records_login_once_per_day(client: TestClient) -> None:
+    """/api/me는 현황조사용 LoginRecord를 하루 1건만 기록(중복제거) — 맵 열 때마다 안 찍힘."""
     from app.models import LoginRecord
 
     async def _count(login_id: str) -> int:
@@ -97,9 +97,11 @@ def test_me_records_login(client: TestClient) -> None:
             ).all()
             return len(list(rows))
 
+    # 같은 날 여러 번 호출(새 탭·새로고침 모사) → 1건만
     client.get("/api/me", headers={"X-Dev-User": "record.me"})
     client.get("/api/me", headers={"X-Dev-User": "record.me"})
-    assert asyncio.run(_count("record.me")) == 2
+    client.get("/api/me", headers={"X-Dev-User": "record.me"})
+    assert asyncio.run(_count("record.me")) == 1
 
 
 def test_employees_list_requires_admin(client: TestClient, sysadmin_enforced: None) -> None:
