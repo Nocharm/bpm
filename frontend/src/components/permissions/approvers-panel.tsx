@@ -61,6 +61,11 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
   }));
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
   const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? userName(id);
+  // 소속 경로 세그먼트(센터/부서/팀/그룹/파트) — 최대 5 (ST 승인자 카드)
+  const dirOrg = (id: string): string[] => {
+    const path = dirUsers.find((u) => u.id === id)?.org_path ?? "";
+    return path ? path.split("/").slice(0, 5) : [];
+  };
 
   const reload = useCallback(async () => {
     try {
@@ -122,29 +127,39 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         </div>
       )}
 
-      {/* 결재자 목록 — 아이디·이름 카드 그리드 (ST) */}
+      {/* 결재자 카드 그리드 — 정사각형 고정 크기(소속 개수 무관), 이름·아이디·소속(최대5) (ST) */}
       {approverIds.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {approverIds.map((userId) => (
             <div
               key={userId}
               data-id={`approver-card-${userId}`}
-              className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-3 py-2 shadow-sm"
+              className="relative flex aspect-square flex-col rounded-md border border-hairline bg-surface p-3 shadow-sm"
             >
-              <span className="min-w-0">
-                <span className="block truncate text-caption text-ink">{dirName(userId)}</span>
-                <span className="block truncate text-fine text-ink-tertiary">{userId}</span>
-              </span>
               {isOwner && (
                 <button
                   type="button"
                   title={t("perm.removeButton")}
-                  className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                  className="absolute right-1.5 top-1.5 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
                   onClick={() => void handleRemove(userId)}
                 >
                   <X size={14} strokeWidth={1.5} />
                 </button>
               )}
+              <span className="truncate pr-5 text-caption-strong text-ink">{dirName(userId)}</span>
+              <span className="truncate text-fine text-ink-tertiary">{userId}</span>
+              {/* 소속(센터/부서/팀/그룹/파트) — 최대 5, 아래 공간 확보(카드 크기 동일) */}
+              <div className="mt-auto flex flex-col gap-0.5 overflow-hidden">
+                {dirOrg(userId).map((seg, idx) => (
+                  <span
+                    key={idx}
+                    className="flex items-center gap-1 truncate text-fine text-ink-tertiary"
+                  >
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-ink-tertiary/40" />
+                    <span className="truncate">{seg}</span>
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
         </div>

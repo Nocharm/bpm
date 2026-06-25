@@ -399,6 +399,12 @@ class DirectoryUserOut(BaseModel):
     department: str
 
 
+class EligibleApproverOut(DirectoryUserOut):
+    """승인자 후보 — 디렉터리 기본 + 소속 경로(승인자 카드 표시용, ST)."""
+
+    org_path: str = ""  # 루트→리프 조직 경로(센터/부서/팀/그룹/파트)
+
+
 class DirectoryDeptOut(BaseModel):
     """부서 principal 후보 — principalId = org_path 문자열 / dept principal; id = org_path string."""
 

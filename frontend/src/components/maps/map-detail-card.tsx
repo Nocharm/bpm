@@ -6,7 +6,18 @@
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowUpRight, Building2, Copy, Settings, Trash2, User, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  Boxes,
+  Building2,
+  Copy,
+  Landmark,
+  Settings,
+  Trash2,
+  User,
+  Users,
+  UsersRound,
+} from "lucide-react";
 
 import {
   getMap,
@@ -16,7 +27,7 @@ import {
   type MapPermission,
 } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
@@ -30,13 +41,6 @@ const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "department", labelKey: "home.memberDept" },
   { type: "group", labelKey: "home.memberGroup" },
 ];
-
-// principal_type → 아이콘 / principal icon.
-function PrincipalIcon({ type }: { type: string }) {
-  if (type === "department") return <Building2 size={12} strokeWidth={1.5} />;
-  if (type === "group") return <Users size={12} strokeWidth={1.5} />;
-  return <User size={12} strokeWidth={1.5} />;
-}
 
 // 부서 org_path("A/B/C")의 말단 세그먼트만 / leaf segment of a dept org_path (HM-3).
 function deptLeaf(orgPath: string): string {
@@ -52,6 +56,31 @@ function deptLevelRank(leaf: string): number {
   if (s.includes("그룹") || s.includes("group")) return 3;
   if (s.includes("파트") || s.includes("part")) return 4;
   return 1; // 담당(Department) / 그 외 기본
+}
+
+// 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
+const LEVEL_ICONS = [Landmark, Building2, Users, UsersRound, Boxes];
+
+// 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
+function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
+  if (perm.principal_type === "user") {
+    if (isMe) {
+      // 본인 — 유저 아이콘 대신 'me' 배지(아이콘과 동급 크기, 큰 이질감 없게)
+      return (
+        <span
+          data-id="member-me-badge"
+          title="me"
+          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-accent text-[8px] font-semibold uppercase leading-none text-on-accent"
+        >
+          me
+        </span>
+      );
+    }
+    return <User size={12} strokeWidth={1.5} />;
+  }
+  if (perm.principal_type === "group") return <UsersRound size={12} strokeWidth={1.5} />;
+  const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(perm.principal_id))] ?? Building2;
+  return <Icon size={12} strokeWidth={1.5} />;
 }
 
 interface MapDetailCardProps {
@@ -217,7 +246,10 @@ export function MapDetailCard({
                           }`}
                         >
                           <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
-                            <PrincipalIcon type={perm.principal_type} />
+                            <MemberIcon
+                              perm={perm}
+                              isMe={perm.principal_type === "user" && perm.principal_id === loginId}
+                            />
                             {/* 부서는 말단 조직만 표시 (HM-3) */}
                             <span className="truncate">
                               {perm.principal_type === "department"
@@ -288,12 +320,8 @@ export function MapDetailCard({
         )}
       </div>
       {confirmDelete && onDelete && (
-        <ConfirmDialog
-          title={t("home.confirmDeleteTitle")}
-          message={t("home.confirmDeleteMessage")}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
-          danger
+        <DeleteMapDialog
+          mapName={detail.name}
           onConfirm={() => {
             setConfirmDelete(false);
             onDelete(detail.id);

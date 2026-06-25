@@ -40,6 +40,7 @@ import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
+import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -627,6 +628,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     | {
         source: string;
         target: string;
+        options: { edgeId: string; label: string }[];
+        at: { x: number; y: number };
+      }
+    | null
+  >(null);
+  // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
+  const [decisionDrop, setDecisionDrop] = useState<
+    | {
+        aId: string;
+        bId: string;
         options: { edgeId: string; label: string }[];
         at: { x: number; y: number };
       }
@@ -2756,19 +2767,26 @@ function MapEditor({ mapId }: { mapId: number }) {
       const rect = conflict ? screenRectOf(bId) : null;
       if (conflict && rect) {
         if (zone === "back") {
-          // B의 기존 출력선(A행 제외). 2개 이상(분기/다중출력)이면 어느 선에 끼울지 선택 모달,
-          // 1개면 삽입/교체/취소 모달. source=B(드롭 대상), target=A(드래그 노드).
+          // B의 기존 출력선(A행 제외). source=B(드롭 대상), target=A(드래그 노드).
           const bOut = getOutgoingEdges(edgesRef.current, bId).filter((edge) => edge.target !== aId);
           const at = { ...pointerScreenRef.current };
+          const options = bOut.map((edge) => {
+            const targetTitle =
+              nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+            return {
+              edgeId: edge.id,
+              label: edge.label ? `${edge.label} → ${targetTitle}` : `→ ${targetTitle}`,
+            };
+          });
+          const bIsDecision =
+            nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
+          // 디시전 노드 + 출력 ≥1 → 분기/인터셉트/취소 (F1)
+          if (bIsDecision) {
+            setDecisionDrop({ aId, bId, options, at });
+            return;
+          }
+          // 비-디시전: 2개 이상이면 어느 선에 끼울지 선택, 1개면 삽입/교체/취소.
           if (bOut.length >= 2) {
-            const options = bOut.map((edge) => {
-              const targetTitle =
-                nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
-              return {
-                edgeId: edge.id,
-                label: edge.label ? `${edge.label} → ${targetTitle}` : `→ ${targetTitle}`,
-              };
-            });
             setEdgeSelect({ source: bId, target: aId, options, at });
             return;
           }
@@ -4989,7 +5007,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // 모달 열림 중엔 무시
-      if (summaryNodeId || bulkEditGroupId || branchPrompt || managingApprovers || pending) {
+      if (
+        summaryNodeId ||
+        bulkEditGroupId ||
+        branchPrompt ||
+        decisionDrop ||
+        managingApprovers ||
+        pending
+      ) {
         return;
       }
       const count = nodesRef.current.filter((node) => node.selected).length;
@@ -5051,6 +5076,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     summaryNodeId,
     bulkEditGroupId,
     branchPrompt,
+    decisionDrop,
     managingApprovers,
     pending,
     applyNodesTransform,
@@ -5093,14 +5119,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     [edgeAction, pushHistory, setEdges, scheduleAutoSave],
   );
 
-  // 다중 출력 노드 삽입 — 선택한 출력선(source→X)에 끼워넣기: source→target→X (해당 선만, 라벨 보존, 다른 분기 유지).
-  const applyEdgeSelect = useCallback(
-    (edgeId: string) => {
-      if (edgeSelect === null) {
-        return;
-      }
-      const { source, target } = edgeSelect;
-      setEdgeSelect(null);
+  // 선택한 출력선(source→X)에 끼워넣기: source→target→X (해당 선만, 라벨 보존, 다른 분기 유지).
+  const interceptIntoEdge = useCallback(
+    (source: string, target: string, edgeId: string) => {
       pushHistory();
       const isSub = (nodeId: string): boolean =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
@@ -5122,8 +5143,47 @@ function MapEditor({ mapId }: { mapId: number }) {
       });
       scheduleAutoSave();
     },
-    [edgeSelect, pushHistory, setEdges, scheduleAutoSave],
+    [pushHistory, setEdges, scheduleAutoSave],
   );
+
+  // 다중 출력 노드 삽입 — 선택 모달에서 고른 출력선에 끼워넣기.
+  const applyEdgeSelect = useCallback(
+    (edgeId: string) => {
+      if (edgeSelect === null) {
+        return;
+      }
+      const { source, target } = edgeSelect;
+      setEdgeSelect(null);
+      interceptIntoEdge(source, target, edgeId);
+    },
+    [edgeSelect, interceptIntoEdge],
+  );
+
+  // 디시전 드롭 모달: 인터셉트 — 출력선 ≥2면 선택 모달, 1개면 그 선에 바로 끼움 (F1).
+  const applyDecisionIntercept = useCallback(() => {
+    if (decisionDrop === null) {
+      return;
+    }
+    const { aId, bId, options, at } = decisionDrop;
+    setDecisionDrop(null);
+    if (options.length >= 2) {
+      setEdgeSelect({ source: bId, target: aId, options, at });
+      return;
+    }
+    if (options.length === 1) {
+      interceptIntoEdge(bId, aId, options[0].edgeId);
+    }
+  }, [decisionDrop, interceptIntoEdge]);
+
+  // 디시전 드롭 모달: 분기 — B→A 새 출력선 추가(자동 yes/no/기타 라벨 모달) (F1).
+  const applyDecisionBranch = useCallback(() => {
+    if (decisionDrop === null) {
+      return;
+    }
+    const { aId, bId } = decisionDrop;
+    setDecisionDrop(null);
+    applyFlowEdges(aId, bId, "back", false);
+  }, [decisionDrop, applyFlowEdges]);
 
   // F14 — 노드 선택 후 ]=하이라이트 경로 전방 확장 / [=축소→초기→후방 확장(뷰 고정).
   // Tab/Shift+Tab=흐름상 다음/이전 노드로 포커스 이동(+중앙). 입력/아웃라인 포커스 중엔 제외(아웃라인 Tab 보존).
@@ -5148,9 +5208,24 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (event.key === "]" || event.key === "[") {
         event.preventDefault();
         const delta = event.key === "]" ? 1 : -1;
+        const edges = edgesRef.current;
+        // reach 값에 해당하는 하이라이트 노드 수 — 4225~4231의 hop 산정과 동일하게.
+        const reachCount = (r: number): number => {
+          const fwd = r >= 0 ? r + 1 : 1;
+          const bwd = r < 0 ? -r : 0;
+          return new Set([
+            ...getFlowPathForward(edges, selectedId, fwd),
+            ...getFlowPathBackward(edges, selectedId, bwd),
+          ]).size;
+        };
         setFlow((prev) => {
           const base = prev.anchor === selectedId ? prev.reach : 0;
-          return { anchor: selectedId, reach: base + delta };
+          const next = base + delta;
+          // 실제 끝/처음에 도달하면 더 증가/감소하지 않음 (F14) — 노드 수가 안 변하면 클램프.
+          if (reachCount(next) === reachCount(base)) {
+            return prev.anchor === selectedId ? prev : { anchor: selectedId, reach: 0 };
+          }
+          return { anchor: selectedId, reach: next };
         });
         return;
       }
@@ -6501,6 +6576,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           options={edgeSelect.options}
           onPick={(edgeId) => applyEdgeSelect(edgeId)}
           onClose={() => setEdgeSelect(null)}
+        />
+      )}
+      {decisionDrop && (
+        <EdgeDecisionModal
+          position={decisionDrop.at}
+          onBranch={applyDecisionBranch}
+          onIntercept={applyDecisionIntercept}
+          onClose={() => setDecisionDrop(null)}
         />
       )}
       {capPrompt && (
