@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session, init_models
-from app.models import Employee
+from app.models import Employee, LoginRecord
 from app.permissions.logic import is_sysadmin, org_path
 from app.routers import (
     admin,
@@ -74,6 +74,9 @@ async def get_me(
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)
+    # 로그인/활동 기록 1건 — 사용자 현황조사용(집계는 후속). /me는 앱 로드 시 호출됨.
+    session.add(LoginRecord(login_id=login_id, name=emp.name if emp else None))
+    await session.commit()
     return MeOut(
         username=login_id,
         ai_enabled=settings.ai_enabled,

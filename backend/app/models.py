@@ -351,3 +351,17 @@ class UserGroupManager(Base):
         ForeignKey("user_groups.id", ondelete="CASCADE")
     )
     user_id: Mapped[str] = mapped_column(String(100))
+
+
+class LoginRecord(Base):
+    """로그인/활동 기록 — 사용자 현황조사용. /api/me 호출 시 1건 기록(집계·리포트는 후속)."""
+
+    __tablename__ = "login_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    # 조회 편의용 표시명 스냅샷(없으면 None)
+    name: Mapped[str | None] = mapped_column(String(200), default=None)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, index=True
+    )

@@ -84,6 +84,24 @@ def test_me_falls_back_for_unknown_user(client: TestClient) -> None:
     assert body["role"] == "user"  # employees에 없으면 기본 user
 
 
+def test_me_records_login(client: TestClient) -> None:
+    """/api/me 호출 시 LoginRecord 1건 기록 — 현황조사용."""
+    from app.models import LoginRecord
+
+    async def _count(login_id: str) -> int:
+        async with SessionLocal() as session:
+            rows = (
+                await session.scalars(
+                    select(LoginRecord).where(LoginRecord.login_id == login_id)
+                )
+            ).all()
+            return len(list(rows))
+
+    client.get("/api/me", headers={"X-Dev-User": "record.me"})
+    client.get("/api/me", headers={"X-Dev-User": "record.me"})
+    assert asyncio.run(_count("record.me")) == 2
+
+
 def test_employees_list_requires_admin(client: TestClient, sysadmin_enforced: None) -> None:
     # 일반 유저(비-sysadmin) → 403, sysadmin(admin.kim) → 200 (F6: admin 흡수)
     assert client.get("/api/employees", headers={"X-Dev-User": "user.lee"}).status_code == 403
