@@ -21,6 +21,27 @@ describe("matchTerm", () => {
   it("returns null when nothing matches", () => {
     expect(matchTerm("Kim", "zzz")).toBeNull();
   });
+  it("subsequence (order-only) matches as last resort", () => {
+    // p·f·x가 순서대로 등장 (연속 아님) → subsequence 매치
+    expect(matchTerm("prefix", "pfx")).not.toBeNull();
+  });
+  it("subsequence respects order", () => {
+    // c가 a보다 뒤 → 순서 불일치 → null
+    expect(matchTerm("abc", "ca")).toBeNull();
+  });
+});
+
+describe("filterByQuery ordering (정확 > 접두 > 부분 > subsequence)", () => {
+  const items = [
+    { name: "axbxc" }, // subsequence
+    { name: "xabc" }, // 부분
+    { name: "abc" }, // 정확
+    { name: "abcd" }, // 접두
+  ];
+  it("sorts hits by match quality", () => {
+    const hits = filterByQuery(items, "abc", (i) => [{ field: "name", text: i.name }]);
+    expect(hits.map((h) => h.item.name)).toEqual(["abc", "abcd", "xabc", "axbxc"]);
+  });
 });
 
 describe("filterByQuery", () => {

@@ -71,6 +71,7 @@ export function PrincipalPicker({
 }: PrincipalPickerProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
 
   const all = buildOptions(users, departments, groups, userDepartments).filter(
     (o) => !excludeIds.has(o.principalId),
@@ -80,8 +81,31 @@ export function PrincipalPicker({
     ? filterByQuery(all, query, (o) => [
         { field: "name", text: o.displayName },
         { field: "dept", text: o.department ?? "" },
+        // 사용자는 아이디(loginId)도 검색 대상 (SR-2)
+        { field: "id", text: o.principalType === "user" ? o.principalId : "" },
       ])
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
+  const visible = hits.slice(0, 8);
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (visible.length === 0) return;
+    if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
+      event.preventDefault();
+      setActive((a) => Math.min(a + 1, visible.length - 1));
+    } else if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
+      event.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const opt = visible[active]?.item;
+      if (opt) {
+        onSelect(opt);
+        setQuery("");
+      }
+    } else if (event.key === "Escape") {
+      setQuery("");
+    }
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -93,32 +117,47 @@ export function PrincipalPicker({
           className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
           placeholder={t("perm.addPickerPlaceholder")}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+          }}
+          onKeyDown={onKeyDown}
         />
       </div>
       {/* 결과 목록 (최대 8개) / Results list (max 8) */}
       {query.trim() && (
         <div className="flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-md">
-          {hits.slice(0, 8).map(({ item: opt, matches }) => {
+          {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
+            const idRanges: MatchRange[] = matches.find((m) => m.field === "id")?.ranges ?? [];
             return (
               <button
                 key={`${opt.principalType}:${opt.principalId}`}
                 type="button"
-                className="flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                className={`flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt ${
+                  active === idx ? "bg-surface-alt" : ""
+                }`}
+                onMouseEnter={() => setActive(idx)}
                 onClick={() => {
                   onSelect(opt);
                   setQuery("");
                 }}
               >
                 <PrincipalIcon type={opt.principalType} />
-                <span>
+                <span className="min-w-0 truncate">
                   <Highlight text={opt.displayName} ranges={nameRanges} />
-                  {opt.department && (
+                  {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
+                  {opt.principalType === "user" && (
+                    <span className="ml-1.5 text-fine text-ink-tertiary">
+                      <Highlight text={opt.principalId} ranges={idRanges} />
+                      {opt.department ? ` · ${opt.department}` : ""}
+                    </span>
+                  )}
+                  {opt.principalType !== "user" && opt.department && (
                     <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
                   )}
                 </span>
-                <span className="ml-auto text-fine text-ink-tertiary">
+                <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
                   {t(
                     opt.principalType === "user"
                       ? "perm.principalUser"
