@@ -29,7 +29,6 @@ import { useI18n } from "@/lib/i18n";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 
 import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
-import type { PrincipalOption } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
 import { SkeletonRows } from "./loading-skeleton";
 
@@ -180,7 +179,6 @@ function AddCollaboratorForm({
   ) => void;
 }) {
   const { t } = useI18n();
-  const [selected, setSelected] = useState<PrincipalOption | null>(null);
   // 공개 맵이면 editor 기본값 / Default to editor on public maps (viewer disabled).
   const [role, setRole] = useState<"viewer" | "editor">(viewerGrantDisabled ? "editor" : "viewer");
 
@@ -203,55 +201,37 @@ function AddCollaboratorForm({
     rawDn: "",
   }));
 
-  function handleAdd() {
-    if (!selected) return;
-    onAdd(selected.principalType, selected.principalId, role);
-    setSelected(null);
-    setRole(viewerGrantDisabled ? "editor" : "viewer");
-  }
-
   return (
     <div className="mt-3 flex flex-col gap-2 border-t border-hairline pt-3">
       <p className="text-caption-strong text-ink">{t("perm.addCollaborator")}</p>
 
-      <PrincipalPicker
-        users={pickerUsers}
-        departments={pickerDepts}
-        groups={toPickerGroups(groups)}
-        excludeIds={excludeIds}
-        onSelect={setSelected}
-      />
-
-      {/* 선택된 principal 표시 / Selected principal chip */}
-      {selected && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="flex-1 text-caption text-ink">{selected.displayName}</span>
-
-            {/* 역할 선택 / Role select */}
-            <label className="text-fine text-ink-tertiary">{t("perm.addRoleLabel")}</label>
-            <select
-              className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
-              value={role}
-              onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
-            >
-              {/* 퍼블릭 맵은 viewer 선택지 자체를 숨김 — editor만 / Public map: no viewer option, editor only */}
-              {!viewerGrantDisabled && (
-                <option value="viewer">{t("perm.roleViewer")}</option>
-              )}
-              <option value="editor">{t("perm.roleEditor")}</option>
-            </select>
-
-            <button
-              type="button"
-              className="rounded-sm bg-accent px-2 py-0.5 text-fine text-on-accent hover:bg-accent-focus"
-              onClick={handleAdd}
-            >
-              {t("perm.addButton")}
-            </button>
-          </div>
+      {/* 선택한 역할로 드롭다운 선택(클릭/Enter) 즉시 추가 — 별도 Add 버튼 없음 (3차 수정) */}
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <PrincipalPicker
+            users={pickerUsers}
+            departments={pickerDepts}
+            groups={toPickerGroups(groups)}
+            excludeIds={excludeIds}
+            onSelect={(opt) => onAdd(opt.principalType, opt.principalId, role)}
+          />
         </div>
-      )}
+        {/* 역할 — 퍼블릭 맵이면 editor 1옵션이라 드롭다운 대신 정적 표시(화살표 없음) */}
+        {viewerGrantDisabled ? (
+          <span className="rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-fine text-ink-secondary">
+            {t("perm.roleEditor")}
+          </span>
+        ) : (
+          <select
+            className="rounded-sm border border-hairline bg-surface px-1.5 py-1.5 text-fine text-ink"
+            value={role}
+            onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
+          >
+            <option value="viewer">{t("perm.roleViewer")}</option>
+            <option value="editor">{t("perm.roleEditor")}</option>
+          </select>
+        )}
+      </div>
     </div>
   );
 }

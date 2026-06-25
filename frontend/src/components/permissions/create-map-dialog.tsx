@@ -231,10 +231,16 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
 
   // ── 승인자 후보 (AP, 생성 시점엔 맵이 없어 클라 산정) ──
   // public=전원 열람이라 모든 직원 후보. private=생성자 + 선택한 협업자(user) +
-  // 협업자로 추가된 부서의 부서원 + 그룹의 멤버(그들의 소속/그룹이 뷰어+ 권한을 가지므로).
-  const deptCollabNames = new Set(
-    collaborators.filter((c) => c.principalType === "department").map((c) => c.displayName),
-  );
+  // 협업자로 추가된 부서의 부서원(상위 조직이면 하위 팀/그룹 전원) + 그룹의 멤버.
+  // 부서 협업자 principalId=org_path → 직원 org_path가 그 하위면 포함 (AP 계층, belongs_to_department parity).
+  const deptOrgPathByLeaf = new Map(dirDepts.map((d) => [d.name, d.id])); // 말단명 → org_path
+  const chosenDeptPaths = collaborators
+    .filter((c) => c.principalType === "department")
+    .map((c) => c.principalId);
+  const inChosenDept = (u: DirectoryUser): boolean => {
+    const orgPath = deptOrgPathByLeaf.get(u.department) ?? u.department;
+    return chosenDeptPaths.some((dp) => orgPath === dp || orgPath.startsWith(`${dp}/`));
+  };
   const groupCollabIds = new Set(
     collaborators.filter((c) => c.principalType === "group").map((c) => c.principalId),
   );
@@ -249,7 +255,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const approverEligibleIds = new Set<string>([
     ...(currentUser ? [currentUser.id] : []),
     ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
-    ...dirUsers.filter((u) => deptCollabNames.has(u.department)).map((u) => u.id),
+    ...dirUsers.filter(inChosenDept).map((u) => u.id),
     ...groupMemberIds,
   ]);
   const approverPickerUsers =

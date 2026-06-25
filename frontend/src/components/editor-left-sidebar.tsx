@@ -16,7 +16,7 @@ import {
 import Link from "next/link";
 import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 
-import type { OutlineRow, ProcessNodeType } from "@/lib/canvas";
+import { terminalDisplayLabel, type OutlineRow, type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { NODE_DISPLAY_FIELDS, type NodeDisplayField } from "@/lib/node-actions";
@@ -462,7 +462,11 @@ export function EditorLeftSidebar({
                       }`}
                     >
                       <Icon size={13} strokeWidth={1.5} />
-                      <span className="truncate">{item.label || t("sidebar.untitled")}</span>
+                      <span className="truncate">
+                        {item.nodeType === "start" || item.nodeType === "end"
+                          ? terminalDisplayLabel(item.nodeType, item.label)
+                          : item.label || t("sidebar.untitled")}
+                      </span>
                     </button>
                   )}
                 </li>

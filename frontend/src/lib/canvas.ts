@@ -497,17 +497,23 @@ export function getFlowPathForward(edges: Edge[], startId: string, hops: number)
   return ids;
 }
 
-/** startId로 들어오는 첫 입력 엣지를 hops번 거슬러 올라간 후방 경로의 엣지 id들 (F14). 시작/사이클에서 중단. */
+/** startId로 거슬러 올라간 후방 경로의 엣지 id들 (F14). BFS로 분기(합류)도 일괄. 시작/사이클에서 중단. */
 export function getFlowPathBackward(edges: Edge[], startId: string, hops: number): string[] {
   const ids: string[] = [];
   const seen = new Set<string>([startId]);
-  let cur = startId;
+  let frontier = [startId];
   for (let i = 0; i < hops; i++) {
-    const prev = getIncomingEdges(edges, cur)[0];
-    if (!prev || seen.has(prev.source)) break;
-    ids.push(prev.id);
-    seen.add(prev.source);
-    cur = prev.source;
+    const nextFrontier: string[] = [];
+    for (const cur of frontier) {
+      for (const edge of getIncomingEdges(edges, cur)) {
+        if (seen.has(edge.source)) continue; // 사이클/이미 방문 차단
+        ids.push(edge.id);
+        seen.add(edge.source);
+        nextFrontier.push(edge.source);
+      }
+    }
+    if (nextFrontier.length === 0) break;
+    frontier = nextFrontier;
   }
   return ids;
 }

@@ -3376,13 +3376,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         const to = pointOf(tgtRect, sideFromHandleId(edge.targetHandle, "left"));
         setEditingEdgePos({ left: (from.x + to.x) / 2, top: (from.y + to.y) / 2 });
       } else {
+        // 인라인 박스를 못 띄울 때만 인스펙터 라벨 입력에 포커스 —
+        // 인라인 박스가 뜰 땐 그쪽이 autoFocus 유지(인스펙터가 포커스를 뺏어 즉시 blur→커밋되던 문제, A1)
         setEditingEdgePos(null);
+        setTimeout(() => {
+          edgeLabelInputRef.current?.focus();
+          edgeLabelInputRef.current?.select();
+        }, 0);
       }
-      // 인스펙터 라벨 입력이 마운트된 뒤 포커스 (분기 엣지는 입력이 비활성 — 분기 버튼으로 편집)
-      setTimeout(() => {
-        edgeLabelInputRef.current?.focus();
-        edgeLabelInputRef.current?.select();
-      }, 0);
     },
     [screenRectOf],
   );
@@ -5677,6 +5678,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setMenu(null);
                         setPending(null);
                         setSummaryNodeId(null);
+                        setFlow({ anchor: null, reach: 0 }); // 흐름 하이라이트 초기화(재선택 시 잔존 방지, F14)
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
