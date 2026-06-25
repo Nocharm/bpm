@@ -9,7 +9,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { getDirectory, listApprovers, setApprovers, type DirectoryUser } from "@/lib/api";
+import {
+  listApprovers,
+  listEligibleApprovers,
+  setApprovers,
+  type DirectoryUser,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/mock/permissions";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
@@ -33,15 +38,15 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
   // 초기 로드 중 — 데이터 도착 전 "결재자 0" 경고 대신 스켈레톤 표시 (F8).
   const [loading, setLoading] = useState(true);
 
-  // 디렉터리 사용자 목록 / Directory users for picker.
+  // 승인자 후보 = 맵 조회권한(viewer+) 보유 직원만 (AP) — 전체 디렉터리 대신 자격자 목록.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   useEffect(() => {
     let active = true;
-    void getDirectory()
-      .then((d) => { if (active) setDirUsers(d.users); })
+    void listEligibleApprovers(mapIdNum)
+      .then((users) => { if (active) setDirUsers(users); })
       .catch(() => { /* picker falls back to empty */ });
     return () => { active = false; };
-  }, []);
+  }, [mapIdNum]);
 
   // 표시명 해석 — mock 시드 사용, 미일치 시 id 폴백 / Resolve display name from mock seed.
   const userName = useCallback(

@@ -38,6 +38,22 @@ function PrincipalIcon({ type }: { type: string }) {
   return <User size={12} strokeWidth={1.5} />;
 }
 
+// 부서 org_path("A/B/C")의 말단 세그먼트만 / leaf segment of a dept org_path (HM-3).
+function deptLeaf(orgPath: string): string {
+  const parts = orgPath.split("/");
+  return parts[parts.length - 1] || orgPath;
+}
+
+// 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
+function deptLevelRank(leaf: string): number {
+  const s = leaf.toLowerCase();
+  if (s.includes("센터") || s.includes("center")) return 0;
+  if (s.includes("팀") || s.includes("team")) return 2;
+  if (s.includes("그룹") || s.includes("group")) return 3;
+  if (s.includes("파트") || s.includes("part")) return 4;
+  return 1; // 담당(Department) / 그 외 기본
+}
+
 interface MapDetailCardProps {
   mapId: number;
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
@@ -176,8 +192,17 @@ export function MapDetailCard({
             ) : (
               <div className="flex flex-col gap-3">
                 {MEMBER_GROUPS.map((g) => {
-                  const rows = members.filter((m) => m.principal_type === g.type);
-                  if (rows.length === 0) return null;
+                  const unsorted = members.filter((m) => m.principal_type === g.type);
+                  if (unsorted.length === 0) return null;
+                  // 부서는 레벨 순(센터>담당>팀>그룹>파트)으로 정렬 (HM-3)
+                  const rows =
+                    g.type === "department"
+                      ? [...unsorted].sort(
+                          (a, b) =>
+                            deptLevelRank(deptLeaf(a.principal_id)) -
+                            deptLevelRank(deptLeaf(b.principal_id)),
+                        )
+                      : unsorted;
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
@@ -193,7 +218,12 @@ export function MapDetailCard({
                         >
                           <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
                             <PrincipalIcon type={perm.principal_type} />
-                            <span className="truncate">{perm.principal_id}</span>
+                            {/* 부서는 말단 조직만 표시 (HM-3) */}
+                            <span className="truncate">
+                              {perm.principal_type === "department"
+                                ? deptLeaf(perm.principal_id)
+                                : perm.principal_id}
+                            </span>
                           </span>
                           <RoleBadge role={perm.role as MapRole} />
                         </div>

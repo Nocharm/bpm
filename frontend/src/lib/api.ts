@@ -436,6 +436,11 @@ export function listApprovers(mapId: number): Promise<string[]> {
   return request<string[]>(`/maps/${mapId}/approvers`);
 }
 
+// 승인자 지정 후보 — 맵 조회권한(viewer+) 보유 직원만 (AP)
+export function listEligibleApprovers(mapId: number): Promise<DirectoryUser[]> {
+  return request<DirectoryUser[]>(`/maps/${mapId}/eligible-approvers`);
+}
+
 export function setApprovers(mapId: number, userIds: string[]): Promise<string[]> {
   return request<string[]>(`/maps/${mapId}/approvers`, {
     method: "PUT",

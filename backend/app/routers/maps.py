@@ -10,10 +10,14 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions import logic
-from app.permissions.access import get_effective_role, get_user_active_group_ids
+from app.permissions.access import (
+    get_effective_role,
+    get_eligible_users,
+    get_user_active_group_ids,
+)
 from app.permissions.deps import require_map_role
 from app.routers.versions import clone_graph
-from app.schemas import MapCopy, MapCreate, MapDetailOut, MapOut, MapUpdate
+from app.schemas import DirectoryUserOut, MapCopy, MapCreate, MapDetailOut, MapOut, MapUpdate
 from app.version_events import record_version_event
 
 router = APIRouter(
@@ -218,6 +222,22 @@ async def copy_map(
         await session.refresh(version, attribute_names=["events"])
     new_map.my_role = "owner"
     return new_map
+
+
+@router.get(
+    "/{map_id}/eligible-approvers",
+    response_model=list[DirectoryUserOut],
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def list_eligible_approvers(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> list[DirectoryUserOut]:
+    """승인자 지정 후보 — 맵 조회권한(viewer+) 보유 직원만 (AP). 담당자 후보와 동일 자격."""
+    eligible = await get_eligible_users(session, map_id)
+    return [
+        DirectoryUserOut(id=e.login_id, name=e.name or e.login_id, department=e.department or "")
+        for e in eligible
+    ]
 
 
 @router.get(

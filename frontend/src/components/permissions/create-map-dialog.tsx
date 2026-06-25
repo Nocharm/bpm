@@ -123,15 +123,16 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // ── 공개범위 변경 시 뷰어→편집자 초기화 / reset pending role when switching to public ──
-  const handleVisibilityChange = useCallback((v: MapVisibility) => {
+  // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
+  const handleVisibilityChange = (v: MapVisibility) => {
     setVisibility(v);
     if (v === "public" && pendingCollabRole === "viewer") {
       setPendingCollabRole("editor");
     }
-  }, [pendingCollabRole]);
+  };
 
   // ── 협업자 추가 / add collaborator ──
-  const handleAddCollab = useCallback(() => {
+  const handleAddCollab = () => {
     if (!pendingCollab) return;
     const role: MapRole = visibility === "public" ? "editor" : pendingCollabRole;
     setCollaborators((prev) => {
@@ -149,7 +150,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
       ];
     });
     setPendingCollab(null);
-  }, [pendingCollab, pendingCollabRole, visibility]);
+  };
 
   // ── 협업자 제거 / remove collaborator ──
   const handleRemoveCollab = useCallback((key: string) => {
@@ -206,6 +207,14 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const collabExcludeIds = new Set(
     collaborators.map((c) => c.principalId).concat(currentUser ? [currentUser.id] : []),
   );
+
+  // ── 승인자 후보 = 생성자 + 선택한 user 협업자만 (AP, 생성 시점엔 맵이 없어 클라 산정) ──
+  // 부서/그룹 협업자의 멤버 확장은 생성 후 맵 설정(서버 eligible)에서.
+  const approverEligibleIds = new Set<string>([
+    ...(currentUser ? [currentUser.id] : []),
+    ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
+  ]);
+  const approverPickerUsers = pickerUsers.filter((u) => approverEligibleIds.has(u.id));
 
   const dialog = (
     <ModalBackdrop
@@ -387,8 +396,9 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
             {t("perm.createDialog.approversLabel")}
           </span>
           {/* 결재자 picker (users only) + 선택된 결재자 pills / approver picker + selected pills */}
+          {/* 후보 = 생성자 + 선택한 user 협업자 (AP) */}
           <PrincipalPicker
-            users={pickerUsers}
+            users={approverPickerUsers}
             departments={[]}
             groups={[]}
             excludeIds={new Set(approvers.map((a) => a.userId))}

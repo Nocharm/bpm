@@ -206,6 +206,20 @@ def test_eligible_assignees_private_filters(client: TestClient, enforce: None) -
     assert isinstance(res.json()["departments"], list)
 
 
+def test_eligible_approvers_private_filters(client: TestClient, enforce: None) -> None:
+    """승인자 후보도 viewer+ 자격자만 (AP) — 담당자 후보와 동일 자격."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+    act_as("owner.u")
+    res = client.get(f"/api/maps/{map_id}/eligible-approvers")
+    assert res.status_code == 200
+    ids = {u["id"] for u in res.json()}
+    assert "user.lee" in ids
+    assert "user.park" not in ids
+
+
 def test_eligible_assignees_public_all(client: TestClient, enforce: None) -> None:
     """공개 맵: 전원 열람 가능 → 모든 직원이 담당자 후보 (F5)."""
     map_id = seed_map(visibility="public", grants=[("user", "owner.u", "owner")])

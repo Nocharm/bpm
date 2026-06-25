@@ -13,19 +13,16 @@ from app.auth import get_current_user
 from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.permissions import logic
+from app.permissions.access import get_eligible_users
 from app.permissions.deps import require_version_map_role
 from app.models import (
     Edge,
     Employee,
     Group,
     MapApprover,
-    MapPermission,
     MapVersion,
     Node,
     ProcessMap,
-    UserGroup,
-    UserGroupMember,
     VersionApproval,
 )
 from app.schemas import (
@@ -191,67 +188,7 @@ async def list_eligible_assignees(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    found_map = await session.get(ProcessMap, version.map_id)
-    employees = list((await session.scalars(select(Employee).order_by(Employee.name))).all())
-
-    if found_map is not None and found_map.visibility == "public":
-        eligible = employees
-    else:
-        visibility = found_map.visibility if found_map is not None else "private"
-        perm_rows = (
-            await session.execute(
-                select(
-                    MapPermission.principal_type,
-                    MapPermission.principal_id,
-                    MapPermission.role,
-                ).where(MapPermission.map_id == version.map_id)
-            )
-        ).all()
-        permissions: list[logic.Permission] = [(p, pid, role) for p, pid, role in perm_rows]
-        approver_ids = set(
-            (
-                await session.scalars(
-                    select(MapApprover.user_id).where(MapApprover.map_id == version.map_id)
-                )
-            ).all()
-        )
-        # 모든 active 그룹 멤버십 1회 로드 → 직원별 그룹 소속을 메모리에서 판정 (N+1 회피)
-        member_rows = (
-            await session.execute(
-                select(
-                    UserGroupMember.group_id,
-                    UserGroupMember.member_type,
-                    UserGroupMember.member_id,
-                )
-                .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
-                .where(UserGroup.status == "active")
-            )
-        ).all()
-        eligible = []
-        for emp in employees:
-            emp_org_path = logic.org_path(
-                emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department
-            )
-            group_ids: set[str] = set()
-            for gid, member_type, member_id in member_rows:
-                if member_type == "user" and member_id == emp.login_id:
-                    group_ids.add(str(gid))
-                elif member_type == "department" and logic.belongs_to_department(
-                    emp_org_path, member_id
-                ):
-                    group_ids.add(str(gid))
-            role = logic.effective_role(
-                emp.login_id,
-                logic.is_sysadmin(emp.login_id),
-                emp_org_path,
-                visibility,
-                permissions,
-                emp.login_id in approver_ids,
-                group_ids,
-            )
-            if role is not None:  # None=접근 불가, 그 외(viewer+)는 후보
-                eligible.append(emp)
-
+    eligible = await get_eligible_users(session, version.map_id)
     users = [
         DirectoryUserOut(id=e.login_id, name=e.name or e.login_id, department=e.department or "")
         for e in eligible
