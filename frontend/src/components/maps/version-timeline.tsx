@@ -38,15 +38,6 @@ const EVENT_CHIP: Record<string, string> = {
   rejected: "border-error/40 bg-error/10 text-error",
 };
 
-// 상세 행 단계 텍스트 색 / stage text color per event type.
-const STAGE_COLOR: Record<string, string> = {
-  created: "text-ink-secondary",
-  submitted: "text-accent",
-  approved: "text-added",
-  published: "text-added",
-  rejected: "text-error",
-};
-
 // 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green) / node style by latest event.
 function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
   switch (eventType) {
@@ -141,18 +132,18 @@ export function VersionTimeline({
                     <div className="overflow-hidden">
                       <div className="mt-1.5 flex flex-col gap-1">
                         {events.map((evt) => (
-                          <div key={evt.id} className="flex items-center gap-2 text-fine">
+                          <div key={evt.id} className="flex items-center gap-2 py-0.5 text-fine">
                             <span
-                              className={`inline-flex w-16 shrink-0 items-center gap-1 ${
-                                STAGE_COLOR[evt.event_type] ?? "text-ink-secondary"
+                              className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 ${
+                                EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
                               }`}
                             >
                               <EventIcon type={evt.event_type} />
                               {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
                             </span>
-                            <span className="min-w-0 flex-1 truncate text-ink">
-                              {nameOf(evt.actor)}
-                              <span className="text-ink-tertiary"> ({evt.actor})</span>
+                            <span className="min-w-0 flex-1 truncate text-ink">{nameOf(evt.actor)}</span>
+                            <span className="shrink-0 rounded-sm bg-surface-alt px-1.5 py-0.5 text-ink-tertiary">
+                              {evt.actor}
                             </span>
                             <span className="shrink-0 text-ink-tertiary">{formatStamp(evt.created_at)}</span>
                           </div>
