@@ -233,7 +233,7 @@ export function MapDetailCard({
           {detail.versions.length === 0 ? (
             <p className="text-caption text-ink-tertiary">{t("perm.version.noVersions")}</p>
           ) : (
-            <VersionTimeline versions={detail.versions} />
+            <VersionTimeline versions={detail.versions} nameById={nameById} />
           )}
         </div>
 
@@ -270,48 +270,51 @@ export function MapDetailCard({
                           perm.principal_id !== hoveredPath &&
                           (hoveredPath.startsWith(`${perm.principal_id}/`) ||
                             perm.principal_id.startsWith(`${hoveredPath}/`));
-                        // 2번째 줄 — 유저=직급·말단org / 부서=구성원수(상위소속은 호버 시) / 그룹=구성원수·상태 (H2)
+                        // 2번째 줄 — 유저=직급·부서(평소 숨김→행 호버 시 아래로 펼침) / 부서=구성원수(상위소속 호버 시) / 그룹=구성원수·상태 (H2c)
                         let secondNode: ReactNode = null;
                         if (perm.principal_type === "user") {
                           const leaf = deptLeaf(orgPathById.get(perm.principal_id) ?? "");
-                          const txt = [titleById.get(perm.principal_id), leaf].filter(Boolean).join(" · ");
-                          if (txt) {
-                            secondNode = <span className="truncate text-fine text-ink-tertiary">{txt}</span>;
-                          }
-                        } else {
-                          let count: number | null = null;
-                          let tail = "";
-                          if (perm.principal_type === "group") {
-                            const g = groupInfo.get(perm.principal_id);
-                            if (g) {
-                              count = g.count;
-                              tail = t(
-                                g.status === "pending"
-                                  ? "home.groupPending"
-                                  : g.status === "rejected"
-                                    ? "home.groupRejected"
-                                    : "home.groupActive",
-                              );
-                            }
-                          } else {
-                            count = [...orgPathById.values()].filter(
-                              (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
-                            ).length;
-                            // 상위 소속은 평소 숨기고 호버(또는 관련 팀)일 때만 — 멤버수 중복 회피 (H2)
-                            if (hoveredPath === perm.principal_id || related) {
-                              const parts = perm.principal_id.split("/").filter(Boolean);
-                              tail = parts.length > 1 ? parts.slice(0, -1).join(" › ") : (parts[0] ?? "");
-                            }
-                          }
-                          if (count !== null) {
+                          const detail = [titleById.get(perm.principal_id), leaf].filter(Boolean).join(" · ");
+                          if (detail) {
                             secondNode = (
-                              <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
-                                <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                                {count}
-                                {tail && <span className="truncate">· {tail}</span>}
+                              <span className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-[200ms] ease-smooth group-hover:grid-rows-[1fr]">
+                                <span className="overflow-hidden">
+                                  <span className="block truncate text-fine text-ink-tertiary">{detail}</span>
+                                </span>
                               </span>
                             );
                           }
+                        } else if (perm.principal_type === "group") {
+                          const g = groupInfo.get(perm.principal_id);
+                          if (g) {
+                            const status = t(
+                              g.status === "pending"
+                                ? "home.groupPending"
+                                : g.status === "rejected"
+                                  ? "home.groupRejected"
+                                  : "home.groupActive",
+                            );
+                            secondNode = (
+                              <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+                                <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                                {g.count}
+                                <span className="truncate">· {status}</span>
+                              </span>
+                            );
+                          }
+                        } else {
+                          const count = [...orgPathById.values()].filter(
+                            (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
+                          ).length;
+                          const parts = perm.principal_id.split("/").filter(Boolean);
+                          const parent = parts.length > 1 ? parts.slice(0, -1).join(" › ") : (parts[0] ?? "");
+                          secondNode = (
+                            <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+                              <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                              {count}
+                              {parent && <span className="hidden truncate group-hover:inline">· {parent}</span>}
+                            </span>
+                          );
                         }
                         return (
                           <div
@@ -327,7 +330,7 @@ export function MapDetailCard({
                                 : undefined
                             }
                             // 나의 소속=악센트 배경 / 호버 관련 팀=악센트 틴트 (멤버수 중복 인지) (H2)
-                            className={`flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 transition-colors ${
+                            className={`group flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 transition-colors ${
                               isMine(perm)
                                 ? "border-accent bg-accent/10"
                                 : related
@@ -348,7 +351,7 @@ export function MapDetailCard({
                                   ) : perm.principal_type === "user" ? (
                                     <>
                                       {nameById.get(perm.principal_id) ?? perm.principal_id}
-                                      <span className="text-ink-tertiary"> ({perm.principal_id})</span>
+                                      <span className="hidden text-ink-tertiary group-hover:inline"> ({perm.principal_id})</span>
                                     </>
                                   ) : (
                                     perm.principal_id
