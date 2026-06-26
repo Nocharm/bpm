@@ -312,7 +312,7 @@ export default function SettingsPage() {
           {!currentMockUser ? (
             <p className="text-caption text-ink-tertiary">…</p>
           ) : (
-            <div className="mx-auto flex max-w-[680px] flex-col gap-10 pb-24">
+            <div className="flex w-full max-w-[680px] flex-col gap-10 pb-24">
               {visibleTabs.map((tab) => (
                 <section
                   key={tab.id}
