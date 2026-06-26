@@ -100,6 +100,7 @@ def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     row = next(m for m in client.get("/api/maps").json() if m["id"] == created["id"])
     assert row["version_count"] == 1
     assert row["node_count"] == 2
+    assert "member_count" in row
     assert "owner_name" in row
 
 

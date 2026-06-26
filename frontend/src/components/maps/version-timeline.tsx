@@ -4,7 +4,6 @@
 // 박스 클릭 시 칩 대신 이벤트별 상세 행(단계 필·이름·아이디·시간)으로 펼침. 여러 개 동시 펼침 가능 (H3).
 // 펼침 상태는 부모(map-detail-card)가 보유 — '모두 접기' 공유.
 
-import { Fragment } from "react";
 import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
@@ -90,15 +89,21 @@ export function VersionTimeline({
       {[...versions].reverse().map((version, idx) => {
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
         const events: VersionEvent[] = [...version.events].reverse();
-        // 상세행 시각 — 같은 날짜가 연속되면 날짜 생략하고 시각(HH:mm)만 표시 (날짜 1회) (H3)
-        let prevStampDate: string | null = null;
-        const detailRows = events.map((evt) => {
+        // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
+        const rawRows = events.map((evt) => {
           const full = formatStamp(evt.created_at);
           const sep = full.indexOf(" ");
-          const date = sep >= 0 ? full.slice(0, sep) : full;
-          const stamp = date === prevStampDate ? (sep >= 0 ? full.slice(sep + 1) : full) : full;
-          prevStampDate = date;
-          return { evt, stamp };
+          return {
+            evt,
+            date: sep >= 0 ? full.slice(0, sep) : full,
+            time: sep >= 0 ? full.slice(sep + 1) : "",
+          };
+        });
+        const detailRows = rawRows.map((r, i) => {
+          if (i > 0 && rawRows[i - 1]?.date === r.date) return { ...r, dateSpan: 0 };
+          let span = 1;
+          while (i + span < rawRows.length && rawRows[i + span]?.date === r.date) span += 1;
+          return { ...r, dateSpan: span };
         });
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
@@ -178,23 +183,39 @@ export function VersionTimeline({
                     }`}
                   >
                     <div className="overflow-hidden">
-                      <div className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1 text-fine">
-                        {detailRows.map(({ evt, stamp }) => (
-                          <Fragment key={evt.id}>
-                            <span
-                              className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
-                                EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
-                              }`}
-                            >
-                              <EventIcon type={evt.event_type} />
-                              {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
-                            </span>
-                            <span className="min-w-0 truncate text-ink">{nameOf(evt.actor)}</span>
-                            <span className="text-ink-tertiary">{evt.actor}</span>
-                            <span className="justify-self-end text-ink-tertiary">{stamp}</span>
-                          </Fragment>
-                        ))}
-                      </div>
+                      <table className="mt-1.5 w-full border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
+                        <tbody>
+                          {detailRows.map(({ evt, date, time, dateSpan }) => (
+                            <tr key={evt.id} className="align-top">
+                              <td className="w-24">
+                                <span
+                                  className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
+                                    EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                                  }`}
+                                >
+                                  <EventIcon type={evt.event_type} />
+                                  {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                                </span>
+                              </td>
+                              <td className="w-full whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
+                              <td className="whitespace-nowrap text-ink-tertiary">{evt.actor}</td>
+                              {dateSpan > 0 && (
+                                <td rowSpan={dateSpan}>
+                                  {/* 같은 날짜는 박스 1개가 그 행들 높이만큼 — 날짜 윗 정렬 (H3) */}
+                                  <span className="flex h-full min-w-[5.25rem] items-start justify-center rounded-xs border border-hairline px-1.5 py-0.5 text-ink-tertiary">
+                                    {date}
+                                  </span>
+                                </td>
+                              )}
+                              <td className="whitespace-nowrap text-right">
+                                <span className="rounded-xs border border-hairline px-1.5 py-0.5 text-ink-tertiary">
+                                  {time}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </>

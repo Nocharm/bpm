@@ -42,9 +42,10 @@ export interface MapSummary {
   visibility: "public" | "private";
   // 최신 버전(최대 id) 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
   latest_version_status: VersionStatus | null;
-  // H5b — 홈 카드 집계 (목록 응답에서만 채워짐): 전체 버전 수·라이브(published) 노드 수·소유자 직원명
+  // H5b — 홈 카드 집계 (목록 응답에서만 채워짐): 전체 버전 수·라이브(published) 노드 수·허용 인원 수·소유자 직원명
   version_count?: number;
   node_count?: number;
+  member_count?: number;
   owner_name?: string | null;
   // 소프트삭제 시각 — 휴지통(삭제 예정) 목록에서만 채워짐 (DL)
   deleted_at?: string | null;

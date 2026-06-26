@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Building2, ChevronDown, Clock, ExternalLink, Layers, User, Users, Workflow } from "lucide-react";
+import { Building2, Clock, GitBranch, Globe, Lock, User, Users, Workflow } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -16,11 +16,7 @@ import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MapRole } from "@/lib/mock/permissions";
 import type { MatchRange } from "@/lib/search";
-import {
-  VERSION_STATUS_LABEL,
-  VERSION_STATUS_STYLE,
-  visibilityPillClass,
-} from "@/lib/version-status";
+import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 
 interface MapCardProps {
   map: MapSummary;
@@ -47,6 +43,20 @@ export function MapCard({
   highlighted = false,
 }: MapCardProps) {
   const { t } = useI18n();
+  // 마운트 시점 1회 — 렌더 중 Date.now() 호출은 순수성 규칙 위반이라 상태로 고정 (상대 시각 기준)
+  const [now] = useState(() => Date.now());
+  // 상대 시각 — "방금 / N분 전 / N시간 전 / N일 전", 30일↑은 절대 날짜 (브라우저=KST 가정, formatKst와 동일)
+  const relativeTime = (iso: string): string => {
+    const diffMs = now - new Date(iso).getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return t("home.timeAgo.now");
+    if (min < 60) return t("home.timeAgo.minutes", { n: min });
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return t("home.timeAgo.hours", { n: hr });
+    const day = Math.floor(hr / 24);
+    if (day < 30) return t("home.timeAgo.days", { n: day });
+    return formatKst(iso).slice(0, 10);
+  };
   const rootRef = useRef<HTMLDivElement>(null);
 
   // 강조되면 화면으로 스크롤 (복사 직후 새 카드로 이동)
@@ -58,12 +68,14 @@ export function MapCard({
 
   // 인원 목록은 접근 권한자(viewer+)면 조회 가능 — 서버 GET /permissions 게이트가 viewer+ (B1) / members button for any role with access.
   const canViewMembers = map.my_role !== null;
+  // 역할 배지는 공개+뷰어면 생략(공개맵은 누구나 뷰어라 무의미) — 에디터/오너 또는 비공개일 때만 (요청)
+  const showRole = map.my_role !== null && !(map.visibility === "public" && map.my_role === "viewer");
 
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
   // 멤버 팝오버는 body 포털(fixed)로 — 리스트 overflow에 잘리거나 z-index에 가리지 않게.
-  const membersBtnRef = useRef<HTMLButtonElement>(null);
+  const membersBtnRef = useRef<HTMLSpanElement>(null);
   const [membersPos, setMembersPos] = useState<{ left: number; bottom: number } | null>(null);
   // 호버 닫기 디바운스 — 버튼→툴팁 이동 중 닫히지 않게 (H4)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,6 +118,26 @@ export function MapCard({
     closeTimer.current = setTimeout(() => setMembersOpen(false), 120);
   };
 
+  // 미선택 카드 — 1.5초 호버 시 우측에 아이콘 의미 요약 툴팁 (요청)
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryPos, setSummaryPos] = useState<{ left: number; top: number } | null>(null);
+  const summaryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCardEnter = () => {
+    if (selected) return;
+    summaryTimer.current = setTimeout(() => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (rect) setSummaryPos({ left: rect.right + 8, top: rect.top });
+      setSummaryOpen(true);
+    }, 1500);
+  };
+  const onCardLeave = () => {
+    if (summaryTimer.current) {
+      clearTimeout(summaryTimer.current);
+      summaryTimer.current = null;
+    }
+    setSummaryOpen(false);
+  };
+
   return (
     <div
       ref={rootRef}
@@ -118,58 +150,78 @@ export function MapCard({
             : "border-hairline"
       }`}
       onClick={() => onSelect?.(map.id)}
+      onMouseEnter={onCardEnter}
+      onMouseLeave={onCardLeave}
     >
-      {/* 호버 시 새 탭으로 열기 / Hover: open in a new tab */}
-      <a
-        data-id="map-card-open-newtab"
-        href={`/maps/${map.id}`}
-        target="_blank"
-        rel="noopener"
-        className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface hover:text-ink group-hover:opacity-100 focus-within:opacity-100"
-        aria-label={t("home.openNewWindow")}
-        title={t("home.openNewWindow")}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <ExternalLink size={16} strokeWidth={1.5} />
-      </a>
-
-      {/* 타이틀 + 최신 버전 상태(이름 바로 우측) — 타이틀 텍스트로만 열림(히트박스 축소) */}
-      <div className="flex items-center gap-2 pr-6">
-        <Link
-          data-id="map-card-name"
-          href={`/maps/${map.id}`}
-          className="min-w-0 truncate text-body-strong text-ink hover:text-accent hover:underline"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Highlight text={map.name} ranges={nameRanges ?? []} />
-        </Link>
-        {map.latest_version_status && (
-          <span
-            data-id="map-card-status"
-            className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[map.latest_version_status]}`}
+      {/* 1줄 — 좌: 타이틀+상태 / 우: 역할 배지 + 공개/비공개 아이콘 (역할은 공개+뷰어면 생략) */}
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            data-id="map-card-name"
+            href={`/maps/${map.id}`}
+            className="min-w-0 truncate text-body-strong text-ink hover:text-accent hover:underline"
+            onClick={(e) => e.stopPropagation()}
           >
-            {t(VERSION_STATUS_LABEL[map.latest_version_status])}
+            <Highlight text={map.name} ranges={nameRanges ?? []} />
+          </Link>
+          {map.latest_version_status && (
+            <span
+              data-id="map-card-status"
+              className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[map.latest_version_status]}`}
+            >
+              {t(VERSION_STATUS_LABEL[map.latest_version_status])}
+            </span>
+          )}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {showRole && <RoleBadge role={map.my_role as MapRole} />}
+          <span
+            data-id="map-card-visibility"
+            className={`inline-flex items-center ${
+              map.visibility === "public" ? "text-accent" : "text-ink-tertiary"
+            }`}
+            title={t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+          >
+            {map.visibility === "public" ? (
+              <Globe size={16} strokeWidth={1.5} />
+            ) : (
+              <Lock size={16} strokeWidth={1.5} />
+            )}
           </span>
-        )}
+        </div>
       </div>
 
-      {/* 메타 한 줄 — 좌: 가시성·역할 / 우: 승인멤버 (구 상태필 자리) */}
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-fine text-ink-tertiary">
-          {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
-          <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(map.visibility)}`}>
-            {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+      {/* 메타 한 줄 — 좌: 소유자·수정시각(상대) / 우: 노드·버전·인원 수 (이미지 H4/H5) */}
+      <div className="relative mt-2 flex items-center justify-between gap-2 text-fine text-ink-tertiary">
+        <div className="flex min-w-0 items-center gap-2">
+          {(map.owner_name ?? map.created_by) && (
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <User size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{map.owner_name ?? map.created_by}</span>
+            </span>
+          )}
+          <span className="inline-flex shrink-0 items-center gap-1">
+            <Clock size={12} strokeWidth={1.5} />
+            {relativeTime(map.updated_at)}
           </span>
-          {map.my_role && <RoleBadge role={map.my_role as MapRole} />}
         </div>
 
-        {canViewMembers && (
-          <div className="shrink-0">
-            <button
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span className="inline-flex items-center gap-1" title={t("home.nodeCount")}>
+            <Workflow size={12} strokeWidth={1.5} />
+            {map.node_count ?? 0}
+          </span>
+          <span className="inline-flex items-center gap-1" title={t("home.versionCount")}>
+            <GitBranch size={12} strokeWidth={1.5} />
+            {map.version_count ?? 0}
+          </span>
+          {canViewMembers && (
+            <span
               ref={membersBtnRef}
-              type="button"
               data-id="map-card-members"
-              className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface hover:text-ink"
+              tabIndex={0}
+              className="inline-flex cursor-default items-center gap-1 rounded-sm hover:text-ink"
+              title={t("home.viewMembers")}
               onClick={(e) => e.stopPropagation()}
               onMouseEnter={openMembers}
               onMouseLeave={scheduleClose}
@@ -177,73 +229,85 @@ export function MapCard({
               onBlur={scheduleClose}
             >
               <Users size={12} strokeWidth={1.5} />
-              {t("home.viewMembers")}
-              <ChevronDown
-                size={12}
-                strokeWidth={1.5}
-                className={membersOpen ? "rotate-180 transition-transform" : "transition-transform"}
-              />
-            </button>
+              {map.member_count ?? 0}
+            </span>
+          )}
+        </div>
 
-            {membersOpen &&
-              membersPos &&
-              createPortal(
-                /* body 포털(fixed) — 호버 유지(버튼→툴팁 이동 시 닫힘 디바운스) (H4) */
-                <div
-                  className="fixed z-[1201] max-h-64 w-64 -translate-x-full overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg"
-                  style={{ left: membersPos.left, bottom: membersPos.bottom }}
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseEnter={cancelClose}
-                  onMouseLeave={scheduleClose}
-                >
-                    {membersError ? (
-                      <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
-                    ) : members === null ? (
-                      <p className="px-3 py-1.5 text-fine text-ink-tertiary">…</p>
-                    ) : members.length === 0 ? (
-                      <p className="px-3 py-1.5 text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
-                    ) : (
-                      members.map((perm) => (
-                        <div
-                          key={perm.id}
-                          className="flex items-center justify-between gap-2 px-3 py-1.5"
-                        >
-                          <span className="flex min-w-0 items-center gap-1.5 text-fine text-ink">
-                            <PrincipalIcon type={perm.principal_type} />
-                            <span className="truncate">{perm.principal_id}</span>
-                          </span>
-                          <RoleBadge role={perm.role as MapRole} />
-                        </div>
-                      ))
-                    )}
-                  </div>,
-                document.body,
+        {canViewMembers &&
+          membersOpen &&
+          membersPos &&
+          createPortal(
+            /* body 포털(fixed) — 호버 유지(인원 수→툴팁 이동 시 닫힘 디바운스) (H4) */
+            <div
+              className="fixed z-[1201] max-h-64 w-64 -translate-x-full overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg"
+              style={{ left: membersPos.left, bottom: membersPos.bottom }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={cancelClose}
+              onMouseLeave={scheduleClose}
+            >
+              {membersError ? (
+                <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
+              ) : members === null ? (
+                <p className="px-3 py-1.5 text-fine text-ink-tertiary">…</p>
+              ) : members.length === 0 ? (
+                <p className="px-3 py-1.5 text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
+              ) : (
+                members.map((perm) => (
+                  <div key={perm.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                    <span className="flex min-w-0 items-center gap-1.5 text-fine text-ink">
+                      <PrincipalIcon type={perm.principal_type} />
+                      <span className="truncate">{perm.principal_id}</span>
+                    </span>
+                    <RoleBadge role={perm.role as MapRole} />
+                  </div>
+                ))
               )}
-          </div>
-        )}
+            </div>,
+            document.body,
+          )}
       </div>
 
-      {/* 소유자명 · 수정 시각 · 라이브 노드 수 · 전체 버전 수 (H5a/H5b) */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-fine text-ink-tertiary">
-        {(map.owner_name ?? map.created_by) && (
-          <span className="inline-flex items-center gap-1">
-            <User size={11} strokeWidth={1.5} />
-            {map.owner_name ?? map.created_by}
-          </span>
+      {/* 미선택 카드 1.5초 호버 — 아이콘 의미 요약 툴팁 (요청) */}
+      {summaryOpen &&
+        summaryPos &&
+        createPortal(
+          <div
+            className="fixed z-[1201] w-56 rounded-md border border-hairline bg-surface p-3 text-fine shadow-lg"
+            style={{ left: summaryPos.left, top: summaryPos.top }}
+          >
+            <p className="mb-2 truncate text-caption-strong text-ink">{map.name}</p>
+            <ul className="flex flex-col gap-1.5 text-ink-secondary">
+              <li className="flex items-center gap-2">
+                {map.visibility === "public" ? (
+                  <Globe size={13} strokeWidth={1.5} className="shrink-0 text-accent" />
+                ) : (
+                  <Lock size={13} strokeWidth={1.5} className="shrink-0" />
+                )}
+                {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+              </li>
+              <li className="flex items-center gap-2">
+                <Workflow size={13} strokeWidth={1.5} className="shrink-0" />
+                {t("home.nodeCount")} — {map.node_count ?? 0}
+              </li>
+              <li className="flex items-center gap-2">
+                <GitBranch size={13} strokeWidth={1.5} className="shrink-0" />
+                {t("home.versionCount")} — {map.version_count ?? 0}
+              </li>
+              <li className="flex items-center gap-2">
+                <Users size={13} strokeWidth={1.5} className="shrink-0" />
+                {t("home.viewMembers")} — {map.member_count ?? 0}
+              </li>
+              <li className="flex min-w-0 items-center gap-2">
+                <User size={13} strokeWidth={1.5} className="shrink-0" />
+                <span className="truncate">
+                  {map.owner_name ?? map.created_by} · {relativeTime(map.updated_at)}
+                </span>
+              </li>
+            </ul>
+          </div>,
+          document.body,
         )}
-        <span className="inline-flex items-center gap-1">
-          <Clock size={11} strokeWidth={1.5} />
-          {formatKst(map.updated_at)}
-        </span>
-        <span className="inline-flex items-center gap-1" title={t("home.nodeCount")}>
-          <Workflow size={11} strokeWidth={1.5} />
-          {map.node_count ?? 0}
-        </span>
-        <span className="inline-flex items-center gap-1" title={t("home.versionCount")}>
-          <Layers size={11} strokeWidth={1.5} />
-          {map.version_count ?? 0}
-        </span>
-      </div>
     </div>
   );
 }

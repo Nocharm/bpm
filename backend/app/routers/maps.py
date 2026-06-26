@@ -141,12 +141,22 @@ async def list_maps(
             ).all()
         }
 
+    member_count: dict[int, int] = {
+        mid: cnt
+        for mid, cnt in (
+            await session.execute(
+                select(MapPermission.map_id, func.count()).group_by(MapPermission.map_id)
+            )
+        ).all()
+    }
+
     def _set_card_metrics(m: ProcessMap) -> None:
         """홈 카드 표시용 파생값 주입 (목록 응답 전용 transient attr)."""
         m.latest_version_status = latest_status.get(m.id)
         m.version_count = version_count.get(m.id, 0)
         tvid = published_vid.get(m.id, latest_vid.get(m.id))
         m.node_count = node_count_by_vid.get(tvid, 0) if tvid is not None else 0
+        m.member_count = member_count.get(m.id, 0)
         m.owner_name = owner_name.get(m.created_by) if m.created_by else None
     if is_admin:
         for m in maps:
