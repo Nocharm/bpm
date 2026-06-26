@@ -42,6 +42,42 @@ def test_create_version_blocked_when_draft_exists(client: TestClient) -> None:
     assert allowed.status_code == 201
 
 
+def _set_version_status(version_id: int, status: str) -> None:
+    """버전 status 직접 설정 — '진행중 작업본' 가드(draft/pending/rejected) 테스트용."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            version = await session.get(MapVersion, version_id)
+            version.status = status
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def test_create_version_blocked_when_pending(client: TestClient) -> None:
+    """진행중(pending=승인대기) 버전이 있으면 새 버전 생성 차단 (request #11 강화)."""
+    created = _create_map(client)
+    _set_version_status(created["versions"][0]["id"], "pending")
+    blocked = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})
+    assert blocked.status_code == 409, blocked.text
+
+
+def test_create_version_blocked_when_rejected(client: TestClient) -> None:
+    """진행중(rejected=수정대기) 버전이 있으면 새 버전 생성 차단 (request #11 강화)."""
+    created = _create_map(client)
+    _set_version_status(created["versions"][0]["id"], "rejected")
+    blocked = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})
+    assert blocked.status_code == 409, blocked.text
+
+
+def test_create_version_allowed_after_published(client: TestClient) -> None:
+    """마무리(published) 버전만 있으면 작업본이 없으므로 새 버전 생성 허용."""
+    created = _create_map(client)
+    _set_version_status(created["versions"][0]["id"], "published")
+    allowed = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})
+    assert allowed.status_code == 201, allowed.text
+
+
 def test_create_plain_version(client: TestClient) -> None:
     created = _create_map(client)
     _approve_version(created["versions"][0]["id"])  # 초기 draft 해소 → 새 버전 허용

@@ -134,16 +134,20 @@ async def create_version(
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
 
-    # 맵당 draft 1개 제한 — 진행중인 수정본(draft)이 있으면 새 버전 생성 차단 (request #11)
-    existing_draft = await session.scalar(
+    # 맵당 '진행중 작업본' 1개 제한 — draft/pending/rejected 중 하나라도 있으면 새 버전 생성 차단 (request #11 강화).
+    # approved(게시 후 강등된 이력)·published 는 마무리된 상태라 허용 → 작업본을 마무리(승인·게시)하거나 삭제해야 새 버전 시작.
+    in_progress = await session.scalar(
         select(func.count())
         .select_from(MapVersion)
-        .where(MapVersion.map_id == map_id, MapVersion.status == workflow.DRAFT)
+        .where(
+            MapVersion.map_id == map_id,
+            MapVersion.status.in_([workflow.DRAFT, workflow.PENDING, workflow.REJECTED]),
+        )
     )
-    if existing_draft:
+    if in_progress:
         raise HTTPException(
             status_code=409,
-            detail="map already has a draft version — submit or delete it before creating a new one",
+            detail="map has an in-progress version — approve/publish or delete it before creating a new one",
         )
 
     new_version = MapVersion(map_id=map_id, label=payload.label)
