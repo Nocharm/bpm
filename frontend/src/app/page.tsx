@@ -12,6 +12,7 @@ import { VERSION_STATUS_LABEL } from "@/lib/version-status";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
+import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
@@ -33,8 +34,9 @@ export default function MapListPage() {
   const [mapQuery, setMapQuery] = useState("");
   // 가시성 필터 탭 — ALL/Public/Private
   const [visFilter, setVisFilter] = useState<"all" | "public" | "private">("all");
-  // 상태 필터 — 다중 선택, 비어 있으면 전체 / status filter pills; empty = all statuses (H1).
+  // 상태·권한 필터 — 다중 선택 드롭다운, 비어 있으면 전체 / status & role filters; empty = all (H1).
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [permFilter, setPermFilter] = useState<Set<string>>(new Set());
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -132,9 +134,11 @@ export default function MapListPage() {
         const statusOk =
           statusFilter.size === 0 ||
           (m.latest_version_status !== null && statusFilter.has(m.latest_version_status));
-        return visOk && statusOk;
+        const permOk =
+          permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
+        return visOk && statusOk && permOk;
       }),
-    [visibleMaps, visFilter, statusFilter],
+    [visibleMaps, visFilter, statusFilter, permFilter],
   );
 
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
@@ -173,8 +177,8 @@ export default function MapListPage() {
         <p className="mx-auto mb-3 w-full max-w-[80rem] shrink-0 text-caption text-error">{error}</p>
       )}
 
-      {/* 마스터-디테일 — 리스트·상세 같은 폭(flex-1+동일 max-w), min-w로 안 깨지게, 전체 max-w로 중앙 /
-          List + detail share equal width (flex-1, same max-w), min-w guards wrapping, centered by max-w. */}
+      {/* 마스터-디테일 — 리스트:상세 = 1:2(flex-1 : flex-[2]), min-w로 안 깨지게, 전체 max-w로 중앙 (H6) /
+          List : detail = 1:2 (flex-1 : flex-[2]); min-w guards wrapping; centered by max-w. */}
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 gap-4">
         {visibleMaps.length === 0 ? (
           /* 맵이 하나도 없음 — 풀폭 환영 화면(상세 자리까지 차지) */
@@ -182,7 +186,7 @@ export default function MapListPage() {
         ) : (
           <>
             {/* 좌측 리스트 컬럼 — 상단에 검색·필터탭(같은 폭), 아래 리스트 (#5) */}
-            <div className="flex min-h-0 min-w-[18rem] max-w-[34rem] flex-1 flex-col gap-2">
+            <div className="flex min-h-0 min-w-[18rem] flex-1 flex-col gap-2">
               <div className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
                 <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 <input
@@ -216,43 +220,48 @@ export default function MapListPage() {
                   </button>
                 ))}
               </div>
-              {/* 상태 필 — 다중 선택(가시성과 AND), 선택 시 해제 버튼 (H1) */}
-              <div
-                data-id="home-status-filter"
-                className="flex shrink-0 flex-wrap items-center gap-1"
-              >
-                {STATUS_ORDER.map((s) => {
-                  const on = statusFilter.has(s);
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      aria-pressed={on}
-                      className={`rounded-sm border px-2 py-0.5 text-fine transition-colors ${
-                        on
-                          ? "border-accent-tint-border bg-accent-tint text-accent"
-                          : "border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                      }`}
-                      onClick={() =>
-                        setStatusFilter((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(s)) next.delete(s);
-                          else next.add(s);
-                          return next;
-                        })
-                      }
-                    >
-                      {t(VERSION_STATUS_LABEL[s])}
-                    </button>
-                  );
-                })}
-                {(statusFilter.size > 0 || visFilter !== "all") && (
+              {/* 상태·권한 필터 — 멀티셀렉트 드롭다운(가시성과 AND), Clear는 우측끝 (H1 개정) */}
+              <div data-id="home-filter-row" className="flex shrink-0 items-center gap-1.5">
+                <FilterDropdown
+                  label={t("home.filterStatus")}
+                  dataId="home-status-filter"
+                  options={STATUS_ORDER.map((s) => ({ value: s, label: t(VERSION_STATUS_LABEL[s]) }))}
+                  selected={statusFilter}
+                  onToggle={(v) =>
+                    setStatusFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
+                />
+                <FilterDropdown
+                  label={t("home.filterRole")}
+                  dataId="home-role-filter"
+                  options={[
+                    { value: "owner", label: t("perm.roleOwner") },
+                    { value: "editor", label: t("perm.roleEditor") },
+                    { value: "viewer", label: t("perm.roleViewer") },
+                  ]}
+                  selected={permFilter}
+                  onToggle={(v) =>
+                    setPermFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
+                />
+                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all") && (
                   <button
                     type="button"
                     data-id="home-filter-clear"
-                    className="ml-1 text-fine text-accent hover:underline"
+                    className="ml-auto text-fine text-accent hover:underline"
                     onClick={() => {
                       setStatusFilter(new Set());
+                      setPermFilter(new Set());
                       setVisFilter("all");
                     }}
                   >
@@ -305,7 +314,7 @@ export default function MapListPage() {
               // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
               <aside
                 data-id="map-detail-aside"
-                className="hidden min-w-[18rem] max-w-[34rem] flex-1 flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
+                className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
               >
                 <MapDetailCard
                   key={effectiveSelected}
