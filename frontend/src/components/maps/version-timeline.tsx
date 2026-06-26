@@ -161,7 +161,7 @@ export function VersionTimeline({
                         {events.map((evt) => (
                           <Fragment key={evt.id}>
                             <span
-                              className={`inline-flex w-fit items-center gap-1 rounded-sm border px-1.5 py-0.5 ${
+                              className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
                                 EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
                               }`}
                             >

@@ -3,6 +3,8 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-27
+- **fix(home): 콜랩스올 섹션 헤더 우측 + 단계필 폭 통일 + 트래커 S6~8 상세 (검토 라운드 11, feat/frontend-ui-improvements)** — ①**모두접기 위치**: 상단 별도 행(컴포넌트 밀림) → **섹션 소제목 우측**(VERSIONS 헤더 우측=버전만 접기, Allowed members 헤더 우측=멤버만 접기). 단일 collapseAll → `collapseVersions`/`collapseMembers`. ②**H3 단계 필 폭 통일** `w-fit`→`w-24 justify-center`(Published/Submitted 등 동일 폭, 이름·아이디·시간 열 정렬 강화). ③**트래커 S6~8 상세 복원**(통합 문서라 A1~A3·E1~E4·I1~I6 단위 유지). 검증: tsc 0·lint 0·브라우저 확인.
+## 2026-06-27
 - **feat(home): H3·H2c 클릭 토글·다중 펼침·모두접기 + H3 상세행 그리드 정렬 (검토 라운드 10, feat/frontend-ui-improvements)** — ①**호버 펼침 → 클릭 토글**: 버전 박스·유저 멤버 행을 클릭하면 펼침/접힘(여러 개 동시), 호버는 **커서 포인터 + 일반 호버**(버전=hover bg, 유저=hover ring). 펼침 상태는 detail-card가 보유(VersionTimeline controlled), 키보드(Enter/Space) 지원. ②**모두 접기**: 펼친 게 있으면 상세 상단 우측에 "Collapse all"(`home.collapseAll`) — 버전·멤버 전부 접음. ③**H3 상세행 그리드 정렬**: `grid grid-cols-[auto_minmax(0,1fr)_auto_auto]`로 단계필·이름·**아이디**·시간 열 정렬(아이디 시작 위치 동일). H2 팀 호버는 유지(완료). 검증: tsc 0·lint 0.
 ## 2026-06-27
 - **fix(home): H3 풀 타임스탬프·최신순·이징 + H2c 롤배지 위치 (검토 라운드 9, feat/frontend-ui-improvements)** — ①**H3 타임스탬프** `MM-DD HH:mm` → **`YYYY-MM-DD HH:mm`**(`formatKst`). ②**버전 최신순 정렬**(`[...versions].reverse()`) — idx 0=최신=Current 배지(백엔드는 오래된순 반환). ③**펼침 이징** `ease-smooth`(200ms) → **`ease-in-out`(300ms, 처음·끝 느리게)** — H3 상세행·H2c 유저 펼침 동일. ④**H2c 롤 배지 위치 고정**: 행 `items-center`→`items-start` — 펼쳐져도 역할 배지가 이름줄에 고정. 검증: tsc 0·lint 0. **데모: 5버전 맵(map 4 "Five-Version Demo")** API 생성 — As-Is[approved·4이벤트]/v2[rejected·3]/v3[published·4]/To-Be[pending·2]/Working[draft·1].

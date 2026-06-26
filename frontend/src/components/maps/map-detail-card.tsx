@@ -142,11 +142,8 @@ export function MapDetailCard({
       else next.add(id);
       return next;
     });
-  const collapseAll = () => {
-    setExpandedVersions(new Set());
-    setExpandedMembers(new Set());
-  };
-  const anyExpanded = expandedVersions.size > 0 || expandedMembers.size > 0;
+  const collapseVersions = () => setExpandedVersions(new Set());
+  const collapseMembers = () => setExpandedMembers(new Set());
 
   useEffect(() => {
     let active = true;
@@ -245,25 +242,23 @@ export function MapDetailCard({
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
       </div>
 
-      {anyExpanded && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            data-id="detail-collapse-all"
-            className="text-fine text-accent hover:underline"
-            onClick={collapseAll}
-          >
-            {t("home.collapseAll")}
-          </button>
-        </div>
-      )}
       {/* 버전 · 허용 인원 — 좌우 배치(2:1) + 사이 세로 구분선 / Versions:members = 2:1 with a vertical divider */}
       <div className="flex flex-col gap-4 sm:flex-row">
         {/* 버전 + 승인 상태 / Versions with approval status */}
         <div data-id="map-detail-versions" className="flex min-w-0 flex-[2] flex-col gap-1">
-          <p className="text-fine uppercase tracking-wide text-ink-tertiary">
-            {t("home.versions")}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.versions")}</p>
+            {expandedVersions.size > 0 && (
+              <button
+                type="button"
+                data-id="collapse-versions"
+                className="shrink-0 text-fine text-accent hover:underline"
+                onClick={collapseVersions}
+              >
+                {t("home.collapseAll")}
+              </button>
+            )}
+          </div>
           {detail.versions.length === 0 ? (
             <p className="text-caption text-ink-tertiary">{t("perm.version.noVersions")}</p>
           ) : (
@@ -279,9 +274,19 @@ export function MapDetailCard({
         {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
         {members !== null && (
           <div className="flex min-w-0 flex-1 flex-col gap-1 sm:border-l sm:border-hairline sm:pl-4">
-            <p className="text-fine uppercase tracking-wide text-ink-tertiary">
-              {t("home.members")}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.members")}</p>
+              {expandedMembers.size > 0 && (
+                <button
+                  type="button"
+                  data-id="collapse-members"
+                  className="shrink-0 text-fine text-accent hover:underline"
+                  onClick={collapseMembers}
+                >
+                  {t("home.collapseAll")}
+                </button>
+              )}
+            </div>
             {members.length === 0 ? (
               <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
             ) : (
