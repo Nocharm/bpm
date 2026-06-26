@@ -50,6 +50,12 @@ function deptLeaf(orgPath: string): string {
   return parts[parts.length - 1] || orgPath;
 }
 
+// 부서 org_path의 상위 경로(말단 제외) — 멤버 행 2번째 줄 소속 표시 (H2) / parent path of a dept org_path.
+function deptParent(orgPath: string): string {
+  const parts = orgPath.split("/").filter(Boolean);
+  return parts.length > 1 ? parts.slice(0, -1).join(" › ") : "";
+}
+
 // 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
 function deptLevelRank(leaf: string): number {
   const s = leaf.toLowerCase();
@@ -116,6 +122,8 @@ export function MapDetailCard({
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
   // loginId → 표시명 — 멤버(유저) 행을 "이름(아이디)"로 보여주기 위함 (#5)
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
+  // loginId → 부서 — 유저 멤버 2번째 줄 소속 표시 (H2) / id→department for the member 2nd line.
+  const [deptById, setDeptById] = useState<Map<string, string>>(new Map());
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -135,6 +143,7 @@ export function MapDetailCard({
             if (!active) return;
             setMembers(perms);
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
+            setDeptById(new Map(dir.users.map((u) => [u.id, u.department])));
             if (loginId) {
               setMyGroupIds(
                 new Set(
@@ -250,41 +259,52 @@ export function MapDetailCard({
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
-                      {rows.map((perm) => (
-                        <div
-                          key={perm.id}
-                          // 나의 소속이면 투명도 조절한 악센트 배경으로 하이라이트 / highlight my grants.
-                          className={`flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 ${
-                            isMine(perm)
-                              ? "border-accent bg-accent/10"
-                              : "border-hairline bg-surface"
-                          }`}
-                        >
-                          <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
-                            <MemberIcon
-                              perm={perm}
-                              isMe={perm.principal_type === "user" && perm.principal_id === loginId}
-                            />
-                            {/* 부서=말단만(HM-3) · 유저=이름(아이디 회색), 길면 말줄임 (#5) */}
-                            <span className="min-w-0 truncate">
-                              {perm.principal_type === "department" ? (
-                                deptLeaf(perm.principal_id)
-                              ) : perm.principal_type === "user" ? (
-                                <>
-                                  {nameById.get(perm.principal_id) ?? perm.principal_id}
-                                  <span className="text-ink-tertiary">
-                                    {" "}
-                                    ({perm.principal_id})
-                                  </span>
-                                </>
-                              ) : (
-                                perm.principal_id
-                              )}
+                      {rows.map((perm) => {
+                        // 2번째 줄 소속 — 부서=상위 경로, 유저=부서 (H2)
+                        const org =
+                          perm.principal_type === "department"
+                            ? deptParent(perm.principal_id)
+                            : perm.principal_type === "user"
+                              ? (deptById.get(perm.principal_id) ?? "")
+                              : "";
+                        return (
+                          <div
+                            key={perm.id}
+                            // 나의 소속이면 투명도 조절한 악센트 배경으로 하이라이트 / highlight my grants.
+                            className={`flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 ${
+                              isMine(perm)
+                                ? "border-accent bg-accent/10"
+                                : "border-hairline bg-surface"
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
+                              <MemberIcon
+                                perm={perm}
+                                isMe={perm.principal_type === "user" && perm.principal_id === loginId}
+                              />
+                              {/* 1줄: 부서 말단/유저 이름(아이디)/그룹 · 2줄: 소속(부서 상위경로/유저 부서) (H2) */}
+                              <span className="flex min-w-0 flex-col leading-tight">
+                                <span className="truncate">
+                                  {perm.principal_type === "department" ? (
+                                    deptLeaf(perm.principal_id)
+                                  ) : perm.principal_type === "user" ? (
+                                    <>
+                                      {nameById.get(perm.principal_id) ?? perm.principal_id}
+                                      <span className="text-ink-tertiary"> ({perm.principal_id})</span>
+                                    </>
+                                  ) : (
+                                    perm.principal_id
+                                  )}
+                                </span>
+                                {org && (
+                                  <span className="truncate text-fine text-ink-tertiary">{org}</span>
+                                )}
+                              </span>
                             </span>
-                          </span>
-                          <RoleBadge role={perm.role as MapRole} />
-                        </div>
-                      ))}
+                            <RoleBadge role={perm.role as MapRole} />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
