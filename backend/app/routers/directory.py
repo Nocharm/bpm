@@ -30,7 +30,17 @@ async def get_directory(
     rows = (await session.scalars(select(Employee).order_by(Employee.login_id))).all()
 
     users = [
-        DirectoryUserOut(id=emp.login_id, name=emp.name, department=emp.department)
+        DirectoryUserOut(
+            id=emp.login_id,
+            name=emp.name,
+            department=emp.department,
+            title=emp.title,
+            org_path="/".join(
+                lv
+                for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5)
+                if lv is not None
+            ),
+        )
         for emp in rows
     ]
 

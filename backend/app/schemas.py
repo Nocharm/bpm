@@ -397,6 +397,8 @@ class DirectoryUserOut(BaseModel):
     id: str       # login_id
     name: str     # English display name
     department: str
+    title: str = ""     # 직급 — 멤버 2번째 줄(H2)
+    org_path: str = ""  # 루트→리프 org_path — 멤버 2번째 줄 말단 org·부서 카운트(H2)
 
 
 class EligibleApproverOut(DirectoryUserOut):

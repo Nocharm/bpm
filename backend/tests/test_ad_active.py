@@ -171,17 +171,18 @@ def test_inactive_approver_does_not_count_toward_submit(
 
 # ── directory stays minimal ──────────────────────────────────────────────────
 
-def test_directory_response_has_only_id_name_department(client: TestClient) -> None:
-    """GET /api/directory users must have ONLY {id,name,department} — not email/active."""
+def test_directory_response_excludes_sensitive_fields(client: TestClient) -> None:
+    """GET /api/directory users carry only display fields (id/name/department/title/org_path)
+    for the member 2nd line (H2) — never email/active."""
     resp = client.get("/api/directory")
     assert resp.status_code == 200, resp.text
     data = resp.json()
     users = data.get("users", [])
     # Confirm at least one user is present (local dev users are seeded)
     assert len(users) > 0, "Expected at least 1 user in /api/directory"
-    allowed_keys = {"id", "name", "department"}
+    allowed_keys = {"id", "name", "department", "title", "org_path"}
     for user in users:
         extra = set(user.keys()) - allowed_keys
         assert not extra, (
-            f"/api/directory user has unexpected fields {extra} — must stay minimal"
+            f"/api/directory user has unexpected fields {extra} — must stay minimal (no email/active)"
         )
