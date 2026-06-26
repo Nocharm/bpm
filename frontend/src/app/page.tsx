@@ -4,11 +4,11 @@
 // Home: map list filtered by mock visibility + map creation dialog.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery } from "@/lib/search";
-import { VERSION_STATUS_LABEL } from "@/lib/version-status";
+import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
@@ -225,7 +225,16 @@ export default function MapListPage() {
                 <FilterDropdown
                   label={t("home.filterStatus")}
                   dataId="home-status-filter"
-                  options={STATUS_ORDER.map((s) => ({ value: s, label: t(VERSION_STATUS_LABEL[s]) }))}
+                  icon={<CircleDot size={14} strokeWidth={1.5} />}
+                  options={STATUS_ORDER.map((s) => ({
+                    value: s,
+                    label: t(VERSION_STATUS_LABEL[s]),
+                    icon: (
+                      <span
+                        className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full border ${VERSION_STATUS_STYLE[s]}`}
+                      />
+                    ),
+                  }))}
                   selected={statusFilter}
                   onToggle={(v) =>
                     setStatusFilter((prev) => {
@@ -239,10 +248,11 @@ export default function MapListPage() {
                 <FilterDropdown
                   label={t("home.filterRole")}
                   dataId="home-role-filter"
+                  icon={<ShieldCheck size={14} strokeWidth={1.5} />}
                   options={[
-                    { value: "owner", label: t("perm.roleOwner") },
-                    { value: "editor", label: t("perm.roleEditor") },
-                    { value: "viewer", label: t("perm.roleViewer") },
+                    { value: "owner", label: t("perm.roleOwner"), icon: <Crown size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
+                    { value: "editor", label: t("perm.roleEditor"), icon: <PencilLine size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
+                    { value: "viewer", label: t("perm.roleViewer"), icon: <Eye size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
                   ]}
                   selected={permFilter}
                   onToggle={(v) =>
