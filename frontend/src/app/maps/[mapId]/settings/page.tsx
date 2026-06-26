@@ -3,6 +3,7 @@
 // 맵 설정 화면 — 권한 관리 탭 셸 / Map settings page: tabbed shell for permission management.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -299,7 +300,11 @@ export default function SettingsPage() {
         <main ref={mainRef} className="flex-1 overflow-y-auto p-6">
           {/* 읽기 전용 알림 / Read-only notice */}
           {effectiveRole === "viewer" && (
-            <div className="mb-4 rounded-sm border border-hairline bg-surface-pearl px-3 py-2 text-caption text-ink-secondary">
+            <div
+              data-id="settings-readonly-notice"
+              className="mb-4 flex items-center gap-2 rounded-sm border border-notice-border bg-notice px-3 py-2 text-caption text-changed"
+            >
+              <Info size={14} strokeWidth={1.7} className="shrink-0" />
               {t("perm.readOnly")}
             </div>
           )}
@@ -307,7 +312,7 @@ export default function SettingsPage() {
           {!currentMockUser ? (
             <p className="text-caption text-ink-tertiary">…</p>
           ) : (
-            <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-24">
+            <div className="mx-auto flex max-w-[680px] flex-col gap-10 pb-24">
               {visibleTabs.map((tab) => (
                 <section
                   key={tab.id}
