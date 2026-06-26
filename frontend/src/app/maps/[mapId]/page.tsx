@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, LayoutGrid, Lock, LogOut, Maximize, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Copy, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Maximize, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -25,7 +25,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
@@ -107,6 +107,7 @@ import {
   createComment,
   createVersion,
   deleteComment,
+  copyMap,
   deleteVersion,
   getFullGraph,
   getGraph,
@@ -688,6 +689,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
+  // 서버 산정 역할 — 뷰어(my_role) 판정 단일 소스 / server-computed role for viewer gating
+  const [myRole, setMyRole] = useState<"viewer" | "editor" | "owner" | null>(null);
+  const router = useRouter();
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [managingApprovers, setManagingApprovers] = useState(false);
 
@@ -748,13 +752,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     currentVersion !== null &&
     currentVersion.status !== "draft" &&
     currentVersion.status !== "rejected";
+  // 뷰어 권한 사용자는 항상 읽기 전용 — 서버 산정 my_role 기준 / viewer role is always read-only
+  const isViewer = myRole === "viewer";
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
-  const readOnly = (checkout !== null && !checkout.mine) || statusLocksEditing;
+  const readOnly = isViewer || (checkout !== null && !checkout.mine) || statusLocksEditing;
   // 역할 판정 — render 중 파생(useEffect 금지)
   // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
+
+  // 뷰어 → 내 맵으로 복제(승인본 기준) 후 새 맵 에디터로 이동 / clone to my maps then open it
+  const handleClone = async () => {
+    try {
+      const copy = await copyMap(mapId);
+      router.push(`/maps/${copy.id}`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.copyMap"));
+    }
+  };
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
 
   const reactFlow = useReactFlow();
@@ -1454,6 +1470,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         setMapName(detail.name);
         setMapOwner(detail.created_by);
+        setMyRole(detail.my_role);
         setVersions(detail.versions);
         setVersionId(detail.versions[0].id);
         setScopes([{ kind: "root", title: detail.name }]);
@@ -5374,6 +5391,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
         </div>
 
+        {isViewer && (
+          <span
+            data-id="editor-readonly-badge"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-surface-alt px-2 py-1 text-fine font-semibold text-ink-secondary"
+          >
+            <Lock size={13} strokeWidth={1.7} />
+            {t("editor.viewOnly")}
+          </span>
+        )}
+
         <div className="relative mx-auto">
           <input
             ref={searchInputRef}
@@ -5518,15 +5545,37 @@ function MapEditor({ mapId }: { mapId: number }) {
             <Sparkles size={16} strokeWidth={1.5} />
             AI
           </button>
-          <button
-            className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => void handleSave()}
-            disabled={readOnly}
-          >
-            {t("editor.save")}
-          </button>
+          {isViewer ? (
+            <button
+              type="button"
+              data-id="editor-clone"
+              className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus"
+              onClick={() => void handleClone()}
+            >
+              <Copy size={14} strokeWidth={1.7} />
+              {t("editor.cloneToMine")}
+            </button>
+          ) : (
+            <button
+              className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => void handleSave()}
+              disabled={readOnly}
+            >
+              {t("editor.save")}
+            </button>
+          )}
         </div>
       </header>
+
+      {isViewer && (
+        <div
+          data-id="editor-viewer-notice"
+          className="flex items-center gap-2 border-b border-notice-border bg-notice px-4 py-1.5 text-fine text-changed"
+        >
+          <Info size={14} strokeWidth={1.7} className="shrink-0" />
+          {t("editor.viewerNotice")}
+        </div>
+      )}
 
       <div className="relative flex min-h-0 flex-1">
         <EditorLeftSidebar
@@ -5888,8 +5937,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}
                     {readOnly && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
-                        <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest text-ink-tertiary opacity-[0.07]">
-                          {t("editor.viewOnly")}
+                        <span className="flex -rotate-[18deg] select-none items-center gap-6 whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest text-accent opacity-[0.14]">
+                          <Lock size={84} strokeWidth={2} />
+                          {t("editor.watermark")}
                         </span>
                       </div>
                     )}

@@ -27,8 +27,8 @@ export function DeleteMapDialog({
         data-id="delete-map-dialog"
         className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md bg-surface p-6 text-center shadow-lg"
       >
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-error/10">
-          <Trash2 size={24} strokeWidth={1.5} className="text-error" />
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-error/10">
+          <Trash2 size={28} strokeWidth={1.5} className="text-error" />
         </div>
         <div className="flex flex-col gap-1">
           <h2 className="text-body-strong text-ink">{t("home.confirmDeleteTitle")}</h2>
