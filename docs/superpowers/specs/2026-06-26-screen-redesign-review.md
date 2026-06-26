@@ -83,10 +83,10 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim \
 ### 같이 확인한 버그 (진단)
 | ID | 증상 | 근본 원인 | 처리 |
 |----|------|-----------|------|
-| B1 | 홈 카드 상세에서 **viewer는 허용 멤버 목록이 안 보임**(admin은 보임) | `listMapPermissions`(`GET /maps/{id}/permissions`)가 백엔드 `require_map_role("editor")` → viewer 403 | **백엔드 게이팅 변경 필요**(viewer 읽기 허용 or viewer-safe 엔드포인트) → **착수 전 확인 필요**(프론트 전용 브랜치) |
-| B2 | 맵 설정 진입 시 **토스트 우르르** | `request()`가 실패 시 `"API GET … failed: 403"` Error throw → 각 권한/결재 패널이 **로드 에러를 토스트**로 노출. viewer는 권한 엔드포인트 전부 403 → 패널마다 토스트 누적 | **프론트 수정 가능**(로드 실패는 토스트 대신 무음/인라인, 특히 예상된 403). 다음 단위로 제안 |
+| B1 | 홈 카드 상세에서 **viewer는 허용 멤버 목록이 안 보임**(admin은 보임) | `listMapPermissions`(`GET /maps/{id}/permissions`)가 백엔드 `require_map_role("editor")` → viewer 403 | **✅ (a) 적용** — GET 게이팅 editor→viewer(읽기만, 쓰기는 editor/owner 유지). 테스트 갱신. backend 316 passed. viewer 설정 Collaborators에 Owner 표시 확인 |
+| B2 | 맵 설정 진입 시 **토스트 우르르** | `request()` 실패 시 `"API … failed: 403"` Error throw → 각 권한 패널이 로드 에러를 토스트로 노출, viewer는 패널마다 403 누적 | **✅ 수정** — 설정 `showToast`가 `failed: 40[13]`(권한거부) 메시지 무음 처리. + 뷰어 체크아웃 배지(`editingByOther`·`editingMine`) `!isViewer` 게이트 | 
 
-B1·B2 모두 viewer가 권한 엔드포인트에서 403 받는 데서 비롯. B2는 프론트로 해결, B1은 백엔드 결정 필요.
+추가 요청: **MS1 좌측 패딩 확대**(`p-6`→`py-6 pl-12 pr-6`) ✅. V2·V3·V4 사용자 확인 완료.
 
 ---
 

@@ -5458,7 +5458,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
         {/* 툴바 최소화 — 버전·PNG·엣지스타일·펼치기는 우측 하단 탭 패널로 이동 / minimized toolbar */}
         <div className="flex flex-wrap items-center gap-2">
-          {readOnly && checkout?.checked_out_by && (
+          {readOnly && !isViewer && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
               <button
@@ -5474,7 +5474,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               {t("wf.rejectedBanner", { reason: currentVersion.reject_reason })}
             </span>
           )}
-          {checkout?.mine && (
+          {!isViewer && checkout?.mine && (
             <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary" title={t("editor.editingMineTitle")}>
               <Lock size={14} strokeWidth={1.5} />{t("editor.editingMine")}
             </span>

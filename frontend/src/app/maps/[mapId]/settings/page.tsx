@@ -100,6 +100,8 @@ export default function SettingsPage() {
   // 토스트 상태 / Toast state.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   function showToast(message: string) {
+    // 읽기 전용(viewer 등)은 권한 엔드포인트 로드 시 403/401 다발 — 예상된 접근 거부는 토스트 미노출 (B2).
+    if (/failed: 40[13]/.test(message)) return;
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
   }
   function dismissToast(id: string) {
@@ -297,7 +299,7 @@ export default function SettingsPage() {
         </aside>
 
         {/* 단일 스크롤 콘텐츠 — 모든 섹션을 위→아래로 나열, 좌측 내비로 스크롤 (ST) */}
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-6">
+        <main ref={mainRef} className="flex-1 overflow-y-auto py-6 pl-12 pr-6">
           {/* 읽기 전용 알림 / Read-only notice */}
           {effectiveRole === "viewer" && (
             <div
