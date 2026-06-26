@@ -62,3 +62,4 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 - **S5 진행 순서**(권장): H6 → H5a → H2 → H1 → H3 → H4 → (H5b 확인 후). 각 단위 개별 커밋 + 시현 + 이 표 갱신.
 - 신규 토큰: `--color-ink-muted`(#a0a0a8), `--color-notice`/`--color-notice-border`(옐로우 스트립).
 - i18n: `editor.readonly.*`(사유별), `login.subtitle/or/terms`, `action.close` 등 영/한 양쪽.
+- (검토11 #2, 백엔드) `create_version` 게이트 강화 — 진행중(draft/pending/rejected) 버전 1개 제한(사용자 승인). 데모 맵="Version History Demo"(approved 이력 + published 라이브 + draft 1).
