@@ -1,23 +1,15 @@
 "use client";
 
-// 버전 git-log 타임라인 — 버전별 생애주기 이벤트(누가·언제)를 커밋 점+세로선으로 / version history as a git log.
+// 버전 히스토리 — 좌측 타임라인 노드(최신 이벤트색) + 버전 카드(상태·현재·시각) + 이벤트 칩 (H3) /
+// version history: timeline node + version card + event chips, all visible.
 
-import { Check, GitCommit, Info, Send, Upload, X } from "lucide-react";
+import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
-
-// event_type → 아이콘 / icon per event type.
-function EventIcon({ type }: { type: string }) {
-  if (type === "submitted") return <Send size={14} strokeWidth={1.5} />;
-  if (type === "approved") return <Check size={14} strokeWidth={1.5} />;
-  if (type === "rejected") return <X size={14} strokeWidth={1.5} />;
-  if (type === "published") return <Upload size={14} strokeWidth={1.5} />;
-  return <GitCommit size={14} strokeWidth={1.5} />;
-}
 
 const EVENT_LABEL: Record<string, MessageKey> = {
   created: "home.verEvent.created",
@@ -27,70 +19,104 @@ const EVENT_LABEL: Record<string, MessageKey> = {
   published: "home.verEvent.published",
 };
 
-// created_at(ISO) → "MM-DD HH:mm" KST 절대 표기 / compact absolute timestamp (KST).
+// 이벤트 칩 아이콘 / chip icon per event type.
+function EventIcon({ type }: { type: string }) {
+  if (type === "created") return <Plus size={12} strokeWidth={1.7} />;
+  if (type === "submitted") return <Send size={12} strokeWidth={1.7} />;
+  if (type === "approved") return <Check size={12} strokeWidth={1.7} />;
+  if (type === "rejected") return <X size={12} strokeWidth={1.7} />;
+  if (type === "published") return <Upload size={12} strokeWidth={1.7} />;
+  return <GitCommit size={12} strokeWidth={1.7} />;
+}
+
+// 이벤트 칩 색 — 생성=중립 · 승인요청=accent · 승인/게시=green · 반려=red / chip color per event type.
+const EVENT_CHIP: Record<string, string> = {
+  created: "border-hairline bg-surface-alt text-ink-secondary",
+  submitted: "border-accent-tint-border bg-accent-tint text-accent",
+  approved: "border-added/40 bg-added/10 text-added",
+  published: "border-added/40 bg-added/10 text-added",
+  rejected: "border-error/40 bg-error/10 text-error",
+};
+
+// 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green) / node style by latest event.
+function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
+  switch (eventType) {
+    case "created":
+      return { cls: "border-accent bg-surface text-accent", Icon: Plus };
+    case "submitted":
+      return { cls: "border-changed bg-surface text-changed", Icon: Clock };
+    case "approved":
+      return { cls: "border-added bg-added text-on-accent", Icon: Check };
+    case "published":
+      return { cls: "border-added bg-added text-on-accent", Icon: Upload };
+    case "rejected":
+      return { cls: "border-error bg-surface text-error", Icon: X };
+    default:
+      return { cls: "border-hairline bg-surface text-ink-tertiary", Icon: GitCommit };
+  }
+}
+
+// created_at(ISO) → "MM-DD HH:mm" KST / compact absolute timestamp.
 const formatStamp = formatKstShort;
 
 export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
   const { t } = useI18n();
 
   return (
-    <div data-id="version-timeline" className="flex flex-col gap-4">
-      {versions.map((version) => {
-        // 최신이 위로 — created_at 오름차순 응답을 역순 렌더 / newest first.
+    <div data-id="version-timeline" className="relative flex flex-col gap-3">
+      {/* 좌측 세로 연결선 / left timeline rail */}
+      <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-px bg-hairline" />
+      {versions.map((version, idx) => {
+        // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first; node reflects the latest.
         const events: VersionEvent[] = [...version.events].reverse();
+        const node = nodeFor(events[0]?.event_type);
+        const NodeIcon = node.Icon;
         return (
-          <div key={version.id} className="group flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1 truncate text-caption-strong text-ink">
-                {version.label}
-                {events.length > 0 && (
-                  <Info
-                    size={12}
-                    strokeWidth={1.5}
-                    className="shrink-0 text-ink-tertiary transition-opacity group-hover:opacity-0"
-                  />
-                )}
-              </span>
-              <span
-                className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
-              >
-                {t(VERSION_STATUS_LABEL[version.status])}
-              </span>
-            </div>
-
-            {events.length === 0 ? null : (
-              <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-[200ms] ease-smooth group-hover:grid-rows-[1fr]">
-                <div className="overflow-hidden">
-                  <ol className="flex flex-col pt-1">
-                {events.map((evt, i) => (
-                  <li
-                    key={evt.id}
-                    data-id={`version-event-${evt.id}`}
-                    className="relative flex gap-2 pb-2 pl-1"
+          <div key={version.id} className="relative flex gap-2.5">
+            <span
+              className={`z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${node.cls}`}
+            >
+              <NodeIcon size={13} strokeWidth={2} />
+            </span>
+            <div
+              className={`min-w-0 flex-1 rounded-md border p-2.5 ${
+                idx === 0 ? "border-accent-tint-border bg-accent-tint/30" : "border-hairline bg-surface"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="text-caption-strong text-ink">{version.label}</span>
+                  <span
+                    className={`shrink-0 rounded-xs border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                   >
-                    {/* 세로 연결선 (마지막 행 제외) / connecting line */}
-                    {i < events.length - 1 && (
-                      <span className="absolute left-[0.69rem] top-5 h-full w-px bg-divider" />
-                    )}
-                    <span className="z-[1] mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface text-ink-tertiary ring-1 ring-hairline">
-                      <EventIcon type={evt.event_type} />
+                    {t(VERSION_STATUS_LABEL[version.status])}
+                  </span>
+                  {idx === 0 && (
+                    <span className="shrink-0 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
+                      {t("home.verCurrent")}
                     </span>
-                    <span className="flex flex-wrap items-baseline gap-x-1.5 text-caption text-ink">
-                      <span className="text-ink-secondary">
-                        {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
-                      </span>
-                      <span className="text-ink">{evt.actor}</span>
-                      <span className="text-fine text-ink-tertiary">{formatStamp(evt.created_at)}</span>
-                      {evt.note && (
-                        <span className="basis-full text-fine text-ink-tertiary">“{evt.note}”</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-                  </ol>
-                </div>
+                  )}
+                </span>
+                <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
               </div>
-            )}
+              {events.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {events.map((evt) => (
+                    <span
+                      key={evt.id}
+                      data-id={`version-event-${evt.id}`}
+                      className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                        EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                      }`}
+                      title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                    >
+                      <EventIcon type={evt.event_type} />
+                      {evt.actor}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
