@@ -121,6 +121,8 @@ export function MapDetailCard({
   const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
   // 그룹 id → {구성원수, 상태} — 그룹 멤버 2번째 줄 (H2) / group id → {count, status}.
   const [groupInfo, setGroupInfo] = useState<Map<string, { count: number; status: string }>>(new Map());
+  // 호버한 부서(팀)의 org_path — 상위/하위 팀 하이라이트 + 상위 소속 노출 (H2) / hovered dept path.
+  const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -237,7 +239,7 @@ export function MapDetailCard({
 
         {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
         {members !== null && (
-          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:border-l sm:border-divider sm:pl-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:border-l sm:border-hairline sm:pl-4">
             <p className="text-fine uppercase tracking-wide text-ink-tertiary">
               {t("home.members")}
             </p>
@@ -261,8 +263,14 @@ export function MapDetailCard({
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
                       {rows.map((perm) => {
-                        // 2번째 줄 — 유저=직급·말단org / 부서=구성원수·루트org1 / 그룹=구성원수·상태 (H2)
-                        // 2번째 줄 — 유저=직급·말단org(텍스트) / 부서·그룹=구성원수(아이콘)·org1|상태 (H2)
+                        // 호버한 팀의 상위/하위 팀이면 하이라이트 (멤버수 중복 인지) (H2)
+                        const related =
+                          hoveredPath !== null &&
+                          perm.principal_type === "department" &&
+                          perm.principal_id !== hoveredPath &&
+                          (hoveredPath.startsWith(`${perm.principal_id}/`) ||
+                            perm.principal_id.startsWith(`${hoveredPath}/`));
+                        // 2번째 줄 — 유저=직급·말단org / 부서=구성원수(상위소속은 호버 시) / 그룹=구성원수·상태 (H2)
                         let secondNode: ReactNode = null;
                         if (perm.principal_type === "user") {
                           const leaf = deptLeaf(orgPathById.get(perm.principal_id) ?? "");
@@ -286,10 +294,14 @@ export function MapDetailCard({
                               );
                             }
                           } else {
-                            tail = perm.principal_id.split("/")[0];
                             count = [...orgPathById.values()].filter(
                               (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
                             ).length;
+                            // 상위 소속은 평소 숨기고 호버(또는 관련 팀)일 때만 — 멤버수 중복 회피 (H2)
+                            if (hoveredPath === perm.principal_id || related) {
+                              const parts = perm.principal_id.split("/").filter(Boolean);
+                              tail = parts.length > 1 ? parts.slice(0, -1).join(" › ") : (parts[0] ?? "");
+                            }
                           }
                           if (count !== null) {
                             secondNode = (
@@ -304,11 +316,23 @@ export function MapDetailCard({
                         return (
                           <div
                             key={perm.id}
-                            // 나의 소속이면 투명도 조절한 악센트 배경으로 하이라이트 / highlight my grants.
-                            className={`flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 ${
+                            onMouseEnter={
+                              perm.principal_type === "department"
+                                ? () => setHoveredPath(perm.principal_id)
+                                : undefined
+                            }
+                            onMouseLeave={
+                              perm.principal_type === "department"
+                                ? () => setHoveredPath(null)
+                                : undefined
+                            }
+                            // 나의 소속=악센트 배경 / 호버 관련 팀=악센트 틴트 (멤버수 중복 인지) (H2)
+                            className={`flex items-center justify-between gap-2 rounded-sm border px-2.5 py-1.5 transition-colors ${
                               isMine(perm)
                                 ? "border-accent bg-accent/10"
-                                : "border-hairline bg-surface"
+                                : related
+                                  ? "border-accent-tint-border bg-accent-tint/40"
+                                  : "border-hairline bg-surface"
                             }`}
                           >
                             <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
