@@ -7,9 +7,10 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Building2, ChevronDown, ExternalLink, User, Users } from "lucide-react";
+import { Building2, ChevronDown, Clock, ExternalLink, User, Users } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
+import { formatKst } from "@/lib/datetime";
 import { Highlight } from "@/components/highlight";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
@@ -64,6 +65,8 @@ export function MapCard({
   // 멤버 팝오버는 body 포털(fixed)로 — 리스트 overflow에 잘리거나 z-index에 가리지 않게.
   const membersBtnRef = useRef<HTMLButtonElement>(null);
   const [membersPos, setMembersPos] = useState<{ left: number; bottom: number } | null>(null);
+  // 호버 닫기 디바운스 — 버튼→툴팁 이동 중 닫히지 않게 (H4)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 스크롤/리사이즈 시 위치가 어긋나므로 닫음
   useEffect(() => {
@@ -77,11 +80,15 @@ export function MapCard({
     };
   }, [membersOpen]);
 
-  const toggleMembers = () => {
-    if (membersOpen) {
-      setMembersOpen(false);
-      return;
+  // H4 — 클릭 토글 대신 호버 툴팁: 진입 시 열고(위치·인원 fetch), 이탈 시 약간 지연 후 닫음.
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
     }
+  };
+  const openMembers = () => {
+    cancelClose();
     const rect = membersBtnRef.current?.getBoundingClientRect();
     if (rect) {
       // 버튼 오른쪽 위로 펼침 — right 정렬(left=rect.right + translateX -100%), bottom=버튼 위.
@@ -93,6 +100,10 @@ export function MapCard({
         .then((rows) => setMembers(rows))
         .catch((err) => setMembersError(err instanceof Error ? err.message : String(err)));
     }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setMembersOpen(false), 120);
   };
 
   return (
@@ -159,10 +170,11 @@ export function MapCard({
               type="button"
               data-id="map-card-members"
               className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface hover:text-ink"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMembers();
-              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={openMembers}
+              onMouseLeave={scheduleClose}
+              onFocus={openMembers}
+              onBlur={scheduleClose}
             >
               <Users size={12} strokeWidth={1.5} />
               {t("home.viewMembers")}
@@ -176,21 +188,14 @@ export function MapCard({
             {membersOpen &&
               membersPos &&
               createPortal(
-                <>
-                  {/* 바깥 클릭 닫기 / click-away */}
-                  <div
-                    className="fixed inset-0 z-[1200]"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMembersOpen(false);
-                    }}
-                  />
-                  {/* body 포털(fixed) — 리스트 overflow/z-index 무관하게 항상 보임 */}
-                  <div
-                    className="fixed z-[1201] max-h-64 w-64 -translate-x-full overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg"
-                    style={{ left: membersPos.left, bottom: membersPos.bottom }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                /* body 포털(fixed) — 호버 유지(버튼→툴팁 이동 시 닫힘 디바운스) (H4) */
+                <div
+                  className="fixed z-[1201] max-h-64 w-64 -translate-x-full overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                  style={{ left: membersPos.left, bottom: membersPos.bottom }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseEnter={cancelClose}
+                  onMouseLeave={scheduleClose}
+                >
                     {membersError ? (
                       <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
                     ) : members === null ? (
@@ -211,12 +216,25 @@ export function MapCard({
                         </div>
                       ))
                     )}
-                  </div>
-                </>,
+                  </div>,
                 document.body,
               )}
           </div>
         )}
+      </div>
+
+      {/* 소유자 · 수정 시각 (H5a) */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-fine text-ink-tertiary">
+        {map.created_by && (
+          <span className="inline-flex items-center gap-1">
+            <User size={11} strokeWidth={1.5} />
+            {map.created_by}
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1">
+          <Clock size={11} strokeWidth={1.5} />
+          {formatKst(map.updated_at)}
+        </span>
       </div>
     </div>
   );
