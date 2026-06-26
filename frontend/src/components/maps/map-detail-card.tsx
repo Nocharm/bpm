@@ -339,19 +339,20 @@ export function MapDetailCard({
                                 }`}
                               >
                                 <span className="overflow-hidden">
-                                  <span className="mt-1 flex flex-wrap gap-1">
-                                    <span className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                                  {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명(하이라이트 행에서도 자연스럽게) (H2c) */}
+                                  <span className="mt-1 flex flex-col items-start gap-1">
+                                    <span className="rounded-xs border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary">
                                       {perm.principal_id}
                                     </span>
                                     {title && (
-                                      <span className="rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
+                                      <span className="rounded-xs border border-accent-tint-border px-1.5 py-0.5 text-fine text-accent">
                                         {title}
                                       </span>
                                     )}
                                     {levels.map((lv) => (
                                       <span
                                         key={lv}
-                                        className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary"
+                                        className="rounded-xs border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary"
                                       >
                                         {lv}
                                       </span>
@@ -439,7 +440,7 @@ export function MapDetailCard({
                             }`}
                           >
                             <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
-                              <span className="mt-0.5 shrink-0">
+                              <span className="mt-0.5 flex w-6 shrink-0 justify-center">
                                 <MemberIcon
                                   perm={perm}
                                   isMe={perm.principal_type === "user" && perm.principal_id === loginId}

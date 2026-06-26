@@ -131,29 +131,35 @@ export function VersionTimeline({
 
               {events.length > 0 && (
                 <>
-                  {/* 평소: 이벤트 칩 2줄(이름) — 펼치면 숨김 / chips when collapsed */}
-                  {!open && (
-                    <div className="mt-1.5 flex max-h-12 flex-wrap gap-1.5 overflow-hidden">
-                      {events.map((evt) => (
-                        <span
-                          key={evt.id}
-                          data-id={`version-event-${evt.id}`}
-                          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                            EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
-                          }`}
-                          title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
-                        >
-                          <EventIcon type={evt.event_type} />
-                          {nameOf(evt.actor)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 펼침: 이벤트별 상세 행(단계 필·이름·아이디·시간) — 그리드로 열 정렬 / detail rows in a grid */}
+                  {/* 평소: 이벤트 칩 2줄 — 펼치면 접힘(상세 펼침과 동시 전환 → 높이가 줄었다 커지지 않음) / chips collapse as detail expands */}
                   <div
-                    className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                      open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      open ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="mt-1.5 flex max-h-12 flex-wrap gap-1.5">
+                        {events.map((evt) => (
+                          <span
+                            key={evt.id}
+                            data-id={`version-event-${evt.id}`}
+                            className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                              EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                            }`}
+                            title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                          >
+                            <EventIcon type={evt.event_type} />
+                            {nameOf(evt.actor)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 펼침: 이벤트별 상세 행(단계 필·이름·아이디·시간) — 칩이 접히는 만큼 동시에 펼침 / detail expands as chips collapse */}
+                  <div
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
                     }`}
                   >
                     <div className="overflow-hidden">
