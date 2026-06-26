@@ -6,7 +6,7 @@
 import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
-import { formatKstShort } from "@/lib/datetime";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -56,8 +56,8 @@ function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon
   }
 }
 
-// created_at(ISO) → "MM-DD HH:mm" KST / compact absolute timestamp.
-const formatStamp = formatKstShort;
+// created_at(ISO) → "YYYY-MM-DD HH:mm" KST / full absolute timestamp.
+const formatStamp = formatKst;
 
 export function VersionTimeline({
   versions,
@@ -74,7 +74,8 @@ export function VersionTimeline({
     <div data-id="version-timeline" className="relative flex flex-col gap-3">
       {/* 좌측 세로 연결선 / left timeline rail */}
       <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-px bg-hairline" />
-      {versions.map((version, idx) => {
+      {/* 최신 버전이 위로 — idx 0 = 최신 = Current / newest first. */}
+      {[...versions].reverse().map((version, idx) => {
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first; node reflects the latest.
         const events: VersionEvent[] = [...version.events].reverse();
         const node = nodeFor(events[0]?.event_type);
@@ -128,7 +129,7 @@ export function VersionTimeline({
                   </div>
 
                   {/* 호버: 이벤트별 상세 행(단계 · 이름(아이디) · 시간) 펼침 / detailed rows on hover */}
-                  <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-[200ms] ease-smooth group-hover:grid-rows-[1fr]">
+                  <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-in-out group-hover:grid-rows-[1fr]">
                     <div className="overflow-hidden">
                       <div className="mt-1.5 flex flex-col gap-1">
                         {events.map((evt) => (
