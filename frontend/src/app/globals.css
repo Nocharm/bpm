@@ -29,6 +29,7 @@
   --color-ink: #16161d;
   --color-ink-secondary: #333333;
   --color-ink-tertiary: #7a7a7a;
+  --color-ink-muted: #a0a0a8; /* placeholder·divider 라벨·푸터 등 약한 뮤트 텍스트 */
 
   /* Borders */
   --color-divider: #f0f0f0;
