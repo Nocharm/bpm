@@ -322,10 +322,13 @@ def test_owner_grant_change_refused_409(client: TestClient, enforce: None) -> No
     assert client.delete(f"/api/maps/{map_id}/permissions/{gid}").status_code == 409
 
 
-def test_collaborators_viewer_403(client: TestClient, enforce: None) -> None:
+def test_collaborators_viewer_can_read_not_write(client: TestClient, enforce: None) -> None:
+    # viewer는 멤버 목록을 읽을 수 있으나(B1) 변경(추가)은 불가 — 게이팅 비대칭.
     map_id = seed_map(grants=[("user", "vw", "viewer")])
     act_as("vw")
-    assert client.get(f"/api/maps/{map_id}/permissions").status_code == 403
+    listed = client.get(f"/api/maps/{map_id}/permissions")
+    assert listed.status_code == 200
+    assert any(p["principal_id"] == "vw" for p in listed.json())
     assert (
         client.post(
             f"/api/maps/{map_id}/permissions",

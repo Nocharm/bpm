@@ -47,7 +47,9 @@ async def _get_map_or_404(session: AsyncSession, map_id: int) -> ProcessMap:
 @router.get(
     "/maps/{map_id}/permissions",
     response_model=list[PermissionOut],
-    dependencies=[Depends(require_map_role("editor"))],
+    # viewer+ 가 멤버 목록을 읽을 수 있게 — 홈 카드/설정에서 허용 멤버 표시 (B1).
+    # 변경(add/patch/delete)은 그대로 editor/owner 게이트 유지.
+    dependencies=[Depends(require_map_role("viewer"))],
 )
 async def list_permissions(
     map_id: int, session: AsyncSession = Depends(get_session)
