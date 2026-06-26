@@ -110,7 +110,7 @@ export function MapDetailCard({
   const orgPath = me?.orgPath ?? "";
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 허용 인원 — my_role이 editor+ 일 때만 조회(서버 게이트와 동일) / members, editor+ only.
+  // 허용 인원 — 접근 권한자(viewer+)면 조회. 서버 GET /permissions 게이트도 viewer+ (B1) / members for any role with access.
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   // 내가 속한 그룹 id(문자열) — 멤버 하이라이트용 / my group ids for the "mine" highlight.
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
@@ -125,7 +125,7 @@ export function MapDetailCard({
       .then(async (d) => {
         if (!active) return;
         setDetail(d);
-        if (d.my_role === "editor" || d.my_role === "owner") {
+        if (d.my_role !== null) {
           try {
             const [perms, groups, dir] = await Promise.all([
               listMapPermissions(mapId),

@@ -55,8 +55,8 @@ export function MapCard({
     }
   }, [highlighted]);
 
-  // 인원 목록 조회는 서버에서 editor+ 게이트 — viewer 카드엔 버튼 미노출 / list-permissions is editor+ gated.
-  const canViewMembers = map.my_role === "editor" || map.my_role === "owner";
+  // 인원 목록은 접근 권한자(viewer+)면 조회 가능 — 서버 GET /permissions 게이트가 viewer+ (B1) / members button for any role with access.
+  const canViewMembers = map.my_role !== null;
 
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<MapPermission[] | null>(null);
