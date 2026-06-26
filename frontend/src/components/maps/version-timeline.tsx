@@ -2,7 +2,7 @@
 
 // 버전 git-log 타임라인 — 버전별 생애주기 이벤트(누가·언제)를 커밋 점+세로선으로 / version history as a git log.
 
-import { Check, GitCommit, Send, Upload, X } from "lucide-react";
+import { Check, GitCommit, Info, Send, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
@@ -39,10 +39,17 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
         // 최신이 위로 — created_at 오름차순 응답을 역순 렌더 / newest first.
         const events: VersionEvent[] = [...version.events].reverse();
         return (
-          <div key={version.id} className="flex flex-col gap-1.5">
+          <div key={version.id} className="group flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-caption-strong text-ink">
+              <span className="flex min-w-0 items-center gap-1 truncate text-caption-strong text-ink">
                 {version.label}
+                {events.length > 0 && (
+                  <Info
+                    size={12}
+                    strokeWidth={1.5}
+                    className="shrink-0 text-ink-tertiary transition-opacity group-hover:opacity-0"
+                  />
+                )}
               </span>
               <span
                 className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
@@ -52,7 +59,9 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
             </div>
 
             {events.length === 0 ? null : (
-              <ol className="flex flex-col">
+              <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-[200ms] ease-smooth group-hover:grid-rows-[1fr]">
+                <div className="overflow-hidden">
+                  <ol className="flex flex-col pt-1">
                 {events.map((evt, i) => (
                   <li
                     key={evt.id}
@@ -78,7 +87,9 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
                     </span>
                   </li>
                 ))}
-              </ol>
+                  </ol>
+                </div>
+              </div>
             )}
           </div>
         );
