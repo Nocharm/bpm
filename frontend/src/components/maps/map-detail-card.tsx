@@ -125,6 +125,28 @@ export function MapDetailCard({
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
+  const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
+  const toggleVersion = (id: number) =>
+    setExpandedVersions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleMember = (id: string) =>
+    setExpandedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const collapseAll = () => {
+    setExpandedVersions(new Set());
+    setExpandedMembers(new Set());
+  };
+  const anyExpanded = expandedVersions.size > 0 || expandedMembers.size > 0;
 
   useEffect(() => {
     let active = true;
@@ -223,6 +245,18 @@ export function MapDetailCard({
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
       </div>
 
+      {anyExpanded && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            data-id="detail-collapse-all"
+            className="text-fine text-accent hover:underline"
+            onClick={collapseAll}
+          >
+            {t("home.collapseAll")}
+          </button>
+        </div>
+      )}
       {/* 버전 · 허용 인원 — 좌우 배치(2:1) + 사이 세로 구분선 / Versions:members = 2:1 with a vertical divider */}
       <div className="flex flex-col gap-4 sm:flex-row">
         {/* 버전 + 승인 상태 / Versions with approval status */}
@@ -233,7 +267,12 @@ export function MapDetailCard({
           {detail.versions.length === 0 ? (
             <p className="text-caption text-ink-tertiary">{t("perm.version.noVersions")}</p>
           ) : (
-            <VersionTimeline versions={detail.versions} nameById={nameById} />
+            <VersionTimeline
+              versions={detail.versions}
+              nameById={nameById}
+              expandedIds={expandedVersions}
+              onToggle={toggleVersion}
+            />
           )}
         </div>
 
@@ -270,7 +309,10 @@ export function MapDetailCard({
                           perm.principal_id !== hoveredPath &&
                           (hoveredPath.startsWith(`${perm.principal_id}/`) ||
                             perm.principal_id.startsWith(`${hoveredPath}/`));
-                        // 행 내용 — 유저=이름/부서(호버 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
+                        // 유저 펼침 — 클릭 토글(여러 개 동시) (H2c)
+                        const memberOpen =
+                          perm.principal_type === "user" && expandedMembers.has(perm.principal_id);
+                        // 행 내용 — 유저=이름/부서(클릭 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
                         let nameLine: ReactNode;
                         let restNode: ReactNode = null;
                         if (perm.principal_type === "user") {
@@ -281,14 +323,16 @@ export function MapDetailCard({
                           const levels = path.split("/").filter(Boolean).reverse(); // 작은→큰 / leaf→root
                           restNode = (
                             <>
-                              {/* 평소: 말단 부서 (호버 시 숨김) */}
-                              {leaf && (
-                                <span className="block truncate text-fine text-ink-tertiary group-hover:hidden">
-                                  {leaf}
-                                </span>
+                              {/* 평소: 말단 부서 (펼치면 숨김) */}
+                              {leaf && !memberOpen && (
+                                <span className="block truncate text-fine text-ink-tertiary">{leaf}</span>
                               )}
-                              {/* 호버: 아이디·타이틀·부서 레벨(작은→큰)을 필로 펼침 — 괄호 없이 (H2c) */}
-                              <span className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-in-out group-hover:grid-rows-[1fr]">
+                              {/* 펼침: 아이디·타이틀·부서 레벨(작은→큰)을 필로 — 괄호 없이 (H2c) */}
+                              <span
+                                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                                  memberOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                                }`}
+                              >
                                 <span className="overflow-hidden">
                                   <span className="mt-1 flex flex-wrap gap-1">
                                     <span className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
@@ -349,6 +393,23 @@ export function MapDetailCard({
                         return (
                           <div
                             key={perm.id}
+                            role={perm.principal_type === "user" ? "button" : undefined}
+                            tabIndex={perm.principal_type === "user" ? 0 : undefined}
+                            onClick={
+                              perm.principal_type === "user"
+                                ? () => toggleMember(perm.principal_id)
+                                : undefined
+                            }
+                            onKeyDown={
+                              perm.principal_type === "user"
+                                ? (e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      toggleMember(perm.principal_id);
+                                    }
+                                  }
+                                : undefined
+                            }
                             onMouseEnter={
                               perm.principal_type === "department"
                                 ? () => setHoveredPath(perm.principal_id)
@@ -359,8 +420,12 @@ export function MapDetailCard({
                                 ? () => setHoveredPath(null)
                                 : undefined
                             }
-                            // 나의 소속=악센트 배경 / 호버 관련 팀=악센트 틴트 (멤버수 중복 인지) (H2)
+                            // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
                             className={`group flex items-start justify-between gap-2 rounded-sm border px-2.5 py-1.5 transition-colors ${
+                              perm.principal_type === "user"
+                                ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border"
+                                : ""
+                            } ${
                               isMine(perm)
                                 ? "border-accent bg-accent/10"
                                 : related
