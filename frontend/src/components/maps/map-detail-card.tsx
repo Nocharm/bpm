@@ -270,21 +270,41 @@ export function MapDetailCard({
                           perm.principal_id !== hoveredPath &&
                           (hoveredPath.startsWith(`${perm.principal_id}/`) ||
                             perm.principal_id.startsWith(`${hoveredPath}/`));
-                        // 2번째 줄 — 유저=직급·부서(평소 숨김→행 호버 시 아래로 펼침) / 부서=구성원수(상위소속 호버 시) / 그룹=구성원수·상태 (H2c)
-                        let secondNode: ReactNode = null;
+                        // 행 내용 — 유저=이름/부서(호버 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
+                        let nameLine: ReactNode;
+                        let restNode: ReactNode = null;
                         if (perm.principal_type === "user") {
-                          const leaf = deptLeaf(orgPathById.get(perm.principal_id) ?? "");
-                          const detail = [titleById.get(perm.principal_id), leaf].filter(Boolean).join(" · ");
-                          if (detail) {
-                            secondNode = (
+                          nameLine = nameById.get(perm.principal_id) ?? perm.principal_id;
+                          const path = orgPathById.get(perm.principal_id) ?? "";
+                          const leaf = deptLeaf(path);
+                          const title = titleById.get(perm.principal_id) ?? "";
+                          const levels = path.split("/").filter(Boolean).reverse(); // 작은→큰 / leaf→root
+                          restNode = (
+                            <>
+                              {/* 평소: 말단 부서 (호버 시 숨김) */}
+                              {leaf && (
+                                <span className="block truncate text-fine text-ink-tertiary group-hover:hidden">
+                                  {leaf}
+                                </span>
+                              )}
+                              {/* 호버: (아이디)·타이틀·부서 레벨(작은→큰) 아래로 펼침 */}
                               <span className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-[200ms] ease-smooth group-hover:grid-rows-[1fr]">
                                 <span className="overflow-hidden">
-                                  <span className="block truncate text-fine text-ink-tertiary">{detail}</span>
+                                  <span className="block truncate text-fine text-ink-tertiary">({perm.principal_id})</span>
+                                  {title && (
+                                    <span className="block truncate text-fine text-ink-tertiary">{title}</span>
+                                  )}
+                                  {levels.map((lv) => (
+                                    <span key={lv} className="block truncate text-fine text-ink-tertiary">
+                                      {lv}
+                                    </span>
+                                  ))}
                                 </span>
                               </span>
-                            );
-                          }
+                            </>
+                          );
                         } else if (perm.principal_type === "group") {
+                          nameLine = perm.principal_id;
                           const g = groupInfo.get(perm.principal_id);
                           if (g) {
                             const status = t(
@@ -294,7 +314,7 @@ export function MapDetailCard({
                                   ? "home.groupRejected"
                                   : "home.groupActive",
                             );
-                            secondNode = (
+                            restNode = (
                               <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
                                 <Users size={11} strokeWidth={1.5} className="shrink-0" />
                                 {g.count}
@@ -303,12 +323,13 @@ export function MapDetailCard({
                             );
                           }
                         } else {
+                          nameLine = deptLeaf(perm.principal_id);
                           const count = [...orgPathById.values()].filter(
                             (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
                           ).length;
                           const parts = perm.principal_id.split("/").filter(Boolean);
                           const parent = parts.length > 1 ? parts.slice(0, -1).join(" › ") : (parts[0] ?? "");
-                          secondNode = (
+                          restNode = (
                             <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
                               <Users size={11} strokeWidth={1.5} className="shrink-0" />
                               {count}
@@ -338,26 +359,17 @@ export function MapDetailCard({
                                   : "border-hairline bg-surface"
                             }`}
                           >
-                            <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
-                              <MemberIcon
-                                perm={perm}
-                                isMe={perm.principal_type === "user" && perm.principal_id === loginId}
-                              />
-                              {/* 1줄: 부서 말단/유저 이름(아이디)/그룹 · 2줄: 소속(부서 상위경로/유저 부서) (H2) */}
+                            <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
+                              <span className="mt-0.5 shrink-0">
+                                <MemberIcon
+                                  perm={perm}
+                                  isMe={perm.principal_type === "user" && perm.principal_id === loginId}
+                                />
+                              </span>
+                              {/* 1줄: 이름/말단/그룹 · 이하: 부서/펼침 (H2c) */}
                               <span className="flex min-w-0 flex-col leading-tight">
-                                <span className="truncate">
-                                  {perm.principal_type === "department" ? (
-                                    deptLeaf(perm.principal_id)
-                                  ) : perm.principal_type === "user" ? (
-                                    <>
-                                      {nameById.get(perm.principal_id) ?? perm.principal_id}
-                                      <span className="hidden text-ink-tertiary group-hover:inline"> ({perm.principal_id})</span>
-                                    </>
-                                  ) : (
-                                    perm.principal_id
-                                  )}
-                                </span>
-                                {secondNode}
+                                <span className="truncate">{nameLine}</span>
+                                {restNode}
                               </span>
                             </span>
                             <RoleBadge role={perm.role as MapRole} />
