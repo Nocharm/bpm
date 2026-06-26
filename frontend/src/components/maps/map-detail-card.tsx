@@ -5,7 +5,7 @@
 // 데이터는 getMap(+editor+면 listMapPermissions/listGroups). 선택 변경 시 key로 remount.
 
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
   Boxes,
@@ -221,10 +221,10 @@ export function MapDetailCard({
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
       </div>
 
-      {/* 버전 · 허용 인원 — 좌우 배치 / Versions and members side by side */}
-      <div className="flex flex-wrap gap-4">
+      {/* 버전 · 허용 인원 — 좌우 배치(2:1) + 사이 세로 구분선 / Versions:members = 2:1 with a vertical divider */}
+      <div className="flex flex-col gap-4 sm:flex-row">
         {/* 버전 + 승인 상태 / Versions with approval status */}
-        <div data-id="map-detail-versions" className="flex min-w-[12rem] flex-1 flex-col gap-1">
+        <div data-id="map-detail-versions" className="flex min-w-0 flex-[2] flex-col gap-1">
           <p className="text-fine uppercase tracking-wide text-ink-tertiary">
             {t("home.versions")}
           </p>
@@ -237,7 +237,7 @@ export function MapDetailCard({
 
         {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
         {members !== null && (
-          <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:border-l sm:border-divider sm:pl-4">
             <p className="text-fine uppercase tracking-wide text-ink-tertiary">
               {t("home.members")}
             </p>
@@ -262,27 +262,44 @@ export function MapDetailCard({
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
                       {rows.map((perm) => {
                         // 2번째 줄 — 유저=직급·말단org / 부서=구성원수·루트org1 / 그룹=구성원수·상태 (H2)
-                        let second = "";
+                        // 2번째 줄 — 유저=직급·말단org(텍스트) / 부서·그룹=구성원수(아이콘)·org1|상태 (H2)
+                        let secondNode: ReactNode = null;
                         if (perm.principal_type === "user") {
                           const leaf = deptLeaf(orgPathById.get(perm.principal_id) ?? "");
-                          second = [titleById.get(perm.principal_id), leaf].filter(Boolean).join(" · ");
-                        } else if (perm.principal_type === "group") {
-                          const g = groupInfo.get(perm.principal_id);
-                          if (g) {
-                            const statusKey =
-                              g.status === "pending"
-                                ? "home.groupPending"
-                                : g.status === "rejected"
-                                  ? "home.groupRejected"
-                                  : "home.groupActive";
-                            second = `${t("home.memberCount", { count: g.count })} · ${t(statusKey)}`;
+                          const txt = [titleById.get(perm.principal_id), leaf].filter(Boolean).join(" · ");
+                          if (txt) {
+                            secondNode = <span className="truncate text-fine text-ink-tertiary">{txt}</span>;
                           }
                         } else {
-                          const org1 = perm.principal_id.split("/")[0];
-                          const count = [...orgPathById.values()].filter(
-                            (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
-                          ).length;
-                          second = `${t("home.memberCount", { count })} · ${org1}`;
+                          let count: number | null = null;
+                          let tail = "";
+                          if (perm.principal_type === "group") {
+                            const g = groupInfo.get(perm.principal_id);
+                            if (g) {
+                              count = g.count;
+                              tail = t(
+                                g.status === "pending"
+                                  ? "home.groupPending"
+                                  : g.status === "rejected"
+                                    ? "home.groupRejected"
+                                    : "home.groupActive",
+                              );
+                            }
+                          } else {
+                            tail = perm.principal_id.split("/")[0];
+                            count = [...orgPathById.values()].filter(
+                              (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
+                            ).length;
+                          }
+                          if (count !== null) {
+                            secondNode = (
+                              <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+                                <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                                {count}
+                                {tail && <span className="truncate">· {tail}</span>}
+                              </span>
+                            );
+                          }
                         }
                         return (
                           <div
@@ -313,9 +330,7 @@ export function MapDetailCard({
                                     perm.principal_id
                                   )}
                                 </span>
-                                {second && (
-                                  <span className="truncate text-fine text-ink-tertiary">{second}</span>
-                                )}
+                                {secondNode}
                               </span>
                             </span>
                             <RoleBadge role={perm.role as MapRole} />
