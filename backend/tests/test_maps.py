@@ -79,6 +79,30 @@ def test_list_maps_includes_latest_version_status(client: TestClient) -> None:
     assert row["latest_version_status"] == "draft"
 
 
+def test_list_maps_includes_card_metrics(client: TestClient) -> None:
+    """목록은 카드 집계(전체 버전 수·라이브 노드 수·소유자명)를 동봉 (H5b)."""
+    created = client.post("/api/maps", json={"name": "카드집계"}).json()
+    vid = created["versions"][0]["id"]
+    # 노드 2개 저장 — 라이브(published) 없으면 최신 버전 기준 폴백
+    client.post(f"/api/versions/{vid}/checkout", json={})
+    save = client.put(
+        f"/api/versions/{vid}/graph",
+        json={
+            "nodes": [
+                {"id": "s", "title": "Start", "node_type": "start"},
+                {"id": "a", "title": "A"},
+            ],
+            "edges": [],
+        },
+    )
+    assert save.status_code == 200, save.text
+
+    row = next(m for m in client.get("/api/maps").json() if m["id"] == created["id"])
+    assert row["version_count"] == 1
+    assert row["node_count"] == 2
+    assert "owner_name" in row
+
+
 def test_update_map_changes_name(client: TestClient) -> None:
     created = client.post("/api/maps", json={"name": "old"}).json()
 

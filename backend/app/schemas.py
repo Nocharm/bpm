@@ -196,6 +196,10 @@ class MapOut(BaseModel):
     visibility: str = "private"
     # 최신 버전(최대 id)의 워크플로 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
     latest_version_status: str | None = None
+    # H5b — 홈 카드 집계(목록 응답에서만 채움): 전체 버전 수 · 라이브(published, 없으면 최신) 노드 수 · 소유자 직원명
+    version_count: int = 0
+    node_count: int = 0
+    owner_name: str | None = None
     # 소프트삭제 시각 — 휴지통(삭제 예정) 목록 표시용. 정상 맵은 None (DL)
     deleted_at: datetime | None = None
 

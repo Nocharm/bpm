@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,7 +11,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap
 from app.permissions import logic
 from app.permissions.access import (
     get_effective_role,
@@ -83,18 +83,75 @@ async def list_maps(
         ).all()
     )
     is_admin = logic.is_sysadmin(user)
-    # 맵별 최신 버전(최대 id) 상태 — 홈 카드 표시용. 한 번의 쿼리로 N+1 회피.
+    # 맵별 최신 버전(최대 id) 상태·id — 홈 카드 표시용. 한 번의 쿼리로 N+1 회피.
     latest_status: dict[int, str] = {}
-    for mid, status in (
+    latest_vid: dict[int, int] = {}
+    for mid, vid, status in (
         await session.execute(
-            select(MapVersion.map_id, MapVersion.status).order_by(MapVersion.id)
+            select(MapVersion.map_id, MapVersion.id, MapVersion.status).order_by(MapVersion.id)
         )
     ).all():
         latest_status[mid] = status  # id 오름차순 → 마지막이 최신
+        latest_vid[mid] = vid
+    # H5b 집계 — 전체 버전 수 / 라이브(published) 버전 id / 소유자 직원명 (각 1쿼리, N+1 회피)
+    version_count: dict[int, int] = {
+        mid: cnt
+        for mid, cnt in (
+            await session.execute(
+                select(MapVersion.map_id, func.count()).group_by(MapVersion.map_id)
+            )
+        ).all()
+    }
+    published_vid: dict[int, int] = {
+        mid: vid
+        for mid, vid in (
+            await session.execute(
+                select(MapVersion.map_id, MapVersion.id).where(
+                    MapVersion.status == workflow.PUBLISHED
+                )
+            )
+        ).all()
+    }
+    # 노드 수는 라이브(published) 버전 기준 — 없으면 최신 버전으로 폴백
+    target_vids = {published_vid.get(m.id, latest_vid.get(m.id)) for m in maps}
+    target_vids.discard(None)
+    node_count_by_vid: dict[int, int] = {}
+    if target_vids:
+        node_count_by_vid = {
+            vid: cnt
+            for vid, cnt in (
+                await session.execute(
+                    select(Node.version_id, func.count())
+                    .where(Node.version_id.in_(target_vids))
+                    .group_by(Node.version_id)
+                )
+            ).all()
+        }
+    owner_ids = {m.created_by for m in maps if m.created_by}
+    owner_name: dict[str, str] = {}
+    if owner_ids:
+        owner_name = {
+            lid: nm
+            for lid, nm in (
+                await session.execute(
+                    select(Employee.login_id, Employee.name).where(
+                        Employee.login_id.in_(owner_ids)
+                    )
+                )
+            ).all()
+        }
+
+    def _set_card_metrics(m: ProcessMap) -> None:
+        """홈 카드 표시용 파생값 주입 (목록 응답 전용 transient attr)."""
+        m.latest_version_status = latest_status.get(m.id)
+        m.version_count = version_count.get(m.id, 0)
+        tvid = published_vid.get(m.id, latest_vid.get(m.id))
+        m.node_count = node_count_by_vid.get(tvid, 0) if tvid is not None else 0
+        m.owner_name = owner_name.get(m.created_by) if m.created_by else None
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)
-            m.latest_version_status = latest_status.get(m.id)
+            _set_card_metrics(m)
         return maps  # 필터 불필요(쿼리도 생략)
 
     emp = await session.get(Employee, user)
@@ -141,7 +198,7 @@ async def list_maps(
         )
         if role is not None:  # is_visible == (effective_role is not None)
             m.my_role = role
-            m.latest_version_status = latest_status.get(m.id)
+            _set_card_metrics(m)
             visible.append(m)
     return visible
 

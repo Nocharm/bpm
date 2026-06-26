@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Building2, ChevronDown, Clock, ExternalLink, User, Users } from "lucide-react";
+import { Building2, ChevronDown, Clock, ExternalLink, Layers, User, Users, Workflow } from "lucide-react";
 
 import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -223,17 +223,25 @@ export function MapCard({
         )}
       </div>
 
-      {/* 소유자 · 수정 시각 (H5a) */}
+      {/* 소유자명 · 수정 시각 · 라이브 노드 수 · 전체 버전 수 (H5a/H5b) */}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-fine text-ink-tertiary">
-        {map.created_by && (
+        {(map.owner_name ?? map.created_by) && (
           <span className="inline-flex items-center gap-1">
             <User size={11} strokeWidth={1.5} />
-            {map.created_by}
+            {map.owner_name ?? map.created_by}
           </span>
         )}
         <span className="inline-flex items-center gap-1">
           <Clock size={11} strokeWidth={1.5} />
           {formatKst(map.updated_at)}
+        </span>
+        <span className="inline-flex items-center gap-1" title={t("home.nodeCount")}>
+          <Workflow size={11} strokeWidth={1.5} />
+          {map.node_count ?? 0}
+        </span>
+        <span className="inline-flex items-center gap-1" title={t("home.versionCount")}>
+          <Layers size={11} strokeWidth={1.5} />
+          {map.version_count ?? 0}
         </span>
       </div>
     </div>
