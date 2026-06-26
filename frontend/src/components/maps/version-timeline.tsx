@@ -1,7 +1,7 @@
 "use client";
 
-// 버전 히스토리 — 좌측 타임라인 노드(최신 이벤트색) + 버전 카드(상태·현재·시각) + 이벤트 칩 (H3) /
-// version history: timeline node + version card + event chips, all visible.
+// 버전 히스토리 — 좌측 타임라인 노드 + 버전 카드(상태·현재·시각). 이벤트 칩은 2줄까지 보이고
+// 박스 호버 시 전체로 펼침. 행위자는 이름으로 표시 (H3) / version history with hover-expand history.
 
 import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Upload, X } from "lucide-react";
 
@@ -59,7 +59,14 @@ function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon
 // created_at(ISO) → "MM-DD HH:mm" KST / compact absolute timestamp.
 const formatStamp = formatKstShort;
 
-export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
+export function VersionTimeline({
+  versions,
+  nameById,
+}: {
+  versions: VersionDetail[];
+  // login_id → 표시명 — 칩에 아이디 대신 이름 표시 (H3) / id→name for chip labels.
+  nameById?: Map<string, string>;
+}) {
   const { t } = useI18n();
 
   return (
@@ -72,7 +79,7 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         return (
-          <div key={version.id} className="relative flex gap-2.5">
+          <div key={version.id} className="group relative flex gap-2.5">
             <span
               className={`z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${node.cls}`}
             >
@@ -100,7 +107,8 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
                 <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
               </div>
               {events.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                // 2줄까지 보이고 박스 호버 시 전체로 펼침 (H3) / clamp to ~2 rows, expand on hover.
+                <div className="mt-1.5 flex max-h-12 flex-wrap gap-1.5 overflow-hidden transition-[max-height] duration-[200ms] ease-smooth group-hover:max-h-48">
                   {events.map((evt) => (
                     <span
                       key={evt.id}
@@ -111,7 +119,7 @@ export function VersionTimeline({ versions }: { versions: VersionDetail[] }) {
                       title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
                     >
                       <EventIcon type={evt.event_type} />
-                      {evt.actor}
+                      {nameById?.get(evt.actor) ?? evt.actor}
                     </span>
                   ))}
                 </div>
