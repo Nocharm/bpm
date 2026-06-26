@@ -250,6 +250,17 @@ def test_withdraw_returns_to_draft(client: TestClient) -> None:
     assert save.status_code == 200
 
 
+def test_withdraw_records_event(client: TestClient) -> None:
+    """회수(withdraw)는 'withdrawn' 이벤트를 기록한다 (철회 기록 — H3 표시용)."""
+    map_id, version_id = _submit_with_approvers(client, ["a"])
+    client.post(f"/api/versions/{version_id}/withdraw")
+
+    detail = client.get(f"/api/maps/{map_id}").json()
+    version = next(v for v in detail["versions"] if v["id"] == version_id)
+    event_types = [e["event_type"] for e in version["events"]]
+    assert "withdrawn" in event_types, event_types
+
+
 def test_withdraw_from_approved(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

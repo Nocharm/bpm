@@ -5,7 +5,7 @@
 // 펼침 상태는 부모(map-detail-card)가 보유 — '모두 접기' 공유.
 
 import { Fragment } from "react";
-import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Upload, X } from "lucide-react";
+import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -19,6 +19,7 @@ const EVENT_LABEL: Record<string, MessageKey> = {
   approved: "home.verEvent.approved",
   rejected: "home.verEvent.rejected",
   published: "home.verEvent.published",
+  withdrawn: "home.verEvent.withdrawn",
 };
 
 // 이벤트 칩/단계 아이콘 / icon per event type.
@@ -28,6 +29,7 @@ function EventIcon({ type }: { type: string }) {
   if (type === "approved") return <Check size={12} strokeWidth={1.7} />;
   if (type === "rejected") return <X size={12} strokeWidth={1.7} />;
   if (type === "published") return <Upload size={12} strokeWidth={1.7} />;
+  if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.7} />;
   return <GitCommit size={12} strokeWidth={1.7} />;
 }
 
@@ -38,6 +40,7 @@ const EVENT_CHIP: Record<string, string> = {
   approved: "border-added/40 bg-added/10 text-added",
   published: "border-added/40 bg-added/10 text-added",
   rejected: "border-error/40 bg-error/10 text-error",
+  withdrawn: "border-changed/40 bg-changed/10 text-changed",
 };
 
 // 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green).
@@ -53,6 +56,8 @@ function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon
       return { cls: "border-added bg-added text-on-accent", Icon: Upload };
     case "rejected":
       return { cls: "border-error bg-surface text-error", Icon: X };
+    case "withdrawn":
+      return { cls: "border-changed bg-surface text-changed", Icon: Undo2 };
     default:
       return { cls: "border-hairline bg-surface text-ink-tertiary", Icon: GitCommit };
   }
@@ -85,6 +90,16 @@ export function VersionTimeline({
       {[...versions].reverse().map((version, idx) => {
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
         const events: VersionEvent[] = [...version.events].reverse();
+        // 상세행 시각 — 같은 날짜가 연속되면 날짜 생략하고 시각(HH:mm)만 표시 (날짜 1회) (H3)
+        let prevStampDate: string | null = null;
+        const detailRows = events.map((evt) => {
+          const full = formatStamp(evt.created_at);
+          const sep = full.indexOf(" ");
+          const date = sep >= 0 ? full.slice(0, sep) : full;
+          const stamp = date === prevStampDate ? (sep >= 0 ? full.slice(sep + 1) : full) : full;
+          prevStampDate = date;
+          return { evt, stamp };
+        });
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         const open = expandedIds.has(version.id);
@@ -164,7 +179,7 @@ export function VersionTimeline({
                   >
                     <div className="overflow-hidden">
                       <div className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1 text-fine">
-                        {events.map((evt) => (
+                        {detailRows.map(({ evt, stamp }) => (
                           <Fragment key={evt.id}>
                             <span
                               className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
@@ -176,7 +191,7 @@ export function VersionTimeline({
                             </span>
                             <span className="min-w-0 truncate text-ink">{nameOf(evt.actor)}</span>
                             <span className="text-ink-tertiary">{evt.actor}</span>
-                            <span className="text-ink-tertiary">{formatStamp(evt.created_at)}</span>
+                            <span className="justify-self-end text-ink-tertiary">{stamp}</span>
                           </Fragment>
                         ))}
                       </div>

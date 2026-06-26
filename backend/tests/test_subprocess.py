@@ -10,13 +10,13 @@ from app.models import MapVersion
 from app.settings import settings
 
 
-def _approve_version(version_id: int) -> None:
-    """버전 status 를 직접 approved 로 설정 — 'draft 1개 제한' 가드를 위해 클론 소스 draft 해소용."""
+def _publish_version(version_id: int) -> None:
+    """버전 status 를 직접 published 로 설정 — '최신=published' 가드를 위해 클론 소스 게시용."""
 
     async def _run() -> None:
         async with SessionLocal() as session:
             version = await session.get(MapVersion, version_id)
-            version.status = "approved"
+            version.status = "published"
             await session.commit()
 
     asyncio.run(_run())
@@ -240,7 +240,7 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
         ],
     })
     assert r.status_code == 200, r.json()
-    _approve_version(src_vid)  # draft 해소 → 클론용 새 버전 허용 (draft 1개 제한 가드)
+    _publish_version(src_vid)  # 게시 → 클론용 새 버전 허용 (최신=published 가드)
 
     # Clone by creating a new version with source_version_id
     clone_r = client.post(f"/api/maps/{src_map_id}/versions", json={

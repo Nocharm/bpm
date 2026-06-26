@@ -134,20 +134,20 @@ async def create_version(
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
 
-    # 맵당 '진행중 작업본' 1개 제한 — draft/pending/rejected 중 하나라도 있으면 새 버전 생성 차단 (request #11 강화).
-    # approved(게시 후 강등된 이력)·published 는 마무리된 상태라 허용 → 작업본을 마무리(승인·게시)하거나 삭제해야 새 버전 시작.
-    in_progress = await session.scalar(
-        select(func.count())
-        .select_from(MapVersion)
-        .where(
-            MapVersion.map_id == map_id,
-            MapVersion.status.in_([workflow.DRAFT, workflow.PENDING, workflow.REJECTED]),
-        )
+    # 새 버전은 '현재(최신) 버전이 게시(published)된 뒤'에만 생성 (request #11 강화2).
+    # draft/pending/rejected는 물론 approved(승인했지만 미게시)에서도 차단 → 반드시 게시해야 새 작업본 시작.
+    # publish가 직전 published를 approved로 강등하므로, 최신 버전이 published면 이전 approved 이력은 무관.
+    # status 컬럼만 조회 — 엔티티를 identity map에 올리면 이후 source clone의 selectinload가 무효화됨.
+    latest_status = await session.scalar(
+        select(MapVersion.status)
+        .where(MapVersion.map_id == map_id)
+        .order_by(MapVersion.id.desc())
+        .limit(1)
     )
-    if in_progress:
+    if latest_status is not None and latest_status != workflow.PUBLISHED:
         raise HTTPException(
             status_code=409,
-            detail="map has an in-progress version — approve/publish or delete it before creating a new one",
+            detail="publish the current version before creating a new one",
         )
 
     new_version = MapVersion(map_id=map_id, label=payload.label)
@@ -552,6 +552,7 @@ async def withdraw_version(
     version.status = workflow.DRAFT
     version.checked_out_by = user
     version.checked_out_at = now_kst()
+    record_version_event(session, version_id, "withdrawn", user)
     await session.commit()
     await session.refresh(version)
     return version
