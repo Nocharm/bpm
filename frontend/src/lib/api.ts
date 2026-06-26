@@ -582,7 +582,8 @@ export interface DirectoryUser {
   id: string;        // login_id
   name: string;      // English display name
   department: string;
-  org_path?: string; // 루트→리프 조직 경로(승인자 카드 소속 표시, ST). 미채움 시 ""
+  title?: string;    // 직급 — 멤버 2번째 줄(H2). 미채움 시 ""
+  org_path?: string; // 루트→리프 조직 경로. 멤버 2번째 줄 말단 org·부서 카운트(H2). 미채움 시 ""
 }
 
 export interface DirectoryDept {

@@ -50,12 +50,6 @@ function deptLeaf(orgPath: string): string {
   return parts[parts.length - 1] || orgPath;
 }
 
-// 부서 org_path의 상위 경로(말단 제외) — 멤버 행 2번째 줄 소속 표시 (H2) / parent path of a dept org_path.
-function deptParent(orgPath: string): string {
-  const parts = orgPath.split("/").filter(Boolean);
-  return parts.length > 1 ? parts.slice(0, -1).join(" › ") : "";
-}
-
 // 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
 function deptLevelRank(leaf: string): number {
   const s = leaf.toLowerCase();
@@ -122,8 +116,11 @@ export function MapDetailCard({
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
   // loginId → 표시명 — 멤버(유저) 행을 "이름(아이디)"로 보여주기 위함 (#5)
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
-  // loginId → 부서 — 유저 멤버 2번째 줄 소속 표시 (H2) / id→department for the member 2nd line.
-  const [deptById, setDeptById] = useState<Map<string, string>>(new Map());
+  // 디렉터리 파생 — 멤버 2번째 줄(유저 직급·말단org, 부서 카운트) (H2) / directory-derived maps for the 2nd line.
+  const [titleById, setTitleById] = useState<Map<string, string>>(new Map());
+  const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
+  // 그룹 id → {구성원수, 상태} — 그룹 멤버 2번째 줄 (H2) / group id → {count, status}.
+  const [groupInfo, setGroupInfo] = useState<Map<string, { count: number; status: string }>>(new Map());
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -143,7 +140,11 @@ export function MapDetailCard({
             if (!active) return;
             setMembers(perms);
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
-            setDeptById(new Map(dir.users.map((u) => [u.id, u.department])));
+            setTitleById(new Map(dir.users.map((u) => [u.id, u.title ?? ""])));
+            setOrgPathById(new Map(dir.users.map((u) => [u.id, u.org_path ?? ""])));
+            setGroupInfo(
+              new Map(groups.map((g) => [String(g.id), { count: g.members.length, status: g.status }])),
+            );
             if (loginId) {
               setMyGroupIds(
                 new Set(
@@ -260,13 +261,29 @@ export function MapDetailCard({
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
                       {rows.map((perm) => {
-                        // 2번째 줄 소속 — 부서=상위 경로, 유저=부서 (H2)
-                        const org =
-                          perm.principal_type === "department"
-                            ? deptParent(perm.principal_id)
-                            : perm.principal_type === "user"
-                              ? (deptById.get(perm.principal_id) ?? "")
-                              : "";
+                        // 2번째 줄 — 유저=직급·말단org / 부서=구성원수·루트org1 / 그룹=구성원수·상태 (H2)
+                        let second = "";
+                        if (perm.principal_type === "user") {
+                          const leaf = deptLeaf(orgPathById.get(perm.principal_id) ?? "");
+                          second = [titleById.get(perm.principal_id), leaf].filter(Boolean).join(" · ");
+                        } else if (perm.principal_type === "group") {
+                          const g = groupInfo.get(perm.principal_id);
+                          if (g) {
+                            const statusKey =
+                              g.status === "pending"
+                                ? "home.groupPending"
+                                : g.status === "rejected"
+                                  ? "home.groupRejected"
+                                  : "home.groupActive";
+                            second = `${t("home.memberCount", { count: g.count })} · ${t(statusKey)}`;
+                          }
+                        } else {
+                          const org1 = perm.principal_id.split("/")[0];
+                          const count = [...orgPathById.values()].filter(
+                            (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
+                          ).length;
+                          second = `${t("home.memberCount", { count })} · ${org1}`;
+                        }
                         return (
                           <div
                             key={perm.id}
@@ -296,8 +313,8 @@ export function MapDetailCard({
                                     perm.principal_id
                                   )}
                                 </span>
-                                {org && (
-                                  <span className="truncate text-fine text-ink-tertiary">{org}</span>
+                                {second && (
+                                  <span className="truncate text-fine text-ink-tertiary">{second}</span>
                                 )}
                               </span>
                             </span>

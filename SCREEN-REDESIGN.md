@@ -36,7 +36,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | B1 | 버그 | viewer가 허용 멤버 목록 못 봄 → **GET /permissions 게이팅 editor→viewer**(백엔드) + **프론트 게이트 완화**(map-card·map-detail-card `my_role!==null`) | backend 316✅·tsc/lint✅ | ✅ | 🔧 (a) 반영 — 백엔드+프론트 게이트 모두 완결 | `9bbfe06`·(프론트) |
 | B2 | 버그 | 맵 설정 토스트 폭주 → showToast가 권한거부(403/401) 무음 + 뷰어 체크아웃 배지 `!isViewer` | ✅ | ✅ | 🔧 반영 | `9fb4701` |
 | H1 | 홈 | 필터: **상태·권한 멀티셀렉트 드롭다운**(가시성 탭과 AND) + Clear 우측끝. (검토 2: 필→드롭다운, 권한 필터 추가) | ✅ | ✅ | 🔧 드롭다운·권한필터·Clear우측 반영 | `5b54887`+(검토2) |
-| H2 | 홈 | 멤버 행 2줄 — 1줄 이름/말단, 2줄 소속(부서 상위경로 `›`·유저 부서) | ✅ | ⏳ 시현 | ⏳ 검토대기 | (검토3) |
+| H2 | 홈 | 멤버 2번째 줄 유형별 — 유저=직급·말단org · 부서=구성원수·루트org1 · 그룹=구성원수·상태. (검토4: 디렉터리에 title·org_path 추가=백엔드 승인) | backend316✅·tsc/lint✅ | ⏳ 시현 | 🔧 유형별 반영 | (검토4) |
 | H3 | 홈 | 버전 요약 카드 호버 펼침(max-height) + ⓘ | — | — | ⏳ | — |
 | H4 | 홈 | 카드 허용인원 **호버** 툴팁(현재 클릭 팝오버) | — | — | ⏳ | — |
 | H5a | 홈 | 카드 2번째 줄 메타(수정시각·소유자 — 프론트 가능분) | — | — | ⏳ | — |
