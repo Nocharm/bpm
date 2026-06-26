@@ -8,6 +8,7 @@ import { Plus, Search } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery } from "@/lib/search";
+import { VERSION_STATUS_LABEL } from "@/lib/version-status";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
@@ -16,6 +17,9 @@ import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
+
+// 상태 필터 필 순서 — 초안/검토중/승인됨/반려/게시 / status filter pills order.
+const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] as const;
 
 export default function MapListPage() {
   const { t } = useI18n();
@@ -29,6 +33,8 @@ export default function MapListPage() {
   const [mapQuery, setMapQuery] = useState("");
   // 가시성 필터 탭 — ALL/Public/Private
   const [visFilter, setVisFilter] = useState<"all" | "public" | "private">("all");
+  // 상태 필터 — 다중 선택, 비어 있으면 전체 / status filter pills; empty = all statuses (H1).
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -117,10 +123,18 @@ export default function MapListPage() {
     [maps],
   );
 
-  // 가시성 필터 탭 적용 / apply visibility filter tab.
+  // 가시성 탭 AND 상태 필 — 각 그룹 내 OR, 그룹 간 AND, 둘 다 비면 전체 (H1) /
+  // visibility tab AND status pills — OR within group, AND across; empty = all.
   const filteredMaps = useMemo(
-    () => (visFilter === "all" ? visibleMaps : visibleMaps.filter((m) => m.visibility === visFilter)),
-    [visibleMaps, visFilter],
+    () =>
+      visibleMaps.filter((m) => {
+        const visOk = visFilter === "all" || m.visibility === visFilter;
+        const statusOk =
+          statusFilter.size === 0 ||
+          (m.latest_version_status !== null && statusFilter.has(m.latest_version_status));
+        return visOk && statusOk;
+      }),
+    [visibleMaps, visFilter, statusFilter],
   );
 
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
@@ -144,7 +158,7 @@ export default function MapListPage() {
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
-      <div className="mx-auto mb-4 flex w-full max-w-[72rem] shrink-0 items-center justify-between gap-4">
+      <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
         <button
           className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
@@ -156,12 +170,12 @@ export default function MapListPage() {
       </div>
 
       {error && (
-        <p className="mx-auto mb-3 w-full max-w-[72rem] shrink-0 text-caption text-error">{error}</p>
+        <p className="mx-auto mb-3 w-full max-w-[80rem] shrink-0 text-caption text-error">{error}</p>
       )}
 
       {/* 마스터-디테일 — 리스트·상세 같은 폭(flex-1+동일 max-w), min-w로 안 깨지게, 전체 max-w로 중앙 /
           List + detail share equal width (flex-1, same max-w), min-w guards wrapping, centered by max-w. */}
-      <div className="mx-auto flex min-h-0 w-full max-w-[72rem] flex-1 gap-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 gap-4">
         {visibleMaps.length === 0 ? (
           /* 맵이 하나도 없음 — 풀폭 환영 화면(상세 자리까지 차지) */
           <WelcomePlaceholder onCreate={() => setDialogOpen(true)} />
@@ -201,6 +215,50 @@ export default function MapListPage() {
                       : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
                   </button>
                 ))}
+              </div>
+              {/* 상태 필 — 다중 선택(가시성과 AND), 선택 시 해제 버튼 (H1) */}
+              <div
+                data-id="home-status-filter"
+                className="flex shrink-0 flex-wrap items-center gap-1"
+              >
+                {STATUS_ORDER.map((s) => {
+                  const on = statusFilter.has(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      aria-pressed={on}
+                      className={`rounded-sm border px-2 py-0.5 text-fine transition-colors ${
+                        on
+                          ? "border-accent-tint-border bg-accent-tint text-accent"
+                          : "border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                      }`}
+                      onClick={() =>
+                        setStatusFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(s)) next.delete(s);
+                          else next.add(s);
+                          return next;
+                        })
+                      }
+                    >
+                      {t(VERSION_STATUS_LABEL[s])}
+                    </button>
+                  );
+                })}
+                {(statusFilter.size > 0 || visFilter !== "all") && (
+                  <button
+                    type="button"
+                    data-id="home-filter-clear"
+                    className="ml-1 text-fine text-accent hover:underline"
+                    onClick={() => {
+                      setStatusFilter(new Set());
+                      setVisFilter("all");
+                    }}
+                  >
+                    {t("home.filterClear")}
+                  </button>
+                )}
               </div>
               {mapHits.length === 0 ? (
                 /* 필터/검색 결과 없음 */
