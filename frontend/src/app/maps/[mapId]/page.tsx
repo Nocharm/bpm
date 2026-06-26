@@ -5765,9 +5765,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       panOnDrag={[1]}
                       panActivationKeyCode="Space"
                       deleteKeyCode={["Delete"]}
-                      // 휠 기본 = 캔버스 상하 이동(팬), Ctrl(또는 Cmd)+휠 = 줌 (사용자 요청)
+                      // 휠 기본 = 캔버스 팬(세로 휠 상하, shift+휠·트랙패드 좌우 가로), Ctrl(또는 Cmd)+휠 = 줌 (사용자 요청)
                       panOnScroll
-                      panOnScrollMode={PanOnScrollMode.Vertical}
+                      panOnScrollMode={PanOnScrollMode.Free}
                       zoomOnScroll={false}
                       zoomActivationKeyCode={["Control", "Meta"]}
                       {...(contentExtent

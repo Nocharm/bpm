@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-06-26
+- **fix(canvas): 캔버스 좌우 휠 패닝 활성화 (feat/frontend-ui-improvements)** — 에디터 캔버스에서 shift+휠·트랙패드 좌우 제스처가 먹히지 않던 문제. 원인: `panOnScrollMode`가 `PanOnScrollMode.Vertical`로 고정돼 React Flow가 세로 스크롤 델타만 패닝에 반영하고 가로 델타(deltaX)를 무시. 수정: `Vertical` → `Free`로 변경(`page.tsx:5770`) — 세로 휠=상하 패닝(기존 유지), shift+휠·트랙패드 좌우=가로 패닝(신규), Ctrl/Cmd+휠=줌(기존 유지). 주석도 좌우 패닝 반영해 갱신. enum 멤버 유효성은 `@xyflow/system` 타입 정의로 확인(`Free="free"`). 미실행: 브라우저 수동(실제 좌우 휠 패닝).
+
 ## 2026-06-25
 - **fix(metrics): 로그인 기록 하루 1건 중복제거 — 맵 열 때마다 찍히던 것 수정 (feat/flow-rbac-improvements)** — 검토: `/api/me`가 앱 마운트(providers.publishMe)마다 호출 → 맵을 새 탭으로 열거나 새로고침·토큰갱신 시마다 LoginRecord 1건씩 쌓임(로그인 아님). 수정: `/me`에서 **KST 자정 이후 기록이 없을 때만** 추가 → "그날 접속" 단위 하루 1건. 테스트: 같은 날 3회 호출 → 1건. 검증: backend 316 passed·ruff clean.
 - **feat(time)+fix(i18n): 타임스탬프 KST 기준 + 승인 대기 상태 영어 고정 (feat/flow-rbac-improvements)** — ①**KST**: 공용 `app/clock.py`(KST=UTC+9, `now()`) 신설, `models._now`·라우터의 `datetime.now(timezone.utc)`(maps·ai·graph·versions) 전부 KST로 통일. `checkout._as_aware`는 naive(스토어 기준시 KST)를 KST로 라벨링(기존 UTC 오인 → 체크아웃 만료 9h skew 버그 수정). 프론트 표시는 `lib/datetime.formatKst/Short`(Asia/Seoul 고정)로 — comment·삭제예정·버전 타임라인 적용(브라우저 tz 무관 KST). ②**승인 대기 영어 고정**: 상태 라벨 5개(`home.verStatus.pending`·`perm.rolePending`·`group.statusPending`·`visibilityPending`·`version.waitingApproval`) KO값을 영어로(토스트/문장은 한글 유지). 검증: backend **316 passed**·ruff clean, 프론트 tsc 0·lint 0err·vitest 36·build OK.
