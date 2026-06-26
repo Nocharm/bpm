@@ -287,18 +287,27 @@ export function MapDetailCard({
                                   {leaf}
                                 </span>
                               )}
-                              {/* 호버: (아이디)·타이틀·부서 레벨(작은→큰) 아래로 펼침 */}
+                              {/* 호버: 아이디·타이틀·부서 레벨(작은→큰)을 필로 펼침 — 괄호 없이 (H2c) */}
                               <span className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-[200ms] ease-smooth group-hover:grid-rows-[1fr]">
                                 <span className="overflow-hidden">
-                                  <span className="block truncate text-fine text-ink-tertiary">({perm.principal_id})</span>
-                                  {title && (
-                                    <span className="block truncate text-fine text-ink-tertiary">{title}</span>
-                                  )}
-                                  {levels.map((lv) => (
-                                    <span key={lv} className="block truncate text-fine text-ink-tertiary">
-                                      {lv}
+                                  <span className="mt-1 flex flex-wrap gap-1">
+                                    <span className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                                      {perm.principal_id}
                                     </span>
-                                  ))}
+                                    {title && (
+                                      <span className="rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
+                                        {title}
+                                      </span>
+                                    )}
+                                    {levels.map((lv) => (
+                                      <span
+                                        key={lv}
+                                        className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary"
+                                      >
+                                        {lv}
+                                      </span>
+                                    ))}
+                                  </span>
                                 </span>
                               </span>
                             </>
