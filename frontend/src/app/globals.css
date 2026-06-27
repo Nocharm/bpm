@@ -112,6 +112,27 @@ body {
   display: none; /* WebKit */
 }
 
+/* 자동 숨김 스크롤 — 막대를 평소 숨기고 hover/스크롤 시에만 노출(오버레이 느낌).
+   피커 모달의 명단처럼 높이를 고정하고 내부 스크롤할 때 사용 — 항목 추가로 모달이 늘지 않게. */
+.scroll-soft {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent; /* Firefox: 평소 투명 */
+}
+.scroll-soft:hover {
+  scrollbar-color: var(--color-ink-tertiary) transparent;
+}
+.scroll-soft::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-soft::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.scroll-soft:hover::-webkit-scrollbar-thumb {
+  background: var(--color-ink-tertiary);
+}
+
 /* 버튼 기본 인터랙션 — 전역. 포인터 커서 + 클릭 시 살짝 눌림(tactile).
    hover 배경은 컴포넌트별 토큰(hover:bg-*) 유지. element 셀렉터로 specificity를 낮춰 Tailwind 유틸리티가 항상 우선. */
 button:not(:disabled) {

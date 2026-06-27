@@ -408,7 +408,7 @@ export function GroupsPanel() {
             <div className="flex flex-col gap-1">
               <label className="text-fine text-ink-tertiary">{t("perm.group.membersLabel")}</label>
               {members.length > 0 && (
-                <div className="mb-1 flex flex-wrap gap-1">
+                <div className="scroll-soft mb-1 flex max-h-[6rem] flex-wrap gap-1">
                   {members.map((m) => (
                     <span
                       key={`${m.type}:${m.id}`}
@@ -445,7 +445,7 @@ export function GroupsPanel() {
             <div className="flex flex-col gap-1">
               <label className="text-fine text-ink-tertiary">{t("perm.group.managersLabel")}</label>
               {managers.length > 0 && (
-                <div className="mb-1 flex flex-wrap gap-1">
+                <div className="scroll-soft mb-1 flex max-h-[6rem] flex-wrap gap-1">
                   {managers.map((m) => (
                     <span
                       key={m.id}

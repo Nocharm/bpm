@@ -398,13 +398,13 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
               </select>
             )}
           </div>
-          {/* 추가된 협업자 목록 / added collaborators list */}
-          {collaborators.length > 0 && (
-            <ul className="flex flex-col gap-1">
+          {/* 추가된 협업자 목록 — 높이 고정(~3.5행)·내부 스크롤로 모달 크기 불변(추가해도 안 늘어남) /
+              fixed ~3.5-row scroll area so the modal stays the same size as collaborators stack. */}
+          <ul className="scroll-soft flex h-[7.5rem] flex-col gap-1">
               {collaborators.map((c) => (
                 <li
                   key={c.key}
-                  className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                  className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
                 >
                   <PrincipalIcon type={c.principalType} />
                   <span className="flex-1 truncate">{c.displayName}</span>
@@ -431,8 +431,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                   </button>
                 </li>
               ))}
-            </ul>
-          )}
+          </ul>
         </div>
 
         {/* 결재자 / approvers */}

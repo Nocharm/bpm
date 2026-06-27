@@ -158,11 +158,11 @@ function PickerDialog({
           excludeIds={exclude}
           onSelect={(opt) => setSelected((prev) => [...prev, opt])}
         />
-        {/* 선택 칩 / selected chips */}
+        {/* 선택 칩 — 높이 고정(~3행)·내부 스크롤로 추가해도 모달 크기 불변 / fixed-height scroll so the modal doesn't grow. */}
         {selected.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <span className="text-fine text-ink-tertiary">{t("perm.group.pickerSelected")}</span>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="scroll-soft flex max-h-[5.5rem] flex-wrap gap-1.5">
               {selected.map((s) => (
                 <span
                   key={`${s.principalType}:${s.principalId}`}
