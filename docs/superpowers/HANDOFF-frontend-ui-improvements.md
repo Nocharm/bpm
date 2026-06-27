@@ -33,6 +33,16 @@ S6 관리자/유저그룹 화면 리디자인을 다수 단위로 진행·검증
 | 휴지통 복구 예시 외 | trash | **Scheduled deletion** 탭에서 Restore(확인 모달) |
 | 구매 검토 위원회 v2 외 | active | 추가 활성 예시 |
 
+**승인 큐(Approval Queue) 전 케이스** — settings → Approval Queue (sysadmin), 맵 "승인 큐 예시 맵"(private) 기준:
+| kind | 데이터 | 검토 포인트 |
+|---|---|---|
+| group_create | 신청 대기 그룹 | 그룹 생성 승인 |
+| visibility_change | 승인 큐 예시 맵 | **Private → Public** before→after 표기 |
+| permission_downgrade (다운그레이드) | user.choi editor → viewer | 역할 전환 `editor → viewer` |
+| permission_downgrade (제거) | user.park editor → removed | `editor → removed`(빨강 pill) |
+
+> 생성 방식(실데이터): 비공개 맵 생성→editor 3명 부여→**비-owner editor(user.lee)**가 다른 멤버를 PATCH viewer/DELETE(승인 게이트는 owner/sysadmin이면 즉시 적용되므로 비-owner로 수행)+admin.kim 가시성 변경 요청. (sysadmin으로는 다운그레이드 요청이 안 생기는 점 주의.)
+
 > dev.db 한정. `python -m scripts.reset_db` 하면 사라짐 → 재시드 필요(아래 §7 프롬프트에 시드 지시 포함하거나 API로 재생성).
 
 ## 5. 남은 일
