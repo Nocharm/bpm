@@ -41,7 +41,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | H2b | 홈 | 멤버 카운트=아이콘+숫자 · 상세 버전:인원=2:1 · 사이 세로선(검토6: `border-hairline`로 진하게) | ✅ | ✅ | ✅ OK (H2b완료) | (검토5·6) |
 | H2c | 홈 | 팀=평소 멤버수만→호버 상위소속+상위/하위 하이라이트. **유저=평소 [이름/말단부서]→호버 [이름/(아이디)/타이틀/부서레벨 작은→큰] 다행 펼침**(필=각 행·투명·롤배지 고정·클릭토글·테두리 ink-tertiary/40) (확정 사양) | ✅ | ✅ | ✅ OK (H2c완료) | (검토6~16) |
 | H4 | 홈 | 카드 허용인원 클릭 팝오버 → **호버 툴팁**(120ms 디바운스·키보드) | ✅ | ✅ | 🔧 호버 전환 반영 | (검토14) |
-| H5a | 홈 | 카드 3번째 줄 메타 **소유자(id)·수정시각**(프론트 가능분) | ✅ | ✅ | 🔧 메타 반영 | (검토14) |
+| H5a | 홈 | 카드 3번째 줄 메타 **소유자(id)·수정시각**(프론트 가능분) | ✅ | ✅ | ✅ OK (완료) | (검토14) |
 | H5b | 홈 | 카드 메타 **노드수(라이브 published)·버전수(전체)·소유자명** — 백엔드 목록 집계 + 카드 표시 | backend322✅·tsc/lint✅ | ✅ | 🔧 집계 반영 | (검토14) |
 | H6 | 홈 | 좌:우 = **1:2**(flex-1 : flex-[2], 동일 max-w 캡 제거) + 컨테이너 1280. (검토 2: 폭만 됐던 것 비율 보완) | ✅ | ✅ | ✅ OK (H6완료) | `5b54887`+(검토2) |
 | A1 | 관리자 | DB 테이블 **무한 스크롤** — 페이지 버튼→스크롤 append(50행/회·420ms 스피너), sticky 헤더, "N/total rows" 카운트, 끝 "All rows loaded". `admin/table-viewer.tsx` | ✅ | ✅ | ✅ OK (완료) | `9afbf64` |
@@ -50,9 +50,9 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A4 | 관리자 | 그룹/승인큐 **max-width**(`max-w-4xl`) + 승인 큐 **nav 배지**(대기 건수, sysadmin 선조회+`onCountChange` 갱신). `groups-panel`·`approval-queue`·`settings/page` | ✅ | ✅ | ✅ OK (완료) | (S6) |
 | A5 | 관리자 | **관리자 테이블 일괄 디자인**([Image #1]) — Employees/Departments/Users 공통 셸(`admin-table.tsx`: `TableCard`·헤더 bg·divider·`RolePill`). 서브타이틀 stats는 Employees 동기화 msg 기존 유지. | ✅ | ✅ | ✅ OK (완료) | `0ddaba7` |
 | A6 | 관리자 | **DB 뷰어 디자인**([Image #2]) — pill 테이블 선택(아이콘+이름+행수)·카드 헤더(`{table}` + `{total} rows · {loaded} shown`)·visibility 배지·로딩/끝. 백엔드 `/admin/tables`→`[{name,count}]`(스키마 무변경). | backend 7✅·tsc/lint✅ | ✅ | ✅ OK (완료) | `4b3f4f5` |
-| A7 | 관리자 | Scheduled deletion **삭제 예정 카운트다운** — `N일/N시간 뒤 삭제`/`곧 삭제`(`deleted_at`+7일−now), **빨간 강조**(`text-error`). 절대시각 hover. `admin/deleted-maps-panel` | ✅ | ✅ | 🔧 카운트다운+빨강 반영 | (S6) |
+| A7 | 관리자 | Scheduled deletion **삭제 예정 카운트다운** — `N일/N시간 뒤 삭제`/`곧 삭제`(`deleted_at`+7일−now), **빨간 강조**(`text-error`). 절대시각 hover. `admin/deleted-maps-panel` | ✅ | ✅ | ✅ OK (완료) | `2feda2f` |
 | A10 | 관리자 | **승인 큐 케이스 pill 요약** — 그룹 생성·권한 하향·가시성 변경을 `{kind}·{요약}` pill로, 클릭 시 상세+Approve/Reject 펼침. 모든 케이스 실데이터. `admin/approval-queue` | ✅ | ✅ | 🔧 pill+클릭상세 반영 | (S6) |
-| A9 | 관리자 | **Departments 인원수 열** — org 보기 OFF(기본) 시 "Members" 열 추가(org_levels 경로 일치 집계). org ON이면 기존 orgLevels 열. `admin/department-table` | ✅ | ✅ | 🔧 인원수 열 반영 | (S6) |
+| A9 | 관리자 | **Departments 인원수 열** — org 보기 OFF(기본) 시 "Members" 열 추가(org_levels 경로 일치 집계). org ON이면 기존 orgLevels 열. `admin/department-table` | ✅ | ✅ | ✅ OK (완료) | `2feda2f` |
 | A8 | 관리자 | **그룹 카드 인라인 상세**(새 페이지 X→카드 아래 펼침, 공용 `group-detail.tsx`·보기+편집) + **매니저=멤버(user) 제한**(피커 후보 제한·캐스케이드·백엔드 422). `groups-panel`·`group-detail`·`groups/[groupId]`·`routers/groups` | backend 325✅·tsc/lint✅ | ✅ | 🔧 인라인+매니저제한 반영 | (S6) |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
