@@ -77,7 +77,7 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
                 <span className="block truncate text-caption text-ink">{m.name}</span>
                 {m.deleted_at && (
                   <span
-                    className="text-fine text-ink-tertiary"
+                    className="text-fine font-semibold text-error"
                     title={`${t("trash.deletedAt")}: ${formatKst(m.deleted_at)}`}
                   >
                     {purgeLabel(m.deleted_at)}
