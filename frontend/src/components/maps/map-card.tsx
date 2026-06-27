@@ -7,9 +7,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Building2, Clock, GitBranch, Globe, Lock, User, Users, Workflow } from "lucide-react";
+import { Clock, GitBranch, Globe, Lock, User, Users, Workflow } from "lucide-react";
 
-import { listMapPermissions, type MapPermission, type MapSummary } from "@/lib/api";
+import { type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { Highlight } from "@/components/highlight";
 import { RoleBadge } from "@/components/permissions/role-badge";
@@ -26,13 +26,6 @@ interface MapCardProps {
   nameRanges?: MatchRange[];
   // 복사 직후 강조 — 쉬머 링 + 자동 스크롤 (F12).
   highlighted?: boolean;
-}
-
-// principal_type → 아이콘 / principal icon.
-function PrincipalIcon({ type }: { type: string }) {
-  if (type === "department") return <Building2 size={12} strokeWidth={1.5} />;
-  if (type === "group") return <Users size={12} strokeWidth={1.5} />;
-  return <User size={12} strokeWidth={1.5} />;
 }
 
 export function MapCard({
@@ -75,8 +68,6 @@ export function MapCard({
   // 모달은 pointer-events-none(통과) → 디테일 패널/다른 카드 호버를 가리지 않음(호버가 마우스를 따라감).
   const [modalOpen, setModalOpen] = useState(false);
   const [modalPos, setModalPos] = useState<{ left: number; top: number } | null>(null);
-  const [members, setMembers] = useState<MapPermission[] | null>(null);
-  const [membersError, setMembersError] = useState<string | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const closeModal = () => {
@@ -93,11 +84,6 @@ export function MapCard({
       const rect = rootRef.current?.getBoundingClientRect();
       if (rect) setModalPos({ left: rect.right + 8, top: rect.top });
       setModalOpen(true);
-      if (canViewMembers && members === null) {
-        void listMapPermissions(map.id)
-          .then((rows) => setMembers(rows))
-          .catch((err) => setMembersError(err instanceof Error ? err.message : String(err)));
-      }
     }, 1000);
   };
 
@@ -219,57 +205,61 @@ export function MapCard({
             style={{ left: modalPos.left, top: modalPos.top }}
           >
             <p className="mb-2 truncate text-caption-strong text-ink">{map.name}</p>
-            <ul className="flex flex-col gap-1.5 text-ink-secondary">
-              <li className="flex items-center gap-2">
-                {map.visibility === "public" ? (
-                  <Globe size={13} strokeWidth={1.5} className="shrink-0 text-accent" />
-                ) : (
-                  <Lock size={13} strokeWidth={1.5} className="shrink-0" />
-                )}
-                {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+            {/* 가시성 / visibility */}
+            <div className="mb-2 flex items-center gap-2 text-ink-secondary">
+              {map.visibility === "public" ? (
+                <Globe size={13} strokeWidth={1.5} className="shrink-0 text-accent" />
+              ) : (
+                <Lock size={13} strokeWidth={1.5} className="shrink-0" />
+              )}
+              {t(map.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+            </div>
+
+            {/* 카운트 — 라벨 좌측 / 숫자 우측 pill / counts: label left, count pill right */}
+            <ul className="flex flex-col gap-1 text-ink-secondary">
+              <li className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Workflow size={13} strokeWidth={1.5} className="shrink-0" />
+                  <span className="truncate">{t("home.nodeCount")}</span>
+                </span>
+                <span className="inline-flex min-w-[1.5rem] shrink-0 justify-center rounded-full bg-accent-tint px-2 py-0.5 text-fine text-accent">
+                  {map.node_count ?? 0}
+                </span>
               </li>
-              <li className="flex items-center gap-2">
-                <Workflow size={13} strokeWidth={1.5} className="shrink-0" />
-                {t("home.nodeCount")} — {map.node_count ?? 0}
+              <li className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <GitBranch size={13} strokeWidth={1.5} className="shrink-0" />
+                  <span className="truncate">{t("home.versionCount")}</span>
+                </span>
+                <span className="inline-flex min-w-[1.5rem] shrink-0 justify-center rounded-full bg-accent-tint px-2 py-0.5 text-fine text-accent">
+                  {map.version_count ?? 0}
+                </span>
               </li>
-              <li className="flex items-center gap-2">
-                <GitBranch size={13} strokeWidth={1.5} className="shrink-0" />
-                {t("home.versionCount")} — {map.version_count ?? 0}
-              </li>
-              <li className="flex items-center gap-2">
-                <Users size={13} strokeWidth={1.5} className="shrink-0" />
-                {t("home.viewMembers")} — {map.member_count ?? 0}
-              </li>
-              <li className="flex min-w-0 items-center gap-2">
-                <User size={13} strokeWidth={1.5} className="shrink-0" />
-                <span className="truncate">
-                  {map.owner_name ?? map.created_by} · {relativeTime(map.updated_at)}
+              <li className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Users size={13} strokeWidth={1.5} className="shrink-0" />
+                  <span className="truncate">{t("home.viewMembers")}</span>
+                </span>
+                <span className="inline-flex min-w-[1.5rem] shrink-0 justify-center rounded-full bg-accent-tint px-2 py-0.5 text-fine text-accent">
+                  {map.member_count ?? 0}
                 </span>
               </li>
             </ul>
-            {canViewMembers && (
-              <div className="mt-2 max-h-40 overflow-y-auto border-t border-hairline pt-2">
-                {membersError ? (
-                  <p className="text-fine text-error">{membersError}</p>
-                ) : members === null ? (
-                  <p className="text-fine text-ink-tertiary">…</p>
-                ) : members.length === 0 ? (
-                  <p className="text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
-                ) : (
-                  <ul className="flex flex-col gap-1">
-                    {members.map((perm) => (
-                      <li key={perm.id} className="flex items-center justify-between gap-2">
-                        <span className="flex min-w-0 items-center gap-1.5 text-ink">
-                          <PrincipalIcon type={perm.principal_type} />
-                          <span className="truncate">{perm.principal_id}</span>
-                        </span>
-                        <RoleBadge role={perm.role as MapRole} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+
+            {/* 오너 카드 / owner card */}
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-hairline bg-surface-alt px-2.5 py-1.5">
+              <User size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-fine text-ink-tertiary">{t("home.owner")}</span>
+                <span className="truncate text-caption text-ink">{map.owner_name ?? map.created_by}</span>
+              </span>
+            </div>
+
+            {/* 업데이트 시각 — 맨 아래 / updated time at the very bottom */}
+            <div className="mt-2 flex items-center gap-1.5 text-fine text-ink-tertiary">
+              <Clock size={12} strokeWidth={1.5} className="shrink-0" />
+              {relativeTime(map.updated_at)}
+            </div>
           </div>,
           document.body,
         )}
