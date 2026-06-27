@@ -162,6 +162,7 @@ class GroupOut(BaseModel):
     approved_by: str | None
     approved_at: datetime | None
     created_at: datetime
+    deleted_at: datetime | None = None  # 소프트삭제/거절 시각 — 7일 후 자동 영구삭제
     members: list[MemberOut]
     managers: list[str]
 

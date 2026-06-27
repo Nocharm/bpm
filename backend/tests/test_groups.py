@@ -7,6 +7,7 @@ is_sysadmin 을 차별화해 실제 403/422/409 와 sysadmin 게이트를 검증
 
 import asyncio
 from collections.abc import Iterator
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +15,7 @@ from fastapi.testclient import TestClient
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import Employee, MapVersion, ProcessMap
+from app.models import Employee, MapVersion, ProcessMap, UserGroup, _now
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -487,3 +488,68 @@ def test_auth_off_group_create_and_approve(client: TestClient) -> None:
         client.post(f"/api/groups/{gid}/decide", json={"decision": "approve"}).status_code
         == 200
     )
+
+
+# ── G. 소프트삭제 · 재신청 · 자동 퍼지 (2026-06-27) ──────────────
+
+
+def _two_user_members() -> list[dict]:
+    return [
+        {"member_type": "user", "member_id": "u.a"},
+        {"member_type": "user", "member_id": "u.b"},
+    ]
+
+
+def test_delete_active_group_soft_hides(client: TestClient, enforce: None) -> None:
+    """생성자/매니저가 active 그룹 삭제 → 소프트삭제(deleted_at 설정, 목록에서 숨김)."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    act_as("creator1")
+    r = client.delete(f"/api/groups/{g['id']}")
+    assert r.status_code == 200
+    assert r.json()["deleted_at"] is not None
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups").json()}
+
+
+def test_reject_then_resubmit(client: TestClient, enforce: None) -> None:
+    """거절 → 목록에 rejected로 노출(유예) → 재신청 → pending(deleted_at 해제)."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    act_as("creator1")
+    listed = {x["id"]: x for x in client.get("/api/groups").json()}
+    assert g["id"] in listed and listed[g["id"]]["status"] == "rejected"
+    body = client.post(f"/api/groups/{g['id']}/resubmit").json()
+    assert body["status"] == "pending" and body["deleted_at"] is None
+
+
+def test_delete_rejected_group_removes(client: TestClient, enforce: None) -> None:
+    """거절된 그룹 삭제 → 즉시 영구 제거(404)."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    act_as("creator1")
+    assert client.delete(f"/api/groups/{g['id']}").status_code == 200
+    assert client.get(f"/api/groups/{g['id']}").status_code == 404
+
+
+def _set_group_deleted(group_id: int, dt: object) -> None:
+    async def _set(session: object) -> None:
+        grp = await session.get(UserGroup, group_id)
+        grp.deleted_at = dt
+
+    _seed(_set)
+
+
+def test_purge_expired_groups(client: TestClient, enforce: None) -> None:
+    """deleted_at이 보존기간(7일) 지난 그룹은 목록 조회 시 영구 삭제."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    _set_group_deleted(g["id"], _now() - timedelta(days=8))
+    act_as("creator1")
+    client.get("/api/groups")  # lazy purge 트리거
+    assert client.get(f"/api/groups/{g['id']}").status_code == 404

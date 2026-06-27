@@ -22,6 +22,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("map_versions", "reject_reason", "VARCHAR(500)"),
     ("groups", "parent_group_id", "VARCHAR(50)"),  # 그룹 중첩(하위 그룹핑) — design 2026-06-15
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
+    ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27
 ]
 
 

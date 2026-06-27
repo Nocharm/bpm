@@ -52,9 +52,10 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A6 | 관리자 | **DB 뷰어 디자인**([Image #2]) — pill 테이블 선택(아이콘+이름+행수)·카드 헤더(`{table}` + `{total} rows · {loaded} shown`)·visibility 배지·로딩/끝. 백엔드 `/admin/tables`→`[{name,count}]`(스키마 무변경). | backend 7✅·tsc/lint✅ | ✅ | ✅ OK (완료) | `4b3f4f5` |
 | A7 | 관리자 | Scheduled deletion **삭제 예정 카운트다운** — `N일/N시간 뒤 삭제`/`곧 삭제`(`deleted_at`+7일−now), **빨간 강조**(`text-error`). 절대시각 hover. `admin/deleted-maps-panel` | ✅ | ✅ | ✅ OK (완료) | `2feda2f` |
 | A11 | 관리자 | **유저그룹 개선 4건**(Message 3): ①매니저=멤버 카드에서 토글(피커 삭제) ②멤버 박스=홈 상세 카드 재활용 ③**가시성 필터**(sysadmin 전체·일반 유저는 해당 그룹만) ④상단 SVG 안내 가이드(목적·신청/관리/사용). `groups-panel`·`group-detail`·`groups-guide`·`routers/groups` | ✅ backend 325 | ✅ | 🔧 ①②③ 완료, ④ 아이콘/필+매니저 재설계 반영 | (S6) |
-| A10 | 관리자 | **승인 큐 — 간소 카드(아이콘/필) + 클릭 펼침 아코디언**. 헤더=종류 아이콘/필+식별자, 펼침=역할전환·요청자·시각+Approve/Reject(가시성 확보). `admin/approval-queue` | ✅ | ✅ | 🔧 아코디언 재설계 | (S6) |
+| A10 | 관리자 | **승인 큐 — 간소 카드(아이콘/필) + 클릭 펼침 아코디언**. 헤더=종류 아이콘/필+식별자, 펼침=역할전환·요청자·시각+Approve/Reject(가시성 확보). `admin/approval-queue` | ✅ | ✅ | ✅ OK (완료) | (S6) |
 | A9 | 관리자 | **Departments 인원수 열** — org 보기 OFF(기본) 시 "Members" 열 추가(org_levels 경로 일치 집계). org ON이면 기존 orgLevels 열. `admin/department-table` | ✅ | ✅ | ✅ OK (완료) | `2feda2f` |
-| A8 | 관리자 | **그룹 카드 인라인 상세**(새 페이지 X→카드 아래 펼침, 공용 `group-detail.tsx`·보기+편집) + **매니저=멤버(user) 제한**(피커 후보 제한·캐스케이드·백엔드 422). `groups-panel`·`group-detail`·`groups/[groupId]`·`routers/groups` | backend 325✅·tsc/lint✅ | ✅ | 🔧 인라인+매니저제한 반영 | (S6) |
+| A8 | 관리자 | **그룹 카드 인라인 상세**(새 페이지 X→카드 아래 펼침, 공용 `group-detail.tsx`·보기+편집) + **매니저=멤버(user) 제한**(피커 후보 제한·캐스케이드·백엔드 422). `groups-panel`·`group-detail`·`groups/[groupId]`·`routers/groups` | backend 325✅·tsc/lint✅ | ✅ | ✅ OK (완료) | (S6) |
+| A12 | 관리자 | **그룹 소프트삭제·재신청·자동퍼지** — `user_groups.deleted_at`(스키마✓). 매니저 삭제(7일 보존)·거절 7일 자동삭제·재신청(rejected→pending). `routers/groups`·`models`·`db`. (프론트: 그룹 펼침 시 삭제/비활성/재신청 메뉴 + 아이콘/필 기능설명 = item 4, 후속) | backend 329✅ | 후속 | 🔧 백엔드 완료, 프론트 진행 | (S6) |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
 | E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |

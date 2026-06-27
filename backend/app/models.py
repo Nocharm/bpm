@@ -323,6 +323,10 @@ class UserGroup(Base):
         DateTime(timezone=True), default=None
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # 소프트삭제(매니저 삭제/거절) — 설정 후 7일 경과 시 _purge_expired_groups가 영구삭제
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
 
 class UserGroupMember(Base):
