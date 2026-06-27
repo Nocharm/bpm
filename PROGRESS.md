@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-27
+- **feat(admin): A10 승인 큐 — 간소 카드 + 클릭 펼침 아코디언 (피드백 반영, feat/frontend-ui-improvements)** — 전 항목을 **간소 헤더**(종류 아이콘+필 + 식별자[그룹명/🗺Map]+chevron)로 노출, **클릭 시 상세 펼침**(가시성 확보 — `DetailRow` 라벨+필: 역할전환 `editor→removed`·가시성 필·요청자·요청시각 + Approve/Reject). 다중 펼침(Set). `Pill`/`DetailRow` 모듈레벨. 검증: tsc/lint 0·브라우저(3 컴팩트 카드·다운그레이드 펼침).
 - **feat(groups): A11-④ 안내 가이드 재설계 — 아이콘 중심 + 매니저 설정·권한 (피드백 반영, feat/frontend-ui-improvements)** — SVG 가이드 간소화: 번호 원 → **아이콘 원**(＋신청·✓승인·→사용, 흰 glyph)·라벨·화살표, 텍스트 최소화. **관리자 콜아웃** 추가(하이라이트 박스: ★ Manager · "멤버의 ★로 지정"(설정) · "그룹 멤버 관리"(권한)). 토큰 색만, 키 `guideMgr*`. 검증: tsc/lint 0·브라우저.
 - **feat(admin): A10 승인 큐 재설계 — 전 항목 카드 + 아이콘/필 한눈 (피드백 반영, feat/frontend-ui-improvements)** — 이전 "pill 요약→클릭 상세"(필터처럼 1개씩)를 폐기하고 **모든 대기 항목을 카드로 전부 노출**. 각 카드는 아이콘+필로 내용을 한눈에: 종류 아이콘/필(그룹=바이올렛·하향=앰버·가시성=중립)·🗺Map 필·**역할 전환**(`editor → removed/viewer` 화살표 필)·가시성 전환 필·👥멤버수·★매니저 필·요청자. Approve/Reject는 카드 우측. `Pill` 모듈레벨 헬퍼. 검증: tsc/lint 0·브라우저(3 케이스 카드 한눈 표시).
 - **feat(home): H4 카드 호버 모달 재설계 (Message 4, feat/frontend-ui-improvements)** — `map-card.tsx` 호버 모달: (1) 노드/버전/허용인원 **숫자를 우측 정렬 pill**(accent-tint)로(기존 `라벨 — N` 폐기), (2) **오너를 카드 박스**(border+bg-surface-alt, "Owner" 캡션+이름)로, (3) **업데이트 시각을 맨 아래**(Clock+상대시각), (4) **허용인원 목록 삭제**. 목록 제거로 생긴 고아(`listMapPermissions` fetch·`members`/`membersError` state·`PrincipalIcon`·`Building2` import) 정리. 키 `home.owner`. 검증: tsc/lint 0·코드. (호버 트리거 로직 무변경 — 자동 발화는 도구 제약으로 미실행, 내용만 변경.)

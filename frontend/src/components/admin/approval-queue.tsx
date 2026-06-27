@@ -1,12 +1,23 @@
 "use client";
 
-// 시스템 관리자 승인 큐 — 대기 항목(그룹 생성 · 권한 하향 · 가시성 변경)을 모두 카드로 노출.
-// 각 카드는 아이콘/필로 내용을 한눈에 보여준다(필터 아님, 전부 표시). 결정 후 재조회. /
-// Sysadmin approval queue: every pending item (group creation / permission downgrade / visibility
-// change) is shown as a card whose content is conveyed with icons + pills for at-a-glance review.
+// 시스템 관리자 승인 큐 — 대기 항목을 아이콘/필로 간소화한 카드로 전부 노출하고, 누르면 상세가 펼쳐진다.
+// 펼친 상세도 가시성 확보(라벨+필, 충분한 간격). 결정 후 재조회. /
+// Sysadmin approval queue: compact icon/pill cards for every pending item; click to expand the
+// detail (readable: labels + pills). Group creation / permission downgrade / visibility change.
 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { ArrowRight, Globe, Lock, Map, ShieldAlert, Star, User, Users } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Clock,
+  Globe,
+  Lock,
+  Map,
+  ShieldAlert,
+  Star,
+  User,
+  Users,
+} from "lucide-react";
 
 import {
   decideApprovalRequest,
@@ -16,6 +27,7 @@ import {
   type ApprovalRequest,
   type Group,
 } from "@/lib/api";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { genId } from "@/lib/id";
 import type { ToastItem } from "@/components/toast-stack";
@@ -43,12 +55,25 @@ function Pill({ children, className }: { children: ReactNode; className?: string
   );
 }
 
+// 펼친 상세의 라벨 행 / labelled row in the expanded detail.
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-20 shrink-0 text-fine text-ink-tertiary">{label}</span>
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-caption text-ink">
+        {children}
+      </span>
+    </div>
+  );
+}
+
 export function ApprovalQueue({ onToast, onCountChange }: Props) {
   const { t } = useI18n();
 
   const [pendingGroups, setPendingGroups] = useState<Group[]>([]);
   const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
   const [decidingKeys, setDecidingKeys] = useState<Set<string>>(new Set());
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
     try {
@@ -95,11 +120,20 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     })),
   ];
 
+  function toggle(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   async function decideItem(item: QueueItem, decision: "approve" | "reject") {
     setDecidingKeys((prev) => new Set(prev).add(item.key));
     try {
       if (item.kind === "group_create") await decideGroup(item.group.id, decision);
-      else await decideApprovalRequest(item.req.id, decision); // approve → 서버가 즉시 적용
+      else await decideApprovalRequest(item.req.id, decision);
       onToast({
         id: genId(),
         message: decision === "approve" ? t("perm.sysadmin.toastApproved") : t("perm.sysadmin.toastRejected"),
@@ -116,6 +150,41 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     }
   }
 
+  // 종류별 아이콘 + 필 + 간단 식별자(헤더) / kind icon, kind pill, brief id for the compact header.
+  function kindIcon(item: QueueItem): ReactNode {
+    if (item.kind === "group_create")
+      return <Users size={14} strokeWidth={1.5} className="shrink-0 text-accent" />;
+    if (item.kind === "permission_downgrade")
+      return <ShieldAlert size={14} strokeWidth={1.5} className="shrink-0 text-changed" />;
+    const toPublic = String(item.req.payload.to_visibility ?? "") === "public";
+    return toPublic ? (
+      <Globe size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+    ) : (
+      <Lock size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+    );
+  }
+  function kindPill(item: QueueItem): ReactNode {
+    if (item.kind === "group_create")
+      return (
+        <Pill className="border-accent-tint-border bg-accent-tint text-accent">
+          {t("perm.sysadmin.kindGroupCreate")}
+        </Pill>
+      );
+    if (item.kind === "permission_downgrade")
+      return <Pill className="border-changed text-changed">{t("perm.sysadmin.kindDowngrade")}</Pill>;
+    return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindVisibility")}</Pill>;
+  }
+  function brief(item: QueueItem): ReactNode {
+    if (item.kind === "group_create")
+      return <span className="truncate text-caption-strong text-ink">{item.group.name}</span>;
+    return (
+      <Pill>
+        <Map size={11} strokeWidth={1.5} />
+        {t("perm.sysadmin.mapLabel")} {item.req.map_id}
+      </Pill>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <p className="py-8 text-center text-caption text-ink-tertiary">
@@ -124,109 +193,129 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     );
   }
 
-  // 카드 1행: 아이콘 + 종류 필 + 한눈 정보 필들 / line 1: kind icon + kind pill + glance pills.
-  function glanceLine(item: QueueItem): ReactNode {
-    if (item.kind === "group_create") {
-      const g = item.group;
-      return (
-        <>
-          <Users size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
-          <Pill className="border-accent-tint-border bg-accent-tint text-accent">
-            {t("perm.sysadmin.kindGroupCreate")}
-          </Pill>
-          <span className="truncate text-caption-strong text-ink">{g.name}</span>
-          <Pill>
-            <Users size={11} strokeWidth={1.5} />
-            {g.members.length}
-          </Pill>
-          {g.managers.length > 0 && (
-            <Pill className="border-accent text-accent">
-              <Star size={11} strokeWidth={1.5} className="fill-current" />
-              {g.managers.join(", ")}
-            </Pill>
-          )}
-        </>
-      );
-    }
-    if (item.kind === "permission_downgrade") {
-      const p = item.req.payload;
-      const to = p.to_role == null ? t("perm.approvals.roleRemoved") : String(p.to_role);
-      return (
-        <>
-          <ShieldAlert size={14} strokeWidth={1.5} className="shrink-0 text-changed" />
-          <Pill className="border-changed text-changed">{t("perm.sysadmin.kindDowngrade")}</Pill>
-          <Pill>
-            <Map size={11} strokeWidth={1.5} />
-            {t("perm.sysadmin.mapLabel")} {item.req.map_id}
-          </Pill>
-          <span className="truncate text-caption text-ink">{String(p.principal_id)}</span>
-          <Pill className="border-hairline text-ink">{String(p.from_role ?? "")}</Pill>
-          <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <Pill className={p.to_role == null ? "border-error text-error" : "border-hairline text-ink"}>
-            {to}
-          </Pill>
-        </>
-      );
-    }
-    // visibility_change
-    const toVis = String(item.req.payload.to_visibility ?? "");
-    const toPublic = toVis === "public";
-    return (
-      <>
-        {toPublic ? (
-          <Globe size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
-        ) : (
-          <Lock size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-        )}
-        <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindVisibility")}</Pill>
-        <Pill>
-          <Map size={11} strokeWidth={1.5} />
-          {t("perm.sysadmin.mapLabel")} {item.req.map_id}
-        </Pill>
-        <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-        <Pill className={toPublic ? "border-accent text-accent" : "border-hairline text-ink"}>
-          {toPublic ? <Globe size={11} strokeWidth={1.5} /> : <Lock size={11} strokeWidth={1.5} />}
-          {t(toPublic ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
-        </Pill>
-      </>
-    );
-  }
-
   return (
     <div className="flex max-w-4xl flex-col gap-2">
       {items.map((item) => {
-        const requester = item.kind === "group_create" ? item.group.created_by : item.req.requested_by;
+        const expanded = expandedKeys.has(item.key);
         const deciding = decidingKeys.has(item.key);
+        const requester = item.kind === "group_create" ? item.group.created_by : item.req.requested_by;
         return (
-          <div
-            key={item.key}
-            className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface px-4 py-3"
-          >
-            <div className="flex min-w-0 flex-col gap-1.5">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">{glanceLine(item)}</div>
-              <span className="flex items-center gap-1 text-fine text-ink-tertiary">
-                <User size={11} strokeWidth={1.5} />
-                {t("perm.sysadmin.requesterLabel")}: {requester}
+          <div key={item.key} className="rounded-md border border-hairline bg-surface">
+            {/* 간소 헤더 — 클릭 시 펼침 / compact header, click to expand */}
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-surface-alt"
+              onClick={() => toggle(item.key)}
+              aria-expanded={expanded}
+            >
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                {kindIcon(item)}
+                {kindPill(item)}
+                {brief(item)}
               </span>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                type="button"
-                className="rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-40"
-                onClick={() => void decideItem(item, "approve")}
-                disabled={deciding}
-              >
-                {t("perm.sysadmin.approve")}
-              </button>
-              <button
-                type="button"
-                className="rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-40"
-                onClick={() => void decideItem(item, "reject")}
-                disabled={deciding}
-              >
-                {t("perm.sysadmin.reject")}
-              </button>
-            </div>
+              <ChevronDown
+                size={16}
+                strokeWidth={1.5}
+                className={`shrink-0 text-ink-tertiary transition-transform ${expanded ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {/* 펼친 상세 — 라벨+필, 가시성 확보 / expanded detail */}
+            {expanded && (
+              <div className="flex flex-col gap-2 border-t border-hairline px-4 py-3">
+                {item.kind === "group_create" ? (
+                  <>
+                    <DetailRow label={t("perm.sysadmin.managerLabel")}>
+                      {item.group.managers.map((m) => (
+                        <Pill key={m} className="border-accent text-accent">
+                          <Star size={11} strokeWidth={1.5} className="fill-current" />
+                          {m}
+                        </Pill>
+                      ))}
+                    </DetailRow>
+                    <DetailRow label={t("perm.group.membersSection")}>
+                      <Pill>
+                        <Users size={11} strokeWidth={1.5} />
+                        {item.group.members.length}
+                      </Pill>
+                    </DetailRow>
+                  </>
+                ) : item.kind === "permission_downgrade" ? (
+                  <DetailRow label={t("perm.sysadmin.detailLabel")}>
+                    <span className="inline-flex items-center gap-1">
+                      <User size={11} strokeWidth={1.5} className="text-ink-tertiary" />
+                      {String(item.req.payload.principal_id)}
+                    </span>
+                    <Pill className="border-hairline text-ink">
+                      {String(item.req.payload.from_role ?? "")}
+                    </Pill>
+                    <ArrowRight size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+                    <Pill
+                      className={
+                        item.req.payload.to_role == null ? "border-error text-error" : "border-hairline text-ink"
+                      }
+                    >
+                      {item.req.payload.to_role == null
+                        ? t("perm.approvals.roleRemoved")
+                        : String(item.req.payload.to_role)}
+                    </Pill>
+                  </DetailRow>
+                ) : (
+                  <DetailRow label={t("perm.sysadmin.detailLabel")}>
+                    <Pill
+                      className={
+                        String(item.req.payload.to_visibility) === "public"
+                          ? "border-accent text-accent"
+                          : "border-hairline text-ink"
+                      }
+                    >
+                      {String(item.req.payload.to_visibility) === "public" ? (
+                        <Globe size={11} strokeWidth={1.5} />
+                      ) : (
+                        <Lock size={11} strokeWidth={1.5} />
+                      )}
+                      {t(
+                        String(item.req.payload.to_visibility) === "public"
+                          ? "perm.visibilityPublic"
+                          : "perm.visibilityPrivate",
+                      )}
+                    </Pill>
+                  </DetailRow>
+                )}
+
+                <DetailRow label={t("perm.sysadmin.requesterLabel")}>
+                  <span className="inline-flex items-center gap-1 text-ink-secondary">
+                    <User size={11} strokeWidth={1.5} className="text-ink-tertiary" />
+                    {requester}
+                  </span>
+                  {item.kind !== "group_create" && (
+                    <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary">
+                      <Clock size={11} strokeWidth={1.5} />
+                      {formatKst(item.req.created_at)}
+                    </span>
+                  )}
+                </DetailRow>
+
+                <div className="mt-1 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-40"
+                    onClick={() => void decideItem(item, "approve")}
+                    disabled={deciding}
+                  >
+                    {t("perm.sysadmin.approve")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-40"
+                    onClick={() => void decideItem(item, "reject")}
+                    disabled={deciding}
+                  >
+                    {t("perm.sysadmin.reject")}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
