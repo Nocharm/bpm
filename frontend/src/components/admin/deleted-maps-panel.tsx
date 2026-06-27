@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 
+import { IconActionButton } from "@/components/icon-action-button";
 import { listDeletedMaps, restoreMap, type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
@@ -84,14 +85,12 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
                   </span>
                 )}
               </span>
-              <button
-                type="button"
-                className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface-alt"
+              <IconActionButton
+                icon={<RotateCcw size={14} strokeWidth={1.5} />}
+                label={t("trash.restore")}
+                align="right"
                 onClick={() => void handleRestore(m.id)}
-              >
-                <RotateCcw size={14} strokeWidth={1.5} />
-                {t("trash.restore")}
-              </button>
+              />
             </div>
           ))}
         </div>

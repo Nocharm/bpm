@@ -18,11 +18,13 @@ import {
   Trash2,
   Undo2,
   User,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
 
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
+import { IconActionButton } from "@/components/icon-action-button";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import {
@@ -169,13 +171,6 @@ function PickerDialog({
   );
 }
 
-// 라이프사이클 액션 버튼 톤 / lifecycle action button tone by variant.
-function actionTone(variant?: "plain" | "accent" | "error"): string {
-  if (variant === "accent") return "border-accent text-accent hover:bg-accent-tint";
-  if (variant === "error") return "border-error text-error hover:bg-surface-alt";
-  return "border-hairline text-ink hover:bg-surface-alt";
-}
-
 export function GroupDetail({
   group,
   dirUsers,
@@ -238,7 +233,6 @@ export function GroupDetail({
   };
   const [renaming, setRenaming] = useState(false); // active 인라인 이름변경
   const [renameValue, setRenameValue] = useState(group.name);
-  const [hoveredAction, setHoveredAction] = useState<string | null>(null); // 호버 시 설명 페이드인
   // 확인 모달 게이트 — 삭제/비활성/재활성은 즉시 실행 대신 모달 확인 후 / confirm before destructive actions.
   const [pendingAction, setPendingAction] = useState<"delete" | "deactivate" | "reactivate" | null>(
     null,
@@ -448,40 +442,27 @@ export function GroupDetail({
           {group.members.length}
           <span className="font-normal text-ink-secondary">{t("perm.group.membersSection")}</span>
         </p>
-        <div className="flex min-w-0 items-center justify-end gap-2">
-          {/* 호버 설명 — 'Add member' 위치에 페이드인 / hovered action's hint, fades in */}
-          <span
-            className={`hidden truncate text-fine text-ink-tertiary transition-opacity duration-200 sm:block ${
-              hoveredAction ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            {hoveredAction}
-          </span>
+        {/* 우측 액션 — 아이콘 전용, 호버 시 라벨이 왼쪽으로 펼쳐짐(우정렬) / icon-only, label expands left (L4) */}
+        <div className="flex min-w-0 items-center justify-end gap-1.5">
           {canManage &&
             !renaming &&
             actions.map((a) => (
-              <button
+              <IconActionButton
                 key={a.key}
-                type="button"
-                onMouseEnter={() => setHoveredAction(a.hint)}
-                onMouseLeave={() => setHoveredAction(null)}
-                onFocus={() => setHoveredAction(a.hint)}
-                onBlur={() => setHoveredAction(null)}
+                icon={a.icon}
+                label={a.label}
+                align="right"
+                tone={a.variant}
                 onClick={a.onClick}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-2 py-1 text-fine ${actionTone(a.variant)}`}
-              >
-                {a.icon}
-                {a.label}
-              </button>
+              />
             ))}
           {canEdit && (
-            <button
-              type="button"
-              className="shrink-0 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
+            <IconActionButton
+              icon={<UserPlus size={14} strokeWidth={1.5} />}
+              label={t("perm.group.addMemberBtn")}
+              align="right"
               onClick={() => setMemberDialogOpen(true)}
-            >
-              {t("perm.group.addMemberBtn")}
-            </button>
+            />
           )}
         </div>
       </div>
