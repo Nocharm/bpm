@@ -121,47 +121,92 @@ function PersonCard({
   );
 }
 
-// 멤버 추가 피커 다이얼로그 / member add picker dialog.
+// 멤버 추가 피커 다이얼로그 — 여러 명을 선택(칩)한 뒤 Add로 일괄 추가 / multi-select then add together.
 function PickerDialog({
   title,
   pickerUsers,
   pickerDepts,
   excludeIds,
-  onSelect,
+  onAdd,
   onClose,
 }: {
   title: string;
   pickerUsers: MockUser[];
   pickerDepts: Department[];
   excludeIds: Set<string>;
-  onSelect: (opt: PrincipalOption) => void;
+  onAdd: (opts: PrincipalOption[]) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const [selected, setSelected] = useState<PrincipalOption[]>([]);
+  // 이미 선택된 것은 피커 후보에서 제외 / hide already-picked from the candidate list.
+  const exclude = new Set([...excludeIds, ...selected.map((s) => s.principalId)]);
   return (
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
     >
-      <div className="flex w-[380px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md border border-hairline bg-surface p-5 shadow-lg">
-        <p className="text-body-strong text-ink">{title}</p>
+      <div className="flex w-[400px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md bg-surface p-6 shadow-lg">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-body-strong text-ink">{title}</h2>
+          <p className="text-caption text-ink-tertiary">{t("perm.group.pickerHint")}</p>
+        </div>
         <PrincipalPicker
           users={pickerUsers}
           departments={pickerDepts}
           groups={[]}
-          excludeIds={excludeIds}
-          onSelect={(opt) => {
-            onSelect(opt);
-            onClose();
-          }}
+          excludeIds={exclude}
+          onSelect={(opt) => setSelected((prev) => [...prev, opt])}
         />
-        <div className="flex justify-end">
+        {/* 선택 칩 / selected chips */}
+        {selected.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-fine text-ink-tertiary">{t("perm.group.pickerSelected")}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {selected.map((s) => (
+                <span
+                  key={`${s.principalType}:${s.principalId}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface-alt py-0.5 pl-2 pr-1 text-fine text-ink"
+                >
+                  {s.principalType === "department" ? (
+                    <Building2 size={11} strokeWidth={1.5} className="text-ink-tertiary" />
+                  ) : (
+                    <User size={11} strokeWidth={1.5} className="text-ink-tertiary" />
+                  )}
+                  <span className="truncate">{s.displayName}</span>
+                  <button
+                    type="button"
+                    className="rounded-full p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
+                    aria-label={t("perm.group.removeBtn")}
+                    onClick={() =>
+                      setSelected((prev) => prev.filter((x) => x.principalId !== s.principalId))
+                    }
+                  >
+                    <X size={11} strokeWidth={1.5} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
           <button
             type="button"
             className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
             onClick={onClose}
           >
             {t("perm.group.cancelBtn")}
+          </button>
+          <button
+            type="button"
+            disabled={selected.length === 0}
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={() => {
+              onAdd(selected);
+              onClose();
+            }}
+          >
+            {t("perm.group.pickerAdd", { n: selected.length })}
           </button>
         </div>
       </div>
@@ -271,15 +316,23 @@ export function GroupDetail({
     .sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i)
     .map((x) => x.r);
 
-  async function handleAddMember(opt: PrincipalOption) {
-    if (opt.principalType === "group") return;
+  async function handleAddMembers(opts: PrincipalOption[]) {
+    const targets = opts.filter((o) => o.principalType !== "group");
+    if (targets.length === 0) return;
     try {
-      const updated = await addGroupMember(groupIdNum, {
-        member_type: opt.principalType as "department" | "user",
-        member_id: opt.principalId,
-      });
-      onGroupChange(updated);
-      onToast(t("perm.group.toastMemberAdded"));
+      let updated: Group | null = null;
+      for (const opt of targets) {
+        updated = await addGroupMember(groupIdNum, {
+          member_type: opt.principalType as "department" | "user",
+          member_id: opt.principalId,
+        });
+      }
+      if (updated) onGroupChange(updated);
+      onToast(
+        targets.length === 1
+          ? t("perm.group.toastMemberAdded")
+          : t("perm.group.toastMembersAdded", { n: targets.length }),
+      );
     } catch (err) {
       onToast(err instanceof Error ? err.message : String(err));
     }
@@ -605,7 +658,7 @@ export function GroupDetail({
           pickerUsers={pickerUsers}
           pickerDepts={pickerDepts}
           excludeIds={memberExcludeIds}
-          onSelect={(opt) => void handleAddMember(opt)}
+          onAdd={(opts) => void handleAddMembers(opts)}
           onClose={() => setMemberDialogOpen(false)}
         />
       )}
