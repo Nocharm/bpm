@@ -10,5 +10,6 @@
 | [scope-save-and-coordinates.md](scope-save-and-coordinates.md) | 자식 스코프 저장, 좌표(스코프상대↔표시) 변환, buildScope를 건드릴 때 |
 | [browser-verification.md](browser-verification.md) | Playwright로 캔버스 동작을 검증할 때 (dev.db 오염 함정 필독) |
 | [react-ts-patterns.md](react-ts-patterns.md) | useCallback deps/TDZ, ref 미러, 큰 상태 모델 변경 시 |
+| [settings-and-forms.md](settings-and-forms.md) | 설정/관리자 화면·모달/피커/카드 헤더·소프트삭제 백엔드를 건드릴 때 (비캔버스) |
 
 > 설계/계획 기록은 `docs/superpowers/plans·specs/`(날짜별 스냅샷), 진행 현황은 `PROGRESS.md` 참조.
