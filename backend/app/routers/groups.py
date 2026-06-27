@@ -127,6 +127,15 @@ async def create_group(
         raise HTTPException(
             status_code=422, detail="a group requires at least 2 members"
         )
+    # 매니저는 그룹 멤버(user) 중에서만 지정 — 명시된 관리자 검증 (생성자 자동 관리자는 예외) /
+    # Managers must be member users; the auto-added creator is exempt.
+    member_user_ids = {m.member_id for m in payload.members if m.member_type == "user"}
+    invalid_managers = [mgr for mgr in payload.managers if mgr not in member_user_ids]
+    if invalid_managers:
+        raise HTTPException(
+            status_code=422,
+            detail="managers must be chosen from the group's user members",
+        )
     group = UserGroup(
         name=payload.name,
         description=payload.description,

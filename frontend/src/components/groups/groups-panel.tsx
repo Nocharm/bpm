@@ -5,13 +5,13 @@
 // 서버가 진실 — 목록 GET /api/groups, 생성 POST /api/groups. 변경 후 재조회(낙관적 갱신 금지).
 // 멤버 피커는 실 디렉터리(getDirectory). 생성 시 ≥2 멤버 필수(클라 차단 + 서버 422).
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Users } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import { GroupDetail } from "@/components/groups/group-detail";
 import {
   createGroup,
   getDirectory,
@@ -57,6 +57,8 @@ export function GroupsPanel() {
 
   // 서버 그룹 목록 / Server-sourced group list.
   const [groups, setGroups] = useState<Group[]>([]);
+  // 인라인 상세로 펼친 카드 id (단일) / id of the card expanded inline.
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   // 실 디렉터리 — 피커 후보 / Real directory for picker candidates.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
@@ -81,6 +83,11 @@ export function GroupsPanel() {
   function dismissToast(id: string) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }
+
+  // 인라인 편집(멤버/관리자 변경) 결과를 목록 state에 반영 / reflect inline edits into the list.
+  const updateGroup = (updated: Group) => {
+    setGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
+  };
 
   const reloadGroups = useCallback(async () => {
     try {
@@ -161,6 +168,8 @@ export function GroupsPanel() {
 
   function removeMember(type: "department" | "user", id: string) {
     setMembers((prev) => prev.filter((m) => !(m.type === type && m.id === id)));
+    // 멤버에서 빠진 user는 매니저에서도 제거 (매니저⊆멤버) / drop from managers too.
+    if (type === "user") setManagers((prev) => prev.filter((m) => m.id !== id));
   }
 
   function removeManager(id: string) {
@@ -195,6 +204,9 @@ export function GroupsPanel() {
   // 피커 제외 — id 기반(PrincipalPicker가 principalId로만 비교) / Picker exclusion (id-only).
   const memberExcludeIds = new Set(members.map((m) => m.id));
   const managerExcludeIds = new Set(managers.map((m) => m.id));
+  // 매니저 후보 = 멤버(user)만 — 매니저는 멤버 중에서 지정 / managers chosen from member users.
+  const memberUserIds = new Set(members.filter((m) => m.type === "user").map((m) => m.id));
+  const managerCandidates = pickerUsers.filter((u) => memberUserIds.has(u.id));
 
   return (
     <div className="flex max-w-4xl flex-col gap-4">
@@ -219,30 +231,58 @@ export function GroupsPanel() {
       {groups.length === 0 ? (
         <p className="text-caption text-ink-tertiary">{t("perm.group.noGroups")}</p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {groups.map((group) => (
-            <Link
-              key={group.id}
-              href={`/groups/${group.id}`}
-              className="flex flex-col gap-2 rounded-md border border-hairline bg-surface p-4 hover:bg-surface-alt"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2">
-                  <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  <span className="truncate text-caption-strong text-ink">{group.name}</span>
-                </span>
-                <GroupStatusBadge status={group.status} />
+        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+          {groups.map((group) => {
+            const expanded = expandedId === group.id;
+            return (
+              <div
+                key={group.id}
+                data-id="group-card"
+                className={`flex flex-col rounded-md border bg-surface ${
+                  expanded ? "border-accent sm:col-span-2" : "border-hairline"
+                }`}
+              >
+                {/* 요약(클릭=인라인 상세 토글) / summary toggles the inline detail */}
+                <button
+                  type="button"
+                  className={`flex flex-col gap-2 p-4 text-left ${
+                    expanded ? "rounded-t-md" : "rounded-md hover:bg-surface-alt"
+                  }`}
+                  onClick={() => setExpandedId(expanded ? null : group.id)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="truncate text-caption-strong text-ink">{group.name}</span>
+                    </span>
+                    <GroupStatusBadge status={group.status} />
+                  </div>
+                  {group.description && (
+                    <span className="line-clamp-2 text-fine text-ink-tertiary">
+                      {group.description}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
+                    <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                    {group.members.length}
+                  </span>
+                </button>
+
+                {/* 인라인 상세 — 멤버·관리자·편집 (공용 GroupDetail) / inline detail */}
+                {expanded && (
+                  <div className="border-t border-hairline px-4 py-3">
+                    <GroupDetail
+                      group={group}
+                      dirUsers={dirUsers}
+                      dirDepts={dirDepts}
+                      onGroupChange={updateGroup}
+                      onToast={addToast}
+                    />
+                  </div>
+                )}
               </div>
-              {group.description && (
-                <span className="line-clamp-2 text-fine text-ink-tertiary">{group.description}</span>
-              )}
-              {/* 멤버 수 — 카드 하단 정렬 / member count, bottom-aligned */}
-              <span className="mt-auto flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
-                <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                {group.members.length}
-              </span>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -340,14 +380,19 @@ export function GroupsPanel() {
                   ))}
                 </div>
               )}
-              {/* user만 — departments: [], groups: [] / Pass empty to restrict to user. */}
+              {/* 멤버(user)만 — 매니저는 멤버 중에서 지정 / managers chosen from member users. */}
               <PrincipalPicker
-                users={pickerUsers}
+                users={managerCandidates}
                 departments={[]}
                 groups={[]}
                 excludeIds={managerExcludeIds}
                 onSelect={handleManagerSelect}
               />
+              {memberUserIds.size === 0 && (
+                <p className="text-fine text-ink-tertiary">
+                  {t("perm.group.managerFromMembersHint")}
+                </p>
+              )}
             </div>
 
             {/* 액션 버튼 / Action buttons */}

@@ -592,6 +592,7 @@ const en = {
   "perm.group.descEmpty": "No description.",
   "perm.group.noMembers": "No members.",
   "perm.group.noManagers": "No managers assigned.",
+  "perm.group.managerFromMembersHint": "Add a user as a member first — managers are chosen from members.",
   // ── sysadmin 콘솔 / Sysadmin console ──
   "perm.sysadmin.pageTitle": "System Admin Console",
   "perm.sysadmin.noAccess": "Access denied (sysadmin only).",
@@ -1231,6 +1232,7 @@ const ko: Record<MessageKey, string> = {
   "perm.group.descEmpty": "설명 없음.",
   "perm.group.noMembers": "멤버가 없습니다.",
   "perm.group.noManagers": "관리자가 지정되지 않았습니다.",
+  "perm.group.managerFromMembersHint": "먼저 멤버에 사용자를 추가하세요 — 관리자는 멤버 중에서 지정합니다.",
   // ── sysadmin 콘솔 / Sysadmin console ──
   "perm.sysadmin.pageTitle": "시스템 관리 콘솔",
   "perm.sysadmin.noAccess": "접근 거부 (시스템 관리자 전용).",

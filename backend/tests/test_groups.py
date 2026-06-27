@@ -129,13 +129,29 @@ def test_create_group_extra_managers_included(
         client,
         members=[
             {"member_type": "user", "member_id": "u.a"},
-            {"member_type": "department", "member_id": "Div/Office"},
+            {"member_type": "user", "member_id": "u.helper"},  # 매니저는 멤버(user) 중에서
         ],
         managers=["u.helper"],
     )
     assert r.status_code == 201
     managers = r.json()["managers"]
     assert "u.creator" in managers and "u.helper" in managers
+
+
+def test_create_group_manager_not_member_422(
+    client: TestClient, enforce: None
+) -> None:
+    """매니저는 그룹 멤버(user) 중에서만 — 비-멤버 매니저 지정은 422."""
+    act_as("u.creator")
+    r = _create_group(
+        client,
+        members=[
+            {"member_type": "user", "member_id": "u.a"},
+            {"member_type": "user", "member_id": "u.b"},
+        ],
+        managers=["u.outsider"],
+    )
+    assert r.status_code == 422
 
 
 # ── list visibility ───────────────────────────────────────────
