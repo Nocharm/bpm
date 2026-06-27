@@ -71,72 +71,59 @@ export function MapCard({
   // 역할 배지는 공개+뷰어면 생략(공개맵은 누구나 뷰어라 무의미) — 에디터/오너 또는 비공개일 때만 (요청)
   const showRole = map.my_role !== null && !(map.visibility === "public" && map.my_role === "viewer");
 
-  const [membersOpen, setMembersOpen] = useState(false);
+  // 카드 호버 모달 — 모든 카드 1초 호버 시 우측에 요약+인원 모달. 카드/모달 벗어나면 닫힘 (요청 간소화)
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalPos, setModalPos] = useState<{ left: number; top: number } | null>(null);
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
-  // 멤버 팝오버는 body 포털(fixed)로 — 리스트 overflow에 잘리거나 z-index에 가리지 않게.
-  const membersBtnRef = useRef<HTMLSpanElement>(null);
-  const [membersPos, setMembersPos] = useState<{ left: number; bottom: number } | null>(null);
-  // 호버 닫기 디바운스 — 버튼→툴팁 이동 중 닫히지 않게 (H4)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearOpen = () => {
+    if (openTimer.current) {
+      clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+  };
+  const clearClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  // 카드 진입 → 1초 뒤 모달 열기(위치 계산·인원 fetch). 모달 진입 시에도 호출되어 닫힘 취소.
+  const onCardEnter = () => {
+    clearClose();
+    if (modalOpen) return;
+    openTimer.current = setTimeout(() => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (rect) setModalPos({ left: rect.right + 8, top: rect.top });
+      setModalOpen(true);
+      if (canViewMembers && members === null) {
+        void listMapPermissions(map.id)
+          .then((rows) => setMembers(rows))
+          .catch((err) => setMembersError(err instanceof Error ? err.message : String(err)));
+      }
+    }, 1000);
+  };
+  // 카드/모달 이탈 → 150ms 뒤 닫기(카드↔모달 이동 허용). 재진입 시 clearClose로 취소.
+  const scheduleClose = () => {
+    clearOpen();
+    clearClose();
+    closeTimer.current = setTimeout(() => setModalOpen(false), 150);
+  };
 
   // 스크롤/리사이즈 시 위치가 어긋나므로 닫음
   useEffect(() => {
-    if (!membersOpen) return;
-    const close = () => setMembersOpen(false);
+    if (!modalOpen) return;
+    const close = () => setModalOpen(false);
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [membersOpen]);
-
-  // H4 — 클릭 토글 대신 호버 툴팁: 진입 시 열고(위치·인원 fetch), 이탈 시 약간 지연 후 닫음.
-  const cancelClose = () => {
-    if (closeTimer.current) {
-      clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  };
-  const openMembers = () => {
-    cancelClose();
-    const rect = membersBtnRef.current?.getBoundingClientRect();
-    if (rect) {
-      // 버튼 오른쪽 위로 펼침 — right 정렬(left=rect.right + translateX -100%), bottom=버튼 위.
-      setMembersPos({ left: rect.right, bottom: window.innerHeight - rect.top + 4 });
-    }
-    setMembersOpen(true);
-    if (members === null) {
-      void listMapPermissions(map.id)
-        .then((rows) => setMembers(rows))
-        .catch((err) => setMembersError(err instanceof Error ? err.message : String(err)));
-    }
-  };
-  const scheduleClose = () => {
-    cancelClose();
-    closeTimer.current = setTimeout(() => setMembersOpen(false), 120);
-  };
-
-  // 미선택 카드 — 1.5초 호버 시 우측에 아이콘 의미 요약 툴팁 (요청)
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [summaryPos, setSummaryPos] = useState<{ left: number; top: number } | null>(null);
-  const summaryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onCardEnter = () => {
-    if (selected) return;
-    summaryTimer.current = setTimeout(() => {
-      const rect = rootRef.current?.getBoundingClientRect();
-      if (rect) setSummaryPos({ left: rect.right + 8, top: rect.top });
-      setSummaryOpen(true);
-    }, 1500);
-  };
-  const onCardLeave = () => {
-    if (summaryTimer.current) {
-      clearTimeout(summaryTimer.current);
-      summaryTimer.current = null;
-    }
-    setSummaryOpen(false);
-  };
+  }, [modalOpen]);
 
   return (
     <div
@@ -151,7 +138,7 @@ export function MapCard({
       }`}
       onClick={() => onSelect?.(map.id)}
       onMouseEnter={onCardEnter}
-      onMouseLeave={onCardLeave}
+      onMouseLeave={scheduleClose}
     >
       {/* 1줄 — 좌: 타이틀+상태 / 우: 역할 배지 + 공개/비공개 아이콘 (역할은 공개+뷰어면 생략) */}
       <div className="flex items-center gap-2">
@@ -216,65 +203,24 @@ export function MapCard({
             {map.version_count ?? 0}
           </span>
           {canViewMembers && (
-            <span
-              ref={membersBtnRef}
-              data-id="map-card-members"
-              tabIndex={0}
-              className="inline-flex cursor-default items-center gap-1 rounded-sm hover:text-ink"
-              title={t("home.viewMembers")}
-              onClick={(e) => e.stopPropagation()}
-              onMouseEnter={openMembers}
-              onMouseLeave={scheduleClose}
-              onFocus={openMembers}
-              onBlur={scheduleClose}
-            >
+            <span className="inline-flex items-center gap-1" title={t("home.viewMembers")}>
               <Users size={12} strokeWidth={1.5} />
               {map.member_count ?? 0}
             </span>
           )}
         </div>
-
-        {canViewMembers &&
-          membersOpen &&
-          membersPos &&
-          createPortal(
-            /* body 포털(fixed) — 호버 유지(인원 수→툴팁 이동 시 닫힘 디바운스) (H4) */
-            <div
-              className="fixed z-[1201] max-h-64 w-64 -translate-x-full overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg"
-              style={{ left: membersPos.left, bottom: membersPos.bottom }}
-              onClick={(e) => e.stopPropagation()}
-              onMouseEnter={cancelClose}
-              onMouseLeave={scheduleClose}
-            >
-              {membersError ? (
-                <p className="px-3 py-1.5 text-fine text-error">{membersError}</p>
-              ) : members === null ? (
-                <p className="px-3 py-1.5 text-fine text-ink-tertiary">…</p>
-              ) : members.length === 0 ? (
-                <p className="px-3 py-1.5 text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
-              ) : (
-                members.map((perm) => (
-                  <div key={perm.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
-                    <span className="flex min-w-0 items-center gap-1.5 text-fine text-ink">
-                      <PrincipalIcon type={perm.principal_type} />
-                      <span className="truncate">{perm.principal_id}</span>
-                    </span>
-                    <RoleBadge role={perm.role as MapRole} />
-                  </div>
-                ))
-              )}
-            </div>,
-            document.body,
-          )}
       </div>
 
-      {/* 미선택 카드 1.5초 호버 — 아이콘 의미 요약 툴팁 (요청) */}
-      {summaryOpen &&
-        summaryPos &&
+      {/* 모든 카드 1초 호버 — 우측 요약+인원 모달. 카드/모달 벗어나면 닫힘 (요청) */}
+      {modalOpen &&
+        modalPos &&
         createPortal(
           <div
-            className="fixed z-[1201] w-56 rounded-md border border-hairline bg-surface p-3 text-fine shadow-lg"
-            style={{ left: summaryPos.left, top: summaryPos.top }}
+            data-id="map-card-hover-modal"
+            className="fixed z-[1201] w-64 rounded-md border border-hairline bg-surface p-3 text-fine shadow-lg"
+            style={{ left: modalPos.left, top: modalPos.top }}
+            onMouseEnter={clearClose}
+            onMouseLeave={scheduleClose}
           >
             <p className="mb-2 truncate text-caption-strong text-ink">{map.name}</p>
             <ul className="flex flex-col gap-1.5 text-ink-secondary">
@@ -305,6 +251,29 @@ export function MapCard({
                 </span>
               </li>
             </ul>
+            {canViewMembers && (
+              <div className="mt-2 max-h-40 overflow-y-auto border-t border-hairline pt-2">
+                {membersError ? (
+                  <p className="text-fine text-error">{membersError}</p>
+                ) : members === null ? (
+                  <p className="text-fine text-ink-tertiary">…</p>
+                ) : members.length === 0 ? (
+                  <p className="text-fine text-ink-tertiary">{t("home.membersEmpty")}</p>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {members.map((perm) => (
+                      <li key={perm.id} className="flex items-center justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-1.5 text-ink">
+                          <PrincipalIcon type={perm.principal_type} />
+                          <span className="truncate">{perm.principal_id}</span>
+                        </span>
+                        <RoleBadge role={perm.role as MapRole} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>,
           document.body,
         )}

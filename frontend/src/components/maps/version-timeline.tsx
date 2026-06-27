@@ -200,11 +200,12 @@ export function VersionTimeline({
                               <td className="w-full whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
                               <td className="whitespace-nowrap text-ink-tertiary">{evt.actor}</td>
                               {dateSpan > 0 && (
-                                <td rowSpan={dateSpan}>
-                                  {/* 같은 날짜는 박스 1개가 그 행들 높이만큼 — 날짜 윗 정렬 (H3) */}
-                                  <span className="flex h-full min-w-[5.25rem] items-start justify-center rounded-xs border border-hairline px-1.5 py-0.5 text-ink-tertiary">
-                                    {date}
-                                  </span>
+                                <td
+                                  rowSpan={dateSpan}
+                                  className="min-w-[5.25rem] rounded-xs border border-divider px-1.5 py-0.5 text-center align-top text-ink-tertiary"
+                                >
+                                  {/* 박스 = td 자체(테두리) → rowspan 만큼 높이 증가(2일=2배·3일=3배), 날짜 윗 정렬 (H3) */}
+                                  {date}
                                 </td>
                               )}
                               <td className="whitespace-nowrap text-right">

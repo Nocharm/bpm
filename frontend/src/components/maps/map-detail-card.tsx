@@ -341,7 +341,7 @@ export function MapDetailCard({
                                 <span className="overflow-hidden">
                                   {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명, 테두리는 하이라이트(me) 행에서도 보이게 divider (H2c) */}
                                   <span className="mt-1 flex flex-col items-start gap-1">
-                                    <span className="rounded-xs border border-divider px-1.5 py-0.5 text-fine text-ink-secondary">
+                                    <span className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary">
                                       {perm.principal_id}
                                     </span>
                                     {title && (
@@ -352,7 +352,7 @@ export function MapDetailCard({
                                     {levels.map((lv) => (
                                       <span
                                         key={lv}
-                                        className="rounded-xs border border-divider px-1.5 py-0.5 text-fine text-ink-tertiary"
+                                        className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-tertiary"
                                       >
                                         {lv}
                                       </span>
