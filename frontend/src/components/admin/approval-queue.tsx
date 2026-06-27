@@ -8,6 +8,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   Clock,
   Globe,
@@ -17,6 +18,7 @@ import {
   Star,
   User,
   Users,
+  X,
 } from "lucide-react";
 
 import {
@@ -55,6 +57,16 @@ function Pill({ children, className }: { children: ReactNode; className?: string
   );
 }
 
+// 가시성 필 (Globe/Lock + 라벨) / visibility pill.
+function VisibilityPill({ isPublic, label }: { isPublic: boolean; label: string }) {
+  return (
+    <Pill className={isPublic ? "border-accent text-accent" : "border-hairline text-ink"}>
+      {isPublic ? <Globe size={11} strokeWidth={1.5} /> : <Lock size={11} strokeWidth={1.5} />}
+      {label}
+    </Pill>
+  );
+}
+
 // 펼친 상세의 라벨 행 / labelled row in the expanded detail.
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -69,6 +81,8 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
 
 export function ApprovalQueue({ onToast, onCountChange }: Props) {
   const { t } = useI18n();
+  const visLabel = (v: string): string =>
+    t(v === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate");
 
   const [pendingGroups, setPendingGroups] = useState<Group[]>([]);
   const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
@@ -262,24 +276,19 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                   </DetailRow>
                 ) : (
                   <DetailRow label={t("perm.sysadmin.detailLabel")}>
-                    <Pill
-                      className={
-                        String(item.req.payload.to_visibility) === "public"
-                          ? "border-accent text-accent"
-                          : "border-hairline text-ink"
-                      }
-                    >
-                      {String(item.req.payload.to_visibility) === "public" ? (
-                        <Globe size={11} strokeWidth={1.5} />
-                      ) : (
-                        <Lock size={11} strokeWidth={1.5} />
-                      )}
-                      {t(
-                        String(item.req.payload.to_visibility) === "public"
-                          ? "perm.visibilityPublic"
-                          : "perm.visibilityPrivate",
-                      )}
-                    </Pill>
+                    {item.req.payload.from_visibility != null && (
+                      <>
+                        <VisibilityPill
+                          isPublic={String(item.req.payload.from_visibility) === "public"}
+                          label={visLabel(String(item.req.payload.from_visibility))}
+                        />
+                        <ArrowRight size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+                      </>
+                    )}
+                    <VisibilityPill
+                      isPublic={String(item.req.payload.to_visibility) === "public"}
+                      label={visLabel(String(item.req.payload.to_visibility))}
+                    />
                   </DetailRow>
                 )}
 
@@ -299,18 +308,20 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                 <div className="mt-1 flex justify-end gap-2">
                   <button
                     type="button"
-                    className="rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-40"
                     onClick={() => void decideItem(item, "approve")}
                     disabled={deciding}
                   >
+                    <Check size={13} strokeWidth={1.5} />
                     {t("perm.sysadmin.approve")}
                   </button>
                   <button
                     type="button"
-                    className="rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-40"
                     onClick={() => void decideItem(item, "reject")}
                     disabled={deciding}
                   >
+                    <X size={13} strokeWidth={1.5} />
                     {t("perm.sysadmin.reject")}
                   </button>
                 </div>

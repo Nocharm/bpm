@@ -408,7 +408,10 @@ def test_visibility_request_owner_creates_pending(
         f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
     )
     assert r.status_code == 201
-    assert r.json()["status"] == "pending"
+    body = r.json()
+    assert body["status"] == "pending"
+    # before→after 표기용으로 현재값(private)도 payload에 저장 (A13)
+    assert body["payload"] == {"from_visibility": "private", "to_visibility": "public"}
     _, visibility = map_owner_and_visibility(map_id)
     assert visibility == "private"  # 아직 적용 안 됨
 

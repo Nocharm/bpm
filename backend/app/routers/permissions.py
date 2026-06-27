@@ -280,12 +280,15 @@ async def request_visibility_change(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ApprovalRequest:
-    """가시성 변경 요청 — 즉시 적용하지 않고 승인 지연(§5)."""
-    await _get_map_or_404(session, map_id)
+    """가시성 변경 요청 — 즉시 적용하지 않고 승인 지연(§5). before→after 표기용으로 현재값도 저장."""
+    found_map = await _get_map_or_404(session, map_id)
     req = ApprovalRequest(
         map_id=map_id,
         kind="visibility_change",
-        payload={"to_visibility": payload.to_visibility},
+        payload={
+            "from_visibility": found_map.visibility,
+            "to_visibility": payload.to_visibility,
+        },
         requested_by=user,
         status="pending",
     )
