@@ -619,7 +619,7 @@ export function getDirectory(): Promise<Directory> {
 
 // ── 사용자 그룹 관리 API (Layer 4 Task 3b/4) ────────────────────────────────
 
-export type GroupStatus = "pending" | "active" | "rejected";
+export type GroupStatus = "pending" | "active" | "rejected" | "inactive";
 export type GroupMemberType = "user" | "department";
 
 export interface GroupMember {
@@ -638,6 +638,7 @@ export interface Group {
   approved_at: string | null;
   created_at: string;
   deleted_at: string | null;  // 소프트삭제/거절 시각 — 7일 후 자동 영구삭제
+  name_changed_at: string | null;  // 마지막 이름변경 시각 — active 주 1회 rename 제한
   members: GroupMember[];
   managers: string[];  // manager login_ids
 }
@@ -730,6 +731,29 @@ export function resubmitGroup(groupId: number): Promise<Group> {
 // 그룹 이름 사용 가능 여부 — 전역 중복 금지(모든 그룹이 안 보여도 서버가 판정). 생성 모달 실시간 검사.
 export function checkGroupName(name: string): Promise<{ available: boolean }> {
   return request<{ available: boolean }>(`/groups/name-available?name=${encodeURIComponent(name)}`);
+}
+
+// 라이프사이클 — 신청 철회(pending 취소, 즉시 제거).
+export function withdrawGroup(groupId: number): Promise<{ withdrawn: boolean }> {
+  return request<{ withdrawn: boolean }>(`/groups/${groupId}/withdraw`, { method: "POST" });
+}
+
+// 라이프사이클 — 비활성(active→inactive, 삭제 전 단계).
+export function deactivateGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/deactivate`, { method: "POST" });
+}
+
+// 라이프사이클 — 재활성(inactive→active).
+export function reactivateGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/reactivate`, { method: "POST" });
+}
+
+// 라이프사이클 — 이름 변경(active만, 주 1회, 전역 중복 금지).
+export function renameGroup(groupId: number, name: string): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/name`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
 }
 
 // ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────

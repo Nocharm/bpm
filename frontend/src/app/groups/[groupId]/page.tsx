@@ -27,11 +27,13 @@ function GroupStatusBadge({ status }: { status: GroupStatus }) {
     active: "border-added text-added",
     pending: "border-changed text-changed",
     rejected: "border-error text-error",
+    inactive: "border-divider text-ink-tertiary",
   };
   const labels: Record<GroupStatus, string> = {
     active: t("perm.group.statusActive"),
     pending: t("perm.group.statusPending"),
     rejected: t("perm.group.statusRejected"),
+    inactive: t("perm.group.statusInactive"),
   };
   return (
     <span className={`rounded-sm border px-1.5 py-0.5 text-fine ${styles[status]}`}>

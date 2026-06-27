@@ -16,6 +16,7 @@ import { GroupsGuide } from "@/components/groups/groups-guide";
 import {
   checkGroupName,
   createGroup,
+  deleteGroup,
   getDirectory,
   listGroups,
   type DirectoryDept,
@@ -35,11 +36,13 @@ function GroupStatusBadge({ status }: { status: GroupStatus }) {
     active: "border-added text-added",
     pending: "border-changed text-changed",
     rejected: "border-error text-error",
+    inactive: "border-divider text-ink-tertiary",
   };
   const labels: Record<GroupStatus, string> = {
     active: t("perm.group.statusActive"),
     pending: t("perm.group.statusPending"),
     rejected: t("perm.group.statusRejected"),
+    inactive: t("perm.group.statusInactive"),
   };
   return (
     <span className={`rounded-sm border px-1.5 py-0.5 text-fine ${styles[status]}`}>
@@ -75,6 +78,7 @@ export function GroupsPanel() {
   const [description, setDescription] = useState("");
   const [members, setMembers] = useState<MemberEntry[]>([]);
   const [managers, setManagers] = useState<ManagerEntry[]>([]);
+  const [reRequestId, setReRequestId] = useState<number | null>(null); // 재신청 시 정리할 기존 거절 그룹
 
   // 토스트 / Toast state
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -166,11 +170,39 @@ export function GroupsPanel() {
     setDescription("");
     setMembers([]);
     setManagers([]);
+    setReRequestId(null);
+    setDialogOpen(true);
+  }
+
+  // 재신청 — 거절 그룹 값을 생성 모달에 프리필 후 열기(수정 뒤 제출 유도) / re-request: prefill the create dialog.
+  function handleReRequest(group: Group) {
+    setName(group.name);
+    setNameAvailable(null);
+    setDescription(group.description);
+    setMembers(
+      group.members.map((m) => ({
+        type: m.member_type,
+        id: m.member_id,
+        displayName:
+          m.member_type === "department"
+            ? (dirDepts.find((d) => d.id === m.member_id)?.name ?? m.member_id)
+            : (dirUsers.find((u) => u.id === m.member_id)?.name ?? m.member_id),
+      })),
+    );
+    setManagers(
+      group.managers.map((id) => ({
+        id,
+        displayName: dirUsers.find((u) => u.id === id)?.name ?? id,
+      })),
+    );
+    setReRequestId(group.id);
+    setExpandedId(null);
     setDialogOpen(true);
   }
 
   function closeDialog() {
     setDialogOpen(false);
+    setReRequestId(null);
   }
 
   // 멤버 추가 — dept + user만 / Add member (department or user only).
@@ -212,6 +244,14 @@ export function GroupsPanel() {
         members.map((m) => ({ member_type: m.type, member_id: m.id })),
         managers.map((m) => m.id),
       );
+      // 재신청이면 새 요청 생성 후 기존 거절 그룹 제거 / re-request: remove the old rejected group.
+      if (reRequestId !== null) {
+        try {
+          await deleteGroup(reRequestId);
+        } catch {
+          /* 이미 정리됐을 수 있음 — 무시 / may already be gone */
+        }
+      }
       addToast(t("perm.group.toastRequested"));
       closeDialog();
       await reloadGroups();
@@ -312,6 +352,7 @@ export function GroupsPanel() {
                         setExpandedId(null);
                         void reloadGroups();
                       }}
+                      onReRequest={handleReRequest}
                       onToast={addToast}
                     />
                   </div>
