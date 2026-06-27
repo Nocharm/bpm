@@ -66,6 +66,7 @@ export function GroupActions({
   const [pendingAction, setPendingAction] = useState<"delete" | "deactivate" | "reactivate" | null>(
     null,
   );
+  const [hoveredHint, setHoveredHint] = useState<string | null>(null); // 버튼 호버 시 안내문구
 
   async function handleDelete() {
     try {
@@ -123,32 +124,34 @@ export function GroupActions({
   type Action = {
     key: string;
     label: string;
+    hint: string; // 호버 시 노출되는 안내문구 / hover hint
     icon: ReactNode;
     onClick: () => void;
     variant?: "plain" | "accent" | "error";
   };
   const actions: Action[] = [];
   if (group.status === "pending") {
-    actions.push({ key: "withdraw", label: t("perm.group.withdraw"), icon: <Undo2 size={13} strokeWidth={1.5} />, onClick: () => void handleWithdraw() });
+    actions.push({ key: "withdraw", label: t("perm.group.withdraw"), hint: t("perm.group.withdrawHint"), icon: <Undo2 size={13} strokeWidth={1.5} />, onClick: () => void handleWithdraw() });
   } else if (group.status === "active") {
     actions.push({
       key: "rename",
       label: t("perm.group.rename"),
+      hint: t("perm.group.renameHint"),
       icon: <Pencil size={13} strokeWidth={1.5} />,
       onClick: () => {
         setRenameValue(group.name);
         setRenaming(true);
       },
     });
-    actions.push({ key: "deactivate", label: t("perm.group.deactivate"), icon: <PauseCircle size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("deactivate") });
+    actions.push({ key: "deactivate", label: t("perm.group.deactivate"), hint: t("perm.group.deactivateHint"), icon: <PauseCircle size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("deactivate") });
   } else if (group.status === "inactive") {
-    actions.push({ key: "reactivate", label: t("perm.group.reactivate"), icon: <PlayCircle size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("reactivate"), variant: "accent" });
-    actions.push({ key: "delete", label: t("perm.group.delete"), icon: <Trash2 size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("delete"), variant: "error" });
+    actions.push({ key: "reactivate", label: t("perm.group.reactivate"), hint: t("perm.group.inactiveHint"), icon: <PlayCircle size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("reactivate"), variant: "accent" });
+    actions.push({ key: "delete", label: t("perm.group.delete"), hint: t("perm.group.deleteHint"), icon: <Trash2 size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("delete"), variant: "error" });
   } else if (group.status === "rejected") {
     if (onReRequest) {
-      actions.push({ key: "resubmit", label: t("perm.group.resubmit"), icon: <RotateCcw size={13} strokeWidth={1.5} />, onClick: () => onReRequest(group), variant: "accent" });
+      actions.push({ key: "resubmit", label: t("perm.group.resubmit"), hint: t("perm.group.resubmitHint"), icon: <RotateCcw size={13} strokeWidth={1.5} />, onClick: () => onReRequest(group), variant: "accent" });
     }
-    actions.push({ key: "delete", label: t("perm.group.delete"), icon: <Trash2 size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("delete"), variant: "error" });
+    actions.push({ key: "delete", label: t("perm.group.delete"), hint: t("perm.group.deleteHint"), icon: <Trash2 size={13} strokeWidth={1.5} />, onClick: () => setPendingAction("delete"), variant: "error" });
   }
 
   if (!canManage) return null;
@@ -182,18 +185,39 @@ export function GroupActions({
           </button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {actions.map((a) => (
-            <IconActionButton key={a.key} icon={a.icon} label={a.label} align="right" tone={a.variant} onClick={a.onClick} />
-          ))}
-          {canEdit && onAddMember && (
-            <IconActionButton
-              icon={<UserPlus size={14} strokeWidth={1.5} />}
-              label={t("perm.group.addMemberBtn")}
-              align="right"
-              onClick={onAddMember}
-            />
-          )}
+        <div className="flex items-center justify-end gap-2">
+          {/* 호버 안내문구 — 버튼 좌측에 페이드인 / hovered action's hint, fades in left of the buttons */}
+          <span
+            className={`hidden truncate text-fine text-ink-tertiary transition-opacity duration-200 sm:block ${
+              hoveredHint ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {hoveredHint}
+          </span>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {actions.map((a) => (
+              <IconActionButton
+                key={a.key}
+                icon={a.icon}
+                label={a.label}
+                align="right"
+                tone={a.variant}
+                hint={a.hint}
+                onHoverChange={setHoveredHint}
+                onClick={a.onClick}
+              />
+            ))}
+            {canEdit && onAddMember && (
+              <IconActionButton
+                icon={<UserPlus size={14} strokeWidth={1.5} />}
+                label={t("perm.group.addMemberBtn")}
+                align="right"
+                hint={t("perm.group.addMemberHint")}
+                onHoverChange={setHoveredHint}
+                onClick={onAddMember}
+              />
+            )}
+          </div>
         </div>
       )}
 
