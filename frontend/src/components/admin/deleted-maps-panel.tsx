@@ -3,8 +3,9 @@
 // 삭제 예정(휴지통) — 소프트삭제된 맵 목록 + 복구. 오너는 본인 것만, sysadmin은 전체(서버 필터). (DL)
 
 import { useEffect, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { PlayCircle, RotateCcw } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { IconActionButton } from "@/components/icon-action-button";
 import { listDeletedMaps, restoreMap, type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -19,6 +20,7 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
   const { t } = useI18n();
   const [maps, setMaps] = useState<MapSummary[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0); // 복구 후 재조회 트리거
+  const [pendingRestore, setPendingRestore] = useState<MapSummary | null>(null); // 복구 확인 대상
   // 마운트 시점 1회 — 렌더 중 Date.now()는 순수성 규칙 위반이라 상태로 고정 / lazy now for purity.
   const [now] = useState(() => Date.now());
 
@@ -89,11 +91,31 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
                 icon={<RotateCcw size={14} strokeWidth={1.5} />}
                 label={t("trash.restore")}
                 align="right"
-                onClick={() => void handleRestore(m.id)}
+                onClick={() => setPendingRestore(m)}
               />
             </div>
           ))}
         </div>
+      )}
+
+      {pendingRestore && (
+        <ConfirmDialog
+          icon={<RotateCcw size={28} strokeWidth={1.5} />}
+          title={t("trash.confirmRestoreMapTitle")}
+          message={pendingRestore.name}
+          lines={[
+            { icon: <RotateCcw size={14} strokeWidth={1.5} />, text: t("trash.confirmRestoreMapL1") },
+            { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("trash.confirmRestoreMapL2"), tone: "accent" },
+          ]}
+          confirmLabel={t("trash.restore")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const target = pendingRestore;
+            setPendingRestore(null);
+            void handleRestore(target.id);
+          }}
+          onClose={() => setPendingRestore(null)}
+        />
       )}
     </div>
   );

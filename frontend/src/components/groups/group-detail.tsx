@@ -640,6 +640,7 @@ export function GroupDetail({
           lines={
             [
               { icon: <PauseCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL1") },
+              { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL3"), tone: "error" },
               { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL2"), tone: "accent" },
             ] satisfies ConfirmLine[]
           }

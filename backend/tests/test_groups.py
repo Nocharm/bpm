@@ -11,6 +11,7 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 import app.auth as auth_mod
 from app.db import SessionLocal
@@ -678,3 +679,38 @@ def test_restore_non_deleted_409(client: TestClient, enforce: None) -> None:
     g = _make_active(client)
     act_as("creator1")
     assert client.post(f"/api/groups/{g['id']}/restore").status_code == 409
+
+
+def test_deactivate_removes_group_map_permissions(client: TestClient, enforce: None) -> None:
+    """그룹 비활성 시 그 그룹에 부여된 map_permissions 행이 삭제된다(잔존 방지)."""
+    from app.models import MapPermission
+
+    g = _make_active(client)
+    map_id = seed_map()
+
+    async def _grant(session) -> None:
+        session.add(
+            MapPermission(
+                map_id=map_id,
+                principal_type="group",
+                principal_id=str(g["id"]),
+                role="viewer",
+                granted_by=SYSADMIN,
+            )
+        )
+
+    _seed(_grant)
+
+    async def _count(session) -> int:
+        rows = await session.scalars(
+            select(MapPermission).where(
+                MapPermission.principal_type == "group",
+                MapPermission.principal_id == str(g["id"]),
+            )
+        )
+        return len(rows.all())
+
+    assert _seed(_count) == 1
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/deactivate").json()["status"] == "inactive"
+    assert _seed(_count) == 0  # 비활성 시 권한 삭제됨
