@@ -1,8 +1,17 @@
 "use client";
 
-// 유저 그룹 상단 안내 — 라이프사이클(신청→승인→활성→비활성→삭제)을 상태 아이콘 원 + 전이 화살표로
-// 한눈에. 화살표 위=전진 동작, 아래=되돌리는 동작(↺ 철회/재신청/재활성/복구). 관리자 콜아웃 유지.
-// 색은 상태 배지와 동일 시맨틱 토큰만 (L3). / User Groups lifecycle guide.
+// 유저 그룹 상단 안내 — 가시성 우선 간소화(L3). 라이프사이클은 5상태 아이콘 흐름(SVG, 전진만)으로,
+// 되돌리기 동작과 그룹 매니저 권한은 아이콘+키워드 칩(HTML, Lucide)으로 PPT처럼 한눈에. 색은 시맨틱 토큰만.
+
+import {
+  PauseCircle,
+  Pencil,
+  RotateCcw,
+  Star,
+  Trash2,
+  Undo2,
+  Users,
+} from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
 
@@ -14,138 +23,126 @@ const GLYPH = {
   inactive: "M-3.5 -5 V5 M3.5 -5 V5", // pause
   trash: "M-5 -3.5 H5 M-1.5 -3.5 V-6 H1.5 V-3.5 M-3.5 -3 L-3 6 H3 L3.5 -3 M-1.5 0 V4 M1.5 0 V4", // bin
 } as const;
-const STAR =
-  "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.123 2.123 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z";
 
-const CY = 110;
-const R = 18;
+const CY = 38;
+const R = 16;
 
 export function GroupsGuide() {
   const { t } = useI18n();
 
   // 상태 노드 — 상태 배지와 동일 시맨틱 색 / state nodes, colors mirror the status badges.
   const states = [
-    { cx: 90, color: "var(--color-changed)", glyph: GLYPH.request, fill: false, label: t("perm.group.lcRequest") },
-    { cx: 290, color: "var(--color-accent)", glyph: GLYPH.approval, fill: false, label: t("perm.group.lcApproval") },
-    { cx: 490, color: "var(--color-added)", glyph: GLYPH.active, fill: true, label: t("perm.group.lcActive") },
-    { cx: 690, color: "var(--color-ink-tertiary)", glyph: GLYPH.inactive, fill: false, label: t("perm.group.lcInactive") },
-    { cx: 890, color: "var(--color-error)", glyph: GLYPH.trash, fill: false, label: t("perm.group.lcDeleted") },
+    { cx: 70, color: "var(--color-changed)", glyph: GLYPH.request, fill: false, label: t("perm.group.lcRequest") },
+    { cx: 270, color: "var(--color-accent)", glyph: GLYPH.approval, fill: false, label: t("perm.group.lcApproval") },
+    { cx: 470, color: "var(--color-added)", glyph: GLYPH.active, fill: true, label: t("perm.group.lcActive") },
+    { cx: 670, color: "var(--color-ink-tertiary)", glyph: GLYPH.inactive, fill: false, label: t("perm.group.lcInactive") },
+    { cx: 870, color: "var(--color-error)", glyph: GLYPH.trash, fill: false, label: t("perm.group.lcDeleted") },
   ];
-  // 전이 — 위=전진 동작, 아래=되돌리기(↺) / transitions: forward verb above, reverse below.
-  const gaps = [
-    { fwd: t("perm.group.lcFwdPending"), rev: t("perm.group.lcRevWithdraw") },
-    { fwd: t("perm.group.lcFwdApprove"), rev: t("perm.group.lcRevReject") },
-    { fwd: t("perm.group.lcFwdDeactivate"), rev: t("perm.group.lcRevReactivate") },
-    { fwd: t("perm.group.lcFwdDelete"), rev: t("perm.group.lcRevRestore") },
+  const forwards = [
+    t("perm.group.lcFwdPending"),
+    t("perm.group.lcFwdApprove"),
+    t("perm.group.lcFwdDeactivate"),
+    t("perm.group.lcFwdDelete"),
+  ];
+  // 되돌리기 동작 — 칩 / reversible actions as chips.
+  const reversible = [
+    { icon: Undo2, label: t("perm.group.lcRevWithdraw") },
+    { icon: RotateCcw, label: t("perm.group.resubmit") },
+    { icon: PauseCircle, label: t("perm.group.lcRevReactivate") },
+    { icon: RotateCcw, label: t("trash.restore") },
+  ];
+  // 그룹 매니저 권한 — 아이콘+키워드 칩(PPT식) / manager permissions as icon+keyword chips.
+  const perms = [
+    { icon: Users, label: t("perm.group.lcPermMembers") },
+    { icon: Star, label: t("perm.group.lcPermManagers") },
+    { icon: Pencil, label: t("perm.group.lcPermRename") },
+    { icon: PauseCircle, label: t("perm.group.lcPermDeactivate") },
+    { icon: Trash2, label: t("perm.group.lcPermDelete") },
   ];
 
   return (
-    <svg
-      viewBox="0 0 980 250"
-      role="img"
-      aria-label={t("perm.group.guideTitle")}
-      className="h-auto w-full max-w-4xl"
-    >
-      <defs>
-        <marker id="gd-arrow" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto">
-          <path d="M0 0 L6 3 L0 6 Z" fill="var(--color-ink-tertiary)" />
-        </marker>
-      </defs>
+    <div className="flex max-w-4xl flex-col gap-3 rounded-md border border-accent-tint-border bg-accent-tint px-5 py-4">
+      <div>
+        <h3 className="text-body-strong text-ink">{t("perm.group.guideTitle")}</h3>
+        <p className="text-caption text-ink-secondary">{t("perm.group.guidePurpose")}</p>
+      </div>
 
-      <rect
-        x="0.75"
-        y="0.75"
-        width="978.5"
-        height="248.5"
-        rx="14"
-        fill="var(--color-accent-tint)"
-        stroke="var(--color-accent-tint-border)"
-        strokeWidth="1.5"
-      />
-
-      <text x="28" y="36" fill="var(--color-ink)" fontSize="17" fontWeight="600">
-        {t("perm.group.guideTitle")}
-      </text>
-      <text x="28" y="58" fill="var(--color-ink-secondary)" fontSize="12.5">
-        {t("perm.group.guidePurpose")}
-      </text>
-
-      {/* 전이 화살표 + 전진/되돌리기 라벨 / transition arrows with forward + reverse labels */}
-      {gaps.map((g, i) => {
-        const center = (states[i].cx + states[i + 1].cx) / 2;
-        return (
-          <g key={i}>
+      {/* 라이프사이클 — 5상태 아이콘 흐름(전진만) / lifecycle: 5 state icons, forward flow */}
+      <svg viewBox="0 0 940 70" role="img" aria-label={t("perm.group.guideTitle")} className="h-auto w-full">
+        <defs>
+          <marker id="gd-arrow" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto">
+            <path d="M0 0 L6 3 L0 6 Z" fill="var(--color-ink-tertiary)" />
+          </marker>
+        </defs>
+        {states.slice(0, -1).map((s, i) => {
+          const center = (s.cx + states[i + 1].cx) / 2;
+          return (
+            <g key={`arrow-${i}`}>
+              <path
+                d={`M ${s.cx + R + 5} ${CY} H ${states[i + 1].cx - R - 5}`}
+                stroke="var(--color-ink-tertiary)"
+                strokeWidth="1.5"
+                fill="none"
+                markerEnd="url(#gd-arrow)"
+              />
+              <text x={center} y={CY - 8} textAnchor="middle" fill="var(--color-ink-secondary)" fontSize="11" fontWeight="600">
+                {forwards[i]}
+              </text>
+            </g>
+          );
+        })}
+        {states.map((s) => (
+          <g key={s.cx}>
+            <circle cx={s.cx} cy={CY} r={R} fill={s.color} />
             <path
-              d={`M ${states[i].cx + R + 6} ${CY} H ${states[i + 1].cx - R - 6}`}
-              stroke="var(--color-ink-tertiary)"
-              strokeWidth="1.5"
-              fill="none"
-              markerEnd="url(#gd-arrow)"
+              d={s.glyph}
+              transform={`translate(${s.cx} ${CY})`}
+              stroke={s.fill ? "none" : "var(--color-on-accent)"}
+              fill={s.fill ? "var(--color-on-accent)" : "none"}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
-            <text
-              x={center}
-              y={CY - 12}
-              textAnchor="middle"
-              fill="var(--color-ink-secondary)"
-              fontSize="11.5"
-              fontWeight="600"
-            >
-              {g.fwd}
-            </text>
-            <text x={center} y={CY + 22} textAnchor="middle" fill="var(--color-ink-tertiary)" fontSize="11">
-              {"↺ "}
-              {g.rev}
+            <text x={s.cx} y={CY + 30} textAnchor="middle" fill="var(--color-ink)" fontSize="12.5" fontWeight="600">
+              {s.label}
             </text>
           </g>
-        );
-      })}
+        ))}
+      </svg>
 
-      {/* 상태 노드 — 아이콘 원 + 라벨 / state nodes: icon circle + label */}
-      {states.map((s) => (
-        <g key={s.cx}>
-          <circle cx={s.cx} cy={CY} r={R} fill={s.color} />
-          <path
-            d={s.glyph}
-            transform={`translate(${s.cx} ${CY})`}
-            stroke={s.fill ? "none" : "var(--color-on-accent)"}
-            fill={s.fill ? "var(--color-on-accent)" : "none"}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <text
-            x={s.cx}
-            y={CY + 46}
-            textAnchor="middle"
-            fill="var(--color-ink)"
-            fontSize="13"
-            fontWeight="600"
+      {/* 되돌리기 동작 — 칩 / reversible-action chips */}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-accent-tint-border pt-3">
+        <span className="inline-flex items-center gap-1 text-caption font-semibold text-ink-secondary">
+          <RotateCcw size={13} strokeWidth={1.5} className="text-ink-tertiary" />
+          {t("perm.group.lcReversible")}
+        </span>
+        {reversible.map((r) => (
+          <span
+            key={r.label}
+            className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface px-2 py-0.5 text-fine text-ink"
           >
-            {s.label}
-          </text>
-        </g>
-      ))}
+            <r.icon size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+            {r.label}
+          </span>
+        ))}
+      </div>
 
-      {/* 관리자 콜아웃 — ★ + 설정 방법 + 권한 / manager callout */}
-      <rect
-        x="24"
-        y="200"
-        width="932"
-        height="32"
-        rx="8"
-        fill="var(--color-surface)"
-        stroke="var(--color-accent-tint-border)"
-      />
-      <path d={STAR} transform="translate(36 209) scale(0.6)" fill="var(--color-accent)" />
-      <text x="58" y="220" fontSize="12.5">
-        <tspan fill="var(--color-accent)" fontWeight="600">
-          {t("perm.group.guideMgr")}
-        </tspan>
-        <tspan fill="var(--color-ink-tertiary)">{"  ·  "}</tspan>
-        <tspan fill="var(--color-ink-secondary)">{t("perm.group.guideMgrSet")}</tspan>
-        <tspan fill="var(--color-ink-tertiary)">{"  ·  "}</tspan>
-        <tspan fill="var(--color-ink-secondary)">{t("perm.group.guideMgrPerm")}</tspan>
-      </text>
-    </svg>
+      {/* 그룹 매니저 권한 — PPT식 아이콘+키워드 칩 / manager permissions as icon+keyword chips */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-caption font-semibold text-accent">
+          <Star size={13} strokeWidth={1.5} className="fill-current" />
+          {t("perm.group.lcMgrCan")}
+        </span>
+        {perms.map((p) => (
+          <span
+            key={p.label}
+            className="inline-flex items-center gap-1 rounded-full border border-accent-tint-border bg-surface px-2 py-0.5 text-fine text-ink"
+          >
+            <p.icon size={12} strokeWidth={1.5} className="text-accent" />
+            {p.label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
