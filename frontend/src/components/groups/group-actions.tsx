@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Trash2,
   Undo2,
+  UserPlus,
   X,
 } from "lucide-react";
 
@@ -35,12 +36,14 @@ export function GroupActions({
   onGroupChange,
   onGroupGone,
   onReRequest,
+  onAddMember,
   onToast,
 }: {
   group: Group;
   onGroupChange: (g: Group) => void;
   onGroupGone?: () => void; // 삭제/철회로 그룹이 사라졌을 때
   onReRequest?: (group: Group) => void; // 거절 그룹 재신청 — 부모가 생성 모달 프리필
+  onAddMember?: () => void; // 멤버 추가 — 부모가 피커 다이얼로그를 연다 (사이클 버튼과 같이 위치)
   onToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -50,6 +53,8 @@ export function GroupActions({
   const isGroupManager = currentUser != null && group.managers.includes(currentUser.id);
   const isSysadmin = currentUser?.isSysadmin ?? false;
   const canManage = isSysadmin || isGroupManager || currentUser?.id === group.created_by;
+  // 멤버 편집 권한 — 관리자/sysadmin + active (서버가 최종 강제) / member editing.
+  const canEdit = (isGroupManager || isSysadmin) && group.status === "active";
 
   const [now] = useState(() => Date.now()); // 마운트 고정(순수성)
   const purgeLabel = (deletedAt: string): string => {
@@ -181,6 +186,14 @@ export function GroupActions({
           {actions.map((a) => (
             <IconActionButton key={a.key} icon={a.icon} label={a.label} align="right" tone={a.variant} onClick={a.onClick} />
           ))}
+          {canEdit && onAddMember && (
+            <IconActionButton
+              icon={<UserPlus size={14} strokeWidth={1.5} />}
+              label={t("perm.group.addMemberBtn")}
+              align="right"
+              onClick={onAddMember}
+            />
+          )}
         </div>
       )}
 

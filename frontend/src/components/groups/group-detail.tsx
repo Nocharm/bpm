@@ -5,10 +5,9 @@
 // 관리자는 별도 영역이 아니라 멤버(user) 카드에서 토글로 지정한다 — 관리자 ⊆ 멤버(user).
 
 import { type ReactNode, useState } from "react";
-import { Building2, Star, StarOff, User, UserPlus, X } from "lucide-react";
+import { Building2, Star, StarOff, User, X } from "lucide-react";
 
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
-import { IconActionButton } from "@/components/icon-action-button";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import {
@@ -136,11 +135,10 @@ function PickerDialog({
           excludeIds={exclude}
           onSelect={(opt) => setSelected((prev) => [...prev, opt])}
         />
-        {/* 선택 칩 — 높이 고정(~3행)·내부 스크롤로 추가해도 모달 크기 불변 / fixed-height scroll so the modal doesn't grow. */}
-        {selected.length > 0 && (
-          <div className="flex flex-col gap-1.5">
+        {/* 선택 칩 — 영역을 처음부터 확보(고정 높이)·내부 스크롤로 추가해도 모달 크기 불변 / reserve from the start. */}
+        <div className="flex flex-col gap-1.5">
             <span className="text-fine text-ink-tertiary">{t("perm.group.pickerSelected")}</span>
-            <div className="scroll-soft flex max-h-[5.5rem] flex-wrap gap-1.5">
+            <div className="scroll-soft flex h-[5.5rem] flex-wrap content-start gap-1.5">
               {selected.map((s) => (
                 <span
                   key={`${s.principalType}:${s.principalId}`}
@@ -165,8 +163,7 @@ function PickerDialog({
                 </span>
               ))}
             </div>
-          </div>
-        )}
+        </div>
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -197,19 +194,22 @@ export function GroupDetail({
   dirUsers,
   dirDepts,
   onGroupChange,
+  addMemberOpen,
+  onAddMemberClose,
   onToast,
 }: {
   group: Group;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
   onGroupChange: (g: Group) => void;
+  // 멤버 추가 다이얼로그는 부모가 제어(버튼은 카드 헤더 GroupActions에 있음) / add-member dialog controlled by parent.
+  addMemberOpen: boolean;
+  onAddMemberClose: () => void;
   onToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
   const groupIdNum = group.id;
-
-  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
 
   const pickerUsers: MockUser[] = dirUsers.map((u) => ({
     id: u.id,
@@ -344,18 +344,6 @@ export function GroupDetail({
         </p>
       )}
 
-      {/* 멤버 섹션 헤더 — 멤버수는 카드 헤더(타이틀쪽)에만 두고 여기선 Add member만 / add-member only; count lives in the card header. */}
-      {canEdit && (
-        <div className="flex justify-end">
-          <IconActionButton
-            icon={<UserPlus size={14} strokeWidth={1.5} />}
-            label={t("perm.group.addMemberBtn")}
-            align="right"
-            onClick={() => setMemberDialogOpen(true)}
-          />
-        </div>
-      )}
-
       {sortedRows.length === 0 ? (
         <p className="text-fine text-ink-tertiary">{t("perm.group.noMembers")}</p>
       ) : (
@@ -406,14 +394,14 @@ export function GroupDetail({
       )}
 
       {/* 멤버 추가 다이얼로그 — dept + user / Member add dialog */}
-      {memberDialogOpen && (
+      {addMemberOpen && (
         <PickerDialog
           title={t("perm.group.addMemberBtn")}
           pickerUsers={pickerUsers}
           pickerDepts={pickerDepts}
           excludeIds={memberExcludeIds}
           onAdd={(opts) => void handleAddMembers(opts)}
-          onClose={() => setMemberDialogOpen(false)}
+          onClose={onAddMemberClose}
         />
       )}
 

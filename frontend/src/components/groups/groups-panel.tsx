@@ -65,6 +65,7 @@ export function GroupsPanel() {
   const [groups, setGroups] = useState<Group[]>([]);
   // 인라인 상세로 펼친 카드 id (단일) / id of the card expanded inline.
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [addMemberOpen, setAddMemberOpen] = useState(false); // 멤버 추가 다이얼로그(펼친 그룹용) — 헤더 버튼이 연다
   // 실 디렉터리 — 피커 후보 / Real directory for picker candidates.
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
@@ -315,48 +316,51 @@ export function GroupsPanel() {
                   expanded ? "border-accent sm:col-span-2" : "border-hairline"
                 }`}
               >
-                {/* 헤더 행 — 요약(클릭=토글) + 라이프사이클 액션(타이틀쪽 우측, 펼침 시) /
-                    header row: clickable summary + lifecycle actions on the right (title-side) when expanded */}
-                <div className="flex items-stretch">
-                  <button
-                    type="button"
-                    className={`flex min-w-0 flex-1 flex-col gap-2 p-4 text-left ${
-                      expanded ? "rounded-tl-md" : "rounded-md hover:bg-surface-alt"
-                    }`}
-                    onClick={() => setExpandedId(expanded ? null : group.id)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                        <span className="truncate text-caption-strong text-ink">{group.name}</span>
-                      </span>
-                      <GroupStatusBadge status={group.status} />
-                    </div>
-                    {group.description && (
-                      <span className="line-clamp-2 text-fine text-ink-tertiary">
-                        {group.description}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
-                      <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                      {group.members.length}
+                {/* 요약(클릭=토글) — 풀폭이라 상태 배지가 카드 우측끝에 정렬 / full-width so the status badge stays right-aligned */}
+                <button
+                  type="button"
+                  className={`flex w-full flex-col gap-2 p-4 text-left ${
+                    expanded ? "rounded-t-md" : "rounded-md hover:bg-surface-alt"
+                  }`}
+                  onClick={() => {
+                    setAddMemberOpen(false);
+                    setExpandedId(expanded ? null : group.id);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="truncate text-caption-strong text-ink">{group.name}</span>
                     </span>
-                  </button>
-                  {expanded && (
-                    <div className="flex items-center py-4 pr-4">
-                      <GroupActions
-                        group={group}
-                        onGroupChange={updateGroup}
-                        onGroupGone={() => {
-                          setExpandedId(null);
-                          void reloadGroups();
-                        }}
-                        onReRequest={handleReRequest}
-                        onToast={addToast}
-                      />
-                    </div>
+                    <GroupStatusBadge status={group.status} />
+                  </div>
+                  {group.description && (
+                    <span className="line-clamp-2 text-fine text-ink-tertiary">
+                      {group.description}
+                    </span>
                   )}
-                </div>
+                  <span className="flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
+                    <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                    {group.members.length}
+                  </span>
+                </button>
+
+                {/* 라이프사이클 + 멤버추가 액션 — 카운트 아래 우측 정렬 (펼침 시) / actions row, right-aligned */}
+                {expanded && (
+                  <div className="-mt-2 flex justify-end px-4 pb-3">
+                    <GroupActions
+                      group={group}
+                      onGroupChange={updateGroup}
+                      onGroupGone={() => {
+                        setExpandedId(null);
+                        void reloadGroups();
+                      }}
+                      onReRequest={handleReRequest}
+                      onAddMember={() => setAddMemberOpen(true)}
+                      onToast={addToast}
+                    />
+                  </div>
+                )}
 
                 {/* 인라인 상세 — 멤버·매니저 편집 (공용 GroupDetail) / inline detail */}
                 {expanded && (
@@ -366,6 +370,8 @@ export function GroupsPanel() {
                       dirUsers={dirUsers}
                       dirDepts={dirDepts}
                       onGroupChange={updateGroup}
+                      addMemberOpen={addMemberOpen}
+                      onAddMemberClose={() => setAddMemberOpen(false)}
                       onToast={addToast}
                     />
                   </div>

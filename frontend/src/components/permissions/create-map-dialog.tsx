@@ -451,26 +451,25 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
               if (opt.principalType === "user") handleAddApprover(opt.principalId, opt.displayName);
             }}
           />
-          {approvers.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {approvers.map((a) => (
-                <span
-                  key={a.key}
-                  data-id={`create-approver-pill-${a.userId}`}
-                  className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
+          {/* 결재자 pills — 1.5줄 높이 미리 확보·내부 스크롤(추가해도 모달 안 늘어남) / reserve ~1.5 rows. */}
+          <div className="scroll-soft flex h-[2.5rem] flex-wrap content-start gap-1.5">
+            {approvers.map((a) => (
+              <span
+                key={a.key}
+                data-id={`create-approver-pill-${a.userId}`}
+                className="inline-flex h-fit items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
+              >
+                {a.displayName}
+                <button
+                  type="button"
+                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
+                  onClick={() => handleRemoveApprover(a.key)}
                 >
-                  {a.displayName}
-                  <button
-                    type="button"
-                    className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-error"
-                    onClick={() => handleRemoveApprover(a.key)}
-                  >
-                    <X size={14} strokeWidth={1.5} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+                  <X size={14} strokeWidth={1.5} />
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* 오류 / error */}

@@ -54,6 +54,7 @@ export default function GroupDetailPage({
   const router = useRouter();
 
   const [group, setGroup] = useState<Group | null>(null);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
@@ -128,6 +129,7 @@ export default function GroupDetailPage({
           onGroupChange={setGroup}
           onGroupGone={() => router.push("/settings")}
           onReRequest={() => router.push("/settings")}
+          onAddMember={() => setAddMemberOpen(true)}
           onToast={addToast}
         />
       </div>
@@ -137,6 +139,8 @@ export default function GroupDetailPage({
         dirUsers={dirUsers}
         dirDepts={dirDepts}
         onGroupChange={setGroup}
+        addMemberOpen={addMemberOpen}
+        onAddMemberClose={() => setAddMemberOpen(false)}
         onToast={addToast}
       />
     </div>

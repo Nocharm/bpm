@@ -95,6 +95,12 @@ export function PrincipalPicker({
   const visible = query.trim() ? hits.slice(0, 8) : hits;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
+    // Esc — 검색어 비우고 포커스 해제(blur) → 펼쳐진 목록 닫힘 (항목 유무와 무관)
+    if (event.key === "Escape") {
+      setQuery("");
+      (event.currentTarget as HTMLInputElement).blur();
+      return;
+    }
     if (visible.length === 0) return;
     if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
       event.preventDefault();
@@ -109,8 +115,6 @@ export function PrincipalPicker({
         onSelect(opt);
         setQuery("");
       }
-    } else if (event.key === "Escape") {
-      setQuery("");
     }
   };
 
