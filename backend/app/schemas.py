@@ -569,6 +569,13 @@ class AiProposal(BaseModel):
         return self
 
 
+class TableInfoOut(BaseModel):
+    """admin 테이블 뷰어 — 테이블명 + 행수(선택 pill 표시용) / table name + row count for selector pills."""
+
+    name: str
+    count: int
+
+
 class TableDataOut(BaseModel):
     """admin 테이블 뷰어 — 선택 테이블의 페이징/정렬/필터된 행 / Paginated table rows for the admin viewer."""
 

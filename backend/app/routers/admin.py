@@ -12,7 +12,13 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import Base, Employee
 from app.permissions.logic import is_sysadmin
-from app.schemas import AdminDeptOut, AdminDirectoryOut, AdminUserOut, TableDataOut
+from app.schemas import (
+    AdminDeptOut,
+    AdminDirectoryOut,
+    AdminUserOut,
+    TableDataOut,
+    TableInfoOut,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -73,14 +79,23 @@ def _require_sysadmin(login_id: str) -> None:
         raise HTTPException(status_code=403, detail="sysadmin required")
 
 
-@router.get("/tables", response_model=list[str])
-async def list_tables(login_id: str = Depends(get_current_user)) -> list[str]:
-    """sysadmin 전용 — 앱에 등록된 모든 테이블 이름 (정렬). 읽기전용 인트로스펙션.
+@router.get("/tables", response_model=list[TableInfoOut])
+async def list_tables(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[TableInfoOut]:
+    """sysadmin 전용 — 등록된 모든 테이블 이름 + 행수(읽기전용 COUNT). 뷰어 선택 pill 표시용.
 
-    Sysadmin-only. Names come from SQLAlchemy metadata (no DDL, no schema change).
+    Sysadmin-only. Names come from SQLAlchemy metadata (no DDL, no schema change);
+    each count is a plain SELECT COUNT(*).
     """
     _require_sysadmin(login_id)
-    return sorted(Base.metadata.tables.keys())
+    out: list[TableInfoOut] = []
+    for name in sorted(Base.metadata.tables.keys()):
+        table = Base.metadata.tables[name]
+        count = (await session.execute(select(func.count()).select_from(table))).scalar_one()
+        out.append(TableInfoOut(name=name, count=count))
+    return out
 
 
 @router.get("/tables/{name}", response_model=TableDataOut)

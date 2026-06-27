@@ -1,18 +1,18 @@
 "use client";
 
-// DB 테이블 뷰어 — sysadmin 전용 읽기전용 표. 테이블 선택 → 헤더 정렬·필터 + 무한 스크롤(하단 도달 시 append) (A1) /
-// Read-only DB table viewer (sysadmin): pick a table → server-side sort/filter + infinite scroll.
-// 데이터 소스: GET /api/admin/tables, /api/admin/tables/{name} (읽기전용, 서버측 정렬/필터/페이징).
+// DB 테이블 뷰어 — sysadmin 전용 읽기전용. 테이블 pill 선택(행수) → 카드(헤더 바 + 무한 스크롤) (A1+A6, Image #2) /
+// Read-only DB viewer (sysadmin): table pills (with counts) → a card with a header bar + infinite scroll.
+// 데이터: GET /api/admin/tables(이름+행수), /api/admin/tables/{name}(서버측 정렬/필터/페이징).
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Table2 } from "lucide-react";
 
-import { getDbTable, listDbTables, type TableData } from "@/lib/api";
+import { getDbTable, listDbTables, type TableData, type TableInfo } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 const PAGE_SIZE = 50; // 무한 스크롤 1회 로드 행수 / rows per scroll-load
 const FILTER_DEBOUNCE_MS = 300;
-const SPINNER_MIN_MS = 420; // 추가 로드 스피너 최소 노출 — 빠른 로컬 DB에서 깜빡임 방지
+const SPINNER_MIN_MS = 420; // 추가 로드 스피너 최소 노출 — 빠른 로컬 DB 깜빡임 방지
 const SCROLL_THRESHOLD_PX = 80; // 하단 80px 도달 시 다음 페이지
 
 type Order = "asc" | "desc";
@@ -26,13 +26,13 @@ function formatCell(value: unknown): string {
 export function TableViewer() {
   const { t } = useI18n();
 
-  const [tables, setTables] = useState<string[]>([]);
+  const [tables, setTables] = useState<TableInfo[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<TableData["rows"]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loadedPage, setLoadedPage] = useState(0); // 마지막으로 로드 완료한 page (.then에서 설정)
+  const [loadedPage, setLoadedPage] = useState(0); // 마지막 로드 완료 page (.then에서 설정)
   const [error, setError] = useState<string | null>(null);
 
   const [sort, setSort] = useState<string | null>(null);
@@ -41,19 +41,18 @@ export function TableViewer() {
   const [query, setQuery] = useState(""); // debounced filter applied to fetch
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const loadingRef = useRef(false); // 스크롤 트리거 동기 가드 — 한 번에 한 페이지만
+  const loadingRef = useRef(false); // 스크롤 트리거 동기 가드
 
   const loaded = rows.length;
   const hasMore = loaded < total;
-  // 요청한 page가 아직 로드 안 됐으면 조회 중 — 동기 setState(effect) 없이 파생.
   const isFetching = Boolean(selected) && page > loadedPage;
 
-  // 테이블 목록 (mount) / Table names.
+  // 테이블 목록(+행수) (mount) / Table names with row counts.
   useEffect(() => {
     let active = true;
     void listDbTables()
-      .then((names) => {
-        if (active) setTables(names);
+      .then((info) => {
+        if (active) setTables(info);
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : String(err));
@@ -63,7 +62,7 @@ export function TableViewer() {
     };
   }, []);
 
-  // 필터 입력 디바운스 → query (+ 1페이지로 리셋) / Debounce filter; reset to page 1.
+  // 필터 입력 디바운스 → query (+ page 1 리셋) / Debounce filter; reset to page 1.
   useEffect(() => {
     const id = setTimeout(() => {
       setQuery(filterInput.trim());
@@ -73,9 +72,9 @@ export function TableViewer() {
     return () => clearTimeout(id);
   }, [filterInput]);
 
-  // 데이터 조회 — page 1=교체, page>1=append. 정렬/필터/테이블 변경은 핸들러에서 page=1·loadedPage=0으로 리셋.
+  // 데이터 조회 — page 1=교체, page>1=append. 정렬/필터/테이블 변경은 핸들러에서 page 1 리셋.
   useEffect(() => {
-    if (!selected) return; // 미선택 — onChange에서 이미 초기화
+    if (!selected) return;
     let active = true;
     loadingRef.current = true;
     const fetchP = getDbTable(selected, {
@@ -85,7 +84,7 @@ export function TableViewer() {
       order,
       q: query || undefined,
     });
-    // 추가 로드(스크롤)만 스피너 최소 노출 적용 — 첫 페이지는 즉시 표시.
+    // 추가 로드(스크롤)만 스피너 최소 노출 — 첫 페이지는 즉시 표시.
     const settled =
       page > 1
         ? Promise.all([fetchP, new Promise((r) => setTimeout(r, SPINNER_MIN_MS))]).then(([res]) => res)
@@ -110,6 +109,20 @@ export function TableViewer() {
     };
   }, [selected, page, sort, order, query]);
 
+  // 테이블 pill 선택 — 누적/정렬/필터 초기화 / Pick a table; reset accumulation, sort, filter.
+  const selectTable = (name: string) => {
+    setSelected(name);
+    setColumns([]);
+    setRows([]);
+    setTotal(0);
+    setPage(1);
+    setLoadedPage(0);
+    setSort(null);
+    setOrder("asc");
+    setFilterInput("");
+    setQuery("");
+  };
+
   // 헤더 클릭 정렬 — 같은 컬럼이면 방향 토글, page 1로 리셋 / Header sort; reset to page 1.
   const onSort = (col: string) => {
     if (sort === col) {
@@ -132,119 +145,137 @@ export function TableViewer() {
     }
   };
 
+  // 셀 렌더 — visibility 컬럼은 public/private 배지, 그 외 텍스트 / visibility column as a badge.
+  function renderCell(col: string, value: unknown) {
+    const text = formatCell(value);
+    if (col === "visibility" && (text === "public" || text === "private")) {
+      return (
+        <span
+          className={`inline-flex rounded-sm border px-1.5 py-0.5 text-fine ${
+            text === "public" ? "border-added text-added" : "border-divider text-ink-tertiary"
+          }`}
+        >
+          {text}
+        </span>
+      );
+    }
+    return text;
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      {/* 툴바 — 테이블 선택 + 필터 + 로드/전체 행수 / Toolbar: selector + filter + loaded count */}
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none focus:border-accent"
-          value={selected}
-          onChange={(e) => {
-            setSelected(e.target.value);
-            setColumns([]);
-            setRows([]);
-            setTotal(0);
-            setPage(1);
-            setLoadedPage(0);
-            setSort(null);
-            setOrder("asc");
-            setFilterInput("");
-            setQuery("");
-          }}
-        >
-          <option value="">{t("db.selectTable")}</option>
-          {tables.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+      <p className="text-body-strong text-ink">{t("db.tablesTab")}</p>
 
-        {selected && (
-          <>
-            <input
-              type="text"
-              className="w-56 rounded-sm border border-hairline bg-transparent px-2 py-1.5 text-caption text-ink outline-none focus:border-accent placeholder:text-ink-tertiary"
-              placeholder={t("db.filterPlaceholder")}
-              value={filterInput}
-              onChange={(e) => setFilterInput(e.target.value)}
-            />
-            {total > 0 && (
-              <span className="text-fine text-ink-tertiary">
-                {t("db.rowsLoaded", { loaded, total })}
-              </span>
-            )}
-          </>
-        )}
+      {/* 테이블 선택 pill — 아이콘 + 이름 + 행수 / table selector pills */}
+      <div className="flex flex-wrap gap-2">
+        {tables.map((tbl) => {
+          const active = tbl.name === selected;
+          return (
+            <button
+              key={tbl.name}
+              type="button"
+              onClick={() => selectTable(tbl.name)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-caption transition-colors ${
+                active
+                  ? "border-accent-tint-border bg-accent-tint text-accent"
+                  : "border-hairline text-ink-secondary hover:bg-surface-alt hover:text-ink"
+              }`}
+            >
+              <Table2 size={14} strokeWidth={1.5} className="shrink-0" />
+              {tbl.name}
+              <span className="opacity-60">{tbl.count}</span>
+            </button>
+          );
+        })}
       </div>
 
       {error && <p className="text-caption text-error">{error}</p>}
 
       {!selected && <p className="text-caption text-ink-tertiary">{t("db.pickPrompt")}</p>}
 
-      {/* 표 — 내부 스크롤 컨테이너(무한 스크롤) + sticky 헤더 / Scroll container with sticky header */}
-      {selected && columns.length > 0 && (
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="max-h-[60vh] overflow-auto rounded-sm border border-hairline"
-        >
-          <table className="w-full text-fine">
-            <thead className="sticky top-0 z-[1]">
-              <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
-                {columns.map((col) => (
-                  <th key={col} className="whitespace-nowrap px-2 py-1.5">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 hover:text-ink"
-                      onClick={() => onSort(col)}
-                    >
-                      {col}
-                      {sort === col &&
-                        (order === "asc" ? (
-                          <ArrowUp size={12} strokeWidth={1.5} />
-                        ) : (
-                          <ArrowDown size={12} strokeWidth={1.5} />
-                        ))}
-                    </button>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && !isFetching ? (
-                <tr>
-                  <td className="px-2 py-3 text-center text-ink-tertiary" colSpan={columns.length}>
-                    {t("db.empty")}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row, i) => (
-                  <tr key={i} className="border-b border-divider hover:bg-surface-alt">
-                    {columns.map((col) => (
-                      <td
-                        key={col}
-                        className="max-w-[28rem] truncate px-2 py-1 text-ink"
-                        title={formatCell(row[col])}
-                      >
-                        {formatCell(row[col])}
-                      </td>
-                    ))}
-                  </tr>
-                ))
+      {/* 카드 — 헤더 바(테이블명 + 필터 + 카운트) + 무한 스크롤 표 / Card: header bar + scroll table */}
+      {selected && (
+        <div className="overflow-hidden rounded-md border border-hairline bg-surface">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-alt px-4 py-2.5">
+            <span className="text-caption-strong text-ink">{selected}</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                className="w-48 rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink outline-none focus:border-accent placeholder:text-ink-tertiary"
+                placeholder={t("db.filterPlaceholder")}
+                value={filterInput}
+                onChange={(e) => setFilterInput(e.target.value)}
+              />
+              {total > 0 && (
+                <span className="shrink-0 text-fine text-ink-tertiary">
+                  {t("db.rowsTotalShown", { total, loaded })}
+                </span>
               )}
-            </tbody>
-          </table>
-
-          {/* 로딩 스피너 / 끝 표시 (스크롤 컨테이너 내부) */}
-          {isFetching && (
-            <div className="flex items-center justify-center py-3 text-ink-tertiary">
-              <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
             </div>
-          )}
-          {!isFetching && !hasMore && loaded > 0 && (
-            <p className="py-3 text-center text-fine text-ink-tertiary">{t("db.allLoaded")}</p>
-          )}
+          </div>
+
+          <div ref={scrollRef} onScroll={onScroll} className="max-h-[60vh] overflow-auto">
+            <table className="w-full text-fine">
+              <thead className="sticky top-0 z-[1]">
+                <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
+                  {columns.map((col) => (
+                    <th key={col} className="whitespace-nowrap px-3 py-2">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-ink"
+                        onClick={() => onSort(col)}
+                      >
+                        {col}
+                        {sort === col &&
+                          (order === "asc" ? (
+                            <ArrowUp size={12} strokeWidth={1.5} />
+                          ) : (
+                            <ArrowDown size={12} strokeWidth={1.5} />
+                          ))}
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 && !isFetching ? (
+                  <tr>
+                    <td
+                      className="px-3 py-3 text-center text-ink-tertiary"
+                      colSpan={columns.length || 1}
+                    >
+                      {t("db.empty")}
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, i) => (
+                    <tr key={i} className="border-b border-divider last:border-0 hover:bg-surface-alt">
+                      {columns.map((col) => (
+                        <td
+                          key={col}
+                          className="max-w-[28rem] truncate px-3 py-2 text-ink"
+                          title={formatCell(row[col])}
+                        >
+                          {renderCell(col, row[col])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            {/* 추가 로드 스피너 / 끝 표시 (스크롤 컨테이너 내부) */}
+            {isFetching && (
+              <div className="flex items-center justify-center gap-2 py-3 text-fine text-ink-tertiary">
+                <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
+                {t("db.loading")}
+              </div>
+            )}
+            {!isFetching && !hasMore && loaded > 0 && (
+              <p className="py-3 text-center text-fine text-ink-tertiary">{t("db.allLoaded")}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

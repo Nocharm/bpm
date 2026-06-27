@@ -404,8 +404,14 @@ export interface TableQuery {
   q?: string;
 }
 
-export function listDbTables(): Promise<string[]> {
-  return request<string[]>("/admin/tables");
+// 테이블 선택 pill — 이름 + 행수 / table selector pills: name + row count.
+export interface TableInfo {
+  name: string;
+  count: number;
+}
+
+export function listDbTables(): Promise<TableInfo[]> {
+  return request<TableInfo[]>("/admin/tables");
 }
 
 export function getDbTable(name: string, query: TableQuery = {}): Promise<TableData> {

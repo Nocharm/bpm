@@ -29,12 +29,14 @@ def sysadmin_enforced(client: TestClient) -> Iterator[None]:
 
 
 def test_list_tables_sysadmin_200(client: TestClient, sysadmin_enforced: None) -> None:
-    """sysadmin → 200 with the app's table names."""
+    """sysadmin → 200 with the app's table names + integer row counts (selector pills)."""
     res = client.get("/api/admin/tables", headers={"X-Dev-User": SYSADMIN})
     assert res.status_code == 200
-    names = res.json()
+    rows = res.json()
+    names = [t["name"] for t in rows]
     for expected in ("employees", "process_maps", "nodes", "map_versions"):
         assert expected in names
+    assert all(isinstance(t["count"], int) for t in rows)
 
 
 def test_list_tables_non_sysadmin_403(client: TestClient, sysadmin_enforced: None) -> None:
