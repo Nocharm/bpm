@@ -13,7 +13,7 @@ import {
   Clock,
   Globe,
   Lock,
-  Map,
+  Map as MapIcon,
   ShieldAlert,
   Star,
   User,
@@ -24,9 +24,11 @@ import {
 import {
   decideApprovalRequest,
   decideGroup,
+  getDirectory,
   listPendingApprovalRequests,
   listPendingGroups,
   type ApprovalRequest,
+  type DirectoryUser,
   type Group,
 } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -67,6 +69,29 @@ function VisibilityPill({ isPublic, label }: { isPublic: boolean; label: string 
   );
 }
 
+// 요청자 카드 — 이름 우선·아이디·소속(메인 상세 유저 정보 디자인 재활용). 이름 미해석 시 id로 폴백 /
+// requester card: name first, then id + department (reuses the home detail user-info style).
+function RequesterCard({ id, user }: { id: string; user?: DirectoryUser }) {
+  const dept = user?.org_path ? user.org_path.split("/").filter(Boolean).pop() : user?.department;
+  return (
+    <div className="inline-flex items-center gap-2 rounded-md border border-hairline bg-surface-alt px-2.5 py-1.5">
+      <User size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-caption text-ink">{user?.name ?? id}</span>
+        <span className="flex flex-wrap items-center gap-x-1.5 text-fine text-ink-tertiary">
+          <span className="truncate">{id}</span>
+          {dept && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="truncate">{dept}</span>
+            </>
+          )}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 // 펼친 상세의 라벨 행 / labelled row in the expanded detail.
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -88,6 +113,20 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
   const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
   const [decidingKeys, setDecidingKeys] = useState<Set<string>>(new Set());
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const [usersById, setUsersById] = useState<Map<string, DirectoryUser>>(new Map()); // 요청자 이름·소속 해석
+
+  // 디렉터리 로드 — 요청자 login_id → 이름/소속 / load directory to resolve requester name & dept.
+  useEffect(() => {
+    let active = true;
+    void getDirectory()
+      .then((dir) => {
+        if (active) setUsersById(new Map(dir.users.map((u) => [u.id, u])));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -193,7 +232,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       return <span className="truncate text-caption-strong text-ink">{item.group.name}</span>;
     return (
       <Pill>
-        <Map size={11} strokeWidth={1.5} />
+        <MapIcon size={11} strokeWidth={1.5} />
         {t("perm.sysadmin.mapLabel")} {item.req.map_id}
       </Pill>
     );
@@ -293,17 +332,16 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                 )}
 
                 <DetailRow label={t("perm.sysadmin.requesterLabel")}>
-                  <span className="inline-flex items-center gap-1 text-ink-secondary">
-                    <User size={11} strokeWidth={1.5} className="text-ink-tertiary" />
-                    {requester}
-                  </span>
-                  {item.kind !== "group_create" && (
+                  <RequesterCard id={requester} user={usersById.get(requester)} />
+                </DetailRow>
+                {item.kind !== "group_create" && (
+                  <DetailRow label={t("perm.sysadmin.requestedAt")}>
                     <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary">
                       <Clock size={11} strokeWidth={1.5} />
                       {formatKst(item.req.created_at)}
                     </span>
-                  )}
-                </DetailRow>
+                  </DetailRow>
+                )}
 
                 <div className="mt-1 flex justify-end gap-2">
                   <button
