@@ -57,9 +57,13 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A8 | 관리자 | **그룹 카드 인라인 상세**(새 페이지 X→카드 아래 펼침, 공용 `group-detail.tsx`·보기+편집) + **매니저=멤버(user) 제한**(피커 후보 제한·캐스케이드·백엔드 422). `groups-panel`·`group-detail`·`groups/[groupId]`·`routers/groups` | backend 325✅·tsc/lint✅ | ✅ | ✅ OK (완료) | (S6) |
 | A12 | 관리자 | **그룹 소프트삭제·재신청·자동퍼지** — `user_groups.deleted_at`(스키마✓). 매니저 삭제(7일 보존)·거절 7일 자동삭제·재신청(rejected→pending). `routers/groups`·`models`·`db`. 프론트: 그룹 펼침 하단 관리 액션(삭제/재신청) + 아이콘/필 기능설명 + 자동삭제 카운트다운. `group-detail`·`groups-panel`·`groups/[groupId]` | backend 329✅·tsc/lint✅ | ✅ | 🔧 백+프론트 반영 | (S6) |
 | L1 | 관리자 | **그룹 라이프사이클 백엔드** — 생성→신청(철회)→승인/거절→액티브/재신청→인액티브→삭제. withdraw·deactivate·reactivate·rename(active·주1회=`name_changed_at`[스키마✓]·중복금지)·DELETE 게이트(active→비활성먼저). `routers/groups`·`models`·`db`·`schemas` | backend 336✅ | 후속 | 🔧 백엔드 완료 | (S6) |
-| L2 | 관리자 | **그룹 라이프사이클 프론트** — 상태별 액션(pending=철회 · active=비활성/이름변경 · inactive=재활성/삭제 · rejected=재신청[프리필 모달]/삭제) + 아이콘/필. `group-detail`·`groups-panel` | tsc/lint✅ | ✅(재신청 후속) | 🔧 반영(핵심 검증) | (S6) |
-| L3 | 관리자 | **유저그룹 가이드 이미지에 라이프사이클 반영**. `groups-guide` | — | — | ⏳ | — |
-| L4 | 설정 | **아이콘 버튼 호버 확장** — 평소 아이콘만, 호버 시 정렬방향으로 텍스트 펼침(좌정렬→우로, 우정렬→좌로). 공용 컴포넌트 | — | — | ⏳ | — |
+| L2 | 관리자 | **그룹 라이프사이클 프론트** — 상태별 액션(pending=철회 · active=비활성/이름변경 · inactive=재활성/삭제 · rejected=재신청[프리필 모달]/삭제) + 아이콘/필. `group-detail`·`groups-panel` | tsc/lint✅ | ✅ | ✅ OK(전체 검증·재신청 프리필 포함) | `1ce9754` |
+| L3 | 관리자 | **유저그룹 가이드 이미지에 라이프사이클 반영**(생성→신청[철회]→승인/거절→액티브/재신청→인액티브→삭제). `groups-guide` | — | — | ⏳ | — |
+| L4 | 설정 | **아이콘 버튼 호버 확장** — 평소 아이콘만, 호버 시 정렬방향으로 텍스트 펼침(좌정렬→우로, 우정렬→좌로). 공용 컴포넌트. ⚠ item②③의 아이콘화·호버설명 기반 | — | — | ⏳ | — |
+| D1 | 관리자 | **(신규 ①) Departments 고아조직 재연결** — AD 갱신 시 생긴 고아 조직을 현존 조직으로 대체/재연결. Departments 탭 상단에 서브탭 **[Departments \| Orphan orgs]** 추가, 현 'Show org columns'는 **우측 이동**. ⚠ 고아 정의 확인 필요(직원 org_path가 참조하나 디렉터리에 없는 조직) + **백엔드**(탐지·재매핑 엔드포인트). `department-table`·`routers/admin` | 백엔드 필요 | — | ⏳ 분석/확인 | — |
+| A13 | 관리자 | **(신규 ②) 승인 큐 상세 변경값 before→after** — 가시성 변경 등에서 'Public'만 아닌 '**Private → Public**'(A10 역할전환 editor→removed 패턴 확장). Approve/Reject **버튼 아이콘화**. ⚠ 이전값 필요 → `ApprovalRequest.payload`에 old값 저장 여부 확인(없으면 백엔드 보강). `approval-queue`·`routers/permissions` | payload 확인 | — | ⏳ 분석/확인 | — |
+| L5 | 관리자 | **(신규 ④) 그룹 삭제 → 즉시삭제 폐지·스케줄드 딜리션行** — 삭제 시 **맵처럼 확인 모달** 후 진행, 소프트삭제 그룹이 **Scheduled deletion 탭**에 노출(+복구). 현 삭제버튼=목록 제외 역할 유지. ⚠ **백엔드**(삭제 그룹 목록·복구 엔드포인트). `group-detail`·`deleted-maps-panel`·`routers/groups` | 백엔드 필요 | — | ⏳ | — |
+| L6 | 관리자 | **(신규 ③) 그룹 상세 버튼 위치·호버 설명** — 액션 버튼을 하단→**멤버 아이콘+수 div 오른쪽**으로 이동, 버튼 호버 시 관련 설명이 'Add member' 위치에 **페이드인**. (프론트 전용) `group-detail` | 프론트 | — | ⏳ | — |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
 | E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |
