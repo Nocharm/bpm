@@ -219,21 +219,28 @@ export function GroupsPanel() {
       {groups.length === 0 ? (
         <p className="text-caption text-ink-tertiary">{t("perm.group.noGroups")}</p>
       ) : (
-        <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {groups.map((group) => (
             <Link
               key={group.id}
               href={`/groups/${group.id}`}
-              className="flex items-center gap-3 rounded-sm border border-hairline bg-surface px-4 py-3 hover:bg-surface-alt"
+              className="flex flex-col gap-2 rounded-md border border-hairline bg-surface p-4 hover:bg-surface-alt"
             >
-              <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-              <div className="flex flex-1 flex-col gap-0.5">
-                <span className="text-caption text-ink">{group.name}</span>
-                {group.description && (
-                  <span className="text-fine text-ink-tertiary">{group.description}</span>
-                )}
+              <div className="flex items-start justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="truncate text-caption-strong text-ink">{group.name}</span>
+                </span>
+                <GroupStatusBadge status={group.status} />
               </div>
-              <GroupStatusBadge status={group.status} />
+              {group.description && (
+                <span className="line-clamp-2 text-fine text-ink-tertiary">{group.description}</span>
+              )}
+              {/* 멤버 수 — 카드 하단 정렬 / member count, bottom-aligned */}
+              <span className="mt-auto flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
+                <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                {group.members.length}
+              </span>
             </Link>
           ))}
         </div>
