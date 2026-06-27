@@ -11,6 +11,7 @@ import { Users } from "lucide-react";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import { GroupActions } from "@/components/groups/group-actions";
 import { GroupDetail } from "@/components/groups/group-detail";
 import { GroupsGuide } from "@/components/groups/groups-guide";
 import {
@@ -314,33 +315,50 @@ export function GroupsPanel() {
                   expanded ? "border-accent sm:col-span-2" : "border-hairline"
                 }`}
               >
-                {/* 요약(클릭=인라인 상세 토글) / summary toggles the inline detail */}
-                <button
-                  type="button"
-                  className={`flex flex-col gap-2 p-4 text-left ${
-                    expanded ? "rounded-t-md" : "rounded-md hover:bg-surface-alt"
-                  }`}
-                  onClick={() => setExpandedId(expanded ? null : group.id)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                      <span className="truncate text-caption-strong text-ink">{group.name}</span>
+                {/* 헤더 행 — 요약(클릭=토글) + 라이프사이클 액션(타이틀쪽 우측, 펼침 시) /
+                    header row: clickable summary + lifecycle actions on the right (title-side) when expanded */}
+                <div className="flex items-stretch">
+                  <button
+                    type="button"
+                    className={`flex min-w-0 flex-1 flex-col gap-2 p-4 text-left ${
+                      expanded ? "rounded-tl-md" : "rounded-md hover:bg-surface-alt"
+                    }`}
+                    onClick={() => setExpandedId(expanded ? null : group.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Users size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        <span className="truncate text-caption-strong text-ink">{group.name}</span>
+                      </span>
+                      <GroupStatusBadge status={group.status} />
+                    </div>
+                    {group.description && (
+                      <span className="line-clamp-2 text-fine text-ink-tertiary">
+                        {group.description}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
+                      <Users size={11} strokeWidth={1.5} className="shrink-0" />
+                      {group.members.length}
                     </span>
-                    <GroupStatusBadge status={group.status} />
-                  </div>
-                  {group.description && (
-                    <span className="line-clamp-2 text-fine text-ink-tertiary">
-                      {group.description}
-                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="flex items-center py-4 pr-4">
+                      <GroupActions
+                        group={group}
+                        onGroupChange={updateGroup}
+                        onGroupGone={() => {
+                          setExpandedId(null);
+                          void reloadGroups();
+                        }}
+                        onReRequest={handleReRequest}
+                        onToast={addToast}
+                      />
+                    </div>
                   )}
-                  <span className="flex items-center gap-1 pt-1 text-fine text-ink-tertiary">
-                    <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                    {group.members.length}
-                  </span>
-                </button>
+                </div>
 
-                {/* 인라인 상세 — 멤버·관리자·편집 (공용 GroupDetail) / inline detail */}
+                {/* 인라인 상세 — 멤버·매니저 편집 (공용 GroupDetail) / inline detail */}
                 {expanded && (
                   <div className="border-t border-hairline px-4 py-3">
                     <GroupDetail
@@ -348,11 +366,6 @@ export function GroupsPanel() {
                       dirUsers={dirUsers}
                       dirDepts={dirDepts}
                       onGroupChange={updateGroup}
-                      onGroupGone={() => {
-                        setExpandedId(null);
-                        void reloadGroups();
-                      }}
-                      onReRequest={handleReRequest}
                       onToast={addToast}
                     />
                   </div>

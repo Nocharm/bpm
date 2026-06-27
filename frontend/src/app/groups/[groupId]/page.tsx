@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { GroupActions } from "@/components/groups/group-actions";
 import { GroupDetail } from "@/components/groups/group-detail";
 import {
   getDirectory,
@@ -112,14 +113,23 @@ export default function GroupDetailPage({
         {t("perm.group.backToList")}
       </Link>
 
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-3">
-          <p className="text-body-strong text-ink">{group.name}</p>
-          <GroupStatusBadge status={group.status} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <p className="text-body-strong text-ink">{group.name}</p>
+            <GroupStatusBadge status={group.status} />
+          </div>
+          <p className="text-caption text-ink-tertiary">
+            {group.description || t("perm.group.descEmpty")}
+          </p>
         </div>
-        <p className="text-caption text-ink-tertiary">
-          {group.description || t("perm.group.descEmpty")}
-        </p>
+        <GroupActions
+          group={group}
+          onGroupChange={setGroup}
+          onGroupGone={() => router.push("/settings")}
+          onReRequest={() => router.push("/settings")}
+          onToast={addToast}
+        />
       </div>
 
       <GroupDetail
@@ -127,7 +137,6 @@ export default function GroupDetailPage({
         dirUsers={dirUsers}
         dirDepts={dirDepts}
         onGroupChange={setGroup}
-        onGroupGone={() => router.push("/settings")}
         onToast={addToast}
       />
     </div>

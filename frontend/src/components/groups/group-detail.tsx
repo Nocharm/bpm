@@ -5,24 +5,7 @@
 // 관리자는 별도 영역이 아니라 멤버(user) 카드에서 토글로 지정한다 — 관리자 ⊆ 멤버(user).
 
 import { type ReactNode, useState } from "react";
-import {
-  AlertTriangle,
-  Building2,
-  Check,
-  Clock,
-  PauseCircle,
-  Pencil,
-  PlayCircle,
-  RotateCcw,
-  Star,
-  StarOff,
-  Trash2,
-  Undo2,
-  User,
-  UserPlus,
-  Users,
-  X,
-} from "lucide-react";
+import { Building2, Star, StarOff, User, UserPlus, X } from "lucide-react";
 
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { IconActionButton } from "@/components/icon-action-button";
@@ -30,13 +13,8 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import {
   addGroupMember,
-  deactivateGroup,
-  deleteGroup,
-  reactivateGroup,
   removeGroupMember,
-  renameGroup,
   setGroupManagers,
-  withdrawGroup,
   type DirectoryDept,
   type DirectoryUser,
   type Group,
@@ -219,16 +197,12 @@ export function GroupDetail({
   dirUsers,
   dirDepts,
   onGroupChange,
-  onGroupGone,
-  onReRequest,
   onToast,
 }: {
   group: Group;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
   onGroupChange: (g: Group) => void;
-  onGroupGone?: () => void; // 삭제/철회로 그룹이 사라졌을 때 — 부모가 목록 갱신/이동 처리
-  onReRequest?: (group: Group) => void; // 재신청 — 부모가 생성 모달을 프리필로 연다
   onToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -266,21 +240,6 @@ export function GroupDetail({
   const isGroupManager = currentUser != null && group.managers.includes(currentUser.id);
   const isSysadmin = currentUser?.isSysadmin ?? false;
   const canEdit = (isGroupManager || isSysadmin) && group.status === "active";
-  // 삭제/재신청 권한 — 생성자/관리자/sysadmin (상태 무관) / delete or re-request.
-  const canManage = isSysadmin || isGroupManager || currentUser?.id === group.created_by;
-  // 거절/소프트삭제 자동삭제 카운트다운 — 마운트 now 고정(순수성) / lazy now for purge countdown.
-  const [now] = useState(() => Date.now());
-  const purgeLabel = (deletedAt: string): string => {
-    const days = Math.floor((new Date(deletedAt).getTime() + 7 * 86400000 - now) / 86400000);
-    return days >= 1 ? t("perm.group.autoDeleteIn", { n: days }) : t("perm.group.autoDeleteSoon");
-  };
-  const [renaming, setRenaming] = useState(false); // active 인라인 이름변경
-  const [renameValue, setRenameValue] = useState(group.name);
-  // 확인 모달 게이트 — 삭제/비활성/재활성은 즉시 실행 대신 모달 확인 후 / confirm before destructive actions.
-  const [pendingAction, setPendingAction] = useState<"delete" | "deactivate" | "reactivate" | null>(
-    null,
-  );
-  const [hoveredHint, setHoveredHint] = useState<string | null>(null); // 헤더 하단 안내문구(스페이서 아래)
   // 매니저 추가/제거 확인 모달 / confirm before changing a member's manager role.
   const [pendingManager, setPendingManager] = useState<{ id: string; makeManager: boolean } | null>(
     null,
@@ -370,133 +329,6 @@ export function GroupDetail({
     }
   }
 
-  async function handleDelete() {
-    try {
-      await deleteGroup(groupIdNum);
-      onToast(t("perm.group.toastDeleted"));
-      onGroupGone?.();
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleWithdraw() {
-    try {
-      await withdrawGroup(groupIdNum);
-      onToast(t("perm.group.toastWithdrawn"));
-      onGroupGone?.();
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleDeactivate() {
-    try {
-      onGroupChange(await deactivateGroup(groupIdNum));
-      onToast(t("perm.group.toastDeactivated"));
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleReactivate() {
-    try {
-      onGroupChange(await reactivateGroup(groupIdNum));
-      onToast(t("perm.group.toastReactivated"));
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function handleRename() {
-    const next = renameValue.trim();
-    if (!next || next === group.name) {
-      setRenaming(false);
-      return;
-    }
-    try {
-      onGroupChange(await renameGroup(groupIdNum, next));
-      onToast(t("perm.group.toastRenamed"));
-      setRenaming(false);
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  // 상태별 라이프사이클 액션 — 버튼은 멤버 헤더 우측, 설명은 호버 시 페이드인 / status-based actions.
-  type GroupAction = {
-    key: string;
-    label: string;
-    hint: string;
-    icon: ReactNode;
-    onClick: () => void;
-    variant?: "plain" | "accent" | "error";
-  };
-  const actions: GroupAction[] = [];
-  if (group.status === "pending") {
-    actions.push({
-      key: "withdraw",
-      label: t("perm.group.withdraw"),
-      hint: t("perm.group.withdrawHint"),
-      icon: <Undo2 size={13} strokeWidth={1.5} />,
-      onClick: () => void handleWithdraw(),
-    });
-  } else if (group.status === "active") {
-    actions.push({
-      key: "rename",
-      label: t("perm.group.rename"),
-      hint: t("perm.group.renameHint"),
-      icon: <Pencil size={13} strokeWidth={1.5} />,
-      onClick: () => {
-        setRenameValue(group.name);
-        setRenaming(true);
-      },
-    });
-    actions.push({
-      key: "deactivate",
-      label: t("perm.group.deactivate"),
-      hint: t("perm.group.deactivateHint"),
-      icon: <PauseCircle size={13} strokeWidth={1.5} />,
-      onClick: () => setPendingAction("deactivate"),
-    });
-  } else if (group.status === "inactive") {
-    actions.push({
-      key: "reactivate",
-      label: t("perm.group.reactivate"),
-      hint: t("perm.group.inactiveHint"),
-      icon: <PlayCircle size={13} strokeWidth={1.5} />,
-      onClick: () => setPendingAction("reactivate"),
-      variant: "accent",
-    });
-    actions.push({
-      key: "delete",
-      label: t("perm.group.delete"),
-      hint: t("perm.group.deleteHint"),
-      icon: <Trash2 size={13} strokeWidth={1.5} />,
-      onClick: () => setPendingAction("delete"),
-      variant: "error",
-    });
-  } else if (group.status === "rejected") {
-    if (onReRequest) {
-      actions.push({
-        key: "resubmit",
-        label: t("perm.group.resubmit"),
-        hint: t("perm.group.resubmitHint"),
-        icon: <RotateCcw size={13} strokeWidth={1.5} />,
-        onClick: () => onReRequest(group),
-        variant: "accent",
-      });
-    }
-    actions.push({
-      key: "delete",
-      label: t("perm.group.delete"),
-      hint: t("perm.group.deleteHint"),
-      icon: <Trash2 size={13} strokeWidth={1.5} />,
-      onClick: () => setPendingAction("delete"),
-      variant: "error",
-    });
-  }
-
   // 읽기 전용 안내 / Read-only notice.
   let readOnlyNotice: string | null = null;
   if (group.status === "pending") readOnlyNotice = t("perm.group.readOnlyPending");
@@ -512,93 +344,15 @@ export function GroupDetail({
         </p>
       )}
 
-      {/* 멤버 헤더 — 스페이서(구분선) 위줄: 아이콘+수(좌) + 액션버튼(우, 아이콘전용 호버펼침) /
-          top row above the spacer: member count (left) + icon-only actions (right). */}
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex shrink-0 items-center gap-1.5 text-caption font-semibold text-ink">
-          <Users size={15} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          {group.members.length}
-          <span className="font-normal text-ink-secondary">{t("perm.group.membersSection")}</span>
-        </p>
-        <div className="flex min-w-0 items-center justify-end gap-1.5">
-          {canManage &&
-            !renaming &&
-            actions.map((a) => (
-              <IconActionButton
-                key={a.key}
-                icon={a.icon}
-                label={a.label}
-                align="right"
-                tone={a.variant}
-                hint={a.hint}
-                onHoverChange={setHoveredHint}
-                onClick={a.onClick}
-              />
-            ))}
-          {canEdit && (
-            <IconActionButton
-              icon={<UserPlus size={14} strokeWidth={1.5} />}
-              label={t("perm.group.addMemberBtn")}
-              align="right"
-              hint={t("perm.group.addMemberBtn")}
-              onHoverChange={setHoveredHint}
-              onClick={() => setMemberDialogOpen(true)}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* 스페이서(구분선) 아래줄: 호버한 버튼의 안내문구 페이드인 / below the spacer: hovered action's hint */}
-      {(canManage || canEdit) && !renaming && (
-        <div className="flex min-h-[1.1rem] items-center justify-end border-t border-hairline pt-1.5">
-          <span
-            className={`truncate text-fine text-ink-tertiary transition-opacity duration-200 ${
-              hoveredHint ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            {hoveredHint}
-          </span>
-        </div>
-      )}
-
-      {/* 거절/소프트삭제 자동삭제 카운트다운 / auto-delete countdown */}
-      {group.deleted_at && (
-        <span className="flex items-center gap-1.5 text-fine font-semibold text-error">
-          <Clock size={12} strokeWidth={1.5} className="shrink-0" />
-          {purgeLabel(group.deleted_at)}
-        </span>
-      )}
-
-      {/* 인라인 이름변경 (active) / inline rename */}
-      {renaming && (
-        <div className="flex items-center gap-1.5">
-          <input
-            type="text"
-            autoFocus
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleRename();
-              if (e.key === "Escape") setRenaming(false);
-            }}
-            className="flex-1 rounded-sm border border-accent bg-transparent px-2 py-1 text-caption text-ink outline-none"
+      {/* 멤버 섹션 헤더 — 멤버수는 카드 헤더(타이틀쪽)에만 두고 여기선 Add member만 / add-member only; count lives in the card header. */}
+      {canEdit && (
+        <div className="flex justify-end">
+          <IconActionButton
+            icon={<UserPlus size={14} strokeWidth={1.5} />}
+            label={t("perm.group.addMemberBtn")}
+            align="right"
+            onClick={() => setMemberDialogOpen(true)}
           />
-          <button
-            type="button"
-            onClick={() => void handleRename()}
-            className="rounded-sm border border-accent p-1 text-accent hover:bg-accent-tint"
-            aria-label={t("perm.group.rename")}
-          >
-            <Check size={14} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRenaming(false)}
-            className="rounded-sm border border-hairline p-1 text-ink-tertiary hover:bg-surface-alt"
-            aria-label={t("common.cancel")}
-          >
-            <X size={14} strokeWidth={1.5} />
-          </button>
         </div>
       )}
 
@@ -660,69 +414,6 @@ export function GroupDetail({
           excludeIds={memberExcludeIds}
           onAdd={(opts) => void handleAddMembers(opts)}
           onClose={() => setMemberDialogOpen(false)}
-        />
-      )}
-
-      {/* 삭제/비활성/재활성 확인 모달 — 즉시 실행 대신 확인 / confirm before destructive actions */}
-      {pendingAction === "delete" && (
-        <ConfirmDialog
-          icon={<Trash2 size={28} strokeWidth={1.5} />}
-          title={t("perm.group.confirmDeleteTitle")}
-          message={group.name}
-          danger
-          lines={
-            [
-              { icon: <Trash2 size={14} strokeWidth={1.5} />, text: t("delete.lineTrash") },
-              { icon: <Clock size={14} strokeWidth={1.5} />, text: t("delete.lineRecover"), tone: "accent" },
-              { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("delete.linePurge"), tone: "error" },
-            ] satisfies ConfirmLine[]
-          }
-          confirmLabel={t("delete.confirm")}
-          cancelLabel={t("common.cancel")}
-          onConfirm={() => {
-            setPendingAction(null);
-            void handleDelete();
-          }}
-          onClose={() => setPendingAction(null)}
-        />
-      )}
-      {pendingAction === "deactivate" && (
-        <ConfirmDialog
-          icon={<PauseCircle size={28} strokeWidth={1.5} />}
-          title={t("perm.group.confirmDeactivateTitle")}
-          lines={
-            [
-              { icon: <PauseCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL1") },
-              { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL3"), tone: "error" },
-              { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL2"), tone: "accent" },
-            ] satisfies ConfirmLine[]
-          }
-          confirmLabel={t("perm.group.deactivate")}
-          cancelLabel={t("common.cancel")}
-          onConfirm={() => {
-            setPendingAction(null);
-            void handleDeactivate();
-          }}
-          onClose={() => setPendingAction(null)}
-        />
-      )}
-      {pendingAction === "reactivate" && (
-        <ConfirmDialog
-          icon={<PlayCircle size={28} strokeWidth={1.5} />}
-          title={t("perm.group.confirmReactivateTitle")}
-          danger={false}
-          lines={
-            [
-              { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmReactivateL1"), tone: "accent" },
-            ] satisfies ConfirmLine[]
-          }
-          confirmLabel={t("perm.group.reactivate")}
-          cancelLabel={t("common.cancel")}
-          onConfirm={() => {
-            setPendingAction(null);
-            void handleReactivate();
-          }}
-          onClose={() => setPendingAction(null)}
         />
       )}
 
