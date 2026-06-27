@@ -20,6 +20,7 @@ import { DepartmentTable } from "@/components/admin/department-table";
 import { UserTable } from "@/components/admin/user-table";
 import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
+import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
@@ -167,7 +168,10 @@ export default function SettingsPage() {
           {current === "users" && <UserTable />}
           {current === "tables" && <TableViewer />}
           {current === "trash" && (
-            <DeletedMapsPanel onToast={(message) => showToast({ id: genId(), message })} />
+            <div className="flex flex-col gap-8">
+              <DeletedMapsPanel onToast={(message) => showToast({ id: genId(), message })} />
+              <DeletedGroupsPanel onToast={(message) => showToast({ id: genId(), message })} />
+            </div>
           )}
         </main>
       </div>

@@ -6,6 +6,7 @@
 
 import { type ReactNode, useState } from "react";
 import {
+  AlertTriangle,
   Building2,
   Check,
   Clock,
@@ -21,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 
+import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import {
@@ -237,6 +239,10 @@ export function GroupDetail({
   const [renaming, setRenaming] = useState(false); // active 인라인 이름변경
   const [renameValue, setRenameValue] = useState(group.name);
   const [hoveredAction, setHoveredAction] = useState<string | null>(null); // 호버 시 설명 페이드인
+  // 확인 모달 게이트 — 삭제/비활성/재활성은 즉시 실행 대신 모달 확인 후 / confirm before destructive actions.
+  const [pendingAction, setPendingAction] = useState<"delete" | "deactivate" | "reactivate" | null>(
+    null,
+  );
 
   const managerSet = new Set(group.managers);
   const memberExcludeIds = new Set(group.members.map((m) => m.member_id));
@@ -379,7 +385,7 @@ export function GroupDetail({
       label: t("perm.group.deactivate"),
       hint: t("perm.group.deactivateHint"),
       icon: <PauseCircle size={13} strokeWidth={1.5} />,
-      onClick: () => void handleDeactivate(),
+      onClick: () => setPendingAction("deactivate"),
     });
   } else if (group.status === "inactive") {
     actions.push({
@@ -387,7 +393,7 @@ export function GroupDetail({
       label: t("perm.group.reactivate"),
       hint: t("perm.group.inactiveHint"),
       icon: <PlayCircle size={13} strokeWidth={1.5} />,
-      onClick: () => void handleReactivate(),
+      onClick: () => setPendingAction("reactivate"),
       variant: "accent",
     });
     actions.push({
@@ -395,7 +401,7 @@ export function GroupDetail({
       label: t("perm.group.delete"),
       hint: t("perm.group.deleteHint"),
       icon: <Trash2 size={13} strokeWidth={1.5} />,
-      onClick: () => void handleDelete(),
+      onClick: () => setPendingAction("delete"),
       variant: "error",
     });
   } else if (group.status === "rejected") {
@@ -414,7 +420,7 @@ export function GroupDetail({
       label: t("perm.group.delete"),
       hint: t("perm.group.deleteHint"),
       icon: <Trash2 size={13} strokeWidth={1.5} />,
-      onClick: () => void handleDelete(),
+      onClick: () => setPendingAction("delete"),
       variant: "error",
     });
   }
@@ -573,6 +579,58 @@ export function GroupDetail({
           excludeIds={memberExcludeIds}
           onSelect={(opt) => void handleAddMember(opt)}
           onClose={() => setMemberDialogOpen(false)}
+        />
+      )}
+
+      {/* 삭제/비활성/재활성 확인 모달 — 즉시 실행 대신 확인 / confirm before destructive actions */}
+      {pendingAction === "delete" && (
+        <ConfirmDialog
+          icon={<Trash2 size={28} strokeWidth={1.5} />}
+          title={t("perm.group.confirmDeleteTitle")}
+          message={group.name}
+          danger
+          lines={
+            [
+              { icon: <Trash2 size={14} strokeWidth={1.5} />, text: t("delete.lineTrash") },
+              { icon: <Clock size={14} strokeWidth={1.5} />, text: t("delete.lineRecover"), tone: "accent" },
+              { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("delete.linePurge"), tone: "error" },
+            ] satisfies ConfirmLine[]
+          }
+          confirmLabel={t("delete.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setPendingAction(null);
+            void handleDelete();
+          }}
+          onClose={() => setPendingAction(null)}
+        />
+      )}
+      {pendingAction === "deactivate" && (
+        <ConfirmDialog
+          icon={<PauseCircle size={28} strokeWidth={1.5} />}
+          title={t("perm.group.confirmDeactivateTitle")}
+          message={t("perm.group.confirmDeactivateBody")}
+          confirmLabel={t("perm.group.deactivate")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setPendingAction(null);
+            void handleDeactivate();
+          }}
+          onClose={() => setPendingAction(null)}
+        />
+      )}
+      {pendingAction === "reactivate" && (
+        <ConfirmDialog
+          icon={<PlayCircle size={28} strokeWidth={1.5} />}
+          title={t("perm.group.confirmReactivateTitle")}
+          message={t("perm.group.confirmReactivateBody")}
+          confirmLabel={t("perm.group.reactivate")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setPendingAction(null);
+            void handleReactivate();
+          }}
+          onClose={() => setPendingAction(null)}
         />
       )}
     </div>

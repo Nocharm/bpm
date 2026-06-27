@@ -642,3 +642,39 @@ def test_rename_duplicate_and_non_active_409(client: TestClient, enforce: None) 
     act_as("creator1")
     pend = _create_group(client, members=_two_user_members()).json()
     assert client.patch(f"/api/groups/{pend['id']}/name", json={"name": "X"}).status_code == 409
+
+
+# ── I. 스케줄드 딜리션(휴지통) — 목록 + 복구 (L5, 2026-06-28) ──
+
+
+def test_deleted_group_in_trash_and_restore(client: TestClient, enforce: None) -> None:
+    """inactive 그룹 삭제 → 메인 목록에서 사라지고 휴지통에 노출 → 복구 시 inactive로 복귀."""
+    g = _make_active(client)
+    act_as("creator1")
+    client.post(f"/api/groups/{g['id']}/deactivate")
+    client.delete(f"/api/groups/{g['id']}")
+    # 메인 목록에서 제외
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups").json()}
+    # 휴지통에 노출
+    trash = client.get("/api/groups/deleted").json()
+    assert g["id"] in {x["id"] for x in trash}
+    # 복구 → inactive 로 메인 목록 복귀, 휴지통에서 사라짐
+    restored = client.post(f"/api/groups/{g['id']}/restore").json()
+    assert restored["status"] == "inactive" and restored["deleted_at"] is None
+    assert g["id"] in {x["id"] for x in client.get("/api/groups").json()}
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups/deleted").json()}
+
+
+def test_rejected_not_in_trash(client: TestClient, enforce: None) -> None:
+    """거절 그룹은 deleted_at이 있어도 휴지통이 아닌 메인 목록(유예)에 남는다."""
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "reject"})
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups/deleted").json()}
+
+
+def test_restore_non_deleted_409(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/restore").status_code == 409

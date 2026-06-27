@@ -240,6 +240,30 @@ async def group_name_available(
     return {"available": existing is None}
 
 
+@router.get("/groups/deleted", response_model=list[GroupOut])
+async def list_deleted_groups(
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[GroupOut]:
+    """스케줄드 딜리션(휴지통) — 소프트삭제된 그룹(deleted_at·status!=rejected). sysadmin 전체·그 외 관리 가능분만."""
+    await _purge_expired_groups(session)
+    is_admin = logic.is_sysadmin(user)
+    rows = await session.scalars(
+        select(UserGroup)
+        .where(UserGroup.deleted_at.is_not(None), UserGroup.status != "rejected")
+        .order_by(UserGroup.deleted_at)
+    )
+    out: list[GroupOut] = []
+    for g in rows.all():
+        if (
+            is_admin
+            or g.created_by == user
+            or user in await _get_manager_ids(session, g.id)
+        ):
+            out.append(await _serialize_group(session, g))
+    return out
+
+
 @router.get("/groups/{group_id}", response_model=GroupOut)
 async def get_group(
     group_id: int,
@@ -512,6 +536,23 @@ async def rename_group(
         raise HTTPException(status_code=409, detail="group name already in use")
     group.name = new_name
     group.name_changed_at = _now()
+    await session.commit()
+    await session.refresh(group)
+    return await _serialize_group(session, group)
+
+
+@router.post("/groups/{group_id}/restore", response_model=GroupOut)
+async def restore_group(
+    group_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> GroupOut:
+    """스케줄드 딜리션에서 복구 — 소프트삭제(inactive) 그룹의 deleted_at 해제. 관리자/생성자/sysadmin."""
+    group = await _get_group_or_404(session, group_id)
+    await _assert_can_manage(session, user, group)
+    if group.deleted_at is None or group.status == "rejected":
+        raise HTTPException(status_code=409, detail="group is not in scheduled deletion")
+    group.deleted_at = None  # inactive 상태로 되돌아와 다시 목록 노출(재활성 가능)
     await session.commit()
     await session.refresh(group)
     return await _serialize_group(session, group)

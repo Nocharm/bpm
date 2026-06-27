@@ -733,6 +733,16 @@ export function checkGroupName(name: string): Promise<{ available: boolean }> {
   return request<{ available: boolean }>(`/groups/name-available?name=${encodeURIComponent(name)}`);
 }
 
+// 스케줄드 딜리션(휴지통) — 소프트삭제된 그룹 목록. 관리 가능분만(sysadmin 전체).
+export function listDeletedGroups(): Promise<Group[]> {
+  return request<Group[]>("/groups/deleted");
+}
+
+// 휴지통에서 복구 — deleted_at 해제(inactive로 복귀).
+export function restoreGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/restore`, { method: "POST" });
+}
+
 // 라이프사이클 — 신청 철회(pending 취소, 즉시 제거).
 export function withdrawGroup(groupId: number): Promise<{ withdrawn: boolean }> {
   return request<{ withdrawn: boolean }>(`/groups/${groupId}/withdraw`, { method: "POST" });
