@@ -26,6 +26,7 @@ from app.schemas import (
     GroupCreate,
     GroupDecisionIn,
     GroupOut,
+    GroupRenameIn,
     ManagersIn,
     MemberIn,
     MemberOut,
@@ -70,6 +71,7 @@ async def _serialize_group(session: AsyncSession, group: UserGroup) -> GroupOut:
         approved_at=group.approved_at,
         created_at=group.created_at,
         deleted_at=group.deleted_at,
+        name_changed_at=group.name_changed_at,
         members=[MemberOut.model_validate(m) for m in members],
         managers=managers,
     )
@@ -83,6 +85,7 @@ async def _get_group_or_404(session: AsyncSession, group_id: int) -> UserGroup:
 
 
 GROUP_RETENTION = timedelta(days=7)  # 소프트삭제/거절 후 영구삭제까지 (맵 휴지통과 동일)
+GROUP_RENAME_INTERVAL = timedelta(days=7)  # active 그룹 이름변경 최소 간격 (주 1회)
 
 
 async def _purge_expired_groups(session: AsyncSession) -> None:
@@ -382,16 +385,20 @@ async def delete_group(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GroupOut:
-    """그룹 삭제/비활성 — 관리자/생성자/sysadmin. rejected는 즉시 영구삭제, 그 외는 소프트삭제(7일 후 퍼지)."""
+    """그룹 삭제 — 관리자/생성자/sysadmin. active는 먼저 비활성(409)·pending은 철회(409)·rejected는 즉시 영구삭제·inactive는 소프트삭제(7일 후 퍼지)."""
     group = await _get_group_or_404(session, group_id)
     await _assert_can_manage(session, user, group)
+    if group.status == "active":
+        raise HTTPException(status_code=409, detail="deactivate the group before deleting")
+    if group.status == "pending":
+        raise HTTPException(status_code=409, detail="withdraw the pending request instead")
     if group.status == "rejected":
         # 이미 실패한 요청 — 즉시 제거 / hard-delete a rejected request now.
         serialized = await _serialize_group(session, group)
         await session.delete(group)
         await session.commit()
         return serialized
-    group.deleted_at = _now()  # 소프트삭제 — 7일 후 _purge_expired_groups가 영구삭제
+    group.deleted_at = _now()  # inactive 소프트삭제 — 7일 후 _purge_expired_groups가 영구삭제
     await session.commit()
     await session.refresh(group)
     return await _serialize_group(session, group)
@@ -412,6 +419,99 @@ async def resubmit_group(
     group.deleted_at = None
     group.approved_by = None
     group.approved_at = None
+    await session.commit()
+    await session.refresh(group)
+    return await _serialize_group(session, group)
+
+
+@router.post("/groups/{group_id}/withdraw")
+async def withdraw_group(
+    group_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """대기 중 신청 철회 — 생성자/관리자/sysadmin. pending만, 승인 전이라 즉시 제거."""
+    group = await _get_group_or_404(session, group_id)
+    if group.status != "pending":
+        raise HTTPException(status_code=409, detail=f"group is {group.status}, not pending")
+    await _assert_can_manage(session, user, group)
+    await session.delete(group)
+    await session.commit()
+    return {"withdrawn": True}
+
+
+@router.post("/groups/{group_id}/deactivate", response_model=GroupOut)
+async def deactivate_group(
+    group_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> GroupOut:
+    """그룹 비활성 — 관리자/생성자/sysadmin. active→inactive(권한 판정에서 제외). 삭제 전 단계."""
+    group = await _get_group_or_404(session, group_id)
+    if group.status != "active":
+        raise HTTPException(status_code=409, detail=f"group is {group.status}, not active")
+    await _assert_can_manage(session, user, group)
+    group.status = "inactive"
+    await session.commit()
+    await session.refresh(group)
+    return await _serialize_group(session, group)
+
+
+@router.post("/groups/{group_id}/reactivate", response_model=GroupOut)
+async def reactivate_group(
+    group_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> GroupOut:
+    """비활성 그룹 재활성 — 관리자/생성자/sysadmin. inactive→active."""
+    group = await _get_group_or_404(session, group_id)
+    if group.status != "inactive":
+        raise HTTPException(status_code=409, detail=f"group is {group.status}, not inactive")
+    await _assert_can_manage(session, user, group)
+    group.status = "active"
+    await session.commit()
+    await session.refresh(group)
+    return await _serialize_group(session, group)
+
+
+@router.patch("/groups/{group_id}/name", response_model=GroupOut)
+async def rename_group(
+    group_id: int,
+    payload: GroupRenameIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> GroupOut:
+    """그룹 이름 변경 — 관리자/생성자/sysadmin. active에서만, 주 1회 제한, 전역 중복 금지."""
+    group = await _get_group_or_404(session, group_id)
+    await _assert_can_manage(session, user, group)
+    if group.status != "active":
+        raise HTTPException(status_code=409, detail="rename is only allowed while active")
+    new_name = payload.name.strip()
+    if not new_name:
+        raise HTTPException(status_code=422, detail="name is required")
+    # 주 1회 제한 — DB측 비교(sqlite naive / pg aware tz 차이 회피, _purge_expired_groups와 동일 패턴).
+    if group.name_changed_at is not None:
+        recent_rename = await session.scalar(
+            select(UserGroup.id).where(
+                UserGroup.id == group_id,
+                UserGroup.name_changed_at > _now() - GROUP_RENAME_INTERVAL,
+            )
+        )
+        if recent_rename is not None:
+            raise HTTPException(
+                status_code=409, detail="name can be changed only once per week"
+            )
+    dup = await session.scalar(
+        select(UserGroup.id).where(
+            UserGroup.name == new_name,
+            UserGroup.deleted_at.is_(None),
+            UserGroup.id != group_id,
+        )
+    )
+    if dup is not None:
+        raise HTTPException(status_code=409, detail="group name already in use")
+    group.name = new_name
+    group.name_changed_at = _now()
     await session.commit()
     await session.refresh(group)
     return await _serialize_group(session, group)

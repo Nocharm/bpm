@@ -327,6 +327,10 @@ class UserGroup(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 이름 변경 시각 — active 상태에서 주 1회 rename 제한 판정용
+    name_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
 
 class UserGroupMember(Base):

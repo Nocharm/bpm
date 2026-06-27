@@ -163,8 +163,13 @@ class GroupOut(BaseModel):
     approved_at: datetime | None
     created_at: datetime
     deleted_at: datetime | None = None  # 소프트삭제/거절 시각 — 7일 후 자동 영구삭제
+    name_changed_at: datetime | None = None  # 마지막 이름변경 시각 — 주 1회 rename 제한
     members: list[MemberOut]
     managers: list[str]
+
+
+class GroupRenameIn(BaseModel):
+    name: str
 
 
 class WorkflowStateOut(BaseModel):

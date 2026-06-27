@@ -507,13 +507,14 @@ def _two_user_members() -> list[dict]:
     ]
 
 
-def test_delete_active_group_soft_hides(client: TestClient, enforce: None) -> None:
-    """생성자/매니저가 active 그룹 삭제 → 소프트삭제(deleted_at 설정, 목록에서 숨김)."""
+def test_delete_inactive_group_soft_hides(client: TestClient, enforce: None) -> None:
+    """비활성 그룹 삭제 → 소프트삭제(deleted_at 설정, 목록에서 숨김). active는 먼저 비활성 필요."""
     act_as("creator1")
     g = _create_group(client, members=_two_user_members()).json()
     act_as(SYSADMIN)
     client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
     act_as("creator1")
+    client.post(f"/api/groups/{g['id']}/deactivate")  # active → inactive (삭제 전 단계)
     r = client.delete(f"/api/groups/{g['id']}")
     assert r.status_code == 200
     assert r.json()["deleted_at"] is not None
@@ -572,3 +573,72 @@ def test_create_group_duplicate_name_409(client: TestClient, enforce: None) -> N
     assert r.status_code == 409
     fresh = client.get("/api/groups/name-available", params={"name": "Totally New Name"})
     assert fresh.json()["available"] is True
+
+
+# ── H. 라이프사이클 — withdraw · deactivate/reactivate · rename (2026-06-27) ──
+
+
+def _make_active(client: TestClient, creator: str = "creator1") -> dict:
+    act_as(creator)
+    g = _create_group(client, members=_two_user_members()).json()
+    act_as(SYSADMIN)
+    client.post(f"/api/groups/{g['id']}/decide", json={"decision": "approve"})
+    return g
+
+
+def test_withdraw_pending_removes(client: TestClient, enforce: None) -> None:
+    act_as("creator1")
+    g = _create_group(client, members=_two_user_members()).json()
+    r = client.post(f"/api/groups/{g['id']}/withdraw")
+    assert r.status_code == 200 and r.json()["withdrawn"] is True
+    act_as(SYSADMIN)
+    assert client.get(f"/api/groups/{g['id']}").status_code == 404
+
+
+def test_withdraw_non_pending_409(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/withdraw").status_code == 409
+
+
+def test_delete_active_requires_deactivate(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.delete(f"/api/groups/{g['id']}").status_code == 409
+    assert client.post(f"/api/groups/{g['id']}/deactivate").json()["status"] == "inactive"
+    assert client.delete(f"/api/groups/{g['id']}").status_code == 200
+    assert g["id"] not in {x["id"] for x in client.get("/api/groups").json()}
+
+
+def test_deactivate_reactivate_cycle(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    assert client.post(f"/api/groups/{g['id']}/deactivate").json()["status"] == "inactive"
+    assert client.post(f"/api/groups/{g['id']}/reactivate").json()["status"] == "active"
+    assert client.post(f"/api/groups/{g['id']}/reactivate").status_code == 409
+
+
+def test_rename_active_weekly_limit(client: TestClient, enforce: None) -> None:
+    g = _make_active(client)
+    act_as("creator1")
+    r = client.patch(f"/api/groups/{g['id']}/name", json={"name": "Renamed Lifecycle"})
+    assert r.status_code == 200 and r.json()["name"] == "Renamed Lifecycle"
+    assert (
+        client.patch(
+            f"/api/groups/{g['id']}/name", json={"name": "Renamed Again"}
+        ).status_code
+        == 409
+    )
+
+
+def test_rename_duplicate_and_non_active_409(client: TestClient, enforce: None) -> None:
+    g1 = _make_active(client, creator="c1")
+    g2 = _make_active(client, creator="c2")
+    act_as("c1")
+    assert (
+        client.patch(f"/api/groups/{g1['id']}/name", json={"name": g2["name"]}).status_code
+        == 409
+    )
+    act_as("creator1")
+    pend = _create_group(client, members=_two_user_members()).json()
+    assert client.patch(f"/api/groups/{pend['id']}/name", json={"name": "X"}).status_code == 409

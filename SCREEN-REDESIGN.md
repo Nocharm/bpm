@@ -56,6 +56,10 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A9 | 관리자 | **Departments 인원수 열** — org 보기 OFF(기본) 시 "Members" 열 추가(org_levels 경로 일치 집계). org ON이면 기존 orgLevels 열. `admin/department-table` | ✅ | ✅ | ✅ OK (완료) | `2feda2f` |
 | A8 | 관리자 | **그룹 카드 인라인 상세**(새 페이지 X→카드 아래 펼침, 공용 `group-detail.tsx`·보기+편집) + **매니저=멤버(user) 제한**(피커 후보 제한·캐스케이드·백엔드 422). `groups-panel`·`group-detail`·`groups/[groupId]`·`routers/groups` | backend 325✅·tsc/lint✅ | ✅ | ✅ OK (완료) | (S6) |
 | A12 | 관리자 | **그룹 소프트삭제·재신청·자동퍼지** — `user_groups.deleted_at`(스키마✓). 매니저 삭제(7일 보존)·거절 7일 자동삭제·재신청(rejected→pending). `routers/groups`·`models`·`db`. 프론트: 그룹 펼침 하단 관리 액션(삭제/재신청) + 아이콘/필 기능설명 + 자동삭제 카운트다운. `group-detail`·`groups-panel`·`groups/[groupId]` | backend 329✅·tsc/lint✅ | ✅ | 🔧 백+프론트 반영 | (S6) |
+| L1 | 관리자 | **그룹 라이프사이클 백엔드** — 생성→신청(철회)→승인/거절→액티브/재신청→인액티브→삭제. withdraw·deactivate·reactivate·rename(active·주1회=`name_changed_at`[스키마✓]·중복금지)·DELETE 게이트(active→비활성먼저). `routers/groups`·`models`·`db`·`schemas` | backend 336✅ | 후속 | 🔧 백엔드 완료 | (S6) |
+| L2 | 관리자 | **그룹 라이프사이클 프론트** — 상태별 액션(pending=철회 · active=비활성/이름변경 · inactive=재활성/삭제 · rejected=재신청[프리필 모달]/삭제) + 아이콘/필. `group-detail`·`groups-panel` | — | — | ⏳ | — |
+| L3 | 관리자 | **유저그룹 가이드 이미지에 라이프사이클 반영**. `groups-guide` | — | — | ⏳ | — |
+| L4 | 설정 | **아이콘 버튼 호버 확장** — 평소 아이콘만, 호버 시 정렬방향으로 텍스트 펼침(좌정렬→우로, 우정렬→좌로). 공용 컴포넌트 | — | — | ⏳ | — |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
 | E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |
