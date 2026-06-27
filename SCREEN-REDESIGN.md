@@ -51,6 +51,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A5 | 관리자 | **관리자 테이블 일괄 디자인**([Image #1]) — Employees/Departments/Users 공통 셸(`admin-table.tsx`: `TableCard`·헤더 bg·divider·`RolePill`). 서브타이틀 stats는 Employees 동기화 msg 기존 유지. | ✅ | ✅ | ✅ OK (완료) | `0ddaba7` |
 | A6 | 관리자 | **DB 뷰어 디자인**([Image #2]) — pill 테이블 선택(아이콘+이름+행수)·카드 헤더(`{table}` + `{total} rows · {loaded} shown`)·visibility 배지·로딩/끝. 백엔드 `/admin/tables`→`[{name,count}]`(스키마 무변경). | backend 7✅·tsc/lint✅ | ✅ | ✅ OK (완료) | `4b3f4f5` |
 | A7 | 관리자 | Scheduled deletion **삭제 예정 카운트다운** — `N일/N시간 뒤 삭제`/`곧 삭제`(`deleted_at`+7일−now), **빨간 강조**(`text-error`). 절대시각 hover. `admin/deleted-maps-panel` | ✅ | ✅ | 🔧 카운트다운+빨강 반영 | (S6) |
+| A10 | 관리자 | **승인 큐 케이스 pill 요약** — 그룹 생성·권한 하향·가시성 변경을 `{kind}·{요약}` pill로, 클릭 시 상세+Approve/Reject 펼침. 모든 케이스 실데이터. `admin/approval-queue` | ✅ | ✅ | 🔧 pill+클릭상세 반영 | (S6) |
 | A9 | 관리자 | **Departments 인원수 열** — org 보기 OFF(기본) 시 "Members" 열 추가(org_levels 경로 일치 집계). org ON이면 기존 orgLevels 열. `admin/department-table` | ✅ | ✅ | 🔧 인원수 열 반영 | (S6) |
 | A8 | 관리자 | **그룹 카드 인라인 상세**(새 페이지 X→카드 아래 펼침, 공용 `group-detail.tsx`·보기+편집) + **매니저=멤버(user) 제한**(피커 후보 제한·캐스케이드·백엔드 422). `groups-panel`·`group-detail`·`groups/[groupId]`·`routers/groups` | backend 325✅·tsc/lint✅ | ✅ | 🔧 인라인+매니저제한 반영 | (S6) |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
