@@ -3,7 +3,7 @@
 // 홈 목록 필터용 멀티셀렉트 드롭다운 — 버튼(아이콘+라벨+선택수) + 체크 목록(옵션별 아이콘) /
 // multi-select filter dropdown with leading icons.
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 interface FilterOption {
@@ -30,10 +30,21 @@ export function FilterDropdown({
   dataId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const count = selected.size;
 
+  // 바깥 클릭 닫기 — 전체화면 오버레이(`fixed inset-0`)는 페이지 호버를 가로채므로 document 리스너로 대체
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         data-id={dataId}
@@ -54,27 +65,23 @@ export function FilterDropdown({
         />
       </button>
       {open && (
-        <>
-          {/* 바깥 클릭 닫기 / click-away */}
-          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-[1001] mt-1 min-w-[10rem] rounded-md border border-hairline bg-surface py-1 shadow-lg">
-            {options.map((o) => {
-              const on = selected.has(o.value);
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => onToggle(o.value)}
-                >
-                  {o.icon}
-                  <span className="flex-1 truncate">{o.label}</span>
-                  {on && <Check size={14} strokeWidth={1.7} className="shrink-0 text-accent" />}
-                </button>
-              );
-            })}
-          </div>
-        </>
+        <div className="absolute left-0 z-[1001] mt-1 min-w-[10rem] rounded-md border border-hairline bg-surface py-1 shadow-lg">
+          {options.map((o) => {
+            const on = selected.has(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                onClick={() => onToggle(o.value)}
+              >
+                {o.icon}
+                <span className="flex-1 truncate">{o.label}</span>
+                {on && <Check size={14} strokeWidth={1.7} className="shrink-0 text-accent" />}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );

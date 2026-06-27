@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setDevUser } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
@@ -22,6 +22,17 @@ export function TopNav() {
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // 바깥 클릭 닫기 — 전체화면 오버레이는 페이지 호버를 가로채므로 document 리스너로 대체
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
 
   const onLogout = async () => {
     if (AUTH_ENABLED) {
@@ -48,7 +59,7 @@ export function TopNav() {
       <div className="flex items-center gap-3">
         {/* 무조건 렌더 — 로컬(인증 비활성)은 user가 null이라 가드 시 벨이 안 뜬다. 서버는 TopNav 자체가 AuthGate 인증 후에만 노출 */}
         <NotificationBell />
-        <div className="relative">
+        <div ref={menuRef} className="relative">
           <button
             type="button"
             className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
@@ -57,9 +68,7 @@ export function TopNav() {
             {user?.name ?? t("nav.guest")}
           </button>
           {open && user && (
-            <>
-              <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-              <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+            <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg">
                 {/* 설정 콘솔 — 누구나 접근(왼쪽 탭이 권한별로 다름). 그룹·어드민·권한 surface를 흡수 / Settings console (everyone) */}
                 <button
                   type="button"
@@ -78,8 +87,7 @@ export function TopNav() {
                 >
                   {t("nav.logout")}
                 </button>
-              </div>
-            </>
+            </div>
           )}
         </div>
         <button
