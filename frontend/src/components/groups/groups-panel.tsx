@@ -14,6 +14,7 @@ import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/
 import { GroupDetail } from "@/components/groups/group-detail";
 import { GroupsGuide } from "@/components/groups/groups-guide";
 import {
+  checkGroupName,
   createGroup,
   getDirectory,
   listGroups,
@@ -70,6 +71,7 @@ export function GroupsPanel() {
 
   // 생성 요청 폼 / Create-request form state
   const [name, setName] = useState("");
+  const [nameAvailable, setNameAvailable] = useState<boolean | null>(null); // 실시간 이름 중복 검사
   const [description, setDescription] = useState("");
   const [members, setMembers] = useState<MemberEntry[]>([]);
   const [managers, setManagers] = useState<ManagerEntry[]>([]);
@@ -118,6 +120,27 @@ export function GroupsPanel() {
     };
   }, []);
 
+  // 이름 중복 실시간 검사 — 디바운스 후 서버 조회(전역 중복 금지). 빈 입력/판정전은 null.
+  useEffect(() => {
+    let active = true;
+    const id = setTimeout(() => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        if (active) setNameAvailable(null);
+        return;
+      }
+      void checkGroupName(trimmed)
+        .then((r) => {
+          if (active) setNameAvailable(r.available);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(id);
+    };
+  }, [name]);
+
   // 실 디렉터리를 피커 prop 형식으로 변환 (미사용 필드 stub) /
   // Adapt real directory to picker's MockUser / Department shapes.
   const pickerUsers: MockUser[] = dirUsers.map((u) => ({
@@ -139,6 +162,7 @@ export function GroupsPanel() {
 
   function openDialog() {
     setName("");
+    setNameAvailable(null);
     setDescription("");
     setMembers([]);
     setManagers([]);
@@ -200,7 +224,11 @@ export function GroupsPanel() {
 
   // 제출 비활성 — 이름 필수 + 멤버 ≥2 (서버 규칙) + 관리자 ≥1 / Disable until name, ≥2 members, ≥1 manager.
   const submitDisabled =
-    !name.trim() || members.length < 2 || managers.length === 0 || submitting;
+    !name.trim() ||
+    nameAvailable === false ||
+    members.length < 2 ||
+    managers.length === 0 ||
+    submitting;
 
   // 피커 제외 — id 기반(PrincipalPicker가 principalId로만 비교) / Picker exclusion (id-only).
   const memberExcludeIds = new Set(members.map((m) => m.id));
@@ -308,12 +336,19 @@ export function GroupsPanel() {
               <label className="text-fine text-ink-tertiary">{t("perm.group.nameLabel")}</label>
               <input
                 type="text"
-                className="rounded-sm border border-hairline bg-transparent px-2 py-1.5 text-caption text-ink outline-none focus:border-accent placeholder:text-ink-tertiary"
+                className={`rounded-sm border bg-transparent px-2 py-1.5 text-caption text-ink outline-none placeholder:text-ink-tertiary ${
+                  nameAvailable === false
+                    ? "border-error focus:border-error"
+                    : "border-hairline focus:border-accent"
+                }`}
                 placeholder={t("perm.group.namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
               />
+              {nameAvailable === false && (
+                <p className="text-fine text-error">{t("perm.group.nameTaken")}</p>
+              )}
             </div>
 
             {/* 설명 / Description */}

@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 import { Highlight } from "@/components/highlight";
-import { filterByQuery } from "@/lib/search";
+import { filterByQuery, type MatchRange } from "@/lib/search";
 
 export interface SelectOption {
   value: string;
@@ -36,10 +36,13 @@ export function SearchSelect({
   const listRef = useRef<HTMLDivElement>(null);
 
   // 검색은 label + keywords만 — sub(부서 등)는 표시 전용(검색 제외).
-  const hits = filterByQuery(options, query, (option) => [
-    { field: "label", text: option.label },
-    ...(option.keywords ? [{ field: "keywords", text: option.keywords }] : []),
-  ]);
+  // 빈 입력이면 선택 가능한 전체 옵션 노출, 검색 중엔 필터 / all options when empty, filtered while typing.
+  const hits = query.trim()
+    ? filterByQuery(options, query, (option) => [
+        { field: "label", text: option.label },
+        ...(option.keywords ? [{ field: "keywords", text: option.keywords }] : []),
+      ])
+    : options.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
   // 내비 대상: [미지정, ...hits]
   const navCount = 1 + hits.length;
   const current = options.find((option) => option.value === value);

@@ -727,6 +727,11 @@ export function resubmitGroup(groupId: number): Promise<Group> {
   return request<Group>(`/groups/${groupId}/resubmit`, { method: "POST" });
 }
 
+// 그룹 이름 사용 가능 여부 — 전역 중복 금지(모든 그룹이 안 보여도 서버가 판정). 생성 모달 실시간 검사.
+export function checkGroupName(name: string): Promise<{ available: boolean }> {
+  return request<{ available: boolean }>(`/groups/name-available?name=${encodeURIComponent(name)}`);
+}
+
 // ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
 
 export interface AdminUser {

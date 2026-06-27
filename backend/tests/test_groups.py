@@ -81,12 +81,19 @@ def effective_role_of(map_id: int, user: str) -> str | None:
     return _seed(_get)  # type: ignore[return-value]
 
 
+_name_seq = [0]
+
+
 def _create_group(
     client: TestClient,
     members: list[dict],
-    name: str = "g",
+    name: str = "",
     managers: list[str] | None = None,
 ) -> "dict | int":
+    # 이름 전역 중복 금지(409)라 default는 매 호출 고유값 / unique default name per call.
+    if not name:
+        _name_seq[0] += 1
+        name = f"grp-auto-{_name_seq[0]}"
     body = {"name": name, "description": "", "members": members}
     if managers is not None:
         body["managers"] = managers
@@ -553,3 +560,15 @@ def test_purge_expired_groups(client: TestClient, enforce: None) -> None:
     act_as("creator1")
     client.get("/api/groups")  # lazy purge 트리거
     assert client.get(f"/api/groups/{g['id']}").status_code == 404
+
+
+def test_create_group_duplicate_name_409(client: TestClient, enforce: None) -> None:
+    """그룹 이름 전역 중복 금지 — name-available=false + 중복 생성 409."""
+    act_as("creator1")
+    _create_group(client, name="Dup Name", members=_two_user_members())
+    avail = client.get("/api/groups/name-available", params={"name": "Dup Name"})
+    assert avail.status_code == 200 and avail.json()["available"] is False
+    r = _create_group(client, name="Dup Name", members=_two_user_members())
+    assert r.status_code == 409
+    fresh = client.get("/api/groups/name-available", params={"name": "Totally New Name"})
+    assert fresh.json()["available"] is True

@@ -180,7 +180,13 @@ async def create_group(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GroupOut:
-    """그룹 생성 요청 — status='pending', 생성자는 자동 관리자. 멤버 ≥2 필수(아니면 422)."""
+    """그룹 생성 요청 — status='pending', 생성자는 자동 관리자. 멤버 ≥2 필수, 이름 전역 중복 금지."""
+    name = payload.name.strip()
+    existing_name = await session.scalar(
+        select(UserGroup.id).where(UserGroup.name == name, UserGroup.deleted_at.is_(None))
+    )
+    if existing_name is not None:
+        raise HTTPException(status_code=409, detail="group name already in use")
     if len(payload.members) < 2:
         raise HTTPException(
             status_code=422, detail="a group requires at least 2 members"
@@ -195,7 +201,7 @@ async def create_group(
             detail="managers must be chosen from the group's user members",
         )
     group = UserGroup(
-        name=payload.name,
+        name=name,
         description=payload.description,
         status="pending",
         created_by=user,
@@ -217,6 +223,18 @@ async def create_group(
     await session.commit()
     await session.refresh(group)
     return await _serialize_group(session, group)
+
+
+@router.get("/groups/name-available", dependencies=[Depends(get_current_user)])
+async def group_name_available(
+    name: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """그룹 이름 사용 가능 여부 — 전역 중복 금지(삭제분 제외). 모든 그룹이 안 보여도 서버가 판정."""
+    existing = await session.scalar(
+        select(UserGroup.id).where(UserGroup.name == name.strip(), UserGroup.deleted_at.is_(None))
+    )
+    return {"available": existing is None}
 
 
 @router.get("/groups/{group_id}", response_model=GroupOut)

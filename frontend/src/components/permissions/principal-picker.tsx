@@ -72,6 +72,7 @@ export function PrincipalPicker({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [focused, setFocused] = useState(false);
 
   const all = buildOptions(users, departments, groups, userDepartments).filter(
     (o) => !excludeIds.has(o.principalId),
@@ -90,7 +91,8 @@ export function PrincipalPicker({
           : [{ field: "name", text: o.displayName }],
       )
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
-  const visible = hits.slice(0, 8);
+  // 검색 중엔 상위 8개, 빈 입력(포커스)이면 선택 가능한 전체를 노출(스크롤) / all options when empty.
+  const visible = query.trim() ? hits.slice(0, 8) : hits;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (visible.length === 0) return;
@@ -127,11 +129,13 @@ export function PrincipalPicker({
             setQuery(e.target.value);
             setActive(0);
           }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={onKeyDown}
         />
       </div>
-      {/* 결과 목록 (최대 8개) — absolute 플로팅 / floating results, max 8 */}
-      {query.trim() && (
+      {/* 결과 목록 — 빈 입력(포커스)이면 전체, 검색 중엔 상위 8개 / floating results */}
+      {(focused || query.trim()) && (
         <div className="absolute left-0 right-0 top-full z-[1001] mt-1 flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg">
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
@@ -144,6 +148,7 @@ export function PrincipalPicker({
                   active === idx ? "bg-surface-alt" : ""
                 }`}
                 onMouseEnter={() => setActive(idx)}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onSelect(opt);
                   setQuery("");
