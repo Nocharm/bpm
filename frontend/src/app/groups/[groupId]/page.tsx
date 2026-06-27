@@ -4,6 +4,7 @@
 // Group detail page: header + shared GroupDetail. Direct-URL access; the settings panel renders the same inline.
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -47,6 +48,7 @@ export default function GroupDetailPage({
   const { groupId } = use(params);
   const groupIdNum = Number(groupId);
   const { t } = useI18n();
+  const router = useRouter();
 
   const [group, setGroup] = useState<Group | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -123,6 +125,7 @@ export default function GroupDetailPage({
         dirUsers={dirUsers}
         dirDepts={dirDepts}
         onGroupChange={setGroup}
+        onGroupGone={() => router.push("/settings")}
         onToast={addToast}
       />
     </div>

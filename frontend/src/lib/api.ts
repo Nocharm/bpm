@@ -637,6 +637,7 @@ export interface Group {
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
+  deleted_at: string | null;  // 소프트삭제/거절 시각 — 7일 후 자동 영구삭제
   members: GroupMember[];
   managers: string[];  // manager login_ids
 }
@@ -714,6 +715,16 @@ export function decideGroup(
     method: "POST",
     body: JSON.stringify({ decision }),
   });
+}
+
+// 그룹 삭제/비활성 — rejected는 즉시, 그 외는 소프트삭제(7일 보존). 매니저/생성자/sysadmin.
+export function deleteGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}`, { method: "DELETE" });
+}
+
+// 거절된 그룹 재신청 → pending. 매니저/생성자/sysadmin.
+export function resubmitGroup(groupId: number): Promise<Group> {
+  return request<Group>(`/groups/${groupId}/resubmit`, { method: "POST" });
 }
 
 // ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────

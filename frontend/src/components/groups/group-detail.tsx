@@ -5,13 +5,15 @@
 // 관리자는 별도 영역이 아니라 멤버(user) 카드에서 토글로 지정한다 — 관리자 ⊆ 멤버(user).
 
 import { type ReactNode, useState } from "react";
-import { Building2, Star, User } from "lucide-react";
+import { Building2, Clock, Info, RotateCcw, Star, Trash2, User } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import {
   addGroupMember,
+  deleteGroup,
   removeGroupMember,
+  resubmitGroup,
   setGroupManagers,
   type DirectoryDept,
   type DirectoryUser,
@@ -153,12 +155,14 @@ export function GroupDetail({
   dirUsers,
   dirDepts,
   onGroupChange,
+  onGroupGone,
   onToast,
 }: {
   group: Group;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
   onGroupChange: (g: Group) => void;
+  onGroupGone?: () => void; // 삭제로 그룹이 사라졌을 때 — 부모가 목록 갱신/이동 처리
   onToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -196,6 +200,14 @@ export function GroupDetail({
   const isGroupManager = currentUser != null && group.managers.includes(currentUser.id);
   const isSysadmin = currentUser?.isSysadmin ?? false;
   const canEdit = (isGroupManager || isSysadmin) && group.status === "active";
+  // 삭제/재신청 권한 — 생성자/관리자/sysadmin (상태 무관) / delete or re-request.
+  const canManage = isSysadmin || isGroupManager || currentUser?.id === group.created_by;
+  // 거절/소프트삭제 자동삭제 카운트다운 — 마운트 now 고정(순수성) / lazy now for purge countdown.
+  const [now] = useState(() => Date.now());
+  const purgeLabel = (deletedAt: string): string => {
+    const days = Math.floor((new Date(deletedAt).getTime() + 7 * 86400000 - now) / 86400000);
+    return days >= 1 ? t("perm.group.autoDeleteIn", { n: days }) : t("perm.group.autoDeleteSoon");
+  };
 
   const managerSet = new Set(group.managers);
   const memberExcludeIds = new Set(group.members.map((m) => m.member_id));
@@ -246,6 +258,26 @@ export function GroupDetail({
       const updated = await setGroupManagers(groupIdNum, next);
       onGroupChange(updated);
       onToast(t("perm.group.toastManagersUpdated"));
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await deleteGroup(groupIdNum);
+      onToast(t("perm.group.toastDeleted"));
+      onGroupGone?.();
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleResubmit() {
+    try {
+      const updated = await resubmitGroup(groupIdNum);
+      onGroupChange(updated);
+      onToast(t("perm.group.toastRequested"));
     } catch (err) {
       onToast(err instanceof Error ? err.message : String(err));
     }
@@ -319,6 +351,56 @@ export function GroupDetail({
               removeLabel={t("perm.group.removeBtn")}
             />
           ))}
+        </div>
+      )}
+
+      {/* 관리 액션 + 기능 설명 (펼침 시 노출) / management actions + icon/pill hints */}
+      {(canManage || group.status === "rejected") && (
+        <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+          {/* 거절/소프트삭제 자동삭제 카운트다운 / auto-delete countdown */}
+          {group.deleted_at && (
+            <span className="flex items-center gap-1.5 text-fine font-semibold text-error">
+              <Clock size={12} strokeWidth={1.5} className="shrink-0" />
+              {purgeLabel(group.deleted_at)}
+            </span>
+          )}
+          {/* 기능 설명 — 아이콘/필 / function hints as icon pills */}
+          <div className="flex flex-wrap items-center gap-1.5 text-fine text-ink-tertiary">
+            <Info size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5">
+              <Trash2 size={11} strokeWidth={1.5} />
+              {t("perm.group.deleteHint")}
+            </span>
+            {group.status === "rejected" && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5">
+                <RotateCcw size={11} strokeWidth={1.5} />
+                {t("perm.group.resubmitHint")}
+              </span>
+            )}
+          </div>
+          {/* 액션 버튼 / action buttons */}
+          {canManage && (
+            <div className="flex gap-2">
+              {group.status === "rejected" && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-sm border border-accent px-3 py-1 text-fine text-accent hover:bg-accent-tint"
+                  onClick={() => void handleResubmit()}
+                >
+                  <RotateCcw size={13} strokeWidth={1.5} />
+                  {t("perm.group.resubmit")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt"
+                onClick={() => void handleDelete()}
+              >
+                <Trash2 size={13} strokeWidth={1.5} />
+                {t("perm.group.delete")}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

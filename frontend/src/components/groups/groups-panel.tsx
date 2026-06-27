@@ -280,6 +280,10 @@ export function GroupsPanel() {
                       dirUsers={dirUsers}
                       dirDepts={dirDepts}
                       onGroupChange={updateGroup}
+                      onGroupGone={() => {
+                        setExpandedId(null);
+                        void reloadGroups();
+                      }}
                       onToast={addToast}
                     />
                   </div>
