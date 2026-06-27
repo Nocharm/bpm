@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { type AdminDept, getAdminUsers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
 
 export function DepartmentTable() {
   const { t } = useI18n();
@@ -53,42 +54,32 @@ export function DepartmentTable() {
         {t("perm.sysadmin.deptDebugToggle")}
       </label>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-caption">
-          <thead>
-            <tr className="border-b border-hairline">
-              <th className="py-2 pr-4 text-left text-fine text-ink-secondary">
-                {t("perm.sysadmin.deptColName")}
-              </th>
+      <TableCard>
+        <thead>
+          <tr className={ADMIN_HEAD_ROW}>
+            <th className={ADMIN_TH}>{t("perm.sysadmin.deptColName")}</th>
+            {showOrg &&
+              orgColIndices.map((i) => (
+                <th key={i} className={ADMIN_TH}>
+                  {t("perm.sysadmin.deptOrgCol", { n: String(i + 1) })}
+                </th>
+              ))}
+          </tr>
+        </thead>
+        <tbody>
+          {departments.map((dept, idx) => (
+            <tr key={idx} className={ADMIN_ROW}>
+              <td className={ADMIN_TD}>{dept.name}</td>
               {showOrg &&
                 orgColIndices.map((i) => (
-                  <th
-                    key={i}
-                    className="py-2 pr-4 text-left text-fine text-ink-secondary"
-                  >
-                    {t("perm.sysadmin.deptOrgCol", { n: String(i + 1) })}
-                  </th>
+                  <td key={i} className={`${ADMIN_TD} text-ink-tertiary`}>
+                    {dept.org_levels[i] ?? ""}
+                  </td>
                 ))}
             </tr>
-          </thead>
-          <tbody>
-            {departments.map((dept, idx) => (
-              <tr
-                key={idx}
-                className="border-b border-hairline last:border-0 hover:bg-surface-alt"
-              >
-                <td className="py-2 pr-4 text-ink">{dept.name}</td>
-                {showOrg &&
-                  orgColIndices.map((i) => (
-                    <td key={i} className="py-2 pr-4 text-ink-tertiary">
-                      {dept.org_levels[i] ?? ""}
-                    </td>
-                  ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </TableCard>
     </div>
   );
 }

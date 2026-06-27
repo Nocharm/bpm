@@ -12,6 +12,7 @@ import {
   type SyncSummary,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
 
 export function EmployeeTable() {
   const { t } = useI18n();
@@ -51,30 +52,32 @@ export function EmployeeTable() {
         </button>
       </div>
       {msg && <p className="text-fine text-ink-tertiary">{msg}</p>}
-      <table className="w-full text-caption">
+      <TableCard>
         <thead>
-          <tr className="border-b border-hairline text-left text-ink-tertiary">
-            <th className="py-1">loginId</th>
-            <th>name</th>
-            <th>title</th>
-            <th>department</th>
-            <th>role</th>
-            <th>source</th>
+          <tr className={ADMIN_HEAD_ROW}>
+            <th className={ADMIN_TH}>loginId</th>
+            <th className={ADMIN_TH}>name</th>
+            <th className={ADMIN_TH}>title</th>
+            <th className={ADMIN_TH}>department</th>
+            <th className={ADMIN_TH}>role</th>
+            <th className={ADMIN_TH}>source</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.login_id} className="border-b border-divider">
-              <td className="py-1">{r.login_id}</td>
-              <td>{r.name}</td>
-              <td>{r.title}</td>
-              <td>{r.department}</td>
-              <td>{r.role}</td>
-              <td>{r.source}</td>
+            <tr key={r.login_id} className={ADMIN_ROW}>
+              <td className={ADMIN_TD}>{r.login_id}</td>
+              <td className={ADMIN_TD}>{r.name}</td>
+              <td className={ADMIN_TD}>{r.title}</td>
+              <td className={ADMIN_TD}>{r.department}</td>
+              <td className={ADMIN_TD}>
+                <RolePill role={r.role} />
+              </td>
+              <td className={`${ADMIN_TD} text-ink-tertiary`}>{r.source}</td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </TableCard>
     </div>
   );
 }
