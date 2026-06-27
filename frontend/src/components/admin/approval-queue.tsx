@@ -1,50 +1,64 @@
 "use client";
 
-// 시스템 관리자 승인 큐 — 그룹 생성(실 API) + 권한 하향/공개범위 변경(mock 미리보기) /
-// Sysadmin approval queue: group creation (REAL API) + permission/visibility requests (mock preview).
-// 그룹 큐는 GET /api/groups/pending + POST /api/groups/{id}/decide(실 API). 결정 후 재조회한다.
-// MAP 요청 행은 mock 그대로 — 백엔드에 cross-map 결재 목록 엔드포인트가 없어 전역 큐를 실 API로 채울 수 없음(Layer 4 보고).
-// 맵 권한·가시성 실 결재는 맵별 설정(PendingApprovalsPanel)에서 처리한다. /
-// Group queue is REAL; MAP rows stay a labeled mock preview (no cross-map list endpoint).
-// Owner-transfer is excluded (handled by confirm modal). version_publish lives in versionFlow.
+// 시스템 관리자 승인 큐 — 그룹 생성 + 맵 권한 하향/공개범위 변경 (모두 실 API) (A3) /
+// Sysadmin approval queue: group creation + map permission/visibility requests (all REAL API).
+// 그룹: GET /api/groups/pending + POST /api/groups/{id}/decide.
+// 맵 요청: GET /api/approval-requests(교차맵 sysadmin 큐) + POST /api/approval-requests/{id}/decide(approve→적용).
+// 결정 후 재조회(낙관적 갱신 금지). Owner-transfer·version_publish 는 별도 경로.
 
 import { useCallback, useEffect, useState } from "react";
 
-import { decideGroup, listPendingGroups, type Group } from "@/lib/api";
+import {
+  decideApprovalRequest,
+  decideGroup,
+  listPendingApprovalRequests,
+  listPendingGroups,
+  type ApprovalRequest,
+  type Group,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { usePermissions, decideRequest } from "@/lib/mock/permissions";
-import type { ApprovalKind, DowngradePayload, VisibilityChangePayload } from "@/lib/mock/permissions-types";
 import { genId } from "@/lib/id";
 import type { ToastItem } from "@/components/toast-stack";
 
 interface Props {
-  currentUserId: string;
   onToast: (item: ToastItem) => void;
 }
 
-export function ApprovalQueue({ currentUserId, onToast }: Props) {
+export function ApprovalQueue({ onToast }: Props) {
   const { t } = useI18n();
-  const state = usePermissions();
 
-  // 그룹 생성 대기 — 실 API / Pending group creations (real API).
+  // 그룹 생성 대기 + 맵 권한·가시성 변경 대기 — 둘 다 실 API / Both queues from real API.
   const [pendingGroups, setPendingGroups] = useState<Group[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
+  // 결정 진행 중 요청 id — 버튼 중복 클릭 방지 / in-flight decisions to disable buttons.
+  const [decidingIds, setDecidingIds] = useState<Set<number>>(new Set());
 
-  const reloadGroups = useCallback(async () => {
+  const reload = useCallback(async () => {
     try {
-      setPendingGroups(await listPendingGroups());
+      const [groups, requests] = await Promise.all([
+        listPendingGroups(),
+        listPendingApprovalRequests(),
+      ]);
+      setPendingGroups(groups);
+      setPendingRequests(requests);
     } catch (err) {
       onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
     }
   }, [onToast]);
 
-  // 초기 로드 — 인라인 async + active 가드(set-state-in-effect 회피, lessons) /
-  // Initial load: inline async with an active guard (avoids set-state-in-effect lint).
+  // 초기 로드 — 인라인 async + active 가드(set-state-in-effect 회피) / Initial load with active guard.
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
-        const rows = await listPendingGroups();
-        if (active) setPendingGroups(rows);
+        const [groups, requests] = await Promise.all([
+          listPendingGroups(),
+          listPendingApprovalRequests(),
+        ]);
+        if (active) {
+          setPendingGroups(groups);
+          setPendingRequests(requests);
+        }
       } catch (err) {
         if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
       }
@@ -53,12 +67,6 @@ export function ApprovalQueue({ currentUserId, onToast }: Props) {
       active = false;
     };
   }, [onToast]);
-
-  // 권한·가시성 변경 대기 (version_publish는 versionFlow 전용 — 여기 미포함, mock) /
-  // Pending permission/visibility requests (mock preview; version_publish excluded).
-  const pendingRequests = state.requests.filter(
-    (r) => r.status === "pending" && r.kind !== "version_publish",
-  );
 
   const isEmpty = pendingGroups.length === 0 && pendingRequests.length === 0;
 
@@ -69,32 +77,45 @@ export function ApprovalQueue({ currentUserId, onToast }: Props) {
         id: genId(),
         message: decision === "approve" ? t("perm.sysadmin.toastApproved") : t("perm.sysadmin.toastRejected"),
       });
-      await reloadGroups();
+      await reload();
     } catch (err) {
       onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  function handleDecideRequest(requestId: string, decision: "approved" | "rejected") {
-    decideRequest(requestId, decision, currentUserId);
-    onToast({
-      id: genId(),
-      message: decision === "approved" ? t("perm.sysadmin.toastApproved") : t("perm.sysadmin.toastRejected"),
-    });
+  async function handleDecideRequest(requestId: number, decision: "approve" | "reject") {
+    setDecidingIds((prev) => new Set(prev).add(requestId));
+    try {
+      // approve → 서버가 권한 하향/가시성 변경을 즉시 적용(applied), reject → 변경 없음.
+      await decideApprovalRequest(requestId, decision);
+      onToast({
+        id: genId(),
+        message: decision === "approve" ? t("perm.sysadmin.toastApproved") : t("perm.sysadmin.toastRejected"),
+      });
+      await reload();
+    } catch (err) {
+      onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setDecidingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
+    }
   }
 
-  // 요청 내용 요약 — kind별 / Summarise request detail by kind.
-  function renderRequestDetail(kind: ApprovalKind, payload: unknown): string {
-    if (kind === "permission_downgrade") {
-      const p = payload as DowngradePayload;
-      const to = p.toRole ?? t("perm.approvals.roleRemoved");
-      return `${p.principalType}:${p.principalId} ${p.fromRole} → ${to}`;
+  // 요청 내용 요약 — kind별 실 payload / Summarise request detail by kind (real payload).
+  function renderRequestDetail(req: ApprovalRequest): string {
+    if (req.kind === "permission_downgrade") {
+      const p = req.payload;
+      const from = String(p.from_role ?? "");
+      const to = p.to_role == null ? t("perm.approvals.roleRemoved") : String(p.to_role);
+      return `${String(p.principal_type)}:${String(p.principal_id)}  ${from} → ${to}`;
     }
-    if (kind === "visibility_change") {
-      const p = payload as VisibilityChangePayload;
-      return `${p.from} → ${p.to}`;
+    if (req.kind === "visibility_change") {
+      return String(req.payload.to_visibility ?? "");
     }
-    return String(payload);
+    return JSON.stringify(req.payload);
   }
 
   if (isEmpty) {
@@ -143,20 +164,14 @@ export function ApprovalQueue({ currentUserId, onToast }: Props) {
         </div>
       ))}
 
-      {/* 맵 권한·가시성 요청은 mock 미리보기 — 실 결재는 맵별 설정 화면에서 / Map rows are a mock preview; real decisions are per-map. */}
-      {pendingRequests.length > 0 && (
-        <p className="px-1 pt-1 text-fine text-ink-tertiary">
-          {t("perm.sysadmin.mapMockNote")}
-        </p>
-      )}
-
-      {/* 권한·가시성 변경 요청 (mock) / Permission & visibility change requests (mock) */}
+      {/* 맵 권한·가시성 변경 요청 — 실 API (교차맵). approve 시 서버가 즉시 적용 / Map requests (real, cross-map). */}
       {pendingRequests.map((req) => {
         const kindLabel =
           req.kind === "permission_downgrade"
             ? t("perm.sysadmin.kindDowngrade")
             : t("perm.sysadmin.kindVisibility");
-        const detail = renderRequestDetail(req.kind, req.payload);
+        const detail = renderRequestDetail(req);
+        const isDeciding = decidingIds.has(req.id);
         return (
           <div
             key={req.id}
@@ -168,28 +183,30 @@ export function ApprovalQueue({ currentUserId, onToast }: Props) {
                   {kindLabel}
                 </span>
                 <span className="text-fine text-ink-secondary">
-                  {t("perm.sysadmin.mapLabel")} {req.mapId}
+                  {t("perm.sysadmin.mapLabel")} {req.map_id}
                 </span>
               </div>
               <span className="truncate text-fine text-ink-tertiary">
                 {t("perm.sysadmin.detailLabel")}: {detail}
               </span>
               <span className="text-fine text-ink-tertiary">
-                {t("perm.sysadmin.requesterLabel")}: {req.requestedBy}
+                {t("perm.sysadmin.requesterLabel")}: {req.requested_by}
               </span>
             </div>
             <div className="ml-4 flex shrink-0 gap-2">
               <button
                 type="button"
-                className="rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt"
-                onClick={() => handleDecideRequest(req.id, "approved")}
+                className="rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-40"
+                onClick={() => void handleDecideRequest(req.id, "approve")}
+                disabled={isDeciding}
               >
                 {t("perm.sysadmin.approve")}
               </button>
               <button
                 type="button"
-                className="rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt"
-                onClick={() => handleDecideRequest(req.id, "rejected")}
+                className="rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-40"
+                onClick={() => void handleDecideRequest(req.id, "reject")}
+                disabled={isDeciding}
               >
                 {t("perm.sysadmin.reject")}
               </button>

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
 from app.permissions import logic
@@ -310,6 +310,26 @@ async def list_approval_requests(
     rows = await session.scalars(
         select(ApprovalRequest)
         .where(ApprovalRequest.map_id == map_id)
+        .order_by(ApprovalRequest.created_at.desc())
+    )
+    return list(rows.all())
+
+
+@router.get(
+    "/approval-requests",
+    response_model=list[ApprovalRequestOut],
+    dependencies=[Depends(require_sysadmin)],
+)
+async def list_pending_approval_requests(
+    session: AsyncSession = Depends(get_session),
+) -> list[ApprovalRequest]:
+    """교차맵 대기 승인 요청 — sysadmin 전역 큐(권한 하향·가시성 변경). pending 만, 최신순.
+
+    맵별 목록(/maps/{id}/approval-requests)과 달리 모든 맵을 가로질러 sysadmin 콘솔 승인 큐를 채운다.
+    """
+    rows = await session.scalars(
+        select(ApprovalRequest)
+        .where(ApprovalRequest.status == "pending")
         .order_by(ApprovalRequest.created_at.desc())
     )
     return list(rows.all())

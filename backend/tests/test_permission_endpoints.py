@@ -618,3 +618,42 @@ def test_auth_off_management_open(client: TestClient) -> None:
         ).status_code
         == 200
     )
+
+
+# ── F. 교차맵 sysadmin 승인 큐 (A3) ──────────────────────────────
+
+
+def test_cross_map_pending_queue_lists_across_maps(client: TestClient, enforce: None) -> None:
+    """교차맵 sysadmin 큐 — 여러 맵의 pending 다운그레이드를 맵 경계 무관하게 한 번에 반환."""
+    created_map_ids = []
+    for tag in ("xqa", "xqb"):
+        map_id = seed_map(
+            grants=[
+                ("user", f"owner.{tag}", "owner"),
+                ("user", f"actor.{tag}", "editor"),
+                ("user", f"ed.{tag}", "editor"),
+            ]
+        )
+        gid = grant_id(map_id, f"ed.{tag}")
+        act_as(f"actor.{tag}")
+        assert (
+            client.patch(
+                f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+            ).status_code
+            == 200
+        )
+        created_map_ids.append(map_id)
+
+    act_as(SYSADMIN)
+    r = client.get("/api/approval-requests")
+    assert r.status_code == 200
+    rows = r.json()
+    # 세션 공유 DB라 절대 카운트 대신 부분집합으로 — 내가 만든 두 맵 모두 포함 + 전부 pending
+    assert set(created_map_ids) <= {row["map_id"] for row in rows}
+    assert all(row["status"] == "pending" for row in rows)
+
+
+def test_cross_map_pending_queue_sysadmin_only(client: TestClient, enforce: None) -> None:
+    """교차맵 큐는 sysadmin 전용 — 비-sysadmin 은 403."""
+    act_as("nobody.u")
+    assert client.get("/api/approval-requests").status_code == 403

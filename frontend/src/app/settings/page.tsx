@@ -132,7 +132,7 @@ export default function SettingsPage() {
           {current === "groups" && <GroupsPanel />}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" && user && (
-            <ApprovalQueue currentUserId={user.loginId} onToast={showToast} />
+            <ApprovalQueue onToast={showToast} />
           )}
           {current === "depts" && <DepartmentTable />}
           {current === "users" && <UserTable />}

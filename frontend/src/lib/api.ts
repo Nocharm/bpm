@@ -569,6 +569,11 @@ export function listApprovalRequests(mapId: number): Promise<ApprovalRequest[]> 
   return request<ApprovalRequest[]>(`/maps/${mapId}/approval-requests`);
 }
 
+// 교차맵 대기 승인 요청 — sysadmin 전역 큐(관리자 콘솔 Approval Queue). 결정 후 재조회.
+export function listPendingApprovalRequests(): Promise<ApprovalRequest[]> {
+  return request<ApprovalRequest[]>(`/approval-requests`);
+}
+
 // 승인 요청 결정 — approve 면 서버가 payload(권한 하향/가시성)를 즉시 적용, reject 면 변경 없음.
 // 서버 진실: 호출 후 요청 목록·영향받은 맵 데이터를 재조회한다(낙관적 갱신 금지).
 export function decideApprovalRequest(

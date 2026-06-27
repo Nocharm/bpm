@@ -46,7 +46,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | H6 | 홈 | 좌:우 = **1:2**(flex-1 : flex-[2], 동일 max-w 캡 제거) + 컨테이너 1280. (검토 2: 폭만 됐던 것 비율 보완) | ✅ | ✅ | ✅ OK (H6완료) | `5b54887`+(검토2) |
 | A1 | 관리자 | DB 테이블 **무한 스크롤** — 페이지 버튼→스크롤 append(50행/회·420ms 스피너), sticky 헤더, "N/total rows" 카운트, 끝 "All rows loaded". `admin/table-viewer.tsx` | ✅ | ✅ | 🔧 무한스크롤 반영 | (S6) |
 | A2 | 관리자 | 유저 그룹 **카드 그리드(2열)** — 세로 리스트→`grid sm:grid-cols-2`. 카드=이름·상태·설명·멤버수. `groups/groups-panel.tsx` | ✅ | ✅ | 🔧 카드 그리드 반영 | (S6) |
-| A3 | 관리자 | (보류) 승인 큐 권한하향·공개범위변경 **실데이터** — 현재 mock. 교차맵 승인 엔드포인트 필요 → **백엔드, 이 브랜치 범위 외** | — | — | ⏸ 보류 | — |
+| A3 | 관리자 | 승인 큐 권한하향·공개범위변경 **실데이터** — mock→실 API. 교차맵 목록 `GET /api/approval-requests`(sysadmin) **신규 라우트만, 스키마 무변경**. `admin/approval-queue.tsx` | backend 324✅·tsc/lint✅ | ✅ | 🔧 실데이터 반영 | (S6) |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
 | E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |
