@@ -125,6 +125,15 @@ export function MapCard({
     };
   }, [modalOpen]);
 
+  // 언마운트 시 대기 타이머 정리 — 사라진 컴포넌트가 setState 호출하지 않게
+  useEffect(
+    () => () => {
+      if (openTimer.current) clearTimeout(openTimer.current);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
   return (
     <div
       ref={rootRef}
@@ -136,7 +145,13 @@ export function MapCard({
             ? "border-accent ring-1 ring-accent"
             : "border-hairline"
       }`}
-      onClick={() => onSelect?.(map.id)}
+      onClick={() => {
+        // 클릭(선택) 시 대기 중 1초 타이머 취소 + 모달 닫기 — 클릭 후 모달이 뒤늦게 뜨거나 가리지 않게
+        clearOpen();
+        clearClose();
+        setModalOpen(false);
+        onSelect?.(map.id);
+      }}
       onMouseEnter={onCardEnter}
       onMouseLeave={scheduleClose}
     >
