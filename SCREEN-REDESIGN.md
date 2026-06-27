@@ -50,6 +50,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A4 | 관리자 | 그룹/승인큐 **max-width**(`max-w-4xl`) + 승인 큐 **nav 배지**(대기 건수, sysadmin 선조회+`onCountChange` 갱신). `groups-panel`·`approval-queue`·`settings/page` | ✅ | ✅ | ✅ OK (완료) | (S6) |
 | A5 | 관리자 | **관리자 테이블 일괄 디자인**([Image #1]) — Employees/Departments/Users 공통 셸(`admin-table.tsx`: `TableCard`·헤더 bg·divider·`RolePill`). 서브타이틀 stats는 Employees 동기화 msg 기존 유지. | ✅ | ✅ | 🔧 공통 셸 적용 | (S6) |
 | A6 | 관리자 | **DB 뷰어 디자인**([Image #2]) — pill 테이블 선택(아이콘+이름+행수)·카드 헤더(`{table}` + `{total} rows · {loaded} shown`)·visibility 배지·로딩/끝. 백엔드 `/admin/tables`→`[{name,count}]`(스키마 무변경). | backend 7✅·tsc/lint✅ | ✅ | 🔧 Image #2 적용 | (S6) |
+| A7 | 관리자 | Scheduled deletion **삭제 예정 카운트다운** — 삭제시각→`N일 뒤 삭제`/`N시간 뒤 삭제`/`곧 삭제`(`deleted_at`+7일−now). 절대시각은 hover title. `admin/deleted-maps-panel` | ✅ | ✅ | 🔧 카운트다운 반영 | (S6) |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
 | E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |
