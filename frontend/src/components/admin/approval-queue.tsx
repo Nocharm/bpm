@@ -22,9 +22,11 @@ import type { ToastItem } from "@/components/toast-stack";
 
 interface Props {
   onToast: (item: ToastItem) => void;
+  // 좌측 nav 배지용 — 로드/결정 후 대기 건수(그룹+요청) 보고 / report pending count for the nav badge.
+  onCountChange?: (count: number) => void;
 }
 
-export function ApprovalQueue({ onToast }: Props) {
+export function ApprovalQueue({ onToast, onCountChange }: Props) {
   const { t } = useI18n();
 
   // 그룹 생성 대기 + 맵 권한·가시성 변경 대기 — 둘 다 실 API / Both queues from real API.
@@ -41,10 +43,11 @@ export function ApprovalQueue({ onToast }: Props) {
       ]);
       setPendingGroups(groups);
       setPendingRequests(requests);
+      onCountChange?.(groups.length + requests.length);
     } catch (err) {
       onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
     }
-  }, [onToast]);
+  }, [onToast, onCountChange]);
 
   // 초기 로드 — 인라인 async + active 가드(set-state-in-effect 회피) / Initial load with active guard.
   useEffect(() => {
@@ -58,6 +61,7 @@ export function ApprovalQueue({ onToast }: Props) {
         if (active) {
           setPendingGroups(groups);
           setPendingRequests(requests);
+          onCountChange?.(groups.length + requests.length);
         }
       } catch (err) {
         if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
@@ -66,7 +70,7 @@ export function ApprovalQueue({ onToast }: Props) {
     return () => {
       active = false;
     };
-  }, [onToast]);
+  }, [onToast, onCountChange]);
 
   const isEmpty = pendingGroups.length === 0 && pendingRequests.length === 0;
 
@@ -127,7 +131,7 @@ export function ApprovalQueue({ onToast }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex max-w-4xl flex-col gap-2">
       {/* 그룹 생성 요청 — 실 API / Group creation requests (real API) */}
       {pendingGroups.map((group) => (
         <div

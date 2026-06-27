@@ -5,8 +5,9 @@
 //   Groups(모두) · Directory/조직(role=admin) · Permissions/권한(sysadmin)
 // 백엔드 무변경 — 서버 엔드포인트 가드(require_admin·sysadmin)가 최종 보호.
 
-import { Fragment, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 
+import { listPendingApprovalRequests, listPendingGroups } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -73,6 +74,28 @@ export default function SettingsPage() {
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // 좌측 nav 승인 큐 배지 건수 — sysadmin만. 큐 탭을 열면 ApprovalQueue가 onCountChange로 갱신.
+  const [queueCount, setQueueCount] = useState<number | null>(null);
+
+  // 큐 탭을 열지 않아도 배지가 보이도록 마운트 시 선조회(sysadmin 한정).
+  useEffect(() => {
+    if (!user?.isSysadmin) return;
+    let active = true;
+    void (async () => {
+      try {
+        const [groups, requests] = await Promise.all([
+          listPendingGroups(),
+          listPendingApprovalRequests(),
+        ]);
+        if (active) setQueueCount(groups.length + requests.length);
+      } catch {
+        /* 배지 카운트 실패는 무시 — 비핵심 */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user?.isSysadmin]);
 
   const showToast = (item: ToastItem) => setToasts((prev) => [item, ...prev]);
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id));
@@ -113,7 +136,7 @@ export default function SettingsPage() {
                 <button
                   key={tab.id}
                   type="button"
-                  className={`rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
+                  className={`flex items-center rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
                     current === tab.id
                       ? "bg-accent-tint text-accent"
                       : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
@@ -121,6 +144,12 @@ export default function SettingsPage() {
                   onClick={() => setActiveTab(tab.id)}
                 >
                   {t(tab.labelKey)}
+                  {/* 승인 큐 대기 건수 배지 / pending count badge on the queue tab */}
+                  {tab.id === "queue" && queueCount ? (
+                    <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
+                      {queueCount}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </Fragment>
@@ -132,7 +161,7 @@ export default function SettingsPage() {
           {current === "groups" && <GroupsPanel />}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" && user && (
-            <ApprovalQueue onToast={showToast} />
+            <ApprovalQueue onToast={showToast} onCountChange={setQueueCount} />
           )}
           {current === "depts" && <DepartmentTable />}
           {current === "users" && <UserTable />}

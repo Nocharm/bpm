@@ -197,7 +197,7 @@ export function GroupsPanel() {
   const managerExcludeIds = new Set(managers.map((m) => m.id));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-4xl flex-col gap-4">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* 헤더 / Header */}
