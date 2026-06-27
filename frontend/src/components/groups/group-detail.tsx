@@ -15,6 +15,7 @@ import {
   PlayCircle,
   RotateCcw,
   Star,
+  StarOff,
   Trash2,
   Undo2,
   User,
@@ -52,72 +53,69 @@ function MemberTypeIcon({ type }: { type: "department" | "user" }) {
   return <User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
 }
 
-// 관리자 토글/배지 — user 카드에서 관리자 지정 (관리자 ⊆ 멤버) / manager toggle on a user card.
-function ManagerControl({
-  isManager,
-  canEdit,
-  onToggle,
-}: {
-  isManager: boolean;
-  canEdit: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useI18n();
-  if (!canEdit) {
-    return isManager ? (
-      <span className="inline-flex items-center gap-1 rounded-sm border border-accent px-1.5 py-0.5 text-fine text-accent">
-        <Star size={11} strokeWidth={1.5} />
-        {t("perm.group.manager")}
-      </span>
-    ) : null;
-  }
-  return (
-    <button
-      type="button"
-      className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine transition-colors ${
-        isManager
-          ? "border-accent bg-accent-tint text-accent"
-          : "border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-      }`}
-      onClick={onToggle}
-      title={isManager ? t("perm.group.manager") : t("perm.group.makeManager")}
-    >
-      <Star size={11} strokeWidth={1.5} className={isManager ? "fill-current" : undefined} />
-      {t("perm.group.manager")}
-    </button>
-  );
-}
-
-// 멤버/관리자 카드 — 홈 상세 카드 스타일(아이콘+이름+컨트롤) 재활용 / member card.
+// 멤버/관리자 카드 — 매니저 배지는 항상 노출, 리무브·매니저 토글은 카드 호버 시 노출 (홈 상세 카드 스타일) /
+// member card: manager badge always visible; remove & manager-toggle reveal on card hover.
 function PersonCard({
   icon,
   name,
   typeLabel,
-  control,
+  isManager,
+  canEdit,
+  canToggleManager,
+  onToggleManager,
   onRemove,
-  removeLabel,
+  labels,
 }: {
   icon: ReactNode;
   name: string;
   typeLabel?: string;
-  control?: ReactNode;
+  isManager: boolean;
+  canEdit: boolean;
+  canToggleManager: boolean;
+  onToggleManager?: () => void;
   onRemove?: () => void;
-  removeLabel: string;
+  labels: { manager: string; makeManager: string; unset: string; remove: string };
 }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-md border border-hairline bg-surface px-3 py-2.5">
+    <div className="group flex items-center gap-2.5 rounded-md border border-hairline bg-surface px-3 py-2.5 transition-colors hover:bg-surface-alt">
       {icon}
       <span className="flex-1 truncate text-caption text-ink">{name}</span>
       {typeLabel && <span className="shrink-0 text-fine text-ink-tertiary">{typeLabel}</span>}
-      {control}
-      {onRemove && (
-        <button
-          type="button"
-          className="shrink-0 text-fine text-ink-tertiary hover:text-error"
-          onClick={onRemove}
-        >
-          {removeLabel}
-        </button>
+      {/* 매니저 배지 — 항상 노출 / manager badge always shown */}
+      {isManager && (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-accent px-1.5 py-0.5 text-fine text-accent">
+          <Star size={11} strokeWidth={1.5} className="fill-current" />
+          {labels.manager}
+        </span>
+      )}
+      {/* 호버 시 컨트롤 — 매니저 토글 + 리무브 / hover-revealed controls */}
+      {canEdit && (onRemove || canToggleManager) && (
+        <div className="hidden shrink-0 items-center gap-1.5 group-hover:flex">
+          {canToggleManager && onToggleManager && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface hover:text-ink"
+              onClick={onToggleManager}
+            >
+              {isManager ? (
+                <StarOff size={11} strokeWidth={1.5} />
+              ) : (
+                <Star size={11} strokeWidth={1.5} />
+              )}
+              {isManager ? labels.unset : labels.makeManager}
+            </button>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary hover:border-error hover:text-error"
+              onClick={onRemove}
+            >
+              <X size={11} strokeWidth={1.5} />
+              {labels.remove}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -237,6 +235,11 @@ export function GroupDetail({
   const [pendingAction, setPendingAction] = useState<"delete" | "deactivate" | "reactivate" | null>(
     null,
   );
+  const [hoveredHint, setHoveredHint] = useState<string | null>(null); // 헤더 하단 안내문구(스페이서 아래)
+  // 매니저 추가/제거 확인 모달 / confirm before changing a member's manager role.
+  const [pendingManager, setPendingManager] = useState<{ id: string; makeManager: boolean } | null>(
+    null,
+  );
 
   const managerSet = new Set(group.managers);
   const memberExcludeIds = new Set(group.members.map((m) => m.member_id));
@@ -245,6 +248,28 @@ export function GroupDetail({
   );
   // 관리자인데 멤버(user)는 아닌 사람(예: 생성자) — 별도 카드로 노출 / managers not in the member list.
   const managerOnlyIds = group.managers.filter((id) => !memberUserIds.has(id));
+
+  // 정렬 — 매니저 먼저, 그다음 유저, 마지막 부서(팀). 동일 순위는 안정 정렬 / managers → users → teams.
+  type MemberRow =
+    | { kind: "member"; member: GroupMember; isManager: boolean }
+    | { kind: "managerOnly"; id: string };
+  const rank = (r: MemberRow): number => {
+    if (r.kind === "managerOnly") return 0;
+    if (r.member.member_type === "user") return r.isManager ? 0 : 1;
+    return 2; // department(team)
+  };
+  const memberRows: MemberRow[] = [
+    ...group.members.map((m) => ({
+      kind: "member" as const,
+      member: m,
+      isManager: m.member_type === "user" && managerSet.has(m.member_id),
+    })),
+    ...managerOnlyIds.map((id) => ({ kind: "managerOnly" as const, id })),
+  ];
+  const sortedRows = memberRows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i)
+    .map((x) => x.r);
 
   async function handleAddMember(opt: PrincipalOption) {
     if (opt.principalType === "group") return;
@@ -434,15 +459,14 @@ export function GroupDetail({
         </p>
       )}
 
-      {/* 멤버 헤더 — 좌: 아이콘+수, 우: 호버설명(페이드인) + 액션버튼 + Add member /
-          member icon+count left; lifecycle actions right, hovering one fades its hint in at the Add-member spot. */}
+      {/* 멤버 헤더 — 스페이서(구분선) 위줄: 아이콘+수(좌) + 액션버튼(우, 아이콘전용 호버펼침) /
+          top row above the spacer: member count (left) + icon-only actions (right). */}
       <div className="flex items-center justify-between gap-2">
         <p className="flex shrink-0 items-center gap-1.5 text-caption font-semibold text-ink">
           <Users size={15} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
           {group.members.length}
           <span className="font-normal text-ink-secondary">{t("perm.group.membersSection")}</span>
         </p>
-        {/* 우측 액션 — 아이콘 전용, 호버 시 라벨이 왼쪽으로 펼쳐짐(우정렬) / icon-only, label expands left (L4) */}
         <div className="flex min-w-0 items-center justify-end gap-1.5">
           {canManage &&
             !renaming &&
@@ -453,6 +477,8 @@ export function GroupDetail({
                 label={a.label}
                 align="right"
                 tone={a.variant}
+                hint={a.hint}
+                onHoverChange={setHoveredHint}
                 onClick={a.onClick}
               />
             ))}
@@ -461,11 +487,26 @@ export function GroupDetail({
               icon={<UserPlus size={14} strokeWidth={1.5} />}
               label={t("perm.group.addMemberBtn")}
               align="right"
+              hint={t("perm.group.addMemberBtn")}
+              onHoverChange={setHoveredHint}
               onClick={() => setMemberDialogOpen(true)}
             />
           )}
         </div>
       </div>
+
+      {/* 스페이서(구분선) 아래줄: 호버한 버튼의 안내문구 페이드인 / below the spacer: hovered action's hint */}
+      {(canManage || canEdit) && !renaming && (
+        <div className="flex min-h-[1.1rem] items-center justify-end border-t border-hairline pt-1.5">
+          <span
+            className={`truncate text-fine text-ink-tertiary transition-opacity duration-200 ${
+              hoveredHint ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {hoveredHint}
+          </span>
+        </div>
+      )}
 
       {/* 거절/소프트삭제 자동삭제 카운트다운 / auto-delete countdown */}
       {group.deleted_at && (
@@ -508,46 +549,52 @@ export function GroupDetail({
         </div>
       )}
 
-      {group.members.length === 0 && managerOnlyIds.length === 0 ? (
+      {sortedRows.length === 0 ? (
         <p className="text-fine text-ink-tertiary">{t("perm.group.noMembers")}</p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {group.members.map((m) => (
-            <PersonCard
-              key={m.id}
-              icon={<MemberTypeIcon type={m.member_type} />}
-              name={resolveMemberName(m)}
-              typeLabel={m.member_type === "department" ? t("perm.principalDept") : undefined}
-              control={
-                m.member_type === "user" ? (
-                  <ManagerControl
-                    isManager={managerSet.has(m.member_id)}
-                    canEdit={canEdit}
-                    onToggle={() => void toggleManager(m.member_id, !managerSet.has(m.member_id))}
-                  />
-                ) : undefined
-              }
-              onRemove={canEdit ? () => void handleRemoveMember(m) : undefined}
-              removeLabel={t("perm.group.removeBtn")}
-            />
-          ))}
-
-          {/* 멤버가 아닌 관리자(생성자 등) / managers who aren't members (e.g. creator) */}
-          {managerOnlyIds.map((id) => (
-            <PersonCard
-              key={`mgr-${id}`}
-              icon={<User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
-              name={userName(id)}
-              control={
-                <ManagerControl
+          {sortedRows.map((row) => {
+            const cardLabels = {
+              manager: t("perm.group.manager"),
+              makeManager: t("perm.group.makeManager"),
+              unset: t("perm.group.unsetManager"),
+              remove: t("perm.group.removeBtn"),
+            };
+            if (row.kind === "managerOnly") {
+              // 멤버가 아닌 관리자(생성자 등) — 토글로 해제만 / manager who isn't a member.
+              return (
+                <PersonCard
+                  key={`mgr-${row.id}`}
+                  icon={<User size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
+                  name={userName(row.id)}
                   isManager
                   canEdit={canEdit}
-                  onToggle={() => void toggleManager(id, false)}
+                  canToggleManager
+                  onToggleManager={() => setPendingManager({ id: row.id, makeManager: false })}
+                  labels={cardLabels}
                 />
-              }
-              removeLabel={t("perm.group.removeBtn")}
-            />
-          ))}
+              );
+            }
+            const m = row.member;
+            return (
+              <PersonCard
+                key={m.id}
+                icon={<MemberTypeIcon type={m.member_type} />}
+                name={resolveMemberName(m)}
+                typeLabel={m.member_type === "department" ? t("perm.principalDept") : undefined}
+                isManager={row.isManager}
+                canEdit={canEdit}
+                canToggleManager={m.member_type === "user"}
+                onToggleManager={
+                  m.member_type === "user"
+                    ? () => setPendingManager({ id: m.member_id, makeManager: !row.isManager })
+                    : undefined
+                }
+                onRemove={canEdit ? () => void handleRemoveMember(m) : undefined}
+                labels={cardLabels}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -590,7 +637,12 @@ export function GroupDetail({
         <ConfirmDialog
           icon={<PauseCircle size={28} strokeWidth={1.5} />}
           title={t("perm.group.confirmDeactivateTitle")}
-          message={t("perm.group.confirmDeactivateBody")}
+          lines={
+            [
+              { icon: <PauseCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL1") },
+              { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmDeactivateL2"), tone: "accent" },
+            ] satisfies ConfirmLine[]
+          }
           confirmLabel={t("perm.group.deactivate")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
@@ -604,7 +656,12 @@ export function GroupDetail({
         <ConfirmDialog
           icon={<PlayCircle size={28} strokeWidth={1.5} />}
           title={t("perm.group.confirmReactivateTitle")}
-          message={t("perm.group.confirmReactivateBody")}
+          danger={false}
+          lines={
+            [
+              { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmReactivateL1"), tone: "accent" },
+            ] satisfies ConfirmLine[]
+          }
           confirmLabel={t("perm.group.reactivate")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
@@ -612,6 +669,49 @@ export function GroupDetail({
             void handleReactivate();
           }}
           onClose={() => setPendingAction(null)}
+        />
+      )}
+
+      {/* 매니저 추가/제거 확인 모달 — L5 모달 재사용 / confirm manager role change */}
+      {pendingManager && (
+        <ConfirmDialog
+          icon={
+            pendingManager.makeManager ? (
+              <Star size={28} strokeWidth={1.5} />
+            ) : (
+              <StarOff size={28} strokeWidth={1.5} />
+            )
+          }
+          danger={false}
+          title={
+            pendingManager.makeManager
+              ? t("perm.group.confirmMakeManagerTitle")
+              : t("perm.group.confirmUnsetManagerTitle")
+          }
+          message={userName(pendingManager.id)}
+          lines={
+            (pendingManager.makeManager
+              ? [
+                  { icon: <Star size={14} strokeWidth={1.5} />, text: t("perm.group.confirmMakeManagerL1"), tone: "accent" },
+                  { icon: <User size={14} strokeWidth={1.5} />, text: t("perm.group.confirmMakeManagerL2") },
+                ]
+              : [
+                  { icon: <StarOff size={14} strokeWidth={1.5} />, text: t("perm.group.confirmUnsetManagerL1") },
+                  { icon: <User size={14} strokeWidth={1.5} />, text: t("perm.group.confirmUnsetManagerL2") },
+                ]) satisfies ConfirmLine[]
+          }
+          confirmLabel={
+            pendingManager.makeManager
+              ? t("perm.group.makeManager")
+              : t("perm.group.unsetManager")
+          }
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const p = pendingManager;
+            setPendingManager(null);
+            void toggleManager(p.id, p.makeManager);
+          }}
+          onClose={() => setPendingManager(null)}
         />
       )}
     </div>

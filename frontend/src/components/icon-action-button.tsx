@@ -21,6 +21,8 @@ export function IconActionButton({
   align = "left",
   tone = "plain",
   type = "button",
+  hint,
+  onHoverChange,
 }: {
   icon: ReactNode;
   label: string;
@@ -28,7 +30,11 @@ export function IconActionButton({
   align?: "left" | "right";
   tone?: Tone;
   type?: "button" | "submit";
+  // 호버 시 부모에 안내문구 보고(헤더 하단 등에 표시) / report hint to parent on hover.
+  hint?: string;
+  onHoverChange?: (hint: string | null) => void;
 }) {
+  const reportHover = (on: boolean) => onHoverChange?.(on ? (hint ?? label) : null);
   // 펼쳐지는 라벨 — grid-cols 0fr→1fr로 폭을 0에서 콘텐츠까지 부드럽게 / collapsible label.
   const labelWrap = (
     <span className="grid grid-cols-[0fr] overflow-hidden transition-[grid-template-columns] duration-350 ease-smooth group-hover:grid-cols-[1fr] group-focus-visible:grid-cols-[1fr]">
@@ -45,6 +51,10 @@ export function IconActionButton({
       onClick={onClick}
       aria-label={label}
       title={label}
+      onMouseEnter={() => reportHover(true)}
+      onMouseLeave={() => reportHover(false)}
+      onFocus={() => reportHover(true)}
+      onBlur={() => reportHover(false)}
       className={`group inline-flex shrink-0 items-center rounded-sm border px-1.5 py-1 text-fine ${TONE[tone]}`}
     >
       {align === "right" && labelWrap}

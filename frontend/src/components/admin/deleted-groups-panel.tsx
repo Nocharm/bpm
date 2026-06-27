@@ -3,7 +3,7 @@
 // 삭제 예정(휴지통) — 소프트삭제된 사용자 그룹 목록 + 복구(확인 모달). 관리 가능분만(sysadmin 전체). (L5)
 
 import { useEffect, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { PlayCircle, RotateCcw } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { IconActionButton } from "@/components/icon-action-button";
@@ -101,7 +101,10 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void
         <ConfirmDialog
           icon={<RotateCcw size={28} strokeWidth={1.5} />}
           title={t("perm.group.confirmRestoreTitle")}
-          message={t("perm.group.confirmRestoreBody")}
+          lines={[
+            { icon: <RotateCcw size={14} strokeWidth={1.5} />, text: t("perm.group.confirmRestoreL1") },
+            { icon: <PlayCircle size={14} strokeWidth={1.5} />, text: t("perm.group.confirmRestoreL2"), tone: "accent" },
+          ]}
           confirmLabel={t("trash.restore")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
