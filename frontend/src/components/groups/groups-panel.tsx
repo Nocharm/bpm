@@ -12,6 +12,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { GroupDetail } from "@/components/groups/group-detail";
+import { GroupsGuide } from "@/components/groups/groups-guide";
 import {
   createGroup,
   getDirectory,
@@ -226,6 +227,9 @@ export function GroupsPanel() {
           {t("perm.group.createBtn")}
         </button>
       </div>
+
+      {/* 상단 안내 — 목적 + 신청→승인→사용 SVG 가이드 / header guide */}
+      <GroupsGuide />
 
       {/* 그룹 목록 / Group list */}
       {groups.length === 0 ? (
