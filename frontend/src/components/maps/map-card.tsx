@@ -71,31 +71,25 @@ export function MapCard({
   // 역할 배지는 공개+뷰어면 생략(공개맵은 누구나 뷰어라 무의미) — 에디터/오너 또는 비공개일 때만 (요청)
   const showRole = map.my_role !== null && !(map.visibility === "public" && map.my_role === "viewer");
 
-  // 카드 호버 모달 — 모든 카드 1초 호버 시 우측에 요약+인원 모달. 카드/모달 벗어나면 닫힘 (요청 간소화)
+  // 카드 호버 모달 — 모든 카드 1초 호버 시 우측에 요약+인원(읽기 전용). 카드를 벗어나면 닫힘.
+  // 모달은 pointer-events-none(통과) → 디테일 패널/다른 카드 호버를 가리지 않음(호버가 마우스를 따라감).
   const [modalOpen, setModalOpen] = useState(false);
   const [modalPos, setModalPos] = useState<{ left: number; top: number } | null>(null);
   const [members, setMembers] = useState<MapPermission[] | null>(null);
   const [membersError, setMembersError] = useState<string | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearOpen = () => {
+  const closeModal = () => {
     if (openTimer.current) {
       clearTimeout(openTimer.current);
       openTimer.current = null;
     }
+    setModalOpen(false);
   };
-  const clearClose = () => {
-    if (closeTimer.current) {
-      clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  };
-  // 카드 진입 → 1초 뒤 모달 열기(위치 계산·인원 fetch). 모달 진입 시에도 호출되어 닫힘 취소.
   const onCardEnter = () => {
-    clearClose();
-    if (modalOpen) return;
+    if (openTimer.current || modalOpen) return;
     openTimer.current = setTimeout(() => {
+      openTimer.current = null;
       const rect = rootRef.current?.getBoundingClientRect();
       if (rect) setModalPos({ left: rect.right + 8, top: rect.top });
       setModalOpen(true);
@@ -105,12 +99,6 @@ export function MapCard({
           .catch((err) => setMembersError(err instanceof Error ? err.message : String(err)));
       }
     }, 1000);
-  };
-  // 카드/모달 이탈 → 150ms 뒤 닫기(카드↔모달 이동 허용). 재진입 시 clearClose로 취소.
-  const scheduleClose = () => {
-    clearOpen();
-    clearClose();
-    closeTimer.current = setTimeout(() => setModalOpen(false), 150);
   };
 
   // 스크롤/리사이즈 시 위치가 어긋나므로 닫음
@@ -125,14 +113,12 @@ export function MapCard({
     };
   }, [modalOpen]);
 
-  // 언마운트 시 대기 타이머 정리 — 사라진 컴포넌트가 setState 호출하지 않게
-  useEffect(
-    () => () => {
+  // 언마운트 시 대기 타이머 정리
+  useEffect(() => {
+    return () => {
       if (openTimer.current) clearTimeout(openTimer.current);
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    },
-    [],
-  );
+    };
+  }, []);
 
   return (
     <div
@@ -146,14 +132,11 @@ export function MapCard({
             : "border-hairline"
       }`}
       onClick={() => {
-        // 클릭(선택) 시 대기 중 1초 타이머 취소 + 모달 닫기 — 클릭 후 모달이 뒤늦게 뜨거나 가리지 않게
-        clearOpen();
-        clearClose();
-        setModalOpen(false);
+        closeModal(); // 클릭(선택) 시 대기 타이머 취소 + 모달 닫기
         onSelect?.(map.id);
       }}
       onMouseEnter={onCardEnter}
-      onMouseLeave={scheduleClose}
+      onMouseLeave={closeModal}
     >
       {/* 1줄 — 좌: 타이틀+상태 / 우: 역할 배지 + 공개/비공개 아이콘 (역할은 공개+뷰어면 생략) */}
       <div className="flex items-center gap-2">
@@ -232,10 +215,8 @@ export function MapCard({
         createPortal(
           <div
             data-id="map-card-hover-modal"
-            className="fixed z-[1201] w-64 rounded-md border border-hairline bg-surface p-3 text-fine shadow-lg"
+            className="pointer-events-none fixed z-[1201] w-64 rounded-md border border-hairline bg-surface p-3 text-fine shadow-lg"
             style={{ left: modalPos.left, top: modalPos.top }}
-            onMouseEnter={clearClose}
-            onMouseLeave={scheduleClose}
           >
             <p className="mb-2 truncate text-caption-strong text-ink">{map.name}</p>
             <ul className="flex flex-col gap-1.5 text-ink-secondary">
