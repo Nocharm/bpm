@@ -63,7 +63,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | D1 | 관리자 | **(신규 ①) Departments 고아조직 재연결** — AD 갱신 시 생긴 고아 조직을 현존 조직으로 대체/재연결. Departments 탭 상단에 서브탭 **[Departments \| Orphan orgs]** 추가, 현 'Show org columns'는 **우측 이동**. ⚠ 고아 정의 확인 필요(직원 org_path가 참조하나 디렉터리에 없는 조직) + **백엔드**(탐지·재매핑 엔드포인트). `department-table`·`routers/admin` | 백엔드 필요 | — | ⏳ 분석/확인 | — |
 | A13 | 관리자 | **(신규 ②) 승인 큐 상세 변경값 before→after** — 가시성 변경 등에서 'Public'만 아닌 '**Private → Public**'(A10 역할전환 editor→removed 패턴 확장). Approve/Reject **버튼 아이콘화**. ⚠ 이전값 필요 → `ApprovalRequest.payload`에 old값 저장 여부 확인(없으면 백엔드 보강). `approval-queue`·`routers/permissions` | payload 확인 | — | ⏳ 분석/확인 | — |
 | L5 | 관리자 | **(신규 ④) 그룹 삭제 → 즉시삭제 폐지·스케줄드 딜리션行** — 삭제 시 **맵처럼 확인 모달** 후 진행, 소프트삭제 그룹이 **Scheduled deletion 탭**에 노출(+복구). 현 삭제버튼=목록 제외 역할 유지. ⚠ **백엔드**(삭제 그룹 목록·복구 엔드포인트). `group-detail`·`deleted-maps-panel`·`routers/groups` | 백엔드 필요 | — | ⏳ | — |
-| L6 | 관리자 | **(신규 ③) 그룹 상세 버튼 위치·호버 설명** — 액션 버튼을 하단→**멤버 아이콘+수 div 오른쪽**으로 이동, 버튼 호버 시 관련 설명이 'Add member' 위치에 **페이드인**. (프론트 전용) `group-detail` | 프론트 | — | ⏳ | — |
+| L6 | 관리자 | **(신규 ③) 그룹 상세 버튼 위치·호버 설명** — 액션 버튼을 하단→**멤버 아이콘+수 헤더 오른쪽**으로 이동(Add member 옆), 버튼 호버 시 설명 **페이드인**(`hoveredAction`), 하단 필 제거·카운트다운 헤더 아래. `group-detail` | tsc/lint✅ | ✅ | ✅ OK(레이아웃 검증·호버 위치 피드백 가능) | (S6) |
 | E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
 | E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
 | E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |

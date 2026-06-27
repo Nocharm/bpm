@@ -9,7 +9,6 @@ import {
   Building2,
   Check,
   Clock,
-  Info,
   PauseCircle,
   Pencil,
   PlayCircle,
@@ -18,6 +17,7 @@ import {
   Trash2,
   Undo2,
   User,
+  Users,
   X,
 } from "lucide-react";
 
@@ -167,44 +167,11 @@ function PickerDialog({
   );
 }
 
-// 기능 설명 필 (아이콘 + 텍스트) / function-hint pill.
-function HintPill({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5">
-      {icon}
-      {children}
-    </span>
-  );
-}
-
-// 라이프사이클 액션 버튼 / lifecycle action button.
-function ActionBtn({
-  icon,
-  label,
-  onClick,
-  variant = "plain",
-}: {
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-  variant?: "plain" | "accent" | "error";
-}) {
-  const tone =
-    variant === "accent"
-      ? "border-accent text-accent hover:bg-accent-tint"
-      : variant === "error"
-        ? "border-error text-error hover:bg-surface-alt"
-        : "border-hairline text-ink hover:bg-surface-alt";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-fine ${tone}`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+// 라이프사이클 액션 버튼 톤 / lifecycle action button tone by variant.
+function actionTone(variant?: "plain" | "accent" | "error"): string {
+  if (variant === "accent") return "border-accent text-accent hover:bg-accent-tint";
+  if (variant === "error") return "border-error text-error hover:bg-surface-alt";
+  return "border-hairline text-ink hover:bg-surface-alt";
 }
 
 export function GroupDetail({
@@ -269,6 +236,7 @@ export function GroupDetail({
   };
   const [renaming, setRenaming] = useState(false); // active 인라인 이름변경
   const [renameValue, setRenameValue] = useState(group.name);
+  const [hoveredAction, setHoveredAction] = useState<string | null>(null); // 호버 시 설명 페이드인
 
   const managerSet = new Set(group.managers);
   const memberExcludeIds = new Set(group.members.map((m) => m.member_id));
@@ -377,6 +345,80 @@ export function GroupDetail({
     }
   }
 
+  // 상태별 라이프사이클 액션 — 버튼은 멤버 헤더 우측, 설명은 호버 시 페이드인 / status-based actions.
+  type GroupAction = {
+    key: string;
+    label: string;
+    hint: string;
+    icon: ReactNode;
+    onClick: () => void;
+    variant?: "plain" | "accent" | "error";
+  };
+  const actions: GroupAction[] = [];
+  if (group.status === "pending") {
+    actions.push({
+      key: "withdraw",
+      label: t("perm.group.withdraw"),
+      hint: t("perm.group.withdrawHint"),
+      icon: <Undo2 size={13} strokeWidth={1.5} />,
+      onClick: () => void handleWithdraw(),
+    });
+  } else if (group.status === "active") {
+    actions.push({
+      key: "rename",
+      label: t("perm.group.rename"),
+      hint: t("perm.group.renameHint"),
+      icon: <Pencil size={13} strokeWidth={1.5} />,
+      onClick: () => {
+        setRenameValue(group.name);
+        setRenaming(true);
+      },
+    });
+    actions.push({
+      key: "deactivate",
+      label: t("perm.group.deactivate"),
+      hint: t("perm.group.deactivateHint"),
+      icon: <PauseCircle size={13} strokeWidth={1.5} />,
+      onClick: () => void handleDeactivate(),
+    });
+  } else if (group.status === "inactive") {
+    actions.push({
+      key: "reactivate",
+      label: t("perm.group.reactivate"),
+      hint: t("perm.group.inactiveHint"),
+      icon: <PlayCircle size={13} strokeWidth={1.5} />,
+      onClick: () => void handleReactivate(),
+      variant: "accent",
+    });
+    actions.push({
+      key: "delete",
+      label: t("perm.group.delete"),
+      hint: t("perm.group.deleteHint"),
+      icon: <Trash2 size={13} strokeWidth={1.5} />,
+      onClick: () => void handleDelete(),
+      variant: "error",
+    });
+  } else if (group.status === "rejected") {
+    if (onReRequest) {
+      actions.push({
+        key: "resubmit",
+        label: t("perm.group.resubmit"),
+        hint: t("perm.group.resubmitHint"),
+        icon: <RotateCcw size={13} strokeWidth={1.5} />,
+        onClick: () => onReRequest(group),
+        variant: "accent",
+      });
+    }
+    actions.push({
+      key: "delete",
+      label: t("perm.group.delete"),
+      hint: t("perm.group.deleteHint"),
+      icon: <Trash2 size={13} strokeWidth={1.5} />,
+      onClick: () => void handleDelete(),
+      variant: "error",
+    });
+  }
+
   // 읽기 전용 안내 / Read-only notice.
   let readOnlyNotice: string | null = null;
   if (group.status === "pending") readOnlyNotice = t("perm.group.readOnlyPending");
@@ -392,19 +434,92 @@ export function GroupDetail({
         </p>
       )}
 
-      {/* 멤버 섹션 — user 카드의 ★ 토글로 관리자 지정 (별도 관리자 영역 없음) / single members section */}
-      <div className="flex items-center justify-between">
-        <p className="text-caption font-semibold text-ink">{t("perm.group.membersSection")}</p>
-        {canEdit && (
+      {/* 멤버 헤더 — 좌: 아이콘+수, 우: 호버설명(페이드인) + 액션버튼 + Add member /
+          member icon+count left; lifecycle actions right, hovering one fades its hint in at the Add-member spot. */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex shrink-0 items-center gap-1.5 text-caption font-semibold text-ink">
+          <Users size={15} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          {group.members.length}
+          <span className="font-normal text-ink-secondary">{t("perm.group.membersSection")}</span>
+        </p>
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {/* 호버 설명 — 'Add member' 위치에 페이드인 / hovered action's hint, fades in */}
+          <span
+            className={`hidden truncate text-fine text-ink-tertiary transition-opacity duration-200 sm:block ${
+              hoveredAction ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {hoveredAction}
+          </span>
+          {canManage &&
+            !renaming &&
+            actions.map((a) => (
+              <button
+                key={a.key}
+                type="button"
+                onMouseEnter={() => setHoveredAction(a.hint)}
+                onMouseLeave={() => setHoveredAction(null)}
+                onFocus={() => setHoveredAction(a.hint)}
+                onBlur={() => setHoveredAction(null)}
+                onClick={a.onClick}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-2 py-1 text-fine ${actionTone(a.variant)}`}
+              >
+                {a.icon}
+                {a.label}
+              </button>
+            ))}
+          {canEdit && (
+            <button
+              type="button"
+              className="shrink-0 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
+              onClick={() => setMemberDialogOpen(true)}
+            >
+              {t("perm.group.addMemberBtn")}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 거절/소프트삭제 자동삭제 카운트다운 / auto-delete countdown */}
+      {group.deleted_at && (
+        <span className="flex items-center gap-1.5 text-fine font-semibold text-error">
+          <Clock size={12} strokeWidth={1.5} className="shrink-0" />
+          {purgeLabel(group.deleted_at)}
+        </span>
+      )}
+
+      {/* 인라인 이름변경 (active) / inline rename */}
+      {renaming && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            autoFocus
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleRename();
+              if (e.key === "Escape") setRenaming(false);
+            }}
+            className="flex-1 rounded-sm border border-accent bg-transparent px-2 py-1 text-caption text-ink outline-none"
+          />
           <button
             type="button"
-            className="rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
-            onClick={() => setMemberDialogOpen(true)}
+            onClick={() => void handleRename()}
+            className="rounded-sm border border-accent p-1 text-accent hover:bg-accent-tint"
+            aria-label={t("perm.group.rename")}
           >
-            {t("perm.group.addMemberBtn")}
+            <Check size={14} strokeWidth={1.5} />
           </button>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={() => setRenaming(false)}
+            className="rounded-sm border border-hairline p-1 text-ink-tertiary hover:bg-surface-alt"
+            aria-label={t("common.cancel")}
+          >
+            <X size={14} strokeWidth={1.5} />
+          </button>
+        </div>
+      )}
 
       {group.members.length === 0 && managerOnlyIds.length === 0 ? (
         <p className="text-fine text-ink-tertiary">{t("perm.group.noMembers")}</p>
@@ -446,148 +561,6 @@ export function GroupDetail({
               removeLabel={t("perm.group.removeBtn")}
             />
           ))}
-        </div>
-      )}
-
-      {/* 라이프사이클 관리 액션 + 기능 설명 (펼침 하단) / lifecycle actions + icon-pill hints */}
-      {(canManage || group.status === "rejected") && (
-        <div className="flex flex-col gap-2 border-t border-hairline pt-3">
-          {/* 거절/소프트삭제 자동삭제 카운트다운 / auto-delete countdown */}
-          {group.deleted_at && (
-            <span className="flex items-center gap-1.5 text-fine font-semibold text-error">
-              <Clock size={12} strokeWidth={1.5} className="shrink-0" />
-              {purgeLabel(group.deleted_at)}
-            </span>
-          )}
-          {/* 상태별 기능 설명 — 아이콘/필 / status hints as icon pills */}
-          <div className="flex flex-wrap items-center gap-1.5 text-fine text-ink-tertiary">
-            <Info size={12} strokeWidth={1.5} className="shrink-0" />
-            {group.status === "pending" && (
-              <HintPill icon={<Undo2 size={11} strokeWidth={1.5} />}>
-                {t("perm.group.withdrawHint")}
-              </HintPill>
-            )}
-            {group.status === "active" && (
-              <>
-                <HintPill icon={<PauseCircle size={11} strokeWidth={1.5} />}>
-                  {t("perm.group.deactivateHint")}
-                </HintPill>
-                <HintPill icon={<Pencil size={11} strokeWidth={1.5} />}>
-                  {t("perm.group.renameHint")}
-                </HintPill>
-              </>
-            )}
-            {group.status === "inactive" && (
-              <HintPill icon={<PlayCircle size={11} strokeWidth={1.5} />}>
-                {t("perm.group.inactiveHint")}
-              </HintPill>
-            )}
-            {group.status === "rejected" && (
-              <>
-                <HintPill icon={<RotateCcw size={11} strokeWidth={1.5} />}>
-                  {t("perm.group.resubmitHint")}
-                </HintPill>
-                <HintPill icon={<Trash2 size={11} strokeWidth={1.5} />}>
-                  {t("perm.group.deleteHint")}
-                </HintPill>
-              </>
-            )}
-          </div>
-          {/* 인라인 이름변경 (active) / inline rename */}
-          {renaming && (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                autoFocus
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleRename();
-                  if (e.key === "Escape") setRenaming(false);
-                }}
-                className="flex-1 rounded-sm border border-accent bg-transparent px-2 py-1 text-caption text-ink outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => void handleRename()}
-                className="rounded-sm border border-accent p-1 text-accent hover:bg-accent-tint"
-                aria-label={t("perm.group.rename")}
-              >
-                <Check size={14} strokeWidth={1.5} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setRenaming(false)}
-                className="rounded-sm border border-hairline p-1 text-ink-tertiary hover:bg-surface-alt"
-                aria-label={t("common.cancel")}
-              >
-                <X size={14} strokeWidth={1.5} />
-              </button>
-            </div>
-          )}
-          {/* 상태별 액션 버튼 / status-based actions */}
-          {canManage && !renaming && (
-            <div className="flex flex-wrap gap-2">
-              {group.status === "pending" && (
-                <ActionBtn
-                  icon={<Undo2 size={13} strokeWidth={1.5} />}
-                  label={t("perm.group.withdraw")}
-                  onClick={() => void handleWithdraw()}
-                />
-              )}
-              {group.status === "active" && (
-                <>
-                  <ActionBtn
-                    icon={<Pencil size={13} strokeWidth={1.5} />}
-                    label={t("perm.group.rename")}
-                    onClick={() => {
-                      setRenameValue(group.name);
-                      setRenaming(true);
-                    }}
-                  />
-                  <ActionBtn
-                    icon={<PauseCircle size={13} strokeWidth={1.5} />}
-                    label={t("perm.group.deactivate")}
-                    onClick={() => void handleDeactivate()}
-                  />
-                </>
-              )}
-              {group.status === "inactive" && (
-                <>
-                  <ActionBtn
-                    icon={<PlayCircle size={13} strokeWidth={1.5} />}
-                    label={t("perm.group.reactivate")}
-                    onClick={() => void handleReactivate()}
-                    variant="accent"
-                  />
-                  <ActionBtn
-                    icon={<Trash2 size={13} strokeWidth={1.5} />}
-                    label={t("perm.group.delete")}
-                    onClick={() => void handleDelete()}
-                    variant="error"
-                  />
-                </>
-              )}
-              {group.status === "rejected" && (
-                <>
-                  {onReRequest && (
-                    <ActionBtn
-                      icon={<RotateCcw size={13} strokeWidth={1.5} />}
-                      label={t("perm.group.resubmit")}
-                      onClick={() => onReRequest(group)}
-                      variant="accent"
-                    />
-                  )}
-                  <ActionBtn
-                    icon={<Trash2 size={13} strokeWidth={1.5} />}
-                    label={t("perm.group.delete")}
-                    onClick={() => void handleDelete()}
-                    variant="error"
-                  />
-                </>
-              )}
-            </div>
-          )}
         </div>
       )}
 
