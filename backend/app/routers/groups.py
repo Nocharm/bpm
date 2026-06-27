@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import (
+    Employee,
     UserGroup,
     UserGroupManager,
     UserGroupMember,
@@ -78,11 +79,27 @@ async def _get_group_or_404(session: AsyncSession, group_id: int) -> UserGroup:
     return group
 
 
-def _is_visible(group: UserGroup, user: str) -> bool:
-    """list 가시성 규칙 — sysadmin은 전부, 그 외는 active + 본인 생성(자기 pending)만."""
-    if logic.is_sysadmin(user):
+async def _emp_org_path(session: AsyncSession, user: str) -> str:
+    """사용자 org_path — 부서 멤버십 판정용(직원 미존재 시 '')."""
+    emp = await session.get(Employee, user)
+    if emp is None:
+        return ""
+    return logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
+
+
+def _belongs(group: GroupOut, user: str, emp_org_path: str) -> bool:
+    """사용자가 그룹에 '해당'하는가 — 생성자/관리자/직접 user 멤버/부서 멤버 (상태 무관).
+
+    일반 유저 가시성: sysadmin은 전체, 그 외는 자신이 해당하는 그룹만 본다.
+    """
+    if group.created_by == user or user in group.managers:
         return True
-    return group.status == "active" or group.created_by == user
+    for m in group.members:
+        if m.member_type == "user" and m.member_id == user:
+            return True
+        if m.member_type == "department" and logic.belongs_to_department(emp_org_path, m.member_id):
+            return True
+    return False
 
 
 # ── list / create ─────────────────────────────────────────────
@@ -93,13 +110,16 @@ async def list_groups(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[GroupOut]:
-    """그룹 목록 — sysadmin은 전체(pending/rejected 포함), 그 외는 active + 본인 생성 pending."""
+    """그룹 목록 — sysadmin은 전체, 그 외는 '자신이 해당하는' 그룹(생성자/관리자/user 멤버/부서 멤버)만."""
+    is_admin = logic.is_sysadmin(user)
+    emp_org_path = "" if is_admin else await _emp_org_path(session, user)
     rows = await session.scalars(select(UserGroup).order_by(UserGroup.id))
-    return [
-        await _serialize_group(session, g)
-        for g in rows.all()
-        if _is_visible(g, user)
-    ]
+    out: list[GroupOut] = []
+    for g in rows.all():
+        serialized = await _serialize_group(session, g)
+        if is_admin or _belongs(serialized, user, emp_org_path):
+            out.append(serialized)
+    return out
 
 
 @router.get("/groups/pending", response_model=list[GroupOut])
@@ -169,9 +189,12 @@ async def get_group(
 ) -> GroupOut:
     """그룹 상세 — 가시성 규칙에 따라 보이지 않으면 404(존재 은닉)."""
     group = await _get_group_or_404(session, group_id)
-    if not _is_visible(group, user):
-        raise HTTPException(status_code=404, detail=f"group {group_id} not found")
-    return await _serialize_group(session, group)
+    serialized = await _serialize_group(session, group)
+    if not logic.is_sysadmin(user):
+        emp_org_path = await _emp_org_path(session, user)
+        if not _belongs(serialized, user, emp_org_path):
+            raise HTTPException(status_code=404, detail=f"group {group_id} not found")
+    return serialized
 
 
 # ── members ───────────────────────────────────────────────────

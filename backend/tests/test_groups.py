@@ -157,10 +157,11 @@ def test_create_group_manager_not_member_422(
 # ── list visibility ───────────────────────────────────────────
 
 
-def test_list_visibility_sysadmin_all_others_active_plus_own(
+def test_list_visibility_belongs_only(
     client: TestClient, enforce: None
 ) -> None:
-    # creator1 의 pending 그룹
+    """sysadmin은 전체, 일반 유저는 '자신이 해당하는' 그룹(생성자/멤버)만 본다."""
+    # creator1 의 그룹 (멤버 u.a, u.b)
     act_as("creator1")
     g1 = _create_group(
         client,
@@ -170,7 +171,7 @@ def test_list_visibility_sysadmin_all_others_active_plus_own(
             {"member_type": "user", "member_id": "u.b"},
         ],
     ).json()
-    # creator2 의 pending 그룹 → sysadmin approve → active
+    # creator2 의 그룹 (멤버 u.c, u.d) → sysadmin approve → active
     act_as("creator2")
     g2 = _create_group(
         client,
@@ -183,19 +184,24 @@ def test_list_visibility_sysadmin_all_others_active_plus_own(
     act_as(SYSADMIN)
     client.post(f"/api/groups/{g2['id']}/decide", json={"decision": "approve"})
 
-    # sysadmin → 둘 다 보임(pending 포함)
+    # sysadmin → 둘 다 보임
     ids = {g["id"] for g in client.get("/api/groups").json()}
     assert g1["id"] in ids and g2["id"] in ids
 
-    # creator1 → 자기 pending(g1) + active(g2) 보임
+    # creator1 → 자기 그룹(g1)만, 안 속한 active g2는 안 보임
     act_as("creator1")
     ids = {g["id"] for g in client.get("/api/groups").json()}
-    assert g1["id"] in ids and g2["id"] in ids
+    assert g1["id"] in ids and g2["id"] not in ids
 
-    # stranger → active(g2)만, 남의 pending(g1)은 안 보임
+    # u.c (g2 멤버) → g2 보임
+    act_as("u.c")
+    ids = {g["id"] for g in client.get("/api/groups").json()}
+    assert g2["id"] in ids
+
+    # stranger → 둘 다 안 보임 (active 라도)
     act_as("stranger")
     ids = {g["id"] for g in client.get("/api/groups").json()}
-    assert g2["id"] in ids and g1["id"] not in ids
+    assert g1["id"] not in ids and g2["id"] not in ids
 
 
 def test_detail_others_pending_404(client: TestClient, enforce: None) -> None:
