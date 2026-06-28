@@ -5615,6 +5615,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           displayFields={displayFields}
           onToggleDisplayField={toggleDisplayField}
           readOnly={readOnly}
+          onAddNode={(type) => handleAddNode(null, type)}
+          onOpenLibrary={() => setLibraryOpen(true)}
           onRowContextMenu={(event, id) => {
             setSelectedId(id);
             setSelectedEdgeId(null);
