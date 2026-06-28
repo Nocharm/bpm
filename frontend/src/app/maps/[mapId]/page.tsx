@@ -1,16 +1,15 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Maximize, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
   Background,
   BackgroundVariant,
-  ControlButton,
-  Controls,
   type Connection,
   type Edge,
   MarkerType,
+  MiniMap,
   type NodeChange,
   type NodeTypes,
   PanOnScrollMode,
@@ -5917,13 +5916,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                           color="var(--color-canvas-dot)"
                         />
                       )}
-                      <Controls showFitView={false}>
-                        {/* 기본 fit(가운데 정렬+스냅) 대신 좌상단 정렬 fit — 왼쪽위 고정 일관 */}
-                        <ControlButton onClick={fitScopeTopLeft} title={t("editor.fitView")}>
-                          <Maximize size={14} strokeWidth={1.5} />
-                        </ControlButton>
-                      </Controls>
-                      <CanvasZoomScale />
+                      <MiniMap
+                        position="bottom-left"
+                        pannable
+                        zoomable
+                        bgColor="var(--color-surface)"
+                        nodeColor="var(--color-ink-tertiary)"
+                        maskColor="color-mix(in srgb, var(--color-accent) 16%, transparent)"
+                        className="rounded-sm border border-hairline shadow-md"
+                      />
+                      <CanvasZoomScale onFit={fitScopeTopLeft} />
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}
                     {readOnly && (

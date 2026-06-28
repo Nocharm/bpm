@@ -24,7 +24,7 @@
 
 | ID | 화면 | 단위 / 내용 | 검증 | 시현 | 검토결과 | 커밋 |
 |----|------|-------------|------|------|---------|------|
-| R1 | 캔버스 크롬 | **미니맵 추가(좌하)** + **줌 pill 재스타일**(하단중앙 `- 100% +`·전체화면). `<MiniMap>` ReactFlow children에 추가·`canvas-zoom-scale.tsx` 목업화. 이미지 `editor-overview.png` | — | — | ⏳ | — |
+| R1 | 캔버스 크롬 | **미니맵 추가(좌하)** + **줌 pill 재스타일**(하단중앙 `- 100% +`·전체화면). `<MiniMap>` ReactFlow children에 추가·`canvas-zoom-scale.tsx` 목업화. 이미지 `editor-overview.png` | tsc/lint✅ | ✅ | ✅ 줌 pill 승인 · 🔧 미니맵 악센트/톤다운/흰배경 보정(뷰포트 채움은 React Flow 한계로 후속 오버레이) | (R1) |
 | R2 | 노드 비주얼 | 프로세스 테두리 `#6e84a3`·셀렉션 링 `2px accent + 4px color-mix 12%`·도형(분기 마름모/시작·끝 알약) 폴리시. `process-node.tsx`(DEFAULT_COLORS·selected). 이미지 `inspector-properties-node.png` | — | — | ⏳ | — |
 | R3 | 상단바 | 브레드크럼·**맵네임 드롭다운**·**버전 pill**·저장상태·undo/redo·＋/AI/공유/저장·전체화면/인스펙터 토글 → `EditorTopbar`(+`MapNameDropdown`·`VersionPill`) 추출. page.tsx `5341–5559` 인라인 교체, 핸들러 배선 보존. 이미지 `editor-overview.png`·`topbar-mapname-dropdown.png` | — | — | ⏳ | — |
 | R4 | 좌측 사이드바 | **＋노드 메뉴**(프로세스/분기/시작·끝/하위프로세스)·자동정렬·정렬도구·**단축키 카드(선택 맥락 반응)**·검색·아웃라인 재스타일. `editor-left-sidebar.tsx` + `add-node-menu` 추출. 이미지 `topbar-add-node-menu.png`·`editor-overview.png` | — | — | ⏳ | — |
