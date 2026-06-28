@@ -4,9 +4,9 @@
 // MiniMap은 전달된 children을 svg에 렌더하지 않으므로, 동일 좌표계(viewBox)를 가진
 // 별도 Panel을 같은 위치에 겹쳐 그린다 — 좌표 계산이 MiniMap과 동일해 정렬된다.
 import {
-  getNodesBounds,
   Panel,
   useNodes,
+  useReactFlow,
   useStore,
   useViewport,
 } from "@xyflow/react";
@@ -17,6 +17,7 @@ const OFFSET_SCALE = 5; // MiniMap offsetScale 기본값
 
 export function MiniMapViewportFill() {
   const nodes = useNodes();
+  const { getNodesBounds } = useReactFlow();
   const { x: tx, y: ty, zoom } = useViewport();
   const paneW = useStore((s) => s.width);
   const paneH = useStore((s) => s.height);
@@ -24,6 +25,7 @@ export function MiniMapViewportFill() {
   if (nodes.length === 0 || zoom <= 0) return null;
 
   // MiniMap과 동일한 viewBox 계산(boundingRect → viewScale → offset).
+  // getNodesBounds는 훅 버전 — 서브플로우 nodeLookup 반영(standalone 경고 회피).
   const b = getNodesBounds(nodes);
   if (b.width <= 0 || b.height <= 0) return null;
   const viewScale = Math.max(b.width / MM_W, b.height / MM_H);

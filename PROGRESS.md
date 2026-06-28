@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-06-29
+- **fix(editor): R1+ 미니맵 getNodesBounds 훅 버전으로 — 서브플로우 경고 제거 (feat/editor-compare-redesign)** — `minimap-viewport-fill`의 standalone `getNodesBounds(nodes)` → **`useReactFlow().getNodesBounds`**(내부 nodeLookup 반영). React Flow 콘솔 경고 재발 0건·서브플로우 bounds 정확도 개선. 검증: tsc/eslint 0.
+
 ## 2026-06-28
 - **feat(editor): R1+ 미니맵 목업 정합 — 흰 배경·노드 실색 톤다운·뷰포트 악센트 채움 (feat/editor-compare-redesign)** — MiniMap `maskColor=transparent`(바깥 흰 배경)·`nodeColor` 함수로 **각 노드 실제 색 톤다운**(`color-mix 38%`, `resolveNodeStroke`를 `process-node`에서 export·`<MiniMap<AppNode>>`). MiniMap이 children 미렌더라 **동일 viewBox 오버레이 Panel**(`minimap-viewport-fill.tsx`)로 뷰포트를 반투명 악센트로 채움(목업의 '악센트 사각형'). 검증: tsc/eslint 0·정렬 브라우저 확인.
 - **feat(versions): 드래프트 점유권 강탈은 sysadmin만 + 생성자 자동점유 (feat/editor-compare-redesign, 백엔드 변경=사용자 승인)** — `acquire_checkout`의 **force(강탈)를 sysadmin 전용**(비-sysadmin force→403), `create_version`이 **생성자를 점유권자로 자동 설정**. 편집은 기존대로 보유자만(graph.py) — sysadmin도 점유 없으면 수정 불가. 프론트 force-edit 버튼을 `is_sysadmin`에게만 노출(그 외 읽기전용 안내). 정식 인수(에디터 요청→승인큐 승인)는 모달/승인 디자인 후 후속. 검증: backend 342 passed(+2)·ruff·tsc/eslint 0. 스키마 무변경.
