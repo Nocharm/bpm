@@ -152,6 +152,11 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   subprocess: "#7c6adc", // violet
 };
 
+// data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
+export function resolveNodeStroke(color: string, nodeType: ProcessNodeType): string {
+  return color || DEFAULT_COLORS[nodeType];
+}
+
 // 파스텔 fill — 저장된 stroke color에서 파생(데이터 모델 무변경)
 function deriveFill(color: string): string {
   return `color-mix(in srgb, ${color} 18%, white)`;

@@ -33,6 +33,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
+import { MiniMapViewportFill } from "@/components/minimap-viewport-fill";
 import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
@@ -52,7 +53,7 @@ import { Tooltip } from "@/components/tooltip";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
-import { ProcessNode } from "@/components/process-node";
+import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -5922,15 +5923,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                           color="var(--color-canvas-dot)"
                         />
                       )}
-                      <MiniMap
+                      <MiniMap<AppNode>
                         position="bottom-left"
                         pannable
                         zoomable
                         bgColor="var(--color-surface)"
-                        nodeColor="var(--color-ink-tertiary)"
-                        maskColor="color-mix(in srgb, var(--color-accent) 16%, transparent)"
+                        nodeColor={(n) =>
+                          `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
+                        }
+                        maskColor="transparent"
                         className="rounded-sm border border-hairline shadow-md"
                       />
+                      {/* 뷰포트 영역을 반투명 악센트로 채움 — MiniMap이 children 미렌더라 동일 좌표계 오버레이 */}
+                      <MiniMapViewportFill />
                       <CanvasZoomScale onFit={fitScopeTopLeft} />
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}
