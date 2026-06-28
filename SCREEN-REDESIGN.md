@@ -64,16 +64,7 @@ AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim .venv/bi
 | A13 | 관리자 | **(신규 ②) 승인 큐 상세 변경값 before→after** — `visibility_change` payload에 `from_visibility` 저장(스키마 무변경) → **🔒 Private → 🌐 Public**(`VisibilityPill`, 구 요청은 to만 폴백). Approve/Reject **✓/✗ 아이콘화**. **요청자=유저 카드**(이름 우선·아이디·소속, 메인 상세 디자인 재활용)·**날짜 별도 행**. `approval-queue`·`routers/permissions` | backend 336✅·tsc/lint✅ | ✅ | ✅ OK(카드·날짜행 검증) | (S6) |
 | L5 | 관리자 | **(신규 ④) 그룹 삭제→확인 모달+스케줄드 딜리션·deactivate/reactivate/restore 모달** — `GET /groups/deleted`+`/restore`(스키마✓ 무변경). 공용 `ConfirmDialog` 리치 폼 확장. delete(리치)/deactivate/reactivate/restore 모두 확인 모달(삭제 모달처럼 **아이콘+간결 줄** 보완). `DeletedGroupsPanel`을 Scheduled deletion에 User groups 섹션 추가. **맵 Restore도 확인 모달**. **비활성 시 map_permissions 삭제**+경고. **add member=피커 다중선택(칩)+Add N 일괄·모달 통일**. `confirm-dialog`·`group-detail`·`deleted-*-panel`·`settings`·`routers/groups` | backend 340✅·tsc/lint✅ | ✅ | ✅ OK(전 흐름·일괄추가·맵모달 검증) | (S6) |
 | L6 | 관리자 | **그룹 상세 헤더·멤버 카드 개선** — 멤버수 중복 제거(**카드 헤더 카운트만**)·라이프사이클 버튼을 **카드 헤더 우측(타이틀쪽)으로 이동**(`GroupActions` 추출, 토글 sibling). 멤버 카드 **호버 시 Remove·매니저 토글**(★배지 항상)·정렬 **매니저→유저→팀**·**매니저 추가/제거 확인 모달**. `group-actions`·`group-detail`·`groups-panel`·`groups/[groupId]` | tsc/lint✅ | ✅ | ✅ OK(중복제거·헤더버튼·rename 검증) | (S6) |
-| E1 | 편집기 | 줌 pill 좌하단(`left-3`)→**우하단**. `canvas-zoom-scale.tsx` | — | — | ⏳ | — |
-| E2 | 편집기 | **미니맵** 추가 — React Flow `<MiniMap>` 좌하단(현재 부재). `page.tsx` | — | — | ⏳ | — |
-| E3 | 편집기 | 프로세스 노드 테두리색 `#909098`→`#6e84a3`(fill은 `color-mix 18%` 유지). `process-node.tsx` DEFAULT_COLORS | — | — | ⏳ | — |
-| E4 | 편집기 | 셀렉션 링 정확값 — `2px accent` + `0 0 0 4px color-mix(accent 12%)`(현재 Tailwind `ring-2`와 대조 보정). (E5 8방향 드롭존=스펙상 4방향 유지, 변경 없음) | — | — | ⏳ | — |
-| I1 | 편집기 | 인스펙터 **탭 바**(속성/맵/승인/활동) + `inspectorTab` 상태 + 닫힘 시 우측 가장자리 "속성" 재오픈 탭, 폭 330. **현재 탭 부재**(단일 패널+하단탭) | — | — | ⏳ | — |
-| I2 | 편집기 | **속성 탭** — 노드/엣지/빈상태 콘텐츠 재배치 + 엣지 선택 시 연결면 선택·엣지 삭제(현재 컨텍스트 메뉴만) | — | — | ⏳ | — |
-| I3 | 편집기 | **맵 탭(신규)** — 가시성 컨트롤 + 협업자 멤버-로우(2번째줄 소속) + 엣지 스타일(하단 design 탭에서 이동, 맵 전체 통일) + 설명 | — | — | ⏳ | — |
-| I4 | 편집기 | **승인 탭** — `WorkflowDashboard`를 하단 탭→상단 탭 승격 | — | — | ⏳ | — |
-| I5 | 편집기 | **활동 탭(신규)** — 코멘트(속성 `<details>`에서 이동) + 버전 타임라인 통합 | — | — | ⏳ | — |
-| I6 | 편집기 | 좌측 사이드바 — 단축키 가이드 카드 **선택 맥락 반응형**(노드/분기/엣지/무선택) + 검색창 위치 정렬 | — | — | ⏳ | — |
+| E·I | 편집기/인스펙터 | **편집기·비교화면 재디자인은 별도 트래커로 이관** → [`SCREEN-REDESIGN-EDITOR.md`](SCREEN-REDESIGN-EDITOR.md) (제자리 리스타일+컴포넌트 대체, 브랜치 `feat/editor-compare-redesign`). 기존 E1~E4(줌·미니맵·노드테두리·셀렉션 링)·I1~I6(인스펙터 4탭·맵/승인/활동 탭·사이드바)는 거기서 R1~R11로 재정의됨. | — | — | ➡️ 이관 | — |
 
 ## 비고
 - **S5 진행 순서**(권장): H6 → H5a → H2 → H1 → H3 → H4 → (H5b 확인 후). 각 단위 개별 커밋 + 시현 + 이 표 갱신.
