@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronRight, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -35,6 +35,8 @@ import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MiniMapViewportFill } from "@/components/minimap-viewport-fill";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
+import { MapNameDropdown } from "@/components/map-name-dropdown";
+import { VersionPill } from "@/components/version-pill";
 import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
@@ -607,8 +609,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 우측 인스펙터 하단 탭 패널 — 승인/버전/다운로드/맵 디자인 (툴바에서 옮긴 컨트롤 수납)
   const [bottomTab, setBottomTab] = useState<"approval" | "version" | "download" | "design">("approval");
-  // 좌상단 맵 이름 드롭다운(목록·루트로)
-  const [mapMenuOpen, setMapMenuOpen] = useState(false);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(320);
   // 대시보드 패널 높이(px) — 사용자 조절, localStorage 영속
@@ -2898,6 +2898,50 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
     },
     [readOnly, reactFlow, setNodes, scheduleAutoSave],
+  );
+
+  // 상단 맵 드롭다운의 '링크노드로 추가' — 다른 맵을 현재 캔버스에 읽기전용 참조(subprocess) 노드로 삽입.
+  // handleLibraryDrop과 동일한 노드 형태이되 드롭 좌표 대신 뷰포트 중앙, 최신본 추종(followLatest).
+  const addLinkNodeFromMap = useCallback(
+    async (linkedMapId: number, name: string) => {
+      if (readOnly) return;
+      const position = reactFlow.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      let subEnds: SubEnd[] = [];
+      try {
+        const resolved = await getResolvedGraph(linkedMapId, true, null);
+        subEnds = deriveSubEnds(resolved);
+      } catch {
+        // subEnds 파생 실패 시 빈 채로 — 백엔드가 핸들 없어도 저장 허용
+      }
+      const node: AppNode = {
+        id: genId(),
+        type: "process",
+        position,
+        data: {
+          label: name,
+          description: "",
+          nodeType: "subprocess",
+          color: "",
+          assignee: "",
+          department: "",
+          system: "",
+          duration: "",
+          groupIds: [],
+          hasChildren: false,
+          linkedMapId,
+          linkedVersionId: null,
+          followLatest: true,
+          subEnds,
+        },
+      };
+      setNodes((cur) => [...cur, node]);
+      scheduleAutoSave();
+      showToast(t("editor.linkNodeAdded", { name }));
+    },
+    [readOnly, reactFlow, setNodes, scheduleAutoSave, showToast, t],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -5341,6 +5385,9 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const toolButton =
     "inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+  // 상단바 ghost 아이콘 버튼 — 보더 없이 hover 배경만(목업 토브바 톤). 클릭 눌림은 globals.css base.
+  const topIconBtn =
+    "inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
     <NodeActionsContext.Provider value={nodeActions}>
@@ -5348,54 +5395,32 @@ function MapEditor({ mapId }: { mapId: number }) {
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
       <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}`}</style>
       <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
-        {/* 좌상단 — 아웃라인 토글(사이드바에서 이동) + 맵 이름 드롭다운(목록/루트로). 브레드크럼 제거 */}
+      <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
+        {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
         <button
           type="button"
-          className={toolButton}
+          className={topIconBtn}
           onClick={() => setLeftCollapsed((v) => !v)}
           title={leftCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
           aria-label={leftCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
         >
           <PanelLeft size={16} strokeWidth={1.5} />
         </button>
-        <div className="relative">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
-            onClick={() => setMapMenuOpen((v) => !v)}
-            title={t("editor.mapMenu")}
-          >
-            <span className="max-w-[16rem] truncate">{mapName}</span>
-            <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
-          </button>
-          {mapMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-[1000]" onClick={() => setMapMenuOpen(false)} />
-              <div className="absolute left-0 z-[1001] mt-1 w-44 rounded-md border border-hairline bg-surface py-1 shadow-lg">
-                <Link
-                  href="/"
-                  className="flex items-center gap-1 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => setMapMenuOpen(false)}
-                >
-                  <ArrowLeft size={14} strokeWidth={1.5} />{t("editor.backToList")}
-                </Link>
-                {scopes.length > 1 && (
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                    onClick={() => {
-                      setMapMenuOpen(false);
-                      void navigateTo(scopes.slice(0, 1));
-                    }}
-                  >
-                    {t("editor.toRoot")}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+        <MapNameDropdown
+          mapId={mapId}
+          mapName={mapName}
+          canToRoot={scopes.length > 1}
+          isEditing={!readOnly}
+          onToRoot={() => void navigateTo(scopes.slice(0, 1))}
+          onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+        />
+        <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <VersionPill
+          versions={versions}
+          versionId={versionId}
+          isEditing={!readOnly}
+          onSwitch={(id) => void switchVersion(id)}
+        />
 
         {isViewer && (
           <span
@@ -5460,8 +5485,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           )}
         </div>
 
-        {/* 툴바 최소화 — 버전·PNG·엣지스타일·펼치기는 우측 하단 탭 패널로 이동 / minimized toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* 우: 상태 인디케이터 · undo/redo · 라이브러리 · AI · 저장 · 인스펙터 토글.
+            (공유·전체화면은 백엔드/동작 부재로 보류 — R3) */}
+        <div className="flex items-center gap-1.5">
           {readOnly && !isViewer && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
@@ -5504,7 +5530,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           <button
-            className={toolButton}
+            className={topIconBtn}
             onClick={undo}
             disabled={readOnly || historySize.past === 0}
             title={t("editor.undoTitle")}
@@ -5512,33 +5538,26 @@ function MapEditor({ mapId }: { mapId: number }) {
             <Undo2 size={16} strokeWidth={1.5} />
           </button>
           <button
-            className={toolButton}
+            className={topIconBtn}
             onClick={redo}
             disabled={readOnly || historySize.future === 0}
             title={t("editor.redoTitle")}
           >
             <Redo2 size={16} strokeWidth={1.5} />
           </button>
+          <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
-            className={toolButton}
+            className={topIconBtn}
             onClick={() => setLibraryOpen((open) => !open)}
             title={t("library.toggle")}
             aria-label={t("library.toggle")}
           >
             <Network size={16} strokeWidth={1.5} />
           </button>
-          <button
-            className={toolButton}
-            onClick={() => setInspectorOpen((open) => !open)}
-            title={t("editor.inspectorToggle")}
-            aria-label={t("editor.inspectorToggle")}
-          >
-            <PanelRight size={16} strokeWidth={1.5} />
-          </button>
           {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+            className="inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
             onClick={() => {
               // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
               if (!aiOpen) {
@@ -5555,12 +5574,21 @@ function MapEditor({ mapId }: { mapId: number }) {
             AI
           </button>
           <button
-            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
             disabled={readOnly}
           >
             {readOnly && <Lock size={14} strokeWidth={1.7} />}
             {t("editor.save")}
+          </button>
+          <span className="mx-0.5 h-5 w-px bg-divider" />
+          <button
+            className={topIconBtn}
+            onClick={() => setInspectorOpen((open) => !open)}
+            title={t("editor.inspectorToggle")}
+            aria-label={t("editor.inspectorToggle")}
+          >
+            <PanelRight size={16} strokeWidth={1.5} />
           </button>
         </div>
       </header>
