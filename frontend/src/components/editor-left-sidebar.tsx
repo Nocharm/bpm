@@ -16,7 +16,6 @@ import {
 import Link from "next/link";
 import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 
-import { AddNodeMenu } from "@/components/add-node-menu";
 import { terminalDisplayLabel, type OutlineRow, type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -43,9 +42,6 @@ interface EditorLeftSidebarProps {
   onToggleDisplayField: (field: NodeDisplayField) => void;
   // 행 우클릭 = 캔버스 노드와 동일 컨텍스트 메뉴, 더블클릭 = 이름 인라인 편집
   readOnly: boolean;
-  // ＋노드 메뉴 — 모양 선택은 뷰포트 중앙 추가, 하위프로세스는 라이브러리 패널 열기
-  onAddNode: (type: ProcessNodeType) => void;
-  onOpenLibrary: () => void;
   onRowContextMenu: (event: MouseEvent, id: string) => void;
   onRenameNode: (id: string, label: string) => void;
   // Tab 네비게이션 — 다음 노드 선택(하위 프로세스 있으면 하위로 진입). 페이지가 트리로 계산.
@@ -81,8 +77,6 @@ export function EditorLeftSidebar({
   displayFields,
   onToggleDisplayField,
   readOnly,
-  onAddNode,
-  onOpenLibrary,
   onRowContextMenu,
   onRenameNode,
   onSelectNext,
@@ -269,13 +263,6 @@ export function EditorLeftSidebar({
       onScroll={handleSidebarScroll}
       className="scrollbar-hidden relative flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2"
     >
-      {/* ＋노드 메뉴 — 모양 선택(프로세스/판단/시작끝) + 하위프로세스(라이브러리 연결). 편집 가능할 때만 */}
-      {!readOnly && (
-        <div className="mb-2 flex items-center gap-1.5">
-          <AddNodeMenu onAdd={onAddNode} onOpenLibrary={onOpenLibrary} />
-        </div>
-      )}
-
       {/* 노드 정보 · 아웃라인 단축키 — 둘 다 접히면 한 줄에 나눠, 아니면 세로 스택(contents) */}
       <div className={bothCollapsed ? "mb-2 flex items-start gap-2" : "contents"}>
         {/* 노드에 표시할 정보 — 접기/펼치기, 상태 sessionStorage 영속 */}

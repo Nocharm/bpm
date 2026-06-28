@@ -46,6 +46,7 @@ import { EdgeSelectModal } from "@/components/edge-select-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
+import { EditorToolbar } from "@/components/editor-toolbar";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -5603,6 +5604,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       )}
 
+      {/* 편집 툴바(두 번째 상단바) — 편집 모드일 때만. 노드 추가·자동정렬·정렬/분배 */}
+      {!readOnly && (
+        <EditorToolbar
+          onAddNode={(type) => handleAddNode(null, type)}
+          onOpenLibrary={() => setLibraryOpen(true)}
+          onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
+          onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
+          onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
+        />
+      )}
+
       <div className="relative flex min-h-0 flex-1">
         <EditorLeftSidebar
           collapsed={leftCollapsed}
@@ -5615,8 +5627,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           displayFields={displayFields}
           onToggleDisplayField={toggleDisplayField}
           readOnly={readOnly}
-          onAddNode={(type) => handleAddNode(null, type)}
-          onOpenLibrary={() => setLibraryOpen(true)}
           onRowContextMenu={(event, id) => {
             setSelectedId(id);
             setSelectedEdgeId(null);
