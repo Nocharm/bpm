@@ -695,6 +695,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // AI 채팅 패널 상태
   const [aiOpen, setAiOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  // BPM 시스템 관리자 여부 — 활성 점유 강제 인수(force checkout)는 sysadmin만 노출
+  const [isSysadmin, setIsSysadmin] = useState(false);
   const [aiPreviewActive, setAiPreviewActive] = useState(false);
   const aiPreviewRef = useRef(false);
 
@@ -1495,6 +1497,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (alive) {
           setUsername(me.username);
           setAiEnabled(me.ai_enabled);
+          setIsSysadmin(me.is_sysadmin);
         }
       })
       .catch(() => undefined);
@@ -5460,12 +5463,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           {readOnly && !isViewer && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
-              <button
-                className="rounded-sm bg-error px-1.5 py-0.5 text-fine text-on-accent hover:bg-error/90"
-                onClick={() => void handleForceCheckout()}
-              >
-                {t("editor.forceEdit")}
-              </button>
+              {/* 활성 점유 강제 인수는 sysadmin만 — 에디터/오너는 읽기전용 안내만 본다 */}
+              {isSysadmin && (
+                <button
+                  className="rounded-sm bg-error px-1.5 py-0.5 text-fine text-on-accent hover:bg-error/90"
+                  onClick={() => void handleForceCheckout()}
+                >
+                  {t("editor.forceEdit")}
+                </button>
+              )}
             </span>
           )}
           {currentVersion?.status === "rejected" && currentVersion.reject_reason && (

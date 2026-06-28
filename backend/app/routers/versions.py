@@ -15,6 +15,7 @@ from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.permissions.access import get_eligible_users
 from app.permissions.deps import require_version_map_role
+from app.permissions.logic import is_sysadmin
 from app.models import (
     Edge,
     Employee,
@@ -171,6 +172,9 @@ async def create_version(
         await clone_graph(session, source, new_version.id)
 
     record_version_event(session, new_version.id, "created", user)
+    # 생성자를 점유권자로 — 드래프트 편집권은 생성자가 보유(타인 읽기전용, 강탈은 sysadmin force만).
+    new_version.checked_out_by = user
+    new_version.checked_out_at = now_kst()
     await session.commit()
     await session.refresh(new_version)
     return new_version
@@ -241,12 +245,19 @@ async def acquire_checkout(
         )
 
     now = now_kst()
-    if is_locked_by_other(version, user, now) and not payload.force:
-        return CheckoutOut(
-            checked_out_by=version.checked_out_by,
-            checked_out_at=version.checked_out_at,
-            mine=False,
-        )
+    if is_locked_by_other(version, user, now):
+        if not payload.force:
+            return CheckoutOut(
+                checked_out_by=version.checked_out_by,
+                checked_out_at=version.checked_out_at,
+                mine=False,
+            )
+        # 강제 점유(강탈)는 시스템 관리자만 — 에디터/오너는 활성 잠금을 가져올 수 없다.
+        if not is_sysadmin(user):
+            raise HTTPException(
+                status_code=403,
+                detail="only system admin can take over an active checkout",
+            )
 
     version.checked_out_by = user
     version.checked_out_at = now
