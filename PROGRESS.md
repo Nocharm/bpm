@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-29
+- **feat(editor): R2 노드 비주얼 — E3 테두리(slate) + E4 셀렉션 링을 노드간 슬라이드 인디케이터로 (feat/editor-compare-redesign)** — **E3**: 프로세스 기본 테두리 `#909098`→`#6e84a3`(slate). **E4**: 노드별 셀렉션 링(box-shadow) 폐기 → **단일 플로팅 인디케이터가 노드 사이를 슬라이드**. 신규 `node-selection-ring.tsx`(ViewportPortal·`useStore`로 선택노드 추종·단일선택은 고정 DOM으로 350ms 슬라이드·드래그 중 트랜지션 꺼 즉시추종·다중선택 노드별·시작끝 알약/그외 사각). `globals.css` `.node-ring-selected`(2px accent+4px 12% 헤일로). `process-node`는 셀렉션 링 제거(오버레이가 담당)·`selected` prop 미사용 정리. 검증: tsc/eslint 0·슬라이드 클래스 컴파일 확인·브라우저 승인. (dev CSS 스테일로 `.next` 캐시 비우고 dev 재기동한 이력.)
 - **fix(editor): R1+ 미니맵 getNodesBounds 훅 버전으로 — 서브플로우 경고 제거 (feat/editor-compare-redesign)** — `minimap-viewport-fill`의 standalone `getNodesBounds(nodes)` → **`useReactFlow().getNodesBounds`**(내부 nodeLookup 반영). React Flow 콘솔 경고 재발 0건·서브플로우 bounds 정확도 개선. 검증: tsc/eslint 0.
 
 ## 2026-06-28

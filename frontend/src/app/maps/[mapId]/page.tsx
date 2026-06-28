@@ -34,6 +34,7 @@ import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MiniMapViewportFill } from "@/components/minimap-viewport-fill";
+import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { CommentSection } from "@/components/comment-section";
 import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
@@ -5823,6 +5824,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       fitView
                     >
                       <ViewportPortal>
+                        {/* 선택 노드 추종 테두리 — 노드 사이를 슬라이드 */}
+                        <NodeSelectionRing />
                         {inlineComposition && (
                           <InlineRegionBands
                             regions={inlineComposition.regions}

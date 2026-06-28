@@ -240,6 +240,13 @@ button:not(:disabled):active {
   animation: zone-pop-in 260ms var(--ease-overshoot);
 }
 
+/* 노드 선택 링 — 2px accent + 4px 소프트 헤일로 (E4). box-shadow라 selected 노드는 hover 그림자 미적용(충돌 회피) */
+.node-ring-selected {
+  box-shadow:
+    0 0 0 2px var(--color-accent),
+    0 0 0 6px color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
 /* 그룹 합류 대상 — 노드를 끌어와 박스 위에 머물 때 반투명 반짝임 + 커졌다 작아지기 */
 @keyframes group-target-pulse {
   0%,
