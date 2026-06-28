@@ -14,7 +14,7 @@ import {
   Square,
 } from "lucide-react";
 import Link from "next/link";
-import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { terminalDisplayLabel, type OutlineRow, type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -42,6 +42,8 @@ interface EditorLeftSidebarProps {
   onToggleDisplayField: (field: NodeDisplayField) => void;
   // 행 우클릭 = 캔버스 노드와 동일 컨텍스트 메뉴, 더블클릭 = 이름 인라인 편집
   readOnly: boolean;
+  // 노드 검색 — page.tsx가 <NodeSearch>를 만들어 주입(검색 상태·결과 계산은 page.tsx 소유)
+  searchSlot: ReactNode;
   onRowContextMenu: (event: MouseEvent, id: string) => void;
   onRenameNode: (id: string, label: string) => void;
   // Tab 네비게이션 — 다음 노드 선택(하위 프로세스 있으면 하위로 진입). 페이지가 트리로 계산.
@@ -77,6 +79,7 @@ export function EditorLeftSidebar({
   displayFields,
   onToggleDisplayField,
   readOnly,
+  searchSlot,
   onRowContextMenu,
   onRenameNode,
   onSelectNext,
@@ -367,6 +370,8 @@ export function EditorLeftSidebar({
       <div className="mb-1 px-1">
         <span className="text-caption-strong text-ink">{t("sidebar.outline")}</span>
       </div>
+
+      {searchSlot}
 
       {outline.length === 0 ? (
         <p className="px-2 text-fine text-ink-tertiary">{t("sidebar.outlineEmpty")}</p>

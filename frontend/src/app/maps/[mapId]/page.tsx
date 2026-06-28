@@ -47,6 +47,7 @@ import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
+import { NodeSearch } from "@/components/node-search";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -1430,7 +1431,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        // 검색이 사이드바로 이동(R4b) — 접혀 있으면 펼친 뒤 다음 프레임에 포커스
+        setLeftCollapsed(false);
+        requestAnimationFrame(() => searchInputRef.current?.focus());
         return;
       }
       if (
@@ -5433,62 +5436,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           </span>
         )}
 
-        <div className="relative mx-auto">
-          <input
-            ref={searchInputRef}
-            className="w-72 rounded-sm border border-hairline px-2 py-1 text-caption"
-            placeholder={t("editor.searchPlaceholder")}
-            value={searchQuery}
-            onChange={(event) => {
-              const value = event.target.value;
-              setSearchQuery(value);
-              if (!value.trim()) {
-                setSearchResults([]);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setSearchIndex((index) => Math.min(index + 1, searchResults.length - 1));
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setSearchIndex((index) => Math.max(index - 1, 0));
-              } else if (event.key === "Enter" && searchResults[searchIndex]) {
-                handleSearchSelect(searchResults[searchIndex]);
-              } else if (event.key === "Escape") {
-                setSearchQuery("");
-                setSearchResults([]);
-                event.currentTarget.blur();
-              }
-            }}
-          />
-          {searchResults.length > 0 && (
-            <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-80 overflow-auto rounded-sm border border-hairline bg-surface py-1">
-              {searchResults.map((result, index) => (
-                <li key={result.node.id}>
-                  <button
-                    className={`block w-full px-3 py-1.5 text-left text-caption ${
-                      index === searchIndex ? "bg-surface-alt" : ""
-                    }`}
-                    onMouseDown={(event) => {
-                      // blur로 드롭다운이 닫히기 전에 선택 처리
-                      event.preventDefault();
-                      handleSearchSelect(result);
-                    }}
-                    onMouseEnter={() => setSearchIndex(index)}
-                  >
-                    <span className="font-medium text-ink">{result.node.title}</span>
-                    <span className="ml-2 text-fine text-ink-tertiary">{result.path}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {/* 노드 검색은 좌측 사이드바 아웃라인 위로 이동(R4b) — searchSlot으로 주입 */}
 
         {/* 우: 상태 인디케이터 · undo/redo · 라이브러리 · AI · 저장 · 인스펙터 토글.
             (공유·전체화면은 백엔드/동작 부재로 보류 — R3) */}
-        <div className="flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1.5">
           {readOnly && !isViewer && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
@@ -5627,6 +5579,22 @@ function MapEditor({ mapId }: { mapId: number }) {
           displayFields={displayFields}
           onToggleDisplayField={toggleDisplayField}
           readOnly={readOnly}
+          searchSlot={
+            <NodeSearch<SearchResult>
+              inputRef={searchInputRef}
+              query={searchQuery}
+              onQueryChange={(value) => {
+                setSearchQuery(value);
+                if (!value.trim()) {
+                  setSearchResults([]);
+                }
+              }}
+              results={searchResults}
+              activeIndex={searchIndex}
+              onActiveIndexChange={setSearchIndex}
+              onSelect={handleSearchSelect}
+            />
+          }
           onRowContextMenu={(event, id) => {
             setSelectedId(id);
             setSelectedEdgeId(null);
