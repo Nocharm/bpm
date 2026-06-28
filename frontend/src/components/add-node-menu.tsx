@@ -2,7 +2,7 @@
 
 // 좌측 사이드바 +노드 메뉴 — 모양 선택(프로세스·판단·시작/끝) + 하위프로세스(라이브러리 연결).
 // 노드 생성/라이브러리 열기는 page.tsx 핸들러로 위임(onAdd·onOpenLibrary). 좌표 없는 추가=뷰포트 중앙.
-import { ChevronDown, Circle, Diamond, Network, Plus, Square } from "lucide-react";
+import { ChevronDown, Circle, CircleDot, Diamond, Network, Plus, Square } from "lucide-react";
 import { type ComponentType, useEffect, useState } from "react";
 
 import { type ProcessNodeType } from "@/lib/canvas";
@@ -12,7 +12,8 @@ import { type MessageKey } from "@/lib/i18n-messages";
 const SHAPES: { type: ProcessNodeType; icon: ComponentType<{ size?: number; strokeWidth?: number }>; labelKey: MessageKey }[] = [
   { type: "process", icon: Square, labelKey: "nodeType.process" },
   { type: "decision", icon: Diamond, labelKey: "nodeType.decision" },
-  { type: "start", icon: Circle, labelKey: "nodeType.terminal" },
+  { type: "start", icon: Circle, labelKey: "nodeType.start" },
+  { type: "end", icon: CircleDot, labelKey: "nodeType.end" },
 ];
 
 interface AddNodeMenuProps {
