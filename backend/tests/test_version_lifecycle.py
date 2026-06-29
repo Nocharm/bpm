@@ -2,17 +2,14 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.settings import settings
-
-_lc_seq = 0
 
 
 def _create_map(client: TestClient) -> tuple[int, int]:
     """새 맵 생성 후 (map_id, initial_version_id) 반환."""
-    global _lc_seq
-    _lc_seq += 1
-    created = client.post("/api/maps", json={"name": f"lc map {_lc_seq}"}).json()
+    created = client.post("/api/maps", json={"name": f"lc map {uuid4().hex[:8]}"}).json()
     return created["id"], created["versions"][0]["id"]
 
 
@@ -84,3 +81,23 @@ def test_publish_numbers_and_expires(
     assert by_id[v2]["version_number"] == 2        # 만료 후에도 불변
     assert by_id[v3]["status"] == "published"
     assert by_id[v3]["version_number"] == 3
+
+
+def test_workflow_state_version_number(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    GET /versions/{id}/workflow 응답에 version_number가 올바르게 포함되는지 검증.
+    - 미게시 초안: version_number == None
+    - 게시 후: version_number == 1
+    """
+    map_id, v1 = _create_map(client)
+
+    # 미게시 초안 — version_number는 None
+    wf = client.get(f"/api/versions/{v1}/workflow").json()
+    assert wf["version_number"] is None
+
+    # 게시 → version_number 1
+    _publish(client, monkeypatch, map_id, v1)
+    wf = client.get(f"/api/versions/{v1}/workflow").json()
+    assert wf["version_number"] == 1

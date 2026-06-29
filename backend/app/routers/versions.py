@@ -356,6 +356,7 @@ async def get_workflow_state(
     )
     return WorkflowStateOut(
         version_id=version_id,
+        version_number=version.version_number,
         status=version.status,
         submitted_by=version.submitted_by,
         reject_reason=version.reject_reason,

@@ -175,6 +175,8 @@ class GroupRenameIn(BaseModel):
 
 class WorkflowStateOut(BaseModel):
     version_id: int
+    # 게시 시 부여된 버전 번호 — 미게시 초안은 None
+    version_number: int | None
     status: str
     submitted_by: str | None
     reject_reason: str | None
