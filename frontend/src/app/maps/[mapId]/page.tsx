@@ -6621,6 +6621,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                     </button>
                   </div>
                 }
+                mapName={mapName}
+                versionControl={
+                  <VersionPill
+                    versions={versions}
+                    versionId={versionId}
+                    isEditing={!readOnly}
+                    onSwitch={(id) => void switchVersion(id)}
+                  />
+                }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
                 onOpenLibrary={() => setLibraryOpen(true)}

@@ -145,7 +145,22 @@ export function CommentSection({
           }}
         />
         <div className="flex items-center justify-between gap-2 border-t border-divider px-2 py-1">
-          <span className="truncate text-fine text-ink-tertiary">{t("comment.hint")}</span>
+          {/* 단축키 안내 — 키 모양 배지로 가시성 향상(Enter 줄바꿈 · Ctrl+Enter 전송) */}
+          <span className="flex min-w-0 items-center gap-1 truncate text-fine text-ink-tertiary">
+            <kbd className="rounded-xs border border-hairline bg-surface px-1 py-px font-medium text-ink-secondary">
+              Enter
+            </kbd>
+            {t("comment.keyNewline")}
+            <span className="mx-0.5 text-divider">·</span>
+            <kbd className="rounded-xs border border-hairline bg-surface px-1 py-px font-medium text-ink-secondary">
+              Ctrl
+            </kbd>
+            +
+            <kbd className="rounded-xs border border-hairline bg-surface px-1 py-px font-medium text-ink-secondary">
+              Enter
+            </kbd>
+            {t("comment.keySend")}
+          </span>
           <button
             type="button"
             className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"

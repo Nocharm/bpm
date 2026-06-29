@@ -12,6 +12,7 @@ import {
   Network,
   Plus,
   SlidersHorizontal,
+  Workflow,
 } from "lucide-react";
 import { type ComponentType, type ReactNode, useState } from "react";
 
@@ -35,6 +36,9 @@ interface InspectorPanelProps {
   propertiesSlot?: ReactNode;
   // 맵 탭 콘텐츠(가시성·소유자/협업자·설명·노드표시·엣지스타일·PNG) — page.tsx 주입. 없으면 placeholder.
   mapTabSlot?: ReactNode;
+  // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
+  mapName?: string;
+  versionControl?: ReactNode;
   readOnly: boolean;
   onAddNode: () => void;
   onOpenLibrary: () => void;
@@ -50,6 +54,8 @@ export function InspectorPanel({
   selectionKind,
   propertiesSlot,
   mapTabSlot,
+  mapName,
+  versionControl,
   readOnly,
   onAddNode,
   onOpenLibrary,
@@ -113,6 +119,8 @@ export function InspectorPanel({
             edgeCount={edgeCount}
             subprocessCount={subprocessCount}
             saveLabel={saveLabel}
+            mapName={mapName}
+            versionControl={versionControl}
           />
         )}
         {tab === "properties" &&
@@ -139,17 +147,21 @@ function PropertiesEmpty({
   edgeCount,
   subprocessCount,
   saveLabel,
+  mapName,
+  versionControl,
 }: Omit<InspectorPanelProps, "onCollapse" | "selectionKind">) {
   const { t } = useI18n();
   const action =
     "flex w-full items-center gap-2 rounded-sm border border-hairline px-3 py-2 text-caption text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";
   return (
     <div className="flex flex-col gap-4">
+      {/* 빈상태 — 맵 타이틀 + 버전(전환 가능). 아이콘은 앱 대표 아이콘(로그인 화면) */}
       <div className="flex flex-col items-center gap-2 pt-2 text-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-md bg-surface-alt text-ink-tertiary">
-          <Boxes size={24} strokeWidth={1.5} />
+        <span className="flex h-14 w-14 items-center justify-center rounded-md bg-accent-tint text-accent">
+          <Workflow size={24} strokeWidth={1.6} />
         </span>
-        <span className="text-body-strong text-ink">{t("inspector.noSelection")}</span>
+        <span className="max-w-full truncate text-body-strong text-ink">{mapName || t("inspector.noSelection")}</span>
+        {versionControl}
         <span className="text-caption text-ink-tertiary">{t("inspector.emptyHint")}</span>
       </div>
 
