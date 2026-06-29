@@ -36,6 +36,9 @@ interface InspectorPanelProps {
   propertiesSlot?: ReactNode;
   // 맵 탭 콘텐츠(가시성·소유자/협업자·설명·노드표시·엣지스타일·PNG) — page.tsx 주입. 없으면 placeholder.
   mapTabSlot?: ReactNode;
+  // 승인 탭(워크플로 대시보드)·활동 탭(코멘트·버전 타임라인) 콘텐츠 — page.tsx 주입. 없으면 placeholder.
+  approvalSlot?: ReactNode;
+  activitySlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
   mapName?: string;
   versionControl?: ReactNode;
@@ -54,6 +57,8 @@ export function InspectorPanel({
   selectionKind,
   propertiesSlot,
   mapTabSlot,
+  approvalSlot,
+  activitySlot,
   mapName,
   versionControl,
   readOnly,
@@ -130,9 +135,10 @@ export function InspectorPanel({
           ))}
         {tab === "map" &&
           (mapTabSlot ?? <Placeholder text={`${t("inspector.tabMap")} · ${t("inspector.wip")}`} />)}
-        {(tab === "approval" || tab === "activity") && (
-          <Placeholder text={`${t(TABS.find((x) => x.key === tab)!.labelKey)} · ${t("inspector.wip")}`} />
-        )}
+        {tab === "approval" &&
+          (approvalSlot ?? <Placeholder text={`${t("editor.tabApproval")} · ${t("inspector.wip")}`} />)}
+        {tab === "activity" &&
+          (activitySlot ?? <Placeholder text={`${t("inspector.tabActivity")} · ${t("inspector.wip")}`} />)}
       </div>
     </div>
   );

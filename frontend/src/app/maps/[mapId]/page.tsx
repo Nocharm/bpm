@@ -6621,6 +6621,51 @@ function MapEditor({ mapId }: { mapId: number }) {
                     </button>
                   </div>
                 }
+                approvalSlot={
+                  // R5c 승인 탭 — OLD 워크플로 대시보드 재사용(스테퍼·승인자·승인요청)
+                  currentVersion ? (
+                    <WorkflowDashboard
+                      versionLabel={currentVersion.label}
+                      status={currentVersion.status}
+                      submittedBy={currentVersion.submitted_by}
+                      rejectReason={currentVersion.reject_reason}
+                      workflow={workflow}
+                      isCheckoutHolder={checkout?.mine ?? false}
+                      isApprover={isApprover}
+                      isSubmitter={isSubmitter}
+                      hasApproved={hasApproved}
+                      isMapOwner={isMapOwner}
+                      onSubmit={() => void runTransition(submitVersion)}
+                      onApprove={() => void runTransition(approveVersion)}
+                      onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
+                      onPublish={() => void runTransition(publishVersion)}
+                      onWithdraw={() => void runTransition(withdrawVersion)}
+                      onManageApprovers={() => setManagingApprovers(true)}
+                    />
+                  ) : undefined
+                }
+                activitySlot={
+                  // R5d 활동 탭 — 전체 코멘트(노드 단위 정렬, 작성칸 숨김) + 버전 타임라인(OLD 재사용)
+                  <div className="flex flex-col gap-4">
+                    <section>
+                      <div className="mb-2 text-fine font-semibold text-ink">
+                        {t("editor.comments")}
+                        {comments.some((comment) => !comment.resolved) &&
+                          ` · ${t("editor.unresolvedCount", { n: comments.filter((comment) => !comment.resolved).length })}`}
+                      </div>
+                      <CommentSection
+                        comments={[...comments].sort(
+                          (a, b) => a.node_id.localeCompare(b.node_id) || a.created_at.localeCompare(b.created_at),
+                        )}
+                        onAdd={(body) => void handleAddComment(body)}
+                        onToggleResolved={(comment) => void handleToggleComment(comment)}
+                        onDelete={(comment) => void handleDeleteComment(comment)}
+                        hideInput
+                      />
+                    </section>
+                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
+                  </div>
+                }
                 mapName={mapName}
                 versionControl={
                   <VersionPill

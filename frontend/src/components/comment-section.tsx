@@ -14,6 +14,8 @@ interface CommentSectionProps {
   onAdd: (body: string) => void;
   onToggleResolved: (comment: CommentItem) => void;
   onDelete: (comment: CommentItem) => void;
+  // 작성칸 숨김 — 활동 탭의 전체 코멘트 뷰처럼 노드 컨텍스트가 없어 추가가 불가한 경우 / hide the input.
+  hideInput?: boolean;
 }
 
 export function CommentSection({
@@ -21,6 +23,7 @@ export function CommentSection({
   onAdd,
   onToggleResolved,
   onDelete,
+  hideInput = false,
 }: CommentSectionProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
@@ -124,7 +127,8 @@ export function CommentSection({
           {t("comment.goToBottom")}
         </button>
       )}
-      {/* 작성칸 — 자동 확장(스크롤 없음), 버튼·단축키 힌트는 박스 안 하단 라인 */}
+      {/* 작성칸 — 자동 확장(스크롤 없음), 버튼·단축키 힌트는 박스 안 하단 라인. 활동 탭 전체뷰는 숨김 */}
+      {!hideInput && (
       <div className="rounded-sm border border-hairline focus-within:border-accent/50">
         <textarea
           ref={taRef}
@@ -171,6 +175,7 @@ export function CommentSection({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

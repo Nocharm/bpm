@@ -95,8 +95,8 @@ interface MapDetailCardProps {
   onDelete?: (mapId: number) => void;
   // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
   onCopy?: (mapId: number, name: string) => void;
-  // 멤버(허용 인원) 영역만 렌더 — 에디터 맵 탭에서 OLD 카드 디자인 재사용 / render only the members section.
-  only?: "members";
+  // 일부 섹션만 렌더 — 에디터 맵 탭=멤버 카드, 활동 탭=버전 타임라인 재사용 / render only members or versions.
+  only?: "members" | "versions";
 }
 
 export function MapDetailCard({
@@ -213,7 +213,7 @@ export function MapDetailCard({
 
   const body = (
     <>
-      {only !== "members" && (
+      {!only && (
         <>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
@@ -280,7 +280,7 @@ export function MapDetailCard({
         )}
 
         {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
-        {members !== null && (
+        {only !== "versions" && members !== null && (
           <div
             className={`flex min-w-0 flex-1 flex-col gap-1 ${
               only === "members" ? "" : "sm:border-l sm:border-hairline sm:pl-4"
