@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { Building2, Globe, Lock } from "lucide-react";
 
 import { getDirectory, getMap, listMapPermissions, updateMap, type MapPermission } from "@/lib/api";
+import { RoleBadge } from "@/components/permissions/role-badge";
+import { type MapRole } from "@/lib/mock/permissions";
 import { useI18n } from "@/lib/i18n";
 
 interface MapInspectorTabProps {
@@ -19,12 +21,6 @@ interface Person {
   name: string;
   org: string;
 }
-
-const ROLE_BADGE: Record<string, string> = {
-  owner: "border-accent text-accent",
-  editor: "border-added text-added",
-  viewer: "border-divider text-ink-secondary",
-};
 
 function leaf(orgPath: string | undefined): string {
   if (!orgPath) return "";
@@ -100,10 +96,10 @@ export function MapInspectorTab({ mapId, currentLoginId, readOnly }: MapInspecto
         <section>
           <div className="mb-1 text-fine text-ink-tertiary">{t("inspector.owner")}</div>
           <PersonRow
+            id={owner ?? ""}
             person={ownerPerson}
             role="owner"
             isMe={owner === currentLoginId}
-            roleLabel="Owner"
           />
         </section>
       )}
@@ -118,11 +114,11 @@ export function MapInspectorTab({ mapId, currentLoginId, readOnly }: MapInspecto
             {collaborators.map((perm) => (
               <PersonRow
                 key={perm.id}
+                id={perm.principal_id}
                 person={perm.principal_type === "group" ? { name: perm.principal_id, org: "" } : resolve(perm.principal_id)}
                 role={perm.role}
                 isGroup={perm.principal_type === "group"}
                 isMe={perm.principal_id === currentLoginId}
-                roleLabel={perm.role.charAt(0).toUpperCase() + perm.role.slice(1)}
               />
             ))}
           </div>
@@ -144,38 +140,46 @@ export function MapInspectorTab({ mapId, currentLoginId, readOnly }: MapInspecto
   );
 }
 
+// 멤버/팀 카드 — 메인>상세 멤버 디자인 재사용(RoleBadge·ME·클릭 펼침으로 아이디 노출).
 function PersonRow({
+  id,
   person,
   role,
-  roleLabel,
   isGroup,
   isMe,
 }: {
+  id: string;
   person: Person;
   role: string;
-  roleLabel: string;
   isGroup?: boolean;
   isMe?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <div
-      className={`flex items-center gap-2 rounded-sm border px-2.5 py-2 ${
-        isMe ? "border-accent/40 bg-accent-tint/40" : "border-hairline"
-      }`}
+      className={`rounded-sm border ${isMe ? "border-accent/40 bg-accent-tint/40" : "border-hairline"}`}
     >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-surface-alt text-fine font-semibold text-ink-secondary">
-        {isGroup ? <Building2 size={14} strokeWidth={1.5} /> : person.name.slice(0, 1).toUpperCase()}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-caption font-medium text-ink">
-          {person.name}
-          {isMe && <span className="ml-1 text-fine text-accent">· ME</span>}
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-surface-alt/60"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-surface-alt text-fine font-semibold text-ink-secondary">
+          {isGroup ? <Building2 size={14} strokeWidth={1.5} /> : person.name.slice(0, 1).toUpperCase()}
         </span>
-        {person.org && <span className="block truncate text-fine text-ink-tertiary">{person.org}</span>}
-      </span>
-      <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${ROLE_BADGE[role] ?? "border-divider text-ink-secondary"}`}>
-        {roleLabel}
-      </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-caption font-medium text-ink">
+            {person.name}
+            {isMe && <span className="ml-1 text-fine text-accent">· ME</span>}
+          </span>
+          {person.org && <span className="block truncate text-fine text-ink-tertiary">{person.org}</span>}
+        </span>
+        <RoleBadge role={role as MapRole} />
+      </button>
+      {expanded && (
+        <div className="border-t border-divider px-2.5 py-1.5 text-fine text-ink-tertiary">{id}</div>
+      )}
     </div>
   );
 }
