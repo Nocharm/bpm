@@ -48,6 +48,7 @@ import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
+import { InspectorPanel } from "@/components/inspector-panel";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -6262,13 +6263,41 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
 
         {inspectorOpen && (
-          <div className="flex min-h-0 shrink-0" style={{ width: inspectorWidth }}>
+          <div className="flex min-h-0 shrink-0" style={{ width: inspectorWidth * 2 }}>
             <div
               onPointerDown={startInspectorResize}
               className="w-1 shrink-0 cursor-col-resize hover:bg-accent-tint"
               title={t("editor.inspectorToggle")}
             />
+            {/* NEW 인스펙터 (R5) — OLD와 나란히 비교, 4탭 전부 이관 후 OLD 제거 예정 */}
+            <div className="flex min-w-0 flex-1 flex-col border-l border-accent/40 bg-surface">
+              <div className="border-b border-hairline bg-accent-tint/30 px-3 py-1 text-fine font-semibold text-accent">
+                NEW (R5)
+              </div>
+              <InspectorPanel
+                onCollapse={() => setInspectorOpen(false)}
+                selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
+                readOnly={readOnly}
+                onAddNode={() => handleAddNode(null, "process")}
+                onOpenLibrary={() => setLibraryOpen(true)}
+                onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
+                nodeCount={nodes.length}
+                edgeCount={edges.length}
+                subprocessCount={nodes.filter((node) => node.data.nodeType === "subprocess").length}
+                saveLabel={
+                  saveState === "saving"
+                    ? t("editor.saving")
+                    : saveState === "error"
+                      ? t("editor.saveError")
+                      : t("editor.saved")
+                }
+              />
+            </div>
+            {/* OLD 인스펙터 — 4탭 이관 완료 후 제거 예정 */}
             <div className="flex min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
+            <div className="border-b border-hairline bg-surface-alt px-3 py-1 text-fine font-semibold text-ink-tertiary">
+              OLD
+            </div>
             <div className="flex-1 overflow-y-auto p-4">
             {selectedNode ? (
               <>
