@@ -49,6 +49,7 @@ import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
 import { InspectorPanel } from "@/components/inspector-panel";
+import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -6342,6 +6343,64 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                         ))}
                       </div>
+                      {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
+                      {selectedNode.data.nodeType === "end" && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-caption text-ink-secondary">{t("node.primaryEnd")}</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={selectedNode.data.isPrimaryEnd ?? false}
+                            aria-label={t("node.primaryEnd")}
+                            disabled={readOnly}
+                            onClick={() =>
+                              updateSelectedData(
+                                { isPrimaryEnd: !(selectedNode.data.isPrimaryEnd ?? false) },
+                                true,
+                              )
+                            }
+                            className={`relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+                              selectedNode.data.isPrimaryEnd ? "bg-accent" : "bg-border-strong"
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                                selectedNode.data.isPrimaryEnd ? "left-3.5" : "left-0.5"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      )}
+                      {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
+                      {selectedNode.data.nodeType === "subprocess" &&
+                        selectedNode.data.linkedMapId != null && (
+                          <SubprocessVersionPicker
+                            linkedMapId={selectedNode.data.linkedMapId}
+                            linkedVersionId={selectedNode.data.linkedVersionId ?? null}
+                            followLatest={selectedNode.data.followLatest ?? false}
+                            updateAvailable={selectedNode.data.updateAvailable ?? false}
+                            readOnly={readOnly}
+                            onFollowLatest={(value) => updateSelectedData({ followLatest: value }, false)}
+                            onPinVersion={(versionId) => updateSelectedData({ linkedVersionId: versionId }, false)}
+                            onUpdate={() => handleUpdateSubprocess(selectedNode.id)}
+                          />
+                        )}
+                      {/* 코멘트 — 노드별, 하단 배치(읽기전용에서도 작성 가능). 활동 탭 통합은 R5d */}
+                      <details open className="rounded-md border border-hairline px-3 py-2">
+                        <summary className="cursor-pointer text-fine font-semibold text-ink">
+                          {t("editor.comments")}
+                          {selectedComments.some((comment) => !comment.resolved) &&
+                            ` (${t("editor.unresolvedCount", { n: selectedComments.filter((comment) => !comment.resolved).length })})`}
+                        </summary>
+                        <div className="mt-2">
+                          <CommentSection
+                            comments={selectedComments}
+                            onAdd={(body) => void handleAddComment(body)}
+                            onToggleResolved={(comment) => void handleToggleComment(comment)}
+                            onDelete={(comment) => void handleDeleteComment(comment)}
+                          />
+                        </div>
+                      </details>
                     </div>
                   ) : selectedEdge ? (
                     // R5a NEW 엣지 속성 폼 — 소스→타겟·분기 라벨(Yes/No/기타)·라벨·연결 스타일·삭제 (목업 inspector-properties-edge).
