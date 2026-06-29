@@ -62,9 +62,9 @@ export function MapInspectorTab({ mapId, readOnly }: MapInspectorTabProps) {
         </div>
       </section>
 
-      {/* 멤버(허용 인원) — 아코디언. 카드 디자인은 OLD MapDetailCard 재사용(클릭 펼침·역할 배지 포함) */}
-      <details className="group" open>
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-fine uppercase tracking-wide text-ink-tertiary [&::-webkit-details-marker]:hidden">
+      {/* 멤버(허용 인원) — 코멘트 영역처럼 테두리 박스로 감싸 분리. 카드 디자인은 OLD MapDetailCard 재사용(클릭 펼침·역할 배지) */}
+      <details open className="group rounded-md border border-hairline px-3 py-2">
+        <summary className="flex cursor-pointer list-none items-center gap-1 text-fine font-semibold text-ink [&::-webkit-details-marker]:hidden">
           <ChevronRight size={12} strokeWidth={1.5} className="transition-transform group-open:rotate-90" />
           {t("inspector.collaborators")}
         </summary>
