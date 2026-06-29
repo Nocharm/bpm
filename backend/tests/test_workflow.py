@@ -4,9 +4,17 @@ auth 우회 모드에서는 모든 요청이 settings.dev_user로 인증된다. 
 시나리오는 dev_user를 monkeypatch로 바꿔 재현한다 (tests/test_collab.py 패턴).
 """
 
+import asyncio
+from collections.abc import Iterator
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 
+import app.auth as _auth_mod
+from app.db import SessionLocal
+from app.main import app as _app
+from app.models import MapPermission, MapVersion, ProcessMap
 from app.settings import settings
 
 
@@ -323,3 +331,142 @@ def test_map_detail_exposes_created_by(client: TestClient) -> None:
     map_id, _version_id = _create_map_with_version(client)
     detail = client.get(f"/api/maps/{map_id}").json()
     assert detail["created_by"] == settings.dev_user
+
+
+# ── Checkout transfer (Task 2) ────────────────────────────────────────────────
+
+_TRANSFER_SYSADMIN = "transfer.admin"
+
+
+@pytest.fixture
+def _transfer_enforce(client: TestClient) -> Iterator[None]:
+    """dev_enforce_permissions=True + sysadmin 1명 — checkout transfer 테스트 전용."""
+    prev_enforce = settings.dev_enforce_permissions
+    prev_sys = settings.bpm_sysadmins
+    settings.dev_enforce_permissions = True
+    settings.bpm_sysadmins = _TRANSFER_SYSADMIN
+    yield
+    settings.dev_enforce_permissions = prev_enforce
+    settings.bpm_sysadmins = prev_sys
+    _app.dependency_overrides.pop(_auth_mod.get_current_user, None)
+
+
+def _act_as(user: str) -> None:
+    """이후 요청의 인증 사용자를 user로 고정 (JWT 검증 우회)."""
+    _app.dependency_overrides[_auth_mod.get_current_user] = lambda: user
+
+
+def _seed_with_grants(grants: list[tuple[str, str]]) -> tuple[int, int]:
+    """새 맵 + 버전 + user 권한 시드 → (map_id, version_id).
+
+    grants: [(login_id, role), ...] — role ∈ {owner, editor, viewer}
+    """
+    name = f"tr-map-{uuid4().hex[:6]}"
+
+    async def _make(session) -> tuple[int, int]:
+        m = ProcessMap(name=name, visibility="private")
+        mv = MapVersion(label="As-Is")
+        m.versions.append(mv)
+        session.add(m)
+        await session.flush()
+        for lid, role in grants:
+            session.add(
+                MapPermission(
+                    map_id=m.id,
+                    principal_type="user",
+                    principal_id=lid,
+                    role=role,
+                    granted_by="seed",
+                )
+            )
+        await session.flush()
+        return m.id, mv.id
+
+    async def _run() -> tuple[int, int]:
+        async with SessionLocal() as session:
+            result = await _make(session)
+            await session.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+def test_transfer_holder_to_editor(client: TestClient, _transfer_enforce: None) -> None:
+    """① 점유자가 editor+에게 transfer → 점유 이전."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    # holder.u가 checkout 획득
+    _act_as("holder.u")
+    assert client.post(f"/api/versions/{version_id}/checkout", json={}).status_code == 200
+
+    # holder.u가 editor.u에게 이전
+    res = client.post(f"/api/versions/{version_id}/checkout/transfer", json={"to": "editor.u"})
+    assert res.status_code == 200
+    assert res.json()["checked_out_by"] == "editor.u"
+
+    # workflow state도 반영
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] == "editor.u"
+
+
+def test_transfer_non_editor_target_422(client: TestClient, _transfer_enforce: None) -> None:
+    """② 비-editor 대상 거부 → 422."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    # stranger.u는 맵에 아무 권한 없음 → 422
+    res = client.post(
+        f"/api/versions/{version_id}/checkout/transfer", json={"to": "stranger.u"}
+    )
+    assert res.status_code == 422
+
+
+def test_transfer_non_holder_non_owner_403(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """③ 비점유·비오너·비sysadmin 호출자 → 403."""
+    map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor"), ("intruder.u", "editor")]
+    )
+
+    # holder.u가 checkout 획득
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    # intruder.u는 편집자지만 점유자도 오너도 sysadmin도 아님 → 403
+    _act_as("intruder.u")
+    res = client.post(
+        f"/api/versions/{version_id}/checkout/transfer", json={"to": "editor.u"}
+    )
+    assert res.status_code == 403
+
+
+def test_transfer_owner_and_sysadmin_can_transfer(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """④ 오너와 sysadmin은 타인의 점유권을 이전할 수 있다."""
+    map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor"), ("owner.u", "owner")]
+    )
+
+    # holder.u가 checkout 획득
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    # 오너가 이전
+    _act_as("owner.u")
+    res = client.post(
+        f"/api/versions/{version_id}/checkout/transfer", json={"to": "editor.u"}
+    )
+    assert res.status_code == 200
+    assert res.json()["checked_out_by"] == "editor.u"
+
+    # sysadmin이 이전 (editor.u → holder.u)
+    _act_as(_TRANSFER_SYSADMIN)
+    res2 = client.post(
+        f"/api/versions/{version_id}/checkout/transfer", json={"to": "holder.u"}
+    )
+    assert res2.status_code == 200
+    assert res2.json()["checked_out_by"] == "holder.u"

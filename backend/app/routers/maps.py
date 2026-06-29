@@ -21,6 +21,7 @@ from app.permissions.access import (
 from app.permissions.deps import require_map_role
 from app.routers.versions import clone_graph
 from app.schemas import (
+    DirectoryUserOut,
     EligibleApproverOut,
     MapCopy,
     MapCreate,
@@ -344,6 +345,45 @@ async def list_eligible_approvers(
             ),
         )
         for e in eligible
+    ]
+
+
+@router.get(
+    "/{map_id}/editors",
+    response_model=list[DirectoryUserOut],
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def list_editors(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> list[DirectoryUserOut]:
+    """점유권 이전 피커 — 맵에서 role∈{owner,editor}인 user principal + Employee 이름 머지 (Task 2)."""
+    rows = list(
+        (
+            await session.scalars(
+                select(MapPermission).where(
+                    MapPermission.map_id == map_id,
+                    MapPermission.principal_type == "user",
+                    MapPermission.role.in_(["owner", "editor"]),
+                )
+            )
+        ).all()
+    )
+    login_ids = [r.principal_id for r in rows]
+    if not login_ids:
+        return []
+    emp_map: dict[str, Employee] = {
+        e.login_id: e
+        for e in (
+            await session.scalars(select(Employee).where(Employee.login_id.in_(login_ids)))
+        ).all()
+    }
+    return [
+        DirectoryUserOut(
+            id=r.principal_id,
+            name=emp_map[r.principal_id].name if r.principal_id in emp_map else r.principal_id,
+            department=emp_map[r.principal_id].department or "" if r.principal_id in emp_map else "",
+        )
+        for r in rows
     ]
 
 

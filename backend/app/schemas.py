@@ -184,6 +184,8 @@ class WorkflowStateOut(BaseModel):
     approvers: list[str]
     # 이번 사이클에 이미 승인한 승인자
     approvals: list[str]
+    # 현재 활성 체크아웃 보유자 — TTL 이내 잠금이 없으면 None
+    checkout_holder: str | None = None
 
 
 class RejectIn(BaseModel):
@@ -314,6 +316,11 @@ class CheckoutOut(BaseModel):
     checked_out_at: datetime | None
     # 요청 사용자가 현재 잠금 소유자인지
     mine: bool
+
+
+class CheckoutTransferIn(BaseModel):
+    """점유권 이전 요청 — 대상 login_id."""
+    to: str
 
 
 class CommentCreate(BaseModel):

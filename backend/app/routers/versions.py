@@ -13,7 +13,7 @@ from app.auth import get_current_user
 from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.permissions.access import get_eligible_users
+from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.deps import require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
@@ -29,6 +29,7 @@ from app.models import (
 from app.schemas import (
     CheckoutIn,
     CheckoutOut,
+    CheckoutTransferIn,
     DirectoryUserOut,
     EligibleAssigneesOut,
     RejectIn,
@@ -281,6 +282,45 @@ async def release_checkout(
         await session.commit()
 
 
+@router.post("/versions/{version_id}/checkout/transfer", response_model=CheckoutOut)
+async def transfer_checkout(
+    version_id: int,
+    payload: CheckoutTransferIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CheckoutOut:
+    """점유권 이전 — 점유자·맵 오너·sysadmin이 editor+ 대상에게 이전 (Task 2).
+
+    403: 호출자가 점유자·오너·sysadmin 아님.
+    422: 대상이 해당 맵의 editor+(owner or editor) 아님.
+    """
+    version = await session.get(MapVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+
+    actor_role = await get_effective_role(session, user, version.map_id)
+    is_holder = version.checked_out_by == user
+    is_owner = actor_role == "owner"
+    if not (is_holder or is_owner or is_sysadmin(user)):
+        raise HTTPException(
+            status_code=403,
+            detail="only the checkout holder, map owner, or sysadmin can transfer",
+        )
+
+    target_role = await get_effective_role(session, payload.to, version.map_id)
+    if target_role not in ("editor", "owner"):
+        raise HTTPException(
+            status_code=422,
+            detail="transfer target must be an editor or owner on this map",
+        )
+
+    now = now_kst()
+    version.checked_out_by = payload.to
+    version.checked_out_at = now
+    await session.commit()
+    return CheckoutOut(checked_out_by=payload.to, checked_out_at=now, mine=(payload.to == user))
+
+
 @router.delete("/versions/{version_id}", status_code=204)
 async def delete_version(
     version_id: int,
@@ -354,6 +394,7 @@ async def get_workflow_state(
             )
         ).all()
     )
+    now = now_kst()
     return WorkflowStateOut(
         version_id=version_id,
         version_number=version.version_number,
@@ -362,6 +403,7 @@ async def get_workflow_state(
         reject_reason=version.reject_reason,
         approvers=approvers,
         approvals=approvals,
+        checkout_holder=version.checked_out_by if is_checkout_active(version, now) else None,
     )
 
 
