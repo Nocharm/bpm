@@ -3,13 +3,13 @@
 // 상단바 맵 이름 드롭다운 — 박스형 트리거 + 드롭다운(검색·최근 맵·새 맵).
 // 맵 행은 바로 이동하지 않고 호버/클릭 → 하위메뉴(맵 열기 · 링크노드로 추가) → 확인 모달 순.
 // 편집 화면(isEditing)이면 이동 확인 모달에 미저장 손실 안내. 비공개(private) 맵은 목록에서 제외.
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Link2, Network, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { listMaps, type MapSummary } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { VERSION_STATUS_LABEL } from "@/lib/version-status";
@@ -36,6 +36,7 @@ export function MapNameDropdown({
   const { t } = useI18n();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const [maps, setMaps] = useState<MapSummary[] | null>(null);
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -142,17 +143,17 @@ export function MapNameDropdown({
                   );
                 }
 
-                // 다른 맵 — 호버/클릭으로 하위메뉴(맵 열기 · 링크노드 추가) 인라인 펼침.
+                // 다른 맵 — 클릭으로만 하위메뉴(맵 열기 · 링크노드 추가) 인라인 펼침(호버 열림 폐기, 한 번에 1개).
                 // 우측 flyout은 스크롤 컨테이너 overflow에 잘려 인라인 아코디언으로 처리.
                 const active = activeId === m.id;
                 return (
-                  <div key={m.id} onMouseEnter={() => setActiveId(m.id)}>
+                  <div key={m.id}>
                     <button
                       type="button"
                       className={`flex w-full items-center gap-2.5 px-3 py-2 text-left ${
                         active ? "bg-surface-alt" : "hover:bg-surface-alt"
                       }`}
-                      onClick={() => setActiveId(m.id)}
+                      onClick={() => setActiveId((id) => (id === m.id ? null : m.id))}
                     >
                       {tile}
                       {text}
@@ -205,14 +206,18 @@ export function MapNameDropdown({
             </div>
 
             <div className="mt-1 border-t border-divider pt-1">
-              <Link
-                href="/"
-                className="flex items-center gap-2 px-3 py-1.5 text-caption font-medium text-accent hover:bg-surface-alt"
-                onClick={() => setOpen(false)}
+              {/* 새 맵 — 홈으로 나가지 않고 생성 모달을 띄움 */}
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption font-medium text-accent hover:bg-surface-alt"
+                onClick={() => {
+                  closeAll();
+                  setShowCreate(true);
+                }}
               >
                 <Plus size={16} strokeWidth={1.5} />
                 {t("editor.newMap")}
-              </Link>
+              </button>
             </div>
           </div>
         </>
@@ -253,6 +258,12 @@ export function MapNameDropdown({
             onAddLinkNode(id, name);
           }}
           onClose={() => setPending(null)}
+        />
+      )}
+      {showCreate && (
+        <CreateMapDialog
+          onClose={() => setShowCreate(false)}
+          onCreated={() => setShowCreate(false)}
         />
       )}
     </div>
