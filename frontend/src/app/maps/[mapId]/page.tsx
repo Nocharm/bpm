@@ -6533,6 +6533,90 @@ function MapEditor({ mapId }: { mapId: number }) {
                     </div>
                   ) : null
                 }
+                mapTabSlot={
+                  // R5b 맵 탭 — 가시성·소유자/협업자·설명(MapDetailCard) + 노드 표시 토글 + 엣지 스타일 + PNG
+                  <div className="flex flex-col gap-4">
+                    <MapDetailCard mapId={mapId} showFooter={false} hideOpen />
+                    <div className="rounded-md border border-hairline p-3">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
+                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
+                      </div>
+                      {NODE_DISPLAY_FIELDS.map((field) => {
+                        const on = displayFields.includes(field);
+                        const labelKey =
+                          field === "assignee"
+                            ? "field.assignee"
+                            : field === "department"
+                              ? "field.department"
+                              : field === "system"
+                                ? "field.system"
+                                : field === "duration"
+                                  ? "field.duration"
+                                  : "field.type";
+                        return (
+                          <div
+                            key={field}
+                            className="flex items-center justify-between py-1 text-caption text-ink-secondary"
+                          >
+                            <span>{t(labelKey)}</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={on}
+                              aria-label={t(labelKey)}
+                              onClick={() => toggleDisplayField(field)}
+                              className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                                on ? "bg-accent" : "bg-border-strong"
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                                  on ? "left-3.5" : "left-0.5"
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div>
+                      <div className="mb-1 text-fine text-ink-tertiary">
+                        <span className="font-semibold text-ink">{t("inspector.edgeStyle")}</span> ·{" "}
+                        {t("inspector.mapWide")}
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {([
+                          ["default", "edgeStyle.curve"],
+                          ["smoothstep", "edgeStyle.step"],
+                          ["straight", "edgeStyle.straight"],
+                        ] as const).map(([value, labelKey]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={readOnly}
+                            onClick={() => setEdgeStyle(value)}
+                            className={`rounded-sm border px-2 py-1.5 text-caption ${
+                              edgeStyle === value
+                                ? "border-accent bg-accent-tint font-medium text-accent"
+                                : "border-hairline text-ink hover:bg-surface-alt"
+                            }`}
+                          >
+                            {t(labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleExportPng()}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                    >
+                      <Download size={16} strokeWidth={1.5} />
+                      {t("inspector.exportPng")}
+                    </button>
+                  </div>
+                }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
                 onOpenLibrary={() => setLibraryOpen(true)}

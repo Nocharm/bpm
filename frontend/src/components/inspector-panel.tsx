@@ -22,6 +22,8 @@ interface InspectorPanelProps {
   selectionKind: "node" | "edge" | null;
   // 선택된 노드/엣지 속성 폼 — page.tsx가 만들어 주입(빈상태는 내부 처리). 없으면 placeholder.
   propertiesSlot?: ReactNode;
+  // 맵 탭 콘텐츠(가시성·소유자/협업자·설명·노드표시·엣지스타일·PNG) — page.tsx 주입. 없으면 placeholder.
+  mapTabSlot?: ReactNode;
   readOnly: boolean;
   onAddNode: () => void;
   onOpenLibrary: () => void;
@@ -36,6 +38,7 @@ export function InspectorPanel({
   onCollapse,
   selectionKind,
   propertiesSlot,
+  mapTabSlot,
   readOnly,
   onAddNode,
   onOpenLibrary,
@@ -94,7 +97,11 @@ export function InspectorPanel({
           (propertiesSlot ?? (
             <Placeholder text={`${selectionKind === "node" ? "Node" : "Edge"} ${t("inspector.tabProperties")} · ${t("inspector.wip")}`} />
           ))}
-        {tab !== "properties" && <Placeholder text={`${t(TABS.find((x) => x.key === tab)!.labelKey)} · ${t("inspector.wip")}`} />}
+        {tab === "map" &&
+          (mapTabSlot ?? <Placeholder text={`${t("inspector.tabMap")} · ${t("inspector.wip")}`} />)}
+        {(tab === "approval" || tab === "activity") && (
+          <Placeholder text={`${t(TABS.find((x) => x.key === tab)!.labelKey)} · ${t("inspector.wip")}`} />
+        )}
       </div>
     </div>
   );
