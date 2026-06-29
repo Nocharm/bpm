@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-06-29 — feat/version-lifecycle (continued, Task 6)
+- **feat(approval): 역할/상태 액션 매트릭스 + checkout request/decide/transfer/republish 배선 + 기본 버전 선택 (Task 6)** — Part A: api.ts에 `transferCheckout·requestCheckout·decideCheckoutRequest·republishVersion·getMapEditors` 추가. Part B: 맵 로드 시 내 draft(점유 보유) → 최신 published → 첫 번째 순 기본 선택. Part C: approvalSlot 우측 아이콘 — 점유자+draft=이전·이름·삭제, editor+미점유+draft=요청(Hand)/요청됨(비활성)+"{이름} 편집 중", editor+expired+draft없음=재게시(RotateCcw). Part D: approval-panel.tsx에 pending_checkout_request 결정 배너(보유자/소유자/sysadmin에게 승인/거절 노출). Part E: 핸들러 배선 + 이전 다이얼로그(minimal) + 재게시 ConfirmDialog. i18n 신규 키 18개(en+ko). tsc 0·lint 0 errors.
+
 ## 2026-06-29 — feat/version-lifecycle (continued)
 - **feat(version): expired 상태 타입 + WorkflowState checkout 필드 + formatVersionName 테스트 (Task 5 gap fill)** — ① `VersionStatus` 유니온에 `"expired"` 추가 → 연쇄: `version-status.ts`·`status-badge.tsx`·`approval-panel.tsx`(switch exhaustive) + i18n EN/KO 키 2개. ② `WorkflowState`에 `version_number?·checkout_holder?·pending_checkout_request?` 추가. ③ `version-name.test.ts` 신규(vitest 3/3). ④ `VersionPill` expired 필터 없음 확인(변경 없음). tsc 0·lint 0 errors.
 

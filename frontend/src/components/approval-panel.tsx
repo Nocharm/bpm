@@ -1,7 +1,7 @@
 "use client";
 
-// R5c 승인 탭 — 목업 디자인. 3단계 스테퍼(제출→검토→게시) + 상태 배지 + 승인자 현황(승인/대기·누구에게 대기) + 액션.
-// 워크플로 데이터·액션은 page.tsx 주입(WorkflowDashboard와 동일). 승인자 login_id는 getDirectory로 이름 해석.
+// R5c 승인 탭 — 3단계 스테퍼(제출→검토→게시) + 상태 배지 + 승인자 현황 + 액션.
+// Part D: pending_checkout_request 배너 — 결정 권한자(보유자/소유자/sysadmin)에게 승인/거절 UI 노출.
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 
@@ -25,6 +25,10 @@ interface ApprovalPanelProps {
   onPublish: () => void;
   onWithdraw: () => void;
   onManageApprovers: () => void;
+  // 편집권한 요청 결정 (Part D) — 결정 권한자에게 승인/거절 UI 노출
+  pendingCheckoutRequest?: { id: number; requested_by: string } | null;
+  canDecideCheckout?: boolean;
+  onDecideCheckout?: (requestId: number, approve: boolean) => void;
 }
 
 const STEPS: { key: string; labelKey: MessageKey }[] = [
@@ -63,6 +67,9 @@ export function ApprovalPanel({
   onPublish,
   onWithdraw,
   onManageApprovers,
+  pendingCheckoutRequest,
+  canDecideCheckout,
+  onDecideCheckout,
 }: ApprovalPanelProps) {
   const { t } = useI18n();
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
@@ -153,6 +160,33 @@ export function ApprovalPanel({
           );
         })}
       </div>
+
+      {/* 편집권한 요청 배너 — 결정 권한자에게만 노출 (Part D) */}
+      {pendingCheckoutRequest && canDecideCheckout && onDecideCheckout && (
+        <div className="flex items-center justify-between rounded-sm border border-hairline bg-surface-alt px-3 py-2">
+          <span className="text-caption text-ink">
+            {t("approval.checkoutDecideTitle", {
+              name: resolve(pendingCheckoutRequest.requested_by),
+            })}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className="rounded-sm px-2 py-1 text-fine text-error hover:bg-error/10"
+              onClick={() => onDecideCheckout(pendingCheckoutRequest.id, false)}
+            >
+              {t("approval.checkoutReject")}
+            </button>
+            <button
+              type="button"
+              className="rounded-sm bg-accent px-2 py-1 text-fine text-on-accent hover:bg-accent-focus"
+              onClick={() => onDecideCheckout(pendingCheckoutRequest.id, true)}
+            >
+              {t("approval.checkoutApprove")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 승인자 현황 — 이름 + 승인/대기, 소유자는 관리 링크 */}
       <div className="flex flex-col gap-2">

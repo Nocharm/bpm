@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -115,11 +115,14 @@ import {
   approveVersion,
   createComment,
   createVersion,
+  decideCheckoutRequest,
   deleteComment,
   deleteVersion,
+  getDirectory,
   getFullGraph,
   getGraph,
   getMap,
+  getMapEditors,
   getMe,
   getResolvedGraph,
   getWorkflowState,
@@ -129,8 +132,11 @@ import {
   rejectVersion,
   releaseCheckout,
   renameVersion,
+  republishVersion,
+  requestCheckout,
   saveGraph,
   submitVersion,
+  transferCheckout,
   updateComment,
   withdrawVersion,
   type AiNode,
@@ -138,6 +144,7 @@ import {
   type AiProposal,
   type CheckoutState,
   type CommentItem,
+  type DirectoryUser,
   type FlatNode,
   type Graph,
   type GraphEdge,
@@ -695,6 +702,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [myRole, setMyRole] = useState<"viewer" | "editor" | "owner" | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [managingApprovers, setManagingApprovers] = useState(false);
+  // 점유권 이전 다이얼로그 / Transfer checkout dialog
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferEditors, setTransferEditors] = useState<DirectoryUser[]>([]);
+  const [transferTarget, setTransferTarget] = useState<string>("");
+  // 재게시 확인 다이얼로그 / Republish confirm dialog
+  const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
+  // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
+  const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
   // AI 채팅 패널 상태
   const [aiOpen, setAiOpen] = useState(false);
@@ -779,6 +794,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
+  // 점유권 매트릭스 파생 / checkout role matrix
+  const isHolder =
+    !!username &&
+    workflow?.checkout_holder === username &&
+    currentVersion?.status === "draft";
+  const isEditorRole = myRole === "owner" || myRole === "editor" || isSysadmin;
+  const hasDraft = versions.some((v) => v.status === "draft");
 
   const reactFlow = useReactFlow();
   // 캔버스 컨테이너 픽셀 크기(리사이즈 시에만 변경 — 줌/팬엔 불변) — translateExtent 우하단 확장 계산용
@@ -1459,12 +1481,13 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // ── 로드 ──────────────────────────────────────────────
 
-  // 맵 메타 로드 — 버전 확보 + 브레드크럼 루트 이름
+  // 맵 메타 로드 — 버전 확보 + 브레드크럼 루트 이름 + 기본 버전 선택(§6.1)
+  // 기본 선택: 내가 점유 보유한 draft → 최신 published → 첫 번째
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
-        const detail = await getMap(mapId);
+        const [detail, me] = await Promise.all([getMap(mapId), getMe()]);
         if (!active) {
           return;
         }
@@ -1472,9 +1495,28 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapOwner(detail.created_by);
         setMyRole(detail.my_role);
         setVersions(detail.versions);
-        setVersionId(detail.versions[0].id);
-        setScopes([{ kind: "root", title: detail.name }]);
-        setActiveIndex(0);
+        setUsername(me.username);
+        setAiEnabled(me.ai_enabled);
+        setIsSysadmin(me.is_sysadmin);
+        // 기본 선택 — 내 draft(점유 보유) > 최신 published > 첫 번째
+        const draft = detail.versions.find((v) => v.status === "draft");
+        const latestPublished = detail.versions.find((v) => v.status === "published");
+        let initialId = latestPublished?.id ?? detail.versions[0]?.id;
+        if (draft) {
+          try {
+            const ws = await getWorkflowState(draft.id);
+            if (active && ws.checkout_holder === me.username) {
+              initialId = draft.id;
+            }
+          } catch {
+            // 워크플로우 조회 실패 시 기본값 유지
+          }
+        }
+        if (active) {
+          setVersionId(initialId ?? detail.versions[0].id);
+          setScopes([{ kind: "root", title: detail.name }]);
+          setActiveIndex(0);
+        }
       } catch (err) {
         if (active) {
           setStatus(err instanceof Error ? err.message : t("err.loadMap"));
@@ -1486,7 +1528,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
   }, [mapId, t]);
 
-  // 현재 사용자 신원 — 마운트 1회, auth 비활성 시 null 유지
+  // 현재 사용자 신원 — 마운트 1회(맵 로드 병렬 호출과 별개로 auth 비활성 시 null 유지)
   useEffect(() => {
     let alive = true;
     void getMe()
@@ -1495,6 +1537,21 @@ function MapEditor({ mapId }: { mapId: number }) {
           setUsername(me.username);
           setAiEnabled(me.ai_enabled);
           setIsSysadmin(me.is_sysadmin);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 이름 해석 캐시 — 점유자·이전 대상 이름 표시(login_id→표시이름) / name cache for checkout display
+  useEffect(() => {
+    let alive = true;
+    void getDirectory()
+      .then((dir) => {
+        if (alive) {
+          setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
         }
       })
       .catch(() => undefined);
@@ -2157,6 +2214,71 @@ function MapEditor({ mapId }: { mapId: number }) {
       setActiveIndex(0);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
+    }
+  };
+
+  // ── 점유권 요청·결정·이전·재게시 핸들러 (§6.3) ──────────
+
+  // 편집권한 요청 — 현 미보유 편집자가 보유자에게 요청
+  const handleRequestCheckout = async () => {
+    if (versionId === null) return;
+    try {
+      await requestCheckout(versionId);
+      await refreshWorkflow();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.requestCheckout"));
+    }
+  };
+
+  // 편집권한 요청 결정 — 보유자/소유자/sysadmin이 승인 또는 거절
+  const handleDecideCheckout = async (requestId: number, approve: boolean) => {
+    try {
+      await decideCheckoutRequest(requestId, approve);
+      await refreshWorkflow();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.decideCheckout"));
+    }
+  };
+
+  // 점유권 이전 다이얼로그 열기 — 편집자 목록 로드 후 오픈
+  const handleTransferOpen = async () => {
+    if (versionId === null) return;
+    try {
+      const editors = await getMapEditors(mapId);
+      const others = editors.filter((e) => e.id !== username);
+      setTransferEditors(others);
+      setTransferTarget(others[0]?.id ?? "");
+      setTransferOpen(true);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.transferCheckout"));
+    }
+  };
+
+  // 점유권 이전 확인
+  const handleConfirmTransfer = async () => {
+    if (versionId === null || !transferTarget) return;
+    setTransferOpen(false);
+    try {
+      await transferCheckout(versionId, transferTarget);
+      await refreshWorkflow();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.transferCheckout"));
+    }
+  };
+
+  // 재게시 확인 — 만료 버전에서 새 draft 생성 후 해당 draft로 전환
+  const handleConfirmRepublish = async () => {
+    setRepublishConfirmOpen(false);
+    if (versionId === null) return;
+    try {
+      const newDraft = await republishVersion(versionId);
+      const detail = await getMap(mapId);
+      setVersions(detail.versions);
+      setVersionId(newDraft.id);
+      setScopes([{ kind: "root", title: mapName }]);
+      setActiveIndex(0);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.republish"));
     }
   };
 
@@ -6595,8 +6717,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         onSwitch={(id) => void switchVersion(id)}
                         compact
                       />
-                      {/* 버전 관리 — 우측 정렬 아이콘(호버 라벨). 생성·이름변경 항상, 삭제는 readOnly·단일버전 시 비활성 */}
+                      {/* 버전 관리 — 역할/상태 매트릭스 우측 정렬 아이콘 (§6.2) */}
                       <div className="flex shrink-0 items-center gap-0.5">
+                        {/* 새 버전 — 항상 노출 */}
                         <Tooltip label={t("editor.newVersion")}>
                           <button
                             type="button"
@@ -6607,27 +6730,91 @@ function MapEditor({ mapId }: { mapId: number }) {
                             <Plus size={16} strokeWidth={1.5} />
                           </button>
                         </Tooltip>
-                        <Tooltip label={t("editor.rename")}>
-                          <button
-                            type="button"
-                            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
-                            onClick={handleRenameVersion}
-                            aria-label={t("editor.rename")}
-                          >
-                            <PencilLine size={16} strokeWidth={1.5} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label={t("editor.deleteVersion")}>
-                          <button
-                            type="button"
-                            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-error disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
-                            onClick={handleDeleteVersion}
-                            disabled={versions.length <= 1 || readOnly}
-                            aria-label={t("editor.deleteVersion")}
-                          >
-                            <Trash2 size={16} strokeWidth={1.5} />
-                          </button>
-                        </Tooltip>
+
+                        {/* 점유자 + draft: 이전·이름변경·삭제 */}
+                        {isHolder && (
+                          <>
+                            <Tooltip label={t("approval.checkoutTransfer")}>
+                              <button
+                                type="button"
+                                className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                                onClick={() => void handleTransferOpen()}
+                                aria-label={t("approval.checkoutTransfer")}
+                              >
+                                <ArrowLeftRight size={16} strokeWidth={1.5} />
+                              </button>
+                            </Tooltip>
+                            <Tooltip label={t("editor.rename")}>
+                              <button
+                                type="button"
+                                className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                                onClick={handleRenameVersion}
+                                aria-label={t("editor.rename")}
+                              >
+                                <PencilLine size={16} strokeWidth={1.5} />
+                              </button>
+                            </Tooltip>
+                            <Tooltip label={t("editor.deleteVersion")}>
+                              <button
+                                type="button"
+                                className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-error disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
+                                onClick={handleDeleteVersion}
+                                disabled={versions.length <= 1}
+                                aria-label={t("editor.deleteVersion")}
+                              >
+                                <Trash2 size={16} strokeWidth={1.5} />
+                              </button>
+                            </Tooltip>
+                          </>
+                        )}
+
+                        {/* editor + 미점유 + draft: 편집권한 요청 + 편집 중 텍스트 */}
+                        {!isHolder && isEditorRole && currentVersion?.status === "draft" && (
+                          <>
+                            {workflow?.pending_checkout_request ? (
+                              <button
+                                type="button"
+                                className="inline-flex cursor-default items-center gap-1 rounded-sm p-1.5 text-ink-tertiary opacity-50"
+                                disabled
+                                aria-label={t("approval.checkoutRequested")}
+                              >
+                                <Hand size={16} strokeWidth={1.5} />
+                                <span className="text-fine">{t("approval.checkoutRequested")}</span>
+                              </button>
+                            ) : (
+                              <Tooltip label={t("approval.checkoutRequest")}>
+                                <button
+                                  type="button"
+                                  className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                                  onClick={() => void handleRequestCheckout()}
+                                  aria-label={t("approval.checkoutRequest")}
+                                >
+                                  <Hand size={16} strokeWidth={1.5} />
+                                </button>
+                              </Tooltip>
+                            )}
+                            {workflow?.checkout_holder && (
+                              <span className="ml-1 text-fine text-ink-tertiary">
+                                {nameById.get(workflow.checkout_holder) ?? workflow.checkout_holder}{" "}
+                                편집 중
+                              </span>
+                            )}
+                          </>
+                        )}
+
+                        {/* editor + expired + draft 없음: 재게시 */}
+                        {isEditorRole && currentVersion?.status === "expired" && !hasDraft && (
+                          <Tooltip label={t("approval.checkoutRepublish")}>
+                            <button
+                              type="button"
+                              className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                              onClick={() => setRepublishConfirmOpen(true)}
+                              aria-label={t("approval.checkoutRepublish")}
+                            >
+                              <RotateCcw size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </div>
                     {currentVersion && (
@@ -6645,6 +6832,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onPublish={() => void runTransition(publishVersion)}
                       onWithdraw={() => void runTransition(withdrawVersion)}
                       onManageApprovers={() => setManagingApprovers(true)}
+                      pendingCheckoutRequest={workflow?.pending_checkout_request ?? null}
+                      canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
+                      onDecideCheckout={(requestId, approve) =>
+                        void handleDecideCheckout(requestId, approve)
+                      }
                     />
                     )}
                     <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
@@ -6731,6 +6923,66 @@ function MapEditor({ mapId }: { mapId: number }) {
           danger
           onConfirm={() => void confirmDeleteVersion()}
           onClose={() => setDeleteVersionOpen(false)}
+        />
+      )}
+      {/* 점유권 이전 다이얼로그 — 최소 기능(편집자 선택 + 확인). T7에서 DeleteMapDialog 스타일로 정제 */}
+      {transferOpen && (
+        <ModalBackdrop
+          onClose={() => setTransferOpen(false)}
+          className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+        >
+          <div className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg">
+            <h2 className="text-body-strong text-ink">{t("approval.transferTitle")}</h2>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-caption text-ink-secondary" htmlFor="transfer-target-select">
+                {t("approval.transferPickLabel")}
+              </label>
+              {transferEditors.length === 0 ? (
+                <p className="text-caption text-ink-tertiary">{t("perm.transferNoEligible")}</p>
+              ) : (
+                <select
+                  id="transfer-target-select"
+                  className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
+                  value={transferTarget}
+                  onChange={(e) => setTransferTarget(e.target.value)}
+                >
+                  {transferEditors.map((editor) => (
+                    <option key={editor.id} value={editor.id}>
+                      {editor.name} ({editor.id})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                onClick={() => setTransferOpen(false)}
+              >
+                {t("approval.transferCancel")}
+              </button>
+              <button
+                type="button"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                disabled={!transferTarget}
+                onClick={() => void handleConfirmTransfer()}
+              >
+                {t("approval.transferConfirm")}
+              </button>
+            </div>
+          </div>
+        </ModalBackdrop>
+      )}
+      {/* 재게시 확인 */}
+      {republishConfirmOpen && (
+        <ConfirmDialog
+          title={t("approval.republishConfirmTitle")}
+          message={t("approval.republishConfirmBody")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => void handleConfirmRepublish()}
+          onClose={() => setRepublishConfirmOpen(false)}
         />
       )}
       {branchPrompt && (

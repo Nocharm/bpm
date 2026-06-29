@@ -294,6 +294,32 @@ export function releaseCheckout(versionId: number): Promise<void> {
   return request<void>(`/versions/${versionId}/checkout`, { method: "DELETE" });
 }
 
+// 점유권 이전 — 현 보유자가 다른 편집자에게 점유권 넘김 / Transfer checkout to another editor
+export function transferCheckout(versionId: number, to: string): Promise<void> {
+  return request<void>(`/versions/${versionId}/checkout/transfer`, {
+    method: "POST",
+    body: JSON.stringify({ to }),
+  });
+}
+
+// 점유권 요청 — 미보유 편집자가 보유자에게 요청 발송 / Request checkout from holder
+export function requestCheckout(
+  versionId: number,
+): Promise<{ id: number; requested_by: string }> {
+  return request<{ id: number; requested_by: string }>(
+    `/versions/${versionId}/checkout/request`,
+    { method: "POST" },
+  );
+}
+
+// 점유권 요청 결정 — 보유자/소유자/sysadmin이 승인 또는 거절 / Approve or reject a checkout request
+export function decideCheckoutRequest(requestId: number, approve: boolean): Promise<void> {
+  return request<void>(`/checkout-requests/${requestId}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ approve }),
+  });
+}
+
 export interface CommentItem {
   id: number;
   node_id: string;
@@ -463,6 +489,11 @@ export function withdrawVersion(versionId: number): Promise<VersionSummary> {
   return request<VersionSummary>(`/versions/${versionId}/withdraw`, { method: "POST" });
 }
 
+// 만료 버전 재게시 — 새 draft 반환 / Republish expired version (creates a new draft)
+export function republishVersion(versionId: number): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/republish`, { method: "POST" });
+}
+
 export function listApprovers(mapId: number): Promise<string[]> {
   return request<string[]>(`/maps/${mapId}/approvers`);
 }
@@ -470,6 +501,11 @@ export function listApprovers(mapId: number): Promise<string[]> {
 // 승인자 지정 후보 — 맵 조회권한(viewer+) 보유 직원만 (AP)
 export function listEligibleApprovers(mapId: number): Promise<DirectoryUser[]> {
   return request<DirectoryUser[]>(`/maps/${mapId}/eligible-approvers`);
+}
+
+// 편집자 목록 — 점유권 이전 대상 후보(editor+ 역할 보유) / Editors for checkout transfer
+export function getMapEditors(mapId: number): Promise<DirectoryUser[]> {
+  return request<DirectoryUser[]>(`/maps/${mapId}/editors`);
 }
 
 export function setApprovers(mapId: number, userIds: string[]): Promise<string[]> {
