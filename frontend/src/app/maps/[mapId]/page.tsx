@@ -6538,7 +6538,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 mapTabSlot={
                   // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
                   <div className="flex flex-col gap-4">
-                    <MapInspectorTab mapId={mapId} currentLoginId={username} readOnly={readOnly} />
+                    <MapInspectorTab mapId={mapId} readOnly={readOnly} />
                     <div className="rounded-md border border-hairline p-3">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
