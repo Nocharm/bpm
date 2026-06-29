@@ -617,6 +617,68 @@ async def publish_version(
     return version
 
 
+@router.post("/versions/{version_id}/republish", response_model=VersionOut, status_code=201)
+async def republish_version(
+    version_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MapVersion:
+    """Published/Expired → 그래프 복제 새 Draft + 생성자 점유. (만료본 재게시, Task 4)
+
+    published·expired만 허용; draft·pending·approved·rejected는 409.
+    맵당 draft 1개 규약 — 기존 draft 있으면 409.
+    호출자는 해당 맵의 editor+ 이어야 함 — 미달 시 403.
+    """
+    source = await session.get(
+        MapVersion,
+        version_id,
+        options=[
+            selectinload(MapVersion.nodes),
+            selectinload(MapVersion.edges),
+            selectinload(MapVersion.groups),
+        ],
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+
+    if source.status not in (workflow.PUBLISHED, workflow.EXPIRED):
+        raise HTTPException(
+            status_code=409,
+            detail=f"cannot republish a {source.status} version",
+        )
+
+    role = await get_effective_role(session, user, source.map_id)
+    if role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="editor or owner required to republish")
+
+    existing_draft = await session.scalar(
+        select(MapVersion)
+        .where(
+            MapVersion.map_id == source.map_id,
+            MapVersion.status == workflow.DRAFT,
+        )
+        .limit(1)
+    )
+    if existing_draft is not None:
+        raise HTTPException(status_code=409, detail="a draft already exists for this map")
+
+    new_version = MapVersion(
+        map_id=source.map_id,
+        label=source.label,
+        checked_out_by=user,
+        checked_out_at=now_kst(),
+    )
+    session.add(new_version)
+    await session.flush()
+
+    await clone_graph(session, source, new_version.id)
+    record_version_event(session, new_version.id, "created", user)
+
+    await session.commit()
+    await session.refresh(new_version)
+    return new_version
+
+
 @router.post("/versions/{version_id}/withdraw", response_model=VersionOut)
 async def withdraw_version(
     version_id: int,

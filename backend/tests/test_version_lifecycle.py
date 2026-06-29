@@ -1,9 +1,19 @@
-"""Tests for version numbering (version_number) and expired status — Task 1."""
+"""Tests for version numbering (version_number) and expired status — Task 1.
+Also covers Task 4: republish expired/published version into a new draft.
+"""
+
+import asyncio
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
 from uuid import uuid4
+from sqlalchemy import func, select
 
+import app.auth as _auth_mod
+from app.db import SessionLocal
+from app.main import app as _fastapi_app
+from app.models import MapVersion, Node
 from app.settings import settings
 
 
@@ -101,3 +111,146 @@ def test_workflow_state_version_number(
     _publish(client, monkeypatch, map_id, v1)
     wf = client.get(f"/api/versions/{v1}/workflow").json()
     assert wf["version_number"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 4: 만료본 재게시 (republish)
+# ---------------------------------------------------------------------------
+
+
+def _seed_node(version_id: int) -> None:
+    """버전에 노드 1개 직접 삽입 (그래프 복제 검증용)."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            session.add(Node(id=uuid.uuid4().hex, version_id=version_id, title="seed"))
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _node_count(version_id: int) -> int:
+    """버전의 노드 수 직접 조회."""
+
+    async def _run() -> int:
+        async with SessionLocal() as session:
+            result = await session.scalar(
+                select(func.count()).select_from(Node).where(Node.version_id == version_id)
+            )
+            return result or 0
+
+    return asyncio.run(_run())
+
+
+def _force_version_status(version_id: int, status: str) -> None:
+    """버전 상태 직접 설정 (테스트 시나리오 세팅용)."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            v = await session.get(MapVersion, version_id)
+            v.status = status
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def test_republish_expired_creates_draft(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Expired 버전 republish → 그래프 복제 새 draft, version_number=None, checked_out_by=caller."""
+    map_id, v1 = _create_map(client)
+    _seed_node(v1)  # v1에 노드 1개 삽입
+
+    # v1 publish → published (version_number=1)
+    _publish(client, monkeypatch, map_id, v1)
+
+    # v2 publish → v1 expired
+    v2 = client.post(
+        f"/api/maps/{map_id}/versions",
+        json={"label": "To-Be", "source_version_id": v1},
+    ).json()["id"]
+    _publish(client, monkeypatch, map_id, v2)
+
+    # 확인: v1은 expired
+    detail = client.get(f"/api/maps/{map_id}").json()
+    by_id = {v["id"]: v for v in detail["versions"]}
+    assert by_id[v1]["status"] == "expired"
+    v1_label = by_id[v1]["label"]
+
+    # republish v1 (expired) → 새 draft
+    resp = client.post(f"/api/versions/{v1}/republish")
+    assert resp.status_code == 201, resp.text
+    nd = resp.json()
+
+    assert nd["status"] == "draft"
+    assert nd["version_number"] is None
+    assert nd["label"] == v1_label  # label 승계
+
+    # 그래프 복제 검증: 새 draft에 노드 1개 (v1과 동수)
+    assert _node_count(v1) == 1
+    assert _node_count(nd["id"]) == 1
+
+    # 생성자 점유권 확인
+    wf = client.get(f"/api/versions/{nd['id']}/workflow").json()
+    assert wf["checkout_holder"] == "local-dev"
+
+
+def test_republish_draft_exists_409(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """맵에 이미 draft가 있으면 republish → 409."""
+    map_id, v1 = _create_map(client)
+    _publish(client, monkeypatch, map_id, v1)  # v1 = published
+
+    # v2 draft 생성 → 작업본 존재
+    client.post(f"/api/maps/{map_id}/versions", json={"label": "To-Be"})
+
+    # v1 (published) republish 시도 → 409
+    resp = client.post(f"/api/versions/{v1}/republish")
+    assert resp.status_code == 409, resp.text
+    assert "draft" in resp.json()["detail"]
+
+
+def test_republish_no_editor_role_403(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """editor+ 권한 없는 사용자 → 403.
+
+    dev_enforce_permissions 기본값(False)에서는 전원 sysadmin이라 권한 차단이 안 됨.
+    auth_enabled=True + 단일 sysadmin 지정 + get_current_user 오버라이드로 실제 역할 적용.
+    """
+    map_id, v1 = _create_map(client)
+    _publish(client, monkeypatch, map_id, v1)  # v1 = published (private map, owner=local-dev)
+
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    monkeypatch.setattr(settings, "bpm_sysadmins", "local-dev")
+    _fastapi_app.dependency_overrides[_auth_mod.get_current_user] = lambda: "no-access-user"
+    try:
+        resp = client.post(f"/api/versions/{v1}/republish")
+    finally:
+        _fastapi_app.dependency_overrides.pop(_auth_mod.get_current_user, None)
+    assert resp.status_code == 403, resp.text
+
+
+def test_republish_source_status_gates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """draft/pending source → 409 차단; published source → 201 허용."""
+    # draft source → 409
+    _, v_draft = _create_map(client)
+    resp = client.post(f"/api/versions/{v_draft}/republish")
+    assert resp.status_code == 409, resp.text
+    assert "draft" in resp.json()["detail"]
+
+    # pending source → 409
+    _, v_pending = _create_map(client)
+    _force_version_status(v_pending, "pending")
+    resp = client.post(f"/api/versions/{v_pending}/republish")
+    assert resp.status_code == 409, resp.text
+
+    # published source (no existing draft) → 201
+    map_id_c, v_pub = _create_map(client)
+    _publish(client, monkeypatch, map_id_c, v_pub)
+    resp = client.post(f"/api/versions/{v_pub}/republish")
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["status"] == "draft"
