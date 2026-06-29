@@ -50,11 +50,10 @@ async def request_checkout(
             detail="you already hold the checkout",
         )
 
-    # 미결 중복 요청 차단
+    # 버전당 미결 요청은 1건만 허용 — 요청자 무관하게 차단
     existing = await session.scalar(
         select(CheckoutRequest).where(
             CheckoutRequest.version_id == version_id,
-            CheckoutRequest.requested_by == user,
             CheckoutRequest.status == "pending",
         )
     )

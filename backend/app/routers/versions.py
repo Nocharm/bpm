@@ -401,7 +401,7 @@ async def get_workflow_state(
         ).all()
     )
     now = now_kst()
-    # 이 버전에 대한 미결 점유 요청 — 최신 1건 (Task 3)
+    # 이 버전에 대한 미결 점유 요청 — 버전당 최대 1건 불변식 (Task 3 per-version dedup)
     pending_req = await session.scalar(
         select(CheckoutRequest)
         .where(

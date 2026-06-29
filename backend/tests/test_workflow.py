@@ -624,6 +624,26 @@ def test_checkout_request_duplicate_409(
     assert dup.status_code == 409
 
 
+def test_checkout_request_different_user_409(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """②-b 다른 사용자의 요청이 pending 중일 때 또 다른 editor가 요청 → 409 (per-version dedup)."""
+    map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor"), ("editor2.u", "editor")]
+    )
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    first = client.post(f"/api/versions/{version_id}/checkout/request")
+    assert first.status_code == 201  # editor.u 요청 성공
+
+    _act_as("editor2.u")
+    dup = client.post(f"/api/versions/{version_id}/checkout/request")  # different user
+    assert dup.status_code == 409  # 버전당 1건 불변식
+
+
 def test_checkout_request_approve_moves_checkout(
     client: TestClient, _transfer_enforce: None
 ) -> None:
