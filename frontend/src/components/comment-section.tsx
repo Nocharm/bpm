@@ -2,8 +2,8 @@
 
 // 노드 코멘트 스레드 — 목록/작성/해결 토글/삭제. 읽기 전용 모드에서도 작성 가능 (spec §7 Phase C).
 
-import { useState } from "react";
-import { Check, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { ArrowDown, Check, Trash2 } from "lucide-react";
 
 import type { CommentItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
@@ -26,6 +26,17 @@ export function CommentSection({
   const [draft, setDraft] = useState("");
   // 상대 시각 기준 "지금"을 마운트 시 1회 캡처 — render 중 Date.now() 호출(순수성 위반) 회피
   const [now] = useState(() => Date.now());
+  const listRef = useRef<HTMLUListElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // 작성칸 자동 확장(스크롤 없이 아래로 늘어남) — 내용 높이만큼 height 재설정
+  const grow = () => {
+    const ta = taRef.current;
+    if (ta) {
+      ta.style.height = "0px";
+      ta.style.height = `${ta.scrollHeight}px`;
+    }
+  };
 
   const handleSubmit = () => {
     const body = draft.trim();
@@ -34,6 +45,12 @@ export function CommentSection({
     }
     onAdd(body);
     setDraft("");
+    if (taRef.current) taRef.current.style.height = ""; // 전송 후 높이 초기화
+  };
+
+  const scrollToBottom = () => {
+    const el = listRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
   // 상대 시각 — 백엔드 tz-aware 저장이라 new Date(iso) 차이로 안전. 30일 초과는 절대(컴팩트).
@@ -50,7 +67,7 @@ export function CommentSection({
 
   return (
     <div className="flex flex-col gap-2">
-      <ul className="scroll-soft flex max-h-72 flex-col gap-3 overflow-y-auto">
+      <ul ref={listRef} className="flex max-h-72 flex-col gap-3 overflow-y-auto pr-1">
         {comments.map((comment) => (
           <li key={comment.id} className={`flex gap-2 ${comment.resolved ? "opacity-60" : ""}`}>
             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine font-semibold text-accent">
@@ -97,26 +114,47 @@ export function CommentSection({
           <li className="text-caption text-ink-tertiary">{t("comment.empty")}</li>
         )}
       </ul>
-      <div className="flex items-end gap-1.5">
+      {comments.length > 1 && (
+        <button
+          type="button"
+          className="inline-flex items-center gap-0.5 self-end text-fine text-ink-tertiary hover:text-accent"
+          onClick={scrollToBottom}
+        >
+          <ArrowDown size={12} strokeWidth={1.5} />
+          {t("comment.goToBottom")}
+        </button>
+      )}
+      {/* 작성칸 — 자동 확장(스크롤 없음), 버튼·단축키 힌트는 박스 안 하단 라인 */}
+      <div className="rounded-sm border border-hairline focus-within:border-accent/50">
         <textarea
-          className="scroll-soft h-[4.5rem] flex-1 resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption"
+          ref={taRef}
+          rows={2}
+          className="block w-full resize-none overflow-hidden bg-transparent px-2 py-1.5 text-caption focus:outline-none"
           placeholder={t("comment.placeholder")}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            grow();
+          }}
           onKeyDown={(event) => {
+            // Enter=줄바꿈(기본), Ctrl/Cmd+Enter=전송
             if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
               event.preventDefault();
               handleSubmit();
             }
           }}
         />
-        <button
-          className="shrink-0 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
-          onClick={handleSubmit}
-          disabled={!draft.trim()}
-        >
-          {t("comment.submit")}
-        </button>
+        <div className="flex items-center justify-between gap-2 border-t border-divider px-2 py-1">
+          <span className="truncate text-fine text-ink-tertiary">{t("comment.hint")}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={handleSubmit}
+            disabled={!draft.trim()}
+          >
+            {t("comment.submit")}
+          </button>
+        </div>
       </div>
     </div>
   );
