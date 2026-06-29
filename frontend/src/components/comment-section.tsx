@@ -14,8 +14,10 @@ interface CommentSectionProps {
   onAdd: (body: string) => void;
   onToggleResolved: (comment: CommentItem) => void;
   onDelete: (comment: CommentItem) => void;
-  // 작성칸 숨김 — 활동 탭의 전체 코멘트 뷰처럼 노드 컨텍스트가 없어 추가가 불가한 경우 / hide the input.
-  hideInput?: boolean;
+  // 작성칸 비활성 — 활동 탭에서 노드 미선택 시(추가 대상 노드가 없어) 입력을 막고 안내만 표시 / disabled input.
+  inputDisabled?: boolean;
+  // 코멘트 클릭 → 해당 노드로 네비게이션(활동 탭 전체 코멘트 뷰) / click a comment to jump to its node.
+  onCommentClick?: (comment: CommentItem) => void;
 }
 
 export function CommentSection({
@@ -23,7 +25,8 @@ export function CommentSection({
   onAdd,
   onToggleResolved,
   onDelete,
-  hideInput = false,
+  inputDisabled = false,
+  onCommentClick,
 }: CommentSectionProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
@@ -77,6 +80,11 @@ export function CommentSection({
               {comment.author.slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
+              <div
+                className={onCommentClick ? "-mx-1 cursor-pointer rounded-sm px-1 hover:bg-surface-alt" : ""}
+                role={onCommentClick ? "button" : undefined}
+                onClick={onCommentClick ? () => onCommentClick(comment) : undefined}
+              >
               <div className="flex flex-wrap items-center gap-x-1.5 text-fine text-ink-tertiary">
                 <span className="font-semibold text-ink">{comment.author}</span>
                 <span>· {relativeTime(comment.created_at)}</span>
@@ -94,6 +102,7 @@ export function CommentSection({
               >
                 {comment.body}
               </p>
+              </div>
               <div className="mt-0.5 flex gap-2 text-fine">
                 <button
                   className="text-ink-secondary hover:text-accent"
@@ -127,8 +136,12 @@ export function CommentSection({
           {t("comment.goToBottom")}
         </button>
       )}
-      {/* 작성칸 — 자동 확장(스크롤 없음), 버튼·단축키 힌트는 박스 안 하단 라인. 활동 탭 전체뷰는 숨김 */}
-      {!hideInput && (
+      {/* 작성칸 — 자동 확장(스크롤 없음), 버튼·단축키 힌트는 박스 안 하단 라인. 노드 미선택 시 비활성 안내 */}
+      {inputDisabled ? (
+        <div className="rounded-sm border border-dashed border-hairline px-2 py-2 text-center text-fine text-ink-tertiary">
+          {t("comment.selectNodeToWrite")}
+        </div>
+      ) : (
       <div className="rounded-sm border border-hairline focus-within:border-accent/50">
         <textarea
           ref={taRef}

@@ -52,6 +52,7 @@ import { InspectorPanel } from "@/components/inspector-panel";
 import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
+import { ApprovalPanel } from "@/components/approval-panel";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -6622,13 +6623,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 }
                 approvalSlot={
-                  // R5c 승인 탭 — OLD 워크플로 대시보드 재사용(스테퍼·승인자·승인요청)
+                  // R5c 승인 탭 — 목업 디자인(스테퍼 제출→검토→게시·승인자 현황·대기 대상·액션)
                   currentVersion ? (
-                    <WorkflowDashboard
-                      versionLabel={currentVersion.label}
+                    <ApprovalPanel
                       status={currentVersion.status}
-                      submittedBy={currentVersion.submitted_by}
-                      rejectReason={currentVersion.reject_reason}
                       workflow={workflow}
                       isCheckoutHolder={checkout?.mine ?? false}
                       isApprover={isApprover}
@@ -6660,7 +6658,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         onAdd={(body) => void handleAddComment(body)}
                         onToggleResolved={(comment) => void handleToggleComment(comment)}
                         onDelete={(comment) => void handleDeleteComment(comment)}
-                        hideInput
+                        inputDisabled={selectedNode === null}
+                        onCommentClick={(comment) => handleOutlineSelect(comment.node_id)}
                       />
                     </section>
                     <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
