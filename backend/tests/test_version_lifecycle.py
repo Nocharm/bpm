@@ -3,17 +3,15 @@ Also covers Task 4: republish expired/published version into a new draft.
 """
 
 import asyncio
-import uuid
 
 import pytest
 from fastapi.testclient import TestClient
 from uuid import uuid4
-from sqlalchemy import func, select
 
 import app.auth as _auth_mod
 from app.db import SessionLocal
 from app.main import app as _fastapi_app
-from app.models import MapVersion, Node
+from app.models import MapVersion
 from app.settings import settings
 
 
@@ -118,30 +116,6 @@ def test_workflow_state_version_number(
 # ---------------------------------------------------------------------------
 
 
-def _seed_node(version_id: int) -> None:
-    """버전에 노드 1개 직접 삽입 (그래프 복제 검증용)."""
-
-    async def _run() -> None:
-        async with SessionLocal() as session:
-            session.add(Node(id=uuid.uuid4().hex, version_id=version_id, title="seed"))
-            await session.commit()
-
-    asyncio.run(_run())
-
-
-def _node_count(version_id: int) -> int:
-    """버전의 노드 수 직접 조회."""
-
-    async def _run() -> int:
-        async with SessionLocal() as session:
-            result = await session.scalar(
-                select(func.count()).select_from(Node).where(Node.version_id == version_id)
-            )
-            return result or 0
-
-    return asyncio.run(_run())
-
-
 def _force_version_status(version_id: int, status: str) -> None:
     """버전 상태 직접 설정 (테스트 시나리오 세팅용)."""
 
@@ -159,7 +133,21 @@ def test_republish_expired_creates_draft(
 ) -> None:
     """Expired 버전 republish → 그래프 복제 새 draft, version_number=None, checked_out_by=caller."""
     map_id, v1 = _create_map(client)
-    _seed_node(v1)  # v1에 노드 1개 삽입
+
+    # v1에 그래프 삽입: 노드 2개 + 엣지 1개 + 그룹 1개 (복제 완전성 검증용)
+    client.post(f"/api/versions/{v1}/checkout", json={})
+    put_resp = client.put(
+        f"/api/versions/{v1}/graph",
+        json={
+            "nodes": [
+                {"id": "rp-n1", "title": "Start", "node_type": "start"},
+                {"id": "rp-n2", "title": "Task", "group_ids": ["rp-g1"]},
+            ],
+            "edges": [{"id": "rp-e1", "source_node_id": "rp-n1", "target_node_id": "rp-n2"}],
+            "groups": [{"id": "rp-g1", "label": "G1", "color": ""}],
+        },
+    )
+    assert put_resp.status_code == 200
 
     # v1 publish → published (version_number=1)
     _publish(client, monkeypatch, map_id, v1)
@@ -186,9 +174,16 @@ def test_republish_expired_creates_draft(
     assert nd["version_number"] is None
     assert nd["label"] == v1_label  # label 승계
 
-    # 그래프 복제 검증: 새 draft에 노드 1개 (v1과 동수)
-    assert _node_count(v1) == 1
-    assert _node_count(nd["id"]) == 1
+    # 그래프 복제 검증: 노드 2개·엣지 1개·그룹 1개 (원본과 동수)
+    nd_graph = client.get(f"/api/versions/{nd['id']}/graph").json()
+    assert len(nd_graph["nodes"]) == 2
+    assert len(nd_graph["edges"]) == 1
+    assert len(nd_graph["groups"]) == 1
+
+    # 복제된 id는 원본과 달라야 함 (clone_graph는 새 id 발급)
+    assert {n["id"] for n in nd_graph["nodes"]}.isdisjoint({"rp-n1", "rp-n2"})
+    assert {e["id"] for e in nd_graph["edges"]}.isdisjoint({"rp-e1"})
+    assert {g["id"] for g in nd_graph["groups"]}.isdisjoint({"rp-g1"})
 
     # 생성자 점유권 확인
     wf = client.get(f"/api/versions/{nd['id']}/workflow").json()
