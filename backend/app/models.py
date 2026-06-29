@@ -55,8 +55,10 @@ class MapVersion(Base):
     checked_out_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
-    # 승인 워크플로우 상태 — draft|pending|approved|published|rejected (design 2026-06-14)
+    # 승인 워크플로우 상태 — draft|pending|approved|published|rejected|expired (design 2026-06-14)
     status: Mapped[str] = mapped_column(String(20), default="draft")
+    # 맵 내 게시 순번 — publish 시 채번, 만료 후에도 불변. 미게시 버전은 NULL.
+    version_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     # 현재 사이클 제출자(=submit 시점 체크아웃 보유자 박제) — 게시/회수 권한자
     submitted_by: Mapped[str | None] = mapped_column(String(100), default=None)
     # 최신 반려 사유만 보관 (전이 이력 로그는 두지 않음)

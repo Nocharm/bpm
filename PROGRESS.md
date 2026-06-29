@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-29 — feat/version-lifecycle
+- **feat(versions): 버전 번호 + expired 상태 — 모델·publish 로직 (Task 1)** — `MapVersion.version_number`(nullable int) 컬럼 추가. `workflow.EXPIRED` 상수. `publish_version`: MAX(version_number)+1 채번 → 게시 버전에 부여, 직전 published → `expired` 전환 + `expired` 이벤트 로그. `VersionOut.version_number` 필드 노출. `test_version_lifecycle.py` TDD 신규 작성(343 tests 통과, ruff clean).
 - **feat(editor): 승인 탭 프론트 선작업 — 버전명 포맷·축소 pill·우측 아이콘 버튼 (feat/version-lifecycle)** — 스펙/계획(`docs/superpowers/specs·plans/2026-06-29-version-lifecycle*`) 기반 프론트 선행: ① `formatVersionName`(게시번호 있으면 `v{n} · {label}`, 미게시 라벨만) + `api.ts` `version_number?` 추가(백엔드 후속). ② `VersionPill` `compact` prop(승인탭 축소) + 라벨/드롭다운에 formatVersionName. ③ 승인탭 상단을 **버전 풀네임 라벨 + 축소 pill + 우측 아이콘 버튼(생성/이름변경/삭제, 호버 라벨)**으로 재구성(텍스트→아이콘, 우측정렬). 검증: tsc/eslint 0·브라우저(As-Is 라벨·축소 pill·아이콘 3, Delete 비활성·콘솔 0). **나머지(점유권 이전/요청·만료본 재게시 매트릭스·모달 + 백엔드 버전번호/만료/점유권 API)는 새 세션 서브에이전트 주도.**
 
 ## 2026-06-29

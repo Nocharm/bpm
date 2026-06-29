@@ -9,6 +9,7 @@ PENDING = "pending"
 APPROVED = "approved"
 PUBLISHED = "published"
 REJECTED = "rejected"
+EXPIRED = "expired"  # terminal — 후속 게시로 대체된 published 버전
 
 # 편집·체크아웃 가능한 상태 — 검토중/확정 버전은 읽기 전용
 EDITABLE_STATUSES = frozenset({DRAFT, REJECTED})

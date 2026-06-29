@@ -32,6 +32,7 @@ class VersionOut(BaseModel):
     submitted_by: str | None
     reject_reason: str | None
     created_at: datetime
+    version_number: int | None = None
 
 
 class VersionEventOut(BaseModel):

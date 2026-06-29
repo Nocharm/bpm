@@ -203,7 +203,7 @@ def test_publish_demotes_prior(client: TestClient, monkeypatch: pytest.MonkeyPat
     published = client.post(f"/api/versions/{v1}/publish").json()
     assert published["status"] == "published"
 
-    # v2 클론 → 승인 → 게시. v1은 approved로 강등되어야 한다.
+    # v2 클론 → 승인 → 게시. v1은 expired(terminal)로 전환되어야 한다.
     v2 = client.post(
         f"/api/maps/{map_id}/versions",
         json={"label": "To-Be", "source_version_id": v1},
@@ -217,7 +217,7 @@ def test_publish_demotes_prior(client: TestClient, monkeypatch: pytest.MonkeyPat
 
     detail = client.get(f"/api/maps/{map_id}").json()
     statuses = {v["id"]: v["status"] for v in detail["versions"]}
-    assert statuses[v1] == "approved"
+    assert statuses[v1] == "expired"
     assert statuses[v2] == "published"
 
 

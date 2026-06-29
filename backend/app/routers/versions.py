@@ -137,7 +137,7 @@ async def create_version(
 
     # 새 버전은 '현재(최신) 버전이 게시(published)된 뒤'에만 생성 (request #11 강화2).
     # draft/pending/rejected는 물론 approved(승인했지만 미게시)에서도 차단 → 반드시 게시해야 새 작업본 시작.
-    # publish가 직전 published를 approved로 강등하므로, 최신 버전이 published면 이전 approved 이력은 무관.
+    # publish가 직전 published를 expired(terminal)로 전환하므로, 최신 버전이 published면 이전 이력은 무관.
     # status 컬럼만 조회 — 엔티티를 identity map에 올리면 이후 source clone의 selectinload가 무효화됨.
     latest_status = await session.scalar(
         select(MapVersion.status)
@@ -507,7 +507,7 @@ async def publish_version(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Approved → Published. submitter만. 같은 맵의 기존 Published는 Approved로 강등."""
+    """Approved → Published. submitter만. 같은 맵의 기존 Published는 Expired(terminal)로 전환."""
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
@@ -518,6 +518,15 @@ async def publish_version(
     if version.submitted_by != user:
         raise HTTPException(status_code=403, detail="only the submitter can publish")
 
+    # 채번 — 이 맵의 기존 version_number 최댓값 + 1 (없으면 1부터)
+    max_num = await session.scalar(
+        select(func.max(MapVersion.version_number)).where(
+            MapVersion.map_id == version.map_id
+        )
+    )
+    version.version_number = (max_num or 0) + 1
+
+    # 기존 published 버전 → expired (terminal; 승인 흐름으로 복귀 불가)
     approvers = await _load_approvers(session, version.map_id)
     prior_published = await session.scalars(
         select(MapVersion).where(
@@ -526,7 +535,8 @@ async def publish_version(
         )
     )
     for prior in prior_published:
-        prior.status = workflow.APPROVED
+        prior.status = workflow.EXPIRED
+        record_version_event(session, prior.id, "expired", user)
 
     version.status = workflow.PUBLISHED
     workflow.create_notifications(
