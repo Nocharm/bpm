@@ -2306,6 +2306,33 @@ function MapEditor({ mapId }: { mapId: number }) {
     [branchPrompt, createEdge, setEdges, scheduleAutoSave],
   );
 
+  // 새 노드가 기존 노드와 겹치지 않도록 충돌 시 대각선으로 밀어 빈 자리 탐색
+  const findFreeSpot = useCallback((x: number, y: number) => {
+    const hit = (px: number, py: number) =>
+      nodesRef.current.some(
+        (n) =>
+          Math.abs(n.position.x - px) < NODE_WIDTH * 0.7 &&
+          Math.abs(n.position.y - py) < NODE_HEIGHT * 0.7,
+      );
+    let pos = { x, y };
+    let guard = 0;
+    while (hit(pos.x, pos.y) && guard < 60) {
+      pos = { x: pos.x + 28, y: pos.y + 28 };
+      guard += 1;
+    }
+    return pos;
+  }, []);
+
+  // 새로 생성한 노드를 페이드로 두 번 반짝여 위치를 알림(.bpm-node-flash) → 850ms 후 클래스 제거
+  const flashNode = useCallback(
+    (id: string) => {
+      window.setTimeout(() => {
+        setNodes((cur) => cur.map((n) => (n.id === id ? { ...n, className: undefined } : n)));
+      }, 850);
+    },
+    [setNodes],
+  );
+
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
     (screen: { x: number; y: number } | null, nodeType: ProcessNodeType = "process") => {
@@ -2331,12 +2358,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
         }
       }
+      // 같은 자리에 겹치지 않도록 빈 자리로 보정
+      position = findFreeSpot(position.x, position.y);
       setNodes((current) => [
         ...current,
         {
           id,
           type: "process",
           position,
+          // 생성 위치를 알 수 있도록 잠깐 페이드 반짝(클래스는 flashNode가 제거)
+          className: "bpm-node-flash",
           data: {
             // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
             label:
@@ -2361,8 +2392,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSelectedId(id);
       setSelectedEdgeId(null);
       scheduleAutoSave();
+      flashNode(id);
     },
-    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t],
+    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t, findFreeSpot, flashNode],
   );
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
@@ -2909,10 +2941,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const addLinkNodeFromMap = useCallback(
     async (linkedMapId: number, name: string) => {
       if (readOnly) return;
-      const position = reactFlow.screenToFlowPosition({
+      const center = reactFlow.screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
+      const id = genId();
+      const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
       let subEnds: SubEnd[] = [];
       try {
         const resolved = await getResolvedGraph(linkedMapId, true, null);
@@ -2921,9 +2955,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         // subEnds 파생 실패 시 빈 채로 — 백엔드가 핸들 없어도 저장 허용
       }
       const node: AppNode = {
-        id: genId(),
+        id,
         type: "process",
         position,
+        className: "bpm-node-flash",
         data: {
           label: name,
           description: "",
@@ -2943,9 +2978,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       setNodes((cur) => [...cur, node]);
       scheduleAutoSave();
+      flashNode(id);
       showToast(t("editor.linkNodeAdded", { name }));
     },
-    [readOnly, reactFlow, setNodes, scheduleAutoSave, showToast, t],
+    [readOnly, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -5397,7 +5433,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}18%{opacity:.25}38%{opacity:1}58%{opacity:.25}78%,100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 850ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
@@ -5561,7 +5597,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         <EditorToolbar
           onAddNode={(type) => handleAddNode(null, type)}
           onOpenLibrary={() => setLibraryOpen(true)}
-          onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
+          onAutoArrange={() =>
+            applyNodesTransform((current) => {
+              // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
+              const ids = new Set(current.filter((node) => node.selected).map((node) => node.id));
+              return ids.size >= 2
+                ? layoutSubsetWithDagre(current, edgesRef.current, ids)
+                : layoutWithDagre(current, edgesRef.current);
+            })
+          }
           onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
         />
