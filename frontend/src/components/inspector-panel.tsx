@@ -3,7 +3,7 @@
 // NEW 우측 인스펙터 (R5) — 4탭 패널(속성/맵/승인/활동). 기존 인스펙터와 나란히 두고 비교, 전 탭 완성 후 OLD 제거.
 // 현재: 탭 바 + 속성 탭 빈상태(노드추가·라이브러리·자동정렬·맵 요약). 노드/엣지 폼·맵/승인/활동 탭은 후속 단위.
 import { Boxes, ChevronRight, LayoutGrid, Network, Plus } from "lucide-react";
-import { type ComponentType, useState } from "react";
+import { type ComponentType, type ReactNode, useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
@@ -20,6 +20,8 @@ const TABS: { key: InspectorTab; labelKey: MessageKey }[] = [
 interface InspectorPanelProps {
   onCollapse: () => void;
   selectionKind: "node" | "edge" | null;
+  // 선택된 노드/엣지 속성 폼 — page.tsx가 만들어 주입(빈상태는 내부 처리). 없으면 placeholder.
+  propertiesSlot?: ReactNode;
   readOnly: boolean;
   onAddNode: () => void;
   onOpenLibrary: () => void;
@@ -33,6 +35,7 @@ interface InspectorPanelProps {
 export function InspectorPanel({
   onCollapse,
   selectionKind,
+  propertiesSlot,
   readOnly,
   onAddNode,
   onOpenLibrary,
@@ -86,9 +89,11 @@ export function InspectorPanel({
             saveLabel={saveLabel}
           />
         )}
-        {tab === "properties" && selectionKind !== null && (
-          <Placeholder text={`${selectionKind === "node" ? "Node" : "Edge"} ${t("inspector.tabProperties")} · ${t("inspector.wip")}`} />
-        )}
+        {tab === "properties" &&
+          selectionKind !== null &&
+          (propertiesSlot ?? (
+            <Placeholder text={`${selectionKind === "node" ? "Node" : "Edge"} ${t("inspector.tabProperties")} · ${t("inspector.wip")}`} />
+          ))}
         {tab !== "properties" && <Placeholder text={`${t(TABS.find((x) => x.key === tab)!.labelKey)} · ${t("inspector.wip")}`} />}
       </div>
     </div>

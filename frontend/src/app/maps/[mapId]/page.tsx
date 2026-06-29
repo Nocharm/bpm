@@ -6277,6 +6277,74 @@ function MapEditor({ mapId }: { mapId: number }) {
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
+                propertiesSlot={
+                  selectedNode ? (
+                    // R5a NEW 노드 속성 폼 — 제목/유형(읽기전용)/색상/BPM 속성 카드 (목업 inspector-properties-node).
+                    // 설명·end/subprocess 특수필드는 비교기간 OLD에 유지(후속 이관). 핸들러 재사용.
+                    <div className="flex flex-col gap-3">
+                      <h2 className="text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
+                        <input
+                          className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                          value={selectedNode.data.label}
+                          disabled={readOnly}
+                          onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.type")}</label>
+                        <div className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary">
+                          {t(
+                            NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
+                              ?.labelKey ?? "nodeType.process",
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {colorsForType(selectedNode.data.nodeType).map((preset) => (
+                            <button
+                              key={preset || "default"}
+                              type="button"
+                              title={preset || t("editor.defaultColor")}
+                              aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
+                              className={`h-6 w-6 rounded-sm border ${
+                                selectedNode.data.color === preset ? "ring-2 ring-accent" : "border-hairline"
+                              }`}
+                              style={{ backgroundColor: preset || "#ffffff" }}
+                              disabled={readOnly}
+                              onClick={() => updateSelectedData({ color: preset })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-hairline p-3">
+                        <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                        {([
+                          ["assignee", "field.assignee"],
+                          ["department", "field.department"],
+                          ["system", "field.system"],
+                          ["duration", "field.duration"],
+                        ] as const).map(([key, labelKey]) => (
+                          <div
+                            key={key}
+                            className="flex items-center justify-between gap-2 border-t border-divider py-1 first:border-t-0"
+                          >
+                            <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                            <input
+                              className="min-w-0 flex-1 rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                              value={selectedNode.data[key]}
+                              disabled={readOnly}
+                              onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null
+                }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
                 onOpenLibrary={() => setLibraryOpen(true)}
