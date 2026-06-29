@@ -3,7 +3,7 @@
 // 노드 코멘트 스레드 — 목록/작성/해결 토글/삭제. 읽기 전용 모드에서도 작성 가능 (spec §7 Phase C).
 
 import { useRef, useState } from "react";
-import { ArrowDown, Check, Trash2 } from "lucide-react";
+import { ArrowDown, Check, Hand, Trash2 } from "lucide-react";
 
 import type { CommentItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
@@ -18,6 +18,8 @@ interface CommentSectionProps {
   inputDisabled?: boolean;
   // 코멘트 클릭 → 해당 노드로 네비게이션(활동 탭 전체 코멘트 뷰) / click a comment to jump to its node.
   onCommentClick?: (comment: CommentItem) => void;
+  // 현재 사용자 식별자(login_id) — 본인 댓글은 Me 아이콘 + 액션(해결/삭제) 노출, 타인 댓글은 액션 숨김.
+  currentUser?: string | null;
 }
 
 export function CommentSection({
@@ -27,6 +29,7 @@ export function CommentSection({
   onDelete,
   inputDisabled = false,
   onCommentClick,
+  currentUser = null,
 }: CommentSectionProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
@@ -74,10 +77,17 @@ export function CommentSection({
   return (
     <div className="flex flex-col gap-2">
       <ul ref={listRef} className="flex max-h-72 flex-col gap-3 overflow-y-auto pr-1">
-        {comments.map((comment) => (
+        {comments.map((comment) => {
+          const isMine = currentUser != null && comment.author === currentUser;
+          return (
           <li key={comment.id} className={`flex gap-2 ${comment.resolved ? "opacity-60" : ""}`}>
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine font-semibold text-accent">
-              {comment.author.slice(0, 1).toUpperCase()}
+            <span
+              className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fine font-semibold ${
+                isMine ? "bg-accent text-on-accent" : "bg-accent-tint text-accent"
+              }`}
+              title={isMine ? "me" : undefined}
+            >
+              {isMine ? <Hand size={12} strokeWidth={2} /> : comment.author.slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
               <div
@@ -103,25 +113,28 @@ export function CommentSection({
                 {comment.body}
               </p>
               </div>
-              <div className="mt-0.5 flex gap-2 text-fine">
-                <button
-                  className="text-ink-secondary hover:text-accent"
-                  onClick={() => onToggleResolved(comment)}
-                >
-                  {comment.resolved ? t("comment.reopen") : t("comment.resolve")}
-                </button>
-                {/* 작성자만 삭제 가능 — 서버가 403으로 거부, 클라이언트는 단순 노출 */}
-                <button
-                  className="inline-flex items-center gap-0.5 text-ink-tertiary hover:text-error"
-                  onClick={() => onDelete(comment)}
-                >
-                  <Trash2 size={12} strokeWidth={1.5} />
-                  {t("comment.delete")}
-                </button>
-              </div>
+              {/* 해결/재열기/삭제는 작성자에게만 노출 — 타인에겐 숨김(백엔드도 작성자만 허용) */}
+              {isMine && (
+                <div className="mt-0.5 flex gap-2 text-fine">
+                  <button
+                    className="text-ink-secondary hover:text-accent"
+                    onClick={() => onToggleResolved(comment)}
+                  >
+                    {comment.resolved ? t("comment.reopen") : t("comment.resolve")}
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-0.5 text-ink-tertiary hover:text-error"
+                    onClick={() => onDelete(comment)}
+                  >
+                    <Trash2 size={12} strokeWidth={1.5} />
+                    {t("comment.delete")}
+                  </button>
+                </div>
+              )}
             </div>
           </li>
-        ))}
+          );
+        })}
         {comments.length === 0 && (
           <li className="text-caption text-ink-tertiary">{t("comment.empty")}</li>
         )}
@@ -165,7 +178,7 @@ export function CommentSection({
           {/* 단축키 안내 — 키 모양 배지로 가시성 향상(Enter 줄바꿈 · Ctrl+Enter 전송) */}
           <span className="flex min-w-0 items-center gap-1 truncate text-fine text-ink-tertiary">
             <kbd className="rounded-xs border border-hairline bg-surface px-1 py-px font-medium text-ink-secondary">
-              Enter
+              ↵
             </kbd>
             {t("comment.keyNewline")}
             <span className="mx-0.5 text-divider">·</span>
@@ -174,7 +187,7 @@ export function CommentSection({
             </kbd>
             +
             <kbd className="rounded-xs border border-hairline bg-surface px-1 py-px font-medium text-ink-secondary">
-              Enter
+              ↵
             </kbd>
             {t("comment.keySend")}
           </span>

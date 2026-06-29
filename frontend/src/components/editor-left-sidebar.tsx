@@ -18,17 +18,6 @@ import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, type
 
 import { terminalDisplayLabel, type OutlineRow, type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
-import type { MessageKey } from "@/lib/i18n-messages";
-import { NODE_DISPLAY_FIELDS, type NodeDisplayField } from "@/lib/node-actions";
-
-const FIELD_LABEL_KEY: Record<NodeDisplayField, MessageKey> = {
-  assignee: "field.assignee",
-  department: "field.department",
-  system: "field.system",
-  duration: "field.duration",
-  nodeType: "field.type",
-};
-
 interface EditorLeftSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -38,8 +27,6 @@ interface EditorLeftSidebarProps {
   outline: OutlineRow[];
   onSelectNode: (id: string) => void;
   onToggleExpand: (id: string) => void;
-  displayFields: NodeDisplayField[];
-  onToggleDisplayField: (field: NodeDisplayField) => void;
   // 행 우클릭 = 캔버스 노드와 동일 컨텍스트 메뉴, 더블클릭 = 이름 인라인 편집
   readOnly: boolean;
   // 노드 검색 — page.tsx가 <NodeSearch>를 만들어 주입(검색 상태·결과 계산은 page.tsx 소유)
@@ -59,7 +46,6 @@ interface EditorLeftSidebarProps {
 }
 
 // 사이드바 카드 접힘 상태 — 새로고침해도 세션 동안 유지(sessionStorage).
-const SIDEBAR_NODE_INFO_KEY = "bpm.sidebar.nodeInfoOpen";
 const SIDEBAR_NAV_KEYS_KEY = "bpm.sidebar.navKeysOpen";
 
 const TYPE_ICONS: Record<ProcessNodeType, ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -78,8 +64,6 @@ export function EditorLeftSidebar({
   outline,
   onSelectNode,
   onToggleExpand,
-  displayFields,
-  onToggleDisplayField,
   readOnly,
   searchSlot,
   onRowContextMenu,
@@ -93,24 +77,14 @@ export function EditorLeftSidebar({
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
   // 카드 접힘 — 기본 펼침으로 초기화 후 마운트 시 sessionStorage 복원(초기 SSR 렌더와 일치).
-  const [nodeInfoOpen, setNodeInfoOpen] = useState(true);
   const [navKeysOpen, setNavKeysOpen] = useState(true);
   useEffect(() => {
-    const ni = window.sessionStorage.getItem(SIDEBAR_NODE_INFO_KEY);
     const nk = window.sessionStorage.getItem(SIDEBAR_NAV_KEYS_KEY);
-    if (ni !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setNodeInfoOpen(ni === "1"); // one-time hydration restore from sessionStorage
-    }
     if (nk !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNavKeysOpen(nk === "1"); // one-time hydration restore from sessionStorage
     }
   }, []);
-  const toggleNodeInfo = () => {
-    const next = !nodeInfoOpen;
-    window.sessionStorage.setItem(SIDEBAR_NODE_INFO_KEY, next ? "1" : "0");
-    setNodeInfoOpen(next);
-  };
   const toggleNavKeys = () => {
     const next = !navKeysOpen;
     window.sessionStorage.setItem(SIDEBAR_NAV_KEYS_KEY, next ? "1" : "0");
@@ -267,75 +241,15 @@ export function EditorLeftSidebar({
       active: !!selRow && (selRow.hasChildren || selRow.hierarchy),
     },
   ];
-  // 둘 다 접히면 위아래가 아닌 같은 줄에 나눠 배치.
-  const bothCollapsed = !nodeInfoOpen && !navKeysOpen;
-
   return (
     <aside
       ref={asideRef}
       onScroll={handleSidebarScroll}
       className="scrollbar-hidden relative flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2"
     >
-      {/* 노드 정보 · 아웃라인 단축키 — 둘 다 접히면 한 줄에 나눠, 아니면 세로 스택(contents) */}
-      <div className={bothCollapsed ? "mb-2 flex items-start gap-2" : "contents"}>
-        {/* 노드에 표시할 정보 — 접기/펼치기, 상태 sessionStorage 영속 */}
-        <div
-          className={`rounded-sm border border-hairline bg-surface-alt ${
-            bothCollapsed ? "min-w-0 flex-1" : "mb-2"
-          }`}
-        >
-          <button
-            type="button"
-            className="flex w-full min-w-0 items-center justify-between gap-1 p-2 text-fine text-ink-tertiary"
-            onClick={toggleNodeInfo}
-            aria-expanded={nodeInfoOpen}
-          >
-            <span className="truncate">{t("sidebar.nodeInfo")}</span>
-            {nodeInfoOpen ? (
-              <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
-            ) : (
-              <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
-            )}
-          </button>
-          {nodeInfoOpen && (
-            <div className="flex flex-col gap-1 px-2 pb-2">
-              {NODE_DISPLAY_FIELDS.map((field) => {
-                const on = displayFields.includes(field);
-                return (
-                  <div
-                    key={field}
-                    className="flex items-center justify-between text-fine text-ink-secondary"
-                  >
-                    <span>{t(FIELD_LABEL_KEY[field])}</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      aria-label={t(FIELD_LABEL_KEY[field])}
-                      onClick={() => onToggleDisplayField(field)}
-                      className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                        on ? "bg-accent" : "bg-border-strong"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                          on ? "left-3.5" : "left-0.5"
-                        }`}
-                      />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* 아웃라인 이동 단축키 — 접기/펼치기(노드인포 카드와 동일), 선택 노드 상태로 행별 활성/흐림 */}
-        <div
-          className={`rounded-sm border border-hairline bg-surface-alt ${
-            bothCollapsed ? "min-w-0 flex-1" : "mb-2"
-          }`}
-        >
+      {/* 아웃라인 이동 단축키 — 접기/펼치기, 선택 노드 상태로 행별 활성/흐림. (노드 표시 정보 카드는 맵 탭으로 이관) */}
+      <div className="contents">
+        <div className="mb-2 rounded-sm border border-hairline bg-surface-alt">
           <button
             type="button"
             className="flex w-full min-w-0 items-center justify-between gap-1 p-2 text-fine text-ink-tertiary"

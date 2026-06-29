@@ -5625,8 +5625,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           outline={displayOutline}
           onSelectNode={handleOutlineSelect}
           onToggleExpand={handleToggleExpand}
-          displayFields={displayFields}
-          onToggleDisplayField={toggleDisplayField}
           readOnly={readOnly}
           searchSlot={
             <NodeSearch<SearchResult>
@@ -6444,6 +6442,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             onAdd={(body) => void handleAddComment(body)}
                             onToggleResolved={(comment) => void handleToggleComment(comment)}
                             onDelete={(comment) => void handleDeleteComment(comment)}
+                            currentUser={username}
                           />
                         </div>
                       </details>
@@ -6623,8 +6622,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 }
                 approvalSlot={
-                  // R5c 승인 탭 — 목업 디자인(스테퍼 제출→검토→게시·승인자 현황·대기 대상·액션)
-                  currentVersion ? (
+                  // R5c 승인 탭 — 상단 버전 pill(전환) + 워크플로(스테퍼·승인자·액션) + 버전 타임라인(하단)
+                  <div className="flex flex-col gap-4">
+                    <VersionPill
+                      versions={versions}
+                      versionId={versionId}
+                      isEditing={!readOnly}
+                      onSwitch={(id) => void switchVersion(id)}
+                    />
+                    {currentVersion && (
                     <ApprovalPanel
                       status={currentVersion.status}
                       workflow={workflow}
@@ -6640,10 +6646,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onWithdraw={() => void runTransition(withdrawVersion)}
                       onManageApprovers={() => setManagingApprovers(true)}
                     />
-                  ) : undefined
+                    )}
+                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
+                  </div>
                 }
                 activitySlot={
-                  // R5d 활동 탭 — 전체 코멘트(노드 단위 정렬, 작성칸 숨김) + 버전 타임라인(OLD 재사용)
+                  // R5d 활동 탭 — 전체 코멘트(노드 단위 정렬, 노드 선택 시만 작성·클릭 시 노드 이동). 버전 타임라인은 승인 탭으로 이동
                   <div className="flex flex-col gap-4">
                     <section>
                       <div className="mb-2 text-fine font-semibold text-ink">
@@ -6658,11 +6666,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                         onAdd={(body) => void handleAddComment(body)}
                         onToggleResolved={(comment) => void handleToggleComment(comment)}
                         onDelete={(comment) => void handleDeleteComment(comment)}
+                        currentUser={username}
                         inputDisabled={selectedNode === null}
                         onCommentClick={(comment) => handleOutlineSelect(comment.node_id)}
                       />
                     </section>
-                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
                   </div>
                 }
                 mapName={mapName}
@@ -6873,6 +6881,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   onAdd={(body) => void handleAddComment(body)}
                   onToggleResolved={(comment) => void handleToggleComment(comment)}
                   onDelete={(comment) => void handleDeleteComment(comment)}
+                  currentUser={username}
                 />
               </div>
             </details>
