@@ -102,7 +102,7 @@ export function InspectorPanel({
         })}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="scroll-soft min-h-0 flex-1 overflow-y-auto p-4">
         {tab === "properties" && selectionKind === null && (
           <PropertiesEmpty
             readOnly={readOnly}

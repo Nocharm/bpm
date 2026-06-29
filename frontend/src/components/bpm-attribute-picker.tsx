@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
+import { Tooltip } from "@/components/tooltip";
 import { useI18n } from "@/lib/i18n";
 
 interface BpmAttributePickerProps {
@@ -56,37 +57,52 @@ export function BpmAttributePicker({
     ? data.users.filter((user) => user.department === department)
     : data.users;
   const filteredNames = filteredUsers.map((user) => user.name);
+  // 선택된 담당자의 정보 카드(호버 툴팁) — 이름/아이디/부서
+  const assigneeUser = data.users.find((user) => user.name === assignee);
 
   return (
     <>
       <div className={ROW}>
         <span className="shrink-0 text-caption text-ink-secondary">{t("field.assignee")}</span>
-        <select
-          className={SELECT}
-          value={assignee}
-          disabled={readOnly}
-          onChange={(event) => {
-            const name = event.target.value;
-            const user = data.users.find((candidate) => candidate.name === name);
-            onChange(user ? { assignee: name, department: user.department } : { assignee: name });
-          }}
+        <Tooltip
+          className="min-w-0 flex-1"
+          content={
+            assigneeUser ? (
+              <span className="flex flex-col gap-0.5 text-left">
+                <span className="text-caption font-semibold text-ink">{assigneeUser.name}</span>
+                <span className="text-fine text-ink-tertiary">{assigneeUser.id}</span>
+                <span className="text-fine text-ink-tertiary">{assigneeUser.department}</span>
+              </span>
+            ) : undefined
+          }
         >
-          <option value="">—</option>
-          {assignee && !filteredNames.includes(assignee) && <option value={assignee}>{assignee}</option>}
-          {filteredUsers.map((user) => (
-            <option key={user.id} value={user.name}>
-              {user.name} · {user.department}
-            </option>
-          ))}
-        </select>
+          <select
+            className={`${SELECT} truncate`}
+            value={assignee}
+            disabled={readOnly}
+            onChange={(event) => {
+              const name = event.target.value;
+              const user = data.users.find((candidate) => candidate.name === name);
+              onChange(user ? { assignee: name, department: user.department } : { assignee: name });
+            }}
+          >
+            <option value="">—</option>
+            {assignee && !filteredNames.includes(assignee) && <option value={assignee}>{assignee}</option>}
+            {filteredUsers.map((user) => (
+              <option key={user.id} value={user.name}>
+                {user.name} · {user.department}
+              </option>
+            ))}
+          </select>
+        </Tooltip>
       </div>
       <div className={ROW}>
         <span className="shrink-0 text-caption text-ink-secondary">{t("field.department")}</span>
         <select
-          className={SELECT}
+          className={`${SELECT} truncate`}
           value={department}
           disabled={readOnly || assigneeSet}
-          title={assigneeSet ? t("inspector.deptLocked") : undefined}
+          title={assigneeSet ? t("inspector.deptLocked") : department || undefined}
           onChange={(event) => onChange({ department: event.target.value })}
         >
           <option value="">—</option>

@@ -50,7 +50,7 @@ export function CommentSection({
 
   return (
     <div className="flex flex-col gap-2">
-      <ul className="flex max-h-72 flex-col gap-3 overflow-y-auto">
+      <ul className="scroll-soft flex max-h-72 flex-col gap-3 overflow-y-auto">
         {comments.map((comment) => (
           <li key={comment.id} className={`flex gap-2 ${comment.resolved ? "opacity-60" : ""}`}>
             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine font-semibold text-accent">
@@ -99,7 +99,7 @@ export function CommentSection({
       </ul>
       <div className="flex items-end gap-1.5">
         <textarea
-          className="h-9 min-h-9 flex-1 resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption"
+          className="scroll-soft h-[4.5rem] flex-1 resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption"
           placeholder={t("comment.placeholder")}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}

@@ -6379,9 +6379,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                           >
                             <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
                             <input
-                              className="min-w-0 flex-1 rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                              className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
                               value={selectedNode.data[key]}
                               disabled={readOnly}
+                              title={selectedNode.data[key] || undefined}
                               onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
                             />
                           </div>
