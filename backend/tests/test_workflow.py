@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 import app.auth as _auth_mod
 from app.db import SessionLocal
 from app.main import app as _app
-from app.models import MapPermission, MapVersion, ProcessMap
+from app.models import Employee, MapPermission, MapVersion, ProcessMap, UserGroup, UserGroupMember
 from app.settings import settings
 
 
@@ -410,7 +410,7 @@ def test_transfer_holder_to_editor(client: TestClient, _transfer_enforce: None) 
 
 
 def test_transfer_non_editor_target_422(client: TestClient, _transfer_enforce: None) -> None:
-    """② 비-editor 대상 거부 → 422."""
+    """② 비-editor 대상 거부 → 422; 점유자는 변경 없음."""
     map_id, version_id = _seed_with_grants([("holder.u", "editor")])
 
     _act_as("holder.u")
@@ -421,6 +421,9 @@ def test_transfer_non_editor_target_422(client: TestClient, _transfer_enforce: N
         f"/api/versions/{version_id}/checkout/transfer", json={"to": "stranger.u"}
     )
     assert res.status_code == 422
+    # 422 거부 후 점유자 변경 없음
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] == "holder.u"
 
 
 def test_transfer_non_holder_non_owner_403(
@@ -470,3 +473,109 @@ def test_transfer_owner_and_sysadmin_can_transfer(
     )
     assert res2.status_code == 200
     assert res2.json()["checked_out_by"] == "holder.u"
+
+
+def test_editors_list_name_resolution_and_group(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """editors 피커 — Employee 이름/id 폴백/그룹 경유 편집자 모두 포함 (Fix 1 회귀 방지).
+
+    인증 게이트: require_map_role("viewer") — owner.u가 맵 viewer+ 이므로 통과.
+    """
+    name = f"editors-map-{uuid4().hex[:6]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(name=name, visibility="private")
+            mv = MapVersion(label="As-Is")
+            m.versions.append(mv)
+            session.add(m)
+            await session.flush()
+
+            # 직접 user editor — Employee 행 있음 → name 사용
+            session.add(
+                MapPermission(
+                    map_id=m.id,
+                    principal_type="user",
+                    principal_id="editor.with.emp",
+                    role="editor",
+                    granted_by="seed",
+                )
+            )
+            session.add(Employee(login_id="editor.with.emp", name="홍길동", department="개발팀"))
+
+            # 직접 user editor — Employee 행 없음 → login_id 폴백
+            session.add(
+                MapPermission(
+                    map_id=m.id,
+                    principal_type="user",
+                    principal_id="editor.no.emp",
+                    role="editor",
+                    granted_by="seed",
+                )
+            )
+
+            # 그룹 경유 editor — Fix 1 회귀 방지
+            grp = UserGroup(name=f"grp-{uuid4().hex[:4]}", status="active", created_by="seed")
+            session.add(grp)
+            await session.flush()
+            session.add(
+                UserGroupMember(group_id=grp.id, member_type="user", member_id="group.editor.u")
+            )
+            session.add(
+                MapPermission(
+                    map_id=m.id,
+                    principal_type="group",
+                    principal_id=str(grp.id),
+                    role="editor",
+                    granted_by="seed",
+                )
+            )
+
+            # owner.u — 엔드포인트 호출자 (viewer+ gate 통과)
+            session.add(
+                MapPermission(
+                    map_id=m.id,
+                    principal_type="user",
+                    principal_id="owner.u",
+                    role="owner",
+                    granted_by="seed",
+                )
+            )
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+
+    _act_as("owner.u")
+    res = client.get(f"/api/maps/{map_id}/editors")
+    assert res.status_code == 200
+
+    items = {e["id"]: e for e in res.json()}
+
+    # Employee 행 있는 편집자 → Employee.name 사용
+    assert "editor.with.emp" in items
+    assert items["editor.with.emp"]["name"] == "홍길동"
+
+    # Employee 행 없는 편집자 → login_id 폴백
+    assert "editor.no.emp" in items
+    assert items["editor.no.emp"]["name"] == "editor.no.emp"
+
+    # 그룹 경유 편집자 → 포함됨 (Fix 1 핵심)
+    assert "group.editor.u" in items
+
+
+def test_transfer_no_checkout_409(client: TestClient, _transfer_enforce: None) -> None:
+    """⑤ checkout 없는 버전에 이전 시도 → 409; checked_out_by는 None 유지."""
+    map_id, version_id = _seed_with_grants([("owner.u", "owner"), ("editor.u", "editor")])
+
+    # checkout 없이 바로 transfer 시도 (오너로)
+    _act_as("owner.u")
+    res = client.post(
+        f"/api/versions/{version_id}/checkout/transfer", json={"to": "editor.u"}
+    )
+    assert res.status_code == 409
+
+    # checked_out_by는 여전히 None
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] is None

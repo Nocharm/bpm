@@ -11,7 +11,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap
+from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember
 from app.permissions import logic
 from app.permissions.access import (
     get_effective_role,
@@ -356,21 +356,65 @@ async def list_eligible_approvers(
 async def list_editors(
     map_id: int, session: AsyncSession = Depends(get_session)
 ) -> list[DirectoryUserOut]:
-    """점유권 이전 피커 — 맵에서 role∈{owner,editor}인 user principal + Employee 이름 머지 (Task 2)."""
-    rows = list(
+    """점유권 이전 피커 — role∈{owner,editor} user principal(직접+그룹) + Employee 이름 머지 (Task 2).
+
+    get_user_active_group_ids 와 동일한 그룹 멤버십 로직을 적용해 그룹 경유 편집자도 포함한다.
+    """
+    perm_rows = list(
         (
-            await session.scalars(
-                select(MapPermission).where(
+            await session.execute(
+                select(MapPermission.principal_type, MapPermission.principal_id).where(
                     MapPermission.map_id == map_id,
-                    MapPermission.principal_type == "user",
                     MapPermission.role.in_(["owner", "editor"]),
                 )
             )
         ).all()
     )
-    login_ids = [r.principal_id for r in rows]
+
+    login_ids: set[str] = {pid for ptype, pid in perm_rows if ptype == "user"}
+    # principal_id는 문자열로 저장된 정수 — UserGroup.id(int)와 맞추기 위해 캐스팅
+    group_ids: set[int] = set()
+    for ptype, pid in perm_rows:
+        if ptype == "group":
+            try:
+                group_ids.add(int(pid))
+            except ValueError:
+                pass
+
+    if group_ids:
+        # active 그룹의 멤버 로드 — get_user_active_group_ids 와 동일 패턴
+        member_rows = list(
+            (
+                await session.execute(
+                    select(UserGroupMember.member_type, UserGroupMember.member_id)
+                    .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+                    .where(
+                        UserGroup.status == "active",
+                        UserGroupMember.group_id.in_(group_ids),
+                    )
+                )
+            ).all()
+        )
+        dept_patterns: list[str] = []
+        for mtype, mid in member_rows:
+            if mtype == "user":
+                login_ids.add(mid)
+            elif mtype == "department":
+                dept_patterns.append(mid)
+
+        if dept_patterns:
+            # department 멤버: 모든 직원의 org_path로 판정 (belongs_to_department 재사용)
+            all_emps = list((await session.scalars(select(Employee))).all())
+            for emp in all_emps:
+                org = logic.org_path(
+                    emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department or ""
+                )
+                if any(logic.belongs_to_department(org, d) for d in dept_patterns):
+                    login_ids.add(emp.login_id)
+
     if not login_ids:
         return []
+
     emp_map: dict[str, Employee] = {
         e.login_id: e
         for e in (
@@ -379,11 +423,11 @@ async def list_editors(
     }
     return [
         DirectoryUserOut(
-            id=r.principal_id,
-            name=emp_map[r.principal_id].name if r.principal_id in emp_map else r.principal_id,
-            department=emp_map[r.principal_id].department or "" if r.principal_id in emp_map else "",
+            id=lid,
+            name=emp_map[lid].name if lid in emp_map else lid,
+            department=emp_map[lid].department or "" if lid in emp_map else "",
         )
-        for r in rows
+        for lid in sorted(login_ids)
     ]
 
 

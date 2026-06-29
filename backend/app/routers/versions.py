@@ -307,6 +307,10 @@ async def transfer_checkout(
             detail="only the checkout holder, map owner, or sysadmin can transfer",
         )
 
+    # 이전할 점유가 없으면 409 — 만료됐어도 checked_out_by가 남아 있으면 이전 허용
+    if version.checked_out_by is None:
+        raise HTTPException(status_code=409, detail="no active checkout to transfer")
+
     target_role = await get_effective_role(session, payload.to, version.map_id)
     if target_role not in ("editor", "owner"):
         raise HTTPException(
