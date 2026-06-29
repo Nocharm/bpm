@@ -6320,7 +6320,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                               onClick={() => updateSelectedData({ color: preset })}
                             />
                           ))}
+                          {/* 커스텀 색상 — Palette 토글로 hex 직접 입력 */}
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              title={t("editor.hexToggle")}
+                              aria-label={t("editor.hexToggle")}
+                              aria-pressed={showHexInput}
+                              className={`flex h-6 w-6 items-center justify-center rounded-sm border ${
+                                showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
+                              } hover:bg-surface-alt`}
+                              onClick={() => setShowHexInput((value) => !value)}
+                            >
+                              <Palette size={14} strokeWidth={1.5} />
+                            </button>
+                          )}
                         </div>
+                        {showHexInput && (
+                          <input
+                            key={`new-${selectedNode.id}-${selectedNode.data.color}`}
+                            autoFocus
+                            className="mt-2 w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                            defaultValue={selectedNode.data.color}
+                            disabled={readOnly}
+                            placeholder={t("editor.hexPlaceholder")}
+                            onBlur={(event) => {
+                              const value = event.target.value.trim();
+                              if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
+                                updateSelectedData({ color: value });
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.currentTarget.blur();
+                              }
+                            }}
+                          />
+                        )}
                       </div>
                       <div className="rounded-md border border-hairline p-3">
                         <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
