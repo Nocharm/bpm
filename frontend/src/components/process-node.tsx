@@ -145,12 +145,17 @@ function NodeTitle({
 
 // 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용)
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
-  process: "#909098", // stone
+  process: "#6e84a3", // slate (E3)
   decision: "#c7a062", // amber
   start: "#84a07c", // sage
   end: "#c2849a", // rose
   subprocess: "#7c6adc", // violet
 };
+
+// data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
+export function resolveNodeStroke(color: string, nodeType: ProcessNodeType): string {
+  return color || DEFAULT_COLORS[nodeType];
+}
 
 // 파스텔 fill — 저장된 stroke color에서 파생(데이터 모델 무변경)
 function deriveFill(color: string): string {
@@ -273,16 +278,13 @@ function NodeHandles() {
 }
 
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
-export function ProcessNode({ id, data, selected }: NodeProps<AppNode>) {
+export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const { t } = useI18n();
   const color = data.color || DEFAULT_COLORS[data.nodeType];
   const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
-  const ring = data.diffStatus
-    ? DIFF_RINGS[data.diffStatus]
-    : selected
-      ? "ring-2 ring-accent"
-      : "";
+  // 선택 링은 NodeSelectionRing 오버레이가 담당(노드 사이 슬라이드). 여기선 비교화면 diff 링만.
+  const ring = data.diffStatus ? DIFF_RINGS[data.diffStatus] : "";
 
   if (data.nodeType === "subprocess") {
     return (

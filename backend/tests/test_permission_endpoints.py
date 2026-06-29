@@ -660,3 +660,58 @@ def test_cross_map_pending_queue_sysadmin_only(client: TestClient, enforce: None
     """교차맵 큐는 sysadmin 전용 — 비-sysadmin 은 403."""
     act_as("nobody.u")
     assert client.get("/api/approval-requests").status_code == 403
+
+
+# ── G. 드래프트 점유권 인수 — 강탈(force)은 sysadmin only ───────────
+
+
+def _set_version_status(version_id: int, status: str) -> None:
+    async def _do(session) -> None:
+        v = await session.get(MapVersion, version_id)
+        v.status = status
+
+    _seed(_do)
+
+
+def checked_out_by_of(version_id: int) -> str | None:
+    async def _get(session) -> str | None:
+        return await session.scalar(
+            select(MapVersion.checked_out_by).where(MapVersion.id == version_id)
+        )
+
+    return _seed(_get)  # type: ignore[return-value]
+
+
+def test_force_checkout_is_sysadmin_only(client: TestClient, enforce: None) -> None:
+    """활성 점유 강탈은 sysadmin만 — 에디터는 일반획득 시 읽기전용·force 시 403, sysadmin은 인수."""
+    map_id = seed_map(grants=[("user", "ed.itor", "editor")])
+    vid = first_version_id(map_id)
+    # 생성자가 점유
+    act_as("creator.u")
+    assert client.post(f"/api/versions/{vid}/checkout", json={}).json()["mine"] is True
+    # 에디터: 일반 획득 = 읽기전용(강탈 아님)
+    act_as("ed.itor")
+    assert client.post(f"/api/versions/{vid}/checkout", json={}).json()["mine"] is False
+    # 에디터: 강제 점유 = 403, 점유는 그대로 생성자
+    assert (
+        client.post(f"/api/versions/{vid}/checkout", json={"force": True}).status_code
+        == 403
+    )
+    assert checked_out_by_of(vid) == "creator.u"
+    # sysadmin: 강제 인수 성공
+    act_as(SYSADMIN)
+    r = client.post(f"/api/versions/{vid}/checkout", json={"force": True})
+    assert r.status_code == 200
+    assert r.json()["mine"] is True and r.json()["checked_out_by"] == SYSADMIN
+
+
+def test_create_version_holds_checkout_for_creator(
+    client: TestClient, enforce: None
+) -> None:
+    """새 드래프트 생성 시 생성자가 점유권자 — 타인은 읽기전용으로 진입."""
+    map_id = seed_map(grants=[("user", "creator.u", "owner")])
+    _set_version_status(first_version_id(map_id), "published")  # 생성 게이트 충족
+    act_as("creator.u")
+    r = client.post(f"/api/maps/{map_id}/versions", json={"label": "To-Be"})
+    assert r.status_code == 201
+    assert checked_out_by_of(r.json()["id"]) == "creator.u"

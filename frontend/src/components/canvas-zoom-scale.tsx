@@ -1,45 +1,49 @@
 "use client";
 
-// 캔버스 좌측 줌 인디케이터 — 현재 확대/축소 레벨을 세로 눈금 바로 표시(읽기 전용).
-// xyflow 줌 스텝이 곱셈(~1.2배)이라 로그 스케일로 위치를 잡아야 체감과 맞는다.
-import { useViewport } from "@xyflow/react";
+// 캔버스 줌 컨트롤 pill — 하단 중앙. 축소 / 현재 배율 / 확대 + 화면 맞춤(좌상단 정렬 fit).
+import { useReactFlow, useViewport } from "@xyflow/react";
+import { Maximize, Minus, Plus } from "lucide-react";
 
-const MIN_ZOOM = 0.2; // ReactFlow minZoom prop과 일치
-const MAX_ZOOM = 2; // ReactFlow 기본 maxZoom
-const TICKS = [2, 1.5, 1, 0.5, 0.2]; // 눈금 위치(줌 배율)
+import { useI18n } from "@/lib/i18n";
 
-function ratioOf(zoom: number): number {
-  const r = (Math.log(zoom) - Math.log(MIN_ZOOM)) / (Math.log(MAX_ZOOM) - Math.log(MIN_ZOOM));
-  return Math.min(1, Math.max(0, r));
-}
-
-export function CanvasZoomScale() {
+export function CanvasZoomScale({ onFit }: { onFit: () => void }) {
   const { zoom } = useViewport();
-  const ratio = ratioOf(zoom);
+  const { zoomIn, zoomOut } = useReactFlow();
+  const { t } = useI18n();
   return (
-    <div className="pointer-events-none absolute left-3 top-1/2 z-10 flex -translate-y-1/2 select-none flex-col items-center gap-1.5">
-      <span className="rounded-xs bg-surface/90 px-1.5 py-0.5 text-fine text-ink-secondary shadow-sm">
-        {Math.round(zoom * 100)}%
-      </span>
-      <div className="relative h-[clamp(120px,38vh,240px)] w-1 rounded-full bg-surface-alt shadow-sm">
-        {/* 현재 줌까지 채움 — 아래=축소, 위=확대 */}
-        <div
-          className="absolute inset-x-0 bottom-0 rounded-full bg-accent"
-          style={{ height: `${ratio * 100}%` }}
-        />
-        {/* 눈금 — 바 우측 짧은 선 */}
-        {TICKS.map((z) => (
-          <span
-            key={z}
-            className="absolute left-full ml-1 h-px w-1.5 -translate-y-1/2 bg-divider"
-            style={{ bottom: `${ratioOf(z) * 100}%` }}
-          />
-        ))}
-        {/* 현재 위치 마커 */}
-        <div
-          className="absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-surface bg-accent shadow-sm"
-          style={{ bottom: `${ratio * 100}%` }}
-        />
+    <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 select-none">
+      <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-hairline bg-surface p-1 shadow-md">
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary hover:bg-surface-alt"
+          onClick={() => zoomOut()}
+          title={t("editor.zoomOut")}
+          aria-label={t("editor.zoomOut")}
+        >
+          <Minus size={16} strokeWidth={1.5} />
+        </button>
+        <span className="min-w-[3rem] text-center text-caption tabular-nums text-ink">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary hover:bg-surface-alt"
+          onClick={() => zoomIn()}
+          title={t("editor.zoomIn")}
+          aria-label={t("editor.zoomIn")}
+        >
+          <Plus size={16} strokeWidth={1.5} />
+        </button>
+        <span className="mx-0.5 h-4 w-px bg-divider" />
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary hover:bg-surface-alt"
+          onClick={onFit}
+          title={t("editor.fitView")}
+          aria-label={t("editor.fitView")}
+        >
+          <Maximize size={16} strokeWidth={1.5} />
+        </button>
       </div>
     </div>
   );

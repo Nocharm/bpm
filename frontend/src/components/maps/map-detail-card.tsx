@@ -95,6 +95,8 @@ interface MapDetailCardProps {
   onDelete?: (mapId: number) => void;
   // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
   onCopy?: (mapId: number, name: string) => void;
+  // 일부 섹션만 렌더 — 에디터 맵 탭=멤버 카드, 활동 탭=버전 타임라인 재사용 / render only members or versions.
+  only?: "members" | "versions";
 }
 
 export function MapDetailCard({
@@ -103,6 +105,7 @@ export function MapDetailCard({
   hideOpen = false,
   onDelete,
   onCopy,
+  only,
 }: MapDetailCardProps) {
   const { t } = useI18n();
   const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
@@ -210,6 +213,8 @@ export function MapDetailCard({
 
   const body = (
     <>
+      {!only && (
+        <>
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
         {!hideOpen && (
@@ -241,10 +246,12 @@ export function MapDetailCard({
         </span>
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
       </div>
+        </>
+      )}
 
       {/* 버전 · 허용 인원 — 좌우 배치(2:1) + 사이 세로 구분선 / Versions:members = 2:1 with a vertical divider */}
       <div className="flex flex-col gap-4 sm:flex-row">
-        {/* 버전 + 승인 상태 / Versions with approval status */}
+        {only !== "members" && (
         <div data-id="map-detail-versions" className="flex min-w-0 flex-[2] flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.versions")}</p>
@@ -270,23 +277,30 @@ export function MapDetailCard({
             />
           )}
         </div>
+        )}
 
         {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
-        {members !== null && (
-          <div className="flex min-w-0 flex-1 flex-col gap-1 sm:border-l sm:border-hairline sm:pl-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.members")}</p>
-              {expandedMembers.size > 0 && (
-                <button
-                  type="button"
-                  data-id="collapse-members"
-                  className="shrink-0 text-fine text-accent hover:underline"
-                  onClick={collapseMembers}
-                >
-                  {t("home.collapseAll")}
-                </button>
-              )}
-            </div>
+        {only !== "versions" && members !== null && (
+          <div
+            className={`flex min-w-0 flex-1 flex-col gap-1 ${
+              only === "members" ? "" : "sm:border-l sm:border-hairline sm:pl-4"
+            }`}
+          >
+            {only !== "members" && (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.members")}</p>
+                {expandedMembers.size > 0 && (
+                  <button
+                    type="button"
+                    data-id="collapse-members"
+                    className="shrink-0 text-fine text-accent hover:underline"
+                    onClick={collapseMembers}
+                  >
+                    {t("home.collapseAll")}
+                  </button>
+                )}
+              </div>
+            )}
             {members.length === 0 ? (
               <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
             ) : (

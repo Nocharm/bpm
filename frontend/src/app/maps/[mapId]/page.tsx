@@ -1,16 +1,15 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronDown, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Maximize, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Redo2, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
   Background,
   BackgroundVariant,
-  ControlButton,
-  Controls,
   type Connection,
   type Edge,
   MarkerType,
+  MiniMap,
   type NodeChange,
   type NodeTypes,
   PanOnScrollMode,
@@ -24,7 +23,6 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -34,8 +32,11 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
+import { MiniMapViewportFill } from "@/components/minimap-viewport-fill";
+import { NodeSelectionRing } from "@/components/node-selection-ring";
+import { MapNameDropdown } from "@/components/map-name-dropdown";
+import { VersionPill } from "@/components/version-pill";
 import { CommentSection } from "@/components/comment-section";
-import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
@@ -43,17 +44,23 @@ import { EdgeSelectModal } from "@/components/edge-select-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
+import { EditorToolbar } from "@/components/editor-toolbar";
+import { NodeSearch } from "@/components/node-search";
+import { InspectorPanel } from "@/components/inspector-panel";
+import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
+import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
+import { MapInspectorTab } from "@/components/map-inspector-tab";
+import { ApprovalPanel } from "@/components/approval-panel";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
-import { Tooltip } from "@/components/tooltip";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
-import { ProcessNode } from "@/components/process-node";
+import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -604,14 +611,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  // 우측 인스펙터 하단 탭 패널 — 승인/버전/다운로드/맵 디자인 (툴바에서 옮긴 컨트롤 수납)
-  const [bottomTab, setBottomTab] = useState<"approval" | "version" | "download" | "design">("approval");
-  // 좌상단 맵 이름 드롭다운(목록·루트로)
-  const [mapMenuOpen, setMapMenuOpen] = useState(false);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(320);
-  // 대시보드 패널 높이(px) — 사용자 조절, localStorage 영속
-  const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
@@ -696,6 +697,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // AI 채팅 패널 상태
   const [aiOpen, setAiOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  // BPM 시스템 관리자 여부 — 활성 점유 강제 인수(force checkout)는 sysadmin만 노출
+  const [isSysadmin, setIsSysadmin] = useState(false);
   const [aiPreviewActive, setAiPreviewActive] = useState(false);
   const aiPreviewRef = useRef(false);
 
@@ -1122,15 +1125,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, []);
 
-  // 저장된 대시보드 높이 복원 (클라이언트 전용, hydration 후 1회)
-  useEffect(() => {
-    const saved = Number(window.localStorage.getItem("bpm.dashboardHeight"));
-    if (Number.isFinite(saved) && saved > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
-      setDashboardHeight(Math.min(560, Math.max(120, saved)));
-    }
-  }, []);
-
   // 창 기하 변경 시 디바운스 저장
   useEffect(() => {
     const timer = setTimeout(() => saveWindowGeoms(mapId, windowGeom), 300);
@@ -1426,7 +1420,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        // 검색이 사이드바로 이동(R4b) — 접혀 있으면 펼친 뒤 다음 프레임에 포커스
+        setLeftCollapsed(false);
+        requestAnimationFrame(() => searchInputRef.current?.focus());
         return;
       }
       if (
@@ -1496,6 +1492,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (alive) {
           setUsername(me.username);
           setAiEnabled(me.ai_enabled);
+          setIsSysadmin(me.is_sysadmin);
         }
       })
       .catch(() => undefined);
@@ -2298,6 +2295,33 @@ function MapEditor({ mapId }: { mapId: number }) {
     [branchPrompt, createEdge, setEdges, scheduleAutoSave],
   );
 
+  // 새 노드가 기존 노드와 겹치지 않도록 충돌 시 대각선으로 밀어 빈 자리 탐색
+  const findFreeSpot = useCallback((x: number, y: number) => {
+    const hit = (px: number, py: number) =>
+      nodesRef.current.some(
+        (n) =>
+          Math.abs(n.position.x - px) < NODE_WIDTH * 0.7 &&
+          Math.abs(n.position.y - py) < NODE_HEIGHT * 0.7,
+      );
+    let pos = { x, y };
+    let guard = 0;
+    while (hit(pos.x, pos.y) && guard < 60) {
+      pos = { x: pos.x + 28, y: pos.y + 28 };
+      guard += 1;
+    }
+    return pos;
+  }, []);
+
+  // 새로 생성한 노드를 페이드로 두 번 반짝여 위치를 알림(.bpm-node-flash) → 850ms 후 클래스 제거
+  const flashNode = useCallback(
+    (id: string) => {
+      window.setTimeout(() => {
+        setNodes((cur) => cur.map((n) => (n.id === id ? { ...n, className: undefined } : n)));
+      }, 850);
+    },
+    [setNodes],
+  );
+
   // screen 좌표가 주어지면(컨텍스트 메뉴) 커서가 노드 중심이 되도록 생성
   const handleAddNode = useCallback(
     (screen: { x: number; y: number } | null, nodeType: ProcessNodeType = "process") => {
@@ -2323,12 +2347,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
         }
       }
+      // 같은 자리에 겹치지 않도록 빈 자리로 보정
+      position = findFreeSpot(position.x, position.y);
       setNodes((current) => [
         ...current,
         {
           id,
           type: "process",
           position,
+          // 생성 위치를 알 수 있도록 잠깐 페이드 반짝(클래스는 flashNode가 제거)
+          className: "bpm-node-flash",
           data: {
             // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
             label:
@@ -2353,8 +2381,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSelectedId(id);
       setSelectedEdgeId(null);
       scheduleAutoSave();
+      flashNode(id);
     },
-    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t],
+    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t, findFreeSpot, flashNode],
   );
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
@@ -2894,6 +2923,54 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
     },
     [readOnly, reactFlow, setNodes, scheduleAutoSave],
+  );
+
+  // 상단 맵 드롭다운의 '링크노드로 추가' — 다른 맵을 현재 캔버스에 읽기전용 참조(subprocess) 노드로 삽입.
+  // handleLibraryDrop과 동일한 노드 형태이되 드롭 좌표 대신 뷰포트 중앙, 최신본 추종(followLatest).
+  const addLinkNodeFromMap = useCallback(
+    async (linkedMapId: number, name: string) => {
+      if (readOnly) return;
+      const center = reactFlow.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const id = genId();
+      const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
+      let subEnds: SubEnd[] = [];
+      try {
+        const resolved = await getResolvedGraph(linkedMapId, true, null);
+        subEnds = deriveSubEnds(resolved);
+      } catch {
+        // subEnds 파생 실패 시 빈 채로 — 백엔드가 핸들 없어도 저장 허용
+      }
+      const node: AppNode = {
+        id,
+        type: "process",
+        position,
+        className: "bpm-node-flash",
+        data: {
+          label: name,
+          description: "",
+          nodeType: "subprocess",
+          color: "",
+          assignee: "",
+          department: "",
+          system: "",
+          duration: "",
+          groupIds: [],
+          hasChildren: false,
+          linkedMapId,
+          linkedVersionId: null,
+          followLatest: true,
+          subEnds,
+        },
+      };
+      setNodes((cur) => [...cur, node]);
+      scheduleAutoSave();
+      flashNode(id);
+      showToast(t("editor.linkNodeAdded", { name }));
+    },
+    [readOnly, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -4702,11 +4779,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
   }, [inspectorWidth]);
 
-  // 대시보드 높이 로컬 영속
-  useEffect(() => {
-    window.localStorage.setItem("bpm.dashboardHeight", String(dashboardHeight));
-  }, [dashboardHeight]);
-
   // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
   const outline = useMemo(() => {
     // 현재 스코프는 라이브 상태가 권위 — id로 dedup해 fullGraph가 stale일 때 중복 행 방지
@@ -5316,82 +5388,42 @@ function MapEditor({ mapId }: { mapId: number }) {
     [inspectorWidth],
   );
 
-  const startDashboardResize = useCallback(
-    (event: { clientY: number; preventDefault: () => void }) => {
-      event.preventDefault();
-      const startY = event.clientY;
-      const startH = dashboardHeight;
-      const onMove = (ev: PointerEvent) => {
-        // 핸들을 위로 끌면 대시보드가 커진다
-        setDashboardHeight(Math.min(560, Math.max(120, startH + (startY - ev.clientY))));
-      };
-      const onUp = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-      };
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-    },
-    [dashboardHeight],
-  );
-
-  const toolButton =
-    "inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+  // 상단바 ghost 아이콘 버튼 — 보더 없이 hover 배경만(목업 토브바 톤). 클릭 눌림은 globals.css base.
+  const topIconBtn =
+    "inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
   return (
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}18%{opacity:.25}38%{opacity:1}58%{opacity:.25}78%,100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 850ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}`}</style>
       <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline bg-surface px-4 py-2">
-        {/* 좌상단 — 아웃라인 토글(사이드바에서 이동) + 맵 이름 드롭다운(목록/루트로). 브레드크럼 제거 */}
+      <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
+        {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
         <button
           type="button"
-          className={toolButton}
+          className={topIconBtn}
           onClick={() => setLeftCollapsed((v) => !v)}
           title={leftCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
           aria-label={leftCollapsed ? t("sidebar.expand") : t("sidebar.collapse")}
         >
           <PanelLeft size={16} strokeWidth={1.5} />
         </button>
-        <div className="relative">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
-            onClick={() => setMapMenuOpen((v) => !v)}
-            title={t("editor.mapMenu")}
-          >
-            <span className="max-w-[16rem] truncate">{mapName}</span>
-            <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
-          </button>
-          {mapMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-[1000]" onClick={() => setMapMenuOpen(false)} />
-              <div className="absolute left-0 z-[1001] mt-1 w-44 rounded-md border border-hairline bg-surface py-1 shadow-lg">
-                <Link
-                  href="/"
-                  className="flex items-center gap-1 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => setMapMenuOpen(false)}
-                >
-                  <ArrowLeft size={14} strokeWidth={1.5} />{t("editor.backToList")}
-                </Link>
-                {scopes.length > 1 && (
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                    onClick={() => {
-                      setMapMenuOpen(false);
-                      void navigateTo(scopes.slice(0, 1));
-                    }}
-                  >
-                    {t("editor.toRoot")}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+        <MapNameDropdown
+          mapId={mapId}
+          mapName={mapName}
+          canToRoot={scopes.length > 1}
+          isEditing={!readOnly}
+          onToRoot={() => void navigateTo(scopes.slice(0, 1))}
+          onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+        />
+        <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <VersionPill
+          versions={versions}
+          versionId={versionId}
+          isEditing={!readOnly}
+          onSwitch={(id) => void switchVersion(id)}
+        />
 
         {isViewer && (
           <span
@@ -5403,70 +5435,23 @@ function MapEditor({ mapId }: { mapId: number }) {
           </span>
         )}
 
-        <div className="relative mx-auto">
-          <input
-            ref={searchInputRef}
-            className="w-72 rounded-sm border border-hairline px-2 py-1 text-caption"
-            placeholder={t("editor.searchPlaceholder")}
-            value={searchQuery}
-            onChange={(event) => {
-              const value = event.target.value;
-              setSearchQuery(value);
-              if (!value.trim()) {
-                setSearchResults([]);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setSearchIndex((index) => Math.min(index + 1, searchResults.length - 1));
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setSearchIndex((index) => Math.max(index - 1, 0));
-              } else if (event.key === "Enter" && searchResults[searchIndex]) {
-                handleSearchSelect(searchResults[searchIndex]);
-              } else if (event.key === "Escape") {
-                setSearchQuery("");
-                setSearchResults([]);
-                event.currentTarget.blur();
-              }
-            }}
-          />
-          {searchResults.length > 0 && (
-            <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-80 overflow-auto rounded-sm border border-hairline bg-surface py-1">
-              {searchResults.map((result, index) => (
-                <li key={result.node.id}>
-                  <button
-                    className={`block w-full px-3 py-1.5 text-left text-caption ${
-                      index === searchIndex ? "bg-surface-alt" : ""
-                    }`}
-                    onMouseDown={(event) => {
-                      // blur로 드롭다운이 닫히기 전에 선택 처리
-                      event.preventDefault();
-                      handleSearchSelect(result);
-                    }}
-                    onMouseEnter={() => setSearchIndex(index)}
-                  >
-                    <span className="font-medium text-ink">{result.node.title}</span>
-                    <span className="ml-2 text-fine text-ink-tertiary">{result.path}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {/* 노드 검색은 좌측 사이드바 아웃라인 위로 이동(R4b) — searchSlot으로 주입 */}
 
-        {/* 툴바 최소화 — 버전·PNG·엣지스타일·펼치기는 우측 하단 탭 패널로 이동 / minimized toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* 우: 상태 인디케이터 · undo/redo · 라이브러리 · AI · 저장 · 인스펙터 토글.
+            (공유·전체화면은 백엔드/동작 부재로 보류 — R3) */}
+        <div className="ml-auto flex items-center gap-1.5">
           {readOnly && !isViewer && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
-              <button
-                className="rounded-sm bg-error px-1.5 py-0.5 text-fine text-on-accent hover:bg-error/90"
-                onClick={() => void handleForceCheckout()}
-              >
-                {t("editor.forceEdit")}
-              </button>
+              {/* 활성 점유 강제 인수는 sysadmin만 — 에디터/오너는 읽기전용 안내만 본다 */}
+              {isSysadmin && (
+                <button
+                  className="rounded-sm bg-error px-1.5 py-0.5 text-fine text-on-accent hover:bg-error/90"
+                  onClick={() => void handleForceCheckout()}
+                >
+                  {t("editor.forceEdit")}
+                </button>
+              )}
             </span>
           )}
           {currentVersion?.status === "rejected" && currentVersion.reject_reason && (
@@ -5497,7 +5482,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           <button
-            className={toolButton}
+            className={topIconBtn}
             onClick={undo}
             disabled={readOnly || historySize.past === 0}
             title={t("editor.undoTitle")}
@@ -5505,33 +5490,26 @@ function MapEditor({ mapId }: { mapId: number }) {
             <Undo2 size={16} strokeWidth={1.5} />
           </button>
           <button
-            className={toolButton}
+            className={topIconBtn}
             onClick={redo}
             disabled={readOnly || historySize.future === 0}
             title={t("editor.redoTitle")}
           >
             <Redo2 size={16} strokeWidth={1.5} />
           </button>
+          <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
-            className={toolButton}
+            className={topIconBtn}
             onClick={() => setLibraryOpen((open) => !open)}
             title={t("library.toggle")}
             aria-label={t("library.toggle")}
           >
             <Network size={16} strokeWidth={1.5} />
           </button>
-          <button
-            className={toolButton}
-            onClick={() => setInspectorOpen((open) => !open)}
-            title={t("editor.inspectorToggle")}
-            aria-label={t("editor.inspectorToggle")}
-          >
-            <PanelRight size={16} strokeWidth={1.5} />
-          </button>
           {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
+            className="inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
             onClick={() => {
               // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
               if (!aiOpen) {
@@ -5548,12 +5526,21 @@ function MapEditor({ mapId }: { mapId: number }) {
             AI
           </button>
           <button
-            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
             disabled={readOnly}
           >
             {readOnly && <Lock size={14} strokeWidth={1.7} />}
             {t("editor.save")}
+          </button>
+          <span className="mx-0.5 h-5 w-px bg-divider" />
+          <button
+            className={topIconBtn}
+            onClick={() => setInspectorOpen((open) => !open)}
+            title={t("editor.inspectorToggle")}
+            aria-label={t("editor.inspectorToggle")}
+          >
+            <PanelRight size={16} strokeWidth={1.5} />
           </button>
         </div>
       </header>
@@ -5568,6 +5555,25 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       )}
 
+      {/* 편집 툴바(두 번째 상단바) — 편집 모드일 때만. 노드 추가·자동정렬·정렬/분배 */}
+      {!readOnly && (
+        <EditorToolbar
+          onAddNode={(type) => handleAddNode(null, type)}
+          onOpenLibrary={() => setLibraryOpen(true)}
+          onAutoArrange={() =>
+            applyNodesTransform((current) => {
+              // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
+              const ids = new Set(current.filter((node) => node.selected).map((node) => node.id));
+              return ids.size >= 2
+                ? layoutSubsetWithDagre(current, edgesRef.current, ids)
+                : layoutWithDagre(current, edgesRef.current);
+            })
+          }
+          onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
+          onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
+        />
+      )}
+
       <div className="relative flex min-h-0 flex-1">
         <EditorLeftSidebar
           collapsed={leftCollapsed}
@@ -5577,15 +5583,30 @@ function MapEditor({ mapId }: { mapId: number }) {
           outline={displayOutline}
           onSelectNode={handleOutlineSelect}
           onToggleExpand={handleToggleExpand}
-          displayFields={displayFields}
-          onToggleDisplayField={toggleDisplayField}
           readOnly={readOnly}
+          searchSlot={
+            <NodeSearch<SearchResult>
+              inputRef={searchInputRef}
+              query={searchQuery}
+              onQueryChange={(value) => {
+                setSearchQuery(value);
+                if (!value.trim()) {
+                  setSearchResults([]);
+                }
+              }}
+              results={searchResults}
+              activeIndex={searchIndex}
+              onActiveIndexChange={setSearchIndex}
+              onSelect={handleSearchSelect}
+            />
+          }
           onRowContextMenu={(event, id) => {
             setSelectedId(id);
             setSelectedEdgeId(null);
             openMenu(event, "node", id);
           }}
           onRenameNode={renameNode}
+          onDeleteNode={(id) => void reactFlow.deleteElements({ nodes: [{ id }] })}
           onSelectNext={handleOutlineNext}
           onSelectPrev={handleOutlinePrev}
           onExpand={handleOutlineExpand}
@@ -5817,6 +5838,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       fitView
                     >
                       <ViewportPortal>
+                        {/* 선택 노드 추종 테두리 — 노드 사이를 슬라이드 */}
+                        <NodeSelectionRing />
                         {inlineComposition && (
                           <InlineRegionBands
                             regions={inlineComposition.regions}
@@ -5917,13 +5940,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                           color="var(--color-canvas-dot)"
                         />
                       )}
-                      <Controls showFitView={false}>
-                        {/* 기본 fit(가운데 정렬+스냅) 대신 좌상단 정렬 fit — 왼쪽위 고정 일관 */}
-                        <ControlButton onClick={fitScopeTopLeft} title={t("editor.fitView")}>
-                          <Maximize size={14} strokeWidth={1.5} />
-                        </ControlButton>
-                      </Controls>
-                      <CanvasZoomScale />
+                      <MiniMap<AppNode>
+                        position="bottom-left"
+                        pannable
+                        zoomable
+                        bgColor="var(--color-surface)"
+                        nodeColor={(n) =>
+                          `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
+                        }
+                        maskColor="transparent"
+                        className="rounded-sm border border-hairline shadow-md"
+                      />
+                      {/* 뷰포트 영역을 반투명 악센트로 채움 — MiniMap이 children 미렌더라 동일 좌표계 오버레이 */}
+                      <MiniMapViewportFill />
+                      <CanvasZoomScale onFit={fitScopeTopLeft} />
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}
                     {readOnly && (
@@ -6199,411 +6229,456 @@ function MapEditor({ mapId }: { mapId: number }) {
               className="w-1 shrink-0 cursor-col-resize hover:bg-accent-tint"
               title={t("editor.inspectorToggle")}
             />
-            <div className="flex min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
-            <div className="flex-1 overflow-y-auto p-4">
-            {selectedNode ? (
-              <>
-            <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
-            <input
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              value={selectedNode.data.label}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateSelectedData({ label: event.target.value }, true)
-              }
-            />
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
-            <textarea
-              className="h-28 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              value={selectedNode.data.description}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateSelectedData({ description: event.target.value }, true)
-              }
-            />
-            {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
-            <label className="mb-1 mt-3 block text-fine text-ink-tertiary">{t("field.type")}</label>
-            <div className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary">
-              {t(
-                NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
-                  ?.labelKey ?? "nodeType.process",
-              )}
-            </div>
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
-            <div className="mb-2 flex flex-wrap items-center gap-1.5">
-              {/* 타입별 색 세트 (#8) */}
-              {colorsForType(selectedNode.data.nodeType).map((preset) => (
-                <button
-                  key={preset || "default"}
-                  title={preset || t("editor.defaultColor")}
-                  aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
-                  className={`h-5 w-5 rounded-xs border ${
-                    selectedNode.data.color === preset
-                      ? "ring-2 ring-accent"
-                      : "border-hairline"
-                  }`}
-                  style={{ backgroundColor: preset || "#ffffff" }}
-                  disabled={readOnly}
-                  onClick={() => updateSelectedData({ color: preset })}
-                />
-              ))}
-              {/* 헥스 직접 입력은 필요 시에만 — 아이콘 클릭으로 입력칸 토글 (#8) */}
-              {!readOnly && (
-                <button
-                  type="button"
-                  title={t("editor.hexToggle")}
-                  aria-label={t("editor.hexToggle")}
-                  aria-pressed={showHexInput}
-                  className={`flex h-5 w-5 items-center justify-center rounded-xs border ${
-                    showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
-                  } hover:bg-surface-alt`}
-                  onClick={() => setShowHexInput((v) => !v)}
-                >
-                  <Palette size={12} strokeWidth={1.5} />
-                </button>
-              )}
-            </div>
-            {showHexInput && (
-              <input
-                key={`${selectedNode.id}-${selectedNode.data.color}`}
-                autoFocus
-                className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                defaultValue={selectedNode.data.color}
-                disabled={readOnly}
-                placeholder={t("editor.hexPlaceholder")}
-                onBlur={(event) => {
-                  const value = event.target.value.trim();
-                  if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
-                    updateSelectedData({ color: value });
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-            )}
-            <details className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
-              <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
-                {t("editor.bpmAttrs")}
-              </summary>
-              <label className="mb-1 mt-2 block text-fine text-ink-tertiary">{t("field.assignee")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.assignee}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ assignee: event.target.value }, true)
-                }
-              />
-              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.department")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.department}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ department: event.target.value }, true)
-                }
-              />
-              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.system")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.system}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ system: event.target.value }, true)
-                }
-              />
-              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.duration")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.duration}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ duration: event.target.value }, true)
-                }
-                placeholder={t("editor.durationPlaceholder")}
-              />
-            </details>
-            {selectedNode.data.nodeType === "end" && (
-              <label className="mb-3 flex items-center gap-2 text-caption text-ink-secondary">
-                <input
-                  type="checkbox"
-                  checked={selectedNode.data.isPrimaryEnd ?? false}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    updateSelectedData({ isPrimaryEnd: event.target.checked }, true)
-                  }
-                />
-                {t("node.primaryEnd")}
-              </label>
-            )}
-            {selectedNode.data.nodeType === "subprocess" && (
-              <div className="mb-3 flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-caption text-ink-secondary">
-                  <input
-                    type="checkbox"
-                    checked={selectedNode.data.followLatest ?? false}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      updateSelectedData({ followLatest: event.target.checked }, false)
-                    }
-                  />
-                  {t("subprocess.followLatest")}
-                </label>
-                {selectedNode.data.updateAvailable && (
-                  <button
-                    type="button"
-                    disabled={readOnly}
-                    className="rounded-sm border border-hairline bg-accent-tint px-3 py-1 text-caption text-accent hover:bg-surface-alt disabled:opacity-50"
-                    onClick={() => handleUpdateSubprocess(selectedNode.id)}
-                  >
-                    {t("subprocess.update")}
-                  </button>
-                )}
-              </div>
-            )}
-            <details open className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
-              <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
-                {t("editor.comments")}
-                {selectedComments.some((comment) => !comment.resolved) &&
-                  ` (${t("editor.unresolvedCount", { n: selectedComments.filter((comment) => !comment.resolved).length })})`}
-              </summary>
-              <div className="mt-2">
-                {/* 코멘트는 읽기 전용 모드에서도 작성 가능 — 피드백 통로 */}
-                <CommentSection
-                  comments={selectedComments}
-                  onAdd={(body) => void handleAddComment(body)}
-                  onToggleResolved={(comment) => void handleToggleComment(comment)}
-                  onDelete={(comment) => void handleDeleteComment(comment)}
-                />
-              </div>
-            </details>
-            <p className="mt-3 text-fine text-ink-tertiary">
-              {t("editor.hintNode")}
-            </p>
-              </>
-            ) : selectedEdge ? (
-              <>
-            <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.edgeEdit")}</h2>
-            {/* 판단 노드 분기 엣지 — Yes/No/기타 탭 전환. 기타일 때만 라벨 직접 편집 */}
-            {selectedEdgeBranch !== null && (
-              <div className="mb-3 flex overflow-hidden rounded-sm border border-hairline text-caption">
-                {(["yes", "no", "other"] as BranchKind[]).map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    disabled={readOnly}
-                    onClick={() => setSelectedEdgeBranch(kind)}
-                    className={`flex-1 px-2 py-1 ${
-                      selectedEdgeBranch === kind
-                        ? "bg-accent-tint text-accent"
-                        : "text-ink-secondary hover:bg-surface-alt"
-                    }`}
-                  >
-                    {t(`branch.${kind}`)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
-            <input
-              ref={edgeLabelInputRef}
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
-              value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
-              disabled={readOnly || (selectedEdgeBranch !== null && selectedEdgeBranch !== "other")}
-              onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
-            />
-            <p className="mt-3 text-fine text-ink-tertiary">{t("editor.hintEdge")}</p>
-              </>
-            ) : (
-              <div className="text-caption text-ink-secondary">
-                {/* 아무것도 선택 안 됨 — 상단에 맵 상세 카드(가시성·역할·버전·멤버) / no selection: map detail at top */}
-                <div className="mb-4 border-b border-hairline pb-4">
-                  {/* 에디터에선 이미 이 맵이라 Open 버튼 숨김 (#6) */}
-                  <MapDetailCard mapId={mapId} showFooter={false} hideOpen />
-                </div>
-                <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
-                <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>
-                {groups.length > 0 && (
-                  <div className="mt-3">
-                    <div className="mb-1 text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
-                      {t("inspector.groupsTitle")}
-                    </div>
-                    <ul className="flex flex-col gap-1">
-                      {groups.map((group) => (
-                        <li key={group.id} className="flex items-center gap-2">
-                          <span
-                            className="h-3 w-3 shrink-0 rounded-full border border-hairline"
-                            style={{ background: group.color || "var(--color-surface-alt)" }}
-                          />
-                          <span className="truncate">{group.label || t("sidebar.untitled")}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-            </div>
-            {currentVersion && (
-              <>
-                <div
-                  onPointerDown={startDashboardResize}
-                  className="h-1 shrink-0 cursor-row-resize border-t border-hairline hover:bg-accent-tint"
-                  title={t("dash.resize")}
-                />
-                <div
-                  className="flex shrink-0 flex-col overflow-hidden"
-                  style={{ height: dashboardHeight }}
-                >
-                  {/* 우측 하단 탭 — 툴바에서 옮긴 컨트롤 수납 / bottom tab panel: moved toolbar controls */}
-                  <div className="flex shrink-0 border-b border-hairline px-1">
-                    {(
-                      [
-                        ["approval", "editor.tabApproval"],
-                        ["version", "editor.tabVersion"],
-                        ["download", "editor.tabDownload"],
-                        ["design", "editor.tabDesign"],
-                      ] as const
-                    ).map(([id, label]) => {
-                      const TabIcon =
-                        id === "approval"
-                          ? Bell
-                          : id === "version"
-                            ? GitBranch
-                            : id === "download"
-                              ? Download
-                              : Palette;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-fine transition-colors ${
-                            bottomTab === id
-                              ? "border-b-2 border-accent text-accent"
-                              : "text-ink-tertiary hover:text-ink"
-                          }`}
-                          onClick={() => setBottomTab(id)}
-                        >
-                          <TabIcon size={14} strokeWidth={1.5} />
-                          {t(label)}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    {bottomTab === "approval" && (
-                      <WorkflowDashboard
-                        versionLabel={currentVersion.label}
-                        status={currentVersion.status}
-                        submittedBy={currentVersion.submitted_by}
-                        rejectReason={currentVersion.reject_reason}
-                        workflow={workflow}
-                        isCheckoutHolder={checkout?.mine ?? false}
-                        isApprover={isApprover}
-                        isSubmitter={isSubmitter}
-                        hasApproved={hasApproved}
-                        isMapOwner={isMapOwner}
-                        onSubmit={() => void runTransition(submitVersion)}
-                        onApprove={() => void runTransition(approveVersion)}
-                        onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
-                        onPublish={() => void runTransition(publishVersion)}
-                        onWithdraw={() => void runTransition(withdrawVersion)}
-                        onManageApprovers={() => setManagingApprovers(true)}
-                      />
-                    )}
-
-                    {bottomTab === "version" && (
-                      <div className="flex flex-col gap-2 p-3">
-                        <label className="text-fine text-ink-tertiary">{t("editor.currentVersion")}</label>
-                        <select
-                          className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                          value={versionId ?? ""}
-                          onChange={(event) => void switchVersion(Number(event.target.value))}
-                          aria-label={t("editor.versionSelectAria")}
-                        >
-                          {versions.map((version) => (
-                            <option key={version.id} value={version.id}>
-                              {version.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex flex-wrap gap-2">
-                          <Tooltip label={t("editor.newVersion")}>
-                            <button
-                              className={toolButton}
-                              aria-label={t("editor.newVersion")}
-                              onClick={() => void handleCreateVersion()}
-                            >
-                              <Plus size={16} strokeWidth={1.5} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={t("editor.rename")}>
-                            <button
-                              className={toolButton}
-                              aria-label={t("editor.rename")}
-                              onClick={() => void handleRenameVersion()}
-                            >
-                              <PencilLine size={16} strokeWidth={1.5} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={t("editor.deleteVersion")}>
-                            <button
-                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
-                              aria-label={t("editor.deleteVersion")}
-                              onClick={() => void handleDeleteVersion()}
-                              disabled={versions.length <= 1 || readOnly}
-                            >
-                              <Trash2 size={16} strokeWidth={1.5} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={t("editor.compare")}>
-                            <Link
-                              href={`/maps/${mapId}/compare`}
-                              aria-label={t("editor.compare")}
-                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-                            >
-                              <GitCompare size={16} strokeWidth={1.5} />
-                            </Link>
-                          </Tooltip>
+            {/* 우측 4탭 인스펙터 — 속성/맵/승인/활동 */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
+              <InspectorPanel
+                onCollapse={() => setInspectorOpen(false)}
+                selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
+                propertiesSlot={
+                  selectedNode ? (
+                    // R5a NEW 노드 속성 폼 — 제목/유형(읽기전용)/색상/BPM 속성 카드 (목업 inspector-properties-node).
+                    // 설명·end/subprocess 특수필드는 비교기간 OLD에 유지(후속 이관). 핸들러 재사용.
+                    <div className="flex flex-col gap-3">
+                      <h2 className="text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
+                        <input
+                          className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                          value={selectedNode.data.label}
+                          disabled={readOnly}
+                          onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.type")}</label>
+                        <div className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary">
+                          {t(
+                            NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
+                              ?.labelKey ?? "nodeType.process",
+                          )}
                         </div>
                       </div>
-                    )}
-
-                    {bottomTab === "download" && (
-                      <div className="p-3">
-                        <button className={toolButton} onClick={() => void handleExportPng()}>
-                          <Download size={16} strokeWidth={1.5} />PNG
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {colorsForType(selectedNode.data.nodeType).map((preset) => (
+                            <button
+                              key={preset || "default"}
+                              type="button"
+                              title={preset || t("editor.defaultColor")}
+                              aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
+                              className={`h-6 w-6 rounded-sm border ${
+                                selectedNode.data.color === preset ? "ring-2 ring-accent" : "border-hairline"
+                              }`}
+                              style={{ backgroundColor: preset || "#ffffff" }}
+                              disabled={readOnly}
+                              onClick={() => updateSelectedData({ color: preset })}
+                            />
+                          ))}
+                          {/* 커스텀 색상 — Palette 토글로 hex 직접 입력 */}
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              title={t("editor.hexToggle")}
+                              aria-label={t("editor.hexToggle")}
+                              aria-pressed={showHexInput}
+                              className={`flex h-6 w-6 items-center justify-center rounded-sm border ${
+                                showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
+                              } hover:bg-surface-alt`}
+                              onClick={() => setShowHexInput((value) => !value)}
+                            >
+                              <Palette size={14} strokeWidth={1.5} />
+                            </button>
+                          )}
+                        </div>
+                        {showHexInput && (
+                          <input
+                            key={`new-${selectedNode.id}-${selectedNode.data.color}`}
+                            autoFocus
+                            className="mt-2 w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                            defaultValue={selectedNode.data.color}
+                            disabled={readOnly}
+                            placeholder={t("editor.hexPlaceholder")}
+                            onBlur={(event) => {
+                              const value = event.target.value.trim();
+                              if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
+                                updateSelectedData({ color: value });
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.currentTarget.blur();
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="rounded-md border border-hairline p-3">
+                        <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                        {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
+                        <BpmAttributePicker
+                          versionId={versionId}
+                          assignee={selectedNode.data.assignee}
+                          department={selectedNode.data.department}
+                          readOnly={readOnly}
+                          onChange={(patch) => updateSelectedData(patch, true)}
+                        />
+                        {([
+                          ["system", "field.system"],
+                          ["duration", "field.duration"],
+                        ] as const).map(([key, labelKey]) => (
+                          <div
+                            key={key}
+                            className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                          >
+                            <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                            <input
+                              className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                              value={selectedNode.data[key]}
+                              disabled={readOnly}
+                              title={selectedNode.data[key] || undefined}
+                              onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
+                      {selectedNode.data.nodeType === "end" && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-caption text-ink-secondary">{t("node.primaryEnd")}</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={selectedNode.data.isPrimaryEnd ?? false}
+                            aria-label={t("node.primaryEnd")}
+                            disabled={readOnly}
+                            onClick={() =>
+                              updateSelectedData(
+                                { isPrimaryEnd: !(selectedNode.data.isPrimaryEnd ?? false) },
+                                true,
+                              )
+                            }
+                            className={`relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+                              selectedNode.data.isPrimaryEnd ? "bg-accent" : "bg-border-strong"
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                                selectedNode.data.isPrimaryEnd ? "left-3.5" : "left-0.5"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      )}
+                      {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
+                      {selectedNode.data.nodeType === "subprocess" &&
+                        selectedNode.data.linkedMapId != null && (
+                          <SubprocessVersionPicker
+                            linkedMapId={selectedNode.data.linkedMapId}
+                            linkedVersionId={selectedNode.data.linkedVersionId ?? null}
+                            followLatest={selectedNode.data.followLatest ?? false}
+                            updateAvailable={selectedNode.data.updateAvailable ?? false}
+                            readOnly={readOnly}
+                            onFollowLatest={(value) => updateSelectedData({ followLatest: value }, false)}
+                            onPinVersion={(versionId) => updateSelectedData({ linkedVersionId: versionId }, false)}
+                            onUpdate={() => handleUpdateSubprocess(selectedNode.id)}
+                          />
+                        )}
+                      {/* 코멘트 — 노드별, 하단 배치(읽기전용에서도 작성 가능). 활동 탭 통합은 R5d */}
+                      <details open className="rounded-md border border-hairline px-3 py-2">
+                        <summary className="cursor-pointer text-fine font-semibold text-ink">
+                          {t("editor.comments")}
+                          {selectedComments.some((comment) => !comment.resolved) &&
+                            ` (${t("editor.unresolvedCount", { n: selectedComments.filter((comment) => !comment.resolved).length })})`}
+                        </summary>
+                        <div className="mt-2">
+                          <CommentSection
+                            comments={selectedComments}
+                            onAdd={(body) => void handleAddComment(body)}
+                            onToggleResolved={(comment) => void handleToggleComment(comment)}
+                            onDelete={(comment) => void handleDeleteComment(comment)}
+                            currentUser={username}
+                          />
+                        </div>
+                      </details>
+                    </div>
+                  ) : selectedEdge ? (
+                    // R5a NEW 엣지 속성 폼 — 소스→타겟·분기 라벨(Yes/No/기타)·라벨·연결 스타일·삭제 (목업 inspector-properties-edge).
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <h2 className="flex items-center gap-1.5 text-caption-strong text-ink-secondary">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-accent-tint text-accent">
+                            <ArrowRight size={14} strokeWidth={1.5} />
+                          </span>
+                          {t("inspector.edgeEdit")}
+                        </h2>
+                        <button
+                          type="button"
+                          className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                          onClick={() => setSelectedEdgeId(null)}
+                          aria-label={t("action.close")}
+                        >
+                          <X size={14} strokeWidth={1.5} />
                         </button>
                       </div>
-                    )}
-
-                    {bottomTab === "design" && (
-                      <div className="flex flex-col gap-2 p-3">
-                        <label className="text-fine text-ink-tertiary">{t("editor.edgeStyle")}</label>
-                        {/* 엣지 스타일 — 맵 전역(모든 엣지 일괄 적용) */}
-                        <select
-                          className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
-                          value={edgeStyle}
-                          onChange={(event) =>
-                            setEdgeStyle(event.target.value as "default" | "smoothstep" | "straight")
-                          }
-                          aria-label={t("editor.edgeStyle")}
-                        >
-                          <option value="default">{t("edgeStyle.curve")}</option>
-                          <option value="smoothstep">{t("edgeStyle.step")}</option>
-                          <option value="straight">{t("edgeStyle.straight")}</option>
-                        </select>
+                      <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink">
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "—"}
+                        </span>
+                        <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        <span className="min-w-0 flex-1 truncate text-right font-medium">
+                          {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "—"}
+                        </span>
                       </div>
-                    )}
+                      {selectedEdgeBranch !== null && (
+                        <div>
+                          <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.branchLabel")}</label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {([
+                              ["yes", BRANCH_YES_LABEL],
+                              ["no", BRANCH_NO_LABEL],
+                              ["other", t("inspector.branchOther")],
+                            ] as const).map(([kind, label]) => (
+                              <button
+                                key={kind}
+                                type="button"
+                                disabled={readOnly}
+                                onClick={() => setSelectedEdgeBranch(kind)}
+                                className={`rounded-sm border px-2 py-1.5 text-caption ${
+                                  selectedEdgeBranch === kind
+                                    ? "border-accent bg-accent-tint font-medium text-accent"
+                                    : "border-hairline text-ink hover:bg-surface-alt"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.label")}</label>
+                        <input
+                          className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                          value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
+                          disabled={readOnly}
+                          onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>
+                        <div className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary">
+                          {t(
+                            selectedEdge.type === "smoothstep"
+                              ? "edgeStyle.step"
+                              : selectedEdge.type === "straight"
+                                ? "edgeStyle.straight"
+                                : "edgeStyle.curve",
+                          )}
+                        </div>
+                      </div>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-error/40 px-2 py-2 text-caption text-error hover:bg-error/10"
+                          onClick={() => void reactFlow.deleteElements({ edges: [{ id: selectedEdge.id }] })}
+                        >
+                          <Trash2 size={14} strokeWidth={1.5} />
+                          {t("inspector.deleteEdge")}
+                        </button>
+                      )}
+                    </div>
+                  ) : null
+                }
+                mapTabSlot={
+                  // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
+                  <div className="flex flex-col gap-4">
+                    <MapInspectorTab mapId={mapId} readOnly={readOnly} />
+                    <div className="rounded-md border border-hairline p-3">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
+                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
+                      </div>
+                      {NODE_DISPLAY_FIELDS.map((field) => {
+                        const on = displayFields.includes(field);
+                        const labelKey =
+                          field === "assignee"
+                            ? "field.assignee"
+                            : field === "department"
+                              ? "field.department"
+                              : field === "system"
+                                ? "field.system"
+                                : field === "duration"
+                                  ? "field.duration"
+                                  : "field.type";
+                        return (
+                          <div
+                            key={field}
+                            className="flex items-center justify-between py-1 text-caption text-ink-secondary"
+                          >
+                            <span>{t(labelKey)}</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={on}
+                              aria-label={t(labelKey)}
+                              onClick={() => toggleDisplayField(field)}
+                              className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                                on ? "bg-accent" : "bg-border-strong"
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                                  on ? "left-3.5" : "left-0.5"
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div>
+                      <div className="mb-1 text-fine text-ink-tertiary">
+                        <span className="font-semibold text-ink">{t("inspector.edgeStyle")}</span> ·{" "}
+                        {t("inspector.mapWide")}
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {([
+                          ["default", "edgeStyle.curve", Spline],
+                          ["smoothstep", "edgeStyle.step", CornerDownRight],
+                          ["straight", "edgeStyle.straight", Slash],
+                        ] as const).map(([value, labelKey, Icon]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={readOnly}
+                            title={t(labelKey)}
+                            aria-label={t(labelKey)}
+                            onClick={() => setEdgeStyle(value)}
+                            className={`flex items-center justify-center rounded-sm border py-2 ${
+                              edgeStyle === value
+                                ? "border-accent bg-accent-tint text-accent"
+                                : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                            }`}
+                          >
+                            <Icon size={18} strokeWidth={1.5} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleExportPng()}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                    >
+                      <Download size={16} strokeWidth={1.5} />
+                      {t("inspector.exportPng")}
+                    </button>
                   </div>
-                </div>
-              </>
-            )}
+                }
+                approvalSlot={
+                  // R5c 승인 탭 — 상단 버전 pill(전환)·버전 관리(생성/이름/삭제) + 워크플로 + 버전 타임라인(하단)
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <VersionPill
+                        versions={versions}
+                        versionId={versionId}
+                        isEditing={!readOnly}
+                        onSwitch={(id) => void switchVersion(id)}
+                      />
+                      {/* 버전 생성/이름변경/삭제 — OLD 버전 탭에서 이관. 생성·이름변경은 항상, 삭제는 readOnly·단일버전 시 비활성 */}
+                      <div className="flex items-center gap-2 text-fine">
+                        <button
+                          type="button"
+                          className="text-accent hover:underline"
+                          onClick={handleCreateVersion}
+                        >
+                          + {t("editor.newVersion")}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-ink-secondary hover:text-accent"
+                          onClick={handleRenameVersion}
+                        >
+                          {t("editor.rename")}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-ink-tertiary hover:text-error disabled:opacity-40 disabled:hover:text-ink-tertiary"
+                          onClick={handleDeleteVersion}
+                          disabled={versions.length <= 1 || readOnly}
+                        >
+                          {t("editor.deleteVersion")}
+                        </button>
+                      </div>
+                    </div>
+                    {currentVersion && (
+                    <ApprovalPanel
+                      status={currentVersion.status}
+                      workflow={workflow}
+                      isCheckoutHolder={checkout?.mine ?? false}
+                      isApprover={isApprover}
+                      isSubmitter={isSubmitter}
+                      hasApproved={hasApproved}
+                      isMapOwner={isMapOwner}
+                      onSubmit={() => void runTransition(submitVersion)}
+                      onApprove={() => void runTransition(approveVersion)}
+                      onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
+                      onPublish={() => void runTransition(publishVersion)}
+                      onWithdraw={() => void runTransition(withdrawVersion)}
+                      onManageApprovers={() => setManagingApprovers(true)}
+                    />
+                    )}
+                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
+                  </div>
+                }
+                activitySlot={
+                  // R5d 활동 탭 — 전체 코멘트(노드 단위 정렬, 노드 선택 시만 작성·클릭 시 노드 이동). 버전 타임라인은 승인 탭으로 이동
+                  <div className="flex flex-col gap-4">
+                    <section>
+                      <div className="mb-2 text-fine font-semibold text-ink">
+                        {t("editor.comments")}
+                        {comments.some((comment) => !comment.resolved) &&
+                          ` · ${t("editor.unresolvedCount", { n: comments.filter((comment) => !comment.resolved).length })}`}
+                      </div>
+                      <CommentSection
+                        comments={[...comments].sort(
+                          (a, b) => a.node_id.localeCompare(b.node_id) || a.created_at.localeCompare(b.created_at),
+                        )}
+                        onAdd={(body) => void handleAddComment(body)}
+                        onToggleResolved={(comment) => void handleToggleComment(comment)}
+                        onDelete={(comment) => void handleDeleteComment(comment)}
+                        currentUser={username}
+                        inputDisabled={selectedNode === null}
+                        onCommentClick={(comment) => handleOutlineSelect(comment.node_id)}
+                      />
+                    </section>
+                  </div>
+                }
+                mapName={mapName}
+                versionControl={
+                  <VersionPill
+                    versions={versions}
+                    versionId={versionId}
+                    isEditing={!readOnly}
+                    onSwitch={(id) => void switchVersion(id)}
+                  />
+                }
+                readOnly={readOnly}
+                onAddNode={() => handleAddNode(null, "process")}
+                onOpenLibrary={() => setLibraryOpen(true)}
+                onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
+                nodeCount={nodes.length}
+                edgeCount={edges.length}
+                subprocessCount={nodes.filter((node) => node.data.nodeType === "subprocess").length}
+                saveLabel={
+                  saveState === "saving"
+                    ? t("editor.saving")
+                    : saveState === "error"
+                      ? t("editor.saveError")
+                      : t("editor.saved")
+                }
+              />
             </div>
           </div>
         )}

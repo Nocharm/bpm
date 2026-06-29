@@ -6,9 +6,21 @@
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export function Tooltip({ label, children }: { label: string; children: ReactNode }) {
+// label(텍스트) 또는 content(리치 카드 ReactNode) 중 하나. className으로 래퍼 폭 제어(예: flex-1 min-w-0).
+export function Tooltip({
+  label,
+  content,
+  className,
+  children,
+}: {
+  label?: string;
+  content?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLSpanElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const body = content ?? label;
 
   const show = () => {
     const rect = ref.current?.getBoundingClientRect();
@@ -20,19 +32,22 @@ export function Tooltip({ label, children }: { label: string; children: ReactNod
   return (
     <span
       ref={ref}
-      className="inline-flex"
+      className={`inline-flex ${className ?? ""}`}
       onMouseEnter={show}
       onMouseLeave={() => setPos(null)}
     >
       {children}
       {pos !== null &&
+        body != null &&
         createPortal(
           <span
             role="tooltip"
-            className="pointer-events-none fixed z-[1400] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink shadow-lg"
+            className={`pointer-events-none fixed z-[1400] -translate-x-1/2 -translate-y-full rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink shadow-lg ${
+              content ? "max-w-56" : "whitespace-nowrap"
+            }`}
             style={{ left: pos.x, top: pos.y - 6 }}
           >
-            {label}
+            {body}
           </span>,
           document.body,
         )}
