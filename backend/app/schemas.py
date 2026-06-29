@@ -173,6 +173,29 @@ class GroupRenameIn(BaseModel):
     name: str
 
 
+class PendingCheckoutRequestOut(BaseModel):
+    """WorkflowStateOut에 내포되는 경량 점유 요청 — 프론트 '요청됨' 버튼 비활성화용."""
+
+    id: int
+    requested_by: str
+
+
+class CheckoutRequestOut(BaseModel):
+    """점유권 요청 단건 응답 — request/decide 엔드포인트 공용."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    version_id: int
+    requested_by: str
+    status: str
+    created_at: datetime
+
+
+class CheckoutDecideIn(BaseModel):
+    approve: bool
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
@@ -186,6 +209,8 @@ class WorkflowStateOut(BaseModel):
     approvals: list[str]
     # 현재 활성 체크아웃 보유자 — TTL 이내 잠금이 없으면 None
     checkout_holder: str | None = None
+    # 이 버전에 대한 미결 점유 요청 — None이면 요청 없음 (Task 3)
+    pending_checkout_request: PendingCheckoutRequestOut | None = None
 
 
 class RejectIn(BaseModel):

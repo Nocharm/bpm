@@ -16,6 +16,7 @@ from app.routers import (
     admin,
     ai,
     approvers,
+    checkout,
     comments,
     directory,
     employees,
@@ -49,6 +50,7 @@ app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
+app.include_router(checkout.router)
 app.include_router(graph.router)
 app.include_router(comments.router)
 app.include_router(directory.router)

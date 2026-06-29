@@ -17,6 +17,7 @@ from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.deps import require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
+    CheckoutRequest,
     Edge,
     Employee,
     Group,
@@ -32,6 +33,7 @@ from app.schemas import (
     CheckoutTransferIn,
     DirectoryUserOut,
     EligibleAssigneesOut,
+    PendingCheckoutRequestOut,
     RejectIn,
     VersionCreate,
     VersionOut,
@@ -399,6 +401,16 @@ async def get_workflow_state(
         ).all()
     )
     now = now_kst()
+    # 이 버전에 대한 미결 점유 요청 — 최신 1건 (Task 3)
+    pending_req = await session.scalar(
+        select(CheckoutRequest)
+        .where(
+            CheckoutRequest.version_id == version_id,
+            CheckoutRequest.status == "pending",
+        )
+        .order_by(CheckoutRequest.created_at.desc())
+        .limit(1)
+    )
     return WorkflowStateOut(
         version_id=version_id,
         version_number=version.version_number,
@@ -408,6 +420,11 @@ async def get_workflow_state(
         approvers=approvers,
         approvals=approvals,
         checkout_holder=version.checked_out_by if is_checkout_active(version, now) else None,
+        pending_checkout_request=(
+            PendingCheckoutRequestOut(id=pending_req.id, requested_by=pending_req.requested_by)
+            if pending_req
+            else None
+        ),
     )
 
 

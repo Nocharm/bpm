@@ -365,6 +365,21 @@ class UserGroupManager(Base):
     user_id: Mapped[str] = mapped_column(String(100))
 
 
+class CheckoutRequest(Base):
+    """점유권 이전 요청 — editor+가 현 점유자·오너·sysadmin에게 요청, decide로 승인/거절 (Task 3)."""
+
+    __tablename__ = "checkout_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("map_versions.id", ondelete="CASCADE"), index=True
+    )
+    requested_by: Mapped[str] = mapped_column(String(100))
+    # 'pending' | 'approved' | 'rejected' | 'withdrawn'
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class LoginRecord(Base):
     """로그인/활동 기록 — 사용자 현황조사용. /api/me 호출 시 1건 기록(집계·리포트는 후속)."""
 

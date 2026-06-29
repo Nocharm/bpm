@@ -579,3 +579,188 @@ def test_transfer_no_checkout_409(client: TestClient, _transfer_enforce: None) -
     # checked_out_by는 여전히 None
     state = client.get(f"/api/versions/{version_id}/workflow").json()
     assert state["checkout_holder"] is None
+
+
+# ── Checkout request/decide (Task 3) ──────────────────────────────────────────
+
+
+def test_checkout_request_editor_non_holder(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """① editor + 미점유자가 request 생성 → 201, pending 행 생성, workflow state 반영."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    # holder.u가 checkout 획득
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    # editor.u가 점유 요청
+    _act_as("editor.u")
+    res = client.post(f"/api/versions/{version_id}/checkout/request")
+    assert res.status_code == 201
+    body = res.json()
+    assert body["requested_by"] == "editor.u"
+    assert body["status"] == "pending"
+    assert body["version_id"] == version_id
+
+    # workflow state에 pending_checkout_request 반영
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["pending_checkout_request"] is not None
+    assert state["pending_checkout_request"]["requested_by"] == "editor.u"
+
+
+def test_checkout_request_duplicate_409(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """② 동일 사용자의 중복 pending 요청 → 409."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    client.post(f"/api/versions/{version_id}/checkout/request")  # first OK
+    dup = client.post(f"/api/versions/{version_id}/checkout/request")  # duplicate
+    assert dup.status_code == 409
+
+
+def test_checkout_request_approve_moves_checkout(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """③ 점유자가 approve → 점유 이전 + 요청 status=approved."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    req = client.post(f"/api/versions/{version_id}/checkout/request").json()
+    req_id = req["id"]
+
+    # holder.u가 approve
+    _act_as("holder.u")
+    res = client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": True})
+    assert res.status_code == 200
+    assert res.json()["status"] == "approved"
+
+    # 점유가 editor.u로 이전됨
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] == "editor.u"
+    # pending_checkout_request는 이제 없음
+    assert state["pending_checkout_request"] is None
+
+
+def test_checkout_request_owner_approve(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """③-b 맵 오너가 approve → 점유 이전."""
+    map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor"), ("owner.u", "owner")]
+    )
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+
+    _act_as("owner.u")
+    res = client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": True})
+    assert res.status_code == 200
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] == "editor.u"
+
+
+def test_checkout_request_sysadmin_approve(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """③-c sysadmin이 approve → 점유 이전."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+
+    _act_as(_TRANSFER_SYSADMIN)
+    res = client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": True})
+    assert res.status_code == 200
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] == "editor.u"
+
+
+def test_checkout_request_reject_keeps_checkout(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """④ reject → 요청 status=rejected, 점유 유지."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+
+    # 점유자가 reject
+    _act_as("holder.u")
+    res = client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": False})
+    assert res.status_code == 200
+    assert res.json()["status"] == "rejected"
+
+    # 점유는 여전히 holder.u
+    state = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert state["checkout_holder"] == "holder.u"
+
+
+def test_checkout_request_viewer_403(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """⑤ viewer가 request 시도 → 403."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("viewer.u", "viewer")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("viewer.u")
+    res = client.post(f"/api/versions/{version_id}/checkout/request")
+    assert res.status_code == 403
+
+
+def test_checkout_request_non_holder_decide_403(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """③- 비점유·비오너·비sysadmin이 decide 시도 → 403."""
+    map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor"), ("other.u", "editor")]
+    )
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+
+    # other.u는 편집자지만 점유자·오너·sysadmin 아님
+    _act_as("other.u")
+    res = client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": True})
+    assert res.status_code == 403
+
+
+def test_checkout_pending_queue_for_holder(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """pending queue — 점유자는 자신 버전의 pending 요청을 볼 수 있다."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    client.post(f"/api/versions/{version_id}/checkout/request")
+
+    _act_as("holder.u")
+    res = client.get("/api/checkout-requests/pending")
+    assert res.status_code == 200
+    items = res.json()
+    assert any(r["version_id"] == version_id for r in items)
