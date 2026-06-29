@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { type VersionSummary } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useI18n } from "@/lib/i18n";
+import { formatVersionName } from "@/lib/version-name";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 
 interface VersionPillProps {
@@ -15,9 +16,11 @@ interface VersionPillProps {
   versionId: number | null;
   isEditing: boolean;
   onSwitch: (id: number) => void;
+  // 승인 탭 등 컴팩트 위치 — 패딩·글자 축소 / shrink padding & text for tight spots.
+  compact?: boolean;
 }
 
-export function VersionPill({ versions, versionId, isEditing, onSwitch }: VersionPillProps) {
+export function VersionPill({ versions, versionId, isEditing, onSwitch, compact = false }: VersionPillProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<VersionSummary | null>(null);
@@ -40,13 +43,17 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch }: Versio
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-tint px-2.5 py-1 text-caption font-medium text-accent hover:bg-accent-tint/70"
+        className={`inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-tint font-medium text-accent hover:bg-accent-tint/70 ${
+          compact ? "px-2 py-0.5 text-fine" : "px-2.5 py-1 text-caption"
+        }`}
         onClick={() => setOpen((v) => !v)}
         title={t("editor.versionSelectAria")}
         aria-label={t("editor.versionSelectAria")}
       >
-        <span className="max-w-[10rem] truncate">{current.label}</span>
-        <ChevronDown size={14} strokeWidth={1.5} />
+        <span className={`truncate ${compact ? "max-w-[8rem]" : "max-w-[10rem]"}`}>
+          {formatVersionName(current)}
+        </span>
+        <ChevronDown size={compact ? 12 : 14} strokeWidth={1.5} />
       </button>
       {open && (
         <>
@@ -65,7 +72,7 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch }: Versio
                   else setPending(version);
                 }}
               >
-                <span className="min-w-0 flex-1 truncate text-ink">{version.label}</span>
+                <span className="min-w-0 flex-1 truncate text-ink">{formatVersionName(version)}</span>
                 <span
                   className={`rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                 >

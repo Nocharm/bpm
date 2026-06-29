@@ -14,6 +14,8 @@ export interface VersionSummary {
   submitted_by: string | null;
   reject_reason: string | null;
   created_at: string;
+  // 게시 시 부여되는 맵별 순차 번호(v1, v2…). 미게시는 null/미설정. 백엔드 추가 예정.
+  version_number?: number | null;
 }
 
 // 버전 생애주기 이벤트 — git-log 타임라인 행 / version lifecycle event.
