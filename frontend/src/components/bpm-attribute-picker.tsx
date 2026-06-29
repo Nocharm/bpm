@@ -50,7 +50,12 @@ export function BpmAttributePicker({
     };
   }, [versionId]);
 
-  const userNames = data.users.map((user) => user.name);
+  // 부서가 먼저 선택되면 담당자 목록을 그 부서로 필터, 담당자가 있으면 부서는 잠금(담당자에서 파생)
+  const assigneeSet = assignee.trim() !== "";
+  const filteredUsers = department
+    ? data.users.filter((user) => user.department === department)
+    : data.users;
+  const filteredNames = filteredUsers.map((user) => user.name);
 
   return (
     <>
@@ -67,8 +72,8 @@ export function BpmAttributePicker({
           }}
         >
           <option value="">—</option>
-          {assignee && !userNames.includes(assignee) && <option value={assignee}>{assignee}</option>}
-          {data.users.map((user) => (
+          {assignee && !filteredNames.includes(assignee) && <option value={assignee}>{assignee}</option>}
+          {filteredUsers.map((user) => (
             <option key={user.id} value={user.name}>
               {user.name} · {user.department}
             </option>
@@ -80,7 +85,8 @@ export function BpmAttributePicker({
         <select
           className={SELECT}
           value={department}
-          disabled={readOnly}
+          disabled={readOnly || assigneeSet}
+          title={assigneeSet ? t("inspector.deptLocked") : undefined}
           onChange={(event) => onChange({ department: event.target.value })}
         >
           <option value="">—</option>

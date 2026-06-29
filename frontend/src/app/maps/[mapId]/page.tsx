@@ -6272,7 +6272,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               title={t("editor.inspectorToggle")}
             />
             {/* NEW 인스펙터 (R5) — OLD와 나란히 비교, 4탭 전부 이관 후 OLD 제거 예정 */}
-            <div className="flex min-w-0 flex-1 flex-col border-l border-accent/40 bg-surface">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-accent/40 bg-surface">
               <div className="border-b border-hairline bg-accent-tint/30 px-3 py-1 text-fine font-semibold text-accent">
                 NEW (R5)
               </div>

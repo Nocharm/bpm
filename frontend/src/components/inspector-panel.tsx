@@ -2,19 +2,30 @@
 
 // NEW 우측 인스펙터 (R5) — 4탭 패널(속성/맵/승인/활동). 기존 인스펙터와 나란히 두고 비교, 전 탭 완성 후 OLD 제거.
 // 현재: 탭 바 + 속성 탭 빈상태(노드추가·라이브러리·자동정렬·맵 요약). 노드/엣지 폼·맵/승인/활동 탭은 후속 단위.
-import { Boxes, ChevronRight, LayoutGrid, Network, Plus } from "lucide-react";
+import {
+  Boxes,
+  ChevronRight,
+  CircleCheck,
+  LayoutGrid,
+  Map as MapIcon,
+  MessageSquare,
+  Network,
+  Plus,
+  SlidersHorizontal,
+} from "lucide-react";
 import { type ComponentType, type ReactNode, useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
 
 type InspectorTab = "properties" | "map" | "approval" | "activity";
+type IconType = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 
-const TABS: { key: InspectorTab; labelKey: MessageKey }[] = [
-  { key: "properties", labelKey: "inspector.tabProperties" },
-  { key: "map", labelKey: "inspector.tabMap" },
-  { key: "approval", labelKey: "editor.tabApproval" },
-  { key: "activity", labelKey: "inspector.tabActivity" },
+const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
+  { key: "properties", labelKey: "inspector.tabProperties", icon: SlidersHorizontal },
+  { key: "map", labelKey: "inspector.tabMap", icon: MapIcon },
+  { key: "approval", labelKey: "editor.tabApproval", icon: CircleCheck },
+  { key: "activity", labelKey: "inspector.tabActivity", icon: MessageSquare },
 ];
 
 interface InspectorPanelProps {
@@ -52,31 +63,43 @@ export function InspectorPanel({
   const [tab, setTab] = useState<InspectorTab>("properties");
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      {/* 탭 바 — 접기 화살표 + 속성/맵/승인/활동 */}
-      <div className="flex items-center gap-1 border-b border-hairline px-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* 탭 바 — 접기 화살표 + 아이콘 탭(선택 시 폭 늘며 라벨 노출). 잘림 방지·컴팩트 */}
+      <div className="flex items-center gap-0.5 border-b border-hairline px-2 py-1">
         <button
           type="button"
-          className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+          className="shrink-0 rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
           onClick={onCollapse}
           title={t("editor.inspectorToggle")}
           aria-label={t("editor.inspectorToggle")}
         >
           <ChevronRight size={16} strokeWidth={1.5} />
         </button>
-        {TABS.map(({ key, labelKey }) => (
-          <button
-            key={key}
-            type="button"
-            className={`relative px-2.5 py-2.5 text-caption transition-colors ${
-              tab === key ? "font-medium text-accent" : "text-ink-secondary hover:text-ink"
-            }`}
-            onClick={() => setTab(key)}
-          >
-            {t(labelKey)}
-            {tab === key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent" />}
-          </button>
-        ))}
+        {TABS.map(({ key, labelKey, icon: Icon }) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              title={t(labelKey)}
+              aria-label={t(labelKey)}
+              aria-pressed={active}
+              className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors ${
+                active ? "bg-accent-tint font-medium text-accent" : "text-ink-secondary hover:bg-surface-alt"
+              }`}
+              onClick={() => setTab(key)}
+            >
+              <Icon size={16} strokeWidth={1.5} className="shrink-0" />
+              <span
+                className={`grid transition-all duration-350 ease-smooth ${
+                  active ? "grid-cols-[1fr]" : "grid-cols-[0fr]"
+                }`}
+              >
+                <span className="overflow-hidden whitespace-nowrap">{t(labelKey)}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
