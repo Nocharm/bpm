@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronRight, CornerDownRight, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Redo2, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -23,7 +23,6 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -38,7 +37,6 @@ import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
 import { CommentSection } from "@/components/comment-section";
-import { WorkflowDashboard } from "@/components/workflow-dashboard";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
@@ -59,7 +57,6 @@ import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
-import { Tooltip } from "@/components/tooltip";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -614,12 +611,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  // 우측 인스펙터 하단 탭 패널 — 승인/버전/다운로드/맵 디자인 (툴바에서 옮긴 컨트롤 수납)
-  const [bottomTab, setBottomTab] = useState<"approval" | "version" | "download" | "design">("approval");
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(320);
-  // 대시보드 패널 높이(px) — 사용자 조절, localStorage 영속
-  const [dashboardHeight, setDashboardHeight] = useState(260);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
@@ -1129,15 +1122,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (Number.isFinite(saved) && saved > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
       setInspectorWidth(Math.min(480, Math.max(220, saved)));
-    }
-  }, []);
-
-  // 저장된 대시보드 높이 복원 (클라이언트 전용, hydration 후 1회)
-  useEffect(() => {
-    const saved = Number(window.localStorage.getItem("bpm.dashboardHeight"));
-    if (Number.isFinite(saved) && saved > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
-      setDashboardHeight(Math.min(560, Math.max(120, saved)));
     }
   }, []);
 
@@ -4795,11 +4779,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
   }, [inspectorWidth]);
 
-  // 대시보드 높이 로컬 영속
-  useEffect(() => {
-    window.localStorage.setItem("bpm.dashboardHeight", String(dashboardHeight));
-  }, [dashboardHeight]);
-
   // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
   const outline = useMemo(() => {
     // 현재 스코프는 라이브 상태가 권위 — id로 dedup해 fullGraph가 stale일 때 중복 행 방지
@@ -5409,27 +5388,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [inspectorWidth],
   );
 
-  const startDashboardResize = useCallback(
-    (event: { clientY: number; preventDefault: () => void }) => {
-      event.preventDefault();
-      const startY = event.clientY;
-      const startH = dashboardHeight;
-      const onMove = (ev: PointerEvent) => {
-        // 핸들을 위로 끌면 대시보드가 커진다
-        setDashboardHeight(Math.min(560, Math.max(120, startH + (startY - ev.clientY))));
-      };
-      const onUp = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-      };
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-    },
-    [dashboardHeight],
-  );
-
-  const toolButton =
-    "inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
   // 상단바 ghost 아이콘 버튼 — 보더 없이 hover 배경만(목업 토브바 톤). 클릭 눌림은 globals.css base.
   const topIconBtn =
     "inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
@@ -6265,17 +6223,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
 
         {inspectorOpen && (
-          <div className="flex min-h-0 shrink-0" style={{ width: inspectorWidth * 2 }}>
+          <div className="flex min-h-0 shrink-0" style={{ width: inspectorWidth }}>
             <div
               onPointerDown={startInspectorResize}
               className="w-1 shrink-0 cursor-col-resize hover:bg-accent-tint"
               title={t("editor.inspectorToggle")}
             />
-            {/* NEW 인스펙터 (R5) — OLD와 나란히 비교, 4탭 전부 이관 후 OLD 제거 예정 */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-accent/40 bg-surface">
-              <div className="border-b border-hairline bg-accent-tint/30 px-3 py-1 text-fine font-semibold text-accent">
-                NEW (R5)
-              </div>
+            {/* 우측 4탭 인스펙터 — 속성/맵/승인/활동 */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
@@ -6622,14 +6577,41 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 }
                 approvalSlot={
-                  // R5c 승인 탭 — 상단 버전 pill(전환) + 워크플로(스테퍼·승인자·액션) + 버전 타임라인(하단)
+                  // R5c 승인 탭 — 상단 버전 pill(전환)·버전 관리(생성/이름/삭제) + 워크플로 + 버전 타임라인(하단)
                   <div className="flex flex-col gap-4">
-                    <VersionPill
-                      versions={versions}
-                      versionId={versionId}
-                      isEditing={!readOnly}
-                      onSwitch={(id) => void switchVersion(id)}
-                    />
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <VersionPill
+                        versions={versions}
+                        versionId={versionId}
+                        isEditing={!readOnly}
+                        onSwitch={(id) => void switchVersion(id)}
+                      />
+                      {/* 버전 생성/이름변경/삭제 — OLD 버전 탭에서 이관. 생성·이름변경은 항상, 삭제는 readOnly·단일버전 시 비활성 */}
+                      <div className="flex items-center gap-2 text-fine">
+                        <button
+                          type="button"
+                          className="text-accent hover:underline"
+                          onClick={handleCreateVersion}
+                        >
+                          + {t("editor.newVersion")}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-ink-secondary hover:text-accent"
+                          onClick={handleRenameVersion}
+                        >
+                          {t("editor.rename")}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-ink-tertiary hover:text-error disabled:opacity-40 disabled:hover:text-ink-tertiary"
+                          onClick={handleDeleteVersion}
+                          disabled={versions.length <= 1 || readOnly}
+                        >
+                          {t("editor.deleteVersion")}
+                        </button>
+                      </div>
+                    </div>
                     {currentVersion && (
                     <ApprovalPanel
                       status={currentVersion.status}
@@ -6697,417 +6679,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                       : t("editor.saved")
                 }
               />
-            </div>
-            {/* OLD 인스펙터 — 4탭 이관 완료 후 제거 예정 */}
-            <div className="flex min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
-            <div className="border-b border-hairline bg-surface-alt px-3 py-1 text-fine font-semibold text-ink-tertiary">
-              OLD
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-            {selectedNode ? (
-              <>
-            <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
-            <input
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              value={selectedNode.data.label}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateSelectedData({ label: event.target.value }, true)
-              }
-            />
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
-            <textarea
-              className="h-28 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-              value={selectedNode.data.description}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateSelectedData({ description: event.target.value }, true)
-              }
-            />
-            {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
-            <label className="mb-1 mt-3 block text-fine text-ink-tertiary">{t("field.type")}</label>
-            <div className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary">
-              {t(
-                NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
-                  ?.labelKey ?? "nodeType.process",
-              )}
-            </div>
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
-            <div className="mb-2 flex flex-wrap items-center gap-1.5">
-              {/* 타입별 색 세트 (#8) */}
-              {colorsForType(selectedNode.data.nodeType).map((preset) => (
-                <button
-                  key={preset || "default"}
-                  title={preset || t("editor.defaultColor")}
-                  aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
-                  className={`h-5 w-5 rounded-xs border ${
-                    selectedNode.data.color === preset
-                      ? "ring-2 ring-accent"
-                      : "border-hairline"
-                  }`}
-                  style={{ backgroundColor: preset || "#ffffff" }}
-                  disabled={readOnly}
-                  onClick={() => updateSelectedData({ color: preset })}
-                />
-              ))}
-              {/* 헥스 직접 입력은 필요 시에만 — 아이콘 클릭으로 입력칸 토글 (#8) */}
-              {!readOnly && (
-                <button
-                  type="button"
-                  title={t("editor.hexToggle")}
-                  aria-label={t("editor.hexToggle")}
-                  aria-pressed={showHexInput}
-                  className={`flex h-5 w-5 items-center justify-center rounded-xs border ${
-                    showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
-                  } hover:bg-surface-alt`}
-                  onClick={() => setShowHexInput((v) => !v)}
-                >
-                  <Palette size={12} strokeWidth={1.5} />
-                </button>
-              )}
-            </div>
-            {showHexInput && (
-              <input
-                key={`${selectedNode.id}-${selectedNode.data.color}`}
-                autoFocus
-                className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                defaultValue={selectedNode.data.color}
-                disabled={readOnly}
-                placeholder={t("editor.hexPlaceholder")}
-                onBlur={(event) => {
-                  const value = event.target.value.trim();
-                  if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
-                    updateSelectedData({ color: value });
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-            )}
-            <details className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
-              <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
-                {t("editor.bpmAttrs")}
-              </summary>
-              <label className="mb-1 mt-2 block text-fine text-ink-tertiary">{t("field.assignee")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.assignee}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ assignee: event.target.value }, true)
-                }
-              />
-              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.department")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.department}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ department: event.target.value }, true)
-                }
-              />
-              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.system")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.system}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ system: event.target.value }, true)
-                }
-              />
-              <label className="mb-1 block text-fine text-ink-tertiary">{t("field.duration")}</label>
-              <input
-                className="mb-2 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={selectedNode.data.duration}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateSelectedData({ duration: event.target.value }, true)
-                }
-                placeholder={t("editor.durationPlaceholder")}
-              />
-            </details>
-            {selectedNode.data.nodeType === "end" && (
-              <label className="mb-3 flex items-center gap-2 text-caption text-ink-secondary">
-                <input
-                  type="checkbox"
-                  checked={selectedNode.data.isPrimaryEnd ?? false}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    updateSelectedData({ isPrimaryEnd: event.target.checked }, true)
-                  }
-                />
-                {t("node.primaryEnd")}
-              </label>
-            )}
-            {selectedNode.data.nodeType === "subprocess" && (
-              <div className="mb-3 flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-caption text-ink-secondary">
-                  <input
-                    type="checkbox"
-                    checked={selectedNode.data.followLatest ?? false}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      updateSelectedData({ followLatest: event.target.checked }, false)
-                    }
-                  />
-                  {t("subprocess.followLatest")}
-                </label>
-                {selectedNode.data.updateAvailable && (
-                  <button
-                    type="button"
-                    disabled={readOnly}
-                    className="rounded-sm border border-hairline bg-accent-tint px-3 py-1 text-caption text-accent hover:bg-surface-alt disabled:opacity-50"
-                    onClick={() => handleUpdateSubprocess(selectedNode.id)}
-                  >
-                    {t("subprocess.update")}
-                  </button>
-                )}
-              </div>
-            )}
-            <details open className="mb-3 rounded-sm border border-hairline px-2 py-1.5">
-              <summary className="cursor-pointer text-fine font-medium text-ink-secondary">
-                {t("editor.comments")}
-                {selectedComments.some((comment) => !comment.resolved) &&
-                  ` (${t("editor.unresolvedCount", { n: selectedComments.filter((comment) => !comment.resolved).length })})`}
-              </summary>
-              <div className="mt-2">
-                {/* 코멘트는 읽기 전용 모드에서도 작성 가능 — 피드백 통로 */}
-                <CommentSection
-                  comments={selectedComments}
-                  onAdd={(body) => void handleAddComment(body)}
-                  onToggleResolved={(comment) => void handleToggleComment(comment)}
-                  onDelete={(comment) => void handleDeleteComment(comment)}
-                  currentUser={username}
-                />
-              </div>
-            </details>
-            <p className="mt-3 text-fine text-ink-tertiary">
-              {t("editor.hintNode")}
-            </p>
-              </>
-            ) : selectedEdge ? (
-              <>
-            <h2 className="mb-3 text-caption-strong text-ink-secondary">{t("editor.edgeEdit")}</h2>
-            {/* 판단 노드 분기 엣지 — Yes/No/기타 탭 전환. 기타일 때만 라벨 직접 편집 */}
-            {selectedEdgeBranch !== null && (
-              <div className="mb-3 flex overflow-hidden rounded-sm border border-hairline text-caption">
-                {(["yes", "no", "other"] as BranchKind[]).map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    disabled={readOnly}
-                    onClick={() => setSelectedEdgeBranch(kind)}
-                    className={`flex-1 px-2 py-1 ${
-                      selectedEdgeBranch === kind
-                        ? "bg-accent-tint text-accent"
-                        : "text-ink-secondary hover:bg-surface-alt"
-                    }`}
-                  >
-                    {t(`branch.${kind}`)}
-                  </button>
-                ))}
-              </div>
-            )}
-            <label className="mb-1 block text-fine text-ink-tertiary">{t("editor.edgeLabel")}</label>
-            <input
-              ref={edgeLabelInputRef}
-              className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
-              value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
-              disabled={readOnly || (selectedEdgeBranch !== null && selectedEdgeBranch !== "other")}
-              onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
-            />
-            <p className="mt-3 text-fine text-ink-tertiary">{t("editor.hintEdge")}</p>
-              </>
-            ) : (
-              <div className="text-caption text-ink-secondary">
-                {/* 아무것도 선택 안 됨 — 상단에 맵 상세 카드(가시성·역할·버전·멤버) / no selection: map detail at top */}
-                <div className="mb-4 border-b border-hairline pb-4">
-                  {/* 에디터에선 이미 이 맵이라 Open 버튼 숨김 (#6) */}
-                  <MapDetailCard mapId={mapId} showFooter={false} hideOpen />
-                </div>
-                <p className="mb-2 text-fine text-ink-tertiary">{t("inspector.noSelection")}</p>
-                <p className="text-ink-tertiary">{t("inspector.nodesCount", { n: nodes.length })}</p>
-                {groups.length > 0 && (
-                  <div className="mt-3">
-                    <div className="mb-1 text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
-                      {t("inspector.groupsTitle")}
-                    </div>
-                    <ul className="flex flex-col gap-1">
-                      {groups.map((group) => (
-                        <li key={group.id} className="flex items-center gap-2">
-                          <span
-                            className="h-3 w-3 shrink-0 rounded-full border border-hairline"
-                            style={{ background: group.color || "var(--color-surface-alt)" }}
-                          />
-                          <span className="truncate">{group.label || t("sidebar.untitled")}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-            </div>
-            {currentVersion && (
-              <>
-                <div
-                  onPointerDown={startDashboardResize}
-                  className="h-1 shrink-0 cursor-row-resize border-t border-hairline hover:bg-accent-tint"
-                  title={t("dash.resize")}
-                />
-                <div
-                  className="flex shrink-0 flex-col overflow-hidden"
-                  style={{ height: dashboardHeight }}
-                >
-                  {/* 우측 하단 탭 — 툴바에서 옮긴 컨트롤 수납 / bottom tab panel: moved toolbar controls */}
-                  <div className="flex shrink-0 border-b border-hairline px-1">
-                    {(
-                      [
-                        ["approval", "editor.tabApproval"],
-                        ["version", "editor.tabVersion"],
-                        ["download", "editor.tabDownload"],
-                        ["design", "editor.tabDesign"],
-                      ] as const
-                    ).map(([id, label]) => {
-                      const TabIcon =
-                        id === "approval"
-                          ? Bell
-                          : id === "version"
-                            ? GitBranch
-                            : id === "download"
-                              ? Download
-                              : Palette;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-fine transition-colors ${
-                            bottomTab === id
-                              ? "border-b-2 border-accent text-accent"
-                              : "text-ink-tertiary hover:text-ink"
-                          }`}
-                          onClick={() => setBottomTab(id)}
-                        >
-                          <TabIcon size={14} strokeWidth={1.5} />
-                          {t(label)}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    {bottomTab === "approval" && (
-                      <WorkflowDashboard
-                        versionLabel={currentVersion.label}
-                        status={currentVersion.status}
-                        submittedBy={currentVersion.submitted_by}
-                        rejectReason={currentVersion.reject_reason}
-                        workflow={workflow}
-                        isCheckoutHolder={checkout?.mine ?? false}
-                        isApprover={isApprover}
-                        isSubmitter={isSubmitter}
-                        hasApproved={hasApproved}
-                        isMapOwner={isMapOwner}
-                        onSubmit={() => void runTransition(submitVersion)}
-                        onApprove={() => void runTransition(approveVersion)}
-                        onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
-                        onPublish={() => void runTransition(publishVersion)}
-                        onWithdraw={() => void runTransition(withdrawVersion)}
-                        onManageApprovers={() => setManagingApprovers(true)}
-                      />
-                    )}
-
-                    {bottomTab === "version" && (
-                      <div className="flex flex-col gap-2 p-3">
-                        <label className="text-fine text-ink-tertiary">{t("editor.currentVersion")}</label>
-                        <select
-                          className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                          value={versionId ?? ""}
-                          onChange={(event) => void switchVersion(Number(event.target.value))}
-                          aria-label={t("editor.versionSelectAria")}
-                        >
-                          {versions.map((version) => (
-                            <option key={version.id} value={version.id}>
-                              {version.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex flex-wrap gap-2">
-                          <Tooltip label={t("editor.newVersion")}>
-                            <button
-                              className={toolButton}
-                              aria-label={t("editor.newVersion")}
-                              onClick={() => void handleCreateVersion()}
-                            >
-                              <Plus size={16} strokeWidth={1.5} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={t("editor.rename")}>
-                            <button
-                              className={toolButton}
-                              aria-label={t("editor.rename")}
-                              onClick={() => void handleRenameVersion()}
-                            >
-                              <PencilLine size={16} strokeWidth={1.5} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={t("editor.deleteVersion")}>
-                            <button
-                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-error hover:bg-surface-alt disabled:opacity-40 disabled:text-ink-tertiary"
-                              aria-label={t("editor.deleteVersion")}
-                              onClick={() => void handleDeleteVersion()}
-                              disabled={versions.length <= 1 || readOnly}
-                            >
-                              <Trash2 size={16} strokeWidth={1.5} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={t("editor.compare")}>
-                            <Link
-                              href={`/maps/${mapId}/compare`}
-                              aria-label={t("editor.compare")}
-                              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-                            >
-                              <GitCompare size={16} strokeWidth={1.5} />
-                            </Link>
-                          </Tooltip>
-                        </div>
-                      </div>
-                    )}
-
-                    {bottomTab === "download" && (
-                      <div className="p-3">
-                        <button className={toolButton} onClick={() => void handleExportPng()}>
-                          <Download size={16} strokeWidth={1.5} />PNG
-                        </button>
-                      </div>
-                    )}
-
-                    {bottomTab === "design" && (
-                      <div className="flex flex-col gap-2 p-3">
-                        <label className="text-fine text-ink-tertiary">{t("editor.edgeStyle")}</label>
-                        {/* 엣지 스타일 — 맵 전역(모든 엣지 일괄 적용) */}
-                        <select
-                          className="rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt"
-                          value={edgeStyle}
-                          onChange={(event) =>
-                            setEdgeStyle(event.target.value as "default" | "smoothstep" | "straight")
-                          }
-                          aria-label={t("editor.edgeStyle")}
-                        >
-                          <option value="default">{t("edgeStyle.curve")}</option>
-                          <option value="smoothstep">{t("edgeStyle.step")}</option>
-                          <option value="straight">{t("edgeStyle.straight")}</option>
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
             </div>
           </div>
         )}
