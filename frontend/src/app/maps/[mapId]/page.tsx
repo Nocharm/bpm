@@ -50,6 +50,7 @@ import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
 import { InspectorPanel } from "@/components/inspector-panel";
 import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
+import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -6323,15 +6324,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       <div className="rounded-md border border-hairline p-3">
                         <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                        {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
+                        <BpmAttributePicker
+                          versionId={versionId}
+                          assignee={selectedNode.data.assignee}
+                          department={selectedNode.data.department}
+                          readOnly={readOnly}
+                          onChange={(patch) => updateSelectedData(patch, true)}
+                        />
                         {([
-                          ["assignee", "field.assignee"],
-                          ["department", "field.department"],
                           ["system", "field.system"],
                           ["duration", "field.duration"],
                         ] as const).map(([key, labelKey]) => (
                           <div
                             key={key}
-                            className="flex items-center justify-between gap-2 border-t border-divider py-1 first:border-t-0"
+                            className="flex items-center justify-between gap-2 border-t border-divider py-1"
                           >
                             <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
                             <input

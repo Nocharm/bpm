@@ -1,0 +1,99 @@
+"use client";
+
+// 노드 BPM 속성 담당자·부서 피커 — 자유입력 폐기(F5), 자격 직원/부서(getEligibleAssignees)에서 선택.
+// 담당자 선택 시 그 직원의 부서를 자동 채움. 현재 값이 목록에 없으면 옵션으로 보존(레거시 자유입력 데이터).
+// 비동기 fetch는 active 가드(set-state-in-effect 회피). 저장 배선은 onChange로 위임.
+import { useEffect, useRef, useState } from "react";
+
+import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
+
+interface BpmAttributePickerProps {
+  versionId: number | null;
+  assignee: string;
+  department: string;
+  readOnly: boolean;
+  onChange: (patch: { assignee?: string; department?: string }) => void;
+}
+
+const ROW =
+  "flex items-center justify-between gap-2 border-t border-divider py-1";
+const SELECT =
+  "min-w-0 flex-1 rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent";
+
+export function BpmAttributePicker({
+  versionId,
+  assignee,
+  department,
+  readOnly,
+  onChange,
+}: BpmAttributePickerProps) {
+  const { t } = useI18n();
+  const [data, setData] = useState<EligibleAssignees>({ users: [], departments: [] });
+  const loadedFor = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (versionId == null || loadedFor.current === versionId) return;
+    let active = true;
+    void getEligibleAssignees(versionId)
+      .then((eligible) => {
+        if (active) {
+          setData(eligible);
+          loadedFor.current = versionId;
+        }
+      })
+      .catch(() => {
+        if (active) setData({ users: [], departments: [] });
+      });
+    return () => {
+      active = false;
+    };
+  }, [versionId]);
+
+  const userNames = data.users.map((user) => user.name);
+
+  return (
+    <>
+      <div className={ROW}>
+        <span className="shrink-0 text-caption text-ink-secondary">{t("field.assignee")}</span>
+        <select
+          className={SELECT}
+          value={assignee}
+          disabled={readOnly}
+          onChange={(event) => {
+            const name = event.target.value;
+            const user = data.users.find((candidate) => candidate.name === name);
+            onChange(user ? { assignee: name, department: user.department } : { assignee: name });
+          }}
+        >
+          <option value="">—</option>
+          {assignee && !userNames.includes(assignee) && <option value={assignee}>{assignee}</option>}
+          {data.users.map((user) => (
+            <option key={user.id} value={user.name}>
+              {user.name} · {user.department}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className={ROW}>
+        <span className="shrink-0 text-caption text-ink-secondary">{t("field.department")}</span>
+        <select
+          className={SELECT}
+          value={department}
+          disabled={readOnly}
+          onChange={(event) => onChange({ department: event.target.value })}
+        >
+          <option value="">—</option>
+          {department && !data.departments.includes(department) && (
+            <option value={department}>{department}</option>
+          )}
+          {data.departments.map((dept) => (
+            <option key={dept} value={dept}>
+              {dept}
+            </option>
+          ))}
+        </select>
+      </div>
+    </>
+  );
+}
