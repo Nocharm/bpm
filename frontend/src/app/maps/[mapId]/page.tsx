@@ -5645,6 +5645,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             openMenu(event, "node", id);
           }}
           onRenameNode={renameNode}
+          onDeleteNode={(id) => void reactFlow.deleteElements({ nodes: [{ id }] })}
           onSelectNext={handleOutlineNext}
           onSelectPrev={handleOutlinePrev}
           onExpand={handleOutlineExpand}

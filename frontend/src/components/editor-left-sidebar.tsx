@@ -46,6 +46,8 @@ interface EditorLeftSidebarProps {
   searchSlot: ReactNode;
   onRowContextMenu: (event: MouseEvent, id: string) => void;
   onRenameNode: (id: string, label: string) => void;
+  // Del/Backspace(아웃라인 포커스) — 선택 노드 삭제
+  onDeleteNode: (id: string) => void;
   // Tab 네비게이션 — 다음 노드 선택(하위 프로세스 있으면 하위로 진입). 페이지가 트리로 계산.
   onSelectNext: (id: string) => void;
   // Shift+Tab/↑ — 아웃라인의 이전(위) 노드 선택.
@@ -82,6 +84,7 @@ export function EditorLeftSidebar({
   searchSlot,
   onRowContextMenu,
   onRenameNode,
+  onDeleteNode,
   onSelectNext,
   onSelectPrev,
   onExpand,
@@ -175,6 +178,11 @@ export function EditorLeftSidebar({
       if (!readOnly) {
         setEditingId(selectedId);
       }
+    } else if ((event.key === "Delete" || event.key === "Backspace") && !readOnly) {
+      // 아웃라인 포커스 중 삭제 — 캔버스 포커스 시엔 ReactFlow deleteKeyCode가 처리
+      event.preventDefault();
+      event.stopPropagation();
+      onDeleteNode(selectedId);
     } else if (event.key === "Tab") {
       event.preventDefault();
       if (event.shiftKey) {
@@ -245,6 +253,8 @@ export function EditorLeftSidebar({
       label: t("outlineNav.next"),
       active: selIdx >= 0 && selIdx < outline.length - 1,
     },
+    { keys: ["↵"], label: t("outlineNav.edit"), active: !!selRow && !readOnly },
+    { keys: ["Del"], label: t("outlineNav.delete"), active: !!selRow && !readOnly },
     { keys: ["→"], label: t("outlineNav.expand"), active: !!selRow?.hasChildren && !selRow.expanded },
     {
       keys: ["←"],
