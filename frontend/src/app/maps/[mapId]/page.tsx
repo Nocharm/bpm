@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronRight, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2, X } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronRight, CornerDownRight, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -51,6 +51,7 @@ import { NodeSearch } from "@/components/node-search";
 import { InspectorPanel } from "@/components/inspector-panel";
 import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
+import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -6534,9 +6535,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                   ) : null
                 }
                 mapTabSlot={
-                  // R5b 맵 탭 — 가시성·소유자/협업자·설명(MapDetailCard) + 노드 표시 토글 + 엣지 스타일 + PNG
+                  // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
                   <div className="flex flex-col gap-4">
-                    <MapDetailCard mapId={mapId} showFooter={false} hideOpen />
+                    <MapInspectorTab mapId={mapId} currentLoginId={username} readOnly={readOnly} />
                     <div className="rounded-md border border-hairline p-3">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
@@ -6587,22 +6588,24 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       <div className="grid grid-cols-3 gap-1.5">
                         {([
-                          ["default", "edgeStyle.curve"],
-                          ["smoothstep", "edgeStyle.step"],
-                          ["straight", "edgeStyle.straight"],
-                        ] as const).map(([value, labelKey]) => (
+                          ["default", "edgeStyle.curve", Spline],
+                          ["smoothstep", "edgeStyle.step", CornerDownRight],
+                          ["straight", "edgeStyle.straight", Slash],
+                        ] as const).map(([value, labelKey, Icon]) => (
                           <button
                             key={value}
                             type="button"
                             disabled={readOnly}
+                            title={t(labelKey)}
+                            aria-label={t(labelKey)}
                             onClick={() => setEdgeStyle(value)}
-                            className={`rounded-sm border px-2 py-1.5 text-caption ${
+                            className={`flex items-center justify-center rounded-sm border py-2 ${
                               edgeStyle === value
-                                ? "border-accent bg-accent-tint font-medium text-accent"
-                                : "border-hairline text-ink hover:bg-surface-alt"
+                                ? "border-accent bg-accent-tint text-accent"
+                                : "border-hairline text-ink-secondary hover:bg-surface-alt"
                             }`}
                           >
-                            {t(labelKey)}
+                            <Icon size={18} strokeWidth={1.5} />
                           </button>
                         ))}
                       </div>
