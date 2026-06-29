@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronRight, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Bell, Boxes, Check, ChevronRight, Download, GitBranch, GitCompare, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, Sparkles, Trash2, Undo2, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -6342,6 +6342,92 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ) : selectedEdge ? (
+                    // R5a NEW 엣지 속성 폼 — 소스→타겟·분기 라벨(Yes/No/기타)·라벨·연결 스타일·삭제 (목업 inspector-properties-edge).
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <h2 className="flex items-center gap-1.5 text-caption-strong text-ink-secondary">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-accent-tint text-accent">
+                            <ArrowRight size={14} strokeWidth={1.5} />
+                          </span>
+                          {t("inspector.edgeEdit")}
+                        </h2>
+                        <button
+                          type="button"
+                          className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                          onClick={() => setSelectedEdgeId(null)}
+                          aria-label={t("action.close")}
+                        >
+                          <X size={14} strokeWidth={1.5} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink">
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "—"}
+                        </span>
+                        <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        <span className="min-w-0 flex-1 truncate text-right font-medium">
+                          {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "—"}
+                        </span>
+                      </div>
+                      {selectedEdgeBranch !== null && (
+                        <div>
+                          <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.branchLabel")}</label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {([
+                              ["yes", BRANCH_YES_LABEL],
+                              ["no", BRANCH_NO_LABEL],
+                              ["other", t("inspector.branchOther")],
+                            ] as const).map(([kind, label]) => (
+                              <button
+                                key={kind}
+                                type="button"
+                                disabled={readOnly}
+                                onClick={() => setSelectedEdgeBranch(kind)}
+                                className={`rounded-sm border px-2 py-1.5 text-caption ${
+                                  selectedEdgeBranch === kind
+                                    ? "border-accent bg-accent-tint font-medium text-accent"
+                                    : "border-hairline text-ink hover:bg-surface-alt"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.label")}</label>
+                        <input
+                          className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                          value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
+                          disabled={readOnly}
+                          onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>
+                        <div className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary">
+                          {t(
+                            selectedEdge.type === "smoothstep"
+                              ? "edgeStyle.step"
+                              : selectedEdge.type === "straight"
+                                ? "edgeStyle.straight"
+                                : "edgeStyle.curve",
+                          )}
+                        </div>
+                      </div>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-error/40 px-2 py-2 text-caption text-error hover:bg-error/10"
+                          onClick={() => void reactFlow.deleteElements({ edges: [{ id: selectedEdge.id }] })}
+                        >
+                          <Trash2 size={14} strokeWidth={1.5} />
+                          {t("inspector.deleteEdge")}
+                        </button>
+                      )}
                     </div>
                   ) : null
                 }
