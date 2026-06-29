@@ -3,6 +3,9 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-06-29 — feat/version-lifecycle (continued)
+- **feat(version): expired 상태 타입 + WorkflowState checkout 필드 + formatVersionName 테스트 (Task 5 gap fill)** — ① `VersionStatus` 유니온에 `"expired"` 추가 → 연쇄: `version-status.ts`·`status-badge.tsx`·`approval-panel.tsx`(switch exhaustive) + i18n EN/KO 키 2개. ② `WorkflowState`에 `version_number?·checkout_holder?·pending_checkout_request?` 추가. ③ `version-name.test.ts` 신규(vitest 3/3). ④ `VersionPill` expired 필터 없음 확인(변경 없음). tsc 0·lint 0 errors.
+
+
 - **feat(versions): 만료본 재게시 — published/expired → 그래프 복제 새 draft (Task 4)** — `POST /versions/{id}/republish` 추가: published·expired만 허용(draft·pending 409 차단), 맵당 draft 1개 규약(기존 draft 있으면 409), editor+ 미보유 403, `clone_graph` 재사용(nodes/edges/groups 복제, 새 id), label 승계, 생성자 점유권(`checked_out_by/at`) 부여. TDD: tests 4개 신규(RED→GREEN), 364 passed, ruff clean.
 
 ## 2026-06-29 — feat/version-lifecycle

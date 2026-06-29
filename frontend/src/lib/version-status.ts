@@ -9,6 +9,7 @@ export const VERSION_STATUS_LABEL: Record<VersionStatus, MessageKey> = {
   approved: "home.verStatus.approved",
   published: "home.verStatus.published",
   rejected: "home.verStatus.rejected",
+  expired: "home.verStatus.expired",
 };
 
 // 상태별 pill 스타일 — 토큰만(raw hex 금지) / status pill styles, tokens only.
@@ -18,6 +19,7 @@ export const VERSION_STATUS_STYLE: Record<VersionStatus, string> = {
   approved: "border-accent text-accent",
   published: "border-added text-added",
   rejected: "border-error text-error",
+  expired: "border-hairline text-ink-tertiary",
 };
 
 // 공개 범위 pill — public/private 색 구분 / visibility pill, public vs private distinct.

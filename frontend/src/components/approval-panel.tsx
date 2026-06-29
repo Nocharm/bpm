@@ -44,6 +44,7 @@ function currentStage(status: VersionStatus): number {
     case "approved":
       return 2;
     case "published":
+    case "expired":
       return 3;
   }
 }

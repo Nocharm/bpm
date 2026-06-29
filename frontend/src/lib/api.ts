@@ -5,7 +5,8 @@ export type VersionStatus =
   | "pending"
   | "approved"
   | "published"
-  | "rejected";
+  | "rejected"
+  | "expired";
 
 export interface VersionSummary {
   id: number;
@@ -347,6 +348,9 @@ export interface WorkflowState {
   reject_reason: string | null;
   approvers: string[];
   approvals: string[];
+  version_number?: number | null;
+  checkout_holder?: string | null;
+  pending_checkout_request?: { id: number; requested_by: string } | null;
 }
 
 export interface Me {

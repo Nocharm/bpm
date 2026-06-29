@@ -11,6 +11,7 @@ const STYLES: Record<VersionStatus, string> = {
   approved: "border-added text-added",
   published: "border-accent text-accent",
   rejected: "border-error text-error",
+  expired: "border-hairline text-ink-tertiary",
 };
 
 const LABEL_KEY: Record<VersionStatus, MessageKey> = {
@@ -19,6 +20,7 @@ const LABEL_KEY: Record<VersionStatus, MessageKey> = {
   approved: "status.approved",
   published: "status.published",
   rejected: "status.rejected",
+  expired: "status.expired",
 };
 
 export function StatusBadge({ status }: { status: VersionStatus }) {
