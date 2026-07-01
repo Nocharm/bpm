@@ -105,7 +105,20 @@ async def main() -> None:
         f"→ L3(map={nest['l3_map']})"
     )
 
-    # 7. 워크플로 불변식 정규화 (멱등 — 시드가 남긴 불가능 상태 보정: owner·승인자·submitted_by·승인이력)
+    # 8. 버전 라이프사이클 데모 시드 (ADDITIVE — expired/published/draft+체크아웃·이전요청·재게시맵)
+    from scripts.seed_version_lifecycle_demo import seed_version_lifecycle_demo
+
+    async with SessionLocal() as session:
+        lc = await seed_version_lifecycle_demo(session)
+    print(
+        f"seed    version-lifecycle demo — "
+        f"map1={lc['lifecycle_map']} "
+        f"(v1_expired={lc['v1_expired']}, v2_published={lc['v2_published']}, "
+        f"v3_draft={lc['v3_draft']}, cr={lc['checkout_request_id']}), "
+        f"map2={lc['republish_map']} (r1_expired={lc['r1_expired']})"
+    )
+
+    # 9. 워크플로 불변식 정규화 (멱등 — 시드가 남긴 불가능 상태 보정: owner·승인자·submitted_by·승인이력)
     from scripts.seed_invariants import normalize_workflow_invariants
 
     async with SessionLocal() as session:
@@ -172,6 +185,74 @@ async def main() -> None:
         f"{l1_links == l2_map_id}), L2.sub→map {l2_links} (==L3 {l3_map_id}: "
         f"{l2_links == l3_map_id}), L3 owner={l3_owner} (==user.choi: "
         f"{l3_owner == 'user.choi'})"
+    )
+
+    # 10. 버전 라이프사이클 상태 확인 — expired/published/draft + 체크아웃 + 이전요청
+    async with SessionLocal() as session:
+        lc_v1 = (
+            await session.execute(
+                text(
+                    "SELECT status, version_number FROM map_versions "
+                    "WHERE id=:vid"
+                ),
+                {"vid": lc["v1_expired"]},
+            )
+        ).one()
+        lc_v2 = (
+            await session.execute(
+                text(
+                    "SELECT status, version_number FROM map_versions "
+                    "WHERE id=:vid"
+                ),
+                {"vid": lc["v2_published"]},
+            )
+        ).one()
+        lc_v3 = (
+            await session.execute(
+                text(
+                    "SELECT status, version_number, checked_out_by FROM map_versions "
+                    "WHERE id=:vid"
+                ),
+                {"vid": lc["v3_draft"]},
+            )
+        ).one()
+        lc_cr = (
+            await session.execute(
+                text(
+                    "SELECT requested_by, status FROM checkout_requests "
+                    "WHERE id=:cid"
+                ),
+                {"cid": lc["checkout_request_id"]},
+            )
+        ).one()
+        lc_r1 = (
+            await session.execute(
+                text(
+                    "SELECT status, version_number FROM map_versions "
+                    "WHERE id=:vid"
+                ),
+                {"vid": lc["r1_expired"]},
+            )
+        ).one()
+        lc_drafts_m2 = (
+            await session.execute(
+                text(
+                    "SELECT count(*) FROM map_versions "
+                    "WHERE map_id=:mid AND status='draft'"
+                ),
+                {"mid": lc["republish_map"]},
+            )
+        ).scalar()
+    print(
+        f"verify  lifecycle — "
+        f"v1({lc_v1.status},{lc_v1.version_number})==(expired,1):{lc_v1.status == 'expired' and lc_v1.version_number == 1}, "
+        f"v2({lc_v2.status},{lc_v2.version_number})==(published,2):{lc_v2.status == 'published' and lc_v2.version_number == 2}, "
+        f"v3({lc_v3.status},{lc_v3.version_number},{lc_v3.checked_out_by})==(draft,None,user.park):"
+        f"{lc_v3.status == 'draft' and lc_v3.version_number is None and lc_v3.checked_out_by == 'user.park'}, "
+        f"cr({lc_cr.requested_by},{lc_cr.status})==(user.choi,pending):"
+        f"{lc_cr.requested_by == 'user.choi' and lc_cr.status == 'pending'}, "
+        f"r1({lc_r1.status},{lc_r1.version_number})==(expired,1):{lc_r1.status == 'expired' and lc_r1.version_number == 1}, "
+        f"map2_drafts={lc_drafts_m2}(==0:{lc_drafts_m2 == 0})"
     )
 
 

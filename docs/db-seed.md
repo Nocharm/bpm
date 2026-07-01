@@ -21,7 +21,7 @@ cd backend
 
 성공 시 콘솔에 `schema drop_all+create_all` → `seed employees 5명` → 참조 데모 맵 → `seed permission demo` → `verify employees=6, map_permissions=…` 요약이 출력된다(employees는 직원5 + 비활성 승인자 데모 1 = 6).
 
-## reset_db가 하는 일 (4단계)
+## reset_db가 하는 일
 
 | 단계 | 내용 |
 |------|------|
@@ -30,6 +30,9 @@ cd backend
 | 3. 참조 데모 맵 | `seed_reference_demo` — 하위프로세스 참조(Call Activity) 모델 데모 맵 4개 |
 | 4. 권한 데모 | `seed_permission_demo` (ADDITIVE) — RBAC 워크플로 데모 엔터티 (맵마다 노드 흐름 포함) |
 | 5. 버전 비교 데모 | `seed_compare_demo` (ADDITIVE) — As-Is/To-Be 2버전 맵 1개 (비교 화면용) |
+| 6. 3중첩 데모 | `seed_nesting_demo` (ADDITIVE) — 깊이-3 드릴인 A→B→C 체인 (마스킹 비대칭용) |
+| 7. 버전 라이프사이클 데모 | `seed_version_lifecycle_demo` (ADDITIVE) — 승인탭 매트릭스 전 케이스 (아래 상세) |
+| 8. 불변식 정규화 | `normalize_workflow_invariants` — 시드가 남긴 불완전 상태 보정(멱등) |
 
 > **`create_all`은 기존 테이블의 컬럼을 ALTER하지 않는다.** 모델에 컬럼을 추가했으면 기존 DB에는 반영 안 됨 → `reset_db`(drop 포함)로 재생성하거나 dev.db 파일을 지워야 한다. 마이그레이션(Alembic)은 후속.
 
@@ -60,6 +63,58 @@ LOCAL_USERS/참조데모를 건드리지 않고 RBAC 워크플로만 추가. 데
 - "Version Workflow Demo" — published v1 + pending v2(제출자 `user.lee`). v1↔v2도 계보로 이어져 **비교 화면에서 추가(Test)·변경(Release→Release & Notify)** 표시.
 
 모든 권한 데모 맵은 노드 흐름을 갖는다(빈 맵 아님). 화면으로 따라가는 8단계 투어는 **[`permission-demo-walkthrough.md`](permission-demo-walkthrough.md)** 참고.
+
+### 버전 라이프사이클 데모 (`seed_version_lifecycle_demo`, ADDITIVE)
+
+버전 라이프사이클 승인탭 매트릭스와 3종 승인 화면을 화면에서 바로 검증하는 픽스처.
+
+**Map 1 — "Version Lifecycle Demo"** (private, owner=`user.lee`)
+
+| 버전 | 상태 | version_number | checked_out_by | 설명 |
+|------|------|---------------|----------------|------|
+| v1   | expired | 1 | — | 이전 게시본. 만료됨 |
+| v2   | published | 2 | — | 현재 활성 게시본 |
+| v3   | draft | None | `user.park` | 편집 중(점유) |
+
+- `user.choi`가 v3에 대해 **pending** `CheckoutRequest` 1건 — "요청됨" 배지 + Settings/map-settings 큐
+- 맵 협업자: `user.park`=editor, `user.choi`=editor, `user.jung`=viewer
+- 승인자: `admin.kim`
+
+**Map 2 — "Republish Demo"** (private, owner=`user.lee`)
+
+- v1 expired, **draft 없음** → expired 버전에 republish 버튼 표시
+- 협업자: `user.park`=editor, `user.choi`=editor / 승인자: `admin.kim`
+
+**데모 유저 역할표**
+
+| login_id | 이름 | 역할 |
+|----------|------|------|
+| `admin.kim` | Junho Kim | sysadmin (BPM_SYSADMINS) + 맵 승인자 |
+| `user.lee` | Minjae Lee | 맵 owner |
+| `user.park` | Soyeon Park | editor (v3 체크아웃 보유자) |
+| `user.choi` | Daehyun Choi | editor (pending 이전요청자) |
+| `user.jung` | Hana Jung | viewer |
+
+**권한 강제 모드로 라이프사이클 화면 검증:**
+
+```bash
+# === bash (macOS/Linux) ===
+cd backend
+DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim \
+  .venv/bin/uvicorn app.main:app --reload --port 8000
+```
+```powershell
+# === PowerShell (Windows) ===
+cd backend
+$env:DEV_ENFORCE_PERMISSIONS="true"; $env:BPM_SYSADMINS="admin.kim"
+.venv\Scripts\uvicorn app.main:app --reload --port 8000
+```
+
+로그인 스위처로 유저를 전환하면 각 시나리오 확인 가능:
+- `user.park`(holder) → v3 선택 시 transfer/rename/delete 3버튼
+- `user.choi`(requester, pending) → v3 선택 시 "요청됨" 표시 + holder 이름
+- `user.jung`(viewer) → 읽기 전용
+- `admin.kim`(sysadmin) → Settings checkout 요청 큐 + map-settings decide
 
 ## 부분 시드 (선택)
 
