@@ -814,6 +814,17 @@ const en = {
   "perm.sysadmin.noPermission": "No access (system admins only)",
   "perm.approversDevActive": "[Dev] Active",
   "perm.approversDevInactive": "[Dev] Inactive",
+  // ── 점유권 요청 탭 / Checkout requests tab ──
+  "perm.tabCheckoutRequests": "Checkout Requests",
+  "perm.checkout.empty": "No pending checkout requests.",
+  "perm.checkout.versionLabel": "Version",
+  "perm.checkout.requesterLabel": "Requested by",
+  "perm.checkout.requestedAt": "Requested",
+  "perm.checkout.approve": "Approve",
+  "perm.checkout.reject": "Reject",
+  "perm.checkout.toastApproved": "Checkout request approved.",
+  "perm.checkout.toastRejected": "Checkout request rejected.",
+  "perm.sysadmin.kindCheckout": "Checkout request",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1630,6 +1641,17 @@ const ko: Record<MessageKey, string> = {
   "perm.sysadmin.noPermission": "권한 없음 (시스템 관리자 전용)",
   "perm.approversDevActive": "[Dev] 활성",
   "perm.approversDevInactive": "[Dev] 비활성",
+  // ── 점유권 요청 탭 / Checkout requests tab ──
+  "perm.tabCheckoutRequests": "점유권 요청",
+  "perm.checkout.empty": "대기 중인 점유권 요청이 없습니다.",
+  "perm.checkout.versionLabel": "버전",
+  "perm.checkout.requesterLabel": "요청자",
+  "perm.checkout.requestedAt": "요청 시각",
+  "perm.checkout.approve": "승인",
+  "perm.checkout.reject": "반려",
+  "perm.checkout.toastApproved": "점유권 요청을 승인했습니다.",
+  "perm.checkout.toastRejected": "점유권 요청을 반려했습니다.",
+  "perm.sysadmin.kindCheckout": "점유권 요청",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

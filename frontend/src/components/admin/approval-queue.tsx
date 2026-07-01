@@ -7,6 +7,7 @@
 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
+  ArrowLeftRight,
   ArrowRight,
   Check,
   ChevronDown,
@@ -23,11 +24,14 @@ import {
 
 import {
   decideApprovalRequest,
+  decideCheckoutRequest,
   decideGroup,
   getDirectory,
+  getPendingCheckoutRequests,
   listPendingApprovalRequests,
   listPendingGroups,
   type ApprovalRequest,
+  type CheckoutRequestQueue,
   type DirectoryUser,
   type Group,
 } from "@/lib/api";
@@ -44,7 +48,8 @@ interface Props {
 
 type QueueItem =
   | { key: string; kind: "group_create"; group: Group }
-  | { key: string; kind: "permission_downgrade" | "visibility_change"; req: ApprovalRequest };
+  | { key: string; kind: "permission_downgrade" | "visibility_change"; req: ApprovalRequest }
+  | { key: string; kind: "checkout_request"; cr: CheckoutRequestQueue };
 
 // 필 / pill chip.
 function Pill({ children, className }: { children: ReactNode; className?: string }) {
@@ -111,6 +116,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
 
   const [pendingGroups, setPendingGroups] = useState<Group[]>([]);
   const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
+  const [pendingCheckouts, setPendingCheckouts] = useState<CheckoutRequestQueue[]>([]);
   const [decidingKeys, setDecidingKeys] = useState<Set<string>>(new Set());
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [usersById, setUsersById] = useState<Map<string, DirectoryUser>>(new Map()); // 요청자 이름·소속 해석
@@ -130,13 +136,15 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
 
   const reload = useCallback(async () => {
     try {
-      const [groups, requests] = await Promise.all([
+      const [groups, requests, checkouts] = await Promise.all([
         listPendingGroups(),
         listPendingApprovalRequests(),
+        getPendingCheckoutRequests(),
       ]);
       setPendingGroups(groups);
       setPendingRequests(requests);
-      onCountChange?.(groups.length + requests.length);
+      setPendingCheckouts(checkouts);
+      onCountChange?.(groups.length + requests.length + checkouts.length);
     } catch (err) {
       onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
     }
@@ -146,14 +154,16 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     let active = true;
     void (async () => {
       try {
-        const [groups, requests] = await Promise.all([
+        const [groups, requests, checkouts] = await Promise.all([
           listPendingGroups(),
           listPendingApprovalRequests(),
+          getPendingCheckoutRequests(),
         ]);
         if (active) {
           setPendingGroups(groups);
           setPendingRequests(requests);
-          onCountChange?.(groups.length + requests.length);
+          setPendingCheckouts(checkouts);
+          onCountChange?.(groups.length + requests.length + checkouts.length);
         }
       } catch (err) {
         if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
@@ -171,6 +181,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       kind: r.kind as "permission_downgrade" | "visibility_change",
       req: r,
     })),
+    ...pendingCheckouts.map((cr) => ({ key: `c${cr.id}`, kind: "checkout_request" as const, cr })),
   ];
 
   function toggle(key: string) {
@@ -186,6 +197,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     setDecidingKeys((prev) => new Set(prev).add(item.key));
     try {
       if (item.kind === "group_create") await decideGroup(item.group.id, decision);
+      else if (item.kind === "checkout_request")
+        await decideCheckoutRequest(item.cr.id, decision === "approve");
       else await decideApprovalRequest(item.req.id, decision);
       onToast({
         id: genId(),
@@ -209,6 +222,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       return <Users size={14} strokeWidth={1.5} className="shrink-0 text-accent" />;
     if (item.kind === "permission_downgrade")
       return <ShieldAlert size={14} strokeWidth={1.5} className="shrink-0 text-changed" />;
+    if (item.kind === "checkout_request")
+      return <ArrowLeftRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />;
     const toPublic = String(item.req.payload.to_visibility ?? "") === "public";
     return toPublic ? (
       <Globe size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
@@ -225,11 +240,23 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       );
     if (item.kind === "permission_downgrade")
       return <Pill className="border-changed text-changed">{t("perm.sysadmin.kindDowngrade")}</Pill>;
+    if (item.kind === "checkout_request")
+      return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindCheckout")}</Pill>;
     return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindVisibility")}</Pill>;
   }
   function brief(item: QueueItem): ReactNode {
     if (item.kind === "group_create")
       return <span className="truncate text-caption-strong text-ink">{item.group.name}</span>;
+    if (item.kind === "checkout_request")
+      return (
+        <>
+          <Pill>
+            <MapIcon size={11} strokeWidth={1.5} />
+            {item.cr.map_name}
+          </Pill>
+          <span className="truncate text-caption text-ink-secondary">{item.cr.version_label}</span>
+        </>
+      );
     return (
       <Pill>
         <MapIcon size={11} strokeWidth={1.5} />
@@ -251,7 +278,12 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       {items.map((item) => {
         const expanded = expandedKeys.has(item.key);
         const deciding = decidingKeys.has(item.key);
-        const requester = item.kind === "group_create" ? item.group.created_by : item.req.requested_by;
+        const requester =
+          item.kind === "group_create"
+            ? item.group.created_by
+            : item.kind === "checkout_request"
+              ? item.cr.requested_by
+              : item.req.requested_by;
         return (
           <div key={item.key} className="rounded-md border border-hairline bg-surface">
             {/* 간소 헤더 — 클릭 시 펼침 / compact header, click to expand */}
@@ -293,6 +325,21 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                       </Pill>
                     </DetailRow>
                   </>
+                ) : item.kind === "checkout_request" ? (
+                  <>
+                    <DetailRow label={t("perm.checkout.versionLabel")}>
+                      <span className="text-caption text-ink">{item.cr.version_label}</span>
+                    </DetailRow>
+                    <DetailRow label={t("perm.sysadmin.requesterLabel")}>
+                      <RequesterCard id={requester} user={usersById.get(requester)} />
+                    </DetailRow>
+                    <DetailRow label={t("perm.sysadmin.requestedAt")}>
+                      <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary">
+                        <Clock size={11} strokeWidth={1.5} />
+                        {formatKst(item.cr.created_at)}
+                      </span>
+                    </DetailRow>
+                  </>
                 ) : item.kind === "permission_downgrade" ? (
                   <DetailRow label={t("perm.sysadmin.detailLabel")}>
                     <span className="inline-flex items-center gap-1">
@@ -331,16 +378,20 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                   </DetailRow>
                 )}
 
-                <DetailRow label={t("perm.sysadmin.requesterLabel")}>
-                  <RequesterCard id={requester} user={usersById.get(requester)} />
-                </DetailRow>
-                {item.kind !== "group_create" && (
-                  <DetailRow label={t("perm.sysadmin.requestedAt")}>
-                    <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary">
-                      <Clock size={11} strokeWidth={1.5} />
-                      {formatKst(item.req.created_at)}
-                    </span>
-                  </DetailRow>
+                {item.kind !== "checkout_request" && (
+                  <>
+                    <DetailRow label={t("perm.sysadmin.requesterLabel")}>
+                      <RequesterCard id={requester} user={usersById.get(requester)} />
+                    </DetailRow>
+                    {item.kind !== "group_create" && (
+                      <DetailRow label={t("perm.sysadmin.requestedAt")}>
+                        <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary">
+                          <Clock size={11} strokeWidth={1.5} />
+                          {formatKst(item.req.created_at)}
+                        </span>
+                      </DetailRow>
+                    )}
+                  </>
                 )}
 
                 <div className="mt-1 flex justify-end gap-2">

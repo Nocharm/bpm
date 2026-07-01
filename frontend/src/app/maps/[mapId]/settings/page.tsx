@@ -21,20 +21,21 @@ import { VisibilityControl } from "@/components/permissions/visibility-control";
 import { DangerZone } from "@/components/permissions/danger-zone";
 import { VersionsPublishPanel } from "@/components/permissions/versions-publish-panel";
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
+import { CheckoutRequestsPanel } from "@/components/map-settings/checkout-requests-panel";
 import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
 
-type TabId = "details" | "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals";
+type TabId = "details" | "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals" | "checkout";
 
 interface Tab {
   id: TabId;
-  labelKey: "perm.tabDetails" | "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals";
+  labelKey: "perm.tabDetails" | "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals" | "perm.tabCheckoutRequests";
 }
 
-// 전체 탭 목록 — approvals는 조건부 노출로 별도 처리 /
-// Full tab list — approvals is shown conditionally, filtered at render.
-// 순서: 정보 > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 위험 구역
+// 전체 탭 목록 — approvals·checkout은 조건부 노출로 별도 처리 /
+// Full tab list — approvals and checkout are shown conditionally, filtered at render.
+// 순서: 정보 > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 점유권 요청 > 위험 구역
 const ALL_TABS: Tab[] = [
   { id: "details", labelKey: "perm.tabDetails" },
   { id: "visibility", labelKey: "perm.tabVisibility" },
@@ -42,6 +43,7 @@ const ALL_TABS: Tab[] = [
   { id: "approvers", labelKey: "perm.tabApprovers" },
   { id: "versions", labelKey: "perm.tabVersions" },
   { id: "approvals", labelKey: "perm.tabPendingApprovals" },
+  { id: "checkout", labelKey: "perm.tabCheckoutRequests" },
   { id: "danger", labelKey: "perm.tabDanger" },
 ];
 
@@ -142,8 +144,16 @@ export default function SettingsPage() {
     currentMockUser !== null &&
     (currentMockUser.isSysadmin || isApprover(permState, currentMockUser.id, mapIdStr));
 
+  // 점유권 요청 탭 — 소유자 또는 sysadmin만 표시 (보유자는 에디터 승인탭에서 처리) /
+  // Checkout requests tab: owner or sysadmin only (holder acts via editor approval tab).
+  const canDecideCheckout = currentMockUser !== null && isOwner;
+
   // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
-  const visibleTabs = ALL_TABS.filter((tab) => tab.id !== "approvals" || canDecide);
+  const visibleTabs = ALL_TABS.filter(
+    (tab) =>
+      (tab.id !== "approvals" || canDecide) &&
+      (tab.id !== "checkout" || canDecideCheckout),
+  );
   const sectionKey = visibleTabs.map((tab) => tab.id).join(",");
 
   // 스크롤 위치로 활성 섹션 추적 — 좌측 내비 하이라이트 (ST). IO 콜백 setState라 set-state-in-effect 비해당.
@@ -364,6 +374,12 @@ export default function SettingsPage() {
                     )
                   ) : tab.id === "approvals" && canDecide ? (
                     <PendingApprovalsPanel
+                      mapId={mapIdStr}
+                      onDecided={() => void refreshMap()}
+                      onToast={(item) => showToast(item.message)}
+                    />
+                  ) : tab.id === "checkout" && canDecideCheckout ? (
+                    <CheckoutRequestsPanel
                       mapId={mapIdStr}
                       onDecided={() => void refreshMap()}
                       onToast={(item) => showToast(item.message)}

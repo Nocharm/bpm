@@ -7,7 +7,7 @@
 
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 
-import { listPendingApprovalRequests, listPendingGroups } from "@/lib/api";
+import { getPendingCheckoutRequests, listPendingApprovalRequests, listPendingGroups } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -84,11 +84,12 @@ export default function SettingsPage() {
     let active = true;
     void (async () => {
       try {
-        const [groups, requests] = await Promise.all([
+        const [groups, requests, checkouts] = await Promise.all([
           listPendingGroups(),
           listPendingApprovalRequests(),
+          getPendingCheckoutRequests(),
         ]);
-        if (active) setQueueCount(groups.length + requests.length);
+        if (active) setQueueCount(groups.length + requests.length + checkouts.length);
       } catch {
         /* 배지 카운트 실패는 무시 — 비핵심 */
       }

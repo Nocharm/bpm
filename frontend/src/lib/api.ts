@@ -312,6 +312,25 @@ export function requestCheckout(
   );
 }
 
+// 점유 요청 대기 목록 항목 / Checkout request queue item (backend CheckoutRequestQueueOut).
+export interface CheckoutRequestQueue {
+  id: number;
+  version_id: number;
+  requested_by: string;   // login_id
+  status: string;
+  created_at: string;
+  map_id: number;
+  map_name: string;
+  version_label: string;
+}
+
+// 대기 중인 점유 요청 목록 — sysadmin은 전체, 그 외는 처리 권한(보유자/소유자)이 있는 것만 /
+// Pending checkout requests: sysadmin sees all; others see only those they can act on.
+export function getPendingCheckoutRequests(mapId?: number): Promise<CheckoutRequestQueue[]> {
+  const qs = mapId != null ? `?map_id=${mapId}` : "";
+  return request<CheckoutRequestQueue[]>(`/checkout-requests/pending${qs}`);
+}
+
 // 점유권 요청 결정 — 보유자/소유자/sysadmin이 승인 또는 거절 / Approve or reject a checkout request
 export function decideCheckoutRequest(requestId: number, approve: boolean): Promise<void> {
   return request<void>(`/checkout-requests/${requestId}/decide`, {
