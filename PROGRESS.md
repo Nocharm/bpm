@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-01 — feat/version-lifecycle (Task 7)
+- **feat(approval): searchable editor picker for checkout transfer dialog (Task 7)** — `TransferCheckoutDialog` 컴포넌트 신규(`src/components/version/transfer-checkout-dialog.tsx`): accent 아이콘 원(ArrowLeftRight) + 검색 입력 + 선택 가능 편집자 목록(name primary, login_id secondary). 기존 inline native select → 컴포넌트로 교체. 재게시 ConfirmDialog에 `RotateCcw` 아이콘 추가(rich 레이아웃 활성화). i18n 신규 키 1개(en+ko: `approval.transferSearchPlaceholder`). tsc 0 errors, lint 0 errors(pw-smoke-task8 pre-existing warning 유지).
+
 ## 2026-06-29 — feat/version-lifecycle (continued, Task 6)
 - **feat(approval): 역할/상태 액션 매트릭스 + checkout request/decide/transfer/republish 배선 + 기본 버전 선택 (Task 6)** — Part A: api.ts에 `transferCheckout·requestCheckout·decideCheckoutRequest·republishVersion·getMapEditors` 추가. Part B: 맵 로드 시 내 draft(점유 보유) → 최신 published → 첫 번째 순 기본 선택. Part C: approvalSlot 우측 아이콘 — 점유자+draft=이전·이름·삭제, editor+미점유+draft=요청(Hand)/요청됨(비활성)+"{이름} 편집 중", editor+expired+draft없음=재게시(RotateCcw). Part D: approval-panel.tsx에 pending_checkout_request 결정 배너(보유자/소유자/sysadmin에게 승인/거절 노출). Part E: 핸들러 배선 + 이전 다이얼로그(minimal) + 재게시 ConfirmDialog. i18n 신규 키 18개(en+ko). tsc 0·lint 0 errors.
 

@@ -59,6 +59,7 @@ import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
+import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -6925,58 +6926,19 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => setDeleteVersionOpen(false)}
         />
       )}
-      {/* 점유권 이전 다이얼로그 — 최소 기능(편집자 선택 + 확인). T7에서 DeleteMapDialog 스타일로 정제 */}
-      {transferOpen && (
-        <ModalBackdrop
-          onClose={() => setTransferOpen(false)}
-          className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
-        >
-          <div className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg">
-            <h2 className="text-body-strong text-ink">{t("approval.transferTitle")}</h2>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-caption text-ink-secondary" htmlFor="transfer-target-select">
-                {t("approval.transferPickLabel")}
-              </label>
-              {transferEditors.length === 0 ? (
-                <p className="text-caption text-ink-tertiary">{t("perm.transferNoEligible")}</p>
-              ) : (
-                <select
-                  id="transfer-target-select"
-                  className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
-                  value={transferTarget}
-                  onChange={(e) => setTransferTarget(e.target.value)}
-                >
-                  {transferEditors.map((editor) => (
-                    <option key={editor.id} value={editor.id}>
-                      {editor.name} ({editor.id})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                onClick={() => setTransferOpen(false)}
-              >
-                {t("approval.transferCancel")}
-              </button>
-              <button
-                type="button"
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                disabled={!transferTarget}
-                onClick={() => void handleConfirmTransfer()}
-              >
-                {t("approval.transferConfirm")}
-              </button>
-            </div>
-          </div>
-        </ModalBackdrop>
-      )}
+      {/* 점유권 이전 다이얼로그 — searchable editor picker (T7) */}
+      <TransferCheckoutDialog
+        open={transferOpen}
+        editors={transferEditors}
+        value={transferTarget}
+        onChange={setTransferTarget}
+        onConfirm={() => void handleConfirmTransfer()}
+        onCancel={() => setTransferOpen(false)}
+      />
       {/* 재게시 확인 */}
       {republishConfirmOpen && (
         <ConfirmDialog
+          icon={<RotateCcw size={28} strokeWidth={1.5} />}
           title={t("approval.republishConfirmTitle")}
           message={t("approval.republishConfirmBody")}
           confirmLabel={t("common.confirm")}
