@@ -192,6 +192,21 @@ class CheckoutRequestOut(BaseModel):
     created_at: datetime
 
 
+class CheckoutRequestQueueOut(BaseModel):
+    """승인 큐 목록 응답 — pending 목록 전용, 맵·버전 컨텍스트 포함."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    version_id: int
+    requested_by: str
+    status: str
+    created_at: datetime
+    map_id: int
+    map_name: str
+    version_label: str
+
+
 class CheckoutDecideIn(BaseModel):
     approve: bool
 

@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-01 — feat/version-lifecycle (Task 6b)
+- **feat(checkout): pending-requests 큐 맵·버전 컨텍스트 + map_id 필터 (Task 6b)** — `CheckoutRequestQueueOut` 신규 스키마(`map_id·map_name·version_label` 추가). `GET /checkout-requests/pending`: response_model → `list[CheckoutRequestQueueOut]`, 1-query JOIN(CheckoutRequest→MapVersion→ProcessMap), `?map_id=` 옵셔널 필터(per-map 설정 패널용). TDD: `test_checkout_pending_queue_context`·`test_checkout_pending_queue_map_id_filter` 신규(RED→GREEN). 366 passed, ruff clean.
+
 ## 2026-07-01 — feat/version-lifecycle (Task 7)
 - **feat(approval): searchable editor picker for checkout transfer dialog (Task 7)** — `TransferCheckoutDialog` 컴포넌트 신규(`src/components/version/transfer-checkout-dialog.tsx`): accent 아이콘 원(ArrowLeftRight) + 검색 입력 + 선택 가능 편집자 목록(name primary, login_id secondary). 기존 inline native select → 컴포넌트로 교체. 재게시 ConfirmDialog에 `RotateCcw` 아이콘 추가(rich 레이아웃 활성화). i18n 신규 키 1개(en+ko: `approval.transferSearchPlaceholder`). tsc 0 errors, lint 0 errors(pw-smoke-task8 pre-existing warning 유지).
 

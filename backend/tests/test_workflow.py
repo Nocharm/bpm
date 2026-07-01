@@ -784,3 +784,50 @@ def test_checkout_pending_queue_for_holder(
     assert res.status_code == 200
     items = res.json()
     assert any(r["version_id"] == version_id for r in items)
+
+
+def test_checkout_pending_queue_context(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """pending queue 응답에 map_id·map_name·version_label 컨텍스트 포함 확인."""
+    map_id, version_id = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    client.post(f"/api/versions/{version_id}/checkout/request")
+
+    _act_as("holder.u")
+    res = client.get("/api/checkout-requests/pending")
+    assert res.status_code == 200
+    items = res.json()
+    item = next(r for r in items if r["version_id"] == version_id)
+    assert item["map_id"] == map_id
+    assert isinstance(item["map_name"], str) and item["map_name"]
+    assert item["version_label"] == "As-Is"
+
+
+def test_checkout_pending_queue_map_id_filter(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """?map_id= 필터 — 해당 맵 요청만 반환, 다른 맵 요청 제외."""
+    map_id1, version_id1 = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+    map_id2, version_id2 = _seed_with_grants([("holder.u", "editor"), ("editor.u", "editor")])
+
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id1}/checkout", json={})
+    client.post(f"/api/versions/{version_id2}/checkout", json={})
+
+    _act_as("editor.u")
+    client.post(f"/api/versions/{version_id1}/checkout/request")
+    client.post(f"/api/versions/{version_id2}/checkout/request")
+
+    # sysadmin으로 map1만 필터링
+    _act_as(_TRANSFER_SYSADMIN)
+    res = client.get(f"/api/checkout-requests/pending?map_id={map_id1}")
+    assert res.status_code == 200
+    items = res.json()
+    assert all(r["map_id"] == map_id1 for r in items)
+    assert any(r["version_id"] == version_id1 for r in items)
+    assert not any(r["version_id"] == version_id2 for r in items)

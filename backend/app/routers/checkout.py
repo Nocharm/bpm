@@ -1,16 +1,16 @@
 """점유권 요청·결정 API — request/decide 플로우 (Task 3, docs/spec.md §5)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
-from app.models import CheckoutRequest, MapPermission, MapVersion
+from app.models import CheckoutRequest, MapPermission, MapVersion, ProcessMap
 from app.permissions.access import get_effective_role
 from app.permissions.logic import is_sysadmin
-from app.schemas import CheckoutDecideIn, CheckoutRequestOut
+from app.schemas import CheckoutDecideIn, CheckoutRequestOut, CheckoutRequestQueueOut
 
 router = APIRouter(
     prefix="/api", tags=["checkout"], dependencies=[Depends(get_current_user)]
@@ -121,46 +121,59 @@ async def decide_checkout_request(
     return req
 
 
-@router.get("/checkout-requests/pending", response_model=list[CheckoutRequestOut])
+@router.get("/checkout-requests/pending", response_model=list[CheckoutRequestQueueOut])
 async def list_pending_checkout_requests(
+    map_id: int | None = Query(None),
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[CheckoutRequest]:
+) -> list[dict]:
     """내가 결정할 수 있는 미결 점유 요청 목록 — 점유자·오너·sysadmin 대상 승인 큐.
 
     sysadmin: 전체.
     그 외: 내가 현재 점유자인 버전, 또는 내가 오너인 맵의 버전에 걸린 요청만.
+    map_id: 특정 맵의 요청만 필터링 (per-map 설정 패널용, 생략 시 전체).
     """
-    if is_sysadmin(user):
-        rows = await session.scalars(
-            select(CheckoutRequest)
-            .where(CheckoutRequest.status == "pending")
-            .order_by(CheckoutRequest.created_at.desc())
+    base_q = (
+        select(CheckoutRequest, MapVersion, ProcessMap)
+        .join(MapVersion, CheckoutRequest.version_id == MapVersion.id)
+        .join(ProcessMap, MapVersion.map_id == ProcessMap.id)
+        .where(CheckoutRequest.status == "pending")
+    )
+
+    if map_id is not None:
+        base_q = base_q.where(MapVersion.map_id == map_id)
+
+    if not is_sysadmin(user):
+        # 내가 현재 점유자인 버전 ID 서브쿼리
+        holder_version_ids = select(MapVersion.id).where(MapVersion.checked_out_by == user)
+        # 내가 오너인 맵 ID 서브쿼리
+        owner_map_ids = select(MapPermission.map_id).where(
+            MapPermission.principal_type == "user",
+            MapPermission.principal_id == user,
+            MapPermission.role == "owner",
         )
-        return list(rows.all())
-
-    # 내가 현재 점유자인 버전 ID 서브쿼리
-    holder_version_ids = select(MapVersion.id).where(MapVersion.checked_out_by == user)
-    # 내가 오너인 맵 ID 서브쿼리
-    owner_map_ids = select(MapPermission.map_id).where(
-        MapPermission.principal_type == "user",
-        MapPermission.principal_id == user,
-        MapPermission.role == "owner",
-    )
-    # 오너 맵에 속한 버전 ID 서브쿼리
-    owner_version_ids = select(MapVersion.id).where(
-        MapVersion.map_id.in_(owner_map_ids)
-    )
-
-    rows = await session.scalars(
-        select(CheckoutRequest)
-        .where(
-            CheckoutRequest.status == "pending",
+        # 오너 맵에 속한 버전 ID 서브쿼리
+        owner_version_ids = select(MapVersion.id).where(
+            MapVersion.map_id.in_(owner_map_ids)
+        )
+        base_q = base_q.where(
             or_(
                 CheckoutRequest.version_id.in_(holder_version_ids),
                 CheckoutRequest.version_id.in_(owner_version_ids),
-            ),
+            )
         )
-        .order_by(CheckoutRequest.created_at.desc())
-    )
-    return list(rows.all())
+
+    rows = await session.execute(base_q.order_by(CheckoutRequest.created_at.desc()))
+    return [
+        {
+            "id": req.id,
+            "version_id": req.version_id,
+            "requested_by": req.requested_by,
+            "status": req.status,
+            "created_at": req.created_at,
+            "map_id": ver.map_id,
+            "map_name": pm.name,
+            "version_label": ver.label,
+        }
+        for req, ver, pm in rows.all()
+    ]
