@@ -2,6 +2,33 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-01 — feat/version-lifecycle (final fixes)
+- **fix(versions): republish 권한 체크를 상태 체크보다 먼저 실행** — 403 가드를 409 가드 앞으로 이동(소스 상태 유출 방지). 순서: 404(소스 부재) → 403(editor+ 미보유) → 409(draft/pending 상태) → 409(기존 draft 존재) → 생성. sibling 엔드포인트(transfer/request/decide)와 동일 패턴으로 통일. 테스트 변경 없음(기본 테스트 사용자=sysadmin=owner → 권한 패스 후 상태 409 도달).
+- **chore(i18n): 미사용 키 `perm.checkout.requestedAt` 제거** — en/ko 양쪽에서 삭제. checkout-requests 패널이 Clock을 인라인으로 렌더링해 이 키를 참조하지 않음(`git grep` 확인). tsc 0 / lint 0.
+
+> **⚠️ DEPLOY NOTE — feat/version-lifecycle 서버 배포 전 필수**
+>
+> `startup create_all`은 **`checkout_requests` 테이블**을 자동 생성하지만,
+> **기존 테이블에 `map_versions.version_number` 컬럼은 추가하지 않음** →
+> publish / 버전 워크플로 API가 500으로 실패함.
+>
+> **배포 전 둘 중 하나를 실행할 것:**
+> - (권장) DB 리셋 + 재시드: `python -m scripts.reset_db`
+> - (기존 데이터 보존) 마이그레이션 수동 실행:
+>   `ALTER TABLE map_versions ADD COLUMN version_number INTEGER;`
+>   (nullable이라 기존 행 생존, 다음 게시 시 번호 채번됨)
+
+**feat/version-lifecycle 전체 출하 요약:**
+- Task 1: `version_number`(nullable int) + `expired` 상태 + publish 시 채번·이전 published → expired 전환
+- Task 2: 점유권 이전(`POST /versions/{id}/transfer-checkout`) — 점유자·owner·sysadmin이 editor+ 대상에게
+- Task 3: 점유권 요청(`POST /versions/{id}/request-checkout`) + 결정(`POST /checkout-requests/{id}/decide`)
+- Task 4: 만료본 재게시(`POST /versions/{id}/republish`) — published/expired → 그래프 복제 새 draft
+- Task 5: 프론트 `VersionStatus`에 `expired` 추가 + `WorkflowState` checkout 필드 + `formatVersionName`
+- Task 6: 승인 탭 역할/상태 액션 매트릭스 (이전·요청·재게시 버튼 + pending 결정 배너) + 3개 화면 checkout-request 패널(맵 설정·settings sysadmin·approval panel)
+- Task 6b: `GET /checkout-requests/pending` 맵·버전 컨텍스트 + `?map_id=` 필터
+- Task 7: 점유권 이전 다이얼로그 검색 가능 편집자 피커
+- 데모 시드: `scripts/seed_demo.py`에 checkout_requests 샘플 포함
+
 ## 2026-07-01 — feat/version-lifecycle (Task 6b)
 - **feat(checkout): pending-requests 큐 맵·버전 컨텍스트 + map_id 필터 (Task 6b)** — `CheckoutRequestQueueOut` 신규 스키마(`map_id·map_name·version_label` 추가). `GET /checkout-requests/pending`: response_model → `list[CheckoutRequestQueueOut]`, 1-query JOIN(CheckoutRequest→MapVersion→ProcessMap), `?map_id=` 옵셔널 필터(per-map 설정 패널용). TDD: `test_checkout_pending_queue_context`·`test_checkout_pending_queue_map_id_filter` 신규(RED→GREEN). 366 passed, ruff clean.
 
