@@ -6926,15 +6926,17 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => setDeleteVersionOpen(false)}
         />
       )}
-      {/* 점유권 이전 다이얼로그 — searchable editor picker (T7) */}
-      <TransferCheckoutDialog
-        open={transferOpen}
-        editors={transferEditors}
-        value={transferTarget}
-        onChange={setTransferTarget}
-        onConfirm={() => void handleConfirmTransfer()}
-        onCancel={() => setTransferOpen(false)}
-      />
+      {/* 점유권 이전 다이얼로그 — searchable editor picker (T7); conditional render resets query state on close */}
+      {transferOpen && (
+        <TransferCheckoutDialog
+          open={transferOpen}
+          editors={transferEditors}
+          value={transferTarget}
+          onChange={setTransferTarget}
+          onConfirm={() => void handleConfirmTransfer()}
+          onCancel={() => setTransferOpen(false)}
+        />
+      )}
       {/* 재게시 확인 */}
       {republishConfirmOpen && (
         <ConfirmDialog

@@ -74,7 +74,7 @@ export function TransferCheckoutDialog({
               />
               <div className="max-h-48 overflow-y-auto rounded-sm border border-hairline">
                 {filtered.length === 0 ? (
-                  <p className="px-3 py-2 text-caption text-ink-tertiary">No results</p>
+                  <p className="px-3 py-2 text-caption text-ink-tertiary">{t("approval.transferNoResults")}</p>
                 ) : (
                   filtered.map((editor) => (
                     <button
