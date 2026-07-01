@@ -641,15 +641,15 @@ async def republish_version(
     if source is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
 
+    role = await get_effective_role(session, user, source.map_id)
+    if role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="editor or owner required to republish")
+
     if source.status not in (workflow.PUBLISHED, workflow.EXPIRED):
         raise HTTPException(
             status_code=409,
             detail=f"cannot republish a {source.status} version",
         )
-
-    role = await get_effective_role(session, user, source.map_id)
-    if role not in ("owner", "editor"):
-        raise HTTPException(status_code=403, detail="editor or owner required to republish")
 
     existing_draft = await session.scalar(
         select(MapVersion)
