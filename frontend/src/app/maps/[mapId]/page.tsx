@@ -6796,7 +6796,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             {workflow?.checkout_holder && (
                               <span className="ml-1 text-fine text-ink-tertiary">
                                 {nameById.get(workflow.checkout_holder) ?? workflow.checkout_holder}{" "}
-                                편집 중
+                                {t("approval.checkoutEditing")}
                               </span>
                             )}
                           </>
