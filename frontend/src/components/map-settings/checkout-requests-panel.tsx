@@ -9,8 +9,10 @@ import { Check, Clock, X } from "lucide-react";
 
 import {
   decideCheckoutRequest,
+  getDirectory,
   getPendingCheckoutRequests,
   type CheckoutRequestQueue,
+  type DirectoryUser,
 } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
@@ -31,6 +33,20 @@ export function CheckoutRequestsPanel({ mapId, onDecided, onToast }: Props) {
   const [requests, setRequests] = useState<CheckoutRequestQueue[]>([]);
   // 결정 진행 중인 요청 id — 중복 결정 방지 / Ids being decided, to disable buttons.
   const [decidingIds, setDecidingIds] = useState<Set<number>>(new Set());
+  // 요청자 login_id → 이름 해석 / resolve requester login_id to display name.
+  const [usersById, setUsersById] = useState<Map<string, DirectoryUser>>(new Map());
+
+  useEffect(() => {
+    let active = true;
+    void getDirectory()
+      .then((dir) => {
+        if (active) setUsersById(new Map(dir.users.map((u) => [u.id, u])));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -104,7 +120,7 @@ export function CheckoutRequestsPanel({ mapId, onDecided, onToast }: Props) {
               {/* 요청자 + 요청 시각 / Requester + requested at */}
               <span className="flex items-center gap-2 text-fine text-ink-tertiary">
                 <span>
-                  {t("perm.checkout.requesterLabel")}: {req.requested_by}
+                  {t("perm.checkout.requesterLabel")}: {usersById.get(req.requested_by)?.name ?? req.requested_by}
                 </span>
                 <span aria-hidden>·</span>
                 <span className="inline-flex items-center gap-1">
