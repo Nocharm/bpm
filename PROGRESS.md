@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — feat/version-lifecycle (test scenarios)
+- **docs: 라이프사이클 테스트 시나리오 문서 추가** (`docs/version-lifecycle-test-scenarios.md`) — 정상(P1~P6)·예외(N1~N12)·관리자(A1~A6) 3분류 검토용 매트릭스. 각 시나리오에 화면(3화면 결정) + API 상태코드(403/409/422) 기대치 + 대응 pytest 함수 근거 매핑. 서두에 `DEV_ENFORCE_PERMISSIONS=true` 강제 모드 경고(안 그러면 전원 sysadmin→403 재현 불가) + 시드 엔터티 표. 인용 테스트 50개 green 확인.
+
 ## 2026-07-01 — feat/version-lifecycle (final fixes)
 - **fix(versions): republish 권한 체크를 상태 체크보다 먼저 실행** — 403 가드를 409 가드 앞으로 이동(소스 상태 유출 방지). 순서: 404(소스 부재) → 403(editor+ 미보유) → 409(draft/pending 상태) → 409(기존 draft 존재) → 생성. sibling 엔드포인트(transfer/request/decide)와 동일 패턴으로 통일. 테스트 변경 없음(기본 테스트 사용자=sysadmin=owner → 권한 패스 후 상태 409 도달).
 - **chore(i18n): 미사용 키 `perm.checkout.requestedAt` 제거** — en/ko 양쪽에서 삭제. checkout-requests 패널이 Clock을 인라인으로 렌더링해 이 키를 참조하지 않음(`git grep` 확인). tsc 0 / lint 0.
