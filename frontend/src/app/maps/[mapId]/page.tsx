@@ -829,15 +829,24 @@ function MapEditor({ mapId }: { mapId: number }) {
   const versionSubtitle = currentVersion
     ? `${formatVersionMarker(currentVersion, versions)} · ${currentVersion.label}`
     : undefined;
-  // 회수 모달 체크아웃 요약 — 누가 보유 중인지 + 회수 시 나에게 이관 + 승인 초기화.
+  // 회수 모달 요약 — 기존 제출자(누가 올렸는지) + 회수 시 체크아웃이 나에게 이관 + 승인 초기화.
+  // (회수 대상은 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로, 보유자 대신 제출자를 노출.)
+  const withdrawSubmitter = currentVersion?.submitted_by ?? null;
   const withdrawCheckoutLines: ConfirmLine[] = [
+    ...(withdrawSubmitter
+      ? [
+          {
+            icon: <Send size={14} strokeWidth={1.5} />,
+            text: nameById.get(withdrawSubmitter) ?? withdrawSubmitter,
+            tone: "accent" as const,
+            badge: { text: t("approval.submitterBadge"), tone: "neutral" as const },
+          },
+        ]
+      : []),
     {
-      // Lock 아이콘=체크아웃, 텍스트=현재 보유자(없으면 "체크아웃 없음"), 뱃지="→ 나"(회수 시 이관).
       icon: <Lock size={14} strokeWidth={1.5} />,
-      text: workflow?.checkout_holder
-        ? (nameById.get(workflow.checkout_holder) ?? workflow.checkout_holder)
-        : t("checkout.none"),
-      tone: "accent",
+      text: t("checkout.title"),
+      tone: "muted",
       badge: { text: t("approval.checkoutToMe"), tone: "accent" },
     },
     {
