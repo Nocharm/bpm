@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 전이 모달 재디자인(요약박스+영어 상태뱃지) + 체크아웃 용어 통일 + 회수 모달 체크아웃 정보
+- **용어 통일** — UI의 "점유권/점유자/holder" 표현을 일괄 **체크아웃(checkout)** 으로(ko "점유권"→"체크아웃"·"점유자 없음"→"체크아웃 없음"·"편집권한 요청"→"체크아웃 요청" 등, en "No holder"→"Not checked out"). i18n 값만 변경(t() 사용처 자동 반영).
+- **모달 디자인 통일(맵 삭제 모달식)** — `ConfirmDialog`에 행 우측 **상태 뱃지**(`badge`)·본인 **하이라이트**(`highlight`)·복수 요약박스(`sections`) 추가. 전이 모달(제출/승인/거절/회수/게시)의 산문 body를 버전 서브타이틀(`formatVersionMarker · label`)로 압축, 핵심은 요약박스/필로.
+- **승인자 상태 = 영어 뱃지** — 승인자 목록 모달(승인/거절/회수)의 상태는 로케일 무관 **"Approved"/"Pending"** 영어 고정, 이름은 좌측·상태는 행 우측 끝 뱃지, 본인 행 accent 하이라이트.
+- **회수 모달 체크아웃 정보** — 현재 체크아웃 보유자(없으면 "체크아웃 없음") + **"→ 나"**(회수 시 이관) + "승인 초기화" 요약박스를 승인자 목록과 함께 표시.
+- 검증: 프론트 lint 0·build OK. (픽셀 스모크는 사용자 Windows/서버 환경)
+
 ## 2026-07-03 — 점유 이동 draft 전용화 + 회수 오너/sysadmin 오버라이드 (거절본 점유 버그)
 - **버그**: 거절본에 요청→승인으로 점유가 제출자와 다른 사람(B)에게 넘어가면, B(홀더)는 회수 불가·제출자 A만 회수 가능·A 회수 시 점유가 A로 복귀. 원인 — `withdraw_version`·프론트가 현재 홀더가 아닌 `submitted_by` 기준.
 - **수정(점유 이동 draft 전용)** — 거절본이 홀더를 못 갖게 해 구조적으로 차단: `request_checkout`·`transfer_checkout` 허용 상태 `draft,rejected`→`draft`, `decide_checkout_request`에 draft-only 게이트 추가(이월 요청 승인 차단), 프론트 `checkoutInteractive`(approval-panel) `draft||rejected`→`draft`.

@@ -57,7 +57,7 @@ import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
@@ -812,18 +812,41 @@ function MapEditor({ mapId }: { mapId: number }) {
     (v) => v.status === "pending" || v.status === "approved",
   );
   // 승인자별 상태 라인 — 승인/거절/회수 모달 공용. 본인은 하이라이트(accent), 승인 완료는 Check.
-  const approverStatusLines = (workflow?.approvers ?? []).map((id) => {
+  // 승인자 행 — 이름(좌, 본인 하이라이트) + 상태 영어 뱃지(우측 끝). 상태는 로케일 무관 영어 고정.
+  const approverStatusLines: ConfirmLine[] = (workflow?.approvers ?? []).map((id) => {
     const approved = (workflow?.approvals ?? []).includes(id);
     const isMe = id === username;
     const name = nameById.get(id) ?? id;
     return {
       icon: approved ? <Check size={14} strokeWidth={1.5} /> : <User size={14} strokeWidth={1.5} />,
-      text: `${name}${isMe ? ` (${t("approval.you")})` : ""} · ${
-        approved ? t("approval.statusApproved") : t("approval.statusPending")
-      }`,
-      tone: (isMe ? "accent" : approved ? "ink" : "muted") as "accent" | "ink" | "muted",
+      text: `${name}${isMe ? ` (${t("approval.you")})` : ""}`,
+      tone: isMe ? "accent" : approved ? "ink" : "muted",
+      highlight: isMe,
+      badge: { text: approved ? "Approved" : "Pending", tone: approved ? "approved" : "pending" },
     };
   });
+  // 전이 모달 공용 서브타이틀 — 어떤 버전인지(마커+라벨). 삭제 모달의 맵이름 자리와 동일 역할.
+  const versionSubtitle = currentVersion
+    ? `${formatVersionMarker(currentVersion, versions)} · ${currentVersion.label}`
+    : undefined;
+  // 회수 모달 체크아웃 요약 — 누가 보유 중인지 + 회수 시 나에게 이관 + 승인 초기화.
+  const withdrawCheckoutLines: ConfirmLine[] = [
+    {
+      // Lock 아이콘=체크아웃, 텍스트=현재 보유자(없으면 "체크아웃 없음"), 뱃지="→ 나"(회수 시 이관).
+      icon: <Lock size={14} strokeWidth={1.5} />,
+      text: workflow?.checkout_holder
+        ? (nameById.get(workflow.checkout_holder) ?? workflow.checkout_holder)
+        : t("checkout.none"),
+      tone: "accent",
+      badge: { text: t("approval.checkoutToMe"), tone: "accent" },
+    },
+    {
+      icon: <RotateCcw size={14} strokeWidth={1.5} />,
+      text: t("approval.approvalsRow"),
+      tone: "muted",
+      badge: { text: t("approval.willReset"), tone: "warn" },
+    },
+  ];
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
     !!username &&
@@ -6998,7 +7021,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <ConfirmDialog
           icon={<Send size={28} strokeWidth={1.5} />}
           title={t("approval.submitConfirmTitle")}
-          message={t("approval.submitConfirmBody")}
+          message={versionSubtitle}
           lines={
             (workflow?.approvers ?? []).length > 0
               ? (workflow?.approvers ?? []).map((id) => ({
@@ -7027,7 +7050,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <ConfirmDialog
           icon={<Check size={28} strokeWidth={1.5} />}
           title={t("approval.approveConfirmTitle")}
-          message={t("approval.approveConfirmBody")}
+          message={versionSubtitle}
           lines={approverStatusLines}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
@@ -7043,7 +7066,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <ConfirmDialog
           icon={<Upload size={28} strokeWidth={1.5} />}
           title={t("approval.publishConfirmTitle")}
-          message={t("approval.publishConfirmBody")}
+          message={versionSubtitle}
           lines={(() => {
             const prior = versions.find((v) => v.status === "published");
             return prior
@@ -7072,8 +7095,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         <ConfirmDialog
           icon={<Undo2 size={28} strokeWidth={1.5} />}
           title={t("approval.withdrawConfirmTitle")}
-          message={t("approval.withdrawConfirmBody")}
-          lines={approverStatusLines}
+          message={versionSubtitle}
+          sections={
+            approverStatusLines.length
+              ? [withdrawCheckoutLines, approverStatusLines]
+              : [withdrawCheckoutLines]
+          }
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
@@ -7089,7 +7116,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           icon={<X size={28} strokeWidth={1.5} />}
           danger
           title={t("wf.rejectTitle")}
-          message={t("approval.rejectConfirmBody")}
+          message={versionSubtitle}
           lines={approverStatusLines}
           input={{
             value: rejectReason,
