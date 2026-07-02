@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 버전 카드 상세: a151936 원본 디자인 복원 + 좁을 때만 좌우 스크롤
+- 사용자 요청 — 내용 디자인은 `0fe62ef` 직전(`a151936`) 원본 그대로, 상세만 좁을 때 좌우 스크롤. 그간의 마커/sticky/scrollbar-hidden/flex(0fe62ef·65e094b·ff74c91)로 크기·정렬이 변한 것을 되돌림.
+- `git checkout a151936 -- version-timeline.tsx`로 원본 복원(테이블 + rowspan 날짜박스, 헤더 마커·말줄임 없음, sticky 없음) 후, 상세 테이블만 `overflow-x-auto` + `w-full min-w-max`로 감싸 넓으면 채우고 좁으면 넘쳐 좌우 스크롤(스크롤바 표시 → 날짜·시각 도달 가능).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 버전 카드 상세: 날짜·시간 항상 표시(가로스크롤 폐기)
 - **문제**: 상세 테이블에서 이름 열 `w-full`이 공간을 다 먹어 날짜·시각이 가로 스크롤(스크롤바 숨김) 밖으로 밀려 안 보임.
 - **수정** (`version-timeline.tsx`) — 가로 스크롤 테이블(`w-max`/sticky/`scrollbar-hidden`) 폐기 → 오버플로 없는 flex 행 `[단계 필][이름·아이디 말줄임][날짜·시각 우측 고정]`. 좁은 사이드바·넓은 홈 상세 모두 날짜·시각 항상 표시. rowspan 날짜박스·cardBg 계산 제거.

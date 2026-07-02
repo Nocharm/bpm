@@ -8,7 +8,6 @@ import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X 
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
-import { formatVersionMarker } from "@/lib/version-name";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -91,6 +90,22 @@ export function VersionTimeline({
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
         // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
         const events: VersionEvent[] = [...version.events].reverse();
+        // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
+        const rawRows = events.map((evt) => {
+          const full = formatStamp(evt.created_at);
+          const sep = full.indexOf(" ");
+          return {
+            evt,
+            date: sep >= 0 ? full.slice(0, sep) : full,
+            time: sep >= 0 ? full.slice(sep + 1) : "",
+          };
+        });
+        const detailRows = rawRows.map((r, i) => {
+          if (i > 0 && rawRows[i - 1]?.date === r.date) return { ...r, dateSpan: 0 };
+          let span = 1;
+          while (i + span < rawRows.length && rawRows[i + span]?.date === r.date) span += 1;
+          return { ...r, dateSpan: span };
+        });
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         const open = expandedIds.has(version.id);
@@ -119,12 +134,8 @@ export function VersionTimeline({
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임. */}
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
-                    <span className="text-caption-strong text-ink">{version.label}</span>
-                  </span>
+                <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="text-caption-strong text-ink">{version.label}</span>
                   <span
                     className={`shrink-0 rounded-xs border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                   >
@@ -166,34 +177,49 @@ export function VersionTimeline({
                     </div>
                   </div>
 
-                  {/* 펼침: 이벤트별 상세 행 — 한 줄에 [단계 필][이름·아이디(말줄임)][날짜·시각(우측 고정)].
-                      좁은 사이드바에서도 날짜·시각이 항상 보이도록 오버플로 없이 flex 배치. */}
+                  {/* 펼침: 이벤트별 상세 행(단계 필·이름·아이디·시간) — 칩이 접히는 만큼 동시에 펼침 / detail expands as chips collapse */}
                   <div
                     className={`grid transition-all duration-300 ease-in-out ${
                       open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
                     }`}
                   >
                     <div className="overflow-hidden">
-                      <div className="mt-1.5 flex flex-col gap-1">
-                        {events.map((evt) => (
-                          <div key={evt.id} className="flex items-center gap-2">
-                            <span
-                              className={`inline-flex w-24 shrink-0 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
-                                EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
-                              }`}
-                            >
-                              <EventIcon type={evt.event_type} />
-                              {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-ink">
-                              {nameOf(evt.actor)}
-                              <span className="ml-1 text-ink-tertiary">{evt.actor}</span>
-                            </span>
-                            <span className="shrink-0 whitespace-nowrap rounded-xs border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
-                              {formatStamp(evt.created_at)}
-                            </span>
-                          </div>
-                        ))}
+                      {/* 좁을 때만 가로 스크롤 — 넓으면 w-full로 채우고, 좁으면 내용 폭(min-w-max)으로 넘쳐 스크롤 */}
+                      <div className="overflow-x-auto">
+                      <table className="mt-1.5 w-full min-w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
+                        <tbody>
+                          {detailRows.map(({ evt, date, time, dateSpan }) => (
+                            <tr key={evt.id} className="align-top">
+                              <td className="w-24">
+                                <span
+                                  className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
+                                    EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                                  }`}
+                                >
+                                  <EventIcon type={evt.event_type} />
+                                  {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                                </span>
+                              </td>
+                              <td className="w-full whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
+                              <td className="whitespace-nowrap text-ink-tertiary">{evt.actor}</td>
+                              {dateSpan > 0 && (
+                                <td
+                                  rowSpan={dateSpan}
+                                  className="min-w-[5.25rem] rounded-xs border border-divider px-1.5 py-0.5 text-center align-top text-ink-tertiary"
+                                >
+                                  {/* 박스 = td 자체(테두리) → rowspan 만큼 높이 증가(2일=2배·3일=3배), 날짜 윗 정렬 (H3) */}
+                                  {date}
+                                </td>
+                              )}
+                              <td className="whitespace-nowrap text-right">
+                                <span className="rounded-xs border border-hairline px-1.5 py-0.5 text-ink-tertiary">
+                                  {time}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                       </div>
                     </div>
                   </div>
