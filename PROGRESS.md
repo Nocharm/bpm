@@ -4,7 +4,7 @@
 
 ## 2026-07-03 — 회수 권한 상태별 분리 + 회수 모달 제출자→회수자 한줄 핸드오프(펼침 애니)
 - **회수 권한** — 승인요청 단계(pending/approved)는 **제출자만**, 반려(rejected)는 현행대로 **+오너·sysadmin**(제출자 부재 대비). 백엔드 `withdraw_version` 상태별 게이트, 프론트 `canWithdraw`도 동일(rejected에서만 오버라이드). 신규 `test_withdraw_override_blocked_on_pending`.
-- **회수 모달 핸드오프** — 체크아웃+제출자를 한 줄로(`제출자 → 회수자`)로 합쳐 누구에게 넘어가는지 한눈에. 제출자(중립)·회수자(accent) 모두 **필(pill)** 형식. **회수자≠제출자일 때만** "→ 회수자"를 모달 로딩 후 가로로 펼치는 애니메이션(700ms, `WithdrawHandoff` 신규 + `ConfirmDialog.banner` 슬롯). 승인 초기화 안내 행 유지.
+- **회수 모달 핸드오프** — 체크아웃+제출자를 한 줄로(`제출자 → 회수자`)로 합쳐 누구에게 넘어가는지 한눈에. 제출자(중립)·회수자(accent) 모두 **필(pill)** 형식. **회수자≠제출자일 때만** 화살표(폭 중앙)가 1초에 걸쳐 좌→우로 늘어나고 you(오른쪽 정렬, ellipsis 없이 클립 허용)가 페이드인, 펼침 후 you를 페이드로 1회 깜빡(`WithdrawHandoff` + `ConfirmDialog.banner` 슬롯). 승인 초기화 안내 행 유지.
 - 정리 — 미사용 i18n 키 `approval.checkoutToMe`·`approval.submitterBadge` 제거.
 - 검증: 백엔드 381 passed·ruff clean / 프론트 lint 0·build OK.
 
