@@ -804,6 +804,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
+  // 승인 진행 중 — 어떤 버전이든 pending/approved면 승인자 목록 변경 금지(tally 깨짐 방지, 백엔드 409와 일치).
+  const approvalInFlight = versions.some(
+    (v) => v.status === "pending" || v.status === "approved",
+  );
+  // 승인자별 상태 라인 — 승인/거절/회수 모달 공용. 본인은 하이라이트(accent), 승인 완료는 Check.
+  const approverStatusLines = (workflow?.approvers ?? []).map((id) => {
+    const approved = (workflow?.approvals ?? []).includes(id);
+    const isMe = id === username;
+    const name = nameById.get(id) ?? id;
+    return {
+      icon: approved ? <Check size={14} strokeWidth={1.5} /> : <User size={14} strokeWidth={1.5} />,
+      text: `${name}${isMe ? ` (${t("approval.you")})` : ""} · ${
+        approved ? t("approval.statusApproved") : t("approval.statusPending")
+      }`,
+      tone: (isMe ? "accent" : approved ? "ink" : "muted") as "accent" | "ink" | "muted",
+    };
+  });
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
     !!username &&
@@ -6832,7 +6849,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       isApprover={isApprover}
                       isSubmitter={isSubmitter}
                       hasApproved={hasApproved}
-                      isMapOwner={isMapOwner}
+                      canManageApprovers={isMapOwner && !approvalInFlight}
                       onSubmit={() => setSubmitConfirmOpen(true)}
                       onApprove={() => setApproveConfirmOpen(true)}
                       onReject={() => setRejectOpen(true)}
@@ -6995,6 +7012,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           icon={<Check size={28} strokeWidth={1.5} />}
           title={t("approval.approveConfirmTitle")}
           message={t("approval.approveConfirmBody")}
+          lines={approverStatusLines}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
@@ -7039,6 +7057,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           icon={<Undo2 size={28} strokeWidth={1.5} />}
           title={t("approval.withdrawConfirmTitle")}
           message={t("approval.withdrawConfirmBody")}
+          lines={approverStatusLines}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
@@ -7055,6 +7074,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           danger
           title={t("wf.rejectTitle")}
           message={t("approval.rejectConfirmBody")}
+          lines={approverStatusLines}
           input={{
             value: rejectReason,
             onChange: setRejectReason,

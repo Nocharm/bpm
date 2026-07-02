@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import workflow
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import MapApprover, ProcessMap
+from app.models import MapApprover, MapVersion, ProcessMap
 from app.schemas import ApproversUpdate
 
 router = APIRouter(
@@ -42,6 +43,22 @@ async def set_approvers(
     # 소유자 미상(created_by=None, seed/legacy 맵)은 잠그지 않고 개방 — 누구나 관리 허용
     if found_map.created_by is not None and found_map.created_by != user:
         raise HTTPException(status_code=403, detail="only the map owner can set approvers")
+
+    # 승인 진행 중(pending/approved 버전 존재)엔 승인자 변경 금지 — 진행 중 변경은 승인 tally를
+    # 깨뜨려 오류를 유발. 승인자 편집은 워크플로 시작 전(draft/rejected 등)에만 허용.
+    in_flight = await session.scalar(
+        select(MapVersion.id)
+        .where(
+            MapVersion.map_id == map_id,
+            MapVersion.status.in_([workflow.PENDING, workflow.APPROVED]),
+        )
+        .limit(1)
+    )
+    if in_flight is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="cannot change approvers while a version is under approval",
+        )
 
     await session.execute(delete(MapApprover).where(MapApprover.map_id == map_id))
     unique_ids = sorted({uid for uid in payload.user_ids if uid})

@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 모달 승인자 현황 + 승인자 관리 드래프트 한정
+- **승인/거절/회수 모달에 승인자 현황** — 각 승인자를 승인 완료(Check)/대기(User) 아이콘 + `이름 · 상태`로 나열, **본인은 accent 하이라이트("나/you")**. `workflow.approvals`/`approvers` 기반. (제출 모달은 기존 명단 유지)
+- **거절→나머지 비활성 확인**: `reject_version`은 `pending`에서만 동작하고 즉시 `rejected`로 전이 → 승인/거절 버튼은 `status==="pending"`에서만 렌더되므로, 1명이 거절하면 다른 승인자에겐 버튼이 사라짐(백엔드도 409). 의도대로 동작 확인.
+- **승인자 관리 = 오너 + 드래프트 한정** — `set_approvers`는 종전대로 오너(created_by)만; 추가로 **pending/approved 버전이 있으면 409**(진행 중 변경이 tally를 깨 오류 유발). 프론트 ApprovalPanel의 관리 링크도 `canManageApprovers = 오너 && !승인진행중`으로 게이트(`isMapOwner` prop→`canManageApprovers`). 테스트 2종(pending 차단/draft 허용).
+- 검증: 백엔드 372 passed·ruff clean / 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 전이 액션 모달 통일(제출/승인/거절/게시/회수)
 - **모달 디자인 통일** — 제출·승인·거절·게시·회수 확인을 모두 `ConfirmDialog`(아이콘 원 + 제목 + 본문 + 확인/취소)로 일원화. `WorkflowActions`의 자체 거절 모달·portal 제거(버튼만 노출, 각 액션이 page.tsx 모달을 연다). `onReject` 시그니처 `(reason)`→`()`.
 - **ConfirmDialog 확장** — 선택 `input`(textarea) + `confirmDisabled` 추가 → 거절 사유 입력창을 통일 디자인 안에서 유지(danger, 사유 없으면 확인 비활성).

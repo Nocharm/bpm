@@ -288,6 +288,21 @@ def test_withdraw_with_approval_keeps_record(
     assert "withdrawn" in event_types, event_types
 
 
+def test_set_approvers_blocked_while_pending(client: TestClient) -> None:
+    """승인 진행 중(pending)엔 승인자 변경 금지 — 409 (진행 중 tally 깨짐 방지)."""
+    map_id, _version_id = _submit_with_approvers(client, ["a"])  # now pending
+    resp = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a", "b"]})
+    assert resp.status_code == 409, resp.text
+
+
+def test_set_approvers_allowed_on_draft(client: TestClient) -> None:
+    """draft 상태에선 승인자 변경 허용."""
+    map_id, _version_id = _create_map_with_version(client)  # draft
+    resp = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a", "b"]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == ["a", "b"]
+
+
 def test_withdraw_from_approved(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -18,7 +18,8 @@ interface ApprovalPanelProps {
   isApprover: boolean;
   isSubmitter: boolean;
   hasApproved: boolean;
-  isMapOwner: boolean;
+  // 승인자 목록 관리 가능 여부 — 오너이면서 승인 진행 중이 아닐 때(draft/rejected 등). / can edit approver list.
+  canManageApprovers: boolean;
   onSubmit: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -60,7 +61,7 @@ export function ApprovalPanel({
   isApprover,
   isSubmitter,
   hasApproved,
-  isMapOwner,
+  canManageApprovers,
   onSubmit,
   onApprove,
   onReject,
@@ -208,7 +209,7 @@ export function ApprovalPanel({
           <span className="text-fine text-ink-tertiary">
             {t("approval.approversCount", { n: approvers.length })}
           </span>
-          {isMapOwner && (
+          {canManageApprovers && (
             <button
               type="button"
               className="text-fine text-accent hover:underline"
