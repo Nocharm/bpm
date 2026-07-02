@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 버전 카드 상세: 날짜·시간 항상 표시(가로스크롤 폐기)
+- **문제**: 상세 테이블에서 이름 열 `w-full`이 공간을 다 먹어 날짜·시각이 가로 스크롤(스크롤바 숨김) 밖으로 밀려 안 보임.
+- **수정** (`version-timeline.tsx`) — 가로 스크롤 테이블(`w-max`/sticky/`scrollbar-hidden`) 폐기 → 오버플로 없는 flex 행 `[단계 필][이름·아이디 말줄임][날짜·시각 우측 고정]`. 좁은 사이드바·넓은 홈 상세 모두 날짜·시각 항상 표시. rowspan 날짜박스·cardBg 계산 제거.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 문서 갱신 + 완료/폐기 문서 정리
 - **README 갱신** — 기능 목록에 승인 워크플로·버전 라이프사이클·점유권·권한(RBAC)·인증 추가. 시드 섹션을 종합 데모(조직도·직원401·맵12·그룹6, `admin.sys`, 로그인 피커, `DEV_ENFORCE_PERMISSIONS`)로 갱신. 죽은 링크 제거, Python 3.11→3.12.
 - **폐기/완료 문서 삭제** — `docs/permission-demo-walkthrough.md`(삭제된 seed_permission_demo 기준·obsolete)·`docs/version-lifecycle-test-scenarios.md`(구현·pytest 완료된 검토 아티팩트, 삭제 시드 참조)·`docs/superpowers/HANDOFF-frontend-ui-improvements.md`(머지 완료 핸드오프)·`SCREEN-REDESIGN.md`(머지 완료 리디자인 트래커).
