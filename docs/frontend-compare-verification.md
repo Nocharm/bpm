@@ -7,7 +7,7 @@
 - B (현재브랜치) = `HEAD`
 
 **원리**: 프론트 2개가 백엔드 1개(=DB 1개)를 `/api` 프록시로 공유 → 같은 데이터, UI만 다름.
-**DB 종류(sqlite/postgres)는 무관** — 프론트는 DB를 직접 안 건드리고 API로만 통신한다. postgres 전환/서버데이터 복원과 상관없음.
+프론트는 DB를 직접 안 건드리고 API로만 통신하므로 **DB(로컬 sqlite)는 비교에 영향 없다.**
 
 ---
 
@@ -39,9 +39,7 @@ lsof -ti tcp:3000 -ti tcp:3001 -ti tcp:8000 | xargs -r kill -9
 - 역할 게이트 UI(승인탭 매트릭스 등)까지 보려면 기동 전에 `DEV_ENFORCE_PERMISSIONS=true` + `BPM_SYSADMINS=admin.kim`.
   PowerShell: `$env:DEV_ENFORCE_PERMISSIONS="true"; $env:BPM_SYSADMINS="admin.kim"`
 
-**데이터 선택 (DB는 `.env` `DATABASE_URL`로 갈림)**
-- **실서버 데이터**로 볼 때 → 복원한 postgres 그대로. (단, 라이프사이클 신규 UI가 필요로 하는 expired/draft+점유/pending-요청 상태·데모유저는 없을 수 있어 새 UI가 빌 수 있음)
-- **라이프사이클 UI**를 볼 때 → 데모시드 필요. ⚠️ `reset_db`는 `drop_all`이라 **복원 데이터 위에 돌리지 말 것** → `DATABASE_URL`을 별도 DB(예: sqlite `dev.db` 또는 데모용 postgres db)로 바꾼 뒤 `python -m scripts.reset_db`.
+**데이터**: 로컬 sqlite(`dev.db`). 라이프사이클 신규 UI(expired/draft+점유/pending-요청 상태)를 보려면 데모시드가 필요 — `python -m scripts.reset_db`로 시드하면 데모 유저(user.park·choi·jung)와 전 케이스가 채워진다.
 
 ## 2) 프론트 A — 분기지점 `291f6d9` → :3000 (worktree)
 

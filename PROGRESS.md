@@ -3,11 +3,10 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-07-02 — 프론트 before/after 비교 검증 방법 문서
-- **docs: 프론트 2 + 백 1 비교 검증 요약** (`docs/frontend-compare-verification.md`) — 분기지점 `291f6d9`(A) ↔ HEAD(B)를 worktree로 각각 :3000/:3001에 띄우고 백엔드 1개(:8000)를 `/api` 프록시로 공유. DB 종류 무관(프론트는 API로만 통신) 명시. 좀비 dev 정리·데이터 선택(실서버 vs 데모시드, 복원 DB에 reset_db 금지)·worktree 정리 포함. PowerShell(사내 Windows) 우선.
+- **docs: 프론트 2 + 백 1 비교 검증 요약** (`docs/frontend-compare-verification.md`) — 분기지점 `291f6d9`(A) ↔ HEAD(B)를 worktree로 각각 :3000/:3001에 띄우고 백엔드 1개(:8000)를 `/api` 프록시로 공유. DB 무관(프론트는 API로만 통신) 명시. 좀비 dev 정리·데이터는 로컬 sqlite(라이프사이클 UI는 데모시드)·worktree 정리 포함. PowerShell(사내 Windows) 우선.
 
-## 2026-07-02 — 로컬 Postgres 전환 + 서버 덤프 복원
-- **fix(db): `map_versions.version_number`를 `_add_missing_columns` 스톱갭에 추가** — 서버 덤프(라이프사이클 이전 스키마)를 로컬 Postgres에 복원해도 기동 시 컬럼이 자동 보강돼 publish/workflow 500 회피(nullable, 기존 행 생존). 구 스키마 시뮬레이션 검증 PASS + 전체 366 테스트 green(테스트는 격리 sqlite라 무영향).
-- **docs(db-seed): "사내 로컬(Windows) — Postgres 전환 + 서버 덤프 복원" 섹션 추가** — DB는 `.env` `DATABASE_URL`로 갈림. 서버(사내 `182.199.63.71`, 계정 `h_jin.jang`)에서 `docker compose exec db pg_dump` → 로컬 다운(완료) → 네이티브 Postgres에 `pg_restore --no-owner` 복원 → `.env` postgres URL → 기동 시 컬럼 자동 보정. 복원 DB엔 `reset_db` 금지 경고. mac/Homebrew 대체 경로 병기.
+## 2026-07-02 — 배포: version_number 컬럼 기동 자동보강
+- **fix(db): `map_versions.version_number`를 `_add_missing_columns` 스톱갭에 추가** — 기존 DB(운영 서버 postgres 등)에 컬럼이 없으면 기동 시 자동 보강(nullable, 기존 행 생존)해 publish/workflow 500 회피. 구 스키마 시뮬레이션 검증 PASS + 전체 366 테스트 green(sqlite 무영향). (로컬 Postgres 전환 시도는 접고 로컬은 sqlite 유지 — 관련 문서 삭제.)
 
 ## 2026-07-02 — feat/version-lifecycle (test scenarios)
 - **docs: 라이프사이클 테스트 시나리오 문서 추가** (`docs/version-lifecycle-test-scenarios.md`) — 정상(P1~P6)·예외(N1~N12)·관리자(A1~A6) 3분류 검토용 매트릭스. 각 시나리오에 화면(3화면 결정) + API 상태코드(403/409/422) 기대치 + 대응 pytest 함수 근거 매핑. 서두에 `DEV_ENFORCE_PERMISSIONS=true` 강제 모드 경고(안 그러면 전원 sysadmin→403 재현 불가) + 시드 엔터티 표. 인용 테스트 50개 green 확인.
