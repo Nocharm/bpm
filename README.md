@@ -9,6 +9,10 @@
 - 좌측 **아웃라인 트리**(분기 들여쓰기 + 하위 펼치기, 클릭 시 해당 노드로 포커싱)
 - 자동 정렬(선후 기준 레이아웃) 및 선택 노드 맞춤/등간격 정렬
 - 버전 생성(복제)·라벨링·나란히 비교 · PNG 내보내기
+- **버전 승인 워크플로** — Draft→제출(Pending)→승인(만장일치)→게시(Published), 반려·회수(기록 유지), 게시 시 순차 버전번호(v1,v2…)·직전 게시본 만료(Expired)·만료본 재게시
+- **점유권(checkout)** — 드래프트 편집은 보유자 1인만, 지정 인계 전용(직접 이전 / 요청→승인). 요청자 복수·승인 시 나머지 자동거절·요청 철회, 출처(누구에게서·언제) 표시
+- **권한(RBAC)** — 맵별 owner/editor/viewer(유저·부서·그룹 grant), 공개/비공개 가시성, 지정 승인자, 유저 그룹 라이프사이클
+- **인증** — Keycloak(OIDC) 로그인. 로컬(인증 OFF)은 임시 로그인 피커로 직원 디렉터리를 검색·선택
 
 기능 명세: [`docs/spec.md`](docs/spec.md)
 
@@ -17,7 +21,7 @@
 | 디렉터리 | 스택 | 역할 |
 |----------|------|------|
 | `frontend/` | Next.js + TypeScript + @xyflow/react | 에디터 UI |
-| `backend/` | FastAPI + Python 3.11 | 맵/버전/노드/엣지 API |
+| `backend/` | FastAPI + Python 3.12 | 맵/버전/노드/엣지·승인 워크플로·권한 API |
 | `nginx/` | nginx | 리버스 프록시 — `/` → frontend, `/api` → backend |
 | `docker-compose.yml` | + PostgreSQL 16 | 서버 배포 (포트 **3333**) |
 
@@ -69,16 +73,18 @@ npm run dev
 
 ## 데이터 초기화 / 데모 시드
 
-서비스 미런칭 상태 — DB를 비우고 데모 데이터를 채울 수 있다. backend/ 에서:
+서비스 미런칭 상태 — DB를 비우고 종합 데모 데이터를 채울 수 있다. backend/ 에서:
 
 ```bash
-.venv/bin/python -m scripts.reset_db        # drop+create + 직원 + 참조데모맵 + 권한데모
+.venv/bin/python -m scripts.reset_db        # drop+create + 종합 데모(조직도·직원401·맵12·그룹6)
 ```
 ```powershell
 .venv\Scripts\python -m scripts.reset_db
 ```
 
-> 전체 동작·부분 시드·권한 강제 검증은 **[`docs/db-seed.md`](docs/db-seed.md)**, RBAC 화면 투어는 [`docs/permission-demo-walkthrough.md`](docs/permission-demo-walkthrough.md).
+시드 내용: 센터/담당/팀/파트 조직도 + 직원 ~400명(sysadmin `admin.sys`) + 맵 12개(공개6/비공개6, 버전 v1~v5 승인 워크플로 + 작업본) + 그룹 6. `/login`의 임시 로그인 피커에서 검색해 아무나 접속. 실제 역할(owner/editor/viewer)로 화면을 검증하려면 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`(또는 `backend/.env`)로 백엔드를 띄운다.
+
+> 시드 상세·부분 시드·권한 강제 검증은 **[`docs/db-seed.md`](docs/db-seed.md)** 참고.
 
 ## 서버 배포 (docker-compose)
 

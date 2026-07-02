@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 문서 갱신 + 완료/폐기 문서 정리
+- **README 갱신** — 기능 목록에 승인 워크플로·버전 라이프사이클·점유권·권한(RBAC)·인증 추가. 시드 섹션을 종합 데모(조직도·직원401·맵12·그룹6, `admin.sys`, 로그인 피커, `DEV_ENFORCE_PERMISSIONS`)로 갱신. 죽은 링크 제거, Python 3.11→3.12.
+- **폐기/완료 문서 삭제** — `docs/permission-demo-walkthrough.md`(삭제된 seed_permission_demo 기준·obsolete)·`docs/version-lifecycle-test-scenarios.md`(구현·pytest 완료된 검토 아티팩트, 삭제 시드 참조)·`docs/superpowers/HANDOFF-frontend-ui-improvements.md`(머지 완료 핸드오프)·`SCREEN-REDESIGN.md`(머지 완료 리디자인 트래커).
+- 보존: `docs/superpowers/plans·specs/`(설계 기록)·`docs/spec.md`·PROGRESS(로그).
+
 ## 2026-07-02 — 구 시드 정리 + 기동 재시드 가드 + 로컬 권한검증 ON
 - **구 데모 시드 5개 삭제** — `seed_reference_demo`·`seed_permission_demo`·`seed_compare_demo`·`seed_nesting_demo`·`seed_version_lifecycle_demo` 제거(reset_db 미사용). `seed_invariants`(테스트 의존)·`seed_org_demo`·`reset_db` 유지.
 - **기동 재시드 가드** — `seed_local_employees`가 "직원 있으면 skip" → uvicorn 기동 시 구 5명(admin.kim 등)이 종합 시드 DB(401명)에 다시 섞이던 오염 방지. 빈 DB(테스트·최초)만 시드. dev.db 검증: 기동 재시드해도 401 유지·admin.kim 없음.
