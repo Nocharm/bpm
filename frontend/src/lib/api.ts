@@ -402,6 +402,8 @@ export interface WorkflowState {
   status: VersionStatus;
   submitted_by: string | null;
   reject_reason: string | null;
+  // 현재 반려 상태를 만든 승인자(rejected일 때만) — 승인자 목록 'Rejected' 표시용
+  rejected_by?: string | null;
   approvers: string[];
   approvals: string[];
   version_number?: number | null;

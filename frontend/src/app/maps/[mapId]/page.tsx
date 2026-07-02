@@ -813,16 +813,28 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
   // 승인자별 상태 라인 — 승인/거절/회수 모달 공용. 본인은 하이라이트(accent), 승인 완료는 Check.
   // 승인자 행 — 이름(좌, 본인 하이라이트) + 상태 영어 뱃지(우측 끝). 상태는 로케일 무관 영어 고정.
+  // 반려자(rejected_by)는 Rejected 우선 — 승인했다 거절해도 'Approved'로 남지 않게.
+  const rejectedBy = workflow?.rejected_by ?? null;
   const approverStatusLines: ConfirmLine[] = (workflow?.approvers ?? []).map((id) => {
-    const approved = (workflow?.approvals ?? []).includes(id);
+    const rejected = id === rejectedBy;
+    const approved = !rejected && (workflow?.approvals ?? []).includes(id);
     const isMe = id === username;
     const name = nameById.get(id) ?? id;
+    const icon = rejected ? (
+      <X size={14} strokeWidth={1.5} />
+    ) : approved ? (
+      <Check size={14} strokeWidth={1.5} />
+    ) : (
+      <User size={14} strokeWidth={1.5} />
+    );
     return {
-      icon: approved ? <Check size={14} strokeWidth={1.5} /> : <User size={14} strokeWidth={1.5} />,
+      icon,
       text: `${name}${isMe ? ` (${t("approval.you")})` : ""}`,
       tone: isMe ? "accent" : approved ? "ink" : "muted",
       highlight: isMe,
-      badge: { text: approved ? "Approved" : "Pending", tone: approved ? "approved" : "pending" },
+      badge: rejected
+        ? { text: "Rejected", tone: "warn" as const }
+        : { text: approved ? "Approved" : "Pending", tone: approved ? "approved" : "pending" },
     };
   });
   // 전이 모달 공용 서브타이틀 — 어떤 버전인지(마커+라벨). 삭제 모달의 맵이름 자리와 동일 역할.

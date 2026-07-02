@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 승인 후 거절 시 승인자 상태 'Rejected' 반영
+- **버그**: 이미 승인한 승인자가 거절하면 거절은 되지만 승인자 목록에 상태가 'Approved'로 남음.
+- **백엔드** — `reject_version`이 거절자의 `VersionApproval` 레코드 삭제(approvals에서 제외). `get_workflow_state`가 `rejected_by`(rejected 상태일 때 최근 'rejected' 이벤트 actor) 노출, `WorkflowStateOut`에 필드 추가.
+- **프론트** — `WorkflowState.rejected_by` 추가. 모달 `approverStatusLines`·사이드 `ApprovalPanel` 목록 모두 반려자를 **Rejected**(X·error) 우선 표시. `approval.statusRejected` i18n(en "Rejected"/ko "반려").
+- 검증: 백엔드 380 passed·ruff clean(신규 `test_reject_removes_own_approval_and_sets_rejected_by`) / 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 전이 모달 재디자인(요약박스+영어 상태뱃지) + 체크아웃 용어 통일 + 회수 모달 체크아웃 정보
 - **용어 통일** — UI의 "점유권/점유자/holder" 표현을 일괄 **체크아웃(checkout)** 으로(ko "점유권"→"체크아웃"·"점유자 없음"→"체크아웃 없음"·"편집권한 요청"→"체크아웃 요청" 등, en "No holder"→"Not checked out"). i18n 값만 변경(t() 사용처 자동 반영).
 - **모달 디자인 통일(맵 삭제 모달식)** — `ConfirmDialog`에 행 우측 **상태 뱃지**(`badge`)·본인 **하이라이트**(`highlight`)·복수 요약박스(`sections`) 추가. 전이 모달(제출/승인/거절/회수/게시)의 산문 body를 버전 서브타이틀(`formatVersionMarker · label`)로 압축, 핵심은 요약박스/필로.

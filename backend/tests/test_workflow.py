@@ -211,6 +211,23 @@ def test_reject_requires_reason(
     assert missing.status_code == 422
 
 
+def test_reject_removes_own_approval_and_sets_rejected_by(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """승인한 승인자가 거절하면 → 그 사람의 승인 철회(approvals 제외) + rejected_by 노출."""
+    _map_id, version_id = _submit_with_approvers(client, ["a", "b"])  # pending, 승인자 a,b
+
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/approve")  # a 승인
+    assert "a" in client.get(f"/api/versions/{version_id}/workflow").json()["approvals"]
+
+    client.post(f"/api/versions/{version_id}/reject", json={"reason": "changed mind"})
+    wf = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert wf["status"] == "rejected"
+    assert "a" not in wf["approvals"]  # 승인 철회 → 'Approved'로 안 남음
+    assert wf["rejected_by"] == "a"  # 거절자 노출
+
+
 def test_publish_demotes_prior(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     map_id, v1 = _submit_with_approvers(client, ["a"])
     monkeypatch.setattr(settings, "dev_user", "a")

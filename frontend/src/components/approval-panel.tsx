@@ -3,7 +3,7 @@
 // R5c 승인 탭 — 3단계 스테퍼(제출→검토→게시) + 상태 배지 + 승인자 현황 + 액션.
 // Part D: pending_checkout_request 배너 — 결정 권한자(보유자/소유자/sysadmin)에게 승인/거절 UI 노출.
 import { useEffect, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { getDirectory, type VersionStatus, type WorkflowState } from "@/lib/api";
 import { CheckoutPanel } from "@/components/checkout-panel";
@@ -101,6 +101,8 @@ export function ApprovalPanel({
 
   const approvers = workflow?.approvers ?? [];
   const approvals = new Set(workflow?.approvals ?? []);
+  // 반려자 — 승인했다 거절해도 목록에 'Approved'로 남지 않게 Rejected 우선.
+  const rejectedBy = workflow?.rejected_by ?? null;
   const stage = currentStage(status);
   const rejected = status === "rejected";
   const isExpired = status === "expired";
@@ -217,14 +219,20 @@ export function ApprovalPanel({
           <ul className="flex flex-col gap-1.5">
             {approvers.map((id) => {
               const name = resolve(id);
-              const approved = approvals.has(id);
+              const rejected = id === rejectedBy;
+              const approved = !rejected && approvals.has(id);
               return (
                 <li key={id} className="flex items-center gap-2">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine font-semibold text-accent">
                     {name.slice(0, 1).toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-caption text-ink">{name}</span>
-                  {approved ? (
+                  {rejected ? (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 text-fine text-error">
+                      <X size={12} strokeWidth={2} />
+                      {t("approval.statusRejected")}
+                    </span>
+                  ) : approved ? (
                     <span className="inline-flex shrink-0 items-center gap-0.5 text-fine text-added">
                       <Check size={12} strokeWidth={2} />
                       {t("approval.statusApproved")}

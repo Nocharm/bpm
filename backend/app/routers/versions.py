@@ -447,12 +447,25 @@ async def get_workflow_state(
         )
         for r in pending_reqs
     ]
+    # 반려 상태를 만든 승인자 — 가장 최근 'rejected' 이벤트의 actor(rejected일 때만)
+    rejected_by = None
+    if version.status == workflow.REJECTED:
+        rejected_by = await session.scalar(
+            select(VersionEvent.actor)
+            .where(
+                VersionEvent.version_id == version_id,
+                VersionEvent.event_type == "rejected",
+            )
+            .order_by(VersionEvent.id.desc())
+            .limit(1)
+        )
     return WorkflowStateOut(
         version_id=version_id,
         version_number=version.version_number,
         status=version.status,
         submitted_by=version.submitted_by,
         reject_reason=version.reject_reason,
+        rejected_by=rejected_by,
         approvers=approvers,
         approvals=approvals,
         checkout_holder=version.checked_out_by if active else None,
@@ -585,6 +598,13 @@ async def reject_version(
 
     version.status = workflow.REJECTED
     version.reject_reason = payload.reason
+    # 승인했던 사람이 거절하면 그 사람의 승인은 철회 — 승인자 목록에 'Approved'로 남지 않게.
+    await session.execute(
+        delete(VersionApproval).where(
+            VersionApproval.version_id == version_id,
+            VersionApproval.approver == user,
+        )
+    )
     if version.submitted_by:
         workflow.create_notifications(
             session,

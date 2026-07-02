@@ -219,6 +219,8 @@ class WorkflowStateOut(BaseModel):
     status: str
     submitted_by: str | None
     reject_reason: str | None
+    # 현재 반려 상태를 만든 승인자(rejected 상태일 때만) — 승인자 목록 'Rejected' 표시용
+    rejected_by: str | None = None
     # 맵의 지정 승인자 전체
     approvers: list[str]
     # 이번 사이클에 이미 승인한 승인자
