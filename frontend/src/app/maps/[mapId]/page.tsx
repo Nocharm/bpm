@@ -58,6 +58,7 @@ import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
+import { WithdrawHandoff } from "@/components/withdraw-handoff";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
@@ -804,8 +805,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
-  // 회수 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치). 게시는 제출자 전용이라 별개.
-  const canWithdraw = isSubmitter || myRole === "owner" || isSysadmin;
+  // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
+  const canWithdraw =
+    isSubmitter || (currentVersion?.status === "rejected" && (myRole === "owner" || isSysadmin));
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
   // 승인 진행 중 — 어떤 버전이든 pending/approved면 승인자 목록 변경 금지(tally 깨짐 방지, 백엔드 409와 일치).
   const approvalInFlight = versions.some(
@@ -841,33 +843,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const versionSubtitle = currentVersion
     ? `${formatVersionMarker(currentVersion, versions)} · ${currentVersion.label}`
     : undefined;
-  // 회수 모달 요약 — 기존 제출자(누가 올렸는지) + 회수 시 체크아웃이 나에게 이관 + 승인 초기화.
-  // (회수 대상은 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로, 보유자 대신 제출자를 노출.)
+  // 회수 모달 핸드오프용 제출자 — 회수 대상은 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출.
   const withdrawSubmitter = currentVersion?.submitted_by ?? null;
-  const withdrawCheckoutLines: ConfirmLine[] = [
-    ...(withdrawSubmitter
-      ? [
-          {
-            icon: <Send size={14} strokeWidth={1.5} />,
-            text: nameById.get(withdrawSubmitter) ?? withdrawSubmitter,
-            tone: "accent" as const,
-            badge: { text: t("approval.submitterBadge"), tone: "neutral" as const },
-          },
-        ]
-      : []),
-    {
-      icon: <Lock size={14} strokeWidth={1.5} />,
-      text: t("checkout.title"),
-      tone: "muted",
-      badge: { text: t("approval.checkoutToMe"), tone: "accent" },
-    },
-    {
-      icon: <RotateCcw size={14} strokeWidth={1.5} />,
-      text: t("approval.approvalsRow"),
-      tone: "muted",
-      badge: { text: t("approval.willReset"), tone: "warn" },
-    },
-  ];
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
     !!username &&
@@ -7117,11 +7094,18 @@ function MapEditor({ mapId }: { mapId: number }) {
           icon={<Undo2 size={28} strokeWidth={1.5} />}
           title={t("approval.withdrawConfirmTitle")}
           message={versionSubtitle}
-          sections={
-            approverStatusLines.length
-              ? [withdrawCheckoutLines, approverStatusLines]
-              : [withdrawCheckoutLines]
+          banner={
+            <WithdrawHandoff
+              submitterName={
+                withdrawSubmitter
+                  ? (nameById.get(withdrawSubmitter) ?? withdrawSubmitter)
+                  : t("checkout.none")
+              }
+              youName={t("approval.you")}
+              transfers={!!withdrawSubmitter && withdrawSubmitter !== username}
+            />
           }
+          sections={approverStatusLines.length ? [approverStatusLines] : undefined}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {

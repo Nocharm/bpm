@@ -55,6 +55,8 @@ interface ConfirmDialogProps {
   lines?: ConfirmLine[];
   // 복수 요약박스(예: 체크아웃 요약 + 승인자 목록). 지정 시 lines 대신 각 그룹을 별도 박스로.
   sections?: ConfirmLine[][];
+  // 커스텀 요약박스(정적 lines로 표현 못 하는 애니메이션 행 등) — groups 위에 렌더.
+  banner?: ReactNode;
   // 선택 입력(예: 거절 사유) — 있으면 message/lines 아래 textarea 노출. 값은 호출자가 관리.
   input?: { value: string; onChange: (value: string) => void; placeholder?: string; rows?: number };
   // confirm 버튼 비활성(예: 사유 미입력) / disable confirm.
@@ -72,6 +74,7 @@ export function ConfirmDialog({
   icon,
   lines,
   sections,
+  banner,
   input,
   confirmDisabled = false,
 }: ConfirmDialogProps) {
@@ -105,6 +108,9 @@ export function ConfirmDialog({
             </p>
           )}
         </div>
+        {banner && (
+          <div className="w-full rounded-sm bg-surface-alt p-2 text-left">{banner}</div>
+        )}
         {groups.map((group, gi) => (
           <ul
             key={gi}

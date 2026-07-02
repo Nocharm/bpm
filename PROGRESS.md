@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 회수 권한 상태별 분리 + 회수 모달 제출자→회수자 한줄 핸드오프(펼침 애니)
+- **회수 권한** — 승인요청 단계(pending/approved)는 **제출자만**, 반려(rejected)는 현행대로 **+오너·sysadmin**(제출자 부재 대비). 백엔드 `withdraw_version` 상태별 게이트, 프론트 `canWithdraw`도 동일(rejected에서만 오버라이드). 신규 `test_withdraw_override_blocked_on_pending`.
+- **회수 모달 핸드오프** — 체크아웃+제출자를 한 줄로(`제출자 → 회수자`)로 합쳐 누구에게 넘어가는지 한눈에. **회수자≠제출자일 때만** "→ 회수자"를 모달 로딩 후 가로로 펼치는 애니메이션(`WithdrawHandoff` 신규 + `ConfirmDialog.banner` 슬롯). 승인 초기화 안내 행 유지.
+- 정리 — 미사용 i18n 키 `approval.checkoutToMe`·`approval.submitterBadge` 제거.
+- 검증: 백엔드 381 passed·ruff clean / 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 승인 후 거절 시 승인자 상태 'Rejected' 반영
 - **버그**: 이미 승인한 승인자가 거절하면 거절은 되지만 승인자 목록에 상태가 'Approved'로 남음.
 - **백엔드** — `reject_version`이 거절자의 `VersionApproval` 레코드 삭제(approvals에서 제외). `get_workflow_state`가 `rejected_by`(rejected 상태일 때 최근 'rejected' 이벤트 actor) 노출, `WorkflowStateOut`에 필드 추가.

@@ -395,6 +395,23 @@ def test_withdraw_owner_sysadmin_override(client: TestClient, _transfer_enforce:
     assert client.post(f"/api/versions/{version_id2}/withdraw").status_code == 200
 
 
+def test_withdraw_override_blocked_on_pending(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """승인요청 단계(pending)에선 제출자만 회수 — 오너·sysadmin도 403(반려 상태에서만 오버라이드)."""
+    _map_id, version_id = _seed_with_grants(
+        [("sub.u", "editor"), ("owner.u", "owner")],
+        status="pending",
+        submitted_by="sub.u",
+    )
+    _act_as("owner.u")
+    assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 403
+    _act_as(_TRANSFER_SYSADMIN)
+    assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 403
+    _act_as("sub.u")
+    assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 200
+
+
 def test_checkout_blocked_on_pending(client: TestClient) -> None:
     _map_id, version_id = _submit_with_approvers(client, ["a"])  # now pending
 

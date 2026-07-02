@@ -740,7 +740,7 @@ async def withdraw_version(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Pending/Approved/Rejected → Draft. submitter·오너·sysadmin. 회수자에게 체크아웃 재부여."""
+    """Pending/Approved/Rejected → Draft. pending/approved는 submitter만·rejected는 +오너·sysadmin. 회수자에게 체크아웃 재부여."""
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
@@ -748,12 +748,18 @@ async def withdraw_version(
         raise HTTPException(
             status_code=409, detail=f"cannot withdraw from status {version.status}"
         )
-    # 제출자 부재 시에도 진행이 막히지 않도록 오너·sysadmin 오버라이드(transfer/decide와 권한 일관).
-    actor_role = await get_effective_role(session, user, version.map_id)
-    if not (version.submitted_by == user or actor_role == "owner" or is_sysadmin(user)):
+    # 회수 권한 — 승인요청 단계(pending/approved)는 제출자만. 반려(rejected)는 제출자 부재 대비
+    # 오너·sysadmin도 허용(transfer/decide와 권한 일관).
+    is_withdraw_submitter = version.submitted_by == user
+    if version.status == workflow.REJECTED:
+        actor_role = await get_effective_role(session, user, version.map_id)
+        can_withdraw = is_withdraw_submitter or actor_role == "owner" or is_sysadmin(user)
+    else:
+        can_withdraw = is_withdraw_submitter
+    if not can_withdraw:
         raise HTTPException(
             status_code=403,
-            detail="only the submitter, map owner, or sysadmin can withdraw",
+            detail="only the submitter can withdraw (owner/sysadmin only on a rejected version)",
         )
 
     # 회수 조건부 트랙킹 — 현재 승인요청 사이클의 승인 수로 판정(submit이 매 제출마다 리셋).
