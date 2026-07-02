@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 시드 DB 전면 재구성(조직도 400명·맵12·그룹6) + 로그인 피커
+- **종합 시드 `scripts/seed_org_demo.py`** — 기존 분산 데모(reference/permission/compare/nesting/lifecycle) 대신 단일 시드로 통합. reset_db는 drop_all→seed_org_demo→verify만.
+- **조직도** — 센터2(+관리센터)·담당2/센터·팀2~3/담당·파트1~3/팀, 리프 깊이 혼합(파트/팀/담당 리프). 직원 **401명(admin.sys 포함)** 라운드로빈 분포.
+- **맵 12**(공개6/비공개6) — 오너·편집자·뷰어(유저/부서/그룹 혼합)·승인자, 버전 **v1~v5 게시(정상 워크플로 이벤트+승인이력)** + 최상위 draft(일부 rejected), 일부 이력에 반려·회수. **그룹 6**(유저2·파트2·혼합2).
+- **로컬 로그인 피커** — `DevLoginModal`을 하드코딩 5명→백엔드 디렉터리 fetch+검색으로 교체(관리자 배지). `DirectoryUserOut`/`DirectoryUser`에 `role` 추가.
+- 검증: reset_db 실행 OK(employees=401, maps=12, versions=72[만료48/게시12/draft10/rejected2], groups=6). 백엔드 376 passed·ruff clean / 프론트 lint 0·build OK. (구 시드 스크립트·구 데모 문서는 파일로 잔존하나 미사용)
+
 ## 2026-07-02 — 점유권 탭 프론트 UI(접이식·요청자·호버 결정·철회)
 - **CheckoutPanel** (`checkout-panel.tsx`) — 프로그레스바 위 접이식(기본 접힘) 섹션. 현재 점유자 + 출처(누구에게서)·획득 상대시각("~분 전"), 미결 요청자 카드. 요청 있으면 헤더 **빨간 닷 + 개수**.
 - **호버 결정·철회** — 결정권자(보유자/오너/sysadmin)는 요청 카드 호버 시 승인/거절 아이콘, 요청자는 자기 요청 철회(X). ApprovalPanel의 기존 단건 배너를 이 패널로 대체.

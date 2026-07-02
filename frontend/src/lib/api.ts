@@ -678,6 +678,7 @@ export interface DirectoryUser {
   department: string;
   title?: string;    // 직급 — 멤버 2번째 줄(H2). 미채움 시 ""
   org_path?: string; // 루트→리프 조직 경로. 멤버 2번째 줄 말단 org·부서 카운트(H2). 미채움 시 ""
+  role?: string;     // admin | user — 로컬 로그인 피커 관리자 식별
 }
 
 export interface DirectoryDept {

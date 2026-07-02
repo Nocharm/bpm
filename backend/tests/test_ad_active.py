@@ -180,7 +180,7 @@ def test_directory_response_excludes_sensitive_fields(client: TestClient) -> Non
     users = data.get("users", [])
     # Confirm at least one user is present (local dev users are seeded)
     assert len(users) > 0, "Expected at least 1 user in /api/directory"
-    allowed_keys = {"id", "name", "department", "title", "org_path"}
+    allowed_keys = {"id", "name", "department", "title", "org_path", "role"}
     for user in users:
         extra = set(user.keys()) - allowed_keys
         assert not extra, (

@@ -40,6 +40,7 @@ async def get_directory(
                 for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5)
                 if lv is not None
             ),
+            role=emp.role,
         )
         for emp in rows
     ]

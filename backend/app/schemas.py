@@ -467,6 +467,7 @@ class DirectoryUserOut(BaseModel):
     department: str
     title: str = ""     # 직급 — 멤버 2번째 줄(H2)
     org_path: str = ""  # 루트→리프 org_path — 멤버 2번째 줄 말단 org·부서 카운트(H2)
+    role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
 
 
 class EligibleApproverOut(DirectoryUserOut):
