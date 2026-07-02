@@ -1563,6 +1563,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             // 워크플로우 조회 실패 시 기본값 유지
           }
         }
+        // 홈 "이 버전으로 가기" 등에서 ?version=<id>로 진입 시 해당 버전으로 개시(기본 선택보다 우선).
+        const paramVersion = Number(new URLSearchParams(window.location.search).get("version"));
+        if (paramVersion && detail.versions.some((v) => v.id === paramVersion)) {
+          initialId = paramVersion;
+        }
         if (active) {
           setVersionId(initialId ?? detail.versions[0].id);
           setScopes([{ kind: "root", title: detail.name }]);

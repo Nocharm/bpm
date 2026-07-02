@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 홈 상세에도 "이 버전으로 가기" + 에디터 ?version= 진입
+- 홈(`app/page.tsx`) MapDetailCard에 `onGoToVersion` 연결 — 라우터로 `/maps/[id]?version=<vid>` 이동. 에디터에서만 보이던 버튼이 **홈 오른쪽 상세**에도 노출(현재 버전 개념 없어 전 버전에 노출).
+- 에디터가 `?version=<id>`로 진입 시 해당 버전으로 개시(기본 선택보다 우선, `window.location.search`).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 버전 카드 펼침 시 "이 버전으로 가기" 버튼
 - 버전 타임라인 카드를 펼치면 버전 이름 바로 아래 **"이 버전으로 가기"** 버튼 노출(현재 보는 버전 제외). 클릭 시 `switchVersion`(전환 전 `saveCurrentScope`로 저장 → 손실 없음). 카드 토글과 분리(`stopPropagation`).
 - `VersionTimeline`·`MapDetailCard`에 `onGoToVersion`·`currentVersionId` prop 추가, 에디터 버전 기록(MapDetailCard only="versions")에서 연결. 홈은 미연결(버튼 미노출). i18n `home.goToVersion`.

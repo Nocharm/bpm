@@ -4,6 +4,7 @@
 // Home: map list filtered by mock visibility + map creation dialog.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
@@ -24,6 +25,7 @@ const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] a
 
 export default function MapListPage() {
   const { t } = useI18n();
+  const router = useRouter();
 
   const [maps, setMaps] = useState<MapSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -309,6 +311,7 @@ export default function MapListPage() {
                           mapId={processMap.id}
                           onDelete={(id) => void handleDelete(id)}
                           onCopy={handleCopyOpen}
+                          onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
                         />
                       </div>
                     )}
@@ -331,6 +334,7 @@ export default function MapListPage() {
                   mapId={effectiveSelected}
                   onDelete={(id) => void handleDelete(id)}
                   onCopy={handleCopyOpen}
+                  onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                 />
               </aside>
             )}
