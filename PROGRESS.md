@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 승인탭 체크아웃 노출 축소·헤더 위 스왑 + 버전필 호버 아코디언(진행중 버전 바로가기)
+- **체크아웃 탭 노출** — draft/rejected에서만(pending/approved/published/expired는 비어 있어 숨김). 위치를 워크플로 상태 헤더 **위로 스왑**(approval-panel).
+- **버전필 호버 아코디언** — VersionPill 호버 시 게시 안 된(진행 중) 최근 버전이 있으면 아래에 플로트 아코디언으로 펼쳐져 바로가기(버전 마커·이름 + 상태 뱃지, 들여쓰기 커넥터). 클릭 시 전환(편집 중이면 확인 모달). pill↔패널 호버 갭은 `pt-1`로 브리지. 드롭다운 전환 로직은 `handlePick`로 공용화.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 회수 권한 상태별 분리 + 회수 모달 제출자→회수자 한줄 핸드오프(펼침 애니)
 - **회수 권한** — 승인요청 단계(pending/approved)는 **제출자만**, 반려(rejected)는 현행대로 **+오너·sysadmin**(제출자 부재 대비). 백엔드 `withdraw_version` 상태별 게이트, 프론트 `canWithdraw`도 동일(rejected에서만 오버라이드). 신규 `test_withdraw_override_blocked_on_pending`.
 - **회수 모달 핸드오프** — 체크아웃+제출자를 한 줄로(`제출자 → 회수자`)로 합쳐 누구에게 넘어가는지 한눈에. 제출자(중립)·회수자(accent) 모두 **필(pill)** 형식. **회수자≠제출자일 때만** 화살표(폭 중앙)가 1초에 걸쳐 좌→우로 늘어나고 you(오른쪽 정렬, ellipsis 없이 클립 허용)가 페이드인, 펼침 후 you를 페이드로 1회 깜빡(`WithdrawHandoff` + `ConfirmDialog.banner` 슬롯). 승인 초기화 안내 행 유지.

@@ -108,27 +108,31 @@ export function ApprovalPanel({
   const isExpired = status === "expired";
   // 점유권 탭 조작 가능 상태 — draft에서만(그 외 view-only). 점유 이동(요청/이전/결정)은 draft 전용.
   const checkoutInteractive = status === "draft";
+  // 체크아웃 탭 노출 — draft/rejected에서만(pending/approved/published/expired는 비어 있어 숨김).
+  const showCheckout = status === "draft" || status === "rejected";
   const resolve = (id: string): string => nameById.get(id) ?? id;
   const pendingNames = approvers.filter((id) => !approvals.has(id)).map(resolve);
 
   return (
     <div className="flex flex-col gap-4">
+      {/* 체크아웃 탭 — 워크플로 상태 헤더 위. draft/rejected에서만(그 외 비어 있어 숨김). 기본 접힘. */}
+      {showCheckout && (
+        <CheckoutPanel
+          workflow={workflow}
+          username={username}
+          canDecide={canDecideCheckout}
+          interactive={checkoutInteractive}
+          resolveName={resolve}
+          onDecide={(id, approve) => onDecideCheckout?.(id, approve)}
+          onWithdraw={(id) => onWithdrawCheckout?.(id)}
+        />
+      )}
+
       {/* 헤더 — 승인 워크플로 + 상태 배지 */}
       <div className="flex items-center justify-between">
         <span className="text-fine text-ink-tertiary">{t("approval.workflowTitle")}</span>
         <StatusBadge status={status} />
       </div>
-
-      {/* 점유권 탭 — 프로그레스바 위, 기본 접힘. draft에서만 조작 가능 */}
-      <CheckoutPanel
-        workflow={workflow}
-        username={username}
-        canDecide={canDecideCheckout}
-        interactive={checkoutInteractive}
-        resolveName={resolve}
-        onDecide={(id, approve) => onDecideCheckout?.(id, approve)}
-        onWithdraw={(id) => onWithdrawCheckout?.(id)}
-      />
 
       {/* 스테퍼 — 제출 → 검토 → 게시. 만료(expired) 시 전체 비활성 + "Expired" 워터마크 */}
       <div className="relative">
