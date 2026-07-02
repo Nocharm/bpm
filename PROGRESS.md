@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 버전 카드 펼침 시 "이 버전으로 가기" 버튼
+- 버전 타임라인 카드를 펼치면 버전 이름 바로 아래 **"이 버전으로 가기"** 버튼 노출(현재 보는 버전 제외). 클릭 시 `switchVersion`(전환 전 `saveCurrentScope`로 저장 → 손실 없음). 카드 토글과 분리(`stopPropagation`).
+- `VersionTimeline`·`MapDetailCard`에 `onGoToVersion`·`currentVersionId` prop 추가, 에디터 버전 기록(MapDetailCard only="versions")에서 연결. 홈은 미연결(버튼 미노출). i18n `home.goToVersion`.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 승인탭 체크아웃 노출 축소·헤더 위 스왑 + 버전필 호버 아코디언(진행중 버전 바로가기)
 - **체크아웃 탭 노출** — draft/rejected에서만(pending/approved/published/expired는 비어 있어 숨김). 위치를 워크플로 상태 헤더 **위로 스왑**(approval-panel).
 - **버전필 호버 아코디언** — VersionPill 호버 시 게시 안 된(진행 중) 최근 버전이 있으면 아래에 플로트 아코디언으로 펼쳐져 바로가기(버전 마커·이름 + 상태 뱃지, 들여쓰기 커넥터). 클릭 시 전환(편집 중이면 확인 모달). pill↔패널 호버 갭은 `pt-1`로 브리지. 드롭다운 전환 로직은 `handlePick`로 공용화.

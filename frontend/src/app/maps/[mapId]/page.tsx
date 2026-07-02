@@ -6900,7 +6900,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
                     />
                     )}
-                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} reloadKey={versionsReloadKey} />
+                    <MapDetailCard
+                      mapId={mapId}
+                      only="versions"
+                      hideOpen
+                      showFooter={false}
+                      reloadKey={versionsReloadKey}
+                      onGoToVersion={(id) => void switchVersion(id)}
+                      currentVersionId={versionId}
+                    />
                   </div>
                 }
                 activitySlot={

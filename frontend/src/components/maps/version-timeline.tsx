@@ -4,7 +4,7 @@
 // 박스 클릭 시 칩 대신 이벤트별 상세 행(단계 필·이름·아이디·시간)으로 펼침. 여러 개 동시 펼침 가능 (H3).
 // 펼침 상태는 부모(map-detail-card)가 보유 — '모두 접기' 공유.
 
-import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -71,6 +71,8 @@ export function VersionTimeline({
   nameById,
   expandedIds,
   onToggle,
+  onGoToVersion,
+  currentVersionId,
 }: {
   versions: VersionDetail[];
   // login_id → 표시명 / id→name.
@@ -78,6 +80,10 @@ export function VersionTimeline({
   // 펼친 버전 id 집합(부모 보유) / expanded version ids (parent-owned).
   expandedIds: Set<number>;
   onToggle: (id: number) => void;
+  // 이 버전으로 전환 — 지정 시 펼친 카드에 "이 버전으로 가기" 버튼 노출(현재 보는 버전 제외).
+  onGoToVersion?: (id: number) => void;
+  // 현재 보고 있는 버전 — 그 카드엔 버튼 숨김.
+  currentVersionId?: number | null;
 }) {
   const { t } = useI18n();
   const nameOf = (id: string) => nameById?.get(id) ?? id;
@@ -159,6 +165,21 @@ export function VersionTimeline({
                 </span>
                 <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
               </div>
+
+              {/* 펼친 카드 — 버전 이름 바로 아래 "이 버전으로 가기"(현재 보는 버전 제외). 카드 토글과 분리(stopPropagation). */}
+              {open && onGoToVersion && version.id !== currentVersionId && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGoToVersion(version.id);
+                  }}
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-accent-tint px-2 py-0.5 text-fine text-accent hover:bg-accent-tint/70"
+                >
+                  <ArrowRight size={12} strokeWidth={1.5} />
+                  {t("home.goToVersion")}
+                </button>
+              )}
 
               {events.length > 0 && (
                 <>

@@ -99,6 +99,10 @@ interface MapDetailCardProps {
   only?: "members" | "versions";
   // 값이 바뀌면 재조회 — 승인 단계 진행 시 버전 기록 실시간 갱신용 / bump to refetch (live version record).
   reloadKey?: number;
+  // 버전 타임라인 "이 버전으로 가기" — 에디터에서 switchVersion 연결. 없으면 버튼 미노출.
+  onGoToVersion?: (id: number) => void;
+  // 현재 보고 있는 버전 — 그 카드엔 "이 버전으로 가기" 숨김.
+  currentVersionId?: number | null;
 }
 
 export function MapDetailCard({
@@ -109,6 +113,8 @@ export function MapDetailCard({
   onCopy,
   only,
   reloadKey,
+  onGoToVersion,
+  currentVersionId,
 }: MapDetailCardProps) {
   const { t } = useI18n();
   const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
@@ -277,6 +283,8 @@ export function MapDetailCard({
               nameById={nameById}
               expandedIds={expandedVersions}
               onToggle={toggleVersion}
+              onGoToVersion={onGoToVersion}
+              currentVersionId={currentVersionId}
             />
           )}
         </div>
