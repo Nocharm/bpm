@@ -97,6 +97,8 @@ interface MapDetailCardProps {
   onCopy?: (mapId: number, name: string) => void;
   // 일부 섹션만 렌더 — 에디터 맵 탭=멤버 카드, 활동 탭=버전 타임라인 재사용 / render only members or versions.
   only?: "members" | "versions";
+  // 값이 바뀌면 재조회 — 승인 단계 진행 시 버전 기록 실시간 갱신용 / bump to refetch (live version record).
+  reloadKey?: number;
 }
 
 export function MapDetailCard({
@@ -106,6 +108,7 @@ export function MapDetailCard({
   onDelete,
   onCopy,
   only,
+  reloadKey,
 }: MapDetailCardProps) {
   const { t } = useI18n();
   const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
@@ -191,7 +194,7 @@ export function MapDetailCard({
     return () => {
       active = false;
     };
-  }, [mapId, loginId]);
+  }, [mapId, loginId, reloadKey]);
 
   if (error) {
     return <p className="p-4 text-caption text-error">{error}</p>;

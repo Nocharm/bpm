@@ -112,7 +112,7 @@ export function ApprovalPanel({
       <div className="relative">
         {isExpired && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-            <span className="select-none -rotate-12 text-2xl font-semibold uppercase tracking-[0.35em] text-ink-tertiary opacity-40">
+            <span className="select-none -rotate-12 text-2xl font-semibold tracking-wide text-ink-tertiary opacity-40">
               Expired
             </span>
           </div>

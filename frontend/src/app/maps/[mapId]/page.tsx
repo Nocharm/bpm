@@ -568,6 +568,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const { t } = useI18n();
   const [mapName, setMapName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
+  // 승인 트랜지션 시 bump — 하단 버전 기록(MapDetailCard) 재조회 트리거 / bump to refresh version record.
+  const [versionsReloadKey, setVersionsReloadKey] = useState(0);
   const [versionId, setVersionId] = useState<number | null>(null);
   const [scopes, setScopes] = useState<Scope[]>([{ kind: "root", title: "홈" }]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -2284,16 +2286,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     async (action: (id: number) => Promise<VersionSummary>) => {
       if (versionId === null) return;
       try {
-        const updated = await action(versionId);
-        setVersions((prev) =>
-          prev.map((v) => (v.id === updated.id ? { ...v, ...updated } : v)),
-        );
+        await action(versionId);
+        // 전체 버전 재로딩 — 게시 시 직전 published→expired 반영(우측에 published 2개 방지).
+        const detail = await getMap(mapId);
+        setVersions(detail.versions);
+        // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
+        setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
       } catch (err) {
         setStatus(err instanceof Error ? err.message : t("err.workflow"));
       }
     },
-    [versionId, refreshWorkflow, t],
+    [versionId, mapId, refreshWorkflow, t],
   );
 
   // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────
@@ -6838,7 +6842,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }
                     />
                     )}
-                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} />
+                    <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} reloadKey={versionsReloadKey} />
                   </div>
                 }
                 activitySlot={

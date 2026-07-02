@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 승인탭 갱신/워터마크/버전기록 3건
+- **① 게시 후 우측 실시간 반영** — `runTransition`이 트랜지션마다 `getMap`으로 전체 버전 재로딩 → 게시 시 직전 published가 expired로 즉시 바뀌어 "published 2개" 안 보임(기존엔 작동 버전 1개만 로컬 병합).
+- **② "Expired" 워터마크 글자간격 축소** — `tracking-[0.35em]`→`tracking-wide`, uppercase 제거(“Expired” 그대로). `approval-panel.tsx`.
+- **③ 버전 기록 실시간 갱신 + 회수 제외** — 승인탭 하단 `MapDetailCard`(자체 fetch)에 `reloadKey` prop 추가, `runTransition`이 bump해 단계마다 재조회(이벤트 추가/상태 반영). `version-timeline.tsx`는 `withdrawn` 이벤트를 트랙킹에서 제외(필터).
+- 검증: 프론트 lint 0 errors, production build OK.
+
 ## 2026-07-02 — 버전 라이프사이클 디테일 수정 5건
 - **① 뷰어 드래프트 생성 차단** — 백엔드 `create_version`에 `require_map_role("editor")`, `acquire_checkout`에 `require_version_map_role("editor")` 게이트 추가. 프론트 "새 버전"(+) 버튼을 `isEditorRole`일 때만 노출.
 - **② 점유 sticky(지정 인계 전용·자동해제 없음)** — `checkout.py` `is_checkout_active`를 TTL 만료 없이 "보유자 존재"로 변경. 이탈해도 점유 유지 → 인계는 요청(decide: 보유자/오너/sysadmin) 또는 이전(transfer)만. 프론트 에디터 진입 effect: 언마운트 자동 release 제거, heartbeat→상태 poll로 전환(요청 승인/이전 반영), 뷰어는 조회 생략.
