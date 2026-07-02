@@ -20,6 +20,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("map_versions", "status", "VARCHAR(20) DEFAULT 'draft'"),
     ("map_versions", "submitted_by", "VARCHAR(100)"),
     ("map_versions", "reject_reason", "VARCHAR(500)"),
+    # 게시 순차번호 — 버전 라이프사이클(2026-06-29 Task1). 서버 등 기존 DB(덤프 복원 포함)
+    # 에 컬럼이 없으면 publish/workflow 조회가 500 → 기동 시 nullable로 보강(기존 행 생존).
+    ("map_versions", "version_number", "INTEGER"),
     ("groups", "parent_group_id", "VARCHAR(50)"),  # 그룹 중첩(하위 그룹핑) — design 2026-06-15
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
     ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27

@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 로컬 Postgres 전환 + 서버 덤프 복원
+- **fix(db): `map_versions.version_number`를 `_add_missing_columns` 스톱갭에 추가** — 서버 덤프(라이프사이클 이전 스키마)를 로컬 Postgres에 복원해도 기동 시 컬럼이 자동 보강돼 publish/workflow 500 회피(nullable, 기존 행 생존). 구 스키마 시뮬레이션 검증 PASS + 전체 366 테스트 green(테스트는 격리 sqlite라 무영향).
+- **docs(db-seed): "사내 로컬(Windows) — Postgres 전환 + 서버 덤프 복원" 섹션 추가** — DB는 `.env` `DATABASE_URL`로 갈림. 서버(사내 `182.199.63.71`, 계정 `h_jin.jang`)에서 `docker compose exec db pg_dump` → 로컬 다운(완료) → 네이티브 Postgres에 `pg_restore --no-owner` 복원 → `.env` postgres URL → 기동 시 컬럼 자동 보정. 복원 DB엔 `reset_db` 금지 경고. mac/Homebrew 대체 경로 병기.
+
 ## 2026-07-02 — feat/version-lifecycle (test scenarios)
 - **docs: 라이프사이클 테스트 시나리오 문서 추가** (`docs/version-lifecycle-test-scenarios.md`) — 정상(P1~P6)·예외(N1~N12)·관리자(A1~A6) 3분류 검토용 매트릭스. 각 시나리오에 화면(3화면 결정) + API 상태코드(403/409/422) 기대치 + 대응 pytest 함수 근거 매핑. 서두에 `DEV_ENFORCE_PERMISSIONS=true` 강제 모드 경고(안 그러면 전원 sysadmin→403 재현 불가) + 시드 엔터티 표. 인용 테스트 50개 green 확인.
 
@@ -9,17 +13,12 @@
 - **fix(versions): republish 권한 체크를 상태 체크보다 먼저 실행** — 403 가드를 409 가드 앞으로 이동(소스 상태 유출 방지). 순서: 404(소스 부재) → 403(editor+ 미보유) → 409(draft/pending 상태) → 409(기존 draft 존재) → 생성. sibling 엔드포인트(transfer/request/decide)와 동일 패턴으로 통일. 테스트 변경 없음(기본 테스트 사용자=sysadmin=owner → 권한 패스 후 상태 409 도달).
 - **chore(i18n): 미사용 키 `perm.checkout.requestedAt` 제거** — en/ko 양쪽에서 삭제. checkout-requests 패널이 Clock을 인라인으로 렌더링해 이 키를 참조하지 않음(`git grep` 확인). tsc 0 / lint 0.
 
-> **⚠️ DEPLOY NOTE — feat/version-lifecycle 서버 배포 전 필수**
+> **✅ DEPLOY NOTE (RESOLVED 2026-07-02) — feat/version-lifecycle**
 >
-> `startup create_all`은 **`checkout_requests` 테이블**을 자동 생성하지만,
-> **기존 테이블에 `map_versions.version_number` 컬럼은 추가하지 않음** →
-> publish / 버전 워크플로 API가 500으로 실패함.
->
-> **배포 전 둘 중 하나를 실행할 것:**
-> - (권장) DB 리셋 + 재시드: `python -m scripts.reset_db`
-> - (기존 데이터 보존) 마이그레이션 수동 실행:
->   `ALTER TABLE map_versions ADD COLUMN version_number INTEGER;`
->   (nullable이라 기존 행 생존, 다음 게시 시 번호 채번됨)
+> ~~기존 테이블에 `map_versions.version_number` 컬럼 미추가 → publish/workflow 500~~ →
+> **기동 시 `_add_missing_columns`가 컬럼을 자동 보강**(nullable, 기존 행 생존)하도록 수정됨.
+> 이제 서버 배포/덤프 복원 시 **수동 ALTER나 reset_db 불필요** — 기존 데이터 그대로 기동하면 된다.
+> (신규 `checkout_requests` 테이블은 종전대로 `create_all`이 생성.)
 
 **feat/version-lifecycle 전체 출하 요약:**
 - Task 1: `version_number`(nullable int) + `expired` 상태 + publish 시 채번·이전 published → expired 전환
