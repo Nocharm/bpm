@@ -431,7 +431,7 @@ export function GroupsPanel() {
                   {members.map((m) => (
                     <span
                       key={`${m.type}:${m.id}`}
-                      className="flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
+                      className="animate-item-in flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
                     >
                       {m.displayName}
                       <button
@@ -468,7 +468,7 @@ export function GroupsPanel() {
                   {managers.map((m) => (
                     <span
                       key={m.id}
-                      className="flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
+                      className="animate-item-in flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
                     >
                       {m.displayName}
                       <button

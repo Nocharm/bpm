@@ -90,29 +90,13 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
           <p className="mt-0.5 text-fine text-ink-tertiary">{t("approvers.hint")}</p>
         </div>
 
-        {/* 승인자 추가 picker (users only) — 생성 다이얼로그와 동일 */}
-        <PrincipalPicker
-          users={pickerUsers}
-          departments={[]}
-          groups={[]}
-          excludeIds={new Set(selected)}
-          userDepartments={userDepartments}
-          onSelect={(opt) => {
-            if (opt.principalType === "user") {
-              setSelected((prev) =>
-                prev.includes(opt.principalId) ? prev : [...prev, opt.principalId],
-              );
-            }
-          }}
-        />
-
-        {/* 선택된 승인자 목록 */}
+        {/* 선택된 승인자 목록 — 피커 위(드롭다운이 아래로 열려도 실시간 추가가 가려지지 않게) */}
         {selected.length > 0 ? (
           <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
             {selected.map((id) => (
               <li
                 key={id}
-                className="flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                className="animate-item-in flex items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
               >
                 <PrincipalIcon type="user" />
                 <span className="min-w-0 flex-1 truncate">
@@ -133,6 +117,22 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
         ) : (
           <p className="py-1 text-fine text-ink-tertiary">{t("approvers.empty")}</p>
         )}
+
+        {/* 승인자 추가 picker (users only) — 선택 목록 아래, 드롭다운은 아래로 */}
+        <PrincipalPicker
+          users={pickerUsers}
+          departments={[]}
+          groups={[]}
+          excludeIds={new Set(selected)}
+          userDepartments={userDepartments}
+          onSelect={(opt) => {
+            if (opt.principalType === "user") {
+              setSelected((prev) =>
+                prev.includes(opt.principalId) ? prev : [...prev, opt.principalId],
+              );
+            }
+          }}
+        />
 
         {error && <p className="text-fine text-error">{error}</p>}
 

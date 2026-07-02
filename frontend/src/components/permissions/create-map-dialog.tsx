@@ -366,6 +366,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.collaboratorsLabel")}
           </span>
+          {/* 목록을 피커 위로 표시(드롭다운이 아래로 열려도 실시간 추가가 안 가려지게) — col-reverse: DOM은 picker→list, 화면은 list 위 */}
+          <div className="flex flex-col-reverse gap-1.5">
           {/* picker + role — 선택한 역할로 드롭다운 선택 즉시 추가(Add 버튼 없음). items-start로 드롭다운 플로팅 시 역할 컨트롤 안 늘어남 */}
           <div className="flex items-start gap-2">
             <div className="flex-1">
@@ -404,7 +406,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
               {collaborators.map((c) => (
                 <li
                   key={c.key}
-                  className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                  className="animate-item-in flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
                 >
                   <PrincipalIcon type={c.principalType} />
                   <span className="flex-1 truncate">{c.displayName}</span>
@@ -432,6 +434,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 </li>
               ))}
           </ul>
+          </div>
         </div>
 
         {/* 결재자 / approvers */}
@@ -439,6 +442,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}
           </span>
+          {/* pills를 피커 위로 표시(실시간 추가가 드롭다운에 안 가려지게) — col-reverse */}
+          <div className="flex flex-col-reverse gap-1.5">
           {/* 결재자 picker (users only) + 선택된 결재자 pills / approver picker + selected pills */}
           {/* 후보 = 생성자 + 선택한 user 협업자 (AP) */}
           <PrincipalPicker
@@ -457,7 +462,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
               <span
                 key={a.key}
                 data-id={`create-approver-pill-${a.userId}`}
-                className="inline-flex h-fit items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
+                className="animate-item-in inline-flex h-fit items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5 text-caption text-ink"
               >
                 {a.displayName}
                 <button
@@ -469,6 +474,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 </button>
               </span>
             ))}
+          </div>
           </div>
         </div>
 

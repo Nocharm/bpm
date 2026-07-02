@@ -174,6 +174,28 @@ button:not(:disabled):active {
   animation: window-open 180ms var(--ease-overshoot);
 }
 
+/* 피커 선택 항목 추가 — 아래로 부드럽게 페이드인(신규 항목만 마운트 시 재생) */
+@keyframes item-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-item-in {
+  animation: item-fade-in 220ms var(--ease-smooth);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-item-in {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .window-open {
     animation: none;

@@ -128,21 +128,14 @@ function PickerDialog({
           <h2 className="text-body-strong text-ink">{title}</h2>
           <p className="text-caption text-ink-tertiary">{t("perm.group.pickerHint")}</p>
         </div>
-        <PrincipalPicker
-          users={pickerUsers}
-          departments={pickerDepts}
-          groups={[]}
-          excludeIds={exclude}
-          onSelect={(opt) => setSelected((prev) => [...prev, opt])}
-        />
-        {/* 선택 칩 — 영역을 처음부터 확보(고정 높이)·내부 스크롤로 추가해도 모달 크기 불변 / reserve from the start. */}
+        {/* 선택 칩 — 피커 위(드롭다운이 아래로 열려도 실시간 추가가 가려지지 않게). 신규 칩은 페이드인. */}
         <div className="flex flex-col gap-1.5">
             <span className="text-fine text-ink-tertiary">{t("perm.group.pickerSelected")}</span>
             <div className="scroll-soft flex h-[5.5rem] flex-wrap content-start gap-1.5">
               {selected.map((s) => (
                 <span
                   key={`${s.principalType}:${s.principalId}`}
-                  className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface-alt py-0.5 pl-2 pr-1 text-fine text-ink"
+                  className="animate-item-in inline-flex items-center gap-1 rounded-full border border-hairline bg-surface-alt py-0.5 pl-2 pr-1 text-fine text-ink"
                 >
                   {s.principalType === "department" ? (
                     <Building2 size={11} strokeWidth={1.5} className="text-ink-tertiary" />
@@ -164,6 +157,13 @@ function PickerDialog({
               ))}
             </div>
         </div>
+        <PrincipalPicker
+          users={pickerUsers}
+          departments={pickerDepts}
+          groups={[]}
+          excludeIds={exclude}
+          onSelect={(opt) => setSelected((prev) => [...prev, opt])}
+        />
         <div className="flex justify-end gap-2">
           <button
             type="button"

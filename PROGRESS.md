@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 피커 모달: 선택 목록을 피커 위로 + 신규 항목 페이드인
+- **문제**: 피커 드롭다운이 아래로 열려, 아래에 있던 선택 항목 리스트를 가려 실시간 추가가 안 보임.
+- **선택 목록을 피커 위로** — 피커가 위·리스트가 아래였던 곳을 스왑: `approver-manager`·`group-detail`(블록 이동), `create-map-dialog`(협업자·결재자 `flex-col-reverse` 래퍼로 라벨 유지한 채 표시순 반전). `approvers-panel`·`collaborators-panel`·`groups-panel`은 이미 리스트가 위라 유지.
+- **신규 항목 페이드인** — `globals.css` `@keyframes item-fade-in`(+`prefers-reduced-motion` 가드) → `.animate-item-in`을 로컬 상태 리스트 항목(approver-manager·group-detail·create-map·groups-panel)에 부여. 항목 마운트 시에만 재생돼 새로 추가된 것만 부드럽게 등장. (reload 기반 approvers/collaborators-panel은 전체 리플래시 방지 위해 미적용)
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 홈 상세에도 "이 버전으로 가기" + 에디터 ?version= 진입
 - 홈(`app/page.tsx`) MapDetailCard에 `onGoToVersion` 연결 — 라우터로 `/maps/[id]?version=<vid>` 이동. 에디터에서만 보이던 버튼이 **홈 오른쪽 상세**에도 노출(현재 버전 개념 없어 전 버전에 노출).
 - 에디터가 `?version=<id>`로 진입 시 해당 버전으로 개시(기본 선택보다 우선, `window.location.search`).
