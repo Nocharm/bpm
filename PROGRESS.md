@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 전이 액션 모달 통일(제출/승인/거절/게시/회수)
+- **모달 디자인 통일** — 제출·승인·거절·게시·회수 확인을 모두 `ConfirmDialog`(아이콘 원 + 제목 + 본문 + 확인/취소)로 일원화. `WorkflowActions`의 자체 거절 모달·portal 제거(버튼만 노출, 각 액션이 page.tsx 모달을 연다). `onReject` 시그니처 `(reason)`→`()`.
+- **ConfirmDialog 확장** — 선택 `input`(textarea) + `confirmDisabled` 추가 → 거절 사유 입력창을 통일 디자인 안에서 유지(danger, 사유 없으면 확인 비활성).
+- **게시 모달** — 현재 게시본(`v{n} · label`)이 만료된다는 내용 라인 표시(현재 published 버전 조회).
+- **회수 모달** — 기존 승인이 초기화되어 승인자들이 다시 승인해야 함을 안내.
+- **거절 사유 노출**: 에디터 상단 상태 스트립의 빨간 배너(`wf.rejectedBanner`, 현재 버전 rejected 시). i18n `approval.{approve,publish,withdraw,reject}Confirm*` 추가.
+- 검증: 프론트 lint 0 / build OK (백엔드 변경 없음).
+
 ## 2026-07-02 — 회수 조건부 트랙킹 + 승인요청 모달 + 승인탭 헤더
 - **회수 조건부 트랙킹** (`withdraw_version`) — 현재 승인요청 사이클의 승인 수로 분기(submit이 매번 `VersionApproval` 리셋): 승인 0건 회수→해당 `submitted` 이벤트 삭제·`withdrawn` 미기록(흔적 없음), 승인 1건 이상 후 회수→`withdrawn` 기록(제출·승인 이력 유지). 프론트 타임라인의 withdrawn 제외 필터는 되돌림(이제 표시). 테스트 2종(0건 삭제/≥1건 유지).
 - **승인 요청 확인 모달** — 제출 버튼이 바로 제출하지 않고 현재 승인자 목록을 `ConfirmDialog`(재활용)로 보여준 뒤 확인 시 제출. i18n `approval.submitConfirm*`.

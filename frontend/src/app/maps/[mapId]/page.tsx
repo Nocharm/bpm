@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Trash2, Undo2, User, X } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Trash2, Undo2, Upload, User, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -712,6 +712,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
   // 승인 요청 확인 다이얼로그 — 승인자 목록 확인 후 제출 / Submit confirm listing approvers.
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  // 승인/게시/회수/거절 확인 다이얼로그 — 전이 액션 통일 모달 / transition confirm modals.
+  const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
@@ -6828,10 +6834,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       hasApproved={hasApproved}
                       isMapOwner={isMapOwner}
                       onSubmit={() => setSubmitConfirmOpen(true)}
-                      onApprove={() => void runTransition(approveVersion)}
-                      onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
-                      onPublish={() => void runTransition(publishVersion)}
-                      onWithdraw={() => void runTransition(withdrawVersion)}
+                      onApprove={() => setApproveConfirmOpen(true)}
+                      onReject={() => setRejectOpen(true)}
+                      onPublish={() => setPublishConfirmOpen(true)}
+                      onWithdraw={() => setWithdrawConfirmOpen(true)}
                       onManageApprovers={() => setManagingApprovers(true)}
                       pendingCheckoutRequest={workflow?.pending_checkout_request ?? null}
                       canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
@@ -6981,6 +6987,92 @@ function MapEditor({ mapId }: { mapId: number }) {
             void runTransition(submitVersion);
           }}
           onClose={() => setSubmitConfirmOpen(false)}
+        />
+      )}
+      {/* 승인 확인 */}
+      {approveConfirmOpen && (
+        <ConfirmDialog
+          icon={<Check size={28} strokeWidth={1.5} />}
+          title={t("approval.approveConfirmTitle")}
+          message={t("approval.approveConfirmBody")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setApproveConfirmOpen(false);
+            void runTransition(approveVersion);
+          }}
+          onClose={() => setApproveConfirmOpen(false)}
+        />
+      )}
+      {/* 게시 확인 — 현재 게시본이 만료됨을 안내 */}
+      {publishConfirmOpen && (
+        <ConfirmDialog
+          icon={<Upload size={28} strokeWidth={1.5} />}
+          title={t("approval.publishConfirmTitle")}
+          message={t("approval.publishConfirmBody")}
+          lines={(() => {
+            const prior = versions.find((v) => v.status === "published");
+            return prior
+              ? [
+                  {
+                    icon: <Info size={14} strokeWidth={1.5} />,
+                    text: t("approval.publishExpireLine", {
+                      name: `v${prior.version_number ?? "?"} · ${prior.label}`,
+                    }),
+                    tone: "error" as const,
+                  },
+                ]
+              : undefined;
+          })()}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setPublishConfirmOpen(false);
+            void runTransition(publishVersion);
+          }}
+          onClose={() => setPublishConfirmOpen(false)}
+        />
+      )}
+      {/* 회수 확인 — 기존 승인 초기화 안내 */}
+      {withdrawConfirmOpen && (
+        <ConfirmDialog
+          icon={<Undo2 size={28} strokeWidth={1.5} />}
+          title={t("approval.withdrawConfirmTitle")}
+          message={t("approval.withdrawConfirmBody")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setWithdrawConfirmOpen(false);
+            void runTransition(withdrawVersion);
+          }}
+          onClose={() => setWithdrawConfirmOpen(false)}
+        />
+      )}
+      {/* 거절 — 사유 입력창 유지, 디자인 통일 */}
+      {rejectOpen && (
+        <ConfirmDialog
+          icon={<X size={28} strokeWidth={1.5} />}
+          danger
+          title={t("wf.rejectTitle")}
+          message={t("approval.rejectConfirmBody")}
+          input={{
+            value: rejectReason,
+            onChange: setRejectReason,
+            placeholder: t("wf.rejectReason"),
+          }}
+          confirmDisabled={rejectReason.trim().length === 0}
+          confirmLabel={t("wf.reject")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const reason = rejectReason.trim();
+            setRejectOpen(false);
+            setRejectReason("");
+            void runTransition((id) => rejectVersion(id, reason));
+          }}
+          onClose={() => {
+            setRejectOpen(false);
+            setRejectReason("");
+          }}
         />
       )}
       {branchPrompt && (

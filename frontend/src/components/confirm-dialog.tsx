@@ -40,6 +40,10 @@ interface ConfirmDialogProps {
   // 리치 폼(L5) — icon 제공 시 아이콘 원 + 요점 줄 중앙 레이아웃 / rich layout when icon is set.
   icon?: ReactNode;
   lines?: ConfirmLine[];
+  // 선택 입력(예: 거절 사유) — 있으면 message/lines 아래 textarea 노출. 값은 호출자가 관리.
+  input?: { value: string; onChange: (value: string) => void; placeholder?: string; rows?: number };
+  // confirm 버튼 비활성(예: 사유 미입력) / disable confirm.
+  confirmDisabled?: boolean;
 }
 
 export function ConfirmDialog({
@@ -52,6 +56,8 @@ export function ConfirmDialog({
   onClose,
   icon,
   lines,
+  input,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   const confirmBtn = danger
     ? "bg-error text-on-accent hover:opacity-90"
@@ -95,6 +101,15 @@ export function ConfirmDialog({
             ))}
           </ul>
         )}
+        {input && (
+          <textarea
+            className="w-full rounded-sm border border-hairline p-2 text-left text-caption"
+            rows={input.rows ?? 3}
+            value={input.value}
+            placeholder={input.placeholder}
+            onChange={(event) => input.onChange(event.target.value)}
+          />
+        )}
         <div className={`flex w-full justify-end gap-2 ${isRich ? "" : ""}`}>
           <button
             type="button"
@@ -107,7 +122,8 @@ export function ConfirmDialog({
           <button
             type="button"
             data-id="confirm-dialog-confirm"
-            className={`rounded-sm px-3 py-1.5 text-caption ${confirmBtn}`}
+            className={`rounded-sm px-3 py-1.5 text-caption disabled:opacity-40 ${confirmBtn}`}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

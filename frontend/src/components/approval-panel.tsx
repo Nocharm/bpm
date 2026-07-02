@@ -21,7 +21,7 @@ interface ApprovalPanelProps {
   isMapOwner: boolean;
   onSubmit: () => void;
   onApprove: () => void;
-  onReject: (reason: string) => void;
+  onReject: () => void;
   onPublish: () => void;
   onWithdraw: () => void;
   onManageApprovers: () => void;
