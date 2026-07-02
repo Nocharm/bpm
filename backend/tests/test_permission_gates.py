@@ -144,6 +144,19 @@ def test_explicit_user_grant_visible(client: TestClient, enforce: None) -> None:
     assert client.get(f"/api/maps/{map_id}").status_code == 200
 
 
+def test_list_maps_sysadmin_sees_ungranted_private(
+    client: TestClient, enforce: None
+) -> None:
+    """sysadmin은 grant 없는 private 맵도 목록에서 보고 my_role=owner (전 맵 열람)."""
+    map_id = seed_map(visibility="private")  # no grants
+    act_as(SYSADMIN)
+
+    listed = client.get("/api/maps").json()
+    match = next((m for m in listed if m["id"] == map_id), None)
+    assert match is not None, "sysadmin should see ungranted private maps"
+    assert match["my_role"] == "owner"
+
+
 # ── DELETE — owner only ───────────────────────────────────────
 
 

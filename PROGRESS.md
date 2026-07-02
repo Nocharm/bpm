@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — sysadmin 전맵 가시성 확인(코드 정상) + 회귀 테스트
+- **확인 결과**: `list_maps`는 `is_sysadmin`이면 필터 없이 전 맵 반환 + `my_role="owner"` 부여(코드 정상). 회귀 테스트 `test_list_maps_sysadmin_sees_ungranted_private` 추가(grant 없는 private도 보임). 373 passed.
+- **원인은 환경/식별자**: sysadmin 판정은 `is_sysadmin()` = **`BPM_SYSADMINS`**(콤마 구분 loginId). 이는 디렉터리 admin(`SYSTEM_ADMIN_LOGIN_IDS`→`Employee.role="admin"`)와 **별개 변수**. enforce/auth ON에서 `BPM_SYSADMINS`에 로그인ID가 없으면 전 맵 안 보임. 진단: `/api/me`의 `is_sysadmin` 확인.
+
 ## 2026-07-02 — 버전 카드 마커·말줄임·가로스크롤(사이드바 대응)
 - **버전 카드에 버전 마커** (`version-timeline.tsx`) — 헤더에 버전 필과 동일한 마커(번호 작게 회색 `v{n}`/`(Draft)v.{n}` + 이름 강조)를 `formatVersionMarker`로 노출.
 - **좁은 폭 말줄임/반응형** — 마커+이름을 `min-w-0 flex-1 truncate`로 묶어 사이드바처럼 좁아지면 이름을 이클립스 처리(깨짐 방지). 상태/현재 배지·시각은 `shrink-0`.
