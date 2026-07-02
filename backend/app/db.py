@@ -23,6 +23,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # 게시 순차번호 — 버전 라이프사이클(2026-06-29 Task1). 서버 등 기존 DB(덤프 복원 포함)
     # 에 컬럼이 없으면 publish/workflow 조회가 500 → 기동 시 nullable로 보강(기존 행 생존).
     ("map_versions", "version_number", "INTEGER"),
+    # 점유 이전 출처(누구에게서) — 점유권 탭 provenance 표시 (2026-07-02)
+    ("map_versions", "checked_out_from", "VARCHAR(100)"),
     ("groups", "parent_group_id", "VARCHAR(50)"),  # 그룹 중첩(하위 그룹핑) — design 2026-06-15
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
     ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27

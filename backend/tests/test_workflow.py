@@ -676,11 +676,11 @@ def test_checkout_request_duplicate_409(
     assert dup.status_code == 409
 
 
-def test_checkout_request_different_user_409(
+def test_checkout_request_multiple_and_approve_auto_rejects(
     client: TestClient, _transfer_enforce: None
 ) -> None:
-    """②-b 다른 사용자의 요청이 pending 중일 때 또 다른 editor가 요청 → 409 (per-version dedup)."""
-    map_id, version_id = _seed_with_grants(
+    """요청자 복수 허용 — 각자 요청 가능(요청자당 1건), 한 명 승인 시 나머지는 자동 거절 + provenance."""
+    _map_id, version_id = _seed_with_grants(
         [("holder.u", "editor"), ("editor.u", "editor"), ("editor2.u", "editor")]
     )
 
@@ -688,12 +688,58 @@ def test_checkout_request_different_user_409(
     client.post(f"/api/versions/{version_id}/checkout", json={})
 
     _act_as("editor.u")
-    first = client.post(f"/api/versions/{version_id}/checkout/request")
-    assert first.status_code == 201  # editor.u 요청 성공
+    r1 = client.post(f"/api/versions/{version_id}/checkout/request")
+    assert r1.status_code == 201
+    # 같은 사용자 재요청은 409 (요청자당 1건)
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 409
 
     _act_as("editor2.u")
-    dup = client.post(f"/api/versions/{version_id}/checkout/request")  # different user
-    assert dup.status_code == 409  # 버전당 1건 불변식
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 201  # 복수 허용
+
+    wf = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert len(wf["pending_checkout_requests"]) == 2
+
+    # holder가 editor.u 요청 승인 → 점유 이전 + editor2.u 요청 자동 거절 + provenance 기록
+    _act_as("holder.u")
+    client.post(f"/api/checkout-requests/{r1.json()['id']}/decide", json={"approve": True})
+
+    wf = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert wf["checkout_holder"] == "editor.u"
+    assert wf["checkout_from"] == "holder.u"
+    assert wf["pending_checkout_requests"] == []  # 나머지 자동 거절
+
+
+def test_checkout_request_withdraw(
+    client: TestClient, _transfer_enforce: None
+) -> None:
+    """요청자 본인이 미결 요청을 철회 → pending 목록에서 사라짐. 타인 철회는 403."""
+    _map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor"), ("editor2.u", "editor")]
+    )
+    _act_as("holder.u")
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+
+    _act_as("editor.u")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+
+    # 타인 철회 불가
+    _act_as("editor2.u")
+    assert client.post(f"/api/checkout-requests/{req_id}/withdraw").status_code == 403
+
+    # 본인 철회
+    _act_as("editor.u")
+    assert client.post(f"/api/checkout-requests/{req_id}/withdraw").status_code == 200
+    wf = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert wf["pending_checkout_requests"] == []
+
+
+def test_checkout_request_requires_editable_status(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """점유 요청은 draft/rejected에서만 — pending 버전엔 409."""
+    map_id, version_id = _submit_with_approvers(client, ["a"])  # now pending
+    monkeypatch.setattr(settings, "dev_user", "editor.x")
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 409
 
 
 def test_checkout_request_approve_moves_checkout(

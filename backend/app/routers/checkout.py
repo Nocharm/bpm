@@ -1,9 +1,10 @@
 """점유권 요청·결정 API — request/decide 플로우 (Task 3, docs/spec.md §5)."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import workflow
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
@@ -35,6 +36,11 @@ async def request_checkout(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status not in (workflow.DRAFT, workflow.REJECTED):
+        raise HTTPException(
+            status_code=409,
+            detail="checkout can only be requested on a draft or rejected version",
+        )
 
     role = await get_effective_role(session, user, version.map_id)
     if role not in ("editor", "owner"):
@@ -50,17 +56,18 @@ async def request_checkout(
             detail="you already hold the checkout",
         )
 
-    # 버전당 미결 요청은 1건만 허용 — 요청자 무관하게 차단
+    # 요청자당 미결 요청 1건 — 여러 편집자가 동시에 요청 가능(승인 시 나머지는 자동 거절)
     existing = await session.scalar(
         select(CheckoutRequest).where(
             CheckoutRequest.version_id == version_id,
+            CheckoutRequest.requested_by == user,
             CheckoutRequest.status == "pending",
         )
     )
     if existing is not None:
         raise HTTPException(
             status_code=409,
-            detail="a pending checkout request already exists",
+            detail="you already have a pending checkout request",
         )
 
     req = CheckoutRequest(version_id=version_id, requested_by=user, status="pending")
@@ -110,12 +117,52 @@ async def decide_checkout_request(
 
     if payload.approve:
         now = now_kst()
+        version.checked_out_from = version.checked_out_by  # 출처(누구에게서)
         version.checked_out_by = req.requested_by
         version.checked_out_at = now
         req.status = "approved"
+        # 한 명 승인 시 같은 버전의 다른 미결 요청은 자동 거절
+        await session.execute(
+            update(CheckoutRequest)
+            .where(
+                CheckoutRequest.version_id == req.version_id,
+                CheckoutRequest.status == "pending",
+                CheckoutRequest.id != req.id,
+            )
+            .values(status="rejected")
+        )
     else:
         req.status = "rejected"
 
+    await session.commit()
+    await session.refresh(req)
+    return req
+
+
+@router.post(
+    "/checkout-requests/{request_id}/withdraw", response_model=CheckoutRequestOut
+)
+async def withdraw_checkout_request(
+    request_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CheckoutRequest:
+    """요청 철회 — 요청자 본인이 자신의 미결 요청을 거둔다.
+
+    403: 요청자 본인 아님.
+    404: 요청 없음.
+    409: 이미 결정된 요청.
+    """
+    req = await session.get(CheckoutRequest, request_id)
+    if req is None:
+        raise HTTPException(
+            status_code=404, detail=f"checkout request {request_id} not found"
+        )
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"request already {req.status}")
+    req.status = "withdrawn"
     await session.commit()
     await session.refresh(req)
     return req

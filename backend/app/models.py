@@ -55,6 +55,8 @@ class MapVersion(Base):
     checked_out_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 직전 점유자 — 이전/요청승인으로 점유가 넘어온 출처(누구에게서). 최초 생성자 점유는 None.
+    checked_out_from: Mapped[str | None] = mapped_column(String(100), default=None)
     # 승인 워크플로우 상태 — draft|pending|approved|published|rejected|expired (design 2026-06-14)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     # 맵 내 게시 순번 — publish 시 채번, 만료 후에도 불변. 미게시 버전은 NULL.

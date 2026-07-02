@@ -309,6 +309,11 @@ async def transfer_checkout(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    if version.status not in (workflow.DRAFT, workflow.REJECTED):
+        raise HTTPException(
+            status_code=409,
+            detail="checkout can only be transferred on a draft or rejected version",
+        )
 
     actor_role = await get_effective_role(session, user, version.map_id)
     is_holder = version.checked_out_by == user
@@ -331,6 +336,7 @@ async def transfer_checkout(
         )
 
     now = now_kst()
+    version.checked_out_from = version.checked_out_by  # 출처(누구에게서)
     version.checked_out_by = payload.to
     version.checked_out_at = now
     await session.commit()
@@ -420,16 +426,26 @@ async def get_workflow_state(
         ).all()
     )
     now = now_kst()
-    # 이 버전에 대한 미결 점유 요청 — 버전당 최대 1건 불변식 (Task 3 per-version dedup)
-    pending_req = await session.scalar(
-        select(CheckoutRequest)
-        .where(
-            CheckoutRequest.version_id == version_id,
-            CheckoutRequest.status == "pending",
-        )
-        .order_by(CheckoutRequest.created_at.desc())
-        .limit(1)
+    active = is_checkout_active(version, now)
+    # 이 버전의 모든 미결 점유 요청(요청자 복수) — 오래된 순
+    pending_reqs = list(
+        (
+            await session.scalars(
+                select(CheckoutRequest)
+                .where(
+                    CheckoutRequest.version_id == version_id,
+                    CheckoutRequest.status == "pending",
+                )
+                .order_by(CheckoutRequest.created_at)
+            )
+        ).all()
     )
+    pending_outs = [
+        PendingCheckoutRequestOut(
+            id=r.id, requested_by=r.requested_by, created_at=r.created_at
+        )
+        for r in pending_reqs
+    ]
     return WorkflowStateOut(
         version_id=version_id,
         version_number=version.version_number,
@@ -438,12 +454,11 @@ async def get_workflow_state(
         reject_reason=version.reject_reason,
         approvers=approvers,
         approvals=approvals,
-        checkout_holder=version.checked_out_by if is_checkout_active(version, now) else None,
-        pending_checkout_request=(
-            PendingCheckoutRequestOut(id=pending_req.id, requested_by=pending_req.requested_by)
-            if pending_req
-            else None
-        ),
+        checkout_holder=version.checked_out_by if active else None,
+        checkout_holder_since=version.checked_out_at if active else None,
+        checkout_from=version.checked_out_from if active else None,
+        pending_checkout_request=pending_outs[-1] if pending_outs else None,
+        pending_checkout_requests=pending_outs,
     )
 
 

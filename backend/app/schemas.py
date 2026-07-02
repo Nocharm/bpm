@@ -174,10 +174,11 @@ class GroupRenameIn(BaseModel):
 
 
 class PendingCheckoutRequestOut(BaseModel):
-    """WorkflowStateOut에 내포되는 경량 점유 요청 — 프론트 '요청됨' 버튼 비활성화용."""
+    """WorkflowStateOut에 내포되는 경량 점유 요청 — 점유권 탭 요청자 카드용."""
 
     id: int
     requested_by: str
+    created_at: datetime | None = None
 
 
 class CheckoutRequestOut(BaseModel):
@@ -224,8 +225,14 @@ class WorkflowStateOut(BaseModel):
     approvals: list[str]
     # 현재 활성 체크아웃 보유자 — TTL 이내 잠금이 없으면 None
     checkout_holder: str | None = None
-    # 이 버전에 대한 미결 점유 요청 — None이면 요청 없음 (Task 3)
+    # 점유 획득 시각 — "언제" 상대시간 표시용(활성 점유일 때만)
+    checkout_holder_since: datetime | None = None
+    # 점유 출처(누구에게서 넘어왔는지) — 이전/요청승인 시 기록, 최초 생성자 점유는 None
+    checkout_from: str | None = None
+    # (deprecated) 단건 미결 요청 — 하위호환. 신규 UI는 pending_checkout_requests 사용
     pending_checkout_request: PendingCheckoutRequestOut | None = None
+    # 이 버전의 모든 미결 점유 요청 — 요청자 복수 (점유권 탭)
+    pending_checkout_requests: list[PendingCheckoutRequestOut] = []
 
 
 class RejectIn(BaseModel):

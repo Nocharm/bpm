@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 점유권 탭 백엔드(요청자 복수·자동거절·철회·provenance)
+- **요청자 복수 허용** — `request_checkout` dedup을 버전당→**요청자당 1건**으로 전환(여러 편집자 동시 요청 가능). request/transfer는 **draft/rejected에서만**(409 게이트).
+- **승인 시 자동 거절 + provenance** — `decide` approve가 같은 버전의 다른 미결 요청을 자동 `rejected` 처리. 점유 이전(approve/transfer) 시 `MapVersion.checked_out_from`(직전 점유자=누구에게서) 기록. `_add_missing_columns` 보강.
+- **요청 철회** — `POST /checkout-requests/{id}/withdraw`(요청자 본인만, pending만).
+- **스키마(non-breaking)** — `WorkflowStateOut`에 `pending_checkout_requests`(복수)·`checkout_holder_since`(언제)·`checkout_from`(누구에게서) 추가, 기존 `pending_checkout_request`(단건)는 하위호환 유지.
+- 검증: 백엔드 376 passed·ruff clean. (프론트 점유권 탭 UI는 후속 커밋)
+
 ## 2026-07-02 — 승인자 관리 설정탭 게이트 + 반려본 회수 플로우
 - **승인자 관리 구멍 확인/보완** — 백엔드 `set_approvers`는 pending/approved면 409(모든 경로 차단, 테스트 있음)라 데이터는 안전. 갭은 **설정 페이지 `ApproversPanel` UI가 상태 게이트 없이 버튼 노출**하던 것 → `underApproval`(설정 페이지가 `getMap` versions로 계산) prop으로 추가/삭제 잠금 + 안내 배너. 에디터는 기존대로 `canManageApprovers`로 게이트. (expired+published만 있고 pending 없으면 변경 허용 = 안전, 다음 사이클용)
 - **반려본은 회수(기록) 후 수정** — 프론트 `WorkflowActions`: rejected에서 submit 제거, withdraw(회수) 노출(submitter). 백엔드 `withdraw_version`: 반려본 회수는 승인 0건이어도 항상 `withdrawn` 기록(제출·반려 이력 유지). 즉 rejected → 회수(→draft, 기록) → 편집 → 재제출. 바로 재승인 요청 불가. 테스트 `test_withdraw_from_rejected_keeps_record`.
