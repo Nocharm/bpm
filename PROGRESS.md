@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 점유권 탭 프론트 UI(접이식·요청자·호버 결정·철회)
+- **CheckoutPanel** (`checkout-panel.tsx`) — 프로그레스바 위 접이식(기본 접힘) 섹션. 현재 점유자 + 출처(누구에게서)·획득 상대시각("~분 전"), 미결 요청자 카드. 요청 있으면 헤더 **빨간 닷 + 개수**.
+- **호버 결정·철회** — 결정권자(보유자/오너/sysadmin)는 요청 카드 호버 시 승인/거절 아이콘, 요청자는 자기 요청 철회(X). ApprovalPanel의 기존 단건 배너를 이 패널로 대체.
+- **view-only(item 5)** — draft/rejected에서만 조작 가능(`interactive`), 그 외 상태는 opacity-60 + 버튼 숨김(확인용).
+- **복수 요청 반영** — 헤더 "요청됨"을 본인 요청 여부로 수정. `WorkflowState`에 `pending_checkout_requests`/`checkout_holder_since`/`checkout_from` 타입 추가, `withdrawCheckoutRequest` API, `relativeAgo` datetime 헬퍼, i18n(checkout.*·time.*).
+- 검증: 프론트 lint 0·build OK. (백엔드는 직전 커밋 65cf37d, 376 passed)
+
 ## 2026-07-02 — 점유권 탭 백엔드(요청자 복수·자동거절·철회·provenance)
 - **요청자 복수 허용** — `request_checkout` dedup을 버전당→**요청자당 1건**으로 전환(여러 편집자 동시 요청 가능). request/transfer는 **draft/rejected에서만**(409 게이트).
 - **승인 시 자동 거절 + provenance** — `decide` approve가 같은 버전의 다른 미결 요청을 자동 `rejected` 처리. 점유 이전(approve/transfer) 시 `MapVersion.checked_out_from`(직전 점유자=누구에게서) 기록. `_add_missing_columns` 보강.

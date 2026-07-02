@@ -339,6 +339,11 @@ export function decideCheckoutRequest(requestId: number, approve: boolean): Prom
   });
 }
 
+// 점유권 요청 철회 — 요청자 본인이 자신의 미결 요청을 거둠 / Requester withdraws own pending request.
+export function withdrawCheckoutRequest(requestId: number): Promise<void> {
+  return request<void>(`/checkout-requests/${requestId}/withdraw`, { method: "POST" });
+}
+
 export interface CommentItem {
   id: number;
   node_id: string;
@@ -386,6 +391,12 @@ export function saveGraph(versionId: number, graph: Graph): Promise<Graph> {
 
 // ── Version approval workflow (design 2026-06-14) ──────────
 
+export interface PendingCheckoutRequest {
+  id: number;
+  requested_by: string;
+  created_at?: string | null;
+}
+
 export interface WorkflowState {
   version_id: number;
   status: VersionStatus;
@@ -395,7 +406,13 @@ export interface WorkflowState {
   approvals: string[];
   version_number?: number | null;
   checkout_holder?: string | null;
-  pending_checkout_request?: { id: number; requested_by: string } | null;
+  // 점유 획득 시각(언제) · 출처(누구에게서) — 점유권 탭 provenance
+  checkout_holder_since?: string | null;
+  checkout_from?: string | null;
+  // (deprecated) 단건 — 하위호환. 신규 UI는 pending_checkout_requests
+  pending_checkout_request?: PendingCheckoutRequest | null;
+  // 미결 점유 요청 전체(요청자 복수)
+  pending_checkout_requests?: PendingCheckoutRequest[];
 }
 
 export interface Me {

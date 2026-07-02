@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 
 import { getDirectory, type VersionStatus, type WorkflowState } from "@/lib/api";
+import { CheckoutPanel } from "@/components/checkout-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { WorkflowActions } from "@/components/workflow-actions";
 import { useI18n } from "@/lib/i18n";
@@ -26,10 +27,11 @@ interface ApprovalPanelProps {
   onPublish: () => void;
   onWithdraw: () => void;
   onManageApprovers: () => void;
-  // 편집권한 요청 결정 (Part D) — 결정 권한자에게 승인/거절 UI 노출
-  pendingCheckoutRequest?: { id: number; requested_by: string } | null;
+  // 점유권 탭 — 결정 권한자에게 요청 승인/거절, 요청자에게 철회 UI
+  username?: string | null;
   canDecideCheckout?: boolean;
   onDecideCheckout?: (requestId: number, approve: boolean) => void;
+  onWithdrawCheckout?: (requestId: number) => void;
 }
 
 const STEPS: { key: string; labelKey: MessageKey }[] = [
@@ -68,9 +70,10 @@ export function ApprovalPanel({
   onPublish,
   onWithdraw,
   onManageApprovers,
-  pendingCheckoutRequest,
-  canDecideCheckout,
+  username = null,
+  canDecideCheckout = false,
   onDecideCheckout,
+  onWithdrawCheckout,
 }: ApprovalPanelProps) {
   const { t } = useI18n();
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
@@ -98,6 +101,8 @@ export function ApprovalPanel({
   const stage = currentStage(status);
   const rejected = status === "rejected";
   const isExpired = status === "expired";
+  // 점유권 탭 조작 가능 상태 — draft/rejected에서만(그 외 view-only)
+  const checkoutInteractive = status === "draft" || status === "rejected";
   const resolve = (id: string): string => nameById.get(id) ?? id;
   const pendingNames = approvers.filter((id) => !approvals.has(id)).map(resolve);
 
@@ -108,6 +113,17 @@ export function ApprovalPanel({
         <span className="text-fine text-ink-tertiary">{t("approval.workflowTitle")}</span>
         <StatusBadge status={status} />
       </div>
+
+      {/* 점유권 탭 — 프로그레스바 위, 기본 접힘. draft/rejected에서만 조작 가능 */}
+      <CheckoutPanel
+        workflow={workflow}
+        username={username}
+        canDecide={canDecideCheckout}
+        interactive={checkoutInteractive}
+        resolveName={resolve}
+        onDecide={(id, approve) => onDecideCheckout?.(id, approve)}
+        onWithdraw={(id) => onWithdrawCheckout?.(id)}
+      />
 
       {/* 스테퍼 — 제출 → 검토 → 게시. 만료(expired) 시 전체 비활성 + "Expired" 워터마크 */}
       <div className="relative">
@@ -175,33 +191,6 @@ export function ApprovalPanel({
           })}
         </div>
       </div>
-
-      {/* 편집권한 요청 배너 — 결정 권한자에게만 노출 (Part D) */}
-      {pendingCheckoutRequest && canDecideCheckout && onDecideCheckout && (
-        <div className="flex items-center justify-between rounded-sm border border-hairline bg-surface-alt px-3 py-2">
-          <span className="text-caption text-ink">
-            {t("approval.checkoutDecideTitle", {
-              name: resolve(pendingCheckoutRequest.requested_by),
-            })}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className="rounded-sm px-2 py-1 text-fine text-error hover:bg-error/10"
-              onClick={() => onDecideCheckout(pendingCheckoutRequest.id, false)}
-            >
-              {t("approval.checkoutReject")}
-            </button>
-            <button
-              type="button"
-              className="rounded-sm bg-accent px-2 py-1 text-fine text-on-accent hover:bg-accent-focus"
-              onClick={() => onDecideCheckout(pendingCheckoutRequest.id, true)}
-            >
-              {t("approval.checkoutApprove")}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* 승인자 현황 — 이름 + 승인/대기, 소유자는 관리 링크 */}
       <div className="flex flex-col gap-2">

@@ -27,3 +27,18 @@ export function formatKstShort(iso: string | null | undefined): string {
   const p = kstParts(iso);
   return `${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
+
+/** ISO → 상대시간 파트(방금/분/시간/일). 컴포넌트가 i18n으로 렌더. tz 무관(offset 포함 절대시각). */
+export function relativeAgo(
+  iso: string | null | undefined,
+): { n: number; unit: "now" | "min" | "hour" | "day" } | null {
+  if (!iso) return null;
+  const ms = Date.now() - Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return { n: 0, unit: "now" };
+  if (min < 60) return { n: min, unit: "min" };
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return { n: hr, unit: "hour" };
+  return { n: Math.floor(hr / 24), unit: "day" };
+}

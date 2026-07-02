@@ -134,6 +134,7 @@ import {
   renameVersion,
   republishVersion,
   requestCheckout,
+  withdrawCheckoutRequest,
   saveGraph,
   submitVersion,
   transferCheckout,
@@ -2261,6 +2262,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       await refreshWorkflow();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.decideCheckout"));
+    }
+  };
+
+  const handleWithdrawCheckout = async (requestId: number) => {
+    try {
+      await withdrawCheckoutRequest(requestId);
+      await refreshWorkflow();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.requestCheckout"));
     }
   };
 
@@ -6795,7 +6805,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {/* editor + 미점유 + draft: 편집권한 요청 + 편집 중 텍스트 */}
                         {!isHolder && isEditorRole && currentVersion?.status === "draft" && (
                           <>
-                            {workflow?.pending_checkout_request ? (
+                            {workflow?.pending_checkout_requests?.some(
+                              (r) => r.requested_by === username,
+                            ) ? (
                               <button
                                 type="button"
                                 className="inline-flex cursor-default items-center gap-1 rounded-sm p-1.5 text-ink-tertiary opacity-50"
@@ -6856,11 +6868,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onPublish={() => setPublishConfirmOpen(true)}
                       onWithdraw={() => setWithdrawConfirmOpen(true)}
                       onManageApprovers={() => setManagingApprovers(true)}
-                      pendingCheckoutRequest={workflow?.pending_checkout_request ?? null}
+                      username={username}
                       canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
                       onDecideCheckout={(requestId, approve) =>
                         void handleDecideCheckout(requestId, approve)
                       }
+                      onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
                     />
                     )}
                     <MapDetailCard mapId={mapId} only="versions" hideOpen showFooter={false} reloadKey={versionsReloadKey} />
