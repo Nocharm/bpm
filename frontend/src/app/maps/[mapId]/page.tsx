@@ -52,7 +52,7 @@ import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
 import { Tooltip } from "@/components/tooltip";
-import { formatVersionName } from "@/lib/version-name";
+import { formatVersionMarker, formatVersionName } from "@/lib/version-name";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -6869,6 +6869,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 }
                 mapName={mapName}
+                mapVersionMarker={
+                  currentVersion
+                    ? formatVersionMarker(currentVersion, versions, { long: true })
+                    : undefined
+                }
                 versionControl={
                   <VersionPill
                     versions={versions}

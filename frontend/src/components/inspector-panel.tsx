@@ -41,6 +41,8 @@ interface InspectorPanelProps {
   activitySlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
   mapName?: string;
+  // 맵 이름 위 작은 버전 표시("version {n}" / 드래프트 "(Draft)v.{n}"). page.tsx 주입.
+  mapVersionMarker?: string;
   versionControl?: ReactNode;
   readOnly: boolean;
   onAddNode: () => void;
@@ -60,6 +62,7 @@ export function InspectorPanel({
   approvalSlot,
   activitySlot,
   mapName,
+  mapVersionMarker,
   versionControl,
   readOnly,
   onAddNode,
@@ -125,6 +128,7 @@ export function InspectorPanel({
             subprocessCount={subprocessCount}
             saveLabel={saveLabel}
             mapName={mapName}
+            mapVersionMarker={mapVersionMarker}
             versionControl={versionControl}
           />
         )}
@@ -154,6 +158,7 @@ function PropertiesEmpty({
   subprocessCount,
   saveLabel,
   mapName,
+  mapVersionMarker,
   versionControl,
 }: Omit<InspectorPanelProps, "onCollapse" | "selectionKind">) {
   const { t } = useI18n();
@@ -166,6 +171,9 @@ function PropertiesEmpty({
         <span className="flex h-14 w-14 items-center justify-center rounded-md bg-accent-tint text-accent">
           <Workflow size={24} strokeWidth={1.6} />
         </span>
+        {mapVersionMarker && (
+          <span className="text-fine text-ink-tertiary">{mapVersionMarker}</span>
+        )}
         <span className="max-w-full truncate text-body-strong text-ink">{mapName || t("inspector.noSelection")}</span>
         {versionControl}
         <span className="text-caption text-ink-tertiary">{t("inspector.emptyHint")}</span>

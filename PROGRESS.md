@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 회수 트랙킹 백엔드 제외 + 버전 마커 표시
+- **회수 이벤트 백엔드 제외** — `withdraw_version`에서 `record_version_event(... "withdrawn")` 제거 → DB에 회수 이벤트 자체를 안 남김(프론트 필터와 이중 안전). 테스트 `test_withdraw_records_event`→`test_withdraw_not_tracked`로 반전.
+- **버전 마커 헬퍼** (`version-name.ts`) — `nextVersionNumber`(최대 번호+1) + `formatVersionMarker`: 번호 있으면 `v{n}`(long=`version {n}`), 드래프트는 `(Draft)v.{다음번호}`. vitest 9 통과.
+- **버전 필 표시** (`version-pill.tsx`) — 버튼·드롭다운에서 마커를 작게 회색(`text-fine text-ink-tertiary`), 이름을 강조(`font-semibold`)로 분리. 승인본 번호 규칙은 유지.
+- **우측 Properties 탭** (`inspector-panel.tsx`) — 맵 이름 위에 작은 `version {n}`(드래프트는 `(Draft)v.{n}`) 표시(`mapVersionMarker` prop, page.tsx 주입).
+- 검증: 백엔드 369 passed, ruff clean · 프론트 vitest 9 / lint 0 / build OK.
+
 ## 2026-07-02 — 승인탭 갱신/워터마크/버전기록 3건
 - **① 게시 후 우측 실시간 반영** — `runTransition`이 트랜지션마다 `getMap`으로 전체 버전 재로딩 → 게시 시 직전 published가 expired로 즉시 바뀌어 "published 2개" 안 보임(기존엔 작동 버전 1개만 로컬 병합).
 - **② "Expired" 워터마크 글자간격 축소** — `tracking-[0.35em]`→`tracking-wide`, uppercase 제거(“Expired” 그대로). `approval-panel.tsx`.

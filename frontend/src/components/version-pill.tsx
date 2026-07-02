@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { type VersionSummary } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useI18n } from "@/lib/i18n";
-import { formatVersionName } from "@/lib/version-name";
+import { formatVersionMarker } from "@/lib/version-name";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 
 interface VersionPillProps {
@@ -50,8 +50,12 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
         title={t("editor.versionSelectAria")}
         aria-label={t("editor.versionSelectAria")}
       >
-        <span className={`truncate ${compact ? "max-w-[8rem]" : "max-w-[10rem]"}`}>
-          {formatVersionName(current)}
+        <span className={`inline-flex items-baseline gap-1 truncate ${compact ? "max-w-[8rem]" : "max-w-[10rem]"}`}>
+          {/* 마커(번호/(Draft)v.n)는 작게 회색 — 이름을 강조 */}
+          <span className="shrink-0 text-fine font-normal text-ink-tertiary">
+            {formatVersionMarker(current, versions)}
+          </span>
+          <span className="truncate font-semibold">{current.label}</span>
         </span>
         <ChevronDown size={compact ? 12 : 14} strokeWidth={1.5} />
       </button>
@@ -72,7 +76,12 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
                   else setPending(version);
                 }}
               >
-                <span className="min-w-0 flex-1 truncate text-ink">{formatVersionName(version)}</span>
+                <span className="flex min-w-0 flex-1 items-baseline gap-1 truncate">
+                  <span className="shrink-0 text-fine text-ink-tertiary">
+                    {formatVersionMarker(version, versions)}
+                  </span>
+                  <span className="truncate font-medium text-ink">{version.label}</span>
+                </span>
                 <span
                   className={`rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                 >

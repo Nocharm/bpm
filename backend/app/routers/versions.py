@@ -717,7 +717,7 @@ async def withdraw_version(
     version.status = workflow.DRAFT
     version.checked_out_by = user
     version.checked_out_at = now_kst()
-    record_version_event(session, version_id, "withdrawn", user)
+    # 회수(withdraw)는 버전 기록에서 제외 — 이벤트를 남기지 않는다(트랙킹 제외 요청).
     await session.commit()
     await session.refresh(version)
     return version
