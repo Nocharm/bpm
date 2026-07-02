@@ -14,7 +14,15 @@ from fastapi.testclient import TestClient
 import app.auth as _auth_mod
 from app.db import SessionLocal
 from app.main import app as _app
-from app.models import Employee, MapPermission, MapVersion, ProcessMap, UserGroup, UserGroupMember
+from app.models import (
+    CheckoutRequest,
+    Employee,
+    MapPermission,
+    MapVersion,
+    ProcessMap,
+    UserGroup,
+    UserGroupMember,
+)
 from app.settings import settings
 
 
@@ -334,14 +342,40 @@ def test_withdraw_from_approved(
     assert withdrawn["status"] == "draft"
 
 
-def test_withdraw_submitter_only(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _map_id, version_id = _submit_with_approvers(client, ["a"])
+def test_withdraw_submitter_only(client: TestClient, _transfer_enforce: None) -> None:
+    """회수 권한 — 제출자만(비권한 편집자는 403). enforce 모드라야 경계가 유의미."""
+    _map_id, version_id = _seed_with_grants(
+        [("sub.u", "editor"), ("stranger.u", "editor")],
+        status="rejected",
+        submitted_by="sub.u",
+    )
 
-    monkeypatch.setattr(settings, "dev_user", "stranger")
-    forbidden = client.post(f"/api/versions/{version_id}/withdraw")
-    assert forbidden.status_code == 403
+    _act_as("stranger.u")
+    assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 403
+
+    _act_as("sub.u")
+    assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 200
+
+
+def test_withdraw_owner_sysadmin_override(client: TestClient, _transfer_enforce: None) -> None:
+    """회수 오버라이드 — 제출자가 아니어도 오너·sysadmin은 회수 가능(제출자 부재 대비)."""
+    # 오너 회수
+    _map_id, version_id = _seed_with_grants(
+        [("sub.u", "editor"), ("owner.u", "owner")],
+        status="rejected",
+        submitted_by="sub.u",
+    )
+    _act_as("owner.u")
+    assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 200
+
+    # sysadmin 회수
+    _map_id2, version_id2 = _seed_with_grants(
+        [("sub.u", "editor")],
+        status="rejected",
+        submitted_by="sub.u",
+    )
+    _act_as(_TRANSFER_SYSADMIN)
+    assert client.post(f"/api/versions/{version_id2}/withdraw").status_code == 200
 
 
 def test_checkout_blocked_on_pending(client: TestClient) -> None:
@@ -408,16 +442,22 @@ def _act_as(user: str) -> None:
     _app.dependency_overrides[_auth_mod.get_current_user] = lambda: user
 
 
-def _seed_with_grants(grants: list[tuple[str, str]]) -> tuple[int, int]:
+def _seed_with_grants(
+    grants: list[tuple[str, str]],
+    *,
+    status: str = "draft",
+    submitted_by: str | None = None,
+) -> tuple[int, int]:
     """새 맵 + 버전 + user 권한 시드 → (map_id, version_id).
 
     grants: [(login_id, role), ...] — role ∈ {owner, editor, viewer}
+    status/submitted_by: 비-draft(예: rejected) 버전을 submit 흐름 없이 직접 시드 (회수 게이트 테스트용).
     """
     name = f"tr-map-{uuid4().hex[:6]}"
 
     async def _make(session) -> tuple[int, int]:
         m = ProcessMap(name=name, visibility="private")
-        mv = MapVersion(label="As-Is")
+        mv = MapVersion(label="As-Is", status=status, submitted_by=submitted_by)
         m.versions.append(mv)
         session.add(m)
         await session.flush()
@@ -736,10 +776,58 @@ def test_checkout_request_withdraw(
 def test_checkout_request_requires_editable_status(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """점유 요청은 draft/rejected에서만 — pending 버전엔 409."""
-    map_id, version_id = _submit_with_approvers(client, ["a"])  # now pending
+    """점유 요청은 draft 전용 — pending·rejected 버전엔 409."""
+    _map_id, version_id = _submit_with_approvers(client, ["a"])  # now pending
     monkeypatch.setattr(settings, "dev_user", "editor.x")
     assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 409
+
+    # 반려본도 draft 아님 → 요청 불가 (draft 복귀는 제출자 회수로만)
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/reject", json={"reason": "no"})
+    monkeypatch.setattr(settings, "dev_user", "editor.x")
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 409
+
+
+def test_transfer_blocked_on_rejected(client: TestClient, _transfer_enforce: None) -> None:
+    """점유 이전은 draft 전용 — rejected 버전엔 409(상태 게이트가 no-checkout보다 먼저)."""
+    _map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor")],
+        status="rejected",
+        submitted_by="holder.u",
+    )
+    _act_as("holder.u")
+    res = client.post(
+        f"/api/versions/{version_id}/checkout/transfer", json={"to": "editor.u"}
+    )
+    assert res.status_code == 409
+
+
+def test_decide_blocked_on_non_draft(client: TestClient, _transfer_enforce: None) -> None:
+    """점유 요청 결정은 draft 전용 — draft에서 만든 요청이 rejected로 이월돼도 승인 불가(409).
+
+    이 게이트가 없으면 rejected 버전에 점유(홀더≠제출자)가 생겨 회수 로직과 충돌한다(버그 재현).
+    """
+    _map_id, version_id = _seed_with_grants(
+        [("holder.u", "editor"), ("editor.u", "editor")],
+        status="rejected",
+        submitted_by="holder.u",
+    )
+
+    async def _seed_req() -> int:
+        async with SessionLocal() as session:
+            req = CheckoutRequest(
+                version_id=version_id, requested_by="editor.u", status="pending"
+            )
+            session.add(req)
+            await session.commit()
+            await session.refresh(req)
+            return req.id
+
+    req_id = asyncio.run(_seed_req())
+
+    _act_as(_TRANSFER_SYSADMIN)
+    res = client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": True})
+    assert res.status_code == 409
 
 
 def test_checkout_request_approve_moves_checkout(

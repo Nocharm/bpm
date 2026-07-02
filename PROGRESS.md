@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 점유 이동 draft 전용화 + 회수 오너/sysadmin 오버라이드 (거절본 점유 버그)
+- **버그**: 거절본에 요청→승인으로 점유가 제출자와 다른 사람(B)에게 넘어가면, B(홀더)는 회수 불가·제출자 A만 회수 가능·A 회수 시 점유가 A로 복귀. 원인 — `withdraw_version`·프론트가 현재 홀더가 아닌 `submitted_by` 기준.
+- **수정(점유 이동 draft 전용)** — 거절본이 홀더를 못 갖게 해 구조적으로 차단: `request_checkout`·`transfer_checkout` 허용 상태 `draft,rejected`→`draft`, `decide_checkout_request`에 draft-only 게이트 추가(이월 요청 승인 차단), 프론트 `checkoutInteractive`(approval-panel) `draft||rejected`→`draft`.
+- **회수 오버라이드** — `withdraw_version` 권한 `submitted_by==user OR owner OR sysadmin`(제출자 부재 대비, transfer/decide와 일관). 프론트 `canWithdraw` prop 신설(page→ApprovalPanel→WorkflowActions), 게시는 제출자 전용 유지.
+- 검증: 백엔드 379 passed·ruff clean(신규 `test_withdraw_owner_sysadmin_override`·`test_transfer_blocked_on_rejected`·`test_decide_blocked_on_non_draft`, `test_withdraw_submitter_only` enforce 전환) / 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 버전 카드 상세: 마커·sticky·스크롤바숨김 재적용 + 스크롤 길이 제한
 - 세 가지 재적용 — 65e094b 복원(헤더 버전 마커 `v{n}`/`(Draft)v.{n}`+말줄임, 1열 단계 필 sticky+cardBg, 가로 스크롤바 숨김).
 - **스크롤 길이 제한** — 이름·아이디 열에 `max-w`(8rem·6rem)+truncate → 사이드바에서 상세 가로 스크롤이 너무 길어지지 않게(내용 폭 상한). 넓은 홈에선 w-full로 채워 스크롤 없음.

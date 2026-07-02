@@ -309,10 +309,11 @@ async def transfer_checkout(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    if version.status not in (workflow.DRAFT, workflow.REJECTED):
+    # 점유 이전은 draft 전용 — 반려본은 제출자 회수(withdraw)로 draft 복귀 후 이전.
+    if version.status != workflow.DRAFT:
         raise HTTPException(
             status_code=409,
-            detail="checkout can only be transferred on a draft or rejected version",
+            detail="checkout can only be transferred on a draft version",
         )
 
     actor_role = await get_effective_role(session, user, version.map_id)
@@ -324,7 +325,7 @@ async def transfer_checkout(
             detail="only the checkout holder, map owner, or sysadmin can transfer",
         )
 
-    # 이전할 점유가 없으면 409 — 만료됐어도 checked_out_by가 남아 있으면 이전 허용
+    # 이전할 점유가 없으면 409 (draft라도 아직 아무도 체크아웃 안 했을 수 있음)
     if version.checked_out_by is None:
         raise HTTPException(status_code=409, detail="no active checkout to transfer")
 
@@ -719,7 +720,7 @@ async def withdraw_version(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Pending/Approved/Rejected → Draft. submitter만. 회수자에게 체크아웃 재부여."""
+    """Pending/Approved/Rejected → Draft. submitter·오너·sysadmin. 회수자에게 체크아웃 재부여."""
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
@@ -727,8 +728,13 @@ async def withdraw_version(
         raise HTTPException(
             status_code=409, detail=f"cannot withdraw from status {version.status}"
         )
-    if version.submitted_by != user:
-        raise HTTPException(status_code=403, detail="only the submitter can withdraw")
+    # 제출자 부재 시에도 진행이 막히지 않도록 오너·sysadmin 오버라이드(transfer/decide와 권한 일관).
+    actor_role = await get_effective_role(session, user, version.map_id)
+    if not (version.submitted_by == user or actor_role == "owner" or is_sysadmin(user)):
+        raise HTTPException(
+            status_code=403,
+            detail="only the submitter, map owner, or sysadmin can withdraw",
+        )
 
     # 회수 조건부 트랙킹 — 현재 승인요청 사이클의 승인 수로 판정(submit이 매 제출마다 리셋).
     approval_count = await session.scalar(

@@ -12,6 +12,8 @@ interface WorkflowActionsProps {
   isCheckoutHolder: boolean;
   isApprover: boolean;
   isSubmitter: boolean;
+  // 회수 가능 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치). 게시는 제출자 전용이라 별도.
+  canWithdraw: boolean;
   hasApproved: boolean;
   onSubmit: () => void;
   onApprove: () => void;
@@ -26,6 +28,7 @@ export function WorkflowActions({
   isCheckoutHolder,
   isApprover,
   isSubmitter,
+  canWithdraw,
   hasApproved,
   onSubmit,
   onApprove,
@@ -97,7 +100,7 @@ export function WorkflowActions({
       )}
 
       {(status === "pending" || status === "approved" || status === "rejected") &&
-        isSubmitter && (
+        canWithdraw && (
           <button type="button" className={actionBtn} onClick={onWithdraw}>
             {t("wf.withdraw")}
           </button>

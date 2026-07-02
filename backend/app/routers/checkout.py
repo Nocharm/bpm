@@ -36,10 +36,12 @@ async def request_checkout(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    if version.status not in (workflow.DRAFT, workflow.REJECTED):
+    # 점유 요청은 draft 전용 — 반려본은 제출자 회수(withdraw)로 draft 복귀 후 요청/이전.
+    # rejected에서 요청·승인 허용하면 점유가 제출자와 어긋난 채로 남아 회수 로직과 충돌.
+    if version.status != workflow.DRAFT:
         raise HTTPException(
             status_code=409,
-            detail="checkout can only be requested on a draft or rejected version",
+            detail="checkout can only be requested on a draft version",
         )
 
     role = await get_effective_role(session, user, version.map_id)
@@ -104,6 +106,13 @@ async def decide_checkout_request(
     if version is None:
         raise HTTPException(
             status_code=404, detail=f"version {req.version_id} not found"
+        )
+
+    # 점유 이동은 draft 전용 — draft에서 만든 요청이 submit/reject로 넘어가도 draft 밖에선 결정 불가.
+    if version.status != workflow.DRAFT:
+        raise HTTPException(
+            status_code=409,
+            detail="checkout requests can only be decided on a draft version",
         )
 
     actor_role = await get_effective_role(session, user, version.map_id)

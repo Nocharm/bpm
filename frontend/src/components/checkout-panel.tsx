@@ -2,7 +2,7 @@
 
 // 점유권 탭 — 프로그레스바 위 접이식 섹션(기본 접힘). 현재 점유자(+출처/획득시각) + 미결 요청자들.
 // 요청이 있으면 헤더에 빨간 닷. 결정권자(보유자/오너/sysadmin)는 요청 카드 호버 시 승인/거절,
-// 요청자는 자기 요청을 철회. draft/rejected에서만 조작 가능(그 외 view-only, 버튼 숨김·흐림).
+// 요청자는 자기 요청을 철회. draft에서만 조작 가능(그 외 view-only, 버튼 숨김·흐림).
 import { useState } from "react";
 import { Check, ChevronDown, ChevronRight, User, X } from "lucide-react";
 
@@ -16,7 +16,7 @@ interface CheckoutPanelProps {
   username: string | null;
   /** 결정권자 — 보유자/오너/sysadmin (승인·거절 가능) */
   canDecide: boolean;
-  /** 조작 가능 상태 — draft/rejected. false면 view-only(버튼 숨김) */
+  /** 조작 가능 상태 — draft 전용. false면 view-only(버튼 숨김) */
   interactive: boolean;
   /** login_id → 표시명 */
   resolveName: (id: string) => string;

@@ -804,6 +804,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
+  // 회수 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치). 게시는 제출자 전용이라 별개.
+  const canWithdraw = isSubmitter || myRole === "owner" || isSysadmin;
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
   // 승인 진행 중 — 어떤 버전이든 pending/approved면 승인자 목록 변경 금지(tally 깨짐 방지, 백엔드 409와 일치).
   const approvalInFlight = versions.some(
@@ -6860,6 +6862,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       isCheckoutHolder={checkout?.mine ?? false}
                       isApprover={isApprover}
                       isSubmitter={isSubmitter}
+                      canWithdraw={canWithdraw}
                       hasApproved={hasApproved}
                       canManageApprovers={isMapOwner && !approvalInFlight}
                       onSubmit={() => setSubmitConfirmOpen(true)}

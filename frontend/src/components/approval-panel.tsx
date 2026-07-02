@@ -18,6 +18,8 @@ interface ApprovalPanelProps {
   isCheckoutHolder: boolean;
   isApprover: boolean;
   isSubmitter: boolean;
+  // 회수 가능 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치).
+  canWithdraw: boolean;
   hasApproved: boolean;
   // 승인자 목록 관리 가능 여부 — 오너이면서 승인 진행 중이 아닐 때(draft/rejected 등). / can edit approver list.
   canManageApprovers: boolean;
@@ -62,6 +64,7 @@ export function ApprovalPanel({
   isCheckoutHolder,
   isApprover,
   isSubmitter,
+  canWithdraw,
   hasApproved,
   canManageApprovers,
   onSubmit,
@@ -101,8 +104,8 @@ export function ApprovalPanel({
   const stage = currentStage(status);
   const rejected = status === "rejected";
   const isExpired = status === "expired";
-  // 점유권 탭 조작 가능 상태 — draft/rejected에서만(그 외 view-only)
-  const checkoutInteractive = status === "draft" || status === "rejected";
+  // 점유권 탭 조작 가능 상태 — draft에서만(그 외 view-only). 점유 이동(요청/이전/결정)은 draft 전용.
+  const checkoutInteractive = status === "draft";
   const resolve = (id: string): string => nameById.get(id) ?? id;
   const pendingNames = approvers.filter((id) => !approvals.has(id)).map(resolve);
 
@@ -114,7 +117,7 @@ export function ApprovalPanel({
         <StatusBadge status={status} />
       </div>
 
-      {/* 점유권 탭 — 프로그레스바 위, 기본 접힘. draft/rejected에서만 조작 가능 */}
+      {/* 점유권 탭 — 프로그레스바 위, 기본 접힘. draft에서만 조작 가능 */}
       <CheckoutPanel
         workflow={workflow}
         username={username}
@@ -249,6 +252,7 @@ export function ApprovalPanel({
         isCheckoutHolder={isCheckoutHolder}
         isApprover={isApprover}
         isSubmitter={isSubmitter}
+        canWithdraw={canWithdraw}
         hasApproved={hasApproved}
         onSubmit={onSubmit}
         onApprove={onApprove}
