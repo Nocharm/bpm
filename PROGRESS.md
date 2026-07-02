@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 버전 카드 상세: 마커·sticky·스크롤바숨김 재적용 + 스크롤 길이 제한
+- 세 가지 재적용 — 65e094b 복원(헤더 버전 마커 `v{n}`/`(Draft)v.{n}`+말줄임, 1열 단계 필 sticky+cardBg, 가로 스크롤바 숨김).
+- **스크롤 길이 제한** — 이름·아이디 열에 `max-w`(8rem·6rem)+truncate → 사이드바에서 상세 가로 스크롤이 너무 길어지지 않게(내용 폭 상한). 넓은 홈에선 w-full로 채워 스크롤 없음.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 버전 카드 상세: a151936 원본 디자인 복원 + 좁을 때만 좌우 스크롤
 - 사용자 요청 — 내용 디자인은 `0fe62ef` 직전(`a151936`) 원본 그대로, 상세만 좁을 때 좌우 스크롤. 그간의 마커/sticky/scrollbar-hidden/flex(0fe62ef·65e094b·ff74c91)로 크기·정렬이 변한 것을 되돌림.
 - `git checkout a151936 -- version-timeline.tsx`로 원본 복원(테이블 + rowspan 날짜박스, 헤더 마커·말줄임 없음, sticky 없음) 후, 상세 테이블만 `overflow-x-auto` + `w-full min-w-max`로 감싸 넓으면 채우고 좁으면 넘쳐 좌우 스크롤(스크롤바 표시 → 날짜·시각 도달 가능).

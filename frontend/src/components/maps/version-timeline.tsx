@@ -8,6 +8,7 @@ import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X 
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
+import { formatVersionMarker } from "@/lib/version-name";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -109,6 +110,11 @@ export function VersionTimeline({
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         const open = expandedIds.has(version.id);
+        // sticky 1열 배경 = 카드 배경(현재 카드 연보라)에 맞춤 — 흰 열로 튀지 않게, hover도 동기화
+        const cardBg =
+          idx === 0
+            ? "bg-accent-tint/30 group-hover:bg-accent-tint/50"
+            : "bg-surface group-hover:bg-surface-alt";
         return (
           <div key={version.id} className="relative flex gap-2.5">
             <span
@@ -127,15 +133,19 @@ export function VersionTimeline({
                   onToggle(version.id);
                 }
               }}
-              className={`min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
+              className={`group min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
                 idx === 0
                   ? "border-accent-tint-border bg-accent-tint/30 hover:bg-accent-tint/50"
                   : "border-hairline bg-surface hover:bg-surface-alt"
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="text-caption-strong text-ink">{version.label}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임. */}
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
+                    <span className="text-caption-strong text-ink">{version.label}</span>
+                  </span>
                   <span
                     className={`shrink-0 rounded-xs border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                   >
@@ -184,13 +194,14 @@ export function VersionTimeline({
                     }`}
                   >
                     <div className="overflow-hidden">
-                      {/* 좁을 때만 가로 스크롤 — 넓으면 w-full로 채우고, 좁으면 내용 폭(min-w-max)으로 넘쳐 스크롤 */}
-                      <div className="overflow-x-auto">
-                      <table className="mt-1.5 w-full min-w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
+                      {/* 좁은 사이드바 대응 — 가로 스크롤(스크롤바 숨김), 1열(단계 필) sticky 고정으로 시간대 확인.
+                          넓은 폭(홈 상세)에선 w-full로 채워 이름 열이 늘어나 날짜/시간이 우측 정렬. */}
+                      <div className="mt-1.5 overflow-x-auto scrollbar-hidden">
+                      <table className="w-full min-w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
                         <tbody>
                           {detailRows.map(({ evt, date, time, dateSpan }) => (
                             <tr key={evt.id} className="align-top">
-                              <td className="w-24">
+                              <td className={`sticky left-0 z-[1] w-24 ${cardBg}`}>
                                 <span
                                   className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
                                     EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
@@ -200,8 +211,13 @@ export function VersionTimeline({
                                   {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
                                 </span>
                               </td>
-                              <td className="w-full whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
-                              <td className="whitespace-nowrap text-ink-tertiary">{evt.actor}</td>
+                              {/* 이름·아이디 최대폭(말줄임) — 사이드바에서 가로 스크롤이 너무 길어지지 않게 */}
+                              <td className="text-ink">
+                                <span className="block max-w-[8rem] truncate">{nameOf(evt.actor)}</span>
+                              </td>
+                              <td className="text-ink-tertiary">
+                                <span className="block max-w-[6rem] truncate">{evt.actor}</span>
+                              </td>
                               {dateSpan > 0 && (
                                 <td
                                   rowSpan={dateSpan}
