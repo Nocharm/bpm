@@ -131,7 +131,6 @@ import {
   listLibraryProcesses,
   publishVersion,
   rejectVersion,
-  releaseCheckout,
   renameVersion,
   republishVersion,
   requestCheckout,
@@ -237,7 +236,7 @@ const GROUP_COLOR_PRESETS = [
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
 const AUTO_SAVE_DELAY_MS = 2000; // 마지막 변경 후 자동 저장까지의 디바운스
-const CHECKOUT_HEARTBEAT_MS = 10_000; // 체크아웃 연장 주기 — TTL(기본 30분) 대비 충분히 짧게
+const CHECKOUT_POLL_MS = 10_000; // 점유 상태 재조회 주기(요청 승인/이전 반영). sticky라 TTL 연장 아님
 const COMMENT_POLL_MS = 5_000; // 코멘트 "실시간" 폴링 주기 (spec §7 Phase C)
 
 const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
@@ -1843,19 +1842,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
   }, [searchQuery, versionId, mapName, t]);
 
-  // 체크아웃 — 버전 진입 시 획득 시도, heartbeat로 연장. 타인이 선점 중이면
-  // mine=false가 와서 읽기 전용이 되고, 선점이 풀리면 다음 heartbeat에 자동 승격된다.
+  // 체크아웃 — 지정 인계 전용(자동해제 없음). 진입 시 점유 상태를 조회하고 주기적으로 재조회해
+  // 요청 승인/이전으로 보유자가 바뀌면 반영한다. 이탈해도 점유는 유지(release 호출 안 함).
+  // 뷰어는 점유 대상이 아니므로 조회도 생략(읽기 전용).
   useEffect(() => {
-    if (versionId === null) {
+    if (versionId === null || !isEditorRole) {
       return;
     }
-    // 비편집 상태에선 체크아웃 시도 안 함 — 백엔드가 409 반환하므로 스팸 방지
+    // 비편집 상태에선 체크아웃 조회 안 함 — 백엔드가 409 반환하므로 스팸 방지
     const selected = versions.find((v) => v.id === versionId);
     if (selected && selected.status !== "draft" && selected.status !== "rejected") {
       return;
     }
     let active = true;
-    const tryAcquire = async () => {
+    const poll = async () => {
       try {
         const state = await acquireCheckout(versionId);
         if (!active) {
@@ -1869,18 +1869,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
     };
-    void tryAcquire();
-    const heartbeat = setInterval(() => void tryAcquire(), CHECKOUT_HEARTBEAT_MS);
+    void poll();
+    const interval = setInterval(() => void poll(), CHECKOUT_POLL_MS);
     return () => {
       active = false;
-      clearInterval(heartbeat);
-      if (checkoutMineRef.current) {
-        checkoutMineRef.current = false;
-        // 해제 실패는 무시 — TTL이 자동 회수
-        void releaseCheckout(versionId).catch(() => undefined);
-      }
+      clearInterval(interval);
+      checkoutMineRef.current = false;
     };
-  }, [versionId, versions, t]);
+  }, [versionId, versions, isEditorRole, t]);
 
   const handleForceCheckout = useCallback(async () => {
     if (versionId === null) {
@@ -6720,17 +6716,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                       />
                       {/* 버전 관리 — 역할/상태 매트릭스 우측 정렬 아이콘 (§6.2) */}
                       <div className="flex shrink-0 items-center gap-0.5">
-                        {/* 새 버전 — 항상 노출 */}
-                        <Tooltip label={t("editor.newVersion")}>
-                          <button
-                            type="button"
-                            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
-                            onClick={handleCreateVersion}
-                            aria-label={t("editor.newVersion")}
-                          >
-                            <Plus size={16} strokeWidth={1.5} />
-                          </button>
-                        </Tooltip>
+                        {/* 새 버전 — editor+ 이고 진행 중 draft 없을 때만 (맵당 draft 1개 규약) */}
+                        {isEditorRole && !hasDraft && (
+                          <Tooltip label={t("editor.newVersion")}>
+                            <button
+                              type="button"
+                              className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                              onClick={handleCreateVersion}
+                              aria-label={t("editor.newVersion")}
+                            >
+                              <Plus size={16} strokeWidth={1.5} />
+                            </button>
+                          </Tooltip>
+                        )}
 
                         {/* 점유자 + draft: 이전·이름변경·삭제 */}
                         {isHolder && (

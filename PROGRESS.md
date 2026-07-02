@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 버전 라이프사이클 디테일 수정 5건
+- **① 뷰어 드래프트 생성 차단** — 백엔드 `create_version`에 `require_map_role("editor")`, `acquire_checkout`에 `require_version_map_role("editor")` 게이트 추가. 프론트 "새 버전"(+) 버튼을 `isEditorRole`일 때만 노출.
+- **② 점유 sticky(지정 인계 전용·자동해제 없음)** — `checkout.py` `is_checkout_active`를 TTL 만료 없이 "보유자 존재"로 변경. 이탈해도 점유 유지 → 인계는 요청(decide: 보유자/오너/sysadmin) 또는 이전(transfer)만. 프론트 에디터 진입 effect: 언마운트 자동 release 제거, heartbeat→상태 poll로 전환(요청 승인/이전 반영), 뷰어는 조회 생략.
+- **③ 만료 시 스테퍼** — `approval-panel.tsx`: expired면 스테퍼 전체 비활성(회색) + "Expired" 워터마크(로케일 무관 고정).
+- **④ 드래프트 있을 때 재게시로 중복 생성** — 프론트 "새 버전" 버튼을 `!hasDraft`로 게이트(재게시는 이미 `!hasDraft`). 백엔드는 이미 409 차단(회귀 테스트 통과).
+- **⑤ 드래프트 삭제 권한** — 프론트는 이미 `isHolder` 전용. 백엔드 `delete_version`에 보유자|오너|sysadmin 게이트 추가.
+- 검증: 백엔드 pytest **369 passed**(신규 게이트 3종 + sticky 테스트 추가/수정), ruff clean. 프론트 lint 0 errors, production build OK.
+
 ## 2026-07-02 — 프론트 before/after 비교 검증 방법 문서
 - **docs: 프론트 2 + 백 1 비교 검증 요약** (`docs/frontend-compare-verification.md`) — 분기지점 `291f6d9`(A) ↔ HEAD(B)를 worktree로 각각 :3000/:3001에 띄우고 백엔드 1개(:8000)를 `/api` 프록시로 공유. DB 무관(프론트는 API로만 통신) 명시. 좀비 dev 정리·데이터는 로컬 sqlite(라이프사이클 UI는 데모시드)·worktree 정리 포함. PowerShell(사내 Windows) 우선.
 

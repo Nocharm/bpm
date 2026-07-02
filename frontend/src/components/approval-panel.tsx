@@ -96,6 +96,7 @@ export function ApprovalPanel({
   const approvals = new Set(workflow?.approvals ?? []);
   const stage = currentStage(status);
   const rejected = status === "rejected";
+  const isExpired = status === "expired";
   const resolve = (id: string): string => nameById.get(id) ?? id;
   const pendingNames = approvers.filter((id) => !approvals.has(id)).map(resolve);
 
@@ -107,58 +108,71 @@ export function ApprovalPanel({
         <StatusBadge status={status} />
       </div>
 
-      {/* 스테퍼 — 제출 → 검토 → 게시 */}
-      <div className="flex items-start">
-        {STEPS.map((step, index) => {
-          const done = stage > index || status === "published";
-          const active = stage === index && !rejected;
-          const errorStep = rejected && index === 1;
-          return (
-            <div key={step.key} className="flex flex-1 items-start last:flex-none">
-              <div className="flex shrink-0 flex-col items-center gap-1">
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-fine font-semibold ${
-                    errorStep
-                      ? "border-2 border-error text-error"
-                      : done
-                        ? "bg-accent text-on-accent"
+      {/* 스테퍼 — 제출 → 검토 → 게시. 만료(expired) 시 전체 비활성 + "Expired" 워터마크 */}
+      <div className="relative">
+        {isExpired && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <span className="select-none -rotate-12 text-2xl font-semibold uppercase tracking-[0.35em] text-ink-tertiary opacity-40">
+              Expired
+            </span>
+          </div>
+        )}
+        <div className={`flex items-start ${isExpired ? "opacity-60" : ""}`}>
+          {STEPS.map((step, index) => {
+            const done = !isExpired && (stage > index || status === "published");
+            const active = !isExpired && stage === index && !rejected;
+            const errorStep = !isExpired && rejected && index === 1;
+            return (
+              <div key={step.key} className="flex flex-1 items-start last:flex-none">
+                <div className="flex shrink-0 flex-col items-center gap-1">
+                  <span
+                    className={`flex h-7 w-7 items-center justify-center rounded-full text-fine font-semibold ${
+                      isExpired
+                        ? "border border-divider text-ink-tertiary"
+                        : errorStep
+                          ? "border-2 border-error text-error"
+                          : done
+                            ? "bg-accent text-on-accent"
+                            : active
+                              ? "border-2 border-accent text-accent"
+                              : "border border-divider text-ink-tertiary"
+                    }`}
+                  >
+                    {done ? (
+                      <Check size={14} strokeWidth={2} />
+                    ) : active ? (
+                      <span className="h-2 w-2 rounded-full bg-accent" />
+                    ) : (
+                      index + 1
+                    )}
+                  </span>
+                  <span
+                    className={`text-fine ${
+                      isExpired
+                        ? "text-ink-tertiary"
                         : active
-                          ? "border-2 border-accent text-accent"
-                          : "border border-divider text-ink-tertiary"
-                  }`}
-                >
-                  {done ? (
-                    <Check size={14} strokeWidth={2} />
-                  ) : active ? (
-                    <span className="h-2 w-2 rounded-full bg-accent" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <span
-                  className={`text-fine ${
-                    active
-                      ? "font-semibold text-accent"
-                      : errorStep
-                        ? "text-error"
-                        : done
-                          ? "text-ink"
-                          : "text-ink-tertiary"
-                  }`}
-                >
-                  {t(step.labelKey)}
-                </span>
+                          ? "font-semibold text-accent"
+                          : errorStep
+                            ? "text-error"
+                            : done
+                              ? "text-ink"
+                              : "text-ink-tertiary"
+                    }`}
+                  >
+                    {t(step.labelKey)}
+                  </span>
+                </div>
+                {index < STEPS.length - 1 && (
+                  <div
+                    className={`mx-1 mt-3.5 h-0.5 flex-1 rounded-full ${
+                      done ? "bg-accent" : "bg-divider"
+                    }`}
+                  />
+                )}
               </div>
-              {index < STEPS.length - 1 && (
-                <div
-                  className={`mx-1 mt-3.5 h-0.5 flex-1 rounded-full ${
-                    done ? "bg-accent" : "bg-divider"
-                  }`}
-                />
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* 편집권한 요청 배너 — 결정 권한자에게만 노출 (Part D) */}

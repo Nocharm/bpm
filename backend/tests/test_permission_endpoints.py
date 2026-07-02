@@ -684,9 +684,9 @@ def checked_out_by_of(version_id: int) -> str | None:
 
 def test_force_checkout_is_sysadmin_only(client: TestClient, enforce: None) -> None:
     """활성 점유 강탈은 sysadmin만 — 에디터는 일반획득 시 읽기전용·force 시 403, sysadmin은 인수."""
-    map_id = seed_map(grants=[("user", "ed.itor", "editor")])
+    map_id = seed_map(grants=[("user", "creator.u", "editor"), ("user", "ed.itor", "editor")])
     vid = first_version_id(map_id)
-    # 생성자가 점유
+    # 생성자가 점유 (점유는 editor+ 만 가능)
     act_as("creator.u")
     assert client.post(f"/api/versions/{vid}/checkout", json={}).json()["mine"] is True
     # 에디터: 일반 획득 = 읽기전용(강탈 아님)
@@ -703,6 +703,40 @@ def test_force_checkout_is_sysadmin_only(client: TestClient, enforce: None) -> N
     r = client.post(f"/api/versions/{vid}/checkout", json={"force": True})
     assert r.status_code == 200
     assert r.json()["mine"] is True and r.json()["checked_out_by"] == SYSADMIN
+
+
+def test_acquire_checkout_requires_editor(client: TestClient, enforce: None) -> None:
+    """뷰어는 점유 획득 불가 — editor+ 만 (item 1)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "view.er", "viewer")])
+    vid = first_version_id(map_id)
+    act_as("view.er")
+    assert client.post(f"/api/versions/{vid}/checkout", json={}).status_code == 403
+
+
+def test_create_version_requires_editor(client: TestClient, enforce: None) -> None:
+    """뷰어는 새 버전(드래프트) 생성 불가 — editor+ 만 (item 1)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "view.er", "viewer")])
+    act_as("view.er")
+    r = client.post(f"/api/maps/{map_id}/versions", json={"label": "x"})
+    assert r.status_code == 403
+
+
+def test_delete_version_requires_holder_or_admin(
+    client: TestClient, enforce: None
+) -> None:
+    """드래프트 삭제는 점유 보유자(또는 오너·sysadmin)만 — 비보유 에디터는 403 (item 5)."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "ed.hold", "editor"),
+            ("user", "ed.other", "editor"),
+        ]
+    )
+    vid = first_version_id(map_id)
+    act_as("ed.hold")
+    client.post(f"/api/versions/{vid}/checkout", json={})  # ed.hold 점유
+    act_as("ed.other")
+    assert client.delete(f"/api/versions/{vid}").status_code == 403
 
 
 def test_create_version_holds_checkout_for_creator(

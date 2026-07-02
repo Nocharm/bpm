@@ -101,18 +101,20 @@ def test_release_unlocks_for_others(
     assert state["mine"] is True
 
 
-def test_expired_checkout_is_not_a_lock(
+def test_checkout_is_sticky_no_ttl_expiry(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """점유는 시간 경과로 풀리지 않는다(지정 인계 전용) — 타인은 획득 불가, 요청/이전만."""
     version_id = _create_version(client)
     client.post(f"/api/versions/{version_id}/checkout", json={})
 
-    # TTL 0분 → 즉시 만료로 간주
+    # TTL을 0으로 낮춰도 sticky — 다른 사용자는 여전히 획득 못 함
     monkeypatch.setattr(settings, "checkout_ttl_minutes", 0)
     monkeypatch.setattr(settings, "dev_user", "reviewer")
     state = client.post(f"/api/versions/{version_id}/checkout", json={}).json()
 
-    assert state["mine"] is True
+    assert state["mine"] is False
+    assert state["checked_out_by"] == "local-dev"
 
 
 def test_delete_version_rejected_while_locked_by_other(

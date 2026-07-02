@@ -14,7 +14,7 @@ from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.permissions.access import get_effective_role, get_eligible_users
-from app.permissions.deps import require_version_map_role
+from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
     CheckoutRequest,
@@ -127,7 +127,12 @@ async def clone_graph(
         )
 
 
-@router.post("/maps/{map_id}/versions", response_model=VersionOut, status_code=201)
+@router.post(
+    "/maps/{map_id}/versions",
+    response_model=VersionOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("editor"))],
+)
 async def create_version(
     map_id: int,
     payload: VersionCreate,
@@ -227,7 +232,11 @@ async def rename_version(
     return version
 
 
-@router.post("/versions/{version_id}/checkout", response_model=CheckoutOut)
+@router.post(
+    "/versions/{version_id}/checkout",
+    response_model=CheckoutOut,
+    dependencies=[Depends(require_version_map_role("editor"))],
+)
 async def acquire_checkout(
     version_id: int,
     payload: CheckoutIn,
@@ -339,6 +348,15 @@ async def delete_version(
     if version.status in (workflow.PENDING, workflow.PUBLISHED):
         raise HTTPException(
             status_code=409, detail=f"cannot delete a {version.status} version"
+        )
+
+    # 삭제는 점유 보유자(또는 맵 오너·sysadmin)만 — draft 삭제 버튼과 동일 게이트.
+    actor_role = await get_effective_role(session, user, version.map_id)
+    is_holder = version.checked_out_by == user
+    if not (is_holder or actor_role == "owner" or is_sysadmin(user)):
+        raise HTTPException(
+            status_code=403,
+            detail="only the checkout holder, map owner, or sysadmin can delete this version",
         )
 
     # 다른 사용자가 편집 중인 버전은 삭제 불가 (spec §7 Phase C)
