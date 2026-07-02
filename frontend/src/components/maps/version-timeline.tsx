@@ -87,10 +87,9 @@ export function VersionTimeline({
       <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-px bg-hairline" />
       {/* 최신 버전이 위로 — idx 0 = 최신 = Current / newest first. */}
       {[...versions].reverse().map((version, idx) => {
-        // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준. 회수(withdrawn)는 트랙킹에서 제외.
-        const events: VersionEvent[] = [...version.events]
-          .filter((e) => e.event_type !== "withdrawn")
-          .reverse();
+        // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
+        // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
+        const events: VersionEvent[] = [...version.events].reverse();
         // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
         const rawRows = events.map((evt) => {
           const full = formatStamp(evt.created_at);

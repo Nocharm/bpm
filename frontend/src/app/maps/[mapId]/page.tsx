@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Slash, Sparkles, Spline, Trash2, Undo2, X } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Trash2, Undo2, User, X } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -52,7 +52,7 @@ import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
 import { Tooltip } from "@/components/tooltip";
-import { formatVersionMarker, formatVersionName } from "@/lib/version-name";
+import { formatVersionMarker } from "@/lib/version-name";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -710,6 +710,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [transferTarget, setTransferTarget] = useState<string>("");
   // 재게시 확인 다이얼로그 / Republish confirm dialog
   const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
+  // 승인 요청 확인 다이얼로그 — 승인자 목록 확인 후 제출 / Submit confirm listing approvers.
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
@@ -6706,11 +6708,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   // 점유권 이전·편집권한 요청·만료본 재게시 매트릭스 + 모달은 백엔드(버전번호·만료·점유권 API) 후 새 세션에서 추가
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-2">
-                      {/* 현재 버전 풀네임 라벨(§5.3) */}
-                      <span className="min-w-0 flex-1 truncate text-caption-strong text-ink">
-                        {currentVersion ? formatVersionName(currentVersion) : "—"}
-                      </span>
-                      {/* 전환 pill — 축소(번호 포함) */}
+                      {/* 버전 필(전환) — 승인 탭 좌상단 (풀네임 텍스트 라벨 제거) */}
                       <VersionPill
                         versions={versions}
                         versionId={versionId}
@@ -6719,7 +6717,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         compact
                       />
                       {/* 버전 관리 — 역할/상태 매트릭스 우측 정렬 아이콘 (§6.2) */}
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="ml-auto flex shrink-0 items-center gap-0.5">
                         {/* 새 버전 — editor+ 이고 진행 중 draft 없을 때만 (맵당 draft 1개 규약) */}
                         {isEditorRole && !hasDraft && (
                           <Tooltip label={t("editor.newVersion")}>
@@ -6829,7 +6827,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       isSubmitter={isSubmitter}
                       hasApproved={hasApproved}
                       isMapOwner={isMapOwner}
-                      onSubmit={() => void runTransition(submitVersion)}
+                      onSubmit={() => setSubmitConfirmOpen(true)}
                       onApprove={() => void runTransition(approveVersion)}
                       onReject={(reason) => void runTransition((id) => rejectVersion(id, reason))}
                       onPublish={() => void runTransition(publishVersion)}
@@ -6954,6 +6952,35 @@ function MapEditor({ mapId }: { mapId: number }) {
           cancelLabel={t("common.cancel")}
           onConfirm={() => void handleConfirmRepublish()}
           onClose={() => setRepublishConfirmOpen(false)}
+        />
+      )}
+      {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}
+      {submitConfirmOpen && (
+        <ConfirmDialog
+          icon={<Send size={28} strokeWidth={1.5} />}
+          title={t("approval.submitConfirmTitle")}
+          message={t("approval.submitConfirmBody")}
+          lines={
+            (workflow?.approvers ?? []).length > 0
+              ? (workflow?.approvers ?? []).map((id) => ({
+                  icon: <User size={14} strokeWidth={1.5} />,
+                  text: nameById.get(id) ?? id,
+                }))
+              : [
+                  {
+                    icon: <User size={14} strokeWidth={1.5} />,
+                    text: t("approval.noApprovers"),
+                    tone: "muted" as const,
+                  },
+                ]
+          }
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setSubmitConfirmOpen(false);
+            void runTransition(submitVersion);
+          }}
+          onClose={() => setSubmitConfirmOpen(false)}
         />
       )}
       {branchPrompt && (

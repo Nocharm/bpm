@@ -26,6 +26,7 @@ from app.models import (
     Node,
     ProcessMap,
     VersionApproval,
+    VersionEvent,
 )
 from app.schemas import (
     CheckoutIn,
@@ -714,10 +715,34 @@ async def withdraw_version(
     if version.submitted_by != user:
         raise HTTPException(status_code=403, detail="only the submitter can withdraw")
 
+    # 회수 조건부 트랙킹 — 현재 승인요청 사이클의 승인 수로 판정(submit이 매 제출마다 리셋).
+    approval_count = await session.scalar(
+        select(func.count())
+        .select_from(VersionApproval)
+        .where(VersionApproval.version_id == version_id)
+    )
+
     version.status = workflow.DRAFT
     version.checked_out_by = user
     version.checked_out_at = now_kst()
-    # 회수(withdraw)는 버전 기록에서 제외 — 이벤트를 남기지 않는다(트랙킹 제외 요청).
+
+    if approval_count and approval_count > 0:
+        # 승인 1건 이상 후 회수 → 회수 기록을 남긴다(제출·승인 이력 유지).
+        record_version_event(session, version_id, "withdrawn", user)
+    else:
+        # 승인 0건 회수 → 이번 승인요청(submitted) 흔적을 삭제, 회수 기록도 남기지 않는다.
+        latest_submitted = await session.scalar(
+            select(VersionEvent)
+            .where(
+                VersionEvent.version_id == version_id,
+                VersionEvent.event_type == "submitted",
+            )
+            .order_by(VersionEvent.id.desc())
+            .limit(1)
+        )
+        if latest_submitted is not None:
+            await session.delete(latest_submitted)
+
     await session.commit()
     await session.refresh(version)
     return version

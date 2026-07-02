@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 회수 조건부 트랙킹 + 승인요청 모달 + 승인탭 헤더
+- **회수 조건부 트랙킹** (`withdraw_version`) — 현재 승인요청 사이클의 승인 수로 분기(submit이 매번 `VersionApproval` 리셋): 승인 0건 회수→해당 `submitted` 이벤트 삭제·`withdrawn` 미기록(흔적 없음), 승인 1건 이상 후 회수→`withdrawn` 기록(제출·승인 이력 유지). 프론트 타임라인의 withdrawn 제외 필터는 되돌림(이제 표시). 테스트 2종(0건 삭제/≥1건 유지).
+- **승인 요청 확인 모달** — 제출 버튼이 바로 제출하지 않고 현재 승인자 목록을 `ConfirmDialog`(재활용)로 보여준 뒤 확인 시 제출. i18n `approval.submitConfirm*`.
+- **승인 탭 헤더** — 좌상단 버전 풀네임 텍스트 라벨 제거, 그 자리에 버전 필(전환) 배치. 아이콘 액션은 `ml-auto`로 우측 정렬.
+- 검증: 백엔드 370 passed·ruff clean / 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 회수 트랙킹 백엔드 제외 + 버전 마커 표시
 - **회수 이벤트 백엔드 제외** — `withdraw_version`에서 `record_version_event(... "withdrawn")` 제거 → DB에 회수 이벤트 자체를 안 남김(프론트 필터와 이중 안전). 테스트 `test_withdraw_records_event`→`test_withdraw_not_tracked`로 반전.
 - **버전 마커 헬퍼** (`version-name.ts`) — `nextVersionNumber`(최대 번호+1) + `formatVersionMarker`: 번호 있으면 `v{n}`(long=`version {n}`), 드래프트는 `(Draft)v.{다음번호}`. vitest 9 통과.

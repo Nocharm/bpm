@@ -258,15 +258,34 @@ def test_withdraw_returns_to_draft(client: TestClient) -> None:
     assert save.status_code == 200
 
 
-def test_withdraw_not_tracked(client: TestClient) -> None:
-    """회수(withdraw)는 버전 기록에서 제외 — 'withdrawn' 이벤트를 남기지 않는다(트랙킹 제외)."""
+def test_withdraw_no_approvals_clears_submitted(client: TestClient) -> None:
+    """승인 0건 회수 → 승인요청(submitted) 기록 삭제, withdrawn 미기록 (흔적 없음)."""
     map_id, version_id = _submit_with_approvers(client, ["a"])
     client.post(f"/api/versions/{version_id}/withdraw")
 
     detail = client.get(f"/api/maps/{map_id}").json()
     version = next(v for v in detail["versions"] if v["id"] == version_id)
     event_types = [e["event_type"] for e in version["events"]]
+    assert "submitted" not in event_types, event_types
     assert "withdrawn" not in event_types, event_types
+
+
+def test_withdraw_with_approval_keeps_record(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """승인 1건 이상 후 회수 → withdrawn 기록 남고 submitted·approved 이력도 유지."""
+    map_id, version_id = _submit_with_approvers(client, ["a", "b"])  # 승인자 2인
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/approve")  # 1/2 — 아직 pending
+    monkeypatch.setattr(settings, "dev_user", "local-dev")  # 제출자가 회수
+    client.post(f"/api/versions/{version_id}/withdraw")
+
+    detail = client.get(f"/api/maps/{map_id}").json()
+    version = next(v for v in detail["versions"] if v["id"] == version_id)
+    event_types = [e["event_type"] for e in version["events"]]
+    assert "submitted" in event_types, event_types
+    assert "approved" in event_types, event_types
+    assert "withdrawn" in event_types, event_types
 
 
 def test_withdraw_from_approved(
