@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 승인자 관리 설정탭 게이트 + 반려본 회수 플로우
+- **승인자 관리 구멍 확인/보완** — 백엔드 `set_approvers`는 pending/approved면 409(모든 경로 차단, 테스트 있음)라 데이터는 안전. 갭은 **설정 페이지 `ApproversPanel` UI가 상태 게이트 없이 버튼 노출**하던 것 → `underApproval`(설정 페이지가 `getMap` versions로 계산) prop으로 추가/삭제 잠금 + 안내 배너. 에디터는 기존대로 `canManageApprovers`로 게이트. (expired+published만 있고 pending 없으면 변경 허용 = 안전, 다음 사이클용)
+- **반려본은 회수(기록) 후 수정** — 프론트 `WorkflowActions`: rejected에서 submit 제거, withdraw(회수) 노출(submitter). 백엔드 `withdraw_version`: 반려본 회수는 승인 0건이어도 항상 `withdrawn` 기록(제출·반려 이력 유지). 즉 rejected → 회수(→draft, 기록) → 편집 → 재제출. 바로 재승인 요청 불가. 테스트 `test_withdraw_from_rejected_keeps_record`.
+- 검증: 백엔드 374 passed·ruff clean / 프론트 lint 0·build OK.
+
 ## 2026-07-02 — 버전 카드 스크롤바 숨김·정렬 복구·sticky 배경 매칭
 - **가로 스크롤바 숨김** — 상세 테이블 스크롤 컨테이너에 `scrollbar-hidden`(스크롤 중에도 숨김).
 - **넓은 폭 좌우정렬 복구** — 앞서 `w-max`로 바꾸며 깨진 홈 상세 정렬을 `w-full min-w-max`(넓으면 100%·좁으면 max-content 오버플로) + 이름 열 `w-full` 복원으로 해결 → 넓은 폭에선 날짜/시간 우측 정렬, 좁은 폭에선 가로 스크롤.

@@ -59,6 +59,8 @@ export default function SettingsPage() {
   const [serverRole, setServerRole] = useState<"viewer" | "editor" | "owner" | null>(null);
   // 서버 진실 가시성 — Visibility 화면·viewerGrantDisabled 단일 소스 / Server-truth visibility.
   const [visibility, setVisibility] = useState<"public" | "private">("private");
+  // 승인 진행 중(pending/approved 버전 존재) — 결재자 변경 금지 게이트용 / block approver edits mid-approval.
+  const [underApproval, setUnderApproval] = useState(false);
   // 역할 로드 완료 여부 — 로드 전 false "No access" 깜빡임 방지 / gate no-access screen until loaded.
   const [roleLoaded, setRoleLoaded] = useState(false);
 
@@ -70,6 +72,9 @@ export default function SettingsPage() {
       setMapName(detail.name);
       setServerRole(detail.my_role);
       setVisibility(detail.visibility);
+      setUnderApproval(
+        detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
+      );
     } catch {
       // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
     }
@@ -85,6 +90,9 @@ export default function SettingsPage() {
           setMapName(detail.name);
           setServerRole(detail.my_role);
           setVisibility(detail.visibility);
+          setUnderApproval(
+            detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
+          );
         }
       } catch {
         // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
@@ -345,7 +353,12 @@ export default function SettingsPage() {
                       viewerGrantDisabled={isPublic}
                     />
                   ) : tab.id === "approvers" ? (
-                    <ApproversPanel mapId={mapIdStr} isOwner={isOwner} onToast={showToast} />
+                    <ApproversPanel
+                      mapId={mapIdStr}
+                      isOwner={isOwner}
+                      underApproval={underApproval}
+                      onToast={showToast}
+                    />
                   ) : tab.id === "visibility" ? (
                     <VisibilityControl
                       mapId={mapIdStr}

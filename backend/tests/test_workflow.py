@@ -288,6 +288,24 @@ def test_withdraw_with_approval_keeps_record(
     assert "withdrawn" in event_types, event_types
 
 
+def test_withdraw_from_rejected_keeps_record(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """반려본 회수 → 승인 0건이어도 withdrawn 기록 남기고 submitted/rejected 이력 유지."""
+    map_id, version_id = _submit_with_approvers(client, ["a"])  # pending, 0 approvals
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/reject", json={"reason": "nope"})  # → rejected
+    monkeypatch.setattr(settings, "dev_user", "local-dev")  # submitter
+    client.post(f"/api/versions/{version_id}/withdraw")  # rejected → draft
+
+    detail = client.get(f"/api/maps/{map_id}").json()
+    version = next(v for v in detail["versions"] if v["id"] == version_id)
+    event_types = [e["event_type"] for e in version["events"]]
+    assert "submitted" in event_types, event_types
+    assert "rejected" in event_types, event_types
+    assert "withdrawn" in event_types, event_types  # 반려본이라 승인 0건이어도 기록
+
+
 def test_set_approvers_blocked_while_pending(client: TestClient) -> None:
     """승인 진행 중(pending)엔 승인자 변경 금지 — 409 (진행 중 tally 깨짐 방지)."""
     map_id, _version_id = _submit_with_approvers(client, ["a"])  # now pending

@@ -24,11 +24,13 @@ interface ApproversPanelProps {
   mapId: string;
   /** 소유자 여부 — false면 읽기 전용 / Whether current user is owner; false = read-only. */
   isOwner: boolean;
+  /** 승인 진행 중(pending/approved) — true면 변경 금지(백엔드 409와 동일) / lock edits mid-approval. */
+  underApproval?: boolean;
   /** 토스트 발행 콜백 / Callback to show a toast message. */
   onToast: (msg: string) => void;
 }
 
-export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps) {
+export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast }: ApproversPanelProps) {
   const { t } = useI18n();
   const state = usePermissions();
   const mapIdNum = Number(mapId);
@@ -96,6 +98,8 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
   // 결재자 0 경고 — 목록 비어있음 기준(서버엔 active 개념 없음, Layer 4) /
   // Active-0 warning is now list-emptiness (server has no active concept yet — Layer 4).
   const hasNone = approverIds.length === 0;
+  // 소유자여도 승인 진행 중이면 변경 금지(백엔드 409와 일치) / owner can edit only when not under approval.
+  const canEdit = isOwner && !underApproval;
 
   const handleRemove = useCallback(
     async (userId: string) => {
@@ -117,6 +121,13 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         <p className="mt-0.5 text-fine text-ink-tertiary">{t("perm.approversHint")}</p>
       </div>
 
+      {/* 승인 진행 중 잠금 안내 — 소유자에게만 / locked notice, owner only */}
+      {isOwner && underApproval && (
+        <div className="rounded-sm border border-hairline bg-surface-alt px-3 py-2 text-caption text-ink-tertiary">
+          {t("perm.approversLockedUnderApproval")}
+        </div>
+      )}
+
       {/* 로딩 중 스켈레톤 / Skeleton while loading (F8) */}
       {loading && <SkeletonPills />}
 
@@ -136,7 +147,7 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
               data-id={`approver-card-${userId}`}
               className="relative flex aspect-[4/3] flex-col overflow-hidden rounded-md border border-hairline bg-surface p-2 shadow-sm"
             >
-              {isOwner && (
+              {canEdit && (
                 <button
                   type="button"
                   title={t("perm.removeButton")}
@@ -166,8 +177,8 @@ export function ApproversPanel({ mapId, isOwner, onToast }: ApproversPanelProps)
         <p className="text-fine text-ink-tertiary">{t("perm.approversReadOnly")}</p>
       )}
 
-      {/* 결재자 추가 — 소유자만, PrincipalPicker 사용 / Add form: owner only, uses PrincipalPicker */}
-      {isOwner && (
+      {/* 결재자 추가 — 소유자 + 승인 진행 중 아닐 때만 / Add form: owner and not under approval. */}
+      {canEdit && (
         <div className="mt-2 flex flex-col gap-2 border-t border-hairline pt-3">
           <p className="text-caption-strong text-ink">{t("perm.approversAdd")}</p>
           <PrincipalPicker

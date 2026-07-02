@@ -722,12 +722,15 @@ async def withdraw_version(
         .where(VersionApproval.version_id == version_id)
     )
 
+    # 반려본 회수는 항상 기록(반려 이력이 의미 있음) — 상태 변경 전에 판정.
+    was_rejected = version.status == workflow.REJECTED
+
     version.status = workflow.DRAFT
     version.checked_out_by = user
     version.checked_out_at = now_kst()
 
-    if approval_count and approval_count > 0:
-        # 승인 1건 이상 후 회수 → 회수 기록을 남긴다(제출·승인 이력 유지).
+    if was_rejected or (approval_count and approval_count > 0):
+        # 반려본 회수 또는 승인 1건 이상 후 회수 → 회수 기록을 남긴다(제출·승인·반려 이력 유지).
         record_version_event(session, version_id, "withdrawn", user)
     else:
         # 승인 0건 회수 → 이번 승인요청(submitted) 흔적을 삭제, 회수 기록도 남기지 않는다.

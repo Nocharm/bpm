@@ -45,7 +45,7 @@ export function WorkflowActions({
 
   // 버튼 왼쪽에 둘 안내/진행 메시지 — 있을 때만 노출
   const message =
-    (status === "draft" || status === "rejected") && isCheckoutHolder && noApprovers
+    status === "draft" && isCheckoutHolder && noApprovers
       ? t("wf.submitNeedsApprovers")
       : status === "pending" && workflow
         ? t("wf.approvalProgress", {
@@ -62,7 +62,7 @@ export function WorkflowActions({
         </span>
       )}
 
-      {(status === "draft" || status === "rejected") && isCheckoutHolder && (
+      {status === "draft" && isCheckoutHolder && (
         <button
           type="button"
           className={actionBtn}
@@ -96,11 +96,12 @@ export function WorkflowActions({
         </button>
       )}
 
-      {(status === "pending" || status === "approved") && isSubmitter && (
-        <button type="button" className={actionBtn} onClick={onWithdraw}>
-          {t("wf.withdraw")}
-        </button>
-      )}
+      {(status === "pending" || status === "approved" || status === "rejected") &&
+        isSubmitter && (
+          <button type="button" className={actionBtn} onClick={onWithdraw}>
+            {t("wf.withdraw")}
+          </button>
+        )}
     </div>
   );
 }

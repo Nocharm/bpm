@@ -569,6 +569,7 @@ const en = {
   "perm.approversToggle": "Toggle active",
   "perm.approversToggleLayer4": "Active/inactive status arrives with Layer 4.",
   "perm.approversReadOnly": "You don't have permission to manage approvers (owner-only).",
+  "perm.approversLockedUnderApproval": "A version is under approval — approvers can't be changed until it's published, rejected, or withdrawn.",
   // ── 공개 범위(Visibility) / Visibility tab ──
   "perm.visibilityTitle": "Visibility",
   "perm.visibilityPublic": "Public",
@@ -1406,6 +1407,7 @@ const ko: Record<MessageKey, string> = {
   "perm.approversToggle": "활성 토글",
   "perm.approversToggleLayer4": "활성/비활성 상태는 Layer 4에서 제공됩니다.",
   "perm.approversReadOnly": "결재자 관리 권한이 없습니다 (소유자 전용).",
+  "perm.approversLockedUnderApproval": "승인 진행 중인 버전이 있어 결재자를 변경할 수 없습니다 — 게시·반려·회수 후 변경하세요.",
   // ── 공개 범위(Visibility) / Visibility tab ──
   "perm.visibilityTitle": "공개 범위",
   "perm.visibilityPublic": "공개",
