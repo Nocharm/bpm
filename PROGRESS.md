@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 프론트 before/after 비교 검증 방법 문서
+- **docs: 프론트 2 + 백 1 비교 검증 요약** (`docs/frontend-compare-verification.md`) — 분기지점 `291f6d9`(A) ↔ HEAD(B)를 worktree로 각각 :3000/:3001에 띄우고 백엔드 1개(:8000)를 `/api` 프록시로 공유. DB 종류 무관(프론트는 API로만 통신) 명시. 좀비 dev 정리·데이터 선택(실서버 vs 데모시드, 복원 DB에 reset_db 금지)·worktree 정리 포함. PowerShell(사내 Windows) 우선.
+
 ## 2026-07-02 — 로컬 Postgres 전환 + 서버 덤프 복원
 - **fix(db): `map_versions.version_number`를 `_add_missing_columns` 스톱갭에 추가** — 서버 덤프(라이프사이클 이전 스키마)를 로컬 Postgres에 복원해도 기동 시 컬럼이 자동 보강돼 publish/workflow 500 회피(nullable, 기존 행 생존). 구 스키마 시뮬레이션 검증 PASS + 전체 366 테스트 green(테스트는 격리 sqlite라 무영향).
 - **docs(db-seed): "사내 로컬(Windows) — Postgres 전환 + 서버 덤프 복원" 섹션 추가** — DB는 `.env` `DATABASE_URL`로 갈림. 서버(사내 `182.199.63.71`, 계정 `h_jin.jang`)에서 `docker compose exec db pg_dump` → 로컬 다운(완료) → 네이티브 Postgres에 `pg_restore --no-owner` 복원 → `.env` postgres URL → 기동 시 컬럼 자동 보정. 복원 DB엔 `reset_db` 금지 경고. mac/Homebrew 대체 경로 병기.
