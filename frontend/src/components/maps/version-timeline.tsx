@@ -8,6 +8,7 @@ import { Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X 
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
+import { formatVersionMarker } from "@/lib/version-name";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -134,8 +135,12 @@ export function VersionTimeline({
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="text-caption-strong text-ink">{version.label}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임. */}
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
+                    <span className="text-caption-strong text-ink">{version.label}</span>
+                  </span>
                   <span
                     className={`shrink-0 rounded-xs border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
                   >
@@ -184,11 +189,13 @@ export function VersionTimeline({
                     }`}
                   >
                     <div className="overflow-hidden">
-                      <table className="mt-1.5 w-full border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
+                      {/* 좁은 사이드바 대응 — 가로 스크롤, 1열(단계 필)은 sticky로 고정해 시간대 확인 */}
+                      <div className="mt-1.5 overflow-x-auto">
+                      <table className="w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
                         <tbody>
                           {detailRows.map(({ evt, date, time, dateSpan }) => (
                             <tr key={evt.id} className="align-top">
-                              <td className="w-24">
+                              <td className="sticky left-0 z-[1] w-24 bg-surface">
                                 <span
                                   className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
                                     EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
@@ -198,7 +205,7 @@ export function VersionTimeline({
                                   {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
                                 </span>
                               </td>
-                              <td className="w-full whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
+                              <td className="whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
                               <td className="whitespace-nowrap text-ink-tertiary">{evt.actor}</td>
                               {dateSpan > 0 && (
                                 <td
@@ -218,6 +225,7 @@ export function VersionTimeline({
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   </div>
                 </>

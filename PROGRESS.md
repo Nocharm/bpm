@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 버전 카드 마커·말줄임·가로스크롤(사이드바 대응)
+- **버전 카드에 버전 마커** (`version-timeline.tsx`) — 헤더에 버전 필과 동일한 마커(번호 작게 회색 `v{n}`/`(Draft)v.{n}` + 이름 강조)를 `formatVersionMarker`로 노출.
+- **좁은 폭 말줄임/반응형** — 마커+이름을 `min-w-0 flex-1 truncate`로 묶어 사이드바처럼 좁아지면 이름을 이클립스 처리(깨짐 방지). 상태/현재 배지·시각은 `shrink-0`.
+- **펼침 상세 가로 스크롤 + 1열 sticky** — 상세 테이블을 `overflow-x-auto`로 감싸고 `w-max`(내용 폭)로 바꿔 좁은 폭에서 가로 스크롤. 1열 단계 필 `<td>`는 `sticky left-0 bg-surface`로 고정 → 우측 사이드바에서 가로 스크롤로 시간대 확인 가능.
+- 검증: 프론트 lint 0 / build OK (백엔드 변경 없음).
+
 ## 2026-07-02 — 모달 승인자 현황 + 승인자 관리 드래프트 한정
 - **승인/거절/회수 모달에 승인자 현황** — 각 승인자를 승인 완료(Check)/대기(User) 아이콘 + `이름 · 상태`로 나열, **본인은 accent 하이라이트("나/you")**. `workflow.approvals`/`approvers` 기반. (제출 모달은 기존 명단 유지)
 - **거절→나머지 비활성 확인**: `reject_version`은 `pending`에서만 동작하고 즉시 `rejected`로 전이 → 승인/거절 버튼은 `status==="pending"`에서만 렌더되므로, 1명이 거절하면 다른 승인자에겐 버튼이 사라짐(백엔드도 409). 의도대로 동작 확인.
