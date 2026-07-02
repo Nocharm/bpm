@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 구 시드 정리 + 기동 재시드 가드 + 로컬 권한검증 ON
+- **구 데모 시드 5개 삭제** — `seed_reference_demo`·`seed_permission_demo`·`seed_compare_demo`·`seed_nesting_demo`·`seed_version_lifecycle_demo` 제거(reset_db 미사용). `seed_invariants`(테스트 의존)·`seed_org_demo`·`reset_db` 유지.
+- **기동 재시드 가드** — `seed_local_employees`가 "직원 있으면 skip" → uvicorn 기동 시 구 5명(admin.kim 등)이 종합 시드 DB(401명)에 다시 섞이던 오염 방지. 빈 DB(테스트·최초)만 시드. dev.db 검증: 기동 재시드해도 401 유지·admin.kim 없음.
+- **로컬 권한검증 ON** — `backend/.env`(gitignore) 생성: `DEV_ENFORCE_PERMISSIONS=true` + `BPM_SYSADMINS=admin.sys`. conftest에 enforce/auth baseline 고정 추가 → `.env`가 테스트에 새지 않음(376 passed 유지).
+- 검증: 백엔드 376 passed·ruff clean(.env 존재 상태), reset_db OK.
+
 ## 2026-07-02 — 시드 DB 전면 재구성(조직도 400명·맵12·그룹6) + 로그인 피커
 - **종합 시드 `scripts/seed_org_demo.py`** — 기존 분산 데모(reference/permission/compare/nesting/lifecycle) 대신 단일 시드로 통합. reset_db는 drop_all→seed_org_demo→verify만.
 - **조직도** — 센터2(+관리센터)·담당2/센터·팀2~3/담당·파트1~3/팀, 리프 깊이 혼합(파트/팀/담당 리프). 직원 **401명(admin.sys 포함)** 라운드로빈 분포.

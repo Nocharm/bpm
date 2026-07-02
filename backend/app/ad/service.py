@@ -4,6 +4,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ad import client
@@ -50,7 +51,13 @@ LOCAL_USERS: list[dict] = [
 
 
 async def seed_local_employees(session: AsyncSession) -> None:
-    """로컬 임시 유저 멱등 upsert — auth OFF일 때만 호출."""
+    """로컬 임시 유저 멱등 upsert — auth OFF일 때만 호출.
+
+    이미 직원이 있으면(예: reset_db 종합 시드로 채워진 DB) 재시드하지 않는다 —
+    기동 시 구 5명이 종합 시드 DB에 다시 섞이는 것 방지. 빈 DB(테스트·최초 기동)만 시드.
+    """
+    if await session.scalar(select(Employee.login_id).limit(1)) is not None:
+        return
     for spec in LOCAL_USERS:
         emp = await session.get(Employee, spec["login_id"])
         if emp is None:
