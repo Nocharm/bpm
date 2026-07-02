@@ -29,18 +29,24 @@ export function WithdrawHandoff({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-caption text-ink">
+      <div className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-caption">
         <Send size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
-        <span className="min-w-0 truncate">{submitterName}</span>
+        {/* 제출자 — 필(중립) */}
+        <span className="max-w-[9rem] shrink-0 truncate rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary">
+          {submitterName}
+        </span>
         {transfers && (
           <span
-            className={`grid transition-all duration-300 ease-in-out ${
+            className={`grid transition-all duration-700 ease-in-out ${
               expanded ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0"
             }`}
           >
-            <span className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap text-accent">
-              <ArrowRight size={13} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">{youName}</span>
+            <span className="flex items-center gap-1 overflow-hidden whitespace-nowrap">
+              <ArrowRight size={13} strokeWidth={1.5} className="shrink-0 text-accent" />
+              {/* 회수자(you) — 필(accent) */}
+              <span className="max-w-[9rem] truncate rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
+                {youName}
+              </span>
             </span>
           </span>
         )}
