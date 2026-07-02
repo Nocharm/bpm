@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-02 — 버전 카드 스크롤바 숨김·정렬 복구·sticky 배경 매칭
+- **가로 스크롤바 숨김** — 상세 테이블 스크롤 컨테이너에 `scrollbar-hidden`(스크롤 중에도 숨김).
+- **넓은 폭 좌우정렬 복구** — 앞서 `w-max`로 바꾸며 깨진 홈 상세 정렬을 `w-full min-w-max`(넓으면 100%·좁으면 max-content 오버플로) + 이름 열 `w-full` 복원으로 해결 → 넓은 폭에선 날짜/시간 우측 정렬, 좁은 폭에선 가로 스크롤.
+- **sticky 1열 배경을 카드 배경에 매칭** — `bg-surface`→카드별 `cardBg`(현재 카드 `bg-accent-tint/30`, 그 외 `bg-surface`) + `group-hover` 동기화. 카드에 `group` 추가. 흰 열로 튀던 문제 해결.
+- 검증: 프론트 lint 0 / build OK.
+
 ## 2026-07-02 — sysadmin 전맵 가시성 확인(코드 정상) + 회귀 테스트
 - **확인 결과**: `list_maps`는 `is_sysadmin`이면 필터 없이 전 맵 반환 + `my_role="owner"` 부여(코드 정상). 회귀 테스트 `test_list_maps_sysadmin_sees_ungranted_private` 추가(grant 없는 private도 보임). 373 passed.
 - **원인은 환경/식별자**: sysadmin 판정은 `is_sysadmin()` = **`BPM_SYSADMINS`**(콤마 구분 loginId). 이는 디렉터리 admin(`SYSTEM_ADMIN_LOGIN_IDS`→`Employee.role="admin"`)와 **별개 변수**. enforce/auth ON에서 `BPM_SYSADMINS`에 로그인ID가 없으면 전 맵 안 보임. 진단: `/api/me`의 `is_sysadmin` 확인.

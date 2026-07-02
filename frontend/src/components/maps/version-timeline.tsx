@@ -110,6 +110,11 @@ export function VersionTimeline({
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         const open = expandedIds.has(version.id);
+        // sticky 1열 배경 = 카드 배경(현재 카드 연보라)에 맞춤 — 흰 열로 튀지 않게, hover도 동기화
+        const cardBg =
+          idx === 0
+            ? "bg-accent-tint/30 group-hover:bg-accent-tint/50"
+            : "bg-surface group-hover:bg-surface-alt";
         return (
           <div key={version.id} className="relative flex gap-2.5">
             <span
@@ -128,7 +133,7 @@ export function VersionTimeline({
                   onToggle(version.id);
                 }
               }}
-              className={`min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
+              className={`group min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
                 idx === 0
                   ? "border-accent-tint-border bg-accent-tint/30 hover:bg-accent-tint/50"
                   : "border-hairline bg-surface hover:bg-surface-alt"
@@ -189,13 +194,14 @@ export function VersionTimeline({
                     }`}
                   >
                     <div className="overflow-hidden">
-                      {/* 좁은 사이드바 대응 — 가로 스크롤, 1열(단계 필)은 sticky로 고정해 시간대 확인 */}
-                      <div className="mt-1.5 overflow-x-auto">
-                      <table className="w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
+                      {/* 좁은 사이드바 대응 — 가로 스크롤(스크롤바 숨김), 1열(단계 필) sticky 고정으로 시간대 확인.
+                          넓은 폭(홈 상세)에선 w-full로 채워 이름 열이 늘어나 날짜/시간이 우측 정렬. */}
+                      <div className="mt-1.5 overflow-x-auto scrollbar-hidden">
+                      <table className="w-full min-w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
                         <tbody>
                           {detailRows.map(({ evt, date, time, dateSpan }) => (
                             <tr key={evt.id} className="align-top">
-                              <td className="sticky left-0 z-[1] w-24 bg-surface">
+                              <td className={`sticky left-0 z-[1] w-24 ${cardBg}`}>
                                 <span
                                   className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
                                     EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
@@ -205,7 +211,7 @@ export function VersionTimeline({
                                   {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
                                 </span>
                               </td>
-                              <td className="whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
+                              <td className="w-full whitespace-nowrap text-ink">{nameOf(evt.actor)}</td>
                               <td className="whitespace-nowrap text-ink-tertiary">{evt.actor}</td>
                               {dateSpan > 0 && (
                                 <td
