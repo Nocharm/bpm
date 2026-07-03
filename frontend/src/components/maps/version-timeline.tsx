@@ -232,19 +232,21 @@ export function VersionTimeline({
                                   {EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
                                 </span>
                               </td>
-                              {/* 이름·아이디 최대폭(말줄임) — 사이드바에서 가로 스크롤이 너무 길어지지 않게 */}
+                              {/* 이름 + 아이디(작게, 바로 옆) — 최대폭 말줄임으로 사이드바 가로 스크롤 억제 */}
                               <td className="text-ink">
-                                <span className="block max-w-[8rem] truncate">{nameOf(evt.actor)}</span>
-                              </td>
-                              <td className="text-ink-tertiary">
-                                <span className="block max-w-[6rem] truncate">{evt.actor}</span>
+                                <span className="flex min-w-0 items-baseline gap-1">
+                                  <span className="max-w-[7rem] truncate">{nameOf(evt.actor)}</span>
+                                  <span className="max-w-[5rem] shrink-0 truncate text-[10px] text-ink-tertiary">
+                                    {evt.actor}
+                                  </span>
+                                </span>
                               </td>
                               {dateSpan > 0 && (
                                 <td
                                   rowSpan={dateSpan}
-                                  className="w-24 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center align-middle text-ink-tertiary"
+                                  className="w-24 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center align-top text-ink-tertiary"
                                 >
-                                  {/* 박스 = td 테두리(rowspan 높이) → 여러 행을 덮되 상단·하단이 첫/마지막 시간 박스와 정렬 */}
+                                  {/* 박스 = td 테두리(rowspan 높이) → 여러 행을 덮되 상단·하단이 첫/마지막 시간 박스와 정렬. 날짜 텍스트는 박스 위쪽(align-top). */}
                                   {date}
                                 </td>
                               )}
