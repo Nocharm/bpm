@@ -355,13 +355,13 @@ export function GroupBulkModal({
                         key={key}
                         type="button"
                         onClick={() => setPolicy(key)}
-                        className={`flex items-center gap-1.5 rounded-sm border px-2 py-1.5 text-caption ${
+                        className={`flex items-center justify-center gap-1.5 rounded-sm border px-2 py-2 text-caption ${
                           policy === key
                             ? "border-accent bg-accent-tint text-accent"
-                            : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                            : "border-hairline text-ink hover:border-accent/50 hover:bg-surface-alt"
                         }`}
                       >
-                        <Icon size={14} strokeWidth={1.5} className="shrink-0" />
+                        <Icon size={18} strokeWidth={1.5} className="shrink-0" />
                         {t(`bulk.${key}` as MessageKey)}
                       </button>
                     ))}

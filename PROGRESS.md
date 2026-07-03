@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R8b 충돌 버튼 균일·아이콘 확대 + R8a 완료
+- **충돌 옵션 버튼 개선**(`group-bulk-modal.tsx`) — 2×2 그리드 버튼 `justify-center`(내용 중앙→균일해 보임)·`py-2`·아이콘 14→**18px**·idle 텍스트 `text-ink`(가시성)·hover accent 보더.
+- **R8a 완료 처리**(트래커) — 🔧→✅.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R8b 개선: 일괄편집 담당자/부서 피커 + 충돌 옵션 2×2 아이콘 그리드
 - **담당자/부서 피커**(`group-bulk-modal.tsx`) — 값 입력을 노드 편집과 동일한 **SearchSelect**(assignee=users·department=departments, `getEligibleAssignees(versionId)` 로드)로. system/duration은 자유입력 유지. page.tsx가 `versionId` 전달.
 - **충돌 처리 옵션 재디자인**(사용자 요구) — 라디오 세로 리스트 → **아이콘 + 2×2 그리드 버튼**(replace=Replace·append=Plus·skip=CircleSlash·individual=ListChecks·선택 시 accent). 한눈에 파악.
