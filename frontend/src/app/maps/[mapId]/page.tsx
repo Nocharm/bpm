@@ -3933,6 +3933,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const targetLocked =
         nodes.find((n) => n.id === edge.target)?.data.nodeType === "subprocess";
       return [
+        { caption: t("edge.connection") },
         {
           edgeSides: true,
           sourceLabel: t("edge.startBox"),
@@ -3947,10 +3948,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         { divider: true },
         {
           label: t("edge.editLabel"),
+          icon: PencilLine,
           onSelect: () => startEdgeLabelEdit(edge.id),
         },
         {
           label: t("ctx.delete"),
+          icon: Trash2,
           shortcut: "Del",
           danger: true,
           onSelect: () => void reactFlow.deleteElements({ edges: [{ id: edge.id }] }),

@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 에디터 재디자인 R6d: 엣지 컨텍스트 메뉴 캡션 + 아이콘
+- **엣지 우클릭 메뉴**(`page.tsx` menuItems) — 상단에 "연결 면"(신규 i18n `edge.connection` = Connection/연결 면) 섹션 캡션 추가(연결면 패드 위, 목업 일치). 라벨 편집=PencilLine·삭제=Trash2 아이콘(삭제는 R6c 공통으로 빨강). 내용/동작(edgeSides 면 선택·라벨편집·삭제)은 그대로.
+- 분기 종류(Yes/No/기타) 편집은 인스펙터 속성 탭(R5a) 담당 — 컨텍스트 메뉴엔 미포함(`context-branch-edge.png`=인스펙터).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 에디터 재디자인 R6c: 노드 컨텍스트 메뉴 아이콘 + 이름변경(F2)
 - **노드 우클릭 메뉴**(`page.tsx` menuItems) — 행 아이콘(편집=PencilLine·이름변경=Type·열기=Maximize2·삭제=Trash2). **이름 변경 항목 신규**(기존 `startRename` 배선) + **F2 전역키 바인딩**(`onFlowKey`: 선택 노드 이름편집, readOnly는 startRename이 가드). **색상은 인라인 스와치 유지**(서브메뉴화 안 함·사용자 결정).
 - **공통**(`context-menu.tsx`) — danger 항목 아이콘도 빨강(`text-error`): 삭제 = 빨간 아이콘+라벨+칩(목업 일치).
