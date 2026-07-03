@@ -6432,6 +6432,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 hasChildren={hasChildren}
                 fullGraph={fullGraph}
                 readOnly={readOnly}
+                description={node.data.description}
                 color={node.data.color}
                 assignee={node.data.assignee}
                 department={node.data.department}

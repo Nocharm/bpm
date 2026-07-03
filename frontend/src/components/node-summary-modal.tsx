@@ -3,7 +3,7 @@
 // 노드 더블클릭 요약 모달 — 전/후 단계, 하위 프로세스 프리뷰, 코멘트(읽기+추가), 메타.
 // 바깥 클릭/Esc로 닫힘. readOnly면 코멘트 추가 숨김.
 
-import { CornerDownRight, X } from "lucide-react";
+import { CornerDownRight, SquarePen, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -23,6 +23,7 @@ import { useI18n } from "@/lib/i18n";
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
   label: string;
+  description: string;
   nodeType: ProcessNodeType;
   color: string;
   assignee: string;
@@ -52,6 +53,7 @@ interface NodeSummaryModalProps {
   fullGraph: VersionGraph | null;
   readOnly: boolean;
   // 편집 데이터 + 패치 (readOnly면 입력 비활성)
+  description: string;
   color: string;
   assignee: string;
   department: string;
@@ -77,6 +79,7 @@ export function NodeSummaryModal({
   hasChildren,
   fullGraph,
   readOnly,
+  description,
   color,
   assignee,
   department,
@@ -135,10 +138,13 @@ export function NodeSummaryModal({
     };
   }, [versionId, nodeId]);
 
-  // Esc로 닫기
+  // Esc·⌘S로 닫기 — 편집은 라이브(변경 즉시 반영)라 ⌘S는 브라우저 저장을 막고 모달만 닫는다.
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        onClose();
+      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
         onClose();
       }
     };
@@ -177,17 +183,10 @@ export function NodeSummaryModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
-          {readOnly ? (
-            <span className="flex-1 truncate text-body-strong text-ink">{title}</span>
-          ) : (
-            <input
-              className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-body-strong text-ink"
-              value={title}
-              aria-label={t("field.title")}
-              onChange={(event) => onPatch({ label: event.target.value })}
-              onBlur={(event) => onCommitLabel?.(event.target.value)}
-            />
-          )}
+          <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-body-strong text-ink">
+            <SquarePen size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            {readOnly ? title : t("editor.nodeEdit")}
+          </span>
           <button
             type="button"
             title={t("summary.close")}
@@ -208,7 +207,29 @@ export function NodeSummaryModal({
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
+              {/* 제목 */}
+              <div>
+                <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
+                <input
+                  className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
+                  value={title}
+                  aria-label={t("field.title")}
+                  onChange={(event) => onPatch({ label: event.target.value })}
+                  onBlur={(event) => onCommitLabel?.(event.target.value)}
+                />
+              </div>
+              {/* 설명 — 노드 부연(NodeData.description, 라이브 반영) */}
+              <div>
+                <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
+                <textarea
+                  className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
+                  rows={2}
+                  value={description}
+                  aria-label={t("field.description")}
+                  onChange={(event) => onPatch({ description: event.target.value })}
+                />
+              </div>
               {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
               <div className="flex items-center gap-2">
                 <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</label>
@@ -373,6 +394,22 @@ export function NodeSummaryModal({
               </div>
             )}
           </div>
+        </div>
+
+        {/* 푸터 — Esc/⌘S 닫기 힌트 + 닫기 버튼(편집은 라이브 반영이라 저장 개념 없이 닫기) */}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2">
+          <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
+            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
+            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
+            {t("summary.close")}
+          </span>
+          <button
+            type="button"
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+            onClick={onClose}
+          >
+            {t("summary.close")}
+          </button>
         </div>
       </div>
     </ModalBackdrop>

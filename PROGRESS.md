@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R7a: 노드 편집 모달 재스타일 + 설명(description) 필드
+- **더블클릭 충돌 없음 확인** — 현재 이미 일반 노드 dblclick=편집모달(`NodeSummaryModal`)·서브프로세스=드릴·타이틀=리네임. 트래커 경고 해소, 재매핑 불필요.
+- **description 프론트 배선** — `NodeData.description`·백엔드 schema에 이미 존재(**백엔드 무변경**). `NodeEditPatch`/props에 description 추가, 모달에 **설명 textarea**(라이브 `patchNode`, `{...node.data,...patch}`로 영속).
+- **모달 재스타일**(`node-summary-modal.tsx`) — 헤더를 제목입력→"노드 편집"(`editor.nodeEdit`·SquarePen), 제목은 body 필드로 이동. 푸터(Esc/⌘S 힌트 + 닫기 버튼) 추가, ⌘S=브라우저 저장 막고 모달 닫기. 유형/색상/BPM/코멘트/하위프리뷰 보존.
+- 결정: 저장 모델 **라이브 편집 유지**(동작 보존). 목업의 저장/취소(버퍼 편집)는 검토 시 필요하면 전환. R7을 R7a(재스타일)·R7b(선행/후행 클릭 내비)로 분할.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 연결면 패드 좌우 여백(잘림 수정)·화살표 축소 + 미니맵 16:9
 - **좌/우 변 커넥터 pad 밖 잘림 수정**(`context-menu.tsx`) — 좌(source left)·우(target right) 변 커넥터가 박스 바깥(x=-STUB/+STUB)으로 나가 pad(svg 180폭) 밖으로 잘렸음. `HPAD=10` 좌우 여백 도입(`SRC_X0`/`TGT_X0`·`PAD_W`=200), `gx`도 gap 중앙(`srcX0+BOX_W+GAP/2`). 16조합 전부 박스 미통과 + `[0,PAD_W]` 내 수치 재검증.
 - **화살표 축소**(edgeSidesArrow marker) — 7×7→5×5, path 6→4.5. End 위/아래에서 큰 화살표가 옆에서 꺾인 듯 보이던 것 완화.
