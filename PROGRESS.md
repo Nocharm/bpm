@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R9c: node-summary-modal 토큰 폴리시(굵기 500 제거 + shadow 클래스 정합)
+- **`node-summary-modal.tsx`** — 대표 모달 대비 남은 이탈만 정리: (1) accent 버튼 3곳의 `font-medium`(weight 500·디자인 규칙 300/400/600만 허용 위반) 제거 → 대표 모달 accent 버튼과 동일(weight 클래스 없음=400). (2) 인라인 `style={{ boxShadow: "var(--shadow-lg)" }}` 3곳(메인 패널·미저장확인·부서변경 오버레이)을 `shadow-lg` 클래스로 교체 — `--shadow-lg` 토큰에 매핑되므로 시각 변화 없이 대표 모달과 동일 적용 방식. raw hex 없음 확인, 동작·구조 보존.
+- 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 후속.)
+
 ## 2026-07-04 — R9b: 확장 한계 확인 다이얼로그를 정규 ConfirmDialog로 교체
 - **`page.tsx`** — 인라인 `capPrompt` 모달(`p-4`·`text-white`·인라인 `boxShadow`·`bg-ink 12%` 백드롭으로 대표 모달과 이탈)을 정규 `<ConfirmDialog>`(icon=`Maximize2`, title/message/confirm/cancel)로 교체 → 대표 모달 재사용으로 토큰 완전 정합. `confirmCapPrompt`가 자체적으로 `setCapPrompt(null)` 하므로 동작 보존. 마지막 사용처 제거로 고아가 된 `ModalBackdrop` import 제거.
 - 참고: `expand-invariant-modal.tsx`는 사용처 0(죽은 코드) — R9에서 미변경·보고만. `prompt-dialog.tsx`는 이미 대표 모달과 정합 → 무변경.

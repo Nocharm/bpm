@@ -296,8 +296,7 @@ export function NodeSummaryModal({
       onClose={onClose}
     >
       <div
-        className="relative flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface"
-        style={{ boxShadow: "var(--shadow-lg)" }}
+        className="relative flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
@@ -634,7 +633,7 @@ export function NodeSummaryModal({
                 </button>
                 <button
                   type="button"
-                  className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
                   onClick={handleSave}
                 >
                   {t("editor.save")}
@@ -652,8 +651,7 @@ export function NodeSummaryModal({
             onClick={() => setPendingNav(null)}
           >
             <div
-              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4"
-              style={{ boxShadow: "var(--shadow-lg)" }}
+              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4 shadow-lg"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center gap-2 text-body-strong text-ink">
@@ -678,7 +676,7 @@ export function NodeSummaryModal({
                 </button>
                 <button
                   type="button"
-                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
                   onClick={navSaveAndGo}
                 >
                   {t("summary.saveAndGo")}
@@ -696,8 +694,7 @@ export function NodeSummaryModal({
             onClick={() => setPendingDept(null)}
           >
             <div
-              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4"
-              style={{ boxShadow: "var(--shadow-lg)" }}
+              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4 shadow-lg"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center gap-2 text-body-strong text-ink">
@@ -715,7 +712,7 @@ export function NodeSummaryModal({
                 </button>
                 <button
                   type="button"
-                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
                   onClick={() => {
                     setForm((f) => ({ ...f, department: pendingDept, assignee: "" }));
                     setPendingDept(null);
