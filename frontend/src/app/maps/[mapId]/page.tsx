@@ -3949,8 +3949,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         {
           label: t("edge.editLabel"),
           icon: PencilLine,
+          shortcut: "F2",
           onSelect: () => startEdgeLabelEdit(edge.id),
         },
+        { divider: true },
         {
           label: t("ctx.delete"),
           icon: Trash2,
@@ -5547,13 +5549,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       ) {
         return; // 입력/아웃라인 포커스 중엔 기본 동작(아웃라인 Tab 보존)
       }
-      if (!selectedId) {
+      // F2 — 노드/엣지 이름·라벨 편집 진입 + 열린 컨텍스트 메뉴 닫기. selectedId 가드보다 위(엣지도 처리).
+      if (event.key === "F2") {
+        if (selectedId) {
+          event.preventDefault();
+          setMenu(null);
+          startRename(selectedId); // readOnly는 startRename 내부에서 가드
+        } else if (selectedEdgeId && !readOnly) {
+          event.preventDefault();
+          setMenu(null);
+          startEdgeLabelEdit(selectedEdgeId);
+        }
         return;
       }
-      // F2 — 선택 노드 이름 편집 진입(컨텍스트 메뉴 "이름 변경"과 동일; readOnly는 startRename이 가드).
-      if (event.key === "F2") {
-        event.preventDefault();
-        startRename(selectedId);
+      if (!selectedId) {
         return;
       }
       // [ ] : 흐름 하이라이트 경로 증감 (뷰 고정). anchor≠선택이면 0에서 시작(파생 리셋).
@@ -5605,7 +5614,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
     window.addEventListener("keydown", onFlowKey);
     return () => window.removeEventListener("keydown", onFlowKey);
-  }, [selectedId, reactFlow, setNodes, setSelectedId, startRename]);
+  }, [
+    selectedId,
+    selectedEdgeId,
+    readOnly,
+    reactFlow,
+    setNodes,
+    setSelectedId,
+    setMenu,
+    startRename,
+    startEdgeLabelEdit,
+  ]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(
@@ -5990,7 +6009,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                         openMenu(event, "node", node.id);
                       }}
-                      onEdgeContextMenu={(event, edge) => openMenu(event, "edge", edge.id)}
+                      onEdgeContextMenu={(event, edge) => {
+                        // 우클릭 = 엣지 선택(F2 리네임 대상 확정) — 노드 우클릭과 동일 패턴.
+                        setSelectedEdgeId(edge.id);
+                        setSelectedId(null);
+                        openMenu(event, "edge", edge.id);
+                      }}
                       onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
                       onNodeDragStart={(_, node) => {
                         pushHistory();

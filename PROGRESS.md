@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R6c/R6d 보정: F2 시 메뉴 닫힘 + 엣지 F2 리네임 + 엣지 삭제 divider(검토 피드백)
+- **F2 시 컨텍스트 메뉴 닫힘**(`onFlowKey`) — F2 핸들러를 `!selectedId` 가드 위로 올리고 `setMenu(null)` 추가. 노드/엣지 모두 F2 누르면 편집 진입 + 열린 드롭다운 닫힘(기존엔 메뉴 유지되던 문제).
+- **엣지 F2 = 라벨 리네임** — F2 핸들러에 `selectedEdgeId`(+`!readOnly`) 분기 추가(`startEdgeLabelEdit`). **우클릭 시 엣지 선택**(`onEdgeContextMenu`에 `setSelectedEdgeId`/`setSelectedId(null)` — 노드 우클릭과 동일)해 F2 대상 확정. 엣지 메뉴 `라벨 편집`에 `F2` 칩.
+- **엣지 삭제 앞 divider** — 노드 메뉴처럼 삭제를 스페이서로 분리(`라벨 편집` / — / `삭제`).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 에디터 재디자인 R6d: 엣지 컨텍스트 메뉴 캡션 + 아이콘
 - **엣지 우클릭 메뉴**(`page.tsx` menuItems) — 상단에 "연결 면"(신규 i18n `edge.connection` = Connection/연결 면) 섹션 캡션 추가(연결면 패드 위, 목업 일치). 라벨 편집=PencilLine·삭제=Trash2 아이콘(삭제는 R6c 공통으로 빨강). 내용/동작(edgeSides 면 선택·라벨편집·삭제)은 그대로.
 - 분기 종류(Yes/No/기타) 편집은 인스펙터 속성 탭(R5a) 담당 — 컨텍스트 메뉴엔 미포함(`context-branch-edge.png`=인스펙터).
