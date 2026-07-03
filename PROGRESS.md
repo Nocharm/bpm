@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 컨텍스트 메뉴 하위메뉴 상하 뒤집기(위로 펼침)
+- `context-menu.tsx SubmenuItem` — 좌우 뒤집기(`toLeft`)만 있던 것에 **상하(`toUp`)** 추가. hover 시 트리거 rect + 하위메뉴 높이 추정(`length*ITEM_HEIGHT+12`)으로 아래로 넘치고 위에 공간 있으면 `top:0`→`bottom:0`으로 위로 펼침. 화면 하단 근처 `정렬·레이아웃`/`기타` 서브메뉴 잘림 방지.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R6b 보정: PNG 기타로 환원 + 정렬 서브메뉴 캡션·줄바꿈/비활성 개선(ASCII 확인 후)
 - **PNG 최상위 승격 되돌림**(결정 1) — `기타›`(⋯ MoreHorizontal) 서브메뉴 안에 PNG 내보내기(Download, `Ctrl+⇧E`). 노드타입 4행 아이콘은 유지.
 - **정렬·레이아웃 서브메뉴**(결정 3-3) — `Align`/`Distribute` 섹션 캡션(기존 `legend.align`/`legend.distribute` 재사용) + 4방향 정렬 사이 중간 divider 제거(한 그룹). 스트립 재디자인은 기각(리스트 유지, 결정 2).

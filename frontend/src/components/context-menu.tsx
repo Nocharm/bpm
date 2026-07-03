@@ -386,12 +386,18 @@ function SubmenuItem({
 }) {
   const [open, setOpen] = useState(false);
   const [toLeft, setToLeft] = useState(false);
+  // 하위 메뉴가 아래로 넘칠 때 위로 펼침(트리거 하단 기준). 좌우 뒤집기(toLeft)와 동일 패턴.
+  const [toUp, setToUp] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const handleEnter = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
       setToLeft(rect.right + MENU_WIDTH + EDGE_MARGIN > window.innerWidth);
+      // 하위 메뉴 높이 추정(항목당 ITEM_HEIGHT). 아래로 넘치고 위에 공간이 있으면 위로 펼침.
+      const subHeight = item.submenu.length * ITEM_HEIGHT + 12;
+      const overflowsBelow = rect.top + subHeight + EDGE_MARGIN > window.innerHeight;
+      setToUp(overflowsBelow && subHeight <= rect.bottom - EDGE_MARGIN);
     }
     setOpen(true);
   };
@@ -417,8 +423,11 @@ function SubmenuItem({
       </button>
       {(open || keyboardOpen) && !item.disabled && (
         <div
-          className={`absolute top-0 z-[1200] ${PANEL_CLASS}`}
-          style={toLeft ? { right: "100%" } : { left: "100%" }}
+          className={`absolute z-[1200] ${PANEL_CLASS}`}
+          style={{
+            ...(toLeft ? { right: "100%" } : { left: "100%" }),
+            ...(toUp ? { bottom: 0 } : { top: 0 }),
+          }}
         >
           <MenuList items={item.submenu} onClose={onClose} />
         </div>
