@@ -240,16 +240,16 @@ export function VersionTimeline({
                                 <span className="block max-w-[6rem] truncate">{evt.actor}</span>
                               </td>
                               {dateSpan > 0 && (
-                                <td
-                                  rowSpan={dateSpan}
-                                  className="min-w-[5.25rem] rounded-xs border border-divider px-1.5 py-0.5 text-center align-top text-ink-tertiary"
-                                >
-                                  {/* 박스 = td 자체(테두리) → rowspan 만큼 높이 증가(2일=2배·3일=3배), 날짜 윗 정렬 (H3) */}
-                                  {date}
+                                <td rowSpan={dateSpan} className="align-top">
+                                  {/* 박스 = 내부 span(콘텐츠 높이) → 옆 시간 박스와 상하 위치 동일. 폭 고정. */}
+                                  <span className="inline-block w-24 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center text-ink-tertiary">
+                                    {date}
+                                  </span>
                                 </td>
                               )}
-                              <td className="whitespace-nowrap text-right">
-                                <span className="rounded-xs border border-hairline px-1.5 py-0.5 text-ink-tertiary">
+                              <td className="text-right">
+                                {/* 시간 박스 — 폭 고정(값에 따라 안 흔들리게) + 진한 회색 경계 */}
+                                <span className="inline-block w-14 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center text-ink-tertiary">
                                   {time}
                                 </span>
                               </td>
