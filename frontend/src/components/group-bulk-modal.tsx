@@ -135,7 +135,8 @@ export function GroupBulkModal({
     const hasExisting = m.department !== "" || m.assignee !== "";
     if (!hasExisting) return false;
     const deptMatches = m.department === peopleDept;
-    // Department-only mode: only department must match
+    // Department-only mode: only department must match; an existing assignee is NOT a conflict
+    // and will be silently cleared on apply — intentional per spec.
     const assigneeMatches = hasAssignees ? m.assignee === targetAssigneeStr : true;
     return !(deptMatches && assigneeMatches);
   };
@@ -267,10 +268,10 @@ export function GroupBulkModal({
     if (choice === "replace") {
       resolved.push({ id: member.id, department: peopleDept, assignee: targetAssigneeStr });
     } else if (choice === "append") {
-      // Only reachable when same-dept; merge assignees
+      // Reachable when not cross-dept, incl. empty-dept members; merge assignees
       const existing = parseAssignees(member.assignee);
       const merged = [...existing, ...peopleAssignees.filter((n) => !existing.includes(n))];
-      resolved.push({ id: member.id, department: member.department, assignee: formatAssignees(merged) });
+      resolved.push({ id: member.id, department: peopleDept || member.department, assignee: formatAssignees(merged) });
     }
     // skip → not added
     const next = peopleWizard.step + 1;
