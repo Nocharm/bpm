@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 설정 승인큐 탭 everyone 접근(추후 개인별 승인 페이지 자리)
+- **승인큐 탭 접근 개방** — `app/settings/page.tsx`에서 큐를 sysadmin 카테고리(depts/users와 함께)에서 빼 별도 **everyone 카테고리(`admin.catApprovals`)**로 분리. 누구나 좌측 탭에서 접근 가능.
+- **내용 처리** — 큐 API 3종(pending groups/approval-requests/checkout)은 sysadmin 전용(403)이라, sysadmin은 기존 `ApprovalQueue`, 그 외는 **"준비 중" 안내**(`admin.approvalsComingSoon`) — 에러 토스트 방지. 개인별 승인 모음 콘텐츠는 후속.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 승인자 관리 오너+sysadmin 허용 + .env.example 정리
 - **승인자 관리 권한** — 오너 전용 → **오너 OR sysadmin**. 백엔드 `set_approvers`에 sysadmin 오버라이드(세팅 화면은 이미 sysadmin=owner라 UI만 열리고 저장 시 403이던 잠재버그도 해소), 에디터 `canManageApprovers`에 `isSysadmin` 추가. 테스트 `test_set_approvers_owner_only`는 enforce로 전환 + sysadmin 허용 케이스 추가.
 - **.env.example 정리** — sysadmin 섹션 명확화: `SYSTEM_ADMIN_LOGIN_IDS`(require_admin 별개)와 `BPM_SYSADMINS`(sysadmin) 구분, 서버(Keycloak 사용자명)/로컬(backend/.env, admin.sys) 각각 명시. 옛 예시 `admin.kim` 제거.

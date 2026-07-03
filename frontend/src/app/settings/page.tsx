@@ -45,7 +45,6 @@ const CATEGORIES: Category[] = [
     labelKey: "admin.catPermissions",
     access: "sysadmin",
     tabs: [
-      { id: "queue", labelKey: "perm.sysadmin.tabQueue" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
       { id: "users", labelKey: "perm.sysadmin.tabUsers" },
     ],
@@ -54,6 +53,12 @@ const CATEGORIES: Category[] = [
     labelKey: "admin.catDatabase",
     access: "sysadmin",
     tabs: [{ id: "tables", labelKey: "db.tablesTab" }],
+  },
+  {
+    // 승인큐 — 누구나 접근(추후 개인별 승인 모음 페이지). 현재 큐 내용은 sysadmin만, 그 외는 준비중 안내.
+    labelKey: "admin.catApprovals",
+    access: "everyone",
+    tabs: [{ id: "queue", labelKey: "perm.sysadmin.tabQueue" }],
   },
   {
     labelKey: "nav.groups",
@@ -162,9 +167,16 @@ export default function SettingsPage() {
         <main className="flex-1 overflow-y-auto p-6">
           {current === "groups" && <GroupsPanel />}
           {current === "employees" && <EmployeeTable />}
-          {current === "queue" && user && (
-            <ApprovalQueue onToast={showToast} onCountChange={setQueueCount} />
-          )}
+          {current === "queue" &&
+            user &&
+            (user.isSysadmin ? (
+              <ApprovalQueue onToast={showToast} onCountChange={setQueueCount} />
+            ) : (
+              // 개인별 승인 모음은 추후 구현 — 현재 큐 API는 sysadmin 전용이라 일반 유저엔 안내만.
+              <p className="py-16 text-center text-caption text-ink-tertiary">
+                {t("admin.approvalsComingSoon")}
+              </p>
+            ))}
           {current === "depts" && <DepartmentTable />}
           {current === "users" && <UserTable />}
           {current === "tables" && <TableViewer />}
