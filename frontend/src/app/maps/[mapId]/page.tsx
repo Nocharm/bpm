@@ -6511,6 +6511,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
+                  nodeType: n.data.nodeType,
                 }))}
               colorPresets={COLOR_PRESETS}
               onRenameGroup={(label) => renameGroup(bulkEditGroupId, label)}

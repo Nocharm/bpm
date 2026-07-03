@@ -1,7 +1,16 @@
 "use client";
 
 // 그룹 멤버 일괄 편집 — 그룹명, 색상 일괄, 속성 일괄(설정/비우기 + 충돌 처리: 교체/추가/건너뛰기/개별 선택), 중단 (#5 2026-06-15)
-import { MousePointerClick, Plus, Replace, SkipForward, X, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  MousePointerClick,
+  Plus,
+  Replace,
+  SkipForward,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -9,6 +18,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
+import { hasBpmAttributes } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
@@ -43,6 +53,7 @@ export interface BulkMember {
   department: string;
   system: string;
   duration: string;
+  nodeType: string; // start/end/subprocess는 BPM 속성 대상에서 제외
 }
 
 type Update = { id: string; value: string };
@@ -62,7 +73,7 @@ interface GroupBulkModalProps {
 export function GroupBulkModal({
   versionId,
   groupLabel,
-  members,
+  members: allMembers,
   colorPresets,
   onRenameGroup,
   onApplyColor,
@@ -72,10 +83,16 @@ export function GroupBulkModal({
 }: GroupBulkModalProps) {
   const { t } = useI18n();
 
+  // BPM 속성 대상 = process·decision만. start/end/subprocess는 일괄 속성(부서/담당자/시스템/소요)에서 제외.
+  // 아래 속성 로직은 전부 editable(=members)만 순회하고, 헤더 카운트·제외 안내만 allMembers 사용.
+  const members = allMembers.filter((m) => hasBpmAttributes(m.nodeType));
+  const excludedMembers = allMembers.filter((m) => !hasBpmAttributes(m.nodeType));
+
   // Shared UI state
   const [mode, setMode] = useState<BulkMode>("people");
   const [policy, setPolicy] = useState<BulkPolicy | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
+  const [showExcluded, setShowExcluded] = useState(false);
 
   // People mode: target department + assignees
   const [peopleDept, setPeopleDept] = useState("");
@@ -409,9 +426,39 @@ export function GroupBulkModal({
                     {[peopleDept, targetAssigneeStr].filter(Boolean).join(" / ")}
                   </p>
                   {isCrossDept && (
-                    <p className="mb-2 rounded-sm bg-surface-alt px-2 py-1 text-fine text-ink-secondary">
-                      {t("bulk.crossDeptConfirm")}
-                    </p>
+                    <div className="mb-2 rounded-sm border border-error/40 bg-error/10 px-2 py-1.5">
+                      <p className="flex items-center gap-1 text-fine text-error">
+                        <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+                        {t("bulk.crossDeptConfirm")}
+                      </p>
+                      {/* 부서: 기존(초기화) → 새 부서 */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-fine">
+                        <span className="rounded-full border border-error/40 bg-error/10 px-1.5 py-0.5 text-error line-through">
+                          {member.department}
+                        </span>
+                        <ArrowRight
+                          size={11}
+                          strokeWidth={1.5}
+                          className="shrink-0 text-ink-tertiary"
+                        />
+                        <span className="rounded-full border border-hairline bg-surface-alt px-1.5 py-0.5 text-ink">
+                          {peopleDept || "—"}
+                        </span>
+                      </div>
+                      {/* 초기화될 기존 담당자 */}
+                      {parseAssignees(member.assignee).length > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1 text-fine">
+                          {parseAssignees(member.assignee).map((n) => (
+                            <span
+                              key={n}
+                              className="rounded-full border border-error/40 bg-error/10 px-1.5 py-0.5 text-error line-through"
+                            >
+                              {n}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                   <div className="flex gap-1">
                     <button
@@ -495,7 +542,7 @@ export function GroupBulkModal({
             <div className="mb-3 flex items-center justify-between">
               <p className="text-body-strong text-ink">{t("bulk.title")}</p>
               <span className="text-fine text-ink-tertiary">
-                {t("bulk.members", { n: members.length })}
+                {t("bulk.members", { n: allMembers.length })}
               </span>
             </div>
 
@@ -677,6 +724,39 @@ export function GroupBulkModal({
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* 제외 안내 — start/end/subprocess는 속성 대상 아님. 호버 시 타입별 개수 */}
+              {excludedMembers.length > 0 && (
+                <div
+                  className="relative inline-block self-start"
+                  onMouseEnter={() => setShowExcluded(true)}
+                  onMouseLeave={() => setShowExcluded(false)}
+                >
+                  <span className="cursor-help text-fine text-ink-tertiary underline decoration-dotted">
+                    {t("bulk.excluded", { n: excludedMembers.length })}
+                  </span>
+                  {showExcluded && (
+                    <div className="absolute left-0 top-full z-10 mt-1 w-44 rounded-sm border border-hairline bg-surface p-2 shadow-lg">
+                      <ul className="flex flex-col gap-0.5">
+                        {(["start", "end", "subprocess"] as const)
+                          .map((tp) => ({
+                            tp,
+                            n: excludedMembers.filter((m) => m.nodeType === tp).length,
+                          }))
+                          .filter((x) => x.n > 0)
+                          .map(({ tp, n }) => (
+                            <li key={tp} className="flex justify-between gap-2 text-fine">
+                              <span className="text-ink-tertiary">
+                                {t(`nodeType.${tp}` as MessageKey)}
+                              </span>
+                              <span className="text-ink">{n}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
 

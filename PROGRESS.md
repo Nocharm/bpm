@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — Task 7: 그룹 벌크에서 start/end/subprocess 제외 + 제외 안내 + 교차부서 확인 필/빨강
+- **`group-bulk-modal.tsx`** — prop `members`→`allMembers`, 파생 `members = allMembers.filter(hasBpmAttributes)`/`excludedMembers`. 속성(부서·담당자·시스템·소요) 충돌·적용 로직 전부 editable(=members)만 순회 → 차단 타입은 일괄 등록 대상 제외. 헤더 카운트는 전체(allMembers). 제외 안내 "총 n개 제외"(호버 시 Start/End/Subprocess 타입별 개수). 교차부서 확인(`bulk.crossDeptConfirm`)을 border-error/bg-error 박스 + AlertTriangle + 부서 old(취소선)→new 필 + 초기화 담당자 취소선 필로 재디자인.
+- **`page.tsx`** — GroupBulkModal `members`에 `nodeType` 전달.
+- **`i18n-messages.ts`** — `bulk.excluded` en·ko 추가.
+- 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 검증은 후속 모달 변경과 함께 일괄 예정.)
+
 ## 2026-07-03 — 최종 리뷰 픽스: 드리프트 경고 가드 + 부서 동일 재선택 no-op
 - **`page.tsx`** — 드리프트 경고 계산에 `eligible !== null && hasBpmAttributes(nodeType)` 가드 추가(eligible 로드 전 오탐 배지·start/end/subprocess 조치불가 배지 방지).
 - **`node-summary-modal.tsx`/`bpm-attribute-picker.tsx`** — `changeDept`/`handleDeptChange`에 `dept === 현재부서 → return` 조기 반환(SearchSelect가 동일값 재선택에도 onChange 발화 → 모달은 담당자 무단 초기화·인스펙터는 불필요 확인모달 방지).
