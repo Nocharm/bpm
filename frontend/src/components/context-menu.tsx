@@ -273,42 +273,42 @@ const SIDE_BORDERS: { side: HandleSide; cls: string }[] = [
   { side: "right", cls: "top-2 bottom-2 right-0 w-2" },
 ];
 
-// 선택한 면의 박스 경계 앵커 좌표(pad 좌표계, 박스는 top=VPAD에 배치) — 커넥터 끝점.
-function sideAnchor(side: HandleSide, x0: number): { x: number; y: number } {
-  const cx = x0 + BOX_W / 2;
+// 두 박스 사이 세로 채널(gap)과 박스 위/아래 레인은 항상 비어 있다 — 커넥터를 이 자유 공간으로만 라우팅해
+// 어떤 (source,target) 변 조합(16가지)에서도 박스(노드) 뒤로 지나지 않고 "돌아서" 잇는다.
+// 좌표: 소스 박스 x∈[0,BOX_W], 타겟 박스 x∈[tgtX0, tgtX0+BOX_W], 둘 다 y∈[VPAD, VPAD+BOX_H].
+function orthConnector(sourceSide: HandleSide, targetSide: HandleSide): string {
+  const srcX0 = 0;
+  const tgtX0 = BOX_W + GAP;
   const cy = VPAD + BOX_H / 2;
-  if (side === "top") return { x: cx, y: VPAD };
-  if (side === "bottom") return { x: cx, y: VPAD + BOX_H };
-  if (side === "left") return { x: x0, y: cy };
-  return { x: x0 + BOX_W, y: cy }; // right
-}
+  const topY = VPAD - STUB; // 박스 위 레인(비어 있음)
+  const botY = VPAD + BOX_H + STUB; // 박스 아래 레인(비어 있음)
+  const gx = BOX_W + GAP / 2; // 두 박스 사이 세로 채널 x — 모든 y에서 비어 있음
+  const srcCx = srcX0 + BOX_W / 2;
+  const tgtCx = tgtX0 + BOX_W / 2;
 
-// 변에서 바깥으로 나가는 단위 방향 — 커넥터가 변에 수직으로 빠져나오는 stub 방향.
-function sideDir(side: HandleSide): { dx: number; dy: number } {
-  if (side === "top") return { dx: 0, dy: -1 };
-  if (side === "bottom") return { dx: 0, dy: 1 };
-  if (side === "left") return { dx: -1, dy: 0 };
-  return { dx: 1, dy: 0 }; // right
-}
+  // 소스 변 앵커 → 게이트 채널(gx, hubY)까지 박스 밖으로 이스케이프. 끝점은 항상 (gx, _).
+  const srcPts: [number, number][] =
+    sourceSide === "right"
+      ? [[srcX0 + BOX_W, cy], [gx, cy]]
+      : sourceSide === "left"
+        ? [[srcX0, cy], [srcX0 - STUB, cy], [srcX0 - STUB, topY], [gx, topY]]
+        : sourceSide === "top"
+          ? [[srcCx, VPAD], [srcCx, topY], [gx, topY]]
+          : [[srcCx, VPAD + BOX_H], [srcCx, botY], [gx, botY]]; // bottom
 
-// 두 앵커를 실제 캔버스 엣지처럼 직각 꺾은선으로 잇는 path — 각 끝에서 변 방향 stub 후 중간에서 꺾음.
-function orthConnector(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  sourceSide: HandleSide,
-  targetSide: HandleSide,
-): string {
-  const s = sideDir(sourceSide);
-  const t = sideDir(targetSide);
-  const p1 = { x: from.x + s.dx * STUB, y: from.y + s.dy * STUB };
-  const p2 = { x: to.x + t.dx * STUB, y: to.y + t.dy * STUB };
-  const pts =
-    s.dx !== 0
-      ? // 수평으로 빠져나오면 가로→세로→가로(중간 x에서 꺾음)
-        [from, p1, { x: (p1.x + p2.x) / 2, y: p1.y }, { x: (p1.x + p2.x) / 2, y: p2.y }, p2, to]
-      : // 수직으로 빠져나오면 세로→가로→세로(중간 y에서 꺾음)
-        [from, p1, { x: p1.x, y: (p1.y + p2.y) / 2 }, { x: p2.x, y: (p1.y + p2.y) / 2 }, p2, to];
-  return "M " + pts.map((p) => `${p.x} ${p.y}`).join(" L ");
+  // 게이트 채널(gx, hubY) → 타겟 변 앵커. 시작점은 항상 (gx, _).
+  const tgtPts: [number, number][] =
+    targetSide === "left"
+      ? [[gx, cy], [tgtX0 - STUB, cy], [tgtX0, cy]]
+      : targetSide === "right"
+        ? [[gx, topY], [tgtX0 + BOX_W + STUB, topY], [tgtX0 + BOX_W + STUB, cy], [tgtX0 + BOX_W, cy]]
+        : targetSide === "top"
+          ? [[gx, topY], [tgtCx, topY], [tgtCx, VPAD]]
+          : [[gx, botY], [tgtCx, botY], [tgtCx, VPAD + BOX_H]]; // bottom
+
+  // 소스 끝(gx,hubY_s)·타겟 시작(gx,hubY_t)은 같은 x=gx → 그 사이는 자유로운 세로 채널로 이어진다.
+  const pts = [...srcPts, ...tgtPts];
+  return "M " + pts.map(([x, y]) => `${x} ${y}`).join(" L ");
 }
 
 function SideBox({
@@ -371,8 +371,6 @@ function EdgeSidesPad({
 }) {
   const srcX0 = 0;
   const tgtX0 = BOX_W + GAP;
-  const from = sideAnchor(item.sourceSide, srcX0);
-  const to = sideAnchor(item.targetSide, tgtX0);
   return (
     <div className="px-3 py-2">
       <div className="relative mx-auto" style={{ width: PAD_W, height: PAD_H }}>
@@ -389,7 +387,7 @@ function EdgeSidesPad({
             </marker>
           </defs>
           <path
-            d={orthConnector(from, to, item.sourceSide, item.targetSide)}
+            d={orthConnector(item.sourceSide, item.targetSide)}
             stroke="currentColor"
             strokeWidth="1.5"
             strokeDasharray="4 3"

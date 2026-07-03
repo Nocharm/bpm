@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 엣지 연결면 커넥터 라우팅 재작성(16조합 노드 뒤 통과 방지) + R6e 완료
+- **커넥터가 노드 뒤로 지나 깨져 보이던 문제**(`context-menu.tsx orthConnector`) — 기존 "중간점 꺾기"는 일부 변 조합에서 박스 내부를 통과(svg가 박스 뒤라 잘려 보임). 두 박스 사이 **gap 세로 채널(x=gx)** + **박스 위/아래 레인(topY/botY)**만 쓰도록 재작성: 각 변을 자유 채널로 이스케이프→gx 세로 채널로 연결→타겟 변 진입. **16개 조합 전부 박스 내부 미통과**를 node 스크립트로 수치 검증(ALL OK). 미사용 `sideAnchor`/`sideDir` 제거.
+- **R6e 완료**(트래커) — 사용자 승인, 🔧→✅, 커밋 `7343974`.
+- 검증: 프론트 lint 0·build OK + 16조합 라우팅 수치 검증.
+
 ## 2026-07-03 — 엣지 메뉴 삭제 스페이서 2줄 통일 + 미니맵 크기(20:9·높이 70%)
 - **엣지 삭제 앞 구분선 2개**(`page.tsx`) — 노드 메뉴는 color/delete 인접 divider로 삭제 앞이 2줄인데 엣지는 1줄이라, 엣지도 `{divider}×2`로 통일.
 - **미니맵 크기**(`minimap-viewport-fill.tsx`) — `MM_W/MM_H` 200×150 → **233×105**(높이 기본의 70%=105, 비율 20:9≈233×105). MiniMap `style.width/height`로 지정(React Flow는 `style.width ?? defaultWidth` 사용), 오버레이 svg도 동일 치수라 좌표계 정렬 유지.
