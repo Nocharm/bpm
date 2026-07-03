@@ -256,13 +256,14 @@ function ColorRow({
 }
 
 // 엣지 끝점 면 선택 — 박스 테두리(상/우/하/좌)를 클릭해 그 변을 선택. 선택 변은 악센트.
-// 메뉴 유지 — onClose 호출하지 않음(연속 조정). 박스 사이 커넥터가 선택한 면을 반영(#3).
+// 메뉴 유지 — onClose 호출하지 않음(연속 조정). 박스 사이 커넥터가 선택한 면을 실제 캔버스 엣지처럼 꺾은선으로 반영.
 const BOX_W = 64;
 const BOX_H = 28;
 const GAP = 52;
-const LABEL_H = 16;
+const VPAD = 10; // 박스 위/아래 여백 — 라벨을 박스 안으로 넣어 확보한 공간에 꺾은선 커넥터가 상/하로 라우팅
+const STUB = 7; // 커넥터가 선택 변에서 수직으로 빠져나오는 짧은 구간
 const PAD_W = BOX_W * 2 + GAP;
-const PAD_H = LABEL_H + BOX_H;
+const PAD_H = BOX_H + VPAD * 2;
 
 // 히트박스 키움 — 변 strip 두께 8px(클릭 쉬움)
 const SIDE_BORDERS: { side: HandleSide; cls: string }[] = [
@@ -272,31 +273,67 @@ const SIDE_BORDERS: { side: HandleSide; cls: string }[] = [
   { side: "right", cls: "top-2 bottom-2 right-0 w-2" },
 ];
 
-// 선택한 면의 박스 경계 위 앵커 좌표(pad 좌표계) — 커넥터 끝점 계산용.
+// 선택한 면의 박스 경계 앵커 좌표(pad 좌표계, 박스는 top=VPAD에 배치) — 커넥터 끝점.
 function sideAnchor(side: HandleSide, x0: number): { x: number; y: number } {
   const cx = x0 + BOX_W / 2;
-  const cy = LABEL_H + BOX_H / 2;
-  if (side === "top") return { x: cx, y: LABEL_H };
-  if (side === "bottom") return { x: cx, y: LABEL_H + BOX_H };
+  const cy = VPAD + BOX_H / 2;
+  if (side === "top") return { x: cx, y: VPAD };
+  if (side === "bottom") return { x: cx, y: VPAD + BOX_H };
   if (side === "left") return { x: x0, y: cy };
   return { x: x0 + BOX_W, y: cy }; // right
+}
+
+// 변에서 바깥으로 나가는 단위 방향 — 커넥터가 변에 수직으로 빠져나오는 stub 방향.
+function sideDir(side: HandleSide): { dx: number; dy: number } {
+  if (side === "top") return { dx: 0, dy: -1 };
+  if (side === "bottom") return { dx: 0, dy: 1 };
+  if (side === "left") return { dx: -1, dy: 0 };
+  return { dx: 1, dy: 0 }; // right
+}
+
+// 두 앵커를 실제 캔버스 엣지처럼 직각 꺾은선으로 잇는 path — 각 끝에서 변 방향 stub 후 중간에서 꺾음.
+function orthConnector(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  sourceSide: HandleSide,
+  targetSide: HandleSide,
+): string {
+  const s = sideDir(sourceSide);
+  const t = sideDir(targetSide);
+  const p1 = { x: from.x + s.dx * STUB, y: from.y + s.dy * STUB };
+  const p2 = { x: to.x + t.dx * STUB, y: to.y + t.dy * STUB };
+  const pts =
+    s.dx !== 0
+      ? // 수평으로 빠져나오면 가로→세로→가로(중간 x에서 꺾음)
+        [from, p1, { x: (p1.x + p2.x) / 2, y: p1.y }, { x: (p1.x + p2.x) / 2, y: p2.y }, p2, to]
+      : // 수직으로 빠져나오면 세로→가로→세로(중간 y에서 꺾음)
+        [from, p1, { x: p1.x, y: (p1.y + p2.y) / 2 }, { x: p2.x, y: (p1.y + p2.y) / 2 }, p2, to];
+  return "M " + pts.map((p) => `${p.x} ${p.y}`).join(" L ");
 }
 
 function SideBox({
   current,
   onPick,
   locked = false,
+  label,
 }: {
   current: HandleSide;
   onPick: (side: HandleSide) => void;
   locked?: boolean;
+  label: string;
 }) {
   return (
     <div
-      className={`relative rounded-sm border border-hairline bg-surface-alt ${locked ? "opacity-60" : ""}`}
+      className={`group relative rounded-sm border bg-surface-alt transition-colors ${
+        locked ? "border-hairline opacity-60" : "border-hairline hover:border-accent/50"
+      }`}
       style={{ width: BOX_W, height: BOX_H }}
       title={locked ? "Subprocess: fixed side" : undefined}
     >
+      {/* 박스 안 라벨(작게·중앙) — 클릭은 변 strip으로 통과(pointer-events-none) */}
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center truncate px-1 text-[10px] leading-none text-ink-tertiary">
+        {label}
+      </span>
       {SIDE_BORDERS.map(({ side, cls }) => (
         <button
           key={side}
@@ -304,8 +341,13 @@ function SideBox({
           aria-label={side}
           disabled={locked}
           onClick={locked ? undefined : () => onPick(side)}
-          className={`absolute ${cls} rounded-sm ${
-            current === side ? "bg-accent" : locked ? "bg-divider" : "bg-divider hover:bg-accent-tint"
+          // 박스 hover 시 4변 strip을 tint로 드러내 클릭 가능 영역을 인지시키고(group-hover), 직접 hover는 accent.
+          className={`absolute ${cls} rounded-sm transition-colors ${
+            current === side
+              ? "bg-accent"
+              : locked
+                ? "bg-divider"
+                : "bg-divider/40 group-hover:bg-accent-tint hover:bg-accent"
           } ${locked ? "cursor-default" : ""}`}
         />
       ))}
@@ -334,20 +376,7 @@ function EdgeSidesPad({
   return (
     <div className="px-3 py-2">
       <div className="relative mx-auto" style={{ width: PAD_W, height: PAD_H }}>
-        {/* 라벨(박스 위 중앙) */}
-        <span
-          className="absolute truncate text-center text-fine text-ink-tertiary"
-          style={{ left: srcX0, top: 0, width: BOX_W }}
-        >
-          {item.sourceLabel}
-        </span>
-        <span
-          className="absolute truncate text-center text-fine text-ink-tertiary"
-          style={{ left: tgtX0, top: 0, width: BOX_W }}
-        >
-          {item.targetLabel}
-        </span>
-        {/* 선택한 면을 잇는 커넥터(점선+화살촉) — 면 변경 시 함께 바뀜 (#3) */}
+        {/* 선택한 면을 잇는 커넥터 — 실제 캔버스 엣지처럼 직각 꺾은선(점선+화살촉), 면 변경 시 함께 바뀜 */}
         <svg
           className="pointer-events-none absolute inset-0 text-ink-tertiary"
           width={PAD_W}
@@ -360,7 +389,7 @@ function EdgeSidesPad({
             </marker>
           </defs>
           <path
-            d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
+            d={orthConnector(from, to, item.sourceSide, item.targetSide)}
             stroke="currentColor"
             strokeWidth="1.5"
             strokeDasharray="4 3"
@@ -368,12 +397,22 @@ function EdgeSidesPad({
             markerEnd="url(#edgeSidesArrow)"
           />
         </svg>
-        {/* 박스(커넥터 위) */}
-        <div className="absolute" style={{ left: srcX0, top: LABEL_H }}>
-          <SideBox current={item.sourceSide} onPick={item.onPickSource} locked={item.sourceLocked} />
+        {/* 박스(커넥터 위) — 라벨은 박스 안 */}
+        <div className="absolute" style={{ left: srcX0, top: VPAD }}>
+          <SideBox
+            current={item.sourceSide}
+            onPick={item.onPickSource}
+            locked={item.sourceLocked}
+            label={item.sourceLabel}
+          />
         </div>
-        <div className="absolute" style={{ left: tgtX0, top: LABEL_H }}>
-          <SideBox current={item.targetSide} onPick={item.onPickTarget} locked={item.targetLocked} />
+        <div className="absolute" style={{ left: tgtX0, top: VPAD }}>
+          <SideBox
+            current={item.targetSide}
+            onPick={item.onPickTarget}
+            locked={item.targetLocked}
+            label={item.targetLabel}
+          />
         </div>
       </div>
     </div>

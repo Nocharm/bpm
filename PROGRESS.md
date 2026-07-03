@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 엣지 연결면 패드 개선(꺾은선 커넥터·라벨 박스 안·hover 히트박스) + R6c 완료
+- **연결면 패드**(`context-menu.tsx EdgeSidesPad`) — ① 커넥터 직선→**직각 꺾은선**(`orthConnector`: 각 변에서 stub 후 중간 꺾음, 실제 캔버스 엣지처럼). ② Start/End 라벨을 박스 위→**박스 안 중앙·`text-[10px]`로 축소**(위 라벨행 제거, 그 공간을 꺾은선 상/하 라우팅에 사용; `VPAD`). ③ **박스 hover 시 4변 strip을 `group-hover:bg-accent-tint`로 노출** + `hover:border-accent/50` — 클릭 가능한 히트박스임을 인지.
+- **R6c 완료**(트래커) — 사용자 승인, 🔧→✅, 커밋 `b4ca7a0·26c5c5b`.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 미니맵 최대 투명도 0.65 + R6b 완료 처리
 - **미니맵 최대 불투명도 0.65**(`minimap-viewport-fill.tsx`) — `useMinimapFadeOpacity`에 `MAX_OPACITY=0.65` 도입, 완전 표시 구간도 0.65 상한(미니맵이 켜져 있어도 뒤쪽 노드가 비침). 페이드 곡선 `0.65→0`으로 스케일(FADE_START 1.2~FADE_END 2.0 유지).
 - **R6b 완료**(트래커) — 사용자 승인, 🔧→✅, 커밋 `f9fc00c·e55494b·09e8d7e` 기입.
