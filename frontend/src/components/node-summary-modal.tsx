@@ -103,6 +103,8 @@ interface NodeSummaryModalProps {
   system: string;
   duration: string;
   colorPresets: string[];
+  // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
+  showAttributes: boolean;
   onPatch: (patch: NodeEditPatch) => void;
   // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
   onCommitLabel?: (label: string) => void;
@@ -131,6 +133,7 @@ export function NodeSummaryModal({
   system,
   duration,
   colorPresets,
+  showAttributes,
   onPatch,
   onCommitLabel,
   onNavigate,
@@ -401,75 +404,79 @@ export function NodeSummaryModal({
                   </div>
                 </div>
               </div>
-              {/* BPM 속성 — 담당자/부서는 조회권한 보유자만 선택(F5), system/duration은 자유입력 */}
-              {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
-              <div className="flex items-center gap-2">
-                <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</label>
-                <SearchSelect
-                  value={form.department}
-                  options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
-                  emptyLabel={t("summary.none")}
-                  placeholder={t("field.searchPlaceholder")}
-                  onChange={changeDept}
-                />
-              </div>
-              {/* 담당자 칩 + 부서 필터링 추가 픽커 */}
-              <div className="flex items-start gap-2">
-                <label className="mt-1 w-14 shrink-0 text-fine text-ink-tertiary">{t("field.assignee")}</label>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {assignees.map((name) => {
-                      const isDrift = drifted.includes(name);
-                      return (
-                        <span
-                          key={name}
-                          className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                            isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
-                          }`}
-                        >
-                          {name}
-                          <button
-                            type="button"
-                            aria-label={t("summary.close")}
-                            onClick={() =>
-                              setForm((f) => ({ ...f, assignee: formatAssignees(parseAssignees(f.assignee).filter((n) => n !== name)) }))
-                            }
-                          >
-                            <X size={11} strokeWidth={1.5} />
-                          </button>
-                        </span>
-                      );
-                    })}
+              {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
+              {showAttributes && (
+                <>
+                  {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
+                  <div className="flex items-center gap-2">
+                    <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</label>
+                    <SearchSelect
+                      value={form.department}
+                      options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                      emptyLabel={t("summary.none")}
+                      placeholder={t("field.searchPlaceholder")}
+                      onChange={changeDept}
+                    />
                   </div>
-                  <SearchSelect
-                    value=""
-                    options={users
-                      .filter((u) => form.department === "" || u.department === form.department)
-                      .filter((u) => !assignees.includes(u.name))
-                      .map((u) => ({ value: u.name, label: u.name, sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined, keywords: u.id }))}
-                    emptyLabel={t("field.assignee")}
-                    placeholder={t("field.searchPlaceholder")}
-                    onChange={(name) => {
-                      if (!name) return;
-                      const next = addAssignee(form.department, parseAssignees(form.assignee), name, users);
-                      setForm((f) => ({ ...f, department: next.department, assignee: formatAssignees(next.assignees) }));
-                    }}
-                  />
-                </div>
-              </div>
-              {ATTR_FIELDS.map(({ key, labelKey }) => (
-                <div key={key} className="flex items-center gap-2">
-                  <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
-                  <input
-                    className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                    value={form[key]}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
-                    }}
-                  />
-                </div>
-              ))}
+                  {/* 담당자 칩 + 부서 필터링 추가 픽커 */}
+                  <div className="flex items-start gap-2">
+                    <label className="mt-1 w-14 shrink-0 text-fine text-ink-tertiary">{t("field.assignee")}</label>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {assignees.map((name) => {
+                          const isDrift = drifted.includes(name);
+                          return (
+                            <span
+                              key={name}
+                              className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                                isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
+                              }`}
+                            >
+                              {name}
+                              <button
+                                type="button"
+                                aria-label={t("summary.close")}
+                                onClick={() =>
+                                  setForm((f) => ({ ...f, assignee: formatAssignees(parseAssignees(f.assignee).filter((n) => n !== name)) }))
+                                }
+                              >
+                                <X size={11} strokeWidth={1.5} />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <SearchSelect
+                        value=""
+                        options={users
+                          .filter((u) => form.department === "" || u.department === form.department)
+                          .filter((u) => !assignees.includes(u.name))
+                          .map((u) => ({ value: u.name, label: u.name, sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined, keywords: u.id }))}
+                        emptyLabel={t("field.assignee")}
+                        placeholder={t("field.searchPlaceholder")}
+                        onChange={(name) => {
+                          if (!name) return;
+                          const next = addAssignee(form.department, parseAssignees(form.assignee), name, users);
+                          setForm((f) => ({ ...f, department: next.department, assignee: formatAssignees(next.assignees) }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {ATTR_FIELDS.map(({ key, labelKey }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
+                      <input
+                        className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                        value={form[key]}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
+                        }}
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
               {groupLabel && (
                 <span className="text-fine text-ink-tertiary">
                   {t("summary.group")}: {groupLabel}

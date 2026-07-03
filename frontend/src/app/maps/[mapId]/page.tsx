@@ -99,6 +99,7 @@ import {
   BRANCH_YES_LABEL,
   BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
+  hasBpmAttributes,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
   NODE_WIDTH,
@@ -6472,6 +6473,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 nodeId={summaryNodeId}
                 title={node.data.label}
                 typeLabel={typeKey ? t(typeKey) : node.data.nodeType}
+                showAttributes={hasBpmAttributes(node.data.nodeType)}
                 groupLabel={groupLabel}
                 predecessors={predecessors}
                 successors={successors}
@@ -6635,35 +6637,38 @@ function MapEditor({ mapId }: { mapId: number }) {
                           />
                         )}
                       </div>
-                      <div className="rounded-md border border-hairline p-3">
-                        <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
-                        {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
-                        <BpmAttributePicker
-                          versionId={versionId}
-                          assignee={selectedNode.data.assignee}
-                          department={selectedNode.data.department}
-                          readOnly={readOnly}
-                          onChange={(patch) => updateSelectedData(patch, true)}
-                        />
-                        {([
-                          ["system", "field.system"],
-                          ["duration", "field.duration"],
-                        ] as const).map(([key, labelKey]) => (
-                          <div
-                            key={key}
-                            className="flex items-center justify-between gap-2 border-t border-divider py-1"
-                          >
-                            <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
-                            <input
-                              className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                              value={selectedNode.data[key]}
-                              disabled={readOnly}
-                              title={selectedNode.data[key] || undefined}
-                              onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
+                      {hasBpmAttributes(selectedNode.data.nodeType) && (
+                        <div className="rounded-md border border-hairline p-3">
+                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                          {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
+                          <BpmAttributePicker
+                            versionId={versionId}
+                            assignee={selectedNode.data.assignee}
+                            department={selectedNode.data.department}
+                            readOnly={readOnly}
+                            onChange={(patch) => updateSelectedData(patch, true)}
+                          />
+                          {([
+                            ["system", "field.system"],
+                            ["duration", "field.duration"],
+                          ] as const).map(([key, labelKey]) => (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                            >
+                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                              <input
+                                className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                                value={selectedNode.data[key]}
+                                disabled={readOnly}
+                                title={selectedNode.data[key] || undefined}
+                                onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
                       {selectedNode.data.nodeType === "end" && (
                         <div className="flex items-center justify-between">

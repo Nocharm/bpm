@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import {
+  hasBpmAttributes,
   type AppNode,
   type HandleSide,
   type ProcessNodeType,
@@ -53,12 +54,17 @@ const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
+// start/end/subprocess는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { t } = useI18n();
   const { displayFields } = useNodeActions();
   return (
     <>
       {displayFields.map((field) => {
+        // nodeType 외의 BPM 속성 필드는 process·decision만 표시
+        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType)) {
+          return null;
+        }
         const value =
           field === "nodeType"
             ? t(NODE_TYPE_LABEL_KEY[data.nodeType])

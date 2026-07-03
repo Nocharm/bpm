@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — Task 6: BPM 속성 start/end/subprocess 숨김
+- `canvas.ts` — `hasBpmAttributes()` helper 추가·export (process·decision만 true).
+- `node-summary-modal.tsx` — `showAttributes: boolean` prop 추가; false면 담당자/부서/시스템/소요 입력 숨김.
+- `page.tsx` — `hasBpmAttributes` import; `<NodeSummaryModal showAttributes=…>` 전달; 인스펙터 BPM 속성 카드 조건부 렌더.
+- `process-node.tsx` — `NodeFields`에서 BPM 필드(assignee/department/system/duration)는 `hasBpmAttributes` false 노드에 표시 안 함.
+- 검증: lint 0 errors·build OK.
+
 ## 2026-07-03 — Task 2: 노드 편집 모달 담당자 칩·부서 연동·변경 확인
 - **`node-summary-modal.tsx`** — 부서: 단일 SearchSelect + 담당자 있을 때 변경 시 `pendingDept` 확인 오버레이(담당자 초기화). 담당자: 제거 가능 칩(드리프트 담당자 오류색 표시) + 부서 필터링 추가 픽커. `ATTR_FIELDS`에서 assignee/department 제거, system/duration만 유지. Esc·⌘S도 `pendingDept` 인식.
 - **`i18n-messages.ts`** — `assignee.deptChangeTitle`/`assignee.deptChangeBody` en·ko 추가.
