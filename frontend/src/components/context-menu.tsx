@@ -40,11 +40,14 @@ const MENU_WIDTH = 192;
 const WIDE_MENU_WIDTH = 256;
 const ITEM_HEIGHT = 32;
 const EDGE_MARGIN = 10;
-const PANEL_CLASS = "w-48 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
-const WIDE_PANEL_CLASS = "w-64 rounded border border-hairline bg-surface py-1 text-caption shadow-lg";
+const PANEL_CLASS = "w-48 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
+const WIDE_PANEL_CLASS = "w-64 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
 // 단축키 힌트 — 숏컷 레전드(shortcut-legend.tsx)의 kbd와 동일한 디자인
 const KBD_CLASS =
   "rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary";
+// danger(삭제) 항목의 칩 — error 토큰의 옅은 틴트로 파괴적 동작을 강조 (목업 Del 빨간 칩)
+const KBD_DANGER_CLASS =
+  "rounded-xs border border-error/30 bg-error/10 px-1.5 py-0.5 text-fine text-error";
 
 // 우측/하단 잘림 보정, 바깥 클릭·ESC로 닫힘.
 export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuProps) {
@@ -123,7 +126,7 @@ export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuP
     };
   }, [items, kbSub, onClose]);
 
-  const menuHeight = items.length * ITEM_HEIGHT + 8;
+  const menuHeight = items.length * ITEM_HEIGHT + 12;
   const width = wide ? WIDE_MENU_WIDTH : MENU_WIDTH;
   const left = Math.min(x, window.innerWidth - width - EDGE_MARGIN);
   const top = Math.min(y, window.innerHeight - menuHeight - EDGE_MARGIN);
@@ -184,7 +187,9 @@ function MenuList({
               {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
               {item.label}
             </span>
-            {item.shortcut && <kbd className={KBD_CLASS}>{item.shortcut}</kbd>}
+            {item.shortcut && (
+              <kbd className={item.danger ? KBD_DANGER_CLASS : KBD_CLASS}>{item.shortcut}</kbd>
+            )}
           </button>
         ),
       )}

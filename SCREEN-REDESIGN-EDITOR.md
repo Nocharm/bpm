@@ -5,13 +5,14 @@
 **작업 표준**: 영역(R) 단위로 분할 · 단위별 커밋 · 검토 직전 시현 데이터 세팅 · 이 표를 계속 갱신 · :3100 OLD와 동작 대조. 설계는 `docs/superpowers/specs/2026-06-28-editor-compare-redesign-design.md`, 구현 단계는 `docs/superpowers/plans/2026-06-28-editor-compare-redesign.md`.
 
 ## 검토 환경
+R1~R5a는 `feat/editor-compare-redesign` → main 머지 후 브랜치 삭제. 이후 단위는 main에서 딴 `feat/editor-redesign-r{n}` 브랜치로 진행(현재 R6 = `feat/editor-redesign-r6`). OLD :3100 bpm-baseline 워크트리는 제거됨 — 대조는 main(=배포 기준)과 로컬 실행으로.
+
 | 로컬 | 브랜치 | URL |
 |------|--------|-----|
-| NEW | feat/editor-compare-redesign | http://localhost:3000/maps/{id} |
-| OLD | main(워크트리 bpm-baseline) | http://localhost:3100/maps/{id} |
-| backend | 공유 | :8000 (`AUTH_ENABLED=false DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.kim`) |
+| NEW | feat/editor-redesign-r6 | http://localhost:3000/maps/{id} |
+| backend | 공유 | :8000 (`DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`, backend/.env) |
 
-**시현 권한**: 편집 화면은 owner/editor(예: admin.kim), 뷰어 화면은 공개맵 viewer(user.lee)로 dev-login.
+**시현 권한**: dev 로그인은 하드코딩 5인 → **디렉터리 검색 피커**(시드 전면 재구성, sysadmin=`admin.sys`). 편집 화면은 owner/editor, 뷰어 화면은 공개맵 viewer로 dev-login.
 
 검증=tsc/lint(+해당 시 vitest) · 시현=브라우저(NEW ↔ OLD 대조) · 검토결과: ✅OK / 🔧수정→반영 / ⏳미정 / ⏸보류.
 
@@ -32,7 +33,7 @@
 | R5b | 우측 인스펙터 | **맵 탭** — 가시성·소유자/협업자 카드·설명·노드 표시정보 토글·엣지 스타일(하단 design 탭에서 이동)·PNG. 기존 `MapDetailCard`·design/download 탭 배선 통합. 이미지 `inspector-map-tab.png` | — | — | ⏳ | — |
 | R5c | 우측 인스펙터 | **승인 탭** — `WorkflowDashboard`를 하단 탭→상단 탭 승격(stepper·승인자·요청). 배선 보존. 이미지 `inspector-approval-tab.png` | — | — | ⏳ | — |
 | R5d | 우측 인스펙터 | **활동 탭** — `CommentSection`(코멘트/답글/해결) + 버전 타임라인(현재/검토중/승인됨/게시됨·비교/복원) 통합. version 탭 배선 이동. 이미지 `inspector-activity-tab.png` | — | — | ⏳ | — |
-| R6 | 컨텍스트 메뉴 | 캔버스/노드/엣지/분기엣지/그룹 메뉴 재스타일. `context-menu.tsx`(openMenu 로직 보존). 이미지 `context-canvas/node/edge/branch-edge.png`·`group-context-and-node-modal.png` | — | — | ⏳ | — |
+| R6 | 컨텍스트 메뉴 | 캔버스/노드/엣지/분기엣지/그룹 메뉴 재스타일(`context-menu.tsx`·openMenu 로직 보존). **범위=재스타일+저비용**(신규 동작 복제·전체선택·앞뒤추가·Enter편집모달은 후속 D/R7로 이월) · **하나씩**(일괄 변경 금지). 하위: **R6a 컴포넌트 공통**(패널 라운드/여백·danger 빨간 칩) ✅ · R6b 캔버스(아이콘·PNG 최상위 승격) · R6c 노드(아이콘·이름변경 F2·색상→서브메뉴) · R6d 엣지(아이콘·섹션라벨; 내용 이미 일치) · R6e 그룹(이름변경 F2·색상›·아이콘). 이미지 `context-canvas/node/edge/branch-edge.png`·`group-context-and-node-modal.png` | R6a lint/build✅ | ⏳ | 🔧 R6a 반영(검토대기) | R6a |
 | R7 | 노드 편집 모달 | 더블클릭 편집 모달(제목/설명/유형/색상/선행·후행/Esc·⌘S). ⚠️ **현재 더블클릭=하위프로세스 드릴** → 충돌, 착수 시 사용자와 정리(일반 노드=모달·서브프로세스=드릴 등). 이미지 `group-context-and-node-modal.png`(모달부) | — | — | ⏳ | — |
 | R8 | 그룹 | 그룹 박스·타이틀바·일괄편집(부서/담당자)·색상. `group-box`·`group-title-bar`·`group-bulk-modal` 재스타일. 이미지 `group-bulk-edit.png`·`group-context-and-node-modal.png` | — | — | ⏳ | — |
 | R9 | 기타 모달/오버레이 | 엣지 모달들(branch/action/select/decision)·`NodeSummaryModal`·dialog 토큰 통일 재스타일. | — | — | ⏳ | — |

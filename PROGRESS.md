@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 에디터 재디자인 R6a: 컨텍스트 메뉴 시각 통일(컴포넌트)
+- **R6 착수**(브랜치 `feat/editor-redesign-r6`, main 기준) — 컨텍스트 메뉴 재스타일. 범위=재스타일+저비용(신규 동작 복제·전체선택·앞뒤추가·Enter편집모달은 후속). 목업 5장 기준 전 메뉴 시각 통일.
+- **R6a 컴포넌트 공통**(`context-menu.tsx`) — 패널 `rounded`→`rounded-md`·`py-1`→`py-1.5`(라운드/여백 통일), danger(삭제) 칩 `KBD_DANGER_CLASS`(error 틴트 `border-error/30 bg-error/10 text-error`, 목업 빨간 Del 칩). menuHeight 클램프 +8→+12 동기화. 내용/동작 변경 없음.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 버전 카드 상세: 아이디 이름 옆 작게 + 날짜 텍스트 박스 위쪽
 - **아이디** — 별도 열 → 이름과 같은 셀에 인라인(바로 옆), 폰트 `text-[10px]`(text-fine 12px보다 작게)·muted. 이름·아이디 각각 max-w 말줄임 유지.
 - **날짜 텍스트 위치** — 날짜 박스 rowspan은 유지, 텍스트만 `align-middle`→`align-top`으로 박스 위쪽에.
