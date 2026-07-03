@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 미니맵 최대 투명도 0.65 + R6b 완료 처리
+- **미니맵 최대 불투명도 0.65**(`minimap-viewport-fill.tsx`) — `useMinimapFadeOpacity`에 `MAX_OPACITY=0.65` 도입, 완전 표시 구간도 0.65 상한(미니맵이 켜져 있어도 뒤쪽 노드가 비침). 페이드 곡선 `0.65→0`으로 스케일(FADE_START 1.2~FADE_END 2.0 유지).
+- **R6b 완료**(트래커) — 사용자 승인, 🔧→✅, 커밋 `f9fc00c·e55494b·09e8d7e` 기입.
+
 ## 2026-07-03 — R6c/R6d 보정: F2 시 메뉴 닫힘 + 엣지 F2 리네임 + 엣지 삭제 divider(검토 피드백)
 - **F2 시 컨텍스트 메뉴 닫힘**(`onFlowKey`) — F2 핸들러를 `!selectedId` 가드 위로 올리고 `setMenu(null)` 추가. 노드/엣지 모두 F2 누르면 편집 진입 + 열린 드롭다운 닫힘(기존엔 메뉴 유지되던 문제).
 - **엣지 F2 = 라벨 리네임** — F2 핸들러에 `selectedEdgeId`(+`!readOnly`) 분기 추가(`startEdgeLabelEdit`). **우클릭 시 엣지 선택**(`onEdgeContextMenu`에 `setSelectedEdgeId`/`setSelectedId(null)` — 노드 우클릭과 동일)해 F2 대상 확정. 엣지 메뉴 `라벨 편집`에 `F2` 칩.

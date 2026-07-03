@@ -21,8 +21,9 @@ const OFFSET_SCALE = 5; // MiniMap offsetScale 기본값
 
 // 페이드 임계값 — 채움비 r = min(vp.w/vbW, vp.h/vbH).
 // r=1 이면 뷰포트 rect가 미니맵을 정확히 꽉 채움. 가득 차자마자 사라지지 않게
-// FADE_START까지 마진을 두고 opacity 1 유지, FADE_END에서 완전히 사라진다(클릭 비활성).
-const FADE_START = 1.2; // 이 채움비까지는 완전 불투명(마진)
+// FADE_START까지 마진을 두고 최대 불투명도(MAX_OPACITY) 유지, FADE_END에서 완전히 사라진다(클릭 비활성).
+const MAX_OPACITY = 0.65; // 미니맵 최대 불투명도 — 켜져 있어도 뒤쪽 노드가 비치도록 반투명 상한
+const FADE_START = 1.2; // 이 채움비까지는 최대 불투명도 유지(마진)
 const FADE_END = 2.0; // 이 채움비 이상이면 완전 투명
 const HIDDEN_EPS = 0.02; // opacity가 이 값 이하면 pointer-events 차단
 
@@ -35,10 +36,10 @@ function useMinimapFadeOpacity(): number {
   const paneW = useStore((s) => s.width);
   const paneH = useStore((s) => s.height);
 
-  if (nodes.length === 0 || zoom <= 0) return 1;
+  if (nodes.length === 0 || zoom <= 0) return MAX_OPACITY;
 
   const b = getNodesBounds(nodes);
-  if (b.width <= 0 || b.height <= 0) return 1;
+  if (b.width <= 0 || b.height <= 0) return MAX_OPACITY;
 
   const viewScale = Math.max(b.width / MM_W, b.height / MM_H);
   const offset = OFFSET_SCALE * viewScale;
@@ -46,9 +47,9 @@ function useMinimapFadeOpacity(): number {
   const vbH = viewScale * MM_H + offset * 2;
 
   const r = Math.min(paneW / zoom / vbW, paneH / zoom / vbH);
-  if (r <= FADE_START) return 1;
+  if (r <= FADE_START) return MAX_OPACITY;
   if (r >= FADE_END) return 0;
-  return 1 - (r - FADE_START) / (FADE_END - FADE_START);
+  return MAX_OPACITY * (1 - (r - FADE_START) / (FADE_END - FADE_START));
 }
 
 // MiniMap과 오버레이를 함께 감싸 채움비에 따라 페이드시키는 래퍼.
