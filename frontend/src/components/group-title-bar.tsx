@@ -3,7 +3,7 @@
 // 그룹 박스 타이틀바 — 이름 편집·색 지정·그룹 전체 이동(드래그 핸들)·선택 멤버 그룹 나가기.
 // ViewportPortal 안 flow 좌표로 박스 상단에 렌더(노드 위, pointer-events 활성).
 
-import { GripVertical, SlidersHorizontal, SquarePen } from "lucide-react";
+import { GripVertical, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
@@ -108,17 +108,6 @@ export function GroupTitleBar({
         >
           {label || t("group.untitled")}
         </span>
-      )}
-      {!readOnly && (
-        <button
-          type="button"
-          className="shrink-0 rounded-xs bg-white/15 p-0.5 text-white/90 hover:bg-white/25"
-          title={t("group.rename")}
-          aria-label={t("group.rename")}
-          onClick={() => setEditing(true)}
-        >
-          <SquarePen size={12} strokeWidth={1.5} />
-        </button>
       )}
       {!readOnly && onBulkEdit && (
         <button

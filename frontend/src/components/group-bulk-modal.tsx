@@ -204,7 +204,9 @@ export function GroupBulkModal({
             />
 
             {/* 색상 일괄 — 스와치 클릭 즉시 멤버 전원 적용 */}
-            <p className="mb-1 text-caption-strong text-ink-secondary">{t("bulk.color")}</p>
+            <p className="mb-1 mt-3 border-t border-hairline pt-3 text-caption-strong text-ink-secondary">
+              {t("bulk.color")}
+            </p>
             <div className="mb-3 flex flex-wrap gap-1">
               {colorPresets
                 .filter((preset) => preset)
@@ -222,7 +224,9 @@ export function GroupBulkModal({
             </div>
 
             {/* 속성 일괄 */}
-            <p className="mb-1 text-caption-strong text-ink-secondary">{t("bulk.attribute")}</p>
+            <p className="mb-1 mt-3 border-t border-hairline pt-3 text-caption-strong text-ink-secondary">
+              {t("bulk.attribute")}
+            </p>
             <div className="flex flex-col gap-2">
               <select
                 className="rounded-sm border border-hairline px-2 py-1 text-caption"
@@ -311,7 +315,7 @@ export function GroupBulkModal({
 
               <button
                 type="button"
-                className={btn}
+                className="mt-1 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 disabled={
                   (action === "set" && value.trim() === "") ||
                   (hasConflict && policy === null)

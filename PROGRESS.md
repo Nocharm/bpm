@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R8a 연필 제거 + R8b: 멤버 일괄편집 모달 재스타일
+- **R8a 타이틀바 연필 삭제**(`group-title-bar.tsx`) — 사용자 요청, 리네임은 이름 더블클릭 유지. SquarePen import 제거.
+- **R8b GroupBulkModal 재스타일**(`group-bulk-modal.tsx`) — **적용(저장) 버튼 accent primary**(목업 바이올렛), 그룹이름/색상/속성 섹션 사이 **구분선**(border-t)으로 카드형 구조화. 충돌 처리·개별 마법사·전 기능 보존.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R8a: 그룹 타이틀바 pill + 박스 dashed (R7 마감)
 - **GroupTitleBar → pill**(`group-title-bar.tsx`) — 흰 배경+색 테두리 → **그룹색 배경 pill**(밝은 콘텐츠). 그립(이동)·색 점(팔레트 토글)·이름(흰 텍스트)·**연필 리네임 버튼 신규**·일괄편집 슬라이더. 색 팔레트에 현재색 선택 링·스와치 크기 up.
 - **GroupBox 외곽선 dashed**(`group-box.tsx`) — 실선→`strokeDasharray 5 4`(목업). fill·orthogonal union·targeted 펄스 유지.
