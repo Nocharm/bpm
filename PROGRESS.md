@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 에디터 재디자인 R6e: 그룹 컨텍스트 메뉴(이름변경·색상 인라인·해제 아이콘)
+- **그룹 우클릭 메뉴**(`page.tsx` menuItems group 분기) — 그룹 이름변경(Type·신규 i18n `ctx.renameGroup`)·**색상 인라인 스와치**(`GROUP_COLOR_PRESETS`/`recolorGroup`)·멤버 일괄편집(SlidersHorizontal)·구분선·그룹 해제(Ungroup)·구분선·정렬·레이아웃(유지). 결정: F2 없음(그룹 선택상태 미존재)·⌘⇧G 칩 생략(미바인딩)·색상 인라인·정렬 유지.
+- **그룹 이름변경 트리거**(`group-title-bar.tsx`) — 메뉴가 `setNewGroupId(groupId)`→`autoEdit`. 마운트 전용 useState로는 이미 뜬 그룹 재호출을 못 받으므로 **렌더 중 상태조정**(prevAutoEdit 비교, effect 아님 → `set-state-in-effect` 회피)으로 편집 진입. 편집 종료(blur/Esc) 시 `onAutoEditConsumed`로 신호 해제 → 반복 이름변경 재트리거.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 미니맵 클릭/스태킹 수정: 래핑 div 제거, 패널에 직접 opacity(z-index 보존)
 - **버그**: 미니맵 페이드 opacity를 static 래핑 div에 주니 opacity<1이 새 **스태킹 컨텍스트**를 만들어 미니맵이 인터랙션 pane 아래로 내려가 클릭이 캔버스로 통과(최대 0.65 상한 후 항상 발생). 지도 위 클릭=캔버스 클릭으로 인식되던 원인.
 - **수정**(`minimap-viewport-fill.tsx`) — 래핑 div 폐기. `MinimapFade`가 MiniMap+채움 오버레이를 직접 렌더하고 opacity/`zIndex:20`을 **각 Panel(이미 absolute + 패널 z-index)에 직접** 적용 → 스태킹 컨텍스트 신규 생성 없음, 미니맵이 노드/캔버스 위 유지·클릭(시점 이동) 유효. 완전 페이드 시에만 `pointer-events:none`. `page.tsx`는 `<MinimapFade nodeColor={...}/>`로 축약(MiniMap 직접 렌더 제거).

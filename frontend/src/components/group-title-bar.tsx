@@ -14,8 +14,10 @@ interface GroupTitleBarProps {
   color: string;
   width: number;
   readOnly: boolean;
-  // 갓 생성된 그룹은 true — 마운트 즉시 이름 편집모드로 진입(무명 그룹 방지)
+  // 갓 생성된 그룹 or 컨텍스트 메뉴 "이름 변경" 시 true — 이름 편집모드로 진입(무명 그룹 방지)
   autoEdit?: boolean;
+  // autoEdit 신호를 편집 진입에 소비한 뒤 부모가 신호를 해제하도록 알림(다음 트리거 재사용 위해)
+  onAutoEditConsumed?: () => void;
   colorPresets: string[];
   onRename: (id: string, label: string) => void;
   onRecolor: (id: string, color: string) => void;
@@ -30,6 +32,7 @@ export function GroupTitleBar({
   width,
   readOnly,
   autoEdit,
+  onAutoEditConsumed,
   colorPresets,
   onRename,
   onRecolor,
@@ -38,8 +41,18 @@ export function GroupTitleBar({
 }: GroupTitleBarProps) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(autoEdit ?? false);
+  const [prevAutoEdit, setPrevAutoEdit] = useState(autoEdit);
   const [showColors, setShowColors] = useState(false);
   const stroke = color || "var(--color-border-strong)";
+
+  // autoEdit가 false→true로 바뀌면(생성 직후 or 컨텍스트 메뉴 "이름 변경") 편집 진입 — 렌더 중 상태 조정(effect 아님).
+  // 마운트 전용 useState로는 이미 뜬 그룹의 재호출을 못 받으므로. 신호 해제는 편집 종료 시(onAutoEditConsumed).
+  if (autoEdit !== prevAutoEdit) {
+    setPrevAutoEdit(autoEdit);
+    if (autoEdit) {
+      setEditing(true);
+    }
+  }
 
   return (
     <div
@@ -75,12 +88,14 @@ export function GroupTitleBar({
           onBlur={(event) => {
             onRename(id, event.target.value);
             setEditing(false);
+            onAutoEditConsumed?.(); // 편집 종료 → 신호 해제(다음 메뉴 이름변경 재트리거 위해)
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.currentTarget.blur();
             } else if (event.key === "Escape") {
               setEditing(false);
+              onAutoEditConsumed?.();
             }
           }}
         />

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Square, Trash2, Type, Undo2, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -3899,27 +3899,39 @@ function MapEditor({ mapId }: { mapId: number }) {
           : new Set(nodes.filter((node) => node.selected).map((node) => node.id));
       const targetCount = ids.size;
       const groupId = menu.targetId;
-      // 그룹 우클릭 = 일괄 편집·그룹 해제, 복수선택 우클릭 = 그룹 생성 (둘 다 정렬 위에 배치)
-      const groupActions: ContextMenuItem[] =
-        menu.kind === "group" && groupId && !readOnly
+      // 그룹 우클릭 = 이름변경·색상(인라인)·멤버 일괄편집·해제·정렬. 이름변경 F2는 그룹 선택상태가 없어 미지원(메뉴만).
+      if (menu.kind === "group" && groupId && !readOnly) {
+        const groupColor = groups.find((g) => g.id === groupId)?.color ?? "";
+        return [
+          // setNewGroupId → GroupTitleBar가 autoEdit로 인라인 이름 편집 진입(신호는 소비 후 해제).
+          { label: t("ctx.renameGroup"), icon: Type, onSelect: () => setNewGroupId(groupId) },
+          {
+            colors: GROUP_COLOR_PRESETS,
+            current: groupColor,
+            onPick: (color: string) => recolorGroup(groupId, color),
+          },
+          { label: t("group.bulkEdit"), icon: SlidersHorizontal, onSelect: () => setBulkEditGroupId(groupId) },
+          { divider: true },
+          { label: t("ctx.disband"), icon: Ungroup, onSelect: () => disbandGroup(groupId) },
+          { divider: true },
+          alignItem(ids, targetCount),
+        ];
+      }
+      // 복수선택 우클릭 = 그룹 생성(+정렬)
+      const selectionActions: ContextMenuItem[] =
+        menu.kind === "selection" && !readOnly
           ? [
-              { label: t("group.bulkEdit"), onSelect: () => setBulkEditGroupId(groupId) },
-              { label: t("ctx.disband"), onSelect: () => disbandGroup(groupId) },
+              {
+                label: t("ctx.createGroup"),
+                shortcut: "G",
+                accel: "g",
+                disabled: targetCount < 2,
+                onSelect: () => createGroupFromSelection(),
+              },
               { divider: true },
             ]
-          : menu.kind === "selection" && !readOnly
-            ? [
-                {
-                  label: t("ctx.createGroup"),
-                  shortcut: "G",
-                  accel: "g",
-                  disabled: targetCount < 2,
-                  onSelect: () => createGroupFromSelection(),
-                },
-                { divider: true },
-              ]
-            : [];
-      return [...groupActions, alignItem(ids, targetCount)];
+          : [];
+      return [...selectionActions, alignItem(ids, targetCount)];
     }
     if (menu.kind === "edge") {
       const edge = edges.find((e) => e.id === menu.targetId);
@@ -4077,6 +4089,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPng,
     createGroupFromSelection,
     disbandGroup,
+    groups,
+    recolorGroup,
     reactFlow,
     t,
   ]);
@@ -6160,6 +6174,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 width={box.width - 56}
                                 readOnly={readOnly}
                                 autoEdit={box.id === newGroupId}
+                                onAutoEditConsumed={() => setNewGroupId(null)}
                                 colorPresets={GROUP_COLOR_PRESETS}
                                 onRename={renameGroup}
                                 onRecolor={recolorGroup}
