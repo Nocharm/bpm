@@ -60,7 +60,7 @@ import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { WithdrawHandoff } from "@/components/withdraw-handoff";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
-import { GroupBulkModal, type BulkAttrField } from "@/components/group-bulk-modal";
+import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
@@ -2912,6 +2912,28 @@ function MapEditor({ mapId }: { mapId: number }) {
             ? { ...node, data: { ...node.data, [field]: valueById.get(node.id) ?? "" } }
             : node,
         ),
+      );
+      scheduleAutoSave();
+      showToast(t("bulk.applied"));
+    },
+    [pushHistory, setNodes, scheduleAutoSave, showToast, t],
+  );
+
+  // 그룹 멤버 부서+담당자 일괄 적용 — people 모드에서 두 필드를 함께 패치
+  const applyGroupPeople = useCallback(
+    (updates: PeopleUpdate[]) => {
+      if (updates.length === 0) {
+        return;
+      }
+      pushHistory();
+      const updateById = new Map(updates.map((u) => [u.id, u]));
+      setNodes((current) =>
+        current.map((node) => {
+          const upd = updateById.get(node.id);
+          return upd
+            ? { ...node, data: { ...node.data, department: upd.department, assignee: upd.assignee } }
+            : node;
+        }),
       );
       scheduleAutoSave();
       showToast(t("bulk.applied"));
@@ -6470,6 +6492,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               onApplyAttribute={(field, updates) =>
                 applyGroupAttribute(field, updates)
               }
+              onApplyPeople={(updates) => applyGroupPeople(updates)}
               onClose={() => setBulkEditGroupId(null)}
             />
           )}

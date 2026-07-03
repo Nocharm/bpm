@@ -1,25 +1,29 @@
 "use client";
 
 // 그룹 멤버 일괄 편집 — 그룹명, 색상 일괄, 속성 일괄(설정/비우기 + 충돌 처리: 교체/추가/건너뛰기/개별 선택), 중단 (#5 2026-06-15)
-import { MousePointerClick, Plus, Replace, SkipForward, type LucideIcon } from "lucide-react";
+import { MousePointerClick, Plus, Replace, SkipForward, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
+import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
-export type BulkAttrField = "assignee" | "department" | "system" | "duration";
+// "people" = combined assignee+department mode; "system"/"duration" = single-field modes
+export type BulkAttrField = "system" | "duration";
+export type BulkMode = "people" | BulkAttrField;
 export type BulkAction = "set" | "clear";
 // 충돌 처리: 교체/추가(콤마)/건너뛰기/개별 선택. null=미선택(필수)
 export type BulkPolicy = "replace" | "append" | "skip" | "individual";
+// Combined people update written by onApplyPeople
+export type PeopleUpdate = { id: string; department: string; assignee: string };
 
-const ATTR_FIELDS: BulkAttrField[] = ["assignee", "department", "system", "duration"];
-const FIELD_LABEL_KEY: Record<BulkAttrField, MessageKey> = {
-  assignee: "field.assignee",
-  department: "field.department",
+const ATTR_MODES: BulkMode[] = ["people", "system", "duration"];
+const MODE_LABEL_KEY: Record<BulkMode, MessageKey> = {
+  people: "field.people",
   system: "field.system",
   duration: "field.duration",
 };
@@ -51,6 +55,7 @@ interface GroupBulkModalProps {
   onRenameGroup: (label: string) => void;
   onApplyColor: (color: string) => void;
   onApplyAttribute: (field: BulkAttrField, updates: Update[]) => void;
+  onApplyPeople: (updates: PeopleUpdate[]) => void;
   onClose: () => void;
 }
 
@@ -62,16 +67,31 @@ export function GroupBulkModal({
   onRenameGroup,
   onApplyColor,
   onApplyAttribute,
+  onApplyPeople,
   onClose,
 }: GroupBulkModalProps) {
   const { t } = useI18n();
-  const [field, setField] = useState<BulkAttrField>("assignee");
+
+  // Shared UI state
+  const [mode, setMode] = useState<BulkMode>("people");
+  const [policy, setPolicy] = useState<BulkPolicy | null>(null);
+  const [showConflicts, setShowConflicts] = useState(false);
+
+  // People mode: target department + assignees
+  const [peopleDept, setPeopleDept] = useState("");
+  const [peopleAssignees, setPeopleAssignees] = useState<string[]>([]);
+  // People wizard — explicit targets list so cross-dept-only subsets work
+  const [peopleWizard, setPeopleWizard] = useState<{
+    targets: BulkMember[];
+    step: number;
+    resolved: PeopleUpdate[];
+  } | null>(null);
+
+  // System/duration mode: action + value + wizard
   const [action, setAction] = useState<BulkAction>("set");
   const [value, setValue] = useState("");
-  const [policy, setPolicy] = useState<BulkPolicy | null>(null); // 디폴트 없음 — 필수
-  const [showConflicts, setShowConflicts] = useState(false);
-  // 개별 선택 마법사 — 충돌 멤버를 순차 처리
   const [wizard, setWizard] = useState<{ step: number; resolved: Update[] } | null>(null);
+
   // 담당자/부서 후보 — 노드 편집과 동일 피커(조회권한 보유 직원만, F5)
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   useEffect(() => {
@@ -98,22 +118,181 @@ export function GroupBulkModal({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  // 충돌 = 기존 값이 있고 새 값과 다른 멤버. 동일한 값은 자동 스킵(충돌 아님)
-  const conflicts = members.filter(
-    (m) => m[field].trim() !== "" && m[field].trim() !== value.trim(),
+  const users = eligible?.users ?? [];
+  const userPersons = users.map((u) => ({ name: u.name, department: u.department }));
+  const targetAssigneeStr = formatAssignees(peopleAssignees);
+  const hasAssignees = peopleAssignees.length > 0;
+
+  // Dept-filtered user options for assignee picker (excludes already-added members)
+  const assigneePickOptions = users
+    .filter((u) => (!peopleDept || u.department === peopleDept) && !peopleAssignees.includes(u.name))
+    .map((u) => ({ value: u.name, label: u.name, sub: u.id || undefined, keywords: u.id }));
+
+  // ---- Conflict detection ----
+
+  // People mode conflict: member has existing dept or assignee that differs from target
+  const isPeopleConflict = (m: BulkMember) => {
+    const hasExisting = m.department !== "" || m.assignee !== "";
+    if (!hasExisting) return false;
+    const deptMatches = m.department === peopleDept;
+    // Department-only mode: only department must match
+    const assigneeMatches = hasAssignees ? m.assignee === targetAssigneeStr : true;
+    return !(deptMatches && assigneeMatches);
+  };
+
+  const peopleConflicts = members.filter(isPeopleConflict);
+
+  // System/duration conflict
+  const attrField = mode !== "people" ? (mode as BulkAttrField) : null;
+  const attrConflicts = attrField
+    ? members.filter((m) => m[attrField].trim() !== "" && m[attrField].trim() !== value.trim())
+    : [];
+
+  const hasConflict =
+    mode === "people"
+      ? action === "set" && peopleConflicts.length > 0
+      : action === "set" && attrConflicts.length > 0;
+
+  // Available policies — people+dept-only omits append (department is single-valued)
+  const availablePolicies: Set<BulkPolicy> = new Set(
+    mode === "people" && !hasAssignees
+      ? ["replace", "individual", "skip"]
+      : ["replace", "append", "skip", "individual"],
   );
-  const hasConflict = action === "set" && conflicts.length > 0;
+  const visiblePolicies = POLICY_META.filter((p) => availablePolicies.has(p.key));
+
+  // Effective policy: if current selection is no longer in available set, treat as null
+  const effectivePolicy = policy !== null && availablePolicies.has(policy) ? policy : null;
+
   const btn =
     "rounded-sm border border-hairline px-2 py-1 text-caption hover:bg-surface-alt disabled:opacity-40";
 
+  // ---- People mode apply ----
+
+  const finishPeople = (updates: PeopleUpdate[]) => {
+    onApplyPeople(updates);
+    setPeopleWizard(null);
+    setPeopleDept("");
+    setPeopleAssignees([]);
+    setPolicy(null);
+  };
+
+  const applyPeople = () => {
+    if (action === "clear") {
+      finishPeople(members.map((m) => ({ id: m.id, department: "", assignee: "" })));
+      return;
+    }
+    if (!hasConflict) {
+      finishPeople(
+        members.map((m) => ({ id: m.id, department: peopleDept, assignee: targetAssigneeStr })),
+      );
+      return;
+    }
+    if (effectivePolicy === null) return;
+
+    if (effectivePolicy === "replace") {
+      finishPeople(
+        members.map((m) => ({ id: m.id, department: peopleDept, assignee: targetAssigneeStr })),
+      );
+      return;
+    }
+
+    if (effectivePolicy === "skip") {
+      const updates = members
+        .filter((m) => !isPeopleConflict(m))
+        .map((m) => ({ id: m.id, department: peopleDept, assignee: targetAssigneeStr }));
+      finishPeople(updates);
+      return;
+    }
+
+    if (effectivePolicy === "individual") {
+      const base = members
+        .filter((m) => !isPeopleConflict(m))
+        .map((m) => ({ id: m.id, department: peopleDept, assignee: targetAssigneeStr }));
+      setPeopleWizard({ targets: peopleConflicts, step: 0, resolved: base });
+      return;
+    }
+
+    if (effectivePolicy === "append") {
+      // Same-dept: append and auto-resolve. Cross-dept: route to individual wizard.
+      const autoResolved: PeopleUpdate[] = [];
+      const crossDeptMembers: BulkMember[] = [];
+
+      for (const m of members) {
+        if (!isPeopleConflict(m)) {
+          // No conflict: append to member's current assignees (or set if empty dept)
+          const existing = parseAssignees(m.assignee);
+          const merged = [
+            ...existing,
+            ...peopleAssignees.filter((n) => !existing.includes(n)),
+          ];
+          autoResolved.push({
+            id: m.id,
+            department: peopleDept || m.department,
+            assignee: formatAssignees(merged),
+          });
+          continue;
+        }
+        const sameDept = m.department === peopleDept || m.department === "";
+        if (sameDept) {
+          const existing = parseAssignees(m.assignee);
+          const merged = [
+            ...existing,
+            ...peopleAssignees.filter((n) => !existing.includes(n)),
+          ];
+          autoResolved.push({
+            id: m.id,
+            department: peopleDept,
+            assignee: formatAssignees(merged),
+          });
+        } else {
+          // Cross-dept append forces dept change — route to individual confirm
+          crossDeptMembers.push(m);
+        }
+      }
+
+      if (crossDeptMembers.length === 0) {
+        finishPeople(autoResolved);
+      } else {
+        setPeopleWizard({ targets: crossDeptMembers, step: 0, resolved: autoResolved });
+      }
+      return;
+    }
+  };
+
+  const resolvePeopleStep = (choice: "replace" | "append" | "skip") => {
+    if (!peopleWizard) return;
+    const member = peopleWizard.targets[peopleWizard.step];
+    const resolved = [...peopleWizard.resolved];
+    if (choice === "replace") {
+      resolved.push({ id: member.id, department: peopleDept, assignee: targetAssigneeStr });
+    } else if (choice === "append") {
+      // Only reachable when same-dept; merge assignees
+      const existing = parseAssignees(member.assignee);
+      const merged = [...existing, ...peopleAssignees.filter((n) => !existing.includes(n))];
+      resolved.push({ id: member.id, department: member.department, assignee: formatAssignees(merged) });
+    }
+    // skip → not added
+    const next = peopleWizard.step + 1;
+    if (next >= peopleWizard.targets.length) {
+      finishPeople(resolved);
+    } else {
+      setPeopleWizard({ ...peopleWizard, step: next, resolved });
+    }
+  };
+
+  // ---- System/duration apply ----
+
   const finish = (updates: Update[]) => {
-    onApplyAttribute(field, updates);
+    if (!attrField) return;
+    onApplyAttribute(attrField, updates);
     setWizard(null);
-    setValue(""); // 적용 후 입력값 초기화
+    setValue("");
     setPolicy(null);
   };
 
   const apply = () => {
+    if (!attrField) return;
     if (action === "clear") {
       finish(members.map((m) => ({ id: m.id, value: "" })));
       return;
@@ -122,42 +301,66 @@ export function GroupBulkModal({
       finish(members.map((m) => ({ id: m.id, value })));
       return;
     }
-    if (policy === null) {
-      return; // 충돌 처리 미선택 — 진행 불가
-    }
-    if (policy === "individual") {
-      // 빈 값 멤버는 즉시 설정, 충돌 멤버는 마법사로
+    if (effectivePolicy === null) return;
+    if (effectivePolicy === "individual") {
       const base = members
-        .filter((m) => m[field].trim() === "")
+        .filter((m) => m[attrField].trim() === "")
         .map((m) => ({ id: m.id, value }));
       setWizard({ step: 0, resolved: base });
       return;
     }
     const updates = members.flatMap<Update>((m) => {
-      const existing = m[field].trim();
+      const existing = m[attrField].trim();
       if (existing === "") return [{ id: m.id, value }];
       if (existing === value.trim()) return []; // 동일 값 — 자동 스킵
-      if (policy === "replace") return [{ id: m.id, value }];
-      if (policy === "append") return [{ id: m.id, value: `${m[field]}, ${value}` }];
+      if (effectivePolicy === "replace") return [{ id: m.id, value }];
+      if (effectivePolicy === "append") return [{ id: m.id, value: `${m[attrField]}, ${value}` }];
       return []; // skip
     });
     finish(updates);
   };
 
   const resolveStep = (choice: "replace" | "append" | "skip") => {
-    if (!wizard) return;
-    const member = conflicts[wizard.step];
+    if (!wizard || !attrField) return;
+    const member = attrConflicts[wizard.step];
     const resolved = [...wizard.resolved];
     if (choice === "replace") resolved.push({ id: member.id, value });
     else if (choice === "append")
-      resolved.push({ id: member.id, value: `${member[field]}, ${value}` });
+      resolved.push({ id: member.id, value: `${member[attrField]}, ${value}` });
     // skip → 추가 안 함
     const next = wizard.step + 1;
-    if (next >= conflicts.length) {
+    if (next >= attrConflicts.length) {
       finish(resolved);
     } else {
       setWizard({ step: next, resolved });
     }
+  };
+
+  // ---- Dept change handler — clears out-of-dept assignees ----
+  const handleDeptChange = (newDept: string) => {
+    setPeopleDept(newDept);
+    if (newDept === "") {
+      setPeopleAssignees([]);
+    } else {
+      setPeopleAssignees((prev) =>
+        prev.filter((name) => {
+          const p = userPersons.find((u) => u.name === name);
+          return p?.department === newDept;
+        }),
+      );
+    }
+    setPolicy(null);
+  };
+
+  const handleAddAssignee = (name: string) => {
+    if (!name) return;
+    const result = addAssignee(peopleDept, peopleAssignees, name, userPersons);
+    setPeopleDept(result.department);
+    setPeopleAssignees(result.assignees);
+  };
+
+  const handleRemoveAssignee = (name: string) => {
+    setPeopleAssignees((prev) => prev.filter((n) => n !== name));
   };
 
   return createPortal(
@@ -170,26 +373,100 @@ export function GroupBulkModal({
         className="w-96 rounded-md bg-surface p-4 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
-        {wizard ? (
-          /* 개별 선택 마법사 — 충돌 멤버 순차 처리 + 진행률 */
+        {/* ---- People wizard ---- */}
+        {peopleWizard ? (
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-body-strong text-ink">{t("bulk.individual")}</p>
               <span className="text-fine text-ink-tertiary">
-                {t("bulk.step", { done: wizard.step + 1, total: conflicts.length })}
+                {t("bulk.step", {
+                  done: peopleWizard.step + 1,
+                  total: peopleWizard.targets.length,
+                })}
               </span>
             </div>
             <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-alt">
               <div
                 className="h-full bg-accent transition-all"
-                style={{ width: `${((wizard.step + 1) / conflicts.length) * 100}%` }}
+                style={{
+                  width: `${((peopleWizard.step + 1) / peopleWizard.targets.length) * 100}%`,
+                }}
+              />
+            </div>
+            {(() => {
+              const member = peopleWizard.targets[peopleWizard.step];
+              const isCrossDept =
+                member.department !== "" && member.department !== peopleDept;
+              return (
+                <>
+                  <p className="mb-1 text-caption text-ink">{member.label || member.id}</p>
+                  <p className="mb-0.5 text-fine text-ink-tertiary">
+                    {t("bulk.existing")}: {[member.department, member.assignee].filter(Boolean).join(" / ") || "—"}
+                  </p>
+                  <p className="mb-2 text-fine text-ink-tertiary">
+                    {t("bulk.value")}:{" "}
+                    {[peopleDept, targetAssigneeStr].filter(Boolean).join(" / ")}
+                  </p>
+                  {isCrossDept && (
+                    <p className="mb-2 rounded-sm bg-surface-alt px-2 py-1 text-fine text-ink-secondary">
+                      {t("bulk.crossDeptConfirm")}
+                    </p>
+                  )}
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className={btn}
+                      onClick={() => resolvePeopleStep("replace")}
+                    >
+                      {t("bulk.replace")}
+                    </button>
+                    {!isCrossDept && hasAssignees && (
+                      <button
+                        type="button"
+                        className={btn}
+                        onClick={() => resolvePeopleStep("append")}
+                      >
+                        {t("bulk.append")}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={btn}
+                      onClick={() => resolvePeopleStep("skip")}
+                    >
+                      {t("bulk.skip")}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+            <div className="mt-3 flex justify-end border-t border-hairline pt-3">
+              <button type="button" className={btn} onClick={() => setPeopleWizard(null)}>
+                {t("bulk.close")}
+              </button>
+            </div>
+          </div>
+        ) : wizard ? (
+          /* ---- System/duration wizard ---- */
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-body-strong text-ink">{t("bulk.individual")}</p>
+              <span className="text-fine text-ink-tertiary">
+                {t("bulk.step", { done: wizard.step + 1, total: attrConflicts.length })}
+              </span>
+            </div>
+            <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-alt">
+              <div
+                className="h-full bg-accent transition-all"
+                style={{ width: `${((wizard.step + 1) / attrConflicts.length) * 100}%` }}
               />
             </div>
             <p className="mb-1 text-caption text-ink">
-              {conflicts[wizard.step].label || conflicts[wizard.step].id}
+              {attrConflicts[wizard.step].label || attrConflicts[wizard.step].id}
             </p>
             <p className="mb-1 text-fine text-ink-tertiary">
-              {t("bulk.existing")}: {conflicts[wizard.step][field]}
+              {t("bulk.existing")}:{" "}
+              {attrField ? attrConflicts[wizard.step][attrField] : ""}
             </p>
             <p className="mb-3 text-fine text-ink-tertiary">
               {t("bulk.value")}: {value}
@@ -212,6 +489,7 @@ export function GroupBulkModal({
             </div>
           </div>
         ) : (
+          /* ---- Main UI ---- */
           <div>
             <div className="mb-3 flex items-center justify-between">
               <p className="text-body-strong text-ink">{t("bulk.title")}</p>
@@ -257,21 +535,24 @@ export function GroupBulkModal({
               {t("bulk.attribute")}
             </p>
             <div className="flex flex-col gap-2">
+              {/* Mode selector */}
               <select
                 className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={field}
+                value={mode}
                 onChange={(event) => {
-                  setField(event.target.value as BulkAttrField);
+                  setMode(event.target.value as BulkMode);
                   setPolicy(null);
+                  setValue("");
                 }}
               >
-                {ATTR_FIELDS.map((f) => (
-                  <option key={f} value={f}>
-                    {t(FIELD_LABEL_KEY[f])}
+                {ATTR_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {t(MODE_LABEL_KEY[m])}
                   </option>
                 ))}
               </select>
 
+              {/* Set / Clear toggle */}
               <div className="flex gap-3 text-caption">
                 <label className="flex items-center gap-1">
                   <input
@@ -291,36 +572,57 @@ export function GroupBulkModal({
                 </label>
               </div>
 
-              {action === "set" &&
-                (field === "assignee" ? (
+              {/* People mode controls */}
+              {mode === "people" && action === "set" && (
+                <div className="flex flex-col gap-1.5">
+                  {/* Department selector */}
                   <SearchSelect
-                    value={value}
-                    options={(eligible?.users ?? []).map((u) => ({
-                      value: u.name,
-                      label: u.name,
-                      sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
-                      keywords: u.id,
-                    }))}
-                    emptyLabel={t("bulk.value")}
-                    placeholder={t("field.searchPlaceholder")}
-                    onChange={setValue}
-                  />
-                ) : field === "department" ? (
-                  <SearchSelect
-                    value={value}
+                    value={peopleDept}
                     options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
-                    emptyLabel={t("bulk.value")}
+                    emptyLabel={t("field.department")}
                     placeholder={t("field.searchPlaceholder")}
-                    onChange={setValue}
+                    onChange={handleDeptChange}
                   />
-                ) : (
-                  <input
-                    className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                    placeholder={t("bulk.value")}
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
+                  {/* Assignee chips */}
+                  {peopleAssignees.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {peopleAssignees.map((name) => (
+                        <span
+                          key={name}
+                          className="flex items-center gap-0.5 rounded-full border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink"
+                        >
+                          {name}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAssignee(name)}
+                            aria-label={`Remove ${name}`}
+                          >
+                            <X size={10} strokeWidth={1.5} className="text-ink-tertiary" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Assignee picker — always value="" so it acts as a one-shot add control */}
+                  <SearchSelect
+                    value=""
+                    options={assigneePickOptions}
+                    emptyLabel={t("bulk.addAssignee")}
+                    placeholder={t("field.searchPlaceholder")}
+                    onChange={handleAddAssignee}
                   />
-                ))}
+                </div>
+              )}
+
+              {/* System/duration value input */}
+              {mode !== "people" && action === "set" && (
+                <input
+                  className="rounded-sm border border-hairline px-2 py-1 text-caption"
+                  placeholder={t("bulk.value")}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                />
+              )}
 
               {/* 충돌 처리 — 설정인데 이미 값 있는 멤버가 있을 때만. 디폴트 없음(필수) */}
               {hasConflict && (
@@ -332,17 +634,25 @@ export function GroupBulkModal({
                     onMouseLeave={() => setShowConflicts(false)}
                   >
                     <span className="cursor-help text-fine text-ink-tertiary underline decoration-dotted">
-                      {t("bulk.conflict", { n: conflicts.length })}
+                      {t("bulk.conflict", {
+                        n: mode === "people" ? peopleConflicts.length : attrConflicts.length,
+                      })}
                     </span>
                     {showConflicts && (
                       <div className="absolute left-0 top-full z-10 mt-1 max-h-40 w-64 overflow-y-auto rounded-sm border border-hairline bg-surface p-2 shadow-lg">
                         <ul className="flex flex-col gap-0.5">
-                          {conflicts.map((m) => (
+                          {(mode === "people" ? peopleConflicts : attrConflicts).map((m) => (
                             <li key={m.id} className="flex justify-between gap-2 text-fine">
                               <span className="truncate text-ink-tertiary">
                                 {m.label || m.id}
                               </span>
-                              <span className="shrink-0 text-ink">{m[field]}</span>
+                              <span className="shrink-0 text-ink">
+                                {mode === "people"
+                                  ? [m.department, m.assignee].filter(Boolean).join(" / ")
+                                  : attrField
+                                    ? m[attrField]
+                                    : ""}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -350,13 +660,13 @@ export function GroupBulkModal({
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {POLICY_META.map(({ key, icon: Icon }) => (
+                    {visiblePolicies.map(({ key, icon: Icon }) => (
                       <button
                         key={key}
                         type="button"
                         onClick={() => setPolicy(key)}
                         className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-2 py-2 text-caption ${
-                          policy === key
+                          effectivePolicy === key
                             ? "border-accent bg-accent-tint text-accent"
                             : "border-hairline text-ink hover:border-accent/50 hover:bg-surface-alt"
                         }`}
@@ -373,10 +683,14 @@ export function GroupBulkModal({
                 type="button"
                 className="mt-1 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 disabled={
-                  (action === "set" && value.trim() === "") ||
-                  (hasConflict && policy === null)
+                  (action === "set" &&
+                    mode === "people" &&
+                    peopleDept === "" &&
+                    peopleAssignees.length === 0) ||
+                  (action === "set" && mode !== "people" && value.trim() === "") ||
+                  (hasConflict && effectivePolicy === null)
                 }
-                onClick={apply}
+                onClick={mode === "people" ? applyPeople : apply}
               >
                 {t("bulk.apply")}
               </button>
