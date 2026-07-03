@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 설계: 담당자/부서 설정 로직 통일(3지점) 스펙 작성
+- 신규 기능 설계 문서 `docs/superpowers/specs/2026-07-03-assignee-department-unified-design.md` — 부서 단일·담당자 같은부서 복수(콤마, 백엔드 무변경)·담당자↔부서 연동·부서변경 확인모달·벌크 결합세트(부서만 3옵션·담당자 4옵션·추가 교차부서 확인)·드리프트 경고. 브레인스토밍으로 확정.
+
 ## 2026-07-03 — R8b 충돌 버튼 4개 완전 균일 + 직관 아이콘
 - **4개 버튼 크기 동일**(`group-bulk-modal.tsx`) — 버튼에 `whitespace-nowrap`(라벨 줄바꿈 방지→높이 균일) + grid 동일폭·중앙정렬로 4개 완전 동일.
 - **아이콘 직관화** — skip `CircleSlash`→`SkipForward`(건너뛰기), individual `ListChecks`→`MousePointerClick`(개별 선택). replace=Replace·append=Plus 유지.
