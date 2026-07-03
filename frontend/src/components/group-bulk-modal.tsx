@@ -4,6 +4,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  ChevronDown,
   MousePointerClick,
   Plus,
   Replace,
@@ -93,6 +94,7 @@ export function GroupBulkModal({
   const [policy, setPolicy] = useState<BulkPolicy | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
   const [showExcluded, setShowExcluded] = useState(false);
+  const [showColors, setShowColors] = useState(false);
 
   // People mode: target department + assignees
   const [peopleDept, setPeopleDept] = useState("");
@@ -558,24 +560,35 @@ export function GroupBulkModal({
               }}
             />
 
-            {/* 색상 일괄 — 스와치 클릭 즉시 멤버 전원 적용 */}
-            <p className="mb-1 mt-3 border-t border-hairline pt-3 text-caption-strong text-ink-secondary">
-              {t("bulk.color")}
-            </p>
-            <div className="mb-3 flex flex-wrap gap-1">
-              {colorPresets
-                .filter((preset) => preset)
-                .map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className="h-5 w-5 rounded-full border border-hairline"
-                    style={{ background: preset }}
-                    title={preset}
-                    aria-label={preset}
-                    onClick={() => onApplyColor(preset)}
-                  />
-                ))}
+            {/* 색상 일괄 — 라벨 호버 시 하위 스와치 메뉴, 스와치 클릭 즉시 그룹 노드 전원 적용 */}
+            <div
+              className="relative mb-3 mt-3 border-t border-hairline pt-3"
+              onMouseEnter={() => setShowColors(true)}
+              onMouseLeave={() => setShowColors(false)}
+            >
+              <p className="flex cursor-default items-center justify-between text-caption-strong text-ink-secondary">
+                {t("bulk.color")}
+                <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              </p>
+              {showColors && (
+                <div className="absolute left-0 right-0 top-full z-20 rounded-sm border border-hairline bg-surface p-2 shadow-lg">
+                  <div className="flex flex-wrap gap-1">
+                    {colorPresets
+                      .filter((preset) => preset)
+                      .map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className="h-5 w-5 rounded-full border border-hairline"
+                          style={{ background: preset }}
+                          title={preset}
+                          aria-label={preset}
+                          onClick={() => onApplyColor(preset)}
+                        />
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 속성 일괄 */}

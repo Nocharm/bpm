@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 벌크 색상 섹션: 명칭 변경 + 호버 하위메뉴
+- **`group-bulk-modal.tsx`** — 색상 라벨을 "그룹 내 노드 색상 일괄 변경"(en "Recolor group nodes")으로 변경, 스와치는 상시 노출 대신 라벨 호버 시 하위 메뉴(top-full 팝오버)로 노출. ChevronDown 표식.
+- **`i18n-messages.ts`** — `bulk.color` 문구 en·ko 변경.
+- 검증: 프론트 lint 0 errors.
+
 ## 2026-07-03 — Task 7: 그룹 벌크에서 start/end/subprocess 제외 + 제외 안내 + 교차부서 확인 필/빨강
 - **`group-bulk-modal.tsx`** — prop `members`→`allMembers`, 파생 `members = allMembers.filter(hasBpmAttributes)`/`excludedMembers`. 속성(부서·담당자·시스템·소요) 충돌·적용 로직 전부 editable(=members)만 순회 → 차단 타입은 일괄 등록 대상 제외. 헤더 카운트는 전체(allMembers). 제외 안내 "총 n개 제외"(호버 시 Start/End/Subprocess 타입별 개수). 교차부서 확인(`bulk.crossDeptConfirm`)을 border-error/bg-error 박스 + AlertTriangle + 부서 old(취소선)→new 필 + 초기화 담당자 취소선 필로 재디자인.
 - **`page.tsx`** — GroupBulkModal `members`에 `nodeType` 전달.
