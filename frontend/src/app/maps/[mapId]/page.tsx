@@ -4630,8 +4630,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         count === (display.data.commentCount ?? 0)
           ? display
           : { ...display, data: { ...display.data, commentCount: count } };
-      // 담당자 부서 드리프트 경고 — eligible 로드 후 계산, 읽기전용에서도 표시
-      const hasWarning = driftedAssignees(withCount.data.department, parseAssignees(withCount.data.assignee), eligible?.users ?? []).length > 0;
+      // 담당자 부서 드리프트 경고 — eligible 로드 완료 후 & BPM 속성 노드만 계산(로드 전 오탐·차단타입 미표시), 읽기전용에서도 표시
+      const hasWarning =
+        eligible !== null &&
+        hasBpmAttributes(withCount.data.nodeType) &&
+        driftedAssignees(withCount.data.department, parseAssignees(withCount.data.assignee), eligible.users).length > 0;
       const withWarning =
         hasWarning === (withCount.data.assigneeWarning ?? false)
           ? withCount

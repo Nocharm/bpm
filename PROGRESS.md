@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 최종 리뷰 픽스: 드리프트 경고 가드 + 부서 동일 재선택 no-op
+- **`page.tsx`** — 드리프트 경고 계산에 `eligible !== null && hasBpmAttributes(nodeType)` 가드 추가(eligible 로드 전 오탐 배지·start/end/subprocess 조치불가 배지 방지).
+- **`node-summary-modal.tsx`/`bpm-attribute-picker.tsx`** — `changeDept`/`handleDeptChange`에 `dept === 현재부서 → return` 조기 반환(SearchSelect가 동일값 재선택에도 onChange 발화 → 모달은 담당자 무단 초기화·인스펙터는 불필요 확인모달 방지).
+- 검증: 프론트 lint 0 errors.
+
 ## 2026-07-03 — Task 6: BPM 속성 start/end/subprocess 숨김
 - `canvas.ts` — `hasBpmAttributes()` helper 추가·export (process·decision만 true).
 - `node-summary-modal.tsx` — `showAttributes: boolean` prop 추가; false면 담당자/부서/시스템/소요 입력 숨김.

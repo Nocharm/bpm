@@ -180,7 +180,8 @@ export function NodeSummaryModal({
   const drifted = driftedAssignees(form.department, assignees, users);
 
   const changeDept = (dept: string) => {
-    if (assignees.length > 0 && dept !== form.department) {
+    if (dept === form.department) return; // 같은 부서 재선택 — SearchSelect는 onChange를 항상 발화하므로 no-op(담당자 무단 초기화 방지)
+    if (assignees.length > 0) {
       setPendingDept(dept);
     } else {
       setForm((f) => ({ ...f, department: dept, assignee: "" }));

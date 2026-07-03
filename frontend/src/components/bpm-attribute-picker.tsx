@@ -57,6 +57,7 @@ export function BpmAttributePicker({
 
   // 부서 변경 — 담당자 있으면 확인 후 초기화, 없으면 즉시 적용
   const handleDeptChange = (newDept: string) => {
+    if (newDept === department) return; // 같은 부서 재선택 — SearchSelect onChange 무조건 발화 → 불필요한 확인 모달 방지
     if (assignees.length > 0) {
       setPendingDept(newDept);
     } else {
