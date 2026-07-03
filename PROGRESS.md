@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R7b: 선행/후행 클릭 내비 + 미저장 변경 확인
+- **선행/후행 클릭 내비**(`node-summary-modal.tsx`·`page.tsx`) — 텍스트 → **클릭 가능한 노드 칩**(←선행/후행→ 2열 박스). 클릭 시 `onNavigate`→`setSummaryNodeId`로 그 노드 편집 전환. predecessors/successors를 `{id,label}[]`로 확장(page.tsx `toRef`).
+- **미저장 변경 확인**(사용자 요구) — 이동 시 버퍼가 dirty면 확인 오버레이(**저장하고 이동 / 저장 안 함 / 취소**). 저장하고 이동=현재 노드 반영 후 전환, 저장 안 함=폐기 후 전환, 취소=머무름. Esc는 오버레이부터 닫음. 신규 i18n 4키(`summary.unsavedTitle/Body`·`saveAndGo`·`discardAndGo`).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R7a 보정: 라이브 편집 → 버퍼 편집(사용자 결정)
 - **버퍼 편집 전환**(`node-summary-modal.tsx`) — 모든 편집필드(제목/설명/색상/담당자/부서/시스템/소요)를 로컬 `form` 버퍼로. **저장**(⌘S/버튼)=`onPatch`+`onCommitLabel`로 노드 반영 후 닫기, **취소**(Esc/바깥클릭/취소버튼)=버퍼 폐기. 노드 변경 시 렌더중 상태조정으로 버퍼 리셋(선후행 내비 대비). `handleSave` `useCallback`으로 effect deps 안정화(exhaustive-deps 경고 해소). 푸터 닫기→취소·저장(+Esc/⌘S 힌트). readOnly는 닫기만.
 - 검증: 프론트 lint 0·build OK.

@@ -6395,24 +6395,23 @@ function MapEditor({ mapId }: { mapId: number }) {
               isCurrentScopeNode
                 ? nodes.find((n) => n.id === id)?.data.label ?? ""
                 : fullGraph?.nodes.find((n) => n.id === id)?.title ?? "";
-            const predecessors = isCurrentScopeNode
-              ? edges
-                  .filter((edge) => edge.target === summaryNodeId)
-                  .map((edge) => labelById(edge.source))
-                  .filter(Boolean)
+            const toRef = (id: string) => ({ id, label: labelById(id) });
+            const predecessors = (isCurrentScopeNode
+              ? edges.filter((edge) => edge.target === summaryNodeId).map((edge) => edge.source)
               : (fullGraph?.edges ?? [])
                   .filter((edge) => edge.target_node_id === summaryNodeId)
-                  .map((edge) => labelById(edge.source_node_id))
-                  .filter(Boolean);
-            const successors = isCurrentScopeNode
-              ? edges
-                  .filter((edge) => edge.source === summaryNodeId)
-                  .map((edge) => labelById(edge.target))
-                  .filter(Boolean)
+                  .map((edge) => edge.source_node_id)
+            )
+              .map(toRef)
+              .filter((ref) => ref.label);
+            const successors = (isCurrentScopeNode
+              ? edges.filter((edge) => edge.source === summaryNodeId).map((edge) => edge.target)
               : (fullGraph?.edges ?? [])
                   .filter((edge) => edge.source_node_id === summaryNodeId)
-                  .map((edge) => labelById(edge.target_node_id))
-                  .filter(Boolean);
+                  .map((edge) => edge.target_node_id)
+            )
+              .map(toRef)
+              .filter((ref) => ref.label);
             const hasChildren = (fullGraph?.nodes ?? []).some((n) => n.parent_node_id === summaryNodeId);
             // 다중 태그 — 그룹 라벨들을 콤마로 합쳐 표시
             const groupLabels = node.data.groupIds
@@ -6441,6 +6440,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 colorPresets={COLOR_PRESETS}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
+                onNavigate={(id) => setSummaryNodeId(id)}
                 onClose={() => setSummaryNodeId(null)}
                 onOpenChild={handleSummaryOpenChild}
               />

@@ -3,7 +3,7 @@
 // 노드 더블클릭 요약 모달 — 전/후 단계, 하위 프로세스 프리뷰, 코멘트(읽기+추가), 메타.
 // 바깥 클릭/Esc로 닫힘. readOnly면 코멘트 추가 숨김.
 
-import { CornerDownRight, SquarePen, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, CornerDownRight, SquarePen, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -47,8 +47,8 @@ interface NodeSummaryModalProps {
   title: string;
   typeLabel: string;
   groupLabel: string | null;
-  predecessors: string[];
-  successors: string[];
+  predecessors: { id: string; label: string }[];
+  successors: { id: string; label: string }[];
   hasChildren: boolean;
   fullGraph: VersionGraph | null;
   readOnly: boolean;
@@ -63,6 +63,8 @@ interface NodeSummaryModalProps {
   onPatch: (patch: NodeEditPatch) => void;
   // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
   onCommitLabel?: (label: string) => void;
+  // 선행/후행 노드 클릭 시 그 노드 편집으로 전환
+  onNavigate: (nodeId: string) => void;
   onClose: () => void;
   // 하위 프로세스가 있을 때 그 캔버스로 진입 (있을 때만 버튼 노출)
   onOpenChild?: () => void;
@@ -88,6 +90,7 @@ export function NodeSummaryModal({
   colorPresets,
   onPatch,
   onCommitLabel,
+  onNavigate,
   onClose,
   onOpenChild,
 }: NodeSummaryModalProps) {
@@ -121,6 +124,43 @@ export function NodeSummaryModal({
     onCommitLabel?.(form.label);
     onClose();
   }, [form, onPatch, onCommitLabel, onClose]);
+
+  // 선후행 내비 — 버퍼에 변경이 있으면 확인(저장/저장안함/취소), 없으면 바로 이동.
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
+  const isDirty =
+    form.label !== title ||
+    form.description !== description ||
+    form.color !== color ||
+    form.assignee !== assignee ||
+    form.department !== department ||
+    form.system !== system ||
+    form.duration !== duration;
+  const requestNavigate = (id: string) => {
+    if (isDirty) {
+      setPendingNav(id);
+    } else {
+      onNavigate(id);
+    }
+  };
+  const navSaveAndGo = () => {
+    onPatch({
+      description: form.description,
+      color: form.color,
+      assignee: form.assignee,
+      department: form.department,
+      system: form.system,
+      duration: form.duration,
+    });
+    onCommitLabel?.(form.label);
+    const id = pendingNav;
+    setPendingNav(null);
+    if (id) onNavigate(id);
+  };
+  const navDiscardAndGo = () => {
+    const id = pendingNav;
+    setPendingNav(null);
+    if (id) onNavigate(id);
+  };
 
   useEffect(() => {
     if (readOnly) {
@@ -162,15 +202,17 @@ export function NodeSummaryModal({
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        // 확인 오버레이가 떠 있으면 그것부터 닫는다(모달 유지).
+        if (pendingNav) setPendingNav(null);
+        else onClose();
       } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        handleSave();
+        if (!pendingNav) handleSave();
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [handleSave, onClose]);
+  }, [handleSave, onClose, pendingNav]);
 
   const submitComment = async () => {
     const body = draft.trim();
@@ -198,7 +240,7 @@ export function NodeSummaryModal({
       onClose={onClose}
     >
       <div
-        className="flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface"
+        className="relative flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface"
         style={{ boxShadow: "var(--shadow-lg)" }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -331,13 +373,50 @@ export function NodeSummaryModal({
             </div>
           )}
 
-          <div>
-            <div className="text-fine text-ink-tertiary">{t("summary.predecessors")}</div>
-            <div className="text-ink">{predecessors.length ? predecessors.join(", ") : t("summary.none")}</div>
-          </div>
-          <div>
-            <div className="text-fine text-ink-tertiary">{t("summary.successors")}</div>
-            <div className="text-ink">{successors.length ? successors.join(", ") : t("summary.none")}</div>
+          {/* 선행/후행 — 클릭 시 그 노드 편집으로 전환(버퍼 변경 있으면 확인) */}
+          <div className="grid grid-cols-2 gap-3 rounded-md border border-hairline p-2.5">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-1 text-fine text-ink-tertiary">
+                <ArrowLeft size={12} strokeWidth={1.5} /> {t("summary.predecessors")}
+              </div>
+              {predecessors.length ? (
+                <div className="flex flex-wrap gap-1">
+                  {predecessors.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => requestNavigate(n.id)}
+                      className="max-w-full truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
+                    >
+                      {n.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center justify-end gap-1 text-fine text-ink-tertiary">
+                {t("summary.successors")} <ArrowRight size={12} strokeWidth={1.5} />
+              </div>
+              {successors.length ? (
+                <div className="flex flex-wrap justify-end gap-1">
+                  {successors.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => requestNavigate(n.id)}
+                      className="max-w-full truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
+                    >
+                      {n.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="block text-right text-fine text-ink-tertiary">{t("summary.none")}</span>
+              )}
+            </div>
           </div>
 
           {hasChildren && (
@@ -458,6 +537,50 @@ export function NodeSummaryModal({
             </>
           )}
         </div>
+
+        {/* 저장하지 않은 변경 확인 — 선후행 이동 시 버퍼에 변경이 있으면 (저장/저장안함/취소) */}
+        {pendingNav && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center p-4"
+            style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
+            onClick={() => setPendingNav(null)}
+          >
+            <div
+              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4"
+              style={{ boxShadow: "var(--shadow-lg)" }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center gap-2 text-body-strong text-ink">
+                <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-error" />
+                {t("summary.unsavedTitle")}
+              </div>
+              <p className="mt-1.5 text-caption text-ink-secondary">{t("summary.unsavedBody")}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setPendingNav(null)}
+                >
+                  {t("summary.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={navDiscardAndGo}
+                >
+                  {t("summary.discardAndGo")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  onClick={navSaveAndGo}
+                >
+                  {t("summary.saveAndGo")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ModalBackdrop>
   );
