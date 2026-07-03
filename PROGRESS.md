@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 핫픽스: 미니맵 줌아웃 페이드(가득 차면 숨김·줌인 시 복귀)
+- **미니맵 페이드**(`minimap-viewport-fill.tsx` + `page.tsx`) — 줌아웃으로 뷰포트 rect가 미니맵을 통째로 덮어 연보라로 가득 차면(무의미) 미니맵+오버레이를 opacity로 페이드 아웃, 줌인 시 페이드 인. 채움비 `r=min(vp.w/vbW, vp.h/vbH)` 기반: `r≤1.2` 불투명(가득 차자마자 안 사라지게 마진), `r≥2.0` 완전 투명. opacity가 ~0이면 `pointer-events:none`으로 클릭 비활성. 신규 `useMinimapFadeOpacity` 훅 + `MinimapFade` 래퍼(opacity는 containing block 미생성→Panel absolute 위치 안 깨짐). `transition-opacity duration-350 ease-smooth`로 연속 페이드.
+- 검증: 프론트 lint 0·build OK, 페이드 곡선 수식 실행 확인(핏뷰=불투명·줌아웃=0·마진·pointer-events 컷). 라이브 브라우저 시각 확인은 인증 스택 미구성으로 미실시.
+
 ## 2026-07-03 — 컨텍스트 메뉴 하위메뉴 상하 뒤집기(위로 펼침)
 - `context-menu.tsx SubmenuItem` — 좌우 뒤집기(`toLeft`)만 있던 것에 **상하(`toUp`)** 추가. hover 시 트리거 rect + 하위메뉴 높이 추정(`length*ITEM_HEIGHT+12`)으로 아래로 넘치고 위에 공간 있으면 `top:0`→`bottom:0`으로 위로 펼침. 화면 하단 근처 `정렬·레이아웃`/`기타` 서브메뉴 잘림 방지.
 - 검증: 프론트 lint 0·build OK.
