@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — Task 2: 노드 편집 모달 담당자 칩·부서 연동·변경 확인
+- **`node-summary-modal.tsx`** — 부서: 단일 SearchSelect + 담당자 있을 때 변경 시 `pendingDept` 확인 오버레이(담당자 초기화). 담당자: 제거 가능 칩(드리프트 담당자 오류색 표시) + 부서 필터링 추가 픽커. `ATTR_FIELDS`에서 assignee/department 제거, system/duration만 유지. Esc·⌘S도 `pendingDept` 인식.
+- **`i18n-messages.ts`** — `assignee.deptChangeTitle`/`assignee.deptChangeBody` en·ko 추가.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-03 — 계획: 담당자/부서 통일 구현 플랜 작성
 - 구현 계획 `docs/superpowers/plans/2026-07-03-assignee-department-unified.md` — 5 태스크(공용 로직+테스트 → 노드모달 칩·연동·확인 → 인스펙터 → 그룹벌크 결합 → 드리프트 경고). writing-plans로 작성, TDD·커밋 단위.
 

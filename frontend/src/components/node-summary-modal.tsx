@@ -30,6 +30,7 @@ import {
   type EligibleAssignees,
   type VersionGraph,
 } from "@/lib/api";
+import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 
@@ -45,9 +46,7 @@ export type NodeEditPatch = Partial<{
   duration: string;
 }>;
 
-const ATTR_FIELDS: { key: "assignee" | "department" | "system" | "duration"; labelKey: "field.assignee" | "field.department" | "field.system" | "field.duration" }[] = [
-  { key: "assignee", labelKey: "field.assignee" },
-  { key: "department", labelKey: "field.department" },
+const ATTR_FIELDS: { key: "system" | "duration"; labelKey: "field.system" | "field.duration" }[] = [
   { key: "system", labelKey: "field.system" },
   { key: "duration", labelKey: "field.duration" },
 ];
@@ -171,6 +170,20 @@ export function NodeSummaryModal({
 
   // 선후행 내비 — 버퍼에 변경이 있으면 확인(저장/저장안함/취소), 없으면 바로 이동.
   const [pendingNav, setPendingNav] = useState<string | null>(null);
+  // 부서 변경 시 담당자가 있으면 확인 오버레이 표시 — 확인 후 담당자 초기화.
+  const [pendingDept, setPendingDept] = useState<string | null>(null);
+  const users = eligible?.users ?? [];
+  const assignees = parseAssignees(form.assignee);
+  const drifted = driftedAssignees(form.department, assignees, users);
+
+  const changeDept = (dept: string) => {
+    if (assignees.length > 0 && dept !== form.department) {
+      setPendingDept(dept);
+    } else {
+      setForm((f) => ({ ...f, department: dept, assignee: "" }));
+    }
+  };
+
   const isDirty =
     form.label !== title ||
     form.description !== description ||
@@ -247,16 +260,17 @@ export function NodeSummaryModal({
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         // 확인 오버레이가 떠 있으면 그것부터 닫는다(모달 유지).
-        if (pendingNav) setPendingNav(null);
+        if (pendingDept) setPendingDept(null);
+        else if (pendingNav) setPendingNav(null);
         else onClose();
       } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (!pendingNav) handleSave();
+        if (!pendingNav && !pendingDept) handleSave();
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [handleSave, onClose, pendingNav]);
+  }, [handleSave, onClose, pendingDept, pendingNav]);
 
   const submitComment = async () => {
     const body = draft.trim();
@@ -388,44 +402,72 @@ export function NodeSummaryModal({
                 </div>
               </div>
               {/* BPM 속성 — 담당자/부서는 조회권한 보유자만 선택(F5), system/duration은 자유입력 */}
+              {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
+              <div className="flex items-center gap-2">
+                <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</label>
+                <SearchSelect
+                  value={form.department}
+                  options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                  emptyLabel={t("summary.none")}
+                  placeholder={t("field.searchPlaceholder")}
+                  onChange={changeDept}
+                />
+              </div>
+              {/* 담당자 칩 + 부서 필터링 추가 픽커 */}
+              <div className="flex items-start gap-2">
+                <label className="mt-1 w-14 shrink-0 text-fine text-ink-tertiary">{t("field.assignee")}</label>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {assignees.map((name) => {
+                      const isDrift = drifted.includes(name);
+                      return (
+                        <span
+                          key={name}
+                          className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                            isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
+                          }`}
+                        >
+                          {name}
+                          <button
+                            type="button"
+                            aria-label={t("summary.close")}
+                            onClick={() =>
+                              setForm((f) => ({ ...f, assignee: formatAssignees(parseAssignees(f.assignee).filter((n) => n !== name)) }))
+                            }
+                          >
+                            <X size={11} strokeWidth={1.5} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <SearchSelect
+                    value=""
+                    options={users
+                      .filter((u) => form.department === "" || u.department === form.department)
+                      .filter((u) => !assignees.includes(u.name))
+                      .map((u) => ({ value: u.name, label: u.name, sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined, keywords: u.id }))}
+                    emptyLabel={t("field.assignee")}
+                    placeholder={t("field.searchPlaceholder")}
+                    onChange={(name) => {
+                      if (!name) return;
+                      const next = addAssignee(form.department, parseAssignees(form.assignee), name, users);
+                      setForm((f) => ({ ...f, department: next.department, assignee: formatAssignees(next.assignees) }));
+                    }}
+                  />
+                </div>
+              </div>
               {ATTR_FIELDS.map(({ key, labelKey }) => (
                 <div key={key} className="flex items-center gap-2">
                   <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
-                  {key === "assignee" ? (
-                    <SearchSelect
-                      value={form.assignee}
-                      options={(eligible?.users ?? []).map((u) => ({
-                        value: u.name,
-                        label: u.name,
-                        // 아이디·부서 표시(표시 전용) / 검색은 이름+아이디만(부서 제외)
-                        sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
-                        keywords: u.id,
-                      }))}
-                      emptyLabel={t("summary.none")}
-                      placeholder={t("field.searchPlaceholder")}
-                      onChange={(value) => setForm((f) => ({ ...f, assignee: value }))}
-                    />
-                  ) : key === "department" ? (
-                    <SearchSelect
-                      value={form.department}
-                      options={(eligible?.departments ?? []).map((d) => ({
-                        value: d,
-                        label: d,
-                      }))}
-                      emptyLabel={t("summary.none")}
-                      placeholder={t("field.searchPlaceholder")}
-                      onChange={(value) => setForm((f) => ({ ...f, department: value }))}
-                    />
-                  ) : (
-                    <input
-                      className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                      value={form[key]}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
-                      }}
-                    />
-                  )}
+                  <input
+                    className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
+                    value={form[key]}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
+                    }}
+                  />
                 </div>
               ))}
               {groupLabel && (
@@ -633,6 +675,46 @@ export function NodeSummaryModal({
                   onClick={navSaveAndGo}
                 >
                   {t("summary.saveAndGo")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 부서 변경 확인 — 담당자 있을 때 부서 변경 시 (확인/취소) */}
+        {pendingDept !== null && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center p-4"
+            style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
+            onClick={() => setPendingDept(null)}
+          >
+            <div
+              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4"
+              style={{ boxShadow: "var(--shadow-lg)" }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center gap-2 text-body-strong text-ink">
+                <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-error" />
+                {t("assignee.deptChangeTitle")}
+              </div>
+              <p className="mt-1.5 text-caption text-ink-secondary">{t("assignee.deptChangeBody")}</p>
+              <div className="mt-3 flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setPendingDept(null)}
+                >
+                  {t("summary.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  onClick={() => {
+                    setForm((f) => ({ ...f, department: pendingDept, assignee: "" }));
+                    setPendingDept(null);
+                  }}
+                >
+                  {t("editor.save")}
                 </button>
               </div>
             </div>
