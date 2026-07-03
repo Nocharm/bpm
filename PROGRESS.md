@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 에디터 재디자인 R6b: 캔버스 컨텍스트 메뉴 아이콘 + PNG 최상위 승격
+- **캔버스(pane) 우클릭 메뉴**(`page.tsx` menuItems) — 노드타입 4항목에 Lucide 아이콘(process=Square·decision=Diamond·start=Circle·end=CircleDot, add-node-menu와 동일 매핑; 신규 module const `NODE_TYPE_ICONS`). PNG 내보내기를 `기타›` 하위메뉴에서 **최상위 항목으로 승격**(Download 아이콘, 라벨 `Ctrl+⇧E`=실제 전역키 유지 — 목업 ⌘E는 라벨거짓 방지로 미채택). 빈 `기타` 서브메뉴 제거.
+- 범위 준수(재스타일+저비용): 전체선택(⌘A)·라이브러리에서 추가·노드추가 통합은 신규 동작이라 미포함. `ctx.more` i18n 키는 orphan으로 남김(제거 안 함).
+- **R6a 완료 처리**(트래커) — 사용자 승인, 🔧→✅.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 트래커: R6 단일 행 → R6a~e 서브유닛 행 분리(R5식)
 - `SCREEN-REDESIGN-EDITOR.md` 마스터 표 — R6 한 행에 뭉쳐있던 하위단계를 **R6a~e 개별 행**으로 분리(R5a~d와 동일 트래킹 단위). R6a=✅(6a8f13d), R6b~e=⏳. 비고에 “큰 R은 서브유닛 행으로 분할·이후 단위도 동일” 원칙 + R6 범위(재스타일+저비용) 명시. stale bit 정리(:3100 OLD 대조→main 대조, 진행순서 R6→R6a~e).
 

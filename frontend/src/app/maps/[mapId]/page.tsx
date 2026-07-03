@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, CornerDownRight, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Trash2, Undo2, Upload, User, X } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Square, Trash2, Undo2, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -234,6 +234,14 @@ const GROUP_COLOR_PRESETS = [
   "#6e5aa0", // iris
   "#5f6068", // graphite
 ];
+
+// 캔버스 우클릭 메뉴 노드 타입별 아이콘 — add-node-menu SHAPES와 동일 매핑(도형 일관)
+const NODE_TYPE_ICONS: Record<string, LucideIcon> = {
+  process: Square,
+  decision: Diamond,
+  start: Circle,
+  end: CircleDot,
+};
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
@@ -3851,19 +3859,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
 
     if (menu.kind === "pane") {
-      // 맨 아래 "기타" 하위 메뉴 — 추후 기능 확장 지점
-      const moreItem: ContextMenuItem = {
-        label: t("ctx.more"),
-        submenu: [
-          { label: t("ctx.exportPng"), shortcut: "Ctrl+⇧E", onSelect: () => void handleExportPng() },
-        ],
+      // PNG 내보내기 — 기타 하위메뉴에서 최상위로 승격(R6b). 실제 키는 전역 Ctrl/⌘+⇧+E(라벨도 그대로).
+      const exportItem: ContextMenuItem = {
+        label: t("ctx.exportPng"),
+        icon: Download,
+        shortcut: "Ctrl+⇧E",
+        onSelect: () => void handleExportPng(),
       };
       if (readOnly) {
-        return [moreItem];
+        return [exportItem];
       }
       return [
         ...NODE_TYPE_OPTIONS.map((option, index) => ({
           label: t(option.labelKey),
+          icon: NODE_TYPE_ICONS[option.value],
           shortcut: String(index + 1),
           accel: String(index + 1),
           onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
@@ -3871,7 +3880,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         { divider: true },
         alignItem(null, selectedCount),
         { divider: true },
-        moreItem,
+        exportItem,
       ];
     }
     // 그룹/복수선택 정렬 메뉴 — ids 미지정(selection)은 선택 노드, 지정(group)은 그룹 멤버 대상
