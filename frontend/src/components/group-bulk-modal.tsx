@@ -4,11 +4,16 @@
 import {
   AlertTriangle,
   ArrowRight,
-  ChevronDown,
+  ChevronRight,
+  Clock,
+  Eraser,
   MousePointerClick,
+  PencilLine,
   Plus,
   Replace,
+  Server,
   SkipForward,
+  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -32,12 +37,17 @@ export type BulkPolicy = "replace" | "append" | "skip" | "individual";
 // Combined people update written by onApplyPeople
 export type PeopleUpdate = { id: string; department: string; assignee: string };
 
-const ATTR_MODES: BulkMode[] = ["people", "system", "duration"];
-const MODE_LABEL_KEY: Record<BulkMode, MessageKey> = {
-  people: "field.people",
-  system: "field.system",
-  duration: "field.duration",
-};
+// 속성 탭 — 3분할(아이콘 + 라벨)
+const MODE_META: { key: BulkMode; icon: LucideIcon; labelKey: MessageKey }[] = [
+  { key: "people", icon: Users, labelKey: "bulk.modePeople" },
+  { key: "system", icon: Server, labelKey: "field.system" },
+  { key: "duration", icon: Clock, labelKey: "field.duration" },
+];
+// 값 설정 / 비우기 — 선택 필(아이콘 + 라벨)
+const ACTION_META: { key: BulkAction; icon: LucideIcon; labelKey: MessageKey }[] = [
+  { key: "set", icon: PencilLine, labelKey: "bulk.actionSet" },
+  { key: "clear", icon: Eraser, labelKey: "bulk.actionClear" },
+];
 
 // 충돌 처리 옵션 — 아이콘 + 2×2 그리드로 한눈에
 const POLICY_META: { key: BulkPolicy; icon: LucideIcon }[] = [
@@ -95,6 +105,7 @@ export function GroupBulkModal({
   const [showConflicts, setShowConflicts] = useState(false);
   const [showExcluded, setShowExcluded] = useState(false);
   const [showColors, setShowColors] = useState(false);
+  const [colorFlyLeft, setColorFlyLeft] = useState(false); // 색상 플라이아웃 화면 가장자리 시 좌측 반전
   // 적용 후 최종 변경 요약 — 확인 시 모달 닫힘
   const [summary, setSummary] = useState<{ id: string; label: string; value: string }[] | null>(
     null,
@@ -183,7 +194,6 @@ export function GroupBulkModal({
       ? ["replace", "individual", "skip"]
       : ["replace", "append", "skip", "individual"],
   );
-  const visiblePolicies = POLICY_META.filter((p) => availablePolicies.has(p.key));
 
   // Effective policy: if current selection is no longer in available set, treat as null
   const effectivePolicy = policy !== null && availablePolicies.has(policy) ? policy : null;
@@ -611,18 +621,26 @@ export function GroupBulkModal({
               }}
             />
 
-            {/* 색상 일괄 — 라벨 호버 시 하위 스와치 메뉴, 스와치 클릭 즉시 그룹 노드 전원 적용 */}
+            {/* 색상 일괄 — 라벨 호버 시 옆으로 펼쳐지는 날개 플라이아웃(가장자리 시 좌측 반전), 스와치 클릭 즉시 그룹 노드 전원 적용 */}
             <div
               className="relative mb-3 mt-3 border-t border-hairline pt-3"
-              onMouseEnter={() => setShowColors(true)}
+              onMouseEnter={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setColorFlyLeft(rect.right + 190 > window.innerWidth);
+                setShowColors(true);
+              }}
               onMouseLeave={() => setShowColors(false)}
             >
               <p className="flex cursor-default items-center justify-between text-caption-strong text-ink-secondary">
                 {t("bulk.color")}
-                <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
               </p>
               {showColors && (
-                <div className="absolute left-0 right-0 top-full z-20 rounded-sm border border-hairline bg-surface p-2 shadow-lg">
+                <div
+                  className={`absolute top-2 z-20 w-44 rounded-sm border border-hairline bg-surface p-2 shadow-lg ${
+                    colorFlyLeft ? "right-full" : "left-full"
+                  }`}
+                >
                   <div className="flex flex-wrap gap-1">
                     {colorPresets
                       .filter((preset) => preset)
@@ -647,41 +665,46 @@ export function GroupBulkModal({
               {t("bulk.attribute")}
             </p>
             <div className="flex flex-col gap-2">
-              {/* Mode selector */}
-              <select
-                className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                value={mode}
-                onChange={(event) => {
-                  setMode(event.target.value as BulkMode);
-                  setPolicy(null);
-                  setValue("");
-                }}
-              >
-                {ATTR_MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {t(MODE_LABEL_KEY[m])}
-                  </option>
+              {/* 속성 탭 — 3분할(아이콘 + 라벨) */}
+              <div className="grid grid-cols-3 gap-1">
+                {MODE_META.map(({ key, icon: Icon, labelKey }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setMode(key);
+                      setPolicy(null);
+                      setValue("");
+                    }}
+                    className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-sm border px-1 py-1.5 text-caption ${
+                      mode === key
+                        ? "border-accent bg-accent-tint text-accent"
+                        : "border-hairline text-ink hover:bg-surface-alt"
+                    }`}
+                  >
+                    <Icon size={14} strokeWidth={1.5} className="shrink-0" />
+                    {t(labelKey)}
+                  </button>
                 ))}
-              </select>
+              </div>
 
-              {/* Set / Clear toggle */}
-              <div className="flex gap-3 text-caption">
-                <label className="flex items-center gap-1">
-                  <input
-                    type="radio"
-                    checked={action === "set"}
-                    onChange={() => setAction("set")}
-                  />
-                  {t("bulk.actionSet")}
-                </label>
-                <label className="flex items-center gap-1">
-                  <input
-                    type="radio"
-                    checked={action === "clear"}
-                    onChange={() => setAction("clear")}
-                  />
-                  {t("bulk.actionClear")}
-                </label>
+              {/* 값 설정 / 비우기 — 선택 필(아이콘 + 라벨) */}
+              <div className="flex gap-1">
+                {ACTION_META.map(({ key, icon: Icon, labelKey }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setAction(key)}
+                    className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-fine ${
+                      action === key
+                        ? "border-accent bg-accent-tint text-accent"
+                        : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                    }`}
+                  >
+                    <Icon size={13} strokeWidth={1.5} className="shrink-0" />
+                    {t(labelKey)}
+                  </button>
+                ))}
               </div>
 
               {/* People mode controls */}
@@ -771,22 +794,27 @@ export function GroupBulkModal({
                       </div>
                     )}
                   </div>
+                  {/* 4개 버튼 위치 고정 — 미가용 옵션은 제거하지 않고 비활성 표시 */}
                   <div className="grid grid-cols-2 gap-1.5">
-                    {visiblePolicies.map(({ key, icon: Icon }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setPolicy(key)}
-                        className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-2 py-2 text-caption ${
-                          effectivePolicy === key
-                            ? "border-accent bg-accent-tint text-accent"
-                            : "border-hairline text-ink hover:border-accent/50 hover:bg-surface-alt"
-                        }`}
-                      >
-                        <Icon size={18} strokeWidth={1.5} className="shrink-0" />
-                        {t(`bulk.${key}` as MessageKey)}
-                      </button>
-                    ))}
+                    {POLICY_META.map(({ key, icon: Icon }) => {
+                      const enabled = availablePolicies.has(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          disabled={!enabled}
+                          onClick={() => setPolicy(key)}
+                          className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-2 py-2 text-caption disabled:cursor-not-allowed disabled:border-hairline disabled:bg-surface disabled:text-ink-tertiary disabled:opacity-50 disabled:hover:border-hairline disabled:hover:bg-surface ${
+                            effectivePolicy === key
+                              ? "border-accent bg-accent-tint text-accent"
+                              : "border-hairline text-ink hover:border-accent/50 hover:bg-surface-alt"
+                          }`}
+                        >
+                          <Icon size={18} strokeWidth={1.5} className="shrink-0" />
+                          {t(`bulk.${key}` as MessageKey)}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

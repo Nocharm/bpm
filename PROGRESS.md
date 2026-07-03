@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — 벌크 모달 컨트롤 재디자인: 속성 3탭 + 설정/비우기 필 + 충돌버튼 고정 + 색상 날개 플라이아웃
+- **`group-bulk-modal.tsx`** — (#6) 속성 select→**아이콘 3분할 탭**(담당/부서·시스템·소요), 값 설정/비우기 라디오→**선택 필**(아이콘). (#3) 충돌 처리 4버튼: 미가용 옵션을 제거(위치 변동)하지 않고 **비활성 표시**로 고정. (#5) 색상 일괄: 하위 드롭다운→**옆으로 펼쳐지는 날개 플라이아웃**(화면 우측 가장자리면 좌측 반전, `getBoundingClientRect`로 판정).
+- **`i18n-messages.ts`** — `bulk.modePeople` en·ko 추가.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — 노드 편집 모달 색상: 팔레트 기본 노출 + 더보기 시 헥사 입력창(재조정)
 - **`node-summary-modal.tsx`** — 사용자 재요청: 팔레트(프리셋 스와치)를 기본 1줄로 노출, "더 보기" 시 헥사 입력창(#RRGGBB)만 노출. 직전 커밋의 카드 우측 플라이아웃·relative 래퍼 제거(원복).
 - **`i18n-messages.ts`** — 미사용된 `field.colorDefault` 제거.
