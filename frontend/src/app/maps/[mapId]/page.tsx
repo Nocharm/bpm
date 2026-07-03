@@ -120,6 +120,7 @@ import {
   deleteComment,
   deleteVersion,
   getDirectory,
+  getEligibleAssignees,
   getFullGraph,
   getGraph,
   getMap,
@@ -146,6 +147,7 @@ import {
   type CheckoutState,
   type CommentItem,
   type DirectoryUser,
+  type EligibleAssignees,
   type FlatNode,
   type Graph,
   type GraphEdge,
@@ -168,6 +170,7 @@ import {
   NodeActionsContext,
   type NodeDisplayField,
 } from "@/lib/node-actions";
+import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -735,6 +738,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [aiEnabled, setAiEnabled] = useState(false);
   // BPM 시스템 관리자 여부 — 활성 점유 강제 인수(force checkout)는 sysadmin만 노출
   const [isSysadmin, setIsSysadmin] = useState(false);
+  // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
+  const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   const [aiPreviewActive, setAiPreviewActive] = useState(false);
   const aiPreviewRef = useRef(false);
 
@@ -1105,6 +1110,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     void listLibraryProcesses().then(setLibraryList).catch(() => undefined);
   }, []);
+
+  // 담당자 후보 목록 — 버전 전환 시 재로드. 읽기전용에서도 드리프트 경고 표시용으로 로드.
+  useEffect(() => {
+    if (versionId === null) return;
+    let active = true;
+    void getEligibleAssignees(versionId)
+      .then((data) => { if (active) setEligible(data); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [versionId]);
 
   useEffect(() => {
     windowGeomRef.current = windowGeom;
@@ -4614,12 +4629,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         count === (display.data.commentCount ?? 0)
           ? display
           : { ...display, data: { ...display.data, commentCount: count } };
+      // 담당자 부서 드리프트 경고 — eligible 로드 후 계산, 읽기전용에서도 표시
+      const hasWarning = driftedAssignees(withCount.data.department, parseAssignees(withCount.data.assignee), eligible?.users ?? []).length > 0;
+      const withWarning =
+        hasWarning === (withCount.data.assigneeWarning ?? false)
+          ? withCount
+          : { ...withCount, data: { ...withCount.data, assigneeWarning: hasWarning } };
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
-      return injectSubEnds(withCount);
+      return injectSubEnds(withWarning);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, ancestorContextNodes, currentScopeIsReadOnly, dragLiveById, injectSubEnds]);
+  }, [nodes, childNodes, inlineComposition, unresolvedCounts, eligible, ancestorContextNodes, currentScopeIsReadOnly, dragLiveById, injectSubEnds]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {

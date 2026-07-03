@@ -31,6 +31,8 @@ export type NodeData = {
   hasDescendantChange?: boolean;
   // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
   commentCount?: number;
+  // 담당자 부서 드리프트 경고 — 에디터가 렌더 시 주입
+  assigneeWarning?: boolean;
   // 하위프로세스 참조 (nodeType==="subprocess")
   linkedMapId?: number | null;
   followLatest?: boolean;

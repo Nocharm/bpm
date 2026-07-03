@@ -4,6 +4,7 @@ import { Fragment, useRef } from "react";
 
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
+  AlertTriangle,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -198,6 +199,19 @@ function DescendantChangeBadge() {
   );
 }
 
+// 담당자 부서 드리프트 경고 뱃지 — 담당자의 현재 부서가 노드 부서와 다를 때 (에디터 전용)
+function AssigneeWarningBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      className="absolute -bottom-2 -right-2 rounded-full border border-hairline bg-surface p-0.5 shadow-sm"
+      title={t("assignee.driftWarn")}
+    >
+      <AlertTriangle size={12} strokeWidth={1.5} className="text-error" />
+    </span>
+  );
+}
+
 // 잠긴 하위프로세스 뱃지 — 권한 없는 링크맵은 펼침/드릴 대신 자물쇠 표시(봉인 박스). ExpandToggleButton 자리를 대체.
 function LockedBadge() {
   const { t } = useI18n();
@@ -307,6 +321,7 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {data.assigneeWarning && <AssigneeWarningBadge />}
         {data.locked ? (
           <LockedBadge />
         ) : (
@@ -340,6 +355,7 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {data.assigneeWarning && <AssigneeWarningBadge />}
         {/* decision 노드는 기존 하위가 있을 때만 펼침 토글 */}
         {data.hasChildren && <ExpandToggleButton nodeId={id} />}
         <NodeHandles />
@@ -376,6 +392,7 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+      {data.assigneeWarning && <AssigneeWarningBadge />}
       {data.hasChildren && <ExpandToggleButton nodeId={id} />}
       <NodeHandles />
     </div>
