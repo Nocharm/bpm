@@ -385,8 +385,8 @@ function EdgeSidesPad({
           aria-hidden
         >
           <defs>
-            <marker id="edgeSidesArrow" markerWidth="5" markerHeight="5" refX="4.5" refY="2.25" orient="auto">
-              <path d="M0,0 L4.5,2.25 L0,4.5 Z" fill="currentColor" />
+            <marker id="edgeSidesArrow" markerWidth="4" markerHeight="4" refX="3.5" refY="1.75" orient="auto">
+              <path d="M0,0 L3.5,1.75 L0,3.5 Z" fill="currentColor" />
             </marker>
           </defs>
           <path

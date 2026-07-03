@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 연결면 화살표 추가 축소 + 미니맵 페이드 종료점 1.6
+- **연결면 커넥터 화살표 축소**(`context-menu.tsx` edgeSidesArrow) — marker 5×5→**4×4**, path 4.5→3.5.
+- **미니맵 페이드 종료점**(`minimap-viewport-fill.tsx`) — `FADE_END` 2.0→**1.6**(채움비 1.6에서 완전 투명 = 더 일찍 사라짐, FADE_START 1.2 유지).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R7b: 선행/후행 클릭 내비 + 미저장 변경 확인
 - **선행/후행 클릭 내비**(`node-summary-modal.tsx`·`page.tsx`) — 텍스트 → **클릭 가능한 노드 칩**(←선행/후행→ 2열 박스). 클릭 시 `onNavigate`→`setSummaryNodeId`로 그 노드 편집 전환. predecessors/successors를 `{id,label}[]`로 확장(page.tsx `toRef`).
 - **미저장 변경 확인**(사용자 요구) — 이동 시 버퍼가 dirty면 확인 오버레이(**저장하고 이동 / 저장 안 함 / 취소**). 저장하고 이동=현재 노드 반영 후 전환, 저장 안 함=폐기 후 전환, 취소=머무름. Esc는 오버레이부터 닫음. 신규 i18n 4키(`summary.unsavedTitle/Body`·`saveAndGo`·`discardAndGo`).

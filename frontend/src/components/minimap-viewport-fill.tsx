@@ -26,7 +26,7 @@ const OFFSET_SCALE = 5; // MiniMap offsetScale 기본값
 // FADE_START까지 마진을 두고 최대 불투명도(MAX_OPACITY) 유지, FADE_END에서 완전히 사라진다(클릭 비활성).
 const MAX_OPACITY = 0.65; // 미니맵 최대 불투명도 — 켜져 있어도 뒤쪽 노드가 비치도록 반투명 상한
 const FADE_START = 1.2; // 이 채움비까지는 최대 불투명도 유지(마진)
-const FADE_END = 2.0; // 이 채움비 이상이면 완전 투명
+const FADE_END = 1.6; // 이 채움비 이상이면 완전 투명(더 일찍 사라짐)
 const HIDDEN_EPS = 0.02; // opacity가 이 값 이하면 pointer-events 차단
 
 // 현재 채움비를 기반으로 미니맵 opacity(1→0)를 계산. nodes/viewport 훅을 쓰므로
