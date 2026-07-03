@@ -32,6 +32,7 @@ export function GroupBox({
         fill="none"
         style={{ stroke }}
         strokeWidth={1.5}
+        strokeDasharray="5 4"
         strokeLinejoin="round"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"

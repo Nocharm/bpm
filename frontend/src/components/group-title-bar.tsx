@@ -3,7 +3,7 @@
 // 그룹 박스 타이틀바 — 이름 편집·색 지정·그룹 전체 이동(드래그 핸들)·선택 멤버 그룹 나가기.
 // ViewportPortal 안 flow 좌표로 박스 상단에 렌더(노드 위, pointer-events 활성).
 
-import { GripVertical, SlidersHorizontal } from "lucide-react";
+import { GripVertical, SlidersHorizontal, SquarePen } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
@@ -55,14 +55,15 @@ export function GroupTitleBar({
   }
 
   return (
+    // 목업 pill — 그룹 색 배경 + 밝은 콘텐츠(이동 그립·색 점·이름·연필 리네임·일괄편집)
     <div
-      className="pointer-events-auto relative flex items-center gap-1 rounded-sm border bg-surface px-1 py-0.5 shadow-sm"
-      style={{ borderColor: stroke, maxWidth: Math.max(80, width) }}
+      className="pointer-events-auto relative flex items-center gap-1.5 rounded-md px-1.5 py-1 shadow-sm"
+      style={{ background: stroke, maxWidth: Math.max(80, width) }}
     >
       {!readOnly && (
         <button
           type="button"
-          className="cursor-grab text-ink-tertiary hover:text-ink active:cursor-grabbing"
+          className="cursor-grab text-white/70 hover:text-white active:cursor-grabbing"
           title={t("group.move")}
           aria-label={t("group.move")}
           onPointerDown={(event) => onMoveStart(id, event)}
@@ -70,10 +71,10 @@ export function GroupTitleBar({
           <GripVertical size={12} strokeWidth={1.5} />
         </button>
       )}
+      {/* 색 점 — 색상 팔레트 토글(colored pill 위라 밝은 점) */}
       <button
         type="button"
-        className="h-3 w-3 shrink-0 rounded-full border border-hairline"
-        style={{ background: stroke }}
+        className="h-2.5 w-2.5 shrink-0 rounded-full bg-white/85 ring-1 ring-white/40 disabled:opacity-70"
         title={t("group.color")}
         aria-label={t("group.color")}
         disabled={readOnly}
@@ -83,7 +84,7 @@ export function GroupTitleBar({
         <input
           autoFocus
           defaultValue={label}
-          className="w-24 rounded-xs border border-hairline px-1 text-fine"
+          className="w-24 rounded-xs border border-white/40 bg-white/95 px-1 text-fine text-ink"
           placeholder={t("group.untitled")}
           onBlur={(event) => {
             onRename(id, event.target.value);
@@ -101,18 +102,28 @@ export function GroupTitleBar({
         />
       ) : (
         <span
-          className="cursor-text truncate text-fine font-medium"
-          style={{ color: stroke }}
+          className="cursor-text truncate text-fine font-medium text-white"
           title={t("group.rename")}
           onDoubleClick={() => !readOnly && setEditing(true)}
         >
           {label || t("group.untitled")}
         </span>
       )}
+      {!readOnly && (
+        <button
+          type="button"
+          className="shrink-0 rounded-xs bg-white/15 p-0.5 text-white/90 hover:bg-white/25"
+          title={t("group.rename")}
+          aria-label={t("group.rename")}
+          onClick={() => setEditing(true)}
+        >
+          <SquarePen size={12} strokeWidth={1.5} />
+        </button>
+      )}
       {!readOnly && onBulkEdit && (
         <button
           type="button"
-          className="shrink-0 text-ink-tertiary hover:text-ink"
+          className="shrink-0 text-white/70 hover:text-white"
           title={t("group.bulkEdit")}
           aria-label={t("group.bulkEdit")}
           onClick={() => onBulkEdit(id)}
@@ -121,14 +132,16 @@ export function GroupTitleBar({
         </button>
       )}
       {showColors && !readOnly && (
-        <div className="absolute left-0 top-full z-10 mt-1 flex w-24 flex-wrap gap-1 rounded-sm border border-hairline bg-surface p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-10 mt-1 flex w-28 flex-wrap gap-1 rounded-sm border border-hairline bg-surface p-1.5 shadow-lg">
           {colorPresets
             .filter((preset) => preset)
             .map((preset) => (
               <button
                 key={preset}
                 type="button"
-                className="h-3.5 w-3.5 rounded-full border border-hairline"
+                className={`h-4 w-4 rounded-full border ${
+                  preset === color ? "ring-2 ring-accent" : "border-hairline"
+                }`}
                 style={{ background: preset }}
                 title={preset}
                 aria-label={preset}

@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R8a: 그룹 타이틀바 pill + 박스 dashed (R7 마감)
+- **GroupTitleBar → pill**(`group-title-bar.tsx`) — 흰 배경+색 테두리 → **그룹색 배경 pill**(밝은 콘텐츠). 그립(이동)·색 점(팔레트 토글)·이름(흰 텍스트)·**연필 리네임 버튼 신규**·일괄편집 슬라이더. 색 팔레트에 현재색 선택 링·스와치 크기 up.
+- **GroupBox 외곽선 dashed**(`group-box.tsx`) — 실선→`strokeDasharray 5 4`(목업). fill·orthogonal union·targeted 펄스 유지.
+- R8을 R8a(타이틀바·박스)·R8b(일괄편집 모달)로 분할. R7b 완료로 R7 마감.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R7b 선후행 재디자인(타입 아이콘·세로 나열·가운데선·가장자리 화살표 hover) + R7a·R6 완료
 - **선후행 재디자인**(`node-summary-modal.tsx`·`page.tsx`) — 칩 맨 앞 **노드 타입 아이콘**(`NavChip`·`NAV_TYPE_ICONS` process=Square/decision=Diamond/start=Circle/end=CircleDot/subprocess=Boxes)·여러 스텝은 **세로 나열**(가로 wrap→flex-col)·가운데 **세로 구분선**(border-r)·화살표는 **양 가장자리**만, 좌/우 컬럼 hover 시 **Previous/Next**(신규 i18n `summary.prev/next`) 노출. predecessors/successors를 `{id,label,nodeType}[]`로 확장(page.tsx `typeById`).
 - **R7a·R6(a~e) 완료 처리**(트래커) — 사용자 승인, 🔧→✅.
