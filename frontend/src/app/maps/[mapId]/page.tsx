@@ -55,7 +55,6 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
-import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { WithdrawHandoff } from "@/components/withdraw-handoff";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -7331,40 +7330,20 @@ function MapEditor({ mapId }: { mapId: number }) {
         />
       )}
       {capPrompt && (
-        <ModalBackdrop
+        <ConfirmDialog
+          icon={<Maximize2 size={28} strokeWidth={1.5} />}
+          title={t("inline.capTitle")}
+          message={t("inline.capBody", {
+            nodes: capPrompt.nodeCount,
+            depth: capPrompt.depth,
+            maxNodes: EXPANSION_LIMITS.maxNodes,
+            maxDepth: EXPANSION_LIMITS.maxDepth,
+          })}
+          confirmLabel={t("inline.capProceed")}
+          cancelLabel={t("inline.capCancel")}
+          onConfirm={confirmCapPrompt}
           onClose={() => setCapPrompt(null)}
-          className="fixed inset-0 z-[1100] flex items-center justify-center px-4 backdrop-blur-sm"
-          style={{ background: "color-mix(in srgb, var(--color-ink) 12%, transparent)" }}
-        >
-          <div
-            className="w-full max-w-sm rounded-md border border-hairline bg-surface p-4"
-            style={{ boxShadow: "var(--shadow-lg)" }}
-          >
-            <h2 className="text-body-strong text-ink">{t("inline.capTitle")}</h2>
-            <p className="mt-2 text-caption text-ink-secondary">
-              {t("inline.capBody", {
-                nodes: capPrompt.nodeCount,
-                depth: capPrompt.depth,
-                maxNodes: EXPANSION_LIMITS.maxNodes,
-                maxDepth: EXPANSION_LIMITS.maxDepth,
-              })}
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption hover:bg-surface-alt"
-                onClick={() => setCapPrompt(null)}
-              >
-                {t("inline.capCancel")}
-              </button>
-              <button
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-white hover:opacity-90"
-                onClick={confirmCapPrompt}
-              >
-                {t("inline.capProceed")}
-              </button>
-            </div>
-          </div>
-        </ModalBackdrop>
+        />
       )}
 
     </NodeActionsContext.Provider>

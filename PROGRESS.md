@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R9b: 확장 한계 확인 다이얼로그를 정규 ConfirmDialog로 교체
+- **`page.tsx`** — 인라인 `capPrompt` 모달(`p-4`·`text-white`·인라인 `boxShadow`·`bg-ink 12%` 백드롭으로 대표 모달과 이탈)을 정규 `<ConfirmDialog>`(icon=`Maximize2`, title/message/confirm/cancel)로 교체 → 대표 모달 재사용으로 토큰 완전 정합. `confirmCapPrompt`가 자체적으로 `setCapPrompt(null)` 하므로 동작 보존. 마지막 사용처 제거로 고아가 된 `ModalBackdrop` import 제거.
+- 참고: `expand-invariant-modal.tsx`는 사용처 0(죽은 코드) — R9에서 미변경·보고만. `prompt-dialog.tsx`는 이미 대표 모달과 정합 → 무변경.
+- 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 후속.)
+
 ## 2026-07-04 — R9a: 엣지 컨텍스트 팝업 4종 토큰 통일(context-menu 팝업 톤)
 - **`edge-branch-modal.tsx`·`edge-action-modal.tsx`·`edge-select-modal.tsx`·`edge-decision-modal.tsx`** — 커서 위치 팝업이라 대표 모달(중앙 아이콘 원)이 아닌 `context-menu.tsx`(R6a) 팝업 컨벤션으로 통일: 패널 `p-1.5`→`py-1.5`+`text-caption`, 항목 `rounded-sm px-2 py-1`→`h-8 px-3` 풀폭 hover, 캡션 `text-fine`→uppercase tracking-wide font-semibold, cancel 앞 divider(`border-divider`) 추가. decision 아이콘 gap `1.5`→`2`. 위치/Esc/ModalBackdrop/onClose 동작·i18n 키 전부 보존(신규 문자열 없음).
 - 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 후속.)
