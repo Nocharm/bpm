@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — 노드 편집 모달 색상: 팔레트 기본 노출 + 더보기 시 헥사 입력창(재조정)
+- **`node-summary-modal.tsx`** — 사용자 재요청: 팔레트(프리셋 스와치)를 기본 1줄로 노출, "더 보기" 시 헥사 입력창(#RRGGBB)만 노출. 직전 커밋의 카드 우측 플라이아웃·relative 래퍼 제거(원복).
+- **`i18n-messages.ts`** — 미사용된 `field.colorDefault` 제거.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-03 — 노드 편집 모달 색상: 1줄 축약 + 더보기 시 모달 오른쪽 플라이아웃
 - **`node-summary-modal.tsx`** — 색상 영역을 평소 1줄(현재 색 스와치 + 값/기본색 + "더 보기" 토글)로 축약. `colorExpanded`/`shownColors`/`COLOR_COLLAPSED` 제거, `colorMoreOpen` 도입. 카드가 `overflow-hidden`이라 카드를 `relative` 래퍼로 감싸고, 팔레트+헥사 입력을 카드 밖 오른쪽(`absolute left-full`) 플라이아웃으로 노출.
 - **`i18n-messages.ts`** — `field.colorDefault` en·ko 추가(`editor.moreColors` 재사용).
