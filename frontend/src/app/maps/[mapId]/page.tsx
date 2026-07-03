@@ -6395,7 +6395,11 @@ function MapEditor({ mapId }: { mapId: number }) {
               isCurrentScopeNode
                 ? nodes.find((n) => n.id === id)?.data.label ?? ""
                 : fullGraph?.nodes.find((n) => n.id === id)?.title ?? "";
-            const toRef = (id: string) => ({ id, label: labelById(id) });
+            const typeById = (id: string): string =>
+              isCurrentScopeNode
+                ? nodes.find((n) => n.id === id)?.data.nodeType ?? "process"
+                : fullGraph?.nodes.find((n) => n.id === id)?.node_type ?? "process";
+            const toRef = (id: string) => ({ id, label: labelById(id), nodeType: typeById(id) });
             const predecessors = (isCurrentScopeNode
               ? edges.filter((edge) => edge.target === summaryNodeId).map((edge) => edge.source)
               : (fullGraph?.edges ?? [])

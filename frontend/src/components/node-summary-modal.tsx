@@ -3,7 +3,20 @@
 // 노드 더블클릭 요약 모달 — 전/후 단계, 하위 프로세스 프리뷰, 코멘트(읽기+추가), 메타.
 // 바깥 클릭/Esc로 닫힘. readOnly면 코멘트 추가 숨김.
 
-import { AlertTriangle, ArrowLeft, ArrowRight, CornerDownRight, SquarePen, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Boxes,
+  Circle,
+  CircleDot,
+  CornerDownRight,
+  Diamond,
+  Square,
+  SquarePen,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -41,14 +54,45 @@ const ATTR_FIELDS: { key: "assignee" | "department" | "system" | "duration"; lab
 
 const COLOR_COLLAPSED = 5; // 색 스와치 기본 1줄 노출 수 — "더 보기"로 전체 펼침
 
+// 선후행 칩의 노드 타입별 아이콘 (캔버스 노드타입 아이콘과 동일 매핑)
+const NAV_TYPE_ICONS: Record<string, LucideIcon> = {
+  process: Square,
+  decision: Diamond,
+  start: Circle,
+  end: CircleDot,
+  subprocess: Boxes,
+};
+
+// 선행/후행 노드 칩 — 타입 아이콘 + 라벨, 클릭 시 그 노드 편집으로 이동.
+function NavChip({
+  node,
+  onClick,
+}: {
+  node: { id: string; label: string; nodeType: string };
+  onClick: () => void;
+}) {
+  const Icon = NAV_TYPE_ICONS[node.nodeType] ?? Square;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={node.label}
+      className="flex min-w-0 items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
+    >
+      <Icon size={11} strokeWidth={1.5} className="shrink-0" />
+      <span className="min-w-0 truncate">{node.label}</span>
+    </button>
+  );
+}
+
 interface NodeSummaryModalProps {
   versionId: number;
   nodeId: string;
   title: string;
   typeLabel: string;
   groupLabel: string | null;
-  predecessors: { id: string; label: string }[];
-  successors: { id: string; label: string }[];
+  predecessors: { id: string; label: string; nodeType: string }[];
+  successors: { id: string; label: string; nodeType: string }[];
   hasChildren: boolean;
   fullGraph: VersionGraph | null;
   readOnly: boolean;
@@ -392,49 +436,43 @@ export function NodeSummaryModal({
             </div>
           )}
 
-          {/* 선행/후행 — 클릭 시 그 노드 편집으로 전환(버퍼 변경 있으면 확인) */}
-          <div className="grid grid-cols-2 gap-3 rounded-md border border-hairline p-2.5">
-            <div className="min-w-0">
-              <div className="mb-1 flex items-center gap-1 text-fine text-ink-tertiary">
-                <ArrowLeft size={12} strokeWidth={1.5} /> {t("summary.predecessors")}
+          {/* 선행/후행 — 타입 아이콘 칩(세로 나열)·가운데 세로선·양 가장자리 화살표(hover 시 Previous/Next). 클릭=그 노드 편집(변경 있으면 확인) */}
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-hairline">
+            {/* 선행(좌) — 좌측 가장자리 화살표 */}
+            <div className="group/prev flex min-w-0 items-stretch border-r border-hairline">
+              <div className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-ink-tertiary">
+                <ArrowLeft size={14} strokeWidth={1.5} />
+                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/prev:opacity-100">
+                  {t("summary.prev")}
+                </span>
               </div>
-              {predecessors.length ? (
-                <div className="flex flex-wrap gap-1">
-                  {predecessors.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => requestNavigate(n.id)}
-                      className="max-w-full truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
-                    >
-                      {n.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
-              )}
+              <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5 pr-1.5">
+                {predecessors.length ? (
+                  predecessors.map((n) => (
+                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
+                  ))
+                ) : (
+                  <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
+                )}
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="mb-1 flex items-center justify-end gap-1 text-fine text-ink-tertiary">
-                {t("summary.successors")} <ArrowRight size={12} strokeWidth={1.5} />
+            {/* 후행(우) — 우측 가장자리 화살표 */}
+            <div className="group/next flex min-w-0 items-stretch">
+              <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5 pl-1.5">
+                {successors.length ? (
+                  successors.map((n) => (
+                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
+                  ))
+                ) : (
+                  <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
+                )}
               </div>
-              {successors.length ? (
-                <div className="flex flex-wrap justify-end gap-1">
-                  {successors.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => requestNavigate(n.id)}
-                      className="max-w-full truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
-                    >
-                      {n.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span className="block text-right text-fine text-ink-tertiary">{t("summary.none")}</span>
-              )}
+              <div className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-ink-tertiary">
+                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/next:opacity-100">
+                  {t("summary.next")}
+                </span>
+                <ArrowRight size={14} strokeWidth={1.5} />
+              </div>
             </div>
           </div>
 

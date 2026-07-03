@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R7b 선후행 재디자인(타입 아이콘·세로 나열·가운데선·가장자리 화살표 hover) + R7a·R6 완료
+- **선후행 재디자인**(`node-summary-modal.tsx`·`page.tsx`) — 칩 맨 앞 **노드 타입 아이콘**(`NavChip`·`NAV_TYPE_ICONS` process=Square/decision=Diamond/start=Circle/end=CircleDot/subprocess=Boxes)·여러 스텝은 **세로 나열**(가로 wrap→flex-col)·가운데 **세로 구분선**(border-r)·화살표는 **양 가장자리**만, 좌/우 컬럼 hover 시 **Previous/Next**(신규 i18n `summary.prev/next`) 노출. predecessors/successors를 `{id,label,nodeType}[]`로 확장(page.tsx `typeById`).
+- **R7a·R6(a~e) 완료 처리**(트래커) — 사용자 승인, 🔧→✅.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R6d 히트박스 강조 방식 변경: 솔리드 → 파스텔 tint + accent 보더
 - 사용자 요청 — 히트박스 톤은 **파스텔(투명 tint) 유지**, 강조는 **보더**로. strip `bg-accent/45`(솔리드톤) → `group-hover:bg-accent-tint`(파스텔) + `group-hover:border-accent`(보더). base에 `border border-transparent`로 상태별 크기 일관. 직접 hover는 `bg-accent/30`. 박스 border는 `accent/50`(부드럽게).
 - 검증: 프론트 lint 0·build OK.
