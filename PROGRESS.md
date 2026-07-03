@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 에디터 재디자인 R5 마무리: 인스펙터 탭 바 반응형 + 트래커 완료 처리
+- **탭 바 반응형**(`inspector-panel.tsx`) — 패널 루트에 `@container`, 탭 라벨 span에 `@[430px]:grid-cols-[1fr]`. 폭 넉넉하면(≥430px) 전 탭 라벨 펼침, 좁으면 기존대로 선택 탭만 라벨(아이콘엔 tooltip 유지) → 아이콘 숨김 없이 잘림 방지. 브레이크포인트=영문 4라벨 실측치 ~410px + 여유 20px, 최종 안전망은 `overflow-hidden`. 빌드 CSS에 `container-type:inline-size`·`min-width:430px` 생성 확인.
+- **R5 완료 처리**(트래커) — R5a~d는 이미 main에 구현·머지(속성 ed8de58, 맵 a5044ce, 승인/활동 37581d8 등)인데 표가 ⏳로 stale이었음 → 전부 ✅ + 커밋 열 기입. 컴포넌트 상단 stale 주석(“속성 탭만 완성”)도 현행화.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 에디터 재디자인 R6a: 컨텍스트 메뉴 시각 통일(컴포넌트)
 - **R6 착수**(브랜치 `feat/editor-redesign-r6`, main 기준) — 컨텍스트 메뉴 재스타일. 범위=재스타일+저비용(신규 동작 복제·전체선택·앞뒤추가·Enter편집모달은 후속). 목업 5장 기준 전 메뉴 시각 통일.
 - **R6a 컴포넌트 공통**(`context-menu.tsx`) — 패널 `rounded`→`rounded-md`·`py-1`→`py-1.5`(라운드/여백 통일), danger(삭제) 칩 `KBD_DANGER_CLASS`(error 틴트 `border-error/30 bg-error/10 text-error`, 목업 빨간 Del 칩). menuHeight 클램프 +8→+12 동기화. 내용/동작 변경 없음.

@@ -1,7 +1,7 @@
 "use client";
 
-// NEW 우측 인스펙터 (R5) — 4탭 패널(속성/맵/승인/활동). 기존 인스펙터와 나란히 두고 비교, 전 탭 완성 후 OLD 제거.
-// 현재: 탭 바 + 속성 탭 빈상태(노드추가·라이브러리·자동정렬·맵 요약). 노드/엣지 폼·맵/승인/활동 탭은 후속 단위.
+// 우측 인스펙터 (R5) — 4탭 패널(속성/맵/승인/활동). 각 탭 콘텐츠는 page.tsx가 slot으로 주입(빈상태·요약은 내부).
+// 탭 바: 좁으면 선택 탭만 라벨 노출, 폭 넉넉하면(@container ≥430px) 전 탭 라벨 펼침 — 잘림 방지.
 import {
   Boxes,
   ChevronRight,
@@ -77,8 +77,9 @@ export function InspectorPanel({
   const [tab, setTab] = useState<InspectorTab>("properties");
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {/* 탭 바 — 접기 화살표 + 아이콘 탭(선택 시 폭 늘며 라벨 노출). 잘림 방지·컴팩트 */}
+    // @container — 패널 폭 기준 컨테이너 쿼리(탭 라벨 전체 펼침 판정용, ≥430px면 전 탭 라벨)
+    <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* 탭 바 — 접기 화살표 + 아이콘 탭. 좁으면 선택 탭만 라벨, 폭 넉넉하면 전 탭 라벨 펼침(≥430px). 잘림 방지 */}
       <div className="flex items-center gap-0.5 border-b border-hairline px-2 py-1">
         <button
           type="button"
@@ -105,7 +106,7 @@ export function InspectorPanel({
             >
               <Icon size={16} strokeWidth={1.5} className="shrink-0" />
               <span
-                className={`grid transition-all duration-350 ease-smooth ${
+                className={`grid transition-all duration-350 ease-smooth @[430px]:grid-cols-[1fr] ${
                   active ? "grid-cols-[1fr]" : "grid-cols-[0fr]"
                 }`}
               >
