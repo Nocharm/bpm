@@ -4,7 +4,7 @@
 // 바깥 클릭/Esc로 닫힘. readOnly면 코멘트 추가 숨김.
 
 import { CornerDownRight, SquarePen, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ScopePreview } from "@/components/scope-preview";
@@ -100,7 +100,27 @@ export function NodeSummaryModal({
   const [colorExpanded, setColorExpanded] = useState(false);
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
-  const attrValues = { assignee, department, system, duration };
+  // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
+  const [form, setForm] = useState({ label: title, description, color, assignee, department, system, duration });
+  const [prevNodeId, setPrevNodeId] = useState(nodeId);
+  // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
+  if (nodeId !== prevNodeId) {
+    setPrevNodeId(nodeId);
+    setForm({ label: title, description, color, assignee, department, system, duration });
+  }
+  // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
+  const handleSave = useCallback(() => {
+    onPatch({
+      description: form.description,
+      color: form.color,
+      assignee: form.assignee,
+      department: form.department,
+      system: form.system,
+      duration: form.duration,
+    });
+    onCommitLabel?.(form.label);
+    onClose();
+  }, [form, onPatch, onCommitLabel, onClose]);
 
   useEffect(() => {
     if (readOnly) {
@@ -138,19 +158,19 @@ export function NodeSummaryModal({
     };
   }, [versionId, nodeId]);
 
-  // Esc·⌘S로 닫기 — 편집은 라이브(변경 즉시 반영)라 ⌘S는 브라우저 저장을 막고 모달만 닫는다.
+  // Esc=취소(버퍼 폐기)·⌘S=저장. ⌘S는 브라우저 저장 대화상자를 막는다.
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
       } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        onClose();
+        handleSave();
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [handleSave, onClose]);
 
   const submitComment = async () => {
     const body = draft.trim();
@@ -213,10 +233,9 @@ export function NodeSummaryModal({
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
                 <input
                   className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
-                  value={title}
+                  value={form.label}
                   aria-label={t("field.title")}
-                  onChange={(event) => onPatch({ label: event.target.value })}
-                  onBlur={(event) => onCommitLabel?.(event.target.value)}
+                  onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
                 />
               </div>
               {/* 설명 — 노드 부연(NodeData.description, 라이브 반영) */}
@@ -225,9 +244,9 @@ export function NodeSummaryModal({
                 <textarea
                   className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
                   rows={2}
-                  value={description}
+                  value={form.description}
                   aria-label={t("field.description")}
-                  onChange={(event) => onPatch({ description: event.target.value })}
+                  onChange={(event) => setForm((f) => ({ ...f, description: event.target.value }))}
                 />
               </div>
               {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
@@ -245,9 +264,9 @@ export function NodeSummaryModal({
                       type="button"
                       title={preset || "default"}
                       aria-label={preset || "default"}
-                      onClick={() => onPatch({ color: preset })}
+                      onClick={() => setForm((f) => ({ ...f, color: preset }))}
                       className={`h-5 w-5 rounded-full border ${
-                        color === preset ? "ring-2 ring-accent" : "border-hairline"
+                        form.color === preset ? "ring-2 ring-accent" : "border-hairline"
                       }`}
                       style={{ background: preset || "var(--color-surface-alt)" }}
                     />
@@ -269,7 +288,7 @@ export function NodeSummaryModal({
                   <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
                   {key === "assignee" ? (
                     <SearchSelect
-                      value={assignee}
+                      value={form.assignee}
                       options={(eligible?.users ?? []).map((u) => ({
                         value: u.name,
                         label: u.name,
@@ -279,27 +298,26 @@ export function NodeSummaryModal({
                       }))}
                       emptyLabel={t("summary.none")}
                       placeholder={t("field.searchPlaceholder")}
-                      onChange={(value) => onPatch({ assignee: value })}
+                      onChange={(value) => setForm((f) => ({ ...f, assignee: value }))}
                     />
                   ) : key === "department" ? (
                     <SearchSelect
-                      value={department}
+                      value={form.department}
                       options={(eligible?.departments ?? []).map((d) => ({
                         value: d,
                         label: d,
                       }))}
                       emptyLabel={t("summary.none")}
                       placeholder={t("field.searchPlaceholder")}
-                      onChange={(value) => onPatch({ department: value })}
+                      onChange={(value) => setForm((f) => ({ ...f, department: value }))}
                     />
                   ) : (
                     <input
                       className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                      value={attrValues[key]}
+                      value={form[key]}
                       onChange={(event) => {
                         const value = event.target.value;
-                        if (key === "system") onPatch({ system: value });
-                        else onPatch({ duration: value });
+                        setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
                       }}
                     />
                   )}
@@ -396,20 +414,49 @@ export function NodeSummaryModal({
           </div>
         </div>
 
-        {/* 푸터 — Esc/⌘S 닫기 힌트 + 닫기 버튼(편집은 라이브 반영이라 저장 개념 없이 닫기) */}
+        {/* 푸터 — 버퍼 편집: Esc=취소 / ⌘S=저장 힌트 + 취소·저장 버튼. readOnly면 닫기만. */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2">
-          <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
-            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
-            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
-            {t("summary.close")}
-          </span>
-          <button
-            type="button"
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
-            onClick={onClose}
-          >
-            {t("summary.close")}
-          </button>
+          {readOnly ? (
+            <>
+              <span />
+              <button
+                type="button"
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={onClose}
+              >
+                {t("summary.close")}
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-2 text-fine text-ink-tertiary">
+                <span className="flex items-center gap-1">
+                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
+                  {t("summary.cancel")}
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
+                  {t("editor.save")}
+                </span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={onClose}
+                >
+                  {t("summary.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                  onClick={handleSave}
+                >
+                  {t("editor.save")}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </ModalBackdrop>
