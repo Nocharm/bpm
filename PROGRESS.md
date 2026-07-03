@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 벌크 적용 후 변경 요약 → 확인 시 닫힘
+- **`group-bulk-modal.tsx`** — Apply(또는 개별 마법사 완료) 후 `finishPeople`/`finish`가 적용 결과를 `summary` state로 수집(멤버 라벨 → 새 값, 비움은 "비움"), 최상위 렌더 분기로 요약 패널 노출. 확인 버튼(accent) → `onClose`로 모달 닫힘. 변경 0건이면 "적용된 변경 없음".
+- **`i18n-messages.ts`** — `bulk.summaryTitle`/`summaryCount`/`summaryNone`/`confirm`/`cleared` en·ko 추가.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-03 — 벌크 색상 섹션: 명칭 변경 + 호버 하위메뉴
 - **`group-bulk-modal.tsx`** — 색상 라벨을 "그룹 내 노드 색상 일괄 변경"(en "Recolor group nodes")으로 변경, 스와치는 상시 노출 대신 라벨 호버 시 하위 메뉴(top-full 팝오버)로 노출. ChevronDown 표식.
 - **`i18n-messages.ts`** — `bulk.color` 문구 en·ko 변경.

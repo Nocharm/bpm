@@ -95,6 +95,10 @@ export function GroupBulkModal({
   const [showConflicts, setShowConflicts] = useState(false);
   const [showExcluded, setShowExcluded] = useState(false);
   const [showColors, setShowColors] = useState(false);
+  // 적용 후 최종 변경 요약 — 확인 시 모달 닫힘
+  const [summary, setSummary] = useState<{ id: string; label: string; value: string }[] | null>(
+    null,
+  );
 
   // People mode: target department + assignees
   const [peopleDept, setPeopleDept] = useState("");
@@ -189,8 +193,18 @@ export function GroupBulkModal({
 
   // ---- People mode apply ----
 
+  // 라벨 조회 헬퍼 — 요약 표시용
+  const labelOf = (id: string) => allMembers.find((m) => m.id === id)?.label || id;
+
   const finishPeople = (updates: PeopleUpdate[]) => {
     onApplyPeople(updates);
+    setSummary(
+      updates.map((u) => ({
+        id: u.id,
+        label: labelOf(u.id),
+        value: [u.department, u.assignee].filter(Boolean).join(" / ") || t("bulk.cleared"),
+      })),
+    );
     setPeopleWizard(null);
     setPeopleDept("");
     setPeopleAssignees([]);
@@ -306,6 +320,13 @@ export function GroupBulkModal({
   const finish = (updates: Update[]) => {
     if (!attrField) return;
     onApplyAttribute(attrField, updates);
+    setSummary(
+      updates.map((u) => ({
+        id: u.id,
+        label: labelOf(u.id),
+        value: u.value || t("bulk.cleared"),
+      })),
+    );
     setWizard(null);
     setValue("");
     setPolicy(null);
@@ -393,8 +414,38 @@ export function GroupBulkModal({
         className="w-96 rounded-md bg-surface p-4 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* ---- People wizard ---- */}
-        {peopleWizard ? (
+        {/* ---- 적용 후 최종 변경 요약 — 확인 시 모달 닫힘 ---- */}
+        {summary ? (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-body-strong text-ink">{t("bulk.summaryTitle")}</p>
+              <span className="text-fine text-ink-tertiary">
+                {t("bulk.summaryCount", { n: summary.length })}
+              </span>
+            </div>
+            {summary.length === 0 ? (
+              <p className="mb-3 text-caption text-ink-tertiary">{t("bulk.summaryNone")}</p>
+            ) : (
+              <ul className="mb-3 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+                {summary.map((r) => (
+                  <li key={r.id} className="flex justify-between gap-2 text-fine">
+                    <span className="truncate text-ink-tertiary">{r.label}</span>
+                    <span className="shrink-0 text-ink">{r.value}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex justify-end border-t border-hairline pt-3">
+              <button
+                type="button"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                onClick={onClose}
+              >
+                {t("bulk.confirm")}
+              </button>
+            </div>
+          </div>
+        ) : peopleWizard ? (
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-body-strong text-ink">{t("bulk.individual")}</p>
