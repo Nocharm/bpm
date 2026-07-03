@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 트래커: R6 단일 행 → R6a~e 서브유닛 행 분리(R5식)
+- `SCREEN-REDESIGN-EDITOR.md` 마스터 표 — R6 한 행에 뭉쳐있던 하위단계를 **R6a~e 개별 행**으로 분리(R5a~d와 동일 트래킹 단위). R6a=✅(6a8f13d), R6b~e=⏳. 비고에 “큰 R은 서브유닛 행으로 분할·이후 단위도 동일” 원칙 + R6 범위(재스타일+저비용) 명시. stale bit 정리(:3100 OLD 대조→main 대조, 진행순서 R6→R6a~e).
+
 ## 2026-07-03 — 커밋 룰: PROGRESS + 활성 트래커를 코드와 같은 커밋에 동반 갱신
 - `rules/common/git.md` “Before Every Commit” 확장 — 기존 PROGRESS 갱신에 더해 **현재 검토 중인 체크리스트/트래커 md**(예 `SCREEN-REDESIGN-EDITOR.md`)의 내용·완료상태 변경도 **같은 커밋에** 반영하도록 명문화(별도 커밋으로 미루지 않음).
 
