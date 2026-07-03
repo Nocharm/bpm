@@ -51,8 +51,6 @@ const ATTR_FIELDS: { key: "system" | "duration"; labelKey: "field.system" | "fie
   { key: "duration", labelKey: "field.duration" },
 ];
 
-const COLOR_COLLAPSED = 5; // 색 스와치 기본 1줄 노출 수 — "더 보기"로 전체 펼침
-
 // 선후행 칩의 노드 타입별 아이콘 (캔버스 노드타입 아이콘과 동일 매핑)
 const NAV_TYPE_ICONS: Record<string, LucideIcon> = {
   process: Square,
@@ -146,7 +144,7 @@ export function NodeSummaryModal({
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [colorExpanded, setColorExpanded] = useState(false);
+  const [colorMoreOpen, setColorMoreOpen] = useState(false);
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
@@ -239,10 +237,6 @@ export function NodeSummaryModal({
       active = false;
     };
   }, [versionId, readOnly]);
-  const shownColors =
-    colorExpanded || colorPresets.length <= COLOR_COLLAPSED
-      ? colorPresets
-      : colorPresets.slice(0, COLOR_COLLAPSED);
 
   // 해당 노드 코멘트 로드(진입 1회) — 실패해도 모달은 동작(빈 목록)
   useEffect(() => {
@@ -301,10 +295,10 @@ export function NodeSummaryModal({
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >
+      <div className="relative" onClick={(event) => event.stopPropagation()}>
       <div
         className="relative flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface"
         style={{ boxShadow: "var(--shadow-lg)" }}
-        onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
           <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-body-strong text-ink">
@@ -358,52 +352,28 @@ export function NodeSummaryModal({
                 <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</label>
                 <span className="min-w-0 flex-1 truncate text-caption text-ink-secondary">{typeLabel}</span>
               </div>
-              {/* 색 — 타입별 프리셋 스와치(colorsForType) + 커스텀 헥사 입력 */}
-              <div className="flex items-start gap-2">
-                <span className="w-14 shrink-0 pt-1 text-fine text-ink-tertiary">{t("field.color")}</span>
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {shownColors.map((preset) => (
-                      <button
-                        key={preset || "default"}
-                        type="button"
-                        title={preset || "default"}
-                        aria-label={preset || "default"}
-                        onClick={() => setForm((f) => ({ ...f, color: preset }))}
-                        className={`h-5 w-5 rounded-full border ${
-                          form.color === preset ? "ring-2 ring-accent" : "border-hairline"
-                        }`}
-                        style={{ background: preset || "var(--color-surface-alt)" }}
-                      />
-                    ))}
-                    {colorPresets.length > COLOR_COLLAPSED && !colorExpanded && (
-                      <button
-                        type="button"
-                        className="px-1 text-fine text-ink-tertiary hover:text-ink"
-                        onClick={() => setColorExpanded(true)}
-                      >
-                        {t("editor.moreColors")}
-                      </button>
-                    )}
-                  </div>
-                  {/* 커스텀 헥사 코드(#RRGGBB) — 프리셋 외 임의 색. 좌측 미리보기 스와치. */}
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="h-5 w-5 shrink-0 rounded-full border border-hairline"
-                      style={{ background: form.color || "var(--color-surface-alt)" }}
-                    />
-                    <input
-                      type="text"
-                      value={form.color}
-                      onChange={(event) => setForm((f) => ({ ...f, color: event.target.value }))}
-                      placeholder="#RRGGBB"
-                      maxLength={7}
-                      spellCheck={false}
-                      aria-label={t("field.color")}
-                      className="w-24 rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink"
-                    />
-                  </div>
-                </div>
+              {/* 색 — 평소 1줄(현재 색 스와치+값), "더 보기" 시 모달 오른쪽 플라이아웃에 팔레트+헥사 입력 */}
+              <div className="flex items-center gap-2">
+                <span className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
+                <span
+                  className="h-5 w-5 shrink-0 rounded-full border border-hairline"
+                  style={{ background: form.color || "var(--color-surface-alt)" }}
+                />
+                <span className="min-w-0 flex-1 truncate text-fine text-ink">
+                  {form.color || t("field.colorDefault")}
+                </span>
+                <button
+                  type="button"
+                  aria-expanded={colorMoreOpen}
+                  className={`shrink-0 rounded-xs px-1.5 py-0.5 text-fine ${
+                    colorMoreOpen
+                      ? "bg-accent-tint text-accent"
+                      : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                  }`}
+                  onClick={() => setColorMoreOpen((v) => !v)}
+                >
+                  {t("editor.moreColors")}
+                </button>
               </div>
               {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
               {showAttributes && (
@@ -725,6 +695,47 @@ export function NodeSummaryModal({
                   {t("editor.save")}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+      </div>
+        {/* 색상 더보기 플라이아웃 — 카드 overflow 밖(모달 오른쪽)에 팔레트+헥사 입력 */}
+        {colorMoreOpen && !readOnly && (
+          <div
+            className="absolute left-full top-1/2 z-10 ml-2 w-52 -translate-y-1/2 rounded-sm border border-hairline bg-surface p-3"
+            style={{ boxShadow: "var(--shadow-lg)" }}
+          >
+            <p className="mb-2 text-fine text-ink-tertiary">{t("field.color")}</p>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {colorPresets.map((preset) => (
+                <button
+                  key={preset || "default"}
+                  type="button"
+                  title={preset || "default"}
+                  aria-label={preset || "default"}
+                  onClick={() => setForm((f) => ({ ...f, color: preset }))}
+                  className={`h-5 w-5 rounded-full border ${
+                    form.color === preset ? "ring-2 ring-accent" : "border-hairline"
+                  }`}
+                  style={{ background: preset || "var(--color-surface-alt)" }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 border-t border-hairline pt-2">
+              <span
+                className="h-5 w-5 shrink-0 rounded-full border border-hairline"
+                style={{ background: form.color || "var(--color-surface-alt)" }}
+              />
+              <input
+                type="text"
+                value={form.color}
+                onChange={(event) => setForm((f) => ({ ...f, color: event.target.value }))}
+                placeholder="#RRGGBB"
+                maxLength={7}
+                spellCheck={false}
+                aria-label={t("field.color")}
+                className="w-24 rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink"
+              />
             </div>
           </div>
         )}

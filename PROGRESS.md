@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 노드 편집 모달 색상: 1줄 축약 + 더보기 시 모달 오른쪽 플라이아웃
+- **`node-summary-modal.tsx`** — 색상 영역을 평소 1줄(현재 색 스와치 + 값/기본색 + "더 보기" 토글)로 축약. `colorExpanded`/`shownColors`/`COLOR_COLLAPSED` 제거, `colorMoreOpen` 도입. 카드가 `overflow-hidden`이라 카드를 `relative` 래퍼로 감싸고, 팔레트+헥사 입력을 카드 밖 오른쪽(`absolute left-full`) 플라이아웃으로 노출.
+- **`i18n-messages.ts`** — `field.colorDefault` en·ko 추가(`editor.moreColors` 재사용).
+- 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 검증 예정.)
+
 ## 2026-07-03 — 벌크 적용 후 변경 요약 → 확인 시 닫힘
 - **`group-bulk-modal.tsx`** — Apply(또는 개별 마법사 완료) 후 `finishPeople`/`finish`가 적용 결과를 `summary` state로 수집(멤버 라벨 → 새 값, 비움은 "비움"), 최상위 렌더 분기로 요약 패널 노출. 확인 버튼(accent) → `onClose`로 모달 닫힘. 변경 0건이면 "적용된 변경 없음".
 - **`i18n-messages.ts`** — `bulk.summaryTitle`/`summaryCount`/`summaryNone`/`confirm`/`cleared` en·ko 추가.
