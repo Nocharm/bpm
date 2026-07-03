@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 버전 카드 상세: 행 세로 중앙정렬 + 날짜 박스 rowspan 유지·시간과 상하 정렬
+- **행 세로 중앙정렬** — `tr` `align-top`→`align-middle`. 왼쪽 상태필과 우측(이름·아이디·시간) 높이 중앙이 맞음(#2).
+- **날짜 박스 rowspan 유지 + 정렬** — 날짜를 (직전 커밋의) 콘텐츠 높이 span에서 다시 **td 테두리(rowspan)**로 되돌려 여러 행을 덮되, 시간도 **td 테두리(셀=행 높이 채움)**로 만들어 rowspan 셀의 상단=첫 행·하단=마지막 행 → 첫/마지막 시간 박스와 상하 정확히 정렬(테이블 구조상 보장).
+- 경계 `border-border-strong`·폭 고정(날짜 w-24·시간 w-14)은 유지.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 버전 카드 날짜/시간 박스: 진한 경계·폭 고정·상하 정렬
 - **경계 진하게** — 날짜(연한 `border-divider`)·시간(`border-hairline`) → **`border-border-strong`**(#c9c9d1). 거의 안 보이던 테두리 가시화.
 - **폭 고정** — 시간 박스 `w-14`(값에 따라 폭 안 흔들림), 날짜 박스 `w-24`, 둘 다 `text-center`·`whitespace-nowrap`.

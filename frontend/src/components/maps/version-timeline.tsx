@@ -221,7 +221,7 @@ export function VersionTimeline({
                       <table className="w-full min-w-max border-separate border-spacing-x-2 border-spacing-y-1 text-fine">
                         <tbody>
                           {detailRows.map(({ evt, date, time, dateSpan }) => (
-                            <tr key={evt.id} className="align-top">
+                            <tr key={evt.id} className="align-middle">
                               <td className={`sticky left-0 z-[1] w-24 ${cardBg}`}>
                                 <span
                                   className={`inline-flex w-24 items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 ${
@@ -240,18 +240,17 @@ export function VersionTimeline({
                                 <span className="block max-w-[6rem] truncate">{evt.actor}</span>
                               </td>
                               {dateSpan > 0 && (
-                                <td rowSpan={dateSpan} className="align-top">
-                                  {/* 박스 = 내부 span(콘텐츠 높이) → 옆 시간 박스와 상하 위치 동일. 폭 고정. */}
-                                  <span className="inline-block w-24 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center text-ink-tertiary">
-                                    {date}
-                                  </span>
+                                <td
+                                  rowSpan={dateSpan}
+                                  className="w-24 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center align-middle text-ink-tertiary"
+                                >
+                                  {/* 박스 = td 테두리(rowspan 높이) → 여러 행을 덮되 상단·하단이 첫/마지막 시간 박스와 정렬 */}
+                                  {date}
                                 </td>
                               )}
-                              <td className="text-right">
-                                {/* 시간 박스 — 폭 고정(값에 따라 안 흔들리게) + 진한 회색 경계 */}
-                                <span className="inline-block w-14 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center text-ink-tertiary">
-                                  {time}
-                                </span>
+                              {/* 시간 박스 = td 테두리(행 높이 채움) → 날짜 박스와 상하 정확히 정렬. 폭 고정. */}
+                              <td className="w-14 whitespace-nowrap rounded-xs border border-border-strong px-1.5 py-0.5 text-center align-middle text-ink-tertiary">
+                                {time}
                               </td>
                             </tr>
                           ))}
