@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R8b 개선: 일괄편집 담당자/부서 피커 + 충돌 옵션 2×2 아이콘 그리드
+- **담당자/부서 피커**(`group-bulk-modal.tsx`) — 값 입력을 노드 편집과 동일한 **SearchSelect**(assignee=users·department=departments, `getEligibleAssignees(versionId)` 로드)로. system/duration은 자유입력 유지. page.tsx가 `versionId` 전달.
+- **충돌 처리 옵션 재디자인**(사용자 요구) — 라디오 세로 리스트 → **아이콘 + 2×2 그리드 버튼**(replace=Replace·append=Plus·skip=CircleSlash·individual=ListChecks·선택 시 accent). 한눈에 파악.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R8a 연필 제거 + R8b: 멤버 일괄편집 모달 재스타일
 - **R8a 타이틀바 연필 삭제**(`group-title-bar.tsx`) — 사용자 요청, 리네임은 이름 더블클릭 유지. SquarePen import 제거.
 - **R8b GroupBulkModal 재스타일**(`group-bulk-modal.tsx`) — **적용(저장) 버튼 accent primary**(목업 바이올렛), 그룹이름/색상/속성 섹션 사이 **구분선**(border-t)으로 카드형 구조화. 충돌 처리·개별 마법사·전 기능 보존.

@@ -6452,6 +6452,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           })()}
           {bulkEditGroupId && (
             <GroupBulkModal
+              versionId={versionId}
               groupLabel={groups.find((g) => g.id === bulkEditGroupId)?.label ?? ""}
               members={nodes
                 .filter((n) => bulkEditGroupId !== null && n.data.groupIds.includes(bulkEditGroupId))

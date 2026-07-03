@@ -1,10 +1,13 @@
 "use client";
 
 // 그룹 멤버 일괄 편집 — 그룹명, 색상 일괄, 속성 일괄(설정/비우기 + 충돌 처리: 교체/추가/건너뛰기/개별 선택), 중단 (#5 2026-06-15)
+import { CircleSlash, ListChecks, Plus, Replace, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { SearchSelect } from "@/components/search-select";
+import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
@@ -21,6 +24,14 @@ const FIELD_LABEL_KEY: Record<BulkAttrField, MessageKey> = {
   duration: "field.duration",
 };
 
+// 충돌 처리 옵션 — 아이콘 + 2×2 그리드로 한눈에
+const POLICY_META: { key: BulkPolicy; icon: LucideIcon }[] = [
+  { key: "replace", icon: Replace },
+  { key: "append", icon: Plus },
+  { key: "skip", icon: CircleSlash },
+  { key: "individual", icon: ListChecks },
+];
+
 export interface BulkMember {
   id: string;
   label: string;
@@ -33,6 +44,7 @@ export interface BulkMember {
 type Update = { id: string; value: string };
 
 interface GroupBulkModalProps {
+  versionId: number | null;
   groupLabel: string;
   members: BulkMember[];
   colorPresets: string[];
@@ -43,6 +55,7 @@ interface GroupBulkModalProps {
 }
 
 export function GroupBulkModal({
+  versionId,
   groupLabel,
   members,
   colorPresets,
@@ -59,6 +72,22 @@ export function GroupBulkModal({
   const [showConflicts, setShowConflicts] = useState(false);
   // 개별 선택 마법사 — 충돌 멤버를 순차 처리
   const [wizard, setWizard] = useState<{ step: number; resolved: Update[] } | null>(null);
+  // 담당자/부서 후보 — 노드 편집과 동일 피커(조회권한 보유 직원만, F5)
+  const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
+  useEffect(() => {
+    if (versionId == null) return;
+    let active = true;
+    void getEligibleAssignees(versionId)
+      .then((e) => {
+        if (active) setEligible(e);
+      })
+      .catch(() => {
+        /* 실패 시 값 직접입력만 */
+      });
+    return () => {
+      active = false;
+    };
+  }, [versionId]);
 
   // Esc로 중단
   useEffect(() => {
@@ -262,14 +291,36 @@ export function GroupBulkModal({
                 </label>
               </div>
 
-              {action === "set" && (
-                <input
-                  className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                  placeholder={t("bulk.value")}
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                />
-              )}
+              {action === "set" &&
+                (field === "assignee" ? (
+                  <SearchSelect
+                    value={value}
+                    options={(eligible?.users ?? []).map((u) => ({
+                      value: u.name,
+                      label: u.name,
+                      sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
+                      keywords: u.id,
+                    }))}
+                    emptyLabel={t("bulk.value")}
+                    placeholder={t("field.searchPlaceholder")}
+                    onChange={setValue}
+                  />
+                ) : field === "department" ? (
+                  <SearchSelect
+                    value={value}
+                    options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                    emptyLabel={t("bulk.value")}
+                    placeholder={t("field.searchPlaceholder")}
+                    onChange={setValue}
+                  />
+                ) : (
+                  <input
+                    className="rounded-sm border border-hairline px-2 py-1 text-caption"
+                    placeholder={t("bulk.value")}
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                  />
+                ))}
 
               {/* 충돌 처리 — 설정인데 이미 값 있는 멤버가 있을 때만. 디폴트 없음(필수) */}
               {hasConflict && (
@@ -298,16 +349,21 @@ export function GroupBulkModal({
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    {(["replace", "append", "skip", "individual"] as BulkPolicy[]).map((p) => (
-                      <label key={p} className="flex items-center gap-1">
-                        <input
-                          type="radio"
-                          checked={policy === p}
-                          onChange={() => setPolicy(p)}
-                        />
-                        {t(`bulk.${p}` as MessageKey)}
-                      </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {POLICY_META.map(({ key, icon: Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setPolicy(key)}
+                        className={`flex items-center gap-1.5 rounded-sm border px-2 py-1.5 text-caption ${
+                          policy === key
+                            ? "border-accent bg-accent-tint text-accent"
+                            : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                        }`}
+                      >
+                        <Icon size={14} strokeWidth={1.5} className="shrink-0" />
+                        {t(`bulk.${key}` as MessageKey)}
+                      </button>
                     ))}
                   </div>
                 </div>
