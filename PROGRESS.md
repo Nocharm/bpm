@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 승인자 관리 오너+sysadmin 허용 + .env.example 정리
+- **승인자 관리 권한** — 오너 전용 → **오너 OR sysadmin**. 백엔드 `set_approvers`에 sysadmin 오버라이드(세팅 화면은 이미 sysadmin=owner라 UI만 열리고 저장 시 403이던 잠재버그도 해소), 에디터 `canManageApprovers`에 `isSysadmin` 추가. 테스트 `test_set_approvers_owner_only`는 enforce로 전환 + sysadmin 허용 케이스 추가.
+- **.env.example 정리** — sysadmin 섹션 명확화: `SYSTEM_ADMIN_LOGIN_IDS`(require_admin 별개)와 `BPM_SYSADMINS`(sysadmin) 구분, 서버(Keycloak 사용자명)/로컬(backend/.env, admin.sys) 각각 명시. 옛 예시 `admin.kim` 제거.
+- 검증: 백엔드 381 passed·ruff clean / 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 피커 모달: 선택 목록을 피커 위로 + 신규 항목 페이드인
 - **문제**: 피커 드롭다운이 아래로 열려, 아래에 있던 선택 항목 리스트를 가려 실시간 추가가 안 보임.
 - **선택 목록을 피커 위로** — 피커가 위·리스트가 아래였던 곳을 스왑: `approver-manager`·`group-detail`(블록 이동), `create-map-dialog`(협업자·결재자 `flex-col-reverse` 래퍼로 라벨 유지한 채 표시순 반전). `approvers-panel`·`collaborators-panel`·`groups-panel`은 이미 리스트가 위라 유지.

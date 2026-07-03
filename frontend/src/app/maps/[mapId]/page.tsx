@@ -6890,7 +6890,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       isSubmitter={isSubmitter}
                       canWithdraw={canWithdraw}
                       hasApproved={hasApproved}
-                      canManageApprovers={isMapOwner && !approvalInFlight}
+                      canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
                       onSubmit={() => setSubmitConfirmOpen(true)}
                       onApprove={() => setApproveConfirmOpen(true)}
                       onReject={() => setRejectOpen(true)}

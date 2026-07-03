@@ -68,13 +68,20 @@ def test_set_and_list_approvers(client: TestClient) -> None:
     assert listed == ["boss", "lead"]
 
 
-def test_set_approvers_owner_only(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    map_id, _version_id = _create_map_with_version(client)
+def test_set_approvers_owner_only(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, _transfer_enforce: None
+) -> None:
+    """승인자 변경은 오너·sysadmin만 — 비권한 침입자는 403(enforce라야 경계 유의미)."""
+    map_id, _version_id = _create_map_with_version(client)  # owner = 기본 dev_user
 
     monkeypatch.setattr(settings, "dev_user", "intruder")
     forbidden = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["x"]})
-
     assert forbidden.status_code == 403
+
+    # sysadmin 오버라이드 — 오너가 아니어도 승인자 변경 가능
+    monkeypatch.setattr(settings, "dev_user", _TRANSFER_SYSADMIN)
+    ok = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["x"]})
+    assert ok.status_code == 200
 
 
 def test_submit_requires_checkout_and_approvers(client: TestClient) -> None:

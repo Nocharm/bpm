@@ -1,4 +1,4 @@
-"""맵별 지정 승인자 관리 — 조회는 누구나, 변경은 맵 소유자만 (design 2026-06-14)."""
+"""맵별 지정 승인자 관리 — 조회는 누구나, 변경은 맵 소유자·sysadmin만 (design 2026-06-14)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
@@ -8,6 +8,7 @@ from app import workflow
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import MapApprover, MapVersion, ProcessMap
+from app.permissions.logic import is_sysadmin
 from app.schemas import ApproversUpdate
 
 router = APIRouter(
@@ -40,9 +41,16 @@ async def set_approvers(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    # 소유자 미상(created_by=None, seed/legacy 맵)은 잠그지 않고 개방 — 누구나 관리 허용
-    if found_map.created_by is not None and found_map.created_by != user:
-        raise HTTPException(status_code=403, detail="only the map owner can set approvers")
+    # 소유자 미상(created_by=None, seed/legacy 맵)은 잠그지 않고 개방 — 누구나 관리 허용.
+    # 오너 외 sysadmin도 허용(세팅은 sysadmin=owner로 UI 개방 → 백엔드도 일치).
+    if (
+        found_map.created_by is not None
+        and found_map.created_by != user
+        and not is_sysadmin(user)
+    ):
+        raise HTTPException(
+            status_code=403, detail="only the map owner or sysadmin can set approvers"
+        )
 
     # 승인 진행 중(pending/approved 버전 존재)엔 승인자 변경 금지 — 진행 중 변경은 승인 tally를
     # 깨뜨려 오류를 유발. 승인자 편집은 워크플로 시작 전(draft/rejected 등)에만 허용.
