@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R8b 충돌 버튼 4개 완전 균일 + 직관 아이콘
+- **4개 버튼 크기 동일**(`group-bulk-modal.tsx`) — 버튼에 `whitespace-nowrap`(라벨 줄바꿈 방지→높이 균일) + grid 동일폭·중앙정렬로 4개 완전 동일.
+- **아이콘 직관화** — skip `CircleSlash`→`SkipForward`(건너뛰기), individual `ListChecks`→`MousePointerClick`(개별 선택). replace=Replace·append=Plus 유지.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R8b 충돌 버튼 균일·아이콘 확대 + R8a 완료
 - **충돌 옵션 버튼 개선**(`group-bulk-modal.tsx`) — 2×2 그리드 버튼 `justify-center`(내용 중앙→균일해 보임)·`py-2`·아이콘 14→**18px**·idle 텍스트 `text-ink`(가시성)·hover accent 보더.
 - **R8a 완료 처리**(트래커) — 🔧→✅.

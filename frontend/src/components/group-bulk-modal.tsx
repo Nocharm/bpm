@@ -1,7 +1,7 @@
 "use client";
 
 // 그룹 멤버 일괄 편집 — 그룹명, 색상 일괄, 속성 일괄(설정/비우기 + 충돌 처리: 교체/추가/건너뛰기/개별 선택), 중단 (#5 2026-06-15)
-import { CircleSlash, ListChecks, Plus, Replace, type LucideIcon } from "lucide-react";
+import { MousePointerClick, Plus, Replace, SkipForward, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -26,10 +26,10 @@ const FIELD_LABEL_KEY: Record<BulkAttrField, MessageKey> = {
 
 // 충돌 처리 옵션 — 아이콘 + 2×2 그리드로 한눈에
 const POLICY_META: { key: BulkPolicy; icon: LucideIcon }[] = [
-  { key: "replace", icon: Replace },
-  { key: "append", icon: Plus },
-  { key: "skip", icon: CircleSlash },
-  { key: "individual", icon: ListChecks },
+  { key: "replace", icon: Replace }, // 교체 — 기존↔새 값 교체
+  { key: "append", icon: Plus }, // 추가 — 기존에 새 값 덧붙임
+  { key: "skip", icon: SkipForward }, // 건너뛰기 — 충돌 멤버 그대로 둠
+  { key: "individual", icon: MousePointerClick }, // 개별 — 하나씩 선택
 ];
 
 export interface BulkMember {
@@ -355,7 +355,7 @@ export function GroupBulkModal({
                         key={key}
                         type="button"
                         onClick={() => setPolicy(key)}
-                        className={`flex items-center justify-center gap-1.5 rounded-sm border px-2 py-2 text-caption ${
+                        className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-2 py-2 text-caption ${
                           policy === key
                             ? "border-accent bg-accent-tint text-accent"
                             : "border-hairline text-ink hover:border-accent/50 hover:bg-surface-alt"
