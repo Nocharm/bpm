@@ -193,7 +193,13 @@ function MenuList({
             }}
           >
             <span className="flex items-center gap-2">
-              {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
+              {item.icon && (
+                <item.icon
+                  size={14}
+                  strokeWidth={1.5}
+                  className={`shrink-0 ${item.danger ? "text-error" : "text-ink-tertiary"}`}
+                />
+              )}
               {item.label}
             </span>
             {item.shortcut && (

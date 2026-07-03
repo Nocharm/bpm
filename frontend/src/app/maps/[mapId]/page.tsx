@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Square, Trash2, Undo2, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Square, Trash2, Type, Undo2, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -893,6 +893,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const fullGraphVersionRef = useRef<number | null>(null);
   // toggleInlineExpand는 아래쪽에 정의돼 컨텍스트 메뉴 useMemo(위)에서 직접 못 씀(TDZ) — ref로 호출.
   const toggleInlineExpandRef = useRef<((nodeId: string) => void) | null>(null);
+  // 컨텍스트 메뉴(위쪽 menuItems useMemo)에서 이름 편집 호출용 — startRename은 아래에 정의되어 TDZ 회피 필요
+  const startRenameRef = useRef<((nodeId: string) => void) | null>(null);
   // 합성 트리에 끼울 호스트 — 인라인 펼침 ∪ 드릴 경로(딥뷰)의 호스트. 딥뷰 스코프의 호스트 자식이
   // 합성 트리에 namespaced id로 존재해야 ancestorContextNodes/딥뷰 로드가 그 체인을 앵커할 수 있다.
   const hostsToEmbed = useMemo(() => {
@@ -3962,6 +3964,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             { divider: true },
             {
               label: t("ctx.delete"),
+              icon: Trash2,
               shortcut: "Del",
               danger: true,
               onSelect: () => {
@@ -3992,6 +3995,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? [
             {
               label: t("ctx.openChild"),
+              icon: Maximize2,
               onSelect: () => {
                 // 드릴인 창 대신 인라인 펼침/접기(toggleInlineExpand) — ref는 정의 순서(TDZ) 회피용
                 if (menu.targetId) {
@@ -4001,10 +4005,26 @@ function MapEditor({ mapId }: { mapId: number }) {
             },
           ]
         : [];
+      // 이름 변경 — 인라인 타이틀 편집 진입(startRename). 편집 전용이라 readOnly에선 숨김(F2 전역키와 동일).
+      const renameItems: ContextMenuItem[] = readOnly
+        ? []
+        : [
+            {
+              label: t("editor.rename"),
+              icon: Type,
+              shortcut: "F2",
+              onSelect: () => {
+                if (menu.targetId) {
+                  startRenameRef.current?.(menu.targetId);
+                }
+              },
+            },
+          ];
       return [
         // 노드 우클릭 기본 = 정보 수정 모달(보기+편집)
         {
           label: t("ctx.editInfo"),
+          icon: PencilLine,
           shortcut: "E",
           accel: "e",
           onSelect: () => {
@@ -4013,6 +4033,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
           },
         },
+        ...renameItems,
         { divider: true },
         ...colorItems,
         ...openChildItems,
@@ -4916,6 +4937,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [readOnly],
   );
+  // 컨텍스트 메뉴(위쪽 menuItems useMemo)에서 호출하도록 ref로 노출(TDZ 회피)
+  useEffect(() => {
+    startRenameRef.current = startRename;
+  }, [startRename]);
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -5522,6 +5547,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!selectedId) {
         return;
       }
+      // F2 — 선택 노드 이름 편집 진입(컨텍스트 메뉴 "이름 변경"과 동일; readOnly는 startRename이 가드).
+      if (event.key === "F2") {
+        event.preventDefault();
+        startRename(selectedId);
+        return;
+      }
       // [ ] : 흐름 하이라이트 경로 증감 (뷰 고정). anchor≠선택이면 0에서 시작(파생 리셋).
       if (event.key === "]" || event.key === "[") {
         event.preventDefault();
@@ -5571,7 +5602,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
     window.addEventListener("keydown", onFlowKey);
     return () => window.removeEventListener("keydown", onFlowKey);
-  }, [selectedId, reactFlow, setNodes, setSelectedId]);
+  }, [selectedId, reactFlow, setNodes, setSelectedId, startRename]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
   const startInspectorResize = useCallback(

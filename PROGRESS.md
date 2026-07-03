@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 에디터 재디자인 R6c: 노드 컨텍스트 메뉴 아이콘 + 이름변경(F2)
+- **노드 우클릭 메뉴**(`page.tsx` menuItems) — 행 아이콘(편집=PencilLine·이름변경=Type·열기=Maximize2·삭제=Trash2). **이름 변경 항목 신규**(기존 `startRename` 배선) + **F2 전역키 바인딩**(`onFlowKey`: 선택 노드 이름편집, readOnly는 startRename이 가드). **색상은 인라인 스와치 유지**(서브메뉴화 안 함·사용자 결정).
+- **공통**(`context-menu.tsx`) — danger 항목 아이콘도 빨강(`text-error`): 삭제 = 빨간 아이콘+라벨+칩(목업 일치).
+- **TDZ 회피** — menuItems useMemo(위쪽)에서 아래 정의된 startRename 호출 → `startRenameRef`(useEffect 노출)로 우회(toggleInlineExpandRef와 동일 패턴). 빌드 TDZ 에러(`Cannot access variable before it is declared`) 해결.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 핫픽스: 미니맵 줌아웃 페이드(가득 차면 숨김·줌인 시 복귀)
 - **미니맵 페이드**(`minimap-viewport-fill.tsx` + `page.tsx`) — 줌아웃으로 뷰포트 rect가 미니맵을 통째로 덮어 연보라로 가득 차면(무의미) 미니맵+오버레이를 opacity로 페이드 아웃, 줌인 시 페이드 인. 채움비 `r=min(vp.w/vbW, vp.h/vbH)` 기반: `r≤1.2` 불투명(가득 차자마자 안 사라지게 마진), `r≥2.0` 완전 투명. opacity가 ~0이면 `pointer-events:none`으로 클릭 비활성. 신규 `useMinimapFadeOpacity` 훅 + `MinimapFade` 래퍼(opacity는 containing block 미생성→Panel absolute 위치 안 깨짐). `transition-opacity duration-350 ease-smooth`로 연속 페이드.
 - 검증: 프론트 lint 0·build OK, 페이드 곡선 수식 실행 확인(핏뷰=불투명·줌아웃=0·마진·pointer-events 컷). 라이브 브라우저 시각 확인은 인증 스택 미구성으로 미실시.
