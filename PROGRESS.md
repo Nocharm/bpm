@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — R6d 히트박스 강조 방식 변경: 솔리드 → 파스텔 tint + accent 보더
+- 사용자 요청 — 히트박스 톤은 **파스텔(투명 tint) 유지**, 강조는 **보더**로. strip `bg-accent/45`(솔리드톤) → `group-hover:bg-accent-tint`(파스텔) + `group-hover:border-accent`(보더). base에 `border border-transparent`로 상태별 크기 일관. 직접 hover는 `bg-accent/30`. 박스 border는 `accent/50`(부드럽게).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — R7a 색상(타입별 프리셋+커스텀 헥사) · R6d 히트박스 hover 강조
 - **R7a 모달 색상**(`node-summary-modal.tsx`·`page.tsx`) — 전역 `COLOR_PRESETS` → **노드 타입별 세트**(`colorsForType(nodeType)`: 메인6/터미널3/디시전4, 컨텍스트 메뉴와 동일). **커스텀 헥사 입력란**(#RRGGBB, 좌측 미리보기 스와치) 추가 → 프리셋 외 임의 색 지정.
 - **R6d 연결면 히트박스 hover 강조**(`context-menu.tsx`) — 박스 hover 시 4변 strip `bg-accent-tint`→`bg-accent/45`(더 뚜렷)·박스 border `accent/50`→`accent`·idle `divider/40`→`/50`.

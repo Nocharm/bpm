@@ -328,7 +328,7 @@ function SideBox({
   return (
     <div
       className={`group relative rounded-sm border bg-surface-alt transition-colors ${
-        locked ? "border-hairline opacity-60" : "border-hairline hover:border-accent"
+        locked ? "border-hairline opacity-60" : "border-hairline hover:border-accent/50"
       }`}
       style={{ width: BOX_W, height: BOX_H }}
       title={locked ? "Subprocess: fixed side" : undefined}
@@ -344,13 +344,13 @@ function SideBox({
           aria-label={side}
           disabled={locked}
           onClick={locked ? undefined : () => onPick(side)}
-          // 박스 hover 시 4변 strip을 tint로 드러내 클릭 가능 영역을 인지시키고(group-hover), 직접 hover는 accent.
-          className={`absolute ${cls} rounded-sm transition-colors ${
+          // 박스 hover 시 4변 strip을 파스텔 tint + accent 보더로 강조(톤은 유지, 보더로 클릭영역 인지). 직접 hover는 살짝 더.
+          className={`absolute ${cls} rounded-sm border border-transparent transition-colors ${
             current === side
               ? "bg-accent"
               : locked
                 ? "bg-divider"
-                : "bg-divider/50 group-hover:bg-accent/45 hover:bg-accent"
+                : "bg-divider/40 group-hover:border-accent group-hover:bg-accent-tint hover:bg-accent/30"
           } ${locked ? "cursor-default" : ""}`}
         />
       ))}
