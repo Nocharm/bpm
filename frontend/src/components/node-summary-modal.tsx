@@ -296,32 +296,51 @@ export function NodeSummaryModal({
                 <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</label>
                 <span className="min-w-0 flex-1 truncate text-caption text-ink-secondary">{typeLabel}</span>
               </div>
-              {/* 색 — 기본 1줄 + 더 보기 */}
+              {/* 색 — 타입별 프리셋 스와치(colorsForType) + 커스텀 헥사 입력 */}
               <div className="flex items-start gap-2">
                 <span className="w-14 shrink-0 pt-1 text-fine text-ink-tertiary">{t("field.color")}</span>
-                <div className="flex flex-wrap items-center gap-1">
-                  {shownColors.map((preset) => (
-                    <button
-                      key={preset || "default"}
-                      type="button"
-                      title={preset || "default"}
-                      aria-label={preset || "default"}
-                      onClick={() => setForm((f) => ({ ...f, color: preset }))}
-                      className={`h-5 w-5 rounded-full border ${
-                        form.color === preset ? "ring-2 ring-accent" : "border-hairline"
-                      }`}
-                      style={{ background: preset || "var(--color-surface-alt)" }}
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {shownColors.map((preset) => (
+                      <button
+                        key={preset || "default"}
+                        type="button"
+                        title={preset || "default"}
+                        aria-label={preset || "default"}
+                        onClick={() => setForm((f) => ({ ...f, color: preset }))}
+                        className={`h-5 w-5 rounded-full border ${
+                          form.color === preset ? "ring-2 ring-accent" : "border-hairline"
+                        }`}
+                        style={{ background: preset || "var(--color-surface-alt)" }}
+                      />
+                    ))}
+                    {colorPresets.length > COLOR_COLLAPSED && !colorExpanded && (
+                      <button
+                        type="button"
+                        className="px-1 text-fine text-ink-tertiary hover:text-ink"
+                        onClick={() => setColorExpanded(true)}
+                      >
+                        {t("editor.moreColors")}
+                      </button>
+                    )}
+                  </div>
+                  {/* 커스텀 헥사 코드(#RRGGBB) — 프리셋 외 임의 색. 좌측 미리보기 스와치. */}
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="h-5 w-5 shrink-0 rounded-full border border-hairline"
+                      style={{ background: form.color || "var(--color-surface-alt)" }}
                     />
-                  ))}
-                  {colorPresets.length > COLOR_COLLAPSED && !colorExpanded && (
-                    <button
-                      type="button"
-                      className="px-1 text-fine text-ink-tertiary hover:text-ink"
-                      onClick={() => setColorExpanded(true)}
-                    >
-                      {t("editor.moreColors")}
-                    </button>
-                  )}
+                    <input
+                      type="text"
+                      value={form.color}
+                      onChange={(event) => setForm((f) => ({ ...f, color: event.target.value }))}
+                      placeholder="#RRGGBB"
+                      maxLength={7}
+                      spellCheck={false}
+                      aria-label={t("field.color")}
+                      className="w-24 rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink"
+                    />
+                  </div>
                 </div>
               </div>
               {/* BPM 속성 — 담당자/부서는 조회권한 보유자만 선택(F5), system/duration은 자유입력 */}

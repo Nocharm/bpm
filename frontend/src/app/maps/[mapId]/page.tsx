@@ -6437,7 +6437,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
-                colorPresets={COLOR_PRESETS}
+                colorPresets={colorsForType(node.data.nodeType)}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onNavigate={(id) => setSummaryNodeId(id)}

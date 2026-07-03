@@ -328,7 +328,7 @@ function SideBox({
   return (
     <div
       className={`group relative rounded-sm border bg-surface-alt transition-colors ${
-        locked ? "border-hairline opacity-60" : "border-hairline hover:border-accent/50"
+        locked ? "border-hairline opacity-60" : "border-hairline hover:border-accent"
       }`}
       style={{ width: BOX_W, height: BOX_H }}
       title={locked ? "Subprocess: fixed side" : undefined}
@@ -350,7 +350,7 @@ function SideBox({
               ? "bg-accent"
               : locked
                 ? "bg-divider"
-                : "bg-divider/40 group-hover:bg-accent-tint hover:bg-accent"
+                : "bg-divider/50 group-hover:bg-accent/45 hover:bg-accent"
           } ${locked ? "cursor-default" : ""}`}
         />
       ))}
