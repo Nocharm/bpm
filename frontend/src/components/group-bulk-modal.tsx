@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Eraser,
+  ListChecks,
   MousePointerClick,
   PencilLine,
   Plus,
@@ -106,10 +107,12 @@ export function GroupBulkModal({
   const [showExcluded, setShowExcluded] = useState(false);
   const [showColors, setShowColors] = useState(false);
   const [colorFlyLeft, setColorFlyLeft] = useState(false); // 색상 플라이아웃 화면 가장자리 시 좌측 반전
-  // 적용 후 최종 변경 요약 — 확인 시 모달 닫힘
-  const [summary, setSummary] = useState<{ id: string; label: string; value: string }[] | null>(
-    null,
-  );
+  // 적용 후 최종 변경 요약(이전→현재) — 확인 시 모달 닫힘
+  const [summary, setSummary] = useState<
+    { id: string; label: string; before: string; after: string }[] | null
+  >(null);
+  // 개별 마법사 버튼 호버 — 미리보기(교체/추가/건너뛰기)에 따라 버려지는 쪽 빨간 표시
+  const [wizardHover, setWizardHover] = useState<"replace" | "append" | "skip" | null>(null);
 
   // People mode: target department + assignees
   const [peopleDept, setPeopleDept] = useState("");
@@ -209,13 +212,18 @@ export function GroupBulkModal({
   const finishPeople = (updates: PeopleUpdate[]) => {
     onApplyPeople(updates);
     setSummary(
-      updates.map((u) => ({
-        id: u.id,
-        label: labelOf(u.id),
-        value: [u.department, u.assignee].filter(Boolean).join(" / ") || t("bulk.cleared"),
-      })),
+      updates.map((u) => {
+        const m = allMembers.find((mm) => mm.id === u.id);
+        return {
+          id: u.id,
+          label: labelOf(u.id),
+          before: [m?.department, m?.assignee].filter(Boolean).join(" / ") || "—",
+          after: [u.department, u.assignee].filter(Boolean).join(" / ") || t("bulk.cleared"),
+        };
+      }),
     );
     setPeopleWizard(null);
+    setWizardHover(null);
     setPeopleDept("");
     setPeopleAssignees([]);
     setPolicy(null);
@@ -331,11 +339,15 @@ export function GroupBulkModal({
     if (!attrField) return;
     onApplyAttribute(attrField, updates);
     setSummary(
-      updates.map((u) => ({
-        id: u.id,
-        label: labelOf(u.id),
-        value: u.value || t("bulk.cleared"),
-      })),
+      updates.map((u) => {
+        const m = allMembers.find((mm) => mm.id === u.id);
+        return {
+          id: u.id,
+          label: labelOf(u.id),
+          before: (m ? m[attrField] : "") || "—",
+          after: u.value || t("bulk.cleared"),
+        };
+      }),
     );
     setWizard(null);
     setValue("");
@@ -426,34 +438,56 @@ export function GroupBulkModal({
       >
         {/* ---- 적용 후 최종 변경 요약 — 확인 시 모달 닫힘 ---- */}
         {summary ? (
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-body-strong text-ink">{t("bulk.summaryTitle")}</p>
-              <span className="text-fine text-ink-tertiary">
+          /* ---- 적용 후 변경 요약 — 대표 모달(아이콘 원+요약박스) 스타일, 이전→현재 표 ---- */
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-tint text-accent">
+              <ListChecks size={26} strokeWidth={1.5} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-body-strong text-ink">{t("bulk.summaryTitle")}</h2>
+              <p className="text-caption text-ink-tertiary">
                 {t("bulk.summaryCount", { n: summary.length })}
-              </span>
+              </p>
             </div>
             {summary.length === 0 ? (
-              <p className="mb-3 text-caption text-ink-tertiary">{t("bulk.summaryNone")}</p>
+              <p className="text-caption text-ink-tertiary">{t("bulk.summaryNone")}</p>
             ) : (
-              <ul className="mb-3 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-                {summary.map((r) => (
-                  <li key={r.id} className="flex justify-between gap-2 text-fine">
-                    <span className="truncate text-ink-tertiary">{r.label}</span>
-                    <span className="shrink-0 text-ink">{r.value}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="max-h-64 w-full overflow-y-auto rounded-sm bg-surface-alt p-1 text-left">
+                <table className="w-full border-collapse text-fine">
+                  <thead>
+                    <tr className="text-ink-tertiary">
+                      <th className="px-1.5 py-1 text-left font-normal">{t("bulk.summaryNode")}</th>
+                      <th className="px-1.5 py-1 text-left font-normal">{t("bulk.before")}</th>
+                      <th className="px-1 py-1" />
+                      <th className="px-1.5 py-1 text-left font-normal">{t("bulk.after")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.map((r) => (
+                      <tr key={r.id} className="border-t border-hairline align-top">
+                        <td className="px-1.5 py-1 text-ink">{r.label}</td>
+                        <td className="px-1.5 py-1 text-ink-tertiary line-through">{r.before}</td>
+                        <td className="px-1 py-1">
+                          <ArrowRight
+                            size={11}
+                            strokeWidth={1.5}
+                            className="shrink-0 text-ink-tertiary"
+                          />
+                        </td>
+                        <td className="px-1.5 py-1 text-ink">{r.after}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-            <div className="mt-3 flex justify-end border-t border-hairline pt-3">
-              <button
-                type="button"
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                onClick={onClose}
-              >
-                {t("bulk.confirm")}
-              </button>
-            </div>
+            <button
+              type="button"
+              className="w-full rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+              onClick={onClose}
+            >
+              {t("bulk.confirm")}
+            </button>
           </div>
         ) : peopleWizard ? (
           <div>
@@ -478,73 +512,82 @@ export function GroupBulkModal({
               const member = peopleWizard.targets[peopleWizard.step];
               const isCrossDept =
                 member.department !== "" && member.department !== peopleDept;
+              const existingAssignees = parseAssignees(member.assignee);
+              // 미리보기: 기본·교체=기존 버림 / 건너뛰기=새 값 버림(반전) / 추가=둘 다 유지
+              const discardExisting = wizardHover === null || wizardHover === "replace";
+              const discardNew = wizardHover === "skip";
+              const pillCls = (discarded: boolean) =>
+                `rounded-full border px-1.5 py-0.5 text-fine ${
+                  discarded
+                    ? "border-error/40 bg-error/10 text-error line-through"
+                    : "border-hairline bg-surface text-ink"
+                }`;
+              const rowCls = "w-9 shrink-0 pt-0.5 text-fine text-ink-tertiary";
               return (
                 <>
-                  <p className="mb-1 text-caption text-ink">{member.label || member.id}</p>
-                  <p className="mb-0.5 text-fine text-ink-tertiary">
-                    {t("bulk.existing")}: {[member.department, member.assignee].filter(Boolean).join(" / ") || "—"}
-                  </p>
-                  <p className="mb-2 text-fine text-ink-tertiary">
-                    {t("bulk.value")}:{" "}
-                    {[peopleDept, targetAssigneeStr].filter(Boolean).join(" / ")}
-                  </p>
+                  <p className="mb-2 text-caption text-ink">{member.label || member.id}</p>
                   {isCrossDept && (
-                    <div className="mb-2 rounded-sm border border-error/40 bg-error/10 px-2 py-1.5">
-                      <p className="flex items-center gap-1 text-fine text-error">
-                        <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
-                        {t("bulk.crossDeptConfirm")}
-                      </p>
-                      {/* 부서: 기존(초기화) → 새 부서 */}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-fine">
-                        <span className="rounded-full border border-error/40 bg-error/10 px-1.5 py-0.5 text-error line-through">
-                          {member.department}
-                        </span>
-                        <ArrowRight
-                          size={11}
-                          strokeWidth={1.5}
-                          className="shrink-0 text-ink-tertiary"
-                        />
-                        <span className="rounded-full border border-hairline bg-surface-alt px-1.5 py-0.5 text-ink">
-                          {peopleDept || "—"}
-                        </span>
-                      </div>
-                      {/* 초기화될 기존 담당자 */}
-                      {parseAssignees(member.assignee).length > 0 && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1 text-fine">
-                          {parseAssignees(member.assignee).map((n) => (
-                            <span
-                              key={n}
-                              className="rounded-full border border-error/40 bg-error/10 px-1.5 py-0.5 text-error line-through"
-                            >
-                              {n}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <p className="mb-1.5 flex items-center gap-1 text-fine text-error">
+                      <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+                      {t("bulk.crossDeptConfirm")}
+                    </p>
                   )}
+                  {/* 이전 → 현재: 부서·담당자 필. 버려지는 쪽은 취소선+빨강(버튼 호버로 미리보기) */}
+                  <div className="mb-2 flex flex-col gap-1.5 rounded-sm bg-surface-alt p-2">
+                    <div className="flex items-start gap-1.5">
+                      <span className={rowCls}>{t("bulk.before")}</span>
+                      <div className="flex flex-wrap gap-1">
+                        <span className={pillCls(discardExisting)}>{member.department || "—"}</span>
+                        {existingAssignees.map((n) => (
+                          <span key={n} className={pillCls(discardExisting)}>
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className={rowCls}>{t("bulk.after")}</span>
+                      <div className="flex flex-wrap gap-1">
+                        <span className={pillCls(discardNew)}>{peopleDept || "—"}</span>
+                        {peopleAssignees.map((n) => (
+                          <span key={n} className={pillCls(discardNew)}>
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex gap-1">
                     <button
                       type="button"
-                      className={btn}
+                      className={`${btn} flex items-center gap-1`}
+                      onMouseEnter={() => setWizardHover("replace")}
+                      onMouseLeave={() => setWizardHover(null)}
                       onClick={() => resolvePeopleStep("replace")}
                     >
+                      <Replace size={13} strokeWidth={1.5} className="shrink-0" />
                       {t("bulk.replace")}
                     </button>
                     {!isCrossDept && hasAssignees && (
                       <button
                         type="button"
-                        className={btn}
+                        className={`${btn} flex items-center gap-1`}
+                        onMouseEnter={() => setWizardHover("append")}
+                        onMouseLeave={() => setWizardHover(null)}
                         onClick={() => resolvePeopleStep("append")}
                       >
+                        <Plus size={13} strokeWidth={1.5} className="shrink-0" />
                         {t("bulk.append")}
                       </button>
                     )}
                     <button
                       type="button"
-                      className={btn}
+                      className={`${btn} flex items-center gap-1`}
+                      onMouseEnter={() => setWizardHover("skip")}
+                      onMouseLeave={() => setWizardHover(null)}
                       onClick={() => resolvePeopleStep("skip")}
                     >
+                      <SkipForward size={13} strokeWidth={1.5} className="shrink-0" />
                       {t("bulk.skip")}
                     </button>
                   </div>
@@ -552,7 +595,14 @@ export function GroupBulkModal({
               );
             })()}
             <div className="mt-3 flex justify-end border-t border-hairline pt-3">
-              <button type="button" className={btn} onClick={() => setPeopleWizard(null)}>
+              <button
+                type="button"
+                className={btn}
+                onClick={() => {
+                  setPeopleWizard(null);
+                  setWizardHover(null);
+                }}
+              >
                 {t("bulk.close")}
               </button>
             </div>
@@ -583,13 +633,28 @@ export function GroupBulkModal({
               {t("bulk.value")}: {value}
             </p>
             <div className="flex gap-1">
-              <button type="button" className={btn} onClick={() => resolveStep("replace")}>
+              <button
+                type="button"
+                className={`${btn} flex items-center gap-1`}
+                onClick={() => resolveStep("replace")}
+              >
+                <Replace size={13} strokeWidth={1.5} className="shrink-0" />
                 {t("bulk.replace")}
               </button>
-              <button type="button" className={btn} onClick={() => resolveStep("append")}>
+              <button
+                type="button"
+                className={`${btn} flex items-center gap-1`}
+                onClick={() => resolveStep("append")}
+              >
+                <Plus size={13} strokeWidth={1.5} className="shrink-0" />
                 {t("bulk.append")}
               </button>
-              <button type="button" className={btn} onClick={() => resolveStep("skip")}>
+              <button
+                type="button"
+                className={`${btn} flex items-center gap-1`}
+                onClick={() => resolveStep("skip")}
+              >
+                <SkipForward size={13} strokeWidth={1.5} className="shrink-0" />
                 {t("bulk.skip")}
               </button>
             </div>
