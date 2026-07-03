@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 계획: 담당자/부서 통일 구현 플랜 작성
+- 구현 계획 `docs/superpowers/plans/2026-07-03-assignee-department-unified.md` — 5 태스크(공용 로직+테스트 → 노드모달 칩·연동·확인 → 인스펙터 → 그룹벌크 결합 → 드리프트 경고). writing-plans로 작성, TDD·커밋 단위.
+
 ## 2026-07-03 — 설계: 담당자/부서 설정 로직 통일(3지점) 스펙 작성
 - 신규 기능 설계 문서 `docs/superpowers/specs/2026-07-03-assignee-department-unified-design.md` — 부서 단일·담당자 같은부서 복수(콤마, 백엔드 무변경)·담당자↔부서 연동·부서변경 확인모달·벌크 결합세트(부서만 3옵션·담당자 4옵션·추가 교차부서 확인)·드리프트 경고. 브레인스토밍으로 확정.
 
