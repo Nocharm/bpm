@@ -1,19 +1,19 @@
 "use client";
 
-// React Flow MiniMap의 현재 뷰포트 영역을 반투명 악센트로 '채우는' 오버레이 +
-// 줌아웃으로 미니맵이 무의미해질 때(뷰포트가 콘텐츠를 통째로 덮어 연보라로 가득 참)
-// 미니맵 전체를 페이드로 감추는 래퍼(MinimapFade).
-// MiniMap은 전달된 children을 svg에 렌더하지 않으므로, 동일 좌표계(viewBox)를 가진
-// 별도 Panel을 같은 위치에 겹쳐 그린다 — 좌표 계산이 MiniMap과 동일해 정렬된다.
-import type { ReactNode } from "react";
-
+// React Flow MiniMap + 현재 뷰포트 영역을 반투명 악센트로 '채우는' 오버레이(MiniMapViewportFill).
+// MinimapFade가 둘 다 렌더하며, 줌아웃으로 미니맵이 무의미해지면(뷰포트가 콘텐츠를 통째로 덮음) 페이드.
+// opacity를 래핑 div가 아니라 각 Panel(이미 position:absolute + 패널 z-index)에 직접 줘서
+// 스태킹 컨텍스트를 새로 만들지 않는다 → 미니맵이 노드/캔버스 위에 유지되고 클릭(시점 이동)도 유효.
 import {
+  MiniMap,
   Panel,
   useNodes,
   useReactFlow,
   useStore,
   useViewport,
 } from "@xyflow/react";
+
+import { type AppNode } from "@/lib/canvas";
 
 const MM_W = 200; // MiniMap defaultWidth
 const MM_H = 150; // MiniMap defaultHeight
@@ -52,21 +52,31 @@ function useMinimapFadeOpacity(): number {
   return MAX_OPACITY * (1 - (r - FADE_START) / (FADE_END - FADE_START));
 }
 
-// MiniMap과 오버레이를 함께 감싸 채움비에 따라 페이드시키는 래퍼.
-// opacity는 containing block을 만들지 않으므로 자식 Panel의 absolute 위치를 깨지 않는다.
-export function MinimapFade({ children }: { children: ReactNode }) {
+// MiniMap + 뷰포트 채움 오버레이를 함께 렌더하며 채움비에 따라 페이드.
+// opacity/z-index를 각 Panel에 직접 적용(래핑 div 없음) → 미니맵이 노드/캔버스 위 패널 레이어를 유지하고
+// 클릭(시점 이동)도 유효. 완전 페이드 시에만 pointer-events 차단.
+export function MinimapFade({ nodeColor }: { nodeColor: (node: AppNode) => string }) {
   const opacity = useMinimapFadeOpacity();
+  const hidden = opacity <= HIDDEN_EPS;
   return (
-    <div
-      className="transition-opacity duration-350 ease-smooth"
-      style={{ opacity, pointerEvents: opacity <= HIDDEN_EPS ? "none" : undefined }}
-    >
-      {children}
-    </div>
+    <>
+      <MiniMap<AppNode>
+        position="bottom-left"
+        pannable
+        zoomable
+        bgColor="var(--color-surface)"
+        nodeColor={nodeColor}
+        maskColor="transparent"
+        className="rounded-sm border border-hairline shadow-md transition-opacity duration-350 ease-smooth"
+        style={{ opacity, zIndex: 20, pointerEvents: hidden ? "none" : undefined }}
+      />
+      {/* 뷰포트 영역 채움 — MiniMap과 동일 좌표계 오버레이(같은 z, DOM 뒤라 미니맵 위에 얹힘) */}
+      <MiniMapViewportFill opacity={opacity} />
+    </>
   );
 }
 
-export function MiniMapViewportFill() {
+export function MiniMapViewportFill({ opacity = 1 }: { opacity?: number }) {
   const nodes = useNodes();
   const { getNodesBounds } = useReactFlow();
   const { x: tx, y: ty, zoom } = useViewport();
@@ -92,7 +102,11 @@ export function MiniMapViewportFill() {
   const vp = { x: -tx / zoom, y: -ty / zoom, w: paneW / zoom, h: paneH / zoom };
 
   return (
-    <Panel position="bottom-left" className="pointer-events-none">
+    <Panel
+      position="bottom-left"
+      className="pointer-events-none transition-opacity duration-350 ease-smooth"
+      style={{ opacity, zIndex: 20 }}
+    >
       <svg width={MM_W} height={MM_H} viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}>
         <rect
           x={vp.x}

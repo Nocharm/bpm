@@ -9,7 +9,6 @@ import {
   type Connection,
   type Edge,
   MarkerType,
-  MiniMap,
   type NodeChange,
   type NodeTypes,
   PanOnScrollMode,
@@ -32,7 +31,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
-import { MinimapFade, MiniMapViewportFill } from "@/components/minimap-viewport-fill";
+import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
@@ -6202,22 +6201,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                           color="var(--color-canvas-dot)"
                         />
                       )}
-                      {/* 줌아웃으로 미니맵이 통째로 채워지면(무의미) 페이드 아웃, 줌인 시 페이드 인 */}
-                      <MinimapFade>
-                        <MiniMap<AppNode>
-                          position="bottom-left"
-                          pannable
-                          zoomable
-                          bgColor="var(--color-surface)"
-                          nodeColor={(n) =>
-                            `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
-                          }
-                          maskColor="transparent"
-                          className="rounded-sm border border-hairline shadow-md"
-                        />
-                        {/* 뷰포트 영역을 반투명 악센트로 채움 — MiniMap이 children 미렌더라 동일 좌표계 오버레이 */}
-                        <MiniMapViewportFill />
-                      </MinimapFade>
+                      {/* 미니맵 — 줌아웃으로 통째로 채워지면 페이드 아웃(줌인 복귀). 패널 자체에 opacity를 줘
+                          z-index(패널 레이어)를 보존 → 노드/캔버스 위·클릭(시점 이동) 유효. 뷰포트 채움 오버레이 포함. */}
+                      <MinimapFade
+                        nodeColor={(n) =>
+                          `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
+                        }
+                      />
                       <CanvasZoomScale onFit={fitScopeTopLeft} />
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}

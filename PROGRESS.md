@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 미니맵 클릭/스태킹 수정: 래핑 div 제거, 패널에 직접 opacity(z-index 보존)
+- **버그**: 미니맵 페이드 opacity를 static 래핑 div에 주니 opacity<1이 새 **스태킹 컨텍스트**를 만들어 미니맵이 인터랙션 pane 아래로 내려가 클릭이 캔버스로 통과(최대 0.65 상한 후 항상 발생). 지도 위 클릭=캔버스 클릭으로 인식되던 원인.
+- **수정**(`minimap-viewport-fill.tsx`) — 래핑 div 폐기. `MinimapFade`가 MiniMap+채움 오버레이를 직접 렌더하고 opacity/`zIndex:20`을 **각 Panel(이미 absolute + 패널 z-index)에 직접** 적용 → 스태킹 컨텍스트 신규 생성 없음, 미니맵이 노드/캔버스 위 유지·클릭(시점 이동) 유효. 완전 페이드 시에만 `pointer-events:none`. `page.tsx`는 `<MinimapFade nodeColor={...}/>`로 축약(MiniMap 직접 렌더 제거).
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 엣지 연결면 패드 개선(꺾은선 커넥터·라벨 박스 안·hover 히트박스) + R6c 완료
 - **연결면 패드**(`context-menu.tsx EdgeSidesPad`) — ① 커넥터 직선→**직각 꺾은선**(`orthConnector`: 각 변에서 stub 후 중간 꺾음, 실제 캔버스 엣지처럼). ② Start/End 라벨을 박스 위→**박스 안 중앙·`text-[10px]`로 축소**(위 라벨행 제거, 그 공간을 꺾은선 상/하 라우팅에 사용; `VPAD`). ③ **박스 hover 시 4변 strip을 `group-hover:bg-accent-tint`로 노출** + `hover:border-accent/50` — 클릭 가능한 히트박스임을 인지.
 - **R6c 완료**(트래커) — 사용자 승인, 🔧→✅, 커밋 `b4ca7a0·26c5c5b`.
