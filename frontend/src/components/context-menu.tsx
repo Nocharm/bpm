@@ -260,9 +260,12 @@ function ColorRow({
 const BOX_W = 64;
 const BOX_H = 28;
 const GAP = 52;
-const VPAD = 10; // 박스 위/아래 여백 — 라벨을 박스 안으로 넣어 확보한 공간에 꺾은선 커넥터가 상/하로 라우팅
+const VPAD = 10; // 박스 위/아래 여백 — 꺾은선 커넥터가 상/하 레인으로 라우팅
+const HPAD = 10; // 박스 좌우 여백 — 좌/우 변 커넥터(박스 바깥 경로)가 pad(흰 배경) 밖으로 잘리지 않게
 const STUB = 7; // 커넥터가 선택 변에서 수직으로 빠져나오는 짧은 구간
-const PAD_W = BOX_W * 2 + GAP;
+const SRC_X0 = HPAD; // 소스 박스 좌측 x
+const TGT_X0 = HPAD + BOX_W + GAP; // 타겟 박스 좌측 x
+const PAD_W = HPAD * 2 + BOX_W * 2 + GAP;
 const PAD_H = BOX_H + VPAD * 2;
 
 // 히트박스 키움 — 변 strip 두께 8px(클릭 쉬움)
@@ -277,12 +280,12 @@ const SIDE_BORDERS: { side: HandleSide; cls: string }[] = [
 // 어떤 (source,target) 변 조합(16가지)에서도 박스(노드) 뒤로 지나지 않고 "돌아서" 잇는다.
 // 좌표: 소스 박스 x∈[0,BOX_W], 타겟 박스 x∈[tgtX0, tgtX0+BOX_W], 둘 다 y∈[VPAD, VPAD+BOX_H].
 function orthConnector(sourceSide: HandleSide, targetSide: HandleSide): string {
-  const srcX0 = 0;
-  const tgtX0 = BOX_W + GAP;
+  const srcX0 = SRC_X0;
+  const tgtX0 = TGT_X0;
   const cy = VPAD + BOX_H / 2;
   const topY = VPAD - STUB; // 박스 위 레인(비어 있음)
   const botY = VPAD + BOX_H + STUB; // 박스 아래 레인(비어 있음)
-  const gx = BOX_W + GAP / 2; // 두 박스 사이 세로 채널 x — 모든 y에서 비어 있음
+  const gx = srcX0 + BOX_W + GAP / 2; // 두 박스 사이 세로 채널 x(가운데) — 모든 y에서 비어 있음
   const srcCx = srcX0 + BOX_W / 2;
   const tgtCx = tgtX0 + BOX_W / 2;
 
@@ -369,8 +372,8 @@ function EdgeSidesPad({
     onPickTarget: (side: HandleSide) => void;
   };
 }) {
-  const srcX0 = 0;
-  const tgtX0 = BOX_W + GAP;
+  const srcX0 = SRC_X0;
+  const tgtX0 = TGT_X0;
   return (
     <div className="px-3 py-2">
       <div className="relative mx-auto" style={{ width: PAD_W, height: PAD_H }}>
@@ -382,8 +385,8 @@ function EdgeSidesPad({
           aria-hidden
         >
           <defs>
-            <marker id="edgeSidesArrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
+            <marker id="edgeSidesArrow" markerWidth="5" markerHeight="5" refX="4.5" refY="2.25" orient="auto">
+              <path d="M0,0 L4.5,2.25 L0,4.5 Z" fill="currentColor" />
             </marker>
           </defs>
           <path

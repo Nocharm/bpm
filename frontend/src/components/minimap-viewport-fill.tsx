@@ -15,10 +15,10 @@ import {
 
 import { type AppNode } from "@/lib/canvas";
 
-// 미니맵 크기 — 기본 200×150에서 높이 70%(105) + 비율 20:9(105×20/9≈233). MiniMap style.width/height로 지정,
+// 미니맵 크기 — 높이 105 유지 + 비율 16:9(105×16/9≈187). MiniMap style.width/height로 지정,
 // 오버레이 svg도 동일 치수를 써 좌표계(viewBox)를 미니맵과 정렬한다.
-const MM_W = 233; // 20:9 비율 폭(≈ 105 × 20/9)
-const MM_H = 105; // 기본 150의 70% 높이
+const MM_W = 187; // 16:9 비율 폭(≈ 105 × 16/9)
+const MM_H = 105; // 높이 유지(기본 150의 70%)
 const OFFSET_SCALE = 5; // MiniMap offsetScale 기본값
 
 // 페이드 임계값 — 채움비 r = min(vp.w/vbW, vp.h/vbH).

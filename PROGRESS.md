@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 연결면 패드 좌우 여백(잘림 수정)·화살표 축소 + 미니맵 16:9
+- **좌/우 변 커넥터 pad 밖 잘림 수정**(`context-menu.tsx`) — 좌(source left)·우(target right) 변 커넥터가 박스 바깥(x=-STUB/+STUB)으로 나가 pad(svg 180폭) 밖으로 잘렸음. `HPAD=10` 좌우 여백 도입(`SRC_X0`/`TGT_X0`·`PAD_W`=200), `gx`도 gap 중앙(`srcX0+BOX_W+GAP/2`). 16조합 전부 박스 미통과 + `[0,PAD_W]` 내 수치 재검증.
+- **화살표 축소**(edgeSidesArrow marker) — 7×7→5×5, path 6→4.5. End 위/아래에서 큰 화살표가 옆에서 꺾인 듯 보이던 것 완화.
+- **미니맵 16:9**(`minimap-viewport-fill.tsx`) — 높이 105 유지, 폭 233→**187**(16:9).
+- 검증: 프론트 lint 0·build OK + 16조합 라우팅/바운드 수치 검증.
+
 ## 2026-07-03 — 엣지 연결면 커넥터 라우팅 재작성(16조합 노드 뒤 통과 방지) + R6e 완료
 - **커넥터가 노드 뒤로 지나 깨져 보이던 문제**(`context-menu.tsx orthConnector`) — 기존 "중간점 꺾기"는 일부 변 조합에서 박스 내부를 통과(svg가 박스 뒤라 잘려 보임). 두 박스 사이 **gap 세로 채널(x=gx)** + **박스 위/아래 레인(topY/botY)**만 쓰도록 재작성: 각 변을 자유 채널로 이스케이프→gx 세로 채널로 연결→타겟 변 진입. **16개 조합 전부 박스 내부 미통과**를 node 스크립트로 수치 검증(ALL OK). 미사용 `sideAnchor`/`sideDir` 제거.
 - **R6e 완료**(트래커) — 사용자 승인, 🔧→✅, 커밋 `7343974`.
