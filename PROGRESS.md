@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-03 — 엣지 메뉴 삭제 스페이서 2줄 통일 + 미니맵 크기(20:9·높이 70%)
+- **엣지 삭제 앞 구분선 2개**(`page.tsx`) — 노드 메뉴는 color/delete 인접 divider로 삭제 앞이 2줄인데 엣지는 1줄이라, 엣지도 `{divider}×2`로 통일.
+- **미니맵 크기**(`minimap-viewport-fill.tsx`) — `MM_W/MM_H` 200×150 → **233×105**(높이 기본의 70%=105, 비율 20:9≈233×105). MiniMap `style.width/height`로 지정(React Flow는 `style.width ?? defaultWidth` 사용), 오버레이 svg도 동일 치수라 좌표계 정렬 유지.
+- 검증: 프론트 lint 0·build OK.
+
 ## 2026-07-03 — 에디터 재디자인 R6e: 그룹 컨텍스트 메뉴(이름변경·색상 인라인·해제 아이콘)
 - **그룹 우클릭 메뉴**(`page.tsx` menuItems group 분기) — 그룹 이름변경(Type·신규 i18n `ctx.renameGroup`)·**색상 인라인 스와치**(`GROUP_COLOR_PRESETS`/`recolorGroup`)·멤버 일괄편집(SlidersHorizontal)·구분선·그룹 해제(Ungroup)·구분선·정렬·레이아웃(유지). 결정: F2 없음(그룹 선택상태 미존재)·⌘⇧G 칩 생략(미바인딩)·색상 인라인·정렬 유지.
 - **그룹 이름변경 트리거**(`group-title-bar.tsx`) — 메뉴가 `setNewGroupId(groupId)`→`autoEdit`. 마운트 전용 useState로는 이미 뜬 그룹 재호출을 못 받으므로 **렌더 중 상태조정**(prevAutoEdit 비교, effect 아님 → `set-state-in-effect` 회피)으로 편집 진입. 편집 종료(blur/Esc) 시 `onAutoEditConsumed`로 신호 해제 → 반복 이름변경 재트리거.

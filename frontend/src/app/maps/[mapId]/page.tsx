@@ -3963,6 +3963,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           shortcut: "F2",
           onSelect: () => startEdgeLabelEdit(edge.id),
         },
+        // 노드 메뉴처럼 삭제 앞 스페이서를 2줄(구분선 2개)로 통일
+        { divider: true },
         { divider: true },
         {
           label: t("ctx.delete"),

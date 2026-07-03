@@ -15,8 +15,10 @@ import {
 
 import { type AppNode } from "@/lib/canvas";
 
-const MM_W = 200; // MiniMap defaultWidth
-const MM_H = 150; // MiniMap defaultHeight
+// 미니맵 크기 — 기본 200×150에서 높이 70%(105) + 비율 20:9(105×20/9≈233). MiniMap style.width/height로 지정,
+// 오버레이 svg도 동일 치수를 써 좌표계(viewBox)를 미니맵과 정렬한다.
+const MM_W = 233; // 20:9 비율 폭(≈ 105 × 20/9)
+const MM_H = 105; // 기본 150의 70% 높이
 const OFFSET_SCALE = 5; // MiniMap offsetScale 기본값
 
 // 페이드 임계값 — 채움비 r = min(vp.w/vbW, vp.h/vbH).
@@ -68,7 +70,7 @@ export function MinimapFade({ nodeColor }: { nodeColor: (node: AppNode) => strin
         nodeColor={nodeColor}
         maskColor="transparent"
         className="rounded-sm border border-hairline shadow-md transition-opacity duration-350 ease-smooth"
-        style={{ opacity, zIndex: 20, pointerEvents: hidden ? "none" : undefined }}
+        style={{ opacity, zIndex: 20, width: MM_W, height: MM_H, pointerEvents: hidden ? "none" : undefined }}
       />
       {/* 뷰포트 영역 채움 — MiniMap과 동일 좌표계 오버레이(같은 z, DOM 뒤라 미니맵 위에 얹힘) */}
       <MiniMapViewportFill opacity={opacity} />
