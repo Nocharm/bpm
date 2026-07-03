@@ -10,6 +10,8 @@ import type { HandleSide } from "@/lib/canvas";
 // 액션 항목 / 구분선 / 색 스와치 행 / 십자 패드 / 하위 메뉴 (icon = 선택적 Lucide 아이콘)
 export type ContextMenuItem =
   | { divider: true }
+  // 섹션 캡션 — 클릭 불가 그룹 라벨(예: 정렬/분배). 엣지 메뉴 "연결 면"과 같은 톤
+  | { caption: string }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
   | {
       edgeSides: true;
@@ -157,6 +159,13 @@ function MenuList({
       {items.map((item, index) =>
         "divider" in item && item.divider ? (
           <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
+        ) : "caption" in item ? (
+          <div
+            key={`caption-${index}`}
+            className="px-3 pb-0.5 pt-1.5 text-fine font-semibold uppercase tracking-wide text-ink-tertiary"
+          >
+            {item.caption}
+          </div>
         ) : "colors" in item ? (
           <ColorRow key={`colors-${index}`} item={item} onClose={onClose} />
         ) : "edgeSides" in item ? (
@@ -173,9 +182,9 @@ function MenuList({
             key={item.label}
             type="button"
             disabled={item.disabled}
-            className={`flex h-8 w-full items-center justify-between gap-3 px-3 ${
+            className={`flex h-8 w-full items-center justify-between gap-3 whitespace-nowrap px-3 ${
               item.disabled
-                ? "cursor-not-allowed text-ink-tertiary"
+                ? "cursor-not-allowed text-ink-tertiary opacity-45"
                 : `hover:bg-surface-alt ${item.danger ? "text-error" : "text-ink"}`
             }`}
             onClick={() => {
@@ -393,8 +402,8 @@ function SubmenuItem({
         ref={triggerRef}
         type="button"
         disabled={item.disabled}
-        className={`flex h-8 w-full items-center justify-between gap-3 px-3 ${
-          item.disabled ? "cursor-not-allowed text-ink-tertiary" : "hover:bg-surface-alt text-ink"
+        className={`flex h-8 w-full items-center justify-between gap-3 whitespace-nowrap px-3 ${
+          item.disabled ? "cursor-not-allowed text-ink-tertiary opacity-45" : "hover:bg-surface-alt text-ink"
         }`}
       >
         <span className="flex items-center gap-2">

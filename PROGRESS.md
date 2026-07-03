@@ -2,7 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
-## 2026-07-03 — 에디터 재디자인 R6b: 캔버스 컨텍스트 메뉴 아이콘 + PNG 최상위 승격
+## 2026-07-03 — R6b 보정: PNG 기타로 환원 + 정렬 서브메뉴 캡션·줄바꿈/비활성 개선(ASCII 확인 후)
+- **PNG 최상위 승격 되돌림**(결정 1) — `기타›`(⋯ MoreHorizontal) 서브메뉴 안에 PNG 내보내기(Download, `Ctrl+⇧E`). 노드타입 4행 아이콘은 유지.
+- **정렬·레이아웃 서브메뉴**(결정 3-3) — `Align`/`Distribute` 섹션 캡션(기존 `legend.align`/`legend.distribute` 재사용) + 4방향 정렬 사이 중간 divider 제거(한 그룹). 스트립 재디자인은 기각(리스트 유지, 결정 2).
+- **공통 컴포넌트**(`context-menu.tsx`) — 결정 2: 항목 라벨 `whitespace-nowrap`("Center (horizontal)" 2줄 줄바꿈 = "센터(호라이즌)" 문제 해결) + 왼쪽 정렬. 결정 3-2: 비활성 항목 `opacity-45`로 뚜렷이. 신규 `{ caption }` 변형. 결정 3-1: 단축키 표시는 기존대로.
+- 검증: 프론트 lint 0·build OK.
+
+## 2026-07-03 — 에디터 재디자인 R6b: 캔버스 컨텍스트 메뉴 아이콘 + PNG 최상위 승격(→ 다음 커밋에서 환원)
 - **캔버스(pane) 우클릭 메뉴**(`page.tsx` menuItems) — 노드타입 4항목에 Lucide 아이콘(process=Square·decision=Diamond·start=Circle·end=CircleDot, add-node-menu와 동일 매핑; 신규 module const `NODE_TYPE_ICONS`). PNG 내보내기를 `기타›` 하위메뉴에서 **최상위 항목으로 승격**(Download 아이콘, 라벨 `Ctrl+⇧E`=실제 전역키 유지 — 목업 ⌘E는 라벨거짓 방지로 미채택). 빈 `기타` 서브메뉴 제거.
 - 범위 준수(재스타일+저비용): 전체선택(⌘A)·라이브러리에서 추가·노드추가 통합은 신규 동작이라 미포함. `ctx.more` i18n 키는 orphan으로 남김(제거 안 함).
 - **R6a 완료 처리**(트래커) — 사용자 승인, 🔧→✅.

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Square, Trash2, Undo2, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Hand, Info, LayoutGrid, Lock, LogOut, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, Sparkles, Spline, Square, Trash2, Undo2, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -3796,7 +3796,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           ),
       },
       { divider: true },
-      // 가로 정렬(세로 기준선) — 좌측 / 가로 가운데
+      { caption: t("legend.align") },
+      // 4방향 정렬(캡션 아래 한 그룹) — 좌측 / 가로 가운데 / 상단 / 세로 가운데
       {
         label: t("editor.alignLeft"),
         icon: AlignStartVertical,
@@ -3813,8 +3814,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         disabled: count < 2,
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerX", ids ?? undefined)),
       },
-      { divider: true },
-      // 세로 정렬(가로 기준선) — 상단 / 세로 가운데
+      // 상단 / 세로 가운데 — 같은 정렬 그룹으로 연속(중간 구분선 제거)
       {
         label: t("editor.alignTop"),
         icon: AlignStartHorizontal,
@@ -3832,6 +3832,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         onSelect: () => applyNodesTransform((current) => alignSelected(current, "centerY", ids ?? undefined)),
       },
       { divider: true },
+      { caption: t("legend.distribute") },
       // 등간격 분배 — 가로 / 세로
       {
         label: t("editor.distributeX"),
@@ -3859,15 +3860,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
 
     if (menu.kind === "pane") {
-      // PNG 내보내기 — 기타 하위메뉴에서 최상위로 승격(R6b). 실제 키는 전역 Ctrl/⌘+⇧+E(라벨도 그대로).
-      const exportItem: ContextMenuItem = {
-        label: t("ctx.exportPng"),
-        icon: Download,
-        shortcut: "Ctrl+⇧E",
-        onSelect: () => void handleExportPng(),
+      // 기타 하위메뉴 — PNG 내보내기 등 보조 동작(추후 확장 지점). 실제 키는 전역 Ctrl/⌘+⇧+E(라벨 그대로).
+      const moreItem: ContextMenuItem = {
+        label: t("ctx.more"),
+        icon: MoreHorizontal,
+        submenu: [
+          {
+            label: t("ctx.exportPng"),
+            icon: Download,
+            shortcut: "Ctrl+⇧E",
+            onSelect: () => void handleExportPng(),
+          },
+        ],
       };
       if (readOnly) {
-        return [exportItem];
+        return [moreItem];
       }
       return [
         ...NODE_TYPE_OPTIONS.map((option, index) => ({
@@ -3880,7 +3887,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         { divider: true },
         alignItem(null, selectedCount),
         { divider: true },
-        exportItem,
+        moreItem,
       ];
     }
     // 그룹/복수선택 정렬 메뉴 — ids 미지정(selection)은 선택 노드, 지정(group)은 그룹 멤버 대상
