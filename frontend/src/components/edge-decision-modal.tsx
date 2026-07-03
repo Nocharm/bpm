@@ -38,14 +38,16 @@ export function EdgeDecisionModal({
     <ModalBackdrop className="fixed inset-0 z-[1200]" style={{ background: "transparent" }} onClose={onClose}>
       <div
         data-id="edge-decision-modal"
-        className="fixed flex w-48 flex-col gap-0.5 rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+        className="fixed flex w-48 flex-col rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg"
         style={{ left, top }}
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="px-1.5 py-1 text-fine text-ink-tertiary">{t("edge.decisionPrompt")}</p>
+        <p className="px-3 pb-0.5 pt-1.5 text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
+          {t("edge.decisionPrompt")}
+        </p>
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
+          className="flex h-8 w-full items-center gap-2 px-3 text-left text-caption text-ink hover:bg-surface-alt"
           onClick={onBranch}
         >
           <GitBranch size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -53,15 +55,16 @@ export function EdgeDecisionModal({
         </button>
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
+          className="flex h-8 w-full items-center gap-2 px-3 text-left text-caption text-ink hover:bg-surface-alt"
           onClick={onIntercept}
         >
           <CornerDownRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
           {t("edge.actionIntercept")}
         </button>
+        <hr className="my-1 border-t border-divider" />
         <button
           type="button"
-          className="rounded-sm px-2 py-1 text-left text-caption text-ink-tertiary hover:bg-surface-alt"
+          className="flex h-8 w-full items-center px-3 text-left text-caption text-ink-tertiary hover:bg-surface-alt"
           onClick={onClose}
         >
           {t("common.cancel")}

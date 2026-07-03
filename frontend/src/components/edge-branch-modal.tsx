@@ -50,16 +50,18 @@ export function EdgeBranchModal({
       onClose={onClose}
     >
       <div
-        className="flex w-44 flex-col gap-0.5 rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+        className="flex w-44 flex-col rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg"
         style={position ? { position: "fixed", left, top } : undefined}
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="px-1.5 py-1 text-fine text-ink-tertiary">{t("branch.pick")}</p>
+        <p className="px-3 pb-0.5 pt-1.5 text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
+          {t("branch.pick")}
+        </p>
         {kinds.map((kind) => (
           <button
             key={kind}
             type="button"
-            className="rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
+            className="flex h-8 w-full items-center px-3 text-left text-caption text-ink hover:bg-surface-alt"
             onClick={() => onPick(kind)}
           >
             {t(`branch.${kind}`)}

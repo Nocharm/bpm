@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R9a: 엣지 컨텍스트 팝업 4종 토큰 통일(context-menu 팝업 톤)
+- **`edge-branch-modal.tsx`·`edge-action-modal.tsx`·`edge-select-modal.tsx`·`edge-decision-modal.tsx`** — 커서 위치 팝업이라 대표 모달(중앙 아이콘 원)이 아닌 `context-menu.tsx`(R6a) 팝업 컨벤션으로 통일: 패널 `p-1.5`→`py-1.5`+`text-caption`, 항목 `rounded-sm px-2 py-1`→`h-8 px-3` 풀폭 hover, 캡션 `text-fine`→uppercase tracking-wide font-semibold, cancel 앞 divider(`border-divider`) 추가. decision 아이콘 gap `1.5`→`2`. 위치/Esc/ModalBackdrop/onClose 동작·i18n 키 전부 보존(신규 문자열 없음).
+- 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 후속.)
+
 ## 2026-07-04 — 벌크 개별 마법사 이전→현재 필 + 버튼 아이콘·호버 반전 + 요약 표(대표모달 스타일)
 - **`group-bulk-modal.tsx`** — (#1) 개별 선택 마법사에서 회색 "기존/값" 텍스트 제거, **이전→현재를 부서·담당자 필**로 완전 표기. (#2) 마법사 버튼 아이콘 추가(교체·추가·건너뛰기), **호버 시 버려지는 쪽 취소선+빨강**(기본/교체=기존 버림, 건너뛰기=새 값 버림으로 반전). 시스템/소요 마법사 버튼도 아이콘. (#4) 적용 후 요약을 **대표 모달 스타일**(아이콘 원+제목+요약박스)로, **이전→현재 표**(노드·이전(취소선)·→·현재).
 - **`i18n-messages.ts`** — `bulk.summaryNode`/`before`/`after` en·ko 추가.
