@@ -6,6 +6,12 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9e: EdgeActionModal 리치 재디자인(Insert/Replace 아이콘 타일 + 의미 애니메이션)
+- **`edge-action-modal.tsx`** — 디시전 팝업과 동일 체계로 재설계: 헤더(uppercase 캡션 + 우상단 X) → 2열 경계 아이콘 타일 → 하단 Cancel. 커스텀 애니 SVG — **Insert**: 노드가 흐름 gap에 껴듦(디시전 Intercept 모션 `edge-box-mid`/`edge-conn` 재사용). **Replace**: `[A]—[B]` 수평 시작 → B 아래 새 노드 C 팝인 → 기존 A—B 엣지 페이드아웃 → 새 꺾은선 엣지 A→C가 아래로 나와 왼쪽으로 들어가며 그려짐(강조색=엣지 → 브랜치와 구분). 정지 상태도 교체 최종형(겹침 없음). 타일 팝 열림 1회, hover 시 아이콘만 재생.
+- **`globals.css`** — Replace용 `edge-repl-node`/`edge-repl-old`/`edge-repl-edge` 클래스 + `edge-fade-out` 키프레임 추가, reduced-motion 가드에 포함. Insert는 기존 `edge-box-mid`/`edge-conn` 재사용.
+- **`i18n-messages.ts`** — 라벨 단축: `edge.actionInsert` "Insert into flow"/"흐름에 삽입" → **"Insert"/"삽입"**, `edge.actionReplace` "Replace existing"/"기존 교체" → **"Replace"/"교체"**(두 키 EdgeActionModal 전용). en·ko.
+- 동작 보존: 위치 클램프·Esc·바깥클릭·onInsert/onReplace/onClose·i18n 키. 검증: lint 0 errors·build OK, static CSS에 edge-repl-* 4종 확인.
+
 ## 2026-07-04 — R9d fix: 인터셉트 겹침 원천 차단 + 애니 견고화·심플화
 - **증상**: 실제 화면이 프리뷰와 다름 — 아이콘 애니 미표시 + 인터셉트 선이 가운데 박스 밑에 겹쳐 보임. 원인은 브라우저가 옛 globals.css를 캐시해 `.edge-*` 규칙 미적용(그 경우 임시 커넥터 `isegStart`가 기본 opacity 1로 박스 밑에 노출). 빌드 산출 CSS엔 규칙 존재 확인.
 - **`edge-decision-modal.tsx`·`globals.css`** — (1) 인터셉트에서 겹침 유발 임시 커넥터(`isegStart`)와 ㅁ-ㅁ widen 크로스페이드 제거 → **가운데 박스가 위에서 드롭 + 좌우 커넥터 페이드인**(좌우 박스 정적)으로 심플화. (2) 애니메이션을 `.edge-anim` 하위 게이트 없이 요소 클래스에 직접 부여. (3) **모든 요소의 '정지 상태 = 최종(그려진) 완성 상태'** → 애니가 없어도(감소모션·CSS 캐시) 겹침 없는 깨끗한 아이콘. tile-pop 포함 전부 `backwards` fill(전역 버튼 :active 눌림 보존).

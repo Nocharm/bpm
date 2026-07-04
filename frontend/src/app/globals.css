@@ -316,12 +316,22 @@ button:not(:disabled):active {
 @keyframes edge-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .edge-conn { animation: edge-fade-in 240ms var(--ease-smooth) 440ms backwards; }
 
+/* EdgeActionModal Replace — 새 노드 C 팝인 → 기존 엣지 페이드아웃 → 새 꺾은선 엣지가 아래로 나와 왼쪽으로 들어가며
+   그려짐(강조색=엣지). Insert는 위 edge-box-mid/edge-conn 재사용. (edge-repl-old는 정지 상태에서 숨김=교체 최종형) */
+@keyframes edge-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.edge-repl-node { transform-box: fill-box; transform-origin: center; animation: edge-pop-in 320ms var(--ease-overshoot) 60ms backwards; }
+.edge-repl-old { opacity: 0; animation: edge-fade-out 460ms var(--ease-smooth) 320ms backwards; }
+.edge-repl-edge { stroke-dasharray: 1; animation: edge-branch-draw 680ms var(--ease-smooth) 520ms backwards; }
+
 @media (prefers-reduced-motion: reduce) {
   .edge-tile-pop,
   .edge-branchline,
   .edge-branchnode,
   .edge-box-mid,
-  .edge-conn {
+  .edge-conn,
+  .edge-repl-node,
+  .edge-repl-old,
+  .edge-repl-edge {
     animation: none;
   }
 }
