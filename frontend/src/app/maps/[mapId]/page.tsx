@@ -746,7 +746,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [isSysadmin, setIsSysadmin] = useState(false);
   // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
-  const [aiPreviewActive, setAiPreviewActive] = useState(true); // TEMP DEV SEED — R10b-2 툴바 확인용. 확인 후 false로 되돌릴 것.
+  const [aiPreviewActive, setAiPreviewActive] = useState(false);
   const aiPreviewRef = useRef(false);
   // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그
   const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });

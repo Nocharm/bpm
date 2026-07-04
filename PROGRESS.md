@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10 완료: 개발 시드 일괄 제거 (컴팩트)
+- **`ai-chat-panel.tsx`·`page.tsx`** — R10 검증용 TEMP DEV SEED(채팅 `messages`·`findings`·`steps`·`aiPreviewActive`)를 전부 제거 → 실서비스 상태(빈 배열·false). **R10(a~d) 전체 완료.**
+- 검증: 잔여 시드 0 · build OK.
+
 ## 2026-07-04 — AI 헤더 아이콘 정리: 최소화 Minimize2·추출 Download·폰트 라벨 T
 - **`scope-window.tsx`** — 최소화 아이콘 `Minus`→`Minimize2`(폰트 − 와 혼동 방지, 축소 직관).
 - **`page.tsx`** — 추출 아이콘 `FileDown`→`Download`(더 심플·직관). 폰트 배율 라벨 `A`→`T`.

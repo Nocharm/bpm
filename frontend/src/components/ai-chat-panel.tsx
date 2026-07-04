@@ -76,48 +76,13 @@ export function AiChatPanel({
   onAutoTitle,
 }: AiChatPanelProps) {
   const { t } = useI18n();
-  // TEMP DEV SEED — R10 시각 확인용 샘플(표·태그·헤딩·코드·인용). R10 완료 후 `[]`로 되돌릴 것.
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "user", content: "이 프로젝트 아키텍처를 표랑 태그도 써서 마크다운으로 정리해줘." },
-    {
-      role: "assistant",
-      content:
-        "# BPM 아키텍처 요약\n\n프로세스맵을 그리는 웹 서비스입니다. 관련 태그: #frontend #backend #docker\n\n## 컨테이너 구성\n\n| 레이어 | 스택 | 역할 |\n| --- | --- | --- |\n| frontend | Next.js + React Flow | 캔버스·노드·엣지 편집 |\n| backend | FastAPI + SQLAlchemy | 맵/버전 CRUD·검증 |\n| db | PostgreSQL | 맵·노드·엣지 영속 |\n| proxy | nginx | `/`→front, `/api`→back |\n\n## 경계\n\n- 브라우저 → **:3333**(nginx) → (Next.js | FastAPI) → PostgreSQL\n- 입력 검증은 *backend API 경계*에서만\n\n```ts\n// nginx 라우팅 예시\nlocation /api { proxy_pass http://backend:8000; }\n```\n\n> 로컬은 네이티브 실행, 서버는 docker-compose로 배포합니다.",
-    },
-    { role: "user", content: "권한 롤은 어떻게 나뉘어? #rbac" },
-    {
-      role: "assistant",
-      content:
-        "## 권한 롤\n\n역할별 권한 요약입니다. 태그: #rbac #security\n\n| 롤 | 맵 편집 | 승인 | 유저관리 |\n| --- | --- | --- | --- |\n| viewer | ✕ | ✕ | ✕ |\n| editor | ○ | ✕ | ✕ |\n| approver | ○ | ○ | ✕ |\n| sysadmin | ○ | ○ | ○ |\n\n### 승인 워크플로\n\n1. editor가 버전 작성 → **제출**\n2. approver가 검토 → 승인/반려\n3. 승인 시 게시(가시성 반영)\n\n주의할 점:\n\n- 점유권(checkout)은 편집자 1인 배타적\n- 반려 시 요청자에게 회수 알림\n\n#### 참고\n\n- 타임스탬프는 **KST**(`clock.now()`)\n- id는 `genId()` 사용(`crypto.randomUUID` 금지)\n\n> 권한 검증은 backend에서 강제합니다(`DEV_ENFORCE_PERMISSIONS`).\n\n---\n\n자세한 건 [권한 문서](https://example.com/rbac)를 참고하세요.",
-    },
-    { role: "user", content: "테스트랑 빌드는 어떤 명령으로 돌려?" },
-    {
-      role: "assistant",
-      content:
-        "## 테스트 · 빌드\n\n태그: #testing #ci\n\n| 대상 | 명령 | 비고 |\n| --- | --- | --- |\n| backend | `pytest tests/ -q` | AAA 패턴 |\n| frontend | `npm run lint` | strict TS |\n| build | `npm run build` | standalone |\n\n- 외부 의존성은 **목킹**, 내부 로직은 실제 경로로 검증\n- 커밋 전 전체 스위트, 개발 중엔 단건\n\n```bash\n.venv/bin/python -m pytest tests/test_maps.py -q\n```\n\n각 코드 행은 더블클릭, 인라인 `코드`는 클릭으로 복사됩니다.",
-    },
-    { role: "user", content: "노드 속성 전체를 아주 넓은 표로 보여줘. #wide" },
-    {
-      role: "assistant",
-      content:
-        "## 노드 속성 매트릭스\n\n좌우로 스크롤되는 넓은 표입니다. 태그: #wide #table #overflow\n\n| ID | 노드 | 유형 | 담당부서 | 담당자 | 담당자ID | 상태 | 색상 | 선행 | 후행 | 우선순위 | 예상시간 | 실제시간 | 리스크 | SLA | 승인자 | 코멘트 | 생성일 | 최종수정 | 버전 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| N01 | Start | event | 공정기획팀 | 김민수 | user.kms | 승인 | slate | - | 접수 | 높음 | 0.5h | 0.4h | 하 | 24h | 최유진 | 프로세스의 시작 지점으로 외부 트리거를 수신한다 | 2026-06-20 | 2026-07-01 | v5 |\n| N02 | 접수 | task | 영업관리팀 | 이서연 | user.lsy | 검토중 | teal | Start | 검증 | 보통 | 2.0h | 2.5h | 중 | 48h | 최유진 | 고객 요청을 접수하여 담당 부서로 라우팅한다 | 2026-06-21 | 2026-07-02 | v5 |\n| N03 | 검증 | task | 품질보증팀 | 박지훈 | user.pjh | 반려 | amber | 접수 | 승인 | 높음 | 3.0h | 4.0h | 상 | 8h | 최유진 | 입력 데이터의 정합성과 필수값을 검증한다 | 2026-06-22 | 2026-07-03 | v5 |\n| N04 | 승인 | decision | 경영지원팀 | 최유진 | user.cyj | 승인 | violet | 검증 | End | 긴급 | 1.0h | 0.8h | 상 | 4h | 대표이사 | 최종 승인 게이트를 통과시키고 게시한다 | 2026-06-23 | 2026-07-04 | v5 |\n| N05 | End | event | 공정기획팀 | 김민수 | user.kms | 승인 | rose | 승인 | - | 낮음 | 0.2h | 0.2h | 하 | 24h | 최유진 | 프로세스 종료 지점으로 결과를 기록한다 | 2026-06-20 | 2026-07-04 | v5 |\n\n표가 대화창 80% 폭을 넘으면 내부에서 좌우로 스크롤됩니다. 마지막 줄까지 스크롤하면 우하단 **맨 아래로** 버튼이 사라집니다.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
-  // TEMP DEV SEED — R10b 카드 확인용. 확인 후 `[]`로 되돌릴 것.
-  const [findings, setFindings] = useState<AiFinding[]>([
-    { severity: "high", category: "validation", node_ids: ["n1"], message: "시작 노드에 선행 연결이 없어 흐름이 끊깁니다.", suggestion: "Start를 접수 노드와 연결하세요." },
-    { severity: "medium", category: "naming", node_ids: ["n2"], message: "노드 라벨이 모호합니다(‘task’).", suggestion: "동사+목적어 형태로 구체화하세요." },
-    { severity: "low", category: "layout", node_ids: [], message: "분기 간격이 좁아 가독성이 떨어집니다.", suggestion: "" },
-  ]); // 최근 analysis 결과 (Phase 4)
-  const [steps, setSteps] = useState<AiStep[]>([
-    { order: 1, node_id: "n1", narration: "Start — 외부 트리거를 수신해 프로세스를 개시합니다." },
-    { order: 2, node_id: "n2", narration: "접수 — 고객 요청을 담당 부서로 라우팅합니다." },
-    { order: 3, node_id: "n3", narration: "검증 — 입력 데이터의 정합성을 확인합니다." },
-  ]); // 워크스루 단계 (Phase 5)
+  const [findings, setFindings] = useState<AiFinding[]>([]); // 최근 analysis 결과 (Phase 4)
+  const [steps, setSteps] = useState<AiStep[]>([]); // 워크스루 단계 (Phase 5)
   const [stepIndex, setStepIndex] = useState(0);
   const [autoplay, setAutoplay] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
