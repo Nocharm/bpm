@@ -43,6 +43,7 @@ import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
+import { FlowConflictModal } from "@/components/flow-conflict-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
@@ -6408,34 +6409,18 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           {pending && (
-            <div
-              className="absolute z-[1110] flex flex-col gap-1 rounded-md border border-hairline bg-surface p-2 shadow-lg"
-              style={{ left: pending.rect.left, top: pending.rect.top + pending.rect.height + 8 }}
-            >
-              <span className="text-fine text-ink-secondary">{t("dropzone.conflictPrompt")}</span>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  className="rounded-sm border border-hairline px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                  onClick={() => {
-                    applyFlowEdges(pending.aId, pending.bId, pending.mode, false);
-                    setPending(null);
-                  }}
-                >
-                  {t("dropzone.keep")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm bg-accent px-2 py-0.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                  onClick={() => {
-                    applyFlowEdges(pending.aId, pending.bId, pending.mode, true);
-                    setPending(null);
-                  }}
-                >
-                  {t("dropzone.insert")}
-                </button>
-              </div>
-            </div>
+            <FlowConflictModal
+              rect={pending.rect}
+              onKeep={() => {
+                applyFlowEdges(pending.aId, pending.bId, pending.mode, false);
+                setPending(null);
+              }}
+              onInsertBetween={() => {
+                applyFlowEdges(pending.aId, pending.bId, pending.mode, true);
+                setPending(null);
+              }}
+              onClose={() => setPending(null)}
+            />
           )}
           {aiPreviewActive && (
             <div className="absolute left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md bg-surface px-3 py-2 shadow-lg">

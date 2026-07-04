@@ -6,6 +6,14 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9h: Keep/Insert Between 모달 통일 + R9 타일 클릭효과
+- **`flow-glyphs.tsx`(신규)** — Insert/Keep 공용 글리프 추출: `InsertGlyph`(흐름 gap 껴듦, 액션 Insert 재사용), `KeepGlyph`(기존 X→B 유지 + 새 노드 A 팝인 + 새 엣지 A→B 강조색 합류). EdgeActionModal의 InsertAnimIcon 제거→InsertGlyph.
+- **`flow-conflict-modal.tsx`(신규)** — 입력 있는 노드 앞에 노드 추가 시 뜨는 Keep/Insert Between 인라인 모달(텍스트버튼+`font-medium` 위반)을 아이콘 타일 컴포넌트로 재디자인: 노드 아래 앵커(absolute), 헤더 캡션+우상단 X(dismiss 신설), 2타일(Keep/Insert between). 타일 팝+hover 아이콘 재생.
+- **`page.tsx`** — 인라인 pending 모달 → `<FlowConflictModal>`. 동작(Keep/Insert `applyFlowEdges`) 보존.
+- **`globals.css`** — `edge-keep-node`/`edge-keep-edge`(기존 `edge-pop-in`/`edge-branch-draw` 재사용) + reduced-motion 가드.
+- **클릭효과**: R9 타일 모달(decision·action·branch·Keep/Insert)에 select식 `active:bg-accent-tint` 추가(전역 press 눌림과 함께). select는 이미 적용됨.
+- R9 리치 재디자인 모달 총 5종(decision·action·branch·select·Keep/Insert) 완료. 검증: lint 0 errors·build OK. 런타임 인앱 확인 후속.
+
 ## 2026-07-04 — R9e 조정: EdgeActionModal Insert/Replace 위치 스왑
 - **`edge-action-modal.tsx`** — Insert(흐름 삽입)가 디시전 Intercept와 사실상 같은 기능이라 **같은 2번째 위치**로 통일: 타일 순서를 Replace(1) / Insert(2)로 스왑(스태거 딜레이도 2번째=Insert로 이동). 위치만 변경, 동작·아이콘·라벨 무변경.
 - 검증: 프론트 lint 0 errors·build OK.

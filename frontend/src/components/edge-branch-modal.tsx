@@ -31,7 +31,7 @@ function BranchTile({
   return (
     <button
       type="button"
-      className="edge-tile-pop group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-sm border border-hairline text-caption text-ink transition-colors hover:border-accent hover:bg-accent-tint"
+      className="edge-tile-pop group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-sm border border-hairline text-caption text-ink transition-colors hover:border-accent hover:bg-accent-tint active:bg-accent-tint"
       style={delayMs ? { animationDelay: `${delayMs}ms` } : undefined}
       onMouseEnter={() => setReplay((k) => k + 1)}
       onClick={() => onPick(kind)}

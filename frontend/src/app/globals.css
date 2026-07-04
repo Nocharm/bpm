@@ -331,6 +331,10 @@ button:not(:disabled):active {
 .edge-repl-old { opacity: 0; animation: edge-fade-out 460ms var(--ease-smooth) 320ms backwards; }
 .edge-repl-edge { stroke-dasharray: 1; animation: edge-branch-draw 680ms var(--ease-smooth) 520ms backwards; }
 
+/* FlowConflictModal Keep — 새 노드 A 팝인 → 새 엣지 A→B(강조색)가 그려져 B로 합류(기존 X→B 유지) */
+.edge-keep-node { transform-box: fill-box; transform-origin: center; animation: edge-pop-in 320ms var(--ease-overshoot) 120ms backwards; }
+.edge-keep-edge { stroke-dasharray: 1; animation: edge-branch-draw 560ms var(--ease-smooth) 360ms backwards; }
+
 /* EdgeBranchModal Yes/No/Other — Yes 체크·No 엑스는 그려지고(색은 컴포넌트 인라인 branch 색), Other 점 3개 순차 팝.
    edge-branch-draw/edge-pop-in 키프레임 재사용. 정지 상태=그려진 최종형. */
 .edge-br-check { stroke-dasharray: 1; animation: edge-branch-draw 440ms var(--ease-smooth) 180ms backwards; }
@@ -354,6 +358,8 @@ button:not(:disabled):active {
   .edge-repl-node,
   .edge-repl-old,
   .edge-repl-edge,
+  .edge-keep-node,
+  .edge-keep-edge,
   .edge-br-check,
   .edge-br-x1,
   .edge-br-x2,

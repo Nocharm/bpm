@@ -96,7 +96,7 @@ export function EdgeDecisionModal({
 
   // 경계 있는 3:2 아이콘 타일 — 열림 시 팝(1회), hover 시 accent 보더/틴트/아이콘.
   const tileClass =
-    "edge-tile-pop group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-sm border border-hairline text-caption text-ink transition-colors hover:border-accent hover:bg-accent-tint";
+    "edge-tile-pop group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-sm border border-hairline text-caption text-ink transition-colors hover:border-accent hover:bg-accent-tint active:bg-accent-tint";
 
   return createPortal(
     <ModalBackdrop className="fixed inset-0 z-[1200]" style={{ background: "transparent" }} onClose={onClose}>

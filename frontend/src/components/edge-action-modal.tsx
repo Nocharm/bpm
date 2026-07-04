@@ -10,37 +10,13 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+import { InsertGlyph } from "@/components/flow-glyphs";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { clampToViewport } from "@/lib/clamp-viewport";
 import { useI18n } from "@/lib/i18n";
 
-// 강조 포인트(Insert=끼우는 노드·Replace=새로 연결되는 엣지) — 데이터가 아닌 토큰이므로 var 사용.
+// 강조 포인트(Replace=새로 연결되는 엣지) — 데이터가 아닌 토큰이므로 var 사용. (Insert 글리프는 flow-glyphs 공용)
 const ACCENT_STROKE = { stroke: "var(--color-accent)" };
-
-// Insert — 노드가 흐름 gap에 껴듦(강조색 박스 드롭 + 커넥터 페이드). 디시전 Intercept와 동일 모션 클래스 재사용.
-function InsertAnimIcon({ replayKey }: { replayKey: number }) {
-  return (
-    <svg
-      key={replayKey}
-      className="text-ink-tertiary transition-colors group-hover:text-accent"
-      width={40}
-      height={24}
-      viewBox="0 0 40 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="2" y="7" width="8" height="10" rx="2" />
-      <rect x="30" y="7" width="8" height="10" rx="2" />
-      <line className="edge-conn" x1="10" y1="12" x2="16" y2="12" />
-      <line className="edge-conn" x1="24" y1="12" x2="30" y2="12" />
-      <rect className="edge-box-mid" x="16" y="7" width="8" height="10" rx="2" style={ACCENT_STROKE} />
-    </svg>
-  );
-}
 
 // Replace — [A]—[B] 시작, B 아래 새 노드 C 팝인 → 기존 A—B 엣지 페이드아웃 → 새 꺾은선 엣지 A→C가
 // 아래로 나와 왼쪽으로 들어가며 그려짐(강조색=엣지). 정지 상태(애니 없이)도 교체된 최종형으로 깨끗.
@@ -96,7 +72,7 @@ export function EdgeActionModal({
 
   // 경계 있는 3:2 아이콘 타일 — 열림 시 팝(1회), hover 시 accent 보더/틴트/아이콘.
   const tileClass =
-    "edge-tile-pop group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-sm border border-hairline text-caption text-ink transition-colors hover:border-accent hover:bg-accent-tint";
+    "edge-tile-pop group flex aspect-[3/2] flex-col items-center justify-center gap-1 rounded-sm border border-hairline text-caption text-ink transition-colors hover:border-accent hover:bg-accent-tint active:bg-accent-tint";
 
   return createPortal(
     <ModalBackdrop className="fixed inset-0 z-[1200]" style={{ background: "transparent" }} onClose={onClose}>
@@ -138,7 +114,7 @@ export function EdgeActionModal({
             onMouseEnter={() => setInsertReplay((k) => k + 1)}
             onClick={onInsert}
           >
-            <InsertAnimIcon replayKey={insertReplay} />
+            <InsertGlyph replayKey={insertReplay} />
             {t("edge.actionInsert")}
           </button>
         </div>
