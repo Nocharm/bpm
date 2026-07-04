@@ -2570,6 +2570,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
+      // 시작 노드는 맵당 1개만 — 이미 있으면 추가 대신 안내 후 기존 시작 노드로 포커스 이동.
+      if (nodeType === "start") {
+        const existingStart = nodesRef.current.find((node) => node.data.nodeType === "start");
+        if (existingStart) {
+          showToast(t("editor.startSingleton"));
+          highlightNode(existingStart.id);
+          return;
+        }
+      }
       pushHistory();
       const id = genId();
       const count = nodesRef.current.length;
@@ -2625,7 +2634,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
       flashNode(id);
     },
-    [readOnly, pushHistory, reactFlow, setNodes, scheduleAutoSave, t, findFreeSpot, flashNode],
+    [
+      readOnly,
+      pushHistory,
+      reactFlow,
+      setNodes,
+      scheduleAutoSave,
+      t,
+      findFreeSpot,
+      flashNode,
+      showToast,
+      highlightNode,
+    ],
   );
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
@@ -4020,7 +4040,23 @@ function MapEditor({ mapId }: { mapId: number }) {
               { divider: true },
             ]
           : [];
-      return [...selectionActions, alignItem(ids, targetCount)];
+      // 복수선택은 맨 아래 구분선 + 삭제(선택 노드 전부). D/Del 가속기.
+      const deleteSelected: ContextMenuItem[] =
+        menu.kind === "selection" && !readOnly && targetCount > 0
+          ? [
+              { divider: true },
+              {
+                label: t("ctx.delete"),
+                icon: Trash2,
+                shortcut: ["Del", "D"],
+                accel: "d",
+                danger: true,
+                onSelect: () =>
+                  void reactFlow.deleteElements({ nodes: [...ids].map((id) => ({ id })) }),
+              },
+            ]
+          : [];
+      return [...selectionActions, alignItem(ids, targetCount), ...deleteSelected];
     }
     if (menu.kind === "edge") {
       const edge = edges.find((e) => e.id === menu.targetId);
@@ -4058,7 +4094,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         {
           label: t("ctx.delete"),
           icon: Trash2,
-          shortcut: "Del",
+          shortcut: ["Del", "D"],
+          accel: "d",
           danger: true,
           onSelect: () => void reactFlow.deleteElements({ edges: [{ id: edge.id }] }),
         },
@@ -4072,7 +4109,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             {
               label: t("ctx.delete"),
               icon: Trash2,
-              shortcut: "Del",
+              shortcut: ["Del", "D"],
+              accel: "d",
               danger: true,
               onSelect: () => {
                 if (menu.targetId) {

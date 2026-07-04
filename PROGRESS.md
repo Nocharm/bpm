@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R11b 오류방지·편집UX ②③④: 시작 싱글턴·D 삭제 가속기·복수선택 삭제
+- **시작 노드 1개 제한**(`page.tsx handleAddNode`) — 모든 추가 채널의 단일 진입점에서 `nodeType==="start"`인데 이미 시작 노드가 있으면 추가 대신 토스트(`editor.startSingleton`, en/ko) + 기존 시작으로 `highlightNode`(fitView 이동효과). 우클릭·인스펙터·좌측/하단 추가 모두 커버.
+- **`D` 삭제 가속기**(`context-menu.tsx`·`page.tsx`) — 노드/엣지 우클릭 메뉴 삭제에 `accel:"d"` + `shortcut:["Del","D"]`(두 칩). 기존 Del(React Flow deleteKeyCode) 유지. ContextMenu `shortcut`을 `string|string[]`로 확장해 다중 칩 렌더.
+- **복수선택 삭제**(`page.tsx menuItems`) — 드래그 복수선택 우클릭 메뉴 맨 아래 구분선 + 삭제(선택 노드 전부, D/Del 가속기).
+- 검증: lint 0 · build/TS OK. 편집모드 라이브 확인은 read-only 아닌 버전 필요.
+
 ## 2026-07-04 — R11b 오류방지 ①: 스왑은 같은 종류 노드끼리만(subprocess↔process 예외)
 - **`canvas.ts`** — 순수 헬퍼 `canSwapTypes(a,b)`: 동종이거나 {subprocess,process} 쌍이면 true, 그 외 false. 단위테스트 4케이스 추가(`canvas.test.ts`, 21 pass).
 - **`page.tsx`** — `flowZoneViolates`에 swap 분기(`!canSwapTypes`) 추가. `dropTarget.swapBlocked` 필드로 `activateZone`이 부적합 시 스왑존을 죽이고(zone=null) 렌더에서 흐림. `handleZoneDrop` swap 실행 전 방어적 차단. front/back 차단과 동일 패턴.

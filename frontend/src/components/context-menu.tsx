@@ -26,7 +26,7 @@ export type ContextMenuItem =
       onPickTarget: (side: HandleSide) => void;
     }
   | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string; submenu: ContextMenuItem[]; disabled?: boolean }
-  | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
+  | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string | string[]; danger?: boolean; disabled?: boolean; onSelect: () => void };
 
 interface ContextMenuProps {
   x: number;
@@ -202,9 +202,18 @@ function MenuList({
               )}
               {item.label}
             </span>
-            {item.shortcut && (
-              <kbd className={item.danger ? KBD_DANGER_CLASS : KBD_CLASS}>{item.shortcut}</kbd>
-            )}
+            {item.shortcut &&
+              (Array.isArray(item.shortcut) ? (
+                <span className="flex items-center gap-1">
+                  {item.shortcut.map((key) => (
+                    <kbd key={key} className={item.danger ? KBD_DANGER_CLASS : KBD_CLASS}>
+                      {key}
+                    </kbd>
+                  ))}
+                </span>
+              ) : (
+                <kbd className={item.danger ? KBD_DANGER_CLASS : KBD_CLASS}>{item.shortcut}</kbd>
+              ))}
           </button>
         ),
       )}
