@@ -3,18 +3,17 @@
 // 에디터 AI 채팅 패널 — 순서도 생성/편집 지시 + 사용법 안내 (design 2026-06-15)
 import {
   AlertTriangle,
+  ArrowUp,
   ArrowUpRight,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  FileDown,
   Info,
   Paperclip,
   Pause,
   Play,
   Route,
   Search,
-  Send,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -391,71 +390,78 @@ export function AiChatPanel({
       </div>
       <div className="border-t border-hairline p-2">
         {/* 빠른 프롬프트 칩 — 클릭 시 즉시 전송 */}
-        <div className="mb-2 flex flex-wrap gap-1">
+        <div className="mb-2 flex flex-wrap gap-1.5">
           {QUICK_CHIPS.map((chipKey) => (
             <button
               key={chipKey}
               type="button"
               disabled={!aiEnabled || busy}
               onClick={() => void send(t(chipKey))}
-              className="rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:border-accent hover:bg-accent-tint hover:text-accent disabled:opacity-40"
+              className="rounded-full border border-hairline px-2.5 py-1 text-fine text-ink-secondary hover:border-accent hover:bg-accent-tint hover:text-accent disabled:opacity-40"
             >
               {t(chipKey)}
             </button>
           ))}
         </div>
-        {/* 입력 카드 — textarea + 하단 툴바(첨부·추출·키힌트·전송) */}
-        <div
-          className={`rounded-sm border border-hairline focus-within:border-accent ${
-            aiEnabled ? "bg-surface" : "bg-surface-alt"
-          }`}
-        >
+        {/* 입력 행 — 첨부 + 입력 + 전송 (첨부는 디자인 플레이스홀더) */}
+        <div className="flex items-end gap-2">
+          <button
+            type="button"
+            aria-label={t("ai.attach")}
+            title={t("ai.attach")}
+            onClick={() => onToast?.(t("ai.comingSoon"))}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-hairline text-ink-tertiary hover:border-accent hover:text-accent disabled:opacity-40"
+            disabled={!aiEnabled}
+          >
+            <Paperclip size={16} strokeWidth={1.5} />
+          </button>
           <textarea
-            className="scrollbar-hidden block max-h-32 min-h-[48px] w-full resize-none bg-transparent px-2 py-1.5 text-caption outline-none"
-            rows={2}
+            className="scrollbar-hidden max-h-32 min-h-[36px] flex-1 resize-none rounded-md border border-hairline px-3 py-2 text-caption outline-none focus:border-accent disabled:bg-surface-alt"
+            rows={1}
             placeholder={aiEnabled ? t("ai.placeholder") : t("ai.disabled")}
             value={input}
             disabled={!aiEnabled}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
-              // Enter=전송, Shift+Enter=줄바꿈. IME 조합 중(한글)엔 전송하지 않음.
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              // ⌘/Ctrl+Enter=전송, Enter=줄바꿈. IME 조합 중(한글)엔 전송하지 않음.
+              if (
+                event.key === "Enter" &&
+                (event.ctrlKey || event.metaKey) &&
+                !event.nativeEvent.isComposing
+              ) {
                 event.preventDefault();
                 void send();
               }
             }}
           />
-          <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
-            {/* 파일 첨부·대화 추출 — 디자인 플레이스홀더(준비 중) */}
-            <button
-              type="button"
-              aria-label={t("ai.attach")}
-              title={t("ai.attach")}
-              onClick={() => onToast?.(t("ai.comingSoon"))}
-              className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink-secondary"
-            >
-              <Paperclip size={15} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              aria-label={t("ai.export")}
-              title={t("ai.export")}
-              onClick={() => onToast?.(t("ai.comingSoon"))}
-              className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink-secondary"
-            >
-              <FileDown size={15} strokeWidth={1.5} />
-            </button>
-            <span className="ml-auto mr-1 text-fine text-ink-tertiary">{t("ai.sendHint")}</span>
-            <button
-              type="button"
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-on-accent hover:bg-accent-focus disabled:opacity-40"
-              onClick={() => void send()}
-              disabled={!aiEnabled || busy || input.trim().length === 0}
-              aria-label={t("ai.send")}
-            >
-              <Send size={14} strokeWidth={1.6} />
-            </button>
-          </div>
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-accent text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={() => void send()}
+            disabled={!aiEnabled || busy || input.trim().length === 0}
+            aria-label={t("ai.send")}
+          >
+            <ArrowUp size={16} strokeWidth={1.8} />
+          </button>
+        </div>
+        {/* 단축키 힌트 — keycap */}
+        <div className="mt-1.5 flex gap-3 text-fine text-ink-tertiary">
+          <span className="flex items-center gap-1">
+            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1 py-px text-[10px] text-ink-secondary">
+              Enter
+            </kbd>
+            {t("ai.hintNewline")}
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1 py-px text-[10px] text-ink-secondary">
+              ⌘/Ctrl
+            </kbd>
+            +
+            <kbd className="rounded-xs border border-hairline bg-surface-alt px-1 py-px text-[10px] text-ink-secondary">
+              Enter
+            </kbd>
+            {t("ai.hintSend")}
+          </span>
         </div>
       </div>
     </div>

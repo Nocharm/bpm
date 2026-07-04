@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10d1: AI 입력 영역 초기 디자인 정합 (keycap 단축키·바인딩 복원)
+- **`ai-chat-panel.tsx`** — 입력부를 승인 프리뷰(`ai-panel-preview.html`)에 맞춤: `[📎 첨부][입력 textarea][↑ 전송]` 한 행 + **keycap 힌트**(`Enter` 줄바꿈 / `⌘/Ctrl`+`Enter` 전송). 바인딩을 **⌘/Ctrl+Enter=전송·Enter=줄바꿈**(초기값)으로 복원(IME 가드 유지). 전송 아이콘 ArrowUp. 대화추출 버튼은 헤더(d3)로 이동 예정.
+- **`i18n-messages.ts`** — `ai.hintNewline`·`ai.hintSend`(en·ko), `ai.sendHint` 제거.
+- 검증: 브라우저 렌더 확인 · lint 0 errors · build OK.
+
 ## 2026-07-04 — R10c: AI 패널 퀵칩 + 입력 영역 재디자인
 - **`ai-chat-panel.tsx`** — 입력부 재설계: **빠른 프롬프트 칩**(Find issues·Summarize·Walkthrough·Suggest improvements — 클릭 시 즉시 전송, `send(override?)` 리팩터) + **입력 카드**(border·`focus-within` accent·자동높이 `max-h-32`) + 하단 툴바(**파일첨부·대화추출 플레이스홀더**[클릭 시 "준비 중" 토스트]·키힌트·accent 원형 전송). 키 바인딩 **Ctrl/Cmd+Enter → Enter=전송·Shift+Enter=줄바꿈**로 변경(+ 힌트 표기), **IME 조합 중 전송 방지**(`isComposing`).
 - **`i18n-messages.ts`** — `ai.chip*`·`ai.sendHint`·`ai.attach`·`ai.export`·`ai.comingSoon`(en·ko).
