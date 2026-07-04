@@ -6,6 +6,10 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — 부서 드롭다운 우측 넘침 수정: fitContent면 right-0으로 좌측 펼침
+- **`search-select.tsx`** — fitContent(우측정렬) select의 드롭다운이 `left-0`(+`w-full min-w-56`)이라 우측정렬된 버튼 기준 우측으로 뻗어 모달/패널 밖으로 넘치며 화면이 밀리던 문제 → **fitContent면 `right-0`(min-w-56, w-full 제거)**으로 버튼 우측 정렬·좌측으로 펼침. 기본 모드는 `left-0 w-full` 유지.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — 노드 속성 후속 3건: 플라이아웃 z상향(클릭가능) / 부서 fitContent(내용폭·우측정렬·삐져나감 방지)
 - **`search-select.tsx`** — (1) addMode 포털 플라이아웃 z를 **z-1340/1350**으로 상향(노드 편집 모달 z-1200보다 위) → 모달 뒤로 깔려 클릭 불가하던 문제 해소. (2) **`fitContent` prop 신설**: flex-1로 안 늘리고 값 내용폭(`max-w-[176px]`·`min-w-0` shrink)으로 → 라벨 옆 우측정렬, 좁으면 줄어 삐져나감 방지.
 - **`node-summary-modal.tsx`·`bpm-attribute-picker.tsx`** — 부서 select를 고정폭 wrapper(w-52/w-44) 제거하고 `fitContent`로(모달·인스펙터 공통 — 폭 커 보이던 문제·좁을 때 삐져나감 동시 해결).

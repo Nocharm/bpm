@@ -207,8 +207,13 @@ export function SearchSelect({
           <>
             {/* 바깥 클릭 닫기 */}
             <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-            {/* absolute overlay — 늘/줄어도 버튼·주변 레이아웃 불변 (SR-4) */}
-            <div className="absolute left-0 z-[1001] mt-1 w-full min-w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+            {/* absolute overlay — 늘/줄어도 버튼·주변 레이아웃 불변 (SR-4).
+                fitContent(우측정렬)면 right-0으로 좌측으로 펼침 → 우측으로 넘쳐 화면 밀리는 것 방지. */}
+            <div
+              className={`absolute z-[1001] mt-1 min-w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg ${
+                fitContent ? "right-0" : "left-0 w-full"
+              }`}
+            >
               {menu}
             </div>
           </>
