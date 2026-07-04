@@ -36,6 +36,11 @@ function inline(s: string): string {
       /\[([^\]]+)\]\(([^)]+)\)/g,
       (_m, text: string, url: string) =>
         `<a href="${escapeAttr(safeHref(url))}" target="_blank" rel="noreferrer">${text}</a>`,
+    )
+    // 인라인 태그 필 — 공백/시작 뒤 #word 를 알약 뱃지로(#는 표기에서 제거).
+    .replace(
+      /(^|\s)#([0-9A-Za-z_가-힣][0-9A-Za-z_가-힣-]*)/g,
+      '$1<span class="md-tag">$2</span>',
     );
 }
 
@@ -56,6 +61,38 @@ function markdownToHtml(md: string): string {
       html += `<div class="md-codewrap"><pre><code>${escapeHtml(
         code.replace(/\n$/, ""),
       )}</code></pre><button class="md-copy" type="button" aria-label="Copy">${COPY_ICON}</button></div>`;
+      continue;
+    }
+    // GFM 표 — 헤더행 + 구분행(---) + 본문행. 구분행은 파이프 포함 필수(hr와 구분).
+    const next = lines[i + 1];
+    if (
+      /\|/.test(l) &&
+      next !== undefined &&
+      /\|/.test(next) &&
+      /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(next)
+    ) {
+      const splitCells = (row: string): string[] =>
+        row
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => c.trim());
+      const head = splitCells(l)
+        .map((c) => `<th>${inline(c)}</th>`)
+        .join("");
+      i += 2;
+      let body = "";
+      while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") {
+        body +=
+          "<tr>" +
+          splitCells(lines[i])
+            .map((c) => `<td>${inline(c)}</td>`)
+            .join("") +
+          "</tr>";
+        i++;
+      }
+      html += `<div class="md-tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
       continue;
     }
     if (/^(-{3,}|\*{3,})\s*$/.test(l)) {

@@ -389,6 +389,11 @@ button:not(:disabled):active {
 .md a { color: var(--color-accent); text-decoration: underline; }
 .md strong { font-weight: 600; color: var(--color-ink); }
 .md hr { border: 0; border-top: 1px solid var(--color-hairline); margin: 0.8em 0; }
+.md-tablewrap { overflow-x: auto; margin: 0.55em 0; }
+.md table { border-collapse: collapse; font-size: 0.95em; }
+.md th, .md td { border: 1px solid var(--color-hairline); padding: 4px 9px; text-align: left; white-space: nowrap; }
+.md th { background: var(--color-surface-alt); font-weight: 600; color: var(--color-ink); }
+.md-tag { display: inline-block; padding: 0.02em 0.5em; margin: 0 0.08em; border-radius: 999px; background: var(--color-accent-tint); color: var(--color-accent); font-size: 0.82em; font-weight: 600; }
 /* 블록별 hover 하이라이트 — 마우스가 있는 라인(블록) 표시 */
 .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote { border-radius: 4px; transition: background-color 0.1s; }
 .md p:hover, .md li:hover, .md h1:hover, .md h2:hover, .md h3:hover, .md h4:hover, .md h5:hover, .md h6:hover, .md blockquote:hover { background: var(--color-surface-alt); }

@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — 마크다운 뷰어: GFM 표 + 인라인 태그 필
+- **`markdown-view.tsx`** — GFM **표** 파서 추가(헤더행+`---`구분행+본문행, 셀은 `inline()` 통과 → 표 안에서도 코드/강조/링크). 구분행은 파이프 포함 필수라 hr(`---`)와 구분. **인라인 태그 필**: 공백/시작 뒤 `#word` → `<span class="md-tag">`(알약, `#`는 표기 제거).
+- **`globals.css`** — `.md-tablewrap`(가로 스크롤)·`.md table/th/td`(테두리·헤더 음영)·`.md-tag`(accent-tint 알약) 스타일.
+- 검증: 브라우저(dev)에서 AI 패널 실제 렌더 확인 — 표 3종(헤더 음영·셀 내 인라인 코드)·태그 필 3세트·h1~h4·리스트·코드블록·인용·링크·스크롤 모두 정상. lint 0 errors·build OK.
+- 참고: R10 시각 확인용 시드(`ai-chat-panel.tsx` `messages`)는 R10 완료까지 로컬 유지(커밋 미포함).
+
 ## 2026-07-04 — R10a 후속 픽스: ScopeWindow 스크롤 + 마크다운 h4~h6
 - **`scope-window.tsx`** — 콘텐츠 래퍼 `relative flex-1`에 **`min-h-0`** 추가. 플렉스 아이템 기본 `min-height:auto`가 긴 콘텐츠에서 래퍼를 늘려 내부 `overflow-y-auto`가 높이를 못 받던 문제 → AI 패널 등 창 내부 긴 콘텐츠 상하 스크롤 정상화(캔버스형 자식엔 영향 없음).
 - **`markdown-view.tsx`** — 헤딩 파서 `#{1,3}` → **`#{1,6}`**(h4~h6 지원). `####` 등이 문단으로 떨어져 리터럴로 보이던 문제 해결. 문단 연결 lookahead도 동일 확장.
