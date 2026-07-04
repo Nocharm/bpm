@@ -6406,19 +6406,36 @@ function MapEditor({ mapId }: { mapId: number }) {
               // 링 반경 — screenRectOf에서 줌 무관 고정값으로 계산됨 (hit-test와 공용)
               const radius = r.radius;
               // 부채꼴: 노드 근처(ri)에서 바깥(ro)으로 팬, 아이콘/라벨은 중간 반경(rm)
-              const ri = radius * 0.68;
-              const ro = radius + 44;
+              const ri = radius * 0.72;
+              const ro = radius + 48;
               const rm = (ri + ro) / 2;
               const rad = (d: number) => (d * Math.PI) / 180;
-              const HALF = rad(20); // 활성 부채꼴 반각(=40° 폭)
+              const HALF = rad(22); // 활성 부채꼴 반각(=44° 폭)
               const DHALF = rad(18); // 대각 점선 부채꼴 반각
-              // annular sector path — 각도는 화면좌표(y-down, 0°=동)
+              const CR = 7; // 모서리 라운드 반경(px) — 이미지처럼 둥근 부채꼴
+              const pt = (rr: number, a: number) =>
+                `${(cx + rr * Math.cos(a)).toFixed(2)} ${(cy + rr * Math.sin(a)).toFixed(2)}`;
+              // 라운드 모서리 annular sector — 각도 화면좌표(y-down, 0°=동). 네 모서리를 CR만큼
+              // 물러나 Q(코너를 제어점)로 둥글린다.
               const sector = (axis: number, half: number, r0: number, r1: number) => {
                 const a0 = axis - half;
                 const a1 = axis + half;
-                const px = (rr: number, a: number) => (cx + rr * Math.cos(a)).toFixed(2);
-                const py = (rr: number, a: number) => (cy + rr * Math.sin(a)).toFixed(2);
-                return `M ${px(r0, a0)} ${py(r0, a0)} L ${px(r1, a0)} ${py(r1, a0)} A ${r1.toFixed(2)} ${r1.toFixed(2)} 0 0 1 ${px(r1, a1)} ${py(r1, a1)} L ${px(r0, a1)} ${py(r0, a1)} A ${r0.toFixed(2)} ${r0.toFixed(2)} 0 0 0 ${px(r0, a0)} ${py(r0, a0)} Z`;
+                const di = CR / r0; // 내호 각도 오프셋
+                const dO = CR / r1; // 외호 각도 오프셋
+                const R0 = r0.toFixed(2);
+                const R1 = r1.toFixed(2);
+                return [
+                  `M ${pt(r0 + CR, a0)}`,
+                  `L ${pt(r1 - CR, a0)}`,
+                  `Q ${pt(r1, a0)} ${pt(r1, a0 + dO)}`,
+                  `A ${R1} ${R1} 0 0 1 ${pt(r1, a1 - dO)}`,
+                  `Q ${pt(r1, a1)} ${pt(r1 - CR, a1)}`,
+                  `L ${pt(r0 + CR, a1)}`,
+                  `Q ${pt(r0, a1)} ${pt(r0, a1 - di)}`,
+                  `A ${R0} ${R0} 0 0 0 ${pt(r0, a0 + di)}`,
+                  `Q ${pt(r0, a0)} ${pt(r0 + CR, a0)}`,
+                  "Z",
+                ].join(" ");
               };
               // 사용 4방향 — group=상(N)/back=우(E)/swap=하(S)/front=좌(W)
               const zones = [
@@ -6440,10 +6457,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                         key={`d${i}`}
                         d={sector(axis, DHALF, ri, ro)}
                         style={{
-                          fill: "color-mix(in srgb, var(--color-ink-tertiary) 5%, transparent)",
-                          stroke: "var(--color-hairline)",
+                          fill: "color-mix(in srgb, var(--color-ink-tertiary) 4%, transparent)",
+                          stroke: "color-mix(in srgb, var(--color-ink-tertiary) 36%, transparent)",
                           strokeWidth: 1.5,
-                          strokeDasharray: "3 4",
+                          strokeDasharray: "4 4",
                           strokeLinejoin: "round",
                         }}
                       />
@@ -6454,19 +6471,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                       const blocked = blockedOf(zone);
                       const style = blocked
                         ? {
-                            fill: "color-mix(in srgb, var(--color-ink-tertiary) 5%, transparent)",
-                            stroke: "var(--color-hairline)",
+                            fill: "color-mix(in srgb, var(--color-ink-tertiary) 7%, transparent)",
+                            stroke: "color-mix(in srgb, var(--color-ink-tertiary) 25%, transparent)",
                             strokeWidth: 1.5,
                           }
                         : active
                           ? {
-                              fill: "color-mix(in srgb, var(--color-accent) 20%, white)",
+                              fill: "color-mix(in srgb, var(--color-accent) 34%, transparent)",
                               stroke: "var(--color-accent)",
-                              strokeWidth: 2,
+                              strokeWidth: 2.5,
                             }
                           : {
-                              fill: "var(--color-accent-tint)",
-                              stroke: "var(--color-accent-tint-border)",
+                              fill: "color-mix(in srgb, var(--color-accent) 18%, transparent)",
+                              stroke: "color-mix(in srgb, var(--color-accent) 32%, transparent)",
                               strokeWidth: 1.5,
                             };
                       return (
