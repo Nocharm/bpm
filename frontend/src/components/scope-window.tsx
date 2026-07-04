@@ -1,7 +1,7 @@
 // 떠있는 스코프 창 — 타이틀바 드래그 이동·코너 리사이즈·최소/최대/닫기·포커스. 활성 창만 라이브 children.
 "use client";
 
-import { Minus, Square, X } from "lucide-react";
+import { Minimize2, Square, X } from "lucide-react";
 import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { useI18n } from "@/lib/i18n";
@@ -200,7 +200,7 @@ export function ScopeWindow({
             toggleMin();
           }}
         >
-          <Minus size={16} strokeWidth={1.5} />
+          <Minimize2 size={15} strokeWidth={1.6} />
         </button>
         {canMaximize && (
           <button

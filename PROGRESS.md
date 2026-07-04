@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — AI 헤더 아이콘 정리: 최소화 Minimize2·추출 Download·폰트 라벨 T
+- **`scope-window.tsx`** — 최소화 아이콘 `Minus`→`Minimize2`(폰트 − 와 혼동 방지, 축소 직관).
+- **`page.tsx`** — 추출 아이콘 `FileDown`→`Download`(더 심플·직관). 폰트 배율 라벨 `A`→`T`.
+- 검증: 헤더 −T＋ / Download / Minimize2 / X 렌더 확인. lint 0·build OK.
+
 ## 2026-07-04 — AI 창 헤더/테두리 프리뷰 정합 (경계 페이드·더블클릭 최대화 제거·아이콘 확대)
 - **`scope-window.tsx`** — 창 테두리 진하게(active `border-ink-tertiary/30`). 커스텀 헤더(`headerLeft`) 시 배경 `bg-surface`·패딩 확대(px-3 py-2.5, 프리뷰 정합). **헤더 더블클릭 최대화 제거**(폰트＋ 더블클릭 버블링 오작동 방지). `canMaximize`(기본 true)로 최대화 버튼 조건부 — AI 창은 숨김(간소화). 컨트롤 아이콘 확대(14→16·패딩 p-1).
 - **`ai-chat-panel.tsx`** — 스레드 상단 **페이드 그라데이션**(헤더 경계 근처 내용이 선에서 끊기지 않고 흐려짐) + 상단 패딩(pt-4).

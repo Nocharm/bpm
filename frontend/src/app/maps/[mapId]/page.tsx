@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, FileDown, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -6656,7 +6656,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     >
                       <Minus size={14} strokeWidth={1.8} />
                     </button>
-                    <span className="px-1 text-caption text-ink-secondary">A</span>
+                    <span className="px-1 text-caption text-ink-secondary">T</span>
                     <button
                       type="button"
                       title={t("ai.fontLarger")}
@@ -6674,7 +6674,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     onClick={() => showToast(t("ai.comingSoon"))}
                     className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
                   >
-                    <FileDown size={18} strokeWidth={1.5} />
+                    <Download size={18} strokeWidth={1.5} />
                   </button>
                 </div>
               }
