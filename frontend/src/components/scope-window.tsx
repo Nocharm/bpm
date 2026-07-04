@@ -100,7 +100,7 @@ export function ScopeWindow({
         style={{ zIndex }}
         onPointerDown={onFocus}
       >
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-h-0">
           {children}
           {!active && (
             <div className="absolute inset-0 flex items-center justify-center bg-surface/60 text-caption text-ink-tertiary">
@@ -177,7 +177,7 @@ export function ScopeWindow({
         )}
       </div>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-h-0">
         {children}
         {!active && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface/60 text-caption text-ink-tertiary">

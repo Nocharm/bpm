@@ -63,7 +63,7 @@ function markdownToHtml(md: string): string {
       i++;
       continue;
     }
-    if (/^#{1,3}\s/.test(l)) {
+    if (/^#{1,6}\s/.test(l)) {
       const h = l.match(/^#+/)![0].length;
       html += `<h${h}>${inline(l.replace(/^#+\s/, ""))}</h${h}>`;
       i++;
@@ -105,7 +105,7 @@ function markdownToHtml(md: string): string {
     while (
       i < lines.length &&
       lines[i].trim() !== "" &&
-      !/^(#{1,3}\s|>|\s*[-*]\s|\s*\d+\.\s|```|-{3,}\s*$)/.test(lines[i])
+      !/^(#{1,6}\s|>|\s*[-*]\s|\s*\d+\.\s|```|-{3,}\s*$)/.test(lines[i])
     ) {
       p += " " + lines[i];
       i++;

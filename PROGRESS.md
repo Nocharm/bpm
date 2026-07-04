@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10a 후속 픽스: ScopeWindow 스크롤 + 마크다운 h4~h6
+- **`scope-window.tsx`** — 콘텐츠 래퍼 `relative flex-1`에 **`min-h-0`** 추가. 플렉스 아이템 기본 `min-height:auto`가 긴 콘텐츠에서 래퍼를 늘려 내부 `overflow-y-auto`가 높이를 못 받던 문제 → AI 패널 등 창 내부 긴 콘텐츠 상하 스크롤 정상화(캔버스형 자식엔 영향 없음).
+- **`markdown-view.tsx`** — 헤딩 파서 `#{1,3}` → **`#{1,6}`**(h4~h6 지원). `####` 등이 문단으로 떨어져 리터럴로 보이던 문제 해결. 문단 연결 lookahead도 동일 확장.
+- **`globals.css`** — `.md h4/h5/h6` 스타일 + 블록 hover 하이라이트·reduced-motion 규칙에 h4~h6 포함.
+- 검증: 브라우저(dev)에서 AI 패널 실제 렌더 확인 — h4 헤딩·상하 스크롤·유저 accent 버블·어시스턴트 마크다운·맨아래 버튼·코드블록 hover 복사 모두 정상. build OK.
+
 ## 2026-07-04 — R10a: AI 패널 스레드 재스타일 + 공용 마크다운 뷰어 + 맨아래 버튼
 - **`markdown-view.tsx`(신규)** — AI 답변·게시글·매뉴얼 공용 마크다운 뷰어. 경량 자체 파서(의존성 無): 헤딩(H1~H3)·리스트(정렬/비정렬)·코드블록/인라인·인용·수평선·링크·강조. 코드블록 hover 시 복사 버튼, 블록별 hover 하이라이트(현재 마우스 위치). `<>&` escape + href 스킴 화이트리스트(`safeHref` — http(s)/상대/앵커/mailto만, `javascript:`·`data:` 차단)로 XSS 방지 후 `dangerouslySetInnerHTML`.
 - **`globals.css`** — `.md` 뷰어 스타일(헤딩·리스트·코드·인용, 블록 hover 하이라이트, `.md-codewrap`/`.md-copy` 코드 복사 버튼).

@@ -378,6 +378,7 @@ button:not(:disabled):active {
 .md h1 { font-size: 18px; font-weight: 600; color: var(--color-ink); margin: 0.7em 0 0.35em; }
 .md h2 { font-size: 15px; font-weight: 600; color: var(--color-ink); margin: 0.7em 0 0.3em; }
 .md h3 { font-size: 14px; font-weight: 600; color: var(--color-ink); margin: 0.6em 0 0.2em; }
+.md h4, .md h5, .md h6 { font-size: 13px; font-weight: 600; color: var(--color-ink-secondary); margin: 0.55em 0 0.2em; }
 .md p { margin: 0.45em 0; }
 .md ul, .md ol { margin: 0.45em 0; padding-left: 1.3em; }
 .md li { margin: 0.15em 0; }
@@ -389,8 +390,8 @@ button:not(:disabled):active {
 .md strong { font-weight: 600; color: var(--color-ink); }
 .md hr { border: 0; border-top: 1px solid var(--color-hairline); margin: 0.8em 0; }
 /* 블록별 hover 하이라이트 — 마우스가 있는 라인(블록) 표시 */
-.md p, .md li, .md h1, .md h2, .md h3, .md blockquote { border-radius: 4px; transition: background-color 0.1s; }
-.md p:hover, .md li:hover, .md h1:hover, .md h2:hover, .md h3:hover, .md blockquote:hover { background: var(--color-surface-alt); }
+.md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote { border-radius: 4px; transition: background-color 0.1s; }
+.md p:hover, .md li:hover, .md h1:hover, .md h2:hover, .md h3:hover, .md h4:hover, .md h5:hover, .md h6:hover, .md blockquote:hover { background: var(--color-surface-alt); }
 /* 코드블록 hover 복사 버튼 */
 .md-codewrap { position: relative; }
 .md-copy { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; border: 1px solid var(--color-hairline); background: var(--color-surface); border-radius: var(--radius-xs); padding: 3px; color: var(--color-ink-tertiary); cursor: pointer; opacity: 0; transition: opacity 0.12s; }
@@ -398,7 +399,7 @@ button:not(:disabled):active {
 .md-copy:hover { color: var(--color-accent); border-color: var(--color-accent); }
 .md-copy-done { color: var(--color-accent); border-color: var(--color-accent-tint-border); background: var(--color-accent-tint); }
 @media (prefers-reduced-motion: reduce) {
-  .md p, .md li, .md h1, .md h2, .md h3, .md blockquote, .md-copy { transition: none; }
+  .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote, .md-copy { transition: none; }
 }
 
 /* 캔버스 select-none 안에서도 입력/텍스트영역은 텍스트 선택 허용(인라인 리네임·검색 등) */
