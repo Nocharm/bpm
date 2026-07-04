@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, FileDown, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -752,6 +752,17 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });
   const aiMinDragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(
     null,
+  );
+  // AI 헤더 — 답변 키워드 자동 타이틀(수동 편집 시 고정) + 채팅 폰트 상대 배율
+  const [aiTitle, setAiTitle] = useState("");
+  const [aiTitleEditing, setAiTitleEditing] = useState(false);
+  const [aiTitleManual, setAiTitleManual] = useState(false);
+  const [aiFontScale, setAiFontScale] = useState(1);
+  const handleAutoTitle = useCallback(
+    (title: string) => {
+      if (!aiTitleManual) setAiTitle(title);
+    },
+    [aiTitleManual],
   );
 
   // 엣지 스타일 — 맵 전역(모든 엣지 일괄). React Flow 빌트인 타입: default=곡선, smoothstep=꺾은선, straight=직선. localStorage 영속.
@@ -6337,7 +6348,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               type="button"
               title={t("ai.title")}
               aria-label={t("ai.title")}
-              className="absolute z-[1095] flex h-11 w-11 touch-none items-center justify-center rounded-md bg-accent text-on-accent shadow-md transition-shadow hover:bg-accent-focus hover:shadow-lg"
+              className="absolute z-[1095] flex h-11 w-11 touch-none items-center justify-center rounded-md border border-accent-tint-border bg-gradient-to-br from-surface to-accent-tint text-accent opacity-70 shadow-md transition hover:opacity-100 hover:shadow-lg"
               style={{ left: aiMinPos.x, top: aiMinPos.y }}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
@@ -6583,6 +6594,89 @@ function MapEditor({ mapId }: { mapId: number }) {
                   y: Math.min(Math.max(clientY - rect.top - 22, 0), Math.max(0, bounds.h - 44)),
                 });
               }}
+              headerLeft={
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-accent text-on-accent">
+                    <Sparkles size={16} strokeWidth={1.6} />
+                  </span>
+                  <div className="min-w-0 flex-1 leading-tight">
+                    {aiTitleEditing ? (
+                      <input
+                        autoFocus
+                        value={aiTitle}
+                        onChange={(event) => setAiTitle(event.target.value)}
+                        onBlur={() => setAiTitleEditing(false)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === "Escape") setAiTitleEditing(false);
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        className="w-full rounded-xs border border-hairline px-1 py-0.5 text-caption font-semibold text-ink outline-none focus:border-accent"
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="truncate text-caption-strong text-ink">
+                          {aiTitle || t("ai.title")}
+                        </span>
+                        <button
+                          type="button"
+                          title={t("ai.renameTitle")}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setAiTitleManual(true);
+                            setAiTitleEditing(true);
+                          }}
+                          className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
+                        >
+                          <Pencil size={12} strokeWidth={1.6} />
+                        </button>
+                      </div>
+                    )}
+                    <div className="truncate text-[10px] text-ink-tertiary">
+                      {mapName} · {versionSubtitle}
+                    </div>
+                  </div>
+                </div>
+              }
+              headerActions={
+                <div
+                  className="flex items-center gap-1"
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  {/* 폰트 상대 배율 — 캔버스 줌처럼 −A＋ */}
+                  <div className="flex items-center overflow-hidden rounded-sm border border-hairline">
+                    <button
+                      type="button"
+                      title={t("ai.fontSmaller")}
+                      onClick={() =>
+                        setAiFontScale((scale) => Math.max(0.8, Math.round((scale - 0.1) * 10) / 10))
+                      }
+                      className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-pearl"
+                    >
+                      <Minus size={12} strokeWidth={1.8} />
+                    </button>
+                    <span className="px-1 text-fine text-ink-secondary">A</span>
+                    <button
+                      type="button"
+                      title={t("ai.fontLarger")}
+                      onClick={() =>
+                        setAiFontScale((scale) => Math.min(1.4, Math.round((scale + 0.1) * 10) / 10))
+                      }
+                      className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-pearl"
+                    >
+                      <Plus size={12} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    title={t("ai.export")}
+                    onClick={() => showToast(t("ai.comingSoon"))}
+                    className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
+                  >
+                    <FileDown size={16} strokeWidth={1.5} />
+                  </button>
+                </div>
+              }
             >
               <AiChatPanel
                 versionId={versionId}
@@ -6595,6 +6689,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 aiPreviewActive={aiPreviewActive}
                 onCommitPreview={commitAiPreview}
                 onDiscardPreview={discardAiPreview}
+                fontScale={aiFontScale}
+                onAutoTitle={handleAutoTitle}
               />
             </ScopeWindow>
           )}

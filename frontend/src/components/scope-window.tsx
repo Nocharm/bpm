@@ -36,6 +36,8 @@ interface ScopeWindowProps {
   onGeomChange: (geom: WindowGeom) => void;
   onClose: () => void;
   onMinimize?: (clientX: number, clientY: number) => void; // 최소화 시점의 포인터 위치 전달
+  headerLeft?: ReactNode; // 타이틀 대체 커스텀 헤더(배지·타이틀·서브타이틀 등) — flex-1 min-w-0 포함할 것
+  headerActions?: ReactNode; // 최소/최대/닫기 앞 추가 버튼(폰트 조절·추출 등)
   children: ReactNode;
 }
 
@@ -51,6 +53,8 @@ export function ScopeWindow({
   onGeomChange,
   onClose,
   onMinimize,
+  headerLeft,
+  headerActions,
   children,
 }: ScopeWindowProps) {
   const { t } = useI18n();
@@ -180,7 +184,8 @@ export function ScopeWindow({
         onPointerCancel={endDrag}
         onDoubleClick={toggleMax}
       >
-        <span className="flex-1 truncate font-medium">{title}</span>
+        {headerLeft ?? <span className="flex-1 truncate font-medium">{title}</span>}
+        {headerActions}
         <button
           type="button"
           title={t("window.minimize")}

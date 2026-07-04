@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10d3 헤더 + 폰트조절 + 입력 재구성 (R10d 완료)
+- **헤더 재디자인** (`scope-window.tsx` 슬롯 + `page.tsx`) — ScopeWindow에 `headerLeft`/`headerActions` 슬롯 추가. AI 창 헤더: ✦ accent 배지 + **답변 키워드 자동 타이틀**(마지막 어시스턴트 답변 첫 헤딩, `onAutoTitle`) + **✎ 변경**(수동 편집 시 고정) + 회색 소형 서브타이틀(맵·버전) + **−A＋ 폰트 배율** + 추출(FileDown)/최소/최대/닫기.
+- **폰트 상대 배율** (`ai-chat-panel.tsx`) — 헤더 −A＋로 스레드 `zoom`(0.8~1.4) 조절.
+- **입력 재구성** — 첨부 버튼을 빠른기능 맨 앞으로, 빠른기능을 **아이콘 버튼**(h-9, 호버 시 이름+설명 툴팁)으로, 입력 textarea **내용 따라 자동 높이**(`inputRef`+effect, max 128px).
+- **정련** — 분석 카드 모서리 `rounded-[3px]`(더 각지게). 최소화 스파클 재스타일(투명도 70%·테두리·밝은 그라데이션·accent 아이콘·hover 100%).
+- i18n: `ai.renameTitle`·`ai.fontSmaller`·`ai.fontLarger`·`ai.chip*Desc`.
+- 검증: 브라우저 — 헤더(자동 타이틀 "노드 속성 매트릭스" 추출)·폰트 컨트롤·아이콘 칩 툴팁·서브타이틀 렌더 확인. lint 0 errors·build OK.
+
 ## 2026-07-04 — R10d 정련: 카드 80% 폭·각진 모서리·제안 재디자인·최소화(마우스 위치)
 - **`ai-chat-panel.tsx`** — 분석 카드 모서리 `rounded-sm`→`rounded-xs`(각지게). 분석·워크스루·제안 카드 폭 **`max-w-[80%]`** 통일. **AI 제안 카드 가시성 재디자인** — accent-tint 헤더 밴드(✦ 아이콘 원 + 타이틀) + body + ✓ Add to map(Check)/Cancel.
 - **`page.tsx`·`scope-window.tsx`** — 최소화 스파클 호버 elevation(shadow-md→lg). 최소화 시 **현재 마우스 위치**에 아이콘 생성(ScopeWindow `onMinimize` 콜백 → `canvasContainerRef` 상대좌표·클램프). 복원 시 **버튼 위치에서 창이 펴짐**(bounds 클램프).

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Info,
   Lightbulb,
   Paperclip,
@@ -48,14 +49,16 @@ interface AiChatPanelProps {
   aiPreviewActive?: boolean;
   onCommitPreview?: () => void;
   onDiscardPreview?: () => void;
+  fontScale?: number; // 헤더 A−/A＋ 로 조절되는 스레드 상대 폰트 배율
+  onAutoTitle?: (title: string) => void; // 마지막 답변 키워드로 자동 타이틀 보고
 }
 
-// 빠른 프롬프트 칩 — 클릭 시 해당 문구를 즉시 전송(i18n 라벨 = 프롬프트).
+// 빠른 프롬프트 칩 — 아이콘 버튼(호버 시 이름·설명 툴팁). 클릭 시 라벨을 즉시 전송.
 const QUICK_CHIPS = [
-  "ai.chipAnalyze",
-  "ai.chipSummarize",
-  "ai.chipWalkthrough",
-  "ai.chipImprove",
+  { key: "ai.chipAnalyze", descKey: "ai.chipAnalyzeDesc", Icon: Search },
+  { key: "ai.chipSummarize", descKey: "ai.chipSummarizeDesc", Icon: FileText },
+  { key: "ai.chipWalkthrough", descKey: "ai.chipWalkthroughDesc", Icon: Route },
+  { key: "ai.chipImprove", descKey: "ai.chipImproveDesc", Icon: Lightbulb },
 ] as const;
 
 export function AiChatPanel({
@@ -69,6 +72,8 @@ export function AiChatPanel({
   aiPreviewActive = false,
   onCommitPreview,
   onDiscardPreview,
+  fontScale = 1,
+  onAutoTitle,
 }: AiChatPanelProps) {
   const { t } = useI18n();
   // TEMP DEV SEED — R10 시각 확인용 샘플(표·태그·헤딩·코드·인용). R10 완료 후 `[]`로 되돌릴 것.
@@ -118,6 +123,15 @@ export function AiChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   // 스레드가 하단에서 떨어져 있으면 "맨 아래로" 버튼 노출.
   const [showToBottom, setShowToBottom] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 입력 내용에 따라 textarea 높이 자동 확장(최대 max-h-32 = 128px)
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  }, [input]);
 
   // 새 메시지·생각중 표시가 추가되면 항상 최신(하단)으로 스크롤
   useEffect(() => {
@@ -126,6 +140,20 @@ export function AiChatPanel({
       el.scrollTop = el.scrollHeight;
     }
   }, [messages, busy]);
+
+  // 마지막 어시스턴트 답변에서 제목 키워드 추출 → 헤더 자동 타이틀
+  useEffect(() => {
+    if (!onAutoTitle) return;
+    const last = [...messages].reverse().find((message) => message.role === "assistant");
+    if (!last) return;
+    const heading = last.content.match(/^#{1,6}\s+(.+)$/m);
+    const raw = (heading ? heading[1] : last.content)
+      .replace(/[#>*`\-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const title = raw.split(" ").slice(0, 6).join(" ").slice(0, 40);
+    if (title) onAutoTitle(title);
+  }, [messages, onAutoTitle]);
 
   // 서빙 모델 목록 조회(진입 1회, AI 활성일 때만) — 첫 모델을 기본 선택
   useEffect(() => {
@@ -233,6 +261,7 @@ export function AiChatPanel({
           if (el) setShowToBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
         }}
         onCopy={() => onToast?.(t("ai.copied"))}
+        style={{ zoom: fontScale }}
         className="scrollbar-hidden min-h-0 flex-1 select-text overflow-y-auto p-3"
       >
         {!aiEnabled && (
@@ -303,7 +332,7 @@ export function AiChatPanel({
                 <button
                   key={`finding-${index}`}
                   type="button"
-                  className={`group flex w-full gap-2.5 rounded-xs border border-l-[3px] border-hairline ${rail} bg-surface p-2.5 text-left shadow-sm hover:bg-surface-alt disabled:opacity-60`}
+                  className={`group flex w-full gap-2.5 rounded-[3px] border border-l-[3px] border-hairline ${rail} bg-surface p-2.5 text-left shadow-sm hover:bg-surface-alt disabled:opacity-60`}
                   onClick={() => onHighlightNode(finding.node_ids[0])}
                   disabled={finding.node_ids.length === 0}
                 >
@@ -465,33 +494,44 @@ export function AiChatPanel({
       )}
       </div>
       <div className="border-t border-hairline p-2">
-        {/* 빠른 프롬프트 칩 — 클릭 시 즉시 전송 */}
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {QUICK_CHIPS.map((chipKey) => (
-            <button
-              key={chipKey}
-              type="button"
-              disabled={!aiEnabled || busy}
-              onClick={() => void send(t(chipKey))}
-              className="rounded-full border border-hairline px-2.5 py-1 text-fine text-ink-secondary hover:border-accent hover:bg-accent-tint hover:text-accent disabled:opacity-40"
-            >
-              {t(chipKey)}
-            </button>
-          ))}
-        </div>
-        {/* 입력 행 — 첨부 + 입력 + 전송 (첨부는 디자인 플레이스홀더) */}
-        <div className="flex items-end gap-2">
+        {/* 빠른 기능 — 첨부 + 아이콘 칩(호버 시 이름·설명 툴팁) */}
+        <div className="mb-2 flex items-center gap-1.5">
           <button
             type="button"
             aria-label={t("ai.attach")}
             title={t("ai.attach")}
             onClick={() => onToast?.(t("ai.comingSoon"))}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-hairline text-ink-tertiary hover:border-accent hover:text-accent disabled:opacity-40"
             disabled={!aiEnabled}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-hairline text-ink-tertiary hover:border-accent hover:text-accent disabled:opacity-40"
           >
             <Paperclip size={16} strokeWidth={1.5} />
           </button>
+          <span className="mx-0.5 h-5 w-px bg-hairline" />
+          {QUICK_CHIPS.map((chip) => (
+            <div key={chip.key} className="group relative">
+              <button
+                type="button"
+                disabled={!aiEnabled || busy}
+                onClick={() => void send(t(chip.key))}
+                aria-label={t(chip.key)}
+                className="flex h-9 w-9 items-center justify-center rounded-sm border border-hairline text-ink-secondary hover:border-accent hover:bg-accent-tint hover:text-accent disabled:opacity-40"
+              >
+                <chip.Icon size={16} strokeWidth={1.5} />
+              </button>
+              {/* 호버 툴팁 — 기능 이름 + 짧은 설명 */}
+              <div className="pointer-events-none absolute bottom-full left-0 z-10 mb-1.5 hidden w-44 rounded-sm border border-hairline bg-surface p-2 shadow-lg group-hover:block">
+                <div className="text-caption-strong text-ink">{t(chip.key)}</div>
+                <div className="mt-0.5 text-fine leading-snug text-ink-tertiary">
+                  {t(chip.descKey)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* 입력 행 — 입력(자동 높이) + 전송 */}
+        <div className="flex items-end gap-2">
           <textarea
+            ref={inputRef}
             className="scrollbar-hidden max-h-32 min-h-[36px] flex-1 resize-none rounded-md border border-hairline px-3 py-2 text-caption outline-none focus:border-accent disabled:bg-surface-alt"
             rows={1}
             placeholder={aiEnabled ? t("ai.placeholder") : t("ai.disabled")}
