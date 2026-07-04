@@ -85,13 +85,15 @@ export function BpmAttributePicker({
         )}
       </div>
 
-      {/* 담당자 칩 + 부서 필터링 추가 픽커 */}
+      {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커). 읽기전용은 칩만. */}
       <div className="flex items-start gap-2 border-t border-divider py-1">
         <span className="mt-1 shrink-0 text-caption text-ink-secondary">{t("field.assignee")}</span>
-        <div className="min-w-0 flex-1 space-y-1">
-          {assignees.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {assignees.map((name) => {
+        <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+            {assignees.length === 0 && readOnly ? (
+              <span className="text-caption text-ink">—</span>
+            ) : (
+              assignees.map((name) => {
                 const isDrift = drifted.includes(name);
                 return (
                   <span
@@ -118,11 +120,12 @@ export function BpmAttributePicker({
                     )}
                   </span>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
           {!readOnly && (
             <SearchSelect
+              addMode
               value=""
               options={data.users
                 .filter((u) => department === "" || u.department === department)
@@ -133,7 +136,7 @@ export function BpmAttributePicker({
                   sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
                   keywords: u.id,
                 }))}
-              emptyLabel={t("field.assignee")}
+              emptyLabel={t("summary.none")}
               placeholder={t("field.searchPlaceholder")}
               onChange={(name) => {
                 if (!name) return;

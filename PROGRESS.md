@@ -6,6 +6,12 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — 우측 인스펙터 노드 속성에도 편집 모달 디자인 적용 + 플라이아웃 간격 축소
+- **`search-select.tsx`** — addMode 플라이아웃 간격 8→4px(트리거 바로 우측에 붙게, 모달과 멀리 떨어지던 문제).
+- **`page.tsx` 인스펙터 노드 폼** — (1) **설명** 섹션을 읽기전용 **회색**(내용만 노출, 편집은 편집 모달에서만) 추가. (2) 유형·색을 라벨좌·필드 **우측정렬**·세로중앙·**구분선** 행으로(색 swatch hover 연보라 링, hex 인라인). (3) **BPM 박스는 유지**하고 안 내용만 디자인 변경. 코멘트는 인스펙터에 없음(제외).
+- **`bpm-attribute-picker.tsx`** — 담당자 칩 **우측정렬 + addMode ＋플라이아웃**(None 회색), 부서 유지. 읽기전용은 칩/— 만.
+- 검증: 프론트 lint 0 errors·build OK. 런타임(인스펙터 우측정렬·플라이아웃·설명 회색·타입별)은 인앱 확인 후속.
+
 ## 2026-07-04 — 노드 편집 모달 속성 영역 재디자인(우측정렬·구분선·담당자 ＋플라이아웃) + 코멘트/색 hover
 - **`search-select.tsx`** — `addMode` prop 신설: 트리거를 ＋아이콘으로, 플라이아웃을 트리거 우측(공간 없으면 좌측·아래 넘치면 위로)에 **fixed**로 띄움 → 모달 overflow에 클리핑 안 되고 아래 필드 미가림. 기본 모드(field 버튼+아래 드롭다운)는 무변경.
 - **`node-summary-modal.tsx`** — 속성 영역(유형/색/부서/담당자/시스템/소요) 재배치: 라벨 좌 + 필드/필 **우측정렬**, 세로 중앙, 행 **구분선**(`divide-divider`). 부서 select=우측 `w-52` 박스, 시스템/소요 입력 `text-right w-44`, 담당자=필 우측 wrap + **＋버튼(addMode SearchSelect)→우측 플라이아웃**(None은 `summary.none` 회색). 색 swatch **hover 연보라 링**(비선택). start/end/subprocess는 `showAttributes=false`라 유형/색만(구분선·레이아웃 정상). 코멘트: **Add comment를 라벨 행 우측 끝**으로 이동, 코멘트 li **hover(accent-tint 배경+연보라 보더)**.

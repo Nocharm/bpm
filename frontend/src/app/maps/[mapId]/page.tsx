@@ -6583,69 +6583,81 @@ function MapEditor({ mapId }: { mapId: number }) {
                           onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
                         />
                       </div>
+                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 편집은 편집 모달에서만. */}
                       <div>
-                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.type")}</label>
-                        <div className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary">
-                          {t(
-                            NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
-                              ?.labelKey ?? "nodeType.process",
-                          )}
+                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
+                        <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary">
+                          {selectedNode.data.description || "—"}
                         </div>
                       </div>
-                      <div>
-                        <label className="mb-1 block text-fine text-ink-tertiary">{t("field.color")}</label>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {colorsForType(selectedNode.data.nodeType).map((preset) => (
-                            <button
-                              key={preset || "default"}
-                              type="button"
-                              title={preset || t("editor.defaultColor")}
-                              aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
-                              className={`h-6 w-6 rounded-sm border ${
-                                selectedNode.data.color === preset ? "ring-2 ring-accent" : "border-hairline"
-                              }`}
-                              style={{ backgroundColor: preset || "#ffffff" }}
-                              disabled={readOnly}
-                              onClick={() => updateSelectedData({ color: preset })}
-                            />
-                          ))}
-                          {/* 커스텀 색상 — Palette 토글로 hex 직접 입력 */}
-                          {!readOnly && (
-                            <button
-                              type="button"
-                              title={t("editor.hexToggle")}
-                              aria-label={t("editor.hexToggle")}
-                              aria-pressed={showHexInput}
-                              className={`flex h-6 w-6 items-center justify-center rounded-sm border ${
-                                showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
-                              } hover:bg-surface-alt`}
-                              onClick={() => setShowHexInput((value) => !value)}
-                            >
-                              <Palette size={14} strokeWidth={1.5} />
-                            </button>
-                          )}
+                      {/* 유형·색 — 라벨 좌·필드 우측정렬·세로중앙·구분선(편집 모달과 동일) */}
+                      <div className="flex flex-col divide-y divide-divider">
+                        <div className="flex min-h-[34px] items-center gap-3 py-1.5">
+                          <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</span>
+                          <span className="min-w-0 flex-1 truncate text-right text-caption text-ink-secondary">
+                            {t(
+                              NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
+                                ?.labelKey ?? "nodeType.process",
+                            )}
+                          </span>
                         </div>
-                        {showHexInput && (
-                          <input
-                            key={`new-${selectedNode.id}-${selectedNode.data.color}`}
-                            autoFocus
-                            className="mt-2 w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
-                            defaultValue={selectedNode.data.color}
-                            disabled={readOnly}
-                            placeholder={t("editor.hexPlaceholder")}
-                            onBlur={(event) => {
-                              const value = event.target.value.trim();
-                              if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
-                                updateSelectedData({ color: value });
-                              }
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.currentTarget.blur();
-                              }
-                            }}
-                          />
-                        )}
+                        <div className="flex items-center gap-3 py-1.5">
+                          <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
+                            {colorsForType(selectedNode.data.nodeType).map((preset) => (
+                              <button
+                                key={preset || "default"}
+                                type="button"
+                                title={preset || t("editor.defaultColor")}
+                                aria-label={t("editor.colorAria", { name: preset || t("editor.colorDefaultName") })}
+                                className={`h-6 w-6 rounded-sm border ${
+                                  selectedNode.data.color === preset
+                                    ? "border-transparent ring-2 ring-accent"
+                                    : "border-hairline hover:ring-2 hover:ring-accent-tint-border"
+                                }`}
+                                style={{ backgroundColor: preset || "#ffffff" }}
+                                disabled={readOnly}
+                                onClick={() => updateSelectedData({ color: preset })}
+                              />
+                            ))}
+                            {/* 커스텀 색상 — Palette 토글로 hex 직접 입력(인라인) */}
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                title={t("editor.hexToggle")}
+                                aria-label={t("editor.hexToggle")}
+                                aria-pressed={showHexInput}
+                                className={`flex h-6 w-6 items-center justify-center rounded-sm border ${
+                                  showHexInput ? "border-accent text-accent" : "border-hairline text-ink-tertiary"
+                                } hover:bg-surface-alt`}
+                                onClick={() => setShowHexInput((value) => !value)}
+                              >
+                                <Palette size={14} strokeWidth={1.5} />
+                              </button>
+                            )}
+                            {showHexInput && (
+                              <input
+                                key={`new-${selectedNode.id}-${selectedNode.data.color}`}
+                                autoFocus
+                                className="w-28 rounded-sm border border-hairline px-2 py-0.5 text-right text-fine text-ink"
+                                defaultValue={selectedNode.data.color}
+                                disabled={readOnly}
+                                placeholder={t("editor.hexPlaceholder")}
+                                onBlur={(event) => {
+                                  const value = event.target.value.trim();
+                                  if (value === "" || /^#[0-9a-fA-F]{6}$/.test(value)) {
+                                    updateSelectedData({ color: value });
+                                  }
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.currentTarget.blur();
+                                  }
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
                       </div>
                       {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
                       {hasBpmAttributes(selectedNode.data.nodeType) && (

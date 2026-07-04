@@ -59,8 +59,8 @@ export function SearchSelect({
   const openMenu = () => {
     if (addMode && triggerRef.current) {
       const r = triggerRef.current.getBoundingClientRect();
-      // 우측에 공간 없으면 좌측으로, 아래로 넘치면 위로 당김.
-      const left = r.right + 8 + FLYOUT_W > window.innerWidth ? r.left - 8 - FLYOUT_W : r.right + 8;
+      // 트리거 바로 우측에 붙임(간격 최소). 공간 없으면 좌측으로, 아래로 넘치면 위로 당김.
+      const left = r.right + 4 + FLYOUT_W > window.innerWidth ? r.left - 4 - FLYOUT_W : r.right + 4;
       const top = Math.max(8, Math.min(r.top, window.innerHeight - 280));
       setFlyoutPos({ left, top });
     }
