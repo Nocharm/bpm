@@ -7,7 +7,7 @@ import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "
 import { useI18n } from "@/lib/i18n";
 import type { WindowGeom } from "@/lib/window-store";
 
-const MIN_W = 240;
+const MIN_W = 360; // 채팅/표 가독성 위해 상향 (기존 240 × 1.5)
 const MIN_H = 160;
 
 type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";

@@ -6424,7 +6424,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           {aiPreviewActive && (
-            <div className="absolute left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface py-1.5 pl-3 pr-1.5 shadow-lg">
+            <div className="absolute left-1/2 top-3 z-[1100] flex -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface py-1.5 pl-3 pr-1.5 shadow-lg">
               <span className="flex items-center gap-1.5 text-caption text-ink">
                 <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
                 {t("ai.previewTitle")}

@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — ScopeWindow 최소폭↑ · 제안 툴바 z-index · 창 열림 시 캔버스 고정
+- **`scope-window.tsx`** — 최소 폭 240 → **360**(채팅/표 가독성, ×1.5).
+- **`page.tsx`** — graph/ops 제안 미리보기 툴바가 캔버스(루트 프로세스 chromeless ScopeWindow, z-1000) 뒤에 가려지던 상시 버그 → **z-[1100]**(기존 z-40)로 올려 표시.
+- **`ai-chat-panel.tsx`** — 워크스루 스텝 포커스 효과가 **초기 마운트(창 열림)에도** 발동해 `highlightNode`의 `fitView`로 캔버스가 이동하던 문제 → 첫 실행·무변화(StrictMode 재호출)엔 생략, **스텝이 실제 바뀔 때만** 포커스. 창 열 때 뷰포트 고정.
+- 검증: 브라우저 — 창 열어도 뷰포트 불변(`canvasMovedOnOpen: false`)·툴바 최상위(z-1100) 표시. lint 0 errors·build OK. (시드는 커밋 제외·로컬 유지.)
+
 ## 2026-07-04 — ScopeWindow: 8방향 리사이즈 + 방향고정 + 최대폭 절반
 - **`scope-window.tsx`** — 리사이즈 핸들을 se 1곳 → **8방향(4모서리+4변)**. 잡은 지점의 반대쪽을 고정하고 **드래그한 방향으로만** 크기 변경 — 기존엔 우측 배치 창을 우로 드래그하면 `clamp`가 x를 밀어 창이 좌측으로 커지던 버그 수정. 마우스가 화면(bounds) 밖으로 나가도 반대 모서리는 그 자리에서 정지. **최대 폭 = 캔버스(사이드바 제외) 폭의 절반**(`bounds.w/2`). AI 패널·딥뷰 창 공통.
 - R10b-2 확인용: `page.tsx` `aiPreviewActive` 초기값 TEMP `true`(미리보기 툴바 노출) — 커밋 제외.

@@ -91,8 +91,16 @@ export function AiChatPanel({
     };
   }, [aiEnabled]);
 
-  // 워크스루 스텝 변경 시 해당 노드 포커스 (공유 헬퍼 재사용)
+  // 워크스루 스텝 변경 시 해당 노드 포커스 (공유 헬퍼 재사용).
+  // 초기 마운트(창 열림)에는 포커스하지 않는다 — 창을 열 때 캔버스가 이동하지 않도록. 스텝이 실제로 바뀔 때만 이동.
+  const focusKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const key = steps.length > 0 ? `${stepIndex}:${steps[stepIndex]?.node_id ?? ""}` : "";
+    if (focusKeyRef.current === null || key === focusKeyRef.current) {
+      focusKeyRef.current = key; // 첫 실행(마운트)·변화 없음(StrictMode 재호출) → 포커스 생략
+      return;
+    }
+    focusKeyRef.current = key;
     if (steps.length > 0 && steps[stepIndex]) {
       onHighlightNode(steps[stepIndex].node_id);
     }
