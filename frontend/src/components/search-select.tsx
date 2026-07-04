@@ -30,6 +30,7 @@ export function SearchSelect({
   placeholder,
   onChange,
   addMode = false,
+  fitContent = false,
 }: {
   value: string;
   options: SelectOption[];
@@ -38,6 +39,8 @@ export function SearchSelect({
   onChange: (value: string) => void;
   // true면 ＋아이콘 트리거 + 마우스 위치 포털 플라이아웃(담당자 추가용).
   addMode?: boolean;
+  // true면 flex-1로 늘리지 않고 값 내용폭(최대폭 캡)으로 — 라벨 옆 우측정렬용(부서 등).
+  fitContent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -148,7 +151,11 @@ export function SearchSelect({
   );
 
   return (
-    <div className={addMode ? "relative shrink-0" : "relative min-w-0 flex-1"}>
+    <div
+      className={
+        addMode ? "relative shrink-0" : fitContent ? "relative min-w-0" : "relative min-w-0 flex-1"
+      }
+    >
       {addMode ? (
         <button
           type="button"
@@ -166,7 +173,9 @@ export function SearchSelect({
       ) : (
         <button
           type="button"
-          className="flex w-full items-center justify-between gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+          className={`flex ${
+            fitContent ? "w-auto min-w-0 max-w-[176px]" : "w-full"
+          } items-center justify-between gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink hover:bg-surface-alt`}
           onClick={() => {
             setOpen((prev) => !prev);
             setQuery("");
@@ -182,10 +191,11 @@ export function SearchSelect({
         (addMode ? (
           // 마우스 위치 포털(fixed) — 모달 transform 조상 영향 없음, 아래 필드 미가림.
           createPortal(
+            // z는 노드 편집 모달(z-1200)보다 위 — 안 그러면 모달 뒤로 깔려 클릭 불가.
             <>
-              <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+              <div className="fixed inset-0 z-[1340]" onClick={() => setOpen(false)} />
               <div
-                className="fixed z-[1001] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                className="fixed z-[1350] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
                 style={flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
               >
                 {menu}

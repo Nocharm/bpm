@@ -405,15 +405,14 @@ export function NodeSummaryModal({
                     <div className="flex min-h-[34px] items-center gap-3 py-1.5">
                       <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</span>
                       <div className="flex min-w-0 flex-1 justify-end">
-                        <div className="flex w-52">
-                          <SearchSelect
-                            value={form.department}
-                            options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
-                            emptyLabel={t("summary.none")}
-                            placeholder={t("field.searchPlaceholder")}
-                            onChange={changeDept}
-                          />
-                        </div>
+                        <SearchSelect
+                          fitContent
+                          value={form.department}
+                          options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                          emptyLabel={t("summary.none")}
+                          placeholder={t("field.searchPlaceholder")}
+                          onChange={changeDept}
+                        />
                       </div>
                     </div>
                     {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커) */}

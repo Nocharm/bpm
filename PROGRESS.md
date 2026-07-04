@@ -6,6 +6,11 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — 노드 속성 후속 3건: 플라이아웃 z상향(클릭가능) / 부서 fitContent(내용폭·우측정렬·삐져나감 방지)
+- **`search-select.tsx`** — (1) addMode 포털 플라이아웃 z를 **z-1340/1350**으로 상향(노드 편집 모달 z-1200보다 위) → 모달 뒤로 깔려 클릭 불가하던 문제 해소. (2) **`fitContent` prop 신설**: flex-1로 안 늘리고 값 내용폭(`max-w-[176px]`·`min-w-0` shrink)으로 → 라벨 옆 우측정렬, 좁으면 줄어 삐져나감 방지.
+- **`node-summary-modal.tsx`·`bpm-attribute-picker.tsx`** — 부서 select를 고정폭 wrapper(w-52/w-44) 제거하고 `fitContent`로(모달·인스펙터 공통 — 폭 커 보이던 문제·좁을 때 삐져나감 동시 해결).
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — 노드 속성 후속 4건: 플라이아웃 마우스위치·포털 / None 통일 / 사이드바 폭 / 부서 우측정렬
 - **`search-select.tsx`** — addMode 플라이아웃을 **클릭 마우스 위치**에 **document.body 포털(fixed)**로 렌더. 편집 모달의 transform 조상 때문에 fixed가 어긋나 캔버스 밖으로 나가며 회색영역이 뜨던 문제 해소(인스펙터는 원래 OK, 이제 둘 다 정상). 화면 넘치면 좌/상으로 접음.
 - **`i18n-messages.ts`** — `summary.none` ko "없음" → **"None"**(한영 상관없이 None).

@@ -75,16 +75,15 @@ export function BpmAttributePicker({
             {department || t("summary.none")}
           </span>
         ) : (
-          // 우측 정렬 — 고정폭 박스로 라벨 좌·select 우.
-          <div className="flex w-44 shrink-0">
-            <SearchSelect
-              value={department}
-              options={data.departments.map((d) => ({ value: d, label: d }))}
-              emptyLabel={t("summary.none")}
-              placeholder={t("field.searchPlaceholder")}
-              onChange={handleDeptChange}
-            />
-          </div>
+          // 우측 정렬 — 내용폭(fitContent)이라 라벨 옆에 붙지 않고 우측에, 좁으면 줄어듦(삐져나감 방지).
+          <SearchSelect
+            fitContent
+            value={department}
+            options={data.departments.map((d) => ({ value: d, label: d }))}
+            emptyLabel={t("summary.none")}
+            placeholder={t("field.searchPlaceholder")}
+            onChange={handleDeptChange}
+          />
         )}
       </div>
 
