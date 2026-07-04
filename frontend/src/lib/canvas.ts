@@ -887,9 +887,14 @@ export function rectWithExclusions(base: Rect, intruders: Rect[], members: Rect[
   return emitCellPaths(xs, ys, filled);
 }
 
-// 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
-// 4방향 cardinal에 배치: 좌=front/우=back/상=group/하(S)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
+// 드롭존 부채꼴 적중 판정 — 커서(컨테이너 상대 좌표)를 타깃 중심 기준 극좌표로 바꿔, 4방향
+// (좌=front/우=back/상=group/하 S=swap) 부채꼴 중 하나에 들면 그 zone. 대각 간극·밴드 밖이면 null.
+// page.tsx 부채꼴 렌더와 정합하되 판정은 살짝 관대(각 ±HIT_HALF, 반경 [radius*HIT_INNER, radius+OUTER_PAD]).
 export type DropZone = "front" | "back" | "group" | "swap";
+
+export const DROPZONE_HIT_OUTER_PAD = 60; // 판정 바깥 반경 = radius + this (링 유지 경계도 이 값 사용)
+const HIT_INNER_RATIO = 0.72; // 판정 안쪽 반경 = radius * this (시각 ri보다 안쪽까지 관대)
+const HIT_HALF = (23 * Math.PI) / 180; // 판정 각 반각(시각 부채꼴 19°보다 살짝 관대)
 
 export function pickDropZone(
   cursorX: number,
@@ -897,19 +902,27 @@ export function pickDropZone(
   cx: number,
   cy: number,
   radius: number,
-  tileW: number,
-  tileH: number,
 ): DropZone | null {
-  const tiles: { zone: DropZone; x: number; y: number }[] = [
-    { zone: "front", x: cx - radius, y: cy },
-    { zone: "back", x: cx + radius, y: cy },
-    { zone: "group", x: cx, y: cy - radius },
-    // 하단(S) = 두 노드 위치+연결 교환
-    { zone: "swap", x: cx, y: cy + radius },
+  const dx = cursorX - cx;
+  const dy = cursorY - cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist < radius * HIT_INNER_RATIO || dist > radius + DROPZONE_HIT_OUTER_PAD) {
+    return null;
+  }
+  const ang = Math.atan2(dy, dx); // 화면좌표(y-down): 0=동, +π/2=남, ±π=서
+  const axes: { zone: DropZone; axis: number }[] = [
+    { zone: "back", axis: 0 },
+    { zone: "swap", axis: Math.PI / 2 },
+    { zone: "front", axis: Math.PI },
+    { zone: "group", axis: -Math.PI / 2 },
   ];
-  for (const tile of tiles) {
-    if (Math.abs(cursorX - tile.x) <= tileW / 2 && Math.abs(cursorY - tile.y) <= tileH / 2) {
-      return tile.zone;
+  for (const { zone, axis } of axes) {
+    let d = Math.abs(ang - axis);
+    if (d > Math.PI) {
+      d = 2 * Math.PI - d; // 각도 wrap(서쪽 ±π 경계)
+    }
+    if (d <= HIT_HALF) {
+      return zone;
     }
   }
   return null;

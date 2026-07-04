@@ -91,6 +91,7 @@ import {
   insertNodeAfter,
   withSubprocessHandles,
   pickDropZone,
+  DROPZONE_HIT_OUTER_PAD,
   rectWithExclusions,
   branchKindOf,
   sideFromHandleId,
@@ -195,9 +196,8 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
-const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 타일 배치 반경(오버레이 렌더와 hit-test 공용)
-const ZONE_TILE_W = 84;
-const ZONE_TILE_H = 58;
+const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 부채꼴 배치 반경(오버레이 렌더·hit-test 공용)
+const ZONE_TILE_H = 58; // 링을 시야로 끌어오는 패닝 여유(ensureRingVisible) 계산용
 const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
 
 type ScreenRect = { left: number; top: number; width: number; height: number; radius: number };
@@ -3325,7 +3325,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const rect = ensureRingVisible(found);
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
-      let zone = pickDropZone(cursorX, cursorY, cx, cy, rect.radius, ZONE_TILE_W, ZONE_TILE_H);
+      let zone = pickDropZone(cursorX, cursorY, cx, cy, rect.radius);
       // 시작/끝 규칙을 어기는 흐름존(front/back)은 비활성화 — 드롭해도 엣지가 생기지 않게 zone을 무효로.
       // 차단 여부는 이벤트 시점에 계산해 dropTarget에 저장(렌더에서 ref 접근 회피, 타일 흐림 표시용).
       const draggedId = draggedNodeIdRef.current;
@@ -3382,7 +3382,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const r = active.rect;
         const cx = r.left + r.width / 2;
         const cy = r.top + r.height / 2;
-        const keep = r.radius + ZONE_TILE_H; // 타일까지 커서를 옮겨도 링 유지
+        const keep = r.radius + DROPZONE_HIT_OUTER_PAD; // 부채꼴 판정 바깥까지 커서를 옮겨도 링 유지
         const dist = Math.hypot(curX - cx, curY - cy);
         if (dist <= keep) {
           activateZone(active.id, curX, curY);
@@ -6406,7 +6406,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               // 링 반경 — screenRectOf에서 줌 무관 고정값으로 계산됨 (hit-test와 공용)
               const radius = r.radius;
               // 부채꼴: 노드 근처(ri)에서 바깥(ro)으로 팬, 아이콘/라벨은 중간 반경(rm)
-              const ri = radius * 0.72;
+              const ri = radius * 0.8; // 밴드 두께 축소 — 가장자리(ro)는 유지, 안쪽만 바깥으로
               const ro = radius + 48;
               const rm = (ri + ro) / 2;
               const rad = (d: number) => (d * Math.PI) / 180;
