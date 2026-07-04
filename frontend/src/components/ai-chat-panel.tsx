@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Lightbulb,
   Paperclip,
   Pause,
   Play,
@@ -42,6 +43,10 @@ interface AiChatPanelProps {
   onOpsProposal: (proposal: AiProposal) => void;
   onHighlightNode: (nodeId: string) => void;
   onToast?: (message: string) => void;
+  // graph/ops 제안 미리보기 — 캔버스에 미리 적용된 상태를 채팅 내 카드로 커밋/취소.
+  aiPreviewActive?: boolean;
+  onCommitPreview?: () => void;
+  onDiscardPreview?: () => void;
 }
 
 // 빠른 프롬프트 칩 — 클릭 시 해당 문구를 즉시 전송(i18n 라벨 = 프롬프트).
@@ -60,6 +65,9 @@ export function AiChatPanel({
   onOpsProposal,
   onHighlightNode,
   onToast,
+  aiPreviewActive = false,
+  onCommitPreview,
+  onDiscardPreview,
 }: AiChatPanelProps) {
   const { t } = useI18n();
   // TEMP DEV SEED — R10 시각 확인용 샘플(표·태그·헤딩·코드·인용). R10 완료 후 `[]`로 되돌릴 것.
@@ -266,50 +274,71 @@ export function AiChatPanel({
           )}
         </ul>
         {findings.length > 0 && (
-          <div className="mt-3 flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5 px-0.5 text-fine text-ink-tertiary">
-              <Search size={13} strokeWidth={1.5} />
+          <div className="mt-3 flex flex-col gap-2">
+            <span className="flex items-center gap-1.5 px-0.5 text-caption-strong text-ink">
+              <Search size={14} strokeWidth={1.6} className="text-accent" />
               {t("ai.analysisTitle")}
+              <span className="rounded-full bg-surface-alt px-1.5 text-fine text-ink-tertiary">
+                {findings.length}
+              </span>
             </span>
             {findings.map((finding, index) => {
-              const isHigh = finding.severity === "high";
+              const sev = finding.severity;
+              // 심각도별 좌측 레일·아이콘 톤 — high=경고 빨강, medium=액센트, low=중성
+              const rail =
+                sev === "high"
+                  ? "border-l-error"
+                  : sev === "medium"
+                    ? "border-l-accent"
+                    : "border-l-divider";
+              const iconTone =
+                sev === "high"
+                  ? "bg-error/10 text-error"
+                  : sev === "medium"
+                    ? "bg-accent-tint text-accent"
+                    : "bg-surface-alt text-ink-tertiary";
               return (
                 // finding 클릭 → 해당 노드 캔버스 하이라이트 (D4: 설명+하이라이트만)
                 <button
                   key={`finding-${index}`}
                   type="button"
-                  className="group flex w-full gap-2 rounded-sm border border-hairline bg-surface-alt p-2 text-left hover:bg-surface-pearl disabled:opacity-60"
+                  className={`group flex w-full gap-2.5 rounded-sm border border-l-[3px] border-hairline ${rail} bg-surface p-2.5 text-left shadow-sm hover:bg-surface-alt disabled:opacity-60`}
                   onClick={() => onHighlightNode(finding.node_ids[0])}
                   disabled={finding.node_ids.length === 0}
                 >
-                  <span className={`mt-px shrink-0 ${isHigh ? "text-error" : "text-ink-tertiary"}`}>
-                    {isHigh ? (
-                      <AlertTriangle size={15} strokeWidth={1.6} />
+                  <span
+                    className={`mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${iconTone}`}
+                  >
+                    {sev === "high" ? (
+                      <AlertTriangle size={14} strokeWidth={1.7} />
                     ) : (
-                      <Info size={15} strokeWidth={1.6} />
+                      <Info size={14} strokeWidth={1.7} />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="text-caption-strong text-ink">{finding.category}</span>
                       <span
-                        className={`rounded-full px-1.5 py-px text-fine ${
-                          isHigh ? "bg-error/10 text-error" : "bg-surface-pearl text-ink-tertiary"
+                        className={`rounded-full px-1.5 py-px text-[10px] font-semibold uppercase ${
+                          sev === "high" ? "bg-error/10 text-error" : "bg-surface-alt text-ink-tertiary"
                         }`}
                       >
                         {finding.severity}
                       </span>
                     </span>
-                    <span className="mt-0.5 block text-fine text-ink">{finding.message}</span>
+                    <span className="mt-1 block text-fine leading-relaxed text-ink">
+                      {finding.message}
+                    </span>
                     {finding.suggestion && (
-                      <span className="mt-1 block border-l-2 border-accent-tint-border pl-2 text-fine text-ink-tertiary">
-                        {finding.suggestion}
+                      <span className="mt-1.5 flex items-start gap-1.5 rounded-xs bg-accent-tint px-2 py-1 text-fine text-accent">
+                        <Lightbulb size={13} strokeWidth={1.6} className="mt-px shrink-0" />
+                        <span>{finding.suggestion}</span>
                       </span>
                     )}
                   </span>
                   {finding.node_ids.length > 0 && (
                     <ArrowUpRight
-                      size={13}
+                      size={14}
                       strokeWidth={1.5}
                       className="mt-px shrink-0 text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100"
                     />
@@ -320,13 +349,30 @@ export function AiChatPanel({
           </div>
         )}
         {steps.length > 0 && (
-          <div className="mt-3 overflow-hidden rounded-sm border border-hairline bg-surface-alt">
-            <div className="flex items-center justify-between px-2 py-1.5">
+          <div className="mt-3 overflow-hidden rounded-sm border border-hairline bg-surface shadow-sm">
+            <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
               <span className="flex items-center gap-1.5 text-caption-strong text-ink">
-                <Route size={14} strokeWidth={1.5} className="text-accent" />
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
+                  <Route size={13} strokeWidth={1.7} />
+                </span>
                 {t("ai.walkthrough")}
               </span>
               <div className="flex items-center gap-0.5">
+                {/* 스텝 진행 도트 — 현재/완료/예정 */}
+                <span className="mr-1.5 flex items-center gap-1">
+                  {steps.map((step, i) => (
+                    <span
+                      key={step.order}
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        i === stepIndex
+                          ? "bg-accent"
+                          : i < stepIndex
+                            ? "bg-accent/40"
+                            : "border border-hairline bg-surface-pearl"
+                      }`}
+                    />
+                  ))}
+                </span>
                 <span className="mr-1 text-fine tabular-nums text-ink-tertiary">
                   {stepIndex + 1} / {steps.length}
                 </span>
@@ -364,14 +410,38 @@ export function AiChatPanel({
                 </button>
               </div>
             </div>
-            {/* 진행바 — 현재 스텝 비율 */}
-            <div className="h-0.5 bg-surface-pearl">
-              <div
-                className="h-full bg-accent transition-all duration-350"
-                style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
-              />
+            <div className="flex items-start gap-2 px-2.5 py-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-on-accent">
+                {stepIndex + 1}
+              </span>
+              <p className="text-caption leading-relaxed text-ink">{steps[stepIndex]?.narration}</p>
             </div>
-            <p className="px-2 py-2 text-fine text-ink">{steps[stepIndex]?.narration}</p>
+          </div>
+        )}
+        {/* graph/ops 제안 미리보기 — 캔버스에 적용된 미리보기를 채팅 안에서 커밋/취소 */}
+        {aiPreviewActive && (
+          <div className="ml-7 mt-3 rounded-sm border border-accent-tint-border bg-surface-pearl p-2.5 shadow-sm">
+            <div className="flex items-center gap-1.5 text-fine font-semibold text-accent">
+              <Sparkles size={13} strokeWidth={1.7} />
+              {t("ai.previewTitle")}
+            </div>
+            <p className="mt-1 text-fine text-ink">{t("ai.previewHint")}</p>
+            <div className="mt-2.5 flex gap-1.5">
+              <button
+                type="button"
+                onClick={onCommitPreview}
+                className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+              >
+                {t("ai.previewAdd")}
+              </button>
+              <button
+                type="button"
+                onClick={onDiscardPreview}
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+              >
+                {t("approvers.cancel")}
+              </button>
+            </div>
           </div>
         )}
       </div>

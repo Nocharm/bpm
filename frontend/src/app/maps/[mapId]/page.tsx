@@ -748,6 +748,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   const [aiPreviewActive, setAiPreviewActive] = useState(true); // TEMP DEV SEED — R10b-2 툴바 확인용. 확인 후 false로 되돌릴 것.
   const aiPreviewRef = useRef(false);
+  // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그
+  const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });
+  const aiMinDragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(
+    null,
+  );
 
   // 엣지 스타일 — 맵 전역(모든 엣지 일괄). React Flow 빌트인 타입: default=곡선, smoothstep=꺾은선, straight=직선. localStorage 영속.
   const [edgeStyle, setEdgeStyle] = useState<"default" | "smoothstep" | "straight">("smoothstep");
@@ -6313,23 +6318,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             );
           })}
           <WindowDock
-            items={[
-              ...scopes
-                .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
-                .filter(({ index, key }) => index !== 0 && (windowGeom[key] ?? defaultGeom(index, bounds)).minimized)
-                .map(({ scope, key }) => ({ key, title: scope.title })),
-              ...(aiOpen && windowGeom[AI_WINDOW_KEY]?.minimized
-                ? [{ key: AI_WINDOW_KEY, title: t("ai.title") }]
-                : []),
-            ]}
+            items={scopes
+              .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
+              .filter(({ index, key }) => index !== 0 && (windowGeom[key] ?? defaultGeom(index, bounds)).minimized)
+              .map(({ scope, key }) => ({ key, title: scope.title }))}
             onRestore={(key) => {
-              if (key === AI_WINDOW_KEY) {
-                setWindowGeom((map) => {
-                  const base = map[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds);
-                  return { ...map, [AI_WINDOW_KEY]: { ...base, minimized: false } };
-                });
-                return;
-              }
               setWindowGeom((map) => {
                 const idx = scopes.findIndex((scope) => scopeKey(scope) === key);
                 const base = map[key] ?? defaultGeom(idx, bounds);
@@ -6338,6 +6331,51 @@ function MapEditor({ mapId }: { mapId: number }) {
               bringToFront(key);
             }}
           />
+          {/* 최소화된 AI 창 — 정사각 스파클 아이콘, 화면 어디든 드래그. 클릭 시 복원 (R10d5) */}
+          {aiOpen && windowGeom[AI_WINDOW_KEY]?.minimized && (
+            <button
+              type="button"
+              title={t("ai.title")}
+              aria-label={t("ai.title")}
+              className="absolute z-[1095] flex h-11 w-11 touch-none items-center justify-center rounded-md bg-accent text-on-accent shadow-lg hover:bg-accent-focus"
+              style={{ left: aiMinPos.x, top: aiMinPos.y }}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                aiMinDragRef.current = {
+                  px: event.clientX,
+                  py: event.clientY,
+                  x: aiMinPos.x,
+                  y: aiMinPos.y,
+                  moved: false,
+                };
+              }}
+              onPointerMove={(event) => {
+                const drag = aiMinDragRef.current;
+                if (!drag) return;
+                if (Math.abs(event.clientX - drag.px) + Math.abs(event.clientY - drag.py) > 4) {
+                  drag.moved = true;
+                }
+                setAiMinPos({
+                  x: Math.min(Math.max(drag.x + (event.clientX - drag.px), 0), Math.max(0, bounds.w - 44)),
+                  y: Math.min(Math.max(drag.y + (event.clientY - drag.py), 0), Math.max(0, bounds.h - 44)),
+                });
+              }}
+              onPointerUp={(event) => {
+                const drag = aiMinDragRef.current;
+                aiMinDragRef.current = null;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+                // 드래그가 아니면(제자리 클릭) 창 복원
+                if (drag && !drag.moved) {
+                  setWindowGeom((map) => {
+                    const base = map[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds);
+                    return { ...map, [AI_WINDOW_KEY]: { ...base, minimized: false } };
+                  });
+                }
+              }}
+            >
+              <Sparkles size={20} strokeWidth={1.7} />
+            </button>
+          )}
           {menu && (
             <ContextMenu
               x={menu.x}
@@ -6423,30 +6461,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               onClose={() => setPending(null)}
             />
           )}
-          {aiPreviewActive && (
-            <div className="absolute left-1/2 top-3 z-[1100] flex -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface py-1.5 pl-3 pr-1.5 shadow-lg">
-              <span className="flex items-center gap-1.5 text-caption text-ink">
-                <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
-                {t("ai.previewTitle")}
-              </span>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
-                onClick={commitAiPreview}
-              >
-                <Check size={14} strokeWidth={1.7} />
-                {t("ai.previewAdd")}
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-                onClick={discardAiPreview}
-              >
-                <X size={14} strokeWidth={1.5} />
-                {t("approvers.cancel")}
-              </button>
-            </div>
-          )}
+          {/* AI 제안 미리보기 커밋/취소는 채팅 스레드 내 카드로 이동(R10d4) — AiChatPanel */}
           <ShortcutLegend />
           {summaryNodeId && versionId !== null && (() => {
             // 현재 스코프 노드 우선, 없으면 인라인 펼친 자식 노드(편집 오버레이 반영된 합성 노드)
@@ -6566,6 +6581,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
                 onToast={showToast}
+                aiPreviewActive={aiPreviewActive}
+                onCommitPreview={commitAiPreview}
+                onDiscardPreview={discardAiPreview}
               />
             </ScopeWindow>
           )}

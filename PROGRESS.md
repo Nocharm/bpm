@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10d2·d4·d5: 카드 가시성 + 인채팅 제안 + 최소화 스파클 드래그
+- **d2 카드 가시성** (`ai-chat-panel.tsx`) — 분석 카드: severity 좌측 레일(high 빨강 / medium 액센트 / low 중성) + 아이콘 원 배지 + 대문자 severity 필 + 제안(💡 accent-tint 블록) + shadow. 워크스루 카드: Route 원 배지 + **스텝 진행 도트** + 번호 배지 내레이션 + shadow.
+- **d4 인채팅 제안** (`ai-chat-panel.tsx`·`page.tsx`·i18n) — graph/ops 제안 미리보기 커밋/취소를 **캔버스 툴바 → 채팅 스레드 내 카드**로 이동(초기 디자인). `aiPreviewActive`·`onCommitPreview`·`onDiscardPreview` props, `ai.previewHint` 추가, 캔버스 툴바 제거.
+- **d5 최소화 스파클** (`page.tsx`) — 최소화 시 고정 dock → **정사각 스파클 아이콘**(44px accent), 화면 어디든 **드래그**(bounds 클램프), 제자리 클릭 시 창 복원. AI 창을 WindowDock에서 분리.
+- 검증: 브라우저 — 카드 렌더·인채팅 제안 카드·최소화→스파클→클릭 복원 확인. lint 0 errors·build OK.
+
 ## 2026-07-04 — R10d1: AI 입력 영역 초기 디자인 정합 (keycap 단축키·바인딩 복원)
 - **`ai-chat-panel.tsx`** — 입력부를 승인 프리뷰(`ai-panel-preview.html`)에 맞춤: `[📎 첨부][입력 textarea][↑ 전송]` 한 행 + **keycap 힌트**(`Enter` 줄바꿈 / `⌘/Ctrl`+`Enter` 전송). 바인딩을 **⌘/Ctrl+Enter=전송·Enter=줄바꿈**(초기값)으로 복원(IME 가드 유지). 전송 아이콘 ArrowUp. 대화추출 버튼은 헤더(d3)로 이동 예정.
 - **`i18n-messages.ts`** — `ai.hintNewline`·`ai.hintSend`(en·ko), `ai.sendHint` 제거.
