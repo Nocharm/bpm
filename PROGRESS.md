@@ -8,6 +8,7 @@
 - **`globals.css`** — 제거된 원형 링 `.zone-ring`→부채꼴 페이드 `.zone-fan`(고아 CSS 정리). 충돌카드(`FlowConflictModal`)는 R9 글리프 디자인 유지.
 - 검증: lint 0·build/TS OK. **브라우저 렌더 확인**(토큰 주입 미리보기) — 투명도·둥근 모서리·4+4 구조·활성 강조·스왑 S 이미지 정합 확인.
 - **형태·판정 후속**(`page.tsx`·`canvas.ts`) — 방사형 변은 곧게(각도차로 조각 사이 간극이 바깥으로 확대), 각폭 축소(HALF 19°·DHALF 16°), 밴드 두께 축소(ri 0.72→0.80·ro 유지). **hit-test를 박스→극좌표**로: `pickDropZone(x,y,cx,cy,radius)`가 각(±23°)+반경([0.72R, R+60])으로 4방향 판정, 대각 간극은 null. `ZONE_TILE_W` 제거, 링 유지 경계는 `DROPZONE_HIT_OUTER_PAD`. 대표 좌표 판정 검증(스왑=S·서쪽 wrap·대각 null·경계) 통과.
+- **링 크기 축소**(`page.tsx` screenRectOf) — 링 반경 배수 0.7→**0.56**(80%)로 원을 노드(중심)에 더 가깝게. radius 하나로 렌더·hit-test·keep 경계가 함께 축소돼 정합 유지(앞/뒤 부채꼴↔노드 간극 ~5.5px).
 
 ## 2026-07-04 — R10 완료: 개발 시드 일괄 제거 (컴팩트)
 - **`ai-chat-panel.tsx`·`page.tsx`** — R10 검증용 TEMP DEV SEED(채팅 `messages`·`findings`·`steps`·`aiPreviewActive`)를 전부 제거 → 실서비스 상태(빈 배열·false). **R10(a~d) 전체 완료.**

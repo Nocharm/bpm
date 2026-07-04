@@ -2654,8 +2654,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         top: topLeft.y - rect.top,
         width: w * zoom,
         height: h * zoom,
-        // 링 반경은 줌·노드 타입과 무관하게 프로세스 노드 크기 기준 상수 — 모든 노드에서 동일 크기. 0.7배로 축소
-        radius: (Math.max(NODE_WIDTH, NODE_HEIGHT) + ZONE_RADIUS_PAD) * 0.7,
+        // 링 반경은 줌·노드 타입과 무관하게 프로세스 노드 크기 기준 상수 — 모든 노드에서 동일 크기.
+        // 0.56배(기존 0.7의 80%)로 축소 — 원을 중심(노드)에 더 가깝게.
+        radius: (Math.max(NODE_WIDTH, NODE_HEIGHT) + ZONE_RADIUS_PAD) * 0.56,
       };
     },
     [reactFlow],
