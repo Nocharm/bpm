@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R11b 오류방지 ①: 스왑은 같은 종류 노드끼리만(subprocess↔process 예외)
+- **`canvas.ts`** — 순수 헬퍼 `canSwapTypes(a,b)`: 동종이거나 {subprocess,process} 쌍이면 true, 그 외 false. 단위테스트 4케이스 추가(`canvas.test.ts`, 21 pass).
+- **`page.tsx`** — `flowZoneViolates`에 swap 분기(`!canSwapTypes`) 추가. `dropTarget.swapBlocked` 필드로 `activateZone`이 부적합 시 스왑존을 죽이고(zone=null) 렌더에서 흐림. `handleZoneDrop` swap 실행 전 방어적 차단. front/back 차단과 동일 패턴.
+- 검증: vitest 21 pass · lint 0 · build/TS OK. 라이브 드래그는 브라우저 확인 필요.
+
 ## 2026-07-04 — R11: 드롭존 라디얼 링 재스타일(부채꼴) + 스왑 S 이동 + 이미지 정합
 - **`page.tsx`** — 드롭존 오버레이를 사각 타일 4개 → **SVG 부채꼴(둥근 모서리 annular sector)**: 사용 4방향(그룹 N·뒤에 E·스왑 S·앞에 W) + **점선 대각 4개**(추후 확장 `+`). **투명 fill**(accent 18%·활성 34%·차단 ink 7% — 캔버스 도트그리드 비침), 활성 진한 violet+2.5px 테두리. 이미지 `dropzone.png`에 맞춰 폭 44°·CR 7px·톤 튜닝.
 - **`canvas.ts`** — `pickDropZone` swap 앵커 SW→**S**(시각·hit-test 정합), 미사용 `DIAG` 상수 제거. **드롭/충돌/dwell 로직 보존**(box hit-test 유지).

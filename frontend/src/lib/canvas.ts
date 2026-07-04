@@ -419,6 +419,23 @@ export function violatesTerminalRule(
   return target === "start" || source === "end";
 }
 
+// 스왑(위치·연결 교환) 허용 규칙 — 같은 종류 노드끼리만. 단 subprocess(하위프로세스 참조)는
+// 일반 process 노드와 호환(둘 다 활동 노드라 교환이 의미 있음). start/end/decision은 동종만.
+export function canSwapTypes(
+  a: ProcessNodeType | undefined,
+  b: ProcessNodeType | undefined,
+): boolean {
+  if (!a || !b) {
+    return false;
+  }
+  if (a === b) {
+    return true;
+  }
+  return (
+    (a === "subprocess" && b === "process") || (a === "process" && b === "subprocess")
+  );
+}
+
 // 시작/끝 노드의 표시 라벨은 i18n·사용자 라벨과 무관하게 항상 영문 고정값.
 const TERMINAL_DEFAULT_LABELS = new Set(["start", "end", "시작", "종료"]);
 

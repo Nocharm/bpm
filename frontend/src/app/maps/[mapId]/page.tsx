@@ -94,6 +94,7 @@ import {
   DROPZONE_HIT_OUTER_PAD,
   rectWithExclusions,
   branchKindOf,
+  canSwapTypes,
   sideFromHandleId,
   sourceHandleId,
   targetHandleId,
@@ -776,6 +777,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 시작/끝 규칙 위반으로 비활성화된 흐름존 — 활성 시점에 계산(렌더 중 ref 접근 회피)
     frontBlocked: boolean;
     backBlocked: boolean;
+    // 다른 종류 노드라 비활성화된 스왑존(subprocess↔process 예외 외)
+    swapBlocked: boolean;
   } | null>(null);
   // 드래그 노드가 기존 그룹 박스 빈 영역 위에 머무는 중 — 합류 대상 그룹 id(펄스 강조)
   const [groupDropTarget, setGroupDropTarget] = useState<string | null>(null);
@@ -2504,6 +2507,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (zone === "back") {
         return violatesTerminalRule(targetType, draggedType);
       }
+      if (zone === "swap") {
+        // 스왑은 같은 종류만(subprocess↔process 예외) — 다른 종류면 무효(드롭존 흐림).
+        return !canSwapTypes(draggedType, targetType);
+      }
       return false;
     },
     [],
@@ -3072,6 +3079,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
       if (zone === "swap") {
+        // 다른 종류 노드는 스왑 불가(subprocess↔process 예외) — activateZone에서 이미 zone을
+        // 죽이지만 방어적으로 차단.
+        if (flowZoneViolates(aId, bId, "swap")) {
+          return;
+        }
         swapNodes(aId, bId);
         return;
       }
@@ -3332,7 +3344,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       const draggedId = draggedNodeIdRef.current;
       const frontBlocked = !!draggedId && flowZoneViolates(draggedId, targetId, "front");
       const backBlocked = !!draggedId && flowZoneViolates(draggedId, targetId, "back");
-      if ((zone === "front" && frontBlocked) || (zone === "back" && backBlocked)) {
+      const swapBlocked = !!draggedId && flowZoneViolates(draggedId, targetId, "swap");
+      if (
+        (zone === "front" && frontBlocked) ||
+        (zone === "back" && backBlocked) ||
+        (zone === "swap" && swapBlocked)
+      ) {
         zone = null;
       }
       setGroupDropTarget((cur) => (cur ? null : cur)); // 노드 대상이 그룹 박스 hover보다 우선
@@ -3341,9 +3358,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         cur.id === targetId &&
         cur.zone === zone &&
         cur.frontBlocked === frontBlocked &&
-        cur.backBlocked === backBlocked
+        cur.backBlocked === backBlocked &&
+        cur.swapBlocked === swapBlocked
           ? cur
-          : { id: targetId, zone, rect, frontBlocked, backBlocked },
+          : { id: targetId, zone, rect, frontBlocked, backBlocked, swapBlocked },
       );
     },
     [screenRectOf, ensureRingVisible, flowZoneViolates],
@@ -6448,7 +6466,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               const diagAxes = [rad(-45), rad(45), rad(135), rad(-135)]; // NE·SE·SW·NW — 추후 확장
               const blockedOf = (zone: string) =>
                 (zone === "front" && dropTarget.frontBlocked) ||
-                (zone === "back" && dropTarget.backBlocked);
+                (zone === "back" && dropTarget.backBlocked) ||
+                (zone === "swap" && dropTarget.swapBlocked);
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
                   <svg className="zone-fan absolute inset-0 h-full w-full overflow-visible">

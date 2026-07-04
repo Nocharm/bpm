@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Edge } from "@xyflow/react";
 
 import {
+  canSwapTypes,
   getFlowPathBackward,
   getFlowPathForward,
   getNextNodeAlongFlow,
@@ -31,6 +32,33 @@ describe("violatesTerminalRule (source→target 방향)", () => {
 
   it("allows plain process→process", () => {
     expect(violatesTerminalRule("process", "process")).toBe(false);
+  });
+});
+
+describe("canSwapTypes (스왑 허용 규칙)", () => {
+  it("allows same type", () => {
+    expect(canSwapTypes("process", "process")).toBe(true);
+    expect(canSwapTypes("decision", "decision")).toBe(true);
+    expect(canSwapTypes("start", "start")).toBe(true);
+    expect(canSwapTypes("end", "end")).toBe(true);
+    expect(canSwapTypes("subprocess", "subprocess")).toBe(true);
+  });
+
+  it("allows subprocess ↔ plain process (both directions)", () => {
+    expect(canSwapTypes("subprocess", "process")).toBe(true);
+    expect(canSwapTypes("process", "subprocess")).toBe(true);
+  });
+
+  it("blocks different types", () => {
+    expect(canSwapTypes("process", "decision")).toBe(false);
+    expect(canSwapTypes("start", "end")).toBe(false);
+    expect(canSwapTypes("subprocess", "decision")).toBe(false);
+    expect(canSwapTypes("subprocess", "start")).toBe(false);
+  });
+
+  it("blocks when a type is missing", () => {
+    expect(canSwapTypes(undefined, "process")).toBe(false);
+    expect(canSwapTypes("process", undefined)).toBe(false);
   });
 });
 
