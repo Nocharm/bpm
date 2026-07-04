@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10b-2: AI 제안 미리보기 툴바 재스타일 (R10b 완료)
+- **`page.tsx`** — graph/ops 제안 미리보기 툴바(`aiPreviewActive`)를 ✦ Sparkles + "AI 제안 미리보기" 라벨 + **[✓ 맵에 추가](accent 필)** / **[✕ 취소](ghost)**로 재스타일(hairline 테두리). commit/discard 배선 유지.
+- **`i18n-messages.ts`** — `ai.previewTitle`(AI 제안 미리보기)·`ai.previewAdd`(맵에 추가).
+- 검증: lint 0 errors·build OK. **R10b(①분석·②워크스루 카드·③미리보기 툴바) 완료.**
+
 ## 2026-07-04 — R10b-1: AI 패널 분석/워크스루 카드 재스타일
 - **`ai-chat-panel.tsx`** — findings(분석) 카드: severity 아이콘(high=AlertTriangle·빨강 / else Info·회색) + category 굵게 + severity 필 + 제안(accent 좌측 rail) + 노드 점프(hover 시 ArrowUpRight). steps(워크스루) 카드: Route 아이콘 헤더 + 스텝 카운터 + **진행바**(accent) + prev/next·재생 컨트롤. 배선(하이라이트·자동재생) 보존.
 - **`i18n-messages.ts`** — `ai.analysisTitle`(분석/Analysis)·`ai.walkthrough`(워크스루/Walkthrough).

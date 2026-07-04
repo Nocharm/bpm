@@ -6424,12 +6424,25 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           {aiPreviewActive && (
-            <div className="absolute left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md bg-surface px-3 py-2 shadow-lg">
-              <span className="text-caption text-ink">{t("ai.title")}</span>
-              <button type="button" className="rounded-sm border border-hairline px-2 py-1 text-caption text-accent" onClick={commitAiPreview}>
-                {t("approvers.save")}
+            <div className="absolute left-1/2 top-3 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface py-1.5 pl-3 pr-1.5 shadow-lg">
+              <span className="flex items-center gap-1.5 text-caption text-ink">
+                <Sparkles size={14} strokeWidth={1.5} className="text-accent" />
+                {t("ai.previewTitle")}
+              </span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
+                onClick={commitAiPreview}
+              >
+                <Check size={14} strokeWidth={1.7} />
+                {t("ai.previewAdd")}
               </button>
-              <button type="button" className="rounded-sm border border-hairline px-2 py-1 text-caption text-error" onClick={discardAiPreview}>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={discardAiPreview}
+              >
+                <X size={14} strokeWidth={1.5} />
                 {t("approvers.cancel")}
               </button>
             </div>
