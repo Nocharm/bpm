@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 문제 노드 하이라이트: 잘못된 다중 연결 항목 클릭 시 이동+선택
+- **`save-checklist.tsx`** — `getMultiOutputNodeIds`(문제 노드 id 추출) export, `getSaveCheckStates.singleOutput`이 이를 재사용. `SaveCheckItem`에 `onLocate?` 추가 — 미충족+onLocate 있으면 아이템이 **클릭 가능 버튼**(크로스헤어 아이콘·호버 error 틴트).
+- **`page.tsx`** — `locateProblemNodes(ids)`: 문제 노드 선택(`node.selected`) + `reactFlow.fitView`로 이동·강조. `saveCheckItems`의 `singleOutput` 항목에 문제 노드가 있으면 `onLocate` 연결. "분기 외 노드 출력 1개"→**"잘못된 다중 연결 없음"**(익숙한 표현) 문구 변경.
+- 검증: lint 0 · build/TS OK. 로케이트 아이콘·호버 렌더 확인(주입).
+
 ## 2026-07-05 — 저장 조건: 출력 다중 노드 감지(분기 제외) + 투명도 /40
 - **`save-checklist.tsx getSaveCheckStates`** — 4번째 조건 `singleOutput` 추가: 노드별 출력(outgoing) 엣지 수를 세어 **분기(decision)·하위프로세스(subprocess, 다중 끝) 외 노드가 출력 2개 이상이면 감지**(클라이언트 전용 — 백엔드 규칙 아님). 드롭존 조작으로 생긴 잘못된 분기를 막기보다 작업자에게 알리는 방향. `edges` 인자 추가, 노드에 `id`.
 - **`page.tsx`** — `saveCheckItems`(deps에 `edges`)·`getSaveBlockers`(`edgesRef.current`)에 4번째 조건 반영 → 체크리스트 표시 + 수동 저장·승인 시작 차단. i18n `save.checkSingleOutput`(en/ko).

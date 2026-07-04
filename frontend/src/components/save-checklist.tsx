@@ -4,13 +4,34 @@
 // 접힘: 제목 표시. 펼침: 제목이 크로스페이드로 사라지며 조건 리스트가 아코디언으로 열림.
 // 각 조건은 현재 노드 상태에 맞춰 자동 체크(충족=체크+취소선, 미충족=빈 박스). 반투명 패널.
 
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Crosshair } from "lucide-react";
 import { useState } from "react";
 
 export interface SaveCheckItem {
   key: string;
   label: string;
   ok: boolean;
+  // 미충족 시 문제 위치로 이동/하이라이트(예: 잘못된 다중 연결 노드) — 있으면 아이템이 클릭 가능
+  onLocate?: () => void;
+}
+
+// 잘못된 다중 연결 노드 id — 분기(decision)·하위프로세스(subprocess, 다중 끝) 외 노드가 출력 2개 이상.
+export function getMultiOutputNodeIds(
+  nodes: { id: string; nodeType: string }[],
+  edges: { source: string }[],
+): string[] {
+  const outCount = new Map<string, number>();
+  for (const edge of edges) {
+    outCount.set(edge.source, (outCount.get(edge.source) ?? 0) + 1);
+  }
+  return nodes
+    .filter(
+      (node) =>
+        node.nodeType !== "decision" &&
+        node.nodeType !== "subprocess" &&
+        (outCount.get(node.id) ?? 0) > 1,
+    )
+    .map((node) => node.id);
 }
 
 // 저장(그래프 검증) 조건의 충족 여부 — 체크리스트 렌더와 저장/승인 차단 로직 공용(어긋남 방지).
@@ -23,21 +44,11 @@ export function getSaveCheckStates(
 ): { start: boolean; primaryEnd: boolean; endUnique: boolean; singleOutput: boolean } {
   const startCount = nodes.filter((node) => node.nodeType === "start").length;
   const endLabels = nodes.filter((node) => node.nodeType === "end").map((node) => node.label);
-  const outCount = new Map<string, number>();
-  for (const edge of edges) {
-    outCount.set(edge.source, (outCount.get(edge.source) ?? 0) + 1);
-  }
-  const singleOutput = nodes.every(
-    (node) =>
-      node.nodeType === "decision" ||
-      node.nodeType === "subprocess" ||
-      (outCount.get(node.id) ?? 0) <= 1,
-  );
   return {
     start: startCount === 1,
     primaryEnd: endLabels.length >= 1,
     endUnique: new Set(endLabels).size === endLabels.length,
-    singleOutput,
+    singleOutput: getMultiOutputNodeIds(nodes, edges).length === 0,
   };
 }
 
@@ -116,25 +127,48 @@ export function MapTitleChecklist({
         }`}
       >
         <div className="overflow-hidden">
-          <ul className="flex flex-col gap-1 border-t border-divider px-2 py-1.5">
-            {items.map((item) => (
-              <li key={item.key} className="flex items-center gap-1.5">
-                <span
-                  className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
-                    item.ok ? "border-accent bg-accent text-on-accent" : "border-ink-tertiary/50"
-                  }`}
-                >
-                  {item.ok && <Check size={10} strokeWidth={3} />}
-                </span>
-                <span
-                  className={`whitespace-nowrap text-fine ${
-                    item.ok ? "text-ink-tertiary line-through" : "text-ink"
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </li>
-            ))}
+          <ul className="flex flex-col gap-0.5 border-t border-divider px-1 py-1.5">
+            {items.map((item) => {
+              const locatable = !item.ok && !!item.onLocate;
+              const rowClass = "flex w-full items-center gap-1.5 rounded-xs px-1 py-0.5 text-left";
+              const inner = (
+                <>
+                  <span
+                    className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
+                      item.ok ? "border-accent bg-accent text-on-accent" : "border-ink-tertiary/50"
+                    }`}
+                  >
+                    {item.ok && <Check size={10} strokeWidth={3} />}
+                  </span>
+                  <span
+                    className={`whitespace-nowrap text-fine ${
+                      item.ok ? "text-ink-tertiary line-through" : "text-ink"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                  {locatable && (
+                    <Crosshair size={12} strokeWidth={1.5} className="ml-auto shrink-0 text-error" />
+                  )}
+                </>
+              );
+              return (
+                <li key={item.key}>
+                  {locatable ? (
+                    <button
+                      type="button"
+                      onClick={item.onLocate}
+                      title={item.label}
+                      className={`${rowClass} hover:bg-error/10`}
+                    >
+                      {inner}
+                    </button>
+                  ) : (
+                    <div className={rowClass}>{inner}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>

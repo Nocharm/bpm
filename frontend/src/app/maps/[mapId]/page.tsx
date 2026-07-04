@@ -64,7 +64,12 @@ import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-d
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
-import { MapTitleChecklist, getSaveCheckStates, type SaveCheckItem } from "@/components/save-checklist";
+import {
+  MapTitleChecklist,
+  getSaveCheckStates,
+  getMultiOutputNodeIds,
+  type SaveCheckItem,
+} from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
@@ -2121,18 +2126,51 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 저장(그래프 검증) 조건 — 현재 스코프 노드 기준 라이브 계산(좌상단 체크리스트). 백엔드 validate_process와 정합:
   // 시작 정확히 1개 / 끝 이름(빈 제목 포함) 중복 없음 / 대표 끝 1개(끝 노드 최소 1개면 저장 시 자동 1개 지정).
+  // 문제 노드(잘못된 다중 연결)로 이동+선택 하이라이트 — 체크리스트 항목 클릭 시.
+  const locateProblemNodes = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) {
+        return;
+      }
+      const idSet = new Set(ids);
+      setSelectedEdgeId(null);
+      setSelectedId(ids.length === 1 ? ids[0] : null);
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected === idSet.has(node.id) ? node : { ...node, selected: idSet.has(node.id) },
+        ),
+      );
+      void reactFlow.fitView({
+        nodes: ids.map((id) => ({ id })),
+        padding: 0.4,
+        duration: 400,
+        maxZoom: 1.3,
+      });
+    },
+    [reactFlow, setNodes],
+  );
+
   const saveCheckItems = useMemo<SaveCheckItem[]>(() => {
-    const states = getSaveCheckStates(
-      nodes.map((node) => ({ id: node.id, nodeType: node.data.nodeType, label: node.data.label })),
-      edges.map((edge) => ({ source: edge.source })),
-    );
+    const simpleNodes = nodes.map((node) => ({
+      id: node.id,
+      nodeType: node.data.nodeType,
+      label: node.data.label,
+    }));
+    const simpleEdges = edges.map((edge) => ({ source: edge.source }));
+    const states = getSaveCheckStates(simpleNodes, simpleEdges);
+    const problemIds = getMultiOutputNodeIds(simpleNodes, simpleEdges);
     return [
       { key: "start", label: t("save.checkOneStart"), ok: states.start },
       { key: "primaryEnd", label: t("save.checkPrimaryEnd"), ok: states.primaryEnd },
       { key: "endUnique", label: t("save.checkUniqueEnd"), ok: states.endUnique },
-      { key: "singleOutput", label: t("save.checkSingleOutput"), ok: states.singleOutput },
+      {
+        key: "singleOutput",
+        label: t("save.checkSingleOutput"),
+        ok: states.singleOutput,
+        onLocate: problemIds.length > 0 ? () => locateProblemNodes(problemIds) : undefined,
+      },
     ];
-  }, [nodes, edges, t]);
+  }, [nodes, edges, t, locateProblemNodes]);
 
   const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
     const step = 36;
