@@ -323,6 +323,16 @@ button:not(:disabled):active {
 .edge-repl-old { opacity: 0; animation: edge-fade-out 460ms var(--ease-smooth) 320ms backwards; }
 .edge-repl-edge { stroke-dasharray: 1; animation: edge-branch-draw 680ms var(--ease-smooth) 520ms backwards; }
 
+/* EdgeBranchModal Yes/No/Other — Yes 체크·No 엑스는 그려지고(색은 컴포넌트 인라인 branch 색), Other 점 3개 순차 팝.
+   edge-branch-draw/edge-pop-in 키프레임 재사용. 정지 상태=그려진 최종형. */
+.edge-br-check { stroke-dasharray: 1; animation: edge-branch-draw 440ms var(--ease-smooth) 180ms backwards; }
+.edge-br-x1 { stroke-dasharray: 1; animation: edge-branch-draw 260ms var(--ease-smooth) 180ms backwards; }
+.edge-br-x2 { stroke-dasharray: 1; animation: edge-branch-draw 260ms var(--ease-smooth) 380ms backwards; }
+.edge-br-dot { transform-box: fill-box; transform-origin: center; }
+.edge-br-dot1 { animation: edge-pop-in 240ms var(--ease-overshoot) 180ms backwards; }
+.edge-br-dot2 { animation: edge-pop-in 240ms var(--ease-overshoot) 300ms backwards; }
+.edge-br-dot3 { animation: edge-pop-in 240ms var(--ease-overshoot) 420ms backwards; }
+
 @media (prefers-reduced-motion: reduce) {
   .edge-tile-pop,
   .edge-branchline,
@@ -331,7 +341,13 @@ button:not(:disabled):active {
   .edge-conn,
   .edge-repl-node,
   .edge-repl-old,
-  .edge-repl-edge {
+  .edge-repl-edge,
+  .edge-br-check,
+  .edge-br-x1,
+  .edge-br-x2,
+  .edge-br-dot1,
+  .edge-br-dot2,
+  .edge-br-dot3 {
     animation: none;
   }
 }

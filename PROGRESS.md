@@ -6,6 +6,11 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9f: EdgeBranchModal 재디자인(Yes/No/Other 3열 아이콘 타일)
+- **`edge-branch-modal.tsx`** — 디시전/액션과 동일 체계: 헤더(uppercase 캡션 + 우상단 X) → 3열 경계 아이콘 타일 → 하단 Cancel. 커스텀 애니 SVG — **Yes**: 체크 그려짐(브랜치 블루 `--color-branch-yes`), **No**: 엑스 그려짐(브랜치 레드 `--color-branch-no`), **Other**: 점 3개 순차 팝(중립 ink-tertiary). Yes/No 색은 실제 캔버스 분기 엣지 색과 일치(데이터 색 → 토큰 규칙 예외). `BranchTile` 서브컴포넌트로 hover 아이콘 재생. 정지 상태도 그려진 최종형. position 중앙 폴백 보존.
+- **`globals.css`** — `edge-br-check`/`edge-br-x1`/`edge-br-x2`/`edge-br-dot1~3` 클래스 추가(기존 `edge-branch-draw`/`edge-pop-in` 키프레임 재사용), reduced-motion 가드 포함.
+- 동작 보존: 위치 클램프·중앙 폴백·Esc·바깥클릭·onPick(yes/no/other)·onClose·`branch.*` i18n 키. 검증: lint 0 errors·build OK, static CSS에 edge-br-* 확인.
+
 ## 2026-07-04 — R9e: EdgeActionModal 리치 재디자인(Insert/Replace 아이콘 타일 + 의미 애니메이션)
 - **`edge-action-modal.tsx`** — 디시전 팝업과 동일 체계로 재설계: 헤더(uppercase 캡션 + 우상단 X) → 2열 경계 아이콘 타일 → 하단 Cancel. 커스텀 애니 SVG — **Insert**: 노드가 흐름 gap에 껴듦(디시전 Intercept 모션 `edge-box-mid`/`edge-conn` 재사용). **Replace**: `[A]—[B]` 수평 시작 → B 아래 새 노드 C 팝인 → 기존 A—B 엣지 페이드아웃 → 새 꺾은선 엣지 A→C가 아래로 나와 왼쪽으로 들어가며 그려짐(강조색=엣지 → 브랜치와 구분). 정지 상태도 교체 최종형(겹침 없음). 타일 팝 열림 1회, hover 시 아이콘만 재생.
 - **`globals.css`** — Replace용 `edge-repl-node`/`edge-repl-old`/`edge-repl-edge` 클래스 + `edge-fade-out` 키프레임 추가, reduced-motion 가드에 포함. Insert는 기존 `edge-box-mid`/`edge-conn` 재사용.
