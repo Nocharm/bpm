@@ -6,6 +6,7 @@
 - **신규 노드 플래시 2회→1회**(`page.tsx` raw `<style>`) — `bpm-node-flash` keyframe을 18%·58% 두 딥에서 45% 한 딥으로, 850ms→450ms.
 - **노드 핸들(연결 히트박스) 재디자인** — globals.css `.react-flow__handle` 규칙을 page.tsx raw `<style>`로 이전(Turbopack이 dev에서 `.react-flow__node` 셀렉터 규칙 purge, lessons §5). 검은 닷 7px → **반투명 violet 둥근사각형 13px**(border-radius 3px, accent 18% 채움·40% 테두리). **평소 opacity 0(숨김)·노드 hover 시 표시**, 핸들 직접 hover 시 강조(accent 채움·테두리·scale 1.2). **주의: 모든 연결가능 핸들에 `connectionindicator` 클래스가 상시 붙어** reveal 규칙에서 제거해야 숨김이 먹음(원래는 base 0.4라 무해했음).
 - 검증: lint 0 · build/TS OK. 라이브(HMR) — 평소 핸들 114개 전부 opacity 0, 노드 hover 시 해당 노드만 표시 확인.
+- **핸들 톤 후속** — violet→**무채색**(ink-tertiary 20% 채움·50% 테두리), 13px→**11px**(조금 작게). 호버 효과에서 `scale(1.2)` 제거 → **색상 진하게(ink-tertiary 42%)+테두리 강조(ink-secondary)만**(크기 불변). 노드 hover 시 핸들이 무채색 색상+테두리로 표시. (노드 박스 자체 hover=리프트는 유지 — "노드 호버링 효과"를 핸들 표시로 해석, 박스 변경 여부 확인 대기.)
 
 ## 2026-07-05 — 문제 노드 하이라이트: 잘못된 다중 연결 항목 클릭 시 이동+선택
 - **`save-checklist.tsx`** — `getMultiOutputNodeIds`(문제 노드 id 추출) export, `getSaveCheckStates.singleOutput`이 이를 재사용. `SaveCheckItem`에 `onLocate?` 추가 — 미충족+onLocate 있으면 아이템이 **클릭 가능 버튼**(크로스헤어 아이콘·호버 error 틴트).
