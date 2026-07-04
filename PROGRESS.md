@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10b-1: AI 패널 분석/워크스루 카드 재스타일
+- **`ai-chat-panel.tsx`** — findings(분석) 카드: severity 아이콘(high=AlertTriangle·빨강 / else Info·회색) + category 굵게 + severity 필 + 제안(accent 좌측 rail) + 노드 점프(hover 시 ArrowUpRight). steps(워크스루) 카드: Route 아이콘 헤더 + 스텝 카운터 + **진행바**(accent) + prev/next·재생 컨트롤. 배선(하이라이트·자동재생) 보존.
+- **`i18n-messages.ts`** — `ai.analysisTitle`(분석/Analysis)·`ai.walkthrough`(워크스루/Walkthrough).
+- 후속(R10b-2): graph/ops 제안 미리보기 툴바(`page.tsx:6426`) "맵에 추가/취소" 재스타일.
+- 검증: lint 0 errors·build OK. 카드 시각 확인은 사용자 진행(로컬 시드). 시드는 커밋 제외.
+
 ## 2026-07-04 — 마크다운 뷰어: 행/인라인 복사 + 복사 토스트 + 채팅 텍스트 선택 + 80% 폭
 - **`markdown-view.tsx`** — 코드블록을 행 단위 `.md-codeline` span으로 분해(빈 행·전체 복사 textContent 보존) → **행 더블클릭 복사**. **인라인 `code` 클릭 복사**. 복사 성공 시 `onCopy` 콜백(프로그램 복사라 네이티브 copy 이벤트 미발생).
 - **`globals.css`** — 인라인 code(pointer)·코드행(copy) 커서 어포던스, 코드행 hover, 복사 플래시(`.md-copied`).

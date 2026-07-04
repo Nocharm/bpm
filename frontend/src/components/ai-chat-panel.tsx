@@ -1,7 +1,20 @@
 "use client";
 
 // 에디터 AI 채팅 패널 — 순서도 생성/편집 지시 + 사용법 안내 (design 2026-06-15)
-import { ChevronDown, ChevronLeft, ChevronRight, Pause, Play, Send, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Pause,
+  Play,
+  Route,
+  Search,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { MarkdownView } from "@/components/markdown-view";
@@ -201,41 +214,70 @@ export function AiChatPanel({
           )}
         </ul>
         {findings.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1">
-            {findings.map((finding, index) => (
-              <li key={`finding-${index}`}>
-                {/* finding 클릭 → 해당 노드 캔버스 하이라이트 (D4: 설명+하이라이트만) */}
+          <div className="mt-3 flex flex-col gap-1.5">
+            <span className="flex items-center gap-1.5 px-0.5 text-fine text-ink-tertiary">
+              <Search size={13} strokeWidth={1.5} />
+              {t("ai.analysisTitle")}
+            </span>
+            {findings.map((finding, index) => {
+              const isHigh = finding.severity === "high";
+              return (
+                // finding 클릭 → 해당 노드 캔버스 하이라이트 (D4: 설명+하이라이트만)
                 <button
+                  key={`finding-${index}`}
                   type="button"
-                  className="w-full rounded-sm border border-hairline bg-surface-alt p-2 text-left hover:bg-surface-pearl disabled:opacity-60"
+                  className="group flex w-full gap-2 rounded-sm border border-hairline bg-surface-alt p-2 text-left hover:bg-surface-pearl disabled:opacity-60"
                   onClick={() => onHighlightNode(finding.node_ids[0])}
                   disabled={finding.node_ids.length === 0}
                 >
-                  <span
-                    className={`text-caption-strong ${
-                      finding.severity === "high" ? "text-error" : "text-ink-tertiary"
-                    }`}
-                  >
-                    [{finding.severity}] {finding.category}
+                  <span className={`mt-px shrink-0 ${isHigh ? "text-error" : "text-ink-tertiary"}`}>
+                    {isHigh ? (
+                      <AlertTriangle size={15} strokeWidth={1.6} />
+                    ) : (
+                      <Info size={15} strokeWidth={1.6} />
+                    )}
                   </span>
-                  <span className="mt-0.5 block text-fine text-ink">{finding.message}</span>
-                  {finding.suggestion && (
-                    <span className="mt-0.5 block text-fine text-ink-tertiary">
-                      → {finding.suggestion}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-caption-strong text-ink">{finding.category}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-px text-fine ${
+                          isHigh ? "bg-error/10 text-error" : "bg-surface-pearl text-ink-tertiary"
+                        }`}
+                      >
+                        {finding.severity}
+                      </span>
                     </span>
+                    <span className="mt-0.5 block text-fine text-ink">{finding.message}</span>
+                    {finding.suggestion && (
+                      <span className="mt-1 block border-l-2 border-accent-tint-border pl-2 text-fine text-ink-tertiary">
+                        {finding.suggestion}
+                      </span>
+                    )}
+                  </span>
+                  {finding.node_ids.length > 0 && (
+                    <ArrowUpRight
+                      size={13}
+                      strokeWidth={1.5}
+                      className="mt-px shrink-0 text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100"
+                    />
                   )}
                 </button>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
         )}
         {steps.length > 0 && (
-          <div className="mt-2 rounded-sm border border-hairline bg-surface-alt p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-fine text-ink-tertiary">
-                {stepIndex + 1} / {steps.length}
+          <div className="mt-3 overflow-hidden rounded-sm border border-hairline bg-surface-alt">
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <span className="flex items-center gap-1.5 text-caption-strong text-ink">
+                <Route size={14} strokeWidth={1.5} className="text-accent" />
+                {t("ai.walkthrough")}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
+                <span className="mr-1 text-fine tabular-nums text-ink-tertiary">
+                  {stepIndex + 1} / {steps.length}
+                </span>
                 <button
                   type="button"
                   aria-label={t("ai.prevStep")}
@@ -270,7 +312,14 @@ export function AiChatPanel({
                 </button>
               </div>
             </div>
-            <p className="mt-1 text-fine text-ink">{steps[stepIndex]?.narration}</p>
+            {/* 진행바 — 현재 스텝 비율 */}
+            <div className="h-0.5 bg-surface-pearl">
+              <div
+                className="h-full bg-accent transition-all duration-350"
+                style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
+              />
+            </div>
+            <p className="px-2 py-2 text-fine text-ink">{steps[stepIndex]?.narration}</p>
           </div>
         )}
       </div>
