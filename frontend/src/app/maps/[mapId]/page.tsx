@@ -6401,48 +6401,111 @@ function MapEditor({ mapId }: { mapId: number }) {
           {dropTarget &&
             (() => {
               const r = dropTarget.rect;
-              const tileW = ZONE_TILE_W;
-              const tileH = ZONE_TILE_H;
               const cx = r.left + r.width / 2;
               const cy = r.top + r.height / 2;
               // 링 반경 — screenRectOf에서 줌 무관 고정값으로 계산됨 (hit-test와 공용)
               const radius = r.radius;
-              // 타일은 원주 위 4 cardinal 지점
-              const tiles = [
-                { zone: "front", Icon: ArrowLeft, x: cx - radius, y: cy, label: t("dropzone.front") },
-                { zone: "back", Icon: ArrowRight, x: cx + radius, y: cy, label: t("dropzone.back") },
-                { zone: "group", Icon: Boxes, x: cx, y: cy - radius, label: t("dropzone.group") },
-                // 좌하단(SW) 대각 — 위치+연결 교환
-                { zone: "swap", Icon: ArrowLeftRight, x: cx - radius * Math.SQRT1_2, y: cy + radius * Math.SQRT1_2, label: t("dropzone.swap") },
+              // 부채꼴: 노드 근처(ri)에서 바깥(ro)으로 팬, 아이콘/라벨은 중간 반경(rm)
+              const ri = radius * 0.68;
+              const ro = radius + 44;
+              const rm = (ri + ro) / 2;
+              const rad = (d: number) => (d * Math.PI) / 180;
+              const HALF = rad(20); // 활성 부채꼴 반각(=40° 폭)
+              const DHALF = rad(18); // 대각 점선 부채꼴 반각
+              // annular sector path — 각도는 화면좌표(y-down, 0°=동)
+              const sector = (axis: number, half: number, r0: number, r1: number) => {
+                const a0 = axis - half;
+                const a1 = axis + half;
+                const px = (rr: number, a: number) => (cx + rr * Math.cos(a)).toFixed(2);
+                const py = (rr: number, a: number) => (cy + rr * Math.sin(a)).toFixed(2);
+                return `M ${px(r0, a0)} ${py(r0, a0)} L ${px(r1, a0)} ${py(r1, a0)} A ${r1.toFixed(2)} ${r1.toFixed(2)} 0 0 1 ${px(r1, a1)} ${py(r1, a1)} L ${px(r0, a1)} ${py(r0, a1)} A ${r0.toFixed(2)} ${r0.toFixed(2)} 0 0 0 ${px(r0, a0)} ${py(r0, a0)} Z`;
+              };
+              // 사용 4방향 — group=상(N)/back=우(E)/swap=하(S)/front=좌(W)
+              const zones = [
+                { zone: "group", axis: rad(-90), Icon: Boxes, label: t("dropzone.group") },
+                { zone: "back", axis: rad(0), Icon: ArrowRight, label: t("dropzone.back") },
+                { zone: "swap", axis: rad(90), Icon: ArrowLeftRight, label: t("dropzone.swap") },
+                { zone: "front", axis: rad(180), Icon: ArrowLeft, label: t("dropzone.front") },
               ] as const;
+              const diagAxes = [rad(-45), rad(45), rad(135), rad(-135)]; // NE·SE·SW·NW — 추후 확장
+              const blockedOf = (zone: string) =>
+                (zone === "front" && dropTarget.frontBlocked) ||
+                (zone === "back" && dropTarget.backBlocked);
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
-                  {/* 기준 셀(B) 원형 링 */}
-                  <div
-                    className="zone-ring absolute rounded-full border-2 border-accent/40"
-                    style={{ left: cx - radius, top: cy - radius, width: radius * 2, height: radius * 2 }}
-                  />
-                  {tiles.map(({ zone, Icon, x, y, label }) => {
-                    const active = dropTarget.zone === zone;
-                    // 시작/끝 규칙을 어기는 흐름존은 비활성 표시(흐림) — 드롭해도 무효
-                    const blocked =
-                      (zone === "front" && dropTarget.frontBlocked) ||
-                      (zone === "back" && dropTarget.backBlocked);
-                    return (
-                    <div
-                      key={zone}
-                      className={`zone-pop absolute flex flex-col items-center justify-center gap-1 rounded-md border px-2 text-center shadow-md ${
-                        blocked
-                          ? "border-hairline bg-surface/60 text-ink-tertiary opacity-40"
-                          : active
-                            ? "border-accent bg-accent-tint text-accent"
-                            : "border-hairline bg-surface/95 text-ink-tertiary"
-                      }`}
-                      style={{ left: x - tileW / 2, top: y - tileH / 2, width: tileW, height: tileH }}
+                  <svg className="zone-fan absolute inset-0 h-full w-full overflow-visible">
+                    {/* 추후 확장 — 점선 대각 부채꼴 */}
+                    {diagAxes.map((axis, i) => (
+                      <path
+                        key={`d${i}`}
+                        d={sector(axis, DHALF, ri, ro)}
+                        style={{
+                          fill: "color-mix(in srgb, var(--color-ink-tertiary) 5%, transparent)",
+                          stroke: "var(--color-hairline)",
+                          strokeWidth: 1.5,
+                          strokeDasharray: "3 4",
+                          strokeLinejoin: "round",
+                        }}
+                      />
+                    ))}
+                    {/* 사용 4방향 부채꼴 */}
+                    {zones.map(({ zone, axis }) => {
+                      const active = dropTarget.zone === zone;
+                      const blocked = blockedOf(zone);
+                      const style = blocked
+                        ? {
+                            fill: "color-mix(in srgb, var(--color-ink-tertiary) 5%, transparent)",
+                            stroke: "var(--color-hairline)",
+                            strokeWidth: 1.5,
+                          }
+                        : active
+                          ? {
+                              fill: "color-mix(in srgb, var(--color-accent) 20%, white)",
+                              stroke: "var(--color-accent)",
+                              strokeWidth: 2,
+                            }
+                          : {
+                              fill: "var(--color-accent-tint)",
+                              stroke: "var(--color-accent-tint-border)",
+                              strokeWidth: 1.5,
+                            };
+                      return (
+                        <path
+                          key={zone}
+                          d={sector(axis, HALF, ri, ro)}
+                          style={{ ...style, strokeLinejoin: "round" }}
+                        />
+                      );
+                    })}
+                  </svg>
+                  {/* 대각 + 표시(추후 확장) */}
+                  {diagAxes.map((axis, i) => (
+                    <span
+                      key={`p${i}`}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 text-body font-light text-ink-tertiary/40"
+                      style={{ left: cx + rm * Math.cos(axis), top: cy + rm * Math.sin(axis) }}
                     >
-                      <Icon size={20} strokeWidth={1.5} />
-                      <span className="text-fine font-medium leading-tight">{label}</span>
-                    </div>
+                      +
+                    </span>
+                  ))}
+                  {/* 아이콘 + 라벨 */}
+                  {zones.map(({ zone, axis, Icon, label }) => {
+                    const active = dropTarget.zone === zone;
+                    const blocked = blockedOf(zone);
+                    const tone = blocked
+                      ? "text-ink-tertiary opacity-40"
+                      : active
+                        ? "text-accent"
+                        : "text-accent/80";
+                    return (
+                      <div
+                        key={`l${zone}`}
+                        className={`zone-pop absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 ${tone}`}
+                        style={{ left: cx + rm * Math.cos(axis), top: cy + rm * Math.sin(axis) }}
+                      >
+                        <Icon size={18} strokeWidth={1.5} />
+                        <span className="text-fine font-semibold leading-none">{label}</span>
+                      </div>
                     );
                   })}
                 </div>

@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R11: 드롭존 라디얼 링 재스타일(부채꼴) + 스왑 S 이동
+- **`page.tsx`** — 드롭존 오버레이를 사각 타일 4개 → **SVG 부채꼴(annular sector)**: 사용 4방향(그룹 N·뒤에 E·스왑 S·앞에 W, accent-tint·활성 진한 violet·차단 흐림) + **점선 대각 4개**(추후 확장 `+`). 이미지 `dropzone.png` 정합.
+- **`canvas.ts`** — `pickDropZone` swap 앵커 SW→**S**(시각·hit-test 정합), 미사용 `DIAG` 상수 제거. **드롭/충돌/dwell 로직 보존**(box hit-test 유지).
+- **`globals.css`** — 제거된 원형 링 `.zone-ring`→부채꼴 페이드 `.zone-fan`(고아 CSS 정리). 충돌카드(`FlowConflictModal`)는 R9 글리프 디자인 유지.
+- 검증: lint 0·build OK. 라이브 드래그 렌더는 브라우저 확인 필요.
+
 ## 2026-07-04 — R10 완료: 개발 시드 일괄 제거 (컴팩트)
 - **`ai-chat-panel.tsx`·`page.tsx`** — R10 검증용 TEMP DEV SEED(채팅 `messages`·`findings`·`steps`·`aiPreviewActive`)를 전부 제거 → 실서비스 상태(빈 배열·false). **R10(a~d) 전체 완료.**
 - 검증: 잔여 시드 0 · build OK.

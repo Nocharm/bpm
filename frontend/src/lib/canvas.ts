@@ -888,11 +888,8 @@ export function rectWithExclusions(base: Rect, intruders: Rect[], members: Rect[
 }
 
 // 드롭존 타일 적중 판정 — 커서(컨테이너 상대 좌표)가 타일 박스 안이면 그 zone, 아니면 null.
-// 앵커 위에 배치: 좌=front/우=back/상=group/좌하(SW)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
+// 4방향 cardinal에 배치: 좌=front/우=back/상=group/하(S)=swap. page.tsx 오버레이 렌더와 동일해야 한다.
 export type DropZone = "front" | "back" | "group" | "swap";
-
-// 대각선 앵커 거리 — 원주 위 45° 지점
-const DIAG = Math.SQRT1_2; // ≈0.707
 
 export function pickDropZone(
   cursorX: number,
@@ -907,8 +904,8 @@ export function pickDropZone(
     { zone: "front", x: cx - radius, y: cy },
     { zone: "back", x: cx + radius, y: cy },
     { zone: "group", x: cx, y: cy - radius },
-    // 좌하단(SW) = 두 노드 위치+연결 교환
-    { zone: "swap", x: cx - radius * DIAG, y: cy + radius * DIAG },
+    // 하단(S) = 두 노드 위치+연결 교환
+    { zone: "swap", x: cx, y: cy + radius },
   ];
   for (const tile of tiles) {
     if (Math.abs(cursorX - tile.x) <= tileW / 2 && Math.abs(cursorY - tile.y) <= tileH / 2) {

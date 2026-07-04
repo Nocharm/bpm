@@ -240,15 +240,13 @@ button:not(:disabled):active {
   opacity: 1;
 }
 
-/* 드롭 영역 — 기준 셀 원형 링 + 원주 위 타일 등장 */
-@keyframes zone-ring-in {
+/* 드롭 영역 — 부채꼴 팬 페이드 + 아이콘/라벨 팝 */
+@keyframes zone-fan-in {
   from {
     opacity: 0;
-    transform: scale(0.4);
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 @keyframes zone-pop-in {
@@ -261,9 +259,8 @@ button:not(:disabled):active {
     transform: scale(1);
   }
 }
-.zone-ring {
-  transform-origin: center;
-  animation: zone-ring-in 220ms var(--ease-overshoot);
+.zone-fan {
+  animation: zone-fan-in 200ms var(--ease-smooth);
 }
 .zone-pop {
   transform-origin: center;
@@ -298,7 +295,7 @@ button:not(:disabled):active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .zone-ring,
+  .zone-fan,
   .zone-pop,
   .group-target {
     animation: none;
