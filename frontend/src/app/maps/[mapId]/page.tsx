@@ -6552,6 +6552,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onGraphProposal={applyAiProposal}
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
+                onToast={showToast}
               />
             </ScopeWindow>
           )}

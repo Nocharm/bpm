@@ -385,6 +385,11 @@ button:not(:disabled):active {
 .md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.88em; background: var(--color-surface-alt); border: 1px solid var(--color-hairline); border-radius: 4px; padding: 0.05em 0.35em; }
 .md pre { background: var(--color-surface-alt); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: 8px 10px; overflow-x: auto; margin: 0.55em 0; }
 .md pre code { background: none; border: 0; padding: 0; font-size: 0.85em; }
+.md code { cursor: pointer; transition: background-color 0.12s; }
+.md pre code { cursor: text; }
+.md-codeline { cursor: copy; border-radius: 3px; transition: background-color 0.12s; }
+.md-codeline:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.md code.md-copied, .md-codeline.md-copied { background: var(--color-accent-tint); color: var(--color-accent); }
 .md blockquote { border-left: 3px solid var(--color-accent-tint-border); padding-left: 10px; color: var(--color-ink-tertiary); margin: 0.55em 0; }
 .md a { color: var(--color-accent); text-decoration: underline; }
 .md strong { font-weight: 600; color: var(--color-ink); }
@@ -404,7 +409,7 @@ button:not(:disabled):active {
 .md-copy:hover { color: var(--color-accent); border-color: var(--color-accent); }
 .md-copy-done { color: var(--color-accent); border-color: var(--color-accent-tint-border); background: var(--color-accent-tint); }
 @media (prefers-reduced-motion: reduce) {
-  .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote, .md-copy { transition: none; }
+  .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote, .md-copy, .md code, .md-codeline { transition: none; }
 }
 
 /* 캔버스 select-none 안에서도 입력/텍스트영역은 텍스트 선택 허용(인라인 리네임·검색 등) */

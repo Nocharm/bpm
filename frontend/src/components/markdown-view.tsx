@@ -4,8 +4,6 @@
 // 코드블록/인라인코드·인용·수평선·링크·강조/기울임. 코드블록 hover 복사, 블록별 hover 하이라이트(현재 위치).
 // 출력은 esc(< > &) 처리 후 dangerouslySetInnerHTML — 스타일은 globals.css `.md`.
 
-import { useCallback } from "react";
-
 const COPY_ICON =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
@@ -58,9 +56,13 @@ function markdownToHtml(md: string): string {
         i++;
       }
       i++;
-      html += `<div class="md-codewrap"><pre><code>${escapeHtml(
-        code.replace(/\n$/, ""),
-      )}</code></pre><button class="md-copy" type="button" aria-label="Copy">${COPY_ICON}</button></div>`;
+      // 행 단위 span — 더블클릭 시 해당 행만 복사. `\n` join으로 textContent(=전체 복사)·빈 행 보존.
+      const codeLines = code
+        .replace(/\n$/, "")
+        .split("\n")
+        .map((ln) => `<span class="md-codeline">${escapeHtml(ln)}</span>`)
+        .join("\n");
+      html += `<div class="md-codewrap"><pre><code>${codeLines}</code></pre><button class="md-copy" type="button" aria-label="Copy">${COPY_ICON}</button></div>`;
       continue;
     }
     // GFM 표 — 헤더행 + 구분행(---) + 본문행. 구분행은 파이프 포함 필수(hr와 구분).
@@ -152,21 +154,56 @@ function markdownToHtml(md: string): string {
   return html;
 }
 
-export function MarkdownView({ source, className = "" }: { source: string; className?: string }) {
-  // 코드블록 복사 — dangerouslySetInnerHTML라 컨테이너에서 위임 처리.
-  const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const btn = (event.target as HTMLElement).closest(".md-copy");
-    if (!btn) return;
-    const code = btn.parentElement?.querySelector("code")?.textContent ?? "";
-    void navigator.clipboard?.writeText(code);
-    btn.classList.add("md-copy-done");
-    window.setTimeout(() => btn.classList.remove("md-copy-done"), 1200);
-  }, []);
+// 복사 후 짧은 강조 플래시.
+function flashCopied(el: Element): void {
+  el.classList.add("md-copied");
+  window.setTimeout(() => el.classList.remove("md-copied"), 700);
+}
+
+export function MarkdownView({
+  source,
+  className = "",
+  onCopy,
+}: {
+  source: string;
+  className?: string;
+  onCopy?: () => void; // 복사 성공 시 호출(토스트 등). 프로그램 복사라 네이티브 copy 이벤트는 안 뜬다.
+}) {
+  // 클릭 위임(dangerouslySetInnerHTML) — ①코드블록 복사 버튼 ②인라인 코드 클릭 복사.
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const btn = target.closest(".md-copy");
+    if (btn) {
+      const code = btn.parentElement?.querySelector("code")?.textContent ?? "";
+      void navigator.clipboard?.writeText(code);
+      btn.classList.add("md-copy-done");
+      window.setTimeout(() => btn.classList.remove("md-copy-done"), 1200);
+      onCopy?.();
+      return;
+    }
+    // 인라인 코드(pre 밖의 code) 클릭 → 텍스트 복사.
+    const codeEl = target.closest("code");
+    if (codeEl && !codeEl.closest("pre")) {
+      void navigator.clipboard?.writeText(codeEl.textContent ?? "");
+      flashCopied(codeEl);
+      onCopy?.();
+    }
+  };
+
+  // 코드블록 행 더블클릭 → 해당 행만 복사.
+  const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const line = (event.target as HTMLElement).closest(".md-codeline");
+    if (!line) return;
+    void navigator.clipboard?.writeText(line.textContent ?? "");
+    flashCopied(line);
+    onCopy?.();
+  };
 
   return (
     <div
       className={`md ${className}`}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       dangerouslySetInnerHTML={{ __html: markdownToHtml(source) }}
     />
   );

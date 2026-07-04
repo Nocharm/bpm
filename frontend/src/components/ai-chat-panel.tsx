@@ -27,6 +27,7 @@ interface AiChatPanelProps {
   onGraphProposal: (proposal: AiProposal) => void;
   onOpsProposal: (proposal: AiProposal) => void;
   onHighlightNode: (nodeId: string) => void;
+  onToast?: (message: string) => void;
 }
 
 export function AiChatPanel({
@@ -36,6 +37,7 @@ export function AiChatPanel({
   onGraphProposal,
   onOpsProposal,
   onHighlightNode,
+  onToast,
 }: AiChatPanelProps) {
   const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -156,7 +158,8 @@ export function AiChatPanel({
           const el = scrollRef.current;
           if (el) setShowToBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
         }}
-        className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-3"
+        onCopy={() => onToast?.(t("ai.copied"))}
+        className="scrollbar-hidden min-h-0 flex-1 select-text overflow-y-auto p-3"
       >
         {!aiEnabled && (
           <p className="mb-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-tertiary">
@@ -171,7 +174,7 @@ export function AiChatPanel({
             message.role === "user" ? (
               <li
                 key={`${message.role}-${index}`}
-                className="max-w-[85%] self-end whitespace-pre-wrap rounded-md rounded-br-sm bg-accent px-3 py-2 text-caption text-on-accent"
+                className="max-w-[80%] self-end whitespace-pre-wrap rounded-md rounded-br-sm bg-accent px-3 py-2 text-caption text-on-accent"
               >
                 {message.content}
               </li>
@@ -180,7 +183,11 @@ export function AiChatPanel({
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
                   <Sparkles size={12} strokeWidth={1.5} />
                 </span>
-                <MarkdownView source={message.content} className="min-w-0 flex-1" />
+                <MarkdownView
+                  source={message.content}
+                  className="min-w-0 max-w-[80%] flex-1"
+                  onCopy={() => onToast?.(t("ai.copied"))}
+                />
               </li>
             ),
           )}

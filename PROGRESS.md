@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — 마크다운 뷰어: 행/인라인 복사 + 복사 토스트 + 채팅 텍스트 선택 + 80% 폭
+- **`markdown-view.tsx`** — 코드블록을 행 단위 `.md-codeline` span으로 분해(빈 행·전체 복사 textContent 보존) → **행 더블클릭 복사**. **인라인 `code` 클릭 복사**. 복사 성공 시 `onCopy` 콜백(프로그램 복사라 네이티브 copy 이벤트 미발생).
+- **`globals.css`** — 인라인 code(pointer)·코드행(copy) 커서 어포던스, 코드행 hover, 복사 플래시(`.md-copied`).
+- **`ai-chat-panel.tsx`** — 스레드에 `select-text`로 **드래그 텍스트 선택 허용**(에디터 캔버스 `select-none` 하위라 막혀 있던 것) + 수동 복사(Ctrl+C) 네이티브 `onCopy`→토스트. 유저 버블·어시스턴트 마크다운 폭을 **80%**로 제한(코드블록이 우측 끝까지 차던 것). `onToast` prop 추가.
+- **`page.tsx`(에디터)** — AiChatPanel에 기존 `showToast` 연결.
+- **`i18n-messages.ts`** — `ai.copied`(en "Copied to clipboard" / ko "클립보드에 복사됨").
+- 검증: dev 브라우저 — 인라인 코드 클릭→복사+토스트("Copied to clipboard"), 드래그 선택(`userSelect: text`·triple-click 하이라이트), 넓은 표(20열)가 80% 안에서 가로 스크롤. lint 0 errors·build OK.
+
 ## 2026-07-04 — 마크다운 뷰어: GFM 표 + 인라인 태그 필
 - **`markdown-view.tsx`** — GFM **표** 파서 추가(헤더행+`---`구분행+본문행, 셀은 `inline()` 통과 → 표 안에서도 코드/강조/링크). 구분행은 파이프 포함 필수라 hr(`---`)와 구분. **인라인 태그 필**: 공백/시작 뒤 `#word` → `<span class="md-tag">`(알약, `#`는 표기 제거).
 - **`globals.css`** — `.md-tablewrap`(가로 스크롤)·`.md table/th/td`(테두리·헤더 음영)·`.md-tag`(accent-tint 알약) 스타일.
