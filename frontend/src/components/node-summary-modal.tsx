@@ -501,7 +501,9 @@ export function NodeSummaryModal({
                     <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
                   ))
                 ) : (
-                  <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
+                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
+                    {t("summary.none")}
+                  </span>
                 )}
               </div>
             </div>
@@ -513,7 +515,9 @@ export function NodeSummaryModal({
                     <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
                   ))
                 ) : (
-                  <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
+                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
+                    {t("summary.none")}
+                  </span>
                 )}
               </div>
               <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
