@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10a: AI 패널 스레드 재스타일 + 공용 마크다운 뷰어 + 맨아래 버튼
+- **`markdown-view.tsx`(신규)** — AI 답변·게시글·매뉴얼 공용 마크다운 뷰어. 경량 자체 파서(의존성 無): 헤딩(H1~H3)·리스트(정렬/비정렬)·코드블록/인라인·인용·수평선·링크·강조. 코드블록 hover 시 복사 버튼, 블록별 hover 하이라이트(현재 마우스 위치). `<>&` escape + href 스킴 화이트리스트(`safeHref` — http(s)/상대/앵커/mailto만, `javascript:`·`data:` 차단)로 XSS 방지 후 `dangerouslySetInnerHTML`.
+- **`globals.css`** — `.md` 뷰어 스타일(헤딩·리스트·코드·인용, 블록 hover 하이라이트, `.md-codewrap`/`.md-copy` 코드 복사 버튼).
+- **`ai-chat-panel.tsx`** — 스레드: 유저=우측 accent 버블(`text-on-accent`), 어시스턴트=Sparkles 아이콘 뱃지 + `MarkdownView`. 스레드가 하단에서 떨어지면 **맨 아래로**(ChevronDown) 플로팅 버튼 노출·클릭 시 부드럽게 하단 스크롤. `ai.toBottom` en·ko 추가.
+- 후속: R10a 헤더(ScopeWindow 크롬 — 스파클·맵/버전 서브타이틀)·추출/파일첨부 버튼·퀵칩(R10c). 참고 커밋 `7c8508e`(한영 세그먼트 토글) 이미 origin 반영.
+- 검증: 프론트 lint 0 errors·build OK. 런타임 인앱 확인 후속.
+
 ## 2026-07-04 — 한영 전환 UI를 세그먼트 토글로 재디자인
 - **`top-nav.tsx`** — 단일 액션 버튼(바꿀 대상 언어 1글자만 표시)을 **한 · EN 세그먼트 필**로 교체: 두 언어를 모두 노출하고 현재 언어를 `bg-accent-tint text-accent`로 강조(`setLang(code)`로 직접 지정, shadow 미사용 — 디자인 룰상 elevation은 노드/플로팅 크롬 전용).
 - **`i18n-messages.ts`** — 액션 의미의 `nav.toEnglish`/`nav.toKorean` → 세그먼트 라벨 `nav.langEn`/`nav.langKo`로 rename(값 "EN"/"한" 유지, en·ko 양쪽). 사용처는 top-nav 단독.

@@ -1,9 +1,10 @@
 "use client";
 
 // 에디터 AI 채팅 패널 — 순서도 생성/편집 지시 + 사용법 안내 (design 2026-06-15)
-import { ChevronLeft, ChevronRight, Pause, Play, Send } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Pause, Play, Send, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { MarkdownView } from "@/components/markdown-view";
 import {
   aiChat,
   getAiModels,
@@ -47,6 +48,8 @@ export function AiChatPanel({
   const [stepIndex, setStepIndex] = useState(0);
   const [autoplay, setAutoplay] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 스레드가 하단에서 떨어져 있으면 "맨 아래로" 버튼 노출.
+  const [showToBottom, setShowToBottom] = useState(false);
 
   // 새 메시지·생각중 표시가 추가되면 항상 최신(하단)으로 스크롤
   useEffect(() => {
@@ -146,7 +149,15 @@ export function AiChatPanel({
           </select>
         </div>
       )}
-      <div ref={scrollRef} className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scrollRef}
+        onScroll={() => {
+          const el = scrollRef.current;
+          if (el) setShowToBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+        }}
+        className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-3"
+      >
         {!aiEnabled && (
           <p className="mb-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-tertiary">
             {t("ai.disabled")}
@@ -155,20 +166,32 @@ export function AiChatPanel({
         {aiEnabled && !canEdit && (
           <p className="mb-2 text-fine text-ink-tertiary">{t("ai.readOnly")}</p>
         )}
-        <ul className="flex flex-col gap-2">
-          {messages.map((message, index) => (
-            <li
-              key={`${message.role}-${index}`}
-              className={`max-w-[90%] rounded-md px-2 py-1 text-caption ${
-                message.role === "user"
-                  ? "self-end bg-accent-tint text-ink"
-                  : "self-start bg-surface-alt text-ink"
-              }`}
-            >
-              {message.content}
+        <ul className="flex flex-col gap-3">
+          {messages.map((message, index) =>
+            message.role === "user" ? (
+              <li
+                key={`${message.role}-${index}`}
+                className="max-w-[85%] self-end whitespace-pre-wrap rounded-md rounded-br-sm bg-accent px-3 py-2 text-caption text-on-accent"
+              >
+                {message.content}
+              </li>
+            ) : (
+              <li key={`${message.role}-${index}`} className="flex items-start gap-2">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+                  <Sparkles size={12} strokeWidth={1.5} />
+                </span>
+                <MarkdownView source={message.content} className="min-w-0 flex-1" />
+              </li>
+            ),
+          )}
+          {busy && (
+            <li className="flex items-center gap-2 text-fine text-ink-tertiary">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+                <Sparkles size={12} strokeWidth={1.5} />
+              </span>
+              {t("ai.thinking")}
             </li>
-          ))}
-          {busy && <li className="self-start text-fine text-ink-tertiary">{t("ai.thinking")}</li>}
+          )}
         </ul>
         {findings.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1">
@@ -243,6 +266,19 @@ export function AiChatPanel({
             <p className="mt-1 text-fine text-ink">{steps[stepIndex]?.narration}</p>
           </div>
         )}
+      </div>
+      {showToBottom && (
+        <button
+          type="button"
+          aria-label={t("ai.toBottom")}
+          onClick={() =>
+            scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
+          }
+          className="absolute bottom-2 right-3 flex h-8 w-8 items-center justify-center rounded-full border border-hairline bg-surface text-ink-secondary shadow-lg hover:bg-surface-alt hover:text-accent"
+        >
+          <ChevronDown size={16} strokeWidth={1.5} />
+        </button>
+      )}
       </div>
       <div className="flex items-end gap-1 border-t border-hairline p-2">
         <textarea
