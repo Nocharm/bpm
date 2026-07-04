@@ -13,31 +13,34 @@ export function BranchGlyph({
   kind,
   replayKey = 0,
   size = 24,
+  animate = true,
 }: {
   kind: BranchKind;
   replayKey?: number;
   size?: number;
+  // false면 애니 클래스 없이 정지된 완성 아이콘(리스트 등 정적 표시용).
+  animate?: boolean;
 }) {
   if (kind === "yes") {
     return (
       <svg key={replayKey} width={size} height={size} viewBox="0 0 24 24" fill="none" style={BRANCH_YES} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path className="edge-br-check" pathLength={1} d="M20 6 L9 17 L4 12" />
+        <path className={animate ? "edge-br-check" : undefined} pathLength={1} d="M20 6 L9 17 L4 12" />
       </svg>
     );
   }
   if (kind === "no") {
     return (
       <svg key={replayKey} width={size} height={size} viewBox="0 0 24 24" fill="none" style={BRANCH_NO} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path className="edge-br-x1" pathLength={1} d="M18 6 L6 18" />
-        <path className="edge-br-x2" pathLength={1} d="M6 6 L18 18" />
+        <path className={animate ? "edge-br-x1" : undefined} pathLength={1} d="M18 6 L6 18" />
+        <path className={animate ? "edge-br-x2" : undefined} pathLength={1} d="M6 6 L18 18" />
       </svg>
     );
   }
   return (
     <svg key={replayKey} className="text-ink-tertiary" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden>
-      <circle className="edge-br-dot edge-br-dot1" cx="5" cy="12" r="2" />
-      <circle className="edge-br-dot edge-br-dot2" cx="12" cy="12" r="2" />
-      <circle className="edge-br-dot edge-br-dot3" cx="19" cy="12" r="2" />
+      <circle className={animate ? "edge-br-dot edge-br-dot1" : undefined} cx="5" cy="12" r="2" />
+      <circle className={animate ? "edge-br-dot edge-br-dot2" : undefined} cx="12" cy="12" r="2" />
+      <circle className={animate ? "edge-br-dot edge-br-dot3" : undefined} cx="19" cy="12" r="2" />
     </svg>
   );
 }

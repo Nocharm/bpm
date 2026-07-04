@@ -667,17 +667,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     | {
         source: string;
         target: string;
-        options: { edgeId: string; label: string }[];
+        options: { edgeId: string; branchKind: BranchKind; edgeLabel: string; targetLabel: string }[];
         at: { x: number; y: number };
       }
     | null
   >(null);
+  // 출력선 선택 모달에서 행 hover 중인 엣지 — 캔버스의 해당 엣지를 하이라이트(styledEdges).
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
   const [decisionDrop, setDecisionDrop] = useState<
     | {
         aId: string;
         bId: string;
-        options: { edgeId: string; label: string }[];
+        options: { edgeId: string; branchKind: BranchKind; edgeLabel: string; targetLabel: string }[];
         at: { x: number; y: number };
       }
     | null
@@ -3087,7 +3089,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
             return {
               edgeId: edge.id,
-              label: edge.label ? `${edge.label} → ${targetTitle}` : `→ ${targetTitle}`,
+              branchKind: branchKindOf(edge.label),
+              edgeLabel: typeof edge.label === "string" ? edge.label : "",
+              targetLabel: targetTitle,
             };
           });
           const bIsDecision =
@@ -4705,6 +4709,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           labelBgBorderRadius: 6,
         };
       }
+      // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
+      if (edge.id === hoveredEdgeId) {
+        next = {
+          ...next,
+          className: [next.className, "edge-hover-highlight"].filter(Boolean).join(" "),
+        };
+      }
       if (!selectedId) {
         return next;
       }
@@ -4745,7 +4756,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
     );
     return [...currentStyled, ...childStyled, ...gatewayStyled];
-  }, [edges, selectedId, edgeStyle, inlineComposition, flowReach]);
+  }, [edges, selectedId, edgeStyle, inlineComposition, flowReach, hoveredEdgeId]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -7329,8 +7340,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         <EdgeSelectModal
           position={edgeSelect.at}
           options={edgeSelect.options}
-          onPick={(edgeId) => applyEdgeSelect(edgeId)}
-          onClose={() => setEdgeSelect(null)}
+          onHoverOption={setHoveredEdgeId}
+          onPick={(edgeId) => {
+            setHoveredEdgeId(null);
+            applyEdgeSelect(edgeId);
+          }}
+          onClose={() => {
+            setHoveredEdgeId(null);
+            setEdgeSelect(null);
+          }}
         />
       )}
       {decisionDrop && (

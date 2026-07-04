@@ -216,6 +216,14 @@ button:not(:disabled):active {
   filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-edge-selected) 70%, transparent))
     drop-shadow(0 0 5px color-mix(in srgb, var(--color-edge-selected) 35%, transparent));
 }
+/* 출력선 선택 모달(EdgeSelectModal)에서 옵션 행 hover 시 대응 캔버스 엣지 하이라이트(accent).
+   엣지의 인라인 stroke(분기 파스텔/선택 색)보다 우선해야 하므로 !important. */
+.react-flow__edge.edge-hover-highlight .react-flow__edge-path {
+  stroke: var(--color-accent) !important;
+  stroke-width: 3.5 !important;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 70%, transparent))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 30%, transparent));
+}
 
 /* 핸들 — 노드당 8개라 평소엔 작게·은은하게, 노드 hover·연결 중에만 또렷하게 */
 .react-flow__handle {
@@ -333,6 +341,10 @@ button:not(:disabled):active {
 .edge-br-dot2 { animation: edge-pop-in 240ms var(--ease-overshoot) 300ms backwards; }
 .edge-br-dot3 { animation: edge-pop-in 240ms var(--ease-overshoot) 420ms backwards; }
 
+/* EdgeSelectModal — 옵션 행 스태거 페이드인(개수 가변 리스트). 정지=최종(보임) 상태. */
+@keyframes edge-row-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+.edge-row-in { animation: edge-row-in 260ms var(--ease-smooth) backwards; }
+
 @media (prefers-reduced-motion: reduce) {
   .edge-tile-pop,
   .edge-branchline,
@@ -347,7 +359,8 @@ button:not(:disabled):active {
   .edge-br-x2,
   .edge-br-dot1,
   .edge-br-dot2,
-  .edge-br-dot3 {
+  .edge-br-dot3,
+  .edge-row-in {
     animation: none;
   }
 }

@@ -6,6 +6,13 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9g: EdgeSelectModal 리스트형 재디자인 + 행 hover 시 캔버스 엣지 하이라이트
+- **`edge-select-modal.tsx`** — 개수 가변이라 타일 대신 리스트형: 헤더(캡션+우상단 X) → 최대 3.4행(≈132px) 내부 스크롤(`scrollbar-hidden`) → 하단 Cancel. 각 행=그리드 `[글리프+엣지필 2fr][쉐브론 auto][대상필 3fr]`: `BranchGlyph`(정지, Yes/No만 체크/엑스·그 외 기타 점) + 엣지라벨 필 + `ChevronRight` + 대상노드 필(균일폭·truncate). 필 `title` 툴팁으로 잘린 내용 표시. `edge-row-in` 스태거 페이드인. 클릭효과=행이 button이라 전역 press + hover accent.
+- **`branch-icon.tsx`** — `animate` prop 추가(리스트는 정지 아이콘).
+- **`globals.css`** — `edge-row-in` 키프레임(reduced-motion 가드) + `.react-flow__edge.edge-hover-highlight`(옵션 행 hover 시 캔버스 엣지 accent 하이라이트, 인라인 stroke보다 우선 `!important`+글로우).
+- **`page.tsx`** — `edgeSelect.options`(및 미사용 `decisionDrop.options` 공유 shape)를 `{ edgeId, branchKind, edgeLabel, targetLabel }`로 구조화(`branchKindOf`). `hoveredEdgeId` 상태 + `styledEdges`가 hover 엣지에 `edge-hover-highlight` className 부여(deps 추가). EdgeSelectModal `onHoverOption` 배선, pick/close 시 하이라이트 해제.
+- 엣지 팝업 4종(decision·action·branch·select) 재디자인 완료. 검증: lint 0 errors·build OK. 런타임(캔버스 하이라이트·실데이터 렌더)은 후속 인앱 확인.
+
 ## 2026-07-04 — R9f follow-up: 분기 출력 엣지 인스펙터 Yes/No/Other를 브랜치 타일 디자인으로 통일
 - **`branch-icon.tsx`(신규)** — 분기 아이콘 공용 컴포넌트 `BranchGlyph`(kind/replayKey/size) 추출(EdgeBranchModal·인스펙터 공용, DRY). Yes=체크(브랜치 블루)·No=엑스(브랜치 레드)·Other=점 3개, globals.css `.edge-br-*` 애니 재사용.
 - **`edge-branch-modal.tsx`** — 인라인 BranchIcon 제거, 공용 `BranchGlyph` 사용(동작 동일).
