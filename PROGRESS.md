@@ -6,6 +6,11 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — 노드 편집 모달 속성 영역 재디자인(우측정렬·구분선·담당자 ＋플라이아웃) + 코멘트/색 hover
+- **`search-select.tsx`** — `addMode` prop 신설: 트리거를 ＋아이콘으로, 플라이아웃을 트리거 우측(공간 없으면 좌측·아래 넘치면 위로)에 **fixed**로 띄움 → 모달 overflow에 클리핑 안 되고 아래 필드 미가림. 기본 모드(field 버튼+아래 드롭다운)는 무변경.
+- **`node-summary-modal.tsx`** — 속성 영역(유형/색/부서/담당자/시스템/소요) 재배치: 라벨 좌 + 필드/필 **우측정렬**, 세로 중앙, 행 **구분선**(`divide-divider`). 부서 select=우측 `w-52` 박스, 시스템/소요 입력 `text-right w-44`, 담당자=필 우측 wrap + **＋버튼(addMode SearchSelect)→우측 플라이아웃**(None은 `summary.none` 회색). 색 swatch **hover 연보라 링**(비선택). start/end/subprocess는 `showAttributes=false`라 유형/색만(구분선·레이아웃 정상). 코멘트: **Add comment를 라벨 행 우측 끝**으로 이동, 코멘트 li **hover(accent-tint 배경+연보라 보더)**.
+- 검증: 프론트 lint 0 errors·build OK, static CSS에 토큰 유틸 생성 확인. 런타임(플라이아웃 위치·우측정렬·타입별 표시)은 인앱 확인 후속.
+
 ## 2026-07-04 — R7b 보완: 노드 모달 선행/후행 내비(쉐브론·라벨 하단 고정·칩 min/max 스크롤) + R9 전체 완료 표기
 - **`node-summary-modal.tsx`** — 선행/후행 내비: (1) 가장자리 `ArrowLeft/ArrowRight` → `ChevronLeft/ChevronRight`. (2) hover 라벨(Previous/Next)을 양쪽 다 **하단 고정**(쉐브론 위·라벨 아래, `justify-between`)해 높이 통일(기존 후행은 라벨이 위였음). (3) 칩 리스트에 `min-h-[26px] max-h-[104px] overflow-y-auto scrollbar-hidden`(필 높이 ~4.4행) → 모달이 낮아도 항상 보이고(안 보이던 버그 수정) 과도하게 늘지 않고 내부 스크롤.
 - **`SCREEN-REDESIGN-EDITOR.md`** — R9 전체(R9a~h) 시현·검토결과 ✅ 표기(사용자 확인). R9 = 엣지 흐름 모달 5종 리치 재디자인 + 토큰 통일 + 인스펙터 통일 완료.

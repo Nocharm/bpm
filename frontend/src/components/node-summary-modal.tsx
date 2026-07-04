@@ -346,16 +346,17 @@ export function NodeSummaryModal({
                   onChange={(event) => setForm((f) => ({ ...f, description: event.target.value }))}
                 />
               </div>
-              {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
-              <div className="flex items-center gap-2">
-                <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</label>
-                <span className="min-w-0 flex-1 truncate text-caption text-ink-secondary">{typeLabel}</span>
-              </div>
-              {/* 색 — 팔레트가 기본 노출(1줄), "더 보기" 시 헥사 입력창 노출 */}
-              <div className="flex items-start gap-2">
-                <span className="w-14 shrink-0 pt-1 text-fine text-ink-tertiary">{t("field.color")}</span>
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-1">
+              {/* 속성 — 라벨 좌·필드 우측정렬·세로중앙·행 구분선. start/end/subprocess는 유형/색만(BPM 숨김) */}
+              <div className="flex flex-col divide-y divide-divider">
+                {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
+                <div className="flex min-h-[34px] items-center gap-3 py-1.5">
+                  <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</span>
+                  <span className="min-w-0 flex-1 truncate text-right text-caption text-ink-secondary">{typeLabel}</span>
+                </div>
+                {/* 색 — 팔레트 우측 노출, "더 보기" 시 헥사 입력 인라인 */}
+                <div className="flex items-center gap-3 py-1.5">
+                  <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
                     {colorPresets.map((preset) => (
                       <button
                         key={preset || "default"}
@@ -364,7 +365,9 @@ export function NodeSummaryModal({
                         aria-label={preset || "default"}
                         onClick={() => setForm((f) => ({ ...f, color: preset }))}
                         className={`h-5 w-5 rounded-full border ${
-                          form.color === preset ? "ring-2 ring-accent" : "border-hairline"
+                          form.color === preset
+                            ? "border-transparent ring-2 ring-accent"
+                            : "border-hairline hover:ring-2 hover:ring-accent-tint-border"
                         }`}
                         style={{ background: preset || "var(--color-surface-alt)" }}
                       />
@@ -381,14 +384,7 @@ export function NodeSummaryModal({
                     >
                       {t("editor.moreColors")}
                     </button>
-                  </div>
-                  {/* 헥사 입력 — 더 보기 시 노출 */}
-                  {colorMoreOpen && (
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="h-5 w-5 shrink-0 rounded-full border border-hairline"
-                        style={{ background: form.color || "var(--color-surface-alt)" }}
-                      />
+                    {colorMoreOpen && (
                       <input
                         type="text"
                         value={form.color}
@@ -397,85 +393,94 @@ export function NodeSummaryModal({
                         maxLength={7}
                         spellCheck={false}
                         aria-label={t("field.color")}
-                        className="w-24 rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink"
+                        className="w-24 rounded-sm border border-hairline px-2 py-0.5 text-right text-fine text-ink"
                       />
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-              {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
-              {showAttributes && (
-                <>
-                  {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
-                  <div className="flex items-center gap-2">
-                    <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</label>
-                    <SearchSelect
-                      value={form.department}
-                      options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
-                      emptyLabel={t("summary.none")}
-                      placeholder={t("field.searchPlaceholder")}
-                      onChange={changeDept}
-                    />
-                  </div>
-                  {/* 담당자 칩 + 부서 필터링 추가 픽커 */}
-                  <div className="flex items-start gap-2">
-                    <label className="mt-1 w-14 shrink-0 text-fine text-ink-tertiary">{t("field.assignee")}</label>
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-1">
-                        {assignees.map((name) => {
-                          const isDrift = drifted.includes(name);
-                          return (
-                            <span
-                              key={name}
-                              className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                                isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
-                              }`}
-                            >
-                              {name}
-                              <button
-                                type="button"
-                                aria-label={t("summary.close")}
-                                onClick={() =>
-                                  setForm((f) => ({ ...f, assignee: formatAssignees(parseAssignees(f.assignee).filter((n) => n !== name)) }))
-                                }
-                              >
-                                <X size={11} strokeWidth={1.5} />
-                              </button>
-                            </span>
-                          );
-                        })}
+                {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
+                {showAttributes && (
+                  <>
+                    {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
+                    <div className="flex min-h-[34px] items-center gap-3 py-1.5">
+                      <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</span>
+                      <div className="flex min-w-0 flex-1 justify-end">
+                        <div className="flex w-52">
+                          <SearchSelect
+                            value={form.department}
+                            options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                            emptyLabel={t("summary.none")}
+                            placeholder={t("field.searchPlaceholder")}
+                            onChange={changeDept}
+                          />
+                        </div>
                       </div>
-                      <SearchSelect
-                        value=""
-                        options={users
-                          .filter((u) => form.department === "" || u.department === form.department)
-                          .filter((u) => !assignees.includes(u.name))
-                          .map((u) => ({ value: u.name, label: u.name, sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined, keywords: u.id }))}
-                        emptyLabel={t("field.assignee")}
-                        placeholder={t("field.searchPlaceholder")}
-                        onChange={(name) => {
-                          if (!name) return;
-                          const next = addAssignee(form.department, parseAssignees(form.assignee), name, users);
-                          setForm((f) => ({ ...f, department: next.department, assignee: formatAssignees(next.assignees) }));
-                        }}
-                      />
                     </div>
-                  </div>
-                  {ATTR_FIELDS.map(({ key, labelKey }) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <label className="w-14 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</label>
-                      <input
-                        className="min-w-0 flex-1 rounded-sm border border-hairline px-2 py-1 text-caption"
-                        value={form[key]}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
-                        }}
-                      />
+                    {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커) */}
+                    <div className="flex items-start gap-3 py-1.5">
+                      <span className="mt-1 w-16 shrink-0 text-fine text-ink-tertiary">{t("field.assignee")}</span>
+                      <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
+                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+                          {assignees.map((name) => {
+                            const isDrift = drifted.includes(name);
+                            return (
+                              <span
+                                key={name}
+                                className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                                  isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
+                                }`}
+                              >
+                                {name}
+                                <button
+                                  type="button"
+                                  aria-label={t("summary.close")}
+                                  onClick={() =>
+                                    setForm((f) => ({ ...f, assignee: formatAssignees(parseAssignees(f.assignee).filter((n) => n !== name)) }))
+                                  }
+                                >
+                                  <X size={11} strokeWidth={1.5} />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <SearchSelect
+                          addMode
+                          value=""
+                          options={users
+                            .filter((u) => form.department === "" || u.department === form.department)
+                            .filter((u) => !assignees.includes(u.name))
+                            .map((u) => ({ value: u.name, label: u.name, sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined, keywords: u.id }))}
+                          emptyLabel={t("summary.none")}
+                          placeholder={t("field.searchPlaceholder")}
+                          onChange={(name) => {
+                            if (!name) return;
+                            const next = addAssignee(form.department, parseAssignees(form.assignee), name, users);
+                            setForm((f) => ({ ...f, department: next.department, assignee: formatAssignees(next.assignees) }));
+                          }}
+                        />
+                      </div>
                     </div>
-                  ))}
-                </>
-              )}
+                    {/* 시스템 · 소요시간 — 우측 정렬 입력 */}
+                    {ATTR_FIELDS.map(({ key, labelKey }) => (
+                      <div key={key} className="flex min-h-[34px] items-center gap-3 py-1.5">
+                        <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</span>
+                        <div className="flex min-w-0 flex-1 justify-end">
+                          <input
+                            className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                            value={form[key]}
+                            aria-label={t(labelKey)}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
               {groupLabel && (
                 <span className="text-fine text-ink-tertiary">
                   {t("summary.group")}: {groupLabel}
@@ -551,25 +556,30 @@ export function NodeSummaryModal({
           )}
 
           <div>
-            <div className="text-fine text-ink-tertiary">{t("summary.comments")}</div>
-            {comments.length === 0 && <div className="text-ink-tertiary">{t("summary.none")}</div>}
+            <div className="flex items-center justify-between">
+              <span className="text-fine text-ink-tertiary">{t("summary.comments")}</span>
+              {!readOnly && !adding && (
+                <button
+                  type="button"
+                  className="rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setAdding(true)}
+                >
+                  {t("summary.addComment")}
+                </button>
+              )}
+            </div>
+            {comments.length === 0 && <div className="mt-1 text-ink-tertiary">{t("summary.none")}</div>}
             <ul className="mt-1 flex flex-col gap-1">
               {comments.map((comment) => (
-                <li key={comment.id} className="rounded-sm bg-surface-alt px-2 py-1">
+                <li
+                  key={comment.id}
+                  className="rounded-sm border border-transparent bg-surface-alt px-2 py-1 transition-colors hover:border-accent-tint-border hover:bg-accent-tint"
+                >
                   <span className="text-fine text-ink-tertiary">{comment.author}</span>
                   <div className="text-ink">{comment.body}</div>
                 </li>
               ))}
             </ul>
-            {!readOnly && !adding && (
-              <button
-                type="button"
-                className="mt-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
-                onClick={() => setAdding(true)}
-              >
-                {t("summary.addComment")}
-              </button>
-            )}
             {!readOnly && adding && (
               <div className="mt-1 flex flex-col gap-1">
                 <textarea
