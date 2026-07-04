@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R9d: 엣지 디시전 팝업 리치 재디자인(아이콘 타일 + 의미 애니메이션)
+- **`edge-decision-modal.tsx`** — R9a 토큰 통일에서 더 나아가 재설계(사용자 방향): 헤더(uppercase 캡션 + 우상단 공통 X) → 2열 경계 아이콘 타일(`aspect-3/2`·24px/굵기2·hover accent 보더/틴트/아이콘) → 하단 Cancel 바. Lucide GitBranch/CornerDownRight → **커스텀 애니 SVG**(하위요소 애니 위한 의도적 예외, Lucide 라인 스타일 유지). **브랜치**=곡선이 base 원 위→node 원 좌측으로 뻗어 그려지고 끝 노드가 강조색으로 톡. **인터셉트**=ㅁ-ㅁ가 좌우로 벌어지며 가운데 박스가 위에서 드롭(강조색), 커넥터는 테두리만 연결(겹침 없음). 타일 팝은 열림 시 1회, hover 시엔 아이콘 SVG를 `replayKey`로 리마운트해 아이콘만 재생.
+- **`globals.css`** — `.edge-*` 키프레임 8종 + 클래스 추가, `prefers-reduced-motion` 가드. tile-pop은 `backwards`만(forwards면 전역 버튼 `:active` 눌림 scale(.97)이 막힘).
+- 동작 보존: 위치 클램프·Esc·바깥클릭 닫기·onBranch/onIntercept/onClose·i18n 키 그대로(신규 문자열 없음).
+- 검증: 프론트 lint 0 errors·build OK. 나머지 3종(branch/action/select)은 하나씩 후속.
+
 ## 2026-07-04 — R9c: node-summary-modal 토큰 폴리시(굵기 500 제거 + shadow 클래스 정합)
 - **`node-summary-modal.tsx`** — 대표 모달 대비 남은 이탈만 정리: (1) accent 버튼 3곳의 `font-medium`(weight 500·디자인 규칙 300/400/600만 허용 위반) 제거 → 대표 모달 accent 버튼과 동일(weight 클래스 없음=400). (2) 인라인 `style={{ boxShadow: "var(--shadow-lg)" }}` 3곳(메인 패널·미저장확인·부서변경 오버레이)을 `shadow-lg` 클래스로 교체 — `--shadow-lg` 토큰에 매핑되므로 시각 변화 없이 대표 모달과 동일 적용 방식. raw hex 없음 확인, 동작·구조 보존.
 - 검증: 프론트 lint 0 errors·build OK. (브라우저 시현 후속.)
