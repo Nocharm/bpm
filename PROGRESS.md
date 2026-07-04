@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 저장 조건: 출력 다중 노드 감지(분기 제외) + 투명도 /40
+- **`save-checklist.tsx getSaveCheckStates`** — 4번째 조건 `singleOutput` 추가: 노드별 출력(outgoing) 엣지 수를 세어 **분기(decision)·하위프로세스(subprocess, 다중 끝) 외 노드가 출력 2개 이상이면 감지**(클라이언트 전용 — 백엔드 규칙 아님). 드롭존 조작으로 생긴 잘못된 분기를 막기보다 작업자에게 알리는 방향. `edges` 인자 추가, 노드에 `id`.
+- **`page.tsx`** — `saveCheckItems`(deps에 `edges`)·`getSaveBlockers`(`edgesRef.current`)에 4번째 조건 반영 → 체크리스트 표시 + 수동 저장·승인 시작 차단. i18n `save.checkSingleOutput`(en/ko).
+- **투명도** `bg-surface/60→/40` (요청) — backdrop-blur로 가독성 유지.
+- 검증: lint 0 · build/TS OK. 출력 감지 로직 대표 케이스 검증(일반 2출력 감지·분기/하위 제외). 렌더 확인(주입).
+
 ## 2026-07-05 — 좌상단 제목 칩 + 저장 조건 아코디언 병합 (반투명·펼침 애니)
 - **`save-checklist.tsx`** — `SaveChecklist`→**`MapTitleChecklist`**로 개편: 접힘=맵 제목 표시, 펼침=제목이 크로스페이드로 사라지며 저장 조건 리스트가 아코디언(grid-rows 0fr→1fr, duration-350 ease-smooth)으로 열림. 헤더 우측 배지(전체충족 체크/미충족 수). 빈 맵은 평범한 제목 칩. 투명도 상향(bg-surface/75→/60 + backdrop-blur).
 - **`scope-window.tsx`** — chromeless 루트에 `titleSlot` prop 추가(기본 제목 칩 대체, 슬롯이 스스로 위치).

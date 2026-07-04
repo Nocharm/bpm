@@ -2077,12 +2077,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       return [];
     }
     const states = getSaveCheckStates(
-      ns.map((node) => ({ nodeType: node.data.nodeType, label: node.data.label })),
+      ns.map((node) => ({ id: node.id, nodeType: node.data.nodeType, label: node.data.label })),
+      edgesRef.current.map((edge) => ({ source: edge.source })),
     );
     const blockers: string[] = [];
     if (!states.start) blockers.push(t("save.checkOneStart"));
     if (!states.primaryEnd) blockers.push(t("save.checkPrimaryEnd"));
     if (!states.endUnique) blockers.push(t("save.checkUniqueEnd"));
+    if (!states.singleOutput) blockers.push(t("save.checkSingleOutput"));
     return blockers;
   }, [t]);
 
@@ -2121,14 +2123,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 시작 정확히 1개 / 끝 이름(빈 제목 포함) 중복 없음 / 대표 끝 1개(끝 노드 최소 1개면 저장 시 자동 1개 지정).
   const saveCheckItems = useMemo<SaveCheckItem[]>(() => {
     const states = getSaveCheckStates(
-      nodes.map((node) => ({ nodeType: node.data.nodeType, label: node.data.label })),
+      nodes.map((node) => ({ id: node.id, nodeType: node.data.nodeType, label: node.data.label })),
+      edges.map((edge) => ({ source: edge.source })),
     );
     return [
       { key: "start", label: t("save.checkOneStart"), ok: states.start },
       { key: "primaryEnd", label: t("save.checkPrimaryEnd"), ok: states.primaryEnd },
       { key: "endUnique", label: t("save.checkUniqueEnd"), ok: states.endUnique },
+      { key: "singleOutput", label: t("save.checkSingleOutput"), ok: states.singleOutput },
     ];
-  }, [nodes, t]);
+  }, [nodes, edges, t]);
 
   const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
     const step = 36;

@@ -14,21 +14,35 @@ export interface SaveCheckItem {
 }
 
 // 저장(그래프 검증) 조건의 충족 여부 — 체크리스트 렌더와 저장/승인 차단 로직 공용(어긋남 방지).
-// 백엔드 validate_process와 정합: 시작 정확히 1개 / 대표끝=1(끝 노드 최소 1개면 저장 시 자동 지정) / 끝 이름 중복 없음.
+// 백엔드 validate_process 정합(시작 1개 / 대표끝=1 / 끝 이름 중복 없음) + 클라이언트 전용:
+// 분기(decision)·하위프로세스(subprocess, 다중 끝)만 다출력 정상 — 그 외 노드가 출력 2개 이상이면
+// 드롭존 조작 등으로 생긴 잘못된 분기이므로 작업자에게 알린다.
 export function getSaveCheckStates(
-  nodes: { nodeType: string; label: string }[],
-): { start: boolean; primaryEnd: boolean; endUnique: boolean } {
+  nodes: { id: string; nodeType: string; label: string }[],
+  edges: { source: string }[],
+): { start: boolean; primaryEnd: boolean; endUnique: boolean; singleOutput: boolean } {
   const startCount = nodes.filter((node) => node.nodeType === "start").length;
   const endLabels = nodes.filter((node) => node.nodeType === "end").map((node) => node.label);
+  const outCount = new Map<string, number>();
+  for (const edge of edges) {
+    outCount.set(edge.source, (outCount.get(edge.source) ?? 0) + 1);
+  }
+  const singleOutput = nodes.every(
+    (node) =>
+      node.nodeType === "decision" ||
+      node.nodeType === "subprocess" ||
+      (outCount.get(node.id) ?? 0) <= 1,
+  );
   return {
     start: startCount === 1,
     primaryEnd: endLabels.length >= 1,
     endUnique: new Set(endLabels).size === endLabels.length,
+    singleOutput,
   };
 }
 
 const CHIP_BASE =
-  "absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface/60 shadow-sm backdrop-blur-sm";
+  "absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
 
 export function MapTitleChecklist({
   mapTitle,
