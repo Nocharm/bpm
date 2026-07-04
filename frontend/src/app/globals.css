@@ -297,45 +297,31 @@ button:not(:disabled):active {
   }
 }
 
-/* 엣지 디시전 팝업(edge-decision-modal) — 액션 타일 팝 + 아이콘 의미 애니메이션.
-   열림 시 1회 재생. hover 재생은 컴포넌트가 아이콘 SVG를 key로 리마운트해 처리(타일 팝은 재생 안 함).
-   tile-pop은 backwards만 — forwards로 transform을 물면 전역 버튼 :active 눌림(scale .97)이 막힌다. */
-@keyframes edge-tile-pop {
-  from { opacity: 0; transform: scale(0.6); }
-  to { opacity: 1; transform: scale(1); }
-}
+/* 엣지 디시전 팝업(edge-decision-modal) — 타일 팝(열림 1회) + 아이콘 의미 애니메이션.
+   hover 재생은 컴포넌트가 아이콘 SVG를 key로 리마운트(타일 팝은 재생 안 함).
+   핵심: 각 요소의 '정지 상태 = 최종(그려진) 상태' → 애니메이션이 없어도(감소모션·CSS 캐시) 겹침 없는 깨끗한 최종 아이콘.
+   모두 backwards만 — forwards로 transform/opacity를 물면 전역 버튼 :active 눌림(scale .97)이나 이후 상태가 막힌다. */
+@keyframes edge-tile-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
 .edge-tile-pop { animation: edge-tile-pop 320ms var(--ease-overshoot) backwards; }
 
-@keyframes edge-branch-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes edge-branch-node { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
-@keyframes edge-box-left { from { transform: translateX(75%); } to { transform: translateX(0); } }
-@keyframes edge-box-right { from { transform: translateX(-75%); } to { transform: translateX(0); } }
-@keyframes edge-box-mid {
-  from { opacity: 0; transform: translateY(-120%) scale(0.7); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes edge-iseg-out { 0% { opacity: 1; } 70%, 100% { opacity: 0; } }
-@keyframes edge-iseg-in { from { opacity: 0; } to { opacity: 1; } }
-
 /* 브랜치: 곡선이 base 원 위 → node 원 좌측으로 뻗어 그려지고 끝 노드가 톡(강조색은 컴포넌트 인라인) */
-.edge-anim .edge-branchline { stroke-dasharray: 1; animation: edge-branch-draw 440ms var(--ease-smooth) 140ms both; }
-.edge-anim .edge-branchnode { transform-box: fill-box; transform-origin: center; animation: edge-branch-node 320ms var(--ease-overshoot) 540ms both; }
-/* 인터셉트: ㅁ-ㅁ가 좌우로 벌어지고 가운데 박스가 위에서 드롭, 커넥터는 테두리만 연결(겹침 없음) */
-.edge-anim .edge-boxL { transform-box: fill-box; transform-origin: center; animation: edge-box-left 460ms var(--ease-smooth) 140ms both; }
-.edge-anim .edge-boxR { transform-box: fill-box; transform-origin: center; animation: edge-box-right 460ms var(--ease-smooth) 140ms both; }
-.edge-anim .edge-boxM { transform-box: fill-box; transform-origin: center; animation: edge-box-mid 380ms var(--ease-overshoot) 500ms both; }
-.edge-anim .edge-isegStart { opacity: 0; animation: edge-iseg-out 380ms var(--ease-smooth) 140ms both; }
-.edge-anim .edge-isegIn { animation: edge-iseg-in 240ms var(--ease-smooth) 560ms both; }
+@keyframes edge-branch-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.edge-branchline { stroke-dasharray: 1; animation: edge-branch-draw 460ms var(--ease-smooth) 160ms backwards; }
+@keyframes edge-pop-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+.edge-branchnode { transform-box: fill-box; transform-origin: center; animation: edge-pop-in 300ms var(--ease-overshoot) 560ms backwards; }
+
+/* 인터셉트: 가운데 박스가 위에서 사이로 드롭 + 커넥터 페이드인. 좌우 박스·커넥터는 테두리만 연결(겹침 없음). */
+@keyframes edge-drop-in { from { opacity: 0; transform: translateY(-120%) scale(0.7); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.edge-box-mid { transform-box: fill-box; transform-origin: center; animation: edge-drop-in 400ms var(--ease-overshoot) 160ms backwards; }
+@keyframes edge-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.edge-conn { animation: edge-fade-in 240ms var(--ease-smooth) 440ms backwards; }
 
 @media (prefers-reduced-motion: reduce) {
   .edge-tile-pop,
-  .edge-anim .edge-branchline,
-  .edge-anim .edge-branchnode,
-  .edge-anim .edge-boxL,
-  .edge-anim .edge-boxR,
-  .edge-anim .edge-boxM,
-  .edge-anim .edge-isegStart,
-  .edge-anim .edge-isegIn {
+  .edge-branchline,
+  .edge-branchnode,
+  .edge-box-mid,
+  .edge-conn {
     animation: none;
   }
 }

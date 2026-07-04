@@ -18,11 +18,12 @@ import { useI18n } from "@/lib/i18n";
 const ACCENT_STROKE = { stroke: "var(--color-accent)" };
 
 // 브랜치 — base 원 위에서 곡선이 뻗어 node 원 좌측으로, 끝 노드(강조색)가 톡. replayKey 변경 시 리마운트→재생.
+// 정지 상태(애니 없이)도 곡선은 그려지고 노드는 보이는 완성 아이콘이다.
 function BranchAnimIcon({ replayKey }: { replayKey: number }) {
   return (
     <svg
       key={replayKey}
-      className="edge-anim text-ink-tertiary transition-colors group-hover:text-accent"
+      className="text-ink-tertiary transition-colors group-hover:text-accent"
       width={24}
       height={24}
       viewBox="0 0 24 24"
@@ -41,12 +42,13 @@ function BranchAnimIcon({ replayKey }: { replayKey: number }) {
   );
 }
 
-// 인터셉트 — ㅁ-ㅁ가 좌우로 벌어지고 가운데 박스(강조색)가 위에서 드롭, 커넥터는 테두리만 연결.
+// 인터셉트 — 가운데 박스(강조색)가 위에서 사이로 드롭 + 커넥터 페이드인. 좌우 박스·커넥터는 테두리만 연결(겹침 없음).
+// 정지 상태(애니 없이)도 [ㅁ]—[ㅁ]—[ㅁ] 완성형으로 깨끗하다(겹치는 임시 선 없음).
 function InterceptAnimIcon({ replayKey }: { replayKey: number }) {
   return (
     <svg
       key={replayKey}
-      className="edge-anim text-ink-tertiary transition-colors group-hover:text-accent"
+      className="text-ink-tertiary transition-colors group-hover:text-accent"
       width={40}
       height={24}
       viewBox="0 0 40 24"
@@ -57,12 +59,11 @@ function InterceptAnimIcon({ replayKey }: { replayKey: number }) {
       strokeLinejoin="round"
       aria-hidden
     >
-      <line className="edge-isegStart" x1="16" y1="12" x2="24" y2="12" />
-      <line className="edge-isegIn" x1="10" y1="12" x2="16" y2="12" />
-      <line className="edge-isegIn" x1="24" y1="12" x2="30" y2="12" />
-      <rect className="edge-boxL" x="2" y="7" width="8" height="10" rx="2" />
-      <rect className="edge-boxR" x="30" y="7" width="8" height="10" rx="2" />
-      <rect className="edge-boxM" x="16" y="7" width="8" height="10" rx="2" style={ACCENT_STROKE} />
+      <rect x="2" y="7" width="8" height="10" rx="2" />
+      <rect x="30" y="7" width="8" height="10" rx="2" />
+      <line className="edge-conn" x1="10" y1="12" x2="16" y2="12" />
+      <line className="edge-conn" x1="24" y1="12" x2="30" y2="12" />
+      <rect className="edge-box-mid" x="16" y="7" width="8" height="10" rx="2" style={ACCENT_STROKE} />
     </svg>
   );
 }

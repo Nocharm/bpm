@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R9d fix: 인터셉트 겹침 원천 차단 + 애니 견고화·심플화
+- **증상**: 실제 화면이 프리뷰와 다름 — 아이콘 애니 미표시 + 인터셉트 선이 가운데 박스 밑에 겹쳐 보임. 원인은 브라우저가 옛 globals.css를 캐시해 `.edge-*` 규칙 미적용(그 경우 임시 커넥터 `isegStart`가 기본 opacity 1로 박스 밑에 노출). 빌드 산출 CSS엔 규칙 존재 확인.
+- **`edge-decision-modal.tsx`·`globals.css`** — (1) 인터셉트에서 겹침 유발 임시 커넥터(`isegStart`)와 ㅁ-ㅁ widen 크로스페이드 제거 → **가운데 박스가 위에서 드롭 + 좌우 커넥터 페이드인**(좌우 박스 정적)으로 심플화. (2) 애니메이션을 `.edge-anim` 하위 게이트 없이 요소 클래스에 직접 부여. (3) **모든 요소의 '정지 상태 = 최종(그려진) 완성 상태'** → 애니가 없어도(감소모션·CSS 캐시) 겹침 없는 깨끗한 아이콘. tile-pop 포함 전부 `backwards` fill(전역 버튼 :active 눌림 보존).
+- 참고: 애니 표시엔 새 CSS 로드 필요 → 하드 리프레시(Cmd/Ctrl+Shift+R) 또는 dev 재기동.
+- 검증: 프론트 lint 0 errors·build OK. 새 CSS에 `edge-isegStart` 없음 확인(겹침 원천 제거).
+
 ## 2026-07-04 — R9d: 엣지 디시전 팝업 리치 재디자인(아이콘 타일 + 의미 애니메이션)
 - **`edge-decision-modal.tsx`** — R9a 토큰 통일에서 더 나아가 재설계(사용자 방향): 헤더(uppercase 캡션 + 우상단 공통 X) → 2열 경계 아이콘 타일(`aspect-3/2`·24px/굵기2·hover accent 보더/틴트/아이콘) → 하단 Cancel 바. Lucide GitBranch/CornerDownRight → **커스텀 애니 SVG**(하위요소 애니 위한 의도적 예외, Lucide 라인 스타일 유지). **브랜치**=곡선이 base 원 위→node 원 좌측으로 뻗어 그려지고 끝 노드가 강조색으로 톡. **인터셉트**=ㅁ-ㅁ가 좌우로 벌어지며 가운데 박스가 위에서 드롭(강조색), 커넥터는 테두리만 연결(겹침 없음). 타일 팝은 열림 시 1회, hover 시엔 아이콘 SVG를 `replayKey`로 리마운트해 아이콘만 재생.
 - **`globals.css`** — `.edge-*` 키프레임 8종 + 클래스 추가, `prefers-reduced-motion` 가드. tile-pop은 `backwards`만(forwards면 전역 버튼 `:active` 눌림 scale(.97)이 막힘).
