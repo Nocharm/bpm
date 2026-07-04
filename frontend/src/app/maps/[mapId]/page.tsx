@@ -6410,29 +6410,27 @@ function MapEditor({ mapId }: { mapId: number }) {
               const ro = radius + 48;
               const rm = (ri + ro) / 2;
               const rad = (d: number) => (d * Math.PI) / 180;
-              const HALF = rad(22); // 활성 부채꼴 반각(=44° 폭)
-              const DHALF = rad(18); // 대각 점선 부채꼴 반각
+              const HALF = rad(19); // 활성 부채꼴 반각(=38° 폭) — 각폭 좁혀 조각 사이 간극 확대
+              const DHALF = rad(16); // 대각 점선 부채꼴 반각
               const CR = 7; // 모서리 라운드 반경(px) — 이미지처럼 둥근 부채꼴
-              const BOW = rad(4); // 방사형 변을 안쪽으로 오목하게 — 완벽한 파이 조각 아닌 꽃잎/허리 형태
               const pt = (rr: number, a: number) =>
                 `${(cx + rr * Math.cos(a)).toFixed(2)} ${(cy + rr * Math.sin(a)).toFixed(2)}`;
-              // 라운드 모서리 annular sector — 각도 화면좌표(y-down, 0°=동). 네 모서리를 CR만큼
-              // 물러나 Q로 둥글리고, 좌우 방사형 변은 중앙축 쪽으로 BOW만큼 당겨 오목하게(단조로움 방지).
+              // 라운드 모서리 annular sector — 각도 화면좌표(y-down, 0°=동). 방사형 변은 곧게(중심 방향)
+              // 두어 각도 차만큼 조각 사이 간극이 바깥으로 갈수록 넓어진다. 네 모서리만 CR로 둥글림.
               const sector = (axis: number, half: number, r0: number, r1: number) => {
                 const a0 = axis - half;
                 const a1 = axis + half;
                 const di = CR / r0; // 내호 각도 오프셋
                 const dO = CR / r1; // 외호 각도 오프셋
-                const mid = (r0 + r1) / 2; // 방사형 변 곡선 제어점 반경
                 const R0 = r0.toFixed(2);
                 const R1 = r1.toFixed(2);
                 return [
                   `M ${pt(r0 + CR, a0)}`,
-                  `Q ${pt(mid, a0 + BOW)} ${pt(r1 - CR, a0)}`,
+                  `L ${pt(r1 - CR, a0)}`,
                   `Q ${pt(r1, a0)} ${pt(r1, a0 + dO)}`,
                   `A ${R1} ${R1} 0 0 1 ${pt(r1, a1 - dO)}`,
                   `Q ${pt(r1, a1)} ${pt(r1 - CR, a1)}`,
-                  `Q ${pt(mid, a1 - BOW)} ${pt(r0 + CR, a1)}`,
+                  `L ${pt(r0 + CR, a1)}`,
                   `Q ${pt(r0, a1)} ${pt(r0, a1 - di)}`,
                   `A ${R0} ${R0} 0 0 0 ${pt(r0, a0 + di)}`,
                   `Q ${pt(r0, a0)} ${pt(r0 + CR, a0)}`,
