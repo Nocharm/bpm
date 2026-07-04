@@ -2077,6 +2077,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [saveCurrentScope, showToast, t]);
 
+  // 승인 요청(승인 시작) 전 현재 화면을 먼저 저장 — 저장된 구버전이 아니라 "지금 보는 내용"이
+  // 승인 대상이 되도록. 저장(=서버의 시작/끝 검증)에 실패하면 승인 요청 다이얼로그를 열지 않는다.
+  const handleSubmitForApproval = useCallback(async () => {
+    try {
+      await saveCurrentScope();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : t("err.save"));
+      return;
+    }
+    setSubmitConfirmOpen(true);
+  }, [saveCurrentScope, showToast, t]);
+
   const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
     const step = 36;
     const w = Math.min(760, Math.round(b.w * 0.82));
@@ -7332,7 +7344,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       canWithdraw={canWithdraw}
                       hasApproved={hasApproved}
                       canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
-                      onSubmit={() => setSubmitConfirmOpen(true)}
+                      onSubmit={() => void handleSubmitForApproval()}
                       onApprove={() => setApproveConfirmOpen(true)}
                       onReject={() => setRejectOpen(true)}
                       onPublish={() => setPublishConfirmOpen(true)}

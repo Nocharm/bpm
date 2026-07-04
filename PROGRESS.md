@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R11b 오류방지 ⑤: 승인 요청(승인 시작) 전 현재 화면 저장 검증
+- **`page.tsx handleSubmitForApproval`** — ApprovalPanel `onSubmit`이 곧바로 submit 확인창을 열던 것을, 먼저 `saveCurrentScope()`(현재 화면 영속 + 서버의 시작/끝 검증)를 await하도록 변경. 실패 시 토스트 후 다이얼로그를 열지 않음. 저장 성공 시에만 승인 요청 확인창 오픈 → 저장된 구버전이 아닌 "지금 보는 내용"이 승인 대상이 되도록(착각 방지). 확인창은 모달이라 저장~확정 사이 편집 불가.
+- 검증: lint 0 · build/TS OK. 백엔드 변경 없음(기존 저장 API·검증 재사용).
+
 ## 2026-07-04 — R11b 오류방지·편집UX ②③④: 시작 싱글턴·D 삭제 가속기·복수선택 삭제
 - **시작 노드 1개 제한**(`page.tsx handleAddNode`) — 모든 추가 채널의 단일 진입점에서 `nodeType==="start"`인데 이미 시작 노드가 있으면 추가 대신 토스트(`editor.startSingleton`, en/ko) + 기존 시작으로 `highlightNode`(fitView 이동효과). 우클릭·인스펙터·좌측/하단 추가 모두 커버.
 - **`D` 삭제 가속기**(`context-menu.tsx`·`page.tsx`) — 노드/엣지 우클릭 메뉴 삭제에 `accel:"d"` + `shortcut:["Del","D"]`(두 칩). 기존 Del(React Flow deleteKeyCode) 유지. ContextMenu `shortcut`을 `string|string[]`로 확장해 다중 칩 렌더.
