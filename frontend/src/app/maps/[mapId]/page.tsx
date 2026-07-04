@@ -64,6 +64,7 @@ import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-d
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
+import { SaveChecklist, type SaveCheckItem } from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
@@ -2089,6 +2090,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     setSubmitConfirmOpen(true);
   }, [saveCurrentScope, showToast, t]);
 
+  // 저장(그래프 검증) 조건 — 현재 스코프 노드 기준 라이브 계산(좌상단 체크리스트). 백엔드 validate_process와 정합:
+  // 시작 정확히 1개 / 끝 이름(빈 제목 포함) 중복 없음 / 대표 끝 1개(끝 노드 최소 1개면 저장 시 자동 1개 지정).
+  const saveCheckItems = useMemo<SaveCheckItem[]>(() => {
+    const startCount = nodes.filter((node) => node.data.nodeType === "start").length;
+    const endLabels = nodes.filter((node) => node.data.nodeType === "end").map((node) => node.data.label);
+    return [
+      { key: "start", label: t("save.checkOneStart"), ok: startCount === 1 },
+      { key: "primaryEnd", label: t("save.checkPrimaryEnd"), ok: endLabels.length >= 1 },
+      { key: "endUnique", label: t("save.checkUniqueEnd"), ok: new Set(endLabels).size === endLabels.length },
+    ];
+  }, [nodes, t]);
+
   const defaultGeom = (index: number, b: { w: number; h: number }): WindowGeom => {
     const step = 36;
     const w = Math.min(760, Math.round(b.w * 0.82));
@@ -3685,10 +3698,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       const taken = nodesRef.current
         .filter((node) => node.id !== summaryNodeId)
         .map((node) => node.data.label);
-      const unique = makeUniqueLabel(label, taken);
-      if (unique !== label) {
-        patchNode(summaryNodeId, { label: unique }, false);
-      }
+      // 항상 반영 — 충돌 시 " (n)"로 고유화, 유니크하면 입력 그대로. (충돌일 때만 patch하던 버그로
+      // 유니크한 새 제목이 저장되지 않던 문제 수정.)
+      patchNode(summaryNodeId, { label: makeUniqueLabel(label, taken) }, false);
     },
     [summaryNodeId, patchNode],
   );
@@ -6397,6 +6409,12 @@ function MapEditor({ mapId }: { mapId: number }) {
               </ScopeWindow>
             );
           })}
+          {/* 저장 조건 체크리스트 — 좌상단 맵 제목 칩 아래, 편집 모드·노드가 있을 때만(빈 맵은 검증 없음) */}
+          {!readOnly && nodes.length > 0 && (
+            <div className="absolute left-2 top-9 z-[1050]">
+              <SaveChecklist title={t("save.checklistTitle")} items={saveCheckItems} />
+            </div>
+          )}
           <WindowDock
             items={scopes
               .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
