@@ -120,25 +120,26 @@ export function EdgeActionModal({
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
+        {/* Insert(흐름 삽입)는 디시전 Intercept와 사실상 같은 기능이라 같은 2번째 위치로 통일 */}
         <div className="grid grid-cols-2 gap-1.5">
           <button
             type="button"
             className={tileClass}
-            onMouseEnter={() => setInsertReplay((k) => k + 1)}
-            onClick={onInsert}
-          >
-            <InsertAnimIcon replayKey={insertReplay} />
-            {t("edge.actionInsert")}
-          </button>
-          <button
-            type="button"
-            className={tileClass}
-            style={{ animationDelay: "80ms" }}
             onMouseEnter={() => setReplaceReplay((k) => k + 1)}
             onClick={onReplace}
           >
             <ReplaceAnimIcon replayKey={replaceReplay} />
             {t("edge.actionReplace")}
+          </button>
+          <button
+            type="button"
+            className={tileClass}
+            style={{ animationDelay: "80ms" }}
+            onMouseEnter={() => setInsertReplay((k) => k + 1)}
+            onClick={onInsert}
+          >
+            <InsertAnimIcon replayKey={insertReplay} />
+            {t("edge.actionInsert")}
           </button>
         </div>
         <button

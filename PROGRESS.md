@@ -6,6 +6,10 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9e 조정: EdgeActionModal Insert/Replace 위치 스왑
+- **`edge-action-modal.tsx`** — Insert(흐름 삽입)가 디시전 Intercept와 사실상 같은 기능이라 **같은 2번째 위치**로 통일: 타일 순서를 Replace(1) / Insert(2)로 스왑(스태거 딜레이도 2번째=Insert로 이동). 위치만 변경, 동작·아이콘·라벨 무변경.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — R9g: EdgeSelectModal 리스트형 재디자인 + 행 hover 시 캔버스 엣지 하이라이트
 - **`edge-select-modal.tsx`** — 개수 가변이라 타일 대신 리스트형: 헤더(캡션+우상단 X) → 최대 3.4행(≈132px) 내부 스크롤(`scrollbar-hidden`) → 하단 Cancel. 각 행=그리드 `[글리프+엣지필 2fr][쉐브론 auto][대상필 3fr]`: `BranchGlyph`(정지, Yes/No만 체크/엑스·그 외 기타 점) + 엣지라벨 필 + `ChevronRight` + 대상노드 필(균일폭·truncate). 필 `title` 툴팁으로 잘린 내용 표시. `edge-row-in` 스태거 페이드인. 클릭효과=행이 button이라 전역 press + hover accent.
 - **`branch-icon.tsx`** — `animate` prop 추가(리스트는 정지 아이콘).
