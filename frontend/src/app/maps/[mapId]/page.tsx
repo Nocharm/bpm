@@ -652,7 +652,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // connection: 핸들 드래그(엣지 미생성, 선택 시 생성) / edge: 노드 드롭으로 이미 생성된 엣지에 라벨 부여
   const [branchPrompt, setBranchPrompt] = useState<
     | { kind: "connection"; connection: Connection; at: { x: number; y: number } }
-    | { kind: "edge"; edgeId: string; at: { x: number; y: number } }
+    // 노드 드롭 삽입이 마름모에서 나가는 엣지를 만들 때 — 분기 선택 전엔 삽입을 적용하지 않고 보류.
+    // 픽 시 nextEdges(라벨 부여)로 삽입 적용, 취소 시 미적용(엣지가 먼저 생기지 않게).
+    | { kind: "pendingInsert"; nextEdges: Edge[]; freshId: string; at: { x: number; y: number } }
     | null
   >(null);
   // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
@@ -2487,17 +2489,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     [],
   );
 
-  // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결은 엣지를 생성, 노드 드롭은 기존 엣지에 라벨만 부여.
+  // 분기 모달 선택 → 라벨(Yes/No/빈값=기타) 적용. 드래그 연결·노드 드롭 삽입 모두 "선택 시점"에 엣지를 생성한다.
   const handlePickBranch = useCallback(
     (kind: BranchKind) => {
       const label = kind === "yes" ? BRANCH_YES_LABEL : kind === "no" ? BRANCH_NO_LABEL : "";
       if (branchPrompt?.kind === "connection") {
         createEdge(branchPrompt.connection, label);
-      } else if (branchPrompt?.kind === "edge") {
-        const edgeId = branchPrompt.edgeId;
-        setEdges((current) =>
-          current.map((edge) =>
-            edge.id === edgeId ? { ...edge, label: label || undefined } : edge,
+      } else if (branchPrompt?.kind === "pendingInsert") {
+        // 보류했던 삽입을 이제 적용 — fresh 엣지에 분기 라벨 부여.
+        const { nextEdges, freshId } = branchPrompt;
+        setEdges(
+          nextEdges.map((edge) =>
+            edge.id === freshId ? { ...edge, label: label || undefined } : edge,
           ),
         );
         scheduleAutoSave();
@@ -2677,14 +2680,21 @@ function MapEditor({ mapId }: { mapId: number }) {
           : insertNodeAfter(current, aId, bId, rewire, isDecision(bId));
       // 삽입/재연결로 끝점이 하위프로세스가 된 엣지는 전용 핸들(in/__primary__)로 보정 — 안 그러면 RF가 못 붙임.
       const next = inserted.map((edge) => withSubprocessHandles(edge, isSubprocess));
-      setEdges(next);
-      // 마름모에서 새로 출발하는(라벨 없는) 엣지가 생겼으면 분기 라벨 모달을 띄운다.
+      // 마름모에서 새로 출발하는(라벨 없는) 엣지가 생기면, 분기 선택 전엔 삽입을 적용하지 않는다
+      // (엣지가 먼저 보이지 않도록). 픽 시 삽입 전체를 라벨과 함께 적용, 취소 시 미적용.
       const beforeIds = new Set(current.map((edge) => edge.id));
       const fresh = next.find(
         (edge) => !beforeIds.has(edge.id) && !edge.label && isDecision(edge.source),
       );
       if (fresh) {
-        setBranchPrompt({ kind: "edge", edgeId: fresh.id, at: { ...pointerScreenRef.current } });
+        setBranchPrompt({
+          kind: "pendingInsert",
+          nextEdges: next,
+          freshId: fresh.id,
+          at: { ...pointerScreenRef.current },
+        });
+      } else {
+        setEdges(next);
       }
       scheduleAutoSave();
     },

@@ -6,6 +6,11 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9 fix: 결정 노드 분기 엣지를 브랜치 선택 후 생성(노드 드롭 경로)
+- **`page.tsx`** — 노드 드롭 삽입(`applyFlowEdges`)이 마름모(decision)에서 나가는 fresh 엣지를 만들 때, 기존엔 엣지를 먼저 만들고(`setEdges(next)`) 분기 라벨 모달을 띄웠다(사용자 지적: "엣지가 먼저 생성됨"). 이제 fresh 결정-소스 엣지가 있으면 **삽입 전체를 보류**(setEdges 미실행)하고 `branchPrompt.kind:"pendingInsert"`(nextEdges·freshId 보관)로 모달만 띄운다. 선택 시 `handlePickBranch`가 nextEdges에 라벨을 얹어 삽입 적용, 취소 시 미적용(엣지 안 생김). 핸들 드래그(`onConnect` kind "connection")는 이미 선택 후 생성이라 무변경. 원자적 삽입이 반쯤 적용돼 깨지지 않도록 fresh 하나만이 아닌 삽입 전체를 미룸. 기존 kind "edge"(선생성 후 라벨)는 제거.
+- 참고: 취소 시 드롭된 노드 위치(placeBeside)는 유지(엣지만 미생성).
+- 검증: lint 0 errors·build OK(TS 유니온 타입 컴파일 통과). 실제 드롭 런타임 동작 시현은 후속(사용자 드롭 테스트).
+
 ## 2026-07-04 — R9f: EdgeBranchModal 재디자인(Yes/No/Other 3열 아이콘 타일)
 - **`edge-branch-modal.tsx`** — 디시전/액션과 동일 체계: 헤더(uppercase 캡션 + 우상단 X) → 3열 경계 아이콘 타일 → 하단 Cancel. 커스텀 애니 SVG — **Yes**: 체크 그려짐(브랜치 블루 `--color-branch-yes`), **No**: 엑스 그려짐(브랜치 레드 `--color-branch-no`), **Other**: 점 3개 순차 팝(중립 ink-tertiary). Yes/No 색은 실제 캔버스 분기 엣지 색과 일치(데이터 색 → 토큰 규칙 예외). `BranchTile` 서브컴포넌트로 hover 아이콘 재생. 정지 상태도 그려진 최종형. position 중앙 폴백 보존.
 - **`globals.css`** — `edge-br-check`/`edge-br-x1`/`edge-br-x2`/`edge-br-dot1~3` 클래스 추가(기존 `edge-branch-draw`/`edge-pop-in` 키프레임 재사용), reduced-motion 가드 포함.
