@@ -6,6 +6,12 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R9f follow-up: 분기 출력 엣지 인스펙터 Yes/No/Other를 브랜치 타일 디자인으로 통일
+- **`branch-icon.tsx`(신규)** — 분기 아이콘 공용 컴포넌트 `BranchGlyph`(kind/replayKey/size) 추출(EdgeBranchModal·인스펙터 공용, DRY). Yes=체크(브랜치 블루)·No=엑스(브랜치 레드)·Other=점 3개, globals.css `.edge-br-*` 애니 재사용.
+- **`edge-branch-modal.tsx`** — 인라인 BranchIcon 제거, 공용 `BranchGlyph` 사용(동작 동일).
+- **`page.tsx`** — 인스펙터 분기 선택 3버튼을 텍스트→**아이콘(BranchGlyph 20px)+라벨** flex-col 타일로 통일, 선택 상태 border-accent/bg-accent-tint/text-accent. `font-medium`(weight 500·디자인 규칙 위반) 제거.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — R9 fix: 결정 노드 분기 엣지를 브랜치 선택 후 생성(노드 드롭 경로)
 - **`page.tsx`** — 노드 드롭 삽입(`applyFlowEdges`)이 마름모(decision)에서 나가는 fresh 엣지를 만들 때, 기존엔 엣지를 먼저 만들고(`setEdges(next)`) 분기 라벨 모달을 띄웠다(사용자 지적: "엣지가 먼저 생성됨"). 이제 fresh 결정-소스 엣지가 있으면 **삽입 전체를 보류**(setEdges 미실행)하고 `branchPrompt.kind:"pendingInsert"`(nextEdges·freshId 보관)로 모달만 띄운다. 선택 시 `handlePickBranch`가 nextEdges에 라벨을 얹어 삽입 적용, 취소 시 미적용(엣지 안 생김). 핸들 드래그(`onConnect` kind "connection")는 이미 선택 후 생성이라 무변경. 원자적 삽입이 반쯤 적용돼 깨지지 않도록 fresh 하나만이 아닌 삽입 전체를 미룸. 기존 kind "edge"(선생성 후 라벨)는 제거.
 - 참고: 취소 시 드롭된 노드 위치(placeBeside)는 유지(엣지만 미생성).

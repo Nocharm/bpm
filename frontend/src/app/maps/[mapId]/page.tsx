@@ -37,6 +37,7 @@ import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
 import { CommentSection } from "@/components/comment-section";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
@@ -6784,12 +6785,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 type="button"
                                 disabled={readOnly}
                                 onClick={() => setSelectedEdgeBranch(kind)}
-                                className={`rounded-sm border px-2 py-1.5 text-caption ${
+                                className={`flex flex-col items-center justify-center gap-1 rounded-sm border px-2 py-2 text-caption transition-colors ${
                                   selectedEdgeBranch === kind
-                                    ? "border-accent bg-accent-tint font-medium text-accent"
+                                    ? "border-accent bg-accent-tint text-accent"
                                     : "border-hairline text-ink hover:bg-surface-alt"
                                 }`}
                               >
+                                <BranchGlyph kind={kind} size={20} />
                                 {label}
                               </button>
                             ))}

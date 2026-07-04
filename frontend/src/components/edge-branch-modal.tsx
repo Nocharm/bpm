@@ -9,40 +9,11 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+import { BranchGlyph } from "@/components/branch-icon";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { clampToViewport } from "@/lib/clamp-viewport";
 import type { BranchKind } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
-
-// Yes/No는 실제 캔버스 분기 엣지와 같은 브랜치 색(데이터 색 — 토큰 규칙 예외). Other는 중립.
-const BRANCH_YES = { stroke: "var(--color-branch-yes)" };
-const BRANCH_NO = { stroke: "var(--color-branch-no)" };
-
-// 분기별 아이콘 — replayKey 변경 시 SVG 리마운트→재생. 정지 상태(애니 없이)도 완성된 아이콘.
-function BranchIcon({ kind, replayKey }: { kind: BranchKind; replayKey: number }) {
-  if (kind === "yes") {
-    return (
-      <svg key={replayKey} width={24} height={24} viewBox="0 0 24 24" fill="none" style={BRANCH_YES} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path className="edge-br-check" pathLength={1} d="M20 6 L9 17 L4 12" />
-      </svg>
-    );
-  }
-  if (kind === "no") {
-    return (
-      <svg key={replayKey} width={24} height={24} viewBox="0 0 24 24" fill="none" style={BRANCH_NO} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path className="edge-br-x1" pathLength={1} d="M18 6 L6 18" />
-        <path className="edge-br-x2" pathLength={1} d="M6 6 L18 18" />
-      </svg>
-    );
-  }
-  return (
-    <svg key={replayKey} className="text-ink-tertiary" width={24} height={24} viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden>
-      <circle className="edge-br-dot edge-br-dot1" cx="5" cy="12" r="2" />
-      <circle className="edge-br-dot edge-br-dot2" cx="12" cy="12" r="2" />
-      <circle className="edge-br-dot edge-br-dot3" cx="19" cy="12" r="2" />
-    </svg>
-  );
-}
 
 // 분기 타일 — 자체 replay state로 hover 시 아이콘만 재생.
 function BranchTile({
@@ -65,7 +36,7 @@ function BranchTile({
       onMouseEnter={() => setReplay((k) => k + 1)}
       onClick={() => onPick(kind)}
     >
-      <BranchIcon kind={kind} replayKey={replay} />
+      <BranchGlyph kind={kind} replayKey={replay} />
       {label}
     </button>
   );
