@@ -6337,7 +6337,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               type="button"
               title={t("ai.title")}
               aria-label={t("ai.title")}
-              className="absolute z-[1095] flex h-11 w-11 touch-none items-center justify-center rounded-md bg-accent text-on-accent shadow-lg hover:bg-accent-focus"
+              className="absolute z-[1095] flex h-11 w-11 touch-none items-center justify-center rounded-md bg-accent text-on-accent shadow-md transition-shadow hover:bg-accent-focus hover:shadow-lg"
               style={{ left: aiMinPos.x, top: aiMinPos.y }}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
@@ -6364,11 +6364,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                 const drag = aiMinDragRef.current;
                 aiMinDragRef.current = null;
                 event.currentTarget.releasePointerCapture(event.pointerId);
-                // 드래그가 아니면(제자리 클릭) 창 복원
+                // 드래그가 아니면(제자리 클릭) 창 복원 — 버튼 위치에서 펴지되 캔버스 안에 들어오게 클램프
                 if (drag && !drag.moved) {
                   setWindowGeom((map) => {
                     const base = map[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds);
-                    return { ...map, [AI_WINDOW_KEY]: { ...base, minimized: false } };
+                    const x = Math.min(Math.max(aiMinPos.x, 0), Math.max(0, bounds.w - base.w));
+                    const y = Math.min(Math.max(aiMinPos.y, 0), Math.max(0, bounds.h - base.h));
+                    return { ...map, [AI_WINDOW_KEY]: { ...base, x, y, minimized: false } };
                   });
                 }
               }}
@@ -6572,6 +6574,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                 setWindowGeom((map) => ({ ...map, [AI_WINDOW_KEY]: next }))
               }
               onClose={() => setAiOpen(false)}
+              onMinimize={(clientX, clientY) => {
+                // 최소화 아이콘을 현재 마우스 위치(캔버스 상대, 44px 중앙 정렬)에 배치
+                const rect = canvasContainerRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                setAiMinPos({
+                  x: Math.min(Math.max(clientX - rect.left - 22, 0), Math.max(0, bounds.w - 44)),
+                  y: Math.min(Math.max(clientY - rect.top - 22, 0), Math.max(0, bounds.h - 44)),
+                });
+              }}
             >
               <AiChatPanel
                 versionId={versionId}

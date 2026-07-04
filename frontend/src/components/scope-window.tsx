@@ -35,6 +35,7 @@ interface ScopeWindowProps {
   onFocus: () => void;
   onGeomChange: (geom: WindowGeom) => void;
   onClose: () => void;
+  onMinimize?: (clientX: number, clientY: number) => void; // 최소화 시점의 포인터 위치 전달
   children: ReactNode;
 }
 
@@ -49,6 +50,7 @@ export function ScopeWindow({
   onFocus,
   onGeomChange,
   onClose,
+  onMinimize,
   children,
 }: ScopeWindowProps) {
   const { t } = useI18n();
@@ -186,6 +188,7 @@ export function ScopeWindow({
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
+            if (!geom.minimized) onMinimize?.(event.clientX, event.clientY);
             toggleMin();
           }}
         >

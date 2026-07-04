@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowUp,
   ArrowUpRight,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -274,7 +275,7 @@ export function AiChatPanel({
           )}
         </ul>
         {findings.length > 0 && (
-          <div className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 flex max-w-[80%] flex-col gap-2">
             <span className="flex items-center gap-1.5 px-0.5 text-caption-strong text-ink">
               <Search size={14} strokeWidth={1.6} className="text-accent" />
               {t("ai.analysisTitle")}
@@ -302,7 +303,7 @@ export function AiChatPanel({
                 <button
                   key={`finding-${index}`}
                   type="button"
-                  className={`group flex w-full gap-2.5 rounded-sm border border-l-[3px] border-hairline ${rail} bg-surface p-2.5 text-left shadow-sm hover:bg-surface-alt disabled:opacity-60`}
+                  className={`group flex w-full gap-2.5 rounded-xs border border-l-[3px] border-hairline ${rail} bg-surface p-2.5 text-left shadow-sm hover:bg-surface-alt disabled:opacity-60`}
                   onClick={() => onHighlightNode(finding.node_ids[0])}
                   disabled={finding.node_ids.length === 0}
                 >
@@ -349,7 +350,7 @@ export function AiChatPanel({
           </div>
         )}
         {steps.length > 0 && (
-          <div className="mt-3 overflow-hidden rounded-sm border border-hairline bg-surface shadow-sm">
+          <div className="mt-3 max-w-[80%] overflow-hidden rounded-sm border border-hairline bg-surface shadow-sm">
             <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
               <span className="flex items-center gap-1.5 text-caption-strong text-ink">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
@@ -420,27 +421,32 @@ export function AiChatPanel({
         )}
         {/* graph/ops 제안 미리보기 — 캔버스에 적용된 미리보기를 채팅 안에서 커밋/취소 */}
         {aiPreviewActive && (
-          <div className="ml-7 mt-3 rounded-sm border border-accent-tint-border bg-surface-pearl p-2.5 shadow-sm">
-            <div className="flex items-center gap-1.5 text-fine font-semibold text-accent">
-              <Sparkles size={13} strokeWidth={1.7} />
-              {t("ai.previewTitle")}
+          <div className="mt-3 max-w-[80%] overflow-hidden rounded-sm border border-accent-tint-border bg-surface shadow-md">
+            <div className="flex items-center gap-2 border-b border-accent-tint-border bg-accent-tint px-2.5 py-1.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-on-accent">
+                <Sparkles size={12} strokeWidth={1.8} />
+              </span>
+              <span className="text-caption-strong text-accent">{t("ai.previewTitle")}</span>
             </div>
-            <p className="mt-1 text-fine text-ink">{t("ai.previewHint")}</p>
-            <div className="mt-2.5 flex gap-1.5">
-              <button
-                type="button"
-                onClick={onCommitPreview}
-                className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-              >
-                {t("ai.previewAdd")}
-              </button>
-              <button
-                type="button"
-                onClick={onDiscardPreview}
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-              >
-                {t("approvers.cancel")}
-              </button>
+            <div className="p-2.5">
+              <p className="text-fine leading-relaxed text-ink">{t("ai.previewHint")}</p>
+              <div className="mt-2.5 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={onCommitPreview}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+                >
+                  <Check size={14} strokeWidth={1.8} />
+                  {t("ai.previewAdd")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onDiscardPreview}
+                  className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                >
+                  {t("approvers.cancel")}
+                </button>
+              </div>
             </div>
           </div>
         )}
