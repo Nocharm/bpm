@@ -10,6 +10,20 @@ import type { WindowGeom } from "@/lib/window-store";
 const MIN_W = 240;
 const MIN_H = 160;
 
+type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+// 8방향 리사이즈 핸들 — 변(한 축)은 코너 사이, 코너(두 축)는 변 위에 오도록 뒤에 배치.
+const RESIZE_HANDLES: { dir: ResizeDir; className: string }[] = [
+  { dir: "n", className: "left-2 right-2 top-0 h-1.5 cursor-ns-resize" },
+  { dir: "s", className: "bottom-0 left-2 right-2 h-1.5 cursor-ns-resize" },
+  { dir: "w", className: "bottom-2 left-0 top-2 w-1.5 cursor-ew-resize" },
+  { dir: "e", className: "bottom-2 right-0 top-2 w-1.5 cursor-ew-resize" },
+  { dir: "nw", className: "left-0 top-0 h-2.5 w-2.5 cursor-nwse-resize" },
+  { dir: "ne", className: "right-0 top-0 h-2.5 w-2.5 cursor-nesw-resize" },
+  { dir: "sw", className: "bottom-0 left-0 h-2.5 w-2.5 cursor-nesw-resize" },
+  { dir: "se", className: "bottom-0 right-0 h-2.5 w-2.5 cursor-nwse-resize" },
+];
+
 interface ScopeWindowProps {
   title: string;
   geom: WindowGeom;
@@ -39,7 +53,7 @@ export function ScopeWindow({
 }: ScopeWindowProps) {
   const { t } = useI18n();
   // 드래그/리사이즈 시작 시점의 포인터·기하 스냅샷
-  const dragRef = useRef<{ px: number; py: number; geom: WindowGeom } | null>(null);
+  const dragRef = useRef<{ px: number; py: number; geom: WindowGeom; dir?: ResizeDir } | null>(null);
 
   const clamp = (g: WindowGeom): WindowGeom => {
     const w = Math.min(Math.max(g.w, MIN_W), Math.max(MIN_W, bounds.w));
@@ -69,18 +83,46 @@ export function ScopeWindow({
       }),
     );
   };
-  const resizeWindow = (event: ReactPointerEvent) => {
-    const start = dragRef.current;
-    if (!start) {
+  const startResize = (event: ReactPointerEvent, dir: ResizeDir) => {
+    if (geom.maximized) {
       return;
     }
-    onGeomChange(
-      clamp({
-        ...start.geom,
-        w: start.geom.w + (event.clientX - start.px),
-        h: start.geom.h + (event.clientY - start.py),
-      }),
-    );
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { px: event.clientX, py: event.clientY, geom, dir };
+  };
+  // 잡은 모서리 반대쪽을 고정하고 드래그한 방향으로만 크기 변경. 마우스가 화면(bounds)을
+  // 벗어나도 반대 모서리는 움직이지 않고 그 지점에서 멈춘다. 최대 폭은 캔버스 폭의 절반.
+  const resizeWindow = (event: ReactPointerEvent) => {
+    const start = dragRef.current;
+    if (!start || !start.dir) {
+      return;
+    }
+    const g = start.geom;
+    const dx = event.clientX - start.px;
+    const dy = event.clientY - start.py;
+    const maxW = Math.max(MIN_W, Math.floor(bounds.w / 2));
+    const dir = start.dir;
+    let { x, y, w, h } = g;
+    if (dir.includes("e")) {
+      // 오른쪽 끝을 마우스로, 왼쪽(x) 고정 — 화면·maxW 넘으면 정지
+      w = Math.min(Math.max(g.w + dx, MIN_W), Math.min(maxW, bounds.w - g.x));
+    }
+    if (dir.includes("w")) {
+      // 왼쪽 끝을 마우스로, 오른쪽(x+w) 고정
+      const right = g.x + g.w;
+      x = Math.min(Math.max(g.x + dx, Math.max(0, right - maxW)), right - MIN_W);
+      w = right - x;
+    }
+    if (dir.includes("s")) {
+      h = Math.min(Math.max(g.h + dy, MIN_H), bounds.h - g.y);
+    }
+    if (dir.includes("n")) {
+      const bottom = g.y + g.h;
+      y = Math.min(Math.max(g.y + dy, 0), bottom - MIN_H);
+      h = bottom - y;
+    }
+    onGeomChange({ ...g, x, y, w, h });
   };
   const endDrag = (event: ReactPointerEvent) => {
     if (dragRef.current) {
@@ -186,15 +228,17 @@ export function ScopeWindow({
         )}
       </div>
 
-      {!geom.maximized && (
-        <div
-          className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize"
-          onPointerDown={startDrag}
-          onPointerMove={resizeWindow}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        />
-      )}
+      {!geom.maximized &&
+        RESIZE_HANDLES.map((handle) => (
+          <div
+            key={handle.dir}
+            className={`absolute ${handle.className}`}
+            onPointerDown={(event) => startResize(event, handle.dir)}
+            onPointerMove={resizeWindow}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          />
+        ))}
     </div>
   );
 }

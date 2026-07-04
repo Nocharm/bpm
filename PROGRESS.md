@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — ScopeWindow: 8방향 리사이즈 + 방향고정 + 최대폭 절반
+- **`scope-window.tsx`** — 리사이즈 핸들을 se 1곳 → **8방향(4모서리+4변)**. 잡은 지점의 반대쪽을 고정하고 **드래그한 방향으로만** 크기 변경 — 기존엔 우측 배치 창을 우로 드래그하면 `clamp`가 x를 밀어 창이 좌측으로 커지던 버그 수정. 마우스가 화면(bounds) 밖으로 나가도 반대 모서리는 그 자리에서 정지. **최대 폭 = 캔버스(사이드바 제외) 폭의 절반**(`bounds.w/2`). AI 패널·딥뷰 창 공통.
+- R10b-2 확인용: `page.tsx` `aiPreviewActive` 초기값 TEMP `true`(미리보기 툴바 노출) — 커밋 제외.
+- 검증: lint 0 errors·build OK. 리사이즈 동작 시각 확인은 사용자 진행.
+
 ## 2026-07-04 — R10b-2: AI 제안 미리보기 툴바 재스타일 (R10b 완료)
 - **`page.tsx`** — graph/ops 제안 미리보기 툴바(`aiPreviewActive`)를 ✦ Sparkles + "AI 제안 미리보기" 라벨 + **[✓ 맵에 추가](accent 필)** / **[✕ 취소](ghost)**로 재스타일(hairline 테두리). commit/discard 배선 유지.
 - **`i18n-messages.ts`** — `ai.previewTitle`(AI 제안 미리보기)·`ai.previewAdd`(맵에 추가).
