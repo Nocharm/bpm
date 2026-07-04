@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — AI 창 헤더/테두리 프리뷰 정합 (경계 페이드·더블클릭 최대화 제거·아이콘 확대)
+- **`scope-window.tsx`** — 창 테두리 진하게(active `border-ink-tertiary/30`). 커스텀 헤더(`headerLeft`) 시 배경 `bg-surface`·패딩 확대(px-3 py-2.5, 프리뷰 정합). **헤더 더블클릭 최대화 제거**(폰트＋ 더블클릭 버블링 오작동 방지). `canMaximize`(기본 true)로 최대화 버튼 조건부 — AI 창은 숨김(간소화). 컨트롤 아이콘 확대(14→16·패딩 p-1).
+- **`ai-chat-panel.tsx`** — 스레드 상단 **페이드 그라데이션**(헤더 경계 근처 내용이 선에서 끊기지 않고 흐려짐) + 상단 패딩(pt-4).
+- **`page.tsx`** — AI 창 `canMaximize={false}`. 헤더 아이콘 확대(배지 18·연필 14·폰트±14·추출 18).
+- 검증: 브라우저 — 흰 헤더·회색 서브타이틀·−A＋/추출/최소/닫기(최대화 없음)·경계 페이드·진한 테두리 확인. lint 0·build OK.
+
 ## 2026-07-04 — R10d3 헤더 + 폰트조절 + 입력 재구성 (R10d 완료)
 - **헤더 재디자인** (`scope-window.tsx` 슬롯 + `page.tsx`) — ScopeWindow에 `headerLeft`/`headerActions` 슬롯 추가. AI 창 헤더: ✦ accent 배지 + **답변 키워드 자동 타이틀**(마지막 어시스턴트 답변 첫 헤딩, `onAutoTitle`) + **✎ 변경**(수동 편집 시 고정) + 회색 소형 서브타이틀(맵·버전) + **−A＋ 폰트 배율** + 추출(FileDown)/최소/최대/닫기.
 - **폰트 상대 배율** (`ai-chat-panel.tsx`) — 헤더 −A＋로 스레드 `zoom`(0.8~1.4) 조절.

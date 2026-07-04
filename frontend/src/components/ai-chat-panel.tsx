@@ -254,6 +254,8 @@ export function AiChatPanel({
         </div>
       )}
       <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* 헤더 경계 근처 페이드 — 스크롤 시 내용이 선에서 끊기지 않고 흐려지는 효과 */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-gradient-to-b from-surface to-transparent" />
       <div
         ref={scrollRef}
         onScroll={() => {
@@ -262,7 +264,7 @@ export function AiChatPanel({
         }}
         onCopy={() => onToast?.(t("ai.copied"))}
         style={{ zoom: fontScale }}
-        className="scrollbar-hidden min-h-0 flex-1 select-text overflow-y-auto p-3"
+        className="scrollbar-hidden min-h-0 flex-1 select-text overflow-y-auto p-3 pt-4"
       >
         {!aiEnabled && (
           <p className="mb-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-tertiary">

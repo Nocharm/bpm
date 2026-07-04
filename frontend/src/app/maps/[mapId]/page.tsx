@@ -6579,6 +6579,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               active
               zIndex={1090}
               canClose
+              canMaximize={false}
               bounds={bounds}
               onFocus={() => {}}
               onGeomChange={(next) =>
@@ -6596,8 +6597,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               }}
               headerLeft={
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-accent text-on-accent">
-                    <Sparkles size={16} strokeWidth={1.6} />
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-accent text-on-accent">
+                    <Sparkles size={18} strokeWidth={1.6} />
                   </span>
                   <div className="min-w-0 flex-1 leading-tight">
                     {aiTitleEditing ? (
@@ -6628,7 +6629,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           }}
                           className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
                         >
-                          <Pencil size={12} strokeWidth={1.6} />
+                          <Pencil size={14} strokeWidth={1.6} />
                         </button>
                       </div>
                     )}
@@ -6651,20 +6652,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onClick={() =>
                         setAiFontScale((scale) => Math.max(0.8, Math.round((scale - 0.1) * 10) / 10))
                       }
-                      className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-pearl"
+                      className="px-1.5 py-1 text-ink-secondary hover:bg-surface-pearl"
                     >
-                      <Minus size={12} strokeWidth={1.8} />
+                      <Minus size={14} strokeWidth={1.8} />
                     </button>
-                    <span className="px-1 text-fine text-ink-secondary">A</span>
+                    <span className="px-1 text-caption text-ink-secondary">A</span>
                     <button
                       type="button"
                       title={t("ai.fontLarger")}
                       onClick={() =>
                         setAiFontScale((scale) => Math.min(1.4, Math.round((scale + 0.1) * 10) / 10))
                       }
-                      className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-pearl"
+                      className="px-1.5 py-1 text-ink-secondary hover:bg-surface-pearl"
                     >
-                      <Plus size={12} strokeWidth={1.8} />
+                      <Plus size={14} strokeWidth={1.8} />
                     </button>
                   </div>
                   <button
@@ -6673,7 +6674,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     onClick={() => showToast(t("ai.comingSoon"))}
                     className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
                   >
-                    <FileDown size={16} strokeWidth={1.5} />
+                    <FileDown size={18} strokeWidth={1.5} />
                   </button>
                 </div>
               }

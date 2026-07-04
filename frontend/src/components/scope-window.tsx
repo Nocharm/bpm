@@ -30,6 +30,7 @@ interface ScopeWindowProps {
   active: boolean;
   zIndex: number;
   canClose: boolean;
+  canMaximize?: boolean; // 최대화 버튼 노출(기본 true) — AI 창은 헤더 간소화로 숨김
   chromeless?: boolean; // 최상위(루트) 프로세스 — 항상 최대화, 타이틀바/리사이즈 없이 제목 칩만
   bounds: { w: number; h: number };
   onFocus: () => void;
@@ -47,6 +48,7 @@ export function ScopeWindow({
   active,
   zIndex,
   canClose,
+  canMaximize = true,
   chromeless = false,
   bounds,
   onFocus,
@@ -170,26 +172,27 @@ export function ScopeWindow({
   return (
     <div
       className={`window-open absolute flex flex-col overflow-hidden rounded-sm border bg-surface shadow-md ${
-        active ? "border-hairline" : "border-divider"
+        active ? "border-ink-tertiary/30" : "border-hairline"
       }`}
       style={{ ...rect, zIndex }}
       onPointerDown={onFocus}
     >
       <div
-        className="flex shrink-0 select-none items-center gap-1 border-b border-hairline bg-surface-alt px-2 py-1 text-fine text-ink-secondary"
+        className={`flex shrink-0 select-none items-center border-b border-hairline text-fine text-ink-secondary ${
+          headerLeft ? "gap-2 bg-surface px-3 py-2.5" : "gap-1 bg-surface-alt px-2 py-1"
+        }`}
         style={{ cursor: geom.maximized ? "default" : "move" }}
         onPointerDown={startDrag}
         onPointerMove={moveWindow}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        onDoubleClick={toggleMax}
       >
         {headerLeft ?? <span className="flex-1 truncate font-medium">{title}</span>}
         {headerActions}
         <button
           type="button"
           title={t("window.minimize")}
-          className="rounded-xs p-0.5 hover:bg-surface-pearl"
+          className="rounded-xs p-1 hover:bg-surface-pearl"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -197,32 +200,34 @@ export function ScopeWindow({
             toggleMin();
           }}
         >
-          <Minus size={14} strokeWidth={1.5} />
+          <Minus size={16} strokeWidth={1.5} />
         </button>
-        <button
-          type="button"
-          title={t("window.maximize")}
-          className="rounded-xs p-0.5 hover:bg-surface-pearl"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            toggleMax();
-          }}
-        >
-          <Square size={12} strokeWidth={1.5} />
-        </button>
+        {canMaximize && (
+          <button
+            type="button"
+            title={t("window.maximize")}
+            className="rounded-xs p-1 hover:bg-surface-pearl"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleMax();
+            }}
+          >
+            <Square size={14} strokeWidth={1.5} />
+          </button>
+        )}
         {canClose && (
           <button
             type="button"
             title={t("window.close")}
-            className="rounded-xs p-0.5 hover:bg-error/10 hover:text-error"
+            className="rounded-xs p-1 hover:bg-error/10 hover:text-error"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
               onClose();
             }}
           >
-            <X size={14} strokeWidth={1.5} />
+            <X size={16} strokeWidth={1.5} />
           </button>
         )}
       </div>
