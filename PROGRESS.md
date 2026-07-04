@@ -6,6 +6,13 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — 노드 속성 후속 4건: 플라이아웃 마우스위치·포털 / None 통일 / 사이드바 폭 / 부서 우측정렬
+- **`search-select.tsx`** — addMode 플라이아웃을 **클릭 마우스 위치**에 **document.body 포털(fixed)**로 렌더. 편집 모달의 transform 조상 때문에 fixed가 어긋나 캔버스 밖으로 나가며 회색영역이 뜨던 문제 해소(인스펙터는 원래 OK, 이제 둘 다 정상). 화면 넘치면 좌/상으로 접음.
+- **`i18n-messages.ts`** — `summary.none` ko "없음" → **"None"**(한영 상관없이 None).
+- **`bpm-attribute-picker.tsx`·`page.tsx`** — 빈 값 placeholder `—` → `t("summary.none")`(None). BPM 부서 select를 **고정폭(w-44) 우측정렬**.
+- **`page.tsx`** — 인스펙터 폭 기본 320→**360**, 최소 220→**300**, 최대 480→520(불러오기 클램프 동일).
+- 검증: 프론트 lint 0 errors·build OK. 런타임 인앱 확인 후속.
+
 ## 2026-07-04 — 우측 인스펙터 노드 속성에도 편집 모달 디자인 적용 + 플라이아웃 간격 축소
 - **`search-select.tsx`** — addMode 플라이아웃 간격 8→4px(트리거 바로 우측에 붙게, 모달과 멀리 떨어지던 문제).
 - **`page.tsx` 인스펙터 노드 폼** — (1) **설명** 섹션을 읽기전용 **회색**(내용만 노출, 편집은 편집 모달에서만) 추가. (2) 유형·색을 라벨좌·필드 **우측정렬**·세로중앙·**구분선** 행으로(색 swatch hover 연보라 링, hex 인라인). (3) **BPM 박스는 유지**하고 안 내용만 디자인 변경. 코멘트는 인스펙터에 없음(제외).

@@ -1113,7 +1113,7 @@ const ko: Record<MessageKey, string> = {
   "summary.saveAndGo": "저장하고 이동",
   "summary.discardAndGo": "저장 안 함",
   "summary.addError": "코멘트 등록에 실패했습니다",
-  "summary.none": "없음",
+  "summary.none": "None",
   "summary.type": "유형",
   "summary.group": "그룹",
   "summary.close": "닫기",

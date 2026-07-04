@@ -3,10 +3,11 @@
 // 검색 드롭다운 — 옵션 목록을 검색어로 필터 + 매치 하이라이트, 선택 시 value 저장 (F5 담당자/부서).
 // 자유입력 불가(목록에서만 선택). 기존 값이 옵션에 없으면 버튼에 그대로 표시(레거시 보존).
 // SR: 키 내비(Tab/↓ 다음, ↑/Shift+Tab 이전, Enter 선택) · 드롭다운은 absolute overlay라 입력창 위치 불변.
-// addMode: 트리거를 ＋아이콘으로, 플라이아웃을 트리거 우측(공간 없으면 좌측)에 fixed로 띄운다 — 모달 overflow에
-//   클리핑되지 않고(fixed는 스크롤 컨테이너에 안 잘림) 아래 필드를 가리지 않게. (담당자 추가용)
+// addMode: 트리거를 ＋아이콘으로, 플라이아웃을 "클릭한 마우스 위치"에 document.body 포털로 fixed 렌더.
+//   포털이라 모달(transform 조상)의 좌표계 영향을 안 받고, 화면 넘치면 좌/상으로 접어 캔버스 밖으로 안 나감.
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Plus } from "lucide-react";
 
 import { Highlight } from "@/components/highlight";
@@ -20,6 +21,7 @@ export interface SelectOption {
 }
 
 const FLYOUT_W = 224; // w-56
+const FLYOUT_H = 300; // 대략 높이(화면 하단 클램프용)
 
 export function SearchSelect({
   value,
@@ -34,15 +36,14 @@ export function SearchSelect({
   emptyLabel: string; // 미지정 옵션 라벨
   placeholder: string; // 검색 입력 placeholder
   onChange: (value: string) => void;
-  // true면 ＋아이콘 트리거 + 우측 fixed 플라이아웃(담당자 추가용).
+  // true면 ＋아이콘 트리거 + 마우스 위치 포털 플라이아웃(담당자 추가용).
   addMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0); // 0=미지정, 1..n=hits
   const listRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  // addMode 플라이아웃의 fixed 좌표(트리거 rect 기준).
+  // addMode 플라이아웃의 fixed 좌표(클릭 마우스 위치 기준).
   const [flyoutPos, setFlyoutPos] = useState<{ left: number; top: number } | null>(null);
 
   // 검색은 label + keywords만 — sub(부서 등)는 표시 전용(검색 제외).
@@ -56,14 +57,11 @@ export function SearchSelect({
   const current = options.find((option) => option.value === value);
   const display = current ? current.label : value || emptyLabel;
 
-  const openMenu = () => {
-    if (addMode && triggerRef.current) {
-      const r = triggerRef.current.getBoundingClientRect();
-      // 트리거 바로 우측에 붙임(간격 최소). 공간 없으면 좌측으로, 아래로 넘치면 위로 당김.
-      const left = r.right + 4 + FLYOUT_W > window.innerWidth ? r.left - 4 - FLYOUT_W : r.right + 4;
-      const top = Math.max(8, Math.min(r.top, window.innerHeight - 280));
-      setFlyoutPos({ left, top });
-    }
+  // addMode — 클릭 마우스 위치에 플라이아웃(화면 넘치면 좌/상으로 접음).
+  const openAt = (clientX: number, clientY: number) => {
+    const left = clientX + FLYOUT_W + 8 > window.innerWidth ? Math.max(8, clientX - FLYOUT_W) : clientX;
+    const top = Math.max(8, Math.min(clientY, window.innerHeight - FLYOUT_H));
+    setFlyoutPos({ left, top });
     setOpen(true);
     setQuery("");
     setActive(0);
@@ -93,11 +91,66 @@ export function SearchSelect({
     }
   };
 
+  // 플라이아웃 내용 — addMode(포털·fixed)와 기본(absolute·버튼 아래) 공용.
+  const menu = (
+    <>
+      <input
+        autoFocus
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setActive(0);
+        }}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        className="mx-2 mb-1 w-[calc(100%-1rem)] rounded-sm border border-hairline px-2 py-1 text-fine text-ink outline-none"
+      />
+      <div ref={listRef} className="max-h-56 overflow-y-auto">
+        {/* 미지정 (index 0) */}
+        <button
+          type="button"
+          className={`block w-full px-3 py-1 text-left text-caption text-ink-tertiary hover:bg-surface-alt ${
+            active === 0 ? "bg-surface-alt" : ""
+          }`}
+          onMouseEnter={() => setActive(0)}
+          onClick={() => pick(0)}
+        >
+          {emptyLabel}
+        </button>
+        {hits.length === 0 ? (
+          <p className="px-3 py-1 text-fine text-ink-tertiary">…</p>
+        ) : (
+          hits.map(({ item, matches }, idx) => {
+            const labelRanges = matches.find((m) => m.field === "label")?.ranges ?? [];
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className={`flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-caption text-ink hover:bg-surface-alt ${
+                  active === idx + 1 ? "bg-surface-alt" : ""
+                }`}
+                onMouseEnter={() => setActive(idx + 1)}
+                onClick={() => pick(idx + 1)}
+              >
+                <span className="min-w-0 truncate">
+                  <Highlight text={item.label} ranges={labelRanges} />
+                  {item.sub && <span className="ml-1 text-fine text-ink-tertiary">· {item.sub}</span>}
+                </span>
+                {item.value === value && (
+                  <Check size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+                )}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className={addMode ? "relative shrink-0" : "relative min-w-0 flex-1"}>
       {addMode ? (
         <button
-          ref={triggerRef}
           type="button"
           aria-label={placeholder}
           title={placeholder}
@@ -106,7 +159,7 @@ export function SearchSelect({
               ? "border-solid border-accent bg-accent-tint text-accent"
               : "border-dashed border-hairline text-ink-tertiary hover:border-solid hover:border-accent hover:text-accent"
           }`}
-          onClick={() => (open ? setOpen(false) : openMenu())}
+          onClick={(event) => (open ? setOpen(false) : openAt(event.clientX, event.clientY))}
         >
           <Plus size={14} strokeWidth={1.5} />
         </button>
@@ -125,72 +178,31 @@ export function SearchSelect({
         </button>
       )}
 
-      {open && (
-        <>
-          {/* 바깥 클릭 닫기 */}
-          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-          {/* addMode: 트리거 우측 fixed(모달 overflow 미클리핑) / 기본: 버튼 아래 absolute(주변 레이아웃 불변) */}
-          <div
-            className={
-              addMode
-                ? "fixed z-[1001] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
-                : "absolute left-0 z-[1001] mt-1 w-full min-w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
-            }
-            style={addMode && flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
-          >
-            <input
-              autoFocus
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setActive(0);
-              }}
-              onKeyDown={onKeyDown}
-              placeholder={placeholder}
-              className="mx-2 mb-1 w-[calc(100%-1rem)] rounded-sm border border-hairline px-2 py-1 text-fine text-ink outline-none"
-            />
-            <div ref={listRef} className="max-h-56 overflow-y-auto">
-              {/* 미지정 (index 0) */}
-              <button
-                type="button"
-                className={`block w-full px-3 py-1 text-left text-caption text-ink-tertiary hover:bg-surface-alt ${
-                  active === 0 ? "bg-surface-alt" : ""
-                }`}
-                onMouseEnter={() => setActive(0)}
-                onClick={() => pick(0)}
+      {open &&
+        (addMode ? (
+          // 마우스 위치 포털(fixed) — 모달 transform 조상 영향 없음, 아래 필드 미가림.
+          createPortal(
+            <>
+              <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+              <div
+                className="fixed z-[1001] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                style={flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
               >
-                {emptyLabel}
-              </button>
-              {hits.length === 0 ? (
-                <p className="px-3 py-1 text-fine text-ink-tertiary">…</p>
-              ) : (
-                hits.map(({ item, matches }, idx) => {
-                  const labelRanges = matches.find((m) => m.field === "label")?.ranges ?? [];
-                  return (
-                    <button
-                      key={item.value}
-                      type="button"
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-caption text-ink hover:bg-surface-alt ${
-                        active === idx + 1 ? "bg-surface-alt" : ""
-                      }`}
-                      onMouseEnter={() => setActive(idx + 1)}
-                      onClick={() => pick(idx + 1)}
-                    >
-                      <span className="min-w-0 truncate">
-                        <Highlight text={item.label} ranges={labelRanges} />
-                        {item.sub && <span className="ml-1 text-fine text-ink-tertiary">· {item.sub}</span>}
-                      </span>
-                      {item.value === value && (
-                        <Check size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
-                      )}
-                    </button>
-                  );
-                })
-              )}
+                {menu}
+              </div>
+            </>,
+            document.body,
+          )
+        ) : (
+          <>
+            {/* 바깥 클릭 닫기 */}
+            <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+            {/* absolute overlay — 늘/줄어도 버튼·주변 레이아웃 불변 (SR-4) */}
+            <div className="absolute left-0 z-[1001] mt-1 w-full min-w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+              {menu}
             </div>
-          </div>
-        </>
-      )}
+          </>
+        ))}
     </div>
   );
 }

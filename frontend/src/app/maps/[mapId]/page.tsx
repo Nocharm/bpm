@@ -637,7 +637,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
-  const [inspectorWidth, setInspectorWidth] = useState(320);
+  const [inspectorWidth, setInspectorWidth] = useState(360);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
@@ -1226,7 +1226,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     const saved = Number(window.localStorage.getItem("bpm.inspectorWidth"));
     if (Number.isFinite(saved) && saved > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration, 외부 저장소에서 읽는 합법적 패턴
-      setInspectorWidth(Math.min(480, Math.max(220, saved)));
+      setInspectorWidth(Math.min(520, Math.max(300, saved)));
     }
   }, []);
 
@@ -5717,7 +5717,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const startX = event.clientX;
       const startW = inspectorWidth;
       const onMove = (ev: PointerEvent) => {
-        setInspectorWidth(Math.min(480, Math.max(220, startW + (startX - ev.clientX))));
+        setInspectorWidth(Math.min(520, Math.max(300, startW + (startX - ev.clientX))));
       };
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
@@ -6587,7 +6587,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
                         <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary">
-                          {selectedNode.data.description || "—"}
+                          {selectedNode.data.description || t("summary.none")}
                         </div>
                       </div>
                       {/* 유형·색 — 라벨 좌·필드 우측정렬·세로중앙·구분선(편집 모달과 동일) */}

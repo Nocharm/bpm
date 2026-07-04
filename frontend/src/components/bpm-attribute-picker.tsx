@@ -72,16 +72,19 @@ export function BpmAttributePicker({
         <span className="shrink-0 text-caption text-ink-secondary">{t("field.department")}</span>
         {readOnly ? (
           <span className="min-w-0 flex-1 truncate text-right text-caption text-ink">
-            {department || "—"}
+            {department || t("summary.none")}
           </span>
         ) : (
-          <SearchSelect
-            value={department}
-            options={data.departments.map((d) => ({ value: d, label: d }))}
-            emptyLabel="—"
-            placeholder={t("field.searchPlaceholder")}
-            onChange={handleDeptChange}
-          />
+          // 우측 정렬 — 고정폭 박스로 라벨 좌·select 우.
+          <div className="flex w-44 shrink-0">
+            <SearchSelect
+              value={department}
+              options={data.departments.map((d) => ({ value: d, label: d }))}
+              emptyLabel={t("summary.none")}
+              placeholder={t("field.searchPlaceholder")}
+              onChange={handleDeptChange}
+            />
+          </div>
         )}
       </div>
 
@@ -91,7 +94,7 @@ export function BpmAttributePicker({
         <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
             {assignees.length === 0 && readOnly ? (
-              <span className="text-caption text-ink">—</span>
+              <span className="text-caption text-ink">{t("summary.none")}</span>
             ) : (
               assignees.map((name) => {
                 const isDrift = drifted.includes(name);
