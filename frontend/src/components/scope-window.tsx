@@ -39,6 +39,7 @@ interface ScopeWindowProps {
   onMinimize?: (clientX: number, clientY: number) => void; // 최소화 시점의 포인터 위치 전달
   headerLeft?: ReactNode; // 타이틀 대체 커스텀 헤더(배지·타이틀·서브타이틀 등) — flex-1 min-w-0 포함할 것
   headerActions?: ReactNode; // 최소/최대/닫기 앞 추가 버튼(폰트 조절·추출 등)
+  titleSlot?: ReactNode; // chromeless(루트) 좌상단 제목 칩 대체 — 스스로 위치(absolute left-2 top-2)를 잡을 것
   children: ReactNode;
 }
 
@@ -57,6 +58,7 @@ export function ScopeWindow({
   onMinimize,
   headerLeft,
   headerActions,
+  titleSlot,
   children,
 }: ScopeWindowProps) {
   const { t } = useI18n();
@@ -157,9 +159,11 @@ export function ScopeWindow({
               {t("window.clickToEdit")}
             </div>
           )}
-          <span className="pointer-events-none absolute left-2 top-2 z-10 max-w-[60%] truncate rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-medium text-ink-secondary shadow-sm">
-            {title}
-          </span>
+          {titleSlot ?? (
+            <span className="pointer-events-none absolute left-2 top-2 z-10 max-w-[60%] truncate rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-medium text-ink-secondary shadow-sm">
+              {title}
+            </span>
+          )}
         </div>
       </div>
     );

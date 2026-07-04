@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 좌상단 제목 칩 + 저장 조건 아코디언 병합 (반투명·펼침 애니)
+- **`save-checklist.tsx`** — `SaveChecklist`→**`MapTitleChecklist`**로 개편: 접힘=맵 제목 표시, 펼침=제목이 크로스페이드로 사라지며 저장 조건 리스트가 아코디언(grid-rows 0fr→1fr, duration-350 ease-smooth)으로 열림. 헤더 우측 배지(전체충족 체크/미충족 수). 빈 맵은 평범한 제목 칩. 투명도 상향(bg-surface/75→/60 + backdrop-blur).
+- **`scope-window.tsx`** — chromeless 루트에 `titleSlot` prop 추가(기본 제목 칩 대체, 슬롯이 스스로 위치).
+- **`page.tsx`** — 별도 체크리스트 오버레이 제거, 편집 모드에서 루트 ScopeWindow `titleSlot`으로 `MapTitleChecklist` 전달(읽기전용은 기본 제목 칩).
+- 검증: lint 0 · build/TS OK. 접힘/펼침 렌더 확인(주입 프리뷰).
+
 ## 2026-07-05 — 노드 모달 제목 저장 버그 수정 + 저장 조건 체크리스트(좌상단)
 - **버그 수정**(`page.tsx handleSummaryLabelCommit`) — 노드 편집 모달에서 제목을 유니크한 새 값으로 바꿔도 저장 안 되던 문제: `if (unique !== label)`(충돌 시에만 patch) 가드 때문에 유니크한 라벨이 유실. 항상 `patchNode({label: makeUniqueLabel(...)})` 적용으로 수정.
 - **저장 조건 체크리스트**(`components/save-checklist.tsx` 신규 + `page.tsx`) — 캔버스 좌상단 맵 제목 칩 아래 **반투명·접이식** 패널. 현재 노드 기준 라이브 자동 체크(충족=accent 체크박스+취소선, 미충족=빈 박스). 조건 3개: **시작 노드 1개**·**대표 끝 노드 1개(끝≥1)**·**끝 노드 이름 중복 없음**. 편집 모드·노드≥1일 때만 표시. i18n(en/ko).

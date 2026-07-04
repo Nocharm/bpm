@@ -64,7 +64,7 @@ import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-d
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
-import { SaveChecklist, getSaveCheckStates, type SaveCheckItem } from "@/components/save-checklist";
+import { MapTitleChecklist, getSaveCheckStates, type SaveCheckItem } from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
@@ -6120,6 +6120,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                 zIndex={active ? 1000 : zOrder.indexOf(key) + 1}
                 canClose={index > 0}
                 chromeless={index === 0}
+                // 루트 좌상단 제목 칩 — 편집 모드에선 저장 조건 아코디언과 합친 필로 대체
+                titleSlot={
+                  index === 0 && !readOnly ? (
+                    <MapTitleChecklist
+                      mapTitle={scope.title}
+                      checklistLabel={t("save.checklistTitle")}
+                      items={nodes.length > 0 ? saveCheckItems : []}
+                    />
+                  ) : undefined
+                }
                 bounds={bounds}
                 onFocus={() => {
                   bringToFront(key);
@@ -6437,12 +6447,6 @@ function MapEditor({ mapId }: { mapId: number }) {
               </ScopeWindow>
             );
           })}
-          {/* 저장 조건 체크리스트 — 좌상단 맵 제목 칩 아래, 편집 모드·노드가 있을 때만(빈 맵은 검증 없음) */}
-          {!readOnly && nodes.length > 0 && (
-            <div className="absolute left-2 top-9 z-[1050]">
-              <SaveChecklist title={t("save.checklistTitle")} items={saveCheckItems} />
-            </div>
-          )}
           <WindowDock
             items={scopes
               .map((scope, index) => ({ scope, index, key: scopeKey(scope) }))
