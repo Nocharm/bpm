@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R9d: 디시전 팝업 액션 라벨 단축(한/영)
+- **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — R9d fix: 인터셉트 겹침 원천 차단 + 애니 견고화·심플화
 - **증상**: 실제 화면이 프리뷰와 다름 — 아이콘 애니 미표시 + 인터셉트 선이 가운데 박스 밑에 겹쳐 보임. 원인은 브라우저가 옛 globals.css를 캐시해 `.edge-*` 규칙 미적용(그 경우 임시 커넥터 `isegStart`가 기본 opacity 1로 박스 밑에 노출). 빌드 산출 CSS엔 규칙 존재 확인.
 - **`edge-decision-modal.tsx`·`globals.css`** — (1) 인터셉트에서 겹침 유발 임시 커넥터(`isegStart`)와 ㅁ-ㅁ widen 크로스페이드 제거 → **가운데 박스가 위에서 드롭 + 좌우 커넥터 페이드인**(좌우 박스 정적)으로 심플화. (2) 애니메이션을 `.edge-anim` 하위 게이트 없이 요소 클래스에 직접 부여. (3) **모든 요소의 '정지 상태 = 최종(그려진) 완성 상태'** → 애니가 없어도(감소모션·CSS 캐시) 겹침 없는 깨끗한 아이콘. tile-pop 포함 전부 `backwards` fill(전역 버튼 :active 눌림 보존).
