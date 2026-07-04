@@ -6,6 +6,11 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — Create group 컨텍스트 메뉴 아이콘 + 노드폼 재디자인 완료 표기 + R10 세분화
+- **`page.tsx`** — 복수선택 우클릭 "Create group" 항목 맨앞에 `Group`(Lucide) 아이콘 추가.
+- **`SCREEN-REDESIGN-EDITOR.md`** — 노드 모달·인스펙터 속성 영역 재디자인(+분기 엣지 선택후생성 fix·Create group 아이콘)을 **R7c 행으로 완료 표기**. **R10을 R10a(헤더·스레드)/R10b(제안·분석 카드)/R10c(퀵칩·입력)로 세분화**, R10a 다음 착수.
+- 검증: 프론트 build OK(Group 아이콘 컴파일).
+
 ## 2026-07-04 — 부서 드롭다운 우측 넘침 수정: fitContent면 right-0으로 좌측 펼침
 - **`search-select.tsx`** — fitContent(우측정렬) select의 드롭다운이 `left-0`(+`w-full min-w-56`)이라 우측정렬된 버튼 기준 우측으로 뻗어 모달/패널 밖으로 넘치며 화면이 밀리던 문제 → **fitContent면 `right-0`(min-w-56, w-full 제거)**으로 버튼 우측 정렬·좌측으로 펼침. 기본 모드는 `left-0 w-full` 유지.
 - 검증: 프론트 lint 0 errors·build OK.
