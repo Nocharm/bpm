@@ -64,7 +64,7 @@ import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-d
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
-import { SaveChecklist, type SaveCheckItem } from "@/components/save-checklist";
+import { SaveChecklist, getSaveCheckStates, type SaveCheckItem } from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
@@ -2069,18 +2069,45 @@ function MapEditor({ mapId }: { mapId: number }) {
     [refreshComments, t],
   );
 
+  // 저장 차단 사유(수동 저장·승인 시작 전 검사) — 좌상단 체크리스트와 동일 조건. 빈 맵은 검증 없음.
+  // autosave는 차단하지 않음(작성 중 방해 방지) — 사용자 선택: 수동 저장·승인 시작에서만 강제.
+  const getSaveBlockers = useCallback((): string[] => {
+    const ns = nodesRef.current;
+    if (ns.length === 0) {
+      return [];
+    }
+    const states = getSaveCheckStates(
+      ns.map((node) => ({ nodeType: node.data.nodeType, label: node.data.label })),
+    );
+    const blockers: string[] = [];
+    if (!states.start) blockers.push(t("save.checkOneStart"));
+    if (!states.primaryEnd) blockers.push(t("save.checkPrimaryEnd"));
+    if (!states.endUnique) blockers.push(t("save.checkUniqueEnd"));
+    return blockers;
+  }, [t]);
+
   const handleSave = useCallback(async () => {
+    const blockers = getSaveBlockers();
+    if (blockers.length > 0) {
+      showToast(`${t("save.blockedTitle")}: ${blockers.join(", ")}`);
+      return;
+    }
     try {
       await saveCurrentScope();
     } catch (err) {
       // 저장 실패(예: 시작/끝 노드 없음)는 상단 배너 대신 토스트로 안내 (#7)
       showToast(err instanceof Error ? err.message : t("err.save"));
     }
-  }, [saveCurrentScope, showToast, t]);
+  }, [getSaveBlockers, saveCurrentScope, showToast, t]);
 
   // 승인 요청(승인 시작) 전 현재 화면을 먼저 저장 — 저장된 구버전이 아니라 "지금 보는 내용"이
-  // 승인 대상이 되도록. 저장(=서버의 시작/끝 검증)에 실패하면 승인 요청 다이얼로그를 열지 않는다.
+  // 승인 대상이 되도록. 저장 조건 미충족이거나 저장 실패면 승인 요청 다이얼로그를 열지 않는다.
   const handleSubmitForApproval = useCallback(async () => {
+    const blockers = getSaveBlockers();
+    if (blockers.length > 0) {
+      showToast(`${t("save.blockedTitle")}: ${blockers.join(", ")}`);
+      return;
+    }
     try {
       await saveCurrentScope();
     } catch (err) {
@@ -2088,17 +2115,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       return;
     }
     setSubmitConfirmOpen(true);
-  }, [saveCurrentScope, showToast, t]);
+  }, [getSaveBlockers, saveCurrentScope, showToast, t]);
 
   // 저장(그래프 검증) 조건 — 현재 스코프 노드 기준 라이브 계산(좌상단 체크리스트). 백엔드 validate_process와 정합:
   // 시작 정확히 1개 / 끝 이름(빈 제목 포함) 중복 없음 / 대표 끝 1개(끝 노드 최소 1개면 저장 시 자동 1개 지정).
   const saveCheckItems = useMemo<SaveCheckItem[]>(() => {
-    const startCount = nodes.filter((node) => node.data.nodeType === "start").length;
-    const endLabels = nodes.filter((node) => node.data.nodeType === "end").map((node) => node.data.label);
+    const states = getSaveCheckStates(
+      nodes.map((node) => ({ nodeType: node.data.nodeType, label: node.data.label })),
+    );
     return [
-      { key: "start", label: t("save.checkOneStart"), ok: startCount === 1 },
-      { key: "primaryEnd", label: t("save.checkPrimaryEnd"), ok: endLabels.length >= 1 },
-      { key: "endUnique", label: t("save.checkUniqueEnd"), ok: new Set(endLabels).size === endLabels.length },
+      { key: "start", label: t("save.checkOneStart"), ok: states.start },
+      { key: "primaryEnd", label: t("save.checkPrimaryEnd"), ok: states.primaryEnd },
+      { key: "endUnique", label: t("save.checkUniqueEnd"), ok: states.endUnique },
     ];
   }, [nodes, t]);
 

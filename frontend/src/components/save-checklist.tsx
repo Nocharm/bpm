@@ -12,6 +12,20 @@ export interface SaveCheckItem {
   ok: boolean;
 }
 
+// 저장(그래프 검증) 조건의 충족 여부 — 체크리스트 렌더와 저장/승인 차단 로직 공용(어긋남 방지).
+// 백엔드 validate_process와 정합: 시작 정확히 1개 / 대표끝=1(끝 노드 최소 1개면 저장 시 자동 지정) / 끝 이름 중복 없음.
+export function getSaveCheckStates(
+  nodes: { nodeType: string; label: string }[],
+): { start: boolean; primaryEnd: boolean; endUnique: boolean } {
+  const startCount = nodes.filter((node) => node.nodeType === "start").length;
+  const endLabels = nodes.filter((node) => node.nodeType === "end").map((node) => node.label);
+  return {
+    start: startCount === 1,
+    primaryEnd: endLabels.length >= 1,
+    endUnique: new Set(endLabels).size === endLabels.length,
+  };
+}
+
 export function SaveChecklist({ title, items }: { title: string; items: SaveCheckItem[] }) {
   const [open, setOpen] = useState(false);
   const failed = items.filter((item) => !item.ok).length;
