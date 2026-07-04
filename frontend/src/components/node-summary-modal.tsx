@@ -5,9 +5,9 @@
 
 import {
   AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
   Boxes,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   CircleDot,
   CornerDownRight,
@@ -484,17 +484,18 @@ export function NodeSummaryModal({
             </div>
           )}
 
-          {/* 선행/후행 — 타입 아이콘 칩(세로 나열)·가운데 세로선·양 가장자리 화살표(hover 시 Previous/Next). 클릭=그 노드 편집(변경 있으면 확인) */}
+          {/* 선행/후행 — 타입 아이콘 칩(세로 나열)·가운데 세로선·양 가장자리 쉐브론(위)+hover 라벨(하단 고정, 높이 통일).
+              칩 영역은 min/max 높이 + 내부 스크롤(스크롤바 숨김)이라 모달이 낮아도 항상 보이고 과도하게 늘지 않는다. 클릭=그 노드 편집(변경 있으면 확인) */}
           <div className="grid grid-cols-2 overflow-hidden rounded-md border border-hairline">
-            {/* 선행(좌) — 좌측 가장자리 화살표 */}
+            {/* 선행(좌) — 좌측 가장자리 쉐브론(위)+라벨(아래) */}
             <div className="group/prev flex min-w-0 items-stretch border-r border-hairline">
-              <div className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-ink-tertiary">
-                <ArrowLeft size={14} strokeWidth={1.5} />
+              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
+                <ChevronLeft size={14} strokeWidth={1.5} />
                 <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/prev:opacity-100">
                   {t("summary.prev")}
                 </span>
               </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5 pr-1.5">
+              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pr-1.5">
                 {predecessors.length ? (
                   predecessors.map((n) => (
                     <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
@@ -504,9 +505,9 @@ export function NodeSummaryModal({
                 )}
               </div>
             </div>
-            {/* 후행(우) — 우측 가장자리 화살표 */}
+            {/* 후행(우) — 우측 가장자리 쉐브론(위)+라벨(아래) */}
             <div className="group/next flex min-w-0 items-stretch">
-              <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5 pl-1.5">
+              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pl-1.5">
                 {successors.length ? (
                   successors.map((n) => (
                     <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
@@ -515,11 +516,11 @@ export function NodeSummaryModal({
                   <span className="text-fine text-ink-tertiary">{t("summary.none")}</span>
                 )}
               </div>
-              <div className="flex w-12 shrink-0 flex-col items-center justify-center gap-0.5 text-ink-tertiary">
+              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
+                <ChevronRight size={14} strokeWidth={1.5} />
                 <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/next:opacity-100">
                   {t("summary.next")}
                 </span>
-                <ArrowRight size={14} strokeWidth={1.5} />
               </div>
             </div>
           </div>

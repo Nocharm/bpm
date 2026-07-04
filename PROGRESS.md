@@ -6,6 +6,11 @@
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
 
+## 2026-07-04 — R7b 보완: 노드 모달 선행/후행 내비(쉐브론·라벨 하단 고정·칩 min/max 스크롤) + R9 전체 완료 표기
+- **`node-summary-modal.tsx`** — 선행/후행 내비: (1) 가장자리 `ArrowLeft/ArrowRight` → `ChevronLeft/ChevronRight`. (2) hover 라벨(Previous/Next)을 양쪽 다 **하단 고정**(쉐브론 위·라벨 아래, `justify-between`)해 높이 통일(기존 후행은 라벨이 위였음). (3) 칩 리스트에 `min-h-[26px] max-h-[104px] overflow-y-auto scrollbar-hidden`(필 높이 ~4.4행) → 모달이 낮아도 항상 보이고(안 보이던 버그 수정) 과도하게 늘지 않고 내부 스크롤.
+- **`SCREEN-REDESIGN-EDITOR.md`** — R9 전체(R9a~h) 시현·검토결과 ✅ 표기(사용자 확인). R9 = 엣지 흐름 모달 5종 리치 재디자인 + 토큰 통일 + 인스펙터 통일 완료.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — R9h: Keep/Insert Between 모달 통일 + R9 타일 클릭효과
 - **`flow-glyphs.tsx`(신규)** — Insert/Keep 공용 글리프 추출: `InsertGlyph`(흐름 gap 껴듦, 액션 Insert 재사용), `KeepGlyph`(기존 X→B 유지 + 새 노드 A 팝인 + 새 엣지 A→B 강조색 합류). EdgeActionModal의 InsertAnimIcon 제거→InsertGlyph.
 - **`flow-conflict-modal.tsx`(신규)** — 입력 있는 노드 앞에 노드 추가 시 뜨는 Keep/Insert Between 인라인 모달(텍스트버튼+`font-medium` 위반)을 아이콘 타일 컴포넌트로 재디자인: 노드 아래 앵커(absolute), 헤더 캡션+우상단 X(dismiss 신설), 2타일(Keep/Insert between). 타일 팝+hover 아이콘 재생.
