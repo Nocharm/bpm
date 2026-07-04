@@ -13,9 +13,17 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// 링크 href sanitize — http(s)/상대/앵커/mailto만 허용, javascript:·data: 등은 차단(XSS 방지).
+// 링크 href sanitize — http(s)/상대/앵커/mailto만 허용, javascript:·data: 차단.
+// 공백·제어문자·따옴표/꺾쇠 포함 URL도 거부(href 속성 탈출 XSS 방지).
 function safeHref(url: string): string {
-  return /^(https?:\/\/|\/|#|mailto:)/i.test(url.trim()) ? url : "#";
+  const trimmed = url.trim();
+  if (/[\s"'<>`]/.test(trimmed)) return "#";
+  return /^(https?:\/\/|\/|#|mailto:)/i.test(trimmed) ? trimmed : "#";
+}
+
+// 속성값 인코딩 — 따옴표를 엔티티로(속성 탈출 방지). <>&는 escapeHtml에서 이미 처리됨.
+function escapeAttr(s: string): string {
+  return s.replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
 }
 
 // 인라인 서식(escape 후 적용) — 코드/굵게/기울임/링크. 텍스트는 이미 escape되어 raw HTML 주입 불가.
@@ -27,7 +35,7 @@ function inline(s: string): string {
     .replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
       (_m, text: string, url: string) =>
-        `<a href="${safeHref(url)}" target="_blank" rel="noreferrer">${text}</a>`,
+        `<a href="${escapeAttr(safeHref(url))}" target="_blank" rel="noreferrer">${text}</a>`,
     );
 }
 
