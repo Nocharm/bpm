@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef } from "react";
+import { Fragment, useRef, type CSSProperties } from "react";
 
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
@@ -297,6 +297,18 @@ function NodeHandles() {
   );
 }
 
+// 노드 테두리/배경 + 호버 강조 링용 노드색 CSS 변수(--nc). @types/react가 커스텀 속성 인덱스
+// 시그니처를 갖지 않아 unknown 경유 캐스팅(런타임은 React가 그대로 전달).
+function nodeStyle(color: string, fill: string): CSSProperties {
+  return {
+    borderColor: color,
+    borderWidth: "1.5px",
+    borderStyle: "solid",
+    background: fill,
+    "--nc": color,
+  } as unknown as CSSProperties;
+}
+
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const { t } = useI18n();
@@ -309,8 +321,8 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   if (data.nodeType === "subprocess") {
     return (
       <div
-        className={`group relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:scale-[1.02] hover:opacity-95 hover:shadow-md ${ring}`}
-        style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
+        className={`group bpm-node-emph relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150 ${ring}`}
+        style={nodeStyle(color, fill)}
         title={data.diffNote}
       >
         <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
@@ -347,8 +359,8 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
       >
           {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
-          className={`absolute inset-3 rotate-45 rounded-sm transition-all duration-150 group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 group-hover:scale-105 group-hover:opacity-95 group-hover:shadow-md ${ring}`}
-          style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
+          className={`bpm-node-emph absolute inset-3 rotate-45 rounded-sm transition-all duration-150 ${ring}`}
+          style={nodeStyle(color, fill)}
         />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
           <NodeTitle id={id} label={data.label} />
@@ -372,12 +384,12 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`group relative px-3 py-2 text-sm transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:scale-[1.02] hover:opacity-95 hover:shadow-md ${ring} ${
+      className={`group bpm-node-emph relative px-3 py-2 text-sm transition-all duration-150 ${ring} ${
         isTerminal
           ? "min-w-[90px] rounded-full text-center"
           : "min-w-[150px] rounded-sm"
       }`}
-      style={{ borderColor: color, borderWidth: "1.5px", borderStyle: "solid", background: fill }}
+      style={nodeStyle(color, fill)}
       title={data.diffNote}
     >
       <div className="font-medium text-ink">
