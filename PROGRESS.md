@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 신규 노드 1회 반짝 + 노드 핸들 재디자인(호버 표시·반투명 둥근사각형)
+- **신규 노드 플래시 2회→1회**(`page.tsx` raw `<style>`) — `bpm-node-flash` keyframe을 18%·58% 두 딥에서 45% 한 딥으로, 850ms→450ms.
+- **노드 핸들(연결 히트박스) 재디자인** — globals.css `.react-flow__handle` 규칙을 page.tsx raw `<style>`로 이전(Turbopack이 dev에서 `.react-flow__node` 셀렉터 규칙 purge, lessons §5). 검은 닷 7px → **반투명 violet 둥근사각형 13px**(border-radius 3px, accent 18% 채움·40% 테두리). **평소 opacity 0(숨김)·노드 hover 시 표시**, 핸들 직접 hover 시 강조(accent 채움·테두리·scale 1.2). **주의: 모든 연결가능 핸들에 `connectionindicator` 클래스가 상시 붙어** reveal 규칙에서 제거해야 숨김이 먹음(원래는 base 0.4라 무해했음).
+- 검증: lint 0 · build/TS OK. 라이브(HMR) — 평소 핸들 114개 전부 opacity 0, 노드 hover 시 해당 노드만 표시 확인.
+
 ## 2026-07-05 — 문제 노드 하이라이트: 잘못된 다중 연결 항목 클릭 시 이동+선택
 - **`save-checklist.tsx`** — `getMultiOutputNodeIds`(문제 노드 id 추출) export, `getSaveCheckStates.singleOutput`이 이를 재사용. `SaveCheckItem`에 `onLocate?` 추가 — 미충족+onLocate 있으면 아이템이 **클릭 가능 버튼**(크로스헤어 아이콘·호버 error 틴트).
 - **`page.tsx`** — `locateProblemNodes(ids)`: 문제 노드 선택(`node.selected`) + `reactFlow.fitView`로 이동·강조. `saveCheckItems`의 `singleOutput` 항목에 문제 노드가 있으면 `onLocate` 연결. "분기 외 노드 출력 1개"→**"잘못된 다중 연결 없음"**(익숙한 표현) 문구 변경.
