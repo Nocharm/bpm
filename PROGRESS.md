@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — R10c: AI 패널 퀵칩 + 입력 영역 재디자인
+- **`ai-chat-panel.tsx`** — 입력부 재설계: **빠른 프롬프트 칩**(Find issues·Summarize·Walkthrough·Suggest improvements — 클릭 시 즉시 전송, `send(override?)` 리팩터) + **입력 카드**(border·`focus-within` accent·자동높이 `max-h-32`) + 하단 툴바(**파일첨부·대화추출 플레이스홀더**[클릭 시 "준비 중" 토스트]·키힌트·accent 원형 전송). 키 바인딩 **Ctrl/Cmd+Enter → Enter=전송·Shift+Enter=줄바꿈**로 변경(+ 힌트 표기), **IME 조합 중 전송 방지**(`isComposing`).
+- **`i18n-messages.ts`** — `ai.chip*`·`ai.sendHint`·`ai.attach`·`ai.export`·`ai.comingSoon`(en·ko).
+- 검증: 브라우저 — 칩·입력카드·첨부/추출·힌트·전송 렌더 확인. lint 0 errors·build OK.
+- **시드 정책 변경(사용자 승인): 이제 시드를 커밋에 포함하고 R10 완료 시 일괄 제거**(매 커밋 revert/restore 오버헤드 제거).
+
 ## 2026-07-04 — ScopeWindow 최소폭↑ · 제안 툴바 z-index · 창 열림 시 캔버스 고정
 - **`scope-window.tsx`** — 최소 폭 240 → **360**(채팅/표 가독성, ×1.5).
 - **`page.tsx`** — graph/ops 제안 미리보기 툴바가 캔버스(루트 프로세스 chromeless ScopeWindow, z-1000) 뒤에 가려지던 상시 버그 → **z-[1100]**(기존 z-40)로 올려 표시.

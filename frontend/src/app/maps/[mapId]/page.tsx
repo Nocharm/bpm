@@ -746,7 +746,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [isSysadmin, setIsSysadmin] = useState(false);
   // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
-  const [aiPreviewActive, setAiPreviewActive] = useState(false);
+  const [aiPreviewActive, setAiPreviewActive] = useState(true); // TEMP DEV SEED — R10b-2 툴바 확인용. 확인 후 false로 되돌릴 것.
   const aiPreviewRef = useRef(false);
 
   // 엣지 스타일 — 맵 전역(모든 엣지 일괄). React Flow 빌트인 타입: default=곡선, smoothstep=꺾은선, straight=직선. localStorage 영속.
