@@ -14,7 +14,7 @@ import { NotificationBell } from "@/components/notification-bell";
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 export function TopNav() {
-  const { t, lang, toggleLang } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const router = useRouter();
   const user = useSyncExternalStore(
     subscribeCurrentUser,
@@ -90,13 +90,25 @@ export function TopNav() {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          className="rounded-xs border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
-          onClick={toggleLang}
-        >
-          {lang === "en" ? t("nav.toKorean") : t("nav.toEnglish")}
-        </button>
+        {/* 한/영 세그먼트 토글 — 두 언어를 모두 노출하고 현재 언어를 accent-tint로 강조 */}
+        <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-fine">
+          {(["ko", "en"] as const).map((code) => (
+            <button
+              key={code}
+              type="button"
+              aria-pressed={lang === code}
+              className={
+                "rounded-xs px-1.5 py-0.5 " +
+                (lang === code
+                  ? "bg-accent-tint font-semibold text-accent"
+                  : "text-ink-tertiary hover:text-ink-secondary")
+              }
+              onClick={() => setLang(code)}
+            >
+              {code === "ko" ? t("nav.langKo") : t("nav.langEn")}
+            </button>
+          ))}
+        </div>
       </div>
     </nav>
   );

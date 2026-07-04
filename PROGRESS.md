@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-04 — 한영 전환 UI를 세그먼트 토글로 재디자인
+- **`top-nav.tsx`** — 단일 액션 버튼(바꿀 대상 언어 1글자만 표시)을 **한 · EN 세그먼트 필**로 교체: 두 언어를 모두 노출하고 현재 언어를 `bg-accent-tint text-accent`로 강조(`setLang(code)`로 직접 지정, shadow 미사용 — 디자인 룰상 elevation은 노드/플로팅 크롬 전용).
+- **`i18n-messages.ts`** — 액션 의미의 `nav.toEnglish`/`nav.toKorean` → 세그먼트 라벨 `nav.langEn`/`nav.langKo`로 rename(값 "EN"/"한" 유지, en·ko 양쪽). 사용처는 top-nav 단독.
+- 검증: 프론트 lint 0 errors·build OK.
+
 ## 2026-07-04 — R9d: 디시전 팝업 액션 라벨 단축(한/영)
 - **`i18n-messages.ts`** — 타일 라벨을 짧게: `edge.actionBranch` "Make a branch"/"분기 만들기" → **"Branch"/"분기"**, `edge.actionIntercept` "Intercept a line"/"출력선에 인터셉트" → **"Intercept"/"인터셉트"**. 두 키는 디시전 팝업에서만 사용(타 화면 영향 없음). en·ko 양쪽 갱신.
 - 검증: 프론트 lint 0 errors·build OK.
