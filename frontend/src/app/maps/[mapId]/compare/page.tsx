@@ -222,6 +222,60 @@ function alignBackbone(nodes: AppNode[], keptIds: Set<string>): AppNode[] {
   }));
 }
 
+// 좌우 과도 확장 방지 — 백본 라인 노드를 X순으로 훑어 한 행이 MAX개를 넘으면 다음 1:1 연결 지점에서
+// 다음 행(좌측부터 다시)으로 접는다. 각 노드는 자기 열의 행 오프셋(아래로 ROW_GAP·좌측 정렬)을 받고,
+// 곁가지(추가/삭제)는 같은 열이므로 함께 이동. 접힘은 1:1(단일 출구→단일 입구)에서만 — 분기/합류는 유지.
+function wrapLayout(
+  nodes: AppNode[],
+  outDeg: Map<string, number>,
+  inDeg: Map<string, number>,
+  keptIds: Set<string>,
+): AppNode[] {
+  const MAX_PER_ROW = 4;
+  const ROW_GAP = 300;
+  const centerX = (node: AppNode) => node.position.x + nodeSizeOf(node.data.nodeType).w / 2;
+  const centerY = (node: AppNode) => node.position.y + (COMPARE_RENDER_H[node.data.nodeType] ?? 38) / 2;
+  const kept = nodes.filter((node) => keptIds.has(node.id));
+  if (kept.length === 0) return nodes;
+  const backboneCY = kept.reduce((sum, node) => sum + centerY(node), 0) / kept.length;
+  const backboneSeq = nodes
+    .filter((node) => Math.abs(centerY(node) - backboneCY) < 20)
+    .sort((a, b) => centerX(a) - centerX(b));
+  if (backboneSeq.length <= MAX_PER_ROW) return nodes;
+  // 접힘 경계 X — MAX 도달 후 cur→next가 1:1이면 next의 X부터 새 행.
+  const boundaries: number[] = [];
+  let count = 0;
+  for (let i = 0; i < backboneSeq.length; i += 1) {
+    count += 1;
+    if (count >= MAX_PER_ROW && i + 1 < backboneSeq.length) {
+      const cur = backboneSeq[i];
+      const next = backboneSeq[i + 1];
+      if ((outDeg.get(cur.id) ?? 0) === 1 && (inDeg.get(next.id) ?? 0) === 1) {
+        boundaries.push(centerX(next));
+        count = 0;
+      }
+    }
+  }
+  if (boundaries.length === 0) return nodes;
+  const leftBase = Math.min(...backboneSeq.map(centerX));
+  const rowStartX = [leftBase, ...boundaries];
+  const rowOf = (x: number) => {
+    let row = 0;
+    for (const boundary of boundaries) if (x >= boundary - 1) row += 1;
+    return row;
+  };
+  return nodes.map((node) => {
+    const row = rowOf(centerX(node));
+    return {
+      ...node,
+      position: {
+        x: node.position.x + (leftBase - rowStartX[row]),
+        y: node.position.y + row * ROW_GAP,
+      },
+    };
+  });
+}
+
 function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
   return merged.map((e) => {
     // 양끝이 모두 유지 노드인 removed 엣지 = 삽입 등으로 끊긴 직접 연결 → 우회 아크로 렌더.
@@ -441,8 +495,16 @@ function ComparePane({
         .map((node) => node.id),
     );
     const aligned = alignBackbone(laid, keptStatusIds);
+    // 접힘(wrap) — 긴 1:1 백본을 여러 행으로 접어 좌우 폭 축소. To-Be 흐름의 in/out 차수로 1:1 판정.
+    const outDeg = new Map<string, number>();
+    const inDeg = new Map<string, number>();
+    for (const edge of layoutEdges) {
+      outDeg.set(edge.source, (outDeg.get(edge.source) ?? 0) + 1);
+      inDeg.set(edge.target, (inDeg.get(edge.target) ?? 0) + 1);
+    }
+    const wrapped = wrapLayout(aligned, outDeg, inDeg, keptStatusIds);
     // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치 아래로 곁가지 배치 — 본류 라인을 비운다.
-    const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
+    const posByKey = new Map(wrapped.map((node) => [node.id, node.position]));
     const removed = buildAppNodes(
       merged.nodes.filter((node) => node.status === "removed"),
       noteOf,
@@ -458,7 +520,7 @@ function ComparePane({
       const ay = neighbors.reduce((sum, pos) => sum + pos.y, 0) / neighbors.length;
       return { ...node, position: { x: ax, y: ay + 150 } };
     });
-    return [...aligned, ...removed];
+    return [...wrapped, ...removed];
   }, [merged, noteOf, fieldsOf, keptKeys]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
@@ -498,10 +560,15 @@ function ComparePane({
       const t = nodeCenters.get(edge.target);
       const passthrough =
         edge.status === "removed" && keptKeys.has(edge.source) && keptKeys.has(edge.target);
-      const back = !passthrough && !!s && !!t && t.cx < s.cx - 40; // 흐름 역행(루프) → 상단 우회
-      const forced: HandleSide | null = passthrough ? "bottom" : back ? "top" : null;
-      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, forced });
-      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, forced });
+      const dyEdge = s && t ? t.cy - s.cy : 0;
+      // 접힘(wrap) 커넥터 — 타겟이 훨씬 아래(다음 행) & 왼쪽 → 아래로 나가 다음 행 왼쪽으로 들어간다.
+      const wrap = !passthrough && !!s && !!t && t.cx < s.cx && dyEdge > 150;
+      // 흐름 역행 루프(같은 행) → 상단 우회
+      const back = !passthrough && !wrap && !!s && !!t && t.cx < s.cx - 40 && Math.abs(dyEdge) < 150;
+      const forcedSource: HandleSide | null = passthrough ? "bottom" : back ? "top" : wrap ? "bottom" : null;
+      const forcedTarget: HandleSide | null = passthrough ? "bottom" : back ? "top" : wrap ? "left" : null;
+      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, forced: forcedSource });
+      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, forced: forcedTarget });
     }
     const result = new Map<string, { source: HandleSide; target: HandleSide }>();
     const setSide = (edgeId: string, end: "source" | "target", side: HandleSide) => {
@@ -689,6 +756,7 @@ function ComparePane({
       <style>{`
 .react-flow__handle{opacity:0}
 .react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}
+.react-flow__node{z-index:2 !important}
       `}</style>
       <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
         <Link
