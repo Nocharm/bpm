@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
@@ -39,6 +40,8 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
     if (!q) return rows;
     return rows.filter((r) => r.name.toLowerCase().includes(q));
   }, [rows, query]);
+  // 25개씩 증분 렌더 — 라이브러리 맵이 수백 개여도 패널 오픈 부하 없음
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
 
   function handleDragStart(e: React.DragEvent<HTMLDivElement>, row: LibraryProcess) {
     e.dataTransfer.effectAllowed = "copy";
@@ -92,7 +95,7 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
         {filtered.length === 0 ? (
           <p className="px-3 py-4 text-center text-fine text-ink/40">{t("library.empty")}</p>
         ) : (
-          filtered.map((row) => {
+          visible.map((row) => {
             const blocked =
               row.map_id === currentMapId || closesCycle(row.map_id, currentMapId, refsByMap);
             return (
@@ -116,6 +119,7 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
             );
           })
         )}
+        {hasMore && <div ref={sentinelRef} className="h-px" />}
       </div>
     </div>
   );

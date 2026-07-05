@@ -9,6 +9,7 @@ import { Building2, Search, User, Users } from "lucide-react";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import type { Department, PrincipalType, User as MockUser, UserGroup } from "@/lib/mock/permissions";
 
 export interface PrincipalOption {
@@ -80,7 +81,7 @@ export function PrincipalPicker({
 
   // 검색 한정: 유저=이름+아이디 / 부서·그룹=부서명·그룹명(displayName)만.
   // 유저를 소속 부서/그룹으로 매칭하지 않음 — "AI dev" 검색 시 그룹원들이 결과를 채워
-  // 정작 'AI dev' 그룹이 slice(8) 밖으로 밀려나던 문제 방지.
+  // 정작 'AI dev' 그룹이 유저 무더기에 묻히는 노이즈 방지.
   const hits = query.trim()
     ? filterByQuery(all, query, (o) =>
         o.principalType === "user"
@@ -91,8 +92,16 @@ export function PrincipalPicker({
           : [{ field: "name", text: o.displayName }],
       )
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
-  // 검색 중엔 상위 8개, 빈 입력(포커스)이면 선택 가능한 전체를 노출(스크롤) / all options when empty.
-  const visible = query.trim() ? hits.slice(0, 8) : hits;
+  // 검색도 캡 없이 전량 노출 — 25개씩 증분 렌더가 DOM 부하를 막는다(~5000명).
+  // 부서·그룹 매치는 이름이 비슷한 유저 무더기에 밀리지 않게, 최고 랭크 1개를 스코어 무시하고 맨 위로 고정.
+  let ordered = hits;
+  if (query.trim()) {
+    const groupIdx = hits.findIndex((h) => h.item.principalType !== "user");
+    if (groupIdx > 0) {
+      ordered = [hits[groupIdx], ...hits.slice(0, groupIdx), ...hits.slice(groupIdx + 1)];
+    }
+  }
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(ordered, query);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     // Esc — 검색어 비우고 포커스 해제(blur) → 펼쳐진 목록 닫힘 (항목 유무와 무관)
@@ -184,6 +193,7 @@ export function PrincipalPicker({
               </button>
             );
           })}
+          {hasMore && <div ref={sentinelRef} className="h-px shrink-0" />}
           {hits.length === 0 && (
             <span className="px-3 py-2 text-caption text-ink-tertiary">—</span>
           )}

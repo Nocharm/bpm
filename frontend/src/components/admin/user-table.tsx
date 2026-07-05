@@ -9,12 +9,15 @@ import { useEffect, useState } from "react";
 
 import { type AdminUser, getAdminUsers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
 
 export function UserTable() {
   const { t } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // 사용자 ~5000행 전량 렌더 부하 방지 — 25행씩 증분(스크롤 끝 센티널 행)
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(users, "");
 
   useEffect(() => {
     getAdminUsers()
@@ -41,7 +44,7 @@ export function UserTable() {
         </tr>
       </thead>
       <tbody>
-        {users.map((user) => (
+        {visible.map((user) => (
           <tr key={user.login_id} className={ADMIN_ROW}>
             <td className={ADMIN_TD}>
               <div className="flex items-center gap-2">
@@ -69,6 +72,11 @@ export function UserTable() {
             </td>
           </tr>
         ))}
+        {hasMore && (
+          <tr ref={sentinelRef}>
+            <td className={ADMIN_TD} colSpan={4} />
+          </tr>
+        )}
       </tbody>
     </TableCard>
   );

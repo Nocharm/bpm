@@ -41,6 +41,7 @@ import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { filterByQuery } from "@/lib/search";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
@@ -140,6 +141,12 @@ export default function InboxPage() {
   const filtered = filterByQuery(byRead, search, (n) => [
     { field: "message", text: n.message },
   ]).map((hit) => hit.item);
+  // 25개씩 증분 렌더 — 알림·승인 두 목록 각각(읽음 필터·검색 변경 시 리셋)
+  const {
+    visible: shownItems,
+    hasMore: hasMoreItems,
+    sentinelRef: itemsSentinelRef,
+  } = useInfiniteSlice(filtered, `${readFilter}:${search}`);
   const selected = items.find((n) => n.id === selectedId) ?? null;
 
   // 승인 큐도 검색 — 제목·맵·요청자(id+이름) 대상
@@ -149,6 +156,11 @@ export default function InboxPage() {
     { field: "requester", text: a.requester },
     { field: "requesterName", text: dir.get(a.requester)?.name ?? "" },
   ]).map((hit) => hit.item);
+  const {
+    visible: shownApprovals,
+    hasMore: hasMoreApprovals,
+    sentinelRef: approvalsSentinelRef,
+  } = useInfiniteSlice(filteredApprovals, search);
 
   const approvalKey = (a: InboxApproval) => `${a.kind}:${a.id}`;
   const selectedApproval =
@@ -269,7 +281,7 @@ export default function InboxPage() {
                 </p>
               ) : (
                 <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
-                  {filteredApprovals.map((a) => {
+                  {shownApprovals.map((a) => {
                     const key = approvalKey(a);
                     return (
                       <li key={key}>
@@ -314,6 +326,7 @@ export default function InboxPage() {
                       </li>
                     );
                   })}
+                  {hasMoreApprovals && <li ref={approvalsSentinelRef} className="h-px shrink-0" />}
                 </ul>
               )
             ) : filtered.length === 0 ? (
@@ -322,7 +335,7 @@ export default function InboxPage() {
               </p>
             ) : (
               <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
-                {filtered.map((n) => {
+                {shownItems.map((n) => {
                   const TypeIcon = typeIcon(n.type);
                   return (
                     <li key={n.id}>
@@ -360,6 +373,7 @@ export default function InboxPage() {
                     </li>
                   );
                 })}
+                {hasMoreItems && <li ref={itemsSentinelRef} className="h-px shrink-0" />}
               </ul>
             )}
           </aside>

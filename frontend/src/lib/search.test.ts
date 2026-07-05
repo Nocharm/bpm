@@ -44,6 +44,47 @@ describe("filterByQuery ordering (정확 > 접두 > 부분 > subsequence)", () =
   });
 });
 
+describe("filterByQuery ranking v2 (단어시작 · 타이브레이크 · 공백 AND)", () => {
+  const nameField = (i: { name: string }) => [{ field: "name", text: i.name }];
+
+  it("word-start beats mid-substring, prefix beats both", () => {
+    const items = [{ name: "Akimoto Ken" }, { name: "Junho Kim" }, { name: "Kim Minsu" }];
+    const hits = filterByQuery(items, "kim", nameField);
+    expect(hits.map((h) => h.item.name)).toEqual(["Kim Minsu", "Junho Kim", "Akimoto Ken"]);
+  });
+
+  it("whitespace acts as AND — surname-last name still matches per word", () => {
+    const items = [{ name: "Kimberly June" }, { name: "Junho Kim" }];
+    const hits = filterByQuery(items, "kim jun", nameField);
+    // Junho Kim: 두 term 모두 접두/단어시작 — 통짜 부분일치가 아니어도 상위
+    expect(hits.map((h) => h.item.name)).toEqual(["Junho Kim", "Kimberly June"]);
+  });
+
+  it("earlier field in getFields wins ties (name field over id field)", () => {
+    const items = [
+      { name: "Park Jimin", id: "kim.aaa" }, // id 접두 매치
+      { name: "Kim Jimin", id: "user.bbb" }, // 이름 접두 매치
+    ];
+    const hits = filterByQuery(items, "kim", (i) => [
+      { field: "name", text: i.name },
+      { field: "id", text: i.id },
+    ]);
+    expect(hits.map((h) => h.item.name)).toEqual(["Kim Jimin", "Park Jimin"]);
+  });
+
+  it("shorter field text wins at equal rank and position", () => {
+    const items = [{ name: "Kim Junhyeokjin" }, { name: "Kim Jun" }];
+    const hits = filterByQuery(items, "kim", nameField);
+    expect(hits.map((h) => h.item.name)).toEqual(["Kim Jun", "Kim Junhyeokjin"]);
+  });
+
+  it("chosung word-start beats chosung mid-match", () => {
+    const items = [{ name: "이규진" }, { name: "규진호" }];
+    const hits = filterByQuery(items, "ㄱㅈ", nameField);
+    expect(hits.map((h) => h.item.name)).toEqual(["규진호", "이규진"]);
+  });
+});
+
 describe("filterByQuery", () => {
   const users = [
     { name: "Kim Daeri", dept: "Procurement" },

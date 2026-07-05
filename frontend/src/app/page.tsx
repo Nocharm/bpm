@@ -13,6 +13,7 @@ import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/re
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { MapCard } from "@/components/maps/map-card";
@@ -263,6 +264,19 @@ export default function MapListPage() {
   const searchPartition = partitionByRecency(mapHits, (h) => h.item.id, recentIds);
   const orderedHits = [...searchPartition.recent, ...searchPartition.rest];
 
+  // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋)
+  const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}`;
+  const {
+    visible: shownSearchHits,
+    hasMore: hasMoreSearch,
+    sentinelRef: searchSentinelRef,
+  } = useInfiniteSlice(orderedHits, listKey);
+  const {
+    visible: shownBrowseHits,
+    hasMore: hasMoreBrowse,
+    sentinelRef: browseSentinelRef,
+  } = useInfiniteSlice(mapHits, listKey);
+
   // 선택 파생 — 자동 첫-맵 선택 없음(초기 선택 없음). 삭제된 맵이면 해제 / no auto-select; clear if stale.
   const effectiveSelected =
     selectedId !== null && visibleMaps.some((m) => m.id === selectedId)
@@ -458,13 +472,14 @@ export default function MapListPage() {
               ) : isSearching ? (
                 /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹. 빈 공간 클릭=선택 해제 */
                 <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-                  {orderedHits.map(({ item: processMap, matches }) =>
+                  {shownSearchHits.map(({ item: processMap, matches }) =>
                     renderRow(
                       processMap,
                       matches.find((m) => m.field === "name")?.ranges ?? [],
                       atById.get(processMap.id),
                     ),
                   )}
+                  {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
               ) : (
                 /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용). 빈 공간 클릭=선택 해제 */
@@ -546,13 +561,14 @@ export default function MapListPage() {
                     </div>
                   )}
                   <ul className="flex flex-col gap-2">
-                    {mapHits.map(({ item: processMap, matches }) =>
+                    {shownBrowseHits.map(({ item: processMap, matches }) =>
                       renderRow(
                         processMap,
                         matches.find((m) => m.field === "name")?.ranges ?? [],
                         undefined,
                       ),
                     )}
+                    {hasMoreBrowse && <li ref={browseSentinelRef} className="h-px shrink-0" />}
                   </ul>
                 </div>
               )}

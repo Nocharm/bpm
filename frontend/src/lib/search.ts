@@ -1,4 +1,5 @@
-// 재사용 검색 — 부분일치 + 한글초성 + 로마자초성, 콤마 AND, 원문 인덱스 range(하이라이트용). deps 없음.
+// 재사용 검색 — 부분일치 + 한글초성 + 로마자초성, 공백/콤마 AND, 원문 인덱스 range(하이라이트용). deps 없음.
+// 정렬: 정확>접두>단어시작>중간>초성 접두/단어시작>초성·로마자 중간>시퀀스, 동순위는 필드 순서→매치 위치→짧은 필드→입력 순서.
 
 import { extractChosung, isChosungQuery } from "@/lib/hangul";
 
@@ -118,22 +119,68 @@ export function matchTerm(text: string, term: string): MatchRange[] | null {
   return subsequenceMatch(text, trimmed);
 }
 
-// 매치 품질 순위 (낮을수록 우선): 0 정확 · 1 접두 · 2 부분 · 3 초성/로마자 · 4 subsequence · ∞ 불일치.
-function termFieldRank(text: string, term: string): number {
-  const t = term.trim().toLowerCase();
-  if (!t) return Infinity;
-  const lower = text.toLowerCase();
-  if (lower === t) return 0;
-  if (lower.startsWith(t)) return 1;
-  if (lower.includes(t)) return 2;
-  if (isChosungQuery(term) && allOccurrences(extractChosung(text), term.trim()).length) return 3;
-  if (isLatinQuery(term) && allOccurrences(toRomanInitials(text).roman, t).length) return 3;
-  if (subsequenceMatch(text, term)) return 4;
-  return Infinity;
+// index 위치가 단어 시작인가 — 앞 문자가 문자/숫자가 아니면(공백·. _ 등) 단어 경계.
+function isWordStart(text: string, index: number): boolean {
+  if (index === 0) return true;
+  return /[^\p{L}\p{N}]/u.test(text[index - 1]);
 }
 
+// 매치 품질 (rank 낮을수록 우선): 0 정확 · 1 접두 · 2 단어시작 · 3 중간 · 4 초성 접두/단어시작 ·
+// 5 초성·로마자 중간 · 6 subsequence · ∞ 불일치. pos는 원문 기준 첫 매치 위치(앞일수록 우선).
+interface TermQuality {
+  rank: number;
+  pos: number;
+}
+
+function getTermQuality(text: string, term: string): TermQuality {
+  const t = term.trim().toLowerCase();
+  if (!t) return { rank: Infinity, pos: Infinity };
+  const lower = text.toLowerCase();
+  if (lower === t) return { rank: 0, pos: 0 };
+  if (lower.startsWith(t)) return { rank: 1, pos: 0 };
+  const subs = allOccurrences(lower, t);
+  if (subs.length) {
+    const wordStart = subs.find((s) => isWordStart(text, s));
+    return wordStart !== undefined ? { rank: 2, pos: wordStart } : { rank: 3, pos: subs[0] };
+  }
+  if (isChosungQuery(term)) {
+    // 초성열은 원문과 1:1 인덱스 정렬이라 단어 경계 판정을 초성열에 그대로 적용
+    const starts = allOccurrences(extractChosung(text), term.trim());
+    if (starts.length) {
+      const wordStart = starts.find((s) => isWordStart(text, s));
+      return wordStart !== undefined ? { rank: 4, pos: wordStart } : { rank: 5, pos: starts[0] };
+    }
+  }
+  if (isLatinQuery(term)) {
+    const { roman, src } = toRomanInitials(text);
+    const starts = allOccurrences(roman, t);
+    if (starts.length) {
+      const wordStart = starts.find((s) => isWordStart(text, src[s]));
+      return wordStart !== undefined
+        ? { rank: 4, pos: src[wordStart] }
+        : { rank: 5, pos: src[starts[0]] };
+    }
+  }
+  // 위치 무의미 — 같은 rank끼리는 필드 길이·입력 순서로 갈림
+  if (subsequenceMatch(text, term)) return { rank: 6, pos: text.length };
+  return { rank: Infinity, pos: Infinity };
+}
+
+// 아이템 정렬 키 — rank → 필드 순서(getFields 배열 순서=우선순위, 이름류가 앞) → 매치 위치 → 짧은 필드.
+interface HitKey {
+  rank: number;
+  fieldIdx: number;
+  pos: number;
+  len: number;
+}
+
+function compareHitKey(a: HitKey, b: HitKey): number {
+  return a.rank - b.rank || a.fieldIdx - b.fieldIdx || a.pos - b.pos || a.len - b.len;
+}
+
+// 공백·콤마 모두 AND 구분자 — "kim j"도 kim AND j로 처리(성·이름 순서 무관 매치).
 function splitTerms(query: string): string[] {
-  return query.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+  return query.split(/[\s,]+/).map((t) => t.trim()).filter((t) => t.length > 0);
 }
 
 function mergeRanges(ranges: MatchRange[]): MatchRange[] {
@@ -152,7 +199,7 @@ function mergeRanges(ranges: MatchRange[]): MatchRange[] {
   return out;
 }
 
-/** 콤마=AND(각 term이 어떤 필드에든 매치), 필드/모드=OR. query 비면 전체 통과(matches=[]). */
+/** 공백/콤마=AND(각 term이 어떤 필드에든 매치), 필드/모드=OR. query 비면 전체 통과(matches=[]). */
 export function filterByQuery<T>(
   items: T[],
   query: string,
@@ -162,40 +209,51 @@ export function filterByQuery<T>(
   if (terms.length === 0) {
     return items.map((item) => ({ item, matches: [] }));
   }
-  const ranked: { hit: SearchHit<T>; rank: number }[] = [];
+  const ranked: { hit: SearchHit<T>; key: HitKey }[] = [];
   for (const item of items) {
     const fields = getFields(item);
     const perField = new Map<string, MatchRange[]>();
     let allTermsMatched = true;
-    let worstTermRank = 0; // 모든 term이 매치해야 하므로 가장 약한 term이 품질을 좌우 (SR-3 정렬)
+    // 모든 term이 매치해야 하므로 가장 약한 term의 키가 품질을 좌우 (SR-3 정렬)
+    let worstKey: HitKey = { rank: 0, fieldIdx: 0, pos: 0, len: 0 };
     for (const term of terms) {
       let termMatched = false;
-      let bestFieldRank = Infinity;
-      for (const f of fields) {
+      let bestKey: HitKey | null = null;
+      for (let fieldIdx = 0; fieldIdx < fields.length; fieldIdx++) {
+        const f = fields[fieldIdx];
         const ranges = matchTerm(f.text, term);
         if (ranges) {
           termMatched = true;
           perField.set(f.field, [...(perField.get(f.field) ?? []), ...ranges]);
         }
-        bestFieldRank = Math.min(bestFieldRank, termFieldRank(f.text, term));
+        const quality = getTermQuality(f.text, term);
+        if (quality.rank !== Infinity) {
+          const key: HitKey = {
+            rank: quality.rank,
+            fieldIdx,
+            pos: quality.pos,
+            len: f.text.length,
+          };
+          if (bestKey === null || compareHitKey(key, bestKey) < 0) bestKey = key;
+        }
       }
-      if (!termMatched) {
+      if (!termMatched || bestKey === null) {
         allTermsMatched = false;
         break;
       }
-      worstTermRank = Math.max(worstTermRank, bestFieldRank);
+      if (compareHitKey(bestKey, worstKey) > 0) worstKey = bestKey;
     }
     if (allTermsMatched) {
       const matches: FieldMatch[] = [...perField.entries()].map(([field, ranges]) => ({
         field,
         ranges: mergeRanges(ranges),
       }));
-      ranked.push({ hit: { item, matches }, rank: worstTermRank });
+      ranked.push({ hit: { item, matches }, key: worstKey });
     }
   }
-  // 품질 순위 오름차순(정확>접두>부분>초성/로마자>subsequence). 동순위는 입력 순서 유지(안정).
+  // 품질 키 오름차순, 동키는 입력 순서 유지(안정).
   return ranked
     .map((r, i) => ({ ...r, i }))
-    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .sort((a, b) => compareHitKey(a.key, b.key) || a.i - b.i)
     .map((r) => r.hit);
 }

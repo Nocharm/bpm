@@ -12,6 +12,7 @@ import {
   type SyncSummary,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
 
 export function EmployeeTable() {
@@ -19,6 +20,8 @@ export function EmployeeTable() {
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  // 직원 ~5000행 전량 렌더 부하 방지 — 25행씩 증분(스크롤 끝 센티널 행)
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(rows, "");
 
   useEffect(() => {
     void listEmployees().then(setRows).catch(() => setRows([]));
@@ -64,7 +67,7 @@ export function EmployeeTable() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {visible.map((r) => (
             <tr key={r.login_id} className={ADMIN_ROW}>
               <td className={ADMIN_TD}>{r.login_id}</td>
               <td className={ADMIN_TD}>{r.name}</td>
@@ -76,6 +79,11 @@ export function EmployeeTable() {
               <td className={`${ADMIN_TD} text-ink-tertiary`}>{r.source}</td>
             </tr>
           ))}
+          {hasMore && (
+            <tr ref={sentinelRef}>
+              <td className={ADMIN_TD} colSpan={6} />
+            </tr>
+          )}
         </tbody>
       </TableCard>
     </div>
