@@ -81,7 +81,14 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
       </div>
 
       <div className="overflow-x-auto rounded-md border border-hairline">
-        <table className="w-full border-collapse text-caption">
+        <table className="w-full table-fixed border-collapse text-caption">
+          <colgroup>
+            <col style={{ width: "6rem" }} />
+            <col />
+            <col style={{ width: "6rem" }} />
+            <col style={{ width: "11rem" }} />
+            <col style={{ width: "7rem" }} />
+          </colgroup>
           <thead>
             <tr className="border-b border-hairline bg-surface-alt text-left text-ink-secondary">
               <th className="px-3 py-2 font-normal">{t("noticeAdmin.colStatus")}</th>
@@ -95,7 +102,11 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
             {notices.map((n) => {
               const status = deriveStatus(n, nowMs);
               return (
-                <tr key={n.id} className="border-b border-hairline last:border-0">
+                <tr
+                  key={n.id}
+                  onDoubleClick={() => setEditing(n)}
+                  className="cursor-pointer border-b border-hairline last:border-0 hover:bg-surface-alt"
+                >
                   <td className="px-3 py-2">
                     <span
                       className={"rounded-sm px-1.5 py-0.5 text-fine " + STATUS_STYLE[status]}
@@ -103,7 +114,7 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
                       {t(STATUS_LABEL[status])}
                     </span>
                   </td>
-                  <td className="max-w-0 px-3 py-2">
+                  <td className="px-3 py-2">
                     <span className="block truncate text-ink" title={n.title}>
                       {n.title}
                     </span>
@@ -115,7 +126,10 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
                     {dateOnly(n.starts_at)} ~{" "}
                     {n.ends_at ? dateOnly(n.ends_at) : t("notices.unlimited")}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                  <td
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    className="whitespace-nowrap px-3 py-2 text-right"
+                  >
                     <button
                       type="button"
                       onClick={() => setEditing(n)}

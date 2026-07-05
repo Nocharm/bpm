@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S5a: 공지 관리 표 폴리시 (더블클릭 편집·고정폭·호버)
+- 행 더블클릭 시 편집 모달(setEditing(n)) — 액션 셀은 onDoubleClick stopPropagation. 행 hover:bg-surface-alt + cursor-pointer.
+- table-fixed + colgroup 폭: 상태 6rem·제목 반응형(auto)·중요도 6rem·게시기간 11rem·액션 7rem. 제목 max-w-0 제거(고정폭이 truncate 처리).
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 폭 개선·더블클릭 편집 모달(기존 값·range 프리필) 확인.
+
 ## 2026-07-05 — S5: 공지사항 관리 탭 + 등록/수정 모달 (설정 콘텐츠)
 - 설정에 '콘텐츠 > 공지사항' 탭 신설(sysadmin). components/notices/notices-manage-panel — 목록(상태 파생 게시중/예약/종료·중요도·게시기간·수정/삭제) + "새 공지 등록".
 - notice-edit-modal — 제목·중요도 세그먼트·게시기간(date-range-calendar 자체 구현·무제한 체크)·본문 md·전체 알림 발송(신규만). 저장 시 KST 경계(자정~하루끝) ISO로 createNotice/updateNotice.
