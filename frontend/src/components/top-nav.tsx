@@ -9,6 +9,12 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { setDevUser } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
+import {
+  closeFeedbackPanel,
+  getFeedbackPanelOpen,
+  openFeedbackPanel,
+  subscribeFeedbackPanel,
+} from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FeedbackSidePanel } from "@/components/feedback-side-panel";
@@ -41,7 +47,11 @@ export function TopNav() {
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
   const [open, setOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const feedbackOpen = useSyncExternalStore(
+    subscribeFeedbackPanel,
+    getFeedbackPanelOpen,
+    () => false,
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 바깥 클릭 닫기 — 전체화면 오버레이는 페이지 호버를 가로채므로 document 리스너로 대체
@@ -125,7 +135,7 @@ export function TopNav() {
         {user && (
           <button
             type="button"
-            onClick={() => setFeedbackOpen(true)}
+            onClick={openFeedbackPanel}
             className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-accent hover:bg-accent-tint"
           >
             <MessageSquare size={14} strokeWidth={1.5} />
@@ -195,7 +205,7 @@ export function TopNav() {
           ))}
         </div>
       </div>
-      <FeedbackSidePanel open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <FeedbackSidePanel open={feedbackOpen} onClose={closeFeedbackPanel} />
     </nav>
   );
 }

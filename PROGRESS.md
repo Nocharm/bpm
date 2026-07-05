@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S3: 전체 피드백 페이지 /feedback (집계·필터·목록·관리자 상태변경)
+- app/feedback/page.tsx: 헤더(+피드백 보내기) · 집계 카드 4(전체/내 accent/작업 중/완료 %) · 유형 필터 pill + 검색 · 목록 테이블(유형 뱃지·내용 truncate·작성자·상태·등록일 date-only). counts·filtered는 파생값 렌더 계산(React Compiler).
+- 관리자(sysadmin) 상태변경: 상태 열을 `<select>`(신규/작업중/완료)로 → updateFeedbackStatus → 로컬 items 갱신. 비-sysadmin은 읽기 뱃지.
+- 공유 스토어 `lib/feedback-panel.ts` 신설 — TopNav 패널 open 상태를 스토어로 이전(useSyncExternalStore), 페이지 "피드백 보내기" 버튼도 openFeedbackPanel()로 동일 패널 오픈.
+- i18n feedback.*(pageSubtitle/stat.*/filterAll/searchPlaceholder/col*/status.*/empty) 추가.
+- 검증: lint 0 · build 성공. 브라우저(:3001 Junho Kim) — 페이지 렌더·집계·유형 뱃지·sysadmin select·페이지 버튼→패널 오픈 확인. 상태변경은 API PATCH(id3→작업중·id4→완료) 후 새로고침으로 집계(작업 중1·완료1 25%)·select 반영 확인.
+
 ## 2026-07-05 — S2c: 피드백 패널 디자인 정합 + 본문 글자수 제한/표시 (사용자 시안)
 - feedback-side-panel: 유형 탭을 **세그먼트 컨트롤**(회색 트랙 `bg-surface-alt` + 흰 활성 pill `bg-surface`·accent)로 · 헤더 서브타이틀 · 유형/내용 라벨 · 컨텍스트 노트에서 raw 라우트 표시 삭제하고 SquareCheck+"현재 화면·열린 맵 자동 첨부" 안내만 · 하단 **2행 버튼**(모든 피드백 보기 풀폭[List/ArrowRight] + 취소/보내기 1:2).
 - 본문 **4000자 제한**(maxLength, 백엔드 FeedbackCreate max_length 일치) + "n / 4000" 카운터.
