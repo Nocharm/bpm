@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 마크다운 표 헤더·코드블록 = 어두운 회색+흰 글씨 (사용자 요청)
+- `.md pre`(코드블록)·`.md th`(표 헤더) 배경 → **`ink-secondary`(#333 어두운 회색)** + 글씨 **`on-accent`(흰색)**로 통일. 인라인 코드는 문장 속이라 흰 채움+테두리 유지, 표 본문 셀 흰색.
+- 검증: build 성공. 브라우저(공지 상세) — 코드블록·표 헤더 어두운 회색+흰 글씨 확인.
+
 ## 2026-07-06 — 마크다운 뷰어(.md) 대비 강화 — 회색 박스에서도 요소 구분 (사용자 요청)
 - 상세가 회색 박스(bg-surface-alt)가 되며 `surface-alt` 채움 요소들이 배경에 묻힘 → `globals.css .md` 일괄 수정(흰/회색 배경 공통 대비).
 - 코드블록·인라인 코드: 채움 `surface-alt`→**흰색** + 테두리 `hairline`→**surface-chip(진한 회색)**. 표: 셀 테두리 진하게(surface-chip)·본문 셀 흰색·**헤더 accent-tint(연보라)**. 인용: **accent-tint 배경**+좌측 액센트 바+패딩. 블록 hover는 accent 7% mix(회색 박스에서도 보이게).
