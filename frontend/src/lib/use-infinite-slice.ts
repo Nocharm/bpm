@@ -4,7 +4,7 @@
 // 데이터는 이미 메모리에 있으므로(디렉터리 ~5000명 등) fetch가 아닌 DOM 렌더만 증분한다.
 // IntersectionObserver는 조상 overflow 클리핑을 반영하므로 스크롤 컨테이너가 무엇이든 동작.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export const INFINITE_CHUNK = 25; // 1회 렌더 행 수 — 피커/목록 1~2화면 분량
 
@@ -29,8 +29,19 @@ export function useInfiniteSlice<T>(
   }
 
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const nodeRef = useRef<HTMLElement | null>(null);
+
+  // 리셋(검색어 변경 등) 시 스크롤 컨테이너를 맨 위로 — 바닥에 남은 스크롤 위치가
+  // 센티널을 화면 안에 둬 리셋 직후 연쇄 로드되는 것을 방지(검색 UX상으로도 상단 복귀가 맞음).
+  useEffect(() => {
+    let el = nodeRef.current?.parentElement ?? null;
+    while (el && el.scrollHeight <= el.clientHeight + 1) el = el.parentElement;
+    el?.scrollTo({ top: 0 });
+  }, [resetKey]);
+
   const sentinelRef = useCallback(
     (node: HTMLElement | null) => {
+      nodeRef.current = node;
       observerRef.current?.disconnect();
       observerRef.current = null;
       if (!node) return;

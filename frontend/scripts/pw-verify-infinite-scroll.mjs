@@ -1,4 +1,5 @@
-// 무한스크롤(25청크) 검증 — A: principal-picker(New map 협업자 피커) 초기 25 → 바닥 도달 시 +25, 검색 8개 캡.
+// 무한스크롤(25청크) 검증 — A: principal-picker(New map 협업자 피커) 초기 25 → 바닥 도달 시 +25,
+// 검색도 캡 없이 25청크 + 부서/그룹 1개 최상단 핀.
 // B: 설정 → Employees 테이블(직원 401행) 25행+센티널 → 스크롤마다 +25.
 // 실행: node scripts/pw-verify-infinite-scroll.mjs  (playwright-core, 서버 8000/3000 기동 전제)
 import { chromium } from "playwright-core";
@@ -38,12 +39,22 @@ const result = await page.evaluate(async () => {
   list.scrollTop = list.scrollHeight;
   await wait(500);
   out.count3 = count();
-  // 검색 캡 — React 제어 입력에 네이티브 setter로 주입
+  // 검색도 캡 없이 25청크 — 'a'는 264명 매치: 25개+센티널, 스크롤 시 +25 (React 제어 입력은 네이티브 setter로 주입)
   const setVal = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-  setVal.call(input, "kim");
+  setVal.call(input, "a");
   input.dispatchEvent(new Event("input", { bubbles: true }));
   await wait(400);
-  out.countSearch = count();
+  out.searchCount1 = count();
+  out.searchSentinel = !!list.querySelector("div.h-px");
+  list.scrollTop = list.scrollHeight;
+  await wait(500);
+  out.searchCount2 = count();
+  // 부서/그룹 최상단 핀 — 's'는 부서(System Team 등)+유저 동시 매치: 첫 행 우측 라벨이 Department/Group
+  setVal.call(input, "s");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  await wait(400);
+  out.firstRowLabel =
+    list.querySelector("button")?.querySelector("span.ml-auto")?.textContent ?? "";
   // 검색어 지우면 다시 25부터(리셋 확인)
   setVal.call(input, "");
   input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -89,7 +100,10 @@ const pass =
   result.sentinel1 &&
   result.count2 === 50 &&
   result.count3 === 75 &&
-  result.countSearch <= 8 &&
+  result.searchCount1 === 25 &&
+  result.searchSentinel &&
+  result.searchCount2 === 50 &&
+  ["Department", "Group"].includes(result.firstRowLabel) &&
   result.countReset === 25 &&
   table.rows1 === 26 &&
   table.rows2 === 51 &&
