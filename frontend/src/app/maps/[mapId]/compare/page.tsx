@@ -167,6 +167,23 @@ function preferredSides(dx: number, dy: number): HandleSide[] {
     .map((s) => s.side);
 }
 
+const CROSS_OFFLINE = 40; // cross축 오프셋이 이보다 크면 "다른 라인" → cross측 변으로 진입/진출.
+
+// 방향 인식 변 선호 — 상대 노드가 흐름 수직축(cross)으로 확실히 벗어나 있으면(다른 라인: 위/아래 곁가지,
+// 삭제 노드 등) 그 cross측 변을 우선(위→top·아래→bottom / 좌→left·우→right), 아니면 흐름축 측 우선.
+// 예: 위쪽 곁가지(재고예약)→다음 노드는 top으로, 아래 삭제 노드(재고부족알림)→다음 노드는 bottom으로 진입.
+// 나머지 변은 내적순 fallback(그리디 분산). 가로(LR)·세로(TB) 모두 적용.
+function orientedSides(dx: number, dy: number, dir: "LR" | "TB"): HandleSide[] {
+  const crossOffset = dir === "LR" ? dy : dx;
+  let primary: HandleSide;
+  if (Math.abs(crossOffset) > CROSS_OFFLINE) {
+    primary = dir === "LR" ? (dy < 0 ? "top" : "bottom") : dx < 0 ? "left" : "right";
+  } else {
+    primary = dir === "LR" ? (dx >= 0 ? "right" : "left") : dy >= 0 ? "bottom" : "top";
+  }
+  return [primary, ...preferredSides(dx, dy).filter((side) => side !== primary)];
+}
+
 // dagre 배치 후처리 — 유지(unchanged/changed) 노드를 공통 backbone 중심Y에 맞춰 열(rank)별로 세로 이동.
 // ①백본이 완전 직선(중심Y 일치 → smoothstep 직각 계단 제거) ②병렬 곁가지의 유지/변경 노드(예: 관리자 승인)를
 // 라인 위로. 추가 노드는 같은 열 내 상대 오프셋을 유지해 위/아래 곁가지로 남는다. 열=중심X로 그룹.
@@ -594,7 +611,7 @@ function ComparePane({
           const dx = other ? other.cx - center.cx : 1;
           const dy = other ? other.cy - center.cy : 0;
           const len = Math.hypot(dx, dy) || 1;
-          return { ep, prefs: preferredSides(dx, dy), certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
+          return { ep, prefs: orientedSides(dx, dy, flowDir), certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
         });
       normal.sort((a, b) => b.certainty - a.certainty);
       for (const { ep, prefs } of normal) {

@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교: 우회 아크가 변경 필 안 가리게 + 곁가지 진입 변 방향화
+- **변경 필 불투명화**(`process-node.tsx` `DiffFieldPills`) — 필 배경 `bg-changed/10`(10% 투명) → 노드 fill과 동일 불투명 틴트(`color-mix(changed 12%, white)`). 뒤로 지나는 우회 아크(passthrough)가 비쳐 변경 내용을 가리던 문제 해소(노드 z-index 2로 위지만 투명 배경이 원인이었음).
+- **곁가지 진입 변 방향화**(`orientedSides`·`compare/page.tsx`) — 상대 노드가 흐름 수직축(cross)으로 확실히 벗어나면(다른 라인, `CROSS_OFFLINE`=40) 그 cross측 변 우선. 위쪽 곁가지(재고예약)→다음 노드는 **top**, 아래 삭제 노드(재고부족알림)→다음 노드는 **bottom**으로 진입(기존엔 dx≫dy라 좌측 진입). 가로(LR top/bottom)·세로(TB left/right) 모두 적용.
+- 검증: lint 0·build OK. 라이브(map 13) LR: 재고예약→결제처리 top·재고부족알림→결제처리 bottom·필 불투명(pillBg alpha 없음) / TB: left·right 진입 확인.
+
 ## 2026-07-05 — 비교 캔버스 간격 축소 + 백본 직선화(연결성 기반 spine)
 - **전개방향 간격 75%**(`layoutWithDagre` spacing 인자·`compare/page.tsx`) — 한눈에 보이게 흐름축(ranksep) 촘촘히. LR ranksep 160→120, TB ranksep 200→150. TB는 곁가지 구분 위해 좌우(nodesep) 90→120 확대. `layoutWithDagre(…, spacing?)` 오버라이드로 에디터 기본값은 불변.
 - **백본 직선화 개선**(`alignBackbone`) — 25px 임계 휴리스틱 → **연결성 기반 spine 탐지**: 유지 노드에서 "분기 없는 단일 연속"(선행 outDeg==1 / 후행 inDeg==1)으로 이어지는 인라인 삽입까지 spine으로 확장, 병렬 곁가지(분기/합류)는 제외. spine 노드가 있는 열/행은 backbone에 정확히 스냅 → LR 수평·TB 수직 직선. `alignBackbone(nodes, kept, dir, edges)`.

@@ -211,6 +211,9 @@ function DiffBadge({ status, className = "-top-2.5 left-2.5" }: { status: DiffSt
   );
 }
 
+// 필 배경은 노드 fill과 동일한 불투명 틴트 — 뒤로 지나는 엣지(우회 아크)가 비쳐 변경 내용을 가리지 않게.
+const CHANGED_PILL_BG = "color-mix(in srgb, var(--color-changed) 12%, white)";
+
 // 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
 // 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.
 function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffFields"]> }) {
@@ -222,7 +225,8 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
       {shown.map((field) => (
         <span
           key={field.label}
-          className="flex max-w-[220px] items-center gap-1 whitespace-nowrap rounded-xs border border-changed/30 bg-changed/10 px-1.5 py-0.5 text-[11px]"
+          className="flex max-w-[220px] items-center gap-1 whitespace-nowrap rounded-xs border border-changed/30 px-1.5 py-0.5 text-[11px]"
+          style={{ backgroundColor: CHANGED_PILL_BG }}
         >
           <span className="shrink-0 font-semibold text-changed">{field.label}</span>
           <span className="min-w-0 truncate text-ink-muted">{field.before}</span>
@@ -231,7 +235,10 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
         </span>
       ))}
       {extra > 0 && (
-        <span className="rounded-xs border border-changed/30 bg-changed/10 px-1.5 py-0.5 text-[11px] font-medium text-changed">
+        <span
+          className="rounded-xs border border-changed/30 px-1.5 py-0.5 text-[11px] font-medium text-changed"
+          style={{ backgroundColor: CHANGED_PILL_BG }}
+        >
           {t("compare.moreFields", { n: extra })}
         </span>
       )}
