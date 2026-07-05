@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S2c: 피드백 패널 디자인 정합 + 본문 글자수 제한/표시 (사용자 시안)
+- feedback-side-panel: 유형 탭을 **세그먼트 컨트롤**(회색 트랙 `bg-surface-alt` + 흰 활성 pill `bg-surface`·accent)로 · 헤더 서브타이틀 · 유형/내용 라벨 · 컨텍스트 노트에서 raw 라우트 표시 삭제하고 SquareCheck+"현재 화면·열린 맵 자동 첨부" 안내만 · 하단 **2행 버튼**(모든 피드백 보기 풀폭[List/ArrowRight] + 취소/보내기 1:2).
+- 본문 **4000자 제한**(maxLength, 백엔드 FeedbackCreate max_length 일치) + "n / 4000" 카운터.
+- i18n feedback.subtitle/typeLabel/contentLabel/cancel 추가, bodyPlaceholder·contextNote 갱신, currentScreen(고아) 제거.
+- 검증: lint 0 · build 성공. 브라우저(:3001 로그인 Junho Kim) — 패널 시안 정합·카운터(29/4000)·**제출 e2e**(피드백 id=3 저장, context route "/") 확인.
+
 ## 2026-07-05 — S1b: 셸 로그인 상태 반영 (Guest→Login·미로그인 피드백 숨김)
 - TopNav: 미로그인(user=null) 시 유저칩을 "Login"으로 표시 + 클릭 시 /login 이동(로그인 시 이름+드롭다운 유지). 피드백 버튼은 로그인 시에만 노출(`{user && …}`).
 - i18n `nav.guest`(top-nav 전용 고아) 제거 → `nav.login`(en Login / ko 로그인).
