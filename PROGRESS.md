@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S5d: 아이콘 필 필터 통일 + 피드백 표 필/모달 아이콘 (사용자 요청)
+- 공용 components/icon-pill-filter.tsx — 비활성=아이콘만, 활성=아이콘+라벨(max-w 0→28 트랜지션 우측 펼침).
+- 적용: S1 TopNav 3-way 탭(슬라이딩 박스 제거→아이콘 필), 피드백 유형 필터(List/Bug/Lightbulb/MessageCircle/Ellipsis), 공지 필터(List/CircleAlert/Circle).
+- 피드백 표: table-fixed colgroup(유형 5rem·내용 auto·작성자 8rem·상태 6rem·등록일 11rem), 내용 truncate(폭 초과 ellipsis), 작성자 필, 등록일 날짜/시간 2필(DatePills).
+- 피드백 상세 모달 버튼 아이콘화: 수정 PencilLine·저장 Check·취소 X·답글 저장 Send·삭제 Trash2.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — TopNav 탭 확장(공지사항)·피드백/공지 아이콘 필터·피드백 표(작성자·날짜/시간 필)·모달 아이콘 버튼 확인.
+
 ## 2026-07-05 — S5c: 공지/피드백 표·모달 폴리시 묶음 (사용자 요청)
 - 공용 components/pagination.tsx(20개 단위, pageCount≤1이면 숨김).
 - 공지 관리 표: 아코디언 미리보기에 펼침/접힘 애니(grid-rows 0fr↔1fr·duration-350 ease-smooth) · 수정/삭제를 Pencil/Trash2 아이콘 + Tooltip + 행 hover 시에만 노출(group-hover) · 20개 페이징.

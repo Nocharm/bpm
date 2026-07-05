@@ -2,7 +2,7 @@
 
 // 피드백 상세/관리 모달 — 상태변경(관리자)·답글(관리자, done 제외)·본문수정/삭제(작성자, draft만).
 
-import { X } from "lucide-react";
+import { Check, PencilLine, Send, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -133,8 +133,9 @@ export function FeedbackDetailModal({
                 <button
                   type="button"
                   onClick={() => setEditingBody(true)}
-                  className="text-fine text-accent hover:underline"
+                  className="inline-flex items-center gap-1 text-fine text-accent hover:underline"
                 >
+                  <PencilLine size={12} strokeWidth={1.5} />
                   {t("feedback.detail.editBody")}
                 </button>
               )}
@@ -154,16 +155,18 @@ export function FeedbackDetailModal({
                       setEditingBody(false);
                       setBodyDraft(feedback.body);
                     }}
-                    className="rounded-sm border border-hairline px-3 py-1 text-fine text-ink hover:bg-surface-alt"
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-fine text-ink hover:bg-surface-alt"
                   >
+                    <X size={14} strokeWidth={1.5} />
                     {t("feedback.cancel")}
                   </button>
                   <button
                     type="button"
                     onClick={saveBody}
                     disabled={busy || bodyDraft.trim().length === 0}
-                    className="rounded-sm bg-accent px-3 py-1 text-fine text-surface hover:opacity-90 disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1 text-fine text-surface hover:opacity-90 disabled:opacity-40"
                   >
+                    <Check size={14} strokeWidth={1.5} />
                     {t("feedback.detail.save")}
                   </button>
                 </div>
@@ -192,8 +195,9 @@ export function FeedbackDetailModal({
                     type="button"
                     onClick={saveReply}
                     disabled={busy}
-                    className="rounded-sm bg-accent px-3 py-1 text-fine text-surface hover:opacity-90 disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1 text-fine text-surface hover:opacity-90 disabled:opacity-40"
                   >
+                    <Send size={14} strokeWidth={1.5} />
                     {t("feedback.detail.saveReply")}
                   </button>
                 </div>
@@ -284,8 +288,9 @@ export function FeedbackDetailModal({
                     type="button"
                     onClick={remove}
                     disabled={busy}
-                    className="rounded-sm bg-error px-3 py-1 text-fine text-surface hover:opacity-90 disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-sm bg-error px-3 py-1 text-fine text-surface hover:opacity-90 disabled:opacity-40"
                   >
+                    <Trash2 size={14} strokeWidth={1.5} />
                     {t("feedback.detail.deleteConfirm")}
                   </button>
                 </div>
@@ -293,8 +298,9 @@ export function FeedbackDetailModal({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-error/10"
+                  className="inline-flex items-center gap-1 rounded-sm border border-error px-3 py-1 text-fine text-error hover:bg-error/10"
                 >
+                  <Trash2 size={14} strokeWidth={1.5} />
                   {t("feedback.detail.delete")}
                 </button>
               ))}

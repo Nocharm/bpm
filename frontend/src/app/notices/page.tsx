@@ -3,6 +3,7 @@
 // 공지사항 열람 — 홈 폭(max-w-[80rem]) 경계 카드 안 마스터-디테일. 좌 목록(전체/중요/일반·미읽음 점)
 // + 우 마크다운 상세. 읽음은 클라 캐시(notices-read) — 서버 저장 없음. (design 2026-07-05)
 
+import { Circle, CircleAlert, List } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
@@ -11,17 +12,10 @@ import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/notices-read";
+import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 
 type Filter = "all" | NoticeImportance;
-
-const FILTERS: Filter[] = ["all", "important", "normal"];
-
-const FILTER_LABEL: Record<Filter, MessageKey> = {
-  all: "notices.filterAll",
-  important: "notices.filterImportant",
-  normal: "notices.filterNormal",
-};
 
 const IMPORTANCE_STYLE: Record<NoticeImportance, string> = {
   important: "bg-error/15 text-error",
@@ -80,6 +74,12 @@ export default function NoticesPage() {
     setReadIds(markNoticeRead(id));
   };
 
+  const filterOptions: IconPillOption<Filter>[] = [
+    { value: "all", label: t("notices.filterAll"), Icon: List },
+    { value: "important", label: t("notices.filterImportant"), Icon: CircleAlert },
+    { value: "normal", label: t("notices.filterNormal"), Icon: Circle },
+  ];
+
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
@@ -93,22 +93,8 @@ export default function NoticesPage() {
               </span>
             )}
           </div>
-          <div className="flex gap-1.5 px-4 pb-2">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setFilter(f)}
-                className={
-                  "rounded-full px-3 py-0.5 text-fine " +
-                  (filter === f
-                    ? "bg-accent-tint text-accent"
-                    : "border border-hairline text-ink-secondary hover:bg-surface-alt")
-                }
-              >
-                {t(FILTER_LABEL[f])}
-              </button>
-            ))}
+          <div className="px-4 pb-2">
+            <IconPillFilter options={filterOptions} value={filter} onChange={setFilter} />
           </div>
           <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
             {filtered.map((n) => {

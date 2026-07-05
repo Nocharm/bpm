@@ -100,31 +100,33 @@ export function TopNav() {
         >
           {t("app.name")}
         </Link>
-        {/* 3-way 전환 탭 — 브랜드 우측. 슬라이딩 박스 인디케이터로 현재 경로 강조 */}
-        <div className="relative inline-grid grid-cols-3 items-stretch overflow-hidden rounded-sm border border-hairline bg-surface-alt text-fine">
-          {/* 활성 탭 위치로 좌우 이동하는 네모 인디케이터 */}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-accent-tint transition-[transform,opacity] duration-350 ease-spring"
-            style={{
-              transform: `translateX(${Math.max(tabIndex, 0) * 100}%)`,
-              opacity: tabIndex < 0 ? 0 : 1,
-            }}
-          />
+        {/* 3-way 전환 탭 — 아이콘 필(비활성 아이콘만·활성 라벨 우측 펼침) */}
+        <div className="flex items-center gap-1.5 text-fine">
           {NAV_TABS.map((tab, i) => {
+            const active = i === tabIndex;
             const Icon = tab.Icon;
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
-                aria-current={i === tabIndex ? "page" : undefined}
+                aria-current={active ? "page" : undefined}
+                title={t(tab.labelKey)}
                 className={
-                  "relative z-10 flex items-center justify-center gap-1 px-2.5 py-1 transition-colors duration-350 " +
-                  (i === tabIndex ? "text-accent" : "text-ink-tertiary hover:text-ink-secondary")
+                  "inline-flex items-center rounded-full px-2 py-1 transition-colors " +
+                  (active
+                    ? "bg-accent-tint text-accent"
+                    : "border border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink-secondary")
                 }
               >
                 <Icon size={14} strokeWidth={1.5} />
-                {t(tab.labelKey)}
+                <span
+                  className={
+                    "overflow-hidden whitespace-nowrap transition-all duration-350 ease-smooth " +
+                    (active ? "ml-1 max-w-28 opacity-100" : "max-w-0 opacity-0")
+                  }
+                >
+                  {t(tab.labelKey)}
+                </span>
               </Link>
             );
           })}

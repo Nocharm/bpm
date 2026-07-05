@@ -2,7 +2,7 @@
 
 // 전체 피드백 페이지 — 집계 카드 · 유형 필터 · 목록 · 행 클릭 상세/관리 모달 (design 2026-07-05).
 
-import { Plus } from "lucide-react";
+import { Bug, Ellipsis, Lightbulb, List, MessageCircle, Plus } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { listFeedback, type FeedbackItem, type FeedbackKind } from "@/lib/api";
@@ -17,17 +17,27 @@ import {
 import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import { FeedbackDetailModal } from "@/components/feedback-detail-modal";
+import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { Pagination } from "@/components/pagination";
 
-const KIND_FILTERS: (FeedbackKind | "all")[] = [
-  "all",
-  "bug",
-  "suggestion",
-  "question",
-  "etc",
-];
-
 const PAGE_SIZE = 20;
+
+// 등록일 필 — 날짜/시간 두 pill
+function DatePills({ iso }: { iso: string }) {
+  const [dateStr, timeStr] = formatKstShort(iso).split(" ");
+  return (
+    <>
+      <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+        {dateStr}
+      </span>
+      {timeStr && (
+        <span className="ml-1 rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
+          {timeStr}
+        </span>
+      )}
+    </>
+  );
+}
 
 export default function FeedbackPage() {
   const { t } = useI18n();
@@ -80,6 +90,14 @@ export default function FeedbackPage() {
     }
   };
 
+  const filterOptions: IconPillOption<FeedbackKind | "all">[] = [
+    { value: "all", label: t("feedback.filterAll"), Icon: List },
+    { value: "bug", label: t(FEEDBACK_KIND_LABEL.bug), Icon: Bug },
+    { value: "suggestion", label: t(FEEDBACK_KIND_LABEL.suggestion), Icon: Lightbulb },
+    { value: "question", label: t(FEEDBACK_KIND_LABEL.question), Icon: MessageCircle },
+    { value: "etc", label: t(FEEDBACK_KIND_LABEL.etc), Icon: Ellipsis },
+  ];
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-5 overflow-y-auto px-6 py-6">
       {/* 헤더 */}
@@ -123,30 +141,14 @@ export default function FeedbackPage() {
 
       {/* 유형 필터 + 검색 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {KIND_FILTERS.map((k) => {
-            const active = kindFilter === k;
-            const label = k === "all" ? t("feedback.filterAll") : t(FEEDBACK_KIND_LABEL[k]);
-            return (
-              <button
-                key={k}
-                type="button"
-                onClick={() => {
-                  setKindFilter(k);
-                  setPage(1);
-                }}
-                className={
-                  "rounded-sm px-2.5 py-1 text-caption " +
-                  (active
-                    ? "bg-accent-tint text-accent"
-                    : "border border-hairline text-ink-secondary hover:bg-surface-alt")
-                }
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        <IconPillFilter
+          options={filterOptions}
+          value={kindFilter}
+          onChange={(v) => {
+            setKindFilter(v);
+            setPage(1);
+          }}
+        />
         <input
           value={search}
           onChange={(event) => {
@@ -160,7 +162,14 @@ export default function FeedbackPage() {
 
       {/* 목록 — 행 클릭 시 상세/관리 모달 */}
       <div className="overflow-x-auto rounded-md border border-hairline">
-        <table className="w-full border-collapse text-caption">
+        <table className="w-full table-fixed border-collapse text-caption">
+          <colgroup>
+            <col style={{ width: "5rem" }} />
+            <col />
+            <col style={{ width: "8rem" }} />
+            <col style={{ width: "6rem" }} />
+            <col style={{ width: "11rem" }} />
+          </colgroup>
           <thead>
             <tr className="border-b border-hairline bg-surface-alt text-left text-ink-secondary">
               <th className="px-3 py-2 font-normal">{t("feedback.typeLabel")}</th>
@@ -184,12 +193,16 @@ export default function FeedbackPage() {
                     {t(FEEDBACK_KIND_LABEL[f.kind])}
                   </span>
                 </td>
-                <td className="max-w-0 px-3 py-2 text-ink">
+                <td className="px-3 py-2 text-ink">
                   <span className="block truncate" title={f.body}>
                     {f.body}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-ink-secondary">{f.author}</td>
+                <td className="whitespace-nowrap px-3 py-2">
+                  <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                    {f.author}
+                  </span>
+                </td>
                 <td className="px-3 py-2">
                   <span
                     className={
@@ -199,8 +212,8 @@ export default function FeedbackPage() {
                     {t(FEEDBACK_STATUS_LABEL[f.status])}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-ink-tertiary">
-                  {formatKstShort(f.created_at)}
+                <td className="whitespace-nowrap px-3 py-2">
+                  <DatePills iso={f.created_at} />
                 </td>
               </tr>
             ))}
