@@ -3,7 +3,7 @@
 // 홈 — 프로세스맵 목록 (공개범위 필터링) + 맵 생성 다이얼로그 /
 // Home: map list filtered by mock visibility + map creation dialog.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
 
@@ -90,6 +90,55 @@ export default function MapListPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecentEntries(getRecentMaps()); // one-time hydration from localStorage
   }, []);
+
+  // 검색·필터 복원 — session 스코프(탭 닫으면 초기화). 마운트 후 1회, default 후 복원(하이드레이션 안전).
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem("bpm.home.filters");
+      if (!raw) {
+        return;
+      }
+      const s = JSON.parse(raw) as {
+        q?: unknown;
+        vis?: unknown;
+        status?: unknown;
+        perm?: unknown;
+      };
+      if (typeof s.q === "string") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setMapQuery(s.q); // one-time hydration restore from sessionStorage
+      }
+      if (s.vis === "all" || s.vis === "public" || s.vis === "private") {
+        setVisFilter(s.vis);
+      }
+      if (Array.isArray(s.status)) {
+        setStatusFilter(new Set(s.status.filter((x): x is string => typeof x === "string")));
+      }
+      if (Array.isArray(s.perm)) {
+        setPermFilter(new Set(s.perm.filter((x): x is string => typeof x === "string")));
+      }
+    } catch {
+      /* 손상된 저장값 무시 */
+    }
+  }, []);
+
+  // 검색·필터 저장 — 변경 시 session에 기록. 마운트 첫 실행은 skip(초기 default가 저장값 덮어쓰기 방지).
+  const saveSkip = useRef(true);
+  useEffect(() => {
+    if (saveSkip.current) {
+      saveSkip.current = false;
+      return;
+    }
+    window.sessionStorage.setItem(
+      "bpm.home.filters",
+      JSON.stringify({
+        q: mapQuery,
+        vis: visFilter,
+        status: [...statusFilter],
+        perm: [...permFilter],
+      }),
+    );
+  }, [mapQuery, visFilter, statusFilter, permFilter]);
 
   const handleDelete = useCallback(
     async (mapId: number) => {
