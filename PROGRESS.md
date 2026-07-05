@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 데모 맵(계보 공유 2버전) + BASE 게시본 기본 + 게시본 없으면 진입 비활성
+- **데모 시드** `backend/scripts/seed_compare_demo.py` — 계보(`source_node_id`) 공유 2버전(v1 게시본/v2 초안) 맵 생성. v2 유지 노드가 v1 노드를 계보 루트로 가리켜 diff가 매칭(seed_org_demo의 버전별 독립 그래프와 대비). 목업 스타일: 노드 추가5·삭제1·변경3·무변경8, 엣지 추가9·삭제5(passthrough 3), 우회 아크 3. 멱등(동명 맵 purge 후 재생성). → map 13 `/maps/13/compare`.
+- **비교 BASE 기본값 = 게시본 우선**(`compare/page.tsx`) — `versions.find(published)` 있으면 base로, 없으면 최초. target=최신.
+- **진입 버튼 게시본 게이트**(`inspector-panel.tsx`·`page.tsx`) — `canCompare = versions.some(published)`. 없으면 버튼 비활성(회색·`cursor-not-allowed`·툴팁 `inspector.compareNeedsPublished`). `PropertiesEmpty` Omit에 canCompare 추가.
+- 검증: lint 0 · build OK. 라이브(map 13) — BASE가 게시본(v1·게시본) 기본 선택·목업 스타일 diff·3 passthrough 아크·before→after 필 확인. 버튼 활성(게시본 有)→v76 임시 draft 시 비활성 회색 확인 후 복원.
+
 ## 2026-07-05 — C2b 후속: compare 엣지 핸들 변 지정(노드 뒤 우회 해결)
 - **문제**: 목업 대비 실제 compare 엣지가 전부 소스 **왼쪽에서 나가** 타겟(오른쪽)까지 **노드 뒤로 우회**. 원인 = `buildAppEdges`가 `sourceHandle/targetHandle` 미지정 → RF가 첫 렌더 핸들(left)에 부착(canvas.ts:548 주석 근거). 배열(dagre)이 아니라 핸들 문제.
 - **수정**(`compare/page.tsx`) — 레이아웃된 노드 중심(`nodeCenters`, `nodeSizeOf`로 산정)의 **우세방향으로 핸들 변 지정**(`edgeSides`: |dx|≥|dy| → R/L, else B/T) → `sourceHandleId/targetHandleId`. 하위프로세스 끝점은 `withSubprocessHandles`(in/__primary__)로 remap. `subprocessIds`·`nodeCenters` useMemo. passthrough 아크는 그대로 동작.

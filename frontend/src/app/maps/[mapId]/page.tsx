@@ -6952,6 +6952,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
                 mapId={mapId}
+                canCompare={versions.some((version) => version.status === "published")}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
                 propertiesSlot={
                   selectedNode ? (

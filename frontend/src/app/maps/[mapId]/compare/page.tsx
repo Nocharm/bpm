@@ -691,8 +691,9 @@ export default function ComparePage() {
       if (!active) return;
       setMapName(detail.name);
       setVersions(detail.versions);
-      // 기본: base=가장 오래된(published 후보), target=최신
-      setBaseId(detail.versions[0].id);
+      // base=게시(published) 버전 우선(없으면 최초), target=최신 — 게시본을 기준선으로 비교.
+      const published = detail.versions.find((version) => version.status === "published");
+      setBaseId((published ?? detail.versions[0]).id);
       setTargetId(detail.versions[detail.versions.length - 1].id);
     })();
     return () => {

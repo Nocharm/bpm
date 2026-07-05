@@ -34,6 +34,8 @@ const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
 interface InspectorPanelProps {
   onCollapse: () => void;
   mapId: number;
+  // 게시(published) 버전이 있어야 비교 가능 — 없으면 진입 버튼 비활성화.
+  canCompare: boolean;
   selectionKind: "node" | "edge" | null;
   // 선택된 노드/엣지 속성 폼 — page.tsx가 만들어 주입(빈상태는 내부 처리). 없으면 placeholder.
   propertiesSlot?: ReactNode;
@@ -60,6 +62,7 @@ interface InspectorPanelProps {
 export function InspectorPanel({
   onCollapse,
   mapId,
+  canCompare,
   selectionKind,
   propertiesSlot,
   mapTabSlot,
@@ -150,16 +153,29 @@ export function InspectorPanel({
           (activitySlot ?? <Placeholder text={`${t("inspector.tabActivity")} · ${t("inspector.wip")}`} />)}
       </div>
 
-      {/* 속성 빈상태 하단 스티키 — 비교 화면 진입(PNG 다운로드 버튼과 동일 accent 톤). 선택 없을 때만 */}
+      {/* 속성 빈상태 하단 스티키 — 비교 화면 진입(PNG 다운로드 버튼과 동일 accent 톤). 선택 없을 때만.
+          게시본이 없으면 비교 기준선이 없어 비활성화(툴팁 안내). */}
       {tab === "properties" && selectionKind === null && (
         <div className="shrink-0 border-t border-hairline p-3">
-          <Link
-            href={`/maps/${mapId}/compare`}
-            className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-          >
-            <GitCompare size={16} strokeWidth={1.5} />
-            {t("inspector.compareVersions")}
-          </Link>
+          {canCompare ? (
+            <Link
+              href={`/maps/${mapId}/compare`}
+              className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+            >
+              <GitCompare size={16} strokeWidth={1.5} />
+              {t("inspector.compareVersions")}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title={t("inspector.compareNeedsPublished")}
+              className="flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-sm bg-surface-alt px-3 py-2 text-caption font-medium text-ink-tertiary"
+            >
+              <GitCompare size={16} strokeWidth={1.5} />
+              {t("inspector.compareVersions")}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -178,7 +194,7 @@ function PropertiesEmpty({
   mapName,
   mapVersionMarker,
   versionControl,
-}: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId">) {
+}: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId" | "canCompare">) {
   const { t } = useI18n();
   const action =
     "flex w-full items-center gap-2 rounded-sm border border-hairline px-3 py-2 text-caption text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";

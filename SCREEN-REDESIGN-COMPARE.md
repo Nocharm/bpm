@@ -9,6 +9,7 @@
 ## 검토 환경
 - 목업 미리보기: `cd docs/superpowers/specs/assets/editor-compare-redesign && python3 -m http.server 8899` → `http://localhost:8899/compare-screen.mockup.html`.
 - 라이브 검증: 로컬 네이티브 `:3000`, 다버전 맵(예: map 11, 9버전) `/maps/11/compare`. 대조 기준 = main(=배포).
+- **개발용 데모 맵**: `backend/scripts/seed_compare_demo.py` — **계보(source_node_id) 공유 2버전**(v1 게시본 As-Is / v2 초안 To-Be)으로 목업 스타일 diff(노드 추가5·삭제1·변경3·무변경8, 엣지 추가9·삭제5(passthrough 3), 3개 우회 아크). 실행 `cd backend && .venv/bin/python -m scripts.seed_compare_demo` → map 13 `/maps/13/compare`. (시드의 Release 스냅샷들은 계보 독립이라 전부 add/remove로만 나옴 — 실제 diff 검증은 이 데모 맵으로.)
 
 ## DB 실현가능성 (확인 완료 — 스키마 변경 불필요)
 - **노드 계보**: `Node.source_node_id`(원본 루트 포인터). 버전 클론 시 서버가 `source_node_id = node.source_node_id or node.id`로 전파 → 버전 간 "같은 논리 노드"가 같은 계보키 공유. `getLineageKey = source_node_id ?? id`.
@@ -34,7 +35,7 @@
 ## 마스터 표
 | ID | 화면 | 단위 / 내용 | 검증 | 시현 | 검토결과 | 커밋 |
 |----|------|-------------|------|------|---------|------|
-| C0 | 진입(에디터) | **비교화면 진입 버튼** — 에디터 우측 속성탭 **빈 상태**(선택 없음) 하단 **스티키** 버튼. PNG 다운로드와 동일 accent 톤(`bg-accent`·`GitCompare`), `/maps/[id]/compare` 내비. 읽기전용에서도 노출. `inspector-panel.tsx`(`mapId` prop·`Link` 푸터, 스크롤 밖 `shrink-0 border-t`)·i18n `inspector.compareVersions`. | lint/build✅ | 라이브(:3000 map 11)✅ 내비 확인 | ✅ | (this) |
+| C0 | 진입(에디터) | **비교화면 진입 버튼** — 에디터 우측 속성탭 **빈 상태**(선택 없음) 하단 **스티키** 버튼. PNG 다운로드와 동일 accent 톤(`bg-accent`·`GitCompare`), `/maps/[id]/compare` 내비. 읽기전용에서도 노출. `inspector-panel.tsx`(`mapId` prop·`Link` 푸터, 스크롤 밖 `shrink-0 border-t`)·i18n `inspector.compareVersions`. **+ 게시본 없으면 비활성**(`canCompare` prop, 회색·툴팁 `compareNeedsPublished`) + **비교 BASE 기본값=게시본 우선**(compare/page.tsx). | lint/build✅ | 라이브(map 13: 활성/비활성·게시본 BASE 확인)✅ | ✅ | (this) |
 | C1a | 셸 헤더 | (완료·머지) 뒤로가기·타이틀·**BASE/TARGET pill(상태 색점)**·swap·Export(PNG)·Apply To-Be·범례 캔버스 이전·`min-h-0` 높이수정 | lint/build✅ | ✅ | ✅ | main `f257047` |
 | C1b | 셸 오버레이 | (완료·머지) 좌상 카운트 필·좌하 범례 폴리시·우하 `ZoomBar`(useStore zoom%) | lint/build✅ | ✅ | ✅ | main `d1f95f9` |
 | C2a | diff 노드 | 노드 상태별 스타일 — 추가 green 실선·삭제 red **점선**·변경 amber, 상단 **상태 뱃지(.7)**+diff색 틴트 fill(자기색 대신), 변경 노드 **before→after 필**(None·최대 3+"+N more"·값 truncate). `merge-diff.ts`에 `FieldChange{field,before,after}` 실음(+단위테스트), `NodeData.diffFields`·`ProcessNode`(DiffBadge/DiffFieldPills)·compare `fieldsOf`. **+ `layoutWithDagre nodesep` 72→120**(필이 아래 노드 침범 방지, compare 전용). | lint/build✅·27test✅ | 라이브(map11 73→74: 추가/삭제/변경 각 확인)✅ | ✅ | (this) |
