@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 구현 계획 (브랜치 worktree-feat+subprocess-detail)
+- 플랜 `docs/superpowers/plans/2026-07-06-subprocess-designation.md` — 검토 단위 U1~U7(백엔드 기반→설정 UI→피커→refs·경고잠금→어트리뷰트 표시→색상→시드), 단위별 커밋+사용자 검토 정지, 트래커 `SUBPROCESS-DESIGNATION.md` 병행.
+
 ## 2026-07-06 — 서브프로세스 지정(Designation) 설계 확정 (브랜치 worktree-feat+subprocess-detail)
 - 스펙 `docs/superpowers/specs/2026-07-06-subprocess-designation-design.md` — 오너가 맵 설정에서 지정해야 피커 노출, 어트리뷰트 4종(부서 필수) 라이브 참조, 미지정/해제 = 경고+잠금, 노드 단일색 고정. `ProcessMap` 컬럼 7개(접근 A)·PUT/DELETE designation API·`subprocess_refs` 동봉.
 
