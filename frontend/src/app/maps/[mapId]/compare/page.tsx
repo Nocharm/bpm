@@ -45,7 +45,16 @@ import {
   type VersionStatus,
   type VersionSummary,
 } from "@/lib/api";
-import { layoutWithDagre, normalizeNodeType, type AppNode } from "@/lib/canvas";
+import {
+  type HandleSide,
+  layoutWithDagre,
+  nodeSizeOf,
+  normalizeNodeType,
+  sourceHandleId,
+  targetHandleId,
+  type AppNode,
+  withSubprocessHandles,
+} from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -115,6 +124,20 @@ function buildAppNodes(
       diffFields: fieldsOf(m),
     },
   }));
+}
+
+// 레이아웃된 두 노드 중심의 우세 방향으로 엣지가 붙을 변을 정한다(가로→R/L, 세로→B/T).
+// 핸들 미지정 시 RF가 첫 핸들(left)에 붙여 엣지가 노드 뒤로 도는 문제를 방지(canvas.ts withEdge 주석 참고).
+function edgeSides(
+  a: { cx: number; cy: number },
+  b: { cx: number; cy: number },
+): { source: HandleSide; target: HandleSide } {
+  const dx = b.cx - a.cx;
+  const dy = b.cy - a.cy;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0 ? { source: "right", target: "left" } : { source: "left", target: "right" };
+  }
+  return dy >= 0 ? { source: "bottom", target: "top" } : { source: "top", target: "bottom" };
 }
 
 function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
@@ -326,6 +349,27 @@ function ComparePane({
     [merged, noteOf, fieldsOf, keptKeys],
   );
 
+  // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
+  const nodeCenters = useMemo(() => {
+    const centers = new Map<string, { cx: number; cy: number }>();
+    for (const node of positioned) {
+      const size = nodeSizeOf(node.data.nodeType);
+      centers.set(node.id, {
+        cx: node.position.x + size.w / 2,
+        cy: node.position.y + size.h / 2,
+      });
+    }
+    return centers;
+  }, [positioned]);
+
+  const subprocessIds = useMemo(
+    () =>
+      new Set(
+        positioned.filter((node) => node.data.nodeType === "subprocess").map((node) => node.id),
+      ),
+    [positioned],
+  );
+
   // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)
   const laidNodes = useMemo(
     () => positioned.map((node) => ({ ...node, selected: focusId === node.id })),
@@ -335,12 +379,26 @@ function ComparePane({
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
     () =>
-      buildAppEdges(merged.edges, keptKeys).map((edge) =>
-        focusId === edge.id
-          ? { ...edge, selected: true, style: { ...(edge.style ?? {}), strokeWidth: 3 } }
-          : edge,
-      ),
-    [merged, focusId, keptKeys],
+      buildAppEdges(merged.edges, keptKeys).map((edge) => {
+        let styled = edge;
+        // 레이아웃 위치로 핸들 변 지정(미지정 시 좌측 핸들에 몰려 노드 뒤로 우회) + 하위프로세스 전용 핸들 remap.
+        const a = nodeCenters.get(edge.source);
+        const b = nodeCenters.get(edge.target);
+        if (a && b) {
+          const sides = edgeSides(a, b);
+          styled = {
+            ...styled,
+            sourceHandle: sourceHandleId(sides.source),
+            targetHandle: targetHandleId(sides.target),
+          };
+          styled = withSubprocessHandles(styled, (id) => subprocessIds.has(id));
+        }
+        if (focusId === edge.id) {
+          styled = { ...styled, selected: true, style: { ...(styled.style ?? {}), strokeWidth: 3 } };
+        }
+        return styled;
+      }),
+    [merged, focusId, keptKeys, nodeCenters, subprocessIds],
   );
 
   const titleByKey = useMemo(

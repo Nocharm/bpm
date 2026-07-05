@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — C2b 후속: compare 엣지 핸들 변 지정(노드 뒤 우회 해결)
+- **문제**: 목업 대비 실제 compare 엣지가 전부 소스 **왼쪽에서 나가** 타겟(오른쪽)까지 **노드 뒤로 우회**. 원인 = `buildAppEdges`가 `sourceHandle/targetHandle` 미지정 → RF가 첫 렌더 핸들(left)에 부착(canvas.ts:548 주석 근거). 배열(dagre)이 아니라 핸들 문제.
+- **수정**(`compare/page.tsx`) — 레이아웃된 노드 중심(`nodeCenters`, `nodeSizeOf`로 산정)의 **우세방향으로 핸들 변 지정**(`edgeSides`: |dx|≥|dy| → R/L, else B/T) → `sourceHandleId/targetHandleId`. 하위프로세스 끝점은 `withSubprocessHandles`(in/__primary__)로 remap. `subprocessIds`·`nodeCenters` useMemo. passthrough 아크는 그대로 동작.
+- 검증: lint 0 · build OK. 라이브(map 11) — 기본쌍·73→74에서 소스 우측 출력·타겟 좌측 입력·분기 상/하 라우팅·passthrough 아크 유지·노드 뒤 우회 제거 확인.
+
 ## 2026-07-05 — C2b: diff 엣지 + passthrough-removed 우회 라우팅
 - **`compare/page.tsx`** — 커스텀 엣지 `RemovedArcEdge`(BaseEdge 베지어, `Math.max(sy,ty)+56`로 아래 dip) + `edgeTypes` 등록. `buildAppEdges(merged, keptKeys)`: **양끝이 모두 유지 노드인 removed 엣지 = passthrough** → `type:"removedArc"`(삽입 노드 회피 아크), 그 외는 smoothstep. 마커 색을 **상태별**(added green/removed red/기타 gray)로. `keptKeys`(non-removed 계보키) useMemo, positioned/appEdges 배선.
 - 검증: lint 0 · build/TS OK. 라이브(map 11 73→74) — 실제 passthrough 엣지 `새 단계 (5) → Order Fulfillment`가 빨간 점선 아크로 New step (6) 아래 우회 확인. 삭제 노드로 가는 엣지는 smoothstep 유지(회귀 없음).
