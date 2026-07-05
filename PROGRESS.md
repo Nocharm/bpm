@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 인터랙션: 노드 클릭/hover·이동 포커스 링·워터마크 상위·엣지 라벨 블러
+- **워터마크 노드 위로**(`compare/page.tsx`) — z-0(뒤)→**z-[4]**(노드 z-2 위로 덮음, opacity .14 유지). 에디터 read-only 워터마크와 동일 동작.
+- **캔버스 노드/엣지 클릭 = 좌측 항목 클릭과 동일 효과** — `onNodeClick`/`onEdgeClick`로 `setFocusId`. 부수효과로 RF가 노드 pointer-events를 켜 **hover 강조 링(bpm-node-emph)도 복구**(이전엔 핸들러 없어 pointer-events off라 hover/click 불가).
+- **이동하는 포커스 링** — 에디터 `NodeSelectionRing`(선택 노드 위 accent 링, CSS transition으로 슬라이드) 재사용, `ViewportPortal`로 flow 좌표 정합. 포커스 바뀌면 링이 노드 사이를 슬라이드.
+- **엣지 라벨 배경 반투명+블러** — SVG 라벨은 backdrop-blur 불가 → 커스텀 `LabeledSmoothEdge`(smoothstep 경로 + `EdgeLabelRenderer` HTML 라벨, bg `color-mix(surface 55%,transparent)`+`blur(3px)`). non-passthrough 엣지를 `smoothstep`→`labeled` 타입으로. 엣지 선이 라벨에서 끊긴 느낌↓·가독성↑.
+- 검증: lint 0·build OK. 라이브(map 13) 클릭 시 링 슬라이드·인스펙터/좌측 갱신·워터마크 상위·라벨 블러 확인.
+
 ## 2026-07-05 — 비교 C4(우측 속성 인스펙터) + 헤더/캔버스 크롬 에디터화
 - **C4 우측 인스펙터**(`compare/page.tsx`) — `Properties` + `View only`(Lock) 배지. 포커스 노드 선택 시 Title/Description(회색 박스)·Type·Color(스와치)·Assignee/Department/System/Duration 행. 변경 필드는 `~~before~~ → after`(취소선+changed색). 미선택 시 빈 상태. `PanelRight` 토글(`inspectorOpen`).
 - **헤더 에디터화** — 좌상단 `PanelLeft`(Changes 접기·`leftCollapsed`), 우측 `PanelRight`(인스펙터 접기) — 에디터 동일 위치. **← Editor 링크 → 제목 드롭다운**(박스+chevron, 클릭 시 'Editor' 메뉴로 이동, MapNameDropdown 트리거 스타일 재활용). **Apply To-Be 제거**(적용 로직 없는 플레이스홀더였고 제목 드롭다운과 중복 → 삭제).

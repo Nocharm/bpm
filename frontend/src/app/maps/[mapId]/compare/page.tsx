@@ -8,7 +8,9 @@ import {
   type Edge,
   type EdgeProps,
   type EdgeTypes,
+  EdgeLabelRenderer,
   getNodesBounds,
+  getSmoothStepPath,
   getViewportForBounds,
   MarkerType,
   type NodeTypes,
@@ -18,6 +20,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   useStore,
+  ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toPng } from "html-to-image";
@@ -41,6 +44,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
+import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { ProcessNode } from "@/components/process-node";
 import {
   getFullGraph,
@@ -90,7 +94,50 @@ function RemovedArcEdge({
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
 }
 
-const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge };
+// 라벨 있는 일반 엣지 — smoothstep 경로 + HTML 라벨(EdgeLabelRenderer). 라벨 배경을 반투명+블러로 처리해
+// 엣지 선이 라벨에서 "끊긴" 느낌을 줄이면서 글자 가독성 확보(SVG 라벨은 backdrop-blur 불가라 커스텀 처리).
+function LabeledSmoothEdge({
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  label,
+  markerEnd,
+  style,
+}: EdgeProps) {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  return (
+    <>
+      <BaseEdge path={path} markerEnd={markerEnd} style={style} />
+      {label && (
+        <EdgeLabelRenderer>
+          <div
+            className="pointer-events-none absolute rounded-xs px-1 text-fine text-ink-secondary"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              background: "color-mix(in srgb, var(--color-surface) 55%, transparent)",
+              backdropFilter: "blur(3px)",
+              WebkitBackdropFilter: "blur(3px)",
+            }}
+          >
+            {label}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge, labeled: LabeledSmoothEdge };
 
 // 비교뷰 노드 컨텍스트 — 변경은 diff 필로 보여주므로 박스의 BPM 필드 줄을 숨긴다(displayFields: []).
 // 노드 높이가 내용과 무관하게 균일해져 백본 정렬(alignBackbone)이 정확해지고 중복 표시도 제거.
@@ -295,7 +342,7 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
       source: e.source,
       target: e.target,
       label: e.label || undefined,
-      type: passthrough ? "removedArc" : "smoothstep",
+      type: passthrough ? "removedArc" : "labeled",
       markerEnd: { type: MarkerType.ArrowClosed, color: markerColor },
       style:
         e.status === "added"
@@ -1064,8 +1111,9 @@ function ComparePane({
         </aside>
         )}
         <div className="relative min-w-0 flex-1 overflow-hidden bg-canvas" data-id="compare-canvas">
-          {/* Compare View 워터마크 — 읽기전용 인지(에디터 read-only 워터마크 재활용, dot-grid 대체) */}
-          <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
+          {/* Compare View 워터마크 — 읽기전용 인지(에디터 read-only 워터마크 재활용, dot-grid 대체).
+              z-[4]로 노드(z-2) 위에 덮되 opacity .14로 투과 — 에디터 워터마크와 동일. */}
+          <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
             <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest text-accent opacity-[0.14]">
               {t("compare.watermark")}
             </span>
@@ -1082,7 +1130,13 @@ function ComparePane({
             elementsSelectable={false}
             fitView
             minZoom={0.2}
+            onNodeClick={(_, node) => setFocusId(node.id)}
+            onEdgeClick={(_, edge) => setFocusId(edge.id)}
           >
+            {/* 선택 노드 위로 슬라이드하는 포커스 링(에디터와 동일 — ViewportPortal로 flow 좌표 정합) */}
+            <ViewportPortal>
+              <NodeSelectionRing />
+            </ViewportPortal>
             {/* dot-grid 제거 · 좌상 카운트 필 제거(좌하 범례로 통합) */}
             <Panel
               position="bottom-left"
