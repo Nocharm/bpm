@@ -10,6 +10,7 @@ import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
 import { useDirectory } from "@/lib/directory";
 import { formatKstShort } from "@/lib/datetime";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/notices-read";
@@ -19,6 +20,7 @@ import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filt
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
 
 type Filter = "all" | NoticeImportance;
@@ -56,9 +58,14 @@ export default function NoticesPage() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const dir = useDirectory(); // 작성자 login_id → 이름 해석(아바타 이니셜용)
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
+
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  const notifyCopied = () =>
+    setToasts((prev) => [{ id: genId(), message: t("ai.copied") }, ...prev]);
 
   useEffect(() => {
     let alive = true;
@@ -108,7 +115,7 @@ export default function NoticesPage() {
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
         {/* 좌 목록 — 폭은 맵 목록과 동일(flex-1 : flex-[2]) */}
-        <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
+        <aside className="flex min-w-[18rem] flex-1 flex-col">
           <div className="flex flex-col gap-2 py-3 pr-3">
             <SearchBox
               value={search}
@@ -171,8 +178,8 @@ export default function NoticesPage() {
           </ul>
         </aside>
 
-        {/* 우 상세 */}
-        <div className="min-w-0 flex-[2] overflow-y-auto">
+        {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스 */}
+        <div className="ml-4 min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt">
           {selected ? (
             <article className="px-8 py-6">
               <div className="flex items-center gap-2">
@@ -204,7 +211,7 @@ export default function NoticesPage() {
                 </span>
               </div>
               <hr className="my-5 border-hairline" />
-              <MarkdownView source={selected.body_md} />
+              <MarkdownView source={selected.body_md} onCopy={notifyCopied} />
               <div className="mt-6 rounded-md bg-accent-tint px-4 py-3 text-caption text-ink-secondary">
                 {t("notices.contactPre")}{" "}
                 <button
@@ -224,6 +231,7 @@ export default function NoticesPage() {
           )}
         </div>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

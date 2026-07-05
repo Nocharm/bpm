@@ -36,8 +36,9 @@ function inline(s: string): string {
         `<a href="${escapeAttr(safeHref(url))}" target="_blank" rel="noreferrer">${text}</a>`,
     )
     // 인라인 태그 필 — 공백/시작 뒤 #word 를 알약 뱃지로(#는 표기에서 제거).
+    // -·. 는 영숫자 사이에서만 허용(#v2.4 → v2.4, 문장 끝 마침표 "#tag." 는 제외).
     .replace(
-      /(^|\s)#([0-9A-Za-z_가-힣][0-9A-Za-z_가-힣-]*)/g,
+      /(^|\s)#([0-9A-Za-z_가-힣](?:[-.]?[0-9A-Za-z_가-힣])*)/g,
       '$1<span class="md-tag">$2</span>',
     );
 }

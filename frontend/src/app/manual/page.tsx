@@ -7,11 +7,13 @@ import { Contrast, MoveHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { getManual, type ManualDoc } from "@/lib/api";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { Tooltip } from "@/components/tooltip";
 
 interface TocEntry {
@@ -49,9 +51,14 @@ export default function ManualPage() {
   const [readWide, setReadWide] = useState(false);
   const [readTheme, setReadTheme] = useState(false);
   const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   useSlashFocus(searchRef);
+
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  const notifyCopied = () =>
+    setToasts((prev) => [{ id: genId(), message: t("ai.copied") }, ...prev]);
 
   useEffect(() => {
     let alive = true;
@@ -211,12 +218,13 @@ export default function ManualPage() {
               {content === "" ? (
                 <p className="text-caption text-ink-tertiary">{t("manual.empty")}</p>
               ) : (
-                <MarkdownView source={content} />
+                <MarkdownView source={content} onCopy={notifyCopied} />
               )}
             </div>
           </article>
         </div>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

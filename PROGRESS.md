@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 상세 회색 박스·복사 토스트·태그 `.`·승인 모달/승인자 현황 (사용자 요청)
+- **상세 우측 회색 바디박스**: 공지·인박스(알림/승인) 상세 pane을 맵 탭처럼 `rounded-sm border border-hairline bg-surface-alt`로. aside border-r 제거(박스+간격이 경계).
+- **마크다운 복사 토스트**: 공지·매뉴얼 `MarkdownView`에 `onCopy` → ToastStack("클립보드에 복사됨" `ai.copied`). (복사는 되는데 토스트 안 뜨던 문제.)
+- **태그 `.` 버그**: `markdown-view` 태그 정규식이 영숫자 사이 `-·.` 허용 → `#v2.4`가 "v2.4" 한 태그(문장 끝 마침표는 제외).
+- **버전 승인 승인자 현황**: 상세에 `getWorkflowState`로 승인자별 ✓승인/○대기/✗반려 목록 표시.
+- **승인/반려 = 에디터와 동일 모달**: 인라인 textarea/버튼 → 공용 `ConfirmDialog` 재사용(에디터 approve/reject 모달과 동일). 승인=확인 모달+승인자 lines, 반려=danger+사유 입력(버전은 필수, 비면 확인 비활성)+승인자 lines. act는 kind별 기존 함수 재사용.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 회색 박스·복사 토스트·v2.4 태그·승인자 현황(Junho Kim 대기)·반려 모달(사유 필수) 확인.
+
 ## 2026-07-06 — 인박스 승인 카드/상세 정보 확장 (사용자 요청)
 - 카드: 유형 아이콘 **오른쪽에 제목** 배치(아이콘+제목 인라인·유형 필 우측). approval_request 제목은 내부 kind→읽기 라벨("가시성 변경"/"권한 변경").
 - 상세: **요청 내용 마크다운 요약**(MarkdownView, `값` inline code + 변경 후 값 **강조** — 가시성/권한 `before` → **`after`**) + **메타**(맵 링크·버전(label·vN)·업데이트 TimePills·요청 시각 TimePills·요청자 UserPill·점유권이전 현재점유자·권한변경 대상) + **멤버 보기**(펼침 시 `listMapPermissions`로 허용 인원 = 이름 필+역할, key로 맵 변경 시 리셋).

@@ -11,6 +11,7 @@ import {
   Mail,
   Megaphone,
   ShieldCheck,
+  User,
   Users,
   X,
   type LucideIcon,
@@ -22,22 +23,26 @@ import {
   approveVersion,
   decideApprovalRequest,
   decideCheckoutRequest,
+  getWorkflowState,
   listInboxApprovals,
   listMapPermissions,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   rejectVersion,
+  type DirectoryUser,
   type InboxApproval,
   type InboxApprovalKind,
   type MapPermission,
   type NotificationItem,
+  type WorkflowState,
 } from "@/lib/api";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { filterByQuery } from "@/lib/search";
 import { useSlashFocus } from "@/lib/use-slash-focus";
+import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
@@ -112,7 +117,6 @@ export default function InboxPage() {
   const [approvals, setApprovals] = useState<InboxApproval[]>([]);
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [nowMs] = useState(() => Date.now());
   const dir = useDirectory(); // 요청자 login_id → 이름 해석(검색·표시)
   const searchRef = useRef<HTMLInputElement>(null);
@@ -164,13 +168,13 @@ export default function InboxPage() {
   };
 
   // 승인/반려 — kind별 기존 엔드포인트 호출 후 큐 재조회(서버 진실, 낙관적 갱신 금지)
-  const actApproval = async (a: InboxApproval, approve: boolean) => {
+  const actApproval = async (a: InboxApproval, approve: boolean, reason: string) => {
     if (approvalBusy) return;
     setApprovalBusy(true);
     try {
       if (a.kind === "version_approval") {
         if (approve) await approveVersion(a.id);
-        else await rejectVersion(a.id, rejectReason.trim());
+        else await rejectVersion(a.id, reason.trim());
       } else if (a.kind === "checkout_transfer") {
         await decideCheckoutRequest(a.id, approve);
       } else {
@@ -179,7 +183,6 @@ export default function InboxPage() {
       const next = await listInboxApprovals();
       setApprovals(next);
       setSelectedApprovalKey(null);
-      setRejectReason("");
     } finally {
       setApprovalBusy(false);
     }
@@ -210,7 +213,7 @@ export default function InboxPage() {
 
         <div className="flex min-h-0 flex-1 gap-4">
           {/* 좌 목록 — 검색·필터(알림 전용) + 탭(우측정렬) + 카드 */}
-          <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
+          <aside className="flex min-w-[18rem] flex-1 flex-col">
             <div className="flex flex-col gap-2 py-3 pr-3">
               {/* 검색 — 두 탭 동일 위치. 알림=메시지, 승인=제목·맵·요청자 */}
               <SearchBox
@@ -361,18 +364,17 @@ export default function InboxPage() {
             )}
           </aside>
 
-          {/* 우 상세 */}
-          <div className="min-w-0 flex-[2] overflow-y-auto">
+          {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스 */}
+          <div className="min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt">
             {tab === "approvals" ? (
               selectedApproval ? (
                 <ApprovalDetail
+                  key={approvalKey(selectedApproval)}
                   approval={selectedApproval}
-                  rejectReason={rejectReason}
-                  onRejectReasonChange={setRejectReason}
                   busy={approvalBusy}
                   nowMs={nowMs}
-                  onApprove={() => void actApproval(selectedApproval, true)}
-                  onReject={() => void actApproval(selectedApproval, false)}
+                  dir={dir}
+                  onAct={(approve, reason) => void actApproval(selectedApproval, approve, reason)}
                   t={t}
                 />
               ) : (
@@ -407,28 +409,73 @@ export default function InboxPage() {
   );
 }
 
-// 승인 항목 상세 — 유형·제목·맵·요청자 + 승인/반려. 버전 승인은 반려 사유 필수.
+// 승인 항목 상세 — 요청 내용·메타·승인자 현황(버전) + 승인/반려(에디터와 동일한 ConfirmDialog).
 function ApprovalDetail({
   approval,
-  rejectReason,
-  onRejectReasonChange,
   busy,
   nowMs,
-  onApprove,
-  onReject,
+  dir,
+  onAct,
   t,
 }: {
   approval: InboxApproval;
-  rejectReason: string;
-  onRejectReasonChange: (value: string) => void;
   busy: boolean;
   nowMs: number;
-  onApprove: () => void;
-  onReject: () => void;
-  t: (key: MessageKey, vars?: Record<string, string | number>) => string;
+  dir: Map<string, DirectoryUser>;
+  onAct: (approve: boolean, reason: string) => void;
+  t: Translate;
 }) {
-  const needsReason = approval.kind === "version_approval";
-  const rejectDisabled = busy || (needsReason && rejectReason.trim().length === 0);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
+
+  const isVersion = approval.kind === "version_approval";
+  const versionId = approval.version_id;
+
+  // 버전 승인 — 승인자 현황(누가 승인/대기/반려) 조회
+  useEffect(() => {
+    if (!isVersion || versionId === null) return;
+    let alive = true;
+    getWorkflowState(versionId)
+      .then((data) => {
+        if (alive) setWorkflow(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isVersion, versionId]);
+
+  const resolveName = (id: string) => dir.get(id)?.name ?? id;
+  const approvers = workflow?.approvers ?? [];
+  const approvals = new Set(workflow?.approvals ?? []);
+  const rejectedBy = workflow?.rejected_by ?? null;
+
+  // ConfirmDialog lines(에디터 승인/반려 모달과 동일) — 승인자별 상태 뱃지
+  const approverLines: ConfirmLine[] = approvers.map((id) => {
+    const rejected = id === rejectedBy;
+    const approved = !rejected && approvals.has(id);
+    return {
+      icon: rejected ? (
+        <X size={14} strokeWidth={1.5} />
+      ) : approved ? (
+        <Check size={14} strokeWidth={1.5} />
+      ) : (
+        <User size={14} strokeWidth={1.5} />
+      ),
+      text: resolveName(id),
+      tone: approved ? "ink" : "muted",
+      badge: rejected
+        ? { text: t("approval.statusRejected"), tone: "warn" }
+        : {
+            text: approved ? t("approval.statusApproved") : t("approval.statusPending"),
+            tone: approved ? "approved" : "pending",
+          },
+    };
+  });
+
+  const subtitle = `${approval.map_name}${approval.version_label ? ` · ${approval.version_label}` : ""}`;
 
   return (
     <article className="px-6 py-4">
@@ -438,13 +485,13 @@ function ApprovalDetail({
         <h2 className="min-w-0 flex-1 truncate text-body-strong text-ink">
           {approvalTitle(approval, t)}
         </h2>
-        <span className="shrink-0 rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+        <span className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-fine text-ink-secondary">
           {t(approvalKindLabel(approval.kind))}
         </span>
       </div>
 
       {/* 요청 내용 — 마크다운(`값` inline code + 변경 후 값 강조) */}
-      <div className="mt-3 rounded-sm border border-hairline bg-surface-alt/50 px-3 py-2">
+      <div className="mt-3 rounded-sm border border-hairline bg-surface px-3 py-2">
         <MarkdownView source={approvalSummary(approval, t)} />
       </div>
 
@@ -457,7 +504,7 @@ function ApprovalDetail({
         </DetailRow>
         {approval.version_label && (
           <DetailRow label={t("inbox.version")}>
-            <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+            <span className="rounded-sm bg-surface px-1.5 py-0.5 text-fine text-ink-secondary">
               {approval.version_label}
               {approval.version_number ? ` · v${approval.version_number}` : ""}
             </span>
@@ -486,23 +533,54 @@ function ApprovalDetail({
         )}
       </dl>
 
-      {/* 멤버 보기 — 맵 허용 인원. key로 맵 변경 시 상태(펼침·조회결과) 리셋 */}
-      <MapMembers key={approval.map_id} mapId={approval.map_id} t={t} />
-
-      {needsReason && (
-        <textarea
-          value={rejectReason}
-          onChange={(event) => onRejectReasonChange(event.target.value)}
-          placeholder={t("inbox.rejectReason")}
-          maxLength={500}
-          className="mt-4 min-h-20 w-full resize-none rounded-sm border border-hairline bg-surface px-3 py-2 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
-        />
+      {/* 승인자 현황 — 버전 승인만(✓승인/○대기/✗반려) */}
+      {isVersion && approvers.length > 0 && (
+        <div className="mt-4">
+          <span className="text-caption-strong text-ink-secondary">
+            {t("inbox.approverStatus")}
+          </span>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {approvers.map((id) => {
+              const rejected = id === rejectedBy;
+              const approved = !rejected && approvals.has(id);
+              return (
+                <li key={id} className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine font-semibold text-accent">
+                    {resolveName(id).slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-caption text-ink">
+                    {resolveName(id)}
+                  </span>
+                  {rejected ? (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 text-fine text-error">
+                      <X size={12} strokeWidth={2} />
+                      {t("approval.statusRejected")}
+                    </span>
+                  ) : approved ? (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 text-fine text-added">
+                      <Check size={12} strokeWidth={2} />
+                      {t("approval.statusApproved")}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-fine text-ink-tertiary">
+                      {t("approval.statusPending")}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
+      {/* 멤버 보기 — 맵 허용 인원. key로 맵 변경 시 상태 리셋 */}
+      <MapMembers key={approval.map_id} mapId={approval.map_id} t={t} />
+
+      {/* 액션 — 클릭 시 에디터와 동일한 확인 모달 */}
       <div className="mt-4 flex items-center gap-2">
         <button
           type="button"
-          onClick={onApprove}
+          onClick={() => setApproveOpen(true)}
           disabled={busy}
           className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
         >
@@ -511,8 +589,8 @@ function ApprovalDetail({
         </button>
         <button
           type="button"
-          onClick={onReject}
-          disabled={rejectDisabled}
+          onClick={() => setRejectOpen(true)}
+          disabled={busy}
           className="inline-flex items-center gap-1 rounded-sm border border-error/40 px-3 py-1.5 text-caption text-error hover:bg-error/10 disabled:opacity-40"
         >
           <X size={14} strokeWidth={1.5} />
@@ -520,11 +598,61 @@ function ApprovalDetail({
         </button>
         <Link
           href={`/maps/${approval.map_id}`}
-          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface"
         >
           {t("inbox.viewMap")}
         </Link>
       </div>
+
+      {/* 승인 확인 모달(에디터 approve 모달과 동일 컴포넌트) */}
+      {approveOpen && (
+        <ConfirmDialog
+          icon={<Check size={28} strokeWidth={1.5} />}
+          title={t("approval.approveConfirmTitle")}
+          message={subtitle}
+          lines={isVersion ? approverLines : undefined}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            setApproveOpen(false);
+            onAct(true, "");
+          }}
+          onClose={() => setApproveOpen(false)}
+        />
+      )}
+
+      {/* 반려 확인 모달 — 버전 승인은 사유 입력 필수(에디터 reject 모달과 동일) */}
+      {rejectOpen && (
+        <ConfirmDialog
+          icon={<X size={28} strokeWidth={1.5} />}
+          danger
+          title={t("wf.rejectTitle")}
+          message={subtitle}
+          lines={isVersion ? approverLines : undefined}
+          input={
+            isVersion
+              ? {
+                  value: rejectReason,
+                  onChange: setRejectReason,
+                  placeholder: t("wf.rejectReason"),
+                }
+              : undefined
+          }
+          confirmDisabled={isVersion && rejectReason.trim().length === 0}
+          confirmLabel={t("inbox.reject")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const reason = rejectReason.trim();
+            setRejectOpen(false);
+            setRejectReason("");
+            onAct(false, reason);
+          }}
+          onClose={() => {
+            setRejectOpen(false);
+            setRejectReason("");
+          }}
+        />
+      )}
     </article>
   );
 }
