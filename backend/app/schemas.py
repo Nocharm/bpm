@@ -254,6 +254,14 @@ class ManualUpdate(BaseModel):
     content: str = Field(max_length=200_000)
 
 
+class DashboardMetricsOut(BaseModel):
+    """운영 대시보드 지표 — 현재는 접속자 현황(login_records 집계). 상세 지표는 후속."""
+
+    visitors_unique: int  # 고유 접속자 수(distinct login_id)
+    logins_total: int  # 전체 로그인/활동 기록 수
+    logins_7d: int  # 최근 7일 로그인 수
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None

@@ -18,6 +18,7 @@ from app.routers import (
     approvers,
     checkout,
     comments,
+    dashboard,
     directory,
     employees,
     feedback,
@@ -65,6 +66,7 @@ app.include_router(feedback.router)
 app.include_router(notices.router)
 app.include_router(inbox.router)
 app.include_router(manual.router)
+app.include_router(dashboard.router)
 app.include_router(library.router)
 app.include_router(permissions.router)
 app.include_router(groups.router)

@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 대시보드 상세: 접속자수 실데이터 (사용자: 나머지 칸·값은 이후 구상, 우선 접속자수)
+- 진입 카드 클릭 시 상세를 자리표시 → **실 지표 3 카드**로 교체. 백엔드 `GET /api/dashboard`(sysadmin, `login_records` 집계): 고유 접속자(distinct login_id)·전체 로그인·최근 7일. `routers/dashboard.py`·`DashboardMetricsOut`·main 등록·`test_dashboard`(2).
+- 프론트 `dashboard-panel` 상세: "운영 현황" + 접속자수(고유 login_id)·총 로그인·최근 7일 카드 + "나머지 지표 추후 보완" 각주. api `getDashboard`. 나머지 칸·미세디자인·값은 사용자가 이후 구상.
+- 검증: ruff·pytest 405·lint 0·build·브라우저(접속자수 5·총 7·최근7일 7) 확인.
+
 ## 2026-07-06 — S9 매뉴얼 편집·게시 탭 + S10 대시보드 진입 스텁 (시안 New Screens.html · 대시보드 진입점.png)
 - **S9 매뉴얼 편집·게시**: 설정 콘텐츠 카테고리에 `Manual` 탭(`settings/manual-manage-panel.tsx`, sysadmin). 포맷 세그먼트(마크다운/HTML)·`.md 업로드`·`배포본 불러오기`·`미리보기`·`게시`(putManual). 편집→게시→`/manual` 뷰어 반영.
   - HTML 게시본 렌더: `dompurify` 추가 + `html-view.tsx`(DOMPurify sanitize) — 뷰어·미리보기에서 포맷=html 안전 렌더(script/onerror 제거 브라우저 확인). 마크다운은 기존 `markdown-view`. 뷰어 TOC는 헤딩 없으면 숨기고 전폭.

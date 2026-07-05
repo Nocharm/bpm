@@ -5,16 +5,44 @@
 // (design 2026-07-05, 시안 대시보드 진입점.png — 4b: 클릭 전환·돌아가기·세부 추후 보완)
 
 import { ArrowLeft, ArrowRight, Info, LayoutGrid } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { getDashboard, type DashboardMetrics } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+
+// 지표 카드 — 라벨·큰 값·보조 설명. 로딩 중이면 값 자리에 "—".
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-4 py-3">
+      <span className="text-fine uppercase tracking-wide text-ink-tertiary">{label}</span>
+      <span className="text-tagline text-ink">{value}</span>
+      {hint ? <span className="text-fine text-ink-tertiary">{hint}</span> : null}
+    </div>
+  );
+}
 
 export function DashboardPanel() {
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
 
-  // 상세 화면 — 아직 자리표시(돌아가기 + 추후 제공 안내)
+  // 대시보드를 열 때 접속자 지표 조회 (login_records 집계)
+  useEffect(() => {
+    if (!opened) return;
+    let alive = true;
+    getDashboard()
+      .then((data) => {
+        if (alive) setMetrics(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [opened]);
+
+  // 상세 화면 — 접속자수만 실데이터, 나머지 칸·지표는 추후 보완
   if (opened) {
+    const value = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString());
     return (
       <div className="flex h-full flex-col gap-6">
         <button
@@ -25,11 +53,21 @@ export function DashboardPanel() {
           <ArrowLeft size={14} strokeWidth={1.5} />
           {t("dashboard.back")}
         </button>
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-          <LayoutGrid size={28} strokeWidth={1.5} className="text-ink-tertiary" />
-          <p className="text-body-strong text-ink">{t("dashboard.placeholderTitle")}</p>
-          <p className="max-w-sm text-caption text-ink-tertiary">
-            {t("dashboard.placeholderBody")}
+
+        <div className="flex flex-col gap-3">
+          <h2 className="text-body-strong text-ink">{t("dashboard.opsHeading")}</h2>
+          <div className="grid max-w-2xl grid-cols-3 gap-3">
+            <StatCard
+              label={t("dashboard.visitors")}
+              value={value(metrics?.visitors_unique)}
+              hint={t("dashboard.visitorsHint")}
+            />
+            <StatCard label={t("dashboard.loginsTotal")} value={value(metrics?.logins_total)} />
+            <StatCard label={t("dashboard.logins7d")} value={value(metrics?.logins_7d)} />
+          </div>
+          <p className="flex items-center gap-1.5 text-fine text-ink-tertiary">
+            <Info size={13} strokeWidth={1.5} />
+            {t("dashboard.metricsComingSoon")}
           </p>
         </div>
       </div>
