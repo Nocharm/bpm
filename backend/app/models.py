@@ -244,6 +244,23 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Feedback(Base):
+    """사용자 피드백 — 유형·본문·컨텍스트(현재 화면/맵)·처리 상태 (design 2026-07-05)."""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 유형 — bug | suggestion | question | etc
+    kind: Mapped[str] = mapped_column(String(20))
+    body: Mapped[str] = mapped_column(Text, default="")
+    author: Mapped[str] = mapped_column(String(100))
+    # 제출 시점 컨텍스트 — {route, map_id?, version_id?} 자동 첨부(느슨한 참조)
+    context: Mapped[dict] = mapped_column(JSON, default=dict)
+    # 처리 상태 — new(신규) | in_progress(작업중) | done(완료)
+    status: Mapped[str] = mapped_column(String(20), default="new")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Employee(Base):
     """사내 AD 동기화 사용자 — loginId(sAMAccountName) PK. source=ad|local (design 2026-06-16)."""
 

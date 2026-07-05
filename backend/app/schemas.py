@@ -404,6 +404,40 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
 
+class FeedbackCreate(BaseModel):
+    kind: Literal["bug", "suggestion", "question", "etc"]
+    body: str = Field(min_length=1, max_length=4000)
+    context: dict = Field(default_factory=dict)
+
+
+class FeedbackStatusUpdate(BaseModel):
+    status: Literal["new", "in_progress", "done"]
+
+
+class FeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    body: str
+    author: str
+    context: dict
+    status: str
+    created_at: datetime
+
+
+class FeedbackCounts(BaseModel):
+    total: int
+    mine: int
+    in_progress: int
+    done: int
+
+
+class FeedbackListOut(BaseModel):
+    items: list[FeedbackOut]
+    counts: FeedbackCounts
+
+
 class MeOut(BaseModel):
     username: str
     ai_enabled: bool

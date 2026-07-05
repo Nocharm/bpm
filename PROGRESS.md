@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S2a: 피드백 백엔드 (Feedback 모델·라우터·테스트)
+- `Feedback` 모델(kind/body/author/context JSON/status/created_at) + `routers/feedback.py` — POST(201) 등록·GET 목록+집계(total/mine/in_progress/done)·PATCH 상태변경(sysadmin) + schemas(Create/Out/Counts/ListOut/StatusUpdate) + main.py 등록.
+- 테스트 `tests/test_feedback.py` 4건(작성·집계·상태변경·빈 본문 422).
+- 검증: ruff 통과 · pytest feedback 4/4 · 전체 385 pass(회귀 없음).
+
 ## 2026-07-05 — S1a: 공유 셸 탭 폴리시 (아이콘·슬라이딩 박스·폰트 축소)
 - TopNav 탭: 아이콘 추가(Map/Megaphone/Inbox·14px/1.5) + 활성 표시를 정적 배경→**좌우 슬라이딩 네모 인디케이터**(grid-cols-3 등폭·`w-1/3`·`translateX(idx*100%)`·`duration-350 ease-spring`, 비활성 경로는 opacity0) + 폰트 text-caption→text-fine 축소.
 - 검증: lint 0 · build 성공. 브라우저(:3001) — 아이콘·축소폰트·세그먼트 레이아웃 확인(활성 슬라이드는 인증 탭에서 확인).
