@@ -132,9 +132,9 @@ export function MapCard({
       {recentOpenedAt !== undefined && (
         <div
           data-id="map-card-recent-badge"
-          className="absolute left-2 top-1 z-10 inline-flex items-center gap-0.5 rounded-sm border border-hairline bg-accent-tint px-1 py-0 text-[10px] leading-none text-accent shadow-sm"
+          className="absolute left-2 top-1 z-10 inline-flex items-center gap-0.5 rounded-sm border border-hairline bg-accent-tint px-1 py-0.5 text-[11px] leading-none text-accent shadow-sm"
         >
-          <Clock size={10} strokeWidth={1.5} />
+          <Clock size={11} strokeWidth={1.5} />
           {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
         </div>
       )}

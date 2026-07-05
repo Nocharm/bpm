@@ -307,7 +307,11 @@ export default function MapListPage() {
 
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
-    <div className="flex h-full min-h-0 flex-col px-8 py-6">
+    // 빈 여백(마진·헤더 간격·필터 우측 등) 클릭 = 선택 해제. 카드·상세·밴드버튼은 stopPropagation으로 제외.
+    <div
+      className="flex h-full min-h-0 flex-col px-8 py-6"
+      onClick={() => setSelectedId(null)}
+    >
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Business Process Map — {t("home.title")}</h1>
@@ -443,10 +447,7 @@ export default function MapListPage() {
                 </div>
               ) : isSearching ? (
                 /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹. 빈 공간 클릭=선택 해제 */
-                <ul
-                  className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
-                  onClick={() => setSelectedId(null)}
-                >
+                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                   {orderedHits.map(({ item: processMap, matches }) =>
                     renderRow(
                       processMap,
@@ -457,10 +458,7 @@ export default function MapListPage() {
                 </ul>
               ) : (
                 /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용). 빈 공간 클릭=선택 해제 */
-                <div
-                  className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1"
-                  onClick={() => setSelectedId(null)}
-                >
+                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
                   {recentBand.length > 0 && (
                     <section data-id="home-recent-band" className="flex flex-col gap-2">
                       {/* 섹션 라벨 + (펼쳐졌을 때) 우측 접기 */}
@@ -547,6 +545,7 @@ export default function MapListPage() {
             {/* ≥ xl — 우측 사이드 패널. 선택 없으면 플레이스홀더 / wide screens: side panel or empty placeholder */}
             <aside
               data-id="map-detail-aside"
+              onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
               className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
             >
               {effectiveSelected !== null ? (
