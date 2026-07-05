@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 캔버스 정렬 4차: 백본 후처리 정렬(완전 직선 + 병렬 유지노드 라인 위)
+- **`alignBackbone` 후처리**(`compare/page.tsx`) — dagre 배치 후, 유지(unchanged/changed) 노드를 열(rank)별로 공통 backbone 중심Y에 스냅. ①백본 완전 직선(스파인 노드 cy 전부 620, spread=0) ②병렬 곁가지의 유지/변경 노드(관리자 승인)를 라인 위로. 추가 노드는 같은 열 내 상대 오프셋 유지(위/아래 곁가지).
+- **`displayFields: []` 컨텍스트 주입**(`NodeActionsContext.Provider`) — 비교뷰는 변경을 diff 필로 보여주므로 박스의 BPM 필드 줄(기본 담당자)을 숨김 → 노드 높이가 내용과 무관하게 **균일**(중복 제거 + 정렬 정확도).
+- **실측 렌더 높이로 중심 계산**(`COMPARE_RENDER_H` process/terminal 38·decision 96·subprocess 64) — dagre는 `nodeSizeOf`로 배치하지만 렌더 중심은 실제 높이 기준이라, 정렬은 실측값으로 해야 handle Y가 정확히 일치. 이전 ~6px 잔여 편차 제거.
+- 검증: lint 0 · build OK. 라이브(map 13) — 스파인 cy 전부 620(spread=0)·관리자 승인 라인 위·승인필요?→관리자승인→배송 수평 확인.
+
 ## 2026-07-05 — 비교 캔버스 정렬 3차: 삭제 노드 곁가지 배치로 직접 엣지 직선화
 - **삭제 엣지 전부를 레이아웃에서 제외 + 삭제 노드는 이웃 아래로 곁가지 배치**(`compare/page.tsx positioned`) — 이전엔 passthrough만 제외해 **삭제 노드가 본류 라인 위(재고확인?~결제처리 사이)에 끼어** 직접 엣지("있음")를 막았음. 이제 To-Be 흐름만으로 배치(유지+추가) → 백본 직선, 삭제 노드는 삭제 엣지 이웃 평균위치+150 아래(곁가지). 수치 검증: Start→주문접수→재고확인?→결제처리 엣지 startY≈endY(straight).
 - 남은 한계: 병렬 곁가지에서 변경/유지 노드 중앙 정렬(관리자 승인)은 dagre 랭크 순서 문제로 미해결(후처리 재배열 후속).

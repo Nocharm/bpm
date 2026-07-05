@@ -57,6 +57,7 @@ import {
 } from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
 import { useI18n } from "@/lib/i18n";
+import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
   buildMergedGraph,
@@ -77,6 +78,18 @@ function RemovedArcEdge({ sourceX, sourceY, targetX, targetY, markerEnd, style }
 }
 
 const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge };
+
+// 비교뷰 노드 컨텍스트 — 변경은 diff 필로 보여주므로 박스의 BPM 필드 줄을 숨긴다(displayFields: []).
+// 노드 높이가 내용과 무관하게 균일해져 백본 정렬(alignBackbone)이 정확해지고 중복 표시도 제거.
+const COMPARE_NODE_ACTIONS: NodeActions = {
+  onToggleExpand: null,
+  expandedInlineIds: new Set<string>(),
+  displayFields: [],
+  editingNodeId: null,
+  onStartRename: null,
+  onRename: null,
+  onCancelRename: null,
+};
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {
   title: "field.title",
@@ -139,6 +152,50 @@ function preferredSides(dx: number, dy: number): HandleSide[] {
   return [...SIDE_VECTORS]
     .sort((a, b) => (b.vx * dx + b.vy * dy) / len - (a.vx * dx + a.vy * dy) / len)
     .map((s) => s.side);
+}
+
+// dagre 배치 후처리 — 유지(unchanged/changed) 노드를 공통 backbone 중심Y에 맞춰 열(rank)별로 세로 이동.
+// ①백본이 완전 직선(중심Y 일치 → smoothstep 직각 계단 제거) ②병렬 곁가지의 유지/변경 노드(예: 관리자 승인)를
+// 라인 위로. 추가 노드는 같은 열 내 상대 오프셋을 유지해 위/아래 곁가지로 남는다. 열=중심X로 그룹.
+// 비교뷰 실측 렌더 높이(displayFields:[]로 BPM 줄 숨겨 균일). dagre는 nodeSizeOf로 배치하지만
+// 렌더 중심은 실제 높이 기준이라, 정렬은 이 값으로 계산해야 handle Y가 정확히 일치(직선).
+const COMPARE_RENDER_H: Record<string, number> = {
+  process: 38,
+  decision: 96,
+  start: 38,
+  end: 38,
+  subprocess: 64,
+};
+
+function alignBackbone(nodes: AppNode[], keptIds: Set<string>): AppNode[] {
+  const centerY = (node: AppNode) =>
+    node.position.y + (COMPARE_RENDER_H[node.data.nodeType] ?? 38) / 2;
+  const kept = nodes.filter((node) => keptIds.has(node.id));
+  if (kept.length === 0) return nodes;
+  const backboneCY = kept.reduce((sum, node) => sum + centerY(node), 0) / kept.length;
+  const columnKey = (node: AppNode) =>
+    Math.round((node.position.x + nodeSizeOf(node.data.nodeType).w / 2) / 10);
+  const columns = new Map<number, AppNode[]>();
+  for (const node of nodes) {
+    const key = columnKey(node);
+    const list = columns.get(key);
+    if (list) list.push(node);
+    else columns.set(key, [node]);
+  }
+  const shiftedY = new Map<string, number>();
+  for (const colNodes of columns.values()) {
+    const keptInCol = colNodes.filter((node) => keptIds.has(node.id));
+    // 열에 유지 노드가 있으면 그 중심을 backbone에 맞춤. 없으면(인라인 삽입) 열 전체를 backbone에 센터링.
+    const anchorCY = keptInCol.length
+      ? centerY(keptInCol[0])
+      : colNodes.reduce((sum, node) => sum + centerY(node), 0) / colNodes.length;
+    const shift = backboneCY - anchorCY;
+    for (const node of colNodes) shiftedY.set(node.id, node.position.y + shift);
+  }
+  return nodes.map((node) => ({
+    ...node,
+    position: { x: node.position.x, y: shiftedY.get(node.id) ?? node.position.y },
+  }));
 }
 
 function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
@@ -353,8 +410,15 @@ function ComparePane({
       ),
       buildAppEdges(layoutEdges, keptKeys),
     );
+    // 후처리 — 유지(unchanged/changed) 백본을 공통 중심Y로 정렬(직선화 + 병렬 유지 노드 라인 위로).
+    const keptStatusIds = new Set(
+      merged.nodes
+        .filter((node) => node.status === "unchanged" || node.status === "changed")
+        .map((node) => node.id),
+    );
+    const aligned = alignBackbone(laid, keptStatusIds);
     // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치 아래로 곁가지 배치 — 본류 라인을 비운다.
-    const posByKey = new Map(laid.map((node) => [node.id, node.position]));
+    const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
     const removed = buildAppNodes(
       merged.nodes.filter((node) => node.status === "removed"),
       noteOf,
@@ -370,7 +434,7 @@ function ComparePane({
       const ay = neighbors.reduce((sum, pos) => sum + pos.y, 0) / neighbors.length;
       return { ...node, position: { x: ax, y: ay + 150 } };
     });
-    return [...laid, ...removed];
+    return [...aligned, ...removed];
   }, [merged, noteOf, fieldsOf, keptKeys]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
@@ -661,6 +725,7 @@ function ComparePane({
       </header>
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 bg-canvas" data-id="compare-canvas">
+          <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
           <ReactFlow
             nodes={laidNodes}
             edges={appEdges}
@@ -713,6 +778,7 @@ function ComparePane({
               <ZoomBar />
             </Panel>
           </ReactFlow>
+          </NodeActionsContext.Provider>
         </div>
         <aside
           className="w-72 shrink-0 overflow-auto border-l border-hairline px-3 py-2"
