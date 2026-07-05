@@ -198,6 +198,17 @@ const COMPARE_RENDER_H: Record<string, number> = {
   subprocess: 64,
 };
 
+// 비교뷰 실측 렌더 폭 — TB에서 cross축(X) 정렬·핸들 중심 계산에 사용. nodeSizeOf는 dagre 박스라 실제와
+// 다르다(process는 min-w-[150px]=150인데 nodeSizeOf=170 → TB 세로 엣지가 10px 꺾임). 실제 폭으로 계산해야
+// handle X가 일치해 [D-U] 세로 엣지가 직선. process 150·terminal 90·decision 96·subprocess 180.
+const COMPARE_RENDER_W: Record<string, number> = {
+  process: 150,
+  decision: 96,
+  start: 90,
+  end: 90,
+  subprocess: 180,
+};
+
 // 백본(척추)을 흐름 수직축(cross)에 맞춰 직선화 — LR은 공통 Y, TB는 공통 X로 스냅.
 // spine = 유지 노드 ∪ 인라인 삽입(분기 없는 단일 연속으로 이어지는 추가 노드). 병렬 곁가지는 제외.
 // spine 노드가 있는 열/행은 그 노드를 backbone에 정확히 맞추고, 나머지 열/행은 최근접 spine shift로
@@ -209,7 +220,8 @@ function alignBackbone(
   spine: Set<string>,
 ): AppNode[] {
   const renderH = (node: AppNode) => COMPARE_RENDER_H[node.data.nodeType] ?? 38;
-  const renderW = (node: AppNode) => nodeSizeOf(node.data.nodeType).w;
+  const renderW = (node: AppNode) =>
+    COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
   // cross = 흐름에 수직인 축(정렬 대상), flow = 흐름 진행축(열/행 그룹 키). LR: cross=Y·flow=X, TB: 반대.
   const cross = (node: AppNode) =>
     dir === "LR" ? node.position.y + renderH(node) / 2 : node.position.x + renderW(node) / 2;
@@ -529,14 +541,15 @@ function ComparePane({
     return [...aligned, ...removed];
   }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds]);
 
-  // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
+  // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
+  // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남).
   const nodeCenters = useMemo(() => {
     const centers = new Map<string, { cx: number; cy: number }>();
     for (const node of positioned) {
-      const size = nodeSizeOf(node.data.nodeType);
+      const type = node.data.nodeType;
       centers.set(node.id, {
-        cx: node.position.x + size.w / 2,
-        cy: node.position.y + size.h / 2,
+        cx: node.position.x + (COMPARE_RENDER_W[type] ?? nodeSizeOf(type).w) / 2,
+        cy: node.position.y + (COMPARE_RENDER_H[type] ?? 38) / 2,
       });
     }
     return centers;

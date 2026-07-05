@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교: TB 세로 스파인 직선화(실측 렌더 폭)
+- 증상: TB에서 [D-U] 세로 스파인 엣지가 직선이 아님(LR 수평은 정상). 원인: 노드 중심 계산에 `nodeSizeOf`(dagre 박스) 사용 — process 실제 폭 150(min-w-[150px])인데 nodeSizeOf=170 → 중심 X 10px 어긋남(process 233 vs decision 243).
+- 수정: **`COMPARE_RENDER_W`**(process 150·terminal 90·decision 96·subprocess 180) 추가 — `alignBackbone`의 cross축(TB=X) 정렬과 `nodeCenters`가 실측 렌더 폭/높이(`COMPARE_RENDER_W`/`_H`)로 계산. LR을 `COMPARE_RENDER_H`로 직선화한 것의 X축 대칭.
+- 검증: lint 0·build OK. 라이브(map 13) TB 스파인 노드 중심 X 전부 237로 일치(측정)·세로 엣지 직선 / LR 수평 직선 회귀 없음 확인.
+
 ## 2026-07-05 — 비교: TB 하위프로세스 세로 연결 + 곁가지 라인에서 더 이격
 - **TB에서 하위프로세스(배송준비·품질검사)가 수평 연결되던 문제** — `SubprocessHandles`가 좌(입력)/우(출력) 핸들만 렌더해 TB 상/하 진입 불가 → 강제 remap으로 [L-R] 수평. 수정: **비교뷰(diff)에선 subprocess도 4변 핸들(`NodeHandles`) 렌더**(`process-node.tsx`), appEdges의 `withSubprocessHandles` remap 제거(`compare/page.tsx`, `subprocessIds`도 정리). → TB 배송준비→품질검사 세로([D-T]), LR은 그대로.
 - **곁가지 라인 이격**(`alignBackbone` `BRANCH_PUSH`=60) — 곁가지(off-spine: 재고예약·배송승인)가 라인에 가까워 병합 엣지가 마지막에 한 번 더 꺾이던 것 → 있던 방향(LR 위·TB 왼쪽)으로 60px 추가 이격 → 엣지가 **한 번만 꺾임**.
