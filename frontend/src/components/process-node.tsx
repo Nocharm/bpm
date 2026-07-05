@@ -419,8 +419,9 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         ) : (
           (data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />
         )}
-        {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨 */}
-        <SubprocessHandles ends={data.subEnds ?? []} />
+        {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨.
+            비교뷰(diff)에선 방향 토글(LR/TB)로 상/하 진입이 필요해 4변 핸들(NodeHandles)을 쓴다. */}
+        {diff ? <NodeHandles /> : <SubprocessHandles ends={data.subEnds ?? []} />}
       </div>
     );
   }

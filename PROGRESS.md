@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교: TB 하위프로세스 세로 연결 + 곁가지 라인에서 더 이격
+- **TB에서 하위프로세스(배송준비·품질검사)가 수평 연결되던 문제** — `SubprocessHandles`가 좌(입력)/우(출력) 핸들만 렌더해 TB 상/하 진입 불가 → 강제 remap으로 [L-R] 수평. 수정: **비교뷰(diff)에선 subprocess도 4변 핸들(`NodeHandles`) 렌더**(`process-node.tsx`), appEdges의 `withSubprocessHandles` remap 제거(`compare/page.tsx`, `subprocessIds`도 정리). → TB 배송준비→품질검사 세로([D-T]), LR은 그대로.
+- **곁가지 라인 이격**(`alignBackbone` `BRANCH_PUSH`=60) — 곁가지(off-spine: 재고예약·배송승인)가 라인에 가까워 병합 엣지가 마지막에 한 번 더 꺾이던 것 → 있던 방향(LR 위·TB 왼쪽)으로 60px 추가 이격 → 엣지가 **한 번만 꺾임**.
+- 검증: lint 0·build OK. 라이브(map 13) TB 하위프로세스 세로·LR/TB 곁가지 단일 꺾임 확인.
+
 ## 2026-07-05 — 비교: 핸들 변 그리디 제거 → 의미 기반 직접 배정(곁가지 꼬임 수정)
 - 증상: LR에서 재고예약→결제처리가 오른쪽으로 나와 **아래(bottom)로 진입**해 꼬임. 원인: 결제처리에 엣지 5개(있음·재고예약·재고부족알림·다음·재시도)인데 재시도(back)가 top 선점 → 그리디 회피가 재고예약을 반대편 bottom으로 밀어냄.
 - 수정(`handleSides`): 4변 그리디 회피(`used`)·`spineAwareSides`·`preferredSides`·`SIDE_VECTORS` 제거. 각 끝에 **의미상 정해진 변을 직접 배정**(핸들 공유 허용):

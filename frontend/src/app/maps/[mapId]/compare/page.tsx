@@ -56,7 +56,6 @@ import {
   sourceHandleId,
   targetHandleId,
   type AppNode,
-  withSubprocessHandles,
 } from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
 import { useI18n } from "@/lib/i18n";
@@ -252,8 +251,15 @@ function alignBackbone(
     const shift = spineShift.has(key) ? (spineShift.get(key) ?? 0) : nearestSpineShift(key);
     for (const node of colNodes) shiftById.set(node.id, shift);
   }
+  // 곁가지(off-spine)는 라인에서 더 밀어낸다 — 라인에 붙어 있으면 병합 엣지가 마지막에 한 번 더 꺾인다.
+  // 있던 방향(위/아래·좌/우)으로 BRANCH_PUSH만큼 추가 이격 → 엣지가 한 번만 꺾이게.
+  const BRANCH_PUSH = 60;
   return nodes.map((node) => {
-    const shift = shiftById.get(node.id) ?? 0;
+    let shift = shiftById.get(node.id) ?? 0;
+    if (!spine.has(node.id)) {
+      const resid = cross(node) + shift - backboneCross; // 정렬 후 backbone 기준 편차(부호=위/아래·좌/우)
+      shift += resid < 0 ? -BRANCH_PUSH : BRANCH_PUSH;
+    }
     return dir === "LR"
       ? { ...node, position: { x: node.position.x, y: node.position.y + shift } }
       : { ...node, position: { x: node.position.x + shift, y: node.position.y } };
@@ -536,13 +542,6 @@ function ComparePane({
     return centers;
   }, [positioned]);
 
-  const subprocessIds = useMemo(
-    () =>
-      new Set(
-        positioned.filter((node) => node.data.nodeType === "subprocess").map((node) => node.id),
-      ),
-    [positioned],
-  );
 
   // 엣지별 붙을 변(핸들) — 의미상 정해진 변을 각 끝에 "직접" 배정(핸들 공유 허용). 이전의 4변 그리디 회피는
   // 결제처리처럼 엣지가 많은 노드(있음·곁가지 2개·다음·재시도=5개)에서 곁가지를 반대편(아래)으로 밀어 꼬았음.
@@ -602,7 +601,8 @@ function ComparePane({
     () =>
       buildAppEdges(merged.edges, keptKeys).map((edge) => {
         let styled = edge;
-        // 노드별 4변 분산 배정(handleSides) → 핸들 지정 + 하위프로세스 전용 핸들 remap.
+        // handleSides가 정한 변으로 핸들 지정. 비교뷰 하위프로세스 노드는 4변 핸들(NodeHandles)을 렌더하므로
+        // 편집기용 전용 핸들 remap(withSubprocessHandles)은 쓰지 않는다(TB에서 상/하 진입이 막히던 원인).
         const sides = handleSides.get(edge.id);
         if (sides) {
           styled = {
@@ -610,14 +610,13 @@ function ComparePane({
             sourceHandle: sourceHandleId(sides.source),
             targetHandle: targetHandleId(sides.target),
           };
-          styled = withSubprocessHandles(styled, (id) => subprocessIds.has(id));
         }
         if (focusId === edge.id) {
           styled = { ...styled, selected: true, style: { ...(styled.style ?? {}), strokeWidth: 3 } };
         }
         return styled;
       }),
-    [merged, focusId, keptKeys, handleSides, subprocessIds],
+    [merged, focusId, keptKeys, handleSides],
   );
 
   const titleByKey = useMemo(
