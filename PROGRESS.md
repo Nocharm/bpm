@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S1: 공유 셸 3-way 전환 탭 + placeholder 라우트
+- TopNav: 브랜드 우측에 세그먼트 전환 탭(맵목록 `/`·공지 `/notices`·인박스 `/inbox`) 추가 — `usePathname`로 현재 경로 accent 강조(맵목록은 `/`·`/maps` 포함). 브랜드+탭을 좌측 그룹으로 래핑.
+- `/notices`·`/inbox` placeholder 라우트 생성(S4·S6에서 실 구현). i18n `nav.tab.maps/notices/inbox`(en/ko).
+- 검증: lint 0 errors(기존 pw-smoke 경고 1건 무관) · build 성공(두 라우트 정적 생성·TS/React Compiler 통과).
+
 ## 2026-07-05 — 신규 화면 4종 설계·트래커 (피드백·공지·매뉴얼·인박스 + 공유 셸)
 - 워크트리 `feat+new-pages`에서 신규 화면 4종 착수. 설계 `docs/superpowers/specs/2026-07-05-new-screens-design.md`, 검토 트래커 `SCREEN-NEW-PAGES.md`(S1~S10 vertical slice).
 - 결정: 대시보드=진입 스텁만 / 공지 읽음=클라 localStorage 캐시(테이블 없음) / 매뉴얼=DB 저장+프론트 편집(manual.md fallback) / 피드백=관리자 상태변경 포함 / 작성·관리 권한=sysadmin.

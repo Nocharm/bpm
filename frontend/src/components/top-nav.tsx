@@ -2,20 +2,29 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setDevUser } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import { NotificationBell } from "@/components/notification-bell";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
+// 상단 세그먼트 전환 탭 — 맵목록/공지/인박스. 현재 경로로 활성 강조.
+const NAV_TABS: { href: string; labelKey: MessageKey }[] = [
+  { href: "/", labelKey: "nav.tab.maps" },
+  { href: "/notices", labelKey: "nav.tab.notices" },
+  { href: "/inbox", labelKey: "nav.tab.inbox" },
+];
+
 export function TopNav() {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
+  const pathname = usePathname() ?? "/";
   const user = useSyncExternalStore(
     subscribeCurrentUser,
     getCurrentUser,
@@ -53,22 +62,48 @@ export function TopNav() {
 
   return (
     <nav className="flex h-10 shrink-0 items-center justify-between border-b border-hairline bg-surface px-4">
-      {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
-      <Link
-        href="/"
-        className="text-body-strong text-ink"
-        onClick={(e) => {
-          e.preventDefault();
-          try {
-            window.sessionStorage.removeItem("bpm.home.filters");
-          } catch {
-            /* 무시 */
-          }
-          window.location.assign("/");
-        }}
-      >
-        {t("app.name")}
-      </Link>
+      <div className="flex items-center gap-4">
+        {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
+        <Link
+          href="/"
+          className="text-body-strong text-ink"
+          onClick={(e) => {
+            e.preventDefault();
+            try {
+              window.sessionStorage.removeItem("bpm.home.filters");
+            } catch {
+              /* 무시 */
+            }
+            window.location.assign("/");
+          }}
+        >
+          {t("app.name")}
+        </Link>
+        {/* 3-way 전환 탭 — 브랜드 우측. 현재 경로를 accent로 강조 */}
+        <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-caption">
+          {NAV_TABS.map((tab) => {
+            const active =
+              tab.href === "/"
+                ? pathname === "/" || pathname.startsWith("/maps")
+                : pathname.startsWith(tab.href);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                aria-current={active ? "page" : undefined}
+                className={
+                  "rounded-xs px-2 py-0.5 " +
+                  (active
+                    ? "bg-accent-tint font-semibold text-accent"
+                    : "text-ink-tertiary hover:text-ink-secondary")
+                }
+              >
+                {t(tab.labelKey)}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
       <div className="flex items-center gap-3">
         {/* 무조건 렌더 — 로컬(인증 비활성)은 user가 null이라 가드 시 벨이 안 뜬다. 서버는 TopNav 자체가 AuthGate 인증 후에만 노출 */}
         <NotificationBell />

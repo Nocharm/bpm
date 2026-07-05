@@ -23,7 +23,7 @@
 
 | ID | 화면 | 단위 / 내용 | 검증 | 시현 | 검토결과 | 커밋 |
 |----|------|-------------|------|------|---------|------|
-| S1 | 공유 셸 | **TopNav 3-way 세그먼트 탭**(맵목록 `/`·공지 `/notices`·인박스 `/inbox`, `usePathname` 강조, ko/en 세그먼트 패턴 재사용) + `/notices`·`/inbox` **빈 placeholder 라우트**. 백엔드 무관. 시안 `피드백 버튼위치.png` | ⏳ | ⏳ | ⏳ | — |
+| S1 | 공유 셸 | **TopNav 3-way 세그먼트 탭**(맵목록 `/`·공지 `/notices`·인박스 `/inbox`, `usePathname` 강조, ko/en 세그먼트 패턴 재사용) + `/notices`·`/inbox` **빈 placeholder 라우트**. 백엔드 무관. 구현: `NAV_TABS`(브랜드+탭 좌측 그룹 래핑·맵목록은 `/`·`/maps` 활성)·i18n `nav.tab.*`. 시안 `피드백 버튼위치.png` | lint/build✅ | ⏳ 브라우저 | ⏳ | (this) |
 | S2 | 피드백 | **백엔드 `Feedback` 모델+`routers/feedback.py`**(POST/GET·집계/PATCH) + `main.py`·schemas + `lib/api.ts` + **TopNav 피드백 버튼** + **`feedback-side-panel.tsx`**(유형 세그먼트·본문·context 자동첨부·제출 토스트·"모든 피드백 보기"). 시안 `피드백 버튼위치.png` | ⏳ | ⏳ | ⏳ | — |
 | S3 | 피드백 | **전체 페이지 `/feedback`** — 집계 카드(전체/내/작업중/완료) + 유형 필터 + 목록(유형·제목·작성자·상태 뱃지·등록일) + **관리자 상태변경 UI**(sysadmin). 시안 `피드백 화면.png` | ⏳ | ⏳ | ⏳ | — |
 | S4 | 공지 | **백엔드 `Notice` 모델+`routers/notices.py`**(GET 목록·상세, 관리 CUD) + `lib/notices-read.ts`(localStorage 읽음 캐시) + api + **뷰어 `/notices`**(좌 목록 전체/중요/일반·미읽음 점·"안읽음 N" / 우 `MarkdownView` 상세). 시안 `공지화면.png` | ⏳ | ⏳ | ⏳ | — |
