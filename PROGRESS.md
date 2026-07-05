@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교화면(C) 재디자인 착수: 승인 목업 + 전용 트래커 (feat/compare-redesign)
+- **브랜치 `feat/compare-redesign`** (main 분기; r11=C1a/C1b는 이미 main 머지·홈 작업까지 원격 동기화됨).
+- **승인 목업 커밋** — `docs/superpowers/specs/assets/editor-compare-redesign/compare-screen.mockup.html`: 반응형·실제 `@theme` 토큰, JS 데이터모델(`NODES`/`EDGES`)로 노드·엣지·변경패널·카운트 생성. 3단 레이아웃(변경 좌·캔버스 중·읽기전용 속성 인스펙터 우), read-only 워터마크(메인 "READ ONLY" accent), dot 제거, diff 노드(뱃지 .7·before→after 필·None), passthrough-removed 엣지 **우회 라우팅**(삽입 노드 회피) 시연.
+- **전용 트래커 `SCREEN-REDESIGN-COMPARE.md`** 신설 — C1a/C1b(완료) + C2a/C2b/C3/C4(예정) 서브유닛 표·확정 디자인·**DB 실현가능성(스키마 변경 불필요, 프론트 before/after 값 보강만)**·스코프(노드 집중·엣지 changed 범위 밖). 편집기 트래커엔 이관 포인터.
+
 ## 2026-07-05 — Task 1: recent-maps 캐시 헬퍼 (순수 로직+localStorage 래퍼)
 - home: recent-maps localStorage 캐시 헬퍼(mergeRecentEntry/partitionByRecency) 추가 — 최근 열람 12개 최신순 클라이언트 캐시.
 
