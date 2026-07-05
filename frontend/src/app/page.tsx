@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery, type MatchRange } from "@/lib/search";
@@ -51,6 +51,8 @@ export default function MapListPage() {
   // 최근 밴드 노출 개수 — 초기 2개, "더보기" +3, "접기"로 2로 리셋(검색내용 아님 → 미영속) /
   // recent band page size — initial 2, "show more" +3, "collapse" resets to 2.
   const [recentShown, setRecentShown] = useState(2);
+  // 최근 밴드 접힘 — 접기=전부 닫힘, 펼침=2개부터 다시 / recent band collapsed toggle.
+  const [recentCollapsed, setRecentCollapsed] = useState(false);
   // "/" 단축키로 포커스할 검색 input / search input focused by the "/" hotkey.
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -266,6 +268,16 @@ export default function MapListPage() {
       ? selectedId
       : null;
 
+  // 최근 밴드 토글 — 접힘→펼침 시 2개부터 다시 시작 / toggle: expanding restarts at 2.
+  const toggleRecentCollapse = () => {
+    if (recentCollapsed) {
+      setRecentShown(2);
+      setRecentCollapsed(false);
+    } else {
+      setRecentCollapsed(true);
+    }
+  };
+
   // 리스트 행 — MapCard + 좁은 폭 인라인 아코디언(기존 블록 그대로). 밴드는 아코디언 없이 별도 렌더. /
   // A full-list row: MapCard + narrow-screen accordion. The band renders cards without the accordion.
   const renderRow = (
@@ -461,43 +473,44 @@ export default function MapListPage() {
                 <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
                   {recentBand.length > 0 && (
                     <section data-id="home-recent-band" className="flex flex-col gap-2">
-                      {/* 섹션 라벨 + (펼쳐졌을 때) 우측 접기 */}
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="text-fine text-ink-tertiary">{t("home.recentTitle")}</h2>
-                        {recentShown > 2 && (
-                          <button
-                            type="button"
-                            data-id="home-recent-collapse-top"
-                            className="text-fine text-accent hover:underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRecentShown(2);
-                            }}
-                          >
-                            {t("home.recentCollapse")}
-                          </button>
+                      {/* 섹션 라벨 행 — 클릭 토글(접힘=전부 닫힘, 펼침=2개부터), 우측끝 쉐브론 */}
+                      <button
+                        type="button"
+                        data-id="home-recent-toggle"
+                        aria-expanded={!recentCollapsed}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleRecentCollapse();
+                        }}
+                        className="flex items-center justify-between gap-2 text-left"
+                      >
+                        <span className="text-fine text-ink-tertiary">{t("home.recentTitle")}</span>
+                        {recentCollapsed ? (
+                          <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        ) : (
+                          <ChevronUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                         )}
-                      </div>
-                      <ul className="flex flex-col gap-2">
-                        {recentBand.slice(0, recentShown).map((processMap) => (
-                          <li key={processMap.id}>
-                            <MapCard
-                              map={processMap}
-                              selected={effectiveSelected === processMap.id}
-                              highlighted={highlightId === processMap.id}
-                              onSelect={setSelectedId}
-                              recentOpenedAt={atById.get(processMap.id)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                      {(recentBand.length > recentShown || recentShown > 2) && (
-                        <div className="flex items-center gap-3">
+                      </button>
+                      {!recentCollapsed && (
+                        <>
+                          <ul className="flex flex-col gap-2">
+                            {recentBand.slice(0, recentShown).map((processMap) => (
+                              <li key={processMap.id}>
+                                <MapCard
+                                  map={processMap}
+                                  selected={effectiveSelected === processMap.id}
+                                  highlighted={highlightId === processMap.id}
+                                  onSelect={setSelectedId}
+                                  recentOpenedAt={atById.get(processMap.id)}
+                                />
+                              </li>
+                            ))}
+                          </ul>
                           {recentBand.length > recentShown && (
                             <button
                               type="button"
                               data-id="home-recent-more"
-                              className="text-fine text-accent hover:underline"
+                              className="self-start text-fine text-accent hover:underline"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setRecentShown((n) => n + 3);
@@ -506,20 +519,7 @@ export default function MapListPage() {
                               {t("home.recentMore")}
                             </button>
                           )}
-                          {recentShown > 2 && (
-                            <button
-                              type="button"
-                              data-id="home-recent-collapse"
-                              className="text-fine text-ink-tertiary hover:text-ink hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRecentShown(2);
-                              }}
-                            >
-                              {t("home.recentCollapse")}
-                            </button>
-                          )}
-                        </div>
+                        </>
                       )}
                     </section>
                   )}
