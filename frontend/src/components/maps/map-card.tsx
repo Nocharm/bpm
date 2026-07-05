@@ -109,6 +109,22 @@ export function MapCard({
     };
   }, []);
 
+  // 오너·수정시각 메타 — 최근 카드는 기본을 배지로 대체하고 카드 호버 시 이걸 노출 / owner + updated meta
+  const ownerAndTime = (
+    <>
+      {(map.owner_name ?? map.created_by) && (
+        <span className="inline-flex min-w-0 items-center gap-1">
+          <User size={12} strokeWidth={1.5} className="shrink-0" />
+          <span className="truncate">{map.owner_name ?? map.created_by}</span>
+        </span>
+      )}
+      <span className="inline-flex shrink-0 items-center gap-1">
+        <Clock size={12} strokeWidth={1.5} />
+        {relativeTime(map.updated_at)}
+      </span>
+    </>
+  );
+
   return (
     <div
       ref={rootRef}
@@ -128,16 +144,6 @@ export function MapCard({
       onMouseEnter={onCardEnter}
       onMouseLeave={closeModal}
     >
-      {/* 최근 접속 배지 — 플로팅 텍스트(배경 없음, 상단·좌측 근접, 타이틀과 비겹침). 밴드·검색 pinned에만 전달됨 */}
-      {recentOpenedAt !== undefined && (
-        <div
-          data-id="map-card-recent-badge"
-          className="absolute left-2 top-1 z-10 inline-flex items-center gap-0.5 text-[11px] leading-none text-accent"
-        >
-          <Clock size={11} strokeWidth={1.5} />
-          {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
-        </div>
-      )}
       {/* 1줄 — 좌: 타이틀+상태 / 우: 역할 배지 + 공개/비공개 아이콘 (역할은 공개+뷰어면 생략) */}
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -179,16 +185,24 @@ export function MapCard({
       {/* 메타 한 줄 — 좌: 소유자·수정시각(상대) / 우: 노드·버전·인원 수 (이미지 H4/H5) */}
       <div className="relative mt-2 flex items-center justify-between gap-2 text-fine text-ink-tertiary">
         <div className="flex min-w-0 items-center gap-2">
-          {(map.owner_name ?? map.created_by) && (
-            <span className="inline-flex min-w-0 items-center gap-1">
-              <User size={12} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">{map.owner_name ?? map.created_by}</span>
-            </span>
+          {recentOpenedAt !== undefined ? (
+            // 최근 카드 — 하나의 필 박스가 배경을 서서히 잃으며(accent-tint→투명) 내용을 제자리에서 교체.
+            // 두 텍스트를 같은 그리드 셀에 겹쳐 박스를 더 넓은 쪽 폭으로 고정 → 높이·말줄임 없이 "필 자체가 변하는" 느낌.
+            <div
+              data-id="map-card-recent-badge"
+              className="grid w-fit items-center rounded-full bg-accent-tint px-2 py-0.5 transition-colors duration-350 ease-smooth group-hover:bg-transparent"
+            >
+              <span className="col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap text-accent transition-opacity duration-350 ease-smooth group-hover:opacity-0">
+                <Clock size={12} strokeWidth={1.5} />
+                {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
+              </span>
+              <div className="col-start-1 row-start-1 flex items-center gap-2 whitespace-nowrap opacity-0 transition-opacity duration-350 ease-smooth group-hover:opacity-100">
+                {ownerAndTime}
+              </div>
+            </div>
+          ) : (
+            ownerAndTime
           )}
-          <span className="inline-flex shrink-0 items-center gap-1">
-            <Clock size={12} strokeWidth={1.5} />
-            {relativeTime(map.updated_at)}
-          </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5">

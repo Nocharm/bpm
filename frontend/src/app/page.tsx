@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, ShieldCheck } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery, type MatchRange } from "@/lib/search";
@@ -328,13 +328,24 @@ export default function MapListPage() {
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
         <h1 data-id="home-title" className="text-tagline text-ink">Process Maps</h1>
-        <button
-          className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
-          onClick={() => setDialogOpen(true)}
-        >
-          <Plus size={16} strokeWidth={1.5} />
-          {t("perm.createDialog.title")}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Manual — 홈 헤더에서도 매뉴얼 열람(뷰어 /manual). New map 왼쪽 보조 버튼 */}
+          <button
+            data-id="home-manual-btn"
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-3 py-2 text-caption-strong text-ink hover:bg-surface-alt"
+            onClick={() => router.push("/manual")}
+          >
+            <BookOpen size={16} strokeWidth={1.5} />
+            {t("manual.title")}
+          </button>
+          <button
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
+            onClick={() => setDialogOpen(true)}
+          >
+            <Plus size={16} strokeWidth={1.5} />
+            {t("perm.createDialog.title")}
+          </button>
+        </div>
       </div>
 
       {error && (

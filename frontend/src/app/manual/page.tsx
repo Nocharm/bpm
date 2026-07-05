@@ -4,7 +4,7 @@
 // 코드블록/인라인 코드 복사는 MarkdownView 내장. 데이터는 getManual()(DB 우선·manual.md fallback). (design 2026-07-05)
 
 import { Contrast, MoveHorizontal, Search, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getManual, type ManualDoc } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -48,6 +48,8 @@ export default function ManualPage() {
   const [readTheme, setReadTheme] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  // 현재 지속 강조 중인 매치 블록 — 다음 매치 이동/검색 변경 시 해제 대상
+  const highlightedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -74,6 +76,9 @@ export default function ManualPage() {
   const content = doc?.content ?? "";
   // TOC는 마크다운 헤딩에서 파생 (html 게시본 렌더·목차는 S9에서 DOMPurify와 함께 도입)
   const toc = parseToc(content);
+  // 본문 엘리먼트를 content 기준 메모이즈 — 검색 매치 이동 등 다른 state 변경으로 ManualPage가
+  // 리렌더돼도 MarkdownView(dangerouslySetInnerHTML)가 재주입되지 않도록(=검색 강조가 유지되도록).
+  const renderedBody = useMemo(() => <MarkdownView source={content} />, [content]);
 
   // 목차 클릭 → 렌더된 N번째 헤딩으로 스크롤 (TOC와 동일 필터라 인덱스 일치)
   const scrollToHeading = (index: number) => {
@@ -82,7 +87,17 @@ export default function ManualPage() {
     headings?.[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // 본문검색 — 매치 블록으로 순환 스크롤 + 잠깐 강조 플래시
+  // 직전에 강조한 매치 블록의 인라인 강조 해제 (다음 매치 이동·검색어 변경·검색 해제 시 호출)
+  const clearHighlight = () => {
+    const prev = highlightedRef.current;
+    if (prev) {
+      prev.style.backgroundColor = "";
+      prev.style.borderRadius = "";
+      highlightedRef.current = null;
+    }
+  };
+
+  // 본문검색 — 매치 블록으로 순환 스크롤 + 강조 유지(다음 매치로 이동하거나 검색을 바꾸거나 해제할 때까지 지속)
   const jumpToMatch = () => {
     const q = search.trim().toLowerCase();
     const root = bodyRef.current;
@@ -101,15 +116,14 @@ export default function ManualPage() {
     setMatchPos(next);
     const el = hits[next];
     el.scrollIntoView({ behavior: "smooth", block: "center" });
+    clearHighlight(); // 이전 매치 강조를 지운 뒤 현재 매치만 지속 강조
     el.style.backgroundColor = "var(--color-accent-tint)";
     el.style.borderRadius = "4px";
-    window.setTimeout(() => {
-      el.style.backgroundColor = "";
-      el.style.borderRadius = "";
-    }, 1200);
+    highlightedRef.current = el;
   };
 
   const clearSearch = () => {
+    clearHighlight();
     setSearch("");
     setMatchPos(-1);
     searchRef.current?.focus();
@@ -142,6 +156,7 @@ export default function ManualPage() {
                 placeholder={t("manual.searchPlaceholder")}
                 value={search}
                 onChange={(event) => {
+                  clearHighlight();
                   setSearch(event.target.value);
                   setMatchPos(-1);
                 }}
@@ -241,7 +256,7 @@ export default function ManualPage() {
               {content === "" ? (
                 <p className="text-caption text-ink-tertiary">{t("manual.empty")}</p>
               ) : (
-                <MarkdownView source={content} />
+                renderedBody
               )}
             </div>
           </article>

@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 마이너 UI: 최근카드 배지 모프 · 홈 Manual 버튼 · 매뉴얼 검색 강조 지속
+- 브랜치 `fix/minor-ui`(main 분기). 프론트 3파일.
+- **최근 열람 카드**(`map-card.tsx`): 오너·수정시각 자리에 accent-tint 필 배지 노출, 카드 호버 시 같은 박스가 배경을 잃으며(`transition-colors`) 오너·수정시각으로 제자리 크로스페이드(grid 셀 겹침 → 높이 점프·말줄임 없음).
+- **홈 헤더**(`page.tsx`): New map 왼쪽에 Manual 버튼(BookOpen, 보조 스타일, `router.push('/manual')`).
+- **매뉴얼 검색 강조 지속**(`manual/page.tsx`): Enter 점프 강조를 1200ms 플래시 → 지속(현재 매치 1개, 다음 점프·검색어 변경·해제 시에만 해제). 근본원인=`setMatchPos` 리렌더가 `MarkdownView`(`dangerouslySetInnerHTML`) 자식을 재주입해 인라인 강조가 소실 → 본문 엘리먼트 `useMemo([content])`로 안정화.
+- 검증: lint 0. 브라우저 — 배지 모프·Manual 이동·강조 2.5s+ 유지/순환/변경해제 확인.
+
 ## 2026-07-05 — 비교: 클릭+Tab 후 파란 포커스 박스 잔상 제거
 - 증상: 노드 클릭 후 Tab하면 클릭했던 노드(예 승인필요?)에 파란 박스 잔상. 원인: RF 노드가 `tabindex=0`(focusable)이라 클릭 시 DOM 포커스→Tab(키보드) 시 `:focus-visible` 파란 아웃라인.
 - 수정(`compare/page.tsx`): **`nodesFocusable={false}`·`edgesFocusable={false}`**(노드/엣지 DOM 포커스 제거) + Tab 핸들러에서 **`activeElement.blur()`**(클릭했던 패널 버튼의 focus-visible 아웃라인도 제거). 클릭·hover·선택 링(NodeSelectionRing)·Tab 내비는 그대로.
