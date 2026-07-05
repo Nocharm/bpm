@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S6f: 카드 시각 필(상대/2필) + 검색 삭제버튼·클릭가능 "/" + 인박스 탭 필터행 이동
+- 공용 `components/time-pills.tsx` — 과거 2주 이내면 상대시간 1필("~분 전", 기존 time.* i18n·relativeAgo 로직 재사용), 그 외엔 날짜(YYYY-MM-DD)·시각(HH:mm) 2필. nowMs는 페이지가 `useState(()=>Date.now())`로 1회 주입(purity). 노티스·인박스 카드에 적용.
+- SearchBox: 검색어 있으면 **전부삭제(X) 버튼**(클릭 시 clear+포커스), 없으면 **클릭 가능한 "/" 버튼**(포커스, 테두리+shadow-sm 입체감·hover). peer-focus 힌트 방식 제거. `dataId` prop 추가.
+- 홈 검색창을 공용 SearchBox로 교체(세 탭 동일 동작) — 인라인 블록 제거, Search import 정리.
+- 인박스: 검색창을 헤더 바로 아래로(노티스와 동일 위치) 올리고, 승인대기/알림 **탭을 All/안읽음 필터 행 우측정렬**로 이동(모두읽음은 페이지 헤더 우측). 승인대기 탭=상세 pane "곧 제공" 안내.
+- 검증: lint 0(기존 warning 1) · build 성공. 브라우저(:3001) — 홈 삭제버튼·공지 상대시간(2/4시간 전)·인박스 검색상단·탭 우측정렬·승인대기 안내 확인.
+
 ## 2026-07-05 — S6e: 노티스/인박스 검색창(/ 단축키·초성) + 좌폭 맵 통일 · 피드백 안내문구 삭제
 - 공용 components/search-box.tsx(맵 목록 디자인: Search 아이콘+input+"/" kbd 힌트) + lib/use-slash-focus.ts("/"로 포커스, 입력 중이면 무시). 노티스·인박스 aside 상단(필터 위)에 배치.
 - 검색은 filterByQuery(초성 포함) — 노티스 title+body_md, 인박스 message. i18n notices/inbox.searchPlaceholder(en/ko).

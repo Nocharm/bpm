@@ -13,13 +13,14 @@ import {
   markNotificationRead,
   type NotificationItem,
 } from "@/lib/api";
-import { formatKst, formatKstShort } from "@/lib/datetime";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { filterByQuery } from "@/lib/search";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { SearchBox } from "@/components/search-box";
+import { TimePills } from "@/components/time-pills";
 
 type Tab = "approvals" | "notifications";
 type ReadFilter = "all" | "unread";
@@ -43,6 +44,7 @@ export default function InboxPage() {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [nowMs] = useState(() => Date.now());
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
 
@@ -84,32 +86,9 @@ export default function InboxPage() {
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4">
-        {/* 탭 + 모두 읽음 */}
-        <h1 className="text-tagline text-ink">Inbox</h1>
-        <div className="flex items-center justify-between gap-4">
-          <div className="inline-grid grid-cols-2 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
-            {TABS.map((tabDef) => {
-              const active = tab === tabDef.id;
-              return (
-                <button
-                  key={tabDef.id}
-                  type="button"
-                  onClick={() => setTab(tabDef.id)}
-                  className={
-                    "inline-flex items-center justify-center gap-1 rounded-xs px-3 py-1 transition-colors " +
-                    (active ? "bg-surface text-accent shadow-sm" : "text-ink-secondary hover:text-ink")
-                  }
-                >
-                  {t(tabDef.labelKey)}
-                  {tabDef.id === "notifications" && unread > 0 && (
-                    <span className="rounded-full bg-accent px-1 text-fine text-on-accent">
-                      {unread}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        {/* 페이지 헤더 — 타이틀(좌) · 모두 읽음(우), 노티스 헤더와 정렬 */}
+        <div className="flex shrink-0 items-center justify-between gap-4">
+          <h1 className="text-tagline text-ink">Inbox</h1>
           {tab === "notifications" && unread > 0 && (
             <button
               type="button"
@@ -122,33 +101,54 @@ export default function InboxPage() {
           )}
         </div>
 
-        {tab === "approvals" ? (
-          <div className="flex flex-1 items-center justify-center text-caption text-ink-tertiary">
-            {t("inbox.approvalsComingSoon")}
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 gap-4">
-            {/* 좌 목록 — 필터 + 카드 */}
-            <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
-              <div className="flex flex-col gap-2 py-3 pr-3">
-                <SearchBox
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={t("inbox.searchPlaceholder")}
-                  inputRef={searchRef}
-                />
+        <div className="flex min-h-0 flex-1 gap-4">
+          {/* 좌 목록 — 검색(상단) + 필터(좌)·탭(우) + 카드 */}
+          <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
+            <div className="flex flex-col gap-2 py-3 pr-3">
+              <SearchBox
+                value={search}
+                onChange={setSearch}
+                placeholder={t("inbox.searchPlaceholder")}
+                inputRef={searchRef}
+              />
+              {/* All/안읽음 필터(좌) · 승인대기/알림 탭(우측정렬) 한 행 */}
+              <div className="flex items-center justify-between gap-2">
                 <IconPillFilter
                   options={filterOptions}
                   value={readFilter}
                   onChange={setReadFilter}
                 />
+                <div className="inline-grid grid-cols-2 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
+                  {TABS.map((tabDef) => {
+                    const active = tab === tabDef.id;
+                    return (
+                      <button
+                        key={tabDef.id}
+                        type="button"
+                        onClick={() => setTab(tabDef.id)}
+                        className={
+                          "inline-flex items-center justify-center gap-1 rounded-xs px-3 py-1 transition-colors " +
+                          (active ? "bg-surface text-accent shadow-sm" : "text-ink-secondary hover:text-ink")
+                        }
+                      >
+                        {t(tabDef.labelKey)}
+                        {tabDef.id === "notifications" && unread > 0 && (
+                          <span className="rounded-full bg-accent px-1 text-fine text-on-accent">
+                            {unread}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              {filtered.length === 0 ? (
-                <p className="px-4 py-8 text-center text-caption text-ink-tertiary">
-                  {t("inbox.empty")}
-                </p>
-              ) : (
-                <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
+            </div>
+            {tab === "approvals" ? null : filtered.length === 0 ? (
+              <p className="px-4 py-8 text-center text-caption text-ink-tertiary">
+                {t("inbox.empty")}
+              </p>
+            ) : (
+              <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
                   {filtered.map((n) => {
                     const TypeIcon = typeIcon(n.type);
                     return (
@@ -185,10 +185,8 @@ export default function InboxPage() {
                           >
                             {n.message}
                           </span>
-                          <div className="flex justify-end">
-                            <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
-                              {formatKstShort(n.created_at)}
-                            </span>
+                          <div className="flex justify-end gap-1">
+                            <TimePills iso={n.created_at} nowMs={nowMs} />
                           </div>
                         </button>
                       </li>
@@ -197,9 +195,13 @@ export default function InboxPage() {
                 </ul>
               )}
             </aside>
-            {/* 우 상세 */}
+            {/* 우 상세 — 승인대기 탭은 준비 중 안내(S7) */}
             <div className="min-w-0 flex-[2] overflow-y-auto">
-              {selected ? (
+              {tab === "approvals" ? (
+                <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
+                  {t("inbox.approvalsComingSoon")}
+                </div>
+              ) : selected ? (
                 <article className="px-6 py-4">
                   <p className="whitespace-pre-wrap text-body text-ink">{selected.message}</p>
                   <p className="mt-2 text-fine text-ink-tertiary">
@@ -221,7 +223,6 @@ export default function InboxPage() {
               )}
             </div>
           </div>
-        )}
       </div>
     </div>
   );

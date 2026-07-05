@@ -17,6 +17,7 @@ import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
+import { TimePills } from "@/components/time-pills";
 
 type Filter = "all" | NoticeImportance;
 
@@ -52,6 +53,7 @@ export default function NoticesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [nowMs] = useState(() => Date.now());
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
 
@@ -147,10 +149,12 @@ export default function NoticesPage() {
                     <span className="truncate text-fine text-ink-tertiary">
                       {bodyPreview(n.body_md)}
                     </span>
-                    {/* 작성자(좌) · 시간(우) */}
+                    {/* 작성자(좌) · 시간 필(우) */}
                     <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
                       <span className="truncate">{n.created_by}</span>
-                      <span className="shrink-0">{formatKstShort(n.starts_at)}</span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <TimePills iso={n.starts_at} nowMs={nowMs} />
+                      </span>
                     </div>
                   </button>
                 </li>

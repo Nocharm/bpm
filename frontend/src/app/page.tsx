@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { filterByQuery, type MatchRange } from "@/lib/search";
@@ -19,6 +19,7 @@ import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
 import { PromptDialog } from "@/components/prompt-dialog";
+import { SearchBox } from "@/components/search-box";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 // 상태 필터 필 순서 — 초안/검토중/승인됨/반려/게시 / status filter pills order.
@@ -350,27 +351,13 @@ export default function MapListPage() {
           <>
             {/* 좌측 리스트 컬럼 — 상단에 검색·필터탭(같은 폭), 아래 리스트 (#5) */}
             <div className="flex min-h-0 min-w-[18rem] flex-1 flex-col gap-2">
-              <div className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
-                <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  data-id="home-map-search"
-                  className="peer w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-                  placeholder={t("home.searchPlaceholder")}
-                  value={mapQuery}
-                  onChange={(e) => setMapQuery(e.target.value)}
-                />
-                {/* "/" 키 힌트 — 검색어 없고 포커스 아닐 때만(peer-focus로 숨김) */}
-                {mapQuery === "" && (
-                  <kbd
-                    aria-hidden
-                    className="pointer-events-none shrink-0 rounded-xs border border-hairline bg-surface-alt px-1.5 text-fine text-ink-tertiary peer-focus:hidden"
-                  >
-                    /
-                  </kbd>
-                )}
-              </div>
+              <SearchBox
+                value={mapQuery}
+                onChange={setMapQuery}
+                placeholder={t("home.searchPlaceholder")}
+                inputRef={searchRef}
+                dataId="home-map-search"
+              />
               <div
                 data-id="home-visibility-filter"
                 className="flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
