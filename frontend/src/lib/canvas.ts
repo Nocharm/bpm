@@ -651,6 +651,7 @@ export function layoutWithDagre(
   nodes: AppNode[],
   edges: Edge[],
   rankdir: "LR" | "TB" = "LR",
+  spacing?: { nodesep?: number; ranksep?: number },
 ): AppNode[] {
   const graph = new dagre.graphlib.Graph();
   // 교차/겹침 최소화 — network-simplex 랭커 + 넉넉한 간격(노드끼리·랭크끼리·엣지끼리).
@@ -663,8 +664,9 @@ export function layoutWithDagre(
     // 같은 랭크 노드 간격(nodesep)·평행 엣지 간격(edgesep)도 키워 엣지가 노드에 가려지는 일 방지.
     // LR: nodesep=같은 열 세로 간격 — 변경 노드의 before→after 필(노드 아래로 뻗음)이 아래 노드를
     // 침범하지 않도록 넉넉히. TB: ranksep=행 간격을 크게 둬 필(아래로 뻗음)이 다음 행을 침범하지 않게.
-    nodesep: isTB ? 90 : 120,
-    ranksep: isTB ? 200 : 160,
+    // spacing 인자로 호출부가 밀도를 조정(compare 방향 토글). 없으면 기본값(에디터).
+    nodesep: spacing?.nodesep ?? (isTB ? 90 : 120),
+    ranksep: spacing?.ranksep ?? (isTB ? 200 : 160),
     edgesep: 40,
     marginx: 20,
     marginy: 20,

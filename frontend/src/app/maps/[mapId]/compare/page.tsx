@@ -180,9 +180,16 @@ const COMPARE_RENDER_H: Record<string, number> = {
   subprocess: 64,
 };
 
-// 유지(백본) 노드를 흐름의 수직축(cross)에 맞춰 직선화 — LR은 공통 Y, TB는 공통 X로 스냅.
-// 열/행(flow축) 단위로 shift를 계산해 병렬 곁가지는 라인 밖에 남기고, 인라인 삽입은 라인에 정확히 붙인다.
-function alignBackbone(nodes: AppNode[], keptIds: Set<string>, dir: "LR" | "TB"): AppNode[] {
+// 백본(척추)을 흐름 수직축(cross)에 맞춰 직선화 — LR은 공통 Y, TB는 공통 X로 스냅.
+// spine = 유지 노드 ∪ 인라인 삽입(분기 없는 단일 연속으로 이어지는 추가 노드). 병렬 곁가지는 제외.
+// spine 노드가 있는 열/행은 그 노드를 backbone에 정확히 맞추고, 나머지 열/행은 최근접 spine shift로
+// dagre 오프셋을 보존 → 병렬 곁가지는 라인 밖, 인라인 삽입은 라인 위로 정렬.
+function alignBackbone(
+  nodes: AppNode[],
+  keptIds: Set<string>,
+  dir: "LR" | "TB",
+  edges: { source: string; target: string }[],
+): AppNode[] {
   const renderH = (node: AppNode) => COMPARE_RENDER_H[node.data.nodeType] ?? 38;
   const renderW = (node: AppNode) => nodeSizeOf(node.data.nodeType).w;
   // cross = 흐름에 수직인 축(정렬 대상), flow = 흐름 진행축(열/행 그룹 키). LR: cross=Y·flow=X, TB: 반대.
@@ -193,6 +200,35 @@ function alignBackbone(nodes: AppNode[], keptIds: Set<string>, dir: "LR" | "TB")
   const kept = nodes.filter((node) => keptIds.has(node.id));
   if (kept.length === 0) return nodes;
   const backboneCross = kept.reduce((sum, node) => sum + cross(node), 0) / kept.length;
+
+  // spine 판정 — 유지 노드에서 시작해 "분기 없는 단일 연속" 링크로 이어지는 추가 노드까지 확장.
+  // (선행 outDeg==1 → 후행도 spine, 후행 inDeg==1 → 선행도 spine). 분기/합류 지점의 곁가지는 제외.
+  const present = new Set(nodes.map((node) => node.id));
+  const outDeg = new Map<string, number>();
+  const inDeg = new Map<string, number>();
+  for (const edge of edges) {
+    if (!present.has(edge.source) || !present.has(edge.target)) continue;
+    outDeg.set(edge.source, (outDeg.get(edge.source) ?? 0) + 1);
+    inDeg.set(edge.target, (inDeg.get(edge.target) ?? 0) + 1);
+  }
+  const spine = new Set<string>();
+  for (const node of nodes) if (keptIds.has(node.id)) spine.add(node.id);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const edge of edges) {
+      if (!present.has(edge.source) || !present.has(edge.target)) continue;
+      if (spine.has(edge.source) && (outDeg.get(edge.source) ?? 0) === 1 && !spine.has(edge.target)) {
+        spine.add(edge.target);
+        grew = true;
+      }
+      if (spine.has(edge.target) && (inDeg.get(edge.target) ?? 0) === 1 && !spine.has(edge.source)) {
+        spine.add(edge.source);
+        grew = true;
+      }
+    }
+  }
+
   const flowKey = (node: AppNode) => Math.round(flow(node) / 10);
   const groups = new Map<number, AppNode[]>();
   for (const node of nodes) {
@@ -201,20 +237,18 @@ function alignBackbone(nodes: AppNode[], keptIds: Set<string>, dir: "LR" | "TB")
     if (list) list.push(node);
     else groups.set(key, [node]);
   }
-  // 유지 노드가 있는 열/행의 shift(그 노드를 backbone에 맞춤).
-  const keptShift = new Map<number, number>();
+  // spine 노드가 있는 열/행의 shift(그 노드를 backbone에 정확히 맞춤).
+  const spineShift = new Map<number, number>();
   for (const [key, colNodes] of groups) {
-    const keptInCol = colNodes.filter((node) => keptIds.has(node.id));
-    if (keptInCol.length) keptShift.set(key, backboneCross - cross(keptInCol[0]));
+    const anchor = colNodes.find((node) => spine.has(node.id));
+    if (anchor) spineShift.set(key, backboneCross - cross(anchor));
   }
-  // 유지 노드 없는 열/행(순수 추가/삭제)은 가장 가까운 유지 열의 shift를 그대로 적용 — 추가 노드의
-  // dagre 오프셋(위/아래·좌/우)을 보존: 병렬 곁가지는 라인 밖에 남아 직접 엣지를 안 막고,
-  // 인라인 삽입은 dagre가 라인에 뒀으니 그대로 라인 위.
-  const nearestKeptShift = (key: number): number => {
+  // spine 없는 열/행(순수 곁가지)은 가장 가까운 spine 열의 shift를 적용 — 상대 오프셋 보존.
+  const nearestSpineShift = (key: number): number => {
     let best = 0;
     let bestDist = Infinity;
-    for (const [keptKey, shift] of keptShift) {
-      const dist = Math.abs(keptKey - key);
+    for (const [spineKey, shift] of spineShift) {
+      const dist = Math.abs(spineKey - key);
       if (dist < bestDist) {
         bestDist = dist;
         best = shift;
@@ -224,15 +258,7 @@ function alignBackbone(nodes: AppNode[], keptIds: Set<string>, dir: "LR" | "TB")
   };
   const shiftById = new Map<string, number>();
   for (const [key, colNodes] of groups) {
-    let shift: number;
-    if (keptShift.has(key)) {
-      shift = keptShift.get(key) ?? 0;
-    } else {
-      const base = nearestKeptShift(key);
-      // 인라인 삽입(dagre가 라인 근처에 배치)이면 라인에 정확히 스냅, 병렬 곁가지(라인에서 먼)면 오프셋 보존.
-      const repCross = cross(colNodes[0]);
-      shift = Math.abs(repCross + base - backboneCross) < 25 ? backboneCross - repCross : base;
-    }
+    const shift = spineShift.has(key) ? (spineShift.get(key) ?? 0) : nearestSpineShift(key);
     for (const node of colNodes) shiftById.set(node.id, shift);
   }
   return nodes.map((node) => {
@@ -449,6 +475,9 @@ function ComparePane({
     // 배치는 To-Be(target) 흐름만으로 — 삭제 엣지를 전부 제외해 유지 백본이 깔끔한 직선이 되게 한다.
     // (삭제 엣지를 넣으면 삭제 노드가 본류 라인 위에 끼어 직접 엣지를 막고 노드를 위/아래로 왜곡시킴.)
     const layoutEdges = merged.edges.filter((edge) => edge.status !== "removed");
+    // 전개방향(흐름축=ranksep) 간격을 촘촘히(한눈에), 수직축(nodesep)은 방향별로. TB는 좌우(nodesep)를
+    // 조금 더 벌려 곁가지 구분. LR: nodesep 120·ranksep 120, TB: nodesep 120·ranksep 150.
+    const spacing = flowDir === "TB" ? { nodesep: 120, ranksep: 150 } : { nodesep: 120, ranksep: 120 };
     const laid = layoutWithDagre(
       buildAppNodes(
         merged.nodes.filter((node) => node.status !== "removed"),
@@ -457,14 +486,15 @@ function ComparePane({
       ),
       buildAppEdges(layoutEdges, keptKeys),
       flowDir,
+      spacing,
     );
-    // 후처리 — 유지(unchanged/changed) 백본을 공통 수직축으로 정렬(직선화 + 병렬 유지 노드 라인 밖으로).
+    // 후처리 — 백본(유지+인라인 삽입)을 공통 수직축으로 정렬(직선화 + 병렬 곁가지 라인 밖으로).
     const keptStatusIds = new Set(
       merged.nodes
         .filter((node) => node.status === "unchanged" || node.status === "changed")
         .map((node) => node.id),
     );
-    const aligned = alignBackbone(laid, keptStatusIds, flowDir);
+    const aligned = alignBackbone(laid, keptStatusIds, flowDir, layoutEdges);
     // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치에서 곁가지로 밀어낸다(본류 라인 비우기).
     // LR은 아래로(+y), TB는 오른쪽으로(+x) — 흐름축과 겹치지 않는 쪽.
     const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
@@ -582,11 +612,6 @@ function ComparePane({
     [positioned, focusId],
   );
 
-  // 배치가 바뀌면(방향 전환 등) 뷰를 다시 맞춘다 — fitView prop은 최초 1회만 적용되므로.
-  useEffect(() => {
-    const id = requestAnimationFrame(() => flow.fitView({ duration: 300, padding: 0.12 }));
-    return () => cancelAnimationFrame(id);
-  }, [positioned, flow]);
 
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
@@ -806,6 +831,7 @@ function ComparePane({
         <div className="min-w-0 flex-1 bg-canvas" data-id="compare-canvas">
           <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
           <ReactFlow
+            key={flowDir}
             nodes={laidNodes}
             edges={appEdges}
             nodeTypes={nodeTypes}

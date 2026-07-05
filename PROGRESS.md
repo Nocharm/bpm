@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 캔버스 간격 축소 + 백본 직선화(연결성 기반 spine)
+- **전개방향 간격 75%**(`layoutWithDagre` spacing 인자·`compare/page.tsx`) — 한눈에 보이게 흐름축(ranksep) 촘촘히. LR ranksep 160→120, TB ranksep 200→150. TB는 곁가지 구분 위해 좌우(nodesep) 90→120 확대. `layoutWithDagre(…, spacing?)` 오버라이드로 에디터 기본값은 불변.
+- **백본 직선화 개선**(`alignBackbone`) — 25px 임계 휴리스틱 → **연결성 기반 spine 탐지**: 유지 노드에서 "분기 없는 단일 연속"(선행 outDeg==1 / 후행 inDeg==1)으로 이어지는 인라인 삽입까지 spine으로 확장, 병렬 곁가지(분기/합류)는 제외. spine 노드가 있는 열/행은 backbone에 정확히 스냅 → LR 수평·TB 수직 직선. `alignBackbone(nodes, kept, dir, edges)`.
+- **fitView 레이스 수정** — 방향 전환 refit을 effect(마운트 시 부분 bounds로 137% 과확대) → `ReactFlow key={flowDir}` 재마운트로 대체(RF 자체 fitView가 측정 후 정확히 fit).
+- 검증: lint 0·build OK. 라이브(map 13) LR/TB 전체 fit(31%)·양방향 직선·간격 축소 확인.
+
 ## 2026-07-05 — 비교 캔버스 wrap 롤백 + 흐름 방향 토글(LR/TB) 제공
 - **wrap(접힘) 롤백** — 접힘이 세로 브릿지·교차 아크를 늘려 오히려 복잡해 보인다는 피드백. `wrapLayout` 전체 제거·`positioned`에서 접힘 호출/차수계산 제거·교차 아크 흐림(`appEdges` opacity) 제거. **z-index(변경 필 엣지 위로)는 유지**.
 - **흐름 방향 토글 신규**(`compare/page.tsx`) — 헤더에 LR(좌→우, 기본)/TB(상→하) 전환 버튼(`MoveVertical`/`MoveHorizontal`, i18n `compare.layout{Horizontal,Vertical}`). 맵이 한 축으로 너무 길면 반대 축으로 전환.
