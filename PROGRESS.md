@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S6: 인박스 /inbox 알림 탭 (read-all)
+- 백엔드 POST /api/notifications/read-all(본인 미읽음 일괄 읽음) + 테스트. api markAllNotificationsRead.
+- /inbox: 홈 폭(max-w-[80rem]). 탭 세그먼트(승인 대기/알림, 피드백 세그먼트 디자인)·알림 미읽음 뱃지·"모두 읽음"(Check). 알림 탭 마스터-디테일: 좌 알림 목록(미읽음 점·bold·클릭 시 읽음+선택), 우 상세(메시지·시각·map_id 있으면 "관련 맵 보기"). 승인 대기 탭 placeholder(S7).
+- i18n inbox.*(en/ko).
+- 검증: ruff·pytest 4/4·전체 394 · lint 0 · build 성공. 브라우저(:3001 Junho Kim) — 탭(알림 활성·미읽음 1)·목록(v2.4 notify_all)·클릭 읽음(점·뱃지 제거·상세)·모두 읽음 확인.
+
 ## 2026-07-05 — S5e: TopNav 탭을 피드백 패널 유형 세그먼트 디자인으로
 - S1 3-way 탭을 아이콘-필(펼침) → 피드백 사이드패널 유형 세그먼트 디자인으로: 회색 트랙(bg-surface-alt p-1) + 활성 흰 pill(bg-surface·text-accent·shadow-sm), 아이콘+라벨 유지(grid-cols-3).
 - 검증: lint 0 · build 성공. 브라우저(:3001 /notices) — 공지사항 탭 흰 pill 활성 확인.

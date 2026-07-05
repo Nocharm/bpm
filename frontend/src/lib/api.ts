@@ -893,6 +893,10 @@ export function markNotificationRead(id: number): Promise<NotificationItem> {
   return request<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
 }
 
+export function markAllNotificationsRead(): Promise<void> {
+  return request<void>("/notifications/read-all", { method: "POST" });
+}
+
 // ── 피드백 (design 2026-07-05) ──────────────
 
 export type FeedbackKind = "bug" | "suggestion" | "question" | "etc";
