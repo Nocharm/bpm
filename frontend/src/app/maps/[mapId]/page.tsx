@@ -165,6 +165,7 @@ import {
   type GraphGroup,
   type GraphNode,
   type LibraryProcess,
+  type SubprocessRef,
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
@@ -997,6 +998,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     return m;
   }, [libraryList]);
 
+  // linked_map_id → 지정 정보 — 루트 그래프 + 임베드 resolved의 subprocess_refs 병합(중첩 임베드 커버).
+  // 노드에 값을 저장하지 않는 라이브 참조 소스 (spec 2026-07-06).
+  const subprocessRefs = useMemo(() => {
+    const m = new Map<number, SubprocessRef>();
+    const addAll = (refs?: Record<number, SubprocessRef>) => {
+      if (!refs) {
+        return;
+      }
+      for (const [refMapId, ref] of Object.entries(refs)) {
+        m.set(Number(refMapId), ref);
+      }
+    };
+    addAll(rootGraph?.subprocess_refs);
+    for (const g of resolvedCache.values()) {
+      addAll(g.subprocess_refs);
+    }
+    return m;
+  }, [rootGraph, resolvedCache]);
+
   // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
   // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
   const injectSubEnds = useCallback(
@@ -1016,17 +1036,23 @@ function MapEditor({ mapId }: { mapId: number }) {
         node.data.linkedVersionId != null &&
         lib?.latest_published_version_id != null &&
         lib.latest_published_version_id > node.data.linkedVersionId;
+      // 미지정/해제 링크맵 — 경고 뱃지 + 잠금(권한 무관). refs 미수신(undefined) 동안은 미판정 유지 (spec 2026-07-06).
+      const ref = node.data.linkedMapId != null ? subprocessRefs.get(node.data.linkedMapId) : undefined;
+      const undesignated = ref != null && !ref.designated;
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, updateAvailable } };
       }
-      return { ...node, data: { ...node.data, subEnds: deriveSubEnds(resolved), updateAvailable } };
+      return {
+        ...node,
+        data: { ...node.data, subEnds: deriveSubEnds(resolved), undesignated, updateAvailable },
+      };
     },
-    [resolvedCache, libByMap, lockedKeys],
+    [resolvedCache, libByMap, lockedKeys, subprocessRefs],
   );
   useEffect(() => {
     nodesRef.current = nodes;

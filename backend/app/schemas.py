@@ -437,6 +437,8 @@ class GraphOut(BaseModel):
 class VersionGraphOut(BaseModel):
     nodes: list[FlatNodeOut]
     edges: list[EdgeIn]
+    # 에디터 루트 그래프(/graph/all)도 지정 정보 동봉 — GraphOut.subprocess_refs와 동일 (spec 2026-07-06)
+    subprocess_refs: dict[int, SubprocessRefOut] = {}
 
 
 class CheckoutIn(BaseModel):

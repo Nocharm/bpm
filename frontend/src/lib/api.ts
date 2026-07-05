@@ -116,6 +116,15 @@ export interface GraphGroup {
   color: string;
 }
 
+// 링크 대상 맵의 서브프로세스 지정 정보 — 노드에 복사하지 않는 라이브 참조 (spec 2026-07-06)
+export interface SubprocessRef {
+  designated: boolean;
+  department: string | null;
+  assignee: string | null;
+  system: string | null;
+  duration: string | null;
+}
+
 export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -123,11 +132,14 @@ export interface Graph {
   // 권한 마스킹 — getResolvedGraph가 viewer 미만 호출자에게 200 + 빈 그래프 + locked:true 반환.
   // Permission masking — getResolvedGraph returns 200 + empty graph + locked:true for below-viewer callers.
   locked?: boolean;
+  // linked_map_id별 지정 정보 — 경고·잠금·어트리뷰트 표시 소스 (JSON 키라 문자열 인덱스)
+  subprocess_refs?: Record<number, SubprocessRef>;
 }
 
 export interface VersionGraph {
   nodes: FlatNode[];
   edges: GraphEdge[];
+  subprocess_refs?: Record<number, SubprocessRef>;
 }
 
 // 인증 토큰 — AuthGate가 로그인 후 주입. auth 비활성(로컬)이면 null로 유지.

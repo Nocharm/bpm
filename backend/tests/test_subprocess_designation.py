@@ -177,6 +177,9 @@ def test_graph_includes_subprocess_refs(client: TestClient, enforce) -> None:
     assert ref["designated"] is True
     assert ref["department"] == "Sales"
     assert ref["assignee"] == "Kim"
+    # 에디터 루트 로드 경로(/graph/all)에도 동일 동봉
+    full = client.get(f"/api/versions/{host_version}/graph/all").json()
+    assert full["subprocess_refs"][str(target)]["designated"] is True
 
 
 def test_refs_undesignated_and_resolved_locked(client: TestClient, enforce) -> None:

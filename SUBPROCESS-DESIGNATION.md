@@ -11,7 +11,7 @@
 | U1 | 백엔드 지정 기반 — `ProcessMap` sp_* 컬럼 7개 + PUT/DELETE `/api/maps/{id}/subprocess-designation` + pytest | 검토 대기 | `60a7c8f` |
 | U2 | 설정 페이지 지정 UI — Subprocess 섹션(오너 전용) + 지정/수정 모달 + 해제 확인 | 검토 대기 | |
 | U3 | 라이브러리 피커 — 지정 맵만 노출(백) + 부서 칩·빈 상태(프론트) | 검토 대기 | `df202f3` + 프론트 |
-| U4 | `subprocess_refs` 동봉 + 미지정 resolved 잠금(백) + 캔버스 경고 배지·펼침 잠금(프론트) | 구현중 | |
+| U4 | `subprocess_refs` 동봉 + 미지정 resolved 잠금(백) + 캔버스 경고 배지·펼침 잠금(프론트) | 검토 대기 | `d45c63a` + 프론트 |
 | U5 | 노드 카드 어트리뷰트 4종 표시 + 인스펙터 읽기전용 | 대기 | |
 | U6 | 서브프로세스 노드 단일색 고정(색 UI 숨김 + 렌더 강제) | 대기 | |
 | U7 | 데모 시드 지정 심기 + Playwright 통합 스모크 | 대기 | |
@@ -74,3 +74,4 @@ cd frontend; npm run dev
 - 2026-07-06: 로컬 시현 환경 — 워크트리 서버는 backend :8001 / frontend :3001 (메인 체크아웃 서버와 포트 분리). dev.db는 reset_db로 신규 시드.
 - 2026-07-06: U3 구현 — 라이브러리 목록 지정+미삭제 필터·어트리뷰트 동봉(백, `df202f3`), 피커 부서 칩·빈 상태 안내(프론트). 기존 테스트 2건 게시+지정 플로우로 갱신(정책 변화 의도 주석). 브라우저: 지정 맵 1건+Fulfillment Part 1 칩, 전체 해제 시 안내 문구. 상태 → 검토 대기.
 - 2026-07-06: 시현 데이터 — 맵 1(Order Fulfillment) 지정 상태(부서 Fulfillment Part 1·SAP ERP·3 days), 나머지 11개 미지정 → U4 경고·잠금 시연에 활용 예정.
+- 2026-07-06: U4 구현 — refs가 `/graph/all`에 빠져 있던 것 보강(에디터 실제 로드 경로). 캔버스: 미지정 경고 삼각형 배지(`subprocess-undesignated-badge`)+펼침 봉인, 지정 노드는 기존 임베드 펼침 정상. 시연 노드 2개(맵2 draft, DB 로컬 전용 — 커밋 안 됨): `demo-sp-undesig`(→맵3 미지정)·`demo-sp-desig`(→맵1 지정). 지정↔해제 라이브 전환 검증. 상태 → 검토 대기.

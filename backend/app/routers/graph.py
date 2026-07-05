@@ -89,14 +89,17 @@ async def get_full_graph(
     edge_rows = (
         await session.scalars(select(Edge).where(Edge.version_id == version_id))
     ).all()
+    nodes = [
+        FlatNodeOut.model_validate(n).model_copy(
+            update={"group_ids": _node_group_ids(n)}
+        )
+        for n in node_rows
+    ]
     return VersionGraphOut(
-        nodes=[
-            FlatNodeOut.model_validate(n).model_copy(
-                update={"group_ids": _node_group_ids(n)}
-            )
-            for n in node_rows
-        ],
+        nodes=nodes,
         edges=[EdgeIn.model_validate(e) for e in edge_rows],
+        # 에디터가 실제로 로드하는 루트 그래프 — 지정 정보 동봉 (spec 2026-07-06)
+        subprocess_refs=await get_subprocess_refs(session, nodes),
     )
 
 

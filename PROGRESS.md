@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 U4(프론트): 캔버스 경고·잠금
+- `subprocess_refs`를 `/graph/all`(에디터 루트 로드 경로)에도 동봉(누락 발견·보강). 프론트: 루트+resolved refs 병합 맵 → `injectSubEnds`가 `undesignated` 주입 → `UndesignatedBadge`(경고 삼각형·error 톤, 잠금 뱃지보다 우선). 펼침 봉인은 서버 locked 응답→기존 lockedKeys 경로 재사용(추가 클라 게이트 불필요).
+- 검증: lint 0, 브라우저 — 미지정 노드 경고+펼침 불가·지정 노드 정상 임베드 펼침(합성 자식 3), 지정→경고 해소·해제→복귀 라이브 확인.
+
 ## 2026-07-06 — 서브프로세스 지정 U4(백): subprocess_refs 동봉 + 미지정 resolve 잠금
 - `GraphOut.subprocess_refs`(링크 대상별 designated+어트리뷰트, `get_subprocess_refs`) — 에디터 그래프·임베드 resolved 공통 동봉(노드 복사 없는 라이브 참조). resolved는 **미지정/삭제 맵이면 권한 무관 locked** 게이트 추가. 기존 픽스처 갱신: mask 시드 지정 부여·pinned 테스트 게시+지정 플로우·빈 그래프 exact-match 2건. pytest 415 passed·ruff 클린.
 

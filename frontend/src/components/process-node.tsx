@@ -288,6 +288,20 @@ function AssigneeWarningBadge() {
   );
 }
 
+// 미지정 서브프로세스 뱃지 — 링크맵이 지정 해제/미지정이면 경고 삼각형 + 잠금(권한 무관). (spec 2026-07-06)
+function UndesignatedBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      data-id="subprocess-undesignated-badge"
+      className="absolute -right-2 -top-2 rounded-xs border border-error/40 bg-error/10 p-0.5 shadow-sm"
+      title={t("subprocess.undesignated")}
+    >
+      <AlertTriangle size={14} strokeWidth={1.5} className="text-error" />
+    </span>
+  );
+}
+
 // 잠긴 하위프로세스 뱃지 — 권한 없는 링크맵은 펼침/드릴 대신 자물쇠 표시(봉인 박스). ExpandToggleButton 자리를 대체.
 function LockedBadge() {
   const { t } = useI18n();
@@ -414,7 +428,10 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.assigneeWarning && <AssigneeWarningBadge />}
-        {data.locked ? (
+        {/* 미지정 경고가 권한 잠금보다 우선 — 원인(지정 해제)을 보여야 오너가 조치 가능 */}
+        {data.undesignated ? (
+          <UndesignatedBadge />
+        ) : data.locked ? (
           <LockedBadge />
         ) : (
           (data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />
