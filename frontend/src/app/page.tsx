@@ -482,13 +482,13 @@ export default function MapListPage() {
                           e.stopPropagation();
                           toggleRecentCollapse();
                         }}
-                        className="flex items-center justify-between gap-2 text-left"
+                        className="group -mx-1.5 flex items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-surface-alt"
                       >
-                        <span className="text-fine text-ink-tertiary">{t("home.recentTitle")}</span>
+                        <span className="text-fine text-ink-tertiary group-hover:text-ink-secondary">{t("home.recentTitle")}</span>
                         {recentCollapsed ? (
-                          <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary group-hover:text-ink-secondary" />
                         ) : (
-                          <ChevronUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          <ChevronUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary group-hover:text-ink-secondary" />
                         )}
                       </button>
                       {!recentCollapsed && (
@@ -506,18 +506,36 @@ export default function MapListPage() {
                               </li>
                             ))}
                           </ul>
-                          {recentBand.length > recentShown && (
-                            <button
-                              type="button"
-                              data-id="home-recent-more"
-                              className="self-start text-fine text-accent hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRecentShown((n) => n + 3);
-                              }}
-                            >
-                              {t("home.recentMore")}
-                            </button>
+                          {(recentBand.length > recentShown || recentShown > 2) && (
+                            <div className="flex items-center gap-3">
+                              {recentBand.length > recentShown && (
+                                <button
+                                  type="button"
+                                  data-id="home-recent-more"
+                                  className="text-fine text-accent hover:underline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRecentShown((n) => n + 3);
+                                  }}
+                                >
+                                  {t("home.recentMore")}
+                                </button>
+                              )}
+                              {recentShown > 2 && (
+                                <button
+                                  type="button"
+                                  data-id="home-recent-collapse"
+                                  className="inline-flex items-center gap-1 text-fine text-ink-tertiary hover:text-ink"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleRecentCollapse();
+                                  }}
+                                >
+                                  <ChevronUp size={14} strokeWidth={1.5} />
+                                  {t("home.recentCollapse")}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </>
                       )}
