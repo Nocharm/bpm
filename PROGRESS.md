@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — C1a 비교 셸 헤더 크롬 재스타일 (BASE/TARGET pill·swap·내보내기·To-Be 적용)
+- **`compare/page.tsx` 헤더 재구성** — 뒤로가기(←편집기·ArrowLeft)·구분선·맵명(굵게)+"버전 비교"(서브타이틀)·**BASE/TARGET pill 셀렉터**(역할 태그 + 선택 버전 상태 색점 `STATUS_DOT`·ChevronDown, native select 유지)·`→`·**swap 버튼**(BASE↔TARGET 교체)·우측 **내보내기**(outline, PNG=`html-to-image` `toPng`·저장노드 범위 1600×1000·bg-canvas hex는 export 배경 예외)·**To-Be 적용**(accent·에디터 내비).
+- **범례 이전** — 헤더 우측 `DiffLegend`를 캔버스 **좌하 오버레이 칩**(`Panel bottom-left`·surface/80 backdrop)으로, `Controls`는 **우하**(`position="bottom-right"`)로 이동(좌하 충돌 회피).
+- **레이아웃 높이 오버플로 수정** — `ComparePane` 루트 `flex flex-1 flex-col`에 `min-h-0` 누락 → 캔버스가 부모(1089px)를 넘겨 1438px로 커져 하단 오버레이가 화면 밖. `min-h-0` 추가로 뷰포트에 바운드(브라우저 실측으로 진단).
+- i18n `compare.swapAria`/`compare.export`/`compare.applyToBe`(en/ko) 신설. `compare.summary`는 기존 키(C1b 카운트 필용).
+- 검증: lint 0 · build/TS OK. 라이브(:3000, map 11) 헤더 렌더·상태 색점·swap(BASE↔TARGET) 동작 확인. (좌하 겹치는 "N"은 Next.js dev 인디케이터=프로덕션 부재.)
+
 ## 2026-07-05 — 신규 노드 1회 반짝 + 노드 핸들 재디자인(호버 표시·반투명 둥근사각형)
 - **신규 노드 플래시 2회→1회**(`page.tsx` raw `<style>`) — `bpm-node-flash` keyframe을 18%·58% 두 딥에서 45% 한 딥으로, 850ms→450ms.
 - **노드 핸들(연결 히트박스) 재디자인** — globals.css `.react-flow__handle` 규칙을 page.tsx raw `<style>`로 이전(Turbopack이 dev에서 `.react-flow__node` 셀렉터 규칙 purge, lessons §5). 검은 닷 7px → **반투명 violet 둥근사각형 13px**(border-radius 3px, accent 18% 채움·40% 테두리). **평소 opacity 0(숨김)·노드 hover 시 표시**, 핸들 직접 hover 시 강조(accent 채움·테두리·scale 1.2). **주의: 모든 연결가능 핸들에 `connectionindicator` 클래스가 상시 붙어** reveal 규칙에서 제거해야 숨김이 먹음(원래는 base 0.4라 무해했음).

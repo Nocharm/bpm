@@ -8,13 +8,18 @@ import {
   BackgroundVariant,
   Controls,
   type Edge,
+  getNodesBounds,
+  getViewportForBounds,
   MarkerType,
   type NodeTypes,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { toPng } from "html-to-image";
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Check, ChevronDown, Download } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,6 +29,7 @@ import {
   getFullGraph,
   getMap,
   type VersionGraph,
+  type VersionStatus,
   type VersionSummary,
 } from "@/lib/api";
 import { layoutWithDagre, normalizeNodeType, type AppNode } from "@/lib/canvas";
@@ -99,31 +105,58 @@ function buildAppEdges(merged: MergedEdge[]): Edge[] {
   }));
 }
 
+// 버전 상태 → 색점(pill 좌측) — version-status.ts 계열 토큰 재사용, 무채 기본.
+const STATUS_DOT: Record<VersionStatus, string> = {
+  draft: "bg-ink-tertiary",
+  pending: "bg-changed",
+  approved: "bg-accent",
+  published: "bg-added",
+  rejected: "bg-error",
+  expired: "bg-ink-tertiary",
+};
+
+// BASE/TARGET 역할 태그 + 상태 색점이 붙은 pill 셀렉터.
 function VersionSelect({
+  role,
   label,
   versions,
   value,
   onChange,
 }: {
+  role: string;
   label: string;
   versions: VersionSummary[];
   value: number;
   onChange: (id: number) => void;
 }) {
+  const current = versions.find((version) => version.id === value);
   return (
-    <label className="flex items-center gap-1 text-caption text-ink-secondary">
-      {label}
-      <select
-        className="rounded-sm border border-hairline px-2 py-1 text-caption"
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      >
-        {versions.map((version) => (
-          <option key={version.id} value={version.id}>
-            {version.label}
-          </option>
-        ))}
-      </select>
+    <label className="flex items-center gap-1.5">
+      <span className="text-fine font-semibold tracking-wide text-ink-tertiary">{role}</span>
+      <div className="relative flex h-7 items-center rounded-sm border border-hairline bg-surface pr-6 pl-2 hover:bg-surface-alt">
+        <span
+          className={`mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+            current ? STATUS_DOT[current.status] : "bg-ink-tertiary"
+          }`}
+        />
+        <select
+          aria-label={label}
+          className="cursor-pointer appearance-none bg-transparent text-caption text-ink focus:outline-none"
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+        >
+          {versions.map((version) => (
+            <option key={version.id} value={version.id}>
+              {version.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={12}
+          strokeWidth={1.5}
+          className="pointer-events-none absolute right-1.5 text-ink-tertiary"
+        />
+      </div>
     </label>
   );
 }
@@ -277,6 +310,35 @@ function ComparePane({
     [flow],
   );
 
+  const handleSwap = useCallback(() => {
+    onChangeBase(targetId);
+    onChangeTarget(baseId);
+  }, [onChangeBase, onChangeTarget, baseId, targetId]);
+
+  // 병합 캔버스를 PNG로 저장 — 저장 노드 범위를 1600×1000에 맞춰 렌더(React Flow 표준 recipe).
+  const handleExport = useCallback(() => {
+    const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+    if (!viewport) return;
+    const width = 1600;
+    const height = 1000;
+    const vp = getViewportForBounds(getNodesBounds(flow.getNodes()), width, height, 0.5, 2, 0.1);
+    void toPng(viewport, {
+      backgroundColor: "#F6F6F8", // bg-canvas — export 배경(데이터/출력 예외, design.md §1)
+      width,
+      height,
+      style: {
+        width: `${width}px`,
+        height: `${height}px`,
+        transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`,
+      },
+    }).then((dataUrl) => {
+      const link = document.createElement("a");
+      link.download = `${mapName}-compare.png`;
+      link.href = dataUrl;
+      link.click();
+    });
+  }, [flow, mapName]);
+
   const badgeClass: Record<MergedNodeStatus, string> = {
     added: "bg-added/10 text-added",
     removed: "bg-removed/10 text-removed",
@@ -293,31 +355,62 @@ function ComparePane({
   const hasChanges = nodeChanges.length + edgeChanges.length > 0;
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex flex-wrap items-center gap-4 border-b border-hairline px-4 py-2">
-        <Link href={`/maps/${mapId}`} className="text-caption text-accent hover:underline">
-          ← {t("compare.editorLink")}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
+        <Link
+          href={`/maps/${mapId}`}
+          className="flex items-center gap-1 text-caption text-accent hover:underline"
+        >
+          <ArrowLeft size={14} strokeWidth={1.5} />
+          {t("compare.editorLink")}
         </Link>
-        <h1 className="text-tagline text-ink font-medium">
-          {mapName} — {t("compare.title")}
-        </h1>
-        <div className="flex items-center gap-3">
+        <span className="h-4 w-px bg-divider" />
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-body-strong text-ink">{mapName}</h1>
+          <span className="text-caption text-ink-tertiary">{t("compare.title")}</span>
+        </div>
+        <div className="ml-2 flex items-center gap-2">
           <VersionSelect
+            role="BASE"
             label={t("compare.base")}
             versions={versions}
             value={baseId}
             onChange={onChangeBase}
           />
-          <span className="text-ink-tertiary">→</span>
+          <ArrowRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
           <VersionSelect
+            role="TARGET"
             label={t("compare.target")}
             versions={versions}
             value={targetId}
             onChange={onChangeTarget}
           />
+          <button
+            type="button"
+            onClick={handleSwap}
+            title={t("compare.swapAria")}
+            aria-label={t("compare.swapAria")}
+            className="flex h-7 w-7 items-center justify-center rounded-sm border border-hairline text-ink-secondary hover:bg-surface-alt"
+          >
+            <ArrowLeftRight size={14} strokeWidth={1.5} />
+          </button>
         </div>
-        <div className="ml-auto">
-          <DiffLegend />
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExport}
+            className="flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-3 text-caption text-ink-secondary hover:bg-surface-alt"
+          >
+            <Download size={14} strokeWidth={1.5} />
+            {t("compare.export")}
+          </button>
+          <Link
+            href={`/maps/${mapId}`}
+            className="flex h-8 items-center gap-1.5 rounded-sm bg-accent px-3 text-caption font-semibold text-on-accent hover:bg-accent/90"
+          >
+            <Check size={14} strokeWidth={2} />
+            {t("compare.applyToBe")}
+          </Link>
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
@@ -337,7 +430,13 @@ function ComparePane({
               size={1.2}
               color="var(--color-canvas-dot)"
             />
-            <Controls showInteractive={false} />
+            <Panel
+              position="bottom-left"
+              className="rounded-sm border border-hairline bg-surface/80 px-2.5 py-1.5 shadow-sm backdrop-blur-sm"
+            >
+              <DiffLegend />
+            </Panel>
+            <Controls showInteractive={false} position="bottom-right" />
           </ReactFlow>
         </div>
         <aside
