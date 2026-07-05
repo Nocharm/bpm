@@ -13,6 +13,7 @@ import {
   Copy,
   Hand,
   Landmark,
+  Loader2,
   Settings,
   Trash2,
   User,
@@ -86,6 +87,30 @@ function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
   return <Icon size={12} strokeWidth={1.5} />;
 }
 
+// 멤버 컬럼 고스트 — 권한·디렉터리·그룹 로딩 동안 우측 컬럼 폭을 미리 차지해,
+// 버전 프레임이 전체 폭으로 나왔다가 줄어드는 리플로우를 방지. 실제 멤버 행(아이콘·2줄·역할 배지) 치수 모사.
+function MembersSkeleton() {
+  return (
+    <div aria-hidden className="flex animate-pulse flex-col gap-1" data-id="map-detail-members-ghost">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
+        >
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-surface-alt" />
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="h-3 w-3/5 rounded-xs bg-surface-alt" />
+              <span className="h-2.5 w-2/5 rounded-xs bg-surface-alt" />
+            </span>
+          </span>
+          <span className="h-4 w-12 shrink-0 rounded-sm bg-surface-alt" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface MapDetailCardProps {
   mapId: number;
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
@@ -124,6 +149,8 @@ export function MapDetailCard({
   const [error, setError] = useState<string | null>(null);
   // 허용 인원 — 접근 권한자(viewer+)면 조회. 서버 GET /permissions 게이트도 viewer+ (B1) / members for any role with access.
   const [members, setMembers] = useState<MapPermission[] | null>(null);
+  // 멤버 섹션 상태 — loading(고스트 표시)/ready/hidden(권한 없음·첫 조회 실패). 재조회(reloadKey) 중엔 기존 값 유지.
+  const [membersStatus, setMembersStatus] = useState<"loading" | "ready" | "hidden">("loading");
   // 내가 속한 그룹 id(문자열) — 멤버 하이라이트용 / my group ids for the "mine" highlight.
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
   // loginId → 표시명 — 멤버(유저) 행을 "이름(아이디)"로 보여주기 위함 (#5)
@@ -172,6 +199,7 @@ export function MapDetailCard({
             ]);
             if (!active) return;
             setMembers(perms);
+            setMembersStatus("ready");
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
             setTitleById(new Map(dir.users.map((u) => [u.id, u.title ?? ""])));
             setOrgPathById(new Map(dir.users.map((u) => [u.id, u.org_path ?? ""])));
@@ -190,8 +218,11 @@ export function MapDetailCard({
               );
             }
           } catch {
-            // 멤버/그룹 조회 실패는 무시 — 섹션만 비표시 / ignore; section hidden.
+            // 멤버/그룹 조회 실패 — 첫 로딩이면 섹션 숨김, 재조회면 기존 값 유지 / hide on first load only.
+            setMembersStatus((s) => (s === "ready" ? s : "hidden"));
           }
+        } else {
+          setMembersStatus("hidden");
         }
       })
       .catch((err) => {
@@ -206,7 +237,16 @@ export function MapDetailCard({
     return <p className="p-4 text-caption text-error">{error}</p>;
   }
   if (!detail) {
-    return <p className="p-4 text-caption text-ink-tertiary">…</p>;
+    // 첫 로딩 — '…' 텍스트 대신 박스 중앙 스피너 + 라벨
+    return (
+      <div
+        data-id="map-detail-loading"
+        className="flex h-full min-h-40 flex-col items-center justify-center gap-2 p-4"
+      >
+        <Loader2 size={20} strokeWidth={1.5} className="animate-spin text-ink-tertiary" />
+        <span className="text-caption text-ink-tertiary">{t("common.loading")}</span>
+      </div>
+    );
   }
 
   const isOwner = detail.my_role === "owner";
@@ -290,8 +330,9 @@ export function MapDetailCard({
         </div>
         )}
 
-        {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트 */}
-        {only !== "versions" && members !== null && (
+        {/* 허용 인원 (editor+ only) — 개인 → 팀 → 유저 그룹 순, 그룹 사이 스페이서, 내 소속 하이라이트.
+            로딩 중엔 고스트로 컬럼 폭을 먼저 확보(버전 프레임 리플로우 방지) */}
+        {only !== "versions" && membersStatus !== "hidden" && (
           <div
             className={`flex min-w-0 flex-1 flex-col gap-1 ${
               only === "members" ? "" : "sm:border-l sm:border-hairline sm:pl-4"
@@ -312,7 +353,9 @@ export function MapDetailCard({
                 )}
               </div>
             )}
-            {members.length === 0 ? (
+            {members === null ? (
+              <MembersSkeleton />
+            ) : members.length === 0 ? (
               <p className="text-caption text-ink-tertiary">{t("home.membersEmpty")}</p>
             ) : (
               <div className="flex flex-col gap-3">
