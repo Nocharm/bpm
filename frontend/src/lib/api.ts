@@ -693,6 +693,19 @@ export function listInboxApprovals(): Promise<InboxApproval[]> {
   return request<InboxApproval[]>("/inbox/approvals");
 }
 
+// ── 사용 매뉴얼 (S8) ──────────────────────────────────────────
+export interface ManualDoc {
+  format: "markdown" | "html";
+  content: string;
+  updated_at: string | null; // 파일 fallback이면 null
+  updated_by: string | null;
+}
+
+// 게시본 조회 — DB 우선, 없으면 manual.md 파일 fallback(updated_at=null).
+export function getManual(): Promise<ManualDoc> {
+  return request<ManualDoc>("/manual");
+}
+
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
 
 export interface DirectoryUser {

@@ -1,7 +1,7 @@
 // 전역 네비게이션 바 — 브랜드 · 유저칩(드롭다운) · 영/한 토글. 모든 페이지 상단.
 "use client";
 
-import { Inbox, Map as MapIcon, Megaphone, MessageSquare } from "lucide-react";
+import { BookOpen, Inbox, Map as MapIcon, Megaphone, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -19,6 +19,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FeedbackSidePanel } from "@/components/feedback-side-panel";
 import { NotificationBell } from "@/components/notification-bell";
+import { Tooltip } from "@/components/tooltip";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
@@ -123,6 +124,23 @@ export function TopNav() {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {/* 매뉴얼 진입 — 로그인 시에만 노출. 아이콘 링크(툴팁) */}
+        {user && (
+          <Tooltip label={t("manual.title")}>
+            <Link
+              href="/manual"
+              aria-current={pathname.startsWith("/manual") ? "page" : undefined}
+              className={
+                "inline-flex rounded-sm border border-hairline p-1.5 " +
+                (pathname.startsWith("/manual")
+                  ? "bg-accent-tint text-accent"
+                  : "text-ink-secondary hover:bg-surface-alt hover:text-ink")
+              }
+            >
+              <BookOpen size={14} strokeWidth={1.5} />
+            </Link>
+          </Tooltip>
+        )}
         {/* 피드백 진입 — 로그인 시에만 노출. 사이드 패널 오픈 */}
         {user && (
           <button

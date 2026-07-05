@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S8b: 매뉴얼 뷰어 `/manual`
+- `src/app/manual/page.tsx` — 좌 TOC(본문 H2/H3 파생, 펜스 코드 제외·클릭 시 렌더 헤딩으로 스크롤·활성 강조) + 우 `MarkdownView`(코드블록/인라인 복사 내장). 헤더: 타이틀 + 배포포함/업데이트 배지 · 본문검색(`Ctrl/⌘+K` 포커스, Enter 순환 점프 + accent-tint 플래시, 삭제 버튼) · 읽기폭 토글(46rem↔전폭) · 본문 한정 읽기 테마 토글.
+- 읽기 테마: 라이트 전용(design §7)·토큰 제약상 다크 대신 **elevated warm paper 패널**(border+shadow+`bg-surface-pearl`)로 명확히 구분. (pearl 단독은 흰색과 미구분이라 테두리/그림자 병용.)
+- api `getManual`(DB 우선·파일 fallback) · i18n `manual.*`(en/ko) · TopNav **BookOpen 진입 아이콘**(로그인 시, 툴팁, /manual 활성 강조).
+- html 포맷 게시본 렌더는 S9(DOMPurify 도입 시)로 이연 — 현재 데이터는 마크다운.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — TOC 스크롤·활성·검색 점프·읽기폭·읽기테마 패널·nav 아이콘 확인.
+
 ## 2026-07-05 — S8a: 매뉴얼 백엔드 — ManualDoc 모델 + GET/PUT /api/manual
 - `ManualDoc` 모델(단일 행 id=1 upsert · format markdown|html · content · updated_at/by) + `routers/manual.py` — `GET /api/manual`(DB 행 우선, 없으면 `app/manual.py:get_manual()` 파일 fallback, updated_at=None) / `PUT /api/manual`(sysadmin upsert). `ManualOut`/`ManualUpdate` 스키마 + main.py 등록.
 - 검증: ruff·pytest 3/3(파일 fallback·403 게이트·PUT→GET 라운드트립)·전체 401. (기존 `manual.md`·`get_manual()` 로더 재사용 — AI 참고자료와 공유.)
