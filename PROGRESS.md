@@ -9,6 +9,11 @@
 - 관리자 테이블 3종(`employee-table`·`user-table`·`department-table`)도 25행+`<tr>` 센티널 적용 — 부서 테이블은 행별 인원수 집계(부서×전직원)가 보이는 행에만 수행돼 함께 경감. pw B섹션(직원 401행: 26tr→51→76) PASS.
 - 스크롤 목록 11곳 적용: 홈 맵 목록(검색·브라우즈)·공지·인박스(승인·알림)·알림벨·비교 변경목록·맵 드롭다운·프로세스 라이브러리·그룹 패널·승인 큐·휴지통 2종. 에디터 아웃라인은 키보드 내비 결합·에디터 민감성으로 제외(현실 행 수 수십). 소형 목록(댓글·AI 채팅·버전 타임라인·엣지 선택)도 제외. lint 0·build 성공·pw C섹션(홈/공지/인박스 콘솔 0) PASS.
 
+## 2026-07-06 — PNG 내보내기 엣지 소실 수정 + 출력 다듬기 (사용자: 엣지 검은 실선·히트박스 비노출·테두리 선명)
+- 원인: html-to-image가 HTML은 computed style을 인라인하지만 **SVG 하위 요소는 DOM 그대로 복제** — 스타일시트/CSS 변수 의존 엣지 stroke·marker 색이 클론에서 소실(인라인 var() 분기 엣지만 살아남던 패턴으로 확정). CSS 클래스 보정은 무효, **캡처 직전 엣지·화살촉에 인라인 스타일 주입 후 원복**으로 해결(`lib/export.ts` applyEdgeFixups).
+- 출력: 전 엣지 검은 실선 1.5(#000, 점선→실선), 화살촉 동일 검정, 히트박스(edge-interaction) 투명 유지, `pixelRatio 2`로 테두리·텍스트 선명. 비교 화면 export도 공용 `exportFramedPng`로 통합(1600×1000·bg-canvas 유지).
+- 검증: pw `scripts/pw-verify-png-export.mjs` — 에디터·비교 PNG 흑픽셀 2815/27146(엣지 실재), 캡처 후 라이브 stroke 원상복구, 콘솔 0 PASS · lint 0 · build. 참고: 맵 13(비교 데모 시드)은 좌표가 전부 0이라 캔버스 자체가 겹침 — 데이터 문제로 별건.
+
 ## 2026-07-06 — 맵 상세 로딩 프레임 개선 (사용자: '…' 빈 화면 → 스피너, 버전 프레임 늘었다 줄었다 → 고스트)
 - `map-detail-card.tsx`(홈 맵탭 상세 + 에디터 인스펙터 맵탭 공용) — ① 첫 로딩 '…' 텍스트를 박스 중앙 스피너(Loader2 회전)+`common.loading` 라벨로 교체 ② 멤버(유저카드) 컬럼을 `membersStatus`(loading/ready/hidden)로 분리, 권한·디렉터리·그룹 로딩 동안 **고스트 행 3개(animate-pulse)**가 컬럼 폭을 선점해 버전 프레임 리플로우 제거. 재조회(reloadKey)는 기존 값 유지(SWR)라 고스트 재점멸 없음.
 - 검증: pw `scripts/pw-verify-detail-loading.mjs`(API 지연 주입 — 스피너·고스트 노출, 고스트 중/후 버전 프레임 폭 489.11px 동일, 콘솔 0) PASS · vitest 69 · 무한스크롤 pw 회귀 PASS · lint 0 · build.
