@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — C2a: diff 노드 스타일 + before→after 필 (merge-diff 확장)
+- **`merge-diff.ts`** — `FieldChange{field,before,after}` + `MergedNode.fieldChanges` 추가(`diffFieldChanges`가 base/target 값 담음). `changedFields`는 파생 유지(기존 소비처 호환). 단위테스트 추가(6 pass).
+- **`process-node.tsx`** — 비교 diff 렌더 교체: 링 → **diff색 테두리(삭제 점선)+연한 틴트 fill**(노드 자기색 대신)+**상태 뱃지(opacity .7, 상단; 마름모는 상단중앙)**. 변경 노드에 **before→after 필**(`DiffFieldPills`: label(amber)·before(muted)·→·after(bold), 노드 아래 절대배치, **최대 3 + "+N more"**, 값 truncate). `diffStatus`는 compare 전용이라 에디터 무영향.
+- **`canvas.ts`** — `NodeData.diffFields` 추가. **`layoutWithDagre nodesep` 72→120**(LR이라 세로 간격 — 필이 아래 노드 침범 방지, 이 함수는 compare 전용).
+- **`compare/page.tsx`** — `fieldsOf`(변경 필드 라벨 i18n + 빈값 None)로 `buildAppNodes`에 `diffFields` 전달.
+- i18n `compare.moreFields`("+{n} more"/"+{n}개 더").
+- 검증: lint 0 · build/TS OK · 27 tests pass. 라이브(map 11) — 73→74 쌍(추가6/삭제3/변경2)에서 뱃지·틴트·점선·before→after 필(None·+3 more)·겹침없음 확인.
+
 ## 2026-07-05 — C0: 에디터 속성탭에 비교화면 진입 버튼(하단 스티키·PNG 톤)
 - **`inspector-panel.tsx`** — 속성탭 **빈 상태**(선택 없음)에서 패널 하단(스크롤 밖 `shrink-0 border-t`)에 **스티키 "Compare versions" 버튼**. PNG 다운로드와 동일 accent 톤(`bg-accent text-on-accent`·`GitCompare`), `<Link href="/maps/[id]/compare">`. `mapId` prop 추가(`PropertiesEmpty`는 Omit에 mapId 포함해 미요구). 읽기전용에서도 노출.
 - **`page.tsx`** InspectorPanel에 `mapId={mapId}` 전달. i18n `inspector.compareVersions`(en "Compare versions"/ko "버전 비교").

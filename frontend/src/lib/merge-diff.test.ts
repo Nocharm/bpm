@@ -78,6 +78,18 @@ describe("buildMergedGraph", () => {
     expect(byId.get("d")?.status).toBe("added");
   });
 
+  it("carries before/after values for changed fields", () => {
+    const { base, target } = buildFixture();
+
+    const merged = buildMergedGraph(base, target);
+    const b = merged.nodes.find((n) => n.id === "b");
+
+    expect(b?.fieldChanges).toEqual([{ field: "title", before: "B", after: "B-new" }]);
+    // unchanged/added/removed 노드는 fieldChanges 비어 있음
+    expect(merged.nodes.find((n) => n.id === "a")?.fieldChanges).toEqual([]);
+    expect(merged.nodes.find((n) => n.id === "d")?.fieldChanges).toEqual([]);
+  });
+
   it("uses target data for matched nodes (target title wins)", () => {
     const { base, target } = buildFixture();
 

@@ -73,9 +73,12 @@ function toDiffStatus(status: MergedNodeStatus): "added" | "removed" | "changed"
 }
 
 // union 노드를 좌표 없는 AppNode로 — 이후 layoutWithDagre가 위치 산정
+type DiffFieldRow = { label: string; before: string; after: string };
+
 function buildAppNodes(
   merged: MergedNode[],
   noteOf: (node: MergedNode) => string | undefined,
+  fieldsOf: (node: MergedNode) => DiffFieldRow[] | undefined,
 ): AppNode[] {
   return merged.map((m) => ({
     id: m.id,
@@ -94,6 +97,7 @@ function buildAppNodes(
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
       diffNote: noteOf(m),
+      diffFields: fieldsOf(m),
     },
   }));
 }
@@ -267,10 +271,23 @@ function ComparePane({
     [t],
   );
 
+  // 변경 노드의 before→after 필 표시값 — 필드 라벨 i18n + 빈값은 None.
+  const fieldsOf = useCallback(
+    (m: MergedNode): DiffFieldRow[] | undefined =>
+      m.status === "changed"
+        ? m.fieldChanges.map((fc) => ({
+            label: t(FIELD_MSG[fc.field]),
+            before: fc.before || t("summary.none"),
+            after: fc.after || t("summary.none"),
+          }))
+        : undefined,
+    [t],
+  );
+
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
   const positioned = useMemo(
-    () => layoutWithDagre(buildAppNodes(merged.nodes, noteOf), buildAppEdges(merged.edges)),
-    [merged, noteOf],
+    () => layoutWithDagre(buildAppNodes(merged.nodes, noteOf, fieldsOf), buildAppEdges(merged.edges)),
+    [merged, noteOf, fieldsOf],
   );
 
   // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)

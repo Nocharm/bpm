@@ -28,6 +28,8 @@ export type NodeData = {
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";
   diffNote?: string;
+  // 변경 노드의 필드 diff (compare 전용) — before→after 필 렌더용. label/before/after는 표시용 포맷 완료값.
+  diffFields?: { label: string; before: string; after: string }[];
   hasDescendantChange?: boolean;
   // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
   commentCount?: number;
@@ -654,7 +656,9 @@ export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
     ranker: "network-simplex",
     // 간격을 넉넉히 — 랭크 사이(ranksep)를 크게 둬 엣지가 노드 위로 겹쳐 지나가지 않게,
     // 같은 랭크 노드 간격(nodesep)·평행 엣지 간격(edgesep)도 키워 엣지가 노드에 가려지는 일 방지.
-    nodesep: 72,
+    // LR이라 nodesep=같은 열 세로 간격 — 변경 노드의 before→after 필(노드 아래로 뻗음)이
+    // 아래 노드를 침범하지 않도록 넉넉히(compare 전용 함수). ranksep=열 간격.
+    nodesep: 120,
     ranksep: 160,
     edgesep: 40,
     marginx: 20,
