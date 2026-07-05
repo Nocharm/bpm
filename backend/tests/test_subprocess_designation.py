@@ -117,6 +117,29 @@ def test_attr_edit_keeps_designated_at(client: TestClient, enforce) -> None:
     assert second["sp_system"] == "ERP"
 
 
+def test_library_lists_only_designated(client: TestClient, enforce) -> None:
+    designated = seed_map("lib-designated", published=True)
+    plain = seed_map("lib-plain", published=True)  # 미지정 — 목록 제외 기대
+    act_as(OWNER)
+    client.put(f"/api/maps/{designated}/subprocess-designation", json=BODY)
+    rows = client.get("/api/library/processes").json()
+    ids = [r["map_id"] for r in rows]
+    assert designated in ids
+    assert plain not in ids
+    mine = next(r for r in rows if r["map_id"] == designated)
+    assert mine["department"] == "Sales"  # 피커 행 부서 칩 소스
+    assert mine["assignee"] == "Kim"
+
+
+def test_library_excludes_soft_deleted(client: TestClient, enforce) -> None:
+    map_id = seed_map("lib-deleted", published=True)
+    act_as(OWNER)
+    client.put(f"/api/maps/{map_id}/subprocess-designation", json=BODY)
+    client.delete(f"/api/maps/{map_id}")  # soft-delete (owner)
+    rows = client.get("/api/library/processes").json()
+    assert map_id not in [r["map_id"] for r in rows]
+
+
 def test_undesignate_keeps_attrs_and_is_idempotent(client: TestClient, enforce) -> None:
     map_id = seed_map("desig-undo", published=True)
     act_as(OWNER)

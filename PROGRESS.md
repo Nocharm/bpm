@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 U3(백): 라이브러리 피커 필터
+- `GET /api/library/processes` — **지정(sp_designated_at)+미삭제 맵만** 반환, 행에 어트리뷰트 4종 포함(부서 칩 소스). 기존 미지정 노출 가정 테스트 2건(`test_subprocess.py`)을 게시+지정 플로우로 갱신. 신규 테스트 2건(미지정 제외·soft-delete 제외). pytest 413 passed·ruff 클린.
+
 ## 2026-07-06 — 서브프로세스 지정 U2: 설정 페이지 지정 UI
 - 설정에 Subprocess 섹션(오너 전용, `ALL_TABS` subprocess) + `subprocess-designation-panel`(상태 카드·Designated 뱃지·최근 변경 이름 우선) + 지정/수정 모달(부서 필수 BPM 피커·시스템/소요시간 입력·프리필) + 해제 ConfirmDialog(사용처 경고 안내). api `putSubprocessDesignation`/`deleteSubprocessDesignation`, i18n `perm.sp.*` en/ko.
 - 검증: lint 0 errors, 브라우저(:3001) — 오너 지정→요약 카드→해제→프리필 재지정, 에디터 계정 섹션 숨김, DB 반영 확인.

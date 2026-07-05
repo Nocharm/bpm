@@ -21,11 +21,31 @@ router = APIRouter(
 @router.get("/processes")
 async def list_processes(session: AsyncSession = Depends(get_session)) -> list[dict]:
     # 맵별 최신/최신발행 버전 — 단일 그룹 쿼리(N+1 회피).
+    # 지정(designated)된 맵만 피커 노출 + 휴지통 제외 — 어트리뷰트는 행 칩 표시용 (spec 2026-07-06)
     latest_rows = (
         await session.execute(
-            select(ProcessMap.id, ProcessMap.name, func.max(MapVersion.id))
+            select(
+                ProcessMap.id,
+                ProcessMap.name,
+                func.max(MapVersion.id),
+                ProcessMap.sp_department,
+                ProcessMap.sp_assignee,
+                ProcessMap.sp_system,
+                ProcessMap.sp_duration,
+            )
             .outerjoin(MapVersion, MapVersion.map_id == ProcessMap.id)
-            .group_by(ProcessMap.id, ProcessMap.name)
+            .where(
+                ProcessMap.sp_designated_at.is_not(None),
+                ProcessMap.deleted_at.is_(None),
+            )
+            .group_by(
+                ProcessMap.id,
+                ProcessMap.name,
+                ProcessMap.sp_department,
+                ProcessMap.sp_assignee,
+                ProcessMap.sp_system,
+                ProcessMap.sp_duration,
+            )
             .order_by(ProcessMap.name)
         )
     ).all()
@@ -56,8 +76,12 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
             "latest_version_id": latest,
             "latest_published_version_id": published.get(mid),
             "refs": sorted(refs.get(mid, [])),
+            "department": department,
+            "assignee": assignee,
+            "system": system,
+            "duration": duration,
         }
-        for mid, name, latest in latest_rows
+        for mid, name, latest, department, assignee, system, duration in latest_rows
     ]
 
 
