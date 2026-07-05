@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — C1b 비교 셸 캔버스 오버레이 폴리시 (좌상 카운트 필·범례·줌바)
+- **좌상 카운트 필**(`compare/page.tsx`) — `hasChanges`일 때 `Panel top-left` 칩에 노드+엣지를 status별 집계(`counts`: 엣지 추가/삭제 포함·변경은 노드만)한 색점 + 굵은 카운트(추가/삭제/변경).
+- **좌하 범례 폴리시**(`DiffLegend`) — 스와치를 노드 diff 테두리 반영: 추가 실선·**삭제 점선**(`border-dashed`)·변경 실선.
+- **줌바 재스타일**(`ZoomBar` 신규) — 기본 `Controls` 제거하고 우하 `Panel`에 `- % +`·fit 버튼. 라이브 zoom%는 `useStore((s)=>s.transform[2])`, 조작은 `useReactFlow` zoomIn/zoomOut/fitView.
+- 검증: lint 0 · build/TS OK. 라이브(:3000, map 11) — 카운트 필(Added 29·Removed 0·Changed 0)·점선 삭제 스와치·줌바 렌더 + `+` 클릭 시 82%→98% 라이브 반영 확인.
+
 ## 2026-07-05 — C1a 비교 셸 헤더 크롬 재스타일 (BASE/TARGET pill·swap·내보내기·To-Be 적용)
 - **`compare/page.tsx` 헤더 재구성** — 뒤로가기(←편집기·ArrowLeft)·구분선·맵명(굵게)+"버전 비교"(서브타이틀)·**BASE/TARGET pill 셀렉터**(역할 태그 + 선택 버전 상태 색점 `STATUS_DOT`·ChevronDown, native select 유지)·`→`·**swap 버튼**(BASE↔TARGET 교체)·우측 **내보내기**(outline, PNG=`html-to-image` `toPng`·저장노드 범위 1600×1000·bg-canvas hex는 export 배경 예외)·**To-Be 적용**(accent·에디터 내비).
 - **범례 이전** — 헤더 우측 `DiffLegend`를 캔버스 **좌하 오버레이 칩**(`Panel bottom-left`·surface/80 backdrop)으로, `Controls`는 **우하**(`position="bottom-right"`)로 이동(좌하 충돌 회피).

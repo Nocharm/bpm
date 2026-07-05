@@ -6,7 +6,6 @@
 import {
   Background,
   BackgroundVariant,
-  Controls,
   type Edge,
   getNodesBounds,
   getViewportForBounds,
@@ -16,10 +15,21 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toPng } from "html-to-image";
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Check, ChevronDown, Download } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Download,
+  Maximize,
+  Minus,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -161,19 +171,46 @@ function VersionSelect({
   );
 }
 
+// 좌하 범례 — 노드 diff 테두리 스타일 반영(추가 실선·삭제 점선·변경 실선).
 function DiffLegend() {
   const { t } = useI18n();
   return (
-    <div className="flex items-center gap-3 text-ink-secondary text-caption" data-id="compare-legend">
-      <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-added" /> {t("compare.legendAdded")}
+    <div className="flex items-center gap-2.5 text-caption text-ink-secondary" data-id="compare-legend">
+      <span className="flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded-[3px] border-2 border-added" /> {t("compare.legendAdded")}
       </span>
-      <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-removed" /> {t("compare.legendRemoved")}
+      <span className="flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded-[3px] border-2 border-dashed border-removed" />{" "}
+        {t("compare.legendRemoved")}
       </span>
-      <span className="flex items-center gap-1">
-        <span className="h-3 w-3 rounded border-2 border-changed" /> {t("compare.legendChanged")}
+      <span className="flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded-[3px] border-2 border-changed" /> {t("compare.legendChanged")}
       </span>
+    </div>
+  );
+}
+
+// 우하 줌 바 — `- % +` + fit(전체화면). 라이브 zoom은 store transform에서.
+function ZoomBar() {
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
+  const zoom = useStore((state) => state.transform[2]);
+  const btn =
+    "flex h-6 w-6 items-center justify-center rounded-xs text-ink-secondary hover:bg-surface-alt";
+  return (
+    <div className="flex items-center gap-0.5 rounded-sm border border-hairline bg-surface/90 p-0.5 shadow-sm backdrop-blur-sm">
+      <button type="button" onClick={() => zoomOut()} title="Zoom out" className={btn}>
+        <Minus size={14} strokeWidth={1.5} />
+      </button>
+      <span className="w-9 text-center text-fine tabular-nums text-ink-secondary">
+        {Math.round(zoom * 100)}%
+      </span>
+      <button type="button" onClick={() => zoomIn()} title="Zoom in" className={btn}>
+        <Plus size={14} strokeWidth={1.5} />
+      </button>
+      <span className="mx-0.5 h-4 w-px bg-divider" />
+      <button type="button" onClick={() => fitView({ duration: 300 })} title="Fit view" className={btn}>
+        <Maximize size={14} strokeWidth={1.5} />
+      </button>
     </div>
   );
 }
@@ -354,6 +391,17 @@ function ComparePane({
 
   const hasChanges = nodeChanges.length + edgeChanges.length > 0;
 
+  // 좌상 카운트 필 — 노드+엣지를 status별 집계(엣지 추가/삭제 포함, 변경은 노드만).
+  const counts = useMemo(() => {
+    const acc = { added: 0, removed: 0, changed: 0 };
+    for (const item of [...nodeChanges, ...edgeChanges]) {
+      if (item.status === "added" || item.status === "removed" || item.status === "changed") {
+        acc[item.status] += 1;
+      }
+    }
+    return acc;
+  }, [nodeChanges, edgeChanges]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
@@ -430,13 +478,41 @@ function ComparePane({
               size={1.2}
               color="var(--color-canvas-dot)"
             />
+            {hasChanges && (
+              <Panel
+                position="top-left"
+                className="rounded-sm border border-hairline bg-surface/80 px-2.5 py-1.5 shadow-sm backdrop-blur-sm"
+              >
+                <div className="flex items-center gap-2 text-caption text-ink-secondary">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-added" />
+                    {t("compare.legendAdded")}
+                    <span className="font-semibold text-ink">{counts.added}</span>
+                  </span>
+                  <span className="h-3 w-px bg-divider" />
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-removed" />
+                    {t("compare.legendRemoved")}
+                    <span className="font-semibold text-ink">{counts.removed}</span>
+                  </span>
+                  <span className="h-3 w-px bg-divider" />
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-changed" />
+                    {t("compare.legendChanged")}
+                    <span className="font-semibold text-ink">{counts.changed}</span>
+                  </span>
+                </div>
+              </Panel>
+            )}
             <Panel
               position="bottom-left"
               className="rounded-sm border border-hairline bg-surface/80 px-2.5 py-1.5 shadow-sm backdrop-blur-sm"
             >
               <DiffLegend />
             </Panel>
-            <Controls showInteractive={false} position="bottom-right" />
+            <Panel position="bottom-right">
+              <ZoomBar />
+            </Panel>
           </ReactFlow>
         </div>
         <aside
