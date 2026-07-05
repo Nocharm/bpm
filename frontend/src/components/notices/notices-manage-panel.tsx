@@ -1,8 +1,8 @@
 "use client";
 
-// 설정 · 공지사항 관리 — 목록(상태 파생·게시기간) + 등록/수정 모달 + 삭제. sysadmin. (design 2026-07-05)
+// 설정 · 공지사항 관리 — 목록(상태·게시기간·아코디언 미리보기·아이콘 액션·페이징) + 등록/수정 모달. sysadmin. (design 2026-07-05)
 
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 
 import { deleteNotice, listNoticesManage, type NoticeItem } from "@/lib/api";
@@ -10,7 +10,11 @@ import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { MarkdownView } from "@/components/markdown-view";
+import { Pagination } from "@/components/pagination";
+import { Tooltip } from "@/components/tooltip";
 import { NoticeEditModal } from "@/components/notices/notice-edit-modal";
+
+const PAGE_SIZE = 20;
 
 type NoticeStatus = "live" | "scheduled" | "ended";
 
@@ -45,6 +49,7 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
   const [editing, setEditing] = useState<NoticeItem | "new" | null>(null);
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
   const clickTimer = useRef<number | null>(null);
 
   // 상태 파생 기준 시각 — 마운트 시 1회 캡처(렌더 중 Date.now 금지, react-hooks/purity)
@@ -74,14 +79,17 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
     setEditing(notice);
   };
 
-  const live = notices.filter((n) => deriveStatus(n, nowMs) === "live").length;
-
   const handleDelete = async (id: number) => {
     await deleteNotice(id);
     setConfirmId(null);
     onToast(t("noticeAdmin.deleted"));
     void reload();
   };
+
+  const live = notices.filter((n) => deriveStatus(n, nowMs) === "live").length;
+  const pageCount = Math.max(1, Math.ceil(notices.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageItems = notices.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -108,8 +116,8 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
             <col style={{ width: "6rem" }} />
             <col />
             <col style={{ width: "6rem" }} />
-            <col style={{ width: "11rem" }} />
-            <col style={{ width: "7rem" }} />
+            <col style={{ width: "13rem" }} />
+            <col style={{ width: "6rem" }} />
           </colgroup>
           <thead>
             <tr className="border-b border-hairline bg-surface-alt text-left text-ink-secondary">
@@ -121,14 +129,15 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
             </tr>
           </thead>
           <tbody>
-            {notices.map((n) => {
+            {pageItems.map((n) => {
               const status = deriveStatus(n, nowMs);
+              const pendingDelete = confirmId === n.id;
               return (
                 <Fragment key={n.id}>
                   <tr
                     onClick={() => handleRowClick(n.id)}
                     onDoubleClick={() => handleRowDblClick(n)}
-                    className="cursor-pointer border-b border-hairline hover:bg-surface-alt"
+                    className="group cursor-pointer border-b border-hairline hover:bg-surface-alt"
                   >
                     <td className="px-3 py-2">
                       <span
@@ -154,51 +163,67 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
                         {n.ends_at ? dateOnly(n.ends_at) : t("notices.unlimited")}
                       </span>
                     </td>
+                    {/* 액션 — 아이콘·행 호버 시에만 노출(삭제 확인 중이면 유지) */}
                     <td
                       onClick={(event) => event.stopPropagation()}
                       onDoubleClick={(event) => event.stopPropagation()}
-                      className="whitespace-nowrap px-3 py-2 text-right"
+                      className="px-3 py-2"
                     >
-                      <button
-                        type="button"
-                        onClick={() => setEditing(n)}
-                        className="text-fine text-accent hover:underline"
+                      <div
+                        className={
+                          "flex items-center justify-end gap-1 transition-opacity " +
+                          (pendingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100")
+                        }
                       >
-                        {t("noticeAdmin.edit")}
-                      </button>
-                      <span className="px-1.5 text-ink-tertiary">·</span>
-                      {confirmId === n.id ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(n.id)}
-                          className="text-fine text-error hover:underline"
+                        <Tooltip label={t("noticeAdmin.edit")}>
+                          <button
+                            type="button"
+                            onClick={() => setEditing(n)}
+                            className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                          >
+                            <Pencil size={14} strokeWidth={1.5} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip
+                          label={pendingDelete ? t("noticeAdmin.deleteConfirm") : t("noticeAdmin.delete")}
                         >
-                          {t("noticeAdmin.deleteConfirm")}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmId(n.id)}
-                          className="text-fine text-ink-tertiary hover:text-error"
-                        >
-                          {t("noticeAdmin.delete")}
-                        </button>
-                      )}
+                          <button
+                            type="button"
+                            onClick={() => (pendingDelete ? void handleDelete(n.id) : setConfirmId(n.id))}
+                            className={
+                              "rounded-sm p-1 hover:bg-surface-alt " +
+                              (pendingDelete ? "text-error" : "text-ink-tertiary hover:text-error")
+                            }
+                          >
+                            <Trash2 size={14} strokeWidth={1.5} />
+                          </button>
+                        </Tooltip>
+                      </div>
                     </td>
                   </tr>
-                  {expandedId === n.id && (
-                    <tr className="border-b border-hairline">
-                      <td colSpan={5} className="bg-surface-alt px-6 py-4">
-                        {n.body_md.trim() ? (
-                          <MarkdownView source={n.body_md} />
-                        ) : (
-                          <p className="text-caption text-ink-tertiary">
-                            {t("noticeAdmin.emptyBody")}
-                          </p>
-                        )}
-                      </td>
-                    </tr>
-                  )}
+                  {/* 아코디언 미리보기 — 항상 렌더, grid-rows로 펼침/접힘 애니 */}
+                  <tr>
+                    <td colSpan={5} className="p-0">
+                      <div
+                        className={
+                          "grid transition-[grid-template-rows] duration-350 ease-smooth " +
+                          (expandedId === n.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]")
+                        }
+                      >
+                        <div className="overflow-hidden">
+                          <div className="border-b border-hairline bg-surface-alt px-6 py-4">
+                            {n.body_md.trim() ? (
+                              <MarkdownView source={n.body_md} />
+                            ) : (
+                              <p className="text-caption text-ink-tertiary">
+                                {t("noticeAdmin.emptyBody")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
                 </Fragment>
               );
             })}
@@ -212,6 +237,8 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
           </tbody>
         </table>
       </div>
+
+      <Pagination total={notices.length} pageSize={PAGE_SIZE} page={safePage} onPage={setPage} />
 
       {editing !== null && (
         <NoticeEditModal

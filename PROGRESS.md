@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S5c: 공지/피드백 표·모달 폴리시 묶음 (사용자 요청)
+- 공용 components/pagination.tsx(20개 단위, pageCount≤1이면 숨김).
+- 공지 관리 표: 아코디언 미리보기에 펼침/접힘 애니(grid-rows 0fr↔1fr·duration-350 ease-smooth) · 수정/삭제를 Pencil/Trash2 아이콘 + Tooltip + 행 hover 시에만 노출(group-hover) · 20개 페이징.
+- 피드백 페이지 표: 20개 페이징(필터/검색 변경 시 1페이지로) · 등록일 date-only→formatKstShort(시간까지).
+- 피드백 상세 모달: 메타 값(작성자/화면/시각)을 필로 · 상태 selector를 슬라이딩 인디케이터(translateX)로, 인디케이터/텍스트 색을 상태별(draft 중립·in_progress amber·done green)로 전환.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 공지 아이콘/툴팁(수정)/호버 노출·날짜필 / 피드백 모달 상태 슬라이딩(작업중 amber)·메타필 / 피드백 표 시간(07-05 16:55) 확인.
+
 ## 2026-07-05 — S5b: 공지 관리 표 — 아코디언 미리보기 + 날짜 필
 - 행 단일클릭 시 본문 읽기전용 미리보기 아코디언(colSpan 행 + MarkdownView, 재클릭 접힘). 더블클릭은 편집 유지 — 200ms 타이머로 단일/더블 구분(액션 셀은 stopPropagation).
 - 게시기간을 날짜 필(bg-surface-alt pill)로 표기. i18n noticeAdmin.emptyBody.

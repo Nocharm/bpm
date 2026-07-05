@@ -17,6 +17,7 @@ import {
 import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import { FeedbackDetailModal } from "@/components/feedback-detail-modal";
+import { Pagination } from "@/components/pagination";
 
 const KIND_FILTERS: (FeedbackKind | "all")[] = [
   "all",
@@ -25,6 +26,8 @@ const KIND_FILTERS: (FeedbackKind | "all")[] = [
   "question",
   "etc",
 ];
+
+const PAGE_SIZE = 20;
 
 export default function FeedbackPage() {
   const { t } = useI18n();
@@ -36,6 +39,7 @@ export default function FeedbackPage() {
   const [kindFilter, setKindFilter] = useState<FeedbackKind | "all">("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let alive = true;
@@ -62,6 +66,8 @@ export default function FeedbackPage() {
       (kindFilter === "all" || f.kind === kindFilter) &&
       (query === "" || f.body.toLowerCase().includes(query)),
   );
+  const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const selected = items.find((f) => f.id === selectedId) ?? null;
 
@@ -125,7 +131,10 @@ export default function FeedbackPage() {
               <button
                 key={k}
                 type="button"
-                onClick={() => setKindFilter(k)}
+                onClick={() => {
+                  setKindFilter(k);
+                  setPage(1);
+                }}
                 className={
                   "rounded-sm px-2.5 py-1 text-caption " +
                   (active
@@ -140,7 +149,10 @@ export default function FeedbackPage() {
         </div>
         <input
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPage(1);
+          }}
           placeholder={t("feedback.searchPlaceholder")}
           className="w-56 rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
         />
@@ -159,7 +171,7 @@ export default function FeedbackPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((f) => (
+            {pageItems.map((f) => (
               <tr
                 key={f.id}
                 onClick={() => setSelectedId(f.id)}
@@ -188,7 +200,7 @@ export default function FeedbackPage() {
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-ink-tertiary">
-                  {formatKstShort(f.created_at).split(" ")[0]}
+                  {formatKstShort(f.created_at)}
                 </td>
               </tr>
             ))}
@@ -202,6 +214,8 @@ export default function FeedbackPage() {
           </tbody>
         </table>
       </div>
+
+      <Pagination total={filtered.length} pageSize={PAGE_SIZE} page={safePage} onPage={setPage} />
 
       {selected && (
         <FeedbackDetailModal

@@ -21,6 +21,18 @@ import {
 } from "@/lib/feedback-meta";
 import { useI18n } from "@/lib/i18n";
 
+// 상태별 슬라이딩 인디케이터 배경·활성 텍스트 색
+const STATUS_INDICATOR: Record<FeedbackStatus, string> = {
+  draft: "bg-ink-secondary/15",
+  in_progress: "bg-changed/25",
+  done: "bg-added/25",
+};
+const STATUS_TEXT: Record<FeedbackStatus, string> = {
+  draft: "text-ink",
+  in_progress: "text-changed",
+  done: "text-added",
+};
+
 export function FeedbackDetailModal({
   feedback,
   currentLoginId,
@@ -45,6 +57,7 @@ export function FeedbackDetailModal({
   const canReply = isSysadmin && feedback.status !== "done";
   const canEditBody = isAuthor && feedback.status === "draft";
   const canDelete = isAuthor && feedback.status === "draft";
+  const statusIndex = FEEDBACK_STATUSES.indexOf(feedback.status);
 
   const run = async (fn: () => Promise<FeedbackItem | null>) => {
     if (busy) return;
@@ -226,7 +239,16 @@ export function FeedbackDetailModal({
                 <span className="text-fine text-ink-tertiary">
                   {t("feedback.detail.changeStatus")}
                 </span>
-                <div className="inline-flex rounded-sm border border-hairline p-0.5">
+                <div className="relative inline-grid grid-cols-3 overflow-hidden rounded-sm border border-hairline">
+                  {/* 상태 위치로 미끄러지는 인디케이터 — 색도 상태별 */}
+                  <span
+                    aria-hidden
+                    className={
+                      "pointer-events-none absolute inset-y-0 left-0 w-1/3 transition-[transform,background-color] duration-350 ease-spring " +
+                      STATUS_INDICATOR[feedback.status]
+                    }
+                    style={{ transform: `translateX(${statusIndex * 100}%)` }}
+                  />
                   {FEEDBACK_STATUSES.map((s) => (
                     <button
                       key={s}
@@ -234,10 +256,10 @@ export function FeedbackDetailModal({
                       onClick={() => changeStatus(s)}
                       disabled={busy || feedback.status === s}
                       className={
-                        "rounded-xs px-2 py-0.5 text-fine " +
+                        "relative z-10 px-2.5 py-0.5 text-fine transition-colors " +
                         (feedback.status === s
-                          ? "bg-accent-tint text-accent"
-                          : "text-ink-secondary hover:bg-surface-alt disabled:opacity-40")
+                          ? "font-semibold " + STATUS_TEXT[s]
+                          : "text-ink-tertiary hover:text-ink-secondary")
                       }
                     >
                       {t(FEEDBACK_STATUS_LABEL[s])}
@@ -285,9 +307,11 @@ export function FeedbackDetailModal({
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3">
+    <div className="flex items-center justify-between gap-3">
       <span>{label}</span>
-      <span className="text-ink-secondary">{value}</span>
+      <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+        {value}
+      </span>
     </div>
   );
 }
