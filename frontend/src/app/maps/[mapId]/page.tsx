@@ -6951,6 +6951,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
+                mapId={mapId}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
                 propertiesSlot={
                   selectedNode ? (

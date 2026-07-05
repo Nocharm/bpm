@@ -34,6 +34,7 @@
 ## 마스터 표
 | ID | 화면 | 단위 / 내용 | 검증 | 시현 | 검토결과 | 커밋 |
 |----|------|-------------|------|------|---------|------|
+| C0 | 진입(에디터) | **비교화면 진입 버튼** — 에디터 우측 속성탭 **빈 상태**(선택 없음) 하단 **스티키** 버튼. PNG 다운로드와 동일 accent 톤(`bg-accent`·`GitCompare`), `/maps/[id]/compare` 내비. 읽기전용에서도 노출. `inspector-panel.tsx`(`mapId` prop·`Link` 푸터, 스크롤 밖 `shrink-0 border-t`)·i18n `inspector.compareVersions`. | lint/build✅ | 라이브(:3000 map 11)✅ 내비 확인 | ✅ | (this) |
 | C1a | 셸 헤더 | (완료·머지) 뒤로가기·타이틀·**BASE/TARGET pill(상태 색점)**·swap·Export(PNG)·Apply To-Be·범례 캔버스 이전·`min-h-0` 높이수정 | lint/build✅ | ✅ | ✅ | main `f257047` |
 | C1b | 셸 오버레이 | (완료·머지) 좌상 카운트 필·좌하 범례 폴리시·우하 `ZoomBar`(useStore zoom%) | lint/build✅ | ✅ | ✅ | main `d1f95f9` |
 | C2a | diff 노드 | 노드 상태별 스타일(추가/삭제/변경 **뱃지 .7**·틴트·형태) + **before→after 필** + `merge-diff.ts`에 base 값(`{field,before,after}`) 실어주기. `ProcessNode diffStatus` 재사용. | — | — | ⏳ | — |

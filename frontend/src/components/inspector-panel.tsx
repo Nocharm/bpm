@@ -6,6 +6,7 @@ import {
   Boxes,
   ChevronRight,
   CircleCheck,
+  GitCompare,
   LayoutGrid,
   Map as MapIcon,
   MessageSquare,
@@ -14,6 +15,7 @@ import {
   SlidersHorizontal,
   Workflow,
 } from "lucide-react";
+import Link from "next/link";
 import { type ComponentType, type ReactNode, useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
@@ -31,6 +33,7 @@ const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
 
 interface InspectorPanelProps {
   onCollapse: () => void;
+  mapId: number;
   selectionKind: "node" | "edge" | null;
   // 선택된 노드/엣지 속성 폼 — page.tsx가 만들어 주입(빈상태는 내부 처리). 없으면 placeholder.
   propertiesSlot?: ReactNode;
@@ -56,6 +59,7 @@ interface InspectorPanelProps {
 
 export function InspectorPanel({
   onCollapse,
+  mapId,
   selectionKind,
   propertiesSlot,
   mapTabSlot,
@@ -145,6 +149,19 @@ export function InspectorPanel({
         {tab === "activity" &&
           (activitySlot ?? <Placeholder text={`${t("inspector.tabActivity")} · ${t("inspector.wip")}`} />)}
       </div>
+
+      {/* 속성 빈상태 하단 스티키 — 비교 화면 진입(PNG 다운로드 버튼과 동일 accent 톤). 선택 없을 때만 */}
+      {tab === "properties" && selectionKind === null && (
+        <div className="shrink-0 border-t border-hairline p-3">
+          <Link
+            href={`/maps/${mapId}/compare`}
+            className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+          >
+            <GitCompare size={16} strokeWidth={1.5} />
+            {t("inspector.compareVersions")}
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -161,7 +178,7 @@ function PropertiesEmpty({
   mapName,
   mapVersionMarker,
   versionControl,
-}: Omit<InspectorPanelProps, "onCollapse" | "selectionKind">) {
+}: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId">) {
   const { t } = useI18n();
   const action =
     "flex w-full items-center gap-2 rounded-sm border border-hairline px-3 py-2 text-caption text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";

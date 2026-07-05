@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — C0: 에디터 속성탭에 비교화면 진입 버튼(하단 스티키·PNG 톤)
+- **`inspector-panel.tsx`** — 속성탭 **빈 상태**(선택 없음)에서 패널 하단(스크롤 밖 `shrink-0 border-t`)에 **스티키 "Compare versions" 버튼**. PNG 다운로드와 동일 accent 톤(`bg-accent text-on-accent`·`GitCompare`), `<Link href="/maps/[id]/compare">`. `mapId` prop 추가(`PropertiesEmpty`는 Omit에 mapId 포함해 미요구). 읽기전용에서도 노출.
+- **`page.tsx`** InspectorPanel에 `mapId={mapId}` 전달. i18n `inspector.compareVersions`(en "Compare versions"/ko "버전 비교").
+- 검증: lint 0 · build/TS OK. 라이브(:3000, map 11) 버튼 렌더·accent 톤·하단 고정·클릭 시 `/compare` 내비 확인.
+
 ## 2026-07-05 — 비교화면(C) 재디자인 착수: 승인 목업 + 전용 트래커 (feat/compare-redesign)
 - **브랜치 `feat/compare-redesign`** (main 분기; r11=C1a/C1b는 이미 main 머지·홈 작업까지 원격 동기화됨).
 - **승인 목업 커밋** — `docs/superpowers/specs/assets/editor-compare-redesign/compare-screen.mockup.html`: 반응형·실제 `@theme` 토큰, JS 데이터모델(`NODES`/`EDGES`)로 노드·엣지·변경패널·카운트 생성. 3단 레이아웃(변경 좌·캔버스 중·읽기전용 속성 인스펙터 우), read-only 워터마크(메인 "READ ONLY" accent), dot 제거, diff 노드(뱃지 .7·before→after 필·None), passthrough-removed 엣지 **우회 라우팅**(삽입 노드 회피) 시연.
