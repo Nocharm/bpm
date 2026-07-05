@@ -1,4 +1,4 @@
-// 최근 열어본 맵 — localStorage(bpm.recentMaps). {id, at} 최신순, 최대 12개.
+// 최근 열어본 맵 — localStorage(bpm.recentMaps). {id, at} 최신순, 최대 11개.
 // 에디터 진입 시 기록하고 홈 리스트에서 조회한다. 백엔드 변경 없는 클라이언트 캐시.
 
 export interface RecentMapEntry {
@@ -7,7 +7,7 @@ export interface RecentMapEntry {
 }
 
 const KEY = "bpm.recentMaps";
-const MAX = 12; // 캐시 상한(밴드 "더보기" 4페이지 분량)
+const MAX = 11; // 캐시 상한(밴드 초기 2 + "더보기" +3 × 3페이지)
 
 // 순수 로직 — id를 맨 앞으로(중복 제거) 후 max개로 절단. 단위 테스트 대상.
 export function mergeRecentEntry(

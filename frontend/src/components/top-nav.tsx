@@ -53,7 +53,20 @@ export function TopNav() {
 
   return (
     <nav className="flex h-10 shrink-0 items-center justify-between border-b border-hairline bg-surface px-4">
-      <Link href="/" className="text-body-strong text-ink">
+      {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
+      <Link
+        href="/"
+        className="text-body-strong text-ink"
+        onClick={(e) => {
+          e.preventDefault();
+          try {
+            window.sessionStorage.removeItem("bpm.home.filters");
+          } catch {
+            /* 무시 */
+          }
+          window.location.assign("/");
+        }}
+      >
         {t("app.name")}
       </Link>
       <div className="flex items-center gap-3">

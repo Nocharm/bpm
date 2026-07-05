@@ -120,13 +120,24 @@ export function MapCard({
             ? "border-accent ring-1 ring-accent"
             : "border-hairline"
       }`}
-      onClick={() => {
+      onClick={(e) => {
+        e.stopPropagation(); // 카드 선택은 배경(선택 해제)으로 버블링 방지
         closeModal(); // 클릭(선택) 시 대기 타이머 취소 + 모달 닫기
         onSelect?.(map.id);
       }}
       onMouseEnter={onCardEnter}
       onMouseLeave={closeModal}
     >
+      {/* 최근 접속 배지 — 플로팅(상단 경계선 안쪽·좌측 근접, 축소). 밴드·검색 pinned에만 전달됨 */}
+      {recentOpenedAt !== undefined && (
+        <div
+          data-id="map-card-recent-badge"
+          className="absolute left-2 top-1 z-10 inline-flex items-center gap-0.5 rounded-sm border border-hairline bg-accent-tint px-1 py-0 text-[10px] leading-none text-accent shadow-sm"
+        >
+          <Clock size={10} strokeWidth={1.5} />
+          {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
+        </div>
+      )}
       {/* 1줄 — 좌: 타이틀+상태 / 우: 역할 배지 + 공개/비공개 아이콘 (역할은 공개+뷰어면 생략) */}
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -168,15 +179,6 @@ export function MapCard({
       {/* 메타 한 줄 — 좌: 소유자·수정시각(상대) / 우: 노드·버전·인원 수 (이미지 H4/H5) */}
       <div className="relative mt-2 flex items-center justify-between gap-2 text-fine text-ink-tertiary">
         <div className="flex min-w-0 items-center gap-2">
-          {recentOpenedAt !== undefined && (
-            <span
-              data-id="map-card-recent-badge"
-              className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent-tint px-1.5 py-0.5 text-accent"
-            >
-              <Clock size={12} strokeWidth={1.5} />
-              {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
-            </span>
-          )}
           {(map.owner_name ?? map.created_by) && (
             <span className="inline-flex min-w-0 items-center gap-1">
               <User size={12} strokeWidth={1.5} className="shrink-0" />

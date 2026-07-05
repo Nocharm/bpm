@@ -48,7 +48,11 @@ export default function MapListPage() {
   // 최근 열람 캐시(마운트 후 로드) + 밴드 노출 개수("더보기" +3, 검색내용 아님 → 미영속) /
   // recent-opened cache (loaded after mount) + band page size.
   const [recentEntries, setRecentEntries] = useState<RecentMapEntry[]>([]);
-  const [recentShown, setRecentShown] = useState(3);
+  // 최근 밴드 노출 개수 — 초기 2개, "더보기" +3, "접기"로 2로 리셋(검색내용 아님 → 미영속) /
+  // recent band page size — initial 2, "show more" +3, "collapse" resets to 2.
+  const [recentShown, setRecentShown] = useState(2);
+  // "/" 단축키로 포커스할 검색 input / search input focused by the "/" hotkey.
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const showToast = useCallback((message: string) => {
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
@@ -91,9 +95,17 @@ export default function MapListPage() {
     setRecentEntries(getRecentMaps()); // one-time hydration from localStorage
   }, []);
 
-  // 검색·필터 복원 — session 스코프(탭 닫으면 초기화). 마운트 후 1회, default 후 복원(하이드레이션 안전).
+  // 검색·필터 복원 — 맵→복귀(SPA)만 복원. 새로고침(reload)은 저장값 폐기 후 초기화.
   useEffect(() => {
     try {
+      // reload면 초기화 — 브랜드 로고는 stash를 먼저 지우므로 navigate 타입이어도 clean 복원.
+      const navEntry = window.performance.getEntriesByType("navigation")[0] as
+        | PerformanceNavigationTiming
+        | undefined;
+      if (navEntry?.type === "reload") {
+        window.sessionStorage.removeItem("bpm.home.filters");
+        return;
+      }
       const raw = window.sessionStorage.getItem("bpm.home.filters");
       if (!raw) {
         return;
@@ -139,6 +151,27 @@ export default function MapListPage() {
       }),
     );
   }, [mapQuery, visFilter, statusFilter, permFilter]);
+
+  // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+      const el = document.activeElement;
+      const typing =
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLElement && el.isContentEditable);
+      if (typing) {
+        return;
+      }
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleDelete = useCallback(
     async (mapId: number) => {
@@ -227,12 +260,11 @@ export default function MapListPage() {
   const searchPartition = partitionByRecency(mapHits, (h) => h.item.id, recentIds);
   const orderedHits = [...searchPartition.recent, ...searchPartition.rest];
 
-  // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
-  // Derive selection: fall back to the first map when none/stale (no effect needed).
+  // 선택 파생 — 자동 첫-맵 선택 없음(초기 선택 없음). 삭제된 맵이면 해제 / no auto-select; clear if stale.
   const effectiveSelected =
     selectedId !== null && visibleMaps.some((m) => m.id === selectedId)
       ? selectedId
-      : (visibleMaps[0]?.id ?? null);
+      : null;
 
   // 리스트 행 — MapCard + 좁은 폭 인라인 아코디언(기존 블록 그대로). 밴드는 아코디언 없이 별도 렌더. /
   // A full-list row: MapCard + narrow-screen accordion. The band renders cards without the accordion.
@@ -252,6 +284,7 @@ export default function MapListPage() {
       />
       <div
         data-id="map-detail-accordion"
+        onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
         className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth xl:hidden ${
           effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
         }`}
@@ -304,13 +337,23 @@ export default function MapListPage() {
               <div className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
                 <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 <input
+                  ref={searchRef}
                   type="text"
                   data-id="home-map-search"
-                  className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
+                  className="peer w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
                   placeholder={t("home.searchPlaceholder")}
                   value={mapQuery}
                   onChange={(e) => setMapQuery(e.target.value)}
                 />
+                {/* "/" 키 힌트 — 검색어 없고 포커스 아닐 때만(peer-focus로 숨김) */}
+                {mapQuery === "" && (
+                  <kbd
+                    aria-hidden
+                    className="pointer-events-none shrink-0 rounded-xs border border-hairline bg-surface-alt px-1.5 text-fine text-ink-tertiary peer-focus:hidden"
+                  >
+                    /
+                  </kbd>
+                )}
               </div>
               <div
                 data-id="home-visibility-filter"
@@ -399,8 +442,11 @@ export default function MapListPage() {
                   {t("home.empty")}
                 </div>
               ) : isSearching ? (
-                /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹 */
-                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+                /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹. 빈 공간 클릭=선택 해제 */
+                <ul
+                  className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
+                  onClick={() => setSelectedId(null)}
+                >
                   {orderedHits.map(({ item: processMap, matches }) =>
                     renderRow(
                       processMap,
@@ -410,11 +456,30 @@ export default function MapListPage() {
                   )}
                 </ul>
               ) : (
-                /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용) */
-                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+                /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용). 빈 공간 클릭=선택 해제 */
+                <div
+                  className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1"
+                  onClick={() => setSelectedId(null)}
+                >
                   {recentBand.length > 0 && (
                     <section data-id="home-recent-band" className="flex flex-col gap-2">
-                      <h2 className="text-fine text-ink-tertiary">{t("home.recentTitle")}</h2>
+                      {/* 섹션 라벨 + (펼쳐졌을 때) 우측 접기 */}
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-fine text-ink-tertiary">{t("home.recentTitle")}</h2>
+                        {recentShown > 2 && (
+                          <button
+                            type="button"
+                            data-id="home-recent-collapse-top"
+                            className="text-fine text-accent hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRecentShown(2);
+                            }}
+                          >
+                            {t("home.recentCollapse")}
+                          </button>
+                        )}
+                      </div>
                       <ul className="flex flex-col gap-2">
                         {recentBand.slice(0, recentShown).map((processMap) => (
                           <li key={processMap.id}>
@@ -428,17 +493,43 @@ export default function MapListPage() {
                           </li>
                         ))}
                       </ul>
-                      {recentBand.length > recentShown && (
-                        <button
-                          type="button"
-                          data-id="home-recent-more"
-                          className="self-start text-fine text-accent hover:underline"
-                          onClick={() => setRecentShown((n) => n + 3)}
-                        >
-                          {t("home.recentMore")}
-                        </button>
+                      {(recentBand.length > recentShown || recentShown > 2) && (
+                        <div className="flex items-center gap-3">
+                          {recentBand.length > recentShown && (
+                            <button
+                              type="button"
+                              data-id="home-recent-more"
+                              className="text-fine text-accent hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRecentShown((n) => n + 3);
+                              }}
+                            >
+                              {t("home.recentMore")}
+                            </button>
+                          )}
+                          {recentShown > 2 && (
+                            <button
+                              type="button"
+                              data-id="home-recent-collapse"
+                              className="text-fine text-ink-tertiary hover:text-ink hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRecentShown(2);
+                              }}
+                            >
+                              {t("home.recentCollapse")}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </section>
+                  )}
+                  {recentBand.length > 0 && (
+                    /* 스페이서 + 전체목록 섹션 라벨 */
+                    <div className="border-t border-divider pt-3">
+                      <h2 className="text-fine text-ink-tertiary">{t("home.allMapsTitle")}</h2>
+                    </div>
                   )}
                   <ul className="flex flex-col gap-2">
                     {mapHits.map(({ item: processMap, matches }) =>
@@ -453,12 +544,12 @@ export default function MapListPage() {
               )}
             </div>
 
-            {effectiveSelected !== null && (
-              // ≥ xl — 우측 사이드 패널(현행) / wide screens: side panel
-              <aside
-                data-id="map-detail-aside"
-                className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
-              >
+            {/* ≥ xl — 우측 사이드 패널. 선택 없으면 플레이스홀더 / wide screens: side panel or empty placeholder */}
+            <aside
+              data-id="map-detail-aside"
+              className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
+            >
+              {effectiveSelected !== null ? (
                 <MapDetailCard
                   key={effectiveSelected}
                   mapId={effectiveSelected}
@@ -466,8 +557,12 @@ export default function MapListPage() {
                   onCopy={handleCopyOpen}
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                 />
-              </aside>
-            )}
+              ) : (
+                <div className="flex flex-1 items-center justify-center p-6 text-caption text-ink-tertiary">
+                  {t("home.detailEmpty")}
+                </div>
+              )}
+            </aside>
           </>
         )}
       </div>
