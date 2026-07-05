@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 매뉴얼 문서 4종 작성 (사용자: 영/한 × 사용자/관리자)
+- `docs/manual/` — user/admin × en/ko 4종. 코드 실측 기반(상태·단축키·워크플로·S9 매뉴얼 게시 탭·S10 대시보드 반영), `/manual` 뷰어 파서 지원 문법만 사용(#필 뱃지·표·코드블록·인용). 검증 스크립트로 펜스·표 열 수·미지원 문법 전무 확인. 게시는 설정→콘텐츠→매뉴얼에서 원하는 판 게시.
+
 ## 2026-07-06 — 대시보드 상세: 접속자수 실데이터 (사용자: 나머지 칸·값은 이후 구상, 우선 접속자수)
 - 진입 카드 클릭 시 상세를 자리표시 → **실 지표 3 카드**로 교체. 백엔드 `GET /api/dashboard`(sysadmin, `login_records` 집계): 고유 접속자(distinct login_id)·전체 로그인·최근 7일. `routers/dashboard.py`·`DashboardMetricsOut`·main 등록·`test_dashboard`(2).
 - 프론트 `dashboard-panel` 상세: "운영 현황" + 접속자수(고유 login_id)·총 로그인·최근 7일 카드 + "나머지 지표 추후 보완" 각주. api `getDashboard`. 나머지 칸·미세디자인·값은 사용자가 이후 구상.
