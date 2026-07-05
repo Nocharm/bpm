@@ -1,9 +1,9 @@
 "use client";
 
-// 알림·승인 인박스 — 홈 폭. 탭(승인 대기/알림) + 알림 마스터-디테일. (design 2026-07-05)
-// 승인 대기 탭은 S7에서 구현.
+// 알림·승인 인박스 — 홈 폭. 탭(승인 대기/알림) + 알림 마스터-디테일(카드 목록·아이콘 필터). (design 2026-07-05)
+// 공지 뷰어와 동일 레이아웃. 승인 대기 탭은 S7에서 구현.
 
-import { Check } from "lucide-react";
+import { Bell, Check, FileCheck, List, Mail, Megaphone, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -13,20 +13,30 @@ import {
   markNotificationRead,
   type NotificationItem,
 } from "@/lib/api";
-import { formatKst } from "@/lib/datetime";
+import { formatKst, formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 
 type Tab = "approvals" | "notifications";
+type ReadFilter = "all" | "unread";
 
 const TABS: { id: Tab; labelKey: MessageKey }[] = [
   { id: "approvals", labelKey: "inbox.tabApprovals" },
   { id: "notifications", labelKey: "inbox.tabNotifications" },
 ];
 
+// 알림 유형별 아이콘 — 공지/승인요청/기타
+function typeIcon(type: string): LucideIcon {
+  if (type === "notice") return Megaphone;
+  if (type === "review_requested") return FileCheck;
+  return Bell;
+}
+
 export default function InboxPage() {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("notifications");
+  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -41,6 +51,7 @@ export default function InboxPage() {
   }, []);
 
   const unread = items.filter((n) => !n.read).length;
+  const filtered = readFilter === "unread" ? items.filter((n) => !n.read) : items;
   const selected = items.find((n) => n.id === selectedId) ?? null;
 
   const openNotification = async (notification: NotificationItem) => {
@@ -55,6 +66,11 @@ export default function InboxPage() {
     await markAllNotificationsRead();
     setItems((prev) => prev.map((x) => ({ ...x, read: true })));
   };
+
+  const filterOptions: IconPillOption<ReadFilter>[] = [
+    { value: "all", label: t("inbox.filterAll"), Icon: List },
+    { value: "unread", label: t("inbox.filterUnread"), Icon: Mail },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
@@ -102,31 +118,49 @@ export default function InboxPage() {
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 gap-4">
-            {/* 좌 목록 */}
-            <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-hairline">
-              {items.length === 0 ? (
+            {/* 좌 목록 — 필터 + 카드 */}
+            <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
+              <div className="px-3 py-3">
+                <IconPillFilter
+                  options={filterOptions}
+                  value={readFilter}
+                  onChange={setReadFilter}
+                />
+              </div>
+              {filtered.length === 0 ? (
                 <p className="px-4 py-8 text-center text-caption text-ink-tertiary">
                   {t("inbox.empty")}
                 </p>
               ) : (
-                <ul className="flex flex-col">
-                  {items.map((n) => (
-                    <li key={n.id}>
-                      <button
-                        type="button"
-                        onClick={() => void openNotification(n)}
-                        className={
-                          "flex w-full flex-col gap-1 border-b border-hairline px-4 py-3 text-left " +
-                          (n.id === selectedId ? "bg-accent-tint" : "hover:bg-surface-alt")
-                        }
-                      >
-                        <div className="flex items-start gap-2">
-                          {!n.read && (
-                            <span
-                              className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-                              aria-hidden
-                            />
-                          )}
+                <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
+                  {filtered.map((n) => {
+                    const TypeIcon = typeIcon(n.type);
+                    return (
+                      <li key={n.id}>
+                        <button
+                          type="button"
+                          onClick={() => void openNotification(n)}
+                          className={
+                            "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
+                            (n.id === selectedId
+                              ? "border-l-2 border-l-accent bg-accent-tint"
+                              : "bg-surface hover:bg-surface-alt")
+                          }
+                        >
+                          {/* 유형 아이콘(좌) · 읽음(우) */}
+                          <div className="flex items-center justify-between">
+                            <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                            {n.read ? (
+                              <span className="text-fine text-ink-tertiary">
+                                {t("notices.read")}
+                              </span>
+                            ) : (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-accent"
+                                aria-hidden
+                              />
+                            )}
+                          </div>
                           <span
                             className={
                               "line-clamp-2 text-caption " +
@@ -135,13 +169,15 @@ export default function InboxPage() {
                           >
                             {n.message}
                           </span>
-                        </div>
-                        <span className="text-fine text-ink-tertiary">
-                          {formatKst(n.created_at)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                          <div className="flex justify-end">
+                            <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
+                              {formatKstShort(n.created_at)}
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </aside>

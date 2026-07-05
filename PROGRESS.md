@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S6a: 인박스 알림 목록 — 공지 레이아웃(아이콘 필터·카드)
+- /inbox 알림 탭 좌 목록을 공지 뷰어와 동일하게: IconPillFilter(전체 List/안읽음 Mail) + 카드형 목록(border·bg·gap). 카드: 유형 아이콘(notice=Megaphone·review_requested=FileCheck·기타=Bell) 좌 + 읽음/미읽음 점 우, 메시지(미읽음 bold·line-clamp-2), 시간 필(우). 선택=좌측 액센트 테두리+tint.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 아이콘 필터·카드·유형 아이콘(Megaphone)·시간 필 확인.
+
 ## 2026-07-05 — S6: 인박스 /inbox 알림 탭 (read-all)
 - 백엔드 POST /api/notifications/read-all(본인 미읽음 일괄 읽음) + 테스트. api markAllNotificationsRead.
 - /inbox: 홈 폭(max-w-[80rem]). 탭 세그먼트(승인 대기/알림, 피드백 세그먼트 디자인)·알림 미읽음 뱃지·"모두 읽음"(Check). 알림 탭 마스터-디테일: 좌 알림 목록(미읽음 점·bold·클릭 시 읽음+선택), 우 상세(메시지·시각·map_id 있으면 "관련 맵 보기"). 승인 대기 탭 placeholder(S7).
