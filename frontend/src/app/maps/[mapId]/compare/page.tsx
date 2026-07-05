@@ -70,10 +70,9 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 // passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 아래로 우회하는 아크(red 점선). C2b.
 // 삭제된 직접 연결이 새 경로(A→X→B) 위/아래로 겹치지 않게, source→target을 아래로 부풀린 베지어로.
 function RemovedArcEdge({ sourceX, sourceY, targetX, targetY, markerEnd, style }: EdgeProps) {
-  const dip = Math.max(sourceY, targetY) + 56;
-  const c1 = sourceX + (targetX - sourceX) * 0.28;
-  const c2 = targetX - (targetX - sourceX) * 0.28;
-  const path = `M${sourceX},${sourceY} C${c1},${dip} ${c2},${dip} ${targetX},${targetY}`;
+  // 아래에서 출발해 아래로 도착 — bottom 핸들에서 수직으로 내려가 아래로 우회하는 U자 아크.
+  const dip = Math.max(sourceY, targetY) + 52;
+  const path = `M${sourceX},${sourceY} C${sourceX},${dip} ${targetX},${dip} ${targetX},${targetY}`;
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
 }
 
@@ -126,18 +125,20 @@ function buildAppNodes(
   }));
 }
 
-// 레이아웃된 두 노드 중심의 우세 방향으로 엣지가 붙을 변을 정한다(가로→R/L, 세로→B/T).
-// 핸들 미지정 시 RF가 첫 핸들(left)에 붙여 엣지가 노드 뒤로 도는 문제를 방지(canvas.ts withEdge 주석 참고).
-function edgeSides(
-  a: { cx: number; cy: number },
-  b: { cx: number; cy: number },
-): { source: HandleSide; target: HandleSide } {
-  const dx = b.cx - a.cx;
-  const dy = b.cy - a.cy;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0 ? { source: "right", target: "left" } : { source: "left", target: "right" };
-  }
-  return dy >= 0 ? { source: "bottom", target: "top" } : { source: "top", target: "bottom" };
+const SIDE_VECTORS: { side: HandleSide; vx: number; vy: number }[] = [
+  { side: "right", vx: 1, vy: 0 },
+  { side: "left", vx: -1, vy: 0 },
+  { side: "top", vx: 0, vy: -1 },
+  { side: "bottom", vx: 0, vy: 1 },
+];
+
+// 상대 노드 방향(dx,dy)에 잘 맞는 순으로 4변 정렬(내적 내림차순). 노드별 그리디 배정에서
+// 최상위부터 시도하되 이미 쓴 변이면 다음 변으로 넘어가 분기 엣지를 4변에 골고루 흩뿌린다.
+function preferredSides(dx: number, dy: number): HandleSide[] {
+  const len = Math.hypot(dx, dy) || 1;
+  return [...SIDE_VECTORS]
+    .sort((a, b) => (b.vx * dx + b.vy * dy) / len - (a.vx * dx + a.vy * dy) / len)
+    .map((s) => s.side);
 }
 
 function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
@@ -370,6 +371,51 @@ function ComparePane({
     [positioned],
   );
 
+  // 엣지별 붙을 변(핸들) — 노드마다 자기 엣지들을 4변에 그리디 분산(겹침 최소화). passthrough는
+  // 아래(bottom)에서 출발/도착하도록 고정. 방향 확실한 엣지가 선호 변을 먼저 차지.
+  const handleSides = useMemo(() => {
+    type Endpoint = { edgeId: string; end: "source" | "target"; otherId: string; passthrough: boolean };
+    const perNode = new Map<string, Endpoint[]>();
+    const add = (nodeId: string, ep: Endpoint) => {
+      const list = perNode.get(nodeId);
+      if (list) list.push(ep);
+      else perNode.set(nodeId, [ep]);
+    };
+    for (const edge of merged.edges) {
+      const passthrough =
+        edge.status === "removed" && keptKeys.has(edge.source) && keptKeys.has(edge.target);
+      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, passthrough });
+      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, passthrough });
+    }
+    const result = new Map<string, { source: HandleSide; target: HandleSide }>();
+    const setSide = (edgeId: string, end: "source" | "target", side: HandleSide) => {
+      const row = result.get(edgeId) ?? { source: "right" as HandleSide, target: "left" as HandleSide };
+      if (end === "source") row.source = side;
+      else row.target = side;
+      result.set(edgeId, row);
+    };
+    for (const [nodeId, endpoints] of perNode) {
+      const center = nodeCenters.get(nodeId);
+      if (!center) continue;
+      const scored = endpoints.map((ep) => {
+        if (ep.passthrough) return { ep, prefs: ["bottom"] as HandleSide[], certainty: Infinity };
+        const other = nodeCenters.get(ep.otherId);
+        const dx = other ? other.cx - center.cx : 1;
+        const dy = other ? other.cy - center.cy : 0;
+        const len = Math.hypot(dx, dy) || 1;
+        return { ep, prefs: preferredSides(dx, dy), certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
+      });
+      scored.sort((a, b) => b.certainty - a.certainty); // passthrough·방향 확실한 순 우선
+      const used = new Set<HandleSide>();
+      for (const { ep, prefs } of scored) {
+        const side = prefs.find((candidate) => !used.has(candidate)) ?? prefs[0];
+        used.add(side);
+        setSide(ep.edgeId, ep.end, side);
+      }
+    }
+    return result;
+  }, [merged, keptKeys, nodeCenters]);
+
   // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)
   const laidNodes = useMemo(
     () => positioned.map((node) => ({ ...node, selected: focusId === node.id })),
@@ -381,11 +427,9 @@ function ComparePane({
     () =>
       buildAppEdges(merged.edges, keptKeys).map((edge) => {
         let styled = edge;
-        // 레이아웃 위치로 핸들 변 지정(미지정 시 좌측 핸들에 몰려 노드 뒤로 우회) + 하위프로세스 전용 핸들 remap.
-        const a = nodeCenters.get(edge.source);
-        const b = nodeCenters.get(edge.target);
-        if (a && b) {
-          const sides = edgeSides(a, b);
+        // 노드별 4변 분산 배정(handleSides) → 핸들 지정 + 하위프로세스 전용 핸들 remap.
+        const sides = handleSides.get(edge.id);
+        if (sides) {
           styled = {
             ...styled,
             sourceHandle: sourceHandleId(sides.source),
@@ -398,7 +442,7 @@ function ComparePane({
         }
         return styled;
       }),
-    [merged, focusId, keptKeys, nodeCenters, subprocessIds],
+    [merged, focusId, keptKeys, handleSides, subprocessIds],
   );
 
   const titleByKey = useMemo(
@@ -515,6 +559,12 @@ function ComparePane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* 메인 캔버스 스타일 참고 — 노드 핸들(히트박스) 숨김 + 노드 호버 시 자기색 강조 링(bpm-node-emph).
+          Turbopack이 dev에서 .react-flow__node 셀렉터 규칙을 purge해 raw <style>로 둔다(lessons canvas §5). */}
+      <style>{`
+.react-flow__handle{opacity:0}
+.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}
+      `}</style>
       <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
         <Link
           href={`/maps/${mapId}`}

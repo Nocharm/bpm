@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 캔버스 미세정렬: 4변 분산·바닥 아크·핸들 숨김·노드 호버
+- **엣지 4변 그리디 분산**(`compare/page.tsx handleSides`) — 노드마다 자기 엣지들을 방향선호(`preferredSides` 내적정렬)로 4변에 배정하되 이미 쓴 변이면 다음 변으로(충돌 회피). 분기 노드 겹침↓, 수평 연결은 R/L로 직선. `edgeSides`(단순 우세방향) 폐기.
+- **passthrough 아크 바닥→바닥**(`RemovedArcEdge`) — 핸들을 source/target 모두 **bottom 고정**(handleSides), 베지어를 수직 dip U자(`M sx,syB C sx,dip tx,dip tx,tyB`)로. 삭제된 직접 연결이 노드 아래로 우회.
+- **노드 핸들(히트박스) 숨김 + 노드 호버 링** — 에디터 raw `<style>` 이식: `.react-flow__handle{opacity:0}` + `.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(--nc 42%)}`(노드 자기색 링).
+- 검증: lint 0 · build OK. 라이브(map 13) — 스파인 수평 직선·분기 상/하/좌 분산·passthrough 바닥 U자·핸들 opacity 0·호버 규칙+`--nc` 확인.
+
 ## 2026-07-05 — 비교 데모 맵(계보 공유 2버전) + BASE 게시본 기본 + 게시본 없으면 진입 비활성
 - **데모 시드** `backend/scripts/seed_compare_demo.py` — 계보(`source_node_id`) 공유 2버전(v1 게시본/v2 초안) 맵 생성. v2 유지 노드가 v1 노드를 계보 루트로 가리켜 diff가 매칭(seed_org_demo의 버전별 독립 그래프와 대비). 목업 스타일: 노드 추가5·삭제1·변경3·무변경8, 엣지 추가9·삭제5(passthrough 3), 우회 아크 3. 멱등(동명 맵 purge 후 재생성). → map 13 `/maps/13/compare`.
 - **비교 BASE 기본값 = 게시본 우선**(`compare/page.tsx`) — `versions.find(published)` 있으면 base로, 없으면 최초. target=최신.
