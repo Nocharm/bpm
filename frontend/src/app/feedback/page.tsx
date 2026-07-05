@@ -1,50 +1,23 @@
 "use client";
 
-// 전체 피드백 페이지 — 집계 카드 · 유형 필터 · 목록 · 관리자 상태변경 (design 2026-07-05).
+// 전체 피드백 페이지 — 집계 카드 · 유형 필터 · 목록 · 행 클릭 상세/관리 모달 (design 2026-07-05).
 
 import { Plus } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import {
-  listFeedback,
-  updateFeedbackStatus,
-  type FeedbackItem,
-  type FeedbackKind,
-  type FeedbackStatus,
-} from "@/lib/api";
+import { listFeedback, type FeedbackItem, type FeedbackKind } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { formatKstShort } from "@/lib/datetime";
+import {
+  FEEDBACK_KIND_LABEL,
+  FEEDBACK_KIND_STYLE,
+  FEEDBACK_STATUS_LABEL,
+  FEEDBACK_STATUS_STYLE,
+} from "@/lib/feedback-meta";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
-import type { MessageKey } from "@/lib/i18n-messages";
+import { FeedbackDetailModal } from "@/components/feedback-detail-modal";
 
-const KIND_STYLE: Record<FeedbackKind, string> = {
-  bug: "border-error text-error",
-  suggestion: "border-accent text-accent",
-  question: "border-changed text-changed",
-  etc: "border-hairline text-ink-tertiary",
-};
-
-const KIND_LABEL: Record<FeedbackKind, MessageKey> = {
-  bug: "feedback.kind.bug",
-  suggestion: "feedback.kind.suggestion",
-  question: "feedback.kind.question",
-  etc: "feedback.kind.etc",
-};
-
-const STATUS_STYLE: Record<FeedbackStatus, string> = {
-  new: "border-hairline text-ink-tertiary",
-  in_progress: "border-changed text-changed",
-  done: "border-added text-added",
-};
-
-const STATUS_LABEL: Record<FeedbackStatus, MessageKey> = {
-  new: "feedback.status.new",
-  in_progress: "feedback.status.in_progress",
-  done: "feedback.status.done",
-};
-
-const STATUSES: FeedbackStatus[] = ["new", "in_progress", "done"];
 const KIND_FILTERS: (FeedbackKind | "all")[] = [
   "all",
   "bug",
@@ -62,6 +35,7 @@ export default function FeedbackPage() {
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [kindFilter, setKindFilter] = useState<FeedbackKind | "all">("all");
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -89,9 +63,15 @@ export default function FeedbackPage() {
       (query === "" || f.body.toLowerCase().includes(query)),
   );
 
-  const handleStatusChange = async (id: number, status: FeedbackStatus) => {
-    const updated = await updateFeedbackStatus(id, status);
-    setItems((prev) => prev.map((f) => (f.id === id ? updated : f)));
+  const selected = items.find((f) => f.id === selectedId) ?? null;
+
+  const handleChanged = (updated: FeedbackItem | null) => {
+    if (updated === null) {
+      setItems((prev) => prev.filter((f) => f.id !== selectedId));
+      setSelectedId(null);
+    } else {
+      setItems((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    }
   };
 
   return (
@@ -140,7 +120,7 @@ export default function FeedbackPage() {
         <div className="flex flex-wrap gap-1.5">
           {KIND_FILTERS.map((k) => {
             const active = kindFilter === k;
-            const label = k === "all" ? t("feedback.filterAll") : t(KIND_LABEL[k]);
+            const label = k === "all" ? t("feedback.filterAll") : t(FEEDBACK_KIND_LABEL[k]);
             return (
               <button
                 key={k}
@@ -166,7 +146,7 @@ export default function FeedbackPage() {
         />
       </div>
 
-      {/* 목록 */}
+      {/* 목록 — 행 클릭 시 상세/관리 모달 */}
       <div className="overflow-x-auto rounded-md border border-hairline">
         <table className="w-full border-collapse text-caption">
           <thead>
@@ -180,12 +160,16 @@ export default function FeedbackPage() {
           </thead>
           <tbody>
             {filtered.map((f) => (
-              <tr key={f.id} className="border-b border-hairline last:border-0">
+              <tr
+                key={f.id}
+                onClick={() => setSelectedId(f.id)}
+                className="cursor-pointer border-b border-hairline last:border-0 hover:bg-surface-alt"
+              >
                 <td className="px-3 py-2">
                   <span
-                    className={"rounded-sm border px-1.5 py-0.5 text-fine " + KIND_STYLE[f.kind]}
+                    className={"rounded-sm px-1.5 py-0.5 text-fine " + FEEDBACK_KIND_STYLE[f.kind]}
                   >
-                    {t(KIND_LABEL[f.kind])}
+                    {t(FEEDBACK_KIND_LABEL[f.kind])}
                   </span>
                 </td>
                 <td className="max-w-0 px-3 py-2 text-ink">
@@ -195,29 +179,13 @@ export default function FeedbackPage() {
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-ink-secondary">{f.author}</td>
                 <td className="px-3 py-2">
-                  {isSysadmin ? (
-                    <select
-                      value={f.status}
-                      onChange={(event) =>
-                        void handleStatusChange(f.id, event.target.value as FeedbackStatus)
-                      }
-                      className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink focus:border-accent focus:outline-none"
-                    >
-                      {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {t(STATUS_LABEL[s])}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span
-                      className={
-                        "rounded-sm border px-1.5 py-0.5 text-fine " + STATUS_STYLE[f.status]
-                      }
-                    >
-                      {t(STATUS_LABEL[f.status])}
-                    </span>
-                  )}
+                  <span
+                    className={
+                      "rounded-sm px-1.5 py-0.5 text-fine " + FEEDBACK_STATUS_STYLE[f.status]
+                    }
+                  >
+                    {t(FEEDBACK_STATUS_LABEL[f.status])}
+                  </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-ink-tertiary">
                   {formatKstShort(f.created_at).split(" ")[0]}
@@ -234,6 +202,17 @@ export default function FeedbackPage() {
           </tbody>
         </table>
       </div>
+
+      {selected && (
+        <FeedbackDetailModal
+          key={selected.id}
+          feedback={selected}
+          currentLoginId={loginId}
+          isSysadmin={isSysadmin}
+          onClose={() => setSelectedId(null)}
+          onChanged={handleChanged}
+        />
+      )}
     </div>
   );
 }

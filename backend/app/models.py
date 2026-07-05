@@ -245,7 +245,7 @@ class Notification(Base):
 
 
 class Feedback(Base):
-    """사용자 피드백 — 유형·본문·컨텍스트(현재 화면/맵)·처리 상태 (design 2026-07-05)."""
+    """사용자 피드백 — 유형·본문·컨텍스트·상태·관리자 답글 (design 2026-07-05)."""
 
     __tablename__ = "feedback"
 
@@ -256,9 +256,17 @@ class Feedback(Base):
     author: Mapped[str] = mapped_column(String(100))
     # 제출 시점 컨텍스트 — {route, map_id?, version_id?} 자동 첨부(느슨한 참조)
     context: Mapped[dict] = mapped_column(JSON, default=dict)
-    # 처리 상태 — new(신규) | in_progress(작업중) | done(완료)
-    status: Mapped[str] = mapped_column(String(20), default="new")
+    # 처리 상태 — draft(작성자 수정/삭제 가능) | in_progress | done(잠금)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    # 관리자 답글 — status가 done이 아닐 때만 작성/수정
+    reply: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # 본문 수정 / 답글 갱신 / 완료 처리 시각 — 모달 표시용(없으면 None)
+    body_edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class Employee(Base):

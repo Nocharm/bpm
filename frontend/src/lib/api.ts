@@ -896,7 +896,7 @@ export function markNotificationRead(id: number): Promise<NotificationItem> {
 // ── 피드백 (design 2026-07-05) ──────────────
 
 export type FeedbackKind = "bug" | "suggestion" | "question" | "etc";
-export type FeedbackStatus = "new" | "in_progress" | "done";
+export type FeedbackStatus = "draft" | "in_progress" | "done";
 
 export interface FeedbackContext {
   route?: string;
@@ -911,7 +911,11 @@ export interface FeedbackItem {
   author: string;
   context: FeedbackContext;
   status: FeedbackStatus;
+  reply: string;
   created_at: string;
+  body_edited_at: string | null;
+  reply_at: string | null;
+  done_at: string | null;
 }
 
 export interface FeedbackCounts {
@@ -945,14 +949,22 @@ export function listFeedback(): Promise<FeedbackList> {
   return request<FeedbackList>("/feedback");
 }
 
-export function updateFeedbackStatus(
-  id: number,
-  status: FeedbackStatus,
-): Promise<FeedbackItem> {
+export interface FeedbackPatch {
+  status?: FeedbackStatus;
+  reply?: string;
+  body?: string;
+}
+
+// 부분 갱신 — 서버가 필드별 권한 검증(status=관리자·reply=관리자·body=작성자)
+export function patchFeedback(id: number, patch: FeedbackPatch): Promise<FeedbackItem> {
   return request<FeedbackItem>(`/feedback/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(patch),
   });
+}
+
+export function deleteFeedback(id: number): Promise<void> {
+  return request<void>(`/feedback/${id}`, { method: "DELETE" });
 }
 
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────

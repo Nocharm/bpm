@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S3b: 피드백 필 재디자인 + 상태변경→상세/관리 모달 (사용자 요청)
+- 필: 유형·상태를 채운 파스텔 필(bg-*/15 토큰)로. 공유 lib/feedback-meta.ts로 목록·모달 통일. 상태 new→draft(Draft/In Progress/Done 3종).
+- 목록: 인라인 select 제거 → 행 클릭 시 상세/관리 모달(feedback-detail-modal.tsx).
+- 모달 권한: 상태변경=관리자 · 답글=관리자(done 제외 잠금) · 본문수정/삭제=작성자(draft만). 본문/답글/완료 시각 표시.
+- 백엔드: Feedback +reply·body_edited_at·reply_at·done_at / PATCH 부분갱신(필드별 서버 권한검증) / DELETE(작성자·draft) / 테스트 7건. api updateFeedbackStatus→patchFeedback+deleteFeedback.
+- 검증: ruff·pytest 7/7·전체 388 · lint 0 · build 성공. 브라우저(:3001, worktree 백엔드 :8001) e2e — 필 파스텔·행 클릭 모달·답글 저장(답글 갱신 스탬프)·완료 전환(완료 스탬프·답글 잠금) 확인.
+- (dev 마이그레이션) 스키마 변경으로 worktree backend/dev.db feedback 테이블에 신규 컬럼 ALTER 보강 + status new→draft UPDATE. 배포/신규 DB는 create_all이 신 스키마 생성.
+
 ## 2026-07-05 — S3: 전체 피드백 페이지 /feedback (집계·필터·목록·관리자 상태변경)
 - app/feedback/page.tsx: 헤더(+피드백 보내기) · 집계 카드 4(전체/내 accent/작업 중/완료 %) · 유형 필터 pill + 검색 · 목록 테이블(유형 뱃지·내용 truncate·작성자·상태·등록일 date-only). counts·filtered는 파생값 렌더 계산(React Compiler).
 - 관리자(sysadmin) 상태변경: 상태 열을 `<select>`(신규/작업중/완료)로 → updateFeedbackStatus → 로컬 items 갱신. 비-sysadmin은 읽기 뱃지.

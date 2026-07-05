@@ -410,8 +410,12 @@ class FeedbackCreate(BaseModel):
     context: dict = Field(default_factory=dict)
 
 
-class FeedbackStatusUpdate(BaseModel):
-    status: Literal["new", "in_progress", "done"]
+class FeedbackUpdate(BaseModel):
+    # 부분 갱신 — 제공된 필드만. 권한은 서버가 필드별 검증
+    # (status=sysadmin · reply=sysadmin·done아닐때 · body=작성자·draft일때)
+    status: Literal["draft", "in_progress", "done"] | None = None
+    reply: str | None = Field(default=None, max_length=4000)
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
 
 
 class FeedbackOut(BaseModel):
@@ -423,7 +427,11 @@ class FeedbackOut(BaseModel):
     author: str
     context: dict
     status: str
+    reply: str
     created_at: datetime
+    body_edited_at: datetime | None
+    reply_at: datetime | None
+    done_at: datetime | None
 
 
 class FeedbackCounts(BaseModel):
