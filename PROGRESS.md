@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S6c: 맵/노티스/인박스 타이틀 크기·위치 통일
+- 세 페이지 타이틀을 동일 크기(text-body-strong)·동일 왼쪽위 기준점(mx-auto max-w-[80rem] 페이지 헤더, 컨테이너 좌상단)으로. 노티스 타이틀+안읽음을 aside 내부(px-4)→페이지 헤더(mb-4)로 이동. 홈/인박스는 이미 정렬됨.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 공지사항이 컨테이너 좌상단으로 이동해 Process Maps/Inbox와 정렬 확인. (노티스 타이틀 언어는 기존 유지.)
+
 ## 2026-07-05 — S6b: 인박스/홈 타이틀 정리
 - /inbox에 "Inbox" 타이틀(text-body-strong) 추가(탭 좌측).
 - 홈 타이틀 text-tagline→text-body-strong(노티스 타이틀 크기 일치), "Business Process Map — {home.title}"→"Process Maps"(영어 고정).

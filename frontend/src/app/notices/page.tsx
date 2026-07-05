@@ -82,18 +82,19 @@ export default function NoticesPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
+      {/* 페이지 헤더 — 맵/인박스와 동일 기준점·크기 */}
+      <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
+        <h1 className="text-body-strong text-ink">{t("nav.tab.notices")}</h1>
+        {unread > 0 && (
+          <span className="text-caption text-changed">
+            {t("notices.unreadCount", { n: unread })}
+          </span>
+        )}
+      </div>
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
         {/* 좌 목록 */}
         <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
-          <div className="flex items-center justify-between px-4 pb-2 pt-4">
-            <h1 className="text-body-strong text-ink">{t("nav.tab.notices")}</h1>
-            {unread > 0 && (
-              <span className="text-caption text-changed">
-                {t("notices.unreadCount", { n: unread })}
-              </span>
-            )}
-          </div>
-          <div className="px-4 pb-2">
+          <div className="px-3 py-3">
             <IconPillFilter options={filterOptions} value={filter} onChange={setFilter} />
           </div>
           <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">

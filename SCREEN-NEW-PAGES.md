@@ -45,7 +45,8 @@
 | S5e | 공유 셸 | S1 탭을 **피드백 패널 유형 세그먼트 디자인**으로(사용자) — 아이콘-필 형식 제거, 회색 트랙(bg-surface-alt)+흰 활성 pill(bg-surface·accent·shadow-sm)·아이콘+라벨 유지. | lint/build✅ | 세그먼트 탭 스크린샷✅ | ✅ | (this) |
 | S6 | 인박스 | **알림 탭** — `POST /api/notifications/read-all`(+테스트) + api `markAllNotificationsRead` + **`/inbox`**(홈 폭·탭 세그먼트 승인대기/알림·미읽음 뱃지·모두읽음·마스터-디테일: 좌 알림목록(미읽음 점·클릭 읽음)·우 상세 메시지·시각·map_id 시 "관련 맵 보기"). 승인대기=S7 placeholder. 시안 `Inbox Page.html` | ruff✅·pytest 4/4·394✅·lint/build✅ | 탭·미읽음뱃지·목록·클릭 읽음·상세 e2e 스크린샷✅ | ✅ | 9a3632a |
 | S6a | 인박스 | 알림 목록 공지 레이아웃 적용(사용자) — **아이콘 필 필터**(전체/안읽음) + **카드형 목록**(유형 아이콘·읽음 표시·메시지·시간 필·선택 좌측 액센트). | lint/build✅ | 필터·카드·유형아이콘·시간필 스크린샷✅ | ✅ | 350e092 |
-| S6b | 인박스/홈 | 타이틀(사용자) — 인박스 "Inbox" 타이틀 추가, 홈 타이틀 `text-tagline`→`text-body-strong`(노티스 타이틀 크기)·간결 "Process Maps"(영어 고정). | lint/build✅ | 타이틀 스크린샷✅ | ✅ | (this) |
+| S6b | 인박스/홈 | 타이틀(사용자) — 인박스 "Inbox" 타이틀 추가, 홈 타이틀 `text-tagline`→`text-body-strong`(노티스 타이틀 크기)·간결 "Process Maps"(영어 고정). | lint/build✅ | 타이틀 스크린샷✅ | ✅ | eda780b |
+| S6c | 공통 | 3페이지 타이틀 정렬 통일(사용자) — 맵/노티스/인박스 타이틀 동일 크기(text-body-strong)·동일 왼쪽위 기준점(mx-auto max-w-[80rem] 페이지 헤더). 노티스 타이틀+안읽음을 aside→페이지 헤더로 이동. | lint/build✅ | 타이틀 정렬 스크린샷✅ | ✅ | (this) |
 | S7 | 인박스 | **승인 대기 탭** — `GET /api/inbox/approvals`(버전승인 내담당 + checkout 이전요청 + approval-requests 통합) + 승인건 만장일치 체크리스트·승인/반려(기존 엔드포인트 재사용). 시안 `Inbox Page.html` | ⏳ | ⏳ | ⏳ | — |
 | S8 | 매뉴얼 | **백엔드 `ManualDoc` 모델 + `GET/PUT /api/manual`**(DB 우선·`manual.md` fallback) + **뷰어 `/manual`**(좌 TOC + 우 `MarkdownView`·본문검색 `Ctrl+K`·읽기폭 토글·본문한정 읽기테마 토글·코드복사). 시안 `메뉴얼 뷰 화면.png` | ⏳ | ⏳ | ⏳ | — |
 | S9 | 매뉴얼 | **설정 '매뉴얼' 편집·게시 탭**(sysadmin) — md/HTML 토글·`.md` 업로드·배포본 불러오기·**미리보기 버튼**(실시간 미리보기 없음)·게시(`putManual`). 편집→게시→뷰어 반영. 시안 `메뉴얼 편집화면.png` | ⏳ | ⏳ | ⏳ | — |
