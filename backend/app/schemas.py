@@ -230,6 +230,22 @@ class InboxApprovalOut(BaseModel):
     detail: dict | None = None  # approval_request의 payload 등 부가 정보
 
 
+class ManualOut(BaseModel):
+    """사용 매뉴얼 게시본 — DB 행 또는 파일 fallback(updated_at=None) 공용."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    format: str
+    content: str
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+
+
+class ManualUpdate(BaseModel):
+    format: Literal["markdown", "html"] = "markdown"
+    content: str = Field(max_length=200_000)
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None

@@ -286,6 +286,21 @@ class Notice(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ManualDoc(Base):
+    """사용 매뉴얼 게시본 — 단일 행(id=1 upsert). DB 우선, 없으면 manual.md 파일 fallback (S8)."""
+
+    __tablename__ = "manual_docs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 게시본 포맷 — markdown | html
+    format: Mapped[str] = mapped_column(String(20), default="markdown")
+    content: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(100), default=None)
+
+
 class Employee(Base):
     """사내 AD 동기화 사용자 — loginId(sAMAccountName) PK. source=ad|local (design 2026-06-16)."""
 

@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S8a: 매뉴얼 백엔드 — ManualDoc 모델 + GET/PUT /api/manual
+- `ManualDoc` 모델(단일 행 id=1 upsert · format markdown|html · content · updated_at/by) + `routers/manual.py` — `GET /api/manual`(DB 행 우선, 없으면 `app/manual.py:get_manual()` 파일 fallback, updated_at=None) / `PUT /api/manual`(sysadmin upsert). `ManualOut`/`ManualUpdate` 스키마 + main.py 등록.
+- 검증: ruff·pytest 3/3(파일 fallback·403 게이트·PUT→GET 라운드트립)·전체 401. (기존 `manual.md`·`get_manual()` 로더 재사용 — AI 참고자료와 공유.)
+
 ## 2026-07-05 — S4e: 공지 카드 작성자 이름 필 + 1초 호버 유저 카드
 - 공지 카드 좌하단 작성자를 login_id→**이름 필**로 노출(`getDirectory()`로 해석, 미해석 시 login_id 폴백).
 - 공용 `components/user-hover-card.tsx` — 앵커 1초 이상 호버 시 유저 정보 팝오버(portal+fixed). 맵 상세 '허용 인원' 확장 카드 디자인 미러: 아바타+이름 · 아이디/직급(accent)/부서 레벨(리프→루트) 필.

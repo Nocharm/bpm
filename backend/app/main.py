@@ -25,6 +25,7 @@ from app.routers import (
     groups,
     inbox,
     library,
+    manual,
     maps,
     notices,
     notifications,
@@ -63,6 +64,7 @@ app.include_router(notifications.router)
 app.include_router(feedback.router)
 app.include_router(notices.router)
 app.include_router(inbox.router)
+app.include_router(manual.router)
 app.include_router(library.router)
 app.include_router(permissions.router)
 app.include_router(groups.router)
