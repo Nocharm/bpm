@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import MapPermission, MapVersion, ProcessMap
+from app.models import MapPermission, MapVersion, Node, ProcessMap
 from app.settings import settings
 
 SYSADMIN = "desig.sysadmin"
@@ -64,6 +64,32 @@ def seed_map(name: str, *, published: bool, owner: str = OWNER) -> int:
             )
         )
         return m.id
+
+    return _seed(_make)
+
+
+def seed_host_with_subprocess_node(target_map_id: int, node_id: str) -> tuple[int, int]:
+    """subprocess 노드 1개가 target을 가리키는 호스트 맵 시드 — (map_id, version_id).
+
+    검증(시작노드 규칙)을 안 타도록 REST 대신 DB 직접 시드. node id는 전역 PK라 호출마다 유니크하게.
+    """
+
+    async def _make(session) -> tuple[int, int]:
+        m = ProcessMap(name=f"host-{node_id}", visibility="public", owner_id=OWNER)
+        v = MapVersion(label="As-Is", status="draft")
+        m.versions.append(v)
+        session.add(m)
+        await session.flush()
+        session.add(
+            Node(
+                id=node_id,
+                version_id=v.id,
+                node_type="subprocess",
+                title="call target",
+                linked_map_id=target_map_id,
+            )
+        )
+        return m.id, v.id
 
     return _seed(_make)
 
@@ -138,6 +164,31 @@ def test_library_excludes_soft_deleted(client: TestClient, enforce) -> None:
     client.delete(f"/api/maps/{map_id}")  # soft-delete (owner)
     rows = client.get("/api/library/processes").json()
     assert map_id not in [r["map_id"] for r in rows]
+
+
+def test_graph_includes_subprocess_refs(client: TestClient, enforce) -> None:
+    target = seed_map("refs-target", published=True)
+    act_as(OWNER)
+    client.put(f"/api/maps/{target}/subprocess-designation", json=BODY)
+    _host_map, host_version = seed_host_with_subprocess_node(target, "desig-sp1")
+    act_as(SYSADMIN)
+    g = client.get(f"/api/versions/{host_version}/graph").json()
+    ref = g["subprocess_refs"][str(target)]
+    assert ref["designated"] is True
+    assert ref["department"] == "Sales"
+    assert ref["assignee"] == "Kim"
+
+
+def test_refs_undesignated_and_resolved_locked(client: TestClient, enforce) -> None:
+    # 미지정 링크 대상 — refs designated=False, resolved는 권한 최상위(sysadmin)여도 잠금
+    target = seed_map("refs-undesig", published=True)
+    _host_map, host_version = seed_host_with_subprocess_node(target, "desig-sp2")
+    act_as(SYSADMIN)
+    g = client.get(f"/api/versions/{host_version}/graph").json()
+    assert g["subprocess_refs"][str(target)]["designated"] is False
+    resolved = client.get(f"/api/library/processes/{target}/resolved").json()
+    assert resolved["locked"] is True
+    assert resolved["nodes"] == []
 
 
 def test_undesignate_keeps_attrs_and_is_idempotent(client: TestClient, enforce) -> None:

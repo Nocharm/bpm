@@ -11,7 +11,7 @@
 | U1 | 백엔드 지정 기반 — `ProcessMap` sp_* 컬럼 7개 + PUT/DELETE `/api/maps/{id}/subprocess-designation` + pytest | 검토 대기 | `60a7c8f` |
 | U2 | 설정 페이지 지정 UI — Subprocess 섹션(오너 전용) + 지정/수정 모달 + 해제 확인 | 검토 대기 | |
 | U3 | 라이브러리 피커 — 지정 맵만 노출(백) + 부서 칩·빈 상태(프론트) | 검토 대기 | `df202f3` + 프론트 |
-| U4 | `subprocess_refs` 동봉 + 미지정 resolved 잠금(백) + 캔버스 경고 배지·펼침 잠금(프론트) | 대기 | |
+| U4 | `subprocess_refs` 동봉 + 미지정 resolved 잠금(백) + 캔버스 경고 배지·펼침 잠금(프론트) | 구현중 | |
 | U5 | 노드 카드 어트리뷰트 4종 표시 + 인스펙터 읽기전용 | 대기 | |
 | U6 | 서브프로세스 노드 단일색 고정(색 UI 숨김 + 렌더 강제) | 대기 | |
 | U7 | 데모 시드 지정 심기 + Playwright 통합 스모크 | 대기 | |

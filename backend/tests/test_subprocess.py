@@ -154,12 +154,23 @@ def test_library_lists_processes(
     assert "재사용 프로세스" in names
 
 
-def test_resolved_returns_pinned_graph(client: TestClient) -> None:
+def test_resolved_returns_pinned_graph(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 지정 게이트(2026-07-06) — resolved는 지정된 맵만 허용하므로 게시+지정 후 pinned 해석 검증
     map_id, vid = _map_and_version(client, "lib-target")
+    client.post(f"/api/versions/{vid}/checkout", json={})
     client.put(
         f"/api/versions/{vid}/graph",
         json={"nodes": [{"id": "s", "node_type": "start"}], "edges": []},
     )
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["boss"]})
+    client.post(f"/api/versions/{vid}/submit")
+    monkeypatch.setattr(settings, "dev_user", "boss")
+    client.post(f"/api/versions/{vid}/approve")
+    monkeypatch.setattr(settings, "dev_user", "local-dev")
+    client.post(f"/api/versions/{vid}/publish")
+    client.put(f"/api/maps/{map_id}/subprocess-designation", json={"department": "QA"})
     r = client.get(
         f"/api/library/processes/{map_id}/resolved",
         params={"follow_latest": "false", "pinned": vid},

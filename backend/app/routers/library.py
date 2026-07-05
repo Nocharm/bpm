@@ -93,6 +93,10 @@ async def resolved_graph(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
+    # 미지정/삭제 맵은 권한과 무관하게 잠금 — 지정된 맵만 임베드 허용 (spec 2026-07-06)
+    target = await session.get(ProcessMap, map_id)
+    if target is None or target.deleted_at is not None or target.sp_designated_at is None:
+        return GraphOut(nodes=[], edges=[], locked=True)
     # 마스킹(옵션1 완전 잠금): viewer 미만은 자식 그래프를 만들지 않고 잠금 응답 — 데이터 자체를 안 싣는다.
     # Masking (full lock): below-viewer never builds the child graph — return empty locked payload.
     role = await get_effective_role(session, user, map_id)

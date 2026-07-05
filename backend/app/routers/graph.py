@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
-from app.subprocess import assert_no_cycle, validate_process
+from app.subprocess import assert_no_cycle, get_subprocess_refs, validate_process
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.models import Comment, Edge, Group, MapVersion, Node
@@ -62,7 +62,9 @@ async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
         await session.scalars(select(Group).where(Group.version_id == version_id))
     ).all()
     groups = [GroupIn.model_validate(g) for g in group_rows]
-    return GraphOut(nodes=nodes, edges=edges, groups=groups)
+    # subprocess 링크 대상 지정 정보 동봉 — 에디터 그래프·임베드 resolved 공통 (spec 2026-07-06)
+    refs = await get_subprocess_refs(session, nodes)
+    return GraphOut(nodes=nodes, edges=edges, groups=groups, subprocess_refs=refs)
 
 
 async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVersion:

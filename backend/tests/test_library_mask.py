@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.auth as auth_mod
+from app.clock import now as now_kst
 from app.db import SessionLocal
 from app.main import app
 from app.models import (
@@ -69,7 +70,15 @@ def seed_map_with_graph(
     """
 
     async def _make(session) -> tuple[int, int]:
-        m = ProcessMap(name="mask-test-map", visibility="private", owner_id=None)
+        # 지정(designated) 상태로 시드 — resolved는 지정 맵만 허용(2026-07-06)이라
+        # 이 파일의 관심사인 "역할 기반 마스킹"만 격리해 검증한다.
+        m = ProcessMap(
+            name="mask-test-map",
+            visibility="private",
+            owner_id=None,
+            sp_designated_at=now_kst(),
+            sp_department="Masking QA",
+        )
         v = MapVersion(label="As-Is")
         m.versions.append(v)
         session.add(m)

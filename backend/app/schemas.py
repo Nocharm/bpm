@@ -416,11 +416,22 @@ class GraphIn(BaseModel):
     groups: list[GroupIn] = []
 
 
+class SubprocessRefOut(BaseModel):
+    # 링크 대상 맵의 지정 상태·어트리뷰트 — 노드에 복사하지 않는 라이브 참조 렌더 소스 (spec 2026-07-06)
+    designated: bool
+    department: str | None = None
+    assignee: str | None = None
+    system: str | None = None
+    duration: str | None = None
+
+
 class GraphOut(BaseModel):
     nodes: list[NodeOut]
     edges: list[EdgeIn]
     groups: list[GroupIn] = []
     locked: bool = False  # True → caller is below viewer; empty payload, no graph built
+    # 그래프 내 subprocess 노드들의 linked_map_id별 지정 정보 — 경고·잠금·어트리뷰트 표시 소스
+    subprocess_refs: dict[int, SubprocessRefOut] = {}
 
 
 class VersionGraphOut(BaseModel):
