@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S5e: TopNav 탭을 피드백 패널 유형 세그먼트 디자인으로
+- S1 3-way 탭을 아이콘-필(펼침) → 피드백 사이드패널 유형 세그먼트 디자인으로: 회색 트랙(bg-surface-alt p-1) + 활성 흰 pill(bg-surface·text-accent·shadow-sm), 아이콘+라벨 유지(grid-cols-3).
+- 검증: lint 0 · build 성공. 브라우저(:3001 /notices) — 공지사항 탭 흰 pill 활성 확인.
+
 ## 2026-07-05 — S5d: 아이콘 필 필터 통일 + 피드백 표 필/모달 아이콘 (사용자 요청)
 - 공용 components/icon-pill-filter.tsx — 비활성=아이콘만, 활성=아이콘+라벨(max-w 0→28 트랜지션 우측 펼침).
 - 적용: S1 TopNav 3-way 탭(슬라이딩 박스 제거→아이콘 필), 피드백 유형 필터(List/Bug/Lightbulb/MessageCircle/Ellipsis), 공지 필터(List/CircleAlert/Circle).

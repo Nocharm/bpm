@@ -100,8 +100,8 @@ export function TopNav() {
         >
           {t("app.name")}
         </Link>
-        {/* 3-way 전환 탭 — 아이콘 필(비활성 아이콘만·활성 라벨 우측 펼침) */}
-        <div className="flex items-center gap-1.5 text-fine">
+        {/* 3-way 전환 탭 — 피드백 패널 유형 세그먼트 디자인(회색 트랙 + 흰 활성 pill·아이콘 유지) */}
+        <div className="inline-grid grid-cols-3 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
           {NAV_TABS.map((tab, i) => {
             const active = i === tabIndex;
             const Icon = tab.Icon;
@@ -110,23 +110,13 @@ export function TopNav() {
                 key={tab.href}
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                title={t(tab.labelKey)}
                 className={
-                  "inline-flex items-center rounded-full px-2 py-1 transition-colors " +
-                  (active
-                    ? "bg-accent-tint text-accent"
-                    : "border border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink-secondary")
+                  "inline-flex items-center justify-center gap-1 rounded-xs px-2.5 py-1 transition-colors " +
+                  (active ? "bg-surface text-accent shadow-sm" : "text-ink-secondary hover:text-ink")
                 }
               >
                 <Icon size={14} strokeWidth={1.5} />
-                <span
-                  className={
-                    "overflow-hidden whitespace-nowrap transition-all duration-350 ease-smooth " +
-                    (active ? "ml-1 max-w-28 opacity-100" : "max-w-0 opacity-0")
-                  }
-                >
-                  {t(tab.labelKey)}
-                </span>
+                {t(tab.labelKey)}
               </Link>
             );
           })}
