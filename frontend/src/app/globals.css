@@ -384,7 +384,7 @@ button:not(:disabled):active {
 .md table { border-collapse: collapse; font-size: 0.95em; }
 .md th, .md td { border: 1px solid var(--color-surface-chip); padding: 4px 9px; text-align: left; white-space: nowrap; }
 .md td { background: var(--color-surface); }
-.md th { background: var(--color-ink-secondary); font-weight: 600; color: var(--color-on-accent); }
+.md th { background: var(--color-ink-secondary); color: var(--color-on-accent); font-weight: 600; }
 .md-tag { display: inline-block; padding: 0.02em 0.5em; margin: 0 0.08em; border-radius: 999px; background: var(--color-accent-tint); color: var(--color-accent); font-size: 0.82em; font-weight: 600; }
 /* 블록별 hover 하이라이트 — 마우스가 있는 라인(블록) 표시 */
 .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote { border-radius: 4px; transition: background-color 0.1s; }
