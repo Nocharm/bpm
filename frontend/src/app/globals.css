@@ -367,26 +367,28 @@ button:not(:disabled):active {
 .md p { margin: 0.45em 0; }
 .md ul, .md ol { margin: 0.45em 0; padding-left: 1.3em; }
 .md li { margin: 0.15em 0; }
-.md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.88em; background: var(--color-surface-alt); border: 1px solid var(--color-hairline); border-radius: 4px; padding: 0.05em 0.35em; }
-.md pre { background: var(--color-surface-alt); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: 8px 10px; overflow-x: auto; margin: 0.55em 0; }
+/* 코드/표/인용은 흰·회색 어느 배경에서도 대비되도록 흰 채움 + 강한(surface-chip) 테두리 */
+.md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.88em; background: var(--color-surface); border: 1px solid var(--color-surface-chip); border-radius: 4px; padding: 0.05em 0.35em; }
+.md pre { background: var(--color-surface); border: 1px solid var(--color-surface-chip); border-radius: var(--radius-sm); padding: 8px 10px; overflow-x: auto; margin: 0.55em 0; }
 .md pre code { background: none; border: 0; padding: 0; font-size: 0.85em; }
 .md code { cursor: pointer; transition: background-color 0.12s; }
 .md pre code { cursor: text; }
 .md-codeline { cursor: copy; border-radius: 3px; transition: background-color 0.12s; }
 .md-codeline:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .md code.md-copied, .md-codeline.md-copied { background: var(--color-accent-tint); color: var(--color-accent); }
-.md blockquote { border-left: 3px solid var(--color-accent-tint-border); padding-left: 10px; color: var(--color-ink-tertiary); margin: 0.55em 0; }
+.md blockquote { border-left: 3px solid var(--color-accent-tint-border); background: var(--color-accent-tint); border-radius: var(--radius-xs); padding: 6px 12px; color: var(--color-ink-secondary); margin: 0.55em 0; }
 .md a { color: var(--color-accent); text-decoration: underline; }
 .md strong { font-weight: 600; color: var(--color-ink); }
 .md hr { border: 0; border-top: 1px solid var(--color-hairline); margin: 0.8em 0; }
 .md-tablewrap { overflow-x: auto; margin: 0.55em 0; }
 .md table { border-collapse: collapse; font-size: 0.95em; }
-.md th, .md td { border: 1px solid var(--color-hairline); padding: 4px 9px; text-align: left; white-space: nowrap; }
-.md th { background: var(--color-surface-alt); font-weight: 600; color: var(--color-ink); }
+.md th, .md td { border: 1px solid var(--color-surface-chip); padding: 4px 9px; text-align: left; white-space: nowrap; }
+.md td { background: var(--color-surface); }
+.md th { background: var(--color-accent-tint); font-weight: 600; color: var(--color-ink); }
 .md-tag { display: inline-block; padding: 0.02em 0.5em; margin: 0 0.08em; border-radius: 999px; background: var(--color-accent-tint); color: var(--color-accent); font-size: 0.82em; font-weight: 600; }
 /* 블록별 hover 하이라이트 — 마우스가 있는 라인(블록) 표시 */
 .md p, .md li, .md h1, .md h2, .md h3, .md h4, .md h5, .md h6, .md blockquote { border-radius: 4px; transition: background-color 0.1s; }
-.md p:hover, .md li:hover, .md h1:hover, .md h2:hover, .md h3:hover, .md h4:hover, .md h5:hover, .md h6:hover, .md blockquote:hover { background: var(--color-surface-alt); }
+.md p:hover, .md li:hover, .md h1:hover, .md h2:hover, .md h3:hover, .md h4:hover, .md h5:hover, .md h6:hover { background: color-mix(in srgb, var(--color-accent) 7%, transparent); }
 /* 코드블록 hover 복사 버튼 */
 .md-codewrap { position: relative; }
 .md-copy { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; border: 1px solid var(--color-hairline); background: var(--color-surface); border-radius: var(--radius-xs); padding: 3px; color: var(--color-ink-tertiary); cursor: pointer; opacity: 0; transition: opacity 0.12s; }
