@@ -173,6 +173,10 @@ export default function MapListPage() {
   const recentBand = isSearching
     ? []
     : partitionByRecency(filteredMaps, (m) => m.id, recentIds).recent;
+  // 검색 모드 정렬 — 최근 접속 매치 상단 고정(최신순) + 나머지 기존 검색 랭킹 /
+  // search order: recent-opened matches pinned on top (recency), rest keep search rank.
+  const searchPartition = partitionByRecency(mapHits, (h) => h.item.id, recentIds);
+  const orderedHits = [...searchPartition.recent, ...searchPartition.rest];
 
   // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
   // Derive selection: fall back to the first map when none/stale (no effect needed).
@@ -346,13 +350,13 @@ export default function MapListPage() {
                   {t("home.empty")}
                 </div>
               ) : isSearching ? (
-                /* 검색 모드 — 단일 랭킹 목록(최근 우선 정렬은 Task 6) */
+                /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹 */
                 <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-                  {mapHits.map(({ item: processMap, matches }) =>
+                  {orderedHits.map(({ item: processMap, matches }) =>
                     renderRow(
                       processMap,
                       matches.find((m) => m.field === "name")?.ranges ?? [],
-                      undefined,
+                      atById.get(processMap.id),
                     ),
                   )}
                 </ul>

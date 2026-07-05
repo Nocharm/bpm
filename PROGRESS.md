@@ -8,6 +8,7 @@
 ## 2026-07-05 — Task 2: 에디터 진입 시 최근 열람 기록
 - home: 에디터 진입 시 recordRecentMap 기록 effect
 - home: 브라우즈 모드 최근 열람 밴드(3+더보기) + 리스트 renderRow 추출
+- home: 검색 시 최근 접속 매치 상단 고정 + 배지
 
 ## 2026-07-05 — C1b 비교 셸 캔버스 오버레이 폴리시 (좌상 카운트 필·범례·줌바)
 - **좌상 카운트 필**(`compare/page.tsx`) — `hasChanges`일 때 `Panel top-left` 칩에 노드+엣지를 status별 집계(`counts`: 엣지 추가/삭제 포함·변경은 노드만)한 색점 + 굵은 카운트(추가/삭제/변경).
