@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import { CircleDot, Crown, Eye, PencilLine, Plus, Search, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
-import { filterByQuery } from "@/lib/search";
+import { filterByQuery, type MatchRange } from "@/lib/search";
+import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -44,6 +45,11 @@ export default function MapListPage() {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
+  // 최근 열람 캐시(마운트 후 로드) + 밴드 노출 개수("더보기" +3, 검색내용 아님 → 미영속) /
+  // recent-opened cache (loaded after mount) + band page size.
+  const [recentEntries, setRecentEntries] = useState<RecentMapEntry[]>([]);
+  const [recentShown, setRecentShown] = useState(3);
+
   const showToast = useCallback((message: string) => {
     setToasts((prev) => [{ id: genId(), message }, ...prev]);
   }, []);
@@ -78,6 +84,12 @@ export default function MapListPage() {
       active = false;
     };
   }, [t]);
+
+  // 최근 열람 로드 — localStorage는 클라 전용이라 마운트 후 복원(초기 render는 빈 배열).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRecentEntries(getRecentMaps()); // one-time hydration from localStorage
+  }, []);
 
   const handleDelete = useCallback(
     async (mapId: number) => {
@@ -153,12 +165,59 @@ export default function MapListPage() {
     [filteredMaps, mapQuery],
   );
 
+  // 최근 접속 파생 — 검색 여부, id 순서·시각 맵, 브라우즈 밴드(최근 ∩ 필터, 최신순) /
+  // recent-opened derivations: search flag, id order, time-by-id, browse band.
+  const isSearching = mapQuery.trim() !== "";
+  const recentIds = recentEntries.map((e) => e.id);
+  const atById = new Map(recentEntries.map((e) => [e.id, e.at]));
+  const recentBand = isSearching
+    ? []
+    : partitionByRecency(filteredMaps, (m) => m.id, recentIds).recent;
+
   // 선택 파생 — selectedId가 비었거나 삭제된 맵이면 첫 맵으로 폴백(이펙트 없이) /
   // Derive selection: fall back to the first map when none/stale (no effect needed).
   const effectiveSelected =
     selectedId !== null && visibleMaps.some((m) => m.id === selectedId)
       ? selectedId
       : (visibleMaps[0]?.id ?? null);
+
+  // 리스트 행 — MapCard + 좁은 폭 인라인 아코디언(기존 블록 그대로). 밴드는 아코디언 없이 별도 렌더. /
+  // A full-list row: MapCard + narrow-screen accordion. The band renders cards without the accordion.
+  const renderRow = (
+    processMap: MapSummary,
+    nameRanges: MatchRange[],
+    recentAt: number | undefined,
+  ) => (
+    <li key={processMap.id} className="flex flex-col">
+      <MapCard
+        map={processMap}
+        selected={effectiveSelected === processMap.id}
+        highlighted={highlightId === processMap.id}
+        onSelect={setSelectedId}
+        nameRanges={nameRanges}
+        recentOpenedAt={recentAt}
+      />
+      <div
+        data-id="map-detail-accordion"
+        className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth xl:hidden ${
+          effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          {effectiveSelected === processMap.id && (
+            <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
+              <MapDetailCard
+                mapId={processMap.id}
+                onDelete={(id) => void handleDelete(id)}
+                onCopy={handleCopyOpen}
+                onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </li>
+  );
 
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
@@ -286,40 +345,58 @@ export default function MapListPage() {
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
                   {t("home.empty")}
                 </div>
-              ) : (
+              ) : isSearching ? (
+                /* 검색 모드 — 단일 랭킹 목록(최근 우선 정렬은 Task 6) */
                 <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-            {mapHits.map(({ item: processMap, matches }) => (
-              <li key={processMap.id} className="flex flex-col">
-                <MapCard
-                  map={processMap}
-                  selected={effectiveSelected === processMap.id}
-                  highlighted={highlightId === processMap.id}
-                  onSelect={setSelectedId}
-                  nameRanges={matches.find((m) => m.field === "name")?.ranges ?? []}
-                />
-                {/* 폭이 좁을 때(< xl)만 — 선택 카드 아래 펼침 아코디언 / inline accordion below the selected card on narrow screens */}
-                <div
-                  data-id="map-detail-accordion"
-                  className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth xl:hidden ${
-                    effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                  }`}
-                >
-                  <div className="min-h-0 overflow-hidden">
-                    {effectiveSelected === processMap.id && (
-                      <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
-                        <MapDetailCard
-                          mapId={processMap.id}
-                          onDelete={(id) => void handleDelete(id)}
-                          onCopy={handleCopyOpen}
-                          onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
+                  {mapHits.map(({ item: processMap, matches }) =>
+                    renderRow(
+                      processMap,
+                      matches.find((m) => m.field === "name")?.ranges ?? [],
+                      undefined,
+                    ),
+                  )}
                 </ul>
+              ) : (
+                /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용) */
+                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+                  {recentBand.length > 0 && (
+                    <section data-id="home-recent-band" className="flex flex-col gap-2">
+                      <h2 className="text-fine text-ink-tertiary">{t("home.recentTitle")}</h2>
+                      <ul className="flex flex-col gap-2">
+                        {recentBand.slice(0, recentShown).map((processMap) => (
+                          <li key={processMap.id}>
+                            <MapCard
+                              map={processMap}
+                              selected={effectiveSelected === processMap.id}
+                              highlighted={highlightId === processMap.id}
+                              onSelect={setSelectedId}
+                              recentOpenedAt={atById.get(processMap.id)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                      {recentBand.length > recentShown && (
+                        <button
+                          type="button"
+                          data-id="home-recent-more"
+                          className="self-start text-fine text-accent hover:underline"
+                          onClick={() => setRecentShown((n) => n + 3)}
+                        >
+                          {t("home.recentMore")}
+                        </button>
+                      )}
+                    </section>
+                  )}
+                  <ul className="flex flex-col gap-2">
+                    {mapHits.map(({ item: processMap, matches }) =>
+                      renderRow(
+                        processMap,
+                        matches.find((m) => m.field === "name")?.ranges ?? [],
+                        undefined,
+                      ),
+                    )}
+                  </ul>
+                </div>
               )}
             </div>
 
