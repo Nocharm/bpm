@@ -110,7 +110,7 @@ export default function NoticesPage() {
               </button>
             ))}
           </div>
-          <ul className="flex-1 overflow-y-auto px-2 py-1">
+          <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
             {filtered.map((n) => {
               const isRead = readSet.has(n.id);
               return (
@@ -119,11 +119,14 @@ export default function NoticesPage() {
                     type="button"
                     onClick={() => openNotice(n.id)}
                     className={
-                      "flex w-full flex-col gap-1 rounded-xs px-3 py-2.5 text-left " +
-                      (n.id === selectedId ? "bg-accent-tint" : "hover:bg-surface-alt")
+                      "flex w-full flex-col gap-1.5 rounded-xs border px-3 py-2.5 text-left " +
+                      (n.id === selectedId
+                        ? "border-accent bg-accent-tint"
+                        : "border-hairline bg-surface hover:bg-surface-alt")
                     }
                   >
-                    <div className="flex items-center gap-1.5">
+                    {/* 유형 필(좌) · 읽음 표시(우) */}
+                    <div className="flex items-center justify-between">
                       <span
                         className={
                           "rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[n.importance]
@@ -137,20 +140,15 @@ export default function NoticesPage() {
                         <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
                       )}
                     </div>
-                    <span
-                      className={
-                        "truncate text-caption " +
-                        (isRead ? "text-ink-tertiary" : "font-semibold text-ink")
-                      }
-                    >
-                      {n.title}
-                    </span>
+                    <span className="truncate text-caption font-semibold text-ink">{n.title}</span>
                     <span className="truncate text-fine text-ink-tertiary">
                       {bodyPreview(n.body_md)}
                     </span>
-                    <span className="text-fine text-ink-tertiary">
-                      {n.created_by} · {formatKstShort(n.starts_at)}
-                    </span>
+                    {/* 작성자(좌) · 시간(우) */}
+                    <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
+                      <span className="truncate">{n.created_by}</span>
+                      <span className="shrink-0">{formatKstShort(n.starts_at)}</span>
+                    </div>
                   </button>
                 </li>
               );

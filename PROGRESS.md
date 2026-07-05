@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S4c: 공지 목록 카드화 (사용자 요청)
+- 목록 각 항목을 카드로(border-hairline·bg-surface·rounded-xs·gap-2 간격). 선택=border-accent·accent-tint.
+- 상단 행: 유형 필(좌)·읽음표시(우) justify-between. 메타 행: 작성자(좌)·시간(우) justify-between → 읽음표시·시간 우측정렬.
+- 제목 전 항목 진하게(font-semibold text-ink).
+- 검증: lint 0 · build 성공. 브라우저(:3001) 확인.
+
 ## 2026-07-05 — S4b: 공지 뷰어 폴리시 (시간·첫줄·선택 최소곡선·무테두리)
 - 목록 메타에 시간 노출(dateOnly → formatKstShort MM-DD HH:mm). 본문 미리보기를 "내용 첫 줄"로(첫 비어있지 않은 줄) + 전 항목 노출(읽음 포함).
 - 선택 카드: 좌측 강조선 제거 + 곡선 최소(rounded-md → rounded-xs), accent-tint 채움만(손톱 연상).
