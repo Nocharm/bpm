@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S4a: 공지 뷰어 시안 정합 + 홈 폭 (사용자 요청)
+- 폭을 홈(맵 목록)과 동일하게 — 루트 px-8 py-6 + mx-auto max-w-[80rem], 마스터-디테일을 경계 rounded-lg 카드로.
+- 시안 반영: rounded-full 필터 pill · 선택 항목 좌측 액센트 바(border-l-2) · 목록 본문 1줄 미리보기 · 읽음 항목 "읽음"+회색+프리뷰 생략 · 상세 작성자 아바타 서클·게시기간 · 하단 "문의는 상단 [피드백] 버튼" 콜아웃(클릭 시 피드백 패널). i18n notices.read/contactPre/contactPost.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 카드·홈폭·필터·미리보기·읽음·상세(아바타/게시기간/마크다운/콜아웃) 확인.
+- (예정) 이후 /inbox도 동일 폭(메인 맵 리스트 페이지) 적용.
+
 ## 2026-07-05 — S4: 공지 백엔드 + 뷰어 /notices (읽음 클라 캐시)
 - 백엔드 Notice 모델 + routers/notices.py — GET(게시기간 유효분)·GET/{id}·GET/manage(sysadmin 전체)·POST(sysadmin, notify_all 시 활성 유저 fan-out)·PATCH·DELETE. workflow.create_notifications map_id/version_id 옵션화. 테스트 5건.
 - lib/notices-read.ts: localStorage 읽음 캐시(recent-maps 패턴, 기기별).

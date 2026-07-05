@@ -1,12 +1,13 @@
 "use client";
 
-// 공지사항 열람 — 좌 목록(전체/중요/일반·미읽음 점) + 우 마크다운 상세 (design 2026-07-05).
-// 읽음은 클라 캐시(notices-read) — 서버 저장 없음.
+// 공지사항 열람 — 홈 폭(max-w-[80rem]) 경계 카드 안 마스터-디테일. 좌 목록(전체/중요/일반·미읽음 점)
+// + 우 마크다운 상세. 읽음은 클라 캐시(notices-read) — 서버 저장 없음. (design 2026-07-05)
 
 import { useEffect, useState } from "react";
 
 import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
 import { formatKst, formatKstShort } from "@/lib/datetime";
+import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/notices-read";
@@ -35,6 +36,15 @@ const IMPORTANCE_LABEL: Record<NoticeImportance, MessageKey> = {
 // "MM-DD" — 목록/게시기간용(시각 없이)
 function dateOnly(iso: string): string {
   return formatKstShort(iso).split(" ")[0];
+}
+
+// 본문 1줄 미리보기 — 마크다운 마커 제거 후 앞부분만
+function bodyPreview(md: string): string {
+  return md
+    .replace(/[#>*_`~[\]()-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 70);
 }
 
 export default function NoticesPage() {
@@ -70,111 +80,142 @@ export default function NoticesPage() {
   };
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      {/* 좌 목록 */}
-      <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
-        <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="text-body-strong text-ink">{t("nav.tab.notices")}</h1>
-          {unread > 0 && (
-            <span className="text-caption text-changed">
-              {t("notices.unreadCount", { n: unread })}
-            </span>
-          )}
-        </div>
-        <div className="flex gap-1.5 px-4 pb-2">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFilter(f)}
-              className={
-                "rounded-sm px-2 py-0.5 text-fine " +
-                (filter === f
-                  ? "bg-accent-tint text-accent"
-                  : "border border-hairline text-ink-secondary hover:bg-surface-alt")
-              }
-            >
-              {t(FILTER_LABEL[f])}
-            </button>
-          ))}
-        </div>
-        <ul className="flex-1 overflow-y-auto">
-          {filtered.map((n) => {
-            const isRead = readSet.has(n.id);
-            return (
-              <li key={n.id}>
-                <button
-                  type="button"
-                  onClick={() => openNotice(n.id)}
-                  className={
-                    "flex w-full flex-col gap-1 border-b border-hairline px-4 py-3 text-left " +
-                    (n.id === selectedId ? "bg-accent-tint" : "hover:bg-surface-alt")
-                  }
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={
-                        "rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[n.importance]
-                      }
-                    >
-                      {t(IMPORTANCE_LABEL[n.importance])}
-                    </span>
-                    {!isRead && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-                    )}
-                  </div>
-                  <span className={"text-caption " + (isRead ? "text-ink-tertiary" : "text-ink")}>
-                    {n.title}
-                  </span>
-                  <span className="text-fine text-ink-tertiary">
-                    {n.created_by} · {dateOnly(n.starts_at)}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-          {filtered.length === 0 && (
-            <li className="px-4 py-8 text-center text-caption text-ink-tertiary">
-              {t("notices.empty")}
-            </li>
-          )}
-        </ul>
-      </aside>
-
-      {/* 우 상세 */}
-      <div className="flex-1 overflow-y-auto">
-        {selected ? (
-          <article className="mx-auto max-w-3xl px-8 py-6">
-            <div className="flex items-center gap-2 text-caption text-ink-tertiary">
-              <span
+    <div className="flex h-full min-h-0 flex-col px-8 py-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden rounded-lg border border-hairline bg-surface">
+        {/* 좌 목록 */}
+        <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
+          <div className="flex items-center justify-between px-4 pb-2 pt-4">
+            <h1 className="text-body-strong text-ink">{t("nav.tab.notices")}</h1>
+            {unread > 0 && (
+              <span className="text-caption text-changed">
+                {t("notices.unreadCount", { n: unread })}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1.5 px-4 pb-2">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFilter(f)}
                 className={
-                  "rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[selected.importance]
+                  "rounded-full px-3 py-0.5 text-fine " +
+                  (filter === f
+                    ? "bg-accent-tint text-accent"
+                    : "border border-hairline text-ink-secondary hover:bg-surface-alt")
                 }
               >
-                {t(IMPORTANCE_LABEL[selected.importance])}
-              </span>
-              <span>
-                {t("notices.label")} · #{selected.id}
-              </span>
-            </div>
-            <h2 className="mt-2 text-tagline text-ink">{selected.title}</h2>
-            <div className="mt-2 flex items-center justify-between text-fine text-ink-tertiary">
-              <span>
-                {selected.created_by} · {formatKst(selected.created_at)}
-              </span>
-              <span>
-                {t("notices.period")} {dateOnly(selected.starts_at)} ~{" "}
-                {selected.ends_at ? dateOnly(selected.ends_at) : t("notices.unlimited")}
-              </span>
-            </div>
-            <hr className="my-4 border-hairline" />
-            <MarkdownView source={selected.body_md} />
-          </article>
-        ) : (
-          <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
-            {t("notices.selectPrompt")}
+                {t(FILTER_LABEL[f])}
+              </button>
+            ))}
           </div>
-        )}
+          <ul className="flex-1 overflow-y-auto px-2 py-1">
+            {filtered.map((n) => {
+              const isRead = readSet.has(n.id);
+              return (
+                <li key={n.id}>
+                  <button
+                    type="button"
+                    onClick={() => openNotice(n.id)}
+                    className={
+                      "flex w-full flex-col gap-1 rounded-md px-3 py-2.5 text-left " +
+                      (n.id === selectedId
+                        ? "border-l-2 border-accent bg-accent-tint"
+                        : "hover:bg-surface-alt")
+                    }
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={
+                          "rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[n.importance]
+                        }
+                      >
+                        {t(IMPORTANCE_LABEL[n.importance])}
+                      </span>
+                      {isRead ? (
+                        <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
+                      ) : (
+                        <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+                      )}
+                    </div>
+                    <span
+                      className={
+                        "truncate text-caption " +
+                        (isRead ? "text-ink-tertiary" : "font-semibold text-ink")
+                      }
+                    >
+                      {n.title}
+                    </span>
+                    {!isRead && (
+                      <span className="truncate text-fine text-ink-tertiary">
+                        {bodyPreview(n.body_md)}
+                      </span>
+                    )}
+                    <span className="text-fine text-ink-tertiary">
+                      {n.created_by} · {dateOnly(n.starts_at)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+            {filtered.length === 0 && (
+              <li className="px-4 py-8 text-center text-caption text-ink-tertiary">
+                {t("notices.empty")}
+              </li>
+            )}
+          </ul>
+        </aside>
+
+        {/* 우 상세 */}
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          {selected ? (
+            <article className="px-8 py-6">
+              <div className="flex items-center gap-2">
+                <span
+                  className={
+                    "rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[selected.importance]
+                  }
+                >
+                  {t(IMPORTANCE_LABEL[selected.importance])}
+                </span>
+                <span className="text-caption text-ink-tertiary">
+                  {t("notices.label")} · #{selected.id}
+                </span>
+              </div>
+              <h2 className="mt-2 text-tagline text-ink">{selected.title}</h2>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-caption text-ink-secondary">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
+                    {selected.created_by.charAt(0).toUpperCase()}
+                  </span>
+                  <span>{selected.created_by}</span>
+                  <span className="text-ink-tertiary">{formatKst(selected.created_at)}</span>
+                </div>
+                <span className="shrink-0 text-fine text-ink-tertiary">
+                  {t("notices.period")} {dateOnly(selected.starts_at)} ~{" "}
+                  {selected.ends_at ? dateOnly(selected.ends_at) : t("notices.unlimited")}
+                </span>
+              </div>
+              <hr className="my-5 border-hairline" />
+              <MarkdownView source={selected.body_md} />
+              <div className="mt-6 rounded-md bg-accent-tint px-4 py-3 text-caption text-ink-secondary">
+                {t("notices.contactPre")}{" "}
+                <button
+                  type="button"
+                  onClick={openFeedbackPanel}
+                  className="font-semibold text-accent hover:underline"
+                >
+                  {t("feedback.button")}
+                </button>{" "}
+                {t("notices.contactPost")}
+              </div>
+            </article>
+          ) : (
+            <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
+              {t("notices.selectPrompt")}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
