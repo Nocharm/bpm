@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 C4(우측 속성 인스펙터) + 헤더/캔버스 크롬 에디터화
+- **C4 우측 인스펙터**(`compare/page.tsx`) — `Properties` + `View only`(Lock) 배지. 포커스 노드 선택 시 Title/Description(회색 박스)·Type·Color(스와치)·Assignee/Department/System/Duration 행. 변경 필드는 `~~before~~ → after`(취소선+changed색). 미선택 시 빈 상태. `PanelRight` 토글(`inspectorOpen`).
+- **헤더 에디터화** — 좌상단 `PanelLeft`(Changes 접기·`leftCollapsed`), 우측 `PanelRight`(인스펙터 접기) — 에디터 동일 위치. **← Editor 링크 → 제목 드롭다운**(박스+chevron, 클릭 시 'Editor' 메뉴로 이동, MapNameDropdown 트리거 스타일 재활용). **Apply To-Be 제거**(적용 로직 없는 플레이스홀더였고 제목 드롭다운과 중복 → 삭제).
+- **캔버스 크롬** — 좌상 카운트 필 제거→**좌하 범례에 건수 통합**(`DiffLegend counts`), **dot-grid 제거**(`<Background>` 삭제), **Compare View 워터마크**(에디터 read-only 워터마크 재활용: 120px·-18°·accent·opacity .14).
+- i18n: `compare.{watermark,properties,viewOnly,selectNode,inspectorToggle}`. `compare.applyToBe`는 미사용(잔존).
+- 검증: lint 0·build OK. 라이브(map 13) 인스펙터 채움·before→after·좌/우 접기·제목 드롭다운·워터마크·범례 건수 확인.
+
 ## 2026-07-05 — 비교 C3 보강: 노드 딸림 엣지 제외 + 종류 필터(노드/엣지)
 - **노드 추가/삭제로 딸려온 엣지 제외**(`changeItems`) — 엣지 항목은 **양끝이 모두 기존 노드**(양 버전 존재=unchanged/changed)인 경우만, 즉 실제 배선 변경만 목록에. 새/삭제 노드에 붙은 엣지는 노드 항목으로 이미 드러나므로 중복 제거. map 13: 엣지 14→3(passthrough 삭제 3만). 카운트(오버레이·상태칩)도 curated 반영(Added 5·Removed 4·Changed 3).
 - **종류 필터 행 추가**(`kindFilter`) — 상태 칩 아래 모두/노드만/엣지만. 상태 필터와 독립·AND 조합. i18n `compare.kind{All,Nodes,Edges}`.

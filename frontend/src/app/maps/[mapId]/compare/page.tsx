@@ -4,8 +4,6 @@
 // 추가/삭제 엣지와 추가/삭제/변경 노드를 색으로 표현하고 변경 목록 클릭으로 포커스. (재작성: spec 2026-06-23)
 
 import {
-  Background,
-  BackgroundVariant,
   BaseEdge,
   type Edge,
   type EdgeProps,
@@ -27,19 +25,21 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowRight,
-  Check,
   ChevronDown,
   Download,
+  Lock,
   Maximize,
   Minus,
   MoveHorizontal,
   MoveVertical,
+  PanelLeft,
+  PanelRight,
   Pencil,
   Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ProcessNode } from "@/components/process-node";
 import {
@@ -363,21 +363,34 @@ function VersionSelect({
   );
 }
 
-// 좌하 범례 — 노드 diff 테두리 스타일 반영(추가 실선·삭제 점선·변경 실선).
-function DiffLegend() {
+// 좌하 범례 — 노드 diff 테두리 스타일(추가 실선·삭제 점선·변경 실선) + 건수(좌상 카운트 필과 통합).
+function DiffLegend({ counts }: { counts: { added: number; removed: number; changed: number } }) {
   const { t } = useI18n();
   return (
     <div className="flex items-center gap-2.5 text-caption text-ink-secondary" data-id="compare-legend">
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded-[3px] border-2 border-added" /> {t("compare.legendAdded")}
+        <span className="font-semibold text-ink">{counts.added}</span>
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded-[3px] border-2 border-dashed border-removed" />{" "}
         {t("compare.legendRemoved")}
+        <span className="font-semibold text-ink">{counts.removed}</span>
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded-[3px] border-2 border-changed" /> {t("compare.legendChanged")}
+        <span className="font-semibold text-ink">{counts.changed}</span>
       </span>
+    </div>
+  );
+}
+
+// 우측 인스펙터 속성 행 — 라벨 좌·값 우측정렬. divide-y로 구분.
+function InspectorRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span className="w-20 shrink-0 text-fine text-ink-tertiary">{label}</span>
+      <span className="min-w-0 flex-1 text-right text-caption text-ink-secondary">{children}</span>
     </div>
   );
 }
@@ -446,6 +459,10 @@ function ComparePane({
   const [kindFilter, setKindFilter] = useState<"all" | "node" | "edge">("all");
   // 흐름 방향 — LR(좌→우, 기본) / TB(상→하). 맵이 한 축으로 너무 길 때 전환.
   const [flowDir, setFlowDir] = useState<"LR" | "TB">("LR");
+  // 좌(변경 패널)·우(속성 인스펙터) 접힘 + 제목 드롭다운 — 에디터 헤더와 동일 위치의 토글.
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [titleMenuOpen, setTitleMenuOpen] = useState(false);
 
   const merged = useMemo(
     () => buildMergedGraph(baseGraph, targetGraph),
@@ -802,6 +819,12 @@ function ComparePane({
     [changeItems, filter, kindFilter],
   );
 
+  // 우측 인스펙터 대상 — 포커스된 id가 노드면 그 노드(엣지면 null → 빈 상태).
+  const selectedNode = useMemo(
+    () => merged.nodes.find((n) => n.id === focusId) ?? null,
+    [merged, focusId],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* 메인 캔버스 스타일 참고 — 노드 핸들(히트박스) 숨김 + 노드 호버 시 자기색 강조 링(bpm-node-emph).
@@ -811,19 +834,43 @@ function ComparePane({
 .react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}
 .react-flow__node{z-index:2 !important}
       `}</style>
-      <header className="flex items-center gap-3 border-b border-hairline bg-surface px-4 py-2.5">
-        <Link
-          href={`/maps/${mapId}`}
-          className="flex items-center gap-1 text-caption text-accent hover:underline"
+      <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
+        {/* 좌: 좌측 패널 접기(에디터 PanelLeft 위치) · 제목 드롭다운(누르면 에디터로) · Version compare */}
+        <button
+          type="button"
+          onClick={() => setLeftCollapsed((v) => !v)}
+          title={t(leftCollapsed ? "sidebar.expand" : "sidebar.collapse")}
+          aria-label={t(leftCollapsed ? "sidebar.expand" : "sidebar.collapse")}
+          className="inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt"
         >
-          <ArrowLeft size={14} strokeWidth={1.5} />
-          {t("compare.editorLink")}
-        </Link>
-        <span className="h-4 w-px bg-divider" />
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-body-strong text-ink">{mapName}</h1>
-          <span className="text-caption text-ink-tertiary">{t("compare.title")}</span>
+          <PanelLeft size={16} strokeWidth={1.5} />
+        </button>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setTitleMenuOpen((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
+          >
+            <span className="max-w-[16rem] truncate">{mapName}</span>
+            <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+          </button>
+          {titleMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-[1000]" onClick={() => setTitleMenuOpen(false)} />
+              <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+                <Link
+                  href={`/maps/${mapId}`}
+                  onClick={() => setTitleMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                >
+                  <ArrowLeft size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                  {t("compare.editorLink")}
+                </Link>
+              </div>
+            </>
+          )}
         </div>
+        <span className="text-caption text-ink-tertiary">{t("compare.title")}</span>
         <div className="ml-2 flex items-center gap-2">
           <VersionSelect
             role="BASE"
@@ -872,16 +919,19 @@ function ComparePane({
             <Download size={14} strokeWidth={1.5} />
             {t("compare.export")}
           </button>
-          <Link
-            href={`/maps/${mapId}`}
-            className="flex h-8 items-center gap-1.5 rounded-sm bg-accent px-3 text-caption font-semibold text-on-accent hover:bg-accent/90"
+          <button
+            type="button"
+            onClick={() => setInspectorOpen((open) => !open)}
+            title={t("compare.inspectorToggle")}
+            aria-label={t("compare.inspectorToggle")}
+            className="inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt"
           >
-            <Check size={14} strokeWidth={2} />
-            {t("compare.applyToBe")}
-          </Link>
+            <PanelRight size={16} strokeWidth={1.5} />
+          </button>
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
+        {!leftCollapsed && (
         <aside
           className="flex w-72 shrink-0 flex-col border-r border-hairline bg-surface"
           data-id="compare-changes"
@@ -1012,7 +1062,14 @@ function ComparePane({
             )}
           </div>
         </aside>
-        <div className="min-w-0 flex-1 bg-canvas" data-id="compare-canvas">
+        )}
+        <div className="relative min-w-0 flex-1 overflow-hidden bg-canvas" data-id="compare-canvas">
+          {/* Compare View 워터마크 — 읽기전용 인지(에디터 read-only 워터마크 재활용, dot-grid 대체) */}
+          <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
+            <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest text-accent opacity-[0.14]">
+              {t("compare.watermark")}
+            </span>
+          </div>
           <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
           <ReactFlow
             key={flowDir}
@@ -1026,43 +1083,12 @@ function ComparePane({
             fitView
             minZoom={0.2}
           >
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={20}
-              size={1.2}
-              color="var(--color-canvas-dot)"
-            />
-            {hasChanges && (
-              <Panel
-                position="top-left"
-                className="rounded-sm border border-hairline bg-surface/80 px-2.5 py-1.5 shadow-sm backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-2 text-caption text-ink-secondary">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-added" />
-                    {t("compare.legendAdded")}
-                    <span className="font-semibold text-ink">{counts.added}</span>
-                  </span>
-                  <span className="h-3 w-px bg-divider" />
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-removed" />
-                    {t("compare.legendRemoved")}
-                    <span className="font-semibold text-ink">{counts.removed}</span>
-                  </span>
-                  <span className="h-3 w-px bg-divider" />
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-changed" />
-                    {t("compare.legendChanged")}
-                    <span className="font-semibold text-ink">{counts.changed}</span>
-                  </span>
-                </div>
-              </Panel>
-            )}
+            {/* dot-grid 제거 · 좌상 카운트 필 제거(좌하 범례로 통합) */}
             <Panel
               position="bottom-left"
               className="rounded-sm border border-hairline bg-surface/80 px-2.5 py-1.5 shadow-sm backdrop-blur-sm"
             >
-              <DiffLegend />
+              <DiffLegend counts={counts} />
             </Panel>
             <Panel position="bottom-right">
               <ZoomBar />
@@ -1070,6 +1096,81 @@ function ComparePane({
           </ReactFlow>
           </NodeActionsContext.Provider>
         </div>
+        {inspectorOpen && (
+          <aside
+            className="flex w-72 shrink-0 flex-col border-l border-hairline bg-surface"
+            data-id="compare-inspector"
+          >
+            <div className="flex items-center justify-between border-b border-hairline px-3 pb-2 pt-3">
+              <h2 className="text-body-strong text-ink">{t("compare.properties")}</h2>
+              <span className="inline-flex items-center gap-1 rounded-sm bg-surface-alt px-2 py-0.5 text-fine font-semibold text-ink-secondary">
+                <Lock size={12} strokeWidth={1.7} />
+                {t("compare.viewOnly")}
+              </span>
+            </div>
+            {!selectedNode ? (
+              <div className="px-3 py-3 text-caption text-ink-tertiary">
+                {t("compare.selectNode")}
+              </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
+                <div>
+                  <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG.title)}</div>
+                  <div className="rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
+                    {selectedNode.node.title || t("summary.none")}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG.description)}</div>
+                  <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption leading-relaxed text-ink-tertiary">
+                    {selectedNode.node.description || t("summary.none")}
+                  </div>
+                </div>
+                <div className="divide-y divide-divider">
+                  <InspectorRow label={t(FIELD_MSG.type)}>
+                    {t(`nodeType.${normalizeNodeType(selectedNode.node.node_type)}` as MessageKey)}
+                  </InspectorRow>
+                  <InspectorRow label={t(FIELD_MSG.color)}>
+                    {selectedNode.node.color ? (
+                      <span
+                        className="inline-block h-5 w-5 rounded-[5px] border align-middle"
+                        style={{
+                          backgroundColor: `color-mix(in srgb, ${selectedNode.node.color} 18%, white)`,
+                          borderColor: selectedNode.node.color,
+                        }}
+                      />
+                    ) : (
+                      <span className="text-ink-tertiary">{t("summary.none")}</span>
+                    )}
+                  </InspectorRow>
+                  {(["assignee", "department", "system", "duration"] as const).map((key) => {
+                    const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
+                    const current = selectedNode.node[key] || "";
+                    return (
+                      <InspectorRow key={key} label={t(FIELD_MSG[key])}>
+                        {change ? (
+                          <>
+                            <span className="text-ink-muted line-through">
+                              {change.before || t("summary.none")}
+                            </span>
+                            <span className="mx-1 text-ink-tertiary">→</span>
+                            <span className="font-semibold text-changed">
+                              {change.after || t("summary.none")}
+                            </span>
+                          </>
+                        ) : (
+                          <span className={current ? "text-ink-secondary" : "text-ink-tertiary"}>
+                            {current || t("summary.none")}
+                          </span>
+                        )}
+                      </InspectorRow>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );
