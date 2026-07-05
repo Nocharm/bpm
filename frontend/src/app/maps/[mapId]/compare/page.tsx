@@ -6,7 +6,10 @@
 import {
   Background,
   BackgroundVariant,
+  BaseEdge,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   getNodesBounds,
   getViewportForBounds,
   MarkerType,
@@ -55,6 +58,18 @@ import {
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
+// passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 아래로 우회하는 아크(red 점선). C2b.
+// 삭제된 직접 연결이 새 경로(A→X→B) 위/아래로 겹치지 않게, source→target을 아래로 부풀린 베지어로.
+function RemovedArcEdge({ sourceX, sourceY, targetX, targetY, markerEnd, style }: EdgeProps) {
+  const dip = Math.max(sourceY, targetY) + 56;
+  const c1 = sourceX + (targetX - sourceX) * 0.28;
+  const c2 = targetX - (targetX - sourceX) * 0.28;
+  const path = `M${sourceX},${sourceY} C${c1},${dip} ${c2},${dip} ${targetX},${targetY}`;
+  return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
+}
+
+const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge };
+
 const FIELD_MSG: Record<ChangedField, MessageKey> = {
   title: "field.title",
   description: "field.description",
@@ -102,21 +117,32 @@ function buildAppNodes(
   }));
 }
 
-function buildAppEdges(merged: MergedEdge[]): Edge[] {
-  return merged.map((e) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    label: e.label || undefined,
-    type: "smoothstep" as const,
-    markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
-    style:
+function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
+  return merged.map((e) => {
+    // 양끝이 모두 유지 노드인 removed 엣지 = 삽입 등으로 끊긴 직접 연결 → 우회 아크로 렌더.
+    const passthrough =
+      e.status === "removed" && keptKeys.has(e.source) && keptKeys.has(e.target);
+    const markerColor =
       e.status === "added"
-        ? { stroke: "var(--color-added)", strokeWidth: 2 }
+        ? "var(--color-added)"
         : e.status === "removed"
-          ? { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" }
-          : undefined,
-  }));
+          ? "var(--color-removed)"
+          : "var(--color-border-strong)";
+    return {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      label: e.label || undefined,
+      type: passthrough ? "removedArc" : "smoothstep",
+      markerEnd: { type: MarkerType.ArrowClosed, color: markerColor },
+      style:
+        e.status === "added"
+          ? { stroke: "var(--color-added)", strokeWidth: 2 }
+          : e.status === "removed"
+            ? { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" }
+            : undefined,
+    };
+  });
 }
 
 // 버전 상태 → 색점(pill 좌측) — version-status.ts 계열 토큰 재사용, 무채 기본.
@@ -257,6 +283,12 @@ function ComparePane({
     [baseGraph, targetGraph],
   );
 
+  // 유지(non-removed) 노드 계보키 — passthrough-removed 엣지(양끝 유지) 판정용.
+  const keptKeys = useMemo(
+    () => new Set(merged.nodes.filter((n) => n.status !== "removed").map((n) => n.id)),
+    [merged],
+  );
+
   const noteOf = useCallback(
     (m: MergedNode): string | undefined => {
       if (m.status === "changed") {
@@ -286,8 +318,12 @@ function ComparePane({
 
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
   const positioned = useMemo(
-    () => layoutWithDagre(buildAppNodes(merged.nodes, noteOf, fieldsOf), buildAppEdges(merged.edges)),
-    [merged, noteOf, fieldsOf],
+    () =>
+      layoutWithDagre(
+        buildAppNodes(merged.nodes, noteOf, fieldsOf),
+        buildAppEdges(merged.edges, keptKeys),
+      ),
+    [merged, noteOf, fieldsOf, keptKeys],
   );
 
   // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)
@@ -299,12 +335,12 @@ function ComparePane({
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
     () =>
-      buildAppEdges(merged.edges).map((edge) =>
+      buildAppEdges(merged.edges, keptKeys).map((edge) =>
         focusId === edge.id
           ? { ...edge, selected: true, style: { ...(edge.style ?? {}), strokeWidth: 3 } }
           : edge,
       ),
-    [merged, focusId],
+    [merged, focusId, keptKeys],
   );
 
   const titleByKey = useMemo(
@@ -484,6 +520,7 @@ function ComparePane({
             nodes={laidNodes}
             edges={appEdges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable={false}

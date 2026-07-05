@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — C2b: diff 엣지 + passthrough-removed 우회 라우팅
+- **`compare/page.tsx`** — 커스텀 엣지 `RemovedArcEdge`(BaseEdge 베지어, `Math.max(sy,ty)+56`로 아래 dip) + `edgeTypes` 등록. `buildAppEdges(merged, keptKeys)`: **양끝이 모두 유지 노드인 removed 엣지 = passthrough** → `type:"removedArc"`(삽입 노드 회피 아크), 그 외는 smoothstep. 마커 색을 **상태별**(added green/removed red/기타 gray)로. `keptKeys`(non-removed 계보키) useMemo, positioned/appEdges 배선.
+- 검증: lint 0 · build/TS OK. 라이브(map 11 73→74) — 실제 passthrough 엣지 `새 단계 (5) → Order Fulfillment`가 빨간 점선 아크로 New step (6) 아래 우회 확인. 삭제 노드로 가는 엣지는 smoothstep 유지(회귀 없음).
+- 발견(시드): map 3·11 Release 스냅샷들은 분기가 아니라 독립 시드라 계보 0 → 전부 add/remove(정상). 실제 앱은 새 버전 생성 시 분기(clone_graph→source_node_id 전파)라 계보 이어짐(map 11 73→74가 증거). 코드/저장 버그 아님.
+
 ## 2026-07-05 — C2a: diff 노드 스타일 + before→after 필 (merge-diff 확장)
 - **`merge-diff.ts`** — `FieldChange{field,before,after}` + `MergedNode.fieldChanges` 추가(`diffFieldChanges`가 base/target 값 담음). `changedFields`는 파생 유지(기존 소비처 호환). 단위테스트 추가(6 pass).
 - **`process-node.tsx`** — 비교 diff 렌더 교체: 링 → **diff색 테두리(삭제 점선)+연한 틴트 fill**(노드 자기색 대신)+**상태 뱃지(opacity .7, 상단; 마름모는 상단중앙)**. 변경 노드에 **before→after 필**(`DiffFieldPills`: label(amber)·before(muted)·→·after(bold), 노드 아래 절대배치, **최대 3 + "+N more"**, 값 truncate). `diffStatus`는 compare 전용이라 에디터 무영향.

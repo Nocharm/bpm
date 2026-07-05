@@ -38,7 +38,7 @@
 | C1a | 셸 헤더 | (완료·머지) 뒤로가기·타이틀·**BASE/TARGET pill(상태 색점)**·swap·Export(PNG)·Apply To-Be·범례 캔버스 이전·`min-h-0` 높이수정 | lint/build✅ | ✅ | ✅ | main `f257047` |
 | C1b | 셸 오버레이 | (완료·머지) 좌상 카운트 필·좌하 범례 폴리시·우하 `ZoomBar`(useStore zoom%) | lint/build✅ | ✅ | ✅ | main `d1f95f9` |
 | C2a | diff 노드 | 노드 상태별 스타일 — 추가 green 실선·삭제 red **점선**·변경 amber, 상단 **상태 뱃지(.7)**+diff색 틴트 fill(자기색 대신), 변경 노드 **before→after 필**(None·최대 3+"+N more"·값 truncate). `merge-diff.ts`에 `FieldChange{field,before,after}` 실음(+단위테스트), `NodeData.diffFields`·`ProcessNode`(DiffBadge/DiffFieldPills)·compare `fieldsOf`. **+ `layoutWithDagre nodesep` 72→120**(필이 아래 노드 침범 방지, compare 전용). | lint/build✅·27test✅ | 라이브(map11 73→74: 추가/삭제/변경 각 확인)✅ | ✅ | (this) |
-| C2b | diff 엣지 | 추가 green·삭제 red 점선 + **passthrough-removed 우회 라우팅**(양끝 유지 판정→아래 아크, 삽입 노드 회피). 커스텀 엣지 렌더 필요(React Flow 기본 smoothstep 대체 가능성). | — | — | ⏳ | — |
+| C2b | diff 엣지 | 추가 green·삭제 red 점선 + **상태별 화살표 색** + **passthrough-removed 우회 라우팅** — 양끝이 모두 유지 노드인 removed 엣지는 커스텀 `RemovedArcEdge`(BaseEdge 베지어, 아래로 dip)로 삽입 노드 회피. 삭제 노드로 가는 엣지는 기존 smoothstep. `keptKeys`(non-removed 계보키)로 판정, `edgeTypes` 등록. | lint/build✅ | 라이브(map11 73→74: 새 단계(5)→Order Fulfillment 실제 passthrough 아크 확인)✅ | ✅ | (this) |
 | C3 | 변경 패널 | 패널 **좌측 이동** + 필터칩(전체/추가/삭제/변경)·아이콘 항목·before→after 필·**클릭 포커스**. 3단 레이아웃 정착(order/CSS). | — | — | ⏳ | — |
 | C4 | 속성 인스펙터 | **우측 노드 속성(읽기전용) 신규** — 선택 노드 속성 카드(Title/Desc/Type/Color/BPM), 변경 필드 diff, `View only` 배지. | — | — | ⏳ | — |
 
