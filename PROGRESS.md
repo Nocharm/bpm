@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S4e: 공지 카드 작성자 이름 필 + 1초 호버 유저 카드
+- 공지 카드 좌하단 작성자를 login_id→**이름 필**로 노출(`getDirectory()`로 해석, 미해석 시 login_id 폴백).
+- 공용 `components/user-hover-card.tsx` — 앵커 1초 이상 호버 시 유저 정보 팝오버(portal+fixed). 맵 상세 '허용 인원' 확장 카드 디자인 미러: 아바타+이름 · 아이디/직급(accent)/부서 레벨(리프→루트) 필.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 작성자 "Junho Kim" 필 + 1초 호버 카드(admin.kim·Manager·부서 3레벨) 확인.
+
 ## 2026-07-05 — S7: 인박스 승인 대기 탭 — 통합 승인 큐(백엔드 집계 + 프론트 승인/반려)
 - 백엔드 `GET /api/inbox/approvals`(`routers/inbox.py`) — 세 출처 집계: 버전 게시 승인(MapApprover·pending·미승인), 점유권 이전 요청(점유자/오너/sysadmin), 권한·가시성 승인요청(맵 승인자/sysadmin). kind로 구분, act는 기존 엔드포인트 재사용. `InboxApprovalOut` 스키마 + main.py 등록 + `tests/test_inbox.py`(4건).
 - 프론트: api `listInboxApprovals`+타입. 인박스 승인 탭 = 대기 큐(카드: 유형 필·제목·맵·요청자·시간) + 상세(승인/반려·맵 열기, 버전 승인은 반려 사유 필수). 승인/반려는 kind별 approveVersion/rejectVersion/decideCheckoutRequest/decideApprovalRequest 호출 후 재조회. 탭 배지=대기 건수. 승인 탭에선 검색·필터 숨김.

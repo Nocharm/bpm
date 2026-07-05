@@ -6,7 +6,13 @@
 import { Circle, CircleAlert, List } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
+import {
+  getDirectory,
+  listNotices,
+  type DirectoryUser,
+  type NoticeImportance,
+  type NoticeItem,
+} from "@/lib/api";
 import { formatKst, formatKstShort } from "@/lib/datetime";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
@@ -18,6 +24,7 @@ import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filt
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { UserHoverCard } from "@/components/user-hover-card";
 
 type Filter = "all" | NoticeImportance;
 
@@ -53,6 +60,7 @@ export default function NoticesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [dirUsers, setDirUsers] = useState<Map<string, DirectoryUser>>(new Map());
   const [nowMs] = useState(() => Date.now());
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
@@ -63,6 +71,10 @@ export default function NoticesPage() {
       if (!alive) return;
       setNotices(data);
       setReadIds(getReadNoticeIds());
+    });
+    // 작성자 login_id → 이름/조직 해석 (디렉터리)
+    getDirectory().then((dir) => {
+      if (alive) setDirUsers(new Map(dir.users.map((u) => [u.id, u])));
     });
     return () => {
       alive = false;
@@ -149,9 +161,13 @@ export default function NoticesPage() {
                     <span className="truncate text-fine text-ink-tertiary">
                       {bodyPreview(n.body_md)}
                     </span>
-                    {/* 작성자(좌) · 시간 필(우) */}
+                    {/* 작성자 이름 필(좌, 1초 호버 시 유저 카드) · 시간 필(우) */}
                     <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
-                      <span className="truncate">{n.created_by}</span>
+                      <UserHoverCard user={dirUsers.get(n.created_by)} loginId={n.created_by}>
+                        <span className="truncate rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                          {dirUsers.get(n.created_by)?.name ?? n.created_by}
+                        </span>
+                      </UserHoverCard>
                       <span className="flex shrink-0 items-center gap-1">
                         <TimePills iso={n.starts_at} nowMs={nowMs} />
                       </span>
