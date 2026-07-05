@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 신규 화면 4종 설계·트래커 (피드백·공지·매뉴얼·인박스 + 공유 셸)
+- 워크트리 `feat+new-pages`에서 신규 화면 4종 착수. 설계 `docs/superpowers/specs/2026-07-05-new-screens-design.md`, 검토 트래커 `SCREEN-NEW-PAGES.md`(S1~S10 vertical slice).
+- 결정: 대시보드=진입 스텁만 / 공지 읽음=클라 localStorage 캐시(테이블 없음) / 매뉴얼=DB 저장+프론트 편집(manual.md fallback) / 피드백=관리자 상태변경 포함 / 작성·관리 권한=sysadmin.
+
 ## 2026-07-05 — Task 1: recent-maps 캐시 헬퍼 (순수 로직+localStorage 래퍼)
 - home: recent-maps localStorage 캐시 헬퍼(mergeRecentEntry/partitionByRecency) 추가 — 최근 열람 12개 최신순 클라이언트 캐시.
 
