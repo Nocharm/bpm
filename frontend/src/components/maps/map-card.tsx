@@ -128,11 +128,11 @@ export function MapCard({
       onMouseEnter={onCardEnter}
       onMouseLeave={closeModal}
     >
-      {/* 최근 접속 배지 — 플로팅(상단 경계선 안쪽·좌측 근접, 축소). 밴드·검색 pinned에만 전달됨 */}
+      {/* 최근 접속 배지 — 플로팅 텍스트(배경 없음, 상단·좌측 근접, 타이틀과 비겹침). 밴드·검색 pinned에만 전달됨 */}
       {recentOpenedAt !== undefined && (
         <div
           data-id="map-card-recent-badge"
-          className="absolute left-2 top-1 z-10 inline-flex items-center gap-0.5 rounded-sm border border-hairline bg-accent-tint px-1 py-0.5 text-[11px] leading-none text-accent shadow-sm"
+          className="absolute left-1 top-0 z-10 inline-flex items-center gap-0.5 text-[11px] leading-none text-accent"
         >
           <Clock size={11} strokeWidth={1.5} />
           {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
