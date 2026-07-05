@@ -342,16 +342,35 @@ function ComparePane({
 
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
   const positioned = useMemo(() => {
-    // passthrough(양끝 유지 노드의 삭제 직접연결)는 배치에 spurious 랭크 제약을 줘 노드를 왜곡 배치시킨다
-    // (예: 우회당한 중간 노드가 위/아래로 밀림). 렌더는 하되 dagre 입력에선 제외 — 삭제 노드로 가는
-    // 엣지는 그 노드 위치 산정에 필요하므로 유지.
-    const layoutEdges = merged.edges.filter(
-      (e) => !(e.status === "removed" && keptKeys.has(e.source) && keptKeys.has(e.target)),
-    );
-    return layoutWithDagre(
-      buildAppNodes(merged.nodes, noteOf, fieldsOf),
+    // 배치는 To-Be(target) 흐름만으로 — 삭제 엣지를 전부 제외해 유지 백본이 깔끔한 직선이 되게 한다.
+    // (삭제 엣지를 넣으면 삭제 노드가 본류 라인 위에 끼어 직접 엣지를 막고 노드를 위/아래로 왜곡시킴.)
+    const layoutEdges = merged.edges.filter((edge) => edge.status !== "removed");
+    const laid = layoutWithDagre(
+      buildAppNodes(
+        merged.nodes.filter((node) => node.status !== "removed"),
+        noteOf,
+        fieldsOf,
+      ),
       buildAppEdges(layoutEdges, keptKeys),
     );
+    // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치 아래로 곁가지 배치 — 본류 라인을 비운다.
+    const posByKey = new Map(laid.map((node) => [node.id, node.position]));
+    const removed = buildAppNodes(
+      merged.nodes.filter((node) => node.status === "removed"),
+      noteOf,
+      fieldsOf,
+    ).map((node) => {
+      const neighbors = merged.edges
+        .filter((edge) => edge.status === "removed" && (edge.source === node.id || edge.target === node.id))
+        .map((edge) => (edge.source === node.id ? edge.target : edge.source))
+        .map((key) => posByKey.get(key))
+        .filter((pos): pos is { x: number; y: number } => !!pos);
+      if (neighbors.length === 0) return node;
+      const ax = neighbors.reduce((sum, pos) => sum + pos.x, 0) / neighbors.length;
+      const ay = neighbors.reduce((sum, pos) => sum + pos.y, 0) / neighbors.length;
+      return { ...node, position: { x: ax, y: ay + 150 } };
+    });
+    return [...laid, ...removed];
   }, [merged, noteOf, fieldsOf, keptKeys]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
