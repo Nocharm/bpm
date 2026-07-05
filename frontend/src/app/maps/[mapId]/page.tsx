@@ -1039,17 +1039,32 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 미지정/해제 링크맵 — 경고 뱃지 + 잠금(권한 무관). refs 미수신(undefined) 동안은 미판정 유지 (spec 2026-07-06).
       const ref = node.data.linkedMapId != null ? subprocessRefs.get(node.data.linkedMapId) : undefined;
       const undesignated = ref != null && !ref.designated;
+      // 지정 어트리뷰트 라이브 주입 — 지정된 링크맵만. 노드에 저장하지 않고 렌더 시 파생.
+      const spAttrs = ref?.designated
+        ? {
+            spDepartment: ref.department,
+            spAssignee: ref.assignee,
+            spSystem: ref.system,
+            spDuration: ref.duration,
+          }
+        : { spDepartment: null, spAssignee: null, spSystem: null, spDuration: null };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, undesignated, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, undesignated, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, ...spAttrs, updateAvailable } };
       }
       return {
         ...node,
-        data: { ...node.data, subEnds: deriveSubEnds(resolved), undesignated, updateAvailable },
+        data: {
+          ...node.data,
+          subEnds: deriveSubEnds(resolved),
+          undesignated,
+          ...spAttrs,
+          updateAvailable,
+        },
       };
     },
     [resolvedCache, libByMap, lockedKeys, subprocessRefs],
@@ -4349,6 +4364,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     () => nodes.find((node) => node.id === selectedId) ?? null,
     [nodes, selectedId],
   );
+  // 선택된 subprocess의 지정 정보 — 인스펙터 읽기전용 카드 소스(라이브 참조, nodes state엔 sp* 미주입)
+  const selectedSpRef =
+    selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
+      ? subprocessRefs.get(selectedNode.data.linkedMapId)
+      : undefined;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -7129,6 +7149,32 @@ function MapEditor({ mapId }: { mapId: number }) {
                               }`}
                             />
                           </button>
+                        </div>
+                      )}
+                      {/* subprocess — 지정 어트리뷰트(라이브 참조, 읽기전용). 수정은 링크 대상 맵 설정의 지정 모달에서만 */}
+                      {selectedNode.data.nodeType === "subprocess" && selectedSpRef?.designated && (
+                        <div data-id="inspector-subprocess-attrs" className="rounded-md border border-hairline p-3">
+                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                          {([
+                            ["department", "field.department"],
+                            ["assignee", "field.assignee"],
+                            ["system", "field.system"],
+                            ["duration", "field.duration"],
+                          ] as const).map(([key, labelKey]) => (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                            >
+                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                              <span
+                                className="min-w-0 truncate text-right text-caption text-ink"
+                                title={selectedSpRef[key] || undefined}
+                              >
+                                {selectedSpRef[key] || "—"}
+                              </span>
+                            </div>
+                          ))}
+                          <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         </div>
                       )}
                       {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}

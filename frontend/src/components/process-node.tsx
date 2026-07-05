@@ -54,21 +54,31 @@ const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
-// start/end/subprocess는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음
+// start/end는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음.
+// subprocess는 노드 자체 필드 대신 지정 어트리뷰트(sp*, 라이브 참조)를 표시 (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { t } = useI18n();
   const { displayFields } = useNodeActions();
+  const isSubprocess = data.nodeType === "subprocess";
+  const spValues: Record<Exclude<NodeDisplayField, "nodeType">, string | null | undefined> = {
+    assignee: data.spAssignee,
+    department: data.spDepartment,
+    system: data.spSystem,
+    duration: data.spDuration,
+  };
   return (
     <>
       {displayFields.map((field) => {
-        // nodeType 외의 BPM 속성 필드는 process·decision만 표시
-        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType)) {
+        // nodeType 외의 BPM 속성 필드는 process·decision(+지정 subprocess)만 표시
+        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType) && !isSubprocess) {
           return null;
         }
         const value =
           field === "nodeType"
             ? t(NODE_TYPE_LABEL_KEY[data.nodeType])
-            : data[field];
+            : isSubprocess
+              ? spValues[field]
+              : data[field];
         if (!value) {
           return null;
         }
@@ -418,6 +428,8 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
           <div className="font-medium text-ink">
             <NodeTitle id={id} label={data.label} />
           </div>
+          {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
+          <NodeFields data={data} />
           {data.updateAvailable && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
