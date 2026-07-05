@@ -12,6 +12,7 @@ import { Check, ChevronDown, Plus } from "lucide-react";
 
 import { Highlight } from "@/components/highlight";
 import { filterByQuery, type MatchRange } from "@/lib/search";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 export interface SelectOption {
   value: string;
@@ -56,7 +57,9 @@ export function SearchSelect({
         ...(option.keywords ? [{ field: "keywords", text: option.keywords }] : []),
       ])
     : options.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
-  const navCount = 1 + hits.length;
+  // 25개씩 증분 렌더 — 담당자 옵션이 수천 명(공개 맵 eligible)일 때 전량 DOM 렌더 부하 방지.
+  const { visible: shown, hasMore, sentinelRef } = useInfiniteSlice(hits, query);
+  const navCount = 1 + shown.length;
   const current = options.find((option) => option.value === value);
   const display = current ? current.label : value || emptyLabel;
 
@@ -74,7 +77,7 @@ export function SearchSelect({
     if (index <= 0) {
       onChange("");
     } else {
-      onChange(hits[index - 1].item.value);
+      onChange(shown[index - 1].item.value);
     }
     setOpen(false);
   };
@@ -123,7 +126,7 @@ export function SearchSelect({
         {hits.length === 0 ? (
           <p className="px-3 py-1 text-fine text-ink-tertiary">…</p>
         ) : (
-          hits.map(({ item, matches }, idx) => {
+          shown.map(({ item, matches }, idx) => {
             const labelRanges = matches.find((m) => m.field === "label")?.ranges ?? [];
             return (
               <button
@@ -146,6 +149,7 @@ export function SearchSelect({
             );
           })
         )}
+        {hasMore && <div ref={sentinelRef} className="h-px shrink-0" />}
       </div>
     </>
   );

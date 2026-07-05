@@ -9,6 +9,7 @@ import { Building2, Search, User, Users } from "lucide-react";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import type { Department, PrincipalType, User as MockUser, UserGroup } from "@/lib/mock/permissions";
 
 export interface PrincipalOption {
@@ -91,8 +92,10 @@ export function PrincipalPicker({
           : [{ field: "name", text: o.displayName }],
       )
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
-  // 검색 중엔 상위 8개, 빈 입력(포커스)이면 선택 가능한 전체를 노출(스크롤) / all options when empty.
-  const visible = query.trim() ? hits.slice(0, 8) : hits;
+  // 검색 중엔 상위 8개. 빈 입력(포커스)은 전체 대상이되 25개씩 증분 렌더 —
+  // 디렉터리 ~5000명을 한 번에 DOM으로 그리면 수 초 걸리는 부하 방지.
+  const matched = query.trim() ? hits.slice(0, 8) : hits;
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(matched, query);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     // Esc — 검색어 비우고 포커스 해제(blur) → 펼쳐진 목록 닫힘 (항목 유무와 무관)
@@ -184,6 +187,7 @@ export function PrincipalPicker({
               </button>
             );
           })}
+          {hasMore && <div ref={sentinelRef} className="h-px shrink-0" />}
           {hits.length === 0 && (
             <span className="px-3 py-2 text-caption text-ink-tertiary">—</span>
           )}

@@ -9,6 +9,7 @@ import { ArrowLeftRight } from "lucide-react";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { useI18n } from "@/lib/i18n";
 import { type DirectoryUser } from "@/lib/api";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 interface TransferCheckoutDialogProps {
   open: boolean;
@@ -30,8 +31,6 @@ export function TransferCheckoutDialog({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
 
-  if (!open) return null;
-
   const q = query.toLowerCase().trim();
   const filtered = q
     ? editors.filter(
@@ -40,6 +39,10 @@ export function TransferCheckoutDialog({
           e.id.toLowerCase().includes(q),
       )
     : editors;
+  // 25개씩 증분 렌더 — 편집자 수가 많아도 목록 DOM 부하 없음(훅이라 early return보다 앞).
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
+
+  if (!open) return null;
 
   return createPortal(
     <ModalBackdrop
@@ -76,7 +79,7 @@ export function TransferCheckoutDialog({
                 {filtered.length === 0 ? (
                   <p className="px-3 py-2 text-caption text-ink-tertiary">{t("approval.transferNoResults")}</p>
                 ) : (
-                  filtered.map((editor) => (
+                  visible.map((editor) => (
                     <button
                       key={editor.id}
                       type="button"
@@ -95,6 +98,7 @@ export function TransferCheckoutDialog({
                     </button>
                   ))
                 )}
+                {hasMore && <div ref={sentinelRef} className="h-px" />}
               </div>
             </>
           )}
