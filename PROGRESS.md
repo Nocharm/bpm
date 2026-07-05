@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S4d: 공지 선택 카드 좌측 테두리 강조
+- 선택 카드에 2px accent 좌측 테두리(border-l-2 border-l-accent) + accent-tint, 나머지 변은 hairline.
+- 확인: 공지 상세 본문은 채팅봇용 공용 렌더러 markdown-view.tsx를 그대로 재사용(볼드·리스트 렌더).
+- 검증: lint 0 · build 성공. 브라우저 확인.
+
 ## 2026-07-05 — S4c: 공지 목록 카드화 (사용자 요청)
 - 목록 각 항목을 카드로(border-hairline·bg-surface·rounded-xs·gap-2 간격). 선택=border-accent·accent-tint.
 - 상단 행: 유형 필(좌)·읽음표시(우) justify-between. 메타 행: 작성자(좌)·시간(우) justify-between → 읽음표시·시간 우측정렬.

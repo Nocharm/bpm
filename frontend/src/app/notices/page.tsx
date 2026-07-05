@@ -119,10 +119,10 @@ export default function NoticesPage() {
                     type="button"
                     onClick={() => openNotice(n.id)}
                     className={
-                      "flex w-full flex-col gap-1.5 rounded-xs border px-3 py-2.5 text-left " +
+                      "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
                       (n.id === selectedId
-                        ? "border-accent bg-accent-tint"
-                        : "border-hairline bg-surface hover:bg-surface-alt")
+                        ? "border-l-2 border-l-accent bg-accent-tint"
+                        : "bg-surface hover:bg-surface-alt")
                     }
                   >
                     {/* 유형 필(좌) · 읽음 표시(우) */}
