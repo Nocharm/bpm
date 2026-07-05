@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교: 클릭+Tab 후 파란 포커스 박스 잔상 제거
+- 증상: 노드 클릭 후 Tab하면 클릭했던 노드(예 승인필요?)에 파란 박스 잔상. 원인: RF 노드가 `tabindex=0`(focusable)이라 클릭 시 DOM 포커스→Tab(키보드) 시 `:focus-visible` 파란 아웃라인.
+- 수정(`compare/page.tsx`): **`nodesFocusable={false}`·`edgesFocusable={false}`**(노드/엣지 DOM 포커스 제거) + Tab 핸들러에서 **`activeElement.blur()`**(클릭했던 패널 버튼의 focus-visible 아웃라인도 제거). 클릭·hover·선택 링(NodeSelectionRing)·Tab 내비는 그대로.
+- 검증: build OK. 라이브(map 13) 클릭+Tab 후 파란 박스 없음, 선택 링만 이동 확인.
+
 ## 2026-07-05 — 비교 휠/키 맵핑 에디터화(팬·줌·Space그랩·Tab 노드 이동)
 - 브랜치 `feat/compare-interactions`(main 분기, 리디자인 머지 후속 폴리시).
 - **휠 맵핑을 에디터와 동일하게**(`compare/page.tsx` ReactFlow) — `panOnScroll`+`PanOnScrollMode.Free`(휠 상하·좌우 팬), `zoomOnScroll={false}`, `zoomActivationKeyCode=["Control","Meta"]`(Ctrl/⌘+휠 줌), `panOnDrag`(좌클릭 드래그 그랩)+`panActivationKeyCode="Space"`(Space 드래그 그랩). 기존 휠=줌 → 팬으로 전환.

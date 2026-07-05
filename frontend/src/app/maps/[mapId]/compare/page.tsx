@@ -892,6 +892,8 @@ function ComparePane({
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       // Tab은 캔버스 내비로 가로챈다 — 브라우저 기본 포커스 이동(패널 버튼 순회) 방지.
       e.preventDefault();
+      // 클릭했던 패널 버튼이 포커스를 쥔 채 Tab→focus-visible 파란 아웃라인이 남는 것 제거.
+      (document.activeElement as HTMLElement | null)?.blur?.();
       const current = focusId && positioned.some((n) => n.id === focusId) ? focusId : null;
       let target: string | null;
       if (!current) {
@@ -1174,6 +1176,8 @@ function ComparePane({
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable={false}
+            nodesFocusable={false}
+            edgesFocusable={false}
             fitView
             minZoom={0.2}
             onNodeClick={(_, node) => setFocusId(node.id)}
