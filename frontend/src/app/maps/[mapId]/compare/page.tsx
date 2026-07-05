@@ -167,20 +167,55 @@ function preferredSides(dx: number, dy: number): HandleSide[] {
     .map((s) => s.side);
 }
 
-const CROSS_OFFLINE = 40; // cross축 오프셋이 이보다 크면 "다른 라인" → cross측 변으로 진입/진출.
-
-// 방향 인식 변 선호 — 상대 노드가 흐름 수직축(cross)으로 확실히 벗어나 있으면(다른 라인: 위/아래 곁가지,
-// 삭제 노드 등) 그 cross측 변을 우선(위→top·아래→bottom / 좌→left·우→right), 아니면 흐름축 측 우선.
-// 예: 위쪽 곁가지(재고예약)→다음 노드는 top으로, 아래 삭제 노드(재고부족알림)→다음 노드는 bottom으로 진입.
-// 나머지 변은 내적순 fallback(그리디 분산). 가로(LR)·세로(TB) 모두 적용.
-function orientedSides(dx: number, dy: number, dir: "LR" | "TB"): HandleSide[] {
-  const crossOffset = dir === "LR" ? dy : dx;
-  let primary: HandleSide;
-  if (Math.abs(crossOffset) > CROSS_OFFLINE) {
-    primary = dir === "LR" ? (dy < 0 ? "top" : "bottom") : dx < 0 ? "left" : "right";
-  } else {
-    primary = dir === "LR" ? (dx >= 0 ? "right" : "left") : dy >= 0 ? "bottom" : "top";
+// spine(척추) 판정 — 유지 노드에서 시작해 "분기 없는 단일 연속" 링크로 이어지는 추가 노드(인라인 삽입)까지
+// 확장. 선행 outDeg==1 → 후행도 spine, 후행 inDeg==1 → 선행도 spine. 분기/합류의 곁가지·삭제 노드는 제외.
+// alignBackbone(직선화)·handleSides(진입 변)가 공유. removed 노드는 present에 없어 항상 off-spine.
+function computeSpine(
+  presentIds: Set<string>,
+  keptIds: Set<string>,
+  edges: { source: string; target: string }[],
+): Set<string> {
+  const outDeg = new Map<string, number>();
+  const inDeg = new Map<string, number>();
+  for (const edge of edges) {
+    if (!presentIds.has(edge.source) || !presentIds.has(edge.target)) continue;
+    outDeg.set(edge.source, (outDeg.get(edge.source) ?? 0) + 1);
+    inDeg.set(edge.target, (inDeg.get(edge.target) ?? 0) + 1);
   }
+  const spine = new Set<string>();
+  for (const id of presentIds) if (keptIds.has(id)) spine.add(id);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const edge of edges) {
+      if (!presentIds.has(edge.source) || !presentIds.has(edge.target)) continue;
+      if (spine.has(edge.source) && (outDeg.get(edge.source) ?? 0) === 1 && !spine.has(edge.target)) {
+        spine.add(edge.target);
+        grew = true;
+      }
+      if (spine.has(edge.target) && (inDeg.get(edge.target) ?? 0) === 1 && !spine.has(edge.source)) {
+        spine.add(edge.source);
+        grew = true;
+      }
+    }
+  }
+  return spine;
+}
+
+// 스파인 인식 변 선호 — 곁가지(off-spine) 노드 자신은 흐름축 변으로 붙고(이전 노드=뒤쪽 변·다음 노드=앞쪽 변),
+// 스파인 노드가 곁가지와 연결될 때만 cross측 변(위/아래·좌/우)으로 붙는다. 둘 다 스파인이면 흐름축(본류 직선).
+// 예(LR): 위쪽 곁가지 재고예약은 [L 진입·R 진출], 이웃 본류(재고확인?·결제처리)는 위(top)로 연결 → [U-L],[R-U].
+// TB에선 흐름축=세로(U/D)·cross=가로(L/R)로 자동 회전. 나머지 변은 내적순 fallback(그리디 분산).
+function spineAwareSides(
+  dx: number,
+  dy: number,
+  dir: "LR" | "TB",
+  thisOnSpine: boolean,
+  otherOnSpine: boolean,
+): HandleSide[] {
+  const flowSide: HandleSide = dir === "LR" ? (dx >= 0 ? "right" : "left") : dy >= 0 ? "bottom" : "top";
+  const crossSide: HandleSide = dir === "LR" ? (dy < 0 ? "top" : "bottom") : dx < 0 ? "left" : "right";
+  const primary = thisOnSpine && !otherOnSpine ? crossSide : flowSide;
   return [primary, ...preferredSides(dx, dy).filter((side) => side !== primary)];
 }
 
@@ -205,7 +240,7 @@ function alignBackbone(
   nodes: AppNode[],
   keptIds: Set<string>,
   dir: "LR" | "TB",
-  edges: { source: string; target: string }[],
+  spine: Set<string>,
 ): AppNode[] {
   const renderH = (node: AppNode) => COMPARE_RENDER_H[node.data.nodeType] ?? 38;
   const renderW = (node: AppNode) => nodeSizeOf(node.data.nodeType).w;
@@ -217,34 +252,6 @@ function alignBackbone(
   const kept = nodes.filter((node) => keptIds.has(node.id));
   if (kept.length === 0) return nodes;
   const backboneCross = kept.reduce((sum, node) => sum + cross(node), 0) / kept.length;
-
-  // spine 판정 — 유지 노드에서 시작해 "분기 없는 단일 연속" 링크로 이어지는 추가 노드까지 확장.
-  // (선행 outDeg==1 → 후행도 spine, 후행 inDeg==1 → 선행도 spine). 분기/합류 지점의 곁가지는 제외.
-  const present = new Set(nodes.map((node) => node.id));
-  const outDeg = new Map<string, number>();
-  const inDeg = new Map<string, number>();
-  for (const edge of edges) {
-    if (!present.has(edge.source) || !present.has(edge.target)) continue;
-    outDeg.set(edge.source, (outDeg.get(edge.source) ?? 0) + 1);
-    inDeg.set(edge.target, (inDeg.get(edge.target) ?? 0) + 1);
-  }
-  const spine = new Set<string>();
-  for (const node of nodes) if (keptIds.has(node.id)) spine.add(node.id);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const edge of edges) {
-      if (!present.has(edge.source) || !present.has(edge.target)) continue;
-      if (spine.has(edge.source) && (outDeg.get(edge.source) ?? 0) === 1 && !spine.has(edge.target)) {
-        spine.add(edge.target);
-        grew = true;
-      }
-      if (spine.has(edge.target) && (inDeg.get(edge.target) ?? 0) === 1 && !spine.has(edge.source)) {
-        spine.add(edge.source);
-        grew = true;
-      }
-    }
-  }
 
   const flowKey = (node: AppNode) => Math.round(flow(node) / 10);
   const groups = new Map<number, AppNode[]>();
@@ -460,6 +467,20 @@ function ComparePane({
     [merged],
   );
 
+  // spine(척추) — 유지 노드 + 인라인 삽입. 직선화(alignBackbone)·진입 변(handleSides) 공유. removed는 off-spine.
+  const spineIds = useMemo(() => {
+    const present = new Set(
+      merged.nodes.filter((n) => n.status !== "removed").map((n) => n.id),
+    );
+    const keptStatus = new Set(
+      merged.nodes
+        .filter((n) => n.status === "unchanged" || n.status === "changed")
+        .map((n) => n.id),
+    );
+    const edges = merged.edges.filter((e) => e.status !== "removed");
+    return computeSpine(present, keptStatus, edges);
+  }, [merged]);
+
   const noteOf = useCallback(
     (m: MergedNode): string | undefined => {
       if (m.status === "changed") {
@@ -505,13 +526,13 @@ function ComparePane({
       flowDir,
       spacing,
     );
-    // 후처리 — 백본(유지+인라인 삽입)을 공통 수직축으로 정렬(직선화 + 병렬 곁가지 라인 밖으로).
+    // 후처리 — 백본(유지+인라인 삽입=spine)을 공통 수직축으로 정렬(직선화 + 병렬 곁가지 라인 밖으로).
     const keptStatusIds = new Set(
       merged.nodes
         .filter((node) => node.status === "unchanged" || node.status === "changed")
         .map((node) => node.id),
     );
-    const aligned = alignBackbone(laid, keptStatusIds, flowDir, layoutEdges);
+    const aligned = alignBackbone(laid, keptStatusIds, flowDir, spineIds);
     // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치에서 곁가지로 밀어낸다(본류 라인 비우기).
     // LR은 아래로(+y), TB는 오른쪽으로(+x) — 흐름축과 겹치지 않는 쪽.
     const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
@@ -533,7 +554,7 @@ function ComparePane({
         : { ...node, position: { x: ax + 220, y: ay } };
     });
     return [...aligned, ...removed];
-  }, [merged, noteOf, fieldsOf, keptKeys, flowDir]);
+  }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
   const nodeCenters = useMemo(() => {
@@ -611,7 +632,10 @@ function ComparePane({
           const dx = other ? other.cx - center.cx : 1;
           const dy = other ? other.cy - center.cy : 0;
           const len = Math.hypot(dx, dy) || 1;
-          return { ep, prefs: orientedSides(dx, dy, flowDir), certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
+          const prefs = spineAwareSides(
+            dx, dy, flowDir, spineIds.has(nodeId), spineIds.has(ep.otherId),
+          );
+          return { ep, prefs, certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
         });
       normal.sort((a, b) => b.certainty - a.certainty);
       for (const { ep, prefs } of normal) {
@@ -621,7 +645,7 @@ function ComparePane({
       }
     }
     return result;
-  }, [merged, keptKeys, nodeCenters, flowDir]);
+  }, [merged, keptKeys, nodeCenters, flowDir, spineIds]);
 
   // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)
   const laidNodes = useMemo(
