@@ -6,15 +6,11 @@
 import { Circle, CircleAlert, List } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  getDirectory,
-  listNotices,
-  type DirectoryUser,
-  type NoticeImportance,
-  type NoticeItem,
-} from "@/lib/api";
-import { formatKst, formatKstShort } from "@/lib/datetime";
+import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
+import { useDirectory } from "@/lib/directory";
+import { formatKstShort } from "@/lib/datetime";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/notices-read";
@@ -24,7 +20,8 @@ import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filt
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
-import { UserHoverCard } from "@/components/user-hover-card";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { UserPill } from "@/components/user-pill";
 
 type Filter = "all" | NoticeImportance;
 
@@ -60,10 +57,15 @@ export default function NoticesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [dirUsers, setDirUsers] = useState<Map<string, DirectoryUser>>(new Map());
   const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const dir = useDirectory(); // 작성자 login_id → 이름 해석(아바타 이니셜용)
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
+
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  const notifyCopied = () =>
+    setToasts((prev) => [{ id: genId(), message: t("ai.copied") }, ...prev]);
 
   useEffect(() => {
     let alive = true;
@@ -71,10 +73,6 @@ export default function NoticesPage() {
       if (!alive) return;
       setNotices(data);
       setReadIds(getReadNoticeIds());
-    });
-    // 작성자 login_id → 이름/조직 해석 (디렉터리)
-    getDirectory().then((dir) => {
-      if (alive) setDirUsers(new Map(dir.users.map((u) => [u.id, u])));
     });
     return () => {
       alive = false;
@@ -117,7 +115,7 @@ export default function NoticesPage() {
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
         {/* 좌 목록 — 폭은 맵 목록과 동일(flex-1 : flex-[2]) */}
-        <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
+        <aside className="flex min-w-[18rem] flex-1 flex-col">
           <div className="flex flex-col gap-2 py-3 pr-3">
             <SearchBox
               value={search}
@@ -163,11 +161,7 @@ export default function NoticesPage() {
                     </span>
                     {/* 작성자 이름 필(좌, 1초 호버 시 유저 카드) · 시간 필(우) */}
                     <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
-                      <UserHoverCard user={dirUsers.get(n.created_by)} loginId={n.created_by}>
-                        <span className="truncate rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
-                          {dirUsers.get(n.created_by)?.name ?? n.created_by}
-                        </span>
-                      </UserHoverCard>
+                      <UserPill loginId={n.created_by} />
                       <span className="flex shrink-0 items-center gap-1">
                         <TimePills iso={n.starts_at} nowMs={nowMs} />
                       </span>
@@ -184,8 +178,8 @@ export default function NoticesPage() {
           </ul>
         </aside>
 
-        {/* 우 상세 */}
-        <div className="min-w-0 flex-[2] overflow-y-auto">
+        {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스 */}
+        <div className="ml-4 min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt">
           {selected ? (
             <article className="px-8 py-6">
               <div className="flex items-center gap-2">
@@ -204,10 +198,12 @@ export default function NoticesPage() {
               <div className="mt-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-caption text-ink-secondary">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
-                    {selected.created_by.charAt(0).toUpperCase()}
+                    {(dir.get(selected.created_by)?.name ?? selected.created_by).charAt(0).toUpperCase()}
                   </span>
-                  <span>{selected.created_by}</span>
-                  <span className="text-ink-tertiary">{formatKst(selected.created_at)}</span>
+                  <UserPill loginId={selected.created_by} />
+                  <span className="flex items-center gap-1">
+                    <TimePills iso={selected.created_at} nowMs={nowMs} />
+                  </span>
                 </div>
                 <span className="shrink-0 text-fine text-ink-tertiary">
                   {t("notices.period")} {dateOnly(selected.starts_at)} ~{" "}
@@ -215,7 +211,7 @@ export default function NoticesPage() {
                 </span>
               </div>
               <hr className="my-5 border-hairline" />
-              <MarkdownView source={selected.body_md} />
+              <MarkdownView source={selected.body_md} onCopy={notifyCopied} />
               <div className="mt-6 rounded-md bg-accent-tint px-4 py-3 text-caption text-ink-secondary">
                 {t("notices.contactPre")}{" "}
                 <button
@@ -235,6 +231,7 @@ export default function NoticesPage() {
           )}
         </div>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

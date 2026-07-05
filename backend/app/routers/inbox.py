@@ -60,6 +60,9 @@ async def list_inbox_approvals(
                 "created_at": ver.updated_at,
                 "version_id": ver.id,
                 "detail": None,
+                "version_label": ver.label,
+                "version_number": ver.version_number,
+                "updated_at": ver.updated_at,
             }
         )
 
@@ -97,6 +100,10 @@ async def list_inbox_approvals(
                 "created_at": req.created_at,
                 "version_id": req.version_id,
                 "detail": None,
+                "version_label": ver.label,
+                "version_number": ver.version_number,
+                "updated_at": ver.updated_at,
+                "holder": ver.checked_out_by,  # 현재 점유자(요청 승인 시 requester로 이전)
             }
         )
 
@@ -110,6 +117,17 @@ async def list_inbox_approvals(
         my_maps = select(MapApprover.map_id).where(MapApprover.user_id == user)
         ar_q = ar_q.where(ApprovalRequest.map_id.in_(my_maps))
     for req, pm in (await session.execute(ar_q)).all():
+        # 변경 전/후 값 — 가시성은 현재 맵 값, 권한 하향은 대상 MapPermission 현재 역할
+        before = after = principal = None
+        if req.kind == "visibility_change":
+            before = pm.visibility
+            after = req.payload.get("to_visibility")
+        elif req.kind == "permission_downgrade":
+            after = req.payload.get("to_role")
+            perm = await session.get(MapPermission, req.payload.get("permission_id"))
+            if perm is not None:
+                before = perm.role
+                principal = perm.principal_id
         items.append(
             {
                 "kind": "approval_request",
@@ -122,6 +140,10 @@ async def list_inbox_approvals(
                 "created_at": req.created_at,
                 "version_id": None,
                 "detail": req.payload,
+                "updated_at": pm.updated_at,
+                "before": before,
+                "after": after,
+                "principal": principal,
             }
         )
 

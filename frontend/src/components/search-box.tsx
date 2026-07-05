@@ -12,15 +12,24 @@ export function SearchBox({
   placeholder,
   inputRef,
   dataId,
+  onEnter,
+  className = "",
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   inputRef?: RefObject<HTMLInputElement | null>;
   dataId?: string;
+  onEnter?: () => void; // Enter 시 호출(예: 본문검색 매치 점프)
+  className?: string; // 루트 폭/여백 제어(예: 헤더 중앙 배치)
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2">
+    <div
+      className={
+        "flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2 " +
+        className
+      }
+    >
       <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
       <input
         ref={inputRef}
@@ -30,6 +39,9 @@ export function SearchBox({
         placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") onEnter?.();
+        }}
       />
       {value === "" ? (
         // "/" 힌트 겸 클릭 시 포커스 — 실제 버튼처럼 테두리·그림자 입체감(클릭 눌림은 전역 base)

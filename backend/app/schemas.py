@@ -228,6 +228,14 @@ class InboxApprovalOut(BaseModel):
     created_at: datetime
     version_id: int | None = None  # checkout_transfer·version_approval의 대상 버전
     detail: dict | None = None  # approval_request의 payload 등 부가 정보
+    # 상세 표시용 부가 정보
+    version_label: str | None = None
+    version_number: int | None = None
+    updated_at: datetime | None = None  # 버전/맵 최종 수정 시각
+    holder: str | None = None  # checkout_transfer 현재 점유자
+    before: str | None = None  # approval_request 변경 전 값(가시성/역할)
+    after: str | None = None  # approval_request 변경 후 값
+    principal: str | None = None  # permission_downgrade 대상 사용자
 
 
 class ManualOut(BaseModel):

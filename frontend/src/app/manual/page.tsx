@@ -1,15 +1,19 @@
 "use client";
 
-// 사용 매뉴얼 뷰어 — 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(Ctrl+K)·읽기폭·본문 한정 읽기 테마 토글.
+// 사용 매뉴얼 뷰어 — 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(/ 포커스)·읽기폭·본문 한정 읽기 테마 토글.
 // 코드블록/인라인 코드 복사는 MarkdownView 내장. 데이터는 getManual()(DB 우선·manual.md fallback). (design 2026-07-05)
 
-import { Contrast, MoveHorizontal, Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Contrast, MoveHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getManual, type ManualDoc } from "@/lib/api";
-import { formatKst } from "@/lib/datetime";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
+import { useSlashFocus } from "@/lib/use-slash-focus";
 import { MarkdownView } from "@/components/markdown-view";
+import { SearchBox } from "@/components/search-box";
+import { TimePills } from "@/components/time-pills";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { Tooltip } from "@/components/tooltip";
 
 interface TocEntry {
@@ -46,10 +50,21 @@ export default function ManualPage() {
   const [activeToc, setActiveToc] = useState(-1);
   const [readWide, setReadWide] = useState(false);
   const [readTheme, setReadTheme] = useState(false);
+  const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   // 현재 지속 강조 중인 매치 블록 — 다음 매치 이동/검색 변경 시 해제 대상
   const highlightedRef = useRef<HTMLElement | null>(null);
+  useSlashFocus(searchRef);
+
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  // useCallback으로 안정 참조 유지 — renderedBody(useMemo) 재계산을 막아 검색 강조가 유지되도록.
+  // t는 컨텍스트 값이라 ManualPage 자체 리렌더 간 불변.
+  const notifyCopied = useCallback(
+    () => setToasts((prev) => [{ id: genId(), message: t("ai.copied") }, ...prev]),
+    [t],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -61,24 +76,15 @@ export default function ManualPage() {
     };
   }, []);
 
-  // Ctrl/⌘+K → 본문검색 포커스
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   const content = doc?.content ?? "";
   // TOC는 마크다운 헤딩에서 파생 (html 게시본 렌더·목차는 S9에서 DOMPurify와 함께 도입)
   const toc = parseToc(content);
   // 본문 엘리먼트를 content 기준 메모이즈 — 검색 매치 이동 등 다른 state 변경으로 ManualPage가
   // 리렌더돼도 MarkdownView(dangerouslySetInnerHTML)가 재주입되지 않도록(=검색 강조가 유지되도록).
-  const renderedBody = useMemo(() => <MarkdownView source={content} />, [content]);
+  const renderedBody = useMemo(
+    () => <MarkdownView source={content} onCopy={notifyCopied} />,
+    [content, notifyCopied],
+  );
 
   // 목차 클릭 → 렌더된 N번째 헤딩으로 스크롤 (TOC와 동일 필터라 인덱스 일치)
   const scrollToHeading = (index: number) => {
@@ -122,13 +128,6 @@ export default function ManualPage() {
     highlightedRef.current = el;
   };
 
-  const clearSearch = () => {
-    clearHighlight();
-    setSearch("");
-    setMatchPos(-1);
-    searchRef.current?.focus();
-  };
-
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4">
@@ -136,49 +135,33 @@ export default function ManualPage() {
         <div className="flex shrink-0 items-center gap-4">
           <div className="flex items-center gap-2">
             <h1 className="text-tagline text-ink">{t("manual.title")}</h1>
-            {doc && (
-              <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
-                {doc.updated_at
-                  ? `${t("manual.updated")} ${formatKst(doc.updated_at).split(" ")[0]}`
-                  : t("manual.bundled")}
-              </span>
-            )}
+            {doc &&
+              (doc.updated_at ? (
+                <span className="flex items-center gap-1">
+                  <span className="text-fine text-ink-tertiary">{t("manual.updated")}</span>
+                  <TimePills iso={doc.updated_at} nowMs={nowMs} />
+                </span>
+              ) : (
+                <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
+                  {t("manual.bundled")}
+                </span>
+              ))}
           </div>
 
           <div className="flex flex-1 justify-center">
-            <div className="flex w-full max-w-md items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-1.5">
-              <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-              <input
-                ref={searchRef}
-                type="text"
-                data-id="manual-search"
-                className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-                placeholder={t("manual.searchPlaceholder")}
-                value={search}
-                onChange={(event) => {
-                  clearHighlight();
-                  setSearch(event.target.value);
-                  setMatchPos(-1);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") jumpToMatch();
-                }}
-              />
-              {search === "" ? (
-                <kbd className="shrink-0 rounded-xs border border-hairline bg-surface-alt px-1.5 text-fine text-ink-tertiary">
-                  Ctrl K
-                </kbd>
-              ) : (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={clearSearch}
-                  className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                >
-                  <X size={14} strokeWidth={1.5} />
-                </button>
-              )}
-            </div>
+            <SearchBox
+              className="w-full max-w-md"
+              value={search}
+              onChange={(value) => {
+                clearHighlight();
+                setSearch(value);
+                setMatchPos(-1);
+              }}
+              placeholder={t("manual.searchPlaceholder")}
+              inputRef={searchRef}
+              onEnter={jumpToMatch}
+              dataId="manual-search"
+            />
           </div>
 
           {/* 읽기 도구 — 읽기폭·본문 한정 읽기 테마 */}
@@ -262,6 +245,7 @@ export default function ManualPage() {
           </article>
         </div>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

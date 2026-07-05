@@ -6,8 +6,43 @@
 - 브랜치 `fix/minor-ui`(main 분기). 프론트 3파일.
 - **최근 열람 카드**(`map-card.tsx`): 오너·수정시각 자리에 accent-tint 필 배지 노출, 카드 호버 시 같은 박스가 배경을 잃으며(`transition-colors`) 오너·수정시각으로 제자리 크로스페이드(grid 셀 겹침 → 높이 점프·말줄임 없음).
 - **홈 헤더**(`page.tsx`): New map 왼쪽에 Manual 버튼(BookOpen, 보조 스타일, `router.push('/manual')`).
-- **매뉴얼 검색 강조 지속**(`manual/page.tsx`): Enter 점프 강조를 1200ms 플래시 → 지속(현재 매치 1개, 다음 점프·검색어 변경·해제 시에만 해제). 근본원인=`setMatchPos` 리렌더가 `MarkdownView`(`dangerouslySetInnerHTML`) 자식을 재주입해 인라인 강조가 소실 → 본문 엘리먼트 `useMemo([content])`로 안정화.
+- **매뉴얼 검색 강조 지속**(`manual/page.tsx`): Enter 점프 강조를 1200ms 플래시 → 지속(현재 매치 1개, 다음 점프·검색어 변경·해제 시에만 해제). 근본원인=`setMatchPos` 리렌더가 `MarkdownView`(`dangerouslySetInnerHTML`) 자식을 재주입해 인라인 강조가 소실 → 본문 엘리먼트 `useMemo([content])`로 안정화. (worktree 머지 후 SearchBox·복사토스트와 통합; `notifyCopied`는 `useCallback`으로 안정화해 memo 유지.)
 - 검증: lint 0. 브라우저 — 배지 모프·Manual 이동·강조 2.5s+ 유지/순환/변경해제 확인.
+
+## 2026-07-06 — 마크다운 표 헤더·코드블록 = 어두운 회색+흰 글씨 (사용자 요청)
+- `.md pre`(코드블록)·`.md th`(표 헤더) 배경 → **`ink-secondary`(#333 어두운 회색)** + 글씨 **`on-accent`(흰색)**로 통일. 인라인 코드는 문장 속이라 흰 채움+테두리 유지, 표 본문 셀 흰색.
+- 검증: build 성공. 브라우저(공지 상세) — 코드블록·표 헤더 어두운 회색+흰 글씨 확인.
+
+## 2026-07-06 — 마크다운 뷰어(.md) 대비 강화 — 회색 박스에서도 요소 구분 (사용자 요청)
+- 상세가 회색 박스(bg-surface-alt)가 되며 `surface-alt` 채움 요소들이 배경에 묻힘 → `globals.css .md` 일괄 수정(흰/회색 배경 공통 대비).
+- 코드블록·인라인 코드: 채움 `surface-alt`→**흰색** + 테두리 `hairline`→**surface-chip(진한 회색)**. 표: 셀 테두리 진하게(surface-chip)·본문 셀 흰색·**헤더 accent-tint(연보라)**. 인용: **accent-tint 배경**+좌측 액센트 바+패딩. 블록 hover는 accent 7% mix(회색 박스에서도 보이게).
+- 검증: build 성공. 브라우저(:3001 공지 상세) — 회색 박스 위 코드블록/표 헤더·테두리/인용 배경 대비 확인.
+
+## 2026-07-06 — 상세 회색 박스·복사 토스트·태그 `.`·승인 모달/승인자 현황 (사용자 요청)
+- **상세 우측 회색 바디박스**: 공지·인박스(알림/승인) 상세 pane을 맵 탭처럼 `rounded-sm border border-hairline bg-surface-alt`로. aside border-r 제거(박스+간격이 경계).
+- **마크다운 복사 토스트**: 공지·매뉴얼 `MarkdownView`에 `onCopy` → ToastStack("클립보드에 복사됨" `ai.copied`). (복사는 되는데 토스트 안 뜨던 문제.)
+- **태그 `.` 버그**: `markdown-view` 태그 정규식이 영숫자 사이 `-·.` 허용 → `#v2.4`가 "v2.4" 한 태그(문장 끝 마침표는 제외).
+- **버전 승인 승인자 현황**: 상세에 `getWorkflowState`로 승인자별 ✓승인/○대기/✗반려 목록 표시.
+- **승인/반려 = 에디터와 동일 모달**: 인라인 textarea/버튼 → 공용 `ConfirmDialog` 재사용(에디터 approve/reject 모달과 동일). 승인=확인 모달+승인자 lines, 반려=danger+사유 입력(버전은 필수, 비면 확인 비활성)+승인자 lines. act는 kind별 기존 함수 재사용.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 회색 박스·복사 토스트·v2.4 태그·승인자 현황(Junho Kim 대기)·반려 모달(사유 필수) 확인.
+
+## 2026-07-06 — 인박스 승인 카드/상세 정보 확장 (사용자 요청)
+- 카드: 유형 아이콘 **오른쪽에 제목** 배치(아이콘+제목 인라인·유형 필 우측). approval_request 제목은 내부 kind→읽기 라벨("가시성 변경"/"권한 변경").
+- 상세: **요청 내용 마크다운 요약**(MarkdownView, `값` inline code + 변경 후 값 **강조** — 가시성/권한 `before` → **`after`**) + **메타**(맵 링크·버전(label·vN)·업데이트 TimePills·요청 시각 TimePills·요청자 UserPill·점유권이전 현재점유자·권한변경 대상) + **멤버 보기**(펼침 시 `listMapPermissions`로 허용 인원 = 이름 필+역할, key로 맵 변경 시 리셋).
+- 백엔드 `InboxApprovalOut` 확장: version_label·version_number·updated_at·holder·before·after·principal. inbox.py 쿼리에서 가시성=맵 현재값, 권한하향=대상 MapPermission 현재 역할 조회.
+- 검증: ruff·pytest 4/4 · lint 0 · build 성공. 브라우저 — 가시성(private→public 강조)·점유권(현재점유자 Soyeon Park)·멤버 보기(이름 필+role) 확인.
+
+## 2026-07-06 — 확인용 더미데이터: 인박스 승인 3종 시드 스크립트
+- `backend/scripts/seed_inbox_demo.py`(멱등) — 승인 대기 종류별 데모: version_approval x2(제출자 user.lee/user.park), checkout_transfer x1(요청자 user.choi), approval_request x1(가시성 변경, user.jung) + 알림 3건. 요청자를 각기 다른 로컬 직원으로 두어 이름 필(Minjae Lee/Soyeon Park/Daehyun Choi/Hana Jung) 표시를 확인.
+- 실행: `backend/`에서 `.venv/bin/python -m scripts.seed_inbox_demo`. 브라우저(:3001, admin.kim) 승인 대기 탭에서 3종·요청자 이름 필 확인.
+
+## 2026-07-06 — 신규 화면 전반: 이름 우선 필·날짜 TimePills 재활용·매뉴얼 SearchBox·승인 검색 (사용자 요청)
+- 공용 `lib/directory.ts`(`useDirectory` 모듈 캐시) + `components/user-pill.tsx`(`UserPill` — 이름 필 + 1초 호버 유저 카드, login_id는 보조). 신규 화면 사용자 표시 단일 소스.
+- **아이디 대신 이름 필**: 인박스 승인(카드·상세 요청자), 공지(카드·상세 작성자), 피드백(표·상세 모달 작성자)를 `UserPill`로 — 이름 먼저·id는 호버 카드 보조.
+- **날짜 필 재활용(TimePills)**: 인박스 알림/승인 상세, 공지 상세, 매뉴얼 배지, 피드백 상세 모달의 평문 날짜를 전부 `TimePills`로. `feedback-detail-modal`의 `MetaRow`는 `value: ReactNode`로 열어 UserPill/TimePills 주입.
+- **매뉴얼 검색을 공용 SearchBox로**: Ctrl+K 커스텀 입력 제거 → `SearchBox`(`/` 단축키·`/` 버튼 클릭 포커스·입력 시 X 삭제) 재사용. `SearchBox`에 `onEnter`(매치 점프)·`className`(폭) prop 추가.
+- **인박스 승인 대기 탭에도 검색창**: 다른 탭과 동일 위치. 제목·맵·요청자(id+이름)로 필터. i18n `inbox.approvalsSearchPlaceholder`.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 승인 요청자 "Junho Kim" 이름 필·상대시간 필, 승인 탭 검색창, 공지 작성자 이름 필, 매뉴얼 `/` 검색·X 확인.
 
 ## 2026-07-05 — 비교: 클릭+Tab 후 파란 포커스 박스 잔상 제거
 - 증상: 노드 클릭 후 Tab하면 클릭했던 노드(예 승인필요?)에 파란 박스 잔상. 원인: RF 노드가 `tabindex=0`(focusable)이라 클릭 시 DOM 포커스→Tab(키보드) 시 `:focus-visible` 파란 아웃라인.

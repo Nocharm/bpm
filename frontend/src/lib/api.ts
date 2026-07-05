@@ -686,6 +686,14 @@ export interface InboxApproval {
   created_at: string;
   version_id: number | null;
   detail: Record<string, unknown> | null;
+  // 상세 표시용 부가 정보
+  version_label: string | null;
+  version_number: number | null;
+  updated_at: string | null; // 버전/맵 최종 수정 시각
+  holder: string | null; // checkout_transfer 현재 점유자
+  before: string | null; // approval_request 변경 전 값
+  after: string | null; // approval_request 변경 후 값
+  principal: string | null; // permission_downgrade 대상 사용자
 }
 
 // 내가 결정할 승인 대기 통합 큐 — 버전 승인·점유권 이전·권한/가시성. act는 각 출처 기존 함수 재사용.
