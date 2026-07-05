@@ -26,6 +26,8 @@ interface MapCardProps {
   nameRanges?: MatchRange[];
   // 복사 직후 강조 — 쉬머 링 + 자동 스크롤 (F12).
   highlighted?: boolean;
+  // 최근 접속 시각(epoch ms) — 있으면 accent 배지 표시(상단 밴드·검색모드 최근 매치).
+  recentOpenedAt?: number;
 }
 
 export function MapCard({
@@ -34,6 +36,7 @@ export function MapCard({
   onSelect,
   nameRanges,
   highlighted = false,
+  recentOpenedAt,
 }: MapCardProps) {
   const { t } = useI18n();
   // 마운트 시점 1회 — 렌더 중 Date.now() 호출은 순수성 규칙 위반이라 상태로 고정 (상대 시각 기준)
@@ -165,6 +168,15 @@ export function MapCard({
       {/* 메타 한 줄 — 좌: 소유자·수정시각(상대) / 우: 노드·버전·인원 수 (이미지 H4/H5) */}
       <div className="relative mt-2 flex items-center justify-between gap-2 text-fine text-ink-tertiary">
         <div className="flex min-w-0 items-center gap-2">
+          {recentOpenedAt !== undefined && (
+            <span
+              data-id="map-card-recent-badge"
+              className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent-tint px-1.5 py-0.5 text-accent"
+            >
+              <Clock size={12} strokeWidth={1.5} />
+              {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
+            </span>
+          )}
           {(map.owner_name ?? map.created_by) && (
             <span className="inline-flex min-w-0 items-center gap-1">
               <User size={12} strokeWidth={1.5} className="shrink-0" />
