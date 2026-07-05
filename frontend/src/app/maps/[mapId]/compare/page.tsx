@@ -441,8 +441,9 @@ function ComparePane({
   const { t } = useI18n();
   const flow = useReactFlow();
   const [focusId, setFocusId] = useState<string | null>(null);
-  // 변경 패널 필터 — all / 상태별. 칩 클릭으로 목록 좁힘.
+  // 변경 패널 필터 — 상태(all/추가/삭제/변경) + 종류(all/노드/엣지). 칩 클릭으로 목록 좁힘.
   const [filter, setFilter] = useState<"all" | "added" | "removed" | "changed">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | "node" | "edge">("all");
   // 흐름 방향 — LR(좌→우, 기본) / TB(상→하). 맵이 한 축으로 너무 길 때 전환.
   const [flowDir, setFlowDir] = useState<"LR" | "TB">("LR");
 
@@ -662,8 +663,17 @@ function ComparePane({
               }))
             : undefined,
       }));
+    // 노드 추가/삭제로 딸려온 엣지는 제외 — 양끝이 모두 "기존"(양 버전 존재=unchanged/changed) 노드인,
+    // 즉 실제 배선(선 연결) 변경만 목록에 남긴다. 새/삭제 노드에 붙은 엣지는 노드 항목으로 이미 드러남.
+    const bothVersion = new Set(
+      merged.nodes
+        .filter((n) => n.status === "unchanged" || n.status === "changed")
+        .map((n) => n.id),
+    );
     const edgeItems: ChangeItem[] = merged.edges
-      .filter((e) => e.status !== "unchanged")
+      .filter(
+        (e) => e.status !== "unchanged" && bothVersion.has(e.source) && bothVersion.has(e.target),
+      )
       .map((e) => ({
         key: `e-${e.id}`,
         focusId: e.id,
@@ -774,9 +784,22 @@ function ComparePane({
     return acc;
   }, [changeItems]);
 
+  const kindCounts = useMemo(
+    () => ({
+      node: changeItems.filter((i) => !i.isEdge).length,
+      edge: changeItems.filter((i) => i.isEdge).length,
+    }),
+    [changeItems],
+  );
+
   const filteredChanges = useMemo(
-    () => (filter === "all" ? changeItems : changeItems.filter((i) => i.status === filter)),
-    [changeItems, filter],
+    () =>
+      changeItems.filter(
+        (i) =>
+          (filter === "all" || i.status === filter) &&
+          (kindFilter === "all" || (kindFilter === "edge") === i.isEdge),
+      ),
+    [changeItems, filter, kindFilter],
   );
 
   return (
@@ -868,30 +891,57 @@ function ComparePane({
             <span className="text-caption text-ink-tertiary">{changeItems.length}</span>
           </div>
           {hasChanges && (
-            <div className="flex gap-1.5 border-b border-hairline px-3 pb-2">
-              {(
-                [
-                  { key: "all", label: t("compare.filterAll"), count: changeItems.length, dot: "" },
-                  { key: "added", label: "", count: counts.added, dot: "bg-added" },
-                  { key: "removed", label: "", count: counts.removed, dot: "bg-removed" },
-                  { key: "changed", label: "", count: counts.changed, dot: "bg-changed" },
-                ] as const
-              ).map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => setFilter(chip.key)}
-                  className={`flex h-6 items-center gap-1.5 rounded-full border px-2 text-fine ${
-                    filter === chip.key
-                      ? "border-accent-tint-border bg-accent-tint text-accent"
-                      : "border-hairline text-ink-secondary hover:bg-surface-alt"
-                  }`}
-                >
-                  {chip.dot && <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />}
-                  {chip.label && <span>{chip.label}</span>}
-                  <span className="font-semibold">{chip.count}</span>
-                </button>
-              ))}
+            <div className="flex flex-col gap-1.5 border-b border-hairline px-3 pb-2">
+              {/* 상태 필터 — 전체/추가/삭제/변경(상태 색점+건수) */}
+              <div className="flex gap-1.5">
+                {(
+                  [
+                    { key: "all", label: t("compare.filterAll"), count: changeItems.length, dot: "" },
+                    { key: "added", label: "", count: counts.added, dot: "bg-added" },
+                    { key: "removed", label: "", count: counts.removed, dot: "bg-removed" },
+                    { key: "changed", label: "", count: counts.changed, dot: "bg-changed" },
+                  ] as const
+                ).map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setFilter(chip.key)}
+                    className={`flex h-6 items-center gap-1.5 rounded-full border px-2 text-fine ${
+                      filter === chip.key
+                        ? "border-accent-tint-border bg-accent-tint text-accent"
+                        : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                    }`}
+                  >
+                    {chip.dot && <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />}
+                    {chip.label && <span>{chip.label}</span>}
+                    <span className="font-semibold">{chip.count}</span>
+                  </button>
+                ))}
+              </div>
+              {/* 종류 필터 — 모두/노드만/엣지만 */}
+              <div className="flex gap-1.5">
+                {(
+                  [
+                    { key: "all", label: t("compare.kindAll"), count: changeItems.length },
+                    { key: "node", label: t("compare.kindNodes"), count: kindCounts.node },
+                    { key: "edge", label: t("compare.kindEdges"), count: kindCounts.edge },
+                  ] as const
+                ).map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setKindFilter(chip.key)}
+                    className={`flex h-6 items-center gap-1.5 rounded-full border px-2 text-fine ${
+                      kindFilter === chip.key
+                        ? "border-accent-tint-border bg-accent-tint text-accent"
+                        : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                    }`}
+                  >
+                    <span>{chip.label}</span>
+                    <span className="font-semibold">{chip.count}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <div className="min-h-0 flex-1 overflow-auto p-2">

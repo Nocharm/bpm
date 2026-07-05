@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 C3 보강: 노드 딸림 엣지 제외 + 종류 필터(노드/엣지)
+- **노드 추가/삭제로 딸려온 엣지 제외**(`changeItems`) — 엣지 항목은 **양끝이 모두 기존 노드**(양 버전 존재=unchanged/changed)인 경우만, 즉 실제 배선 변경만 목록에. 새/삭제 노드에 붙은 엣지는 노드 항목으로 이미 드러나므로 중복 제거. map 13: 엣지 14→3(passthrough 삭제 3만). 카운트(오버레이·상태칩)도 curated 반영(Added 5·Removed 4·Changed 3).
+- **종류 필터 행 추가**(`kindFilter`) — 상태 칩 아래 모두/노드만/엣지만. 상태 필터와 독립·AND 조합. i18n `compare.kind{All,Nodes,Edges}`.
+- 검증: lint 0·build OK. 라이브(map 13) 엣지 3건만·엣지만 필터 3건·노드만 9건 확인.
+
 ## 2026-07-05 — 비교 C3: 변경 패널(좌측·필터칩·아이콘·클릭 포커스)
 - **변경 패널을 좌측으로**(`aside` 캔버스 앞·`border-r`) — 승인 목업 3단(좌 변경/중 캔버스/우 인스펙터[C4]) 정착 시작.
 - **필터칩** 전체/추가/삭제/변경 — 상태 색점+건수, 클릭 시 목록 필터(`filter` state), active=accent-tint. **아이콘 항목**(＋/−/✎ 색상 사각) + 상태 뱃지 + **변경 노드 before→after 필** + 엣지 설명("Edge added/removed").
