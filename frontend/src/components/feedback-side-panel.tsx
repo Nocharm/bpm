@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowRight, List, SquareCheck, X } from "lucide-react";
+import { ArrowRight, List, X } from "lucide-react";
 import { useState } from "react";
 
 import { submitFeedback, type FeedbackKind } from "@/lib/api";
@@ -147,11 +147,6 @@ export function FeedbackSidePanel({
             />
           </div>
 
-          {/* 현재 화면·열린 맵 자동 첨부 안내 (스크린샷 첨부 없음) */}
-          <p className="flex items-center gap-1.5 text-fine text-ink-tertiary">
-            <SquareCheck size={14} strokeWidth={1.5} />
-            {t("feedback.contextNote")}
-          </p>
         </div>
 
         <footer className="flex flex-col gap-2 border-t border-hairline px-4 py-3">

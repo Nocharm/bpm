@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S6e: 노티스/인박스 검색창(/ 단축키·초성) + 좌폭 맵 통일 · 피드백 안내문구 삭제
+- 공용 components/search-box.tsx(맵 목록 디자인: Search 아이콘+input+"/" kbd 힌트) + lib/use-slash-focus.ts("/"로 포커스, 입력 중이면 무시). 노티스·인박스 aside 상단(필터 위)에 배치.
+- 검색은 filterByQuery(초성 포함) — 노티스 title+body_md, 인박스 message. i18n notices/inbox.searchPlaceholder(en/ko).
+- 좌폭을 맵 목록과 동일하게: aside w-80 shrink-0→min-w-[18rem] flex-1, 상세 flex-1→flex-[2](1:2).
+- 피드백 사이드패널: "현재 화면·열린 맵 자동 첨부" 안내(SquareCheck 문구) 삭제 — 해당 기능 없음(첨부 컨텍스트 제출은 유지, UI 문구만 제거). SquareCheck import 제거.
+- 검증: lint 0(warning 1, 기존 스모크 스크립트) · build 성공. 브라우저(:3001) — 노티스 초성검색("ㅍㄹㅅㅅ"→프로세스맵)·인박스 검색창/좌폭·피드백 패널 문구 삭제 확인.
+
 ## 2026-07-05 — S6d: 타이틀 확대 + 노티스/인박스 좌단 정렬 + 인박스 탭 하단 이동
 - 3페이지(맵/노티스/인박스) 타이틀 text-body-strong→text-tagline(한 단계 확대).
 - 노티스·인박스의 타이틀 아래 콘텐츠(필터·카드) 좌단을 컨테이너 좌단(맵 화면과 동일)으로 — aside 필터/ul 좌측 px 제거(px-3→pr-3).

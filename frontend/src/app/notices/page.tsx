@@ -4,7 +4,7 @@
 // + 우 마크다운 상세. 읽음은 클라 캐시(notices-read) — 서버 저장 없음. (design 2026-07-05)
 
 import { Circle, CircleAlert, List } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
 import { formatKst, formatKstShort } from "@/lib/datetime";
@@ -12,8 +12,11 @@ import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/notices-read";
+import { filterByQuery } from "@/lib/search";
+import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
+import { SearchBox } from "@/components/search-box";
 
 type Filter = "all" | NoticeImportance;
 
@@ -47,7 +50,10 @@ export default function NoticesPage() {
   const [notices, setNotices] = useState<NoticeItem[]>([]);
   const [readIds, setReadIds] = useState<number[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useSlashFocus(searchRef);
 
   useEffect(() => {
     let alive = true;
@@ -61,7 +67,11 @@ export default function NoticesPage() {
     };
   }, []);
 
-  const filtered = notices.filter((n) => filter === "all" || n.importance === filter);
+  const byImportance = notices.filter((n) => filter === "all" || n.importance === filter);
+  const filtered = filterByQuery(byImportance, search, (n) => [
+    { field: "title", text: n.title },
+    { field: "body", text: n.body_md },
+  ]).map((hit) => hit.item);
   const unread = countUnreadNotices(
     notices.map((n) => n.id),
     readIds,
@@ -92,9 +102,15 @@ export default function NoticesPage() {
         )}
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
-        {/* 좌 목록 */}
-        <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
-          <div className="py-3 pr-3">
+        {/* 좌 목록 — 폭은 맵 목록과 동일(flex-1 : flex-[2]) */}
+        <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
+          <div className="flex flex-col gap-2 py-3 pr-3">
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder={t("notices.searchPlaceholder")}
+              inputRef={searchRef}
+            />
             <IconPillFilter options={filterOptions} value={filter} onChange={setFilter} />
           </div>
           <ul className="flex flex-1 flex-col gap-2 overflow-y-auto py-3 pr-3">
@@ -149,7 +165,7 @@ export default function NoticesPage() {
         </aside>
 
         {/* 우 상세 */}
-        <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="min-w-0 flex-[2] overflow-y-auto">
           {selected ? (
             <article className="px-8 py-6">
               <div className="flex items-center gap-2">

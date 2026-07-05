@@ -5,7 +5,7 @@
 
 import { Bell, Check, FileCheck, List, Mail, Megaphone, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   listNotifications,
@@ -16,7 +16,10 @@ import {
 import { formatKst, formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { filterByQuery } from "@/lib/search";
+import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
+import { SearchBox } from "@/components/search-box";
 
 type Tab = "approvals" | "notifications";
 type ReadFilter = "all" | "unread";
@@ -37,8 +40,11 @@ export default function InboxPage() {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("notifications");
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const [search, setSearch] = useState("");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useSlashFocus(searchRef);
 
   useEffect(() => {
     let alive = true;
@@ -51,7 +57,10 @@ export default function InboxPage() {
   }, []);
 
   const unread = items.filter((n) => !n.read).length;
-  const filtered = readFilter === "unread" ? items.filter((n) => !n.read) : items;
+  const byRead = readFilter === "unread" ? items.filter((n) => !n.read) : items;
+  const filtered = filterByQuery(byRead, search, (n) => [
+    { field: "message", text: n.message },
+  ]).map((hit) => hit.item);
   const selected = items.find((n) => n.id === selectedId) ?? null;
 
   const openNotification = async (notification: NotificationItem) => {
@@ -120,8 +129,14 @@ export default function InboxPage() {
         ) : (
           <div className="flex min-h-0 flex-1 gap-4">
             {/* 좌 목록 — 필터 + 카드 */}
-            <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
-              <div className="py-3 pr-3">
+            <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
+              <div className="flex flex-col gap-2 py-3 pr-3">
+                <SearchBox
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={t("inbox.searchPlaceholder")}
+                  inputRef={searchRef}
+                />
                 <IconPillFilter
                   options={filterOptions}
                   value={readFilter}
@@ -183,7 +198,7 @@ export default function InboxPage() {
               )}
             </aside>
             {/* 우 상세 */}
-            <div className="min-w-0 flex-1 overflow-y-auto">
+            <div className="min-w-0 flex-[2] overflow-y-auto">
               {selected ? (
                 <article className="px-6 py-4">
                   <p className="whitespace-pre-wrap text-body text-ink">{selected.message}</p>
