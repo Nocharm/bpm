@@ -38,7 +38,8 @@
 | S4d | 공지 | 선택 카드 **좌측 테두리 강조**(사용자) — `border-l-2 border-l-accent`(+accent-tint), 나머지 hairline. + 상세 본문은 채팅봇용 `markdown-view` 재사용 확인. | lint/build✅ | 좌측 강조 스크린샷✅ | ✅ | (this) |
 | — | 공지 | (후속) TopNav 공지 탭 미읽음 뱃지 — 뷰어의 읽음 캐시 기반. 별도 폴리시로 이월. | — | — | ⏳ | — |
 | S5 | 공지 | **설정 '공지사항 관리' 탭**(콘텐츠 카테고리 신설·sysadmin) — 목록(게시중/예약/종료 상태 파생·중요도·게시기간·수정/삭제) + **등록/수정 모달**(제목·중요도 세그먼트·**게시기간 date-range 캘린더**(자체)·무제한 체크·본문 md·전체 알림 발송). KST 경계 ISO 저장. `components/notices/{date-range-calendar,notice-edit-modal,notices-manage-panel}`. 시안 `공지사항관리화면.png`·`달력모달-….png` | lint/build✅ | 탭·테이블·모달·캘린더 range(17~20·4일간)·등록 e2e(예약 상태 파생) 스크린샷✅ | ✅ | eeb9b8b |
-| S5a | 공지 | 관리 표 폴리시(사용자) — **행 더블클릭 편집** · `table-fixed` 폭(제목 반응형 · 상태/중요도/게시기간/액션 고정) · **행 호버**(hover:bg-surface-alt). | lint/build✅ | 더블클릭 편집·폭·호버 스크린샷✅ | ✅ | (this) |
+| S5a | 공지 | 관리 표 폴리시(사용자) — **행 더블클릭 편집** · `table-fixed` 폭(제목 반응형 · 상태/중요도/게시기간/액션 고정) · **행 호버**(hover:bg-surface-alt). | lint/build✅ | 더블클릭 편집·폭·호버 스크린샷✅ | ✅ | eef71a2 |
+| S5b | 공지 | 관리 표 폴리시 2(사용자) — 행 **단일클릭=읽기전용 미리보기 아코디언**(`MarkdownView`, 재클릭 접힘)·더블클릭=편집 유지(200ms 타이머 구분)·게시기간 **날짜 필** 표기. | lint/build✅ | 아코디언 미리보기·날짜필 스크린샷✅ | ✅ | (this) |
 | S6 | 인박스 | **알림 탭** — `POST /api/notifications/read-all` + **`/inbox`** 마스터-디테일 셸 + 알림 탭(`listNotifications`·개별/모두 읽음·"관련 맵 보기"). 시안 `Inbox Page.html` | ⏳ | ⏳ | ⏳ | — |
 | S7 | 인박스 | **승인 대기 탭** — `GET /api/inbox/approvals`(버전승인 내담당 + checkout 이전요청 + approval-requests 통합) + 승인건 만장일치 체크리스트·승인/반려(기존 엔드포인트 재사용). 시안 `Inbox Page.html` | ⏳ | ⏳ | ⏳ | — |
 | S8 | 매뉴얼 | **백엔드 `ManualDoc` 모델 + `GET/PUT /api/manual`**(DB 우선·`manual.md` fallback) + **뷰어 `/manual`**(좌 TOC + 우 `MarkdownView`·본문검색 `Ctrl+K`·읽기폭 토글·본문한정 읽기테마 토글·코드복사). 시안 `메뉴얼 뷰 화면.png` | ⏳ | ⏳ | ⏳ | — |

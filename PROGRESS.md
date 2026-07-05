@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S5b: 공지 관리 표 — 아코디언 미리보기 + 날짜 필
+- 행 단일클릭 시 본문 읽기전용 미리보기 아코디언(colSpan 행 + MarkdownView, 재클릭 접힘). 더블클릭은 편집 유지 — 200ms 타이머로 단일/더블 구분(액션 셀은 stopPropagation).
+- 게시기간을 날짜 필(bg-surface-alt pill)로 표기. i18n noticeAdmin.emptyBody.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 아코디언 마크다운 렌더·날짜 필·더블클릭 편집 확인.
+
 ## 2026-07-05 — S5a: 공지 관리 표 폴리시 (더블클릭 편집·고정폭·호버)
 - 행 더블클릭 시 편집 모달(setEditing(n)) — 액션 셀은 onDoubleClick stopPropagation. 행 hover:bg-surface-alt + cursor-pointer.
 - table-fixed + colgroup 폭: 상태 6rem·제목 반응형(auto)·중요도 6rem·게시기간 11rem·액션 7rem. 제목 max-w-0 제거(고정폭이 truncate 처리).
