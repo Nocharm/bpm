@@ -1,4 +1,5 @@
-// 무한스크롤(25청크) 검증 — principal-picker(New map 협업자 피커): 초기 25 → 바닥 도달 시 +25, 검색은 8개 캡.
+// 무한스크롤(25청크) 검증 — A: principal-picker(New map 협업자 피커) 초기 25 → 바닥 도달 시 +25, 검색 8개 캡.
+// B: 설정 → Employees 테이블(직원 401행) 25행+센티널 → 스크롤마다 +25.
 // 실행: node scripts/pw-verify-infinite-scroll.mjs  (playwright-core, 서버 8000/3000 기동 전제)
 import { chromium } from "playwright-core";
 
@@ -8,7 +9,7 @@ const browser = await chromium.launch({ executablePath: CHROME, headless: true }
 const ctx = await browser.newContext();
 // dev 로그인 우회 — DevGate가 읽는 localStorage 키를 선주입
 await ctx.addInitScript(() => {
-  window.localStorage.setItem("bpm.devUser", "admin.kim");
+  window.localStorage.setItem("bpm.devUser", "admin.sys"); // sysadmin — 설정 관리자 탭 접근용
   window.localStorage.setItem("bpm.lang", "en"); // 라벨 매칭을 EN으로 고정
 
 });
@@ -51,14 +52,41 @@ const result = await page.evaluate(async () => {
   return out;
 });
 
+// ── B: 설정 → Employees 테이블 ──────────────────────────────────────
+await page.goto("http://localhost:3000/settings", { waitUntil: "domcontentloaded" });
+await page.getByRole("button", { name: "Employees" }).first().click();
+await page.waitForSelector("tbody tr", { timeout: 15000 });
+
+const table = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tbody = document.querySelector("tbody");
+  const rows = () => tbody.querySelectorAll("tr").length;
+  // 실제 스크롤되는 조상 탐색(설정 main 등) — 없으면 문서 스크롤 폴백
+  let sc = tbody.parentElement;
+  while (sc && sc.scrollHeight <= sc.clientHeight + 4) sc = sc.parentElement;
+  const target = sc ?? document.scrollingElement;
+  const out = { rows1: rows() };
+  target.scrollTop = target.scrollHeight;
+  await wait(500);
+  out.rows2 = rows();
+  target.scrollTop = target.scrollHeight;
+  await wait(500);
+  out.rows3 = rows();
+  return out;
+});
+
+// 테이블 행 수는 데이터 25 + 센티널 1
 const pass =
   result.count1 === 25 &&
   result.sentinel1 &&
   result.count2 === 50 &&
   result.count3 === 75 &&
   result.countSearch <= 8 &&
-  result.countReset === 25;
+  result.countReset === 25 &&
+  table.rows1 === 26 &&
+  table.rows2 === 51 &&
+  table.rows3 === 76;
 
-console.log(JSON.stringify({ ...result, consoleErrors: errors.length, pass }, null, 2));
+console.log(JSON.stringify({ picker: result, table, consoleErrors: errors.length, pass }, null, 2));
 await browser.close();
 process.exit(pass ? 0 : 1);

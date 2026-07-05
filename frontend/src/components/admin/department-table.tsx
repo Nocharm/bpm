@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { type AdminDept, type AdminUser, getAdminUsers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
 
 export function DepartmentTable() {
@@ -25,6 +26,9 @@ export function DepartmentTable() {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
+
+  // 25행씩 증분 렌더 — 행별 인원수 집계(부서×전직원)도 보이는 행에만 수행돼 함께 경감.
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(departments, "");
 
   // orgLevels 최대 깊이 동적 계산 — 절대 하드코딩 금지 /
   // Compute max orgLevels length dynamically across all departments.
@@ -71,7 +75,7 @@ export function DepartmentTable() {
           </tr>
         </thead>
         <tbody>
-          {departments.map((dept, idx) => (
+          {visible.map((dept, idx) => (
             <tr key={idx} className={ADMIN_ROW}>
               <td className={ADMIN_TD}>{dept.name}</td>
               {!showOrg && (
@@ -85,6 +89,11 @@ export function DepartmentTable() {
                 ))}
             </tr>
           ))}
+          {hasMore && (
+            <tr ref={sentinelRef}>
+              <td className={ADMIN_TD} colSpan={showOrg ? 1 + maxOrgDepth : 2} />
+            </tr>
+          )}
         </tbody>
       </TableCard>
     </div>

@@ -6,6 +6,7 @@
 - `lib/use-infinite-slice.ts` 신설 — 25개 렌더 후 목록 끝 센티널(IntersectionObserver) 도달 시 +25, resetKey(검색어) 변경 시 리셋. fetch는 기존 1회 유지(827KB/gzip 72KB·파싱 3ms로 전송은 병목 아님 — 병목은 5000행 DOM).
 - 적용: `principal-picker`(협업자·결재자·그룹 등 7곳 공용, 빈 포커스 전량 렌더가 주범), `search-select`(담당자·부서 등 6곳 공용), `transfer-checkout-dialog`. 검색 시 8개 캡은 유지.
 - 검증: lint 0 · pw `scripts/pw-verify-infinite-scroll.mjs`(25→50→75 append·검색 캡·리셋·콘솔 0) PASS. gzip은 보류(추후 판단).
+- 관리자 테이블 3종(`employee-table`·`user-table`·`department-table`)도 25행+`<tr>` 센티널 적용 — 부서 테이블은 행별 인원수 집계(부서×전직원)가 보이는 행에만 수행돼 함께 경감. pw B섹션(직원 401행: 26tr→51→76) PASS.
 
 ## 2026-07-06 — 매뉴얼 문서 4종 작성 (사용자: 영/한 × 사용자/관리자)
 - `docs/manual/` — user/admin × en/ko 4종. 코드 실측 기반(상태·단축키·워크플로·S9 매뉴얼 게시 탭·S10 대시보드 반영), `/manual` 뷰어 파서 지원 문법만 사용(#필 뱃지·표·코드블록·인용). 검증 스크립트로 펜스·표 열 수·미지원 문법 전무 확인. 게시는 설정→콘텐츠→매뉴얼에서 원하는 판 게시.
