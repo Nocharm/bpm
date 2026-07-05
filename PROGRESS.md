@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S4b: 공지 뷰어 폴리시 (시간·첫줄·선택 최소곡선·무테두리)
+- 목록 메타에 시간 노출(dateOnly → formatKstShort MM-DD HH:mm). 본문 미리보기를 "내용 첫 줄"로(첫 비어있지 않은 줄) + 전 항목 노출(읽음 포함).
+- 선택 카드: 좌측 강조선 제거 + 곡선 최소(rounded-md → rounded-xs), accent-tint 채움만(손톱 연상).
+- 바깥 테두리 제거(rounded-lg/border/bg-surface 래퍼 제거) — 홈 맵 리스트처럼 외곽 카드 없이 내부 좌우 구분선(border-r)만.
+- 검증: lint 0 · build 성공. 브라우저(:3001) 확인.
+
 ## 2026-07-05 — S4a: 공지 뷰어 시안 정합 + 홈 폭 (사용자 요청)
 - 폭을 홈(맵 목록)과 동일하게 — 루트 px-8 py-6 + mx-auto max-w-[80rem], 마스터-디테일을 경계 rounded-lg 카드로.
 - 시안 반영: rounded-full 필터 pill · 선택 항목 좌측 액센트 바(border-l-2) · 목록 본문 1줄 미리보기 · 읽음 항목 "읽음"+회색+프리뷰 생략 · 상세 작성자 아바타 서클·게시기간 · 하단 "문의는 상단 [피드백] 버튼" 콜아웃(클릭 시 피드백 패널). i18n notices.read/contactPre/contactPost.

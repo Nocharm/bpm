@@ -38,9 +38,10 @@ function dateOnly(iso: string): string {
   return formatKstShort(iso).split(" ")[0];
 }
 
-// 본문 1줄 미리보기 — 마크다운 마커 제거 후 앞부분만
+// 내용 첫 줄 미리보기 — 첫 비어있지 않은 줄에서 마크다운 마커 제거 후 앞부분만
 function bodyPreview(md: string): string {
-  return md
+  const firstLine = md.split("\n").map((line) => line.trim()).find((line) => line.length > 0) ?? "";
+  return firstLine
     .replace(/[#>*_`~[\]()-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -81,7 +82,7 @@ export default function NoticesPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
-      <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden rounded-lg border border-hairline bg-surface">
+      <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
         {/* 좌 목록 */}
         <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
           <div className="flex items-center justify-between px-4 pb-2 pt-4">
@@ -118,10 +119,8 @@ export default function NoticesPage() {
                     type="button"
                     onClick={() => openNotice(n.id)}
                     className={
-                      "flex w-full flex-col gap-1 rounded-md px-3 py-2.5 text-left " +
-                      (n.id === selectedId
-                        ? "border-l-2 border-accent bg-accent-tint"
-                        : "hover:bg-surface-alt")
+                      "flex w-full flex-col gap-1 rounded-xs px-3 py-2.5 text-left " +
+                      (n.id === selectedId ? "bg-accent-tint" : "hover:bg-surface-alt")
                     }
                   >
                     <div className="flex items-center gap-1.5">
@@ -146,13 +145,11 @@ export default function NoticesPage() {
                     >
                       {n.title}
                     </span>
-                    {!isRead && (
-                      <span className="truncate text-fine text-ink-tertiary">
-                        {bodyPreview(n.body_md)}
-                      </span>
-                    )}
+                    <span className="truncate text-fine text-ink-tertiary">
+                      {bodyPreview(n.body_md)}
+                    </span>
                     <span className="text-fine text-ink-tertiary">
-                      {n.created_by} · {dateOnly(n.starts_at)}
+                      {n.created_by} · {formatKstShort(n.starts_at)}
                     </span>
                   </button>
                 </li>
