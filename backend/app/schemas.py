@@ -212,6 +212,40 @@ class CheckoutDecideIn(BaseModel):
     approve: bool
 
 
+class InboxApprovalOut(BaseModel):
+    """승인 대기 인박스 통합 항목 — 세 출처(버전 승인·점유권 이전·권한/가시성)를 kind로 구분.
+
+    id: 각 kind의 act 엔드포인트가 받는 id (version_approval=version_id, 그 외=request id).
+    """
+
+    kind: Literal["version_approval", "checkout_transfer", "approval_request"]
+    id: int
+    title: str
+    map_id: int
+    map_name: str
+    requester: str
+    status: str
+    created_at: datetime
+    version_id: int | None = None  # checkout_transfer·version_approval의 대상 버전
+    detail: dict | None = None  # approval_request의 payload 등 부가 정보
+
+
+class ManualOut(BaseModel):
+    """사용 매뉴얼 게시본 — DB 행 또는 파일 fallback(updated_at=None) 공용."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    format: str
+    content: str
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+
+
+class ManualUpdate(BaseModel):
+    format: Literal["markdown", "html"] = "markdown"
+    content: str = Field(max_length=200_000)
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
@@ -401,6 +435,79 @@ class NotificationOut(BaseModel):
     version_id: int | None
     message: str
     read: bool
+    created_at: datetime
+
+
+class FeedbackCreate(BaseModel):
+    kind: Literal["bug", "suggestion", "question", "etc"]
+    body: str = Field(min_length=1, max_length=4000)
+    context: dict = Field(default_factory=dict)
+
+
+class FeedbackUpdate(BaseModel):
+    # 부분 갱신 — 제공된 필드만. 권한은 서버가 필드별 검증
+    # (status=sysadmin · reply=sysadmin·done아닐때 · body=작성자·draft일때)
+    status: Literal["draft", "in_progress", "done"] | None = None
+    reply: str | None = Field(default=None, max_length=4000)
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+class FeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    body: str
+    author: str
+    context: dict
+    status: str
+    reply: str
+    created_at: datetime
+    body_edited_at: datetime | None
+    reply_at: datetime | None
+    done_at: datetime | None
+
+
+class FeedbackCounts(BaseModel):
+    total: int
+    mine: int
+    in_progress: int
+    done: int
+
+
+class FeedbackListOut(BaseModel):
+    items: list[FeedbackOut]
+    counts: FeedbackCounts
+
+
+class NoticeCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body_md: str = Field(default="", max_length=20000)
+    importance: Literal["important", "normal"] = "normal"
+    starts_at: datetime
+    ends_at: datetime | None = None
+    notify_all: bool = False
+
+
+class NoticeUpdate(BaseModel):
+    # 제공된 필드만 갱신(exclude_unset) — ends_at=null은 '무제한'으로 명시 갱신
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body_md: str | None = Field(default=None, max_length=20000)
+    importance: Literal["important", "normal"] | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+
+class NoticeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    body_md: str
+    importance: str
+    starts_at: datetime
+    ends_at: datetime | None
+    created_by: str
     created_at: datetime
 
 

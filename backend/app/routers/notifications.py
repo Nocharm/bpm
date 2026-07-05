@@ -1,7 +1,7 @@
 """인앱 알림 — 본인 수신분 조회 / 읽음 처리 (design 2026-06-14)."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -28,6 +28,19 @@ async def list_notifications(
     query = query.order_by(Notification.created_at.desc(), Notification.id.desc())
     rows = await session.scalars(query)
     return list(rows.all())
+
+
+@router.post("/read-all", status_code=204)
+async def mark_all_read(
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    await session.execute(
+        update(Notification)
+        .where(Notification.recipient == user, Notification.read.is_(False))
+        .values(read=True)
+    )
+    await session.commit()
 
 
 @router.post("/{notification_id}/read", response_model=NotificationOut)

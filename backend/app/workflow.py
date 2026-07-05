@@ -25,11 +25,14 @@ def create_notifications(
     recipients: list[str],
     *,
     type: str,
-    map_id: int,
-    version_id: int,
+    map_id: int | None = None,
+    version_id: int | None = None,
     message: str,
 ) -> None:
-    """수신자별 알림 행을 세션에 추가한다 — commit은 호출자 책임."""
+    """수신자별 알림 행을 세션에 추가한다 — commit은 호출자 책임.
+
+    map_id/version_id는 선택 — 맵/버전과 무관한 알림(공지 등)은 생략.
+    """
     for recipient in recipients:
         session.add(
             Notification(

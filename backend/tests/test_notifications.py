@@ -62,3 +62,14 @@ def test_mark_read_other_recipient_404(
     monkeypatch.setattr(settings, "dev_user", "notif-b3")
     forbidden = client.post(f"/api/notifications/{notif_id}/read")
     assert forbidden.status_code == 404
+
+
+def test_read_all_marks_every_unread(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _pending_version(client, ["notif-rall"])
+    monkeypatch.setattr(settings, "dev_user", "notif-rall")
+    assert len(client.get("/api/notifications?unread_only=true").json()) >= 1
+    resp = client.post("/api/notifications/read-all")
+    assert resp.status_code == 204
+    assert client.get("/api/notifications?unread_only=true").json() == []

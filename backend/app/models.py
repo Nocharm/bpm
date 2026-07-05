@@ -244,6 +244,63 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Feedback(Base):
+    """사용자 피드백 — 유형·본문·컨텍스트·상태·관리자 답글 (design 2026-07-05)."""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 유형 — bug | suggestion | question | etc
+    kind: Mapped[str] = mapped_column(String(20))
+    body: Mapped[str] = mapped_column(Text, default="")
+    author: Mapped[str] = mapped_column(String(100))
+    # 제출 시점 컨텍스트 — {route, map_id?, version_id?} 자동 첨부(느슨한 참조)
+    context: Mapped[dict] = mapped_column(JSON, default=dict)
+    # 처리 상태 — draft(작성자 수정/삭제 가능) | in_progress | done(잠금)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    # 관리자 답글 — status가 done이 아닐 때만 작성/수정
+    reply: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # 본문 수정 / 답글 갱신 / 완료 처리 시각 — 모달 표시용(없으면 None)
+    body_edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Notice(Base):
+    """공지사항 — 마크다운 본문·중요도·게시기간 (design 2026-07-05). 읽음은 클라 캐시."""
+
+    __tablename__ = "notices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body_md: Mapped[str] = mapped_column(Text, default="")
+    # 중요도 — important | normal
+    importance: Mapped[str] = mapped_column(String(20), default="normal")
+    # 게시기간 — starts_at부터 노출, ends_at=None이면 무제한
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ManualDoc(Base):
+    """사용 매뉴얼 게시본 — 단일 행(id=1 upsert). DB 우선, 없으면 manual.md 파일 fallback (S8)."""
+
+    __tablename__ = "manual_docs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 게시본 포맷 — markdown | html
+    format: Mapped[str] = mapped_column(String(20), default="markdown")
+    content: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(100), default=None)
+
+
 class Employee(Base):
     """사내 AD 동기화 사용자 — loginId(sAMAccountName) PK. source=ad|local (design 2026-06-16)."""
 

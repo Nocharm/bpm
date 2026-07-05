@@ -672,6 +672,40 @@ export function decideApprovalRequest(
   });
 }
 
+// ── 알림·승인 인박스 (S7) ──────────────────────────────────────
+export type InboxApprovalKind = "version_approval" | "checkout_transfer" | "approval_request";
+
+export interface InboxApproval {
+  kind: InboxApprovalKind;
+  id: number; // act 엔드포인트가 받는 id (version_approval=version_id, 그 외=request id)
+  title: string;
+  map_id: number;
+  map_name: string;
+  requester: string;
+  status: string;
+  created_at: string;
+  version_id: number | null;
+  detail: Record<string, unknown> | null;
+}
+
+// 내가 결정할 승인 대기 통합 큐 — 버전 승인·점유권 이전·권한/가시성. act는 각 출처 기존 함수 재사용.
+export function listInboxApprovals(): Promise<InboxApproval[]> {
+  return request<InboxApproval[]>("/inbox/approvals");
+}
+
+// ── 사용 매뉴얼 (S8) ──────────────────────────────────────────
+export interface ManualDoc {
+  format: "markdown" | "html";
+  content: string;
+  updated_at: string | null; // 파일 fallback이면 null
+  updated_by: string | null;
+}
+
+// 게시본 조회 — DB 우선, 없으면 manual.md 파일 fallback(updated_at=null).
+export function getManual(): Promise<ManualDoc> {
+  return request<ManualDoc>("/manual");
+}
+
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
 
 export interface DirectoryUser {
@@ -891,6 +925,140 @@ export function listNotifications(unreadOnly = false): Promise<NotificationItem[
 
 export function markNotificationRead(id: number): Promise<NotificationItem> {
   return request<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
+}
+
+export function markAllNotificationsRead(): Promise<void> {
+  return request<void>("/notifications/read-all", { method: "POST" });
+}
+
+// ── 피드백 (design 2026-07-05) ──────────────
+
+export type FeedbackKind = "bug" | "suggestion" | "question" | "etc";
+export type FeedbackStatus = "draft" | "in_progress" | "done";
+
+export interface FeedbackContext {
+  route?: string;
+  map_id?: number | null;
+  version_id?: number | null;
+}
+
+export interface FeedbackItem {
+  id: number;
+  kind: FeedbackKind;
+  body: string;
+  author: string;
+  context: FeedbackContext;
+  status: FeedbackStatus;
+  reply: string;
+  created_at: string;
+  body_edited_at: string | null;
+  reply_at: string | null;
+  done_at: string | null;
+}
+
+export interface FeedbackCounts {
+  total: number;
+  mine: number;
+  in_progress: number;
+  done: number;
+}
+
+export interface FeedbackList {
+  items: FeedbackItem[];
+  counts: FeedbackCounts;
+}
+
+export function submitFeedback(input: {
+  kind: FeedbackKind;
+  body: string;
+  context?: FeedbackContext;
+}): Promise<FeedbackItem> {
+  return request<FeedbackItem>("/feedback", {
+    method: "POST",
+    body: JSON.stringify({
+      kind: input.kind,
+      body: input.body,
+      context: input.context ?? {},
+    }),
+  });
+}
+
+export function listFeedback(): Promise<FeedbackList> {
+  return request<FeedbackList>("/feedback");
+}
+
+export interface FeedbackPatch {
+  status?: FeedbackStatus;
+  reply?: string;
+  body?: string;
+}
+
+// 부분 갱신 — 서버가 필드별 권한 검증(status=관리자·reply=관리자·body=작성자)
+export function patchFeedback(id: number, patch: FeedbackPatch): Promise<FeedbackItem> {
+  return request<FeedbackItem>(`/feedback/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteFeedback(id: number): Promise<void> {
+  return request<void>(`/feedback/${id}`, { method: "DELETE" });
+}
+
+// ── 공지사항 (design 2026-07-05) ──────────────
+
+export type NoticeImportance = "important" | "normal";
+
+export interface NoticeItem {
+  id: number;
+  title: string;
+  body_md: string;
+  importance: NoticeImportance;
+  starts_at: string;
+  ends_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface NoticeInput {
+  title: string;
+  body_md: string;
+  importance: NoticeImportance;
+  starts_at: string;
+  ends_at: string | null;
+  notify_all?: boolean;
+}
+
+// 게시기간 유효분(열람용)
+export function listNotices(): Promise<NoticeItem[]> {
+  return request<NoticeItem[]>("/notices");
+}
+
+// 관리용 — 게시기간 무관 전체(sysadmin)
+export function listNoticesManage(): Promise<NoticeItem[]> {
+  return request<NoticeItem[]>("/notices/manage");
+}
+
+export function getNotice(id: number): Promise<NoticeItem> {
+  return request<NoticeItem>(`/notices/${id}`);
+}
+
+export function createNotice(input: NoticeInput): Promise<NoticeItem> {
+  return request<NoticeItem>("/notices", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateNotice(id: number, patch: Partial<NoticeInput>): Promise<NoticeItem> {
+  return request<NoticeItem>(`/notices/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteNotice(id: number): Promise<void> {
+  return request<void>(`/notices/${id}`, { method: "DELETE" });
 }
 
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────

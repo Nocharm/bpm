@@ -13,6 +13,182 @@
 - **Tab/Shift+Tab = 흐름상 다음/이전 노드 포커스**(+화면 센터) — `getNextNodeAlongFlow`/`getPrevNodeAlongFlow`(canvas.ts) 재사용, `flowEdges`(삭제 제외 To-Be 흐름). 미선택/엣지 포커스 시 시작 노드로. Tab은 항상 preventDefault(브라우저 포커스 순회 차단).
 - 검증: lint 0·build OK. 라이브(map 13) 결제처리→Tab→결제승인? 포커스 이동·링 슬라이드·인스펙터 갱신 확인.
 
+## 2026-07-05 — S8b: 매뉴얼 뷰어 `/manual`
+- `src/app/manual/page.tsx` — 좌 TOC(본문 H2/H3 파생, 펜스 코드 제외·클릭 시 렌더 헤딩으로 스크롤·활성 강조) + 우 `MarkdownView`(코드블록/인라인 복사 내장). 헤더: 타이틀 + 배포포함/업데이트 배지 · 본문검색(`Ctrl/⌘+K` 포커스, Enter 순환 점프 + accent-tint 플래시, 삭제 버튼) · 읽기폭 토글(46rem↔전폭) · 본문 한정 읽기 테마 토글.
+- 읽기 테마: 라이트 전용(design §7)·토큰 제약상 다크 대신 **elevated warm paper 패널**(border+shadow+`bg-surface-pearl`)로 명확히 구분. (pearl 단독은 흰색과 미구분이라 테두리/그림자 병용.)
+- api `getManual`(DB 우선·파일 fallback) · i18n `manual.*`(en/ko) · TopNav **BookOpen 진입 아이콘**(로그인 시, 툴팁, /manual 활성 강조).
+- html 포맷 게시본 렌더는 S9(DOMPurify 도입 시)로 이연 — 현재 데이터는 마크다운.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — TOC 스크롤·활성·검색 점프·읽기폭·읽기테마 패널·nav 아이콘 확인.
+
+## 2026-07-05 — S8a: 매뉴얼 백엔드 — ManualDoc 모델 + GET/PUT /api/manual
+- `ManualDoc` 모델(단일 행 id=1 upsert · format markdown|html · content · updated_at/by) + `routers/manual.py` — `GET /api/manual`(DB 행 우선, 없으면 `app/manual.py:get_manual()` 파일 fallback, updated_at=None) / `PUT /api/manual`(sysadmin upsert). `ManualOut`/`ManualUpdate` 스키마 + main.py 등록.
+- 검증: ruff·pytest 3/3(파일 fallback·403 게이트·PUT→GET 라운드트립)·전체 401. (기존 `manual.md`·`get_manual()` 로더 재사용 — AI 참고자료와 공유.)
+
+## 2026-07-05 — S4e: 공지 카드 작성자 이름 필 + 1초 호버 유저 카드
+- 공지 카드 좌하단 작성자를 login_id→**이름 필**로 노출(`getDirectory()`로 해석, 미해석 시 login_id 폴백).
+- 공용 `components/user-hover-card.tsx` — 앵커 1초 이상 호버 시 유저 정보 팝오버(portal+fixed). 맵 상세 '허용 인원' 확장 카드 디자인 미러: 아바타+이름 · 아이디/직급(accent)/부서 레벨(리프→루트) 필.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 작성자 "Junho Kim" 필 + 1초 호버 카드(admin.kim·Manager·부서 3레벨) 확인.
+
+## 2026-07-05 — S7: 인박스 승인 대기 탭 — 통합 승인 큐(백엔드 집계 + 프론트 승인/반려)
+- 백엔드 `GET /api/inbox/approvals`(`routers/inbox.py`) — 세 출처 집계: 버전 게시 승인(MapApprover·pending·미승인), 점유권 이전 요청(점유자/오너/sysadmin), 권한·가시성 승인요청(맵 승인자/sysadmin). kind로 구분, act는 기존 엔드포인트 재사용. `InboxApprovalOut` 스키마 + main.py 등록 + `tests/test_inbox.py`(4건).
+- 프론트: api `listInboxApprovals`+타입. 인박스 승인 탭 = 대기 큐(카드: 유형 필·제목·맵·요청자·시간) + 상세(승인/반려·맵 열기, 버전 승인은 반려 사유 필수). 승인/반려는 kind별 approveVersion/rejectVersion/decideCheckoutRequest/decideApprovalRequest 호출 후 재조회. 탭 배지=대기 건수. 승인 탭에선 검색·필터 숨김.
+- 검증: ruff·pytest 4/4·전체 398 · lint 0 · build 성공. 브라우저(:8001, admin.kim 시드) — 승인 카드·상세·배지·승인 e2e(승인 시 큐에서 제거) 확인. (반려는 사유 게이팅 시각 확인 + rejectVersion 기존 테스트 커버.)
+
+## 2026-07-05 — S6f: 카드 시각 필(상대/2필) + 검색 삭제버튼·클릭가능 "/" + 인박스 탭 필터행 이동
+- 공용 `components/time-pills.tsx` — 과거 2주 이내면 상대시간 1필("~분 전", 기존 time.* i18n·relativeAgo 로직 재사용), 그 외엔 날짜(YYYY-MM-DD)·시각(HH:mm) 2필. nowMs는 페이지가 `useState(()=>Date.now())`로 1회 주입(purity). 노티스·인박스 카드에 적용.
+- SearchBox: 검색어 있으면 **전부삭제(X) 버튼**(클릭 시 clear+포커스), 없으면 **클릭 가능한 "/" 버튼**(포커스, 테두리+shadow-sm 입체감·hover). peer-focus 힌트 방식 제거. `dataId` prop 추가.
+- 홈 검색창을 공용 SearchBox로 교체(세 탭 동일 동작) — 인라인 블록 제거, Search import 정리.
+- 인박스: 검색창을 헤더 바로 아래로(노티스와 동일 위치) 올리고, 승인대기/알림 **탭을 All/안읽음 필터 행 우측정렬**로 이동(모두읽음은 페이지 헤더 우측). 승인대기 탭=상세 pane "곧 제공" 안내.
+- 검증: lint 0(기존 warning 1) · build 성공. 브라우저(:3001) — 홈 삭제버튼·공지 상대시간(2/4시간 전)·인박스 검색상단·탭 우측정렬·승인대기 안내 확인.
+
+## 2026-07-05 — S6e: 노티스/인박스 검색창(/ 단축키·초성) + 좌폭 맵 통일 · 피드백 안내문구 삭제
+- 공용 components/search-box.tsx(맵 목록 디자인: Search 아이콘+input+"/" kbd 힌트) + lib/use-slash-focus.ts("/"로 포커스, 입력 중이면 무시). 노티스·인박스 aside 상단(필터 위)에 배치.
+- 검색은 filterByQuery(초성 포함) — 노티스 title+body_md, 인박스 message. i18n notices/inbox.searchPlaceholder(en/ko).
+- 좌폭을 맵 목록과 동일하게: aside w-80 shrink-0→min-w-[18rem] flex-1, 상세 flex-1→flex-[2](1:2).
+- 피드백 사이드패널: "현재 화면·열린 맵 자동 첨부" 안내(SquareCheck 문구) 삭제 — 해당 기능 없음(첨부 컨텍스트 제출은 유지, UI 문구만 제거). SquareCheck import 제거.
+- 검증: lint 0(warning 1, 기존 스모크 스크립트) · build 성공. 브라우저(:3001) — 노티스 초성검색("ㅍㄹㅅㅅ"→프로세스맵)·인박스 검색창/좌폭·피드백 패널 문구 삭제 확인.
+
+## 2026-07-05 — S6d: 타이틀 확대 + 노티스/인박스 좌단 정렬 + 인박스 탭 하단 이동
+- 3페이지(맵/노티스/인박스) 타이틀 text-body-strong→text-tagline(한 단계 확대).
+- 노티스·인박스의 타이틀 아래 콘텐츠(필터·카드) 좌단을 컨테이너 좌단(맵 화면과 동일)으로 — aside 필터/ul 좌측 px 제거(px-3→pr-3).
+- 인박스 승인/알림 탭을 타이틀과 같은 줄→타이틀 아래 별도 행으로 이동.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 타이틀 확대·필터/카드 좌단 정렬·인박스 탭 하단 확인.
+
+## 2026-07-05 — S6c: 맵/노티스/인박스 타이틀 크기·위치 통일
+- 세 페이지 타이틀을 동일 크기(text-body-strong)·동일 왼쪽위 기준점(mx-auto max-w-[80rem] 페이지 헤더, 컨테이너 좌상단)으로. 노티스 타이틀+안읽음을 aside 내부(px-4)→페이지 헤더(mb-4)로 이동. 홈/인박스는 이미 정렬됨.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 공지사항이 컨테이너 좌상단으로 이동해 Process Maps/Inbox와 정렬 확인. (노티스 타이틀 언어는 기존 유지.)
+
+## 2026-07-05 — S6b: 인박스/홈 타이틀 정리
+- /inbox에 "Inbox" 타이틀(text-body-strong) 추가(탭 좌측).
+- 홈 타이틀 text-tagline→text-body-strong(노티스 타이틀 크기 일치), "Business Process Map — {home.title}"→"Process Maps"(영어 고정).
+- 검증: lint 0 · build 성공. 브라우저 확인.
+
+## 2026-07-05 — S6a: 인박스 알림 목록 — 공지 레이아웃(아이콘 필터·카드)
+- /inbox 알림 탭 좌 목록을 공지 뷰어와 동일하게: IconPillFilter(전체 List/안읽음 Mail) + 카드형 목록(border·bg·gap). 카드: 유형 아이콘(notice=Megaphone·review_requested=FileCheck·기타=Bell) 좌 + 읽음/미읽음 점 우, 메시지(미읽음 bold·line-clamp-2), 시간 필(우). 선택=좌측 액센트 테두리+tint.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 아이콘 필터·카드·유형 아이콘(Megaphone)·시간 필 확인.
+
+## 2026-07-05 — S6: 인박스 /inbox 알림 탭 (read-all)
+- 백엔드 POST /api/notifications/read-all(본인 미읽음 일괄 읽음) + 테스트. api markAllNotificationsRead.
+- /inbox: 홈 폭(max-w-[80rem]). 탭 세그먼트(승인 대기/알림, 피드백 세그먼트 디자인)·알림 미읽음 뱃지·"모두 읽음"(Check). 알림 탭 마스터-디테일: 좌 알림 목록(미읽음 점·bold·클릭 시 읽음+선택), 우 상세(메시지·시각·map_id 있으면 "관련 맵 보기"). 승인 대기 탭 placeholder(S7).
+- i18n inbox.*(en/ko).
+- 검증: ruff·pytest 4/4·전체 394 · lint 0 · build 성공. 브라우저(:3001 Junho Kim) — 탭(알림 활성·미읽음 1)·목록(v2.4 notify_all)·클릭 읽음(점·뱃지 제거·상세)·모두 읽음 확인.
+
+## 2026-07-05 — S5e: TopNav 탭을 피드백 패널 유형 세그먼트 디자인으로
+- S1 3-way 탭을 아이콘-필(펼침) → 피드백 사이드패널 유형 세그먼트 디자인으로: 회색 트랙(bg-surface-alt p-1) + 활성 흰 pill(bg-surface·text-accent·shadow-sm), 아이콘+라벨 유지(grid-cols-3).
+- 검증: lint 0 · build 성공. 브라우저(:3001 /notices) — 공지사항 탭 흰 pill 활성 확인.
+
+## 2026-07-05 — S5d: 아이콘 필 필터 통일 + 피드백 표 필/모달 아이콘 (사용자 요청)
+- 공용 components/icon-pill-filter.tsx — 비활성=아이콘만, 활성=아이콘+라벨(max-w 0→28 트랜지션 우측 펼침).
+- 적용: S1 TopNav 3-way 탭(슬라이딩 박스 제거→아이콘 필), 피드백 유형 필터(List/Bug/Lightbulb/MessageCircle/Ellipsis), 공지 필터(List/CircleAlert/Circle).
+- 피드백 표: table-fixed colgroup(유형 5rem·내용 auto·작성자 8rem·상태 6rem·등록일 11rem), 내용 truncate(폭 초과 ellipsis), 작성자 필, 등록일 날짜/시간 2필(DatePills).
+- 피드백 상세 모달 버튼 아이콘화: 수정 PencilLine·저장 Check·취소 X·답글 저장 Send·삭제 Trash2.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — TopNav 탭 확장(공지사항)·피드백/공지 아이콘 필터·피드백 표(작성자·날짜/시간 필)·모달 아이콘 버튼 확인.
+
+## 2026-07-05 — S5c: 공지/피드백 표·모달 폴리시 묶음 (사용자 요청)
+- 공용 components/pagination.tsx(20개 단위, pageCount≤1이면 숨김).
+- 공지 관리 표: 아코디언 미리보기에 펼침/접힘 애니(grid-rows 0fr↔1fr·duration-350 ease-smooth) · 수정/삭제를 Pencil/Trash2 아이콘 + Tooltip + 행 hover 시에만 노출(group-hover) · 20개 페이징.
+- 피드백 페이지 표: 20개 페이징(필터/검색 변경 시 1페이지로) · 등록일 date-only→formatKstShort(시간까지).
+- 피드백 상세 모달: 메타 값(작성자/화면/시각)을 필로 · 상태 selector를 슬라이딩 인디케이터(translateX)로, 인디케이터/텍스트 색을 상태별(draft 중립·in_progress amber·done green)로 전환.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 공지 아이콘/툴팁(수정)/호버 노출·날짜필 / 피드백 모달 상태 슬라이딩(작업중 amber)·메타필 / 피드백 표 시간(07-05 16:55) 확인.
+
+## 2026-07-05 — S5b: 공지 관리 표 — 아코디언 미리보기 + 날짜 필
+- 행 단일클릭 시 본문 읽기전용 미리보기 아코디언(colSpan 행 + MarkdownView, 재클릭 접힘). 더블클릭은 편집 유지 — 200ms 타이머로 단일/더블 구분(액션 셀은 stopPropagation).
+- 게시기간을 날짜 필(bg-surface-alt pill)로 표기. i18n noticeAdmin.emptyBody.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 아코디언 마크다운 렌더·날짜 필·더블클릭 편집 확인.
+
+## 2026-07-05 — S5a: 공지 관리 표 폴리시 (더블클릭 편집·고정폭·호버)
+- 행 더블클릭 시 편집 모달(setEditing(n)) — 액션 셀은 onDoubleClick stopPropagation. 행 hover:bg-surface-alt + cursor-pointer.
+- table-fixed + colgroup 폭: 상태 6rem·제목 반응형(auto)·중요도 6rem·게시기간 11rem·액션 7rem. 제목 max-w-0 제거(고정폭이 truncate 처리).
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 폭 개선·더블클릭 편집 모달(기존 값·range 프리필) 확인.
+
+## 2026-07-05 — S5: 공지사항 관리 탭 + 등록/수정 모달 (설정 콘텐츠)
+- 설정에 '콘텐츠 > 공지사항' 탭 신설(sysadmin). components/notices/notices-manage-panel — 목록(상태 파생 게시중/예약/종료·중요도·게시기간·수정/삭제) + "새 공지 등록".
+- notice-edit-modal — 제목·중요도 세그먼트·게시기간(date-range-calendar 자체 구현·무제한 체크)·본문 md·전체 알림 발송(신규만). 저장 시 KST 경계(자정~하루끝) ISO로 createNotice/updateNotice.
+- date-range-calendar — 외부 의존 없는 월 그리드 range 피커(양끝 accent·중간 tint·일수 표시).
+- 설정 TabId "notices"·CATEGORIES 콘텐츠 카테고리·콘텐츠 조건부. i18n noticeAdmin.*/noticeEdit.*/cal.weekdays/admin.catContent.
+- 검증: lint 0(react-hooks/purity: Date.now를 useState 초기화로 캡처)·build 성공. 브라우저(:3001 Junho Kim) — 탭·테이블(게시중)·모달·캘린더 range(17~20·4일간)·등록 e2e(여름 워크숍 → 예약 상태, 미래 시작이라 뷰어 미노출) 확인.
+
+## 2026-07-05 — S4d: 공지 선택 카드 좌측 테두리 강조
+- 선택 카드에 2px accent 좌측 테두리(border-l-2 border-l-accent) + accent-tint, 나머지 변은 hairline.
+- 확인: 공지 상세 본문은 채팅봇용 공용 렌더러 markdown-view.tsx를 그대로 재사용(볼드·리스트 렌더).
+- 검증: lint 0 · build 성공. 브라우저 확인.
+
+## 2026-07-05 — S4c: 공지 목록 카드화 (사용자 요청)
+- 목록 각 항목을 카드로(border-hairline·bg-surface·rounded-xs·gap-2 간격). 선택=border-accent·accent-tint.
+- 상단 행: 유형 필(좌)·읽음표시(우) justify-between. 메타 행: 작성자(좌)·시간(우) justify-between → 읽음표시·시간 우측정렬.
+- 제목 전 항목 진하게(font-semibold text-ink).
+- 검증: lint 0 · build 성공. 브라우저(:3001) 확인.
+
+## 2026-07-05 — S4b: 공지 뷰어 폴리시 (시간·첫줄·선택 최소곡선·무테두리)
+- 목록 메타에 시간 노출(dateOnly → formatKstShort MM-DD HH:mm). 본문 미리보기를 "내용 첫 줄"로(첫 비어있지 않은 줄) + 전 항목 노출(읽음 포함).
+- 선택 카드: 좌측 강조선 제거 + 곡선 최소(rounded-md → rounded-xs), accent-tint 채움만(손톱 연상).
+- 바깥 테두리 제거(rounded-lg/border/bg-surface 래퍼 제거) — 홈 맵 리스트처럼 외곽 카드 없이 내부 좌우 구분선(border-r)만.
+- 검증: lint 0 · build 성공. 브라우저(:3001) 확인.
+
+## 2026-07-05 — S4a: 공지 뷰어 시안 정합 + 홈 폭 (사용자 요청)
+- 폭을 홈(맵 목록)과 동일하게 — 루트 px-8 py-6 + mx-auto max-w-[80rem], 마스터-디테일을 경계 rounded-lg 카드로.
+- 시안 반영: rounded-full 필터 pill · 선택 항목 좌측 액센트 바(border-l-2) · 목록 본문 1줄 미리보기 · 읽음 항목 "읽음"+회색+프리뷰 생략 · 상세 작성자 아바타 서클·게시기간 · 하단 "문의는 상단 [피드백] 버튼" 콜아웃(클릭 시 피드백 패널). i18n notices.read/contactPre/contactPost.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 카드·홈폭·필터·미리보기·읽음·상세(아바타/게시기간/마크다운/콜아웃) 확인.
+- (예정) 이후 /inbox도 동일 폭(메인 맵 리스트 페이지) 적용.
+
+## 2026-07-05 — S4: 공지 백엔드 + 뷰어 /notices (읽음 클라 캐시)
+- 백엔드 Notice 모델 + routers/notices.py — GET(게시기간 유효분)·GET/{id}·GET/manage(sysadmin 전체)·POST(sysadmin, notify_all 시 활성 유저 fan-out)·PATCH·DELETE. workflow.create_notifications map_id/version_id 옵션화. 테스트 5건.
+- lib/notices-read.ts: localStorage 읽음 캐시(recent-maps 패턴, 기기별).
+- api: listNotices/getNotice/listNoticesManage/createNotice/updateNotice/deleteNotice.
+- 뷰어 /notices: 좌 목록(전체/중요/일반 필터·중요·일반 파스텔 필·미읽음 점·안읽음 N) + 우 MarkdownView 상세(중요 필·작성자·시각·게시기간). 클릭 시 markNoticeRead → 점 제거·카운트 감소.
+- i18n notices.*(en/ko).
+- 검증: ruff·pytest 5/5·전체 393 · lint 0 · build 성공. 브라우저(:3001) e2e — 목록/필/미읽음(안읽음 4)·상세 마크다운 렌더·클릭 읽음(안읽음 3·점 제거)·notify_all 알림 벨 점 확인. (notices 테이블은 백엔드 reload create_all로 생성.)
+- 미착수: TopNav 공지 탭 미읽음 뱃지(후속) · 설정 공지 관리 탭=S5.
+
+## 2026-07-05 — S3b: 피드백 필 재디자인 + 상태변경→상세/관리 모달 (사용자 요청)
+- 필: 유형·상태를 채운 파스텔 필(bg-*/15 토큰)로. 공유 lib/feedback-meta.ts로 목록·모달 통일. 상태 new→draft(Draft/In Progress/Done 3종).
+- 목록: 인라인 select 제거 → 행 클릭 시 상세/관리 모달(feedback-detail-modal.tsx).
+- 모달 권한: 상태변경=관리자 · 답글=관리자(done 제외 잠금) · 본문수정/삭제=작성자(draft만). 본문/답글/완료 시각 표시.
+- 백엔드: Feedback +reply·body_edited_at·reply_at·done_at / PATCH 부분갱신(필드별 서버 권한검증) / DELETE(작성자·draft) / 테스트 7건. api updateFeedbackStatus→patchFeedback+deleteFeedback.
+- 검증: ruff·pytest 7/7·전체 388 · lint 0 · build 성공. 브라우저(:3001, worktree 백엔드 :8001) e2e — 필 파스텔·행 클릭 모달·답글 저장(답글 갱신 스탬프)·완료 전환(완료 스탬프·답글 잠금) 확인.
+- (dev 마이그레이션) 스키마 변경으로 worktree backend/dev.db feedback 테이블에 신규 컬럼 ALTER 보강 + status new→draft UPDATE. 배포/신규 DB는 create_all이 신 스키마 생성.
+
+## 2026-07-05 — S3: 전체 피드백 페이지 /feedback (집계·필터·목록·관리자 상태변경)
+- app/feedback/page.tsx: 헤더(+피드백 보내기) · 집계 카드 4(전체/내 accent/작업 중/완료 %) · 유형 필터 pill + 검색 · 목록 테이블(유형 뱃지·내용 truncate·작성자·상태·등록일 date-only). counts·filtered는 파생값 렌더 계산(React Compiler).
+- 관리자(sysadmin) 상태변경: 상태 열을 `<select>`(신규/작업중/완료)로 → updateFeedbackStatus → 로컬 items 갱신. 비-sysadmin은 읽기 뱃지.
+- 공유 스토어 `lib/feedback-panel.ts` 신설 — TopNav 패널 open 상태를 스토어로 이전(useSyncExternalStore), 페이지 "피드백 보내기" 버튼도 openFeedbackPanel()로 동일 패널 오픈.
+- i18n feedback.*(pageSubtitle/stat.*/filterAll/searchPlaceholder/col*/status.*/empty) 추가.
+- 검증: lint 0 · build 성공. 브라우저(:3001 Junho Kim) — 페이지 렌더·집계·유형 뱃지·sysadmin select·페이지 버튼→패널 오픈 확인. 상태변경은 API PATCH(id3→작업중·id4→완료) 후 새로고침으로 집계(작업 중1·완료1 25%)·select 반영 확인.
+
+## 2026-07-05 — S2c: 피드백 패널 디자인 정합 + 본문 글자수 제한/표시 (사용자 시안)
+- feedback-side-panel: 유형 탭을 **세그먼트 컨트롤**(회색 트랙 `bg-surface-alt` + 흰 활성 pill `bg-surface`·accent)로 · 헤더 서브타이틀 · 유형/내용 라벨 · 컨텍스트 노트에서 raw 라우트 표시 삭제하고 SquareCheck+"현재 화면·열린 맵 자동 첨부" 안내만 · 하단 **2행 버튼**(모든 피드백 보기 풀폭[List/ArrowRight] + 취소/보내기 1:2).
+- 본문 **4000자 제한**(maxLength, 백엔드 FeedbackCreate max_length 일치) + "n / 4000" 카운터.
+- i18n feedback.subtitle/typeLabel/contentLabel/cancel 추가, bodyPlaceholder·contextNote 갱신, currentScreen(고아) 제거.
+- 검증: lint 0 · build 성공. 브라우저(:3001 로그인 Junho Kim) — 패널 시안 정합·카운터(29/4000)·**제출 e2e**(피드백 id=3 저장, context route "/") 확인.
+
+## 2026-07-05 — S1b: 셸 로그인 상태 반영 (Guest→Login·미로그인 피드백 숨김)
+- TopNav: 미로그인(user=null) 시 유저칩을 "Login"으로 표시 + 클릭 시 /login 이동(로그인 시 이름+드롭다운 유지). 피드백 버튼은 로그인 시에만 노출(`{user && …}`).
+- i18n `nav.guest`(top-nav 전용 고아) 제거 → `nav.login`(en Login / ko 로그인).
+- 검증: lint 0 · build 성공. (브라우저 시현은 :3001 재기동 후 확인 — 검증 시도 중 dev 서버가 에러페이지 반환해 스크린샷 미취득.)
+
+## 2026-07-05 — S2b: 피드백 사이드 패널 + TopNav 버튼 (프론트)
+- `feedback-side-panel.tsx` — 우측 슬라이드인(백드롭·ease-spring). 유형 세그먼트 한 행(버그/제안/문의/기타) + 본문 + 현재 화면(route·map#) 자동첨부 안내 + 제출 토스트 + "모든 피드백 보기"→/feedback.
+- TopNav 우측에 피드백 버튼(MessageSquare·accent). `lib/api.ts` submit/list/updateStatus + 타입. i18n feedback.*(en/ko). `/feedback` placeholder(S3에서 실구현).
+- 검증: lint 0 · build 성공(/feedback 생성). 브라우저(:3001) 패널 열림·세그먼트·자동첨부(/login)·레이아웃 스크린샷 확인(제출 e2e는 인증+백엔드에서).
+
+## 2026-07-05 — S2a: 피드백 백엔드 (Feedback 모델·라우터·테스트)
+- `Feedback` 모델(kind/body/author/context JSON/status/created_at) + `routers/feedback.py` — POST(201) 등록·GET 목록+집계(total/mine/in_progress/done)·PATCH 상태변경(sysadmin) + schemas(Create/Out/Counts/ListOut/StatusUpdate) + main.py 등록.
+- 테스트 `tests/test_feedback.py` 4건(작성·집계·상태변경·빈 본문 422).
+- 검증: ruff 통과 · pytest feedback 4/4 · 전체 385 pass(회귀 없음).
+
+## 2026-07-05 — S1a: 공유 셸 탭 폴리시 (아이콘·슬라이딩 박스·폰트 축소)
+- TopNav 탭: 아이콘 추가(Map/Megaphone/Inbox·14px/1.5) + 활성 표시를 정적 배경→**좌우 슬라이딩 네모 인디케이터**(grid-cols-3 등폭·`w-1/3`·`translateX(idx*100%)`·`duration-350 ease-spring`, 비활성 경로는 opacity0) + 폰트 text-caption→text-fine 축소.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 아이콘·축소폰트·세그먼트 레이아웃 확인(활성 슬라이드는 인증 탭에서 확인).
+
+## 2026-07-05 — S1: 공유 셸 3-way 전환 탭 + placeholder 라우트
+- TopNav: 브랜드 우측에 세그먼트 전환 탭(맵목록 `/`·공지 `/notices`·인박스 `/inbox`) 추가 — `usePathname`로 현재 경로 accent 강조(맵목록은 `/`·`/maps` 포함). 브랜드+탭을 좌측 그룹으로 래핑.
+- `/notices`·`/inbox` placeholder 라우트 생성(S4·S6에서 실 구현). i18n `nav.tab.maps/notices/inbox`(en/ko).
+- 검증: lint 0 errors(기존 pw-smoke 경고 1건 무관) · build 성공(두 라우트 정적 생성·TS/React Compiler 통과).
+
+## 2026-07-05 — 신규 화면 4종 설계·트래커 (피드백·공지·매뉴얼·인박스 + 공유 셸)
+- 워크트리 `feat+new-pages`에서 신규 화면 4종 착수. 설계 `docs/superpowers/specs/2026-07-05-new-screens-design.md`, 검토 트래커 `SCREEN-NEW-PAGES.md`(S1~S10 vertical slice).
+- 결정: 대시보드=진입 스텁만 / 공지 읽음=클라 localStorage 캐시(테이블 없음) / 매뉴얼=DB 저장+프론트 편집(manual.md fallback) / 피드백=관리자 상태변경 포함 / 작성·관리 권한=sysadmin.
+
 ## 2026-07-05 — 비교 인터랙션: 노드 클릭/hover·이동 포커스 링·워터마크 상위·엣지 라벨 블러
 - **워터마크 노드 위로**(`compare/page.tsx`) — z-0(뒤)→**z-[4]**(노드 z-2 위로 덮음, opacity .14 유지). 에디터 read-only 워터마크와 동일 동작.
 - **캔버스 노드/엣지 클릭 = 좌측 항목 클릭과 동일 효과** — `onNodeClick`/`onEdgeClick`로 `setFocusId`. 부수효과로 RF가 노드 pointer-events를 켜 **hover 강조 링(bpm-node-emph)도 복구**(이전엔 핸들러 없어 pointer-events off라 hover/click 불가).
