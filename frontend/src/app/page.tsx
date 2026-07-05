@@ -326,7 +326,7 @@ export default function MapListPage() {
     >
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
-        <h1 data-id="home-title" className="text-body-strong text-ink">Process Maps</h1>
+        <h1 data-id="home-title" className="text-tagline text-ink">Process Maps</h1>
         <button
           className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
           onClick={() => setDialogOpen(true)}

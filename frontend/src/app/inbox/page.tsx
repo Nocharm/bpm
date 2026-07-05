@@ -76,10 +76,9 @@ export default function InboxPage() {
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4">
         {/* 탭 + 모두 읽음 */}
+        <h1 className="text-tagline text-ink">Inbox</h1>
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-body-strong text-ink">Inbox</h1>
-            <div className="inline-grid grid-cols-2 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
+          <div className="inline-grid grid-cols-2 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
             {TABS.map((tabDef) => {
               const active = tab === tabDef.id;
               return (
@@ -101,7 +100,6 @@ export default function InboxPage() {
                 </button>
               );
             })}
-            </div>
           </div>
           {tab === "notifications" && unread > 0 && (
             <button
@@ -123,7 +121,7 @@ export default function InboxPage() {
           <div className="flex min-h-0 flex-1 gap-4">
             {/* 좌 목록 — 필터 + 카드 */}
             <aside className="flex w-80 shrink-0 flex-col border-r border-hairline">
-              <div className="px-3 py-3">
+              <div className="py-3 pr-3">
                 <IconPillFilter
                   options={filterOptions}
                   value={readFilter}
@@ -135,7 +133,7 @@ export default function InboxPage() {
                   {t("inbox.empty")}
                 </p>
               ) : (
-                <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
+                <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
                   {filtered.map((n) => {
                     const TypeIcon = typeIcon(n.type);
                     return (
