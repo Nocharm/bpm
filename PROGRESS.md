@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교: 핸들 변 그리디 제거 → 의미 기반 직접 배정(곁가지 꼬임 수정)
+- 증상: LR에서 재고예약→결제처리가 오른쪽으로 나와 **아래(bottom)로 진입**해 꼬임. 원인: 결제처리에 엣지 5개(있음·재고예약·재고부족알림·다음·재시도)인데 재시도(back)가 top 선점 → 그리디 회피가 재고예약을 반대편 bottom으로 밀어냄.
+- 수정(`handleSides`): 4변 그리디 회피(`used`)·`spineAwareSides`·`preferredSides`·`SIDE_VECTORS` 제거. 각 끝에 **의미상 정해진 변을 직접 배정**(핸들 공유 허용):
+  - passthrough=우회 변(LR bottom/TB right), back=우회 변(LR top/TB left).
+  - 그 외: off-spine 노드 자신=흐름축 변(이전 뒤·다음 앞), spine↔off-spine=spine이 cross측, 둘 다 spine=흐름축.
+  - → 재고예약이 결제처리에 top(LR)/left(TB)로 진입(재시도와 공유 무방), bottom 밀림 없음.
+- 검증: lint 0·build OK. 라이브(map 13) LR 재고예약→결제처리 top 진입·꼬임 해소·백본 직선 / TB [L-U]·[D-L] 유지 확인.
+
 ## 2026-07-05 — 비교: 곁가지 진입/진출 변을 spine 인식으로 정밀화(사용자 스펙)
 - 이전 `orientedSides`(양끝 모두 cross 우선)는 곁가지 노드 "자신"까지 위/아래로 진입시켜 오류. **spine 멤버십 기반 `spineAwareSides`로 교체**:
   - 곁가지(off-spine) 노드 자신 = **흐름축 변**(이전 노드=뒤쪽·다음 노드=앞쪽). 본류(spine) 노드가 곁가지와 연결될 때만 = **cross측 변**(위/아래·좌/우). 둘 다 spine이면 흐름축(본류 직선).

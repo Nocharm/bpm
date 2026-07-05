@@ -151,22 +151,6 @@ function buildAppNodes(
   }));
 }
 
-const SIDE_VECTORS: { side: HandleSide; vx: number; vy: number }[] = [
-  { side: "right", vx: 1, vy: 0 },
-  { side: "left", vx: -1, vy: 0 },
-  { side: "top", vx: 0, vy: -1 },
-  { side: "bottom", vx: 0, vy: 1 },
-];
-
-// 상대 노드 방향(dx,dy)에 잘 맞는 순으로 4변 정렬(내적 내림차순). 노드별 그리디 배정에서
-// 최상위부터 시도하되 이미 쓴 변이면 다음 변으로 넘어가 분기 엣지를 4변에 골고루 흩뿌린다.
-function preferredSides(dx: number, dy: number): HandleSide[] {
-  const len = Math.hypot(dx, dy) || 1;
-  return [...SIDE_VECTORS]
-    .sort((a, b) => (b.vx * dx + b.vy * dy) / len - (a.vx * dx + a.vy * dy) / len)
-    .map((s) => s.side);
-}
-
 // spine(척추) 판정 — 유지 노드에서 시작해 "분기 없는 단일 연속" 링크로 이어지는 추가 노드(인라인 삽입)까지
 // 확장. 선행 outDeg==1 → 후행도 spine, 후행 inDeg==1 → 선행도 spine. 분기/합류의 곁가지·삭제 노드는 제외.
 // alignBackbone(직선화)·handleSides(진입 변)가 공유. removed 노드는 present에 없어 항상 off-spine.
@@ -200,23 +184,6 @@ function computeSpine(
     }
   }
   return spine;
-}
-
-// 스파인 인식 변 선호 — 곁가지(off-spine) 노드 자신은 흐름축 변으로 붙고(이전 노드=뒤쪽 변·다음 노드=앞쪽 변),
-// 스파인 노드가 곁가지와 연결될 때만 cross측 변(위/아래·좌/우)으로 붙는다. 둘 다 스파인이면 흐름축(본류 직선).
-// 예(LR): 위쪽 곁가지 재고예약은 [L 진입·R 진출], 이웃 본류(재고확인?·결제처리)는 위(top)로 연결 → [U-L],[R-U].
-// TB에선 흐름축=세로(U/D)·cross=가로(L/R)로 자동 회전. 나머지 변은 내적순 fallback(그리디 분산).
-function spineAwareSides(
-  dx: number,
-  dy: number,
-  dir: "LR" | "TB",
-  thisOnSpine: boolean,
-  otherOnSpine: boolean,
-): HandleSide[] {
-  const flowSide: HandleSide = dir === "LR" ? (dx >= 0 ? "right" : "left") : dy >= 0 ? "bottom" : "top";
-  const crossSide: HandleSide = dir === "LR" ? (dy < 0 ? "top" : "bottom") : dx < 0 ? "left" : "right";
-  const primary = thisOnSpine && !otherOnSpine ? crossSide : flowSide;
-  return [primary, ...preferredSides(dx, dy).filter((side) => side !== primary)];
 }
 
 // dagre 배치 후처리 — 유지(unchanged/changed) 노드를 공통 backbone 중심Y에 맞춰 열(rank)별로 세로 이동.
@@ -577,20 +544,15 @@ function ComparePane({
     [positioned],
   );
 
-  // 엣지별 붙을 변(핸들) — 노드마다 자기 엣지들을 4변에 그리디 분산(겹침 최소화). passthrough·역행 루프는
-  // 흐름축과 수직인 변으로 고정 우회. 방향 확실한 엣지가 선호 변을 먼저 차지.
+  // 엣지별 붙을 변(핸들) — 의미상 정해진 변을 각 끝에 "직접" 배정(핸들 공유 허용). 이전의 4변 그리디 회피는
+  // 결제처리처럼 엣지가 많은 노드(있음·곁가지 2개·다음·재시도=5개)에서 곁가지를 반대편(아래)으로 밀어 꼬았음.
+  //  · passthrough(삭제 직접연결)=우회 변(LR bottom / TB right), 역행 루프(back)=우회 변(LR top / TB left)
+  //  · 그 외: 곁가지(off-spine) 노드 자신=흐름축 변(이전=뒤·다음=앞), 본류(spine)↔곁가지=본류가 cross측 변,
+  //    둘 다 spine=흐름축. → 위 곁가지는 본류에 top으로, 아래 삭제 노드는 bottom으로(재시도와 top 공유 무방).
   const handleSides = useMemo(() => {
-    // forced(우회): LR은 passthrough=bottom→bottom·back=top→top, TB는 passthrough=right→right·back=left→left.
-    type Endpoint = { edgeId: string; end: "source" | "target"; otherId: string; forced: HandleSide | null };
-    const perNode = new Map<string, Endpoint[]>();
-    const add = (nodeId: string, ep: Endpoint) => {
-      const list = perNode.get(nodeId);
-      if (list) list.push(ep);
-      else perNode.set(nodeId, [ep]);
-    };
-    // 흐름축 우회 변 — LR: 세로(아래 dip / 위 우회), TB: 가로(오른쪽 bulge / 왼쪽 우회).
     const arcSide: HandleSide = flowDir === "LR" ? "bottom" : "right";
     const backSide: HandleSide = flowDir === "LR" ? "top" : "left";
+    const result = new Map<string, { source: HandleSide; target: HandleSide }>();
     for (const edge of merged.edges) {
       const s = nodeCenters.get(edge.source);
       const t = nodeCenters.get(edge.target);
@@ -602,47 +564,28 @@ function ComparePane({
         (flowDir === "LR"
           ? t.cx < s.cx - 40 && Math.abs(t.cy - s.cy) < 150
           : t.cy < s.cy - 40 && Math.abs(t.cx - s.cx) < 150);
-      const forced: HandleSide | null = passthrough ? arcSide : back ? backSide : null;
-      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, forced });
-      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, forced });
-    }
-    const result = new Map<string, { source: HandleSide; target: HandleSide }>();
-    const setSide = (edgeId: string, end: "source" | "target", side: HandleSide) => {
-      const row = result.get(edgeId) ?? { source: "right" as HandleSide, target: "left" as HandleSide };
-      if (end === "source") row.source = side;
-      else row.target = side;
-      result.set(edgeId, row);
-    };
-    for (const [nodeId, endpoints] of perNode) {
-      const center = nodeCenters.get(nodeId);
-      if (!center) continue;
-      const used = new Set<HandleSide>();
-      // 고정 우회 변(passthrough·back) 먼저 자리 확보
-      for (const ep of endpoints) {
-        if (ep.forced) {
-          setSide(ep.edgeId, ep.end, ep.forced);
-          used.add(ep.forced);
-        }
-      }
-      // 나머지는 방향 확실한 순으로 4변 그리디 배정(이미 쓴 변 회피)
-      const normal = endpoints
-        .filter((ep) => !ep.forced)
-        .map((ep) => {
-          const other = nodeCenters.get(ep.otherId);
-          const dx = other ? other.cx - center.cx : 1;
-          const dy = other ? other.cy - center.cy : 0;
-          const len = Math.hypot(dx, dy) || 1;
-          const prefs = spineAwareSides(
-            dx, dy, flowDir, spineIds.has(nodeId), spineIds.has(ep.otherId),
-          );
-          return { ep, prefs, certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
-        });
-      normal.sort((a, b) => b.certainty - a.certainty);
-      for (const { ep, prefs } of normal) {
-        const side = prefs.find((candidate) => !used.has(candidate)) ?? prefs[0];
-        used.add(side);
-        setSide(ep.edgeId, ep.end, side);
-      }
+      // 한 끝의 변 — thisC/thisId=이 끝 노드, otherC/otherId=반대 끝 노드.
+      const sideFor = (
+        thisC: { cx: number; cy: number } | undefined,
+        otherC: { cx: number; cy: number } | undefined,
+        thisId: string,
+        otherId: string,
+      ): HandleSide => {
+        if (passthrough) return arcSide;
+        if (back) return backSide;
+        if (!thisC || !otherC) return flowDir === "LR" ? "right" : "bottom";
+        const dx = otherC.cx - thisC.cx;
+        const dy = otherC.cy - thisC.cy;
+        const flowSide: HandleSide =
+          flowDir === "LR" ? (dx >= 0 ? "right" : "left") : dy >= 0 ? "bottom" : "top";
+        const crossSide: HandleSide =
+          flowDir === "LR" ? (dy < 0 ? "top" : "bottom") : dx < 0 ? "left" : "right";
+        return spineIds.has(thisId) && !spineIds.has(otherId) ? crossSide : flowSide;
+      };
+      result.set(edge.id, {
+        source: sideFor(s, t, edge.source, edge.target),
+        target: sideFor(t, s, edge.target, edge.source),
+      });
     }
     return result;
   }, [merged, keptKeys, nodeCenters, flowDir, spineIds]);
