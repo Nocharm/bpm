@@ -893,6 +893,68 @@ export function markNotificationRead(id: number): Promise<NotificationItem> {
   return request<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
 }
 
+// ── 피드백 (design 2026-07-05) ──────────────
+
+export type FeedbackKind = "bug" | "suggestion" | "question" | "etc";
+export type FeedbackStatus = "new" | "in_progress" | "done";
+
+export interface FeedbackContext {
+  route?: string;
+  map_id?: number | null;
+  version_id?: number | null;
+}
+
+export interface FeedbackItem {
+  id: number;
+  kind: FeedbackKind;
+  body: string;
+  author: string;
+  context: FeedbackContext;
+  status: FeedbackStatus;
+  created_at: string;
+}
+
+export interface FeedbackCounts {
+  total: number;
+  mine: number;
+  in_progress: number;
+  done: number;
+}
+
+export interface FeedbackList {
+  items: FeedbackItem[];
+  counts: FeedbackCounts;
+}
+
+export function submitFeedback(input: {
+  kind: FeedbackKind;
+  body: string;
+  context?: FeedbackContext;
+}): Promise<FeedbackItem> {
+  return request<FeedbackItem>("/feedback", {
+    method: "POST",
+    body: JSON.stringify({
+      kind: input.kind,
+      body: input.body,
+      context: input.context ?? {},
+    }),
+  });
+}
+
+export function listFeedback(): Promise<FeedbackList> {
+  return request<FeedbackList>("/feedback");
+}
+
+export function updateFeedbackStatus(
+  id: number,
+  status: FeedbackStatus,
+): Promise<FeedbackItem> {
+  return request<FeedbackItem>(`/feedback/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
 
 export interface AiNodeAttributes {

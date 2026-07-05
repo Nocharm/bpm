@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S2b: 피드백 사이드 패널 + TopNav 버튼 (프론트)
+- `feedback-side-panel.tsx` — 우측 슬라이드인(백드롭·ease-spring). 유형 세그먼트 한 행(버그/제안/문의/기타) + 본문 + 현재 화면(route·map#) 자동첨부 안내 + 제출 토스트 + "모든 피드백 보기"→/feedback.
+- TopNav 우측에 피드백 버튼(MessageSquare·accent). `lib/api.ts` submit/list/updateStatus + 타입. i18n feedback.*(en/ko). `/feedback` placeholder(S3에서 실구현).
+- 검증: lint 0 · build 성공(/feedback 생성). 브라우저(:3001) 패널 열림·세그먼트·자동첨부(/login)·레이아웃 스크린샷 확인(제출 e2e는 인증+백엔드에서).
+
 ## 2026-07-05 — S2a: 피드백 백엔드 (Feedback 모델·라우터·테스트)
 - `Feedback` 모델(kind/body/author/context JSON/status/created_at) + `routers/feedback.py` — POST(201) 등록·GET 목록+집계(total/mine/in_progress/done)·PATCH 상태변경(sysadmin) + schemas(Create/Out/Counts/ListOut/StatusUpdate) + main.py 등록.
 - 테스트 `tests/test_feedback.py` 4건(작성·집계·상태변경·빈 본문 422).

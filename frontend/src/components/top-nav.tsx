@@ -1,7 +1,7 @@
 // 전역 네비게이션 바 — 브랜드 · 유저칩(드롭다운) · 영/한 토글. 모든 페이지 상단.
 "use client";
 
-import { Inbox, Map as MapIcon, Megaphone } from "lucide-react";
+import { Inbox, Map as MapIcon, Megaphone, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -11,6 +11,7 @@ import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/curr
 import { storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { FeedbackSidePanel } from "@/components/feedback-side-panel";
 import { NotificationBell } from "@/components/notification-bell";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
@@ -40,6 +41,7 @@ export function TopNav() {
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
   const [open, setOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 바깥 클릭 닫기 — 전체화면 오버레이는 페이지 호버를 가로채므로 document 리스너로 대체
@@ -119,6 +121,15 @@ export function TopNav() {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {/* 피드백 진입 — 우측 액션. 사이드 패널 오픈 */}
+        <button
+          type="button"
+          onClick={() => setFeedbackOpen(true)}
+          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-accent hover:bg-accent-tint"
+        >
+          <MessageSquare size={14} strokeWidth={1.5} />
+          {t("feedback.button")}
+        </button>
         {/* 무조건 렌더 — 로컬(인증 비활성)은 user가 null이라 가드 시 벨이 안 뜬다. 서버는 TopNav 자체가 AuthGate 인증 후에만 노출 */}
         <NotificationBell />
         <div ref={menuRef} className="relative">
@@ -172,6 +183,7 @@ export function TopNav() {
           ))}
         </div>
       </div>
+      <FeedbackSidePanel open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </nav>
   );
 }
