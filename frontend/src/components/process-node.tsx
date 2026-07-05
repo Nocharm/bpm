@@ -169,12 +169,82 @@ function deriveFill(color: string): string {
   return `color-mix(in srgb, ${color} 18%, white)`;
 }
 
-// 비교 화면 diff 상태별 강조 — 선택 링보다 우선
-const DIFF_RINGS: Record<string, string> = {
-  added: "ring-2 ring-added",
-  removed: "ring-2 ring-removed opacity-60",
-  changed: "ring-2 ring-changed",
+// 비교 화면 diff — 노드 자기색 대신 diff색으로 테두리/틴트/뱃지 (에디터에선 diffStatus 미설정).
+type DiffStatus = "added" | "removed" | "changed";
+const DIFF_COLOR: Record<DiffStatus, string> = {
+  added: "var(--color-added)",
+  removed: "var(--color-removed)",
+  changed: "var(--color-changed)",
 };
+const DIFF_BADGE_KEY: Record<DiffStatus, MessageKey> = {
+  added: "compare.legendAdded",
+  removed: "compare.legendRemoved",
+  changed: "compare.legendChanged",
+};
+const DIFF_BADGE_BG: Record<DiffStatus, string> = {
+  added: "bg-added",
+  removed: "bg-removed",
+  changed: "bg-changed",
+};
+
+// diff 노드 스타일 — diff색 테두리(삭제=점선)+연한 틴트 fill. --nc는 호버 강조 링용.
+function diffNodeStyle(status: DiffStatus): CSSProperties {
+  const c = DIFF_COLOR[status];
+  return {
+    borderColor: c,
+    borderWidth: "1.5px",
+    borderStyle: status === "removed" ? "dashed" : "solid",
+    background: `color-mix(in srgb, ${c} 12%, white)`,
+    "--nc": c,
+  } as unknown as CSSProperties;
+}
+
+// 상태 뱃지(상단) — opacity .7로 내용 안 가림. 위치는 className으로(마름모는 상단중앙).
+function DiffBadge({ status, className = "-top-2.5 left-2.5" }: { status: DiffStatus; className?: string }) {
+  const { t } = useI18n();
+  return (
+    <span
+      className={`absolute z-10 rounded-full px-1.5 text-[11px] font-semibold leading-5 text-white opacity-70 ${DIFF_BADGE_BG[status]} ${className}`}
+    >
+      {t(DIFF_BADGE_KEY[status])}
+    </span>
+  );
+}
+
+// 필 배경은 노드 fill과 동일한 불투명 틴트 — 뒤로 지나는 엣지(우회 아크)가 비쳐 변경 내용을 가리지 않게.
+const CHANGED_PILL_BG = "color-mix(in srgb, var(--color-changed) 12%, white)";
+
+// 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
+// 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.
+function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffFields"]> }) {
+  const { t } = useI18n();
+  const shown = fields.slice(0, 3);
+  const extra = fields.length - shown.length;
+  return (
+    <div className="absolute left-0 top-full z-10 mt-1.5 flex flex-col items-start gap-1">
+      {shown.map((field) => (
+        <span
+          key={field.label}
+          className="flex max-w-[220px] items-center gap-1 whitespace-nowrap rounded-xs border border-changed/30 px-1.5 py-0.5 text-[11px]"
+          style={{ backgroundColor: CHANGED_PILL_BG }}
+        >
+          <span className="shrink-0 font-semibold text-changed">{field.label}</span>
+          <span className="min-w-0 truncate text-ink-muted">{field.before}</span>
+          <span className="shrink-0 text-ink-tertiary">→</span>
+          <span className="min-w-0 truncate font-semibold text-ink">{field.after}</span>
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          className="rounded-xs border border-changed/30 px-1.5 py-0.5 text-[11px] font-medium text-changed"
+          style={{ backgroundColor: CHANGED_PILL_BG }}
+        >
+          {t("compare.moreFields", { n: extra })}
+        </span>
+      )}
+    </div>
+  );
+}
 
 // 미해결 코멘트 수 뱃지 (에디터 전용)
 function UnresolvedCommentBadge({ count }: { count: number }) {
@@ -315,16 +385,20 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const color = data.color || DEFAULT_COLORS[data.nodeType];
   const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
-  // 선택 링은 NodeSelectionRing 오버레이가 담당(노드 사이 슬라이드). 여기선 비교화면 diff 링만.
-  const ring = data.diffStatus ? DIFF_RINGS[data.diffStatus] : "";
+  // 비교화면 diff — diff색 테두리/틴트/뱃지로 표시(에디터에선 diffStatus 미설정 → 자기색). 선택 링은 오버레이 담당.
+  const diff = data.diffStatus;
+  const style = diff ? diffNodeStyle(diff) : nodeStyle(color, fill);
+  const diffFields = data.diffFields ?? [];
 
   if (data.nodeType === "subprocess") {
     return (
       <div
-        className={`group bpm-node-emph relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150 ${ring}`}
-        style={nodeStyle(color, fill)}
+        className="group bpm-node-emph relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150"
+        style={style}
         title={data.diffNote}
       >
+        {diff && <DiffBadge status={diff} />}
+        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
         <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
         <div className="min-w-0 flex-1">
           <div className="font-medium text-ink">
@@ -345,8 +419,9 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         ) : (
           (data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />
         )}
-        {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨 */}
-        <SubprocessHandles ends={data.subEnds ?? []} />
+        {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨.
+            비교뷰(diff)에선 방향 토글(LR/TB)로 상/하 진입이 필요해 4변 핸들(NodeHandles)을 쓴다. */}
+        {diff ? <NodeHandles /> : <SubprocessHandles ends={data.subEnds ?? []} />}
       </div>
     );
   }
@@ -359,9 +434,11 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
       >
           {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
         <div
-          className={`bpm-node-emph absolute inset-3 rotate-45 rounded-sm transition-all duration-150 ${ring}`}
-          style={nodeStyle(color, fill)}
+          className="bpm-node-emph absolute inset-3 rotate-45 rounded-sm transition-all duration-150"
+          style={style}
         />
+        {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
+        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
           <NodeTitle id={id} label={data.label} />
           {data.hasChildren && (
@@ -384,14 +461,16 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
   return (
     <div
-      className={`group bpm-node-emph relative px-3 py-2 text-sm transition-all duration-150 ${ring} ${
+      className={`group bpm-node-emph relative px-3 py-2 text-sm transition-all duration-150 ${
         isTerminal
           ? "min-w-[90px] rounded-full text-center"
           : "min-w-[150px] rounded-sm"
       }`}
-      style={nodeStyle(color, fill)}
+      style={style}
       title={data.diffNote}
     >
+      {diff && <DiffBadge status={diff} />}
+      {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
       <div className="font-medium text-ink">
         <NodeTitle
           id={id}
