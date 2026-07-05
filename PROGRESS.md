@@ -2,6 +2,14 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 신규 화면 전반: 이름 우선 필·날짜 TimePills 재활용·매뉴얼 SearchBox·승인 검색 (사용자 요청)
+- 공용 `lib/directory.ts`(`useDirectory` 모듈 캐시) + `components/user-pill.tsx`(`UserPill` — 이름 필 + 1초 호버 유저 카드, login_id는 보조). 신규 화면 사용자 표시 단일 소스.
+- **아이디 대신 이름 필**: 인박스 승인(카드·상세 요청자), 공지(카드·상세 작성자), 피드백(표·상세 모달 작성자)를 `UserPill`로 — 이름 먼저·id는 호버 카드 보조.
+- **날짜 필 재활용(TimePills)**: 인박스 알림/승인 상세, 공지 상세, 매뉴얼 배지, 피드백 상세 모달의 평문 날짜를 전부 `TimePills`로. `feedback-detail-modal`의 `MetaRow`는 `value: ReactNode`로 열어 UserPill/TimePills 주입.
+- **매뉴얼 검색을 공용 SearchBox로**: Ctrl+K 커스텀 입력 제거 → `SearchBox`(`/` 단축키·`/` 버튼 클릭 포커스·입력 시 X 삭제) 재사용. `SearchBox`에 `onEnter`(매치 점프)·`className`(폭) prop 추가.
+- **인박스 승인 대기 탭에도 검색창**: 다른 탭과 동일 위치. 제목·맵·요청자(id+이름)로 필터. i18n `inbox.approvalsSearchPlaceholder`.
+- 검증: lint 0 · build 성공. 브라우저(:3001) — 승인 요청자 "Junho Kim" 이름 필·상대시간 필, 승인 탭 검색창, 공지 작성자 이름 필, 매뉴얼 `/` 검색·X 확인.
+
 ## 2026-07-05 — S8b: 매뉴얼 뷰어 `/manual`
 - `src/app/manual/page.tsx` — 좌 TOC(본문 H2/H3 파생, 펜스 코드 제외·클릭 시 렌더 헤딩으로 스크롤·활성 강조) + 우 `MarkdownView`(코드블록/인라인 복사 내장). 헤더: 타이틀 + 배포포함/업데이트 배지 · 본문검색(`Ctrl/⌘+K` 포커스, Enter 순환 점프 + accent-tint 플래시, 삭제 버튼) · 읽기폭 토글(46rem↔전폭) · 본문 한정 읽기 테마 토글.
 - 읽기 테마: 라이트 전용(design §7)·토큰 제약상 다크 대신 **elevated warm paper 패널**(border+shadow+`bg-surface-pearl`)로 명확히 구분. (pearl 단독은 흰색과 미구분이라 테두리/그림자 병용.)

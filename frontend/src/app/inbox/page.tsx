@@ -30,7 +30,7 @@ import {
   type InboxApprovalKind,
   type NotificationItem,
 } from "@/lib/api";
-import { formatKst } from "@/lib/datetime";
+import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { filterByQuery } from "@/lib/search";
@@ -38,6 +38,7 @@ import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { UserPill } from "@/components/user-pill";
 
 type Tab = "approvals" | "notifications";
 type ReadFilter = "all" | "unread";
@@ -87,6 +88,7 @@ export default function InboxPage() {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [nowMs] = useState(() => Date.now());
+  const dir = useDirectory(); // 요청자 login_id → 이름 해석(검색·표시)
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
 
@@ -109,6 +111,14 @@ export default function InboxPage() {
     { field: "message", text: n.message },
   ]).map((hit) => hit.item);
   const selected = items.find((n) => n.id === selectedId) ?? null;
+
+  // 승인 큐도 검색 — 제목·맵·요청자(id+이름) 대상
+  const filteredApprovals = filterByQuery(approvals, search, (a) => [
+    { field: "title", text: a.title },
+    { field: "map", text: a.map_name },
+    { field: "requester", text: a.requester },
+    { field: "requesterName", text: dir.get(a.requester)?.name ?? "" },
+  ]).map((hit) => hit.item);
 
   const approvalKey = (a: InboxApproval) => `${a.kind}:${a.id}`;
   const selectedApproval =
@@ -176,14 +186,17 @@ export default function InboxPage() {
           {/* 좌 목록 — 검색·필터(알림 전용) + 탭(우측정렬) + 카드 */}
           <aside className="flex min-w-[18rem] flex-1 flex-col border-r border-hairline">
             <div className="flex flex-col gap-2 py-3 pr-3">
-              {tab === "notifications" && (
-                <SearchBox
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={t("inbox.searchPlaceholder")}
-                  inputRef={searchRef}
-                />
-              )}
+              {/* 검색 — 두 탭 동일 위치. 알림=메시지, 승인=제목·맵·요청자 */}
+              <SearchBox
+                value={search}
+                onChange={setSearch}
+                placeholder={
+                  tab === "approvals"
+                    ? t("inbox.approvalsSearchPlaceholder")
+                    : t("inbox.searchPlaceholder")
+                }
+                inputRef={searchRef}
+              />
               {/* All/안읽음 필터(알림 전용, 좌) · 승인대기/알림 탭(우측정렬) */}
               <div className="flex items-center gap-2">
                 {tab === "notifications" && (
@@ -221,13 +234,13 @@ export default function InboxPage() {
             </div>
 
             {tab === "approvals" ? (
-              approvals.length === 0 ? (
+              filteredApprovals.length === 0 ? (
                 <p className="px-4 py-8 text-center text-caption text-ink-tertiary">
                   {t("inbox.approvalsEmpty")}
                 </p>
               ) : (
                 <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
-                  {approvals.map((a) => {
+                  {filteredApprovals.map((a) => {
                     const key = approvalKey(a);
                     return (
                       <li key={key}>
@@ -252,10 +265,11 @@ export default function InboxPage() {
                             {a.title}
                           </span>
                           <span className="truncate text-fine text-ink-tertiary">{a.map_name}</span>
-                          {/* 요청자(좌) · 시간 필(우) */}
+                          {/* 요청자 이름 필(좌) · 시간 필(우) */}
                           <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
-                            <span className="truncate">
-                              {t("inbox.requestedBy")} {a.requester}
+                            <span className="flex min-w-0 items-center gap-1">
+                              <span className="shrink-0">{t("inbox.requestedBy")}</span>
+                              <UserPill loginId={a.requester} />
                             </span>
                             <span className="flex shrink-0 items-center gap-1">
                               <TimePills iso={a.created_at} nowMs={nowMs} />
@@ -324,6 +338,7 @@ export default function InboxPage() {
                   rejectReason={rejectReason}
                   onRejectReasonChange={setRejectReason}
                   busy={approvalBusy}
+                  nowMs={nowMs}
                   onApprove={() => void actApproval(selectedApproval, true)}
                   onReject={() => void actApproval(selectedApproval, false)}
                   t={t}
@@ -336,9 +351,9 @@ export default function InboxPage() {
             ) : selected ? (
               <article className="px-6 py-4">
                 <p className="whitespace-pre-wrap text-body text-ink">{selected.message}</p>
-                <p className="mt-2 text-fine text-ink-tertiary">
-                  {formatKst(selected.created_at)}
-                </p>
+                <div className="mt-2 flex">
+                  <TimePills iso={selected.created_at} nowMs={nowMs} />
+                </div>
                 {selected.map_id !== null && (
                   <Link
                     href={`/maps/${selected.map_id}`}
@@ -366,6 +381,7 @@ function ApprovalDetail({
   rejectReason,
   onRejectReasonChange,
   busy,
+  nowMs,
   onApprove,
   onReject,
   t,
@@ -374,6 +390,7 @@ function ApprovalDetail({
   rejectReason: string;
   onRejectReasonChange: (value: string) => void;
   busy: boolean;
+  nowMs: number;
   onApprove: () => void;
   onReject: () => void;
   t: (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -395,10 +412,13 @@ function ApprovalDetail({
           {approval.map_name}
         </Link>
         <span className="text-ink-tertiary">·</span>
-        <span>
-          {t("inbox.requestedBy")} {approval.requester}
+        <span className="flex items-center gap-1">
+          {t("inbox.requestedBy")}
+          <UserPill loginId={approval.requester} />
         </span>
-        <span className="text-ink-tertiary">{formatKst(approval.created_at)}</span>
+        <span className="flex items-center gap-1">
+          <TimePills iso={approval.created_at} nowMs={nowMs} />
+        </span>
       </div>
 
       {approval.detail && Object.keys(approval.detail).length > 0 && (

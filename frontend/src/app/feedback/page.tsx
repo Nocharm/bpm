@@ -19,6 +19,7 @@ import { useI18n } from "@/lib/i18n";
 import { FeedbackDetailModal } from "@/components/feedback-detail-modal";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { Pagination } from "@/components/pagination";
+import { UserPill } from "@/components/user-pill";
 
 const PAGE_SIZE = 20;
 
@@ -199,9 +200,7 @@ export default function FeedbackPage() {
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2">
-                  <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
-                    {f.author}
-                  </span>
+                  <UserPill loginId={f.author} />
                 </td>
                 <td className="px-3 py-2">
                   <span

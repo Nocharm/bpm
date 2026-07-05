@@ -3,7 +3,7 @@
 // 피드백 상세/관리 모달 — 상태변경(관리자)·답글(관리자, done 제외)·본문수정/삭제(작성자, draft만).
 
 import { Check, PencilLine, Send, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import {
   deleteFeedback,
@@ -11,7 +11,6 @@ import {
   type FeedbackItem,
   type FeedbackStatus,
 } from "@/lib/api";
-import { formatKst } from "@/lib/datetime";
 import {
   FEEDBACK_KIND_LABEL,
   FEEDBACK_KIND_STYLE,
@@ -20,6 +19,8 @@ import {
   FEEDBACK_STATUS_STYLE,
 } from "@/lib/feedback-meta";
 import { useI18n } from "@/lib/i18n";
+import { TimePills } from "@/components/time-pills";
+import { UserPill } from "@/components/user-pill";
 
 // 상태별 슬라이딩 인디케이터 배경·활성 텍스트 색
 const STATUS_INDICATOR: Record<FeedbackStatus, string> = {
@@ -47,6 +48,7 @@ export function FeedbackDetailModal({
   onChanged: (updated: FeedbackItem | null) => void;
 }) {
   const { t } = useI18n();
+  const [nowMs] = useState(() => Date.now());
   const [reply, setReply] = useState(feedback.reply);
   const [bodyDraft, setBodyDraft] = useState(feedback.body);
   const [editingBody, setEditingBody] = useState(false);
@@ -217,20 +219,38 @@ export function FeedbackDetailModal({
 
           {/* 메타 — 작성자·화면·시각들 */}
           <section className="flex flex-col gap-1 border-t border-hairline pt-3 text-fine text-ink-tertiary">
-            <MetaRow label={t("feedback.colAuthor")} value={feedback.author} />
-            {route && <MetaRow label={t("feedback.detail.screen")} value={route} />}
-            <MetaRow label={t("feedback.detail.submittedAt")} value={formatKst(feedback.created_at)} />
+            <MetaRow label={t("feedback.colAuthor")} value={<UserPill loginId={feedback.author} />} />
+            {route && (
+              <MetaRow
+                label={t("feedback.detail.screen")}
+                value={
+                  <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                    {route}
+                  </span>
+                }
+              />
+            )}
+            <MetaRow
+              label={t("feedback.detail.submittedAt")}
+              value={<TimePills iso={feedback.created_at} nowMs={nowMs} />}
+            />
             {feedback.body_edited_at && (
               <MetaRow
                 label={t("feedback.detail.bodyEditedAt")}
-                value={formatKst(feedback.body_edited_at)}
+                value={<TimePills iso={feedback.body_edited_at} nowMs={nowMs} />}
               />
             )}
             {feedback.reply_at && (
-              <MetaRow label={t("feedback.detail.repliedAt")} value={formatKst(feedback.reply_at)} />
+              <MetaRow
+                label={t("feedback.detail.repliedAt")}
+                value={<TimePills iso={feedback.reply_at} nowMs={nowMs} />}
+              />
             )}
             {feedback.done_at && (
-              <MetaRow label={t("feedback.detail.doneAt")} value={formatKst(feedback.done_at)} />
+              <MetaRow
+                label={t("feedback.detail.doneAt")}
+                value={<TimePills iso={feedback.done_at} nowMs={nowMs} />}
+              />
             )}
           </section>
         </div>
@@ -311,13 +331,12 @@ export function FeedbackDetailModal({
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
+// 값은 이미 필/컴포넌트(UserPill·TimePills·pill span)로 전달 — 여기서 감싸지 않는다.
+function MetaRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <span>{label}</span>
-      <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
-        {value}
-      </span>
+      <span className="flex items-center gap-1">{value}</span>
     </div>
   );
 }

@@ -1,15 +1,17 @@
 "use client";
 
-// 사용 매뉴얼 뷰어 — 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(Ctrl+K)·읽기폭·본문 한정 읽기 테마 토글.
+// 사용 매뉴얼 뷰어 — 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(/ 포커스)·읽기폭·본문 한정 읽기 테마 토글.
 // 코드블록/인라인 코드 복사는 MarkdownView 내장. 데이터는 getManual()(DB 우선·manual.md fallback). (design 2026-07-05)
 
-import { Contrast, MoveHorizontal, Search, X } from "lucide-react";
+import { Contrast, MoveHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { getManual, type ManualDoc } from "@/lib/api";
-import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useSlashFocus } from "@/lib/use-slash-focus";
 import { MarkdownView } from "@/components/markdown-view";
+import { SearchBox } from "@/components/search-box";
+import { TimePills } from "@/components/time-pills";
 import { Tooltip } from "@/components/tooltip";
 
 interface TocEntry {
@@ -46,8 +48,10 @@ export default function ManualPage() {
   const [activeToc, setActiveToc] = useState(-1);
   const [readWide, setReadWide] = useState(false);
   const [readTheme, setReadTheme] = useState(false);
+  const [nowMs] = useState(() => Date.now());
   const searchRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  useSlashFocus(searchRef);
 
   useEffect(() => {
     let alive = true;
@@ -57,18 +61,6 @@ export default function ManualPage() {
     return () => {
       alive = false;
     };
-  }, []);
-
-  // Ctrl/⌘+K → 본문검색 포커스
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const content = doc?.content ?? "";
@@ -109,12 +101,6 @@ export default function ManualPage() {
     }, 1200);
   };
 
-  const clearSearch = () => {
-    setSearch("");
-    setMatchPos(-1);
-    searchRef.current?.focus();
-  };
-
   return (
     <div className="flex h-full min-h-0 flex-col px-8 py-6">
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4">
@@ -122,48 +108,32 @@ export default function ManualPage() {
         <div className="flex shrink-0 items-center gap-4">
           <div className="flex items-center gap-2">
             <h1 className="text-tagline text-ink">{t("manual.title")}</h1>
-            {doc && (
-              <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
-                {doc.updated_at
-                  ? `${t("manual.updated")} ${formatKst(doc.updated_at).split(" ")[0]}`
-                  : t("manual.bundled")}
-              </span>
-            )}
+            {doc &&
+              (doc.updated_at ? (
+                <span className="flex items-center gap-1">
+                  <span className="text-fine text-ink-tertiary">{t("manual.updated")}</span>
+                  <TimePills iso={doc.updated_at} nowMs={nowMs} />
+                </span>
+              ) : (
+                <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
+                  {t("manual.bundled")}
+                </span>
+              ))}
           </div>
 
           <div className="flex flex-1 justify-center">
-            <div className="flex w-full max-w-md items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-1.5">
-              <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-              <input
-                ref={searchRef}
-                type="text"
-                data-id="manual-search"
-                className="w-full bg-transparent text-caption text-ink outline-none placeholder:text-ink-tertiary"
-                placeholder={t("manual.searchPlaceholder")}
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setMatchPos(-1);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") jumpToMatch();
-                }}
-              />
-              {search === "" ? (
-                <kbd className="shrink-0 rounded-xs border border-hairline bg-surface-alt px-1.5 text-fine text-ink-tertiary">
-                  Ctrl K
-                </kbd>
-              ) : (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={clearSearch}
-                  className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                >
-                  <X size={14} strokeWidth={1.5} />
-                </button>
-              )}
-            </div>
+            <SearchBox
+              className="w-full max-w-md"
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setMatchPos(-1);
+              }}
+              placeholder={t("manual.searchPlaceholder")}
+              inputRef={searchRef}
+              onEnter={jumpToMatch}
+              dataId="manual-search"
+            />
           </div>
 
           {/* 읽기 도구 — 읽기폭·본문 한정 읽기 테마 */}
