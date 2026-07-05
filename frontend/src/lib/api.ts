@@ -672,6 +672,27 @@ export function decideApprovalRequest(
   });
 }
 
+// ── 알림·승인 인박스 (S7) ──────────────────────────────────────
+export type InboxApprovalKind = "version_approval" | "checkout_transfer" | "approval_request";
+
+export interface InboxApproval {
+  kind: InboxApprovalKind;
+  id: number; // act 엔드포인트가 받는 id (version_approval=version_id, 그 외=request id)
+  title: string;
+  map_id: number;
+  map_name: string;
+  requester: string;
+  status: string;
+  created_at: string;
+  version_id: number | null;
+  detail: Record<string, unknown> | null;
+}
+
+// 내가 결정할 승인 대기 통합 큐 — 버전 승인·점유권 이전·권한/가시성. act는 각 출처 기존 함수 재사용.
+export function listInboxApprovals(): Promise<InboxApproval[]> {
+  return request<InboxApproval[]>("/inbox/approvals");
+}
+
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
 
 export interface DirectoryUser {

@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S7: 인박스 승인 대기 탭 — 통합 승인 큐(백엔드 집계 + 프론트 승인/반려)
+- 백엔드 `GET /api/inbox/approvals`(`routers/inbox.py`) — 세 출처 집계: 버전 게시 승인(MapApprover·pending·미승인), 점유권 이전 요청(점유자/오너/sysadmin), 권한·가시성 승인요청(맵 승인자/sysadmin). kind로 구분, act는 기존 엔드포인트 재사용. `InboxApprovalOut` 스키마 + main.py 등록 + `tests/test_inbox.py`(4건).
+- 프론트: api `listInboxApprovals`+타입. 인박스 승인 탭 = 대기 큐(카드: 유형 필·제목·맵·요청자·시간) + 상세(승인/반려·맵 열기, 버전 승인은 반려 사유 필수). 승인/반려는 kind별 approveVersion/rejectVersion/decideCheckoutRequest/decideApprovalRequest 호출 후 재조회. 탭 배지=대기 건수. 승인 탭에선 검색·필터 숨김.
+- 검증: ruff·pytest 4/4·전체 398 · lint 0 · build 성공. 브라우저(:8001, admin.kim 시드) — 승인 카드·상세·배지·승인 e2e(승인 시 큐에서 제거) 확인. (반려는 사유 게이팅 시각 확인 + rejectVersion 기존 테스트 커버.)
+
 ## 2026-07-05 — S6f: 카드 시각 필(상대/2필) + 검색 삭제버튼·클릭가능 "/" + 인박스 탭 필터행 이동
 - 공용 `components/time-pills.tsx` — 과거 2주 이내면 상대시간 1필("~분 전", 기존 time.* i18n·relativeAgo 로직 재사용), 그 외엔 날짜(YYYY-MM-DD)·시각(HH:mm) 2필. nowMs는 페이지가 `useState(()=>Date.now())`로 1회 주입(purity). 노티스·인박스 카드에 적용.
 - SearchBox: 검색어 있으면 **전부삭제(X) 버튼**(클릭 시 clear+포커스), 없으면 **클릭 가능한 "/" 버튼**(포커스, 테두리+shadow-sm 입체감·hover). peer-focus 힌트 방식 제거. `dataId` prop 추가.

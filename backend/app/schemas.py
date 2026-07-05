@@ -212,6 +212,24 @@ class CheckoutDecideIn(BaseModel):
     approve: bool
 
 
+class InboxApprovalOut(BaseModel):
+    """승인 대기 인박스 통합 항목 — 세 출처(버전 승인·점유권 이전·권한/가시성)를 kind로 구분.
+
+    id: 각 kind의 act 엔드포인트가 받는 id (version_approval=version_id, 그 외=request id).
+    """
+
+    kind: Literal["version_approval", "checkout_transfer", "approval_request"]
+    id: int
+    title: str
+    map_id: int
+    map_name: str
+    requester: str
+    status: str
+    created_at: datetime
+    version_id: int | None = None  # checkout_transfer·version_approval의 대상 버전
+    detail: dict | None = None  # approval_request의 payload 등 부가 정보
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
