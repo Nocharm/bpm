@@ -85,13 +85,15 @@ async def main() -> None:
             await session.flush()
             session.add(_owner(m.id))
             session.add(MapApprover(map_id=m.id, user_id=VIEWER, assigned_by="seed"))
+            # 알림 메시지엔 아이디 대신 사람 이름을 노출 (미등록이면 login_id fallback)
+            submitter_name = await workflow.get_display_name(session, submitter)
             session.add(
                 Notification(
                     recipient=VIEWER,
                     type="review_requested",
                     map_id=m.id,
                     version_id=v.id,
-                    message=f"{submitter} 님이 '{v.label}' 승인을 요청했습니다.",
+                    message=f"{submitter_name} 님이 '{v.label}' 승인을 요청했습니다.",
                     read=False,
                 )
             )

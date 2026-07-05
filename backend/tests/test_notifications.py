@@ -1,12 +1,27 @@
 """In-app notification tests — submit/publish side-effects + read (design 2026-06-14)."""
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
+from app.models import Employee
 from app.settings import settings
 
 
 _notif_seq = 0
+
+
+def _add_employee(login_id: str, name: str) -> None:
+    """디렉터리에 이름 있는 직원 1명 추가 — 알림 메시지 이름 해석 테스트용."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            session.add(Employee(login_id=login_id, name=name, source="local"))
+            await session.commit()
+
+    asyncio.run(_run())
 
 
 def _pending_version(client: TestClient, approvers: list[str]) -> tuple[int, int]:
@@ -35,6 +50,20 @@ def test_submit_notifies_each_approver(
     assert len(a_notifs) == 1
     assert a_notifs[0]["type"] == "review_requested"
     assert len(b_notifs) == 1
+
+
+def test_submit_notification_uses_requester_name(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """알림 메시지는 요청자 login_id 대신 등록된 이름을 노출한다 (id→name)."""
+    _add_employee("req.named", "Named Requester")
+    monkeypatch.setattr(settings, "dev_user", "req.named")
+    _pending_version(client, ["notif-appr-name"])
+
+    monkeypatch.setattr(settings, "dev_user", "notif-appr-name")
+    message = client.get("/api/notifications?unread_only=true").json()[0]["message"]
+    assert "Named Requester" in message
+    assert "req.named" not in message
 
 
 def test_mark_read_filters_unread(

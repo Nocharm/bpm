@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Notification
+from app.models import Employee, Notification
 
 DRAFT = "draft"
 PENDING = "pending"
@@ -18,6 +18,15 @@ EDITABLE_STATUSES = frozenset({DRAFT, REJECTED})
 def is_editable_status(status: str) -> bool:
     """이 상태의 버전을 편집/체크아웃할 수 있는지."""
     return status in EDITABLE_STATUSES
+
+
+async def get_display_name(session: AsyncSession, login_id: str) -> str:
+    """login_id → 표시 이름(Employee.name). 미등록·빈 이름이면 login_id 그대로.
+
+    알림 메시지 등에 아이디 대신 사람 이름을 노출하기 위한 조회.
+    """
+    emp = await session.get(Employee, login_id)
+    return emp.name if emp is not None and emp.name else login_id
 
 
 def create_notifications(

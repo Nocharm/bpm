@@ -508,13 +508,14 @@ async def submit_version(
     version.reject_reason = None
     version.checked_out_by = None
     version.checked_out_at = None
+    requester_name = await workflow.get_display_name(session, user)
     workflow.create_notifications(
         session,
         approvers,
         type="review_requested",
         map_id=version.map_id,
         version_id=version_id,
-        message=f"{user} requested approval for '{version.label}'",
+        message=f"{requester_name} requested approval for '{version.label}'",
     )
     record_version_event(session, version_id, "submitted", user)
     await session.commit()

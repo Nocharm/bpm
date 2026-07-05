@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 알림 메시지 요청자 아이디→이름 (사용자: "아이디 대신 이름 알람에도 적용")
+- `workflow.get_display_name(session, login_id)` 추가 — Employee.name 조회, 미등록·빈 이름이면 login_id fallback.
+- 승인요청 알림 생성에 적용: `versions.py`(제출 알림 "{name} requested approval…")·시드 `seed_inbox_demo`("{name} 님이…"). 기존 dev.db 알림도 id→name 일괄 보정.
+- 테스트 `test_notifications`(+1: 이름 노출·id 미노출). 검증: ruff·pytest 403·브라우저 인박스(Soyeon Park/Minjae Lee/Junho Kim) 확인.
+
 ## 2026-07-06 — 마이너 UI: 최근카드 배지 모프 · 홈 Manual 버튼 · 매뉴얼 검색 강조 지속
 - 브랜치 `fix/minor-ui`(main 분기). 프론트 3파일.
 - **최근 열람 카드**(`map-card.tsx`): 오너·수정시각 자리에 accent-tint 필 배지 노출, 카드 호버 시 같은 박스가 배경을 잃으며(`transition-colors`) 오너·수정시각으로 제자리 크로스페이드(grid 셀 겹침 → 높이 점프·말줄임 없음).
