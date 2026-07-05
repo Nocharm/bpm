@@ -1,0 +1,460 @@
+<!doctype html>
+<!--
+  Version-compare screen — responsive HTML mockup for design fine-tuning (NOT production).
+  Real @theme tokens from frontend/src/app/globals.css. EN-first chrome + KO node data.
+  Covers C1 (shell), C2 (diff nodes), C3 (changes panel). Canvas is read-only (watermark).
+  Diagram + changes panel + counts are all generated from one data model (NODES/EDGES).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Version Compare — mockup</title>
+<style>
+:root{
+  --color-accent:#6a41ff; --color-accent-focus:#5733e0; --color-on-accent:#fff;
+  --color-accent-tint:#efebff; --color-accent-tint-border:#d7ccff;
+  --color-surface:#fff; --color-surface-alt:#f5f5f7; --color-surface-pearl:#fafafc;
+  --color-canvas:#f6f6f8; --color-canvas-dot:#bdbdc9;
+  --color-ink:#16161d; --color-ink-secondary:#333; --color-ink-tertiary:#7a7a7a; --color-ink-muted:#a0a0a8;
+  --color-divider:#f0f0f0; --color-hairline:#e6e6ea; --color-border-strong:#c9c9d1;
+  --color-error:#cc3300;
+  --shadow-sm:0 1px 2px rgba(22,22,29,.06); --shadow-md:0 4px 12px rgba(22,22,29,.08); --shadow-lg:0 8px 28px rgba(22,22,29,.12);
+  --color-added:#16794f; --color-removed:#cc3300; --color-changed:#9a6b00;
+  --radius-xs:5px; --radius-sm:8px; --radius-md:11px; --radius-lg:18px;
+  --font:"Pretendard Variable",Pretendard,-apple-system,"SF Pro Text",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font);color:var(--color-ink);background:var(--color-surface);font-size:14px;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+button:active{transform:scale(.97)}
+.app{display:flex;flex-direction:column;height:100vh;min-height:0}
+
+/* ── C1 header ── */
+.topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--color-surface);border-bottom:1px solid var(--color-hairline);flex-wrap:wrap}
+.back{display:flex;align-items:center;gap:4px;color:var(--color-accent);font-size:14px}
+.back:hover{text-decoration:underline}
+.vdiv{width:1px;height:16px;background:var(--color-divider)}
+.titlewrap{display:flex;align-items:baseline;gap:8px}
+.maptitle{font-size:17px;font-weight:600}
+.subtitle{font-size:14px;color:var(--color-ink-tertiary)}
+.selgroup{display:flex;align-items:center;gap:8px;margin-left:8px}
+.roletag{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--color-ink-tertiary)}
+.pill{position:relative;display:flex;align-items:center;height:28px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);background:var(--color-surface);padding:0 24px 0 8px}
+.pill:hover{background:var(--color-surface-alt)}
+.dot{width:6px;height:6px;border-radius:999px;margin-right:6px;flex:0 0 auto}
+.pill select{appearance:none;border:0;background:none;font:inherit;font-size:14px;color:var(--color-ink);outline:none;cursor:pointer}
+.pill .chev{position:absolute;right:6px;color:var(--color-ink-tertiary);pointer-events:none}
+.arrow-i{color:var(--color-ink-tertiary)}
+.swap{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);color:var(--color-ink-secondary)}
+.swap:hover{background:var(--color-surface-alt)}
+.spacer{margin-left:auto}
+.actions{display:flex;align-items:center;gap:8px}
+.btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);font-size:14px;color:var(--color-ink-secondary)}
+.btn:hover{background:var(--color-surface-alt)}
+.btn-primary{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;background:var(--color-accent);color:var(--color-on-accent)}
+.btn-primary:hover{background:var(--color-accent-focus)}
+
+/* ── main split ── */
+.main{display:flex;min-height:0;flex:1}
+.canvas{position:relative;flex:1;min-width:0;background:var(--color-canvas);overflow:hidden}
+
+/* read-only watermark — matches main editor (page.tsx): accent, 120px, uppercase, opacity .14 */
+.watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;overflow:hidden}
+.watermark .wm{transform:rotate(-18deg);color:var(--color-accent);opacity:.14;
+  font-size:120px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;user-select:none}
+
+/* overlays */
+.overlay{position:absolute;z-index:6;border:1px solid var(--color-hairline);background:rgba(255,255,255,.82);
+  border-radius:var(--radius-sm);box-shadow:var(--shadow-sm);backdrop-filter:blur(4px)}
+.count-pill{top:12px;left:12px;padding:6px 10px}
+.count-pill .row{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--color-ink-secondary)}
+.count-pill .seg{display:flex;align-items:center;gap:6px}
+.count-pill .cdot{width:8px;height:8px;border-radius:999px}
+.count-pill b{color:var(--color-ink);font-weight:600}
+.count-pill .sep{width:1px;height:12px;background:var(--color-divider)}
+.legend{bottom:12px;left:12px;padding:6px 10px}
+.legend .row{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--color-ink-secondary)}
+.legend .seg{display:flex;align-items:center;gap:6px}
+.legend .sw{width:12px;height:12px;border-radius:3px;border:2px solid}
+.zoombar{bottom:12px;right:12px;display:flex;align-items:center;gap:2px;padding:2px}
+.zoombar button{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:var(--radius-xs);color:var(--color-ink-secondary)}
+.zoombar button:hover{background:var(--color-surface-alt)}
+.zoombar .pct{width:38px;text-align:center;font-size:12px;color:var(--color-ink-secondary);font-variant-numeric:tabular-nums}
+.zoombar .zdiv{width:1px;height:16px;background:var(--color-divider);margin:0 2px}
+
+/* ── C2 diagram (JS-populated) ── */
+#stage{position:absolute;top:50%;transform-origin:left center;z-index:2}
+#edges{position:absolute;left:0;top:0;overflow:visible}
+#nodes{position:absolute;left:0;top:0}
+.node{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;
+  font-size:14px;color:var(--color-ink);border:1.5px solid var(--color-border-strong);
+  background:var(--color-surface);border-radius:var(--radius-sm);box-shadow:var(--shadow-sm);padding:6px 12px}
+.node .sub-ic{color:var(--color-ink-tertiary);flex:0 0 auto;margin-right:6px}
+.node.subprocess{justify-content:flex-start;text-align:left}
+.node.start,.node.end{border-radius:999px}
+.node.decision{padding:0}
+.node.decision .lbl{white-space:nowrap;font-size:12px}
+.node.added{border-color:var(--color-added);background:color-mix(in srgb,var(--color-added) 12%,#fff)}
+.node.removed{border-style:dashed;border-color:var(--color-removed);background:color-mix(in srgb,var(--color-removed) 10%,#fff)}
+.node.changed{border-color:var(--color-changed);background:color-mix(in srgb,var(--color-changed) 12%,#fff)}
+.node.start.unchanged{border-color:var(--color-added);background:color-mix(in srgb,var(--color-added) 12%,#fff)}
+.badge{position:absolute;z-index:3;font-size:11px;font-weight:600;color:#fff;padding:1px 7px;border-radius:999px;line-height:1.5;opacity:.7}
+.badge.added{background:var(--color-added)}
+.badge.removed{background:var(--color-removed)}
+.badge.changed{background:var(--color-changed)}
+.elabel{position:absolute;transform:translate(-50%,-50%);font-size:11px;color:var(--color-ink-secondary);
+  background:var(--color-surface);border:1px solid var(--color-hairline);box-shadow:var(--shadow-sm);
+  padding:1px 6px;border-radius:var(--radius-xs);white-space:nowrap;z-index:2}
+.fields{position:absolute;display:flex;flex-direction:column;gap:3px;z-index:1}
+.fpill{display:flex;align-items:center;gap:5px;font-size:12px;background:color-mix(in srgb,var(--color-changed) 8%,#fff);
+  border:1px solid color-mix(in srgb,var(--color-changed) 30%,#fff);border-radius:var(--radius-xs);padding:1px 6px;white-space:nowrap;width:max-content}
+.fpill .fk{color:var(--color-changed);font-weight:600}
+.fpill .fa{color:var(--color-ink-muted)}
+.fpill .fb{color:var(--color-ink);font-weight:600}
+.fpill .fx{color:var(--color-ink-tertiary)}
+
+/* ── C3 changes panel (JS-populated) ── */
+.panel{width:320px;flex:0 0 320px;order:-1;border-right:1px solid var(--color-hairline);background:var(--color-surface);display:flex;flex-direction:column;min-height:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.panel-head h2{font-size:17px;font-weight:600}
+.panel-head .total{font-size:12px;color:var(--color-ink-tertiary)}
+.filters{display:flex;gap:6px;padding:0 16px 10px;border-bottom:1px solid var(--color-hairline)}
+.fchip{display:flex;align-items:center;gap:5px;height:26px;padding:0 10px;border:1px solid var(--color-hairline);border-radius:999px;font-size:13px;color:var(--color-ink-secondary)}
+.fchip.active{border-color:var(--color-accent-tint-border);background:var(--color-accent-tint);color:var(--color-accent)}
+.fchip .fdot{width:7px;height:7px;border-radius:999px}
+.fchip b{font-weight:600}
+.changelist{overflow:auto;padding:8px;display:flex;flex-direction:column;gap:2px}
+.citem{display:flex;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;align-items:flex-start}
+.citem:hover{background:var(--color-surface-alt)}
+.citem.selected{background:var(--color-accent-tint)}
+.ci-ic{flex:0 0 auto;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;margin-top:1px}
+.ci-ic.added{background:var(--color-added)}.ci-ic.removed{background:var(--color-removed)}.ci-ic.changed{background:var(--color-changed)}
+.ci-body{min-width:0;flex:1}
+.ci-title{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ci-title .t{font-size:14px;font-weight:600;color:var(--color-ink)}
+.ci-badge{font-size:11px;font-weight:600;padding:0 6px;border-radius:999px;line-height:1.6}
+.ci-badge.added{color:var(--color-added);background:color-mix(in srgb,var(--color-added) 12%,#fff)}
+.ci-badge.removed{color:var(--color-removed);background:color-mix(in srgb,var(--color-removed) 12%,#fff)}
+.ci-badge.changed{color:var(--color-changed);background:color-mix(in srgb,var(--color-changed) 12%,#fff)}
+.ci-detail{font-size:12px;color:var(--color-ink-tertiary);margin-top:3px}
+.ci-fields{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+
+/* ── right inspector: node properties (read-only) ── */
+.inspector{width:300px;flex:0 0 300px;border-left:1px solid var(--color-hairline);background:var(--color-surface);display:flex;flex-direction:column;min-height:0;overflow:auto}
+.insp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px 10px;border-bottom:1px solid var(--color-hairline)}
+.insp-head h2{font-size:17px;font-weight:600}
+.ro-badge{display:inline-flex;align-items:center;gap:5px;border-radius:var(--radius-sm);background:var(--color-surface-alt);padding:4px 8px;font-size:12px;font-weight:600;color:var(--color-ink-secondary)}
+.insp-body{padding:12px 16px;display:flex;flex-direction:column;gap:12px}
+.f-label{margin-bottom:4px;font-size:12px;color:var(--color-ink-tertiary)}
+.f-ro{border-radius:var(--radius-sm);background:var(--color-surface-alt);padding:6px 8px;font-size:14px;color:var(--color-ink-secondary);min-height:32px;display:flex;align-items:center}
+.f-desc{border-radius:var(--radius-sm);background:var(--color-surface-alt);padding:6px 8px;font-size:14px;color:var(--color-ink-tertiary);min-height:2rem;line-height:1.45}
+.rows{display:flex;flex-direction:column}
+.rows .row{display:flex;align-items:center;gap:12px;min-height:36px;padding:7px 0;border-top:1px solid var(--color-divider)}
+.rows .row:first-child{border-top:0}
+.rows .rk{width:80px;flex:0 0 auto;font-size:12px;color:var(--color-ink-tertiary)}
+.rows .rv{flex:1;min-width:0;text-align:right;font-size:14px;color:var(--color-ink-secondary)}
+.rows .rv.strong{color:var(--color-ink)}
+.rows .swatch{display:inline-block;width:20px;height:20px;border-radius:5px;border:1px solid var(--color-hairline);vertical-align:middle}
+.rows .was{color:var(--color-ink-muted);text-decoration:line-through}
+.rows .rarrow{color:var(--color-ink-tertiary);margin:0 5px}
+.rows .now{color:var(--color-changed);font-weight:600}
+
+@media (max-width:1180px){.panel,.inspector{width:280px;flex-basis:280px}}
+@media (max-width:980px){.topbar{gap:8px}.titlewrap{order:-1}.selgroup{margin-left:0}.panel,.inspector{width:248px;flex-basis:248px}}
+@media (max-width:760px){.main{flex-direction:column}.canvas{flex:1 1 auto;min-height:320px}.panel,.inspector{width:auto;flex:0 0 auto;order:0;border-left:0;border-right:0;border-top:1px solid var(--color-hairline)}.spacer{margin-left:0}.actions{width:100%;justify-content:flex-end}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ C1 header ═══ -->
+  <header class="topbar">
+    <a class="back" href="#"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Editor</a>
+    <span class="vdiv"></span>
+    <div class="titlewrap"><span class="maptitle">주문 처리 프로세스</span><span class="subtitle">Version compare</span></div>
+    <div class="selgroup">
+      <span class="roletag">BASE</span>
+      <label class="pill"><span class="dot" style="background:var(--color-accent)"></span><select><option>v3 · Published</option></select><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9l6 6 6-6"/></svg></label>
+      <svg class="arrow-i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <span class="roletag">TARGET</span>
+      <label class="pill"><span class="dot" style="background:var(--color-changed)"></span><select><option>To-Be · Pending</option></select><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9l6 6 6-6"/></svg></label>
+      <button class="swap" title="Swap base and target"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg></button>
+    </div>
+    <div class="spacer"></div>
+    <div class="actions">
+      <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Export</button>
+      <button class="btn-primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Apply To-Be</button>
+    </div>
+  </header>
+
+  <!-- ═══ main ═══ -->
+  <div class="main">
+    <div class="canvas" id="canvas">
+      <div class="watermark"><span class="wm">READ ONLY</span></div>
+
+      <div id="stage">
+        <svg id="edges" width="1810" height="530" viewBox="0 0 1810 530">
+          <defs>
+            <marker id="ah-gray" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--color-border-strong)"/></marker>
+            <marker id="ah-green" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--color-added)"/></marker>
+            <marker id="ah-red" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--color-removed)"/></marker>
+          </defs>
+          <g id="edge-paths"></g>
+        </svg>
+        <div id="nodes"></div>
+      </div>
+
+      <div class="overlay count-pill"><div class="row" id="countrow"></div></div>
+      <div class="overlay legend"><div class="row">
+        <span class="seg"><span class="sw" style="border-color:var(--color-added)"></span>Added</span>
+        <span class="seg"><span class="sw" style="border-color:var(--color-removed);border-style:dashed"></span>Removed</span>
+        <span class="seg"><span class="sw" style="border-color:var(--color-changed)"></span>Changed</span>
+      </div></div>
+      <div class="overlay zoombar">
+        <button title="Zoom out"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        <span class="pct">70%</span>
+        <button title="Zoom in"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <span class="zdiv"></span>
+        <button title="Fit view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <div class="panel-head"><h2>Changes</h2><span class="total" id="ptotal"></span></div>
+      <div class="filters" id="filters"></div>
+      <div class="changelist" id="changelist"></div>
+    </aside>
+
+    <aside class="inspector">
+      <div class="insp-head">
+        <h2>Properties</h2>
+        <span class="ro-badge"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>View only</span>
+      </div>
+      <div class="insp-body">
+        <div>
+          <div class="f-label">Title</div>
+          <div class="f-ro">결제 처리</div>
+        </div>
+        <div>
+          <div class="f-label">Description</div>
+          <div class="f-desc">한도 확인 후 결제 게이트웨이로 결제를 처리한다.</div>
+        </div>
+        <div class="rows">
+          <div class="row"><span class="rk">Type</span><span class="rv">Process</span></div>
+          <div class="row"><span class="rk">Color</span><span class="rv"><span class="swatch" style="background:color-mix(in srgb,#6e84a3 18%,#fff);border-color:#6e84a3"></span></span></div>
+          <div class="row"><span class="rk">Assignee</span><span class="rv strong">김결제</span></div>
+          <div class="row"><span class="rk">Department</span><span class="rv">재무팀</span></div>
+          <div class="row"><span class="rk">System</span><span class="rv"><span class="was">None</span><span class="rarrow">→</span><span class="now">PG v2</span></span></div>
+          <div class="row"><span class="rk">Duration</span><span class="rv">1일</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ── one data model → diagram + panel + counts ──────────────────
+// closed order-processing flow: 20 nodes, 3 decisions (B1/B2/B3), merges + a retry loop.
+const N = (id,label,type,status,col,row,fields)=>({id,label,type,status,col,row,fields});
+const NODES = [
+  N(1,"시작","start","unchanged",0,1),
+  N(19,"주문 검증","process","unchanged",1,0),
+  N(2,"주문 접수","process","unchanged",1,1),
+  N(11,"재고 보충","process","unchanged",2,0),
+  N(3,"재고 확인?","decision","unchanged",2,1),
+  N(20,"재고 부족 알림","process","removed",2,2),
+  N(14,"재고 예약","process","added",3,0),
+  N(4,"결제 처리","process","changed",3,1,[{k:"System",a:"None",b:"PG v2"}]),
+  N(12,"결제 재시도","process","unchanged",4,0),
+  N(5,"결제 승인?","decision","unchanged",4,1),
+  N(6,"배송 준비","subprocess","added",5,1),
+  N(15,"품질 검사","subprocess","added",5,2),
+  N(13,"관리자 승인","process","changed",6,0,[{k:"Assignee",a:"None",b:"박승인"}]),
+  N(7,"승인 필요?","decision","unchanged",6,1),
+  N(21,"배송 승인","process","added",7,1),
+  N(16,"송장 발행","process","unchanged",8,0),
+  N(8,"배송","process","unchanged",8,1),
+  N(18,"배송 추적","process","added",8,2),
+  N(9,"배송 완료","process","changed",9,1,[{k:"Duration",a:"3d",b:"1d"}]),
+  N(17,"고객 알림","process","unchanged",9,2),
+  N(10,"완료","end","added",10,1),
+];
+const E = (from,to,status,label)=>({from,to,status,label});
+const EDGES = [
+  E(1,2,"unchanged"), E(2,19,"unchanged"), E(19,3,"unchanged"),
+  E(3,11,"unchanged","No"), E(3,14,"added","Yes"), E(3,20,"removed","부족"),
+  E(11,4,"unchanged"), E(14,4,"added"), E(20,4,"removed"),
+  E(4,5,"unchanged"),
+  E(5,12,"unchanged","No"), E(5,6,"added","Yes"), E(12,4,"unchanged"),
+  E(6,15,"added"), E(15,7,"added"),
+  E(7,13,"unchanged","Yes"), E(7,21,"added","No"), E(21,8,"added"), E(7,8,"removed"), E(13,8,"unchanged"),
+  E(8,16,"unchanged"), E(8,18,"added"), E(16,9,"unchanged"), E(18,9,"added"),
+  E(9,10,"added"), E(9,17,"unchanged"), E(17,10,"unchanged"),
+];
+
+const MX=90, COLW=165, MY=70, ROWH=180;
+const SIZE={process:[118,46],subprocess:[134,46],start:[74,38],end:[74,38],decision:[86,86]};
+const byId={}; NODES.forEach(n=>byId[n.id]=n);
+const cx=n=>MX+n.col*COLW, cy=n=>MY+n.row*ROWH;
+function half(n){ if(n.type==="decision"){const d=SIZE.decision[0]*0.707;return [d,d];} const s=SIZE[n.type];return [s[0]/2,s[1]/2]; }
+const SVGNS="http://www.w3.org/2000/svg";
+const stroke={unchanged:"var(--color-border-strong)",added:"var(--color-added)",removed:"var(--color-removed)"};
+const marker={unchanged:"ah-gray",added:"ah-green",removed:"ah-red"};
+
+// nodes
+const nodesLayer=document.getElementById("nodes");
+const subIcon='<svg class="sub-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>';
+for(const n of NODES){
+  const el=document.createElement("div");
+  el.className="node "+n.type+" "+n.status;
+  el.style.left=cx(n)+"px"; el.style.top=cy(n)+"px";
+  if(n.type==="decision"){
+    const s=SIZE.decision[0]; el.style.width=s+"px"; el.style.height=s+"px";
+    el.style.transform="translate(-50%,-50%) rotate(45deg)";
+    el.innerHTML='<span class="lbl" style="transform:rotate(-45deg)">'+n.label+'</span>';
+  }else{
+    el.style.width=SIZE[n.type][0]+"px";
+    el.style.transform="translate(-50%,-50%)";
+    el.innerHTML=(n.type==="subprocess"?subIcon:"")+'<span>'+n.label+'</span>';
+  }
+  if(n.status!=="unchanged"){
+    const b=document.createElement("span"); b.className="badge "+n.status;
+    b.textContent={added:"Added",removed:"Removed",changed:"Changed"}[n.status];
+    if(n.type==="decision"){ b.style.transform="rotate(-45deg)"; b.style.top="-6px"; b.style.left="-6px"; }
+    else { b.style.top="-10px"; b.style.left="10px"; }
+    el.appendChild(b);
+  }
+  nodesLayer.appendChild(el);
+  // changed-field pill under node
+  if(n.status==="changed"&&n.fields){
+    const f=document.createElement("div"); f.className="fields";
+    const [hw,hh]=half(n);
+    f.style.left=(cx(n)-hw)+"px"; f.style.top=(cy(n)+hh+7)+"px";
+    f.innerHTML=n.fields.map(x=>`<span class="fpill"><span class="fk">${x.k}</span><span class="fa">${x.a}</span><span class="fx">→</span><span class="fb">${x.b}</span></span>`).join("");
+    nodesLayer.appendChild(f);
+  }
+}
+
+// edges — distributed orthogonal router: per-side anchor spread + perpendicular stubs to minimize overlap.
+const g=document.getElementById("edge-paths");
+const STUB=18;
+function classify(e){
+  const dx=cx(byId[e.to])-cx(byId[e.from]), dy=cy(byId[e.to])-cy(byId[e.from]);
+  if(Math.abs(dx)>=Math.abs(dy)*0.85) return {s:dx>=0?"R":"L", t:dx>=0?"L":"R"};
+  return {s:dy>=0?"B":"T", t:dy>=0?"T":"B"};
+}
+const cls=EDGES.map(classify);
+// group endpoints per (node, side); spread anchors so several edges on one side don't stack
+const groups={};
+const addEp=(nid,side,ei,role,other)=>{ (groups[nid+":"+side]||(groups[nid+":"+side]=[])).push({ei,role,other}); };
+EDGES.forEach((e,i)=>{ addEp(e.from,cls[i].s,i,"s",e.to); addEp(e.to,cls[i].t,i,"t",e.from); });
+const off={};
+for(const k in groups){
+  const [nid,side]=k.split(":"); const n=byId[+nid]; const arr=groups[k];
+  const perp=(side==="T"||side==="B")?(o=>cx(byId[o.other])):(o=>cy(byId[o.other]));
+  arr.sort((p,q)=>perp(p)-perp(q)); // order by other end to avoid crossings
+  const [hw,hh]=half(n); const span=(side==="T"||side==="B")?hw:hh; const c=arr.length;
+  arr.forEach((ep,idx)=>{ off[ep.ei+ep.role]= c===1?0:(idx-(c-1)/2)*Math.min(20,(1.7*span)/c); });
+}
+const anchor=(nid,side,o)=>{ const n=byId[nid],X=cx(n),Y=cy(n),[hw,hh]=half(n);
+  return side==="T"?[X+o,Y-hh]:side==="B"?[X+o,Y+hh]:side==="L"?[X-hw,Y+o]:[X+hw,Y+o]; };
+const stubOf=(pt,side)=> side==="T"?[pt[0],pt[1]-STUB]:side==="B"?[pt[0],pt[1]+STUB]:side==="L"?[pt[0]-STUB,pt[1]]:[pt[0]+STUB,pt[1]];
+const isH=s=>s==="L"||s==="R";
+EDGES.forEach((e,i)=>{
+  const c=cls[i];
+  // passthrough removed (양끝 노드가 둘 다 유지) — 사이에 삽입된 노드를 피해 아래로 우회하는 빨강 점선 아크.
+  if(e.status==="removed" && byId[e.from].status!=="removed" && byId[e.to].status!=="removed"){
+    const A=byId[e.from], B=byId[e.to], [ah]=half(A), [bh]=half(B);
+    const rightward=cx(B)>=cx(A);
+    const ax=cx(A)+(rightward?ah:-ah), ay=cy(A), bx=cx(B)+(rightward?-bh:bh), by=cy(B);
+    const dip=Math.max(ay,by)+70;
+    const path=document.createElementNS(SVGNS,"path");
+    path.setAttribute("d",`M${ax},${ay} C${ax+(bx-ax)*0.28},${dip} ${bx-(bx-ax)*0.28},${dip} ${bx},${by}`);
+    path.setAttribute("fill","none"); path.setAttribute("stroke",stroke.removed);
+    path.setAttribute("stroke-width","2"); path.setAttribute("stroke-dasharray","6 3");
+    path.setAttribute("marker-end",`url(#${marker.removed})`);
+    g.appendChild(path);
+    if(e.label){ const lb=document.createElement("div"); lb.className="elabel"; lb.textContent=e.label;
+      lb.style.left=((ax+bx)/2)+"px"; lb.style.top=(dip-6)+"px"; nodesLayer.appendChild(lb); }
+    return;
+  }
+  const a=anchor(e.from,c.s,off[i+"s"]||0), b=anchor(e.to,c.t,off[i+"t"]||0);
+  const p=stubOf(a,c.s), q=stubOf(b,c.t);
+  let mids;
+  if(isH(c.s)&&isH(c.t)){ const mx=(p[0]+q[0])/2; mids=[[mx,p[1]],[mx,q[1]]]; }
+  else if(!isH(c.s)&&!isH(c.t)){ const my=(p[1]+q[1])/2; mids=[[p[0],my],[q[0],my]]; }
+  else if(isH(c.s)){ mids=[[q[0],p[1]]]; }
+  else { mids=[[p[0],q[1]]]; }
+  const pts=[a,p,...mids,q,b];
+  const path=document.createElementNS(SVGNS,"path");
+  path.setAttribute("d","M"+pts.map(pt=>pt[0]+","+pt[1]).join(" L"));
+  path.setAttribute("fill","none");
+  path.setAttribute("stroke",stroke[e.status]);
+  path.setAttribute("stroke-width",e.status==="unchanged"?"1.5":"2");
+  if(e.status==="removed") path.setAttribute("stroke-dasharray","6 3");
+  path.setAttribute("marker-end",`url(#${marker[e.status]})`);
+  g.appendChild(path);
+  if(e.label){
+    const lb=document.createElement("div"); lb.className="elabel"; lb.textContent=e.label;
+    lb.style.left=((p[0]+q[0])/2)+"px"; lb.style.top=((p[1]+q[1])/2)+"px";
+    nodesLayer.appendChild(lb);
+  }
+});
+
+// counts + panel
+const changed=NODES.filter(n=>n.status==="changed");
+const added=[...NODES.filter(n=>n.status==="added"),...EDGES.filter(e=>e.status==="added")];
+const removed=[...NODES.filter(n=>n.status==="removed"),...EDGES.filter(e=>e.status==="removed")];
+const c={added:added.length,removed:removed.length,changed:changed.length};
+const total=c.added+c.removed+c.changed;
+
+document.getElementById("countrow").innerHTML=`
+  <span class="seg"><span class="cdot" style="background:var(--color-added)"></span>Added <b>${c.added}</b></span><span class="sep"></span>
+  <span class="seg"><span class="cdot" style="background:var(--color-removed)"></span>Removed <b>${c.removed}</b></span><span class="sep"></span>
+  <span class="seg"><span class="cdot" style="background:var(--color-changed)"></span>Changed <b>${c.changed}</b></span>`;
+document.getElementById("ptotal").textContent=total+" items";
+document.getElementById("filters").innerHTML=`
+  <button class="fchip active">All <b>${total}</b></button>
+  <button class="fchip"><span class="fdot" style="background:var(--color-added)"></span><b>${c.added}</b></button>
+  <button class="fchip"><span class="fdot" style="background:var(--color-removed)"></span><b>${c.removed}</b></button>
+  <button class="fchip"><span class="fdot" style="background:var(--color-changed)"></span><b>${c.changed}</b></button>`;
+
+const ICON={
+  added:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  removed:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+  changed:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+};
+const BADGE={added:"Added",removed:"Removed",changed:"Changed"};
+function item(status,title,detail,fields){
+  const fh=fields?`<div class="ci-fields">${fields.map(x=>`<span class="fpill"><span class="fk">${x.k}</span><span class="fa">${x.a}</span><span class="fx">→</span><span class="fb">${x.b}</span></span>`).join("")}</div>`:"";
+  const dh=detail?`<div class="ci-detail">${detail}</div>`:"";
+  return `<div class="citem"><div class="ci-ic ${status}">${ICON[status]}</div>
+    <div class="ci-body"><div class="ci-title"><span class="t">${title}</span><span class="ci-badge ${status}">${BADGE[status]}</span></div>${fh}${dh}</div></div>`;
+}
+const list=document.getElementById("changelist");
+let html="";
+// order: added nodes, added edges, removed nodes, removed edges, changed nodes
+NODES.filter(n=>n.status==="added").forEach(n=>html+=item("added",n.label,(n.type==="subprocess"?"Subprocess node added":"Node added")));
+EDGES.filter(e=>e.status==="added").forEach(e=>html+=item("added",`${byId[e.from].label} → ${byId[e.to].label}`,"Edge added"));
+NODES.filter(n=>n.status==="removed").forEach(n=>html+=item("removed",n.label,"Node removed"));
+EDGES.filter(e=>e.status==="removed").forEach(e=>html+=item("removed",`${byId[e.from].label} → ${byId[e.to].label}`,"Edge removed"));
+NODES.filter(n=>n.status==="changed").forEach(n=>html+=item("changed",n.label,null,n.fields));
+list.innerHTML=html;
+list.firstElementChild&&list.firstElementChild.classList.add("selected");
+
+// fit stage to canvas width
+const STAGE_W=1810, STAGE_H=530;
+const stage=document.getElementById("stage"), canvas=document.getElementById("canvas");
+function fit(){
+  const cw=canvas.clientWidth;
+  const s=Math.min(1,(cw-40)/STAGE_W);
+  stage.style.transform=`translateY(-50%) scale(${s})`;
+  stage.style.left=Math.max(16,(cw-STAGE_W*s)/2)+"px";
+  document.querySelector(".zoombar .pct").textContent=Math.round(s*100)+"%";
+}
+fit(); window.addEventListener("resize",fit);
+</script>
+</body>
+</html>

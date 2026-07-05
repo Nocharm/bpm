@@ -167,6 +167,149 @@
 - 워크트리 `feat+new-pages`에서 신규 화면 4종 착수. 설계 `docs/superpowers/specs/2026-07-05-new-screens-design.md`, 검토 트래커 `SCREEN-NEW-PAGES.md`(S1~S10 vertical slice).
 - 결정: 대시보드=진입 스텁만 / 공지 읽음=클라 localStorage 캐시(테이블 없음) / 매뉴얼=DB 저장+프론트 편집(manual.md fallback) / 피드백=관리자 상태변경 포함 / 작성·관리 권한=sysadmin.
 
+## 2026-07-05 — 비교 인터랙션: 노드 클릭/hover·이동 포커스 링·워터마크 상위·엣지 라벨 블러
+- **워터마크 노드 위로**(`compare/page.tsx`) — z-0(뒤)→**z-[4]**(노드 z-2 위로 덮음, opacity .14 유지). 에디터 read-only 워터마크와 동일 동작.
+- **캔버스 노드/엣지 클릭 = 좌측 항목 클릭과 동일 효과** — `onNodeClick`/`onEdgeClick`로 `setFocusId`. 부수효과로 RF가 노드 pointer-events를 켜 **hover 강조 링(bpm-node-emph)도 복구**(이전엔 핸들러 없어 pointer-events off라 hover/click 불가).
+- **이동하는 포커스 링** — 에디터 `NodeSelectionRing`(선택 노드 위 accent 링, CSS transition으로 슬라이드) 재사용, `ViewportPortal`로 flow 좌표 정합. 포커스 바뀌면 링이 노드 사이를 슬라이드.
+- **엣지 라벨 배경 반투명+블러** — SVG 라벨은 backdrop-blur 불가 → 커스텀 `LabeledSmoothEdge`(smoothstep 경로 + `EdgeLabelRenderer` HTML 라벨, bg `color-mix(surface 55%,transparent)`+`blur(3px)`). non-passthrough 엣지를 `smoothstep`→`labeled` 타입으로. 엣지 선이 라벨에서 끊긴 느낌↓·가독성↑.
+- 검증: lint 0·build OK. 라이브(map 13) 클릭 시 링 슬라이드·인스펙터/좌측 갱신·워터마크 상위·라벨 블러 확인.
+
+## 2026-07-05 — 비교 C4(우측 속성 인스펙터) + 헤더/캔버스 크롬 에디터화
+- **C4 우측 인스펙터**(`compare/page.tsx`) — `Properties` + `View only`(Lock) 배지. 포커스 노드 선택 시 Title/Description(회색 박스)·Type·Color(스와치)·Assignee/Department/System/Duration 행. 변경 필드는 `~~before~~ → after`(취소선+changed색). 미선택 시 빈 상태. `PanelRight` 토글(`inspectorOpen`).
+- **헤더 에디터화** — 좌상단 `PanelLeft`(Changes 접기·`leftCollapsed`), 우측 `PanelRight`(인스펙터 접기) — 에디터 동일 위치. **← Editor 링크 → 제목 드롭다운**(박스+chevron, 클릭 시 'Editor' 메뉴로 이동, MapNameDropdown 트리거 스타일 재활용). **Apply To-Be 제거**(적용 로직 없는 플레이스홀더였고 제목 드롭다운과 중복 → 삭제).
+- **캔버스 크롬** — 좌상 카운트 필 제거→**좌하 범례에 건수 통합**(`DiffLegend counts`), **dot-grid 제거**(`<Background>` 삭제), **Compare View 워터마크**(에디터 read-only 워터마크 재활용: 120px·-18°·accent·opacity .14).
+- i18n: `compare.{watermark,properties,viewOnly,selectNode,inspectorToggle}`. `compare.applyToBe`는 미사용(잔존).
+- 검증: lint 0·build OK. 라이브(map 13) 인스펙터 채움·before→after·좌/우 접기·제목 드롭다운·워터마크·범례 건수 확인.
+
+## 2026-07-05 — 비교 C3 보강: 노드 딸림 엣지 제외 + 종류 필터(노드/엣지)
+- **노드 추가/삭제로 딸려온 엣지 제외**(`changeItems`) — 엣지 항목은 **양끝이 모두 기존 노드**(양 버전 존재=unchanged/changed)인 경우만, 즉 실제 배선 변경만 목록에. 새/삭제 노드에 붙은 엣지는 노드 항목으로 이미 드러나므로 중복 제거. map 13: 엣지 14→3(passthrough 삭제 3만). 카운트(오버레이·상태칩)도 curated 반영(Added 5·Removed 4·Changed 3).
+- **종류 필터 행 추가**(`kindFilter`) — 상태 칩 아래 모두/노드만/엣지만. 상태 필터와 독립·AND 조합. i18n `compare.kind{All,Nodes,Edges}`.
+- 검증: lint 0·build OK. 라이브(map 13) 엣지 3건만·엣지만 필터 3건·노드만 9건 확인.
+
+## 2026-07-05 — 비교 C3: 변경 패널(좌측·필터칩·아이콘·클릭 포커스)
+- **변경 패널을 좌측으로**(`aside` 캔버스 앞·`border-r`) — 승인 목업 3단(좌 변경/중 캔버스/우 인스펙터[C4]) 정착 시작.
+- **필터칩** 전체/추가/삭제/변경 — 상태 색점+건수, 클릭 시 목록 필터(`filter` state), active=accent-tint. **아이콘 항목**(＋/−/✎ 색상 사각) + 상태 뱃지 + **변경 노드 before→after 필** + 엣지 설명("Edge added/removed").
+- **선택 하이라이트**(`focusId`=accent-tint) + **클릭 포커스**(fitView로 노드/엣지 확대) — 기존 focus 로직 재사용.
+- `nodeChanges`/`edgeChanges` → **`changeItems`**(목업 순서: 추가노드→추가엣지→삭제노드→삭제엣지→변경노드) 통합, counts도 여기서. 컴팩트(w-72·text-caption/fine·py-1.5). i18n `compare.filterAll`(All/전체).
+- 검증: lint 0·build OK. 라이브(map 13) 좌측 패널·Changed 필터 3건·배송완료 클릭 포커스+선택 확인.
+
+## 2026-07-05 — 비교: TB 세로 스파인 직선화(실측 렌더 폭)
+- 증상: TB에서 [D-U] 세로 스파인 엣지가 직선이 아님(LR 수평은 정상). 원인: 노드 중심 계산에 `nodeSizeOf`(dagre 박스) 사용 — process 실제 폭 150(min-w-[150px])인데 nodeSizeOf=170 → 중심 X 10px 어긋남(process 233 vs decision 243).
+- 수정: **`COMPARE_RENDER_W`**(process 150·terminal 90·decision 96·subprocess 180) 추가 — `alignBackbone`의 cross축(TB=X) 정렬과 `nodeCenters`가 실측 렌더 폭/높이(`COMPARE_RENDER_W`/`_H`)로 계산. LR을 `COMPARE_RENDER_H`로 직선화한 것의 X축 대칭.
+- 검증: lint 0·build OK. 라이브(map 13) TB 스파인 노드 중심 X 전부 237로 일치(측정)·세로 엣지 직선 / LR 수평 직선 회귀 없음 확인.
+
+## 2026-07-05 — 비교: TB 하위프로세스 세로 연결 + 곁가지 라인에서 더 이격
+- **TB에서 하위프로세스(배송준비·품질검사)가 수평 연결되던 문제** — `SubprocessHandles`가 좌(입력)/우(출력) 핸들만 렌더해 TB 상/하 진입 불가 → 강제 remap으로 [L-R] 수평. 수정: **비교뷰(diff)에선 subprocess도 4변 핸들(`NodeHandles`) 렌더**(`process-node.tsx`), appEdges의 `withSubprocessHandles` remap 제거(`compare/page.tsx`, `subprocessIds`도 정리). → TB 배송준비→품질검사 세로([D-T]), LR은 그대로.
+- **곁가지 라인 이격**(`alignBackbone` `BRANCH_PUSH`=60) — 곁가지(off-spine: 재고예약·배송승인)가 라인에 가까워 병합 엣지가 마지막에 한 번 더 꺾이던 것 → 있던 방향(LR 위·TB 왼쪽)으로 60px 추가 이격 → 엣지가 **한 번만 꺾임**.
+- 검증: lint 0·build OK. 라이브(map 13) TB 하위프로세스 세로·LR/TB 곁가지 단일 꺾임 확인.
+
+## 2026-07-05 — 비교: 핸들 변 그리디 제거 → 의미 기반 직접 배정(곁가지 꼬임 수정)
+- 증상: LR에서 재고예약→결제처리가 오른쪽으로 나와 **아래(bottom)로 진입**해 꼬임. 원인: 결제처리에 엣지 5개(있음·재고예약·재고부족알림·다음·재시도)인데 재시도(back)가 top 선점 → 그리디 회피가 재고예약을 반대편 bottom으로 밀어냄.
+- 수정(`handleSides`): 4변 그리디 회피(`used`)·`spineAwareSides`·`preferredSides`·`SIDE_VECTORS` 제거. 각 끝에 **의미상 정해진 변을 직접 배정**(핸들 공유 허용):
+  - passthrough=우회 변(LR bottom/TB right), back=우회 변(LR top/TB left).
+  - 그 외: off-spine 노드 자신=흐름축 변(이전 뒤·다음 앞), spine↔off-spine=spine이 cross측, 둘 다 spine=흐름축.
+  - → 재고예약이 결제처리에 top(LR)/left(TB)로 진입(재시도와 공유 무방), bottom 밀림 없음.
+- 검증: lint 0·build OK. 라이브(map 13) LR 재고예약→결제처리 top 진입·꼬임 해소·백본 직선 / TB [L-U]·[D-L] 유지 확인.
+
+## 2026-07-05 — 비교: 곁가지 진입/진출 변을 spine 인식으로 정밀화(사용자 스펙)
+- 이전 `orientedSides`(양끝 모두 cross 우선)는 곁가지 노드 "자신"까지 위/아래로 진입시켜 오류. **spine 멤버십 기반 `spineAwareSides`로 교체**:
+  - 곁가지(off-spine) 노드 자신 = **흐름축 변**(이전 노드=뒤쪽·다음 노드=앞쪽). 본류(spine) 노드가 곁가지와 연결될 때만 = **cross측 변**(위/아래·좌/우). 둘 다 spine이면 흐름축(본류 직선).
+  - LR: 위 곁가지(재고예약·배송승인) `[U-L]`(이전)·`[R-U]`(다음), 아래 삭제(재고부족알림) `[D-L]`·`[R-D]`.
+  - TB: 좌 곁가지 `[L-U]`·`[D-L]`, 우 삭제 `[R-U]`·`[D-R]`. (표기 [출발변−도착변])
+- spine 계산을 `computeSpine`로 추출(모듈 함수) → `spineIds` useMemo가 `alignBackbone`(직선화)·`handleSides`(진입 변) 공유. `alignBackbone(…, spine)`로 시그니처 변경(내부 재계산 제거).
+- 검증: lint 0·build OK. 라이브(map 13) LR/TB 각 케이스 핸들 변 스펙 일치 확인.
+
+## 2026-07-05 — 비교: 우회 아크가 변경 필 안 가리게 + 곁가지 진입 변 방향화
+- **변경 필 불투명화**(`process-node.tsx` `DiffFieldPills`) — 필 배경 `bg-changed/10`(10% 투명) → 노드 fill과 동일 불투명 틴트(`color-mix(changed 12%, white)`). 뒤로 지나는 우회 아크(passthrough)가 비쳐 변경 내용을 가리던 문제 해소(노드 z-index 2로 위지만 투명 배경이 원인이었음).
+- **곁가지 진입 변 방향화**(`orientedSides`·`compare/page.tsx`) — 상대 노드가 흐름 수직축(cross)으로 확실히 벗어나면(다른 라인, `CROSS_OFFLINE`=40) 그 cross측 변 우선. 위쪽 곁가지(재고예약)→다음 노드는 **top**, 아래 삭제 노드(재고부족알림)→다음 노드는 **bottom**으로 진입(기존엔 dx≫dy라 좌측 진입). 가로(LR top/bottom)·세로(TB left/right) 모두 적용.
+- 검증: lint 0·build OK. 라이브(map 13) LR: 재고예약→결제처리 top·재고부족알림→결제처리 bottom·필 불투명(pillBg alpha 없음) / TB: left·right 진입 확인.
+
+## 2026-07-05 — 비교 캔버스 간격 축소 + 백본 직선화(연결성 기반 spine)
+- **전개방향 간격 75%**(`layoutWithDagre` spacing 인자·`compare/page.tsx`) — 한눈에 보이게 흐름축(ranksep) 촘촘히. LR ranksep 160→120, TB ranksep 200→150. TB는 곁가지 구분 위해 좌우(nodesep) 90→120 확대. `layoutWithDagre(…, spacing?)` 오버라이드로 에디터 기본값은 불변.
+- **백본 직선화 개선**(`alignBackbone`) — 25px 임계 휴리스틱 → **연결성 기반 spine 탐지**: 유지 노드에서 "분기 없는 단일 연속"(선행 outDeg==1 / 후행 inDeg==1)으로 이어지는 인라인 삽입까지 spine으로 확장, 병렬 곁가지(분기/합류)는 제외. spine 노드가 있는 열/행은 backbone에 정확히 스냅 → LR 수평·TB 수직 직선. `alignBackbone(nodes, kept, dir, edges)`.
+- **fitView 레이스 수정** — 방향 전환 refit을 effect(마운트 시 부분 bounds로 137% 과확대) → `ReactFlow key={flowDir}` 재마운트로 대체(RF 자체 fitView가 측정 후 정확히 fit).
+- 검증: lint 0·build OK. 라이브(map 13) LR/TB 전체 fit(31%)·양방향 직선·간격 축소 확인.
+
+## 2026-07-05 — 비교 캔버스 wrap 롤백 + 흐름 방향 토글(LR/TB) 제공
+- **wrap(접힘) 롤백** — 접힘이 세로 브릿지·교차 아크를 늘려 오히려 복잡해 보인다는 피드백. `wrapLayout` 전체 제거·`positioned`에서 접힘 호출/차수계산 제거·교차 아크 흐림(`appEdges` opacity) 제거. **z-index(변경 필 엣지 위로)는 유지**.
+- **흐름 방향 토글 신규**(`compare/page.tsx`) — 헤더에 LR(좌→우, 기본)/TB(상→하) 전환 버튼(`MoveVertical`/`MoveHorizontal`, i18n `compare.layout{Horizontal,Vertical}`). 맵이 한 축으로 너무 길면 반대 축으로 전환.
+- **방향 파라미터화**:
+  - `layoutWithDagre(nodes, edges, rankdir="LR")` — TB는 nodesep 90·ranksep 200(필 아래로 뻗어 다음 행 침범 방지).
+  - `alignBackbone(nodes, kept, dir)` — cross축(LR:Y·TB:X) 정렬로 백본 직선화 일반화.
+  - `handleSides` — 우회 변 방향화(LR passthrough=bottom·back=top / TB passthrough=right·back=left).
+  - `RemovedArcEdge` — `sourcePosition`으로 아크 방향(LR 아래 dip / TB 우측 bulge).
+  - 삭제 노드 곁가지 방향(LR 아래 +y / TB 우측 +x).
+  - `minZoom=0.2`(긴 TB 세로 그래프 fitView) + 배치 변경 시 rAF `fitView` 재적용(방향 전환 뷰 갱신).
+- 검증: lint 0·build OK. 라이브(map 13) LR 평면·TB 세로 척추·토글·fitView 확인.
+
+## 2026-07-05 — 비교 캔버스 접힘(wrap)으로 좌우폭 축소 + 변경 필 엣지 위로
+- **`wrapLayout` 후처리**(`compare/page.tsx`) — 백본 라인 노드를 X순으로 훑어 한 행이 4개(MAX_PER_ROW) 넘으면 **다음 1:1(단일출구→단일입구) 지점에서 다음 행(좌측부터 다시)으로 접음**(ROW_GAP 300). 각 노드는 자기 열의 행 오프셋을 받고 곁가지(추가/삭제)는 같은 열이라 함께 이동. 분기/합류는 유지(1:1만 접음). map 13: 1행→4행, 88%로 컴팩트.
+- **접힘 커넥터 라우팅**(`handleSides`) — 타겟이 훨씬 아래+왼쪽(다음 행)인 엣지=wrap → source bottom·target left. 루프(back)와 구분(같은 행 역행만 top→top).
+- **변경 필/노드 엣지 위로**(raw `<style>` `.react-flow__node{z-index:2}`) — 변경사항 내용이 엣지에 안 가리게.
+- 검증: lint 0 · build OK. 라이브(map 13) 4행 접힘·커넥터·필 상위 확인.
+- **후속(side effect)**: 행을 가로지르는 passthrough 아크(배송→배송완료 등)가 길게 늘어짐 — 다듬기 필요.
+
+## 2026-07-05 — 비교 캔버스 정렬 5차: 병렬 곁가지 vs 인라인 삽입 구분
+- **`alignBackbone` 열 shift 보정** — 유지 노드 없는 열은 backbone 센터링 대신 **가장 가까운 유지 열의 shift**를 적용해 추가 노드의 dagre 오프셋(위/아래)을 보존. + **인라인 삽입 스냅**: shift 후 중심이 backbone 근처(<25px)면 라인에 정확히 스냅, 멀면 곁가지로 유지.
+- 효과(map 13 실측): 백본 620·인라인 삽입(배송 준비·품질 검사) 620·병렬 곁가지(재고 예약 590·배송 승인 534 위). 재고 예약이 라인 위로 올라와 직접 엣지 "있음"(재고 확인?→결제 처리)을 더는 막지 않음.
+- 검증: lint 0 · build OK.
+
+## 2026-07-05 — 비교 캔버스 정렬 4차: 백본 후처리 정렬(완전 직선 + 병렬 유지노드 라인 위)
+- **`alignBackbone` 후처리**(`compare/page.tsx`) — dagre 배치 후, 유지(unchanged/changed) 노드를 열(rank)별로 공통 backbone 중심Y에 스냅. ①백본 완전 직선(스파인 노드 cy 전부 620, spread=0) ②병렬 곁가지의 유지/변경 노드(관리자 승인)를 라인 위로. 추가 노드는 같은 열 내 상대 오프셋 유지(위/아래 곁가지).
+- **`displayFields: []` 컨텍스트 주입**(`NodeActionsContext.Provider`) — 비교뷰는 변경을 diff 필로 보여주므로 박스의 BPM 필드 줄(기본 담당자)을 숨김 → 노드 높이가 내용과 무관하게 **균일**(중복 제거 + 정렬 정확도).
+- **실측 렌더 높이로 중심 계산**(`COMPARE_RENDER_H` process/terminal 38·decision 96·subprocess 64) — dagre는 `nodeSizeOf`로 배치하지만 렌더 중심은 실제 높이 기준이라, 정렬은 실측값으로 해야 handle Y가 정확히 일치. 이전 ~6px 잔여 편차 제거.
+- 검증: lint 0 · build OK. 라이브(map 13) — 스파인 cy 전부 620(spread=0)·관리자 승인 라인 위·승인필요?→관리자승인→배송 수평 확인.
+
+## 2026-07-05 — 비교 캔버스 정렬 3차: 삭제 노드 곁가지 배치로 직접 엣지 직선화
+- **삭제 엣지 전부를 레이아웃에서 제외 + 삭제 노드는 이웃 아래로 곁가지 배치**(`compare/page.tsx positioned`) — 이전엔 passthrough만 제외해 **삭제 노드가 본류 라인 위(재고확인?~결제처리 사이)에 끼어** 직접 엣지("있음")를 막았음. 이제 To-Be 흐름만으로 배치(유지+추가) → 백본 직선, 삭제 노드는 삭제 엣지 이웃 평균위치+150 아래(곁가지). 수치 검증: Start→주문접수→재고확인?→결제처리 엣지 startY≈endY(straight).
+- 남은 한계: 병렬 곁가지에서 변경/유지 노드 중앙 정렬(관리자 승인)은 dagre 랭크 순서 문제로 미해결(후처리 재배열 후속).
+
+## 2026-07-05 — 비교 캔버스 정렬 2차: 직선 스파인·루프 상단우회
+- **passthrough를 dagre 레이아웃 입력에서 제외**(`compare/page.tsx positioned`) — 삭제된 직접연결(양끝 유지)이 spurious 랭크 제약을 줘 중간 노드를 위/아래로 밀던 문제 해결. **메인 스파인이 한 줄 직선 정렬**, 추가/삭제 노드만 곁가지. (렌더는 유지 — 우회 아크는 그대로.) 삭제 노드로 가는 엣지는 그 노드 위치 산정에 필요해 유지.
+- **뒤로 가는 루프 엣지 T→T**(`handleSides` `forced`) — 타겟이 소스보다 왼쪽(흐름 역행)이면 상단(top→top)으로 우회(재시도 루프가 위→아래 대신 위→위로 상단을 감싸 돌아옴). passthrough=bottom과 함께 고정변 먼저 배치 후 나머지 4변 그리디.
+- **미해결(dagre 한계)**: 병렬 경로에서 변경/유지 노드를 중앙 직선에 두기 — dagre.js는 랭크 내 순서를 엣지 가중치로 제어하지 않아(가중치 24까지 시도) 강제 불가. 곁가지 배치는 유효한 플로차트라 수용. 필요 시 dagre 출력 후처리(순서 재배열)로 후속.
+- 검증: lint 0 · build OK · canvas 21 tests. 라이브(map 13) — 결제처리→결제승인?→승인필요?→배송 직선·재시도 루프 상단우회 확인.
+
+## 2026-07-05 — 비교 캔버스 미세정렬: 4변 분산·바닥 아크·핸들 숨김·노드 호버
+- **엣지 4변 그리디 분산**(`compare/page.tsx handleSides`) — 노드마다 자기 엣지들을 방향선호(`preferredSides` 내적정렬)로 4변에 배정하되 이미 쓴 변이면 다음 변으로(충돌 회피). 분기 노드 겹침↓, 수평 연결은 R/L로 직선. `edgeSides`(단순 우세방향) 폐기.
+- **passthrough 아크 바닥→바닥**(`RemovedArcEdge`) — 핸들을 source/target 모두 **bottom 고정**(handleSides), 베지어를 수직 dip U자(`M sx,syB C sx,dip tx,dip tx,tyB`)로. 삭제된 직접 연결이 노드 아래로 우회.
+- **노드 핸들(히트박스) 숨김 + 노드 호버 링** — 에디터 raw `<style>` 이식: `.react-flow__handle{opacity:0}` + `.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(--nc 42%)}`(노드 자기색 링).
+- 검증: lint 0 · build OK. 라이브(map 13) — 스파인 수평 직선·분기 상/하/좌 분산·passthrough 바닥 U자·핸들 opacity 0·호버 규칙+`--nc` 확인.
+
+## 2026-07-05 — 비교 데모 맵(계보 공유 2버전) + BASE 게시본 기본 + 게시본 없으면 진입 비활성
+- **데모 시드** `backend/scripts/seed_compare_demo.py` — 계보(`source_node_id`) 공유 2버전(v1 게시본/v2 초안) 맵 생성. v2 유지 노드가 v1 노드를 계보 루트로 가리켜 diff가 매칭(seed_org_demo의 버전별 독립 그래프와 대비). 목업 스타일: 노드 추가5·삭제1·변경3·무변경8, 엣지 추가9·삭제5(passthrough 3), 우회 아크 3. 멱등(동명 맵 purge 후 재생성). → map 13 `/maps/13/compare`.
+- **비교 BASE 기본값 = 게시본 우선**(`compare/page.tsx`) — `versions.find(published)` 있으면 base로, 없으면 최초. target=최신.
+- **진입 버튼 게시본 게이트**(`inspector-panel.tsx`·`page.tsx`) — `canCompare = versions.some(published)`. 없으면 버튼 비활성(회색·`cursor-not-allowed`·툴팁 `inspector.compareNeedsPublished`). `PropertiesEmpty` Omit에 canCompare 추가.
+- 검증: lint 0 · build OK. 라이브(map 13) — BASE가 게시본(v1·게시본) 기본 선택·목업 스타일 diff·3 passthrough 아크·before→after 필 확인. 버튼 활성(게시본 有)→v76 임시 draft 시 비활성 회색 확인 후 복원.
+
+## 2026-07-05 — C2b 후속: compare 엣지 핸들 변 지정(노드 뒤 우회 해결)
+- **문제**: 목업 대비 실제 compare 엣지가 전부 소스 **왼쪽에서 나가** 타겟(오른쪽)까지 **노드 뒤로 우회**. 원인 = `buildAppEdges`가 `sourceHandle/targetHandle` 미지정 → RF가 첫 렌더 핸들(left)에 부착(canvas.ts:548 주석 근거). 배열(dagre)이 아니라 핸들 문제.
+- **수정**(`compare/page.tsx`) — 레이아웃된 노드 중심(`nodeCenters`, `nodeSizeOf`로 산정)의 **우세방향으로 핸들 변 지정**(`edgeSides`: |dx|≥|dy| → R/L, else B/T) → `sourceHandleId/targetHandleId`. 하위프로세스 끝점은 `withSubprocessHandles`(in/__primary__)로 remap. `subprocessIds`·`nodeCenters` useMemo. passthrough 아크는 그대로 동작.
+- 검증: lint 0 · build OK. 라이브(map 11) — 기본쌍·73→74에서 소스 우측 출력·타겟 좌측 입력·분기 상/하 라우팅·passthrough 아크 유지·노드 뒤 우회 제거 확인.
+
+## 2026-07-05 — C2b: diff 엣지 + passthrough-removed 우회 라우팅
+- **`compare/page.tsx`** — 커스텀 엣지 `RemovedArcEdge`(BaseEdge 베지어, `Math.max(sy,ty)+56`로 아래 dip) + `edgeTypes` 등록. `buildAppEdges(merged, keptKeys)`: **양끝이 모두 유지 노드인 removed 엣지 = passthrough** → `type:"removedArc"`(삽입 노드 회피 아크), 그 외는 smoothstep. 마커 색을 **상태별**(added green/removed red/기타 gray)로. `keptKeys`(non-removed 계보키) useMemo, positioned/appEdges 배선.
+- 검증: lint 0 · build/TS OK. 라이브(map 11 73→74) — 실제 passthrough 엣지 `새 단계 (5) → Order Fulfillment`가 빨간 점선 아크로 New step (6) 아래 우회 확인. 삭제 노드로 가는 엣지는 smoothstep 유지(회귀 없음).
+- 발견(시드): map 3·11 Release 스냅샷들은 분기가 아니라 독립 시드라 계보 0 → 전부 add/remove(정상). 실제 앱은 새 버전 생성 시 분기(clone_graph→source_node_id 전파)라 계보 이어짐(map 11 73→74가 증거). 코드/저장 버그 아님.
+
+## 2026-07-05 — C2a: diff 노드 스타일 + before→after 필 (merge-diff 확장)
+- **`merge-diff.ts`** — `FieldChange{field,before,after}` + `MergedNode.fieldChanges` 추가(`diffFieldChanges`가 base/target 값 담음). `changedFields`는 파생 유지(기존 소비처 호환). 단위테스트 추가(6 pass).
+- **`process-node.tsx`** — 비교 diff 렌더 교체: 링 → **diff색 테두리(삭제 점선)+연한 틴트 fill**(노드 자기색 대신)+**상태 뱃지(opacity .7, 상단; 마름모는 상단중앙)**. 변경 노드에 **before→after 필**(`DiffFieldPills`: label(amber)·before(muted)·→·after(bold), 노드 아래 절대배치, **최대 3 + "+N more"**, 값 truncate). `diffStatus`는 compare 전용이라 에디터 무영향.
+- **`canvas.ts`** — `NodeData.diffFields` 추가. **`layoutWithDagre nodesep` 72→120**(LR이라 세로 간격 — 필이 아래 노드 침범 방지, 이 함수는 compare 전용).
+- **`compare/page.tsx`** — `fieldsOf`(변경 필드 라벨 i18n + 빈값 None)로 `buildAppNodes`에 `diffFields` 전달.
+- i18n `compare.moreFields`("+{n} more"/"+{n}개 더").
+- 검증: lint 0 · build/TS OK · 27 tests pass. 라이브(map 11) — 73→74 쌍(추가6/삭제3/변경2)에서 뱃지·틴트·점선·before→after 필(None·+3 more)·겹침없음 확인.
+
+## 2026-07-05 — C0: 에디터 속성탭에 비교화면 진입 버튼(하단 스티키·PNG 톤)
+- **`inspector-panel.tsx`** — 속성탭 **빈 상태**(선택 없음)에서 패널 하단(스크롤 밖 `shrink-0 border-t`)에 **스티키 "Compare versions" 버튼**. PNG 다운로드와 동일 accent 톤(`bg-accent text-on-accent`·`GitCompare`), `<Link href="/maps/[id]/compare">`. `mapId` prop 추가(`PropertiesEmpty`는 Omit에 mapId 포함해 미요구). 읽기전용에서도 노출.
+- **`page.tsx`** InspectorPanel에 `mapId={mapId}` 전달. i18n `inspector.compareVersions`(en "Compare versions"/ko "버전 비교").
+- 검증: lint 0 · build/TS OK. 라이브(:3000, map 11) 버튼 렌더·accent 톤·하단 고정·클릭 시 `/compare` 내비 확인.
+
+## 2026-07-05 — 비교화면(C) 재디자인 착수: 승인 목업 + 전용 트래커 (feat/compare-redesign)
+- **브랜치 `feat/compare-redesign`** (main 분기; r11=C1a/C1b는 이미 main 머지·홈 작업까지 원격 동기화됨).
+- **승인 목업 커밋** — `docs/superpowers/specs/assets/editor-compare-redesign/compare-screen.mockup.html`: 반응형·실제 `@theme` 토큰, JS 데이터모델(`NODES`/`EDGES`)로 노드·엣지·변경패널·카운트 생성. 3단 레이아웃(변경 좌·캔버스 중·읽기전용 속성 인스펙터 우), read-only 워터마크(메인 "READ ONLY" accent), dot 제거, diff 노드(뱃지 .7·before→after 필·None), passthrough-removed 엣지 **우회 라우팅**(삽입 노드 회피) 시연.
+- **전용 트래커 `SCREEN-REDESIGN-COMPARE.md`** 신설 — C1a/C1b(완료) + C2a/C2b/C3/C4(예정) 서브유닛 표·확정 디자인·**DB 실현가능성(스키마 변경 불필요, 프론트 before/after 값 보강만)**·스코프(노드 집중·엣지 changed 범위 밖). 편집기 트래커엔 이관 포인터.
+
 ## 2026-07-05 — Task 1: recent-maps 캐시 헬퍼 (순수 로직+localStorage 래퍼)
 - home: recent-maps localStorage 캐시 헬퍼(mergeRecentEntry/partitionByRecency) 추가 — 최근 열람 12개 최신순 클라이언트 캐시.
 

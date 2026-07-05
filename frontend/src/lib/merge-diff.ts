@@ -7,11 +7,19 @@ import { FIELD_KEYS, getLineageKey, type ChangedField } from "@/lib/diff";
 export type MergedNodeStatus = "unchanged" | "added" | "removed" | "changed";
 export type MergedEdgeStatus = "unchanged" | "added" | "removed";
 
+// 바뀐 필드 하나 — 라벨 + before/after 원시값(빈값은 "", 표시 계층에서 None으로 변환).
+export interface FieldChange {
+  field: ChangedField;
+  before: string;
+  after: string;
+}
+
 export interface MergedNode {
   id: string; // 계보 키 — union 노드의 안정 id (엣지 endpoint와 동일 공간)
   node: FlatNode; // 대표 데이터 (target 우선, 없으면 base)
   status: MergedNodeStatus;
-  changedFields: ChangedField[]; // changed일 때만 채움
+  changedFields: ChangedField[]; // 바뀐 필드 라벨 목록 (changed일 때만)
+  fieldChanges: FieldChange[]; // 바뀐 필드의 before/after 값 (changed일 때만) — before→after 필 렌더용
 }
 
 export interface MergedEdge {
@@ -32,8 +40,15 @@ function indexByLineage(nodes: FlatNode[]): Map<string, FlatNode> {
   return new Map(nodes.map((node) => [getLineageKey(node), node]));
 }
 
-function diffFields(base: FlatNode, target: FlatNode): ChangedField[] {
-  return FIELD_KEYS.filter(([field]) => base[field] !== target[field]).map(([, key]) => key);
+// 바뀐 필드의 라벨 + before/after 값. FIELD_KEYS: [FlatNode 키, ChangedField 라벨].
+function diffFieldChanges(base: FlatNode, target: FlatNode): FieldChange[] {
+  const changes: FieldChange[] = [];
+  for (const [field, label] of FIELD_KEYS) {
+    if (base[field] !== target[field]) {
+      changes.push({ field: label, before: String(base[field] ?? ""), after: String(target[field] ?? "") });
+    }
+  }
+  return changes;
 }
 
 // 엣지 endpoint를 계보 키로 변환 — 노드가 없으면 raw id 폴백(댕글링 엣지는 RF가 드롭).
@@ -60,17 +75,18 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
     const b = baseByLineage.get(key) ?? null;
     const t = targetByLineage.get(key) ?? null;
     if (t && b) {
-      const changedFields = diffFields(b, t);
+      const fieldChanges = diffFieldChanges(b, t);
       nodes.push({
         id: key,
         node: t,
-        status: changedFields.length > 0 ? "changed" : "unchanged",
-        changedFields,
+        status: fieldChanges.length > 0 ? "changed" : "unchanged",
+        changedFields: fieldChanges.map((c) => c.field),
+        fieldChanges,
       });
     } else if (t) {
-      nodes.push({ id: key, node: t, status: "added", changedFields: [] });
+      nodes.push({ id: key, node: t, status: "added", changedFields: [], fieldChanges: [] });
     } else if (b) {
-      nodes.push({ id: key, node: b, status: "removed", changedFields: [] });
+      nodes.push({ id: key, node: b, status: "removed", changedFields: [], fieldChanges: [] });
     }
   }
 

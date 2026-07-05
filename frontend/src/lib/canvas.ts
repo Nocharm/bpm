@@ -28,6 +28,8 @@ export type NodeData = {
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";
   diffNote?: string;
+  // 변경 노드의 필드 diff (compare 전용) — before→after 필 렌더용. label/before/after는 표시용 포맷 완료값.
+  diffFields?: { label: string; before: string; after: string }[];
   hasDescendantChange?: boolean;
   // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
   commentCount?: number;
@@ -645,17 +647,26 @@ export function insertNodeAfter(
 }
 
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
-export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
+export function layoutWithDagre(
+  nodes: AppNode[],
+  edges: Edge[],
+  rankdir: "LR" | "TB" = "LR",
+  spacing?: { nodesep?: number; ranksep?: number },
+): AppNode[] {
   const graph = new dagre.graphlib.Graph();
   // 교차/겹침 최소화 — network-simplex 랭커 + 넉넉한 간격(노드끼리·랭크끼리·엣지끼리).
   // edgesep을 키워 평행 엣지가 노드 위로 겹쳐 지나가는 경우를 줄인다.
+  const isTB = rankdir === "TB";
   graph.setGraph({
-    rankdir: "LR",
+    rankdir,
     ranker: "network-simplex",
     // 간격을 넉넉히 — 랭크 사이(ranksep)를 크게 둬 엣지가 노드 위로 겹쳐 지나가지 않게,
     // 같은 랭크 노드 간격(nodesep)·평행 엣지 간격(edgesep)도 키워 엣지가 노드에 가려지는 일 방지.
-    nodesep: 72,
-    ranksep: 160,
+    // LR: nodesep=같은 열 세로 간격 — 변경 노드의 before→after 필(노드 아래로 뻗음)이 아래 노드를
+    // 침범하지 않도록 넉넉히. TB: ranksep=행 간격을 크게 둬 필(아래로 뻗음)이 다음 행을 침범하지 않게.
+    // spacing 인자로 호출부가 밀도를 조정(compare 방향 토글). 없으면 기본값(에디터).
+    nodesep: spacing?.nodesep ?? (isTB ? 90 : 120),
+    ranksep: spacing?.ranksep ?? (isTB ? 200 : 160),
     edgesep: 40,
     marginx: 20,
     marginy: 20,
