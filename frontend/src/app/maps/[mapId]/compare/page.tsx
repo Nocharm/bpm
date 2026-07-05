@@ -15,6 +15,7 @@ import {
   MarkerType,
   type NodeTypes,
   Panel,
+  PanOnScrollMode,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -54,6 +55,8 @@ import {
   type VersionSummary,
 } from "@/lib/api";
 import {
+  getNextNodeAlongFlow,
+  getPrevNodeAlongFlow,
   type HandleSide,
   layoutWithDagre,
   nodeSizeOf,
@@ -872,6 +875,49 @@ function ComparePane({
     [merged, focusId],
   );
 
+  // Tab 이동용 흐름 엣지 — 삭제 제외(현재 To-Be 흐름). getNextNodeAlongFlow는 source/target만 읽음.
+  const flowEdges = useMemo(
+    () =>
+      merged.edges
+        .filter((e) => e.status !== "removed")
+        .map((e) => ({ id: e.id, source: e.source, target: e.target })) as Edge[],
+    [merged],
+  );
+
+  // Tab / Shift+Tab — 흐름상 다음/이전 노드로 포커스 이동(+화면 중앙). 입력 중엔 제외. 미선택 시 시작 노드.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      // Tab은 캔버스 내비로 가로챈다 — 브라우저 기본 포커스 이동(패널 버튼 순회) 방지.
+      e.preventDefault();
+      const current = focusId && positioned.some((n) => n.id === focusId) ? focusId : null;
+      let target: string | null;
+      if (!current) {
+        // 미선택(또는 엣지 포커스) — 흐름 시작(입력 엣지 없는 노드)으로.
+        const incoming = new Set(flowEdges.map((edge) => edge.target));
+        target = positioned.find((n) => !incoming.has(n.id))?.id ?? positioned[0]?.id ?? null;
+      } else {
+        target = e.shiftKey
+          ? getPrevNodeAlongFlow(flowEdges, current)
+          : getNextNodeAlongFlow(flowEdges, current);
+      }
+      if (!target) return;
+      setFocusId(target);
+      const node = positioned.find((n) => n.id === target);
+      if (node) {
+        const size = nodeSizeOf(node.data.nodeType);
+        void flow.setCenter(node.position.x + size.w / 2, node.position.y + size.h / 2, {
+          duration: 350,
+          zoom: flow.getZoom(),
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flowEdges, focusId, positioned, flow]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* 메인 캔버스 스타일 참고 — 노드 핸들(히트박스) 숨김 + 노드 호버 시 자기색 강조 링(bpm-node-emph).
@@ -1132,6 +1178,13 @@ function ComparePane({
             minZoom={0.2}
             onNodeClick={(_, node) => setFocusId(node.id)}
             onEdgeClick={(_, edge) => setFocusId(edge.id)}
+            /* 에디터와 동일한 휠/팬 맵핑 — 휠=상하·좌우 팬, Ctrl/⌘+휠=줌, 좌클릭·Space 드래그=팬(그랩). */
+            panOnDrag
+            panActivationKeyCode="Space"
+            panOnScroll
+            panOnScrollMode={PanOnScrollMode.Free}
+            zoomOnScroll={false}
+            zoomActivationKeyCode={["Control", "Meta"]}
           >
             {/* 선택 노드 위로 슬라이드하는 포커스 링(에디터와 동일 — ViewportPortal로 flow 좌표 정합) */}
             <ViewportPortal>

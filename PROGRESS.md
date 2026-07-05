@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 휠/키 맵핑 에디터화(팬·줌·Space그랩·Tab 노드 이동)
+- 브랜치 `feat/compare-interactions`(main 분기, 리디자인 머지 후속 폴리시).
+- **휠 맵핑을 에디터와 동일하게**(`compare/page.tsx` ReactFlow) — `panOnScroll`+`PanOnScrollMode.Free`(휠 상하·좌우 팬), `zoomOnScroll={false}`, `zoomActivationKeyCode=["Control","Meta"]`(Ctrl/⌘+휠 줌), `panOnDrag`(좌클릭 드래그 그랩)+`panActivationKeyCode="Space"`(Space 드래그 그랩). 기존 휠=줌 → 팬으로 전환.
+- **Tab/Shift+Tab = 흐름상 다음/이전 노드 포커스**(+화면 센터) — `getNextNodeAlongFlow`/`getPrevNodeAlongFlow`(canvas.ts) 재사용, `flowEdges`(삭제 제외 To-Be 흐름). 미선택/엣지 포커스 시 시작 노드로. Tab은 항상 preventDefault(브라우저 포커스 순회 차단).
+- 검증: lint 0·build OK. 라이브(map 13) 결제처리→Tab→결제승인? 포커스 이동·링 슬라이드·인스펙터 갱신 확인.
+
 ## 2026-07-05 — 비교 인터랙션: 노드 클릭/hover·이동 포커스 링·워터마크 상위·엣지 라벨 블러
 - **워터마크 노드 위로**(`compare/page.tsx`) — z-0(뒤)→**z-[4]**(노드 z-2 위로 덮음, opacity .14 유지). 에디터 read-only 워터마크와 동일 동작.
 - **캔버스 노드/엣지 클릭 = 좌측 항목 클릭과 동일 효과** — `onNodeClick`/`onEdgeClick`로 `setFocusId`. 부수효과로 RF가 노드 pointer-events를 켜 **hover 강조 링(bpm-node-emph)도 복구**(이전엔 핸들러 없어 pointer-events off라 hover/click 불가).
