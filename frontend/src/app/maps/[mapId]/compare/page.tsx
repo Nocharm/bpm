@@ -15,6 +15,7 @@ import {
   MarkerType,
   type NodeTypes,
   Panel,
+  Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -31,6 +32,8 @@ import {
   Download,
   Maximize,
   Minus,
+  MoveHorizontal,
+  MoveVertical,
   Plus,
 } from "lucide-react";
 import Link from "next/link";
@@ -68,12 +71,22 @@ import {
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-// passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 아래로 우회하는 아크(red 점선). C2b.
-// 삭제된 직접 연결이 새 경로(A→X→B) 위/아래로 겹치지 않게, source→target을 아래로 부풀린 베지어로.
-function RemovedArcEdge({ sourceX, sourceY, targetX, targetY, markerEnd, style }: EdgeProps) {
-  // 아래에서 출발해 아래로 도착 — bottom 핸들에서 수직으로 내려가 아래로 우회하는 U자 아크.
-  const dip = Math.max(sourceY, targetY) + 52;
-  const path = `M${sourceX},${sourceY} C${sourceX},${dip} ${targetX},${dip} ${targetX},${targetY}`;
+// passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 우회하는 아크(red 점선). C2b.
+// 삭제된 직접 연결이 새 경로(A→X→B)와 겹치지 않게 부풀린 베지어. 방향은 핸들 변으로 결정:
+//   LR(bottom 핸들)=아래로 dip / TB(right 핸들)=오른쪽으로 bulge.
+function RemovedArcEdge({
+  sourceX, sourceY, targetX, targetY, sourcePosition, markerEnd, style,
+}: EdgeProps) {
+  const side = sourcePosition === Position.Right || sourcePosition === Position.Left;
+  const path = side
+    ? (() => {
+        const bulge = Math.max(sourceX, targetX) + 52;
+        return `M${sourceX},${sourceY} C${bulge},${sourceY} ${bulge},${targetY} ${targetX},${targetY}`;
+      })()
+    : (() => {
+        const dip = Math.max(sourceY, targetY) + 52;
+        return `M${sourceX},${sourceY} C${sourceX},${dip} ${targetX},${dip} ${targetX},${targetY}`;
+      })();
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
 }
 
@@ -167,30 +180,36 @@ const COMPARE_RENDER_H: Record<string, number> = {
   subprocess: 64,
 };
 
-function alignBackbone(nodes: AppNode[], keptIds: Set<string>): AppNode[] {
-  const centerY = (node: AppNode) =>
-    node.position.y + (COMPARE_RENDER_H[node.data.nodeType] ?? 38) / 2;
+// 유지(백본) 노드를 흐름의 수직축(cross)에 맞춰 직선화 — LR은 공통 Y, TB는 공통 X로 스냅.
+// 열/행(flow축) 단위로 shift를 계산해 병렬 곁가지는 라인 밖에 남기고, 인라인 삽입은 라인에 정확히 붙인다.
+function alignBackbone(nodes: AppNode[], keptIds: Set<string>, dir: "LR" | "TB"): AppNode[] {
+  const renderH = (node: AppNode) => COMPARE_RENDER_H[node.data.nodeType] ?? 38;
+  const renderW = (node: AppNode) => nodeSizeOf(node.data.nodeType).w;
+  // cross = 흐름에 수직인 축(정렬 대상), flow = 흐름 진행축(열/행 그룹 키). LR: cross=Y·flow=X, TB: 반대.
+  const cross = (node: AppNode) =>
+    dir === "LR" ? node.position.y + renderH(node) / 2 : node.position.x + renderW(node) / 2;
+  const flow = (node: AppNode) =>
+    dir === "LR" ? node.position.x + renderW(node) / 2 : node.position.y + renderH(node) / 2;
   const kept = nodes.filter((node) => keptIds.has(node.id));
   if (kept.length === 0) return nodes;
-  const backboneCY = kept.reduce((sum, node) => sum + centerY(node), 0) / kept.length;
-  const columnKey = (node: AppNode) =>
-    Math.round((node.position.x + nodeSizeOf(node.data.nodeType).w / 2) / 10);
-  const columns = new Map<number, AppNode[]>();
+  const backboneCross = kept.reduce((sum, node) => sum + cross(node), 0) / kept.length;
+  const flowKey = (node: AppNode) => Math.round(flow(node) / 10);
+  const groups = new Map<number, AppNode[]>();
   for (const node of nodes) {
-    const key = columnKey(node);
-    const list = columns.get(key);
+    const key = flowKey(node);
+    const list = groups.get(key);
     if (list) list.push(node);
-    else columns.set(key, [node]);
+    else groups.set(key, [node]);
   }
-  // 유지 노드가 있는 열의 shift(그 노드를 backbone에 맞춤).
+  // 유지 노드가 있는 열/행의 shift(그 노드를 backbone에 맞춤).
   const keptShift = new Map<number, number>();
-  for (const [key, colNodes] of columns) {
+  for (const [key, colNodes] of groups) {
     const keptInCol = colNodes.filter((node) => keptIds.has(node.id));
-    if (keptInCol.length) keptShift.set(key, backboneCY - centerY(keptInCol[0]));
+    if (keptInCol.length) keptShift.set(key, backboneCross - cross(keptInCol[0]));
   }
-  // 유지 노드 없는 열(순수 추가/삭제 열)은 가장 가까운 유지 열의 shift를 그대로 적용 — 추가 노드의
-  // dagre 오프셋(위/아래)을 보존한다: 병렬 곁가지(예: 재고 예약)는 라인 밖에 남아 직접 엣지를 안 막고,
-  // 인라인 삽입(예: 배송 준비)은 dagre가 라인에 뒀으니 그대로 라인 위.
+  // 유지 노드 없는 열/행(순수 추가/삭제)은 가장 가까운 유지 열의 shift를 그대로 적용 — 추가 노드의
+  // dagre 오프셋(위/아래·좌/우)을 보존: 병렬 곁가지는 라인 밖에 남아 직접 엣지를 안 막고,
+  // 인라인 삽입은 dagre가 라인에 뒀으니 그대로 라인 위.
   const nearestKeptShift = (key: number): number => {
     let best = 0;
     let bestDist = Infinity;
@@ -203,76 +222,24 @@ function alignBackbone(nodes: AppNode[], keptIds: Set<string>): AppNode[] {
     }
     return best;
   };
-  const shiftedY = new Map<string, number>();
-  for (const [key, colNodes] of columns) {
+  const shiftById = new Map<string, number>();
+  for (const [key, colNodes] of groups) {
     let shift: number;
     if (keptShift.has(key)) {
       shift = keptShift.get(key) ?? 0;
     } else {
       const base = nearestKeptShift(key);
       // 인라인 삽입(dagre가 라인 근처에 배치)이면 라인에 정확히 스냅, 병렬 곁가지(라인에서 먼)면 오프셋 보존.
-      const repCenterY = centerY(colNodes[0]);
-      shift = Math.abs(repCenterY + base - backboneCY) < 25 ? backboneCY - repCenterY : base;
+      const repCross = cross(colNodes[0]);
+      shift = Math.abs(repCross + base - backboneCross) < 25 ? backboneCross - repCross : base;
     }
-    for (const node of colNodes) shiftedY.set(node.id, node.position.y + shift);
+    for (const node of colNodes) shiftById.set(node.id, shift);
   }
-  return nodes.map((node) => ({
-    ...node,
-    position: { x: node.position.x, y: shiftedY.get(node.id) ?? node.position.y },
-  }));
-}
-
-// 좌우 과도 확장 방지 — 백본 라인 노드를 X순으로 훑어 한 행이 MAX개를 넘으면 다음 1:1 연결 지점에서
-// 다음 행(좌측부터 다시)으로 접는다. 각 노드는 자기 열의 행 오프셋(아래로 ROW_GAP·좌측 정렬)을 받고,
-// 곁가지(추가/삭제)는 같은 열이므로 함께 이동. 접힘은 1:1(단일 출구→단일 입구)에서만 — 분기/합류는 유지.
-function wrapLayout(
-  nodes: AppNode[],
-  outDeg: Map<string, number>,
-  inDeg: Map<string, number>,
-  keptIds: Set<string>,
-): AppNode[] {
-  const MAX_PER_ROW = 4;
-  const ROW_GAP = 300;
-  const centerX = (node: AppNode) => node.position.x + nodeSizeOf(node.data.nodeType).w / 2;
-  const centerY = (node: AppNode) => node.position.y + (COMPARE_RENDER_H[node.data.nodeType] ?? 38) / 2;
-  const kept = nodes.filter((node) => keptIds.has(node.id));
-  if (kept.length === 0) return nodes;
-  const backboneCY = kept.reduce((sum, node) => sum + centerY(node), 0) / kept.length;
-  const backboneSeq = nodes
-    .filter((node) => Math.abs(centerY(node) - backboneCY) < 20)
-    .sort((a, b) => centerX(a) - centerX(b));
-  if (backboneSeq.length <= MAX_PER_ROW) return nodes;
-  // 접힘 경계 X — MAX 도달 후 cur→next가 1:1이면 next의 X부터 새 행.
-  const boundaries: number[] = [];
-  let count = 0;
-  for (let i = 0; i < backboneSeq.length; i += 1) {
-    count += 1;
-    if (count >= MAX_PER_ROW && i + 1 < backboneSeq.length) {
-      const cur = backboneSeq[i];
-      const next = backboneSeq[i + 1];
-      if ((outDeg.get(cur.id) ?? 0) === 1 && (inDeg.get(next.id) ?? 0) === 1) {
-        boundaries.push(centerX(next));
-        count = 0;
-      }
-    }
-  }
-  if (boundaries.length === 0) return nodes;
-  const leftBase = Math.min(...backboneSeq.map(centerX));
-  const rowStartX = [leftBase, ...boundaries];
-  const rowOf = (x: number) => {
-    let row = 0;
-    for (const boundary of boundaries) if (x >= boundary - 1) row += 1;
-    return row;
-  };
   return nodes.map((node) => {
-    const row = rowOf(centerX(node));
-    return {
-      ...node,
-      position: {
-        x: node.position.x + (leftBase - rowStartX[row]),
-        y: node.position.y + row * ROW_GAP,
-      },
-    };
+    const shift = shiftById.get(node.id) ?? 0;
+    return dir === "LR"
+      ? { ...node, position: { x: node.position.x, y: node.position.y + shift } }
+      : { ...node, position: { x: node.position.x + shift, y: node.position.y } };
   });
 }
 
@@ -436,6 +403,8 @@ function ComparePane({
   const { t } = useI18n();
   const flow = useReactFlow();
   const [focusId, setFocusId] = useState<string | null>(null);
+  // 흐름 방향 — LR(좌→우, 기본) / TB(상→하). 맵이 한 축으로 너무 길 때 전환.
+  const [flowDir, setFlowDir] = useState<"LR" | "TB">("LR");
 
   const merged = useMemo(
     () => buildMergedGraph(baseGraph, targetGraph),
@@ -487,24 +456,18 @@ function ComparePane({
         fieldsOf,
       ),
       buildAppEdges(layoutEdges, keptKeys),
+      flowDir,
     );
-    // 후처리 — 유지(unchanged/changed) 백본을 공통 중심Y로 정렬(직선화 + 병렬 유지 노드 라인 위로).
+    // 후처리 — 유지(unchanged/changed) 백본을 공통 수직축으로 정렬(직선화 + 병렬 유지 노드 라인 밖으로).
     const keptStatusIds = new Set(
       merged.nodes
         .filter((node) => node.status === "unchanged" || node.status === "changed")
         .map((node) => node.id),
     );
-    const aligned = alignBackbone(laid, keptStatusIds);
-    // 접힘(wrap) — 긴 1:1 백본을 여러 행으로 접어 좌우 폭 축소. To-Be 흐름의 in/out 차수로 1:1 판정.
-    const outDeg = new Map<string, number>();
-    const inDeg = new Map<string, number>();
-    for (const edge of layoutEdges) {
-      outDeg.set(edge.source, (outDeg.get(edge.source) ?? 0) + 1);
-      inDeg.set(edge.target, (inDeg.get(edge.target) ?? 0) + 1);
-    }
-    const wrapped = wrapLayout(aligned, outDeg, inDeg, keptStatusIds);
-    // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치 아래로 곁가지 배치 — 본류 라인을 비운다.
-    const posByKey = new Map(wrapped.map((node) => [node.id, node.position]));
+    const aligned = alignBackbone(laid, keptStatusIds, flowDir);
+    // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치에서 곁가지로 밀어낸다(본류 라인 비우기).
+    // LR은 아래로(+y), TB는 오른쪽으로(+x) — 흐름축과 겹치지 않는 쪽.
+    const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
     const removed = buildAppNodes(
       merged.nodes.filter((node) => node.status === "removed"),
       noteOf,
@@ -518,10 +481,12 @@ function ComparePane({
       if (neighbors.length === 0) return node;
       const ax = neighbors.reduce((sum, pos) => sum + pos.x, 0) / neighbors.length;
       const ay = neighbors.reduce((sum, pos) => sum + pos.y, 0) / neighbors.length;
-      return { ...node, position: { x: ax, y: ay + 150 } };
+      return flowDir === "LR"
+        ? { ...node, position: { x: ax, y: ay + 150 } }
+        : { ...node, position: { x: ax + 220, y: ay } };
     });
-    return [...wrapped, ...removed];
-  }, [merged, noteOf, fieldsOf, keptKeys]);
+    return [...aligned, ...removed];
+  }, [merged, noteOf, fieldsOf, keptKeys, flowDir]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
   const nodeCenters = useMemo(() => {
@@ -544,10 +509,10 @@ function ComparePane({
     [positioned],
   );
 
-  // 엣지별 붙을 변(핸들) — 노드마다 자기 엣지들을 4변에 그리디 분산(겹침 최소화). passthrough는
-  // 아래(bottom)에서 출발/도착하도록 고정. 방향 확실한 엣지가 선호 변을 먼저 차지.
+  // 엣지별 붙을 변(핸들) — 노드마다 자기 엣지들을 4변에 그리디 분산(겹침 최소화). passthrough·역행 루프는
+  // 흐름축과 수직인 변으로 고정 우회. 방향 확실한 엣지가 선호 변을 먼저 차지.
   const handleSides = useMemo(() => {
-    // forced: passthrough(삭제 직접연결)=bottom→bottom, back(뒤로 가는 루프)=top→top(상단 우회). 그 외=방향배정.
+    // forced(우회): LR은 passthrough=bottom→bottom·back=top→top, TB는 passthrough=right→right·back=left→left.
     type Endpoint = { edgeId: string; end: "source" | "target"; otherId: string; forced: HandleSide | null };
     const perNode = new Map<string, Endpoint[]>();
     const add = (nodeId: string, ep: Endpoint) => {
@@ -555,20 +520,23 @@ function ComparePane({
       if (list) list.push(ep);
       else perNode.set(nodeId, [ep]);
     };
+    // 흐름축 우회 변 — LR: 세로(아래 dip / 위 우회), TB: 가로(오른쪽 bulge / 왼쪽 우회).
+    const arcSide: HandleSide = flowDir === "LR" ? "bottom" : "right";
+    const backSide: HandleSide = flowDir === "LR" ? "top" : "left";
     for (const edge of merged.edges) {
       const s = nodeCenters.get(edge.source);
       const t = nodeCenters.get(edge.target);
       const passthrough =
         edge.status === "removed" && keptKeys.has(edge.source) && keptKeys.has(edge.target);
-      const dyEdge = s && t ? t.cy - s.cy : 0;
-      // 접힘(wrap) 커넥터 — 타겟이 훨씬 아래(다음 행) & 왼쪽 → 아래로 나가 다음 행 왼쪽으로 들어간다.
-      const wrap = !passthrough && !!s && !!t && t.cx < s.cx && dyEdge > 150;
-      // 흐름 역행 루프(같은 행) → 상단 우회
-      const back = !passthrough && !wrap && !!s && !!t && t.cx < s.cx - 40 && Math.abs(dyEdge) < 150;
-      const forcedSource: HandleSide | null = passthrough ? "bottom" : back ? "top" : wrap ? "bottom" : null;
-      const forcedTarget: HandleSide | null = passthrough ? "bottom" : back ? "top" : wrap ? "left" : null;
-      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, forced: forcedSource });
-      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, forced: forcedTarget });
+      // 흐름 역행 루프 — LR은 타겟이 왼쪽(뒤로), TB는 타겟이 위로(뒤로) & 반대축 이동 작을 때만.
+      const back =
+        !passthrough && !!s && !!t &&
+        (flowDir === "LR"
+          ? t.cx < s.cx - 40 && Math.abs(t.cy - s.cy) < 150
+          : t.cy < s.cy - 40 && Math.abs(t.cx - s.cx) < 150);
+      const forced: HandleSide | null = passthrough ? arcSide : back ? backSide : null;
+      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, forced });
+      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, forced });
     }
     const result = new Map<string, { source: HandleSide; target: HandleSide }>();
     const setSide = (edgeId: string, end: "source" | "target", side: HandleSide) => {
@@ -581,7 +549,7 @@ function ComparePane({
       const center = nodeCenters.get(nodeId);
       if (!center) continue;
       const used = new Set<HandleSide>();
-      // 고정 변(passthrough=bottom / back=top) 먼저 자리 확보
+      // 고정 우회 변(passthrough·back) 먼저 자리 확보
       for (const ep of endpoints) {
         if (ep.forced) {
           setSide(ep.edgeId, ep.end, ep.forced);
@@ -606,13 +574,19 @@ function ComparePane({
       }
     }
     return result;
-  }, [merged, keptKeys, nodeCenters]);
+  }, [merged, keptKeys, nodeCenters, flowDir]);
 
   // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)
   const laidNodes = useMemo(
     () => positioned.map((node) => ({ ...node, selected: focusId === node.id })),
     [positioned, focusId],
   );
+
+  // 배치가 바뀌면(방향 전환 등) 뷰를 다시 맞춘다 — fitView prop은 최초 1회만 적용되므로.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => flow.fitView({ duration: 300, padding: 0.12 }));
+    return () => cancelAnimationFrame(id);
+  }, [positioned, flow]);
 
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
@@ -800,6 +774,19 @@ function ComparePane({
         <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setFlowDir((dir) => (dir === "LR" ? "TB" : "LR"))}
+            title={t(flowDir === "LR" ? "compare.layoutVertical" : "compare.layoutHorizontal")}
+            aria-label={t(flowDir === "LR" ? "compare.layoutVertical" : "compare.layoutHorizontal")}
+            className="flex h-8 w-8 items-center justify-center rounded-sm border border-hairline text-ink-secondary hover:bg-surface-alt"
+          >
+            {flowDir === "LR" ? (
+              <MoveVertical size={14} strokeWidth={1.5} />
+            ) : (
+              <MoveHorizontal size={14} strokeWidth={1.5} />
+            )}
+          </button>
+          <button
+            type="button"
             onClick={handleExport}
             className="flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-3 text-caption text-ink-secondary hover:bg-surface-alt"
           >
@@ -827,6 +814,7 @@ function ComparePane({
             nodesConnectable={false}
             elementsSelectable={false}
             fitView
+            minZoom={0.2}
           >
             <Background
               variant={BackgroundVariant.Dots}

@@ -2,6 +2,18 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 캔버스 wrap 롤백 + 흐름 방향 토글(LR/TB) 제공
+- **wrap(접힘) 롤백** — 접힘이 세로 브릿지·교차 아크를 늘려 오히려 복잡해 보인다는 피드백. `wrapLayout` 전체 제거·`positioned`에서 접힘 호출/차수계산 제거·교차 아크 흐림(`appEdges` opacity) 제거. **z-index(변경 필 엣지 위로)는 유지**.
+- **흐름 방향 토글 신규**(`compare/page.tsx`) — 헤더에 LR(좌→우, 기본)/TB(상→하) 전환 버튼(`MoveVertical`/`MoveHorizontal`, i18n `compare.layout{Horizontal,Vertical}`). 맵이 한 축으로 너무 길면 반대 축으로 전환.
+- **방향 파라미터화**:
+  - `layoutWithDagre(nodes, edges, rankdir="LR")` — TB는 nodesep 90·ranksep 200(필 아래로 뻗어 다음 행 침범 방지).
+  - `alignBackbone(nodes, kept, dir)` — cross축(LR:Y·TB:X) 정렬로 백본 직선화 일반화.
+  - `handleSides` — 우회 변 방향화(LR passthrough=bottom·back=top / TB passthrough=right·back=left).
+  - `RemovedArcEdge` — `sourcePosition`으로 아크 방향(LR 아래 dip / TB 우측 bulge).
+  - 삭제 노드 곁가지 방향(LR 아래 +y / TB 우측 +x).
+  - `minZoom=0.2`(긴 TB 세로 그래프 fitView) + 배치 변경 시 rAF `fitView` 재적용(방향 전환 뷰 갱신).
+- 검증: lint 0·build OK. 라이브(map 13) LR 평면·TB 세로 척추·토글·fitView 확인.
+
 ## 2026-07-05 — 비교 캔버스 접힘(wrap)으로 좌우폭 축소 + 변경 필 엣지 위로
 - **`wrapLayout` 후처리**(`compare/page.tsx`) — 백본 라인 노드를 X순으로 훑어 한 행이 4개(MAX_PER_ROW) 넘으면 **다음 1:1(단일출구→단일입구) 지점에서 다음 행(좌측부터 다시)으로 접음**(ROW_GAP 300). 각 노드는 자기 열의 행 오프셋을 받고 곁가지(추가/삭제)는 같은 열이라 함께 이동. 분기/합류는 유지(1:1만 접음). map 13: 1행→4행, 88%로 컴팩트.
 - **접힘 커넥터 라우팅**(`handleSides`) — 타겟이 훨씬 아래+왼쪽(다음 행)인 엣지=wrap → source bottom·target left. 루프(back)와 구분(같은 행 역행만 top→top).

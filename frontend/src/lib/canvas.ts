@@ -647,19 +647,24 @@ export function insertNodeAfter(
 }
 
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
-export function layoutWithDagre(nodes: AppNode[], edges: Edge[]): AppNode[] {
+export function layoutWithDagre(
+  nodes: AppNode[],
+  edges: Edge[],
+  rankdir: "LR" | "TB" = "LR",
+): AppNode[] {
   const graph = new dagre.graphlib.Graph();
   // 교차/겹침 최소화 — network-simplex 랭커 + 넉넉한 간격(노드끼리·랭크끼리·엣지끼리).
   // edgesep을 키워 평행 엣지가 노드 위로 겹쳐 지나가는 경우를 줄인다.
+  const isTB = rankdir === "TB";
   graph.setGraph({
-    rankdir: "LR",
+    rankdir,
     ranker: "network-simplex",
     // 간격을 넉넉히 — 랭크 사이(ranksep)를 크게 둬 엣지가 노드 위로 겹쳐 지나가지 않게,
     // 같은 랭크 노드 간격(nodesep)·평행 엣지 간격(edgesep)도 키워 엣지가 노드에 가려지는 일 방지.
-    // LR이라 nodesep=같은 열 세로 간격 — 변경 노드의 before→after 필(노드 아래로 뻗음)이
-    // 아래 노드를 침범하지 않도록 넉넉히(compare 전용 함수). ranksep=열 간격.
-    nodesep: 120,
-    ranksep: 160,
+    // LR: nodesep=같은 열 세로 간격 — 변경 노드의 before→after 필(노드 아래로 뻗음)이 아래 노드를
+    // 침범하지 않도록 넉넉히. TB: ranksep=행 간격을 크게 둬 필(아래로 뻗음)이 다음 행을 침범하지 않게.
+    nodesep: isTB ? 90 : 120,
+    ranksep: isTB ? 200 : 160,
     edgesep: 40,
     marginx: 20,
     marginy: 20,

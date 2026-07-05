@@ -46,11 +46,15 @@
 ## 진행 순서(권장)
 C2a(노드 diff + before/after) → C2b(엣지 우회 라우팅) → C3(패널 좌측 + 필터/포커스) → C4(속성 인스펙터). **노드 우선.**
 
-## 정렬 후처리 (C2 캔버스 폴리시 — dagre 위 얹는 순수 좌표 변형)
-- **`alignBackbone`** — dagre 배치 후 유지 노드를 공통 백본 Y로 스냅(수평 직선). 유지 없는 열은 최근접 유지 shift 보존 + 인라인 삽입은 25px 내면 백본에 스냅. `COMPARE_RENDER_H`(process/terminal 38·decision 96·subprocess 64)로 중심 정확.
-- **`wrapLayout`** — 백본 라인이 4개(MAX_PER_ROW) 초과 시 다음 **1:1 지점**에서 다음 행(좌측부터)으로 접음(ROW_GAP 300). 좌우폭 축소. 곁가지는 열 단위로 함께 이동. 접힘 커넥터는 `handleSides`에서 source bottom·target left.
+## 정렬 후처리 + 흐름 방향 (C2 캔버스 폴리시 — dagre 위 얹는 순수 좌표 변형)
+- **흐름 방향 토글 (LR/TB)** — 헤더 버튼으로 좌→우(기본)/상→하 전환. 맵이 한 축으로 길 때 반대 축 사용. 아래 후처리·핸들·아크·삭제배치가 모두 방향 파라미터(`dir`)로 일반화됨.
+  - `layoutWithDagre(…, rankdir)` — TB는 ranksep 200(필 침범 방지).
+  - `alignBackbone(…, dir)` — cross축(LR:Y·TB:X)으로 백본 직선화. 유지 없는 열은 최근접 유지 shift 보존 + 인라인 삽입 25px 내 스냅. `COMPARE_RENDER_H`(process/terminal 38·decision 96·subprocess 64).
+  - `handleSides` 우회 변 — LR passthrough=bottom·back=top / TB passthrough=right·back=left. 나머지는 방향벡터 4변 그리디.
+  - `RemovedArcEdge` — `sourcePosition`으로 LR 아래 dip / TB 우측 bulge.
+  - `minZoom=0.2` + 방향 전환 시 rAF `fitView` 재적용.
 - **z-index** — `.react-flow__node{z-index:2}`로 변경 필/노드를 엣지 위로(변경 내용 우선).
-- **후속(미해결)**: wrap 시 행을 가로지르는 passthrough 아크(배송→배송완료 등)가 길게 늘어짐 — 억제/재라우팅 검토 필요.
+- **wrap(접힘) 시도 → 롤백**: 4행/2행 접힘은 세로 브릿지·교차 아크가 늘어 오히려 복잡 → 제거하고 방향 토글로 대체.
 
 ## 비고
 - **각 단위는 행(sub-unit)으로 쪼개 개별 트래킹**(R 시리즈와 동일). 단위별 커밋 + 시현 데이터 세팅 + 이 표 갱신.
