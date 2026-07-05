@@ -34,6 +34,7 @@ import {
   Minus,
   MoveHorizontal,
   MoveVertical,
+  Pencil,
   Plus,
 } from "lucide-react";
 import Link from "next/link";
@@ -409,9 +410,11 @@ function ZoomBar() {
 interface ChangeItem {
   key: string;
   focusId: string;
+  isEdge: boolean;
   status: MergedNodeStatus;
   title: string;
   detail?: string;
+  fields?: DiffFieldRow[];
 }
 
 function ComparePane({
@@ -438,6 +441,8 @@ function ComparePane({
   const { t } = useI18n();
   const flow = useReactFlow();
   const [focusId, setFocusId] = useState<string | null>(null);
+  // 변경 패널 필터 — all / 상태별. 칩 클릭으로 목록 좁힘.
+  const [filter, setFilter] = useState<"all" | "added" | "removed" | "changed">("all");
   // 흐름 방향 — LR(좌→우, 기본) / TB(상→하). 맵이 한 축으로 너무 길 때 전환.
   const [flowDir, setFlowDir] = useState<"LR" | "TB">("LR");
 
@@ -637,36 +642,46 @@ function ComparePane({
     [merged],
   );
 
-  const nodeChanges: ChangeItem[] = useMemo(
-    () =>
-      merged.nodes
-        .filter((m) => m.status !== "unchanged")
-        .map((m) => ({
-          key: `n-${m.id}`,
-          focusId: m.id,
-          status: m.status,
-          title: m.node.title,
-          detail:
-            m.status === "changed"
-              ? m.changedFields.map((f) => t(FIELD_MSG[f])).join(", ")
-              : undefined,
-        })),
-    [merged, t],
-  );
-
-  const edgeChanges: ChangeItem[] = useMemo(
-    () =>
-      merged.edges
-        .filter((e) => e.status !== "unchanged")
-        .map((e) => ({
-          key: `e-${e.id}`,
-          focusId: e.id,
-          status: e.status,
-          title: `${titleByKey.get(e.source) ?? "?"} → ${titleByKey.get(e.target) ?? "?"}`,
-          detail: e.status === "added" ? t("compare.edgeAdded") : t("compare.edgeRemoved"),
-        })),
-    [merged, titleByKey, t],
-  );
+  // 변경 항목(패널) — 목업 순서: 추가 노드→추가 엣지→삭제 노드→삭제 엣지→변경 노드.
+  // 변경 노드는 before→after 필 포함, 엣지는 방향 문자열 + "Edge added/removed" 설명.
+  const changeItems: ChangeItem[] = useMemo(() => {
+    const nodeItems: ChangeItem[] = merged.nodes
+      .filter((m) => m.status !== "unchanged")
+      .map((m) => ({
+        key: `n-${m.id}`,
+        focusId: m.id,
+        isEdge: false,
+        status: m.status,
+        title: m.node.title,
+        fields:
+          m.status === "changed"
+            ? m.fieldChanges.map((fc) => ({
+                label: t(FIELD_MSG[fc.field]),
+                before: fc.before || t("summary.none"),
+                after: fc.after || t("summary.none"),
+              }))
+            : undefined,
+      }));
+    const edgeItems: ChangeItem[] = merged.edges
+      .filter((e) => e.status !== "unchanged")
+      .map((e) => ({
+        key: `e-${e.id}`,
+        focusId: e.id,
+        isEdge: true,
+        status: e.status,
+        title: `${titleByKey.get(e.source) ?? "?"} → ${titleByKey.get(e.target) ?? "?"}`,
+        detail: e.status === "added" ? t("compare.edgeAdded") : t("compare.edgeRemoved"),
+      }));
+    const pick = (items: ChangeItem[], status: MergedNodeStatus) =>
+      items.filter((i) => i.status === status);
+    return [
+      ...pick(nodeItems, "added"),
+      ...pick(edgeItems, "added"),
+      ...pick(nodeItems, "removed"),
+      ...pick(edgeItems, "removed"),
+      ...pick(nodeItems, "changed"),
+    ];
+  }, [merged, titleByKey, t]);
 
   const focusNode = useCallback(
     (id: string) => {
@@ -730,19 +745,39 @@ function ComparePane({
     changed: t("compare.legendChanged"),
     unchanged: "",
   };
+  // 항목 앞 아이콘(색상 사각) — 추가 ＋ / 삭제 − / 변경 ✎.
+  const iconBg: Record<MergedNodeStatus, string> = {
+    added: "bg-added",
+    removed: "bg-removed",
+    changed: "bg-changed",
+    unchanged: "",
+  };
+  const statusIcon = (status: MergedNodeStatus) =>
+    status === "added" ? (
+      <Plus size={12} strokeWidth={2.5} />
+    ) : status === "removed" ? (
+      <Minus size={12} strokeWidth={2.5} />
+    ) : (
+      <Pencil size={11} strokeWidth={2} />
+    );
 
-  const hasChanges = nodeChanges.length + edgeChanges.length > 0;
+  const hasChanges = changeItems.length > 0;
 
-  // 좌상 카운트 필 — 노드+엣지를 status별 집계(엣지 추가/삭제 포함, 변경은 노드만).
+  // 좌상 카운트 필 + 패널 필터칩 — 노드+엣지를 status별 집계(엣지 추가/삭제 포함, 변경은 노드만).
   const counts = useMemo(() => {
     const acc = { added: 0, removed: 0, changed: 0 };
-    for (const item of [...nodeChanges, ...edgeChanges]) {
+    for (const item of changeItems) {
       if (item.status === "added" || item.status === "removed" || item.status === "changed") {
         acc[item.status] += 1;
       }
     }
     return acc;
-  }, [nodeChanges, edgeChanges]);
+  }, [changeItems]);
+
+  const filteredChanges = useMemo(
+    () => (filter === "all" ? changeItems : changeItems.filter((i) => i.status === filter)),
+    [changeItems, filter],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -824,6 +859,109 @@ function ComparePane({
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
+        <aside
+          className="flex w-72 shrink-0 flex-col border-r border-hairline bg-surface"
+          data-id="compare-changes"
+        >
+          <div className="flex items-center justify-between px-3 pb-2 pt-3">
+            <h2 className="text-body-strong text-ink">{t("compare.changes")}</h2>
+            <span className="text-caption text-ink-tertiary">{changeItems.length}</span>
+          </div>
+          {hasChanges && (
+            <div className="flex gap-1.5 border-b border-hairline px-3 pb-2">
+              {(
+                [
+                  { key: "all", label: t("compare.filterAll"), count: changeItems.length, dot: "" },
+                  { key: "added", label: "", count: counts.added, dot: "bg-added" },
+                  { key: "removed", label: "", count: counts.removed, dot: "bg-removed" },
+                  { key: "changed", label: "", count: counts.changed, dot: "bg-changed" },
+                ] as const
+              ).map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => setFilter(chip.key)}
+                  className={`flex h-6 items-center gap-1.5 rounded-full border px-2 text-fine ${
+                    filter === chip.key
+                      ? "border-accent-tint-border bg-accent-tint text-accent"
+                      : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                  }`}
+                >
+                  {chip.dot && <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />}
+                  {chip.label && <span>{chip.label}</span>}
+                  <span className="font-semibold">{chip.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="min-h-0 flex-1 overflow-auto p-2">
+            {!hasChanges ? (
+              <div className="px-1.5 py-1 text-caption text-ink-tertiary">
+                {t("compare.identical")}
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-0.5">
+                {filteredChanges.map((item) => {
+                  const selected = focusId === item.focusId;
+                  return (
+                    <li key={item.key}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.isEdge) {
+                            const edge = merged.edges.find((e) => e.id === item.focusId);
+                            if (edge) focusEdge(edge);
+                          } else {
+                            focusNode(item.focusId);
+                          }
+                        }}
+                        className={`flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left ${
+                          selected ? "bg-accent-tint" : "hover:bg-surface-alt"
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-on-accent ${iconBg[item.status]}`}
+                        >
+                          {statusIcon(item.status)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-caption-strong text-ink">{item.title}</span>
+                            <span
+                              className={`rounded-full px-1.5 text-fine font-semibold ${badgeClass[item.status]}`}
+                            >
+                              {badgeLabel[item.status]}
+                            </span>
+                          </span>
+                          {item.fields && item.fields.length > 0 && (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {item.fields.map((f) => (
+                                <span
+                                  key={f.label}
+                                  className="flex items-center gap-1 rounded-xs border border-changed/30 bg-changed/10 px-1 text-fine"
+                                >
+                                  <span className="font-semibold text-changed">{f.label}</span>
+                                  <span className="text-ink-muted">{f.before}</span>
+                                  <span className="text-ink-tertiary">→</span>
+                                  <span className="font-semibold text-ink">{f.after}</span>
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                          {item.detail && (
+                            <span className="mt-0.5 block text-fine text-ink-tertiary">
+                              {item.detail}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </aside>
         <div className="min-w-0 flex-1 bg-canvas" data-id="compare-canvas">
           <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
           <ReactFlow
@@ -882,47 +1020,6 @@ function ComparePane({
           </ReactFlow>
           </NodeActionsContext.Provider>
         </div>
-        <aside
-          className="w-72 shrink-0 overflow-auto border-l border-hairline px-3 py-2"
-          data-id="compare-changes"
-        >
-          <div className="mb-2 text-caption-strong text-ink">{t("compare.changes")}</div>
-          {!hasChanges && (
-            <div className="text-caption text-ink-tertiary">{t("compare.identical")}</div>
-          )}
-          <ul className="space-y-1 text-body">
-            {nodeChanges.map((c) => (
-              <li key={c.key}>
-                <button
-                  className="w-full rounded-sm px-1.5 py-1 text-left hover:bg-surface-alt"
-                  onClick={() => focusNode(c.focusId)}
-                >
-                  <span className={`mr-2 rounded px-1.5 py-0.5 text-caption ${badgeClass[c.status]}`}>
-                    {badgeLabel[c.status]}
-                  </span>
-                  <span className="text-ink">{c.title}</span>
-                  {c.detail && <span className="ml-1 text-caption text-ink-secondary">({c.detail})</span>}
-                </button>
-              </li>
-            ))}
-            {edgeChanges.map((c) => {
-              const edge = merged.edges.find((e) => e.id === c.focusId);
-              return (
-                <li key={c.key}>
-                  <button
-                    className="w-full rounded-sm px-1.5 py-1 text-left hover:bg-surface-alt"
-                    onClick={() => edge && focusEdge(edge)}
-                  >
-                    <span className={`mr-2 rounded px-1.5 py-0.5 text-caption ${badgeClass[c.status]}`}>
-                      {c.detail}
-                    </span>
-                    <span className="text-ink-secondary">{c.title}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
       </div>
     </div>
   );

@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 C3: 변경 패널(좌측·필터칩·아이콘·클릭 포커스)
+- **변경 패널을 좌측으로**(`aside` 캔버스 앞·`border-r`) — 승인 목업 3단(좌 변경/중 캔버스/우 인스펙터[C4]) 정착 시작.
+- **필터칩** 전체/추가/삭제/변경 — 상태 색점+건수, 클릭 시 목록 필터(`filter` state), active=accent-tint. **아이콘 항목**(＋/−/✎ 색상 사각) + 상태 뱃지 + **변경 노드 before→after 필** + 엣지 설명("Edge added/removed").
+- **선택 하이라이트**(`focusId`=accent-tint) + **클릭 포커스**(fitView로 노드/엣지 확대) — 기존 focus 로직 재사용.
+- `nodeChanges`/`edgeChanges` → **`changeItems`**(목업 순서: 추가노드→추가엣지→삭제노드→삭제엣지→변경노드) 통합, counts도 여기서. 컴팩트(w-72·text-caption/fine·py-1.5). i18n `compare.filterAll`(All/전체).
+- 검증: lint 0·build OK. 라이브(map 13) 좌측 패널·Changed 필터 3건·배송완료 클릭 포커스+선택 확인.
+
 ## 2026-07-05 — 비교: TB 세로 스파인 직선화(실측 렌더 폭)
 - 증상: TB에서 [D-U] 세로 스파인 엣지가 직선이 아님(LR 수평은 정상). 원인: 노드 중심 계산에 `nodeSizeOf`(dagre 박스) 사용 — process 실제 폭 150(min-w-[150px])인데 nodeSizeOf=170 → 중심 X 10px 어긋남(process 233 vs decision 243).
 - 수정: **`COMPARE_RENDER_W`**(process 150·terminal 90·decision 96·subprocess 180) 추가 — `alignBackbone`의 cross축(TB=X) 정렬과 `nodeCenters`가 실측 렌더 폭/높이(`COMPARE_RENDER_W`/`_H`)로 계산. LR을 `COMPARE_RENDER_H`로 직선화한 것의 X축 대칭.
