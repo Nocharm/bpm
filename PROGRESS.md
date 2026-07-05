@@ -2,6 +2,15 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S4: 공지 백엔드 + 뷰어 /notices (읽음 클라 캐시)
+- 백엔드 Notice 모델 + routers/notices.py — GET(게시기간 유효분)·GET/{id}·GET/manage(sysadmin 전체)·POST(sysadmin, notify_all 시 활성 유저 fan-out)·PATCH·DELETE. workflow.create_notifications map_id/version_id 옵션화. 테스트 5건.
+- lib/notices-read.ts: localStorage 읽음 캐시(recent-maps 패턴, 기기별).
+- api: listNotices/getNotice/listNoticesManage/createNotice/updateNotice/deleteNotice.
+- 뷰어 /notices: 좌 목록(전체/중요/일반 필터·중요·일반 파스텔 필·미읽음 점·안읽음 N) + 우 MarkdownView 상세(중요 필·작성자·시각·게시기간). 클릭 시 markNoticeRead → 점 제거·카운트 감소.
+- i18n notices.*(en/ko).
+- 검증: ruff·pytest 5/5·전체 393 · lint 0 · build 성공. 브라우저(:3001) e2e — 목록/필/미읽음(안읽음 4)·상세 마크다운 렌더·클릭 읽음(안읽음 3·점 제거)·notify_all 알림 벨 점 확인. (notices 테이블은 백엔드 reload create_all로 생성.)
+- 미착수: TopNav 공지 탭 미읽음 뱃지(후속) · 설정 공지 관리 탭=S5.
+
 ## 2026-07-05 — S3b: 피드백 필 재디자인 + 상태변경→상세/관리 모달 (사용자 요청)
 - 필: 유형·상태를 채운 파스텔 필(bg-*/15 토큰)로. 공유 lib/feedback-meta.ts로 목록·모달 통일. 상태 new→draft(Draft/In Progress/Done 3종).
 - 목록: 인라인 select 제거 → 행 클릭 시 상세/관리 모달(feedback-detail-modal.tsx).

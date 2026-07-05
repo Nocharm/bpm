@@ -269,6 +269,23 @@ class Feedback(Base):
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
+class Notice(Base):
+    """공지사항 — 마크다운 본문·중요도·게시기간 (design 2026-07-05). 읽음은 클라 캐시."""
+
+    __tablename__ = "notices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body_md: Mapped[str] = mapped_column(Text, default="")
+    # 중요도 — important | normal
+    importance: Mapped[str] = mapped_column(String(20), default="normal")
+    # 게시기간 — starts_at부터 노출, ends_at=None이면 무제한
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Employee(Base):
     """사내 AD 동기화 사용자 — loginId(sAMAccountName) PK. source=ad|local (design 2026-06-16)."""
 

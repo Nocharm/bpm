@@ -967,6 +967,62 @@ export function deleteFeedback(id: number): Promise<void> {
   return request<void>(`/feedback/${id}`, { method: "DELETE" });
 }
 
+// ── 공지사항 (design 2026-07-05) ──────────────
+
+export type NoticeImportance = "important" | "normal";
+
+export interface NoticeItem {
+  id: number;
+  title: string;
+  body_md: string;
+  importance: NoticeImportance;
+  starts_at: string;
+  ends_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface NoticeInput {
+  title: string;
+  body_md: string;
+  importance: NoticeImportance;
+  starts_at: string;
+  ends_at: string | null;
+  notify_all?: boolean;
+}
+
+// 게시기간 유효분(열람용)
+export function listNotices(): Promise<NoticeItem[]> {
+  return request<NoticeItem[]>("/notices");
+}
+
+// 관리용 — 게시기간 무관 전체(sysadmin)
+export function listNoticesManage(): Promise<NoticeItem[]> {
+  return request<NoticeItem[]>("/notices/manage");
+}
+
+export function getNotice(id: number): Promise<NoticeItem> {
+  return request<NoticeItem>(`/notices/${id}`);
+}
+
+export function createNotice(input: NoticeInput): Promise<NoticeItem> {
+  return request<NoticeItem>("/notices", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateNotice(id: number, patch: Partial<NoticeInput>): Promise<NoticeItem> {
+  return request<NoticeItem>(`/notices/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteNotice(id: number): Promise<void> {
+  return request<void>(`/notices/${id}`, { method: "DELETE" });
+}
+
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
 
 export interface AiNodeAttributes {

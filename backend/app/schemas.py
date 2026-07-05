@@ -446,6 +446,37 @@ class FeedbackListOut(BaseModel):
     counts: FeedbackCounts
 
 
+class NoticeCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body_md: str = Field(default="", max_length=20000)
+    importance: Literal["important", "normal"] = "normal"
+    starts_at: datetime
+    ends_at: datetime | None = None
+    notify_all: bool = False
+
+
+class NoticeUpdate(BaseModel):
+    # 제공된 필드만 갱신(exclude_unset) — ends_at=null은 '무제한'으로 명시 갱신
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body_md: str | None = Field(default=None, max_length=20000)
+    importance: Literal["important", "normal"] | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+
+class NoticeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    body_md: str
+    importance: str
+    starts_at: datetime
+    ends_at: datetime | None
+    created_by: str
+    created_at: datetime
+
+
 class MeOut(BaseModel):
     username: str
     ai_enabled: bool

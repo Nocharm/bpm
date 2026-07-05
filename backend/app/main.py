@@ -25,6 +25,7 @@ from app.routers import (
     groups,
     library,
     maps,
+    notices,
     notifications,
     permissions,
     versions,
@@ -59,6 +60,7 @@ app.include_router(employees.router)
 app.include_router(approvers.router)
 app.include_router(notifications.router)
 app.include_router(feedback.router)
+app.include_router(notices.router)
 app.include_router(library.router)
 app.include_router(permissions.router)
 app.include_router(groups.router)
