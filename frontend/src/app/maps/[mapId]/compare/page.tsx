@@ -9,9 +9,7 @@ import {
   type EdgeProps,
   type EdgeTypes,
   EdgeLabelRenderer,
-  getNodesBounds,
   getSmoothStepPath,
-  getViewportForBounds,
   MarkerType,
   type NodeTypes,
   Panel,
@@ -24,7 +22,6 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { toPng } from "html-to-image";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -66,6 +63,7 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
+import { exportFramedPng } from "@/lib/export";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
@@ -787,27 +785,13 @@ function ComparePane({
     onChangeTarget(baseId);
   }, [onChangeBase, onChangeTarget, baseId, targetId]);
 
-  // 병합 캔버스를 PNG로 저장 — 저장 노드 범위를 1600×1000에 맞춰 렌더(React Flow 표준 recipe).
+  // 병합 캔버스를 PNG로 저장 — 저장 노드 범위를 1600×1000에 맞춰 렌더(공용 export, png-export 보정 포함).
   const handleExport = useCallback(() => {
-    const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
-    if (!viewport) return;
-    const width = 1600;
-    const height = 1000;
-    const vp = getViewportForBounds(getNodesBounds(flow.getNodes()), width, height, 0.5, 2, 0.1);
-    void toPng(viewport, {
+    void exportFramedPng(flow.getNodes(), `${mapName}-compare.png`, {
+      width: 1600,
+      height: 1000,
+      minZoom: 0.5,
       backgroundColor: "#F6F6F8", // bg-canvas — export 배경(데이터/출력 예외, design.md §1)
-      width,
-      height,
-      style: {
-        width: `${width}px`,
-        height: `${height}px`,
-        transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`,
-      },
-    }).then((dataUrl) => {
-      const link = document.createElement("a");
-      link.download = `${mapName}-compare.png`;
-      link.href = dataUrl;
-      link.click();
     });
   }, [flow, mapName]);
 
