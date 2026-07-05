@@ -182,14 +182,38 @@ function alignBackbone(nodes: AppNode[], keptIds: Set<string>): AppNode[] {
     if (list) list.push(node);
     else columns.set(key, [node]);
   }
-  const shiftedY = new Map<string, number>();
-  for (const colNodes of columns.values()) {
+  // 유지 노드가 있는 열의 shift(그 노드를 backbone에 맞춤).
+  const keptShift = new Map<number, number>();
+  for (const [key, colNodes] of columns) {
     const keptInCol = colNodes.filter((node) => keptIds.has(node.id));
-    // 열에 유지 노드가 있으면 그 중심을 backbone에 맞춤. 없으면(인라인 삽입) 열 전체를 backbone에 센터링.
-    const anchorCY = keptInCol.length
-      ? centerY(keptInCol[0])
-      : colNodes.reduce((sum, node) => sum + centerY(node), 0) / colNodes.length;
-    const shift = backboneCY - anchorCY;
+    if (keptInCol.length) keptShift.set(key, backboneCY - centerY(keptInCol[0]));
+  }
+  // 유지 노드 없는 열(순수 추가/삭제 열)은 가장 가까운 유지 열의 shift를 그대로 적용 — 추가 노드의
+  // dagre 오프셋(위/아래)을 보존한다: 병렬 곁가지(예: 재고 예약)는 라인 밖에 남아 직접 엣지를 안 막고,
+  // 인라인 삽입(예: 배송 준비)은 dagre가 라인에 뒀으니 그대로 라인 위.
+  const nearestKeptShift = (key: number): number => {
+    let best = 0;
+    let bestDist = Infinity;
+    for (const [keptKey, shift] of keptShift) {
+      const dist = Math.abs(keptKey - key);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = shift;
+      }
+    }
+    return best;
+  };
+  const shiftedY = new Map<string, number>();
+  for (const [key, colNodes] of columns) {
+    let shift: number;
+    if (keptShift.has(key)) {
+      shift = keptShift.get(key) ?? 0;
+    } else {
+      const base = nearestKeptShift(key);
+      // 인라인 삽입(dagre가 라인 근처에 배치)이면 라인에 정확히 스냅, 병렬 곁가지(라인에서 먼)면 오프셋 보존.
+      const repCenterY = centerY(colNodes[0]);
+      shift = Math.abs(repCenterY + base - backboneCY) < 25 ? backboneCY - repCenterY : base;
+    }
     for (const node of colNodes) shiftedY.set(node.id, node.position.y + shift);
   }
   return nodes.map((node) => ({
