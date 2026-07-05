@@ -21,10 +21,19 @@ import { UserTable } from "@/components/admin/user-table";
 import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
+import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
-type TabId = "employees" | "queue" | "depts" | "users" | "tables" | "groups" | "trash";
+type TabId =
+  | "employees"
+  | "queue"
+  | "depts"
+  | "users"
+  | "tables"
+  | "groups"
+  | "trash"
+  | "notices";
 type Access = "everyone" | "admin" | "sysadmin";
 
 interface Category {
@@ -36,6 +45,11 @@ interface Category {
 // 순서: admin/sysadmin 카테고리가 앞, Groups(모두)는 뒤 — 일반 유저는 Groups만 보인다 /
 // Order: admin/sysadmin categories first, Groups (everyone) last.
 const CATEGORIES: Category[] = [
+  {
+    labelKey: "admin.catContent",
+    access: "sysadmin",
+    tabs: [{ id: "notices", labelKey: "nav.tab.notices" }],
+  },
   {
     labelKey: "admin.catDirectory",
     access: "admin",
@@ -166,6 +180,9 @@ export default function SettingsPage() {
         {/* 탭 콘텐츠 / Tab content */}
         <main className="flex-1 overflow-y-auto p-6">
           {current === "groups" && <GroupsPanel />}
+          {current === "notices" && (
+            <NoticesManagePanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" &&
             user &&

@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S5: 공지사항 관리 탭 + 등록/수정 모달 (설정 콘텐츠)
+- 설정에 '콘텐츠 > 공지사항' 탭 신설(sysadmin). components/notices/notices-manage-panel — 목록(상태 파생 게시중/예약/종료·중요도·게시기간·수정/삭제) + "새 공지 등록".
+- notice-edit-modal — 제목·중요도 세그먼트·게시기간(date-range-calendar 자체 구현·무제한 체크)·본문 md·전체 알림 발송(신규만). 저장 시 KST 경계(자정~하루끝) ISO로 createNotice/updateNotice.
+- date-range-calendar — 외부 의존 없는 월 그리드 range 피커(양끝 accent·중간 tint·일수 표시).
+- 설정 TabId "notices"·CATEGORIES 콘텐츠 카테고리·콘텐츠 조건부. i18n noticeAdmin.*/noticeEdit.*/cal.weekdays/admin.catContent.
+- 검증: lint 0(react-hooks/purity: Date.now를 useState 초기화로 캡처)·build 성공. 브라우저(:3001 Junho Kim) — 탭·테이블(게시중)·모달·캘린더 range(17~20·4일간)·등록 e2e(여름 워크숍 → 예약 상태, 미래 시작이라 뷰어 미노출) 확인.
+
 ## 2026-07-05 — S4d: 공지 선택 카드 좌측 테두리 강조
 - 선택 카드에 2px accent 좌측 테두리(border-l-2 border-l-accent) + accent-tint, 나머지 변은 hairline.
 - 확인: 공지 상세 본문은 채팅봇용 공용 렌더러 markdown-view.tsx를 그대로 재사용(볼드·리스트 렌더).
