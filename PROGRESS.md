@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 확인용 더미데이터: 인박스 승인 3종 시드 스크립트
+- `backend/scripts/seed_inbox_demo.py`(멱등) — 승인 대기 종류별 데모: version_approval x2(제출자 user.lee/user.park), checkout_transfer x1(요청자 user.choi), approval_request x1(가시성 변경, user.jung) + 알림 3건. 요청자를 각기 다른 로컬 직원으로 두어 이름 필(Minjae Lee/Soyeon Park/Daehyun Choi/Hana Jung) 표시를 확인.
+- 실행: `backend/`에서 `.venv/bin/python -m scripts.seed_inbox_demo`. 브라우저(:3001, admin.kim) 승인 대기 탭에서 3종·요청자 이름 필 확인.
+
 ## 2026-07-06 — 신규 화면 전반: 이름 우선 필·날짜 TimePills 재활용·매뉴얼 SearchBox·승인 검색 (사용자 요청)
 - 공용 `lib/directory.ts`(`useDirectory` 모듈 캐시) + `components/user-pill.tsx`(`UserPill` — 이름 필 + 1초 호버 유저 카드, login_id는 보조). 신규 화면 사용자 표시 단일 소스.
 - **아이디 대신 이름 필**: 인박스 승인(카드·상세 요청자), 공지(카드·상세 작성자), 피드백(표·상세 모달 작성자)를 `UserPill`로 — 이름 먼저·id는 호버 카드 보조.
