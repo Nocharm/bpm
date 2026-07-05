@@ -23,6 +23,21 @@ class MapUpdate(BaseModel):
     description: str | None = None
 
 
+class SubprocessDesignationIn(BaseModel):
+    # 부서 필수 — 공백만은 불가 (지정의 핵심 메타). 나머지는 선택 (spec 2026-07-06)
+    department: str = Field(min_length=1, max_length=100)
+    assignee: str = Field(default="", max_length=100)
+    system: str = Field(default="", max_length=100)
+    duration: str = Field(default="", max_length=50)
+
+    @field_validator("department")
+    @classmethod
+    def _department_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("department must not be blank")
+        return value.strip()
+
+
 class VersionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -313,6 +328,14 @@ class MapOut(BaseModel):
     owner_name: str | None = None
     # 소프트삭제 시각 — 휴지통(삭제 예정) 목록 표시용. 정상 맵은 None (DL)
     deleted_at: datetime | None = None
+    # 서브프로세스 지정 상태·어트리뷰트·최근 변경 — 설정 페이지 표시용 (spec 2026-07-06)
+    sp_designated_at: datetime | None = None
+    sp_department: str | None = None
+    sp_assignee: str | None = None
+    sp_system: str | None = None
+    sp_duration: str | None = None
+    sp_changed_by: str | None = None
+    sp_changed_at: datetime | None = None
 
 
 class MapDetailOut(MapOut):

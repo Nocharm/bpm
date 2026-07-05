@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 U1: 백엔드 기반 (컬럼 7 + 지정 API)
+- `ProcessMap` sp_* 컬럼 7개(+`db.py` 백필), `SubprocessDesignationIn`·`MapOut` 확장, PUT/DELETE `/api/maps/{id}/subprocess-designation`(오너/sysadmin·게시버전 409·부서 422·해제 멱등+프리필·최근변경 기록). 테스트 6종. 검증: pytest 411 passed·ruff 클린. 트래커 U1 검토 대기.
+
 ## 2026-07-06 — 서브프로세스 지정 구현 계획 (브랜치 worktree-feat+subprocess-detail)
 - 플랜 `docs/superpowers/plans/2026-07-06-subprocess-designation.md` — 검토 단위 U1~U7(백엔드 기반→설정 UI→피커→refs·경고잠금→어트리뷰트 표시→색상→시드), 단위별 커밋+사용자 검토 정지, 트래커 `SUBPROCESS-DESIGNATION.md` 병행.
 

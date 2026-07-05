@@ -29,6 +29,14 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
     ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27
     ("user_groups", "name_changed_at", "TIMESTAMP"),  # 주 1회 rename 제한 — 2026-06-27
+    # 서브프로세스 지정 — 지정 맵만 피커 노출 + 라이브 어트리뷰트 (2026-07-06)
+    ("process_maps", "sp_designated_at", "TIMESTAMP"),
+    ("process_maps", "sp_department", "VARCHAR(100)"),
+    ("process_maps", "sp_assignee", "VARCHAR(100)"),
+    ("process_maps", "sp_system", "VARCHAR(100)"),
+    ("process_maps", "sp_duration", "VARCHAR(50)"),
+    ("process_maps", "sp_changed_by", "VARCHAR(100)"),
+    ("process_maps", "sp_changed_at", "TIMESTAMP"),
 ]
 
 

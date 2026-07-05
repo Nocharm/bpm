@@ -28,6 +28,7 @@ from app.schemas import (
     MapDetailOut,
     MapOut,
     MapUpdate,
+    SubprocessDesignationIn,
 )
 from app.version_events import record_version_event
 
@@ -469,6 +470,65 @@ async def update_map(
         found_map.name = payload.name
     if payload.description is not None:
         found_map.description = payload.description
+    await session.commit()
+    await session.refresh(found_map)
+    return found_map
+
+
+@router.put(
+    "/{map_id}/subprocess-designation",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def designate_subprocess(
+    map_id: int,
+    payload: SubprocessDesignationIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """서브프로세스 지정/속성수정(upsert) — 게시 버전 필수, 오너/sysadmin 전용 (spec 2026-07-06)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    has_published = await session.scalar(
+        select(MapVersion.id).where(
+            MapVersion.map_id == map_id, MapVersion.status == "published"
+        )
+    )
+    if has_published is None:
+        raise HTTPException(
+            status_code=409, detail="map has no published version to designate"
+        )
+    if found_map.sp_designated_at is None:  # 미지정→지정 전환만 시각 갱신 (지정 중 수정은 유지)
+        found_map.sp_designated_at = now_kst()
+    found_map.sp_department = payload.department
+    found_map.sp_assignee = payload.assignee
+    found_map.sp_system = payload.system
+    found_map.sp_duration = payload.duration
+    found_map.sp_changed_by = user
+    found_map.sp_changed_at = now_kst()
+    await session.commit()
+    await session.refresh(found_map)
+    return found_map
+
+
+@router.delete(
+    "/{map_id}/subprocess-designation",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def undesignate_subprocess(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """지정 해제 — 어트리뷰트는 유지(재지정 프리필), 멱등 (spec 2026-07-06)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.sp_designated_at = None
+    found_map.sp_changed_by = user
+    found_map.sp_changed_at = now_kst()
     await session.commit()
     await session.refresh(found_map)
     return found_map

@@ -8,7 +8,7 @@
 
 | 단위 | 내용 | 상태 | 커밋 |
 |---|---|---|---|
-| U1 | 백엔드 지정 기반 — `ProcessMap` sp_* 컬럼 7개 + PUT/DELETE `/api/maps/{id}/subprocess-designation` + pytest | 구현중 | |
+| U1 | 백엔드 지정 기반 — `ProcessMap` sp_* 컬럼 7개 + PUT/DELETE `/api/maps/{id}/subprocess-designation` + pytest | 검토 대기 | |
 | U2 | 설정 페이지 지정 UI — Subprocess 섹션(오너 전용) + 지정/수정 모달 + 해제 확인 | 대기 | |
 | U3 | 라이브러리 피커 — 지정 맵만 노출(백) + 부서 칩·빈 상태(프론트) | 대기 | |
 | U4 | `subprocess_refs` 동봉 + 미지정 resolved 잠금(백) + 캔버스 경고 배지·펼침 잠금(프론트) | 대기 | |
@@ -69,3 +69,4 @@ cd frontend; npm run dev
 ## 변경 로그 (작업목록 추가/수정 사항)
 
 - 2026-07-06: 트래커 생성 (U1~U7 초기 구성).
+- 2026-07-06: U1 구현 — 신규 테스트 6종(지정 성공·게시버전 409·비오너 403·부서 422·수정 시 지정시각 유지·해제 멱등/프리필). 전체 회귀 411 passed, ruff 클린. 상태 → 검토 대기.
