@@ -8,8 +8,8 @@
 
 | 단위 | 내용 | 상태 | 커밋 |
 |---|---|---|---|
-| U1 | 백엔드 지정 기반 — `ProcessMap` sp_* 컬럼 7개 + PUT/DELETE `/api/maps/{id}/subprocess-designation` + pytest | 검토 대기 | |
-| U2 | 설정 페이지 지정 UI — Subprocess 섹션(오너 전용) + 지정/수정 모달 + 해제 확인 | 대기 | |
+| U1 | 백엔드 지정 기반 — `ProcessMap` sp_* 컬럼 7개 + PUT/DELETE `/api/maps/{id}/subprocess-designation` + pytest | 검토 대기 | `60a7c8f` |
+| U2 | 설정 페이지 지정 UI — Subprocess 섹션(오너 전용) + 지정/수정 모달 + 해제 확인 | 검토 대기 | |
 | U3 | 라이브러리 피커 — 지정 맵만 노출(백) + 부서 칩·빈 상태(프론트) | 대기 | |
 | U4 | `subprocess_refs` 동봉 + 미지정 resolved 잠금(백) + 캔버스 경고 배지·펼침 잠금(프론트) | 대기 | |
 | U5 | 노드 카드 어트리뷰트 4종 표시 + 인스펙터 읽기전용 | 대기 | |
@@ -70,3 +70,5 @@ cd frontend; npm run dev
 
 - 2026-07-06: 트래커 생성 (U1~U7 초기 구성).
 - 2026-07-06: U1 구현 — 신규 테스트 6종(지정 성공·게시버전 409·비오너 403·부서 422·수정 시 지정시각 유지·해제 멱등/프리필). 전체 회귀 411 passed, ruff 클린. 상태 → 검토 대기.
+- 2026-07-06: U2 구현 — 설정 Subprocess 섹션(오너 전용)·지정/수정 모달(부서 필수, BPM 피커 재사용)·해제 ConfirmDialog·최근 변경 이름 우선 표기. 브라우저 검증(오너 sion.seo3 지정→해제→프리필 재지정, 에디터 daehyun.seo 섹션 숨김). lint 0 errors. 상태 → 검토 대기.
+- 2026-07-06: 로컬 시현 환경 — 워크트리 서버는 backend :8001 / frontend :3001 (메인 체크아웃 서버와 포트 분리). dev.db는 reset_db로 신규 시드.

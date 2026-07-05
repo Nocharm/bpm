@@ -15,6 +15,7 @@ import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { isApprover, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
+import { SubprocessDesignationPanel } from "@/components/permissions/subprocess-designation-panel";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
 import { VisibilityControl } from "@/components/permissions/visibility-control";
@@ -26,18 +27,19 @@ import { genId } from "@/lib/id";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
 
-type TabId = "details" | "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals" | "checkout";
+type TabId = "details" | "subprocess" | "collaborators" | "approvers" | "visibility" | "versions" | "danger" | "approvals" | "checkout";
 
 interface Tab {
   id: TabId;
-  labelKey: "perm.tabDetails" | "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals" | "perm.tabCheckoutRequests";
+  labelKey: "perm.tabDetails" | "perm.tabSubprocess" | "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals" | "perm.tabCheckoutRequests";
 }
 
 // 전체 탭 목록 — approvals·checkout은 조건부 노출로 별도 처리 /
 // Full tab list — approvals and checkout are shown conditionally, filtered at render.
-// 순서: 정보 > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 점유권 요청 > 위험 구역
+// 순서: 정보 > 서브프로세스(오너) > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 점유권 요청 > 위험 구역
 const ALL_TABS: Tab[] = [
   { id: "details", labelKey: "perm.tabDetails" },
+  { id: "subprocess", labelKey: "perm.tabSubprocess" },
   { id: "visibility", labelKey: "perm.tabVisibility" },
   { id: "collaborators", labelKey: "perm.tabCollaborators" },
   { id: "approvers", labelKey: "perm.tabApprovers" },
@@ -160,7 +162,9 @@ export default function SettingsPage() {
   const visibleTabs = ALL_TABS.filter(
     (tab) =>
       (tab.id !== "approvals" || canDecide) &&
-      (tab.id !== "checkout" || canDecideCheckout),
+      (tab.id !== "checkout" || canDecideCheckout) &&
+      // 서브프로세스 지정은 오너 전용 섹션 / Subprocess designation is owner-only.
+      (tab.id !== "subprocess" || isOwner),
   );
   const sectionKey = visibleTabs.map((tab) => tab.id).join(",");
 
@@ -344,6 +348,8 @@ export default function SettingsPage() {
                   </h2>
                   {tab.id === "details" ? (
                     <MapDetailsPanel mapId={mapIdStr} canEdit={canEdit} onToast={showToast} />
+                  ) : tab.id === "subprocess" && isOwner ? (
+                    <SubprocessDesignationPanel mapId={mapIdStr} onToast={showToast} />
                   ) : tab.id === "collaborators" ? (
                     <CollaboratorsPanel
                       mapId={mapIdStr}

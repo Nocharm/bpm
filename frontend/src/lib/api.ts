@@ -52,6 +52,14 @@ export interface MapSummary {
   owner_name?: string | null;
   // 소프트삭제 시각 — 휴지통(삭제 예정) 목록에서만 채워짐 (DL)
   deleted_at?: string | null;
+  // 서브프로세스 지정 — NULL=미지정. 어트리뷰트·최근 변경 기록 (spec 2026-07-06)
+  sp_designated_at?: string | null;
+  sp_department?: string | null;
+  sp_assignee?: string | null;
+  sp_system?: string | null;
+  sp_duration?: string | null;
+  sp_changed_by?: string | null;
+  sp_changed_at?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -203,6 +211,31 @@ export function updateMap(
 
 export function getMap(mapId: number): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}`);
+}
+
+// 서브프로세스 지정/수정(upsert) — 오너 전용, 게시 버전 필수(409). 어트리뷰트는 사용처에 라이브 적용 (spec 2026-07-06)
+export interface SubprocessDesignationBody {
+  department: string;
+  assignee?: string;
+  system?: string;
+  duration?: string;
+}
+
+export function putSubprocessDesignation(
+  mapId: number,
+  body: SubprocessDesignationBody,
+): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/subprocess-designation`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// 지정 해제 — 어트리뷰트는 서버에 유지(재지정 프리필), 멱등
+export function deleteSubprocessDesignation(mapId: number): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/subprocess-designation`, {
+    method: "DELETE",
+  });
 }
 
 export interface LibraryProcess {
