@@ -11,23 +11,26 @@ import {
   Mail,
   Megaphone,
   ShieldCheck,
+  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   approveVersion,
   decideApprovalRequest,
   decideCheckoutRequest,
   listInboxApprovals,
+  listMapPermissions,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   rejectVersion,
   type InboxApproval,
   type InboxApprovalKind,
+  type MapPermission,
   type NotificationItem,
 } from "@/lib/api";
 import { useDirectory } from "@/lib/directory";
@@ -36,9 +39,32 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { filterByQuery } from "@/lib/search";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
+import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
 import { UserPill } from "@/components/user-pill";
+
+type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
+
+// approval_request는 title이 내부 kind(visibility_change 등) — 읽기 좋은 라벨로.
+function approvalTitle(a: InboxApproval, t: Translate): string {
+  if (a.kind === "approval_request") {
+    if (a.title === "visibility_change") return t("inbox.reqKind.visibility_change");
+    if (a.title === "permission_downgrade") return t("inbox.reqKind.permission_downgrade");
+  }
+  return a.title;
+}
+
+// 요청 내용 요약 — inline code(`값`) + 변경 후 값 강조. MarkdownView로 렌더.
+function approvalSummary(a: InboxApproval, t: Translate): string {
+  if (a.kind === "version_approval")
+    return t("inbox.summary.version_approval", { label: a.version_label ?? a.title });
+  if (a.kind === "checkout_transfer")
+    return t("inbox.summary.checkout_transfer", { label: a.version_label ?? a.title });
+  if (a.title === "permission_downgrade")
+    return t("inbox.summary.permission_downgrade", { before: a.before ?? "?", after: a.after ?? "?" });
+  return t("inbox.summary.visibility_change", { before: a.before ?? "?", after: a.after ?? "?" });
+}
 
 type Tab = "approvals" | "notifications";
 type ReadFilter = "all" | "unread";
@@ -254,16 +280,22 @@ export default function InboxPage() {
                               : "bg-surface hover:bg-surface-alt")
                           }
                         >
-                          {/* 유형 아이콘(좌) · 유형 필(우) */}
-                          <div className="flex items-center justify-between">
-                            <ApprovalKindIcon kind={a.kind} size={14} className="text-ink-tertiary" />
-                            <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
+                          {/* 아이콘 + 제목(우측) · 유형 필(맨 오른쪽) */}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <ApprovalKindIcon
+                                kind={a.kind}
+                                size={14}
+                                className="shrink-0 text-ink-tertiary"
+                              />
+                              <span className="truncate text-caption font-semibold text-ink">
+                                {approvalTitle(a, t)}
+                              </span>
+                            </span>
+                            <span className="shrink-0 rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
                               {t(approvalKindLabel(a.kind))}
                             </span>
                           </div>
-                          <span className="line-clamp-2 text-caption font-semibold text-ink">
-                            {a.title}
-                          </span>
                           <span className="truncate text-fine text-ink-tertiary">{a.map_name}</span>
                           {/* 요청자 이름 필(좌) · 시간 필(우) */}
                           <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
@@ -400,32 +432,62 @@ function ApprovalDetail({
 
   return (
     <article className="px-6 py-4">
+      {/* 헤더 — 아이콘 + 제목 + 유형 필 */}
       <div className="flex items-center gap-2">
-        <ApprovalKindIcon kind={approval.kind} size={16} className="text-ink-tertiary" />
-        <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+        <ApprovalKindIcon kind={approval.kind} size={16} className="shrink-0 text-ink-tertiary" />
+        <h2 className="min-w-0 flex-1 truncate text-body-strong text-ink">
+          {approvalTitle(approval, t)}
+        </h2>
+        <span className="shrink-0 rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
           {t(approvalKindLabel(approval.kind))}
         </span>
       </div>
-      <h2 className="mt-2 text-body-strong text-ink">{approval.title}</h2>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-caption text-ink-secondary">
-        <Link href={`/maps/${approval.map_id}`} className="text-accent hover:underline">
-          {approval.map_name}
-        </Link>
-        <span className="text-ink-tertiary">·</span>
-        <span className="flex items-center gap-1">
-          {t("inbox.requestedBy")}
-          <UserPill loginId={approval.requester} />
-        </span>
-        <span className="flex items-center gap-1">
-          <TimePills iso={approval.created_at} nowMs={nowMs} />
-        </span>
+
+      {/* 요청 내용 — 마크다운(`값` inline code + 변경 후 값 강조) */}
+      <div className="mt-3 rounded-sm border border-hairline bg-surface-alt/50 px-3 py-2">
+        <MarkdownView source={approvalSummary(approval, t)} />
       </div>
 
-      {approval.detail && Object.keys(approval.detail).length > 0 && (
-        <pre className="mt-3 overflow-x-auto rounded-sm bg-surface-alt px-3 py-2 text-fine text-ink-secondary">
-          {JSON.stringify(approval.detail, null, 2)}
-        </pre>
-      )}
+      {/* 상세 메타 — 맵·버전·업데이트·요청 시각·요청자(+점유자/대상) */}
+      <dl className="mt-4 flex flex-col gap-2 text-caption">
+        <DetailRow label={t("inbox.map")}>
+          <Link href={`/maps/${approval.map_id}`} className="text-accent hover:underline">
+            {approval.map_name}
+          </Link>
+        </DetailRow>
+        {approval.version_label && (
+          <DetailRow label={t("inbox.version")}>
+            <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+              {approval.version_label}
+              {approval.version_number ? ` · v${approval.version_number}` : ""}
+            </span>
+          </DetailRow>
+        )}
+        {approval.updated_at && (
+          <DetailRow label={t("inbox.updatedAt")}>
+            <TimePills iso={approval.updated_at} nowMs={nowMs} />
+          </DetailRow>
+        )}
+        <DetailRow label={t("inbox.requestedAt")}>
+          <TimePills iso={approval.created_at} nowMs={nowMs} />
+        </DetailRow>
+        <DetailRow label={t("inbox.requestedBy")}>
+          <UserPill loginId={approval.requester} />
+        </DetailRow>
+        {approval.holder && (
+          <DetailRow label={t("inbox.holder")}>
+            <UserPill loginId={approval.holder} />
+          </DetailRow>
+        )}
+        {approval.principal && (
+          <DetailRow label={t("inbox.target")}>
+            <UserPill loginId={approval.principal} />
+          </DetailRow>
+        )}
+      </dl>
+
+      {/* 멤버 보기 — 맵 허용 인원. key로 맵 변경 시 상태(펼침·조회결과) 리셋 */}
+      <MapMembers key={approval.map_id} mapId={approval.map_id} t={t} />
 
       {needsReason && (
         <textarea
@@ -464,5 +526,66 @@ function ApprovalDetail({
         </Link>
       </div>
     </article>
+  );
+}
+
+// 상세 메타 한 줄 — 라벨(좌) · 값(우, 필/링크/컴포넌트)
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-ink-tertiary">{label}</dt>
+      <dd className="flex min-w-0 items-center gap-1">{children}</dd>
+    </div>
+  );
+}
+
+// 멤버 보기 — 맵 허용 인원(사용자=이름 필, 그룹=필) + 역할. 펼칠 때 1회 조회.
+function MapMembers({ mapId, t }: { mapId: number; t: Translate }) {
+  const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState<MapPermission[] | null>(null);
+
+  const toggle = () => {
+    setOpen((prev) => !prev);
+    if (members === null) {
+      listMapPermissions(mapId)
+        .then(setMembers)
+        .catch(() => setMembers([]));
+    }
+  };
+
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-fine text-ink-secondary hover:bg-surface-alt hover:text-ink"
+      >
+        <Users size={14} strokeWidth={1.5} />
+        {t("inbox.viewMembers")}
+        {members && <span className="text-ink-tertiary">({members.length})</span>}
+      </button>
+      {open && members && (
+        <ul className="mt-2 flex flex-col gap-1">
+          {members.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center justify-between gap-2 rounded-xs border border-hairline bg-surface px-2.5 py-1.5"
+            >
+              {m.principal_type === "user" ? (
+                <UserPill loginId={m.principal_id} />
+              ) : (
+                <span className="truncate rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                  {t("inbox.group")} #{m.principal_id}
+                </span>
+              )}
+              <span className="shrink-0 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
+                {m.role}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

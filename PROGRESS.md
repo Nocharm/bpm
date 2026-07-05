@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 인박스 승인 카드/상세 정보 확장 (사용자 요청)
+- 카드: 유형 아이콘 **오른쪽에 제목** 배치(아이콘+제목 인라인·유형 필 우측). approval_request 제목은 내부 kind→읽기 라벨("가시성 변경"/"권한 변경").
+- 상세: **요청 내용 마크다운 요약**(MarkdownView, `값` inline code + 변경 후 값 **강조** — 가시성/권한 `before` → **`after`**) + **메타**(맵 링크·버전(label·vN)·업데이트 TimePills·요청 시각 TimePills·요청자 UserPill·점유권이전 현재점유자·권한변경 대상) + **멤버 보기**(펼침 시 `listMapPermissions`로 허용 인원 = 이름 필+역할, key로 맵 변경 시 리셋).
+- 백엔드 `InboxApprovalOut` 확장: version_label·version_number·updated_at·holder·before·after·principal. inbox.py 쿼리에서 가시성=맵 현재값, 권한하향=대상 MapPermission 현재 역할 조회.
+- 검증: ruff·pytest 4/4 · lint 0 · build 성공. 브라우저 — 가시성(private→public 강조)·점유권(현재점유자 Soyeon Park)·멤버 보기(이름 필+role) 확인.
+
 ## 2026-07-06 — 확인용 더미데이터: 인박스 승인 3종 시드 스크립트
 - `backend/scripts/seed_inbox_demo.py`(멱등) — 승인 대기 종류별 데모: version_approval x2(제출자 user.lee/user.park), checkout_transfer x1(요청자 user.choi), approval_request x1(가시성 변경, user.jung) + 알림 3건. 요청자를 각기 다른 로컬 직원으로 두어 이름 필(Minjae Lee/Soyeon Park/Daehyun Choi/Hana Jung) 표시를 확인.
 - 실행: `backend/`에서 `.venv/bin/python -m scripts.seed_inbox_demo`. 브라우저(:3001, admin.kim) 승인 대기 탭에서 3종·요청자 이름 필 확인.
