@@ -10,6 +10,7 @@ import { getManual, type ManualDoc } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useSlashFocus } from "@/lib/use-slash-focus";
+import { HtmlView } from "@/components/html-view";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
@@ -77,13 +78,20 @@ export default function ManualPage() {
   }, []);
 
   const content = doc?.content ?? "";
-  // TOC는 마크다운 헤딩에서 파생 (html 게시본 렌더·목차는 S9에서 DOMPurify와 함께 도입)
+  const isHtml = doc?.format === "html";
+  // TOC는 마크다운 헤딩에서 파생 — html 게시본은 헤딩 파싱 대상이 아니라 TOC 없이 전폭 렌더.
   const toc = parseToc(content);
   // 본문 엘리먼트를 content 기준 메모이즈 — 검색 매치 이동 등 다른 state 변경으로 ManualPage가
-  // 리렌더돼도 MarkdownView(dangerouslySetInnerHTML)가 재주입되지 않도록(=검색 강조가 유지되도록).
+  // 리렌더돼도 dangerouslySetInnerHTML이 재주입되지 않도록(=검색 강조가 유지되도록).
+  // 포맷=html이면 DOMPurify로 정화한 HtmlView, 아니면 자체 파서 MarkdownView.
   const renderedBody = useMemo(
-    () => <MarkdownView source={content} onCopy={notifyCopied} />,
-    [content, notifyCopied],
+    () =>
+      isHtml ? (
+        <HtmlView source={content} />
+      ) : (
+        <MarkdownView source={content} onCopy={notifyCopied} />
+      ),
+    [isHtml, content, notifyCopied],
   );
 
   // 목차 클릭 → 렌더된 N번째 헤딩으로 스크롤 (TOC와 동일 필터라 인덱스 일치)
@@ -199,8 +207,9 @@ export default function ManualPage() {
           </div>
         </div>
 
-        {/* TOC(좌) | 본문(우) */}
+        {/* TOC(좌) | 본문(우) — 헤딩이 없으면(html 게시본 등) TOC 숨기고 본문 전폭 */}
         <div className="flex min-h-0 flex-1 gap-4">
+          {toc.length > 0 && (
           <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline pr-3 md:flex">
             <span className="mb-2 px-2 text-caption-strong text-ink-secondary">
               {t("manual.toc")}
@@ -224,6 +233,7 @@ export default function ManualPage() {
               ))}
             </nav>
           </aside>
+          )}
 
           <article
             ref={bodyRef}

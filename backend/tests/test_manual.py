@@ -42,3 +42,11 @@ def test_manual_put_and_get_roundtrip(client: TestClient) -> None:
     got = client.get("/api/manual").json()
     assert got["content"] == "# 새 매뉴얼\n내용"
     assert got["updated_at"] is not None
+
+
+def test_manual_get_bundled_ignores_db(client: TestClient) -> None:
+    """bundled=true → DB 게시본 무시하고 배포 manual.md 원문 반환(편집기 '배포본 불러오기')."""
+    got = client.get("/api/manual?bundled=true").json()
+    assert "BPM 사용 매뉴얼" in got["content"]  # 배포 파일 첫 줄
+    assert "새 매뉴얼" not in got["content"]  # 앞 roundtrip이 남긴 DB 행 무시
+    assert got["updated_at"] is None

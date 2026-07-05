@@ -710,8 +710,17 @@ export interface ManualDoc {
 }
 
 // 게시본 조회 — DB 우선, 없으면 manual.md 파일 fallback(updated_at=null).
-export function getManual(): Promise<ManualDoc> {
-  return request<ManualDoc>("/manual");
+// bundled=true면 DB 게시본을 무시하고 배포 포함 manual.md 원문(편집기 '배포본 불러오기').
+export function getManual(bundled = false): Promise<ManualDoc> {
+  return request<ManualDoc>(`/manual${bundled ? "?bundled=true" : ""}`);
+}
+
+// 게시본 저장 (sysadmin) — 단일 행 upsert.
+export function putManual(format: ManualDoc["format"], content: string): Promise<ManualDoc> {
+  return request<ManualDoc>("/manual", {
+    method: "PUT",
+    body: JSON.stringify({ format, content }),
+  });
 }
 
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────

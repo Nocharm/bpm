@@ -22,6 +22,8 @@ import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
 import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
+import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
+import { DashboardPanel } from "@/components/settings/dashboard-panel";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
@@ -33,7 +35,9 @@ type TabId =
   | "tables"
   | "groups"
   | "trash"
-  | "notices";
+  | "notices"
+  | "manual"
+  | "dashboard";
 type Access = "everyone" | "admin" | "sysadmin";
 
 interface Category {
@@ -48,7 +52,10 @@ const CATEGORIES: Category[] = [
   {
     labelKey: "admin.catContent",
     access: "sysadmin",
-    tabs: [{ id: "notices", labelKey: "nav.tab.notices" }],
+    tabs: [
+      { id: "notices", labelKey: "nav.tab.notices" },
+      { id: "manual", labelKey: "manual.manage.tab" },
+    ],
   },
   {
     labelKey: "admin.catDirectory",
@@ -67,6 +74,11 @@ const CATEGORIES: Category[] = [
     labelKey: "admin.catDatabase",
     access: "sysadmin",
     tabs: [{ id: "tables", labelKey: "db.tablesTab" }],
+  },
+  {
+    labelKey: "admin.catAnalytics",
+    access: "sysadmin",
+    tabs: [{ id: "dashboard", labelKey: "dashboard.tab" }],
   },
   {
     // 승인큐 — 누구나 접근(추후 개인별 승인 모음 페이지). 현재 큐 내용은 sysadmin만, 그 외는 준비중 안내.
@@ -183,6 +195,10 @@ export default function SettingsPage() {
           {current === "notices" && (
             <NoticesManagePanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
+          {current === "manual" && (
+            <ManualManagePanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
+          {current === "dashboard" && <DashboardPanel />}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" &&
             user &&

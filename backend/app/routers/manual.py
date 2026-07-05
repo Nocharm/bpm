@@ -1,6 +1,6 @@
 """사용 매뉴얼 게시본 API — GET(DB 우선·manual.md fallback) / PUT(sysadmin upsert) (S8)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user, require_sysadmin
@@ -16,11 +16,19 @@ _DOC_ID = 1
 
 
 @router.get("/manual", response_model=ManualOut)
-async def get_manual_doc(session: AsyncSession = Depends(get_session)) -> ManualOut | dict:
-    """게시본 조회 — DB 행이 있으면 그대로, 없으면 manual.md 파일 fallback(updated_at=None)."""
-    doc = await session.get(ManualDoc, _DOC_ID)
-    if doc is not None:
-        return doc
+async def get_manual_doc(
+    bundled: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+) -> ManualOut | dict:
+    """게시본 조회 — DB 행이 있으면 그대로, 없으면 manual.md 파일 fallback(updated_at=None).
+
+    bundled=true면 DB 게시본을 무시하고 배포 포함 manual.md 원문을 반환한다
+    (편집기의 '배포본 불러오기' — 게시본을 배포 기본값으로 되돌릴 때).
+    """
+    if not bundled:
+        doc = await session.get(ManualDoc, _DOC_ID)
+        if doc is not None:
+            return doc
     return {"format": "markdown", "content": get_manual(), "updated_at": None, "updated_by": None}
 
 

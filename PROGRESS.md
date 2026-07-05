@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — S9 매뉴얼 편집·게시 탭 + S10 대시보드 진입 스텁 (시안 New Screens.html · 대시보드 진입점.png)
+- **S9 매뉴얼 편집·게시**: 설정 콘텐츠 카테고리에 `Manual` 탭(`settings/manual-manage-panel.tsx`, sysadmin). 포맷 세그먼트(마크다운/HTML)·`.md 업로드`·`배포본 불러오기`·`미리보기`·`게시`(putManual). 편집→게시→`/manual` 뷰어 반영.
+  - HTML 게시본 렌더: `dompurify` 추가 + `html-view.tsx`(DOMPurify sanitize) — 뷰어·미리보기에서 포맷=html 안전 렌더(script/onerror 제거 브라우저 확인). 마크다운은 기존 `markdown-view`. 뷰어 TOC는 헤딩 없으면 숨기고 전폭.
+  - 백엔드: GET `/api/manual?bundled=true`(배포 원문 강제). api `putManual`·`getManual(bundled)`. 테스트 `test_manual`(+1: bundled).
+- **S10 대시보드 진입 스텁**: 설정 `분석`(catAnalytics) 카테고리 신설 + `Dashboard` 탭(`settings/dashboard-panel.tsx`). 진입 카드("운영 대시보드 열기")+추후 보완 각주, 클릭 시 상세 자리표시(설정으로 돌아가기). 상세 지표(맵/버전·승인·조직·로그인 추이)는 별도 spec.
+- 검증: lint 0·build 성공·backend 403·브라우저(매뉴얼 편집/미리보기·HTML sanitize·대시보드 진입/전환) 확인.
+
 ## 2026-07-06 — 알림 메시지 요청자 아이디→이름 (사용자: "아이디 대신 이름 알람에도 적용")
 - `workflow.get_display_name(session, login_id)` 추가 — Employee.name 조회, 미등록·빈 이름이면 login_id fallback.
 - 승인요청 알림 생성에 적용: `versions.py`(제출 알림 "{name} requested approval…")·시드 `seed_inbox_demo`("{name} 님이…"). 기존 dev.db 알림도 id→name 일괄 보정.
