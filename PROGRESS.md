@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S1b: 셸 로그인 상태 반영 (Guest→Login·미로그인 피드백 숨김)
+- TopNav: 미로그인(user=null) 시 유저칩을 "Login"으로 표시 + 클릭 시 /login 이동(로그인 시 이름+드롭다운 유지). 피드백 버튼은 로그인 시에만 노출(`{user && …}`).
+- i18n `nav.guest`(top-nav 전용 고아) 제거 → `nav.login`(en Login / ko 로그인).
+- 검증: lint 0 · build 성공. (브라우저 시현은 :3001 재기동 후 확인 — 검증 시도 중 dev 서버가 에러페이지 반환해 스크린샷 미취득.)
+
 ## 2026-07-05 — S2b: 피드백 사이드 패널 + TopNav 버튼 (프론트)
 - `feedback-side-panel.tsx` — 우측 슬라이드인(백드롭·ease-spring). 유형 세그먼트 한 행(버그/제안/문의/기타) + 본문 + 현재 화면(route·map#) 자동첨부 안내 + 제출 토스트 + "모든 피드백 보기"→/feedback.
 - TopNav 우측에 피드백 버튼(MessageSquare·accent). `lib/api.ts` submit/list/updateStatus + 타입. i18n feedback.*(en/ko). `/feedback` placeholder(S3에서 실구현).

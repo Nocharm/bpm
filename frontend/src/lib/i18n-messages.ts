@@ -4,7 +4,7 @@ export type Lang = "en" | "ko";
 
 const en = {
   "app.name": "Business Process Map",
-  "nav.guest": "Guest",
+  "nav.login": "Login",
   "nav.langEn": "EN",
   "nav.langKo": "한",
   "auth.error": "Auth error: {msg}",
@@ -939,7 +939,7 @@ export type MessageKey = keyof typeof en;
 
 const ko: Record<MessageKey, string> = {
   "app.name": "Business Process Map",
-  "nav.guest": "Guest",
+  "nav.login": "로그인",
   "nav.langEn": "EN",
   "nav.langKo": "한",
   "auth.error": "인증 오류: {msg}",

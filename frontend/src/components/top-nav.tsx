@@ -121,27 +121,30 @@ export function TopNav() {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        {/* 피드백 진입 — 우측 액션. 사이드 패널 오픈 */}
-        <button
-          type="button"
-          onClick={() => setFeedbackOpen(true)}
-          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-accent hover:bg-accent-tint"
-        >
-          <MessageSquare size={14} strokeWidth={1.5} />
-          {t("feedback.button")}
-        </button>
-        {/* 무조건 렌더 — 로컬(인증 비활성)은 user가 null이라 가드 시 벨이 안 뜬다. 서버는 TopNav 자체가 AuthGate 인증 후에만 노출 */}
-        <NotificationBell />
-        <div ref={menuRef} className="relative">
+        {/* 피드백 진입 — 로그인 시에만 노출. 사이드 패널 오픈 */}
+        {user && (
           <button
             type="button"
-            className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => setFeedbackOpen(true)}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-accent hover:bg-accent-tint"
           >
-            {user?.name ?? t("nav.guest")}
+            <MessageSquare size={14} strokeWidth={1.5} />
+            {t("feedback.button")}
           </button>
-          {open && user && (
-            <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+        )}
+        {/* 무조건 렌더 — 로컬(인증 비활성)은 user가 null이라 가드 시 벨이 안 뜬다. 서버는 TopNav 자체가 AuthGate 인증 후에만 노출 */}
+        <NotificationBell />
+        {user ? (
+          <div ref={menuRef} className="relative">
+            <button
+              type="button"
+              className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+              onClick={() => setOpen((v) => !v)}
+            >
+              {user.name}
+            </button>
+            {open && (
+              <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg">
                 {/* 설정 콘솔 — 누구나 접근(왼쪽 탭이 권한별로 다름). 그룹·어드민·권한 surface를 흡수 / Settings console (everyone) */}
                 <button
                   type="button"
@@ -160,9 +163,18 @@ export function TopNav() {
                 >
                   {t("nav.logout")}
                 </button>
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+            onClick={() => router.push("/login")}
+          >
+            {t("nav.login")}
+          </button>
+        )}
         {/* 한/영 세그먼트 토글 — 두 언어를 모두 노출하고 현재 언어를 accent-tint로 강조 */}
         <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-fine">
           {(["ko", "en"] as const).map((code) => (
