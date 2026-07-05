@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — S6b: 인박스/홈 타이틀 정리
+- /inbox에 "Inbox" 타이틀(text-body-strong) 추가(탭 좌측).
+- 홈 타이틀 text-tagline→text-body-strong(노티스 타이틀 크기 일치), "Business Process Map — {home.title}"→"Process Maps"(영어 고정).
+- 검증: lint 0 · build 성공. 브라우저 확인.
+
 ## 2026-07-05 — S6a: 인박스 알림 목록 — 공지 레이아웃(아이콘 필터·카드)
 - /inbox 알림 탭 좌 목록을 공지 뷰어와 동일하게: IconPillFilter(전체 List/안읽음 Mail) + 카드형 목록(border·bg·gap). 카드: 유형 아이콘(notice=Megaphone·review_requested=FileCheck·기타=Bell) 좌 + 읽음/미읽음 점 우, 메시지(미읽음 bold·line-clamp-2), 시간 필(우). 선택=좌측 액센트 테두리+tint.
 - 검증: lint 0 · build 성공. 브라우저(:3001) — 아이콘 필터·카드·유형 아이콘(Megaphone)·시간 필 확인.

@@ -77,7 +77,9 @@ export default function InboxPage() {
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4">
         {/* 탭 + 모두 읽음 */}
         <div className="flex items-center justify-between gap-4">
-          <div className="inline-grid grid-cols-2 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
+          <div className="flex items-center gap-3">
+            <h1 className="text-body-strong text-ink">Inbox</h1>
+            <div className="inline-grid grid-cols-2 gap-1 rounded-sm bg-surface-alt p-1 text-fine">
             {TABS.map((tabDef) => {
               const active = tab === tabDef.id;
               return (
@@ -99,6 +101,7 @@ export default function InboxPage() {
                 </button>
               );
             })}
+            </div>
           </div>
           {tab === "notifications" && unread > 0 && (
             <button
