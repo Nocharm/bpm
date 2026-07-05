@@ -10,6 +10,7 @@ import { IconActionButton } from "@/components/icon-action-button";
 import { listDeletedMaps, restoreMap, type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -23,6 +24,8 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
   const [pendingRestore, setPendingRestore] = useState<MapSummary | null>(null); // 복구 확인 대상
   // 마운트 시점 1회 — 렌더 중 Date.now()는 순수성 규칙 위반이라 상태로 고정 / lazy now for purity.
   const [now] = useState(() => Date.now());
+  // 25개씩 증분 렌더 — sysadmin 전체 뷰에서 삭제분이 몰려도 렌더 부하 없음
+  const { visible: shownMaps, hasMore, sentinelRef } = useInfiniteSlice(maps ?? [], "");
 
   // deleted_at + 보존기간 - now → "N일/시간 뒤 삭제" / remaining time until permanent deletion.
   const purgeLabel = (deletedAt: string): string => {
@@ -70,7 +73,7 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
         <p className="text-caption text-ink-tertiary">{t("trash.empty")}</p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {maps.map((m) => (
+          {shownMaps.map((m) => (
             <div
               key={m.id}
               data-id="deleted-map-row"
@@ -95,6 +98,7 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
               />
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} className="h-px" />}
         </div>
       )}
 

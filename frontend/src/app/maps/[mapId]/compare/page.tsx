@@ -67,6 +67,7 @@ import {
 } from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -868,6 +869,12 @@ function ComparePane({
       ),
     [changeItems, filter, kindFilter],
   );
+  // 25개씩 증분 렌더 — 대형 맵 비교에서 변경 목록 전량 렌더 부하 방지
+  const {
+    visible: shownChanges,
+    hasMore: hasMoreChanges,
+    sentinelRef: changesSentinelRef,
+  } = useInfiniteSlice(filteredChanges, `${filter}:${kindFilter}`);
 
   // 우측 인스펙터 대상 — 포커스된 id가 노드면 그 노드(엣지면 null → 빈 상태).
   const selectedNode = useMemo(
@@ -1096,7 +1103,7 @@ function ComparePane({
               </div>
             ) : (
               <ul className="flex flex-col gap-0.5">
-                {filteredChanges.map((item) => {
+                {shownChanges.map((item) => {
                   const selected = focusId === item.focusId;
                   return (
                     <li key={item.key}>
@@ -1153,6 +1160,7 @@ function ComparePane({
                     </li>
                   );
                 })}
+                {hasMoreChanges && <li ref={changesSentinelRef} className="h-px shrink-0" />}
               </ul>
             )}
           </div>

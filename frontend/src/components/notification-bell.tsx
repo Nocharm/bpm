@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 const POLL_MS = 5000;
 
@@ -48,6 +49,8 @@ export function NotificationBell() {
   }, []);
 
   const unread = items.filter((item) => !item.read).length;
+  // 25개씩 증분 렌더 — resetKey 상수라 5초 폴링(배열 교체)에도 로드 수 유지
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(items, "");
 
   const handleRead = async (id: number) => {
     try {
@@ -81,7 +84,7 @@ export function NotificationBell() {
             <p className="px-1 py-2 text-fine text-ink-tertiary">{t("notif.empty")}</p>
           ) : (
             <ul className="max-h-80 overflow-y-auto">
-              {items.map((item) => (
+              {visible.map((item) => (
                 <li
                   key={item.id}
                   className={`flex items-start gap-2 rounded-sm px-1 py-1.5 text-caption ${
@@ -100,6 +103,7 @@ export function NotificationBell() {
                   )}
                 </li>
               ))}
+              {hasMore && <li ref={sentinelRef} className="h-px" />}
             </ul>
           )}
         </div>

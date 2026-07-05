@@ -15,6 +15,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/notices-read";
 import { filterByQuery } from "@/lib/search";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
@@ -84,6 +85,12 @@ export default function NoticesPage() {
     { field: "title", text: n.title },
     { field: "body", text: n.body_md },
   ]).map((hit) => hit.item);
+  // 25개씩 증분 렌더 — 공지가 누적돼도 목록 렌더 부하 없음(필터·검색 변경 시 리셋)
+  const {
+    visible: shownNotices,
+    hasMore,
+    sentinelRef,
+  } = useInfiniteSlice(filtered, `${filter}:${search}`);
   const unread = countUnreadNotices(
     notices.map((n) => n.id),
     readIds,
@@ -126,7 +133,7 @@ export default function NoticesPage() {
             <IconPillFilter options={filterOptions} value={filter} onChange={setFilter} />
           </div>
           <ul className="flex flex-1 flex-col gap-2 overflow-y-auto py-3 pr-3">
-            {filtered.map((n) => {
+            {shownNotices.map((n) => {
               const isRead = readSet.has(n.id);
               return (
                 <li key={n.id}>
@@ -170,6 +177,7 @@ export default function NoticesPage() {
                 </li>
               );
             })}
+            {hasMore && <li ref={sentinelRef} className="h-px shrink-0" />}
             {filtered.length === 0 && (
               <li className="px-4 py-8 text-center text-caption text-ink-tertiary">
                 {t("notices.empty")}

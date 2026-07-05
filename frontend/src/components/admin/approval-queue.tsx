@@ -37,6 +37,7 @@ import {
 } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { genId } from "@/lib/id";
 import type { ToastItem } from "@/components/toast-stack";
 
@@ -183,6 +184,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     })),
     ...pendingCheckouts.map((cr) => ({ key: `c${cr.id}`, kind: "checkout_request" as const, cr })),
   ];
+  // 25개씩 증분 렌더 — 대기 요청이 몰려도 큐 렌더 부하 없음 (early return보다 앞에서 호출)
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(items, "");
 
   function toggle(key: string) {
     setExpandedKeys((prev) => {
@@ -275,7 +278,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
 
   return (
     <div className="flex max-w-4xl flex-col gap-2">
-      {items.map((item) => {
+      {visible.map((item) => {
         const expanded = expandedKeys.has(item.key);
         const deciding = decidingKeys.has(item.key);
         const requester =
@@ -419,6 +422,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
           </div>
         );
       })}
+      {hasMore && <div ref={sentinelRef} className="h-px" />}
     </div>
   );
 }

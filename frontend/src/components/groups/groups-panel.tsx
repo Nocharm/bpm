@@ -26,6 +26,7 @@ import {
   type GroupStatus,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { genId } from "@/lib/id";
 import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
 
@@ -63,6 +64,8 @@ export function GroupsPanel() {
 
   // 서버 그룹 목록 / Server-sourced group list.
   const [groups, setGroups] = useState<Group[]>([]);
+  // 25개씩 증분 렌더 — 그룹 카드가 늘어도 그리드 렌더 부하 없음
+  const { visible: shownGroups, hasMore, sentinelRef } = useInfiniteSlice(groups, "");
   // 인라인 상세로 펼친 카드 id (단일) / id of the card expanded inline.
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [addMemberOpen, setAddMemberOpen] = useState(false); // 멤버 추가 다이얼로그(펼친 그룹용) — 헤더 버튼이 연다
@@ -306,7 +309,7 @@ export function GroupsPanel() {
         <p className="text-caption text-ink-tertiary">{t("perm.group.noGroups")}</p>
       ) : (
         <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
-          {groups.map((group) => {
+          {shownGroups.map((group) => {
             const expanded = expandedId === group.id;
             return (
               <div
@@ -379,6 +382,7 @@ export function GroupsPanel() {
               </div>
             );
           })}
+          {hasMore && <div ref={sentinelRef} className="col-span-full h-px" />}
         </div>
       )}
 

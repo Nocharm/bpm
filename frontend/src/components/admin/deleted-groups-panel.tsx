@@ -10,6 +10,7 @@ import { IconActionButton } from "@/components/icon-action-button";
 import { listDeletedGroups, restoreGroup, type Group } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -23,6 +24,8 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void
   const [pendingRestore, setPendingRestore] = useState<Group | null>(null); // 복구 확인 대상
   // 마운트 1회 — 렌더 중 Date.now() 금지(순수성) / lazy now for purity.
   const [now] = useState(() => Date.now());
+  // 25개씩 증분 렌더 — sysadmin 전체 뷰에서 삭제분이 몰려도 렌더 부하 없음
+  const { visible: shownGroups, hasMore, sentinelRef } = useInfiniteSlice(groups ?? [], "");
 
   const purgeLabel = (deletedAt: string): string => {
     const dueMs = new Date(deletedAt).getTime() + RETENTION_DAYS * DAY_MS - now;
@@ -69,7 +72,7 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void
         <p className="text-caption text-ink-tertiary">{t("trash.groupsEmpty")}</p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {groups.map((g) => (
+          {shownGroups.map((g) => (
             <div
               key={g.id}
               data-id="deleted-group-row"
@@ -94,6 +97,7 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void
               />
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} className="h-px" />}
         </div>
       )}
 

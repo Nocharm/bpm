@@ -75,6 +75,14 @@ const table = await page.evaluate(async () => {
   return out;
 });
 
+// ── C: 페이지 스모크 — 목록 적용 페이지들이 콘솔 에러 없이 렌더되는지 ──────────
+const beforeC = errors.length;
+for (const path of ["/", "/notices", "/inbox"]) {
+  await page.goto(`http://localhost:3000${path}`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1200);
+}
+const cConsoleErrors = errors.length - beforeC;
+
 // 테이블 행 수는 데이터 25 + 센티널 1
 const pass =
   result.count1 === 25 &&
@@ -85,8 +93,9 @@ const pass =
   result.countReset === 25 &&
   table.rows1 === 26 &&
   table.rows2 === 51 &&
-  table.rows3 === 76;
+  table.rows3 === 76 &&
+  cConsoleErrors === 0;
 
-console.log(JSON.stringify({ picker: result, table, consoleErrors: errors.length, pass }, null, 2));
+console.log(JSON.stringify({ picker: result, table, cConsoleErrors, consoleErrors: errors.length, pass }, null, 2));
 await browser.close();
 process.exit(pass ? 0 : 1);

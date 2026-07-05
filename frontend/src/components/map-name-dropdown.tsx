@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { VERSION_STATUS_LABEL } from "@/lib/version-status";
 
 interface MapNameDropdownProps {
@@ -60,6 +61,8 @@ export function MapNameDropdown({
   const filtered = (maps ?? []).filter(
     (m) => m.visibility !== "private" && (!q || m.name.toLowerCase().includes(q)),
   );
+  // 25개씩 증분 렌더 — 맵이 수백 개여도 드롭다운 오픈 부하 없음
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, q);
 
   function closeAll() {
     setOpen(false);
@@ -108,7 +111,7 @@ export function MapNameDropdown({
 
             <div className="px-3 pb-1 pt-2 text-fine text-ink-tertiary">{t("editor.recentMaps")}</div>
             <div className="max-h-72 overflow-auto">
-              {filtered.map((m) => {
+              {visible.map((m) => {
                 const isCurrent = m.id === mapId;
                 const subtitle = [
                   m.latest_version_status ? t(VERSION_STATUS_LABEL[m.latest_version_status]) : null,
@@ -200,6 +203,7 @@ export function MapNameDropdown({
                   </div>
                 );
               })}
+              {hasMore && <div ref={sentinelRef} className="h-px" />}
               {maps !== null && filtered.length === 0 && (
                 <div className="px-3 py-2 text-caption text-ink-tertiary">{t("editor.noMapsFound")}</div>
               )}
