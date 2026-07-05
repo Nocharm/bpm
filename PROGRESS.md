@@ -5,6 +5,9 @@
 ## 2026-07-05 — Task 1: recent-maps 캐시 헬퍼 (순수 로직+localStorage 래퍼)
 - home: recent-maps localStorage 캐시 헬퍼(mergeRecentEntry/partitionByRecency) 추가 — 최근 열람 12개 최신순 클라이언트 캐시.
 
+## 2026-07-05 — Task 2: 에디터 진입 시 최근 열람 기록
+- home: 에디터 진입 시 recordRecentMap 기록 effect
+
 ## 2026-07-05 — C1b 비교 셸 캔버스 오버레이 폴리시 (좌상 카운트 필·범례·줌바)
 - **좌상 카운트 필**(`compare/page.tsx`) — `hasChanges`일 때 `Panel top-left` 칩에 노드+엣지를 status별 집계(`counts`: 엣지 추가/삭제 포함·변경은 노드만)한 색점 + 굵은 카운트(추가/삭제/변경).
 - **좌하 범례 폴리시**(`DiffLegend`) — 스와치를 노드 diff 테두리 반영: 추가 실선·**삭제 점선**(`border-dashed`)·변경 실선.

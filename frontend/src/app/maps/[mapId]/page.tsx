@@ -27,6 +27,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
+import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
@@ -7763,6 +7764,13 @@ function MapEditor({ mapId }: { mapId: number }) {
 export default function MapEditorPage() {
   const params = useParams<{ mapId: string }>();
   const mapId = Number(params.mapId);
+
+  // 최근 열람 기록 — 얇은 래퍼에서(모든 진입 경로 포괄, 6700줄 본체 불변). 클라 캐시.
+  useEffect(() => {
+    if (Number.isFinite(mapId)) {
+      recordRecentMap(mapId);
+    }
+  }, [mapId]);
 
   return (
     <ReactFlowProvider>
