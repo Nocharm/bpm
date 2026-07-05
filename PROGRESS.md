@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-05 — 비교 캔버스 정렬 2차: 직선 스파인·루프 상단우회
+- **passthrough를 dagre 레이아웃 입력에서 제외**(`compare/page.tsx positioned`) — 삭제된 직접연결(양끝 유지)이 spurious 랭크 제약을 줘 중간 노드를 위/아래로 밀던 문제 해결. **메인 스파인이 한 줄 직선 정렬**, 추가/삭제 노드만 곁가지. (렌더는 유지 — 우회 아크는 그대로.) 삭제 노드로 가는 엣지는 그 노드 위치 산정에 필요해 유지.
+- **뒤로 가는 루프 엣지 T→T**(`handleSides` `forced`) — 타겟이 소스보다 왼쪽(흐름 역행)이면 상단(top→top)으로 우회(재시도 루프가 위→아래 대신 위→위로 상단을 감싸 돌아옴). passthrough=bottom과 함께 고정변 먼저 배치 후 나머지 4변 그리디.
+- **미해결(dagre 한계)**: 병렬 경로에서 변경/유지 노드를 중앙 직선에 두기 — dagre.js는 랭크 내 순서를 엣지 가중치로 제어하지 않아(가중치 24까지 시도) 강제 불가. 곁가지 배치는 유효한 플로차트라 수용. 필요 시 dagre 출력 후처리(순서 재배열)로 후속.
+- 검증: lint 0 · build OK · canvas 21 tests. 라이브(map 13) — 결제처리→결제승인?→승인필요?→배송 직선·재시도 루프 상단우회 확인.
+
 ## 2026-07-05 — 비교 캔버스 미세정렬: 4변 분산·바닥 아크·핸들 숨김·노드 호버
 - **엣지 4변 그리디 분산**(`compare/page.tsx handleSides`) — 노드마다 자기 엣지들을 방향선호(`preferredSides` 내적정렬)로 4변에 배정하되 이미 쓴 변이면 다음 변으로(충돌 회피). 분기 노드 겹침↓, 수평 연결은 R/L로 직선. `edgeSides`(단순 우세방향) 폐기.
 - **passthrough 아크 바닥→바닥**(`RemovedArcEdge`) — 핸들을 source/target 모두 **bottom 고정**(handleSides), 베지어를 수직 dip U자(`M sx,syB C sx,dip tx,dip tx,tyB`)로. 삭제된 직접 연결이 노드 아래로 우회.

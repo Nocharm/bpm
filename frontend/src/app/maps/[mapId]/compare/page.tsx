@@ -341,14 +341,18 @@ function ComparePane({
   );
 
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
-  const positioned = useMemo(
-    () =>
-      layoutWithDagre(
-        buildAppNodes(merged.nodes, noteOf, fieldsOf),
-        buildAppEdges(merged.edges, keptKeys),
-      ),
-    [merged, noteOf, fieldsOf, keptKeys],
-  );
+  const positioned = useMemo(() => {
+    // passthrough(양끝 유지 노드의 삭제 직접연결)는 배치에 spurious 랭크 제약을 줘 노드를 왜곡 배치시킨다
+    // (예: 우회당한 중간 노드가 위/아래로 밀림). 렌더는 하되 dagre 입력에선 제외 — 삭제 노드로 가는
+    // 엣지는 그 노드 위치 산정에 필요하므로 유지.
+    const layoutEdges = merged.edges.filter(
+      (e) => !(e.status === "removed" && keptKeys.has(e.source) && keptKeys.has(e.target)),
+    );
+    return layoutWithDagre(
+      buildAppNodes(merged.nodes, noteOf, fieldsOf),
+      buildAppEdges(layoutEdges, keptKeys),
+    );
+  }, [merged, noteOf, fieldsOf, keptKeys]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용(엣지가 타겟 방향 변으로 나가고 들어오게).
   const nodeCenters = useMemo(() => {
@@ -374,7 +378,8 @@ function ComparePane({
   // 엣지별 붙을 변(핸들) — 노드마다 자기 엣지들을 4변에 그리디 분산(겹침 최소화). passthrough는
   // 아래(bottom)에서 출발/도착하도록 고정. 방향 확실한 엣지가 선호 변을 먼저 차지.
   const handleSides = useMemo(() => {
-    type Endpoint = { edgeId: string; end: "source" | "target"; otherId: string; passthrough: boolean };
+    // forced: passthrough(삭제 직접연결)=bottom→bottom, back(뒤로 가는 루프)=top→top(상단 우회). 그 외=방향배정.
+    type Endpoint = { edgeId: string; end: "source" | "target"; otherId: string; forced: HandleSide | null };
     const perNode = new Map<string, Endpoint[]>();
     const add = (nodeId: string, ep: Endpoint) => {
       const list = perNode.get(nodeId);
@@ -382,10 +387,14 @@ function ComparePane({
       else perNode.set(nodeId, [ep]);
     };
     for (const edge of merged.edges) {
+      const s = nodeCenters.get(edge.source);
+      const t = nodeCenters.get(edge.target);
       const passthrough =
         edge.status === "removed" && keptKeys.has(edge.source) && keptKeys.has(edge.target);
-      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, passthrough });
-      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, passthrough });
+      const back = !passthrough && !!s && !!t && t.cx < s.cx - 40; // 흐름 역행(루프) → 상단 우회
+      const forced: HandleSide | null = passthrough ? "bottom" : back ? "top" : null;
+      add(edge.source, { edgeId: edge.id, end: "source", otherId: edge.target, forced });
+      add(edge.target, { edgeId: edge.id, end: "target", otherId: edge.source, forced });
     }
     const result = new Map<string, { source: HandleSide; target: HandleSide }>();
     const setSide = (edgeId: string, end: "source" | "target", side: HandleSide) => {
@@ -397,17 +406,26 @@ function ComparePane({
     for (const [nodeId, endpoints] of perNode) {
       const center = nodeCenters.get(nodeId);
       if (!center) continue;
-      const scored = endpoints.map((ep) => {
-        if (ep.passthrough) return { ep, prefs: ["bottom"] as HandleSide[], certainty: Infinity };
-        const other = nodeCenters.get(ep.otherId);
-        const dx = other ? other.cx - center.cx : 1;
-        const dy = other ? other.cy - center.cy : 0;
-        const len = Math.hypot(dx, dy) || 1;
-        return { ep, prefs: preferredSides(dx, dy), certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
-      });
-      scored.sort((a, b) => b.certainty - a.certainty); // passthrough·방향 확실한 순 우선
       const used = new Set<HandleSide>();
-      for (const { ep, prefs } of scored) {
+      // 고정 변(passthrough=bottom / back=top) 먼저 자리 확보
+      for (const ep of endpoints) {
+        if (ep.forced) {
+          setSide(ep.edgeId, ep.end, ep.forced);
+          used.add(ep.forced);
+        }
+      }
+      // 나머지는 방향 확실한 순으로 4변 그리디 배정(이미 쓴 변 회피)
+      const normal = endpoints
+        .filter((ep) => !ep.forced)
+        .map((ep) => {
+          const other = nodeCenters.get(ep.otherId);
+          const dx = other ? other.cx - center.cx : 1;
+          const dy = other ? other.cy - center.cy : 0;
+          const len = Math.hypot(dx, dy) || 1;
+          return { ep, prefs: preferredSides(dx, dy), certainty: Math.max(Math.abs(dx), Math.abs(dy)) / len };
+        });
+      normal.sort((a, b) => b.certainty - a.certainty);
+      for (const { ep, prefs } of normal) {
         const side = prefs.find((candidate) => !used.has(candidate)) ?? prefs[0];
         used.add(side);
         setSide(ep.edgeId, ep.end, side);
