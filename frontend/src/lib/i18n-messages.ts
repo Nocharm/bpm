@@ -791,6 +791,7 @@ const en = {
   "library.search": "Search…",
   "library.cycleBlocked": "Would create a reference cycle",
   "library.empty": "No processes",
+  "library.emptyDesignated": "No designated subprocesses yet — a map owner can designate one in map settings.",
   "library.toggle": "Process library",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "Map Settings",
@@ -1905,6 +1906,7 @@ const ko: Record<MessageKey, string> = {
   "library.search": "검색…",
   "library.cycleBlocked": "순환 참조가 됩니다",
   "library.empty": "프로세스 없음",
+  "library.emptyDesignated": "지정된 서브프로세스가 없습니다 — 맵 오너가 맵 설정에서 지정할 수 있습니다.",
   "library.toggle": "프로세스 라이브러리",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "맵 설정",

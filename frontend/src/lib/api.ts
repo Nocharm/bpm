@@ -244,6 +244,11 @@ export interface LibraryProcess {
   latest_version_id: number | null;
   latest_published_version_id: number | null;
   refs: number[];
+  // 지정 어트리뷰트 — 목록은 지정된 맵만 반환하므로 항상 동봉(부서 칩 표시용) (spec 2026-07-06)
+  department: string | null;
+  assignee: string | null;
+  system: string | null;
+  duration: string | null;
 }
 
 export function listLibraryProcesses(): Promise<LibraryProcess[]> {

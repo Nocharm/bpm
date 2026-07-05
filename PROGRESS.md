@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 U3(프론트): 피커 부서 칩·빈 상태
+- `LibraryProcess`에 어트리뷰트 4종, 패널 행에 부서 칩(accent-tint), 전체 빈 목록엔 지정 안내 문구(`library.emptyDesignated`, 검색 무결과는 기존 문구 유지). 검증: lint 0, 브라우저 — 지정 맵 1건+칩 표시·해제 시 안내 문구·재지정 복귀.
+
 ## 2026-07-06 — 서브프로세스 지정 U3(백): 라이브러리 피커 필터
 - `GET /api/library/processes` — **지정(sp_designated_at)+미삭제 맵만** 반환, 행에 어트리뷰트 4종 포함(부서 칩 소스). 기존 미지정 노출 가정 테스트 2건(`test_subprocess.py`)을 게시+지정 플로우로 갱신. 신규 테스트 2건(미지정 제외·soft-delete 제외). pytest 413 passed·ruff 클린.
 
