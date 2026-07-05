@@ -1,6 +1,7 @@
 // 전역 네비게이션 바 — 브랜드 · 유저칩(드롭다운) · 영/한 토글. 모든 페이지 상단.
 "use client";
 
+import { Inbox, Map as MapIcon, Megaphone } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -14,17 +15,25 @@ import { NotificationBell } from "@/components/notification-bell";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
-// 상단 세그먼트 전환 탭 — 맵목록/공지/인박스. 현재 경로로 활성 강조.
-const NAV_TABS: { href: string; labelKey: MessageKey }[] = [
-  { href: "/", labelKey: "nav.tab.maps" },
-  { href: "/notices", labelKey: "nav.tab.notices" },
-  { href: "/inbox", labelKey: "nav.tab.inbox" },
+// 상단 세그먼트 전환 탭 — 맵목록/공지/인박스. 슬라이딩 박스로 현재 경로 강조.
+const NAV_TABS: { href: string; labelKey: MessageKey; Icon: typeof MapIcon }[] = [
+  { href: "/", labelKey: "nav.tab.maps", Icon: MapIcon },
+  { href: "/notices", labelKey: "nav.tab.notices", Icon: Megaphone },
+  { href: "/inbox", labelKey: "nav.tab.inbox", Icon: Inbox },
 ];
+
+// 현재 경로 → 활성 탭 인덱스(-1 = 없음). 맵목록은 홈·에디터(/maps) 포함.
+function activeTabIndex(pathname: string): number {
+  return NAV_TABS.findIndex((tab) =>
+    tab.href === "/" ? pathname === "/" || pathname.startsWith("/maps") : pathname.startsWith(tab.href),
+  );
+}
 
 export function TopNav() {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
   const pathname = usePathname() ?? "/";
+  const tabIndex = activeTabIndex(pathname);
   const user = useSyncExternalStore(
     subscribeCurrentUser,
     getCurrentUser,
@@ -79,25 +88,30 @@ export function TopNav() {
         >
           {t("app.name")}
         </Link>
-        {/* 3-way 전환 탭 — 브랜드 우측. 현재 경로를 accent로 강조 */}
-        <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-caption">
-          {NAV_TABS.map((tab) => {
-            const active =
-              tab.href === "/"
-                ? pathname === "/" || pathname.startsWith("/maps")
-                : pathname.startsWith(tab.href);
+        {/* 3-way 전환 탭 — 브랜드 우측. 슬라이딩 박스 인디케이터로 현재 경로 강조 */}
+        <div className="relative inline-grid grid-cols-3 items-stretch overflow-hidden rounded-sm border border-hairline bg-surface-alt text-fine">
+          {/* 활성 탭 위치로 좌우 이동하는 네모 인디케이터 */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-accent-tint transition-[transform,opacity] duration-350 ease-spring"
+            style={{
+              transform: `translateX(${Math.max(tabIndex, 0) * 100}%)`,
+              opacity: tabIndex < 0 ? 0 : 1,
+            }}
+          />
+          {NAV_TABS.map((tab, i) => {
+            const Icon = tab.Icon;
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
-                aria-current={active ? "page" : undefined}
+                aria-current={i === tabIndex ? "page" : undefined}
                 className={
-                  "rounded-xs px-2 py-0.5 " +
-                  (active
-                    ? "bg-accent-tint font-semibold text-accent"
-                    : "text-ink-tertiary hover:text-ink-secondary")
+                  "relative z-10 flex items-center justify-center gap-1 px-2.5 py-1 transition-colors duration-350 " +
+                  (i === tabIndex ? "text-accent" : "text-ink-tertiary hover:text-ink-secondary")
                 }
               >
+                <Icon size={14} strokeWidth={1.5} />
                 {t(tab.labelKey)}
               </Link>
             );
