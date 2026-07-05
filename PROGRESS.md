@@ -51,6 +51,7 @@
 - 백엔드 `validate_process` 실제 규칙: 시작 정확히 1개 / 끝 이름(빈 제목 포함) 중복 없음 / 대표끝≤1(자동 지정) / 순환참조 없음. "끝 1개 이상"은 백엔드 미강제.
 - **저장 조건 강제**(사용자 선택: 수동 저장·승인 시작에서만) — `getSaveBlockers`(체크리스트와 동일 조건, `getSaveCheckStates` 공용)가 미충족 시 `handleSave`·`handleSubmitForApproval`을 차단하고 토스트(`save.blockedTitle` + 미충족 목록). **autosave·백엔드·테스트는 불변**(작성 중 방해 없음). → "대표끝=1(끝≥1)"이 수동 저장·승인에서 실질 강제됨.
 - 검증: lint 0 · build/TS OK. 체크리스트 렌더 확인(주입 프리뷰). 편집버전 라이브 확인 필요.
+- home: i18n keys recentTitle/recentMore/recentBadge (EN·KO)
 
 ## 2026-07-04 — R11b 오류방지 ⑤: 승인 요청(승인 시작) 전 현재 화면 저장 검증
 - **`page.tsx handleSubmitForApproval`** — ApprovalPanel `onSubmit`이 곧바로 submit 확인창을 열던 것을, 먼저 `saveCurrentScope()`(현재 화면 영속 + 서버의 시작/끝 검증)를 await하도록 변경. 실패 시 토스트 후 다이얼로그를 열지 않음. 저장 성공 시에만 승인 요청 확인창 오픈 → 저장된 구버전이 아닌 "지금 보는 내용"이 승인 대상이 되도록(착각 방지). 확인창은 모달이라 저장~확정 사이 편집 불가.
