@@ -1,6 +1,7 @@
 # DB 마이그레이션 & 9800 검증 스택 가이드
 
-운영 스택(포트 **9900**, 커밋 `406c375b` 시점 스키마)의 DB를 **복사**해서, 최신 main(`2190e54`) 코드를
+운영 스택(포트 **9900**, 커밋 `406c375b` 시점 스키마)의 DB를 **복사**해서, **최신 origin/main**
+(이 문서 기준 2026-07-06 — 매뉴얼 다중 문서·MANUAL_URL·서브프로세스 지정 포함) 코드를
 포트 **9800**에 별도 스택으로 띄워 마이그레이션·기능을 검증하는 절차. 검증이 끝나면 운영(9900)을
 같은 방식으로 승격한다. **운영 스택과 볼륨은 일절 건드리지 않는다**(덤프 읽기만).
 
@@ -8,7 +9,7 @@
 
 ---
 
-## 1. 스키마 변경 요약 — `406c375b` → `origin/main`(`2190e54`)
+## 1. 스키마 변경 요약 — `406c375b` → 최신 `origin/main`
 
 | 구분 | 대상 | 내용 | 적용 방식 |
 |------|------|------|-----------|
@@ -18,6 +19,9 @@
 | 신규 테이블 | `checkout_requests` | 점유권 이전 요청/승인 플로 | `create_all` 자동 생성 |
 | 신규 컬럼 | `map_versions.version_number` INTEGER | 게시 순번 — publish 시 채번, 기존 행 NULL | 기동 시 자동 ALTER |
 | 신규 컬럼 | `map_versions.checked_out_from` VARCHAR(100) | 점유 이전 출처 | 기동 시 자동 ALTER |
+| 신규 컬럼 | `manual_docs.title` VARCHAR(200) | 매뉴얼 다중 문서(F10) — 목록 제목(저장 시 자동 추출) | 기동 시 자동 ALTER |
+| 신규 컬럼 | `manual_docs.language` VARCHAR(5) | 문서 언어(ko/en) — 레거시 행은 기본 ko로 흡수 | 기동 시 자동 ALTER |
+| 신규 컬럼 | `manual_docs.sort_order` INTEGER | 목록 정렬(업로드순) | 기동 시 자동 ALTER |
 | 신규 컬럼 | `process_maps.sp_designated_at` TIMESTAMP | 서브프로세스 지정 시각(NULL=미지정) | 기동 시 자동 ALTER |
 | 신규 컬럼 | `process_maps.sp_department` VARCHAR(100) | 지정 어트리뷰트(부서, 지정 시 필수) | 기동 시 자동 ALTER |
 | 신규 컬럼 | `process_maps.sp_assignee` VARCHAR(100) | 지정 어트리뷰트(담당자) | 기동 시 자동 ALTER |
@@ -33,7 +37,8 @@ Alembic은 아직 없다. backend가 기동할 때 `app/db.py::init_models()`가
 
 1. `Base.metadata.create_all` — 없는 **테이블**을 생성 (위 신규 테이블 4종).
 2. `_add_missing_columns()` — `_ADDED_COLUMNS` 목록의 **컬럼**이 기존 테이블에 없으면
-   `ALTER TABLE … ADD COLUMN` (전부 nullable, 기존 행은 NULL 유지). 위 신규 컬럼 9개 모두 등록돼 있다.
+   `ALTER TABLE … ADD COLUMN` (nullable 또는 DEFAULT, 기존 행 생존). 위 신규 컬럼 12개 모두 등록돼 있다.
+   매뉴얼 레거시 단일 게시본 행은 language 기본값 ko로 흡수되고 제목은 읽기 시 자동 추출 — 별도 작업 불요.
 
 즉 **덤프를 복원한 DB 위에 최신 backend를 1회 기동하는 것이 곧 마이그레이션**이다.
 모든 변경이 추가(additive)라서 파괴적 DDL이 없고, 구버전 코드도 같은 DB에서 동작한다
@@ -54,7 +59,7 @@ Alembic은 아직 없다. backend가 기동할 때 `app/db.py::init_models()`가
 
 - [ ] 서버에 최신 main 코드 체크아웃 — 운영 코드와 **다른 디렉터리** 권장(예: `~/bpm-dev`).
   ```bash
-  git clone <repo-url> ~/bpm-dev && cd ~/bpm-dev   # 또는 기존 clone에서 git fetch && git checkout 2190e54
+  git clone <repo-url> ~/bpm-dev && cd ~/bpm-dev   # 또는 기존 clone에서 git fetch && git checkout origin/main
   ```
 - [ ] `.env.dev` 작성 — 운영 `.env`를 복사해 포트만 변경(`.gitignore`의 `.env.*`에 걸려 커밋되지 않음):
   ```bash
@@ -62,6 +67,7 @@ Alembic은 아직 없다. backend가 기동할 때 `app/db.py::init_models()`가
   # .env.dev에서 딱 한 줄 수정:
   #   APP_PORT=9800
   # 나머지(POSTGRES_*, KEYCLOAK_*, LDAP_*, BPM_SYSADMINS …)는 운영과 동일하게 둔다.
+  # (선택) MANUAL_URL=<편집용 매뉴얼 사이트 주소> — 설정 시 에디터 툴바에 버튼 노출, 비우면 숨김
   ```
 - [ ] **Keycloak 리다이렉트 허용** — realm `ai-portal`의 클라이언트에 9800 origin이 없으면 로그인 불가:
   Valid redirect URIs에 `http://<서버IP>:9800/*`, Web origins에 `http://<서버IP>:9800` 추가.
@@ -166,7 +172,7 @@ docker exec -it "$DEV_DB"  psql -U processmap -d processmap -c "$Q"
 - [ ] 기존 맵 에디터 열기 — 노드/엣지 그대로, 저장·자동저장 동작
 - [ ] 버전 워크플로 — 기존 버전 상태 표시 정상, 새 버전 승인 요청→승인→게시 1사이클
   (게시 시 직전 게시본이 `expired`로 바뀌는지, 새 게시본에 `version_number` 붙는지)
-- [ ] 신규 화면 4종 — 공지사항 / 알림·승인(Inbox) / 피드백 / 사용 매뉴얼(`/manual`)
+- [ ] 신규 화면 4종 — 공지사항 / 알림·승인(Inbox) / 피드백 / 사용 매뉴얼(`/manual` — 제목 드롭다운·한/영 문서 목록, 문서 0건이면 번들 fallback)
 - [ ] 점유권 — 다른 계정으로 체크아웃 요청→승인
 - [ ] 관리자(sysadmin 계정) — 설정의 Employees·공지 작성·매뉴얼 게시 탭
 - [ ] **서브프로세스 지정** — 링크 노드가 있는 맵: 미지정 경고+잠금 표시 확인 →
@@ -212,7 +218,7 @@ SQL
 ```bash
 # 운영 디렉터리에서
 docker exec -t "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-before-upgrade-$(date +%Y%m%d).dump
-git fetch && git checkout 2190e54          # 검증한 커밋 그대로
+git fetch && git checkout <9800에서 검증한 커밋>   # 반드시 검증 스택과 같은 커밋으로
 docker compose up -d --build               # backend 기동 = 자동 보강 적용
 docker compose logs backend | head -30 && curl -s http://localhost:9900/api/health
 ```

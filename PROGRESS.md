@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 마이그레이션 문서·매뉴얼 최종화 + MANUAL_URL compose 전달 (사용자: 최신 기준 갱신 후 개발서버 배포)
+- `docs/db-migration-9800.md` 최신 main 기준 재정렬 — manual_docs 신규 컬럼 3(title·language·sort_order, 레거시 ko 흡수·제목 자동 추출로 별도 작업 불요) 추가(컬럼 12), .env.dev에 MANUAL_URL 선택 항목, /manual 체크리스트 다중 문서 기준, 승격 체크아웃 문구 일반화.
+- **compose 공백 수정**: `MANUAL_URL`이 Settings/.env.example에만 있고 docker-compose가 backend로 미전달 → 배포에서 무동작. backend environment에 추가(compose config로 전달 확인).
+- 매뉴얼 최종화(4종+번들): 자동정렬 가로/세로(⇧L·⇧K)·서브프로세스 지정(피커 노출·미지정 잠금·라이브 어트리뷰트)·매뉴얼 다중 문서(제목 드롭다운)·단축키 안내 위치(사이드바 더보기)·admin §12 MANUAL_URL. 렌더 제약 검증 클린·pytest 420.
+
 ## 2026-07-06 — 미니맵 페이드 지점 당김 (사용자: 좀더 빨리 없어지게)
 - `minimap-viewport-fill.tsx` 채움비 임계 FADE_START 1.2→1.05·FADE_END 1.6→1.3 — 뷰포트가 콘텐츠를 꽉 채운 직후부터 페이드, 더 일찍 완전 투명. 검증: lint 0·브라우저(핏 0.65 → 줌아웃 1단계 0.13 → 2단계 0).
 
