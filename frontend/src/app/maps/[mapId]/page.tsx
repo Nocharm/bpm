@@ -33,6 +33,7 @@ import { AiChatPanel } from "@/components/ai-chat-panel";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
+import { NodeActionBar } from "@/components/node-action-bar";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
@@ -673,6 +674,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
+  // 링크 미리보기 패널 — non-null이면 열림. 액션 바 "링크 열기"가 세팅 (Task 3에서 패널 연결)
+  const [linkPreviewUrl, setLinkPreviewUrl] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
@@ -3109,6 +3112,29 @@ function MapEditor({ mapId }: { mapId: number }) {
           ? {
               ...node,
               data: { ...node.data, groupIds: node.data.groupIds.filter((id) => id !== groupId) },
+            }
+          : node,
+      );
+      setNodes(next);
+      pruneSmallGroups(next);
+      scheduleAutoSave();
+    },
+    [setNodes, pruneSmallGroups, scheduleAutoSave],
+  );
+
+  // 액션 바 "그룹 나가기" — 선택 멤버를 소속 그룹 전체에서 이탈(확정: 클릭 1회 전 그룹 탈퇴).
+  // leaveGroup과 같은 경로(setNodes→pruneSmallGroups→scheduleAutoSave)를 한 번에 태운다.
+  const leaveGroups = useCallback(
+    (groupIds: string[]) => {
+      const drop = new Set(groupIds);
+      const next = nodesRef.current.map((node) =>
+        node.selected && node.data.groupIds.some((id) => drop.has(id))
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                groupIds: node.data.groupIds.filter((id) => !drop.has(id)),
+              },
             }
           : node,
       );
@@ -6557,6 +6583,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <ViewportPortal>
                         {/* 선택 노드 추종 테두리 — 노드 사이를 슬라이드 */}
                         <NodeSelectionRing />
+                        {/* 단일 선택 노드 하단의 통합 액션 바 — 펼치기/링크/그룹 나가기 */}
+                        <NodeActionBar
+                          readOnly={readOnly}
+                          onLeaveGroups={leaveGroups}
+                          onOpenLink={setLinkPreviewUrl}
+                        />
                         {inlineComposition && (
                           <InlineRegionBands
                             regions={inlineComposition.regions}
