@@ -107,12 +107,15 @@ alias dcdev='docker compose -p bpm-dev -f docker-compose.yml -f docker-compose.d
 
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}' | grep postgres   # 운영 db 컨테이너 이름 확인
-PROD_DB=<위에서 확인한 이름>   # 예: bpm-db-1
+PROD_DB=business-process-mgmt-db-1   # 사내 71번 운영 db 컨테이너 실이름(2026-07-06 확인)
 
 # 커스텀 포맷 덤프(-Fc) — 압축 + pg_restore 선택 복원 가능
 # 주의: docker exec에 -t(TTY)를 붙이면 바이너리 덤프에 CR이 섞여 아카이브가 깨진다 — 반드시 -t 없이.
 docker exec "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-$(date +%Y%m%d-%H%M).dump
 ls -lh bpm-9900-*.dump   # 0바이트가 아닌지 확인
+
+# 아카이브 검증 — 정상이면 테이블/시퀀스 목록. 에러나 음수 TOC 수가 나오면 손상(위 -t 주의 참고).
+docker run --rm -i postgres:16-alpine pg_restore --list < bpm-9900-*.dump | head -15
 ```
 
 `-U`/`-d`는 운영 `.env`의 `POSTGRES_USER`/`POSTGRES_DB`가 기본값(processmap)과 다르면 그 값으로.
