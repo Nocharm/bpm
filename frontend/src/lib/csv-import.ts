@@ -341,3 +341,45 @@ export function buildTemplateCsv(): string {
     "Notify rejection,,1 day,,",
   ].join("\r\n");
 }
+
+/** 붙여넣은 텍스트의 코드펜스 관용 처리 — 외부 AI 답변이 ```csv … ``` 로 감싸 오는 경우 본문만 추출. */
+export function stripCsvFences(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
+  return match ? match[1] : text;
+}
+
+/** 외부 AI에게 줄 절차 추출 프롬프트 — 임포트 스펙(컬럼·상한·규칙)과 동일 소스에서 파생.
+ *  사용 흐름: 이 프롬프트 + 업무 문서를 외부 AI에 붙여넣기 → 받은 CSV를 임포트 붙여넣기 입력에. */
+export function buildAiPromptText(): string {
+  return [
+    "당신은 업무 절차 분석가입니다. 아래에 첨부하는 업무 문서(규정·지침·절차서 등)를 읽고,",
+    "문서에 기술된 업무 프로세스 흐름을 추출해 CSV 한 개로 작성하세요.",
+    "",
+    "[출력 형식 — 반드시 지킬 것]",
+    "- 다른 설명·코드블록(```) 없이 CSV 텍스트만 출력하세요.",
+    `- 첫 행(헤더)은 정확히: ${buildTemplateCsv().split("\r\n")[0]}`,
+    "- 한 행 = 프로세스 단계 1개. 셀에 쉼표가 들어가면 그 셀을 큰따옴표로 감싸세요.",
+    "",
+    "[컬럼 규칙]",
+    `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
+    `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
+    `- Duration: 선택, 소요 시간(예: 2 days, 3시간 — ${MAX_LEN.duration}자 이하).`,
+    `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
+    "- Next: 선택, 다음 단계의 Name을 세미콜론(;)으로 나열. 분기 조건은 \"대상이름:라벨\" 형식(라벨 200자 이하).",
+    "  예: 승인 여부 단계가 승인/반려로 갈라지면 → 계약 체결:승인;반려 통보:반려",
+    "",
+    "[작성 규칙]",
+    "- Start·End(시작/종료) 행은 쓰지 마세요 — 시스템이 자동 생성합니다.",
+    "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요.",
+    "- Next의 대상 이름은 반드시 같은 CSV에 있는 Name이어야 합니다(오타 금지).",
+    `- 데이터 행은 최대 ${MAX_DATA_ROWS}개입니다.`,
+    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(System·Duration·URL)은 비워두세요.",
+    "",
+    "[예시]",
+    buildTemplateCsv().replace(/\r\n/g, "\n"),
+    "",
+    "[업무 문서]",
+    "(여기에 문서 내용을 붙여넣거나 파일을 첨부하세요)",
+  ].join("\n");
+}

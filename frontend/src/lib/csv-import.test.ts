@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import type { Graph } from "./api";
 import {
+  buildAiPromptText,
   buildGraphFromCsv,
   buildTemplateCsv,
   decodeCsvBuffer,
   parseCsvRecords,
+  stripCsvFences,
 } from "./csv-import";
 
 const HEADER = "Name,System,Duration,URL,Next";
@@ -151,5 +153,30 @@ describe("buildGraphFromCsv — 검증 에러", () => {
 
     const exact = buildGraphFromCsv(`${HEADER}\nA,,,,B:${"y".repeat(200)}\nB,,,,`).errors;
     expect(exact).toEqual([]);
+  });
+});
+
+describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
+  it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
+    const prompt = buildAiPromptText();
+    expect(prompt).toContain("Name,System,Duration,URL,Next"); // 헤더 명시
+    expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
+    expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
+    expect(prompt).toContain("최대 500개"); // MAX_DATA_ROWS 파생
+    expect(prompt).toContain(buildTemplateCsv().split("\r\n")[1]); // 예시 행 포함
+  });
+
+  it("stripCsvFences: ```csv 펜스를 벗기고 본문만 반환", () => {
+    const body = "Name,System,Duration,URL,Next\nA,,,,";
+    expect(stripCsvFences("```csv\n" + body + "\n```")).toBe(body);
+    expect(stripCsvFences("```\n" + body + "\n```")).toBe(body); // 언어 태그 없는 펜스
+    expect(stripCsvFences(body)).toBe(body); // 펜스 없으면 그대로
+  });
+
+  it("펜스로 감싼 CSV도 스트립 후 정상 파싱된다 (붙여넣기 경로)", () => {
+    const fenced = "```csv\nName,System,Duration,URL,Next\nA,,,,B\nB,,,,\n```";
+    const outcome = buildGraphFromCsv(stripCsvFences(fenced));
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.nodeCount).toBe(4); // A·B + 자동 Start/End
   });
 });
