@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -76,6 +76,8 @@ import { ScopePreview } from "@/components/scope-preview";
 import { ShortcutLegend } from "@/components/shortcut-legend";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { WindowDock } from "@/components/window-dock";
+import { CsvImportSection } from "@/components/csv-import-section";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   alignSelected,
   buildOutline,
@@ -183,6 +185,7 @@ import {
   type NodeDisplayField,
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
+import { type CsvImportOutcome } from "@/lib/csv-import";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -747,6 +750,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   // 언마운트/버전 전환 시 해제 여부 판단용 — 상태와 달리 cleanup에서 즉시 읽힘
   const checkoutMineRef = useRef(false);
+  // CSV 임포트(전체 교체) — 모달·파싱 결과·확인 단계 (design 2026-07-06)
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [csvOutcome, setCsvOutcome] = useState<CsvImportOutcome | null>(null);
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  const [csvConfirmOpen, setCsvConfirmOpen] = useState(false);
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
@@ -1377,6 +1385,33 @@ function MapEditor({ mapId }: { mapId: number }) {
     history.future = [];
     setHistorySize({ past: history.past.length, future: 0 });
   }, []);
+
+  // CSV 전체 교체 — 서버 PUT 성공 후에만 캔버스 반영(423/409 시 캔버스 불변).
+  // 직접 saveGraph를 쓰는 이유: setState 직후 ref 동기화 전에 saveCurrentScope를 부르면 이전 상태가 저장됨.
+  const applyCsvImport = useCallback(async () => {
+    if (versionId === null || !csvOutcome?.graph) return;
+    try {
+      const saved = await saveGraph(versionId, csvOutcome.graph);
+      pushHistory(); // undo = 임포트 이전 캔버스로 복귀(다음 자동저장이 서버도 되돌림)
+      setNodes(toAppNodes(saved, null));
+      setEdges(toAppEdges(saved));
+      setGroups(saved.groups);
+      setSelectedId(null);
+      setSelectedEdgeId(null);
+      setMenu(null);
+      dirtyRef.current = false;
+      setSaveState("saved");
+      refreshFullGraph();
+      setCsvConfirmOpen(false);
+      setCsvImportOpen(false);
+      setCsvOutcome(null);
+      setCsvFileName(null);
+      showToast(t("csvImport.applied"));
+    } catch (err) {
+      setCsvConfirmOpen(false);
+      showToast(err instanceof Error ? err.message : t("err.save"));
+    }
+  }, [versionId, csvOutcome, pushHistory, setNodes, setEdges, setGroups, refreshFullGraph, showToast, t]);
 
   // 타이핑은 간격 안에서 한 스냅샷으로 묶고, 그 외 변경은 즉시 기록
   const recordChange = useCallback(
@@ -6224,6 +6259,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
           manualUrl={manualUrl}
+          onImportCsv={
+            checkout?.mine && currentParentId === null
+              ? () => setCsvImportOpen(true)
+              : undefined
+          }
         />
       )}
 
@@ -7929,6 +7969,86 @@ function MapEditor({ mapId }: { mapId: number }) {
           cancelLabel={t("inline.capCancel")}
           onConfirm={confirmCapPrompt}
           onClose={() => setCapPrompt(null)}
+        />
+      )}
+      {/* CSV 임포트 모달 — 파일 선택·파싱 결과, Continue로 교체 확인 단계 진입 */}
+      {csvImportOpen && (
+        <ModalBackdrop
+          onClose={() => {
+            setCsvImportOpen(false);
+            setCsvOutcome(null);
+            setCsvFileName(null);
+          }}
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
+        >
+          <div className="relative flex w-full max-w-lg flex-col gap-4 rounded-md bg-surface p-6 shadow-lg">
+            <h2 className="text-body-strong text-ink">{t("csvImport.modalTitle")}</h2>
+            <CsvImportSection
+              outcome={csvOutcome}
+              fileName={csvFileName}
+              onChange={(nextOutcome, nextFileName) => {
+                setCsvOutcome(nextOutcome);
+                setCsvFileName(nextFileName);
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={() => {
+                  setCsvImportOpen(false);
+                  setCsvOutcome(null);
+                  setCsvFileName(null);
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                data-id="csv-import-continue"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-white hover:opacity-90 disabled:opacity-50"
+                disabled={!csvOutcome?.graph || csvOutcome.errors.length > 0}
+                onClick={() => setCsvConfirmOpen(true)}
+              >
+                {t("csvImport.continue")}
+              </button>
+            </div>
+          </div>
+        </ModalBackdrop>
+      )}
+      {/* CSV 교체 확인 — 기존 노드·엣지·그룹 전부 삭제 경고 (맵 삭제 모달 컨벤션) */}
+      {csvConfirmOpen && csvOutcome?.graph && (
+        <ConfirmDialog
+          title={t("csvImport.confirmTitle")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          danger
+          icon={<FileUp size={28} strokeWidth={1.5} className="text-error" />}
+          sections={[
+            [
+              {
+                icon: <Trash2 size={14} strokeWidth={1.5} />,
+                text: t("csvImport.confirmDelete", {
+                  n: nodes.length,
+                  m: edges.length,
+                  k: groups.length,
+                }),
+                tone: "error",
+              },
+            ],
+            [
+              {
+                icon: <FilePlus2 size={14} strokeWidth={1.5} />,
+                text: t("csvImport.confirmCreate", {
+                  x: csvOutcome.nodeCount,
+                  y: csvOutcome.edgeCount,
+                }),
+                tone: "accent",
+              },
+            ],
+          ]}
+          onConfirm={() => void applyCsvImport()}
+          onClose={() => setCsvConfirmOpen(false)}
         />
       )}
 

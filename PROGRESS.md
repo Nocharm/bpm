@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — Task 6: 에디터 툴바 — CSV 임포트(전체 교체)
+- `editor-toolbar.tsx` 우측 클러스터(`ml-auto` div)로 재구성 — `onImportCsv?`(FileUp) + 기존 매뉴얼 버튼(F9)을 함께 묶음. `page.tsx`: `csvImportOpen`/`csvOutcome`/`csvFileName`/`csvConfirmOpen` state + `applyCsvImport`(saveGraph PUT 성공 후에만 `pushHistory()`→PUT 응답으로 캔버스 반영, 실패 시 토스트만·캔버스 불변) — TDZ 방지로 `pushHistory` 선언 직후에 배치(브리프의 "saveCurrentScope 부근"보다 우선). 툴바 prop은 `checkout?.mine && currentParentId === null`(체크아웃 보유자·루트 스코프 한정) 게이트. 임포트 모달(`ModalBackdrop`+`CsvImportSection`) + 교체 확인 `ConfirmDialog`(삭제/생성 카운트) 추가. 검증: lint 0·build 성공, Playwright(system Chrome, devUser 전환 admin.sys/junho.lee)로 15+3개 체크 전부 통과 — 체크아웃 미보유 계정은 버튼 미노출(양방향)·임포트 후 6노드+"CSV imported" 토스트+새로고침 후 유지·Ctrl+Z undo가 임포트 전 3노드로 복원.
+
 ## 2026-07-06 — Task 5: 새 맵 다이얼로그 — CSV로 시작
 - `create-map-dialog.tsx`에 `CsvImportSection` 배치(visibility 다음, 협업자 이전) + `csv`/`csvFileName` state + `canCreate`에 CSV 에러 게이트 추가. `handleCreate`에 CSV 첨부 시 생성→체크아웃→`saveGraph`→`router.push(/maps/{id})` 시퀀스 삽입(실패 시 맵은 유지·에러 안내·다이얼로그는 열린 채로 유지, `onClose()` 미호출). 검증: lint 0·build 성공, Playwright(system Chrome, devUser=admin.kim)로 21개 체크 전부 통과(템플릿 다운로드 5컬럼·"6 nodes · 6 edges" 요약·생성 후 에디터 6노드+diamond decision 렌더·중복 Name 에러로 Create 비활성→clear로 재활성·CSV 없는 생성은 기존과 동일하게 이동 없음).
 

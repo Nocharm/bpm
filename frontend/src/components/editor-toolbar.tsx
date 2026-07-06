@@ -10,6 +10,7 @@ import {
   AlignStartVertical,
   AlignVerticalDistributeCenter,
   BookOpen,
+  FileUp,
   Network,
 } from "lucide-react";
 import { type ComponentType } from "react";
@@ -42,6 +43,8 @@ interface EditorToolbarProps {
   onDistribute: (axis: DistributeAxis) => void;
   // 편집용 매뉴얼 사이트 주소(.env MANUAL_URL) — 비어 있으면 버튼 숨김 (F9)
   manualUrl?: string;
+  // CSV 전체 교체 임포트 모달 열기 — 체크아웃 보유자·루트 스코프에서만 전달(page.tsx 게이팅), 없으면 버튼 숨김
+  onImportCsv?: () => void;
 }
 
 export function EditorToolbar({
@@ -51,6 +54,7 @@ export function EditorToolbar({
   onAlign,
   onDistribute,
   manualUrl,
+  onImportCsv,
 }: EditorToolbarProps) {
   const { t } = useI18n();
   const iconBtn =
@@ -96,19 +100,33 @@ export function EditorToolbar({
           <Icon size={16} strokeWidth={1.5} />
         </button>
       ))}
-      {/* 편집용 매뉴얼 사이트 — 행 우측 끝, MANUAL_URL 설정 시에만 (F9) */}
-      {manualUrl && (
-        <button
-          type="button"
-          data-id="toolbar-manual-site"
-          className={`${iconBtn} ml-auto`}
-          onClick={() => window.open(manualUrl, "_blank", "noopener,noreferrer")}
-          title={t("editor.manualSite")}
-          aria-label={t("editor.manualSite")}
-        >
-          <BookOpen size={16} strokeWidth={1.5} />
-        </button>
-      )}
+      {/* 우측 클러스터 — CSV 임포트(체크아웃 보유 시) + 매뉴얼 사이트(F9) */}
+      <div className="ml-auto flex items-center gap-1">
+        {onImportCsv && (
+          <button
+            type="button"
+            data-id="toolbar-import-csv"
+            className={iconBtn}
+            onClick={onImportCsv}
+            title={t("csvImport.toolbar")}
+            aria-label={t("csvImport.toolbar")}
+          >
+            <FileUp size={16} strokeWidth={1.5} />
+          </button>
+        )}
+        {manualUrl && (
+          <button
+            type="button"
+            data-id="toolbar-manual-site"
+            className={iconBtn}
+            onClick={() => window.open(manualUrl, "_blank", "noopener,noreferrer")}
+            title={t("editor.manualSite")}
+            aria-label={t("editor.manualSite")}
+          >
+            <BookOpen size={16} strokeWidth={1.5} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
