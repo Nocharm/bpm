@@ -14,7 +14,7 @@
 | 지정 어트리뷰트 | URL + 라벨 **둘 다** (`sp_url`, `sp_url_label`) |
 | 편집 UI 레이아웃 | **2행 분리** — URL 행(필+X, X=URL·라벨 동시 삭제) / 라벨 행(URL 있을 때만 노출, 필+X, X=라벨만 삭제) |
 | 삭제 규칙 | 라벨만 삭제 가능. URL 삭제 시 라벨 동반 삭제(서버 경계에서도 강제) |
-| CSV | `url_label` 컬럼 미추가 — 임포트 그래프는 라벨 없음(UI에서 후속 입력) |
+| CSV | `url_label` 컬럼 **추가**(사용자 수정 2026-07-07). URL이 빈 행의 라벨은 **에러 없이 무시**하고, 임포트 전 서머리에 무시 건수 표기 |
 
 ## 3. 데이터 모델 / 백엔드
 
@@ -61,17 +61,25 @@ urlField.addLabel         "Add label"         / "라벨 추가"     (입력 plac
 urlField.removeUrl        "Remove URL"        / "URL 삭제"      (X aria-label)
 urlField.removeLabel      "Remove label"      / "라벨 삭제"     (X aria-label)
 subprocess.urlInvalid     "URL must start with http:// or https://" / "URL은 http:// 또는 https://로 시작해야 합니다"
+csvImport.ignoredLabels   "{n} label(s) ignored — no URL in the row" / "URL이 없어 무시된 라벨 {n}건"
 ```
 (액션 바는 라벨 자체가 텍스트라 신규 키 불필요 — 라벨 없을 땐 기존 `node.action.openLink`.)
 
-## 8. 비변경 / 스코프 외
+## 8. CSV 임포트 (`frontend/src/lib/csv-import.ts`)
 
-- CSV 임포트/템플릿/AI 프롬프트: `url_label` 미도입(결정). 임포트로 만든 노드는 라벨 없음.
+- `HEADER_COLUMNS`에 `url_label` 추가 — 위치는 `url` 다음, `next` 앞. 템플릿 헤더 `Name,System,Duration,URL,URL_Label,Next`(파서가 소문자 정규화). `MAX_LEN.url_label = 100`.
+- **URL 없는 라벨은 무시**: 행의 `url`이 비어있고 `url_label`이 있으면 에러가 아니라 라벨을 버리고(`url_label → ""`) `ignoredLabelCount`로 집계. 라벨 자체엔 스킴 검증 없음(길이만).
+- **임포트 전 서머리 표기**: 기존 요약 블록("n nodes · m edges")에 `ignoredLabelCount > 0`이면 안내 줄 추가 — i18n `csvImport.ignoredLabels`("{n} label(s) ignored — no URL in the row" / "URL이 없어 무시된 라벨 {n}건"). 새 맵 다이얼로그·에디터 임포트 모달 양쪽 자동 적용(공용 CsvImportSection).
+- AI 추출 프롬프트(`buildAiPromptText`)·컬럼 가이드 문구에 `URL_Label` 열 설명 추가(선택 컬럼, URL 있는 행에서만 의미).
+- vitest: 라벨 왕복, URL 없는 라벨 무시+집계, 길이 초과 에러 케이스 추가.
+
+## 9. 비변경 / 스코프 외
+
 - 미리보기 패널 UI 무변경(주소줄은 URL 원문 유지).
 - 캔버스 노드 본문에 URL/라벨 미표시 — 액션 바가 유일 진입점.
 - displayFields(노드 표시 필드 체크박스)에 url 미추가.
 
-## 9. 검증
+## 10. 검증
 
 - backend pytest: `url_label` 그래프 왕복, NodeIn 캐스케이드(url 비우면 라벨 소거), 지정 PUT에 url/url_label 저장·`SubprocessRefOut` 동봉, url 없이 url_label만 오면 소거되는 지정 케이스.
 - frontend: lint/vitest/build 클린. 스모크 확장 — 라벨 입력 → 액션 바 버튼 텍스트가 라벨로 대체 assert(`data-id="node-action-link"` textContent), 라벨 X → "Open link" 복귀, URL X → 라벨 행 소멸.

@@ -4,6 +4,7 @@
 
 ## 2026-07-07 — URL 라벨 + 필 입력 + 서브프로세스 지정 URL 설계 (feat/url-viewer)
 - 설계 스펙: 노드 url_label(액션 바 버튼 텍스트 대체·호버 열기 아이콘), 인스펙터/모달 공용 UrlLabelField 2행 필(URL X=동반 삭제·라벨 X=라벨만), subprocess는 지정 단계 sp_url/sp_url_label(호스트 수정 불가) — `docs/superpowers/specs/2026-07-07-url-label-design.md`. 풀스택(DB 컬럼 3·API·프론트) 사용자 확정.
+- 스펙 보정(사용자 검토): CSV url_label 컬럼 추가 — URL 없는 라벨은 에러 없이 무시 + 임포트 전 서머리에 무시 건수 표기.
 
 ## 2026-07-06 — 노드 액션 바 + 링크 미리보기 패널 설계 (feat/url-viewer)
 - 구현 계획 작성(Task 1~5: isHttpUrl TDD → NodeActionBar → LinkPreviewPanel → 구 버튼 제거 → 스모크): `docs/superpowers/plans/2026-07-06-node-action-bar-link-preview.md`. locked/undesignated 펼침 미노출 조건 유지 명시(사용자 재확인).
