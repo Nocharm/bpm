@@ -655,3 +655,70 @@ def test_answer_grounding_instruction_in_prompt() -> None:
     )[0]["content"]
     assert "MANUAL_BODY" in system  # 매뉴얼 주입
     assert "모른다" in system  # answer 근거/범위 밖 규칙
+
+
+def test_ai_grounds_on_registered_manual_docs(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """매뉴얼 동기화 — 등록 문서(manual_docs)가 번들 manual.md 대신 AI 근거로 실린다."""
+    _enable_ai(monkeypatch)
+    version_id = _draft_version_checked_out(client)
+    resp = client.post(
+        "/api/manual/docs",
+        json={
+            "format": "markdown",
+            "language": "ko",
+            "content": "# 그라운딩 검증 문서\n등록 매뉴얼 본문 GROUNDCHECK-TOKEN",
+        },
+    )
+    assert resp.status_code == 200
+    doc_id = resp.json()["id"]
+
+    captured: dict = {}
+
+    async def fake_call(messages: list[dict], model: str | None = None) -> str:
+        captured["messages"] = messages
+        return json.dumps({"kind": "answer", "message": "ok"})
+
+    monkeypatch.setattr(ai_client, "call_ai", fake_call)
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "사용법?"})
+    assert resp.status_code == 200
+    system = captured["messages"][0]["content"]
+    assert "GROUNDCHECK-TOKEN" in system  # 등록 문서 본문이 근거로 포함
+    assert "그라운딩 검증 문서" in system  # 제목 헤더 포함
+    # 공유 DB 정리 — 다른 매뉴얼 테스트의 목록 가정을 깨지 않게 생성 문서 삭제
+    assert client.delete(f"/api/manual/docs/{doc_id}").status_code in (200, 204)
+
+
+def test_structure_hints_detect_data_feedback_targets() -> None:
+    """분석 고도화 — 도달성·분기·속성 누락·막다른 노드·중복 제목을 사전탐지."""
+    from app.ai_prompt import _structure_hints
+    from app.schemas import EdgeIn, GraphOut, NodeOut
+
+    graph = GraphOut(
+        groups=[],
+        nodes=[
+            NodeOut(id="s", title="시작", node_type="start"),
+            NodeOut(id="d", title="판단", node_type="decision"),  # 출력 1개 + 라벨 없음 + 속성 비움
+            NodeOut(id="p1", title="검토", node_type="process", assignee="김담당", department="팀", duration="1일"),
+            NodeOut(id="p2", title="검토", node_type="process"),  # 중복 제목 + 막다른(끝 못 감) + 속성 비움
+            NodeOut(id="x", title="외딴 처리", node_type="process"),  # 시작에서 도달 불가(끝으로는 감)
+            NodeOut(id="e", title="끝", node_type="end"),
+        ],
+        edges=[
+            EdgeIn(id="e1", source_node_id="s", target_node_id="d"),
+            EdgeIn(id="e2", source_node_id="d", target_node_id="p1"),
+            EdgeIn(id="e3", source_node_id="p1", target_node_id="e"),
+            EdgeIn(id="e4", source_node_id="p1", target_node_id="p2"),
+            EdgeIn(id="e5", source_node_id="x", target_node_id="e"),
+        ],
+    )
+    hints = "\n".join(_structure_hints(graph))
+    assert "분기 없는 판단 노드" in hints and "d" in hints
+    assert "분기 라벨 없는 판단 노드" in hints
+    assert "시작에서 도달 불가" in hints and "x" in hints
+    assert "끝으로 도달 불가" in hints and "p2" in hints
+    assert "막다른 노드" in hints
+    assert "담당자 미입력" in hints
+    assert "소요시간 미입력" in hints
+    assert '중복 제목 "검토"' in hints
