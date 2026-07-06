@@ -14,6 +14,7 @@ import {
   Info,
   Lightbulb,
   MessageSquare,
+  Minus,
   Paperclip,
   Pause,
   Play,
@@ -64,8 +65,10 @@ interface AiChatPanelProps {
   aiPreviewActive?: boolean;
   onCommitPreview?: () => void;
   onDiscardPreview?: () => void;
-  fontScale?: number; // 헤더 A−/A＋ 로 조절되는 스레드 상대 폰트 배율
+  fontScale?: number; // 대화 전환 바 −T＋ 로 조절되는 스레드 상대 폰트 배율
+  onFontScaleChange?: (scale: number) => void; // 폰트 배율 변경 — 상태는 페이지가 보유(창 닫아도 유지)
   onAutoTitle?: (title: string) => void; // 마지막 답변 키워드로 자동 타이틀 보고
+  onRegisterNewChat?: (startNewChat: () => void) => void; // 새 대화 트리거를 창 헤더 버튼에 노출
 }
 
 // 빠른 프롬프트 칩 — 아이콘 버튼(호버 시 이름·설명 툴팁). 클릭 시 라벨을 즉시 전송.
@@ -88,7 +91,9 @@ export function AiChatPanel({
   onCommitPreview,
   onDiscardPreview,
   fontScale = 1,
+  onFontScaleChange,
   onAutoTitle,
+  onRegisterNewChat,
 }: AiChatPanelProps) {
   const { t } = useI18n();
   // 다중 대화 — 세션 목록(최대 MAX_CHAT_SESSIONS)과 활성 세션. 메시지는 활성 세션에서 파생.
@@ -179,6 +184,11 @@ export function AiChatPanel({
     }
     openFreshSession(sessions);
   };
+
+  // 새 대화 트리거를 창 헤더(page.tsx) 버튼에 노출 — 최신 클로저 유지 위해 매 렌더 재등록
+  useEffect(() => {
+    onRegisterNewChat?.(startNewChat);
+  });
 
   // 확인 시 가장 오래전에 연 대화를 닫고 새 대화 시작
   const confirmCloseOldest = () => {
@@ -348,15 +358,35 @@ export function AiChatPanel({
           </span>
           <ChevronDown size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         </button>
-        <button
-          type="button"
-          data-id="ai-new-chat"
-          onClick={startNewChat}
-          className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-secondary hover:bg-surface-alt hover:text-accent"
+        {/* 폰트 상대 배율 −T＋ — 창 헤더에서 이동(새 대화 버튼과 자리 교환) */}
+        <div
+          data-id="ai-font-scale"
+          className="flex shrink-0 items-center overflow-hidden rounded-sm border border-hairline"
         >
-          <Plus size={14} strokeWidth={1.5} />
-          {t("ai.clearChat")}
-        </button>
+          <button
+            type="button"
+            title={t("ai.fontSmaller")}
+            aria-label={t("ai.fontSmaller")}
+            onClick={() =>
+              onFontScaleChange?.(Math.max(0.8, Math.round((fontScale - 0.1) * 10) / 10))
+            }
+            className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-alt"
+          >
+            <Minus size={13} strokeWidth={1.8} />
+          </button>
+          <span className="px-1 text-fine text-ink-secondary">T</span>
+          <button
+            type="button"
+            title={t("ai.fontLarger")}
+            aria-label={t("ai.fontLarger")}
+            onClick={() =>
+              onFontScaleChange?.(Math.min(1.4, Math.round((fontScale + 0.1) * 10) / 10))
+            }
+            className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-alt"
+          >
+            <Plus size={13} strokeWidth={1.8} />
+          </button>
+        </div>
         {listOpen && (
           <>
             {/* 바깥 클릭 닫힘 — add-node-menu와 동일한 투명 오버레이 패턴 */}

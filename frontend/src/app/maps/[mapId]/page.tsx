@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -30,6 +30,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
+import { IconTip } from "@/components/icon-tip";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
@@ -800,6 +801,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [aiTitleEditing, setAiTitleEditing] = useState(false);
   const [aiTitleManual, setAiTitleManual] = useState(false);
   const [aiFontScale, setAiFontScale] = useState(1);
+  // 새 대화 트리거 — 패널이 등록하고 창 헤더 버튼이 호출
+  const aiNewChatRef = useRef<(() => void) | null>(null);
   const handleAutoTitle = useCallback(
     (title: string) => {
       if (!aiTitleManual) setAiTitle(title);
@@ -7055,19 +7058,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <span className="truncate text-caption-strong text-ink">
                           {aiTitle || t("ai.title")}
                         </span>
-                        <button
-                          type="button"
-                          title={t("ai.renameTitle")}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setAiTitleManual(true);
-                            setAiTitleEditing(true);
-                          }}
-                          className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
-                        >
-                          <Pencil size={14} strokeWidth={1.6} />
-                        </button>
+                        <IconTip label={t("ai.renameTitle")} align="left">
+                          <button
+                            type="button"
+                            aria-label={t("ai.renameTitle")}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setAiTitleManual(true);
+                              setAiTitleEditing(true);
+                            }}
+                            className="rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
+                          >
+                            <Pencil size={14} strokeWidth={1.6} />
+                          </button>
+                        </IconTip>
                       </div>
                     )}
                     <div className="truncate text-[10px] text-ink-tertiary">
@@ -7081,38 +7086,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                   className="flex items-center gap-1"
                   onPointerDown={(event) => event.stopPropagation()}
                 >
-                  {/* 폰트 상대 배율 — 캔버스 줌처럼 −A＋ */}
-                  <div className="flex items-center overflow-hidden rounded-sm border border-hairline">
+                  {/* 새 대화 — 아이콘만(폰트 툴과 자리 교환, 폰트 툴은 패널 대화 전환 바로) */}
+                  <IconTip label={t("ai.clearChat")}>
                     <button
                       type="button"
-                      title={t("ai.fontSmaller")}
-                      onClick={() =>
-                        setAiFontScale((scale) => Math.max(0.8, Math.round((scale - 0.1) * 10) / 10))
-                      }
-                      className="px-1.5 py-1 text-ink-secondary hover:bg-surface-pearl"
+                      data-id="ai-new-chat"
+                      aria-label={t("ai.clearChat")}
+                      onClick={() => aiNewChatRef.current?.()}
+                      className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
                     >
-                      <Minus size={14} strokeWidth={1.8} />
+                      <Plus size={18} strokeWidth={1.5} />
                     </button>
-                    <span className="px-1 text-caption text-ink-secondary">T</span>
+                  </IconTip>
+                  <IconTip label={t("ai.export")}>
                     <button
                       type="button"
-                      title={t("ai.fontLarger")}
-                      onClick={() =>
-                        setAiFontScale((scale) => Math.min(1.4, Math.round((scale + 0.1) * 10) / 10))
-                      }
-                      className="px-1.5 py-1 text-ink-secondary hover:bg-surface-pearl"
+                      aria-label={t("ai.export")}
+                      onClick={() => showToast(t("ai.comingSoon"))}
+                      className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
                     >
-                      <Plus size={14} strokeWidth={1.8} />
+                      <Download size={18} strokeWidth={1.5} />
                     </button>
-                  </div>
-                  <button
-                    type="button"
-                    title={t("ai.export")}
-                    onClick={() => showToast(t("ai.comingSoon"))}
-                    className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
-                  >
-                    <Download size={18} strokeWidth={1.5} />
-                  </button>
+                  </IconTip>
                 </div>
               }
             >
@@ -7128,7 +7123,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onCommitPreview={commitAiPreview}
                 onDiscardPreview={discardAiPreview}
                 fontScale={aiFontScale}
+                onFontScaleChange={setAiFontScale}
                 onAutoTitle={handleAutoTitle}
+                onRegisterNewChat={(fn) => {
+                  aiNewChatRef.current = fn;
+                }}
               />
             </ScopeWindow>
           )}

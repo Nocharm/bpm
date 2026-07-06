@@ -51,6 +51,32 @@ await openAiPanel();
 const counter1 = await page.locator('[data-id="ai-chat-list"]').innerText();
 check("fresh panel counter 1/4", counter1.includes("1/4"), counter1.replace(/\n/g, " "));
 
+// ①-1 헤더 새 대화 아이콘(아이콘만) + 호버 툴팁 박스
+const newChatText = await page.locator('[data-id="ai-new-chat"]').innerText();
+check("header new-chat icon-only", newChatText.trim() === "", `text="${newChatText}"`);
+await page.hover('[data-id="ai-new-chat"]');
+await page.waitForTimeout(200);
+const tipVisible = await page.evaluate(() => {
+  const tips = [...document.querySelectorAll('[data-id="icon-tip"]')];
+  return tips.some(
+    (el) => getComputedStyle(el).display !== "none" && (el.textContent ?? "").includes("새 대화"),
+  );
+});
+check("header tooltip box on hover", tipVisible);
+await page.screenshot({ path: `${SHOT_DIR}/smoke-0-header-tooltip.png` });
+
+// ①-2 대화 전환 바의 폰트 배율 툴 — T+ 클릭 시 스레드 zoom 1.1
+await page
+  .locator(
+    '[data-id="ai-font-scale"] button[title="글자 크게"], [data-id="ai-font-scale"] button[title="Larger text"]',
+  )
+  .click();
+await page.waitForTimeout(200);
+const zoomApplied = await page.evaluate(
+  () => [...document.querySelectorAll("div")].some((el) => el.style.zoom === "1.1"),
+);
+check("font scale tool in chat bar", zoomApplied);
+
 // ② 4개 세션 시드 → 패널 닫았다 열어 재하이드레이션
 await page.evaluate((keys) => {
   const mk = (id, at, topic) => ({
