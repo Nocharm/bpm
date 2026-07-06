@@ -16,6 +16,25 @@
 | U6 | 서브프로세스 노드 단일색 고정(색 UI 숨김 + 렌더 강제) | 검토 대기 | `2b16e1e` |
 | U7 | 데모 시드 지정 심기 + 통합 스모크 | 검토 대기 | |
 
+## 검토 피드백 수정 (2026-07-06 1차 검증 — main 머지 `2190e54` 후)
+
+| 항목 | 내용 | 상태 | 커밋 |
+|---|---|---|---|
+| F1 | 비교화면에서 subprocess 노드와 연결된 엣지 미표시 | 검토 대기 | |
+| F2 | subprocess 2개 연쇄 시 앞 노드 펼치면 대표엔드→다음 subprocess 엣지 소실(접으면 정상) | 검토 대기 | |
+| F3 | 임베드 스타트/엔드 핸들 엣지 끌기 차단 + 접었을 때 대표엔드 포함 모든 엔드가 다음 노드로 연결 | 검토 대기 | |
+| F4 | subprocess 더블클릭 → 편집 모달로 맵핑 변경(현행 프레임 변동 제거), 내부→외부 연결도 차단 | 검토 대기 | |
+| F5 | subprocess 타이틀 편집 차단 — 링크된 맵 이름 그대로 사용(캔버스 인라인·인스펙터·편집 모달·컨텍스트 메뉴) | 검토 대기 | |
+
+### F1~F5 원인·수정 요약 (2026-07-06)
+- **F1** 원인: 비교 엣지는 전부 4변 핸들(t-/s-)로 재매핑되는데 **unchanged** subprocess만 diff 마커가 없어 전용 핸들(SubprocessHandles)을 렌더 → 엣지 앵커 실패. 수정: compare가 노드에 `sideHandles` 주입, subprocess 렌더가 diff 또는 sideHandles면 4변 핸들.
+- **F2** 원인: 펼침 게이트웨이(진출→후속)가 targetHandle을 `t-left`로 하드코딩 — 후속이 subprocess면 그 핸들이 없음. 수정: 게이트웨이를 `withSubprocessHandles`로 보정(subprocess target→`in`, source→`__primary__`).
+- **F3** 원인: 노드 레벨 `connectable:false`는 있었으나 Handle 컴포넌트가 `isConnectable`을 forward하지 않아 무효. 수정: ProcessNode가 isConnectable을 전 핸들에 전달(임베드 자식 전체 — 시작/끝 포함 — 끌기 차단). 접힘 시 전체 엔드 연결: 명시 엣지 없는 끝 핸들에 표시 전용 엣지(`sp-ends:*`)를 파생해 대표끝의 다음 노드로 수렴(저장·선택 불가).
+- **F4** 수정: 노드 더블클릭 = 편집 모달(subprocess 포함, 드릴인 제거 — 딥뷰는 임베드 자식 더블클릭 경로 유지). 내부→외부 연결 차단은 F3와 동일 메커니즘.
+- **F5** 수정: 타이틀 편집 4개 진입점 차단 — 캔버스 인라인(NodeTitle editable=false + startRename 가드), 인스펙터 제목 disabled, 편집 모달 제목 disabled, 컨텍스트 메뉴 "이름 변경" 숨김.
+- 검증: 브라우저(:3001) — 비교화면 unchanged subprocess 엣지 표시, 펼침 시 End·End B→다음 subprocess 게이트웨이 유지, 임베드 핸들 connectable 클래스 제거(루트는 유지), `sp-ends:` 합성 엣지 DOM 확인, 더블클릭 모달+제목 비활성(모달·인스펙터). lint 0·build 성공. (시연 보강 데이터: 맵1 v5에 End B, 맵2 v11/v12에 연쇄·lineage — 로컬 dev.db 전용.)
+- 관찰(범위 외): 인스펙터 노드 타입 라벨이 subprocess에서 "프로세스"로 표시(NODE_TYPE_OPTIONS에 subprocess 부재 → 폴백). 별건으로 처리 가능.
+
 ## 시현 시나리오
 
 로컬 실행 (backend `:8000` + frontend `:3000`):

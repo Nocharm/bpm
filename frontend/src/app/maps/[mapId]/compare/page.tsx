@@ -196,6 +196,8 @@ function buildAppNodes(
       diffStatus: toDiffStatus(m.status),
       diffNote: noteOf(m),
       diffFields: fieldsOf(m),
+      // 비교 엣지는 전부 4변 핸들로 재매핑 — unchanged subprocess도 NodeHandles를 렌더해야 앵커됨 (F1)
+      sideHandles: true,
     },
   }));
 }

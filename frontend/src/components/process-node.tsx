@@ -103,16 +103,19 @@ function NodeTitle({
   id,
   label,
   displayLabel,
+  editable = true,
 }: {
   id: string;
   label: string;
   displayLabel?: string;
+  // false면 인라인 이름 편집 진입 차단 — subprocess는 링크된 맵 이름 고정 (F5)
+  editable?: boolean;
 }) {
   const { editingNodeId, onStartRename, onRename, onCancelRename } = useNodeActions();
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
 
-  if (editingNodeId === id && onRename) {
+  if (editable && editingNodeId === id && onRename) {
     return (
       <input
         autoFocus
@@ -144,9 +147,9 @@ function NodeTitle({
   }
   return (
     <span
-      className={onStartRename ? "cursor-text" : undefined}
+      className={editable && onStartRename ? "cursor-text" : undefined}
       onDoubleClick={
-        onStartRename
+        editable && onStartRename
           ? (event) => {
               // 타이틀 더블클릭 = 이름 편집 (노드 더블클릭=요약창으로 버블되지 않게 차단)
               event.stopPropagation();
@@ -355,12 +358,13 @@ function ExpandToggleButton({ nodeId }: { nodeId: string }) {
 }
 
 // 하위프로세스 노드의 핸들 — 좌측 단일 입력, 우측 끝 노드별 출력 (끝 없으면 단일 PRIMARY_END_HANDLE)
-function SubprocessHandles({ ends }: { ends: SubEnd[] }) {
+// connectable — 노드 레벨 connectable(임베드 읽기전용 자식 false)을 Handle에 전달해야 실제로 끌기가 막힌다 (F3)
+function SubprocessHandles({ ends, connectable }: { ends: SubEnd[]; connectable: boolean }) {
   return (
     <>
-      <Handle id={SUBPROCESS_IN_HANDLE} type="target" position={Position.Left} />
+      <Handle id={SUBPROCESS_IN_HANDLE} type="target" position={Position.Left} isConnectable={connectable} />
       {ends.length === 0 ? (
-        <Handle id={PRIMARY_END_HANDLE} type="source" position={Position.Right} />
+        <Handle id={PRIMARY_END_HANDLE} type="source" position={Position.Right} isConnectable={connectable} />
       ) : (
         ends.map((end, i) => (
           <Handle
@@ -370,6 +374,7 @@ function SubprocessHandles({ ends }: { ends: SubEnd[] }) {
             position={Position.Right}
             style={{ top: `${((i + 1) / (ends.length + 1)) * 100}%` }}
             title={end.title}
+            isConnectable={connectable}
           />
         ))
       )}
@@ -380,13 +385,14 @@ function SubprocessHandles({ ends }: { ends: SubEnd[] }) {
 const NODE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
 
 // 4변 각각에 source·target 핸들(총 8개) — 엣지가 어느 변에든 붙도록. 어느 핸들에 붙을지는 엣지가 id로 지정.
-function NodeHandles() {
+// connectable — SubprocessHandles와 동일하게 노드 레벨 값을 명시 전달(기본 true로 무시되는 것 방지) (F3)
+function NodeHandles({ connectable }: { connectable: boolean }) {
   return (
     <>
       {NODE_SIDES.map((side) => (
         <Fragment key={side}>
-          <Handle id={`t-${side}`} type="target" position={toPosition(side)} />
-          <Handle id={`s-${side}`} type="source" position={toPosition(side)} />
+          <Handle id={`t-${side}`} type="target" position={toPosition(side)} isConnectable={connectable} />
+          <Handle id={`s-${side}`} type="source" position={toPosition(side)} isConnectable={connectable} />
         </Fragment>
       ))}
     </>
@@ -406,7 +412,8 @@ function nodeStyle(color: string, fill: string): CSSProperties {
 }
 
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
-export function ProcessNode({ id, data }: NodeProps<AppNode>) {
+// isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
+export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   const { t } = useI18n();
   // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9)
   const color =
@@ -432,7 +439,8 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
         <div className="min-w-0 flex-1">
           <div className="font-medium text-ink">
-            <NodeTitle id={id} label={data.label} />
+            {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
+            <NodeTitle id={id} label={data.label} editable={false} />
           </div>
           {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
           <NodeFields data={data} />
@@ -455,8 +463,13 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
           (data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />
         )}
         {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨.
-            비교뷰(diff)에선 방향 토글(LR/TB)로 상/하 진입이 필요해 4변 핸들(NodeHandles)을 쓴다. */}
-        {diff ? <NodeHandles /> : <SubprocessHandles ends={data.subEnds ?? []} />}
+            비교뷰는 모든 엣지를 4변 핸들로 재매핑하므로 diff 여부와 무관하게 NodeHandles 필요
+            (unchanged subprocess가 SubprocessHandles를 렌더하면 엣지가 앵커 실패 — F1). */}
+        {diff || data.sideHandles ? (
+          <NodeHandles connectable={isConnectable ?? true} />
+        ) : (
+          <SubprocessHandles ends={data.subEnds ?? []} connectable={isConnectable ?? true} />
+        )}
       </div>
     );
   }
@@ -488,7 +501,7 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         {data.assigneeWarning && <AssigneeWarningBadge />}
         {/* decision 노드는 기존 하위가 있을 때만 펼침 토글 */}
         {data.hasChildren && <ExpandToggleButton nodeId={id} />}
-        <NodeHandles />
+        <NodeHandles connectable={isConnectable ?? true} />
       </div>
     );
   }
@@ -526,7 +539,7 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {data.assigneeWarning && <AssigneeWarningBadge />}
       {data.hasChildren && <ExpandToggleButton nodeId={id} />}
-      <NodeHandles />
+      <NodeHandles connectable={isConnectable ?? true} />
     </div>
   );
 }

@@ -55,6 +55,8 @@ export type NodeData = {
   spAssignee?: string | null;
   spSystem?: string | null;
   spDuration?: string | null;
+  // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)
+  sideHandles?: boolean;
 };
 
 export type AppNode = Node<NodeData>;

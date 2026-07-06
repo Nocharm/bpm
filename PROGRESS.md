@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 1차 검증 피드백 F1~F5 수정 (사용자: 비교 엣지·연쇄 펼침 엣지·임베드 핸들·더블클릭·타이틀)
+- F1 비교화면: unchanged subprocess가 전용 핸들을 렌더해 엣지 앵커 실패 → compare가 `sideHandles` 주입, 렌더는 diff 또는 sideHandles면 4변 핸들. F2 펼침 게이트웨이 targetHandle `t-left` 하드코딩 → `withSubprocessHandles` 보정(subprocess `in`/`__primary__`). F3 Handle에 `isConnectable` 미전달로 임베드 자식 connectable:false 무효 → 전 핸들 forward(시작/끝·내부→외부 끌기 차단) + 접힘 시 명시 엣지 없는 끝 핸들에 표시 전용 `sp-ends:*` 엣지 파생(전체 엔드→다음 노드 수렴). F4 더블클릭=편집 모달(드릴인 제거, 딥뷰는 임베드 자식 경로 유지). F5 타이틀 편집 4진입점 차단(인라인·인스펙터·모달·컨텍스트 메뉴).
+- 검증: 브라우저 전 항목(비교 엣지·게이트웨이 유지·connectable 클래스·합성 엣지·모달·비활성 입력) + lint 0 + build 성공. 상세는 `SUBPROCESS-DESIGNATION.md` F1~F5 요약.
+
 ## 2026-07-06 — 로딩 개선: 피커 무한스크롤 25청크 (사용자: 직원 5000명 피커 부하, 훅 vs 일괄 판단 후 클라 증분 렌더 확정)
 - `lib/use-infinite-slice.ts` 신설 — 25개 렌더 후 목록 끝 센티널(IntersectionObserver) 도달 시 +25, resetKey(검색어) 변경 시 리셋. fetch는 기존 1회 유지(827KB/gzip 72KB·파싱 3ms로 전송은 병목 아님 — 병목은 5000행 DOM).
 - 적용: `principal-picker`(협업자·결재자·그룹 등 7곳 공용, 빈 포커스 전량 렌더가 주범), `search-select`(담당자·부서 등 6곳 공용), `transfer-checkout-dialog`. 검색 시 8개 캡은 유지.

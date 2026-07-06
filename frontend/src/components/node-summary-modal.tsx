@@ -328,13 +328,14 @@ export function NodeSummaryModal({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {/* 제목 */}
+              {/* 제목 — subprocess는 링크된 맵 이름 고정이라 편집 차단 (F5) */}
               <div>
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
                 <input
-                  className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
+                  className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink disabled:bg-surface-alt disabled:text-ink-tertiary"
                   value={form.label}
                   aria-label={t("field.title")}
+                  disabled={nodeType === "subprocess"}
                   onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
                 />
               </div>

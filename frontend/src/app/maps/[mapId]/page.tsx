@@ -4289,7 +4289,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           ]
         : [];
       // 이름 변경 — 인라인 타이틀 편집 진입(startRename). 편집 전용이라 readOnly에선 숨김(F2 전역키와 동일).
-      const renameItems: ContextMenuItem[] = readOnly
+      // subprocess는 타이틀=링크된 맵 이름 고정이라 항목 자체 숨김 (F5)
+      const renameItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
         ? []
         : [
             {
@@ -4647,9 +4648,14 @@ function MapEditor({ mapId }: { mapId: number }) {
 
     // 게이트웨이(A→진입, 진출→후속, 깊이 무관) + A→B 숨김(깊이 무관)
     const combinedEdges = [...edges, ...childEdges];
+    // 게이트웨이 끝점이 subprocess면 전용 핸들(in/__primary__)로 보정 — 하드코딩 t-left는 subprocess에
+    // 존재하지 않아 앵커 실패(연쇄 subprocess 펼침 시 진출 엣지 소실, F2).
+    const subprocessIds = new Set(
+      tree.nodes.filter((n) => n.node_type === "subprocess").map((n) => n.id),
+    );
     const gateways = buildGatewayEdges(expandedInline, childNodes, combinedEdges).map((edge) => ({
       ...EDGE_DEFAULTS,
-      ...edge,
+      ...withSubprocessHandles(edge, (nodeId) => subprocessIds.has(nodeId)),
       animated: false,
       selectable: false,
       deletable: false,
@@ -4954,8 +4960,52 @@ function MapEditor({ mapId }: { mapId: number }) {
         markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
       };
     });
+    // 접힘 subprocess의 모든 끝(대표 포함)이 다음 노드로 연결돼 보이게 — 명시 엣지가 없는 끝 핸들에
+    // 표시 전용 엣지를 파생(저장·선택 불가). 임베드 끝의 수동 배선이 차단되므로 기본 진출 흐름을 시각화 (F3).
+    const syntheticEndEdges: Edge[] = [];
+    for (const node of nodes) {
+      if (node.data.nodeType !== "subprocess" || expandedInline.has(node.id)) {
+        continue;
+      }
+      const k = linkKey({
+        linked_map_id: node.data.linkedMapId ?? null,
+        follow_latest: node.data.followLatest ?? false,
+        linked_version_id: node.data.linkedVersionId ?? null,
+      });
+      const resolved = k ? resolvedCache.get(k) : undefined;
+      const ends = resolved ? deriveSubEnds(resolved) : [];
+      if (ends.length <= 1) {
+        continue;
+      }
+      const outgoing = edges.filter((edge) => edge.source === node.id);
+      if (outgoing.length === 0) {
+        continue;
+      }
+      // sourceHandle 미지정(레거시)은 첫 핸들(=대표끝)에 앵커되므로 대표끝을 커버한 것으로 본다
+      const covered = new Set(outgoing.map((edge) => edge.sourceHandle ?? PRIMARY_END_HANDLE));
+      const anchor =
+        outgoing.find((edge) => (edge.sourceHandle ?? PRIMARY_END_HANDLE) === PRIMARY_END_HANDLE) ??
+        outgoing[0];
+      for (const end of ends) {
+        if (covered.has(end.key)) {
+          continue;
+        }
+        syntheticEndEdges.push({
+          ...EDGE_DEFAULTS,
+          id: `sp-ends:${node.id}:${end.key}`,
+          source: node.id,
+          sourceHandle: end.key,
+          target: anchor.target,
+          targetHandle: anchor.targetHandle,
+          type: edgeStyle,
+          selectable: false,
+          deletable: false,
+          focusable: false,
+        } as Edge);
+      }
+    }
     if (!inlineComposition) {
-      return currentStyled;
+      return [...currentStyled, ...syntheticEndEdges];
     }
     // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김, 아니면 맵 전역 type만 맞춤. 게이트웨이는 합성 시 스타일 완료.
     // 포커스 모드 Step 1: 비활성 스코프라 dim + 비선택(읽기전용).
@@ -4973,8 +5023,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     const gatewayStyled = inlineComposition.gateways.map((edge) =>
       edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
     );
-    return [...currentStyled, ...childStyled, ...gatewayStyled];
-  }, [edges, selectedId, edgeStyle, inlineComposition, flowReach, hoveredEdgeId]);
+    return [...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticEndEdges];
+  }, [edges, nodes, resolvedCache, expandedInline, selectedId, edgeStyle, inlineComposition, flowReach, hoveredEdgeId]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -5236,10 +5286,15 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
   const startRename = useCallback(
     (id: string) => {
-      if (!readOnly) {
-        setSelectedId(id);
-        setEditingNodeId(id);
+      if (readOnly) {
+        return;
       }
+      // subprocess 타이틀은 링크된 맵 이름 고정 — 이름 편집 진입 차단 (F5)
+      if (nodesRef.current.find((node) => node.id === id)?.data.nodeType === "subprocess") {
+        return;
+      }
+      setSelectedId(id);
+      setEditingNodeId(id);
     },
     [readOnly],
   );
@@ -6276,23 +6331,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
-                        // 하위프로세스 노드 더블클릭 = 그 링크맵으로 읽기전용 딥뷰 드릴인(spec §6).
-                        if (node.data?.nodeType === "subprocess" && node.data?.linkedMapId != null) {
-                          // 카메라 보정 — 노드의 표시−저장 위치만큼 옮겨 드릴 후 제자리(인라인 JSX라 ref 쓰기 허용).
-                          const stored = fullGraph?.nodes.find((n) => n.id === node.id);
-                          if (stored) {
-                            focusCamRef.current = {
-                              shift: {
-                                x: node.position.x - stored.pos_x,
-                                y: node.position.y - stored.pos_y,
-                              },
-                              vp: reactFlow.getViewport(),
-                            };
-                          }
-                          drillIntoSubprocess(node.id);
-                          return;
-                        }
-                        // 그 외 — 이름 외 영역 더블클릭 = 요약/편집 모달. 타이틀 더블클릭은 process-node가 이름 편집으로.
+                        // 더블클릭 = 요약/편집 모달 — subprocess 포함(딥뷰 드릴인 대신, 프레임 변동 제거 F4).
+                        // 드릴인은 임베드 자식 더블클릭·펼침 토글 경로로 유지. 타이틀 더블클릭은 이름 편집(비-subprocess).
                         setSelectedId(node.id);
                         setSummaryNodeId(node.id);
                       }}
@@ -7014,7 +7054,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <input
                           className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
                           value={selectedNode.data.label}
-                          disabled={readOnly}
+                          // subprocess 타이틀은 링크된 맵 이름 고정 — 편집 차단 (F5)
+                          disabled={readOnly || selectedNode.data.nodeType === "subprocess"}
                           onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
                         />
                       </div>
