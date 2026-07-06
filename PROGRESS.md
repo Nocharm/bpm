@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — Task 4: `CsvImportSection` 공용 컴포넌트 + i18n
+- `frontend/src/components/csv-import-section.tsx` 신설(useRef 파일 입력·BOM 템플릿 다운로드·요약/에러 표시·행 재선택 리셋) — CSV 파싱 결과(`outcome`·`fileName`)의 3타입 렌더(버튼만/요약·에러 출력·클리어). i18n 14개 키(`csvImport.*` en/ko) 추가 — 기존 common 이후 알파벳 순서, 숫자 파라미터는 직접 전달(`nodes: outcome.nodeCount` 등). 검증: lint 0 errors·build 성공.
+
 ## 2026-07-06 — Task 3: CSV 파서·그래프 변환 라이브러리 (TDD)
 - `frontend/src/lib/csv-import.ts` 신설 — RFC4180 파싱(따옴표 셀·CRLF·빈 행 스킵·실제 행 번호), UTF-8/EUC-KR 디코딩(BOM 제거), 검증(헤더·Name 필수/중복·길이·URL 스킴·행 상한 500), 그래프 변환(자동 Start/End·Next≥2 decision 추론·dagre LR 배치·genId), 템플릿 CSV. 브리프 테스트 편차 1건(코디네이터 승인): Name 누락 행 `,,,,`→`,ERP,,,` — 전부 빈 행은 파서가 스킵하므로 데이터 있는 행으로 교체. vitest 14개 신규 — 전체 83 passed, lint 0 errors(무관 경고 1건).
 

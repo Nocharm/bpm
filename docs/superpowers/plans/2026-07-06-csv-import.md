@@ -829,7 +829,7 @@ git commit -m "feat(frontend): CSV parser + graph builder — CSV 파서·그래
 - Consumes: Task 3의 `buildGraphFromCsv`, `buildTemplateCsv`, `decodeCsvBuffer`, `CsvImportOutcome`.
 - Produces: `CsvImportSection` 컴포넌트 — props `{ outcome: CsvImportOutcome | null; fileName: string | null; onChange: (outcome: CsvImportOutcome | null, fileName: string | null) => void; disabled?: boolean }`. Task 5(다이얼로그)·Task 6(에디터 모달)이 사용.
 
-- [ ] **Step 1: i18n 키 추가**
+- [x] **Step 1: i18n 키 추가**
 
 `frontend/src/lib/i18n-messages.ts` — `en` 객체에 (알파벳/그룹 순서에 맞는 위치, `manual.*` 근처):
 
@@ -871,7 +871,7 @@ git commit -m "feat(frontend): CSV parser + graph builder — CSV 파서·그래
   "csvImport.toolbar": "CSV 임포트",
 ```
 
-- [ ] **Step 2: 컴포넌트 구현**
+- [x] **Step 2: 컴포넌트 구현**
 
 `frontend/src/components/csv-import-section.tsx` 전체:
 
@@ -1001,11 +1001,11 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled }: CsvI
 
 주의: `t()` 인자 타입이 `Record<string, string>`이면 숫자 보간에서 tsc 에러 — 그 경우 `String(...)`으로 감싼다(`{ nodes: String(outcome.nodeCount), ... }`). 기존 사용례(`group.removedN`, page.tsx:3033의 `{ n: removed.length }`)를 먼저 확인해 같은 방식을 따른다.
 
-- [ ] **Step 3: 검증**
+- [x] **Step 3: 검증**
 
 Run (frontend/ 에서): `npm run lint` → 0 errors. `npm run build` → 성공. (렌더 확인은 Task 5·6에서 브라우저로.)
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add frontend/src/components/csv-import-section.tsx frontend/src/lib/i18n-messages.ts docs/superpowers/plans/2026-07-06-csv-import.md PROGRESS.md
