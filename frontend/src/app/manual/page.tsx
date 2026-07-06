@@ -185,18 +185,19 @@ export default function ManualPage() {
                 등록 문서가 없으면(번들 fallback) 기존 정적 타이틀 유지 */}
             {docList && docList.length > 0 ? (
               <div className="relative">
+                {/* 맵 화면 제목 드롭다운과 동일한 테두리 버튼 — 긴 제목은 말줄임 (F11) */}
                 <button
                   type="button"
                   data-id="manual-doc-dropdown"
-                  className="inline-flex items-center gap-1 rounded-sm px-1 text-tagline text-ink hover:bg-surface-alt"
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-body-strong text-ink hover:bg-surface-alt"
                   aria-haspopup="listbox"
                   aria-expanded={listOpen}
                   onClick={() => setListOpen((v) => !v)}
                 >
-                  <span className="max-w-[24rem] truncate">
+                  <span className="max-w-[20rem] truncate">
                     {doc?.title || t("manual.title")}
                   </span>
-                  <ChevronDown size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 </button>
                 {listOpen && (
                   <>
@@ -239,21 +240,8 @@ export default function ManualPage() {
               ))}
           </div>
 
-          <div className="flex flex-1 justify-center">
-            <SearchBox
-              className="w-full max-w-md"
-              value={search}
-              onChange={(value) => {
-                clearHighlight();
-                setSearch(value);
-                setMatchPos(-1);
-              }}
-              placeholder={t("manual.searchPlaceholder")}
-              inputRef={searchRef}
-              onEnter={jumpToMatch}
-              dataId="manual-search"
-            />
-          </div>
+          {/* 검색은 본문 상단 중앙으로 이동(F11) — 헤더는 제목(좌)·읽기 도구(우)만 */}
+          <div className="flex-1" />
 
           {/* 읽기 도구 — 읽기폭·본문 한정 읽기 테마 */}
           <div className="flex shrink-0 items-center gap-1">
@@ -318,24 +306,42 @@ export default function ManualPage() {
           </aside>
           )}
 
-          <article
-            ref={bodyRef}
-            className={
-              "min-w-0 flex-1 overflow-y-auto px-6 py-4 " +
-              // 본문 한정 읽기 테마 — 라이트 전용·토큰 제약상 다크 대신 warm paper 패널(테두리+그림자로 명확히 구분)
-              (readTheme
-                ? "rounded-md border border-hairline bg-surface-pearl shadow-md"
-                : "rounded-sm")
-            }
-          >
-            <div className={"mx-auto " + (readWide ? "max-w-none" : "max-w-[46rem]")}>
-              {content === "" ? (
-                <p className="text-caption text-ink-tertiary">{t("manual.empty")}</p>
-              ) : (
-                renderedBody
-              )}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* 본문검색 — 본문 영역 최상단 가운데 (F11) */}
+            <div className="flex shrink-0 justify-center pb-3">
+              <SearchBox
+                className="w-full max-w-md"
+                value={search}
+                onChange={(value) => {
+                  clearHighlight();
+                  setSearch(value);
+                  setMatchPos(-1);
+                }}
+                placeholder={t("manual.searchPlaceholder")}
+                inputRef={searchRef}
+                onEnter={jumpToMatch}
+                dataId="manual-search"
+              />
             </div>
-          </article>
+            <article
+              ref={bodyRef}
+              className={
+                "min-w-0 flex-1 overflow-y-auto px-6 py-4 " +
+                // 본문 한정 읽기 테마 — 라이트 전용·토큰 제약상 다크 대신 warm paper 패널(테두리+그림자로 명확히 구분)
+                (readTheme
+                  ? "rounded-md border border-hairline bg-surface-pearl shadow-md"
+                  : "rounded-sm")
+              }
+            >
+              <div className={"mx-auto " + (readWide ? "max-w-none" : "max-w-[46rem]")}>
+                {content === "" ? (
+                  <p className="text-caption text-ink-tertiary">{t("manual.empty")}</p>
+                ) : (
+                  renderedBody
+                )}
+              </div>
+            </article>
+          </div>
         </div>
       </div>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

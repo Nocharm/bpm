@@ -140,7 +140,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
             <div
               key={doc.id}
               className={
-                "flex items-center gap-2 rounded-sm px-2 py-1.5 " +
+                "group flex items-center gap-2 rounded-sm px-2 py-1.5 " +
                 (doc.id === editingId ? "bg-accent-tint" : "hover:bg-surface-alt")
               }
             >
@@ -166,9 +166,10 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
                   </span>
                 )}
               </button>
+              {/* 삭제 — 행 호버 시에만 노출 (F11) */}
               <button
                 type="button"
-                className="shrink-0 rounded-xs p-1 text-ink-tertiary hover:bg-error/10 hover:text-error"
+                className="shrink-0 rounded-xs p-1 text-ink-tertiary opacity-0 transition-opacity hover:bg-error/10 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
                 title={t("manual.manage.delete")}
                 aria-label={t("manual.manage.delete")}
                 onClick={() => setPendingDelete(doc)}

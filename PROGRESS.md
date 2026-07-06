@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — F11: 매뉴얼 UI 폴리시 (사용자: 삭제 버튼 호버·드롭다운 테두리·검색 위치)
+- 관리 목록 삭제 버튼 = 행 호버 시에만(opacity + group-hover, focus-visible 유지). 뷰어 타이틀 드롭다운에 맵 제목 버튼과 동일한 테두리 필 + 긴 제목 말줄임(max-w-20rem). 본문검색을 헤더에서 본문 영역 최상단 가운데로 이동(헤더는 제목·읽기 도구만). 검증: lint 0·브라우저(호버 노출·테두리·검색 위치).
+
 ## 2026-07-06 — F10: 매뉴얼 다중 문서 (사용자: 공지사항처럼 복수 문서 + 한/영 + 드롭다운 목록)
 - 백엔드: `manual_docs` 다중 행 확장(title·language·sort_order + 백필), `extract_title`(md 첫 헤딩/html 첫 h태그), CRUD `GET/POST /api/manual/docs`·`GET/PUT/DELETE /api/manual/docs/{id}`(쓰기 sysadmin, 목록 language 필터·업로드순). 레거시 단일 게시본 GET/PUT·번들 fallback 유지(레거시 행은 ko 흡수·제목 읽기 시 추출). 테스트 +5(제목 추출·필터·재추출·삭제·403) — 420 passed.
 - 관리 패널: 문서 목록(언어 뱃지·자동 제목·작성자/시각·삭제 확인) + 새 문서/수정 편집기(포맷+**언어 세그먼트**·업로드·배포본·미리보기·게시). 뷰어(/manual): 제목=드롭다운(맵 제목 버튼식, 현재 한/영 목록만) + **언어 전환 시 동일 순번 문서 오픈**(docIndexRef), 문서 0건이면 번들 fallback. 관리자 매뉴얼 §11 en/ko 갱신.
