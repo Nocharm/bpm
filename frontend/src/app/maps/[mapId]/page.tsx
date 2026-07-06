@@ -772,6 +772,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // AI 채팅 패널 상태
   const [aiOpen, setAiOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  // 편집용 매뉴얼 사이트 주소(.env MANUAL_URL) — 비어 있으면 툴바 버튼 숨김 (F9)
+  const [manualUrl, setManualUrl] = useState("");
   // BPM 시스템 관리자 여부 — 활성 점유 강제 인수(force checkout)는 sysadmin만 노출
   const [isSysadmin, setIsSysadmin] = useState(false);
   // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
@@ -1715,6 +1717,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (alive) {
           setUsername(me.username);
           setAiEnabled(me.ai_enabled);
+          setManualUrl(me.manual_url);
           setIsSysadmin(me.is_sysadmin);
         }
       })
@@ -6218,6 +6221,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
           onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
+          manualUrl={manualUrl}
         />
       )}
 

@@ -9,6 +9,7 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  BookOpen,
   Network,
 } from "lucide-react";
 import { type ComponentType } from "react";
@@ -39,6 +40,8 @@ interface EditorToolbarProps {
   onAutoArrange: () => void;
   onAlign: (axis: AlignAxis) => void;
   onDistribute: (axis: DistributeAxis) => void;
+  // 편집용 매뉴얼 사이트 주소(.env MANUAL_URL) — 비어 있으면 버튼 숨김 (F9)
+  manualUrl?: string;
 }
 
 export function EditorToolbar({
@@ -47,6 +50,7 @@ export function EditorToolbar({
   onAutoArrange,
   onAlign,
   onDistribute,
+  manualUrl,
 }: EditorToolbarProps) {
   const { t } = useI18n();
   const iconBtn =
@@ -92,6 +96,19 @@ export function EditorToolbar({
           <Icon size={16} strokeWidth={1.5} />
         </button>
       ))}
+      {/* 편집용 매뉴얼 사이트 — 행 우측 끝, MANUAL_URL 설정 시에만 (F9) */}
+      {manualUrl && (
+        <button
+          type="button"
+          data-id="toolbar-manual-site"
+          className={`${iconBtn} ml-auto`}
+          onClick={() => window.open(manualUrl, "_blank", "noopener,noreferrer")}
+          title={t("editor.manualSite")}
+          aria-label={t("editor.manualSite")}
+        >
+          <BookOpen size={16} strokeWidth={1.5} />
+        </button>
+      )}
     </div>
   );
 }

@@ -102,6 +102,7 @@ async def get_me(
     return MeOut(
         username=login_id,
         ai_enabled=settings.ai_enabled,
+        manual_url=settings.manual_url,
         name=emp.name if emp else login_id,
         role=emp.role if emp else "user",
         department=emp.department if emp else "",

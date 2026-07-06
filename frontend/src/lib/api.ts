@@ -470,6 +470,8 @@ export interface WorkflowState {
 export interface Me {
   username: string;
   ai_enabled: boolean;
+  // 편집용 매뉴얼 사이트 주소 — 비어 있으면 에디터 버튼 숨김 (F9)
+  manual_url: string;
   name: string;
   role: "admin" | "user";
   department: string;

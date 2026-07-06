@@ -566,6 +566,8 @@ class NoticeOut(BaseModel):
 class MeOut(BaseModel):
     username: str
     ai_enabled: bool
+    # 편집용 매뉴얼 사이트 주소 — 비어 있으면 에디터 버튼 숨김 (F9)
+    manual_url: str = ""
     name: str
     role: str
     department: str

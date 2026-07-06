@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — F9: MANUAL_URL 환경변수 + 에디터 매뉴얼 사이트 버튼
+- Settings `manual_url`(.env `MANUAL_URL`, 루트 .env.example 주석 포함) → `/api/me` 노출 → 에디터 툴바(정렬 행) **우측 끝** BookOpen 버튼(`toolbar-manual-site`, 새 탭 noopener). 미설정 시 숨김. 검증: pytest 415·me 응답·브라우저 버튼 위치/툴팁·lint 0.
+
 ## 2026-07-06 — F8: 노드 검색 단축키 `/` + 플레이스홀더 축약 (사용자: 플레이스홀더 길고 Ctrl+K → /)
 - 플레이스홀더 "노드 검색 — 초성 가능 (Ctrl+K)" → "노드 검색 (/)" (en 동일). 단축키 Ctrl+K → `/`(입력 중 제외, 사이드바 접힘이면 펼친 뒤 포커스 — 펼쳐진 상태는 rAF 없이 즉시 포커스로 견고화). 숏컷 레전드·사용자 매뉴얼 en/ko·번들 manual.md 동기 갱신.
 - 검증: 브라우저 `/` 포커스 확인·lint 0. (검증 삽질 기록: 자동화 탭이 hidden이라 rAF 기반 포커스가 안 돌아 코드 오인 — 실환경 무관.)
