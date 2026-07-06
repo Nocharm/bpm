@@ -32,6 +32,20 @@
 - F1 비교화면: unchanged subprocess가 전용 핸들을 렌더해 엣지 앵커 실패 → compare가 `sideHandles` 주입, 렌더는 diff 또는 sideHandles면 4변 핸들. F2 펼침 게이트웨이 targetHandle `t-left` 하드코딩 → `withSubprocessHandles` 보정(subprocess `in`/`__primary__`). F3 Handle에 `isConnectable` 미전달로 임베드 자식 connectable:false 무효 → 전 핸들 forward(시작/끝·내부→외부 끌기 차단) + 접힘 시 명시 엣지 없는 끝 핸들에 표시 전용 `sp-ends:*` 엣지 파생(전체 엔드→다음 노드 수렴). F4 더블클릭=편집 모달(드릴인 제거, 딥뷰는 임베드 자식 경로 유지). F5 타이틀 편집 4진입점 차단(인라인·인스펙터·모달·컨텍스트 메뉴).
 - 검증: 브라우저 전 항목(비교 엣지·게이트웨이 유지·connectable 클래스·합성 엣지·모달·비활성 입력) + lint 0 + build 성공. 상세는 `SUBPROCESS-DESIGNATION.md` F1~F5 요약.
 
+## 2026-07-06 — 단축키 안내 이동 + 줌 컨트롤 우하단 (사용자: 레전드 버튼 삭제→사이드바 더보기, 토글폴드 이관)
+- 우하단 `ShortcutLegend`(? 버튼+패널·'?' 키) 삭제 → 좌측 사이드바 'Outline keys' 카드 하단 **More shortcuts** 트리거로 이관, 클릭 시 버튼 옆 **플로팅 패널**(구 레전드 디자인: 반투명·blur·kbd 필, 백드롭/Esc 닫기)로 열림. 토글폴드(F)도 그 안으로. 중복 제외(Del·Tab 이동은 아웃라인 키에 이미 있음) + 최신화(F2 이름편집·⇧L/⇧K 가로·세로 자동정렬·`] [` 흐름 하이라이트 추가).
+- `CanvasZoomScale`(− 배율 + ⛶)을 하단 중앙 → 우하단(구 레전드 자리)으로 이동. 미사용 i18n(legend.title/toggle/close/delete) 정리.
+- 검증: lint 0·build·vitest 75·브라우저(? 버튼 부재·줌 pill 우하단·더보기 펼침 렌더·콘솔 0) PASS.
+
+## 2026-07-06 — 자동정렬 가로/세로 + 척추 직선화 (사용자: 비교 배치 로직을 에디터 정렬에 이식)
+- `lib/flow-layout.ts` 신설 — 비교 화면의 spine 판정(computeSpine)·백본 직선화(alignBackbone)·핸들 변 선택(pickHandleSide/isBackEdge)을 일반화해 공용화. 에디터용 `autoLayoutFlow`: dagre(방향)→척추(시작→대표 끝 BFS)→직선화(measured 실측)→엣지 핸들 재지정(서브프로세스 끝은 전용 핸들 유지). 비교 페이지는 로컬 구현 삭제 후 lib 사용으로 리팩터.
+- 에디터: 정렬 메뉴 '자동 정렬'을 가로(A)/세로(S) 2항목으로 분화, `Shift+L`=가로·`Shift+K`=세로, 툴바 버튼은 드롭다운화. 노드+엣지 한 스냅샷(undo 1회). 부분 정렬(선택 2+)은 방향 dagre만(직선화·핸들 변경 없음, `layoutSubsetWithDagre` rankdir 파라미터).
+- 검증: vitest 75(신규 5: 주경로·LR/TB 백본·핸들 플립·서브프로세스 예외)·lint 0·build·pw(맵6: 가로 공통Y 4노드·세로 공통X 4노드·언두 2회 완전 복원·콘솔 0) PASS + 스크린샷 육안 확인.
+
+## 2026-07-06 — DB 마이그레이션 계획 + 9800 검증 스택 (사용자: 운영 9900=406c375b, 복사본으로 최신 검증)
+- `docs/db-migration-9800.md` — 기준 origin/main(2190e54). 스키마 diff(신규 테이블 4·컬럼 9·expired 상태), 마이그레이션=최신 backend 1회 기동(create_all+_ADDED_COLUMNS 멱등, DDL 스크립트 불요), pg_dump→db만 기동→복원→전체 기동 순서(순서 뒤집힘 금지 이유 포함), 스키마/행수/기능 검증 체크리스트, version_number 선택 백필 SQL, 운영 승격·롤백(additive라 코드 되돌리면 끝) 절차.
+- `docker-compose.dev.yml` — 9800 스택 오버라이드(서브넷 172.37/16만 분리, 포트는 .env.dev APP_PORT). `-p bpm-dev`로 컨테이너·볼륨·이미지 격리. `docker compose config`로 병합 검증(9800·172.37·bpm-dev_pgdata 확인). Keycloak 9800 redirect 추가·서브프로세스 지정 운영 작업을 주의사항으로 명기.
+
 ## 2026-07-06 — 로딩 개선: 피커 무한스크롤 25청크 (사용자: 직원 5000명 피커 부하, 훅 vs 일괄 판단 후 클라 증분 렌더 확정)
 - `lib/use-infinite-slice.ts` 신설 — 25개 렌더 후 목록 끝 센티널(IntersectionObserver) 도달 시 +25, resetKey(검색어) 변경 시 리셋. fetch는 기존 1회 유지(827KB/gzip 72KB·파싱 3ms로 전송은 병목 아님 — 병목은 5000행 DOM).
 - 적용: `principal-picker`(협업자·결재자·그룹 등 7곳 공용, 빈 포커스 전량 렌더가 주범), `search-select`(담당자·부서 등 6곳 공용), `transfer-checkout-dialog`. 검색 시 8개 캡은 유지.

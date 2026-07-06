@@ -1,0 +1,16 @@
+# 9800 검증(dev) 스택 오버라이드 — 운영(9900) 스택과 같은 서버에서 동시 구동하기 위한 차분.
+# 포트는 .env.dev의 APP_PORT=9800으로 주입되므로 이 파일은 브리지 서브넷 충돌만 회피한다
+# (운영 스택이 172.36.0.0/16을 점유 — 같은 대역으로 두 번째 네트워크를 만들 수 없음).
+#
+# 실행(항상 -p 로 프로젝트를 분리해 컨테이너·볼륨·이미지 이름 충돌 방지):
+#   docker compose -p bpm-dev -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build
+#
+# 전체 절차(DB 복사→마이그레이션→검증): docs/db-migration-9800.md
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.37.0.0/16
+          gateway: 172.37.0.1
