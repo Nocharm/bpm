@@ -38,7 +38,7 @@
 **Interfaces:**
 - Produces: `isHttpUrl(value: string | null | undefined): boolean` — Task 2(액션 바 노출 조건)·Task 3(iframe 로드 게이트)이 `@/lib/url`에서 import.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `frontend/src/lib/url.test.ts`:
 
@@ -76,12 +76,12 @@ describe("isHttpUrl", () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd frontend && npx vitest run src/lib/url.test.ts`
 Expected: FAIL — `Cannot find module './url'` 계열 에러.
 
-- [ ] **Step 3: 최소 구현**
+- [x] **Step 3: 최소 구현**
 
 `frontend/src/lib/url.ts`:
 
@@ -93,12 +93,12 @@ export function isHttpUrl(value: string | null | undefined): boolean {
 }
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd frontend && npx vitest run src/lib/url.test.ts`
 Expected: PASS (3 test blocks, 12 cases).
 
-- [ ] **Step 5: 린트 + 전체 테스트 + 커밋**
+- [x] **Step 5: 린트 + 전체 테스트 + 커밋**
 
 Run: `cd frontend && npm run lint && npm run test`
 Expected: lint 0 problems, vitest 전체 green.

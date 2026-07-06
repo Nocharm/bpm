@@ -5,6 +5,7 @@
 ## 2026-07-06 — 노드 액션 바 + 링크 미리보기 패널 설계 (feat/url-viewer)
 - 구현 계획 작성(Task 1~5: isHttpUrl TDD → NodeActionBar → LinkPreviewPanel → 구 버튼 제거 → 스모크): `docs/superpowers/plans/2026-07-06-node-action-bar-link-preview.md`. locked/undesignated 펼침 미노출 조건 유지 명시(사용자 재확인).
 - 설계 스펙 작성: 단일 노드 포커스 시 하단 통합 액션 바(펼치기→링크 열기→그룹 나가기 고정 순서, NodeSelectionRing 패턴) + 우측 520px 슬라이드 링크 미리보기 패널(iframe·로딩 애니메이션·임베드 차단 폴백, feedback-side-panel 패턴) — `docs/superpowers/specs/2026-07-06-node-action-bar-link-preview-design.md`. 프론트 전용, `isHttpUrl` 가드로 링크 XSS 백로그 해소 예정.
+- Task 1: isHttpUrl 가드 헬퍼 + vitest 12케이스 (TDD).
 
 ## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)
 - `csv-import.ts`: `buildAiPromptText()`(스펙 상수·템플릿에서 파생한 한국어 절차 추출 프롬프트 — 헤더/컬럼 규칙/Start·End 생략/세미콜론 Next/500행/예시) + `stripCsvFences()`(```csv 펜스 관용 처리). 테스트 +3.
