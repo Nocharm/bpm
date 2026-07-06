@@ -228,6 +228,7 @@ SQL
 
 ```bash
 # 운영 디렉터리에서
+PROD_DB=business-process-mgmt-db-1
 docker exec "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-before-upgrade-$(date +%Y%m%d).dump   # -t(TTY) 금지 — 바이너리 손상
 git fetch && git checkout <9800에서 검증한 커밋>   # 반드시 검증 스택과 같은 커밋으로
 docker compose up -d --build               # backend 기동 = 자동 보강 적용
