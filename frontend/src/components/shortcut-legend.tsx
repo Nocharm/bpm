@@ -32,7 +32,7 @@ export function ShortcutLegend() {
   const shortcuts: { keys: string; label: string }[] = [
     { keys: "Ctrl+Z", label: t("legend.undo") },
     { keys: "Ctrl+⇧Z", label: t("legend.redo") },
-    { keys: "Ctrl+K", label: t("legend.search") },
+    { keys: "/", label: t("legend.search") },
     { keys: "Space+Drag", label: t("legend.pan") },
     { keys: "Drag", label: t("legend.boxSelect") },
     { keys: t("legend.dblClick"), label: t("legend.connect") },

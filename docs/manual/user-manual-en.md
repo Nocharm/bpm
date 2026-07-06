@@ -136,7 +136,7 @@ A **Subprocess** node embeds another process as a single step — a reference, n
 
 ## 6. Finding Nodes and Following Flows
 
-- **Node search** — press `Ctrl+K` and type; Korean chosung (initial consonants) matching is supported. Matches jump to and highlight the node.
+- **Node search** — press `/` and type; Korean chosung (initial consonants) matching is supported. Matches jump to and highlight the node.
 - **Outline** — the left rail shows the whole process as a tree; click an entry to focus that node.
 - **Flow highlight** — select a node, then press `]` to grow the highlighted path forward and `[` to shrink it (or extend backward).
 - **Walk the flow** — `Tab` / `Shift+Tab` move focus to the next / previous node along the flow and re-center the view.
@@ -258,7 +258,7 @@ Open the **AI assistant** from the editor top bar (when enabled).
 | Shortcut | Action |
 | --- | --- |
 | `/` | Focus search (map list, manual) |
-| `Ctrl+K` | Node search (chosung supported) |
+| `/` | Node search (chosung supported) |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / Redo |
 | `F2` | Rename node / edit edge label |
 | `Delete` | Delete selection |

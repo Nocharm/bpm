@@ -1608,20 +1608,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     [reactFlow, setNodes],
   );
 
-  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지. Ctrl+K는 검색 포커스.
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 입력 필드 포커스 중에는 브라우저 기본 동작 유지. "/"는 검색 포커스.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      const isTyping =
+        event.target instanceof HTMLElement &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName);
+      // "/" = 검색 포커스 (Ctrl+K에서 변경, F8) — 입력 중이 아닐 때만
+      if (event.key === "/" && !isTyping && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
-        // 검색이 사이드바로 이동(R4b) — 접혀 있으면 펼친 뒤 다음 프레임에 포커스
+        // 검색이 사이드바로 이동(R4b) — 이미 펼쳐져 있으면 즉시, 접혀 있으면 펼친 뒤 다음 프레임에 포커스
         setLeftCollapsed(false);
-        requestAnimationFrame(() => searchInputRef.current?.focus());
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        } else {
+          requestAnimationFrame(() => searchInputRef.current?.focus());
+        }
         return;
       }
-      if (
-        event.target instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
-      ) {
+      if (isTyping) {
         return;
       }
       if (event.key === "Escape") {
