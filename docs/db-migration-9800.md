@@ -199,7 +199,8 @@ docker exec -it "$DEV_DB"  psql -U processmap -d processmap -c "$Q"
 맵별 게시 시점(created_at) 순으로 채번하면 게시본=v.1, 기존 초안은 새로고침 시 (Draft)v.2가 된다:
 
 ```bash
-docker exec -it "$DEV_DB" psql -U processmap -d processmap <<'SQL'
+# 히어독(stdin 파이프)에는 -t(TTY) 금지 — "the input device is not a TTY" 오류. -i만 사용.
+docker exec -i "$DEV_DB" psql -U processmap -d processmap <<'SQL'
 WITH ranked AS (
   SELECT id, ROW_NUMBER() OVER (PARTITION BY map_id ORDER BY created_at, id) AS rn
   FROM map_versions
