@@ -10,6 +10,7 @@
 - Task 3: LinkPreviewPanel — 우측 520px 슬라이드 iframe 미리보기(로딩 애니메이션·6s 임베드 차단 폴백·Esc/스크림 닫기).
 - Task 4: 구 버튼 제거 — 그룹 모서리 나가기·ExpandToggleButton(+죽은 hasChildren 콜사이트)·leaveGroup·selectedGroupIds·고아 import 정리.
 - Task 5: 스모크(pw-smoke-node-action-bar, 실시드 map 2 기준) + inspector-field data-id + lint/test/build 클린 (pw-smoke-demo는 구시드 전제라 스킵).
+- Task 5 fix: 스모크 try/finally 원복(실패 경로 검증 포함) + expand·link 공존 순서 미커버 사유 주석.
 
 ## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)
 - `csv-import.ts`: `buildAiPromptText()`(스펙 상수·템플릿에서 파생한 한국어 절차 추출 프롬프트 — 헤더/컬럼 규칙/Start·End 생략/세미콜론 Next/500행/예시) + `stripCsvFences()`(```csv 펜스 관용 처리). 테스트 +3.
