@@ -303,7 +303,8 @@ export function NodeSummaryModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
-          <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-body-strong text-ink">
+          {/* 말줄임 대신 줄바꿈 — 긴 노드 제목(읽기전용 헤더)도 전문 표시 (F7) */}
+          <span className="flex min-w-0 flex-1 items-center gap-2 break-keep text-body-strong text-ink">
             <SquarePen size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
             {readOnly ? title : t("editor.nodeEdit")}
           </span>

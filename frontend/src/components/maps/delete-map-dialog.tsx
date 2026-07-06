@@ -32,7 +32,8 @@ export function DeleteMapDialog({
         </div>
         <div className="flex flex-col gap-1">
           <h2 className="text-body-strong text-ink">{t("home.confirmDeleteTitle")}</h2>
-          {mapName && <p className="max-w-full truncate text-caption text-ink-tertiary">{mapName}</p>}
+          {/* 말줄임 대신 줄바꿈 — 긴 맵 이름도 전문 표시 (F7) */}
+          {mapName && <p className="max-w-full break-keep text-caption text-ink-tertiary">{mapName}</p>}
         </div>
         <ul className="flex w-full flex-col gap-2 rounded-sm bg-surface-alt p-3 text-left">
           <li className="flex items-center gap-2 text-caption text-ink">

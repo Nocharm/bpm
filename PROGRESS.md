@@ -4,6 +4,7 @@
 
 ## 2026-07-06 — F7: 아이콘 확인 모달 요점 줄 말줄임 제거 (사용자: 버전 이동 모달 텍스트 잘림)
 - `confirm-dialog.tsx` 리치 폼 요점 줄 `truncate` → `break-keep` 줄바꿈 — 버전 전환 모달의 미저장 경고 등 긴 문구가 전문 표시(전 ConfirmDialog 공통). 검증: 브라우저 버전 전환 모달 2줄 표시·lint 0.
+- 후속(전수 스캔): ConfirmDialog 미사용 아이콘 모달 2곳도 동일 적용 — 맵 삭제 모달 맵 이름·노드 편집/요약 모달 헤더 제목. 나머지 truncate는 목록 행/피커/카드 이름 축약(의도적)이라 유지.
 
 ## 2026-07-06 — 서브프로세스 F6: 펼침 레인 헤더 개선 (사용자: 호버 티나게 + 맵 이동 버튼 + 미저장 경고)
 - `InlineRegionBands` 헤더: 맵 이름 호버 시 액센트+밑줄(+틴트 배경)로 강조, 옆에 `ExternalLink` 12px 아이콘 버튼(`region-open-map`) 추가. 클릭 → ConfirmDialog(제목=맵 이름, "이 에디터를 떠납니다 — 저장하지 않은 내용은 잃을 수 있습니다") → 확인 시 `router.push(/maps/{링크맵})`. i18n `subprocess.openMap*` en/ko.
