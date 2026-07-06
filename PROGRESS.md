@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-07 — 에디터 읽기전용 배너 재편 + 저장 상태 필/실패 배너 (feat/editor-status-banner)
+- 읽기전용 배너를 사유별 구조(톤·아이콘·굵은 타이틀+설명)로 재편 — 뷰어(중성/Eye) > **타인 점유(경고/PencilLine, 점유자 이름 디렉터리 해석 "이름 (id)" + 승인 탭 요청 안내)** > 게시(액센트/BadgeCheck) > 만료(중성/Archive, 신규 분기) > 승인(경고/CircleCheck) > 결재 중(경고/Hourglass). 상태 타이틀은 한/영 모두 영어 고정(Pending approval/Approved/Published/Expired). 헤더 점유 칩도 이름 해석 적용. 만료가 "결재 진행 중"으로 나오던 기존 미분기 해소.
+- 저장 상태 표시를 필 형식으로 — 저장 중(중성)·저장됨(green/added·체크)·저장 실패(red/error·경고 아이콘, 짧은 라벨). **실패 상세는 상단 error 배너로 노출(err.message + 재시도 힌트), 다음 저장 성공까지 유지**(`saveErrorDetail`). 구 키 editor.readonly.*(5종)·editor.saveError 제거, 신규 키 13종(en/ko).
+- 검증: vitest 122·lint 0·build·브라우저 스모크 18/18(점유자 본인 무배너/타인 점유 이름 배너/뷰어/게시/만료 톤·PUT 차단으로 실패 필+상세 배너 유지→수동 저장 성공 시 해소·콘솔 0). dev.db 원복 확인.
+
 ## 2026-07-07 — 에디터 UI: 상태별 워터마크 + 인스펙터 서브프로세스 지정 카드 (main 직접)
 - 워터마크: 게시본 PUBLISHED(액센트)·만료본 EXPIRED(회색 `text-ink-tertiary`)·그 외 READ ONLY — 상태 텍스트 한/영 모두 영어 고정(`editor.watermarkPublished/Expired`).
 - 인스펙터 속성 탭(빈 상태)·맵 탭에 `SubprocessInspectorCard` 신설 — 지정 상태 뱃지(영어 고정 Designated/Not designated)+어트리뷰트+연결 절차 노트("지정은 다른 맵이 이 맵을 임베드하기 위한 절차"). 버튼(지정/수정/해제)은 **게시 버전 열림 + 오너·sysadmin**일 때만 활성, 비활성 시 사유 노트 표시(`inspector.spNeedPublishedOpen/spOwnerOnly`). 지정 모달은 설정 화면 패널에서 `SubprocessDesignationModal`로 추출해 공용화(동작 동일).
