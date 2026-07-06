@@ -41,6 +41,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_duration", "VARCHAR(50)"),
     ("process_maps", "sp_changed_by", "VARCHAR(100)"),
     ("process_maps", "sp_changed_at", "TIMESTAMP"),
+    # 노드 참조 링크 — CSV import design 2026-07-06
+    ("nodes", "url", "VARCHAR(500) DEFAULT ''"),
 ]
 
 

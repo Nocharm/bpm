@@ -73,7 +73,7 @@ Name,System,Duration,URL,Next
 - **backend**:
   - `models.Node.url` — `String(500)`, default `""`.
   - `db.py _ADDED_COLUMNS` — `("nodes", "url", "VARCHAR(500) DEFAULT ''")` (기존 DB 자동 보강).
-  - `NodeIn.url` — 검증: 빈 문자열 또는 `^https?://`, `max_length=500`. `NodeOut`·`FlatNodeOut`에 포함. AI 그래프 스키마는 불변.
+  - `NodeIn.url` — 검증: `max_length=500`만(스킴 패턴 없음 — 인스펙터 자유 타이핑의 자동저장이 422로 깨지지 않도록. `^https?://` 검증은 CSV 파서와 추후 링크 렌더 시 수행). `NodeOut`·`FlatNodeOut`에 포함. AI 그래프 스키마는 불변.
 - **frontend**: `GraphNode.url`(`lib/api.ts`)·`NodeData.url`(`lib/canvas.ts`) 추가. 인스펙터 BPM 속성 카드에 URL 텍스트 입력(process/decision만, System·Duration과 동일 패턴). 캔버스 노드 표시 없음(후속).
 
 ## 6. 에러 처리

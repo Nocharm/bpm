@@ -267,3 +267,27 @@ def test_copy_map_without_approved_409(client: TestClient) -> None:
     created = _create_map(client)  # 초기 As-Is 는 draft → 승인본 없음
     response = client.post(f"/api/maps/{created['id']}/copy", json={})
     assert response.status_code == 409
+
+
+def test_new_version_clone_preserves_url(client: TestClient) -> None:
+    created = client.post("/api/maps", json={"name": "url clone map"}).json()
+    v1 = created["versions"][0]["id"]
+    client.post(f"/api/versions/{v1}/checkout", json={})
+    client.put(
+        f"/api/versions/{v1}/graph",
+        json={
+            "nodes": [
+                {"id": "n0", "title": "시작", "node_type": "start"},
+                {"id": "n1", "title": "계약", "url": "https://contract.example.com"},
+            ],
+            "edges": [],
+        },
+    )
+    # 새 버전 생성은 직전 버전이 published여야 허용된다
+    _set_version_status(v1, "published")
+    v2 = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be", "source_version_id": v1}).json()["id"]
+
+    cloned = client.get(f"/api/versions/{v2}/graph").json()
+    # 복제 노드는 id가 재발급되므로 제목으로 매칭
+    node = next(n for n in cloned["nodes"] if n["title"] == "계약")
+    assert node["url"] == "https://contract.example.com"

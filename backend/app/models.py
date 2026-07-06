@@ -141,6 +141,8 @@ class Node(Base):
     department: Mapped[str] = mapped_column(String(100), default="")
     system: Mapped[str] = mapped_column(String(100), default="")
     duration: Mapped[str] = mapped_column(String(50), default="")
+    # 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
+    url: Mapped[str] = mapped_column(String(500), default="")
     # 복제 계보 루트(원본 노드 ID) — 버전 간 diff 매칭용, 복제 시 서버가 기록 (spec §7 Phase B)
     source_node_id: Mapped[str | None] = mapped_column(String(50), default=None)
     pos_x: Mapped[float] = mapped_column(Float, default=0.0)

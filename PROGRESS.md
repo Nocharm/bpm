@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — Task 1: 백엔드 노드 URL 필드 구현 (TDD)
+- `Node.url` 필드 추가(`models.py` String(500) default "") + `db.py _ADDED_COLUMNS` 보강 + `NodeIn.url` 스키마(max_length=500만, 패턴 검증 제거 — 인스펙터 자유 타이핑 자동저장 보호) + `graph.py` upsert 분기 업데이트 + `versions.py` clone_graph 노드 필드 추가. 스펙 문서(`2026-07-06-csv-import-design.md` §5) 편차 반영. 테스트 3개(roundtrip·길이 검증·복제 보존) — 423 passed, ruff clean.
+
 ## 2026-07-06 — CSV 임포트 구현 계획 (Task 1~7)
 - 계획 문서 작성(`docs/superpowers/plans/2026-07-06-csv-import.md`) — 백엔드 url 필드(TDD)→프론트 배선·인스펙터→CSV 파서 lib(vitest)→공용 섹션 컴포넌트→새 맵 다이얼로그→에디터 툴바 교체→E2E 검증. 스펙 편차 1건 문서화(NodeIn.url 패턴 검증 제거 — 인스펙터 자유 타이핑 자동저장 보호).
 

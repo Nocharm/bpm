@@ -69,11 +69,13 @@ async def clone_graph(
             department=node.department,
             system=node.system,
             duration=node.duration,
+            url=node.url,
             # 계보 루트 전파 — 복제의 복제도 최초 원본을 가리켜 diff 매칭 유지
             source_node_id=node.source_node_id or node.id,
             pos_x=node.pos_x,
             pos_y=node.pos_y,
             sort_order=node.sort_order,
+            group_ids=[],  # 초기값, 나중에 그룹 복제 후 재매핑됨
             # 하위프로세스 참조 필드 — 복제 시 그대로 이전 (Call Activity 링크 보존)
             linked_map_id=node.linked_map_id,
             follow_latest=node.follow_latest,

@@ -390,6 +390,8 @@ class NodeIn(BaseModel):
     department: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
+    # 참조 링크 — 스킴 검증은 클라이언트(CSV 파서·링크 렌더)에서. 자유 타이핑 자동저장이 깨지지 않게 길이만 제한
+    url: str = Field(default="", max_length=500)
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0

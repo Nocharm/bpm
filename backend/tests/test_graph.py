@@ -417,3 +417,44 @@ def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
     end = next(n for n in saved["nodes"] if n["id"] == "e")
     assert end["is_primary_end"] is True
     assert saved["edges"][0]["source_handle"] == "__primary__"
+
+
+def test_node_url_roundtrip(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "계약", "url": "https://contract.example.com/doc/1"},
+        ],
+        "edges": [],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert node["url"] == "https://contract.example.com/doc/1"
+    # 미지정 노드는 빈 문자열 기본값
+    start = next(n for n in saved["nodes"] if n["id"] == "n0")
+    assert start["url"] == ""
+
+    # 두 번째 PUT은 기존 노드 갱신(upsert existing 분기) 경로를 지난다
+    graph["nodes"][1]["url"] = "https://updated.example.com"
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert node["url"] == "https://updated.example.com"
+
+
+def test_node_url_too_long_rejected(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "긴 URL", "url": "https://e.com/" + "a" * 500},
+        ],
+        "edges": [],
+    }
+
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 422
