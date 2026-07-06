@@ -73,7 +73,6 @@ import {
 } from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
-import { ShortcutLegend } from "@/components/shortcut-legend";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { WindowDock } from "@/components/window-dock";
 import {
@@ -6791,7 +6790,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           {/* AI 제안 미리보기 커밋/취소는 채팅 스레드 내 카드로 이동(R10d4) — AiChatPanel */}
-          <ShortcutLegend />
+          {/* 단축키 안내는 좌측 사이드바 '아웃라인 키' 더보기로 이동 — 우하단은 줌 컨트롤(CanvasZoomScale) */}
           {summaryNodeId && versionId !== null && (() => {
             // 현재 스코프 노드 우선, 없으면 인라인 펼친 자식 노드(편집 오버레이 반영된 합성 노드)
             const node =

@@ -1,6 +1,6 @@
 "use client";
 
-// 캔버스 줌 컨트롤 pill — 하단 중앙. 축소 / 현재 배율 / 확대 + 화면 맞춤(좌상단 정렬 fit).
+// 캔버스 줌 컨트롤 pill — 우하단(구 단축키 버튼 자리). 축소 / 현재 배율 / 확대 + 화면 맞춤(좌상단 정렬 fit).
 import { useReactFlow, useViewport } from "@xyflow/react";
 import { Maximize, Minus, Plus } from "lucide-react";
 
@@ -11,7 +11,7 @@ export function CanvasZoomScale({ onFit }: { onFit: () => void }) {
   const { zoomIn, zoomOut } = useReactFlow();
   const { t } = useI18n();
   return (
-    <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 select-none">
+    <div className="pointer-events-none absolute bottom-3 right-3 z-10 select-none">
       <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-hairline bg-surface p-1 shadow-md">
         <button
           type="button"

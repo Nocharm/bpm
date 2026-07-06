@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 단축키 안내 이동 + 줌 컨트롤 우하단 (사용자: 레전드 버튼 삭제→사이드바 더보기, 토글폴드 이관)
+- 우하단 `ShortcutLegend`(? 버튼+패널·'?' 키) 삭제 → 좌측 사이드바 'Outline keys' 카드 하단 **More shortcuts** 트리거로 이관, 클릭 시 버튼 옆 **플로팅 패널**(구 레전드 디자인: 반투명·blur·kbd 필, 백드롭/Esc 닫기)로 열림. 토글폴드(F)도 그 안으로. 중복 제외(Del·Tab 이동은 아웃라인 키에 이미 있음) + 최신화(F2 이름편집·⇧L/⇧K 가로·세로 자동정렬·`] [` 흐름 하이라이트 추가).
+- `CanvasZoomScale`(− 배율 + ⛶)을 하단 중앙 → 우하단(구 레전드 자리)으로 이동. 미사용 i18n(legend.title/toggle/close/delete) 정리.
+- 검증: lint 0·build·vitest 75·브라우저(? 버튼 부재·줌 pill 우하단·더보기 펼침 렌더·콘솔 0) PASS.
+
 ## 2026-07-06 — 자동정렬 가로/세로 + 척추 직선화 (사용자: 비교 배치 로직을 에디터 정렬에 이식)
 - `lib/flow-layout.ts` 신설 — 비교 화면의 spine 판정(computeSpine)·백본 직선화(alignBackbone)·핸들 변 선택(pickHandleSide/isBackEdge)을 일반화해 공용화. 에디터용 `autoLayoutFlow`: dagre(방향)→척추(시작→대표 끝 BFS)→직선화(measured 실측)→엣지 핸들 재지정(서브프로세스 끝은 전용 핸들 유지). 비교 페이지는 로컬 구현 삭제 후 lib 사용으로 리팩터.
 - 에디터: 정렬 메뉴 '자동 정렬'을 가로(A)/세로(S) 2항목으로 분화, `Shift+L`=가로·`Shift+K`=세로, 툴바 버튼은 드롭다운화. 노드+엣지 한 스냅샷(undo 1회). 부분 정렬(선택 2+)은 방향 dagre만(직선화·핸들 변경 없음, `layoutSubsetWithDagre` rankdir 파라미터).

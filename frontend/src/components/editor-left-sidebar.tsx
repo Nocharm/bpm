@@ -12,9 +12,11 @@ import {
   PanelsTopLeft,
   Settings,
   Square,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { terminalDisplayLabel, type OutlineRow, type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -90,6 +92,17 @@ export function EditorLeftSidebar({
     window.sessionStorage.setItem(SIDEBAR_NAV_KEYS_KEY, next ? "1" : "0");
     setNavKeysOpen(next);
   };
+  // 단축키 더보기(전역 단축키) — 버튼 옆 플로팅 패널(구 우하단 레전드 디자인). 위치는 클릭 시 버튼 rect 기준.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [morePos, setMorePos] = useState<{ left: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
   // 인라인 이름 편집 중인 행 — Esc 취소 시 blur 커밋 방지 가드
   const [editingId, setEditingId] = useState<string | null>(null);
   const cancelledRef = useRef(false);
@@ -235,11 +248,28 @@ export function EditorLeftSidebar({
       label: t("outlineNav.collapse"),
       active: !!selRow && ((selRow.hasChildren && selRow.expanded) || selRow.hierarchy),
     },
-    {
-      keys: ["F"],
-      label: t("outlineNav.fold"),
-      active: !!selRow && (selRow.hasChildren || selRow.hierarchy),
-    },
+  ];
+  // 더보기 — 전역(캔버스) 단축키 모음(구 우하단 레전드). 아웃라인 키와 중복(Del·Tab 이동)은 제외,
+  // 토글폴드(F)는 이 안으로 이동. 항목은 현행 키맵 기준 최신.
+  const moreShortcuts: { keys: string; label: string }[] = [
+    { keys: "F", label: t("outlineNav.fold") },
+    { keys: "Ctrl+Z", label: t("legend.undo") },
+    { keys: "Ctrl+⇧Z", label: t("legend.redo") },
+    { keys: "Ctrl+K", label: t("legend.search") },
+    { keys: "F2", label: t("legend.rename") },
+    { keys: "Space+Drag", label: t("legend.pan") },
+    { keys: "Drag", label: t("legend.boxSelect") },
+    { keys: t("legend.dblClick"), label: t("legend.connect") },
+    { keys: t("legend.hover"), label: t("legend.dropZones") },
+    { keys: "Esc", label: t("legend.cancel") },
+    { keys: "⇧L", label: t("ctx.autoLayoutH") },
+    { keys: "⇧K", label: t("ctx.autoLayoutV") },
+    { keys: "Alt+W/C/T/X", label: t("legend.align") },
+    { keys: "Alt+R/V", label: t("legend.distribute") },
+    { keys: "] [", label: t("legend.flowHighlight") },
+    { keys: "Ctrl+G", label: t("legend.createGroup") },
+    { keys: "Ctrl+⇧E", label: t("legend.exportPng") },
+    { keys: "1–4·E·A…", label: t("legend.menuKeys") },
   ];
   return (
     <aside
@@ -264,28 +294,86 @@ export function EditorLeftSidebar({
             )}
           </button>
           {navKeysOpen && (
-            <ul className="flex flex-col gap-0.5 px-2 pb-2">
-              {navShortcuts.map((shortcut) => (
-                <li
-                  key={shortcut.label}
-                  className={`flex items-center justify-between gap-2 px-1 text-fine transition-opacity ${
-                    shortcut.active ? "text-ink-secondary" : "opacity-40"
-                  }`}
-                >
-                  <span className="truncate">{shortcut.label}</span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    {shortcut.keys.map((key) => (
-                      <kbd
-                        key={key}
-                        className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary"
-                      >
-                        {key}
-                      </kbd>
-                    ))}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="flex flex-col gap-0.5 px-2 pb-2">
+                {navShortcuts.map((shortcut) => (
+                  <li
+                    key={shortcut.label}
+                    className={`flex items-center justify-between gap-2 px-1 text-fine transition-opacity ${
+                      shortcut.active ? "text-ink-secondary" : "opacity-40"
+                    }`}
+                  >
+                    <span className="truncate">{shortcut.label}</span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {shortcut.keys.map((key) => (
+                        <kbd
+                          key={key}
+                          className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary"
+                        >
+                          {key}
+                        </kbd>
+                      ))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {/* 더보기 — 전역 단축키(토글폴드 포함). 클릭 시 버튼 옆 플로팅 패널(구 레전드 디자인)로 열림 */}
+              <button
+                type="button"
+                className="flex w-full min-w-0 items-center justify-between gap-1 border-t border-hairline px-2 py-1.5 text-fine text-ink-tertiary hover:text-ink"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  // 패널이 화면 아래로 넘치지 않게 top 클램프(패널 높이 대략치)
+                  const PANEL_H = 460;
+                  setMorePos({
+                    left: rect.right + 12,
+                    top: Math.max(8, Math.min(rect.top, window.innerHeight - PANEL_H - 8)),
+                  });
+                  setMoreOpen((v) => !v);
+                }}
+                aria-expanded={moreOpen}
+              >
+                <span className="truncate">{t("outlineNav.more")}</span>
+                <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
+              </button>
+              {moreOpen &&
+                createPortal(
+                  <>
+                    {/* 바깥 클릭 닫기 — 투명 백드롭 */}
+                    <div className="fixed inset-0 z-[1050]" onClick={() => setMoreOpen(false)} />
+                    <div
+                      className="fixed z-[1051] w-64 rounded-md border border-hairline bg-surface/85 p-3 text-caption shadow-lg backdrop-blur"
+                      style={morePos ? { left: morePos.left, top: morePos.top } : undefined}
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="font-medium text-ink">{t("outlineNav.more")}</span>
+                        <button
+                          type="button"
+                          onClick={() => setMoreOpen(false)}
+                          className="text-ink-tertiary hover:text-ink"
+                          aria-label={t("common.cancel")}
+                        >
+                          <X size={14} strokeWidth={1.5} />
+                        </button>
+                      </div>
+                      <ul className="flex flex-col gap-1">
+                        {moreShortcuts.map((shortcut) => (
+                          <li
+                            key={shortcut.label}
+                            className="flex items-center justify-between gap-3"
+                          >
+                            <span className="truncate text-ink-secondary">{shortcut.label}</span>
+                            <kbd className="shrink-0 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary">
+                              {shortcut.keys}
+                            </kbd>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>,
+                  document.body,
+                )}
+            </>
           )}
         </div>
       </div>
