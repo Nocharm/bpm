@@ -704,11 +704,13 @@ export function layoutWithDagre(
   }));
 }
 
-/** 일부 노드(ids)만 자체 서브그래프로 자동 배치하고, 현재 좌상단 위치에 고정해 그룹이 제자리에 남게 한다. */
+/** 일부 노드(ids)만 자체 서브그래프로 자동 배치하고, 현재 좌상단 위치에 고정해 그룹이 제자리에 남게 한다.
+ *  부분 정렬은 척추 개념이 애매해 방향 dagre까지만 — 직선화(alignBackbone)는 전체 정렬 전용. */
 export function layoutSubsetWithDagre(
   nodes: AppNode[],
   edges: Edge[],
   ids: ReadonlySet<string>,
+  rankdir: "LR" | "TB" = "LR",
 ): AppNode[] {
   const subset = nodes.filter((node) => ids.has(node.id));
   if (subset.length < 2) {
@@ -719,7 +721,7 @@ export function layoutSubsetWithDagre(
   const anchorX = Math.min(...subset.map((node) => node.position.x));
   const anchorY = Math.min(...subset.map((node) => node.position.y));
 
-  const laid = layoutWithDagre(subset, subsetEdges);
+  const laid = layoutWithDagre(subset, subsetEdges, rankdir);
   const newMinX = Math.min(...laid.map((node) => node.position.x));
   const newMinY = Math.min(...laid.map((node) => node.position.y));
   const dx = anchorX - newMinX;

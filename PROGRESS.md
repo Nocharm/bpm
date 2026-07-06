@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 자동정렬 가로/세로 + 척추 직선화 (사용자: 비교 배치 로직을 에디터 정렬에 이식)
+- `lib/flow-layout.ts` 신설 — 비교 화면의 spine 판정(computeSpine)·백본 직선화(alignBackbone)·핸들 변 선택(pickHandleSide/isBackEdge)을 일반화해 공용화. 에디터용 `autoLayoutFlow`: dagre(방향)→척추(시작→대표 끝 BFS)→직선화(measured 실측)→엣지 핸들 재지정(서브프로세스 끝은 전용 핸들 유지). 비교 페이지는 로컬 구현 삭제 후 lib 사용으로 리팩터.
+- 에디터: 정렬 메뉴 '자동 정렬'을 가로(A)/세로(S) 2항목으로 분화, `Shift+L`=가로·`Shift+K`=세로, 툴바 버튼은 드롭다운화. 노드+엣지 한 스냅샷(undo 1회). 부분 정렬(선택 2+)은 방향 dagre만(직선화·핸들 변경 없음, `layoutSubsetWithDagre` rankdir 파라미터).
+- 검증: vitest 75(신규 5: 주경로·LR/TB 백본·핸들 플립·서브프로세스 예외)·lint 0·build·pw(맵6: 가로 공통Y 4노드·세로 공통X 4노드·언두 2회 완전 복원·콘솔 0) PASS + 스크린샷 육안 확인.
+
 ## 2026-07-06 — DB 마이그레이션 계획 + 9800 검증 스택 (사용자: 운영 9900=406c375b, 복사본으로 최신 검증)
 - `docs/db-migration-9800.md` — 기준 origin/main(2190e54). 스키마 diff(신규 테이블 4·컬럼 9·expired 상태), 마이그레이션=최신 backend 1회 기동(create_all+_ADDED_COLUMNS 멱등, DDL 스크립트 불요), pg_dump→db만 기동→복원→전체 기동 순서(순서 뒤집힘 금지 이유 포함), 스키마/행수/기능 검증 체크리스트, version_number 선택 백필 SQL, 운영 승격·롤백(additive라 코드 되돌리면 끝) 절차.
 - `docker-compose.dev.yml` — 9800 스택 오버라이드(서브넷 172.37/16만 분리, 포트는 .env.dev APP_PORT). `-p bpm-dev`로 컨테이너·볼륨·이미지 격리. `docker compose config`로 병합 검증(9800·172.37·bpm-dev_pgdata 확인). Keycloak 9800 redirect 추가·서브프로세스 지정 운영 작업을 주의사항으로 명기.
