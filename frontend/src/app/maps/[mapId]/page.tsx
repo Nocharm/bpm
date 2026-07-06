@@ -31,6 +31,7 @@ import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { IconTip } from "@/components/icon-tip";
+import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
@@ -884,6 +885,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 역할 판정 — render 중 파생(useEffect 금지)
   // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
+  // 서브프로세스 지정 관리 — 게시된 버전이 열린 상태 + 오너/관리자(sysadmin)만 (인스펙터 카드 버튼)
+  const spCanManage = currentVersion?.status === "published" && (isMapOwner || isSysadmin);
+  const spDisabledReason = spCanManage
+    ? null
+    : currentVersion?.status !== "published"
+      ? t("inspector.spNeedPublishedOpen")
+      : t("inspector.spOwnerOnly");
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
@@ -6671,11 +6679,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                       />
                       <CanvasZoomScale onFit={fitScopeTopLeft} />
                     </ReactFlow>
-                    {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark */}
+                    {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark
+                        게시=PUBLISHED(액센트), 만료=EXPIRED(회색), 그 외 READ ONLY — 상태 텍스트는 한/영 모두 영어 고정 */}
                     {readOnly && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
-                        <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest text-accent opacity-[0.14]">
-                          {t("editor.watermark")}
+                        <span
+                          className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                            currentVersion?.status === "expired" ? "text-ink-tertiary" : "text-accent"
+                          }`}
+                        >
+                          {currentVersion?.status === "published"
+                            ? t("editor.watermarkPublished")
+                            : currentVersion?.status === "expired"
+                              ? t("editor.watermarkExpired")
+                              : t("editor.watermark")}
                         </span>
                       </div>
                     )}
@@ -7450,10 +7467,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                     </div>
                   ) : null
                 }
+                subprocessSlot={
+                  <SubprocessInspectorCard
+                    mapId={mapId}
+                    canManage={spCanManage}
+                    disabledReason={spDisabledReason}
+                    onToast={showToast}
+                  />
+                }
                 mapTabSlot={
                   // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
                   <div className="flex flex-col gap-4">
                     <MapInspectorTab mapId={mapId} readOnly={readOnly} />
+                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정 */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      onToast={showToast}
+                    />
                     <div className="rounded-md border border-hairline p-3">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>

@@ -44,6 +44,8 @@ interface InspectorPanelProps {
   // 승인 탭(워크플로 대시보드)·활동 탭(코멘트·버전 타임라인) 콘텐츠 — page.tsx 주입. 없으면 placeholder.
   approvalSlot?: ReactNode;
   activitySlot?: ReactNode;
+  // 서브프로세스 지정 카드 — 속성 빈상태·맵 탭 공용. page.tsx 주입.
+  subprocessSlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
   mapName?: string;
   // 맵 이름 위 작은 버전 표시("version {n}" / 드래프트 "(Draft)v.{n}"). page.tsx 주입.
@@ -68,6 +70,7 @@ export function InspectorPanel({
   mapTabSlot,
   approvalSlot,
   activitySlot,
+  subprocessSlot,
   mapName,
   mapVersionMarker,
   versionControl,
@@ -138,6 +141,7 @@ export function InspectorPanel({
             mapName={mapName}
             mapVersionMarker={mapVersionMarker}
             versionControl={versionControl}
+            subprocessSlot={subprocessSlot}
           />
         )}
         {tab === "properties" &&
@@ -194,6 +198,7 @@ function PropertiesEmpty({
   mapName,
   mapVersionMarker,
   versionControl,
+  subprocessSlot,
 }: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId" | "canCompare">) {
   const { t } = useI18n();
   const action =
@@ -241,6 +246,9 @@ function PropertiesEmpty({
         <SummaryRow icon={LayoutGrid} label={t("inspector.sumSubprocess")} value={`${subprocessCount}`} />
         <SummaryRow icon={Boxes} label={t("inspector.sumSaved")} value={saveLabel} muted />
       </div>
+
+      {/* 서브프로세스 지정 카드 — 다른 맵 연결 절차 안내 + 상태/설정 */}
+      {subprocessSlot}
     </div>
   );
 }

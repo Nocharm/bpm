@@ -3,19 +3,19 @@
 // 서브프로세스 지정 패널 — 오너 전용. 지정/수정 모달(부서 필수) + 해제 확인(사용처 경고·잠금 안내). (spec 2026-07-06)
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Workflow } from "lucide-react";
 
 import {
   deleteSubprocessDesignation,
   getDirectory,
   getMap,
-  putSubprocessDesignation,
   type MapDetail,
 } from "@/lib/api";
-import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ModalBackdrop } from "@/components/modal-backdrop";
+import {
+  SubprocessDesignationModal,
+  type DesignationForm,
+} from "@/components/permissions/subprocess-designation-modal";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
@@ -24,23 +24,13 @@ interface SubprocessDesignationPanelProps {
   onToast: (message: string) => void;
 }
 
-interface DesignationForm {
-  department: string;
-  assignee: string;
-  system: string;
-  duration: string;
-}
-
-const INPUT_CLASS =
-  "rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:text-ink-tertiary focus:border-accent";
-
 export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesignationPanelProps) {
   const { t } = useI18n();
   const [detail, setDetail] = useState<MapDetail | null>(null);
   // login_id → 표시명 — 최근 변경자 이름 우선 표기(디렉터리 해석, 실패 시 id)
   const [names, setNames] = useState<Record<string, string>>({});
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState<DesignationForm>({
+  const [modalInitial, setModalInitial] = useState<DesignationForm>({
     department: "",
     assignee: "",
     system: "",
@@ -93,7 +83,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
 
   function openModal() {
     // 재지정/수정 프리필 — 해제돼도 서버가 어트리뷰트를 유지
-    setForm({
+    setModalInitial({
       department: detail?.sp_department ?? "",
       assignee: detail?.sp_assignee ?? "",
       system: detail?.sp_system ?? "",
@@ -101,26 +91,6 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     });
     setError(null);
     setShowModal(true);
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await putSubprocessDesignation(Number(mapId), {
-        department: form.department.trim(),
-        assignee: form.assignee,
-        system: form.system,
-        duration: form.duration,
-      });
-      setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
-      onToast(t("perm.sp.saved"));
-      setShowModal(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function handleUndesignate() {
@@ -214,75 +184,20 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
         </div>
       )}
 
-      {/* 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템·소요시간 자유 입력 */}
-      {showModal &&
-        createPortal(
-          <ModalBackdrop
-            onClose={() => setShowModal(false)}
-            className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
-          >
-            <div
-              data-id="subprocess-designation-modal"
-              className="flex w-full max-w-sm flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
-            >
-              <h2 className="text-body-strong text-ink">{t("perm.sp.designate")}</h2>
-              <p className="text-caption text-ink-tertiary">{t("perm.sp.modalHint")}</p>
-              <div className="flex flex-col">
-                <BpmAttributePicker
-                  versionId={publishedVersionId}
-                  assignee={form.assignee}
-                  department={form.department}
-                  readOnly={false}
-                  onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                />
-                <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-                  <span className="shrink-0 text-caption text-ink-secondary">
-                    {t("field.system")}
-                  </span>
-                  <input
-                    data-id="subprocess-designation-system"
-                    className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
-                    maxLength={100}
-                    value={form.system}
-                    onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-                  <span className="shrink-0 text-caption text-ink-secondary">
-                    {t("field.duration")}
-                  </span>
-                  <input
-                    data-id="subprocess-designation-duration"
-                    className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
-                    maxLength={50}
-                    value={form.duration}
-                    onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
-                  />
-                </div>
-              </div>
-              {error && <p className="text-caption text-error">{error}</p>}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => setShowModal(false)}
-                >
-                  {t("perm.sp.cancel")}
-                </button>
-                <button
-                  type="button"
-                  data-id="subprocess-designation-save"
-                  className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                  disabled={!form.department.trim() || saving}
-                  onClick={() => void handleSave()}
-                >
-                  {t("perm.sp.save")}
-                </button>
-              </div>
-            </div>
-          </ModalBackdrop>,
-          document.body,
-        )}
+      {/* 지정/수정 모달 — 공용 컴포넌트(에디터 인스펙터 카드와 공유) */}
+      {showModal && (
+        <SubprocessDesignationModal
+          mapId={Number(mapId)}
+          publishedVersionId={publishedVersionId}
+          initial={modalInitial}
+          onSaved={(updated) => {
+            setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
+            onToast(t("perm.sp.saved"));
+            setShowModal(false);
+          }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
 
       {/* 해제 확인 — 사용처 경고·잠금 안내 */}
       {showUndesignate && (
