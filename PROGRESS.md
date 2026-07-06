@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)
+- `csv-import.ts`: `buildAiPromptText()`(스펙 상수·템플릿에서 파생한 한국어 절차 추출 프롬프트 — 헤더/컬럼 규칙/Start·End 생략/세미콜론 Next/500행/예시) + `stripCsvFences()`(```csv 펜스 관용 처리). 테스트 +3.
+- `CsvImportSection`: [AI 프롬프트 복사](Sparkles, 1.2초 Copied! 피드백) + [CSV 붙여넣기] 토글 textarea(입력 즉시 파싱, 파일 선택과 상호 배타, 기존 요약/에러 블록 재사용) — 새 맵 다이얼로그·에디터 임포트 모달 양쪽 자동 적용. i18n 6키.
+- 검증: vitest 93·lint 0·build·브라우저(클립보드 프롬프트 내용·Copied! 전환·펜스 CSV 붙여넣기→"6 nodes · 6 edges"·에러 CSV→행 에러 표시·콘솔 0) PASS.
+
 ## 2026-07-06 — 테스트용 샘플 CSV 3종 (사용자: 분기 많은 20~40노드 임포트 확인용)
 - `docs/samples/csv-sample-01-procurement.csv`(구매 24노드·재작업 루프 4)·`02-recruitment.csv`(채용 31노드·3-way 분기·종결 경로 6)·`03-incident-change.csv`(장애/변경 39노드·P1~P3 트리아지·롤백 순환). 실제 파서(vitest 임시 테스트)로 에러 0·decision 추론·배치 검증, 사용자 실임포트 확인 완료.
 
