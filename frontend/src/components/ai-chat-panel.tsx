@@ -16,6 +16,7 @@ import {
   Pause,
   Play,
   Route,
+  RotateCcw,
   Search,
   Sparkles,
 } from "lucide-react";
@@ -35,6 +36,30 @@ import { useI18n } from "@/lib/i18n";
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+// 대화 영속 — 패널을 닫으면 언마운트되어 state가 사라지므로 버전별 localStorage에 저장/복원.
+const HISTORY_KEY_PREFIX = "bpm.aiChat.v";
+const HISTORY_LIMIT = 40; // 저장 상한(최근 N개) — 용량 가드. 전송 history는 기존대로 최근 6턴만.
+
+function loadStoredChat(versionId: number): ChatMessage[] {
+  try {
+    const raw = window.localStorage.getItem(`${HISTORY_KEY_PREFIX}${versionId}`);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is ChatMessage =>
+        typeof item === "object" &&
+        item !== null &&
+        "role" in item &&
+        "content" in item &&
+        (item.role === "user" || item.role === "assistant") &&
+        typeof item.content === "string",
+    );
+  } catch {
+    return [];
+  }
 }
 
 interface AiChatPanelProps {
@@ -89,6 +114,29 @@ export function AiChatPanel({
   // 스레드가 하단에서 떨어져 있으면 "맨 아래로" 버튼 노출.
   const [showToBottom, setShowToBottom] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 저장된 대화 복원 — 마운트·버전 변경 시 1회 (SSR 초기 렌더와 일치시키기 위해 effect에서 복원)
+  useEffect(() => {
+    setMessages(loadStoredChat(versionId)); // one-time hydration restore from localStorage
+  }, [versionId]);
+
+  // 대화 저장 — 메시지가 바뀔 때마다 최근 HISTORY_LIMIT개만 (비우기는 clearChat에서 키 삭제)
+  useEffect(() => {
+    if (messages.length === 0) return;
+    window.localStorage.setItem(
+      `${HISTORY_KEY_PREFIX}${versionId}`,
+      JSON.stringify(messages.slice(-HISTORY_LIMIT)),
+    );
+  }, [messages, versionId]);
+
+  const clearChat = () => {
+    setMessages([]);
+    setFindings([]);
+    setSteps([]);
+    setStepIndex(0);
+    setAutoplay(false);
+    window.localStorage.removeItem(`${HISTORY_KEY_PREFIX}${versionId}`);
+  };
 
   // 입력 내용에 따라 textarea 높이 자동 확장(최대 max-h-32 = 128px)
   useEffect(() => {
@@ -238,6 +286,20 @@ export function AiChatPanel({
         )}
         {aiEnabled && !canEdit && (
           <p className="mb-2 text-fine text-ink-tertiary">{t("ai.readOnly")}</p>
+        )}
+        {/* 새 대화 — 저장된 스레드 비우기(localStorage 포함) */}
+        {messages.length > 0 && (
+          <div className="mb-1 flex justify-end">
+            <button
+              type="button"
+              data-id="ai-clear-chat"
+              className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+              onClick={clearChat}
+            >
+              <RotateCcw size={12} strokeWidth={1.5} />
+              {t("ai.clearChat")}
+            </button>
+          </div>
         )}
         <ul className="flex flex-col gap-3">
           {messages.map((message, index) =>
