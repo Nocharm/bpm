@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FilePlus2, FileUp, Group, Hand, Hourglass, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -299,6 +299,19 @@ const flatToSubScope = (flat: FlatNode): Scope => ({
 type SearchResult = { node: FlatNode; path: string; scopes: Scope[] };
 type Snapshot = { nodes: AppNode[]; edges: Edge[]; groups: GraphGroup[] };
 type SaveState = "idle" | "saving" | "saved" | "error";
+// 읽기 전용 배너 — 사유별 톤/아이콘/타이틀(굵게)+설명. 시인성: 사유마다 다른 색·아이콘으로 즉시 구분.
+type EditorNoticeTone = "warn" | "accent" | "neutral";
+interface EditorNotice {
+  tone: EditorNoticeTone;
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+}
+const NOTICE_TONE_CLASS: Record<EditorNoticeTone, string> = {
+  warn: "border-notice-border bg-notice text-changed", // 타인 점유·결재 중·승인 완료(대기)
+  accent: "border-accent-tint-border bg-accent-tint text-accent", // 게시본(정상 운영 상태)
+  neutral: "border-hairline bg-surface-alt text-ink-secondary", // 뷰어·만료 이력
+};
 // 인라인 펼침 하위 영역 박스 — 깊이 틴트 배경 렌더용(flow 좌표 절대배치)
 type RegionBox = {
   id: string;
@@ -741,6 +754,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  // 저장 실패 상세 — 상단 배너로 노출, 다음 저장 성공까지 유지
+  const [saveErrorDetail, setSaveErrorDetail] = useState<string | null>(null);
   const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -868,20 +883,57 @@ function MapEditor({ mapId }: { mapId: number }) {
   const isViewer = myRole === "viewer";
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = isViewer || (checkout !== null && !checkout.mine) || statusLocksEditing;
-  // 읽기 전용 사유별 안내 문구 — 뷰어 > 타인 체크아웃 > 비-draft 상태 / read-only cause → notice
-  const statusNoticeKey =
-    currentVersion?.status === "published"
-      ? "editor.readonly.statusPublished"
-      : currentVersion?.status === "approved"
-        ? "editor.readonly.statusApproved"
-        : "editor.readonly.statusPending";
-  const readOnlyMessage = !readOnly
+  // 읽기 전용 배너 — 사유별 톤/아이콘/타이틀+설명 (우선순위: 뷰어 > 타인 점유 > 버전 상태).
+  // 점유자는 디렉터리 표시명으로 해석(이름 우선·id 보조). 상태 타이틀은 한/영 모두 영어 고정.
+  const checkoutHolder = checkout !== null && !checkout.mine ? checkout.checked_out_by : null;
+  const checkoutHolderName = checkoutHolder ? (nameById.get(checkoutHolder) ?? checkoutHolder) : "";
+  const checkoutHolderLabel =
+    checkoutHolder && checkoutHolderName !== checkoutHolder
+      ? `${checkoutHolderName} (${checkoutHolder})`
+      : checkoutHolderName;
+  const readOnlyNotice: EditorNotice | null = !readOnly
     ? null
     : isViewer
-      ? t("editor.readonly.viewer")
-      : checkout !== null && !checkout.mine
-        ? t("editor.readonly.checkout", { name: checkout.checked_out_by ?? "" })
-        : t(statusNoticeKey);
+      ? {
+          tone: "neutral",
+          icon: Eye,
+          title: t("editor.readonly.viewerTitle"),
+          desc: t("editor.readonly.viewerDesc"),
+        }
+      : checkoutHolder !== null
+        ? {
+            tone: "warn",
+            icon: PencilLine,
+            title: t("editor.readonly.checkoutTitle", { name: checkoutHolderLabel }),
+            desc: t("editor.readonly.checkoutDesc"),
+          }
+        : currentVersion?.status === "published"
+          ? {
+              tone: "accent",
+              icon: BadgeCheck,
+              title: t("editor.readonly.publishedTitle"),
+              desc: t("editor.readonly.publishedDesc"),
+            }
+          : currentVersion?.status === "expired"
+            ? {
+                tone: "neutral",
+                icon: Archive,
+                title: t("editor.readonly.expiredTitle"),
+                desc: t("editor.readonly.expiredDesc"),
+              }
+            : currentVersion?.status === "approved"
+              ? {
+                  tone: "warn",
+                  icon: CircleCheck,
+                  title: t("editor.readonly.approvedTitle"),
+                  desc: t("editor.readonly.approvedDesc"),
+                }
+              : {
+                  tone: "warn",
+                  icon: Hourglass,
+                  title: t("editor.readonly.pendingTitle"),
+                  desc: t("editor.readonly.pendingDesc"),
+                };
   // 역할 판정 — render 중 파생(useEffect 금지)
   // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
@@ -1273,9 +1325,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       dirtyRef.current = false;
       setSaveState("saved");
+      setSaveErrorDetail(null); // 저장 성공 — 실패 상세 배너 해제
       refreshFullGraph();
     } catch (err) {
       setSaveState("error");
+      // 실패 상세는 상단 배너로 노출 — 다음 저장 성공까지 유지
+      setSaveErrorDetail(err instanceof Error ? err.message : String(err));
       throw err;
     }
   }, [versionId, readOnly, refreshFullGraph]);
@@ -6166,7 +6221,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div className="ml-auto flex items-center gap-1.5">
           {readOnly && !isViewer && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
-              <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkout.checked_out_by })}
+              <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkoutHolderLabel || checkout.checked_out_by })}
               {/* 활성 점유 강제 인수는 sysadmin만 — 에디터/오너는 읽기전용 안내만 본다 */}
               {isSysadmin && (
                 <button
@@ -6189,14 +6244,29 @@ function MapEditor({ mapId }: { mapId: number }) {
             </span>
           )}
           {status && <span className="text-caption text-error">{status}</span>}
+          {/* 저장 상태 — 필 형식(색상 유지). 실패 상세는 상단 배너로 노출 */}
           {saveState === "saving" && (
-            <span className="text-caption text-ink-tertiary">{t("editor.saving")}</span>
+            <span className="rounded-full border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink-tertiary">
+              {t("editor.saving")}
+            </span>
           )}
           {saveState === "saved" && (
-            <span className="inline-flex items-center gap-1 text-caption text-added"><Check size={14} strokeWidth={1.5} />{t("editor.saved")}</span>
+            <span
+              data-id="editor-save-pill-saved"
+              className="inline-flex items-center gap-1 rounded-full border border-added/40 bg-added/10 px-2 py-0.5 text-fine text-added"
+            >
+              <Check size={12} strokeWidth={1.7} />
+              {t("editor.saved")}
+            </span>
           )}
           {saveState === "error" && (
-            <span className="text-caption text-error">{t("editor.saveError")}</span>
+            <span
+              data-id="editor-save-pill-error"
+              className="inline-flex items-center gap-1 rounded-full border border-error/40 bg-error/10 px-2 py-0.5 text-fine text-error"
+            >
+              <AlertTriangle size={12} strokeWidth={1.7} />
+              {t("editor.saveFailedPill")}
+            </span>
           )}
           {managingApprovers && (
             <ApproverManager
@@ -6269,13 +6339,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       </header>
 
-      {readOnlyMessage && (
+      {/* 저장 실패 배너 — 상세 사유 노출, 다음 저장 성공까지 유지 */}
+      {saveErrorDetail && (
+        <div
+          data-id="editor-save-error-banner"
+          className="flex items-center gap-2 border-b border-error/40 bg-error/10 px-4 py-1.5 text-caption text-error"
+        >
+          <AlertTriangle size={14} strokeWidth={1.7} className="shrink-0" />
+          <span className="shrink-0 font-semibold">{t("editor.saveFailedPill")}</span>
+          <span className="min-w-0">
+            {saveErrorDetail} — {t("editor.saveRetryHint")}
+          </span>
+        </div>
+      )}
+
+      {/* 읽기 전용 배너 — 사유별 톤·아이콘·굵은 타이틀로 즉시 구분(타인 점유는 이름 표기) */}
+      {readOnlyNotice && (
         <div
           data-id="editor-readonly-notice"
-          className="flex items-center gap-2 border-b border-notice-border bg-notice px-4 py-1.5 text-fine text-changed"
+          className={`flex items-center gap-2 border-b px-4 py-1.5 text-caption ${NOTICE_TONE_CLASS[readOnlyNotice.tone]}`}
         >
-          <Info size={14} strokeWidth={1.7} className="shrink-0" />
-          {readOnlyMessage}
+          <readOnlyNotice.icon size={14} strokeWidth={1.7} className="shrink-0" />
+          <span className="shrink-0 font-semibold">{readOnlyNotice.title}</span>
+          <span className="min-w-0">{readOnlyNotice.desc}</span>
         </div>
       )}
 
@@ -7768,7 +7854,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   saveState === "saving"
                     ? t("editor.saving")
                     : saveState === "error"
-                      ? t("editor.saveError")
+                      ? t("editor.saveFailedPill")
                       : t("editor.saved")
                 }
               />
