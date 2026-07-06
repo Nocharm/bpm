@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-07 — AI 챗 다중 대화: 최대 4개 + 이전 대화 열기 + 최오래 닫기 확인 (feat/ai-chat-sessions)
+- `chat-sessions.ts`(신규): 세션 스토어 파싱/직렬화·구 단일배열 포맷 자동 이행·최오래 세션 선정·제목 파생(첫 사용자 메시지 40자)·세션당 40개 캡 — 테스트 14. localStorage 키 `bpm.aiChat.v{versionId}` 유지.
+- `AiChatPanel`: 대화 전환 바(이전 대화 드롭다운 최신순·활성 체크·카운터 n/4 + 새 대화 버튼). 5번째 새 대화 → ConfirmDialog(최대 4개 안내 + 가장 오래전에 연 대화 "닫힘" 뱃지) → 확인 시 최오래 퇴출+새 대화. 빈 대화 재사용(빈 세션 중복 방지), 응답 대기 중 전환해도 원 대화에 append, 버전 전환 시 교차 저장 가드. i18n 5키(en/ko).
+- 검증: vitest 119·lint 0 errors·build PASS·브라우저 스모크 18/18(`frontend/scripts/pw-smoke-ai-chat-sessions.mjs` — 드롭다운/전환/한도 모달/취소 유지/퇴출/localStorage/레거시 이행/콘솔 에러 0).
+
 ## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)
 - `csv-import.ts`: `buildAiPromptText()`(스펙 상수·템플릿에서 파생한 한국어 절차 추출 프롬프트 — 헤더/컬럼 규칙/Start·End 생략/세미콜론 Next/500행/예시) + `stripCsvFences()`(```csv 펜스 관용 처리). 테스트 +3.
 - `CsvImportSection`: [AI 프롬프트 복사](Sparkles, 1.2초 Copied! 피드백) + [CSV 붙여넣기] 토글 textarea(입력 즉시 파싱, 파일 선택과 상호 배타, 기존 요약/에러 블록 재사용) — 새 맵 다이얼로그·에디터 임포트 모달 양쪽 자동 적용. i18n 6키.
