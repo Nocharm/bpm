@@ -28,6 +28,27 @@ CSV 임포트 — 새 맵 시작·기존 맵 전체 교체·노드 URL 필드, E
 
 ## 2026-07-06 — CSV 임포트 설계 스펙 (사용자: 새 맵 템플릿 임포트 + 기존 맵 전체 교체)
 - 브레인스토밍 확정 설계 문서화(`docs/superpowers/specs/2026-07-06-csv-import-design.md`) — 한 파일+Next 컬럼 양식(start/end 자동·decision 추론), 클라이언트 파싱 + 기존 `PUT /graph` 재사용, 노드 URL 어트리뷰트 신설(필드+인스펙터만), 기존 맵은 툴바 버튼(체크아웃 보유자 한정) 전체 교체.
+## 2026-07-06 — 맵 드롭다운 링크 추가도 지정 필터 적용 (사용자: 아코디언 '링크 노드로 추가' 우회로 지적)
+- `map-name-dropdown.tsx` — 라이브러리 피커와 동일 소스(`listLibraryProcesses`=서버가 지정 맵만 반환)를 lazy 로드해 '링크 노드로 추가' 버튼을 지정 맵에만 노출 + 순환 참조(closesCycle) 동일 차단. '맵 열기'는 유지. 목록 응답엔 sp_designated_at이 없어 백엔드 무변경으로 처리.
+- 검증: lint 0·브라우저(지정 맵=열기+링크, 미지정 맵=열기만, 콘솔 0). 로컬 백엔드가 지정 필터 이전 코드로 떠 있던 것 재기동 후 확인.
+
+## 2026-07-06 — 릴리스 공지 초안 + 백필 heredoc -i 교정 (사용자: 운영 배포 전 공지 게시 준비)
+- `docs/notices/2026-07-06-release.md` — 직전 배포(406c375b) 이후 개선분을 사용자 관점 공지로 정리(버전 번호·점유권/신규 화면 4종/서브프로세스 지정/자동정렬 가로·세로·`/`검색·PNG 수정/성능·검색 랭킹). 공지사항 작성 시 본문에 붙여넣기용(마크다운 렌더러 제약 준수).
+- 마이그레이션 §6 백필: heredoc은 `-it`가 "not a TTY" 오류 → `-i`로 교정(사용자 실측).
+
+## 2026-07-06 — 우클릭 정렬 플라이아웃 폭 보정 (사용자: EN에서 글자·단축키 정렬 깨짐·밖으로 넘침)
+- `context-menu.tsx` 하위 플라이아웃을 w-48→**w-60**(240px, 가장자리 뒤집기 추정치 동기) — EN 'Auto layout — horizontal'이 nowrap으로 패널 밖까지 밀리던 문제. 방어적으로 항목·트리거 라벨에 min-w-0+truncate(단축키 kbd는 shrink-0로 우측 고정). 검증: lint 0·브라우저 DOM(패널 240px·라벨 전체 표시·kbd 패널 안) + 스크린샷.
+
+## 2026-07-06 — 9800 배포 실전 트러블 2건 문서 반영 (사용자: 서버 배포 중 Pool overlaps·복원 실패)
+- `docs/db-migration-9800.md` — ① 덤프 명령의 `docker exec -t` 제거(**TTY가 바이너리 덤프에 CR 섞어 아카이브 손상** — process_maps 미존재로 발현) ② compose 오버라이드 `ipam.config` 누적 병합으로 대역을 바꿔도 `Pool overlaps` 재현(서버 확인) → dev 클론 compose 직접 수정(검증값 172.42/16) + dev 파일 제외 alias 우회 명기.
+
+## 2026-07-06 — 마이그레이션 문서·매뉴얼 최종화 + MANUAL_URL compose 전달 (사용자: 최신 기준 갱신 후 개발서버 배포)
+- `docs/db-migration-9800.md` 최신 main 기준 재정렬 — manual_docs 신규 컬럼 3(title·language·sort_order, 레거시 ko 흡수·제목 자동 추출로 별도 작업 불요) 추가(컬럼 12), .env.dev에 MANUAL_URL 선택 항목, /manual 체크리스트 다중 문서 기준, 승격 체크아웃 문구 일반화.
+- **compose 공백 수정**: `MANUAL_URL`이 Settings/.env.example에만 있고 docker-compose가 backend로 미전달 → 배포에서 무동작. backend environment에 추가(compose config로 전달 확인).
+- 매뉴얼 최종화(4종+번들): 자동정렬 가로/세로(⇧L·⇧K)·서브프로세스 지정(피커 노출·미지정 잠금·라이브 어트리뷰트)·매뉴얼 다중 문서(제목 드롭다운)·단축키 안내 위치(사이드바 더보기)·admin §12 MANUAL_URL. 렌더 제약 검증 클린·pytest 420.
+
+## 2026-07-06 — 미니맵 페이드 지점 당김 (사용자: 좀더 빨리 없어지게)
+- `minimap-viewport-fill.tsx` 채움비 임계 FADE_START 1.2→1.05·FADE_END 1.6→1.3 — 뷰포트가 콘텐츠를 꽉 채운 직후부터 페이드, 더 일찍 완전 투명. 검증: lint 0·브라우저(핏 0.65 → 줌아웃 1단계 0.13 → 2단계 0).
 
 ## 2026-07-06 — F12: 아웃라인 검색 `/` 키캡 아이콘화 (사용자: F8 후속 — 다른 검색창처럼 우측 배치)
 - `NodeSearch` — 플레이스홀더 "노드 검색"으로 축약, 우측에 공용 SearchBox와 동일한 `/` 키캡 버튼(클릭=포커스) + 입력 중엔 X 지우기(클리어 후 포커스 유지). 검증: lint 0·브라우저(칩 표시·클릭 포커스·X 전환/클리어).
@@ -58,6 +79,20 @@ CSV 임포트 — 새 맵 시작·기존 맵 전체 교체·노드 URL 필드, E
 ## 2026-07-06 — 서브프로세스 1차 검증 피드백 F1~F5 수정 (사용자: 비교 엣지·연쇄 펼침 엣지·임베드 핸들·더블클릭·타이틀)
 - F1 비교화면: unchanged subprocess가 전용 핸들을 렌더해 엣지 앵커 실패 → compare가 `sideHandles` 주입, 렌더는 diff 또는 sideHandles면 4변 핸들. F2 펼침 게이트웨이 targetHandle `t-left` 하드코딩 → `withSubprocessHandles` 보정(subprocess `in`/`__primary__`). F3 Handle에 `isConnectable` 미전달로 임베드 자식 connectable:false 무효 → 전 핸들 forward(시작/끝·내부→외부 끌기 차단) + 접힘 시 명시 엣지 없는 끝 핸들에 표시 전용 `sp-ends:*` 엣지 파생(전체 엔드→다음 노드 수렴). F4 더블클릭=편집 모달(드릴인 제거, 딥뷰는 임베드 자식 경로 유지). F5 타이틀 편집 4진입점 차단(인라인·인스펙터·모달·컨텍스트 메뉴).
 - 검증: 브라우저 전 항목(비교 엣지·게이트웨이 유지·connectable 클래스·합성 엣지·모달·비활성 입력) + lint 0 + build 성공. 상세는 `SUBPROCESS-DESIGNATION.md` F1~F5 요약.
+
+## 2026-07-06 — 단축키 안내 이동 + 줌 컨트롤 우하단 (사용자: 레전드 버튼 삭제→사이드바 더보기, 토글폴드 이관)
+- 우하단 `ShortcutLegend`(? 버튼+패널·'?' 키) 삭제 → 좌측 사이드바 'Outline keys' 카드 하단 **More shortcuts** 트리거로 이관, 클릭 시 버튼 옆 **플로팅 패널**(구 레전드 디자인: 반투명·blur·kbd 필, 백드롭/Esc 닫기)로 열림. 토글폴드(F)도 그 안으로. 중복 제외(Del·Tab 이동은 아웃라인 키에 이미 있음) + 최신화(F2 이름편집·⇧L/⇧K 가로·세로 자동정렬·`] [` 흐름 하이라이트 추가).
+- `CanvasZoomScale`(− 배율 + ⛶)을 하단 중앙 → 우하단(구 레전드 자리)으로 이동. 미사용 i18n(legend.title/toggle/close/delete) 정리.
+- 검증: lint 0·build·vitest 75·브라우저(? 버튼 부재·줌 pill 우하단·더보기 펼침 렌더·콘솔 0) PASS.
+
+## 2026-07-06 — 자동정렬 가로/세로 + 척추 직선화 (사용자: 비교 배치 로직을 에디터 정렬에 이식)
+- `lib/flow-layout.ts` 신설 — 비교 화면의 spine 판정(computeSpine)·백본 직선화(alignBackbone)·핸들 변 선택(pickHandleSide/isBackEdge)을 일반화해 공용화. 에디터용 `autoLayoutFlow`: dagre(방향)→척추(시작→대표 끝 BFS)→직선화(measured 실측)→엣지 핸들 재지정(서브프로세스 끝은 전용 핸들 유지). 비교 페이지는 로컬 구현 삭제 후 lib 사용으로 리팩터.
+- 에디터: 정렬 메뉴 '자동 정렬'을 가로(A)/세로(S) 2항목으로 분화, `Shift+L`=가로·`Shift+K`=세로, 툴바 버튼은 드롭다운화. 노드+엣지 한 스냅샷(undo 1회). 부분 정렬(선택 2+)은 방향 dagre만(직선화·핸들 변경 없음, `layoutSubsetWithDagre` rankdir 파라미터).
+- 검증: vitest 75(신규 5: 주경로·LR/TB 백본·핸들 플립·서브프로세스 예외)·lint 0·build·pw(맵6: 가로 공통Y 4노드·세로 공통X 4노드·언두 2회 완전 복원·콘솔 0) PASS + 스크린샷 육안 확인.
+
+## 2026-07-06 — DB 마이그레이션 계획 + 9800 검증 스택 (사용자: 운영 9900=406c375b, 복사본으로 최신 검증)
+- `docs/db-migration-9800.md` — 기준 origin/main(2190e54). 스키마 diff(신규 테이블 4·컬럼 9·expired 상태), 마이그레이션=최신 backend 1회 기동(create_all+_ADDED_COLUMNS 멱등, DDL 스크립트 불요), pg_dump→db만 기동→복원→전체 기동 순서(순서 뒤집힘 금지 이유 포함), 스키마/행수/기능 검증 체크리스트, version_number 선택 백필 SQL, 운영 승격·롤백(additive라 코드 되돌리면 끝) 절차.
+- `docker-compose.dev.yml` — 9800 스택 오버라이드(서브넷 172.37/16만 분리, 포트는 .env.dev APP_PORT). `-p bpm-dev`로 컨테이너·볼륨·이미지 격리. `docker compose config`로 병합 검증(9800·172.37·bpm-dev_pgdata 확인). Keycloak 9800 redirect 추가·서브프로세스 지정 운영 작업을 주의사항으로 명기.
 
 ## 2026-07-06 — 로딩 개선: 피커 무한스크롤 25청크 (사용자: 직원 5000명 피커 부하, 훅 vs 일괄 판단 후 클라 증분 렌더 확정)
 - `lib/use-infinite-slice.ts` 신설 — 25개 렌더 후 목록 끝 센티널(IntersectionObserver) 도달 시 +25, resetKey(검색어) 변경 시 리셋. fetch는 기존 1회 유지(827KB/gzip 72KB·파싱 3ms로 전송은 병목 아님 — 병목은 5000행 DOM).

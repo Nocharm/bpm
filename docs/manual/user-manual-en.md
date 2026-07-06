@@ -20,7 +20,7 @@ This manual covers everything a regular user needs — from your first map to pu
 | **Maps** | top tab | All process maps — search, create, open |
 | **Notices** | top tab | Announcements posted by administrators |
 | **Inbox** | top tab | Your approval queue and notifications |
-| **Manual** | top bar | This document — searchable, with a table of contents |
+| **Manual** | top bar | Manual documents (KO/EN) — pick one from the title dropdown; searchable, with a table of contents |
 | **Feedback** | top bar | Send a bug report or suggestion to administrators |
 | **Settings** | top bar | Your groups, scheduled deletion (trash), and admin consoles |
 
@@ -117,7 +117,7 @@ Select a node and edit in the right inspector:
 
 ### Alignment and layout
 
-- **Auto layout** (`Shift+L`) arranges the whole flow left-to-right automatically.
+- **Auto layout** arranges the whole flow automatically — horizontal (`Shift+L`, left→right) or vertical (`Shift+K`, top→bottom). The Start→primary-end path snaps to one straight line, branches sit beside it, and edge connection points follow the direction.
 - With 2+ nodes selected: **Align left** `Alt+W`, **Center** `Alt+C`, **Align top** `Alt+T`, **Middle** `Alt+X`.
 - With 3+ nodes selected: **Distribute horizontally** `Alt+R`, **Distribute vertically** `Alt+V`.
 
@@ -129,6 +129,8 @@ A **Subprocess** node embeds another process as a single step — a reference, n
 
 - **Create subprocess** (right-click a Process node) spins up a child map with Start / Task / End ready to edit.
 - **Add as link node** links an existing map from the process library. Choose **Follow latest published** to always show the newest published version, or pin a specific version. When a newer published version appears, the node offers **Update to latest**.
+- Only maps **designated as subprocesses** appear in the library picker. The map's owner designates it in **Map Settings → Subprocess designation** with representative attributes (department required; assignee/system/duration optional) — these show live on every node linking the map.
+- A link node pointing to an **undesignated** map shows a warning badge and is locked until the map is designated.
 - **Deep view:** double-click a subprocess node to drill into the child map in a stacked overlay with breadcrumbs — the embedded content is **read-only**. `Esc` goes up one level.
 - If you lack permission on the linked map, the node shows **No access**.
 
@@ -265,7 +267,7 @@ Open the **AI assistant** from the editor top bar (when enabled).
 | `Esc` | Cancel action, close modal, exit deep view |
 | `Space` (hold) | Pan the canvas |
 | `Ctrl` + wheel | Zoom |
-| `Shift+L` | Auto layout |
+| `Shift+L` / `Shift+K` | Auto layout — horizontal / vertical |
 | `Ctrl+G` | Create group from selection |
 | `Alt+W` / `Alt+C` / `Alt+T` / `Alt+X` | Align left / center / top / middle |
 | `Alt+R` / `Alt+V` | Distribute horizontally / vertically |
@@ -274,7 +276,7 @@ Open the **AI assistant** from the editor top bar (when enabled).
 | `Ctrl+Shift+E` | Export PNG |
 | `Ctrl+Enter` | Send (comments, AI chat) |
 
-> **Tip:** The in-editor **Keyboard shortcuts** legend (bottom toolbar) shows this list in context.
+> **Tip:** In the editor, open **More shortcuts** at the bottom of the Outline keys card (left sidebar) to see this list in context.
 
 ---
 

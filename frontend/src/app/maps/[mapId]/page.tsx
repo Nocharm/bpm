@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -73,7 +73,6 @@ import {
 } from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
-import { ShortcutLegend } from "@/components/shortcut-legend";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { WindowDock } from "@/components/window-dock";
 import { CsvImportSection } from "@/components/csv-import-section";
@@ -173,6 +172,7 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
+import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -2874,6 +2874,26 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
+  // 자동정렬(가로/세로) — 전체는 dagre + 척추(시작→대표 끝) 직선화 + 엣지 핸들 재지정(lib/flow-layout),
+  // ids(2개 이상)가 오면 그 부분만 방향 dagre(직선화·핸들 변경 없음). 노드·엣지 한 스냅샷 = undo 1회.
+  const applyAutoLayout = useCallback(
+    (dir: FlowDir, ids?: ReadonlySet<string> | null) => {
+      if (readOnly) {
+        return;
+      }
+      pushHistory();
+      if (ids && ids.size >= 2) {
+        setNodes(layoutSubsetWithDagre(nodesRef.current, edgesRef.current, ids, dir));
+      } else {
+        const result = autoLayoutFlow(nodesRef.current, edgesRef.current, dir);
+        setNodes(result.nodes);
+        setEdges(result.edges);
+      }
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setNodes, setEdges, scheduleAutoSave],
+  );
+
   // ── 드래그-오버 드롭 영역 (앞/뒤 흐름 삽입, Phase 1) ─────────
 
   // 노드 id의 캔버스 컨테이너 상대 화면 사각형 — 드롭 영역/팝오버 위치 계산용 (이벤트에서만 호출)
@@ -4104,17 +4124,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       count: number,
     ): ContextMenuItem[] => [
       {
-        label: t("ctx.autoLayout"),
-        icon: Network,
+        label: t("ctx.autoLayoutH"),
+        icon: MoveHorizontal,
         accel: "a",
         shortcut: "A",
         disabled: ids ? count < 2 : false,
-        onSelect: () =>
-          applyNodesTransform((current) =>
-            ids
-              ? layoutSubsetWithDagre(current, edgesRef.current, ids)
-              : layoutWithDagre(current, edgesRef.current),
-          ),
+        onSelect: () => applyAutoLayout("LR", ids),
+      },
+      {
+        label: t("ctx.autoLayoutV"),
+        icon: MoveVertical,
+        accel: "s",
+        shortcut: "S",
+        disabled: ids ? count < 2 : false,
+        onSelect: () => applyAutoLayout("TB", ids),
       },
       { divider: true },
       { caption: t("legend.align") },
@@ -4433,6 +4456,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     disbandGroup,
     groups,
     recolorGroup,
+    applyAutoLayout,
     reactFlow,
     t,
   ]);
@@ -5803,15 +5827,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
 
       // 모든 판정은 물리 키(event.code) — 한글 IME·키 레이아웃·OS(Mac Option) 무관
-      // Shift+L — 전역 자동 정렬(오토레이아웃, L=Layout). 메뉴 가속기는 A→A.
+      // Shift+L — 전역 가로 자동 정렬(L=Layout) · Shift+K — 전역 세로 자동 정렬(L 인접 키).
       if (
         event.shiftKey &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        event.code === "KeyL"
+        (event.code === "KeyL" || event.code === "KeyK")
       ) {
-        fire(() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current)));
+        const dir: FlowDir = event.code === "KeyL" ? "LR" : "TB";
+        fire(() => applyAutoLayout(dir));
         return;
       }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 (undo/redo·검색은 별도 핸들러)
@@ -5858,6 +5883,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     managingApprovers,
     pending,
     applyNodesTransform,
+    applyAutoLayout,
     createGroupFromSelection,
     handleExportPng,
   ]);
@@ -6247,15 +6273,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         <EditorToolbar
           onAddNode={(type) => handleAddNode(null, type)}
           onOpenLibrary={() => setLibraryOpen(true)}
-          onAutoArrange={() =>
-            applyNodesTransform((current) => {
-              // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
-              const ids = new Set(current.filter((node) => node.selected).map((node) => node.id));
-              return ids.size >= 2
-                ? layoutSubsetWithDagre(current, edgesRef.current, ids)
-                : layoutWithDagre(current, edgesRef.current);
-            })
-          }
+          onAutoLayout={(dir) => {
+            // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
+            const ids = new Set(
+              nodesRef.current.filter((node) => node.selected).map((node) => node.id),
+            );
+            applyAutoLayout(dir, ids.size >= 2 ? ids : null);
+          }}
           onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
           manualUrl={manualUrl}
@@ -6887,7 +6911,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             />
           )}
           {/* AI 제안 미리보기 커밋/취소는 채팅 스레드 내 카드로 이동(R10d4) — AiChatPanel */}
-          <ShortcutLegend />
+          {/* 단축키 안내는 좌측 사이드바 '아웃라인 키' 더보기로 이동 — 우하단은 줌 컨트롤(CanvasZoomScale) */}
           {summaryNodeId && versionId !== null && (() => {
             // 현재 스코프 노드 우선, 없으면 인라인 펼친 자식 노드(편집 오버레이 반영된 합성 노드)
             const node =

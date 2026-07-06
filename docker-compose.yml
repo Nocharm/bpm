@@ -30,6 +30,8 @@ services:
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
       CHECKOUT_TTL_MINUTES: ${CHECKOUT_TTL_MINUTES:-30}
+      # 편집용 매뉴얼 사이트 버튼(F9) — 비우면 에디터 툴바에서 숨김
+      MANUAL_URL: ${MANUAL_URL:-}
       AI_ENABLED: ${AI_ENABLED:-false}
       AI_BASE_URL: ${AI_BASE_URL:-}
       AI_API_TOKEN: ${AI_API_TOKEN:-}

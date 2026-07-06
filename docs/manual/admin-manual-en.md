@@ -167,6 +167,7 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | `AUTH_ENABLED` | backend `.env` | Enable Keycloak JWT verification |
 | `NEXT_PUBLIC_AUTH_ENABLED` | frontend env | Enable the Keycloak login flow in the UI |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | Enforce RBAC locally even with auth off |
+| `MANUAL_URL` | `.env` (compose) | Manual-site button on the editor toolbar — hidden when empty |
 
 - Environment changes require a backend restart (`--reload` does not re-read `.env`).
 - Keycloak endpoints and all deployment-specific values come from `.env` — never hardcoded.

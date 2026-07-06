@@ -7,10 +7,11 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Link2, Network, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { listMaps, type MapSummary } from "@/lib/api";
+import { listLibraryProcesses, listMaps, type LibraryProcess, type MapSummary } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { formatKstShort } from "@/lib/datetime";
+import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { VERSION_STATUS_LABEL } from "@/lib/version-status";
@@ -39,6 +40,8 @@ export function MapNameDropdown({
   const [open, setOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [maps, setMaps] = useState<MapSummary[] | null>(null);
+  // 링크 노드 추가 게이트 — 라이브러리 피커와 동일 소스(서버가 지정 맵만 반환). 실패 시 []=버튼 숨김.
+  const [library, setLibrary] = useState<LibraryProcess[] | null>(null);
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -48,13 +51,21 @@ export function MapNameDropdown({
   useEffect(() => {
     if (!open) return;
     if (maps === null) void listMaps().then(setMaps).catch(() => setMaps([]));
+    // 편집 중일 때만 필요(링크 추가 버튼 게이트) — 지정 맵 목록 lazy 로드
+    if (isEditing && library === null)
+      void listLibraryProcesses().then(setLibrary).catch(() => setLibrary([]));
     searchRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, maps]);
+  }, [open, maps, library, isEditing]);
+
+  // 링크 노드 추가 가능 판정 — 지정된 맵(라이브러리 노출분)만 + 순환 참조 차단(라이브러리 피커와 동일 규칙)
+  const refsByMap = new Map((library ?? []).map((row) => [row.map_id, row.refs]));
+  const canAddLink = (id: number): boolean =>
+    (library ?? []).some((row) => row.map_id === id) && !closesCycle(id, mapId, refsByMap);
 
   const q = query.trim().toLowerCase();
   // 비공개 맵 제외 + 검색어 필터
@@ -185,7 +196,8 @@ export function MapNameDropdown({
                           <ArrowRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
                           {t("editor.mapGo")}
                         </button>
-                        {isEditing && (
+                        {/* 링크 추가는 지정(designated) 맵만 — 라이브러리 피커와 같은 필터(미지정·순환은 숨김) */}
+                        {isEditing && canAddLink(m.id) && (
                           <button
                             type="button"
                             className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"

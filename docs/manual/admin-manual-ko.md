@@ -166,6 +166,7 @@ PUT /api/manual
 | `AUTH_ENABLED` | backend `.env` | Keycloak JWT 검증 활성화 |
 | `NEXT_PUBLIC_AUTH_ENABLED` | frontend env | UI의 Keycloak 로그인 플로 활성화 |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | 인증 없이도 로컬에서 RBAC 강제 |
+| `MANUAL_URL` | `.env` (compose) | 에디터 툴바의 매뉴얼 사이트 버튼 — 비우면 숨김 |
 
 - 환경변수 변경은 백엔드 재기동이 필요합니다(`--reload`는 `.env`를 다시 읽지 않습니다).
 - Keycloak 주소 등 배포별 값은 전부 `.env`로 관리합니다 — 하드코딩 금지.
