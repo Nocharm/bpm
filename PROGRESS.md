@@ -11,6 +11,7 @@
 - Task 4: 구 버튼 제거 — 그룹 모서리 나가기·ExpandToggleButton(+죽은 hasChildren 콜사이트)·leaveGroup·selectedGroupIds·고아 import 정리.
 - Task 5: 스모크(pw-smoke-node-action-bar, 실시드 map 2 기준) + inspector-field data-id + lint/test/build 클린 (pw-smoke-demo는 구시드 전제라 스킵).
 - Task 5 fix: 스모크 try/finally 원복(실패 경로 검증 포함) + expand·link 공존 순서 미커버 사유 주석.
+- 최종 리뷰 반영: 스모크 urlWasSet 플래그를 영속 대기 뒤로 이동(중단 시 finally 원복 보장).
 - 보안 하드닝: isSafePreviewUrl — 미리보기 표면(링크 버튼·iframe)에서 자기 오리진 URL 차단(sandbox 탈출 벡터 봉쇄, sandbox 속성은 스펙 유지).
 
 ## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)

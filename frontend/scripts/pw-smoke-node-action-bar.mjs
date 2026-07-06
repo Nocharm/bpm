@@ -108,8 +108,8 @@ try {
   // 나가므로 browser.close() 전에 그만큼 기다려야 실제로 반영된다(다른 pw-smoke-*.mjs와 동일 관례).
   await taskNode.click();
   await urlInput.fill("");
-  urlWasSet = false; // 정상 경로에서 원복 완료 — finally의 best-effort 재시도 불필요
   await page.waitForTimeout(2500); // AUTO_SAVE_DELAY_MS(2000) + PUT 여유
+  urlWasSet = false; // 정상 경로에서 원복 완료 — finally의 best-effort 재시도 불필요
 
   if (errors.length) fail(`console errors: ${errors.join(" | ")}`);
 } finally {
