@@ -90,6 +90,11 @@ await inputBox.fill("x".repeat(1600)); // 80%
 check("ring caution 75%+", (await ringStroke()) === "var(--color-changed)");
 const remainingText = await page.locator('[data-id="ai-input-ring"]').innerText();
 check("ring shows remaining count", remainingText.includes("400"), remainingText);
+const remainingGray = await page.evaluate(() => {
+  const span = document.querySelector('[data-id="ai-input-ring"] span');
+  return span ? span.className.includes("text-ink-tertiary") : false;
+});
+check("ring remaining count is gray", remainingGray);
 await inputBox.fill("x".repeat(1900)); // 95%
 check("ring warning 90%+", (await ringStroke()) === "var(--color-error)");
 await page.screenshot({ path: `${SHOT_DIR}/smoke-4-input-ring.png` });
@@ -239,8 +244,12 @@ await page.evaluate(() => {
   if (el) el.scrollTop = 0; // 상단 도달 → 이전 청크 로딩
 });
 await page.waitForSelector('[data-id="ai-loading-older"]', { timeout: 3000 });
-const tipText = await page.locator('[data-id="ai-loading-older"]').innerText();
-check("loading row with tip", tipText.includes("팁:"), tipText.replace(/\n/g, " "));
+const tipText = await page.evaluate(
+  () =>
+    document.querySelector('[data-id="ai-loading-older"] .bg-accent-tint')?.textContent?.trim() ??
+    "",
+);
+check("loading row with tip", tipText.length > 5, tipText);
 await page.screenshot({ path: `${SHOT_DIR}/smoke-5-chunk-loading.png` });
 await page.waitForTimeout(800);
 check("older chunk appended", (await countThreadItems()) === 24, `${await countThreadItems()}`);
@@ -270,6 +279,42 @@ check("log toggle persisted after reload", true);
 await page.locator('[data-id="ai-log-toggle"]').click();
 await page.waitForTimeout(500);
 check("log toggle restored off", (await toggleChecked()) === "false");
+
+// ⑪ 기능 팁 관리 — 기본 20개 → 커스텀 1개 저장 → 채팅 로딩 행에 노출 → 비우고 저장 시 기본 복원
+const tipsEditor = page.locator('[data-id="ai-tips-editor"]');
+const editorLines = async () =>
+  (await tipsEditor.inputValue()).split("\n").filter((line) => line.trim()).length;
+check("tips editor default 20", (await editorLines()) === 20, `${await editorLines()}`);
+await tipsEditor.fill("커스텀 팁 확인용");
+await page.locator('[data-id="ai-tips-save"]').click();
+await page.waitForTimeout(500);
+check("tips custom saved", (await tipsEditor.inputValue()).trim() === "커스텀 팁 확인용");
+
+// 에디터로 돌아가 로딩 행에 커스텀 팁이 뜨는지 확인
+await page.goto(`${BASE}/maps/1`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".react-flow__node", { timeout: 60000 });
+await openAiPanel();
+await page.evaluate(() => {
+  const el = document.querySelector('[data-id="ai-thread"]')?.parentElement;
+  if (el) el.scrollTop = 0;
+});
+await page.waitForSelector('[data-id="ai-loading-older"]', { timeout: 3000 });
+const customTip = await page.evaluate(
+  () =>
+    document.querySelector('[data-id="ai-loading-older"] .bg-accent-tint')?.textContent?.trim() ??
+    "",
+);
+check("custom tip shown in chat", customTip === "커스텀 팁 확인용", customTip);
+await page.waitForTimeout(700);
+
+// 기본 복원 — 비우고 저장하면 서버가 기본 20종 반환
+await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
+await page.getByText("AI 챗", { exact: true }).click();
+await page.waitForSelector('[data-id="ai-tips-editor"]', { timeout: 10000 });
+await tipsEditor.fill("");
+await page.locator('[data-id="ai-tips-save"]').click();
+await page.waitForTimeout(500);
+check("tips restored to 20 defaults", (await editorLines()) === 20, `${await editorLines()}`);
 
 check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 

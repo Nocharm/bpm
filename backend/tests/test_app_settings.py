@@ -76,6 +76,45 @@ def test_app_settings_requires_sysadmin(
     assert client.get("/api/admin/app-settings", headers=ok).status_code == 200
 
 
+def test_app_settings_default_tips(client: TestClient) -> None:
+    from app.app_settings import DEFAULT_AI_CHAT_TIPS
+
+    body = client.get("/api/admin/app-settings").json()
+    assert body["ai_chat_tips"] == DEFAULT_AI_CHAT_TIPS
+    assert len(DEFAULT_AI_CHAT_TIPS) == 20
+
+
+def test_ai_tips_endpoint_and_custom_roundtrip(client: TestClient) -> None:
+    from app.app_settings import DEFAULT_AI_CHAT_TIPS
+
+    # 커스텀 팁 저장 — 공백 팁은 제거되고, /ai/tips(전 사용자)에도 반영
+    resp = client.put(
+        "/api/admin/app-settings",
+        json={"ai_chat_tips": ["커스텀 팁 하나", "  ", "커스텀 팁 둘  "]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ai_chat_tips"] == ["커스텀 팁 하나", "커스텀 팁 둘"]
+    assert client.get("/api/ai/tips").json()["tips"] == ["커스텀 팁 하나", "커스텀 팁 둘"]
+
+    # 팁만 갱신해도 로그 토글은 유지
+    assert resp.json()["ai_chat_log_enabled"] is False
+
+    # 빈 목록 → 기본 팁 복원
+    resp = client.put("/api/admin/app-settings", json={"ai_chat_tips": []})
+    assert resp.json()["ai_chat_tips"] == DEFAULT_AI_CHAT_TIPS
+    assert client.get("/api/ai/tips").json()["tips"] == DEFAULT_AI_CHAT_TIPS
+
+
+def test_app_settings_partial_update_keeps_tips(client: TestClient) -> None:
+    client.put("/api/admin/app-settings", json={"ai_chat_tips": ["유지될 팁"]})
+    body = client.put("/api/admin/app-settings", json={"ai_chat_log_enabled": True}).json()
+    assert body["ai_chat_tips"] == ["유지될 팁"]
+    # 복원 — 세션 공유 DB 오염 방지
+    client.put(
+        "/api/admin/app-settings", json={"ai_chat_log_enabled": False, "ai_chat_tips": []}
+    )
+
+
 def test_ai_chat_logged_when_enabled(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

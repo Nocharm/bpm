@@ -31,6 +31,7 @@ import { MarkdownView } from "@/components/markdown-view";
 import {
   aiChat,
   getAiModels,
+  getAiTips,
   type AiChatTurn,
   type AiFinding,
   type AiProposal,
@@ -63,7 +64,7 @@ const RING_WARNING = 0.9; // 입력 사용률 경고 임계
 const CHAT_CHUNK_SIZE = 12; // 세션 전환 시 최근부터 로딩하는 청크 크기
 const OLDER_LOAD_DELAY_MS = 450; // 이전 기록 로딩 애니메이션(팁 노출) 시간
 
-// 이전 기록 로딩 중 순환 노출하는 기능 팁 (i18n 키)
+// 이전 기록 로딩 중 노출하는 기능 팁 — 서버(설정 콘솔 관리, 기본 20종) 조회 실패 시 i18n 폴백 5종
 const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
 
 // 사용률 → 링/바 색 (기본 accent, 75% 주의 amber, 90% 경고 error)
@@ -128,6 +129,7 @@ export function AiChatPanel({
   // 청킹 로딩 — 최근 visibleCount개만 렌더, 스크롤 상단 도달 시 이전 청크 로딩(애니메이션+팁)
   const [visibleCount, setVisibleCount] = useState(CHAT_CHUNK_SIZE);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [tips, setTips] = useState<string[]>([]); // 서버 관리 기능 팁 — 빈 배열이면 i18n 폴백
   const [tipIndex, setTipIndex] = useState(0);
   const prevScrollHeightRef = useRef<number | null>(null);
   const [input, setInput] = useState("");
@@ -161,7 +163,7 @@ export function AiChatPanel({
     const el = scrollRef.current;
     if (!el || loadingOlder || hiddenCount === 0) return;
     prevScrollHeightRef.current = el.scrollHeight;
-    setTipIndex(Math.floor(Math.random() * TIP_KEYS.length));
+    setTipIndex(Math.floor(Math.random() * Math.max(1, tips.length || TIP_KEYS.length)));
     setLoadingOlder(true);
     window.setTimeout(() => {
       setVisibleCount((count) => count + CHAT_CHUNK_SIZE);
@@ -282,6 +284,19 @@ export function AiChatPanel({
     const title = raw.split(" ").slice(0, 6).join(" ").slice(0, 40);
     if (title) onAutoTitle(title);
   }, [messages, onAutoTitle]);
+
+  // 기능 팁 조회(진입 1회) — 설정 콘솔에서 관리, 실패 시 i18n 폴백 유지
+  useEffect(() => {
+    let alive = true;
+    void getAiTips()
+      .then((result) => {
+        if (alive && result.tips.length > 0) setTips(result.tips);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // 서빙 모델 목록 조회(진입 1회, AI 활성일 때만) — 첫 모델을 기본 선택
   useEffect(() => {
@@ -522,7 +537,9 @@ export function AiChatPanel({
               </span>
               <span className="flex items-center gap-1.5 rounded-sm bg-accent-tint px-2 py-1 text-fine text-accent">
                 <Lightbulb size={12} strokeWidth={1.6} className="shrink-0" />
-                {t(TIP_KEYS[tipIndex])}
+                {tips.length > 0
+                  ? tips[tipIndex % tips.length]
+                  : t(TIP_KEYS[tipIndex % TIP_KEYS.length])}
               </span>
             </li>
           )}
@@ -806,9 +823,7 @@ export function AiChatPanel({
                 className="group relative ml-auto flex h-9 shrink-0 items-center gap-1"
               >
                 {ratio >= RING_CAUTION && (
-                  <span className="text-fine tabular-nums" style={{ color }}>
-                    {remaining}
-                  </span>
+                  <span className="text-fine tabular-nums text-ink-tertiary">{remaining}</span>
                 )}
                 <svg width="22" height="22" viewBox="0 0 22 22" className="-rotate-90">
                   <circle

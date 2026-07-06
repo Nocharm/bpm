@@ -1,7 +1,7 @@
 "use client";
 
-// AI 챗 로그 설정(sysadmin) — 질문/답변 DB 적재 토글. 재배포 없이 즉시 적용, 테스트 기간 중 ON 예정.
-import { Database, Info } from "lucide-react";
+// AI 챗 설정(sysadmin) — 질문/답변 DB 적재 토글(테스트 기간 중 ON 예정) + 로딩 중 기능 팁 관리.
+import { Database, Info, Lightbulb } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAppSettings, putAppSettings, type AppSettings } from "@/lib/api";
@@ -16,12 +16,16 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
   const { t } = useI18n();
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tipsDraft, setTipsDraft] = useState(""); // 한 줄당 팁 1개 편집 초안
 
   useEffect(() => {
     let alive = true;
     void getAppSettings()
       .then((result) => {
-        if (alive) setAppSettings(result);
+        if (alive) {
+          setAppSettings(result);
+          setTipsDraft(result.ai_chat_tips.join("\n"));
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -35,9 +39,31 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
     if (!appSettings || busy) return;
     setBusy(true);
     try {
-      const next = await putAppSettings(!appSettings.ai_chat_log_enabled);
+      const next = await putAppSettings({
+        ai_chat_log_enabled: !appSettings.ai_chat_log_enabled,
+      });
       setAppSettings(next);
       onToast?.(t(next.ai_chat_log_enabled ? "aiLog.enabledToast" : "aiLog.disabledToast"));
+    } catch (err) {
+      onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 팁 저장 — 한 줄당 1개, 빈 줄 무시. 전부 지우고 저장하면 서버가 기본 20종으로 복원.
+  const saveTips = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const tips = tipsDraft
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const next = await putAppSettings({ ai_chat_tips: tips });
+      setAppSettings(next);
+      setTipsDraft(next.ai_chat_tips.join("\n"));
+      onToast?.(t("aiLog.tipsSaved"));
     } catch (err) {
       onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
     } finally {
@@ -98,6 +124,39 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
           })}
         </p>
       )}
+
+      {/* 기능 팁 관리 — 이전 기록 로딩 중 채팅에 노출되는 FAQ성 팁 (한 줄당 1개) */}
+      <div className="mt-8">
+        <h3 className="flex items-center gap-1.5 text-caption-strong text-ink">
+          <Lightbulb size={15} strokeWidth={1.6} className="text-accent" />
+          {t("aiLog.tipsTitle")}
+        </h3>
+        <p className="mt-1 text-fine text-ink-tertiary">{t("aiLog.tipsDesc")}</p>
+        <textarea
+          data-id="ai-tips-editor"
+          value={tipsDraft}
+          onChange={(event) => setTipsDraft(event.target.value)}
+          rows={12}
+          disabled={appSettings === null || busy}
+          className="mt-2 w-full resize-y rounded-sm border border-hairline px-3 py-2 text-caption leading-relaxed outline-none focus:border-accent disabled:bg-surface-alt"
+        />
+        <div className="mt-2 flex items-center justify-between">
+          <span className="text-fine text-ink-tertiary">
+            {t("aiLog.tipsCount", {
+              n: tipsDraft.split("\n").filter((line) => line.trim()).length,
+            })}
+          </span>
+          <button
+            type="button"
+            data-id="ai-tips-save"
+            onClick={() => void saveTips()}
+            disabled={appSettings === null || busy}
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+          >
+            {t("aiLog.tipsSave")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
-from app.app_settings import is_ai_chat_log_enabled
+from app.app_settings import get_ai_chat_tips, is_ai_chat_log_enabled
 from app.clock import now as now_kst
 from app.ai_prompt import build_messages
 from app.auth import get_current_user
@@ -16,7 +16,7 @@ from app.db import get_session
 from app.manual import get_manual
 from app.models import AiChatLog, Employee, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
-from app.schemas import AiChatRequest, AiModelsOut, AiProposal
+from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
 from app.settings import settings
 
 router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current_user)])
@@ -191,3 +191,9 @@ async def ai_models() -> AiModelsOut:
     if not models and settings.ai_model:
         models = [settings.ai_model]
     return AiModelsOut(models=models)
+
+
+@router.get("/ai/tips", response_model=AiTipsOut)
+async def ai_tips(session: AsyncSession = Depends(get_session)) -> AiTipsOut:
+    """AI 챗 기능 팁 — 이전 기록 로딩 중 노출용. 설정 콘솔에서 교체, 미설정 시 기본 20종."""
+    return AiTipsOut(tips=await get_ai_chat_tips(session))
