@@ -1,0 +1,147 @@
+// CSV 임포트 파서·그래프 변환 단위 테스트 (설계: docs/superpowers/specs/2026-07-06-csv-import-design.md)
+import { describe, expect, it } from "vitest";
+
+import type { Graph } from "./api";
+import {
+  buildGraphFromCsv,
+  buildTemplateCsv,
+  decodeCsvBuffer,
+  parseCsvRecords,
+} from "./csv-import";
+
+const HEADER = "Name,System,Duration,URL,Next";
+
+function graphOf(csv: string): Graph {
+  const outcome = buildGraphFromCsv(csv);
+  expect(outcome.errors).toEqual([]);
+  if (outcome.graph === null) throw new Error("graph is null");
+  return outcome.graph;
+}
+
+describe("parseCsvRecords", () => {
+  it("따옴표 안 쉼표·이스케이프 따옴표·CRLF를 처리한다", () => {
+    const records = parseCsvRecords('a,"b,c","d""e"\r\nf,g,h\r\n');
+    expect(records).toEqual([
+      { cells: ["a", "b,c", 'd"e'], line: 1 },
+      { cells: ["f", "g", "h"], line: 2 },
+    ]);
+  });
+
+  it("따옴표 안 줄바꿈 셀 이후 행 번호가 파일 실제 행을 가리킨다", () => {
+    const records = parseCsvRecords('a,"line1\nline2"\nb,c\n');
+    expect(records[0].cells[1]).toBe("line1\nline2");
+    expect(records[1]).toEqual({ cells: ["b", "c"], line: 3 });
+  });
+
+  it("전부 빈 셀인 행은 건너뛴다", () => {
+    const records = parseCsvRecords("a,b\n,\n \nc,d\n");
+    expect(records.map((r) => r.cells[0])).toEqual(["a", "c"]);
+  });
+});
+
+describe("decodeCsvBuffer", () => {
+  it("UTF-8 BOM을 제거한다", () => {
+    const bytes = new TextEncoder().encode("\uFEFFName\nA");
+    expect(decodeCsvBuffer(bytes.buffer)).toBe("Name\nA");
+  });
+
+  it("UTF-8이 아니면 EUC-KR로 폴백한다", () => {
+    // "한글" EUC-KR 바이트: C7 D1 B1 DB
+    const ascii = Array.from(new TextEncoder().encode("Name\n"));
+    const bytes = new Uint8Array([...ascii, 0xc7, 0xd1, 0xb1, 0xdb]);
+    expect(decodeCsvBuffer(bytes.buffer)).toBe("Name\n한글");
+  });
+});
+
+describe("buildGraphFromCsv — 그래프 변환", () => {
+  it("행 노드 + 자동 Start/End + decision 추론으로 그래프를 만든다", () => {
+    const graph = graphOf(
+      [
+        HEADER,
+        "Review,SAP ERP,2 days,https://ex.com/doc,Decide",
+        "Decide,,,,Sign:approved;Reject:rejected",
+        "Sign,,3 days,,",
+        "Reject,,1 day,,",
+      ].join("\n"),
+    );
+    // 4행 + Start + End = 6 노드
+    expect(graph.nodes).toHaveLength(6);
+    const byTitle = new Map(graph.nodes.map((n) => [n.title, n]));
+    expect(byTitle.get("Start")?.node_type).toBe("start");
+    expect(byTitle.get("End")?.node_type).toBe("end");
+    expect(byTitle.get("End")?.is_primary_end).toBe(true);
+    expect(byTitle.get("Decide")?.node_type).toBe("decision"); // Next 2개 → decision
+    expect(byTitle.get("Review")?.node_type).toBe("process");
+    expect(byTitle.get("Review")?.system).toBe("SAP ERP");
+    expect(byTitle.get("Review")?.duration).toBe("2 days");
+    expect(byTitle.get("Review")?.url).toBe("https://ex.com/doc");
+    // 엣지: Start→Review, Review→Decide, Decide→Sign(approved), Decide→Reject(rejected), Sign→End, Reject→End
+    expect(graph.edges).toHaveLength(6);
+    const label = (from: string, to: string) =>
+      graph.edges.find(
+        (e) =>
+          e.source_node_id === byTitle.get(from)?.id &&
+          e.target_node_id === byTitle.get(to)?.id,
+      )?.label;
+    expect(label("Start", "Review")).toBe("");
+    expect(label("Decide", "Sign")).toBe("approved");
+    expect(label("Decide", "Reject")).toBe("rejected");
+    expect(label("Sign", "End")).toBe("");
+    // dagre 배치 — 좌표가 전부 (0,0)이 아니다
+    expect(graph.nodes.some((n) => n.pos_x !== 0 || n.pos_y !== 0)).toBe(true);
+    expect(graph.groups).toEqual([]);
+  });
+
+  it("헤더는 대소문자·순서 무관, 옵션 컬럼 생략 가능", () => {
+    const graph = graphOf("next,NAME\nB,A\n,B");
+    const byTitle = new Map(graph.nodes.map((n) => [n.title, n]));
+    expect(byTitle.get("A")).toBeDefined();
+    expect(byTitle.get("B")).toBeDefined();
+  });
+
+  it("템플릿 CSV는 에러 없이 변환된다", () => {
+    const outcome = buildGraphFromCsv(buildTemplateCsv());
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.graph).not.toBeNull();
+  });
+});
+
+describe("buildGraphFromCsv — 검증 에러", () => {
+  it("빈 파일 / 데이터 0행", () => {
+    expect(buildGraphFromCsv("").errors[0].message).toMatch(/empty/i);
+    expect(buildGraphFromCsv(HEADER).errors[0].message).toMatch(/no data/i);
+  });
+
+  it("미지 컬럼·Name 컬럼 누락", () => {
+    expect(buildGraphFromCsv("Name,Foo\nA,").errors[0].message).toContain('Unknown column "Foo"');
+    expect(buildGraphFromCsv("System\nERP").errors.some((e) => e.message.includes('"Name"'))).toBe(true);
+  });
+
+  it("Name 누락·중복은 파일 실제 행 번호로 보고한다", () => {
+    const errors = buildGraphFromCsv(`${HEADER}\n,ERP,,,\nA,,,,\nA,,,,`).errors;
+    expect(errors).toEqual([
+      { line: 2, message: "Name is required" },
+      { line: 4, message: 'Duplicate name "A"' },
+    ]);
+  });
+
+  it("Next 대상 미존재·셀 내 중복", () => {
+    const errors = buildGraphFromCsv(`${HEADER}\nA,,,,Missing\nB,,,,A;A`).errors;
+    expect(errors.some((e) => e.line === 2 && e.message.includes('"Missing"'))).toBe(true);
+    expect(errors.some((e) => e.line === 3 && e.message.includes("Duplicate Next"))).toBe(true);
+  });
+
+  it("URL 스킴·행 수 상한", () => {
+    expect(
+      buildGraphFromCsv(`${HEADER}\nA,,,ftp://x,`).errors[0].message,
+    ).toMatch(/http/);
+    const big = [HEADER, ...Array.from({ length: 501 }, (_, i) => `N${i},,,,`)].join("\n");
+    expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
+  });
+
+  it("자기 참조(재작업 루프)는 허용한다", () => {
+    const graph = graphOf(`${HEADER}\nA,,,,A;B\nB,,,,`);
+    const a = graph.nodes.find((n) => n.title === "A");
+    expect(graph.edges.some((e) => e.source_node_id === a?.id && e.target_node_id === a?.id)).toBe(true);
+  });
+});
