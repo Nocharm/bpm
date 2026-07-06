@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — CSV 임포트 구현 계획 (Task 1~7)
+- 계획 문서 작성(`docs/superpowers/plans/2026-07-06-csv-import.md`) — 백엔드 url 필드(TDD)→프론트 배선·인스펙터→CSV 파서 lib(vitest)→공용 섹션 컴포넌트→새 맵 다이얼로그→에디터 툴바 교체→E2E 검증. 스펙 편차 1건 문서화(NodeIn.url 패턴 검증 제거 — 인스펙터 자유 타이핑 자동저장 보호).
+
 ## 2026-07-06 — CSV 임포트 설계 스펙 (사용자: 새 맵 템플릿 임포트 + 기존 맵 전체 교체)
 - 브레인스토밍 확정 설계 문서화(`docs/superpowers/specs/2026-07-06-csv-import-design.md`) — 한 파일+Next 컬럼 양식(start/end 자동·decision 추론), 클라이언트 파싱 + 기존 `PUT /graph` 재사용, 노드 URL 어트리뷰트 신설(필드+인스펙터만), 기존 맵은 툴바 버튼(체크아웃 보유자 한정) 전체 교체.
 
