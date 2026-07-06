@@ -8,6 +8,7 @@
 - Task 1: isHttpUrl 가드 헬퍼 + vitest 12케이스 (TDD).
 - Task 2: NodeActionBar — 단일 선택 노드 하단 통합 액션 바(펼치기/링크/그룹 나가기) + leaveGroups·linkPreviewUrl 연결.
 - Task 3: LinkPreviewPanel — 우측 520px 슬라이드 iframe 미리보기(로딩 애니메이션·6s 임베드 차단 폴백·Esc/스크림 닫기).
+- Task 4: 구 버튼 제거 — 그룹 모서리 나가기·ExpandToggleButton(+죽은 hasChildren 콜사이트)·leaveGroup·selectedGroupIds·고아 import 정리.
 
 ## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)
 - `csv-import.ts`: `buildAiPromptText()`(스펙 상수·템플릿에서 파생한 한국어 절차 추출 프롬프트 — 헤더/컬럼 규칙/Start·End 생략/세미콜론 Next/500행/예시) + `stripCsvFences()`(```csv 펜스 관용 처리). 테스트 +3.

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, FilePlus2, FileUp, Group, Hand, Info, LayoutGrid, Lock, Maximize2, Minus, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -1054,7 +1054,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     return m;
   }, [rootGraph, resolvedCache]);
 
-  // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
+  // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. NodeActionBar 펼침 게이트·핸들이 읽음.
   // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
   const injectSubEnds = useCallback(
     (node: AppNode): AppNode => {
@@ -3105,24 +3105,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pruneSmallGroups, scheduleAutoSave],
   );
 
-  // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 2명 미만이 되면 그룹 자동 제거.
-  const leaveGroup = useCallback(
-    (groupId: string) => {
-      const next = nodesRef.current.map((node) =>
-        node.selected && node.data.groupIds.includes(groupId)
-          ? {
-              ...node,
-              data: { ...node.data, groupIds: node.data.groupIds.filter((id) => id !== groupId) },
-            }
-          : node,
-      );
-      setNodes(next);
-      pruneSmallGroups(next);
-      scheduleAutoSave();
-    },
-    [setNodes, pruneSmallGroups, scheduleAutoSave],
-  );
-
   // 액션 바 "그룹 나가기" — 선택 멤버를 소속 그룹 전체에서 이탈(확정: 클릭 1회 전 그룹 탈퇴).
   // leaveGroup과 같은 경로(setNodes→pruneSmallGroups→scheduleAutoSave)를 한 번에 태운다.
   const leaveGroups = useCallback(
@@ -3192,7 +3174,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     scheduleAutoSave();
   }, [readOnly, pushHistory, setGroups, setNodes, scheduleAutoSave, showToast, t]);
 
-  // 그룹 해제(disband) — 모든 노드에서 이 그룹 태그 제거 + 그룹 자체 삭제. leaveGroup(선택 멤버만 이탈)과 구분.
+  // 그룹 해제(disband) — 모든 노드에서 이 그룹 태그 제거 + 그룹 자체 삭제. leaveGroups(선택 멤버만 이탈)과 구분.
   const disbandGroup = useCallback(
     (groupId: string) => {
       if (readOnly) {
@@ -5354,15 +5336,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     return lanes;
   }, [currentParentId, nodes, inlineComposition, ancestorContextNodes, fullGraph]);
 
-  // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
-  const selectedGroupIds = useMemo(
-    () =>
-      new Set(
-        nodes.filter((node) => node.selected).flatMap((node) => node.data.groupIds),
-      ),
-    [nodes],
-  );
-
   const selectedComments = useMemo(
     () => comments.filter((comment) => comment.node_id === selectedId),
     [comments, selectedId],
@@ -6658,28 +6631,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 onBulkEdit={setBulkEditGroupId}
                               />
                             </div>
-                            {/* 그룹 나가기 — 박스 경계 우측 위 모서리. 선택 멤버가 있을 때만 */}
-                            {selectedGroupIds.has(box.id) && !readOnly && (
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  left: 0,
-                                  top: 0,
-                                  transform: `translate(${box.x + box.width - 26}px, ${box.y + 3}px)`,
-                                  zIndex: 2,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  className="pointer-events-auto rounded-sm border border-hairline bg-surface p-1 text-ink-tertiary shadow-sm hover:bg-error/10 hover:text-error"
-                                  title={t("group.leave")}
-                                  aria-label={t("group.leave")}
-                                  onClick={() => leaveGroup(box.id)}
-                                >
-                                  <LogOut size={12} strokeWidth={1.5} />
-                                </button>
-                              </div>
-                            )}
                           </Fragment>
                         ))}
                       </ViewportPortal>
