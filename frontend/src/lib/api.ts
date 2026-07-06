@@ -777,6 +777,24 @@ export function putManual(format: ManualDoc["format"], content: string): Promise
   });
 }
 
+// ── 앱 런타임 설정 (sysadmin) ────────────────────────────────
+export interface AppSettings {
+  ai_chat_log_enabled: boolean; // AI 챗 질문/답변 DB 적재(테스트 기간 검증용)
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export function getAppSettings(): Promise<AppSettings> {
+  return request<AppSettings>("/admin/app-settings");
+}
+
+export function putAppSettings(aiChatLogEnabled: boolean): Promise<AppSettings> {
+  return request<AppSettings>("/admin/app-settings", {
+    method: "PUT",
+    body: JSON.stringify({ ai_chat_log_enabled: aiChatLogEnabled }),
+  });
+}
+
 // ── 매뉴얼 다중 문서 (F10) ────────────────────────────────────
 export type ManualLang = "ko" | "en";
 

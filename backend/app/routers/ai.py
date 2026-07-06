@@ -7,13 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
+from app.app_settings import is_ai_chat_log_enabled
 from app.clock import now as now_kst
 from app.ai_prompt import build_messages
 from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
-from app.models import Employee, ManualDoc, MapVersion
+from app.models import AiChatLog, Employee, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal
 from app.settings import settings
@@ -154,12 +155,26 @@ async def ai_chat(
     proposal = await _ask_and_validate(messages, payload.model)
     # 편집 불가인데 편집계열(graph/ops)을 제안하면 적용 불가 — answer로 다운그레이드 (최종 가드는 saveGraph)
     if proposal.kind in ("graph", "ops") and not can_edit:
-        return AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
-    # 현 그래프에 없는 node_id 참조는 drop하지 말고 message로 표면화 (계약 규칙 ④)
-    missing = _missing_node_ids(proposal, {node.id for node in current.nodes})
-    if missing:
-        warning = _UNKNOWN_NODES_MSG.format(ids=", ".join(missing))
-        proposal.message = f"{proposal.message}\n{warning}" if proposal.message else warning
+        proposal = AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
+    else:
+        # 현 그래프에 없는 node_id 참조는 drop하지 말고 message로 표면화 (계약 규칙 ④)
+        missing = _missing_node_ids(proposal, {node.id for node in current.nodes})
+        if missing:
+            warning = _UNKNOWN_NODES_MSG.format(ids=", ".join(missing))
+            proposal.message = f"{proposal.message}\n{warning}" if proposal.message else warning
+    # 설정 ON일 때 최종 질문/답변을 DB 적재 — 테스트 기간 검증용 (app_settings.ai_chat_log_enabled)
+    if await is_ai_chat_log_enabled(session):
+        session.add(
+            AiChatLog(
+                version_id=version_id,
+                login_id=user,
+                model=payload.model,
+                kind=proposal.kind,
+                instruction=payload.instruction,
+                answer=proposal.message,
+            )
+        )
+        await session.commit()
     return proposal
 
 

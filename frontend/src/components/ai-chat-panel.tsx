@@ -13,6 +13,7 @@ import {
   History,
   Info,
   Lightbulb,
+  Loader2,
   MessageSquare,
   Minus,
   Paperclip,
@@ -37,6 +38,8 @@ import {
 } from "@/lib/api";
 import {
   MAX_CHAT_SESSIONS,
+  SESSION_MESSAGE_LIMIT,
+  createChatMessage,
   createChatSession,
   deriveSessionTitle,
   findOldestSession,
@@ -45,6 +48,7 @@ import {
   type ChatMessage,
   type ChatSession,
 } from "@/lib/chat-sessions";
+import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
 // 대화 영속 — 패널을 닫으면 언마운트되어 state가 사라지므로 버전별 localStorage에 저장/복원.
@@ -52,6 +56,26 @@ import { useI18n } from "@/lib/i18n";
 const HISTORY_KEY_PREFIX = "bpm.aiChat.v";
 
 const EMPTY_MESSAGES: ChatMessage[] = []; // 파생 messages의 안정 identity — 렌더마다 새 배열 방지
+
+const MAX_INSTRUCTION_CHARS = 2000; // 백엔드 AiChatRequest.instruction max_length와 동일
+const RING_CAUTION = 0.75; // 입력 사용률 주의 임계
+const RING_WARNING = 0.9; // 입력 사용률 경고 임계
+const CHAT_CHUNK_SIZE = 12; // 세션 전환 시 최근부터 로딩하는 청크 크기
+const OLDER_LOAD_DELAY_MS = 450; // 이전 기록 로딩 애니메이션(팁 노출) 시간
+
+// 이전 기록 로딩 중 순환 노출하는 기능 팁 (i18n 키)
+const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
+
+// 사용률 → 링/바 색 (기본 accent, 75% 주의 amber, 90% 경고 error)
+function getUsageColor(ratio: number): string {
+  if (ratio >= RING_WARNING) return "var(--color-error)";
+  if (ratio >= RING_CAUTION) return "var(--color-changed)";
+  return "var(--color-accent)";
+}
+
+function formatMessageTime(at: number): string {
+  return formatKstShort(new Date(at).toISOString()); // KST "MM-DD HH:mm" (앱 표준)
+}
 
 interface AiChatPanelProps {
   versionId: number;
@@ -101,6 +125,11 @@ export function AiChatPanel({
   const [activeId, setActiveId] = useState("");
   const [listOpen, setListOpen] = useState(false); // 이전 대화 드롭다운
   const [limitConfirm, setLimitConfirm] = useState(false); // 5번째 대화 시 최오래 세션 닫기 확인
+  // 청킹 로딩 — 최근 visibleCount개만 렌더, 스크롤 상단 도달 시 이전 청크 로딩(애니메이션+팁)
+  const [visibleCount, setVisibleCount] = useState(CHAT_CHUNK_SIZE);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
+  const prevScrollHeightRef = useRef<number | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
@@ -123,6 +152,30 @@ export function AiChatPanel({
 
   const activeSession = sessions.find((session) => session.id === activeId);
   const messages = activeSession?.messages ?? EMPTY_MESSAGES;
+  // 최근 visibleCount개만 렌더 — 이전 기록은 스크롤 상단 도달 시 청크 단위로 추가 로딩
+  const hiddenCount = Math.max(0, messages.length - visibleCount);
+  const visibleMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages;
+
+  // 이전 청크 로딩 시작 — 스피너+기능 팁을 잠깐 보여준 뒤 이전 기록을 붙인다
+  const beginLoadOlder = () => {
+    const el = scrollRef.current;
+    if (!el || loadingOlder || hiddenCount === 0) return;
+    prevScrollHeightRef.current = el.scrollHeight;
+    setTipIndex(Math.floor(Math.random() * TIP_KEYS.length));
+    setLoadingOlder(true);
+    window.setTimeout(() => {
+      setVisibleCount((count) => count + CHAT_CHUNK_SIZE);
+      setLoadingOlder(false);
+    }, OLDER_LOAD_DELAY_MS);
+  };
+
+  // 이전 청크가 붙은 뒤 스크롤 위치 보존 — 늘어난 높이만큼 내려서 보던 지점 유지
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || prevScrollHeightRef.current === null) return;
+    el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
+    prevScrollHeightRef.current = null;
+  }, [visibleCount]);
 
   // 저장된 대화 복원 — 마운트·버전 변경 시 1회 (SSR 초기 렌더와 일치시키기 위해 effect에서 복원)
   useEffect(() => {
@@ -135,6 +188,7 @@ export function AiChatPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessions(stored.sessions); // intentional: one-time hydration restore from localStorage
     setActiveId(stored.activeId);
+    setVisibleCount(CHAT_CHUNK_SIZE); // 최근 청크부터 로딩
     hydratedVersionRef.current = versionId;
   }, [versionId]);
 
@@ -154,6 +208,8 @@ export function AiChatPanel({
     setSteps([]);
     setStepIndex(0);
     setAutoplay(false);
+    setVisibleCount(CHAT_CHUNK_SIZE); // 세션 전환 시 최근 청크부터 다시
+    setLoadingOlder(false);
   };
 
   const switchSession = (sessionId: string) => {
@@ -288,8 +344,9 @@ export function AiChatPanel({
     if (override === undefined) setInput("");
     setBusy(true);
     const targetId = activeId;
-    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: instruction }];
-    appendToSession(targetId, { role: "user", content: instruction });
+    const userMessage = createChatMessage("user", instruction);
+    const nextMessages: ChatMessage[] = [...messages, userMessage];
+    appendToSession(targetId, userMessage);
     // 최근 6턴만 history로 전송
     const history: AiChatTurn[] = nextMessages.slice(-6).map((message) => ({
       role: message.role,
@@ -299,7 +356,7 @@ export function AiChatPanel({
       const proposal = await aiChat(versionId, instruction, history, model || null);
       // graph/ops/answer 활성 — 빈 message(핸들러 없는 kind)는 미지원 안내로 폴백 (규칙 ③b)
       const content = proposal.message || t("ai.unsupportedKind");
-      appendToSession(targetId, { role: "assistant", content });
+      appendToSession(targetId, createChatMessage("assistant", content));
       if (activeIdRef.current === targetId) {
         setFindings(proposal.kind === "analysis" ? proposal.findings : []);
         setSteps(proposal.kind === "walkthrough" ? proposal.steps : []);
@@ -312,10 +369,10 @@ export function AiChatPanel({
         onOpsProposal(proposal);
       }
     } catch (err) {
-      appendToSession(targetId, {
-        role: "assistant",
-        content: err instanceof Error ? err.message : t("ai.error"),
-      });
+      appendToSession(
+        targetId,
+        createChatMessage("assistant", err instanceof Error ? err.message : t("ai.error")),
+      );
     } finally {
       setBusy(false);
     }
@@ -418,6 +475,20 @@ export function AiChatPanel({
           </>
         )}
       </div>
+      {/* 세션 저장 용량 사용률 — localStorage 세션당 상한(SESSION_MESSAGE_LIMIT) 대비 진행바 */}
+      <div
+        data-id="ai-session-usage"
+        title={t("ai.sessionUsage", { used: messages.length, max: SESSION_MESSAGE_LIMIT })}
+        className="h-[3px] w-full shrink-0 bg-surface-alt"
+      >
+        <div
+          className="h-full transition-[width] duration-350"
+          style={{
+            width: `${Math.min(100, (messages.length / SESSION_MESSAGE_LIMIT) * 100)}%`,
+            background: getUsageColor(messages.length / SESSION_MESSAGE_LIMIT),
+          }}
+        />
+      </div>
       <div className="relative flex min-h-0 flex-1 flex-col">
       {/* 헤더 경계 근처 페이드 — 스크롤 시 내용이 선에서 끊기지 않고 흐려지는 효과 */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-gradient-to-b from-surface to-transparent" />
@@ -425,7 +496,9 @@ export function AiChatPanel({
         ref={scrollRef}
         onScroll={() => {
           const el = scrollRef.current;
-          if (el) setShowToBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+          if (!el) return;
+          setShowToBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+          if (el.scrollTop <= 4) beginLoadOlder(); // 상단 도달 → 이전 기록 청크 로딩
         }}
         onCopy={() => onToast?.(t("ai.copied"))}
         style={{ zoom: fontScale }}
@@ -439,25 +512,52 @@ export function AiChatPanel({
         {aiEnabled && !canEdit && (
           <p className="mb-2 text-fine text-ink-tertiary">{t("ai.readOnly")}</p>
         )}
-        <ul className="flex flex-col gap-3">
-          {messages.map((message, index) =>
+        <ul data-id="ai-thread" className="flex flex-col gap-3">
+          {/* 이전 기록 로딩 — 스피너 + 기능 팁 (스크롤 상단 도달 시) */}
+          {loadingOlder && (
+            <li data-id="ai-loading-older" className="flex flex-col items-center gap-1.5 py-2">
+              <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
+                <Loader2 size={14} strokeWidth={1.6} className="animate-spin text-accent" />
+                {t("ai.loadingOlder")}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-sm bg-accent-tint px-2 py-1 text-fine text-accent">
+                <Lightbulb size={12} strokeWidth={1.6} className="shrink-0" />
+                {t(TIP_KEYS[tipIndex])}
+              </span>
+            </li>
+          )}
+          {visibleMessages.map((message, index) =>
             message.role === "user" ? (
               <li
-                key={`${message.role}-${index}`}
-                className="max-w-[80%] self-end whitespace-pre-wrap rounded-md rounded-br-sm bg-accent px-3 py-2 text-caption text-on-accent"
+                key={`${message.role}-${hiddenCount + index}`}
+                className="flex max-w-[80%] flex-col items-end gap-0.5 self-end"
               >
-                {message.content}
+                <span className="whitespace-pre-wrap rounded-md rounded-br-sm bg-accent px-3 py-2 text-caption text-on-accent">
+                  {message.content}
+                </span>
+                {message.at !== undefined && (
+                  <span className="text-[10px] text-ink-tertiary">
+                    {formatMessageTime(message.at)}
+                  </span>
+                )}
               </li>
             ) : (
-              <li key={`${message.role}-${index}`} className="flex items-start gap-2">
+              <li key={`${message.role}-${hiddenCount + index}`} className="flex items-start gap-2">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
                   <Sparkles size={12} strokeWidth={1.5} />
                 </span>
-                <MarkdownView
-                  source={message.content}
-                  className="min-w-0 max-w-[80%] flex-1"
-                  onCopy={() => onToast?.(t("ai.copied"))}
-                />
+                <div className="flex min-w-0 max-w-[80%] flex-1 flex-col gap-0.5">
+                  <MarkdownView
+                    source={message.content}
+                    className="min-w-0"
+                    onCopy={() => onToast?.(t("ai.copied"))}
+                  />
+                  {message.at !== undefined && (
+                    <span className="text-[10px] text-ink-tertiary">
+                      {formatMessageTime(message.at)}
+                    </span>
+                  )}
+                </div>
               </li>
             ),
           )}
@@ -694,6 +794,50 @@ export function AiChatPanel({
               </div>
             </div>
           ))}
+          {/* 입력 잔여 링 — instruction 상한(2000자) 대비 사용률. 75% 주의(amber)·90% 경고(error) */}
+          {(() => {
+            const ratio = Math.min(1, input.length / MAX_INSTRUCTION_CHARS);
+            const remaining = Math.max(0, MAX_INSTRUCTION_CHARS - input.length);
+            const color = getUsageColor(ratio);
+            const circumference = 2 * Math.PI * 9;
+            return (
+              <div
+                data-id="ai-input-ring"
+                className="group relative ml-auto flex h-9 shrink-0 items-center gap-1"
+              >
+                {ratio >= RING_CAUTION && (
+                  <span className="text-fine tabular-nums" style={{ color }}>
+                    {remaining}
+                  </span>
+                )}
+                <svg width="22" height="22" viewBox="0 0 22 22" className="-rotate-90">
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="9"
+                    fill="none"
+                    stroke="var(--color-hairline)"
+                    strokeWidth="2.5"
+                  />
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="9"
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference * (1 - ratio)}
+                  />
+                </svg>
+                {/* 호버 툴팁 — 잔여 문자수 */}
+                <div className="pointer-events-none absolute bottom-full right-0 z-10 mb-1.5 hidden whitespace-nowrap rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink shadow-lg group-hover:block">
+                  {t("ai.inputRemaining", { n: remaining })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
         {/* 입력 행 — 입력(자동 높이) + 전송 */}
         <div className="flex items-end gap-2">
@@ -701,6 +845,7 @@ export function AiChatPanel({
             ref={inputRef}
             className="scrollbar-hidden max-h-32 min-h-[36px] flex-1 resize-none rounded-md border border-hairline px-3 py-2 text-caption outline-none focus:border-accent disabled:bg-surface-alt"
             rows={1}
+            maxLength={MAX_INSTRUCTION_CHARS}
             placeholder={aiEnabled ? t("ai.placeholder") : t("ai.disabled")}
             value={input}
             disabled={!aiEnabled}

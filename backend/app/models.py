@@ -16,6 +16,36 @@ class Base(DeclarativeBase):
     pass
 
 
+class AppSetting(Base):
+    """앱 런타임 설정 — key-value 단건. sysadmin이 재배포 없이 설정 화면에서 변경."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500))
+    updated_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
+class AiChatLog(Base):
+    """AI 챗 질문/답변 기록 — 설정 ai_chat_log_enabled ON일 때만 적재(테스트 기간 검증용)."""
+
+    __tablename__ = "ai_chat_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("map_versions.id", ondelete="CASCADE"), index=True
+    )
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    model: Mapped[str | None] = mapped_column(String(200), default=None)
+    kind: Mapped[str] = mapped_column(String(20))
+    instruction: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ProcessMap(Base):
     __tablename__ = "process_maps"
 

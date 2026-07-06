@@ -4,6 +4,7 @@ import { genId } from "@/lib/id";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  at?: number; // epoch ms — 표시/DB 대조용(구 포맷 메시지는 없음)
 }
 
 export interface ChatSession {
@@ -27,7 +28,8 @@ function isChatMessage(item: unknown): item is ChatMessage {
     "role" in item &&
     "content" in item &&
     (item.role === "user" || item.role === "assistant") &&
-    typeof item.content === "string"
+    typeof item.content === "string" &&
+    (!("at" in item) || item.at === undefined || typeof item.at === "number")
   );
 }
 
@@ -47,7 +49,12 @@ export function createChatSession(now: number): ChatSession {
   return { id: genId(), createdAt: now, messages: [] };
 }
 
-// 저장 raw 파싱 — 신 포맷({sessions, activeId})과 구 포맷(메시지 배열, 단일 세션으로 이행) 모두 수용.
+export function createChatMessage(role: ChatMessage["role"], content: string): ChatMessage {
+  return { role, content, at: Date.now() }; // 전송/수신 시각 스탬프
+}
+
+// 저장 raw 파싱 — 신 포맷({sessions, activeId, order?})과 구 포맷(메시지 배열, 단일 세션 이행) 모두 수용.
+// order:"desc"(시간 역순 저장, 최근이 배열 앞)면 내부 표현(시간순 오름차순)으로 뒤집는다.
 export function parseChatStore(raw: string | null, now: number): ChatStore | null {
   if (!raw) return null;
   let parsed: unknown;
@@ -63,28 +70,33 @@ export function parseChatStore(raw: string | null, now: number): ChatStore | nul
     return { sessions: [session], activeId: session.id };
   }
   if (typeof parsed !== "object" || parsed === null || !("sessions" in parsed)) return null;
-  const rawSessions = (parsed as Record<string, unknown>).sessions;
-  if (!Array.isArray(rawSessions)) return null;
-  const sessions = rawSessions
+  const record = parsed as Record<string, unknown>;
+  if (!Array.isArray(record.sessions)) return null;
+  const isDesc = record.order === "desc";
+  const sessions = record.sessions
     .map(parseSession)
     .filter((session): session is ChatSession => session !== null)
+    .map((session) =>
+      isDesc ? { ...session, messages: [...session.messages].reverse() } : session,
+    )
     .sort((a, b) => a.createdAt - b.createdAt)
     .slice(-MAX_CHAT_SESSIONS);
   if (sessions.length === 0) return null;
-  const rawActiveId = (parsed as Record<string, unknown>).activeId;
-  const activeId = sessions.some((session) => session.id === rawActiveId)
-    ? (rawActiveId as string)
+  const activeId = sessions.some((session) => session.id === record.activeId)
+    ? (record.activeId as string)
     : sessions[sessions.length - 1].id;
   return { sessions, activeId };
 }
 
+// 시간 역순(desc, 최근이 앞)으로 저장 — 세션 전환 시 앞쪽 청크(=최근)부터 읽는 로딩 전략과 정렬 일치.
 export function serializeChatStore(store: ChatStore): string {
   return JSON.stringify({
     sessions: store.sessions.map((session) => ({
       ...session,
-      messages: session.messages.slice(-SESSION_MESSAGE_LIMIT),
+      messages: session.messages.slice(-SESSION_MESSAGE_LIMIT).reverse(),
     })),
     activeId: store.activeId,
+    order: "desc",
   });
 }
 

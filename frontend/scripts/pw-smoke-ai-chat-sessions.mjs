@@ -77,6 +77,24 @@ const zoomApplied = await page.evaluate(
 );
 check("font scale tool in chat bar", zoomApplied);
 
+// ①-3 입력 잔여 링 — 2000자 상한 대비 75% 주의(amber)·90% 경고(error). AI_ENABLED=true 필요.
+const ringStroke = () =>
+  page
+    .locator('[data-id="ai-input-ring"] svg circle')
+    .nth(1)
+    .getAttribute("stroke");
+const inputBox = page.locator('textarea[maxlength="2000"]'); // 챗 입력창(피드백 textarea 제외)
+await inputBox.fill("x".repeat(100));
+check("ring normal <75%", (await ringStroke()) === "var(--color-accent)", `${await ringStroke()}`);
+await inputBox.fill("x".repeat(1600)); // 80%
+check("ring caution 75%+", (await ringStroke()) === "var(--color-changed)");
+const remainingText = await page.locator('[data-id="ai-input-ring"]').innerText();
+check("ring shows remaining count", remainingText.includes("400"), remainingText);
+await inputBox.fill("x".repeat(1900)); // 95%
+check("ring warning 90%+", (await ringStroke()) === "var(--color-error)");
+await page.screenshot({ path: `${SHOT_DIR}/smoke-4-input-ring.png` });
+await inputBox.fill("");
+
 // ② 4개 세션 시드 → 패널 닫았다 열어 재하이드레이션
 await page.evaluate((keys) => {
   const mk = (id, at, topic) => ({
@@ -100,6 +118,12 @@ await openAiPanel();
 const counter4 = await page.locator('[data-id="ai-chat-list"]').innerText();
 check("seeded counter 4/4", counter4.includes("4/4"), counter4.replace(/\n/g, " "));
 check("active title = newest", counter4.includes("네번째 질문"));
+
+// ②-1 세션 용량 바 — 활성 세션 2/40 = 5%
+const usageWidth = await page
+  .locator('[data-id="ai-session-usage"] > div')
+  .evaluate((el) => el.style.width);
+check("session usage bar width 5%", usageWidth === "5%", usageWidth);
 
 // ③ 드롭다운 — 4개, 최신순, 활성 표시
 await page.locator('[data-id="ai-chat-list"]').click();
@@ -184,6 +208,68 @@ const legacyMsg = await page.getByText("레거시 답변").count();
 check("legacy migrated to 1 session", counterLegacy.includes("1/4") && counterLegacy.includes("레거시 질문"), counterLegacy.replace(/\n/g, " "));
 check("legacy thread content", legacyMsg > 0);
 await page.screenshot({ path: `${SHOT_DIR}/smoke-3-legacy.png` });
+
+// ⑨ 청킹 로딩 — 30개 메시지: 최근 12개만 렌더 → 상단 스크롤 시 로딩 애니메이션+팁 → 이전 청크 추가
+await page.evaluate((keys) => {
+  const messages = Array.from({ length: 30 }, (_, i) => ({
+    role: i % 2 ? "assistant" : "user",
+    content: `메시지 ${i + 1}`,
+    at: 1751900000000 + i * 60000,
+  }));
+  const store = { sessions: [{ id: "big", createdAt: 1, messages }], activeId: "big" };
+  for (const key of keys) window.localStorage.setItem(key, JSON.stringify(store));
+}, KEYS);
+await toggle.click(); // 패널 닫기 → 재하이드레이션
+await page.waitForTimeout(300);
+await openAiPanel();
+const countThreadItems = () =>
+  page.evaluate(
+    () =>
+      document.querySelectorAll('[data-id="ai-thread"] > li:not([data-id="ai-loading-older"])')
+        .length,
+  );
+check("chunk initial 12", (await countThreadItems()) === 12, `${await countThreadItems()}`);
+check("newest message visible", (await page.getByText("메시지 30").count()) > 0);
+check(
+  "timestamps shown",
+  /\d{2}-\d{2} \d{2}:\d{2}/.test(await page.locator('[data-id="ai-thread"]').innerText()),
+);
+await page.evaluate(() => {
+  const el = document.querySelector('[data-id="ai-thread"]')?.parentElement;
+  if (el) el.scrollTop = 0; // 상단 도달 → 이전 청크 로딩
+});
+await page.waitForSelector('[data-id="ai-loading-older"]', { timeout: 3000 });
+const tipText = await page.locator('[data-id="ai-loading-older"]').innerText();
+check("loading row with tip", tipText.includes("팁:"), tipText.replace(/\n/g, " "));
+await page.screenshot({ path: `${SHOT_DIR}/smoke-5-chunk-loading.png` });
+await page.waitForTimeout(800);
+check("older chunk appended", (await countThreadItems()) === 24, `${await countThreadItems()}`);
+const scrollPos = await page.evaluate(
+  () => document.querySelector('[data-id="ai-thread"]')?.parentElement?.scrollTop ?? 0,
+);
+check("scroll position preserved", scrollPos > 0, `scrollTop=${scrollPos}`);
+
+// ⑩ 설정 — AI 챗 로그 토글(sysadmin): 기본 off → 켜기(공지 노출) → 리로드 지속 → 끄기 복원
+await page.goto(`${BASE}/settings`, { waitUntil: "domcontentloaded" });
+await page.getByText("AI 챗", { exact: true }).click();
+await page.waitForSelector('[data-id="ai-log-toggle"]', { timeout: 10000 });
+const toggleChecked = () => page.locator('[data-id="ai-log-toggle"]').getAttribute("aria-checked");
+check("log toggle default off", (await toggleChecked()) === "false");
+await page.locator('[data-id="ai-log-toggle"]').click();
+await page.waitForTimeout(500);
+check(
+  "log toggle on + notice",
+  (await toggleChecked()) === "true" &&
+    (await page.locator('[data-id="ai-log-active-notice"]').count()) === 1,
+);
+await page.screenshot({ path: `${SHOT_DIR}/smoke-6-settings-toggle.png` });
+await page.reload({ waitUntil: "domcontentloaded" });
+await page.getByText("AI 챗", { exact: true }).click();
+await page.waitForSelector('[data-id="ai-log-toggle"][aria-checked="true"]', { timeout: 10000 });
+check("log toggle persisted after reload", true);
+await page.locator('[data-id="ai-log-toggle"]').click();
+await page.waitForTimeout(500);
+check("log toggle restored off", (await toggleChecked()) === "false");
 
 check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 

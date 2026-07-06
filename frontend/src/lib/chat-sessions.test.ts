@@ -56,6 +56,62 @@ describe("parseChatStore", () => {
     expect(parseChatStore(serializeChatStore(store), 999)).toEqual(store);
   });
 
+  it("stores messages newest-first (order desc) but parses back to chronological", () => {
+    const session = makeSession({
+      messages: [
+        { role: "user", content: "first", at: 10 },
+        { role: "assistant", content: "second", at: 20 },
+      ],
+    });
+    const raw = serializeChatStore({ sessions: [session], activeId: "s1" });
+    const stored = JSON.parse(raw);
+    expect(stored.order).toBe("desc");
+    expect(stored.sessions[0].messages.map((m: { content: string }) => m.content)).toEqual([
+      "second",
+      "first",
+    ]);
+    // 내부 표현은 시간순 복원 + at 보존
+    const parsed = parseChatStore(raw, 999)!;
+    expect(parsed.sessions[0].messages).toEqual(session.messages);
+  });
+
+  it("keeps chronological order for v2 stores without order marker", () => {
+    const raw = JSON.stringify({
+      sessions: [
+        {
+          id: "s1",
+          createdAt: 1,
+          messages: [
+            { role: "user", content: "first" },
+            { role: "assistant", content: "second" },
+          ],
+        },
+      ],
+      activeId: "s1",
+    });
+    const parsed = parseChatStore(raw, 999)!;
+    expect(parsed.sessions[0].messages.map((m) => m.content)).toEqual(["first", "second"]);
+  });
+
+  it("drops messages with a non-numeric at", () => {
+    const raw = JSON.stringify({
+      sessions: [
+        {
+          id: "s1",
+          createdAt: 1,
+          messages: [
+            { role: "user", content: "ok", at: 5 },
+            { role: "user", content: "bad", at: "yesterday" },
+          ],
+        },
+      ],
+      activeId: "s1",
+    });
+    expect(parseChatStore(raw, 999)!.sessions[0].messages).toEqual([
+      { role: "user", content: "ok", at: 5 },
+    ]);
+  });
+
   it("drops malformed sessions and messages", () => {
     const raw = JSON.stringify({
       sessions: [

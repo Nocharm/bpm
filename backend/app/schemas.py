@@ -697,6 +697,18 @@ class EligibleAssigneesOut(BaseModel):
 AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 
+class AppSettingsOut(BaseModel):
+    """앱 런타임 설정 — 현재는 AI 챗 Q&A DB 적재 플래그만."""
+
+    ai_chat_log_enabled: bool
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class AppSettingsUpdate(BaseModel):
+    ai_chat_log_enabled: bool
+
+
 class AiChatTurn(BaseModel):
     # 경계에서 역할 제약 — 클라이언트가 system 역할을 주입하지 못하도록 (security.md)
     role: Literal["user", "assistant"]
