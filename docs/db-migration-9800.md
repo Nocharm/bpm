@@ -191,9 +191,12 @@ docker exec -it "$DEV_DB"  psql -U processmap -d processmap -c "$Q"
 - [ ] PNG 내보내기(에디터 `Ctrl+Shift+E`·비교 Export) — 엣지 검은 실선 출력
 - [ ] 브라우저 콘솔에 에러 없는지
 
-## 6. (선택) `version_number` 소급 백필
+## 6. `version_number` 소급 백필 — 레거시 게시본이 있으면 **필수**
 
-기존 게시본에도 번호를 붙이고 싶을 때만. 맵별 게시 시점(created_at) 순으로 채번:
+번호 도입(2026-06-29) 전에 게시된 버전은 `version_number=NULL`인데, 프론트는 번호 없는 버전을
+상태와 무관하게 `(Draft)v.{다음번호}`로 표기한다(`lib/version-name.ts`) → 레거시 게시본이
+"(Draft)v.1"로 보이고 새 초안도 next=1이라 **Draft v1이 두 개** 표시된다(9800 검증에서 실측).
+맵별 게시 시점(created_at) 순으로 채번하면 게시본=v.1, 기존 초안은 새로고침 시 (Draft)v.2가 된다:
 
 ```bash
 docker exec -it "$DEV_DB" psql -U processmap -d processmap <<'SQL'
@@ -209,7 +212,8 @@ WHERE v.id = r.id AND v.version_number IS NULL;
 SQL
 ```
 
-미적용해도 무방(신규 게시부터 1번 채번). 적용했다면 §5 워크플로 항목을 다시 확인.
+레거시 게시본이 없는 DB에서만 생략 가능. 적용 후 §5 워크플로 항목(게시본 v.1·초안 (Draft)v.2 표시)을 다시 확인.
+참고: 레거시 버전의 이력이 "생성"만 보이는 것은 워크플로 이벤트 기록 도입 전 데이터라서이며 백필 대상이 아니다(기능 영향 없음).
 
 ---
 
