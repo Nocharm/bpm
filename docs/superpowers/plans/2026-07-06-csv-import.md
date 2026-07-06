@@ -1356,7 +1356,7 @@ git commit -m "feat(editor): CSV import replace-all from toolbar — 에디터 C
 **Interfaces:**
 - Consumes: Task 1~6 전부.
 
-- [ ] **Step 1: 검증 환경 기동**
+- [x] **Step 1: 검증 환경 기동**
 
 **먼저 `docs/lessons/browser-verification.md`를 읽는다** (dev.db 오염·좀비 프론트·연결 flaky 함정). 요점:
 - 좀비 정리: `pkill -f "next dev"` 후 3000 포트 점유 확인(3001 폴백 금지).
@@ -1364,7 +1364,7 @@ git commit -m "feat(editor): CSV import replace-all from toolbar — 에디터 C
 - backend: `backend/`에서 `.venv/bin/uvicorn app.main:app --reload --port 8000` / frontend: `frontend/`에서 `npm run dev`.
 - 브라우저 구동은 lessons 문서의 Playwright+시스템 Chrome 하네스(또는 세션의 Chrome 자동화 도구)로.
 
-- [ ] **Step 2: E2E 시나리오**
+- [x] **Step 2: E2E 시나리오**
 
 | # | 시나리오 | 기대 |
 |---|---------|------|
@@ -1377,12 +1377,12 @@ git commit -m "feat(editor): CSV import replace-all from toolbar — 에디터 C
 | 7 | 인스펙터 URL 필드 | process 노드에 URL 입력 → 저장·새로고침 후 유지; start/end/subprocess에는 행 없음 |
 | 8 | EUC-KR CSV(한글 노드명, Excel 레거시 저장) | 한글 정상 파싱·렌더 |
 
-- [ ] **Step 3: 전체 회귀**
+- [x] **Step 3: 전체 회귀**
 
 - `backend/`: `.venv/bin/python -m pytest tests/ -q` → 전체 PASS, `.venv/bin/ruff check app/ tests/` → clean.
 - `frontend/`: `npm run test` → PASS, `npm run lint` → 0, `npm run build` → 성공.
 
-- [ ] **Step 4: 마무리 커밋**
+- [x] **Step 4: 마무리 커밋**
 
 발견 결함 수정분 + PROGRESS.md 최종 항목("CSV 임포트 — 새 맵 시작·기존 맵 전체 교체·노드 URL 필드, E2E 검증 완료") + 계획 체크박스 전체 갱신:
 
