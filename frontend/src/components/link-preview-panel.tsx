@@ -17,7 +17,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
-import { isHttpUrl } from "@/lib/url";
+import { isSafePreviewUrl } from "@/lib/url";
 
 // load 이벤트가 이 시간 안에 안 오면 임베드 차단으로 판정(ms) — 스펙 6s
 const LOAD_TIMEOUT_MS = 6000;
@@ -35,8 +35,8 @@ export function LinkPreviewPanel({
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<LoadStatus>(null);
 
-  // http(s)만 로드 — 액션 바와 같은 가드(스킴 XSS 차단)
-  const validUrl = url !== null && isHttpUrl(url) ? url : null;
+  // http(s) + 자기 오리진 차단만 로드 — 액션 바와 같은 가드(isSafePreviewUrl, 샌드박스 탈출 방지)
+  const validUrl = url !== null && isSafePreviewUrl(url) ? url : null;
   const open = validUrl !== null;
   const currentKey = `${validUrl ?? ""}#${reloadKey}`;
   // 로딩/실패는 status↔currentKey 비교로 파생 — effect 내 동기 setState 금지(react-hooks/set-state-in-effect)

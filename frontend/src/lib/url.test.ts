@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isHttpUrl } from "./url";
+import { isHttpUrl, isSafePreviewUrl } from "./url";
 
 describe("isHttpUrl", () => {
   it.each([
@@ -27,5 +27,37 @@ describe("isHttpUrl", () => {
   it("rejects null/undefined", () => {
     expect(isHttpUrl(null)).toBe(false);
     expect(isHttpUrl(undefined)).toBe(false);
+  });
+});
+
+describe("isSafePreviewUrl", () => {
+  beforeEach(() => {
+    vi.stubGlobal("window", { location: { origin: "http://localhost:3000" } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["https://example.com/page", "http://wms.acme-corp.com/inbound"])(
+    "accepts %s",
+    (value) => {
+      expect(isSafePreviewUrl(value)).toBe(true);
+    },
+  );
+
+  it.each([
+    "http://localhost:3000/maps/2",
+    "http://LOCALHOST:3000/x",
+    "javascript:alert(1)",
+    "",
+    "http://",
+  ])("rejects %s", (value) => {
+    expect(isSafePreviewUrl(value)).toBe(false);
+  });
+
+  it("rejects null/undefined", () => {
+    expect(isSafePreviewUrl(null)).toBe(false);
+    expect(isSafePreviewUrl(undefined)).toBe(false);
   });
 });
