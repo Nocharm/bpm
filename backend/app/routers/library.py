@@ -21,11 +21,31 @@ router = APIRouter(
 @router.get("/processes")
 async def list_processes(session: AsyncSession = Depends(get_session)) -> list[dict]:
     # 맵별 최신/최신발행 버전 — 단일 그룹 쿼리(N+1 회피).
+    # 지정(designated)된 맵만 피커 노출 + 휴지통 제외 — 어트리뷰트는 행 칩 표시용 (spec 2026-07-06)
     latest_rows = (
         await session.execute(
-            select(ProcessMap.id, ProcessMap.name, func.max(MapVersion.id))
+            select(
+                ProcessMap.id,
+                ProcessMap.name,
+                func.max(MapVersion.id),
+                ProcessMap.sp_department,
+                ProcessMap.sp_assignee,
+                ProcessMap.sp_system,
+                ProcessMap.sp_duration,
+            )
             .outerjoin(MapVersion, MapVersion.map_id == ProcessMap.id)
-            .group_by(ProcessMap.id, ProcessMap.name)
+            .where(
+                ProcessMap.sp_designated_at.is_not(None),
+                ProcessMap.deleted_at.is_(None),
+            )
+            .group_by(
+                ProcessMap.id,
+                ProcessMap.name,
+                ProcessMap.sp_department,
+                ProcessMap.sp_assignee,
+                ProcessMap.sp_system,
+                ProcessMap.sp_duration,
+            )
             .order_by(ProcessMap.name)
         )
     ).all()
@@ -56,8 +76,12 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
             "latest_version_id": latest,
             "latest_published_version_id": published.get(mid),
             "refs": sorted(refs.get(mid, [])),
+            "department": department,
+            "assignee": assignee,
+            "system": system,
+            "duration": duration,
         }
-        for mid, name, latest in latest_rows
+        for mid, name, latest, department, assignee, system, duration in latest_rows
     ]
 
 
@@ -69,6 +93,10 @@ async def resolved_graph(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
+    # 미지정/삭제 맵은 권한과 무관하게 잠금 — 지정된 맵만 임베드 허용 (spec 2026-07-06)
+    target = await session.get(ProcessMap, map_id)
+    if target is None or target.deleted_at is not None or target.sp_designated_at is None:
+        return GraphOut(nodes=[], edges=[], locked=True)
     # 마스킹(옵션1 완전 잠금): viewer 미만은 자식 그래프를 만들지 않고 잠금 응답 — 데이터 자체를 안 싣는다.
     # Masking (full lock): below-viewer never builds the child graph — return empty locked payload.
     role = await get_effective_role(session, user, map_id)

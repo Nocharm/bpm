@@ -52,6 +52,14 @@ export interface MapSummary {
   owner_name?: string | null;
   // 소프트삭제 시각 — 휴지통(삭제 예정) 목록에서만 채워짐 (DL)
   deleted_at?: string | null;
+  // 서브프로세스 지정 — NULL=미지정. 어트리뷰트·최근 변경 기록 (spec 2026-07-06)
+  sp_designated_at?: string | null;
+  sp_department?: string | null;
+  sp_assignee?: string | null;
+  sp_system?: string | null;
+  sp_duration?: string | null;
+  sp_changed_by?: string | null;
+  sp_changed_at?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -108,6 +116,15 @@ export interface GraphGroup {
   color: string;
 }
 
+// 링크 대상 맵의 서브프로세스 지정 정보 — 노드에 복사하지 않는 라이브 참조 (spec 2026-07-06)
+export interface SubprocessRef {
+  designated: boolean;
+  department: string | null;
+  assignee: string | null;
+  system: string | null;
+  duration: string | null;
+}
+
 export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -115,11 +132,14 @@ export interface Graph {
   // 권한 마스킹 — getResolvedGraph가 viewer 미만 호출자에게 200 + 빈 그래프 + locked:true 반환.
   // Permission masking — getResolvedGraph returns 200 + empty graph + locked:true for below-viewer callers.
   locked?: boolean;
+  // linked_map_id별 지정 정보 — 경고·잠금·어트리뷰트 표시 소스 (JSON 키라 문자열 인덱스)
+  subprocess_refs?: Record<number, SubprocessRef>;
 }
 
 export interface VersionGraph {
   nodes: FlatNode[];
   edges: GraphEdge[];
+  subprocess_refs?: Record<number, SubprocessRef>;
 }
 
 // 인증 토큰 — AuthGate가 로그인 후 주입. auth 비활성(로컬)이면 null로 유지.
@@ -205,12 +225,42 @@ export function getMap(mapId: number): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}`);
 }
 
+// 서브프로세스 지정/수정(upsert) — 오너 전용, 게시 버전 필수(409). 어트리뷰트는 사용처에 라이브 적용 (spec 2026-07-06)
+export interface SubprocessDesignationBody {
+  department: string;
+  assignee?: string;
+  system?: string;
+  duration?: string;
+}
+
+export function putSubprocessDesignation(
+  mapId: number,
+  body: SubprocessDesignationBody,
+): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/subprocess-designation`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// 지정 해제 — 어트리뷰트는 서버에 유지(재지정 프리필), 멱등
+export function deleteSubprocessDesignation(mapId: number): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/subprocess-designation`, {
+    method: "DELETE",
+  });
+}
+
 export interface LibraryProcess {
   map_id: number;
   name: string;
   latest_version_id: number | null;
   latest_published_version_id: number | null;
   refs: number[];
+  // 지정 어트리뷰트 — 목록은 지정된 맵만 반환하므로 항상 동봉(부서 칩 표시용) (spec 2026-07-06)
+  department: string | null;
+  assignee: string | null;
+  system: string | null;
+  duration: string | null;
 }
 
 export function listLibraryProcesses(): Promise<LibraryProcess[]> {

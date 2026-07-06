@@ -24,6 +24,44 @@
 - use-infinite-slice: resetKey 변경 시 스크롤 컨테이너 최상단 복귀(바닥 스크롤 잔존 → 리셋 직후 연쇄 로드 버그 수정).
 - 검증: vitest 69(신규 5: 단어시작·공백AND·필드/위치/길이 타이브레이크·초성 단어시작)·lint 0·build·pw(검색 25→50, Department 핀, 리셋 25) PASS.
 
+## 2026-07-06 — 서브프로세스 지정 U7: 데모 시드 + 통합 검증 (기능 구현 완료)
+- `seed_org_demo`: 지정 4종(Order Fulfillment·Incident Response·Customer Support·Release Pipeline — 부서=오너 리프, 시스템/소요시간) + Employee Onboarding draft에 소비 subprocess 노드 2개(지정/미지정 나란히). 나머지 8맵은 의도적 미지정(경고·피커 필터 시연).
+- 통합 스모크(:3001): 피커 지정 4종+부서 칩 → 미지정 경고 1·지정 펼침(임베드 자식 3) → 인스펙터 지정 카드. 최종 회귀: pytest 415·ruff·lint 0·build 성공. 전 단위(U1~U7) 검토 대기 — 사용자 검증 후 완료 처리.
+
+## 2026-07-06 — 서브프로세스 지정 U6: 단일색 고정
+- subprocess 색 = 타입 기본(#7c6adc 바이올렛) 강제: 렌더(`ProcessNode`·`resolveNodeStroke`)가 저장 color 무시(데이터 무변경), 색 선택 UI 숨김 — 인스펙터 속성폼·노드 요약 모달(nodeType prop 신설)·컨텍스트 메뉴. `colorsForType('subprocess')=[""]` 방어.
+- 검증: lint 0, 브라우저 — 저장색 #c7a062 노드가 바이올렛로 강제(rgb 124,106,220), subprocess 스와치 0·process 스와치 5(회귀 없음), 인스펙터 색 행 숨김.
+
+## 2026-07-06 — 서브프로세스 지정 U5: 노드 어트리뷰트 표시 + 인스펙터 읽기전용
+- 노드 카드: subprocess는 `NodeFields`가 지정 어트리뷰트(sp*, `injectSubEnds` 라이브 주입)를 표시 — 표시 필드 설정(displayFields) 준수, 미지정은 자동 생략. 인스펙터: 지정 subprocess 선택 시 4종 읽기전용 카드(`inspector-subprocess-attrs`, 소스=subprocess_refs) + "오너가 설정에서 지정" 안내.
+- 검증: lint 0, 브라우저 — 노드 카드 부서/시스템/소요시간 표시, 인스펙터 카드 읽기전용, 오너 수정(3d→5d) 후 소비 맵 반영(라이브) 확인. 관찰: 노드 표시 필드 localStorage 영속이 리로드 시 기본값 복귀(기존 동작, 본 작업 무관).
+
+## 2026-07-06 — 서브프로세스 지정 U4(프론트): 캔버스 경고·잠금
+- `subprocess_refs`를 `/graph/all`(에디터 루트 로드 경로)에도 동봉(누락 발견·보강). 프론트: 루트+resolved refs 병합 맵 → `injectSubEnds`가 `undesignated` 주입 → `UndesignatedBadge`(경고 삼각형·error 톤, 잠금 뱃지보다 우선). 펼침 봉인은 서버 locked 응답→기존 lockedKeys 경로 재사용(추가 클라 게이트 불필요).
+- 검증: lint 0, 브라우저 — 미지정 노드 경고+펼침 불가·지정 노드 정상 임베드 펼침(합성 자식 3), 지정→경고 해소·해제→복귀 라이브 확인.
+
+## 2026-07-06 — 서브프로세스 지정 U4(백): subprocess_refs 동봉 + 미지정 resolve 잠금
+- `GraphOut.subprocess_refs`(링크 대상별 designated+어트리뷰트, `get_subprocess_refs`) — 에디터 그래프·임베드 resolved 공통 동봉(노드 복사 없는 라이브 참조). resolved는 **미지정/삭제 맵이면 권한 무관 locked** 게이트 추가. 기존 픽스처 갱신: mask 시드 지정 부여·pinned 테스트 게시+지정 플로우·빈 그래프 exact-match 2건. pytest 415 passed·ruff 클린.
+
+## 2026-07-06 — 서브프로세스 지정 U3(프론트): 피커 부서 칩·빈 상태
+- `LibraryProcess`에 어트리뷰트 4종, 패널 행에 부서 칩(accent-tint), 전체 빈 목록엔 지정 안내 문구(`library.emptyDesignated`, 검색 무결과는 기존 문구 유지). 검증: lint 0, 브라우저 — 지정 맵 1건+칩 표시·해제 시 안내 문구·재지정 복귀.
+
+## 2026-07-06 — 서브프로세스 지정 U3(백): 라이브러리 피커 필터
+- `GET /api/library/processes` — **지정(sp_designated_at)+미삭제 맵만** 반환, 행에 어트리뷰트 4종 포함(부서 칩 소스). 기존 미지정 노출 가정 테스트 2건(`test_subprocess.py`)을 게시+지정 플로우로 갱신. 신규 테스트 2건(미지정 제외·soft-delete 제외). pytest 413 passed·ruff 클린.
+
+## 2026-07-06 — 서브프로세스 지정 U2: 설정 페이지 지정 UI
+- 설정에 Subprocess 섹션(오너 전용, `ALL_TABS` subprocess) + `subprocess-designation-panel`(상태 카드·Designated 뱃지·최근 변경 이름 우선) + 지정/수정 모달(부서 필수 BPM 피커·시스템/소요시간 입력·프리필) + 해제 ConfirmDialog(사용처 경고 안내). api `putSubprocessDesignation`/`deleteSubprocessDesignation`, i18n `perm.sp.*` en/ko.
+- 검증: lint 0 errors, 브라우저(:3001) — 오너 지정→요약 카드→해제→프리필 재지정, 에디터 계정 섹션 숨김, DB 반영 확인.
+
+## 2026-07-06 — 서브프로세스 지정 U1: 백엔드 기반 (컬럼 7 + 지정 API)
+- `ProcessMap` sp_* 컬럼 7개(+`db.py` 백필), `SubprocessDesignationIn`·`MapOut` 확장, PUT/DELETE `/api/maps/{id}/subprocess-designation`(오너/sysadmin·게시버전 409·부서 422·해제 멱등+프리필·최근변경 기록). 테스트 6종. 검증: pytest 411 passed·ruff 클린. 트래커 U1 검토 대기.
+
+## 2026-07-06 — 서브프로세스 지정 구현 계획 (브랜치 worktree-feat+subprocess-detail)
+- 플랜 `docs/superpowers/plans/2026-07-06-subprocess-designation.md` — 검토 단위 U1~U7(백엔드 기반→설정 UI→피커→refs·경고잠금→어트리뷰트 표시→색상→시드), 단위별 커밋+사용자 검토 정지, 트래커 `SUBPROCESS-DESIGNATION.md` 병행.
+
+## 2026-07-06 — 서브프로세스 지정(Designation) 설계 확정 (브랜치 worktree-feat+subprocess-detail)
+- 스펙 `docs/superpowers/specs/2026-07-06-subprocess-designation-design.md` — 오너가 맵 설정에서 지정해야 피커 노출, 어트리뷰트 4종(부서 필수) 라이브 참조, 미지정/해제 = 경고+잠금, 노드 단일색 고정. `ProcessMap` 컬럼 7개(접근 A)·PUT/DELETE designation API·`subprocess_refs` 동봉.
+
 ## 2026-07-06 — 매뉴얼 문서 4종 작성 (사용자: 영/한 × 사용자/관리자)
 - `docs/manual/` — user/admin × en/ko 4종. 코드 실측 기반(상태·단축키·워크플로·S9 매뉴얼 게시 탭·S10 대시보드 반영), `/manual` 뷰어 파서 지원 문법만 사용(#필 뱃지·표·코드블록·인용). 검증 스크립트로 펜스·표 열 수·미지원 문법 전무 확인. 게시는 설정→콘텐츠→매뉴얼에서 원하는 판 게시.
 

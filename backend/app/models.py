@@ -35,6 +35,21 @@ class ProcessMap(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # ── 서브프로세스 지정(designation) — 지정된 맵만 라이브러리 피커 노출 (spec 2026-07-06) ──
+    # NULL=미지정. 값 있으면 지정 시각(플래그 겸용, KST).
+    sp_designated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # 지정 어트리뷰트 — 노드 BPM 필드와 1:1 (department 지정 시 필수). 해제해도 유지(재지정 프리필).
+    sp_department: Mapped[str | None] = mapped_column(String(100), default=None)
+    sp_assignee: Mapped[str | None] = mapped_column(String(100), default=None)
+    sp_system: Mapped[str | None] = mapped_column(String(100), default=None)
+    sp_duration: Mapped[str | None] = mapped_column(String(50), default=None)
+    # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
+    sp_changed_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    sp_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"

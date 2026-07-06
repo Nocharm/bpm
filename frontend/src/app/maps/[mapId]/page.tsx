@@ -165,6 +165,7 @@ import {
   type GraphGroup,
   type GraphNode,
   type LibraryProcess,
+  type SubprocessRef,
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
@@ -230,6 +231,8 @@ const TERMINAL_COLORS = ["", "#5e988f", "#c58a6b"]; // 3 (start/end)
 const DECISION_COLORS = ["", "#c7a062", "#9183c0", "#c2849a"]; // 4 (decision)
 
 function colorsForType(nodeType: string | undefined): string[] {
+  // subprocess는 단일색(타입 기본 = 바이올렛 톤) 고정 — 색 변경 불가 (spec 2026-07-06 §9)
+  if (nodeType === "subprocess") return [""];
   if (nodeType === "start" || nodeType === "end") return TERMINAL_COLORS;
   if (nodeType === "decision") return DECISION_COLORS;
   return NODE_COLORS;
@@ -997,6 +1000,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     return m;
   }, [libraryList]);
 
+  // linked_map_id → 지정 정보 — 루트 그래프 + 임베드 resolved의 subprocess_refs 병합(중첩 임베드 커버).
+  // 노드에 값을 저장하지 않는 라이브 참조 소스 (spec 2026-07-06).
+  const subprocessRefs = useMemo(() => {
+    const m = new Map<number, SubprocessRef>();
+    const addAll = (refs?: Record<number, SubprocessRef>) => {
+      if (!refs) {
+        return;
+      }
+      for (const [refMapId, ref] of Object.entries(refs)) {
+        m.set(Number(refMapId), ref);
+      }
+    };
+    addAll(rootGraph?.subprocess_refs);
+    for (const g of resolvedCache.values()) {
+      addAll(g.subprocess_refs);
+    }
+    return m;
+  }, [rootGraph, resolvedCache]);
+
   // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
   // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
   const injectSubEnds = useCallback(
@@ -1016,17 +1038,38 @@ function MapEditor({ mapId }: { mapId: number }) {
         node.data.linkedVersionId != null &&
         lib?.latest_published_version_id != null &&
         lib.latest_published_version_id > node.data.linkedVersionId;
+      // 미지정/해제 링크맵 — 경고 뱃지 + 잠금(권한 무관). refs 미수신(undefined) 동안은 미판정 유지 (spec 2026-07-06).
+      const ref = node.data.linkedMapId != null ? subprocessRefs.get(node.data.linkedMapId) : undefined;
+      const undesignated = ref != null && !ref.designated;
+      // 지정 어트리뷰트 라이브 주입 — 지정된 링크맵만. 노드에 저장하지 않고 렌더 시 파생.
+      const spAttrs = ref?.designated
+        ? {
+            spDepartment: ref.department,
+            spAssignee: ref.assignee,
+            spSystem: ref.system,
+            spDuration: ref.duration,
+          }
+        : { spDepartment: null, spAssignee: null, spSystem: null, spDuration: null };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, ...spAttrs, updateAvailable } };
       }
-      return { ...node, data: { ...node.data, subEnds: deriveSubEnds(resolved), updateAvailable } };
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          subEnds: deriveSubEnds(resolved),
+          undesignated,
+          ...spAttrs,
+          updateAvailable,
+        },
+      };
     },
-    [resolvedCache, libByMap, lockedKeys],
+    [resolvedCache, libByMap, lockedKeys, subprocessRefs],
   );
   useEffect(() => {
     nodesRef.current = nodes;
@@ -4214,14 +4257,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ];
-      const colorItems: ContextMenuItem[] = readOnly
+      // subprocess는 단일색 고정 — 컨텍스트 메뉴 색 항목 자체를 숨김 (spec 2026-07-06 §9)
+      const menuNodeType = nodes.find((item) => item.id === menu.targetId)?.data.nodeType;
+      const colorItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
         ? []
         : [
             {
               // 노드 타입별 색 세트 (#8) — 메인6·start/end3·분기4
-              colors: colorsForType(
-                nodes.find((item) => item.id === menu.targetId)?.data.nodeType,
-              ),
+              colors: colorsForType(menuNodeType),
               current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
               onPick: handleRecolor,
               moreLabel: t("editor.moreColors"),
@@ -4323,6 +4366,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     () => nodes.find((node) => node.id === selectedId) ?? null,
     [nodes, selectedId],
   );
+  // 선택된 subprocess의 지정 정보 — 인스펙터 읽기전용 카드 소스(라이브 참조, nodes state엔 sp* 미주입)
+  const selectedSpRef =
+    selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
+      ? subprocessRefs.get(selectedNode.data.linkedMapId)
+      : undefined;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -6767,6 +6815,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 nodeId={summaryNodeId}
                 title={node.data.label}
                 typeLabel={typeKey ? t(typeKey) : node.data.nodeType}
+                nodeType={node.data.nodeType}
                 showAttributes={hasBpmAttributes(node.data.nodeType)}
                 groupLabel={groupLabel}
                 predecessors={predecessors}
@@ -6987,6 +7036,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             )}
                           </span>
                         </div>
+                        {/* 색 — subprocess는 단일색 고정이라 선택 UI 숨김 (spec 2026-07-06 §9) */}
+                        {selectedNode.data.nodeType !== "subprocess" && (
                         <div className="flex items-center gap-3 py-1.5">
                           <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
                           <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
@@ -7044,6 +7095,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             )}
                           </div>
                         </div>
+                        )}
                       </div>
                       {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
                       {hasBpmAttributes(selectedNode.data.nodeType) && (
@@ -7103,6 +7155,32 @@ function MapEditor({ mapId }: { mapId: number }) {
                               }`}
                             />
                           </button>
+                        </div>
+                      )}
+                      {/* subprocess — 지정 어트리뷰트(라이브 참조, 읽기전용). 수정은 링크 대상 맵 설정의 지정 모달에서만 */}
+                      {selectedNode.data.nodeType === "subprocess" && selectedSpRef?.designated && (
+                        <div data-id="inspector-subprocess-attrs" className="rounded-md border border-hairline p-3">
+                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                          {([
+                            ["department", "field.department"],
+                            ["assignee", "field.assignee"],
+                            ["system", "field.system"],
+                            ["duration", "field.duration"],
+                          ] as const).map(([key, labelKey]) => (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                            >
+                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                              <span
+                                className="min-w-0 truncate text-right text-caption text-ink"
+                                title={selectedSpRef[key] || undefined}
+                              >
+                                {selectedSpRef[key] || "—"}
+                              </span>
+                            </div>
+                          ))}
+                          <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         </div>
                       )}
                       {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}

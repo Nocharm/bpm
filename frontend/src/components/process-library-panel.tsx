@@ -93,7 +93,10 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
       {/* list */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
-          <p className="px-3 py-4 text-center text-fine text-ink/40">{t("library.empty")}</p>
+          // 전체가 비면 지정 안내(지정된 맵만 노출), 검색 결과만 비면 기존 문구
+          <p data-id="library-empty-state" className="px-3 py-4 text-center text-fine text-ink/40">
+            {rows.length === 0 ? t("library.emptyDesignated") : t("library.empty")}
+          </p>
         ) : (
           visible.map((row) => {
             const blocked =
@@ -114,7 +117,18 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
                   .join(" ")}
               >
                 <Network size={12} strokeWidth={1.5} className="shrink-0 text-ink/50" />
-                <span className="min-w-0 truncate">{row.name}</span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="min-w-0 truncate">{row.name}</span>
+                  {row.department && (
+                    // 지정 부서 칩 — 지정 어트리뷰트의 대표값 (spec 2026-07-06)
+                    <span
+                      data-id="library-department-chip"
+                      className="self-start rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent"
+                    >
+                      {row.department}
+                    </span>
+                  )}
+                </span>
               </div>
             );
           })

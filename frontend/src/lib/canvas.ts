@@ -48,6 +48,13 @@ export type NodeData = {
   // 링크맵 resolved가 잠김(권한 없음)으로 판정됨 — 펼침/드릴 봉인 + Lock 뱃지. 렌더 시 파생.
   // Linked-map resolved as locked (no access) — seals expand/drill + shows Lock badge. Derived at render.
   locked?: boolean;
+  // 링크맵이 서브프로세스 미지정/해제 상태 — 경고 뱃지 + 잠금(권한 무관). subprocess_refs에서 파생 (spec 2026-07-06).
+  undesignated?: boolean;
+  // 지정 어트리뷰트(라이브 참조) — 노드 자체 BPM 필드와 별개, subprocess_refs에서 렌더 시 주입. 지정된 링크맵만 채움.
+  spDepartment?: string | null;
+  spAssignee?: string | null;
+  spSystem?: string | null;
+  spDuration?: string | null;
 };
 
 export type AppNode = Node<NodeData>;

@@ -3,8 +3,8 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import MapVersion, Node
-from app.schemas import NodeIn
+from app.models import MapVersion, Node, ProcessMap
+from app.schemas import NodeIn, SubprocessRefOut
 
 
 def validate_process(nodes: list[NodeIn]) -> None:
@@ -51,6 +51,46 @@ async def resolve_linked_version(
         .where(MapVersion.map_id == map_id)
         .order_by(MapVersion.id.desc())
     )
+
+
+async def get_subprocess_refs(
+    session: AsyncSession, nodes: list[NodeIn]
+) -> dict[int, SubprocessRefOut]:
+    """그래프 내 subprocess 노드들의 링크 대상 지정 정보 — 라이브 참조 (spec 2026-07-06).
+
+    soft-delete·영구삭제된 맵은 designated=False 취급 → 프론트가 경고+잠금 렌더.
+    """
+    targets = {
+        n.linked_map_id for n in nodes if n.node_type == "subprocess" and n.linked_map_id
+    }
+    if not targets:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                ProcessMap.id,
+                ProcessMap.sp_designated_at,
+                ProcessMap.deleted_at,
+                ProcessMap.sp_department,
+                ProcessMap.sp_assignee,
+                ProcessMap.sp_system,
+                ProcessMap.sp_duration,
+            ).where(ProcessMap.id.in_(targets))
+        )
+    ).all()
+    refs = {
+        mid: SubprocessRefOut(
+            designated=designated_at is not None and deleted_at is None,
+            department=department,
+            assignee=assignee,
+            system=system,
+            duration=duration,
+        )
+        for mid, designated_at, deleted_at, department, assignee, system, duration in rows
+    }
+    for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우
+        refs[missing] = SubprocessRefOut(designated=False)
+    return refs
 
 
 async def assert_no_cycle(

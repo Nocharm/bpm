@@ -9,6 +9,7 @@ reset_db가 이 단일 시드로 DB를 새로 채운다(기존 분산 데모 대
 import random
 from datetime import timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
@@ -77,6 +78,15 @@ MAP_SPECS = [
     ("Data Pipeline", "public"),
     ("Vendor Management", "private"),
 ]
+
+# 서브프로세스 지정 — 대표 업무 4종(맵 인덱스 → 시스템/소요시간). 부서는 오너 소속 리프.
+# 나머지 맵은 의도적으로 미지정 → 피커 미노출·소비 노드 경고+잠금 시연 (spec 2026-07-06)
+DESIGNATED_SPECS: dict[int, tuple[str, str]] = {
+    0: ("SAP ERP", "3 days"),      # Order Fulfillment
+    2: ("PagerDuty", "1 day"),     # Incident Response
+    5: ("Zendesk", "2 days"),      # Customer Support
+    6: ("Jenkins", "4 hours"),     # Release Pipeline
+}
 
 
 def _build_leaves() -> list[dict]:
@@ -269,6 +279,15 @@ async def _seed_maps(session: AsyncSession, people: list[dict], groups: dict) ->
         owner = RNG.choice(users)
         m = ProcessMap(name=name, description=f"{name} — demo map", created_by=owner["login_id"],
                        owner_id=owner["login_id"], visibility=vis)
+        # 서브프로세스 지정 — 대표 업무만(게시 v5 존재 전제 충족). 부서 필수 + 최근 변경 기록.
+        if idx in DESIGNATED_SPECS:
+            system, duration = DESIGNATED_SPECS[idx]
+            m.sp_designated_at = base
+            m.sp_department = owner["leaf"]["department"]
+            m.sp_system = system
+            m.sp_duration = duration
+            m.sp_changed_by = owner["login_id"]
+            m.sp_changed_at = base
         session.add(m)
         await session.flush()
         map_ids.append(m.id)
@@ -290,6 +309,26 @@ async def _seed_maps(session: AsyncSession, people: list[dict], groups: dict) ->
             session.add(MapApprover(map_id=m.id, user_id=aid, assigned_by=owner["login_id"]))
 
         await _seed_versions(session, m.id, owner["login_id"], approver_ids, base, idx)
+
+    # 소비 데모 — Employee Onboarding 최신 draft에 subprocess 노드 2개:
+    # 지정 맵(정상 펼침·어트리뷰트) vs 미지정 맵(경고+잠금)을 나란히 시연 (spec 2026-07-06)
+    consumer_map = map_ids[1]
+    draft_vid = await session.scalar(
+        select(MapVersion.id).where(
+            MapVersion.map_id == consumer_map, MapVersion.label == "Release 6"
+        )
+    )
+    if draft_vid is not None:
+        session.add_all([
+            Node(id=f"m{consumer_map}-sp-designated", version_id=draft_vid,
+                 title=MAP_SPECS[0][0], node_type="subprocess",
+                 linked_map_id=map_ids[0], follow_latest=True,
+                 pos_x=80.0, pos_y=420.0, sort_order=10),
+            Node(id=f"m{consumer_map}-sp-undesignated", version_id=draft_vid,
+                 title=MAP_SPECS[3][0], node_type="subprocess",
+                 linked_map_id=map_ids[3], follow_latest=True,
+                 pos_x=340.0, pos_y=420.0, sort_order=11),
+        ])
     await session.flush()
     return map_ids
 

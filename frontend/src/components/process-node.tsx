@@ -54,21 +54,31 @@ const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
-// start/end/subprocess는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음
+// start/end는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음.
+// subprocess는 노드 자체 필드 대신 지정 어트리뷰트(sp*, 라이브 참조)를 표시 (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { t } = useI18n();
   const { displayFields } = useNodeActions();
+  const isSubprocess = data.nodeType === "subprocess";
+  const spValues: Record<Exclude<NodeDisplayField, "nodeType">, string | null | undefined> = {
+    assignee: data.spAssignee,
+    department: data.spDepartment,
+    system: data.spSystem,
+    duration: data.spDuration,
+  };
   return (
     <>
       {displayFields.map((field) => {
-        // nodeType 외의 BPM 속성 필드는 process·decision만 표시
-        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType)) {
+        // nodeType 외의 BPM 속성 필드는 process·decision(+지정 subprocess)만 표시
+        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType) && !isSubprocess) {
           return null;
         }
         const value =
           field === "nodeType"
             ? t(NODE_TYPE_LABEL_KEY[data.nodeType])
-            : data[field];
+            : isSubprocess
+              ? spValues[field]
+              : data[field];
         if (!value) {
           return null;
         }
@@ -160,7 +170,9 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
+// subprocess는 단일색 고정이라 저장 color 무시 (spec 2026-07-06 §9)
 export function resolveNodeStroke(color: string, nodeType: ProcessNodeType): string {
+  if (nodeType === "subprocess") return DEFAULT_COLORS.subprocess;
   return color || DEFAULT_COLORS[nodeType];
 }
 
@@ -288,6 +300,20 @@ function AssigneeWarningBadge() {
   );
 }
 
+// 미지정 서브프로세스 뱃지 — 링크맵이 지정 해제/미지정이면 경고 삼각형 + 잠금(권한 무관). (spec 2026-07-06)
+function UndesignatedBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      data-id="subprocess-undesignated-badge"
+      className="absolute -right-2 -top-2 rounded-xs border border-error/40 bg-error/10 p-0.5 shadow-sm"
+      title={t("subprocess.undesignated")}
+    >
+      <AlertTriangle size={14} strokeWidth={1.5} className="text-error" />
+    </span>
+  );
+}
+
 // 잠긴 하위프로세스 뱃지 — 권한 없는 링크맵은 펼침/드릴 대신 자물쇠 표시(봉인 박스). ExpandToggleButton 자리를 대체.
 function LockedBadge() {
   const { t } = useI18n();
@@ -382,7 +408,11 @@ function nodeStyle(color: string, fill: string): CSSProperties {
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const color = data.color || DEFAULT_COLORS[data.nodeType];
+  // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9)
+  const color =
+    data.nodeType === "subprocess"
+      ? DEFAULT_COLORS.subprocess
+      : data.color || DEFAULT_COLORS[data.nodeType];
   const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
   // 비교화면 diff — diff색 테두리/틴트/뱃지로 표시(에디터에선 diffStatus 미설정 → 자기색). 선택 링은 오버레이 담당.
@@ -404,6 +434,8 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
           <div className="font-medium text-ink">
             <NodeTitle id={id} label={data.label} />
           </div>
+          {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
+          <NodeFields data={data} />
           {data.updateAvailable && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
@@ -414,7 +446,10 @@ export function ProcessNode({ id, data }: NodeProps<AppNode>) {
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.assigneeWarning && <AssigneeWarningBadge />}
-        {data.locked ? (
+        {/* 미지정 경고가 권한 잠금보다 우선 — 원인(지정 해제)을 보여야 오너가 조치 가능 */}
+        {data.undesignated ? (
+          <UndesignatedBadge />
+        ) : data.locked ? (
           <LockedBadge />
         ) : (
           (data.subEnds ?? []).length > 0 && <ExpandToggleButton nodeId={id} />
