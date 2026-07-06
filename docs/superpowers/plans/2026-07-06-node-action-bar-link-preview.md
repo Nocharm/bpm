@@ -781,7 +781,7 @@ git commit -m "refactor(canvas): remove old expand toggle + group-corner leave b
 - Consumes: Task 2·3의 `data-id` 4종(`node-action-bar`/`node-action-expand`/`node-action-link`/`link-preview-panel`).
 - Produces: `node scripts/pw-smoke-node-action-bar.mjs` 스모크 1본, `data-id="inspector-field-url"` (필드 키별 `inspector-field-${key}`).
 
-- [ ] **Step 1: 인스펙터 필드 input에 data-id 부여**
+- [x] **Step 1: 인스펙터 필드 input에 data-id 부여**
 
 page.tsx L7268 `<input` (system/duration/url 공통 map 루프)에 속성 추가:
 
@@ -791,7 +791,7 @@ page.tsx L7268 `<input` (system/duration/url 공통 map 루프)에 속성 추가
                                 className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
 ```
 
-- [ ] **Step 2: 스모크 스크립트 작성**
+- [x] **Step 2: 스모크 스크립트 작성**
 
 `frontend/scripts/pw-smoke-node-action-bar.mjs` (전체 새 파일 — pw-smoke-demo.mjs 컨벤션):
 
@@ -878,25 +878,25 @@ if (failed) process.exit(1);
 console.log("PASS: node action bar + link preview smoke");
 ```
 
-- [ ] **Step 3: 스모크 실행**
+- [x] **Step 3: 스모크 실행**
 
 backend·frontend 기동 확인 후(좀비 next dev 주의 — 3000 포트 선점 시 전수 `pkill -f "next dev"` 후 재기동, `docs/lessons/browser-verification.md`):
 
 Run: `cd frontend && node scripts/pw-smoke-node-action-bar.mjs`
 Expected: `PASS: node action bar + link preview smoke`
 
-- [ ] **Step 4: 그룹 나가기 수동 검증**
+- [x] **Step 4: 그룹 나가기 수동 검증**
 
 `/maps/4`(또는 아무 편집 가능 맵)에서: 노드 2개 shift 선택 → 컨텍스트 메뉴로 그룹 생성 → 멤버 노드 1개 단일 선택 → 액션 바 맨 아래 "그룹 나가기"(중립색, hover 시 위험색) 클릭 → 노드가 그룹에서 빠지고 그룹 박스가 남은 멤버 기준으로 갱신(1개 남으면 그룹 자동 해체) → 저장 토스트/새로고침 후 유지 확인. readOnly 화면(뷰어 계정 또는 게시 버전)에서 그룹 멤버 선택 시 "그룹 나가기" 미노출 + 펼치기/링크는 노출 확인.
 
-- [ ] **Step 5: 전체 검증 + 빌드**
+- [x] **Step 5: 전체 검증 + 빌드**
 
 ```bash
 cd frontend && npm run lint && npm run test && npm run build
 ```
 Expected: 모두 클린(React Compiler 포함). 기존 스모크 회귀 1본 실행: `node scripts/pw-smoke-demo.mjs` → PASS 유지.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add frontend/scripts/pw-smoke-node-action-bar.mjs "frontend/src/app/maps/[mapId]/page.tsx" PROGRESS.md docs/superpowers/plans/2026-07-06-node-action-bar-link-preview.md
