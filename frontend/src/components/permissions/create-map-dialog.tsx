@@ -9,13 +9,16 @@
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { X, Globe, Lock } from "lucide-react";
 
 import {
+  acquireCheckout,
   addMapPermission,
   createMap,
   getDirectory,
   listGroups,
+  saveGraph,
   setApprovers as setMapApprovers,
   type DirectoryUser,
   type DirectoryDept,
@@ -28,8 +31,10 @@ import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissio
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CsvImportSection } from "@/components/csv-import-section";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
+import type { CsvImportOutcome } from "@/lib/csv-import";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
 // Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
@@ -123,6 +128,10 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
   // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
   const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
+  const router = useRouter();
+  // CSV로 시작(선택) — 파싱 결과와 파일명. 에러 있으면 생성 차단
+  const [csv, setCsv] = useState<CsvImportOutcome | null>(null);
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
 
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
@@ -206,19 +215,42 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
       }
       // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
       await setMapApprovers(detail.id, approvers.map((a) => a.userId));
+      // 4. CSV 첨부 시 — 신규 As-Is 버전은 잠금 free: 체크아웃 획득 → 그래프 반영 → 에디터로 이동
+      if (csv?.graph) {
+        const versionId = detail.versions[0].id;
+        try {
+          await acquireCheckout(versionId);
+          await saveGraph(versionId, csv.graph);
+        } catch (err) {
+          // 맵은 이미 생성됨 — 목록 갱신 + 다이얼로그에 안내(에디터 툴바에서 재시도 가능)
+          onCreated();
+          setError(
+            err instanceof Error
+              ? `${t("csvImport.mapCreatedImportFailed")} — ${err.message}`
+              : t("csvImport.mapCreatedImportFailed"),
+          );
+          setSubmitting(false);
+          return;
+        }
+        onCreated();
+        onClose();
+        router.push(`/maps/${detail.id}`);
+        return;
+      }
       onCreated();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("err.createMap"));
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, collaborators, approvers, onCreated, onClose, t]);
+  }, [currentUser, name, description, visibility, collaborators, approvers, csv, onCreated, onClose, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
     currentUser !== null &&
     name.trim().length > 0 &&
     approvers.length >= 1 &&
+    (csv === null || (csv.errors.length === 0 && csv.graph !== null)) &&
     !submitting;
 
   // ── 부서 조회 맵 (사용자 ID → 부서명) / department lookup map for picker ──
@@ -359,6 +391,20 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
               {t("perm.createDialog.visibilityViewerNote")}
             </p>
           )}
+        </div>
+
+        {/* CSV로 시작 (선택) — 양식 다운로드 + 파일 첨부 시 생성 직후 그래프 반영 후 에디터 이동 */}
+        <div className="flex flex-col gap-1">
+          <label className="text-caption text-ink-secondary">{t("csvImport.sectionTitle")}</label>
+          <CsvImportSection
+            outcome={csv}
+            fileName={csvFileName}
+            onChange={(nextOutcome, nextFileName) => {
+              setCsv(nextOutcome);
+              setCsvFileName(nextFileName);
+            }}
+            disabled={submitting}
+          />
         </div>
 
         {/* 초기 협업자 / initial collaborators */}

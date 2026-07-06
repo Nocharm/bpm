@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — Task 5: 새 맵 다이얼로그 — CSV로 시작
+- `create-map-dialog.tsx`에 `CsvImportSection` 배치(visibility 다음, 협업자 이전) + `csv`/`csvFileName` state + `canCreate`에 CSV 에러 게이트 추가. `handleCreate`에 CSV 첨부 시 생성→체크아웃→`saveGraph`→`router.push(/maps/{id})` 시퀀스 삽입(실패 시 맵은 유지·에러 안내·다이얼로그는 열린 채로 유지, `onClose()` 미호출). 검증: lint 0·build 성공, Playwright(system Chrome, devUser=admin.kim)로 21개 체크 전부 통과(템플릿 다운로드 5컬럼·"6 nodes · 6 edges" 요약·생성 후 에디터 6노드+diamond decision 렌더·중복 Name 에러로 Create 비활성→clear로 재활성·CSV 없는 생성은 기존과 동일하게 이동 없음).
+
 ## 2026-07-06 — Task 4: `CsvImportSection` 공용 컴포넌트 + i18n
 - `frontend/src/components/csv-import-section.tsx` 신설(useRef 파일 입력·BOM 템플릿 다운로드·요약/에러 표시·행 재선택 리셋) — CSV 파싱 결과(`outcome`·`fileName`)의 3타입 렌더(버튼만/요약·에러 출력·클리어). i18n 14개 키(`csvImport.*` en/ko) 추가 — 기존 common 이후 알파벳 순서, 숫자 파라미터는 직접 전달(`nodes: outcome.nodeCount` 등). 검증: lint 0 errors·build 성공.
 
