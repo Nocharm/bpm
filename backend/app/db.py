@@ -29,6 +29,10 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
     ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27
     ("user_groups", "name_changed_at", "TIMESTAMP"),  # 주 1회 rename 제한 — 2026-06-27
+    # 매뉴얼 다중 문서 — 제목·언어·정렬 (F10, 2026-07-06). 레거시 단일 게시본 행은 ko로 흡수
+    ("manual_docs", "title", "VARCHAR(200) DEFAULT ''"),
+    ("manual_docs", "language", "VARCHAR(5) DEFAULT 'ko'"),
+    ("manual_docs", "sort_order", "INTEGER DEFAULT 0"),
     # 서브프로세스 지정 — 지정 맵만 피커 노출 + 라이브 어트리뷰트 (2026-07-06)
     ("process_maps", "sp_designated_at", "TIMESTAMP"),
     ("process_maps", "sp_department", "VARCHAR(100)"),

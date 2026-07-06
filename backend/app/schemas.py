@@ -269,6 +269,40 @@ class ManualUpdate(BaseModel):
     content: str = Field(max_length=200_000)
 
 
+class ManualDocCreate(BaseModel):
+    """매뉴얼 문서 생성 — 제목은 서버가 본문에서 자동 추출 (F10)."""
+
+    language: Literal["ko", "en"] = "ko"
+    format: Literal["markdown", "html"] = "markdown"
+    content: str = Field(max_length=200_000)
+
+
+class ManualDocPatch(BaseModel):
+    """매뉴얼 문서 수정 — 보낸 필드만 반영, content 변경 시 제목 재추출 (F10)."""
+
+    language: Literal["ko", "en"] | None = None
+    format: Literal["markdown", "html"] | None = None
+    content: str | None = Field(default=None, max_length=200_000)
+
+
+class ManualDocListOut(BaseModel):
+    """매뉴얼 문서 목록 행 — content 제외(가벼운 목록) (F10)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    language: str
+    format: str
+    sort_order: int
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+
+
+class ManualDocDetailOut(ManualDocListOut):
+    content: str
+
+
 class DashboardMetricsOut(BaseModel):
     """운영 대시보드 지표 — 현재는 접속자 현황(login_records 집계). 상세 지표는 후속."""
 

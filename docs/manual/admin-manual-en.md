@@ -136,11 +136,15 @@ Everything in the user manual's workflow section applies, plus:
 
 ## 11. Publishing This Manual
 
-The manual shown at **/manual** is a single published document. Edit and publish it from **Settings → Content → Manual** ("Manual — edit & publish"):
+**/manual** can hold multiple documents (like notices). Manage them from **Settings → Content → Manual**:
 
-1. Pick the format — **Markdown** or **HTML** (HTML is sanitized before rendering).
-2. Write in the editor, **Upload .md** to load a file, or **Load bundled** to start from the copy shipped with the build.
-3. **Preview** renders exactly what users will see; **Publish** makes it live at /manual immediately.
+1. In the **document list**, click an existing document to edit it or use **New document** to add one. Delete with the trash button on each row.
+2. Pick the format (**Markdown**/**HTML** — HTML is sanitized before rendering) and the **language (Korean/English)**. The viewer lists only documents matching the current KO/EN toggle.
+3. Write in the editor, **Upload .md** to load a file, or **Load bundled** to start from the copy shipped with the build.
+4. **Preview** renders exactly what users will see; **Publish** makes it live at /manual immediately.
+
+- The list title is **auto-extracted from the first heading** on save.
+- Upload KO/EN documents as pairs in the same order — switching languages in the viewer opens the document at the same position.
 
 - The header shows the source: **Published** (with author and time) or **Bundled with build**.
 - **Bundled fallback** — if nothing was ever published, the app serves `backend/app/manual.md` shipped with the build, and the viewer shows a **Bundled with build** badge instead of an update time.

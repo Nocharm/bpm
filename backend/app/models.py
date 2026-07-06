@@ -302,14 +302,23 @@ class Notice(Base):
 
 
 class ManualDoc(Base):
-    """사용 매뉴얼 게시본 — 단일 행(id=1 upsert). DB 우선, 없으면 manual.md 파일 fallback (S8)."""
+    """사용 매뉴얼 문서 — 다중 행(언어별 목록, F10). 행이 없으면 뷰어는 manual.md 파일 fallback.
+
+    (기존 단일 게시본(id=1 upsert, S8)에서 확장 — 레거시 행은 language 기본 ko로 흡수.)
+    """
 
     __tablename__ = "manual_docs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # 목록 제목 — 저장 시 본문(마크다운 첫 헤딩·html 첫 h태그)에서 자동 추출
+    title: Mapped[str] = mapped_column(String(200), default="")
+    # 문서 언어(ko|en) — 뷰어의 한/영 토글 상태에 맞는 목록만 노출
+    language: Mapped[str] = mapped_column(String(5), default="ko")
     # 게시본 포맷 — markdown | html
     format: Mapped[str] = mapped_column(String(20), default="markdown")
     content: Mapped[str] = mapped_column(Text, default="")
+    # 목록 정렬 — 업로드 순서. 한/영 페어는 동일 순번 가정(언어 전환 시 같은 순번 문서 열기)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )

@@ -767,12 +767,64 @@ export function getManual(bundled = false): Promise<ManualDoc> {
   return request<ManualDoc>(`/manual${bundled ? "?bundled=true" : ""}`);
 }
 
-// 게시본 저장 (sysadmin) — 단일 행 upsert.
+// 게시본 저장 (sysadmin) — 단일 행 upsert. (레거시 — 다중 문서 도입 후 관리 UI는 docs CRUD 사용)
 export function putManual(format: ManualDoc["format"], content: string): Promise<ManualDoc> {
   return request<ManualDoc>("/manual", {
     method: "PUT",
     body: JSON.stringify({ format, content }),
   });
+}
+
+// ── 매뉴얼 다중 문서 (F10) ────────────────────────────────────
+export type ManualLang = "ko" | "en";
+
+export interface ManualDocSummary {
+  id: number;
+  title: string; // 본문에서 자동 추출
+  language: ManualLang;
+  format: ManualDoc["format"];
+  sort_order: number;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface ManualDocDetail extends ManualDocSummary {
+  content: string;
+}
+
+export function listManualDocs(language?: ManualLang): Promise<ManualDocSummary[]> {
+  return request<ManualDocSummary[]>(
+    `/manual/docs${language ? `?language=${language}` : ""}`,
+  );
+}
+
+export function getManualDoc(docId: number): Promise<ManualDocDetail> {
+  return request<ManualDocDetail>(`/manual/docs/${docId}`);
+}
+
+export function createManualDoc(body: {
+  language: ManualLang;
+  format: ManualDoc["format"];
+  content: string;
+}): Promise<ManualDocDetail> {
+  return request<ManualDocDetail>("/manual/docs", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateManualDoc(
+  docId: number,
+  body: Partial<{ language: ManualLang; format: ManualDoc["format"]; content: string }>,
+): Promise<ManualDocDetail> {
+  return request<ManualDocDetail>(`/manual/docs/${docId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteManualDoc(docId: number): Promise<void> {
+  return request<void>(`/manual/docs/${docId}`, { method: "DELETE" });
 }
 
 // ── 운영 대시보드 (S10) ──────────────────────────────────────

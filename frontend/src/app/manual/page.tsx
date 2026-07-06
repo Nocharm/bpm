@@ -1,12 +1,20 @@
 "use client";
 
-// 사용 매뉴얼 뷰어 — 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(/ 포커스)·읽기폭·본문 한정 읽기 테마 토글.
-// 코드블록/인라인 코드 복사는 MarkdownView 내장. 데이터는 getManual()(DB 우선·manual.md fallback). (design 2026-07-05)
+// 사용 매뉴얼 뷰어 — 다중 문서(F10): 제목 드롭다운(맵 제목 버튼식)으로 현재 한/영 토글에 맞는 목록 노출.
+// 언어 전환 시 직전 문서와 같은 순번의 문서를 열어 유지(한/영 페어 동일 소팅 가정). 문서가 없으면 번들 manual.md fallback.
+// 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(/ 포커스)·읽기폭·본문 한정 읽기 테마 토글. (design 2026-07-05)
 
-import { Contrast, MoveHorizontal } from "lucide-react";
+import { ChevronDown, Contrast, MoveHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { getManual, type ManualDoc } from "@/lib/api";
+import {
+  getManual,
+  getManualDoc,
+  listManualDocs,
+  type ManualDoc,
+  type ManualDocSummary,
+  type ManualLang,
+} from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useSlashFocus } from "@/lib/use-slash-focus";
@@ -44,8 +52,14 @@ function parseToc(md: string): TocEntry[] {
 }
 
 export default function ManualPage() {
-  const { t } = useI18n();
-  const [doc, setDoc] = useState<ManualDoc | null>(null);
+  const { t, lang } = useI18n();
+  const [doc, setDoc] = useState<(ManualDoc & { title?: string }) | null>(null);
+  // 현재 언어의 문서 목록 + 선택 문서 — 드롭다운(F10). null=로딩 전.
+  const [docList, setDocList] = useState<ManualDocSummary[] | null>(null);
+  const [docId, setDocId] = useState<number | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  // 직전에 열려 있던 문서의 목록 내 순번 — 언어 전환 시 같은 순번 문서를 연다
+  const docIndexRef = useRef(0);
   const [search, setSearch] = useState("");
   const [matchPos, setMatchPos] = useState(-1);
   const [activeToc, setActiveToc] = useState(-1);
@@ -67,15 +81,40 @@ export default function ManualPage() {
     [t],
   );
 
+  // 언어(한/영 토글) 기준 목록 로드 — 전환 시 직전 순번의 문서를 열어 문맥 유지 (F10)
   useEffect(() => {
     let alive = true;
-    getManual().then((data) => {
+    listManualDocs(lang as ManualLang).then((rows) => {
+      if (!alive) return;
+      setDocList(rows);
+      if (rows.length === 0) {
+        // 등록 문서 없음 — 번들 manual.md 단일 문서 fallback (기존 동작)
+        setDocId(null);
+        getManual().then((data) => {
+          if (alive) setDoc(data);
+        });
+        return;
+      }
+      const index = Math.min(docIndexRef.current, rows.length - 1);
+      docIndexRef.current = index;
+      setDocId(rows[index].id);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lang]);
+
+  // 선택 문서 로드 + 순번 기록
+  useEffect(() => {
+    if (docId === null) return;
+    let alive = true;
+    getManualDoc(docId).then((data) => {
       if (alive) setDoc(data);
     });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [docId]);
 
   const content = doc?.content ?? "";
   const isHtml = doc?.format === "html";
@@ -142,7 +181,51 @@ export default function ManualPage() {
         {/* 헤더 — 타이틀+메타(좌) · 본문검색(중) · 읽기 도구(우) */}
         <div className="flex shrink-0 items-center gap-4">
           <div className="flex items-center gap-2">
-            <h1 className="text-tagline text-ink">{t("manual.title")}</h1>
+            {/* 제목 = 문서 드롭다운(맵 제목 버튼식) — 현재 한/영 토글에 맞는 목록 노출 (F10).
+                등록 문서가 없으면(번들 fallback) 기존 정적 타이틀 유지 */}
+            {docList && docList.length > 0 ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  data-id="manual-doc-dropdown"
+                  className="inline-flex items-center gap-1 rounded-sm px-1 text-tagline text-ink hover:bg-surface-alt"
+                  aria-haspopup="listbox"
+                  aria-expanded={listOpen}
+                  onClick={() => setListOpen((v) => !v)}
+                >
+                  <span className="max-w-[24rem] truncate">
+                    {doc?.title || t("manual.title")}
+                  </span>
+                  <ChevronDown size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                </button>
+                {listOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[1000]" onClick={() => setListOpen(false)} />
+                    <div className="absolute left-0 z-[1001] mt-1 max-h-80 w-72 overflow-y-auto rounded-md border border-hairline bg-surface py-1 shadow-lg">
+                      {docList.map((row, index) => (
+                        <button
+                          key={row.id}
+                          type="button"
+                          className={
+                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption hover:bg-surface-alt " +
+                            (row.id === docId ? "text-accent" : "text-ink")
+                          }
+                          onClick={() => {
+                            docIndexRef.current = index;
+                            setDocId(row.id);
+                            setListOpen(false);
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{row.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <h1 className="text-tagline text-ink">{t("manual.title")}</h1>
+            )}
             {doc &&
               (doc.updated_at ? (
                 <span className="flex items-center gap-1">

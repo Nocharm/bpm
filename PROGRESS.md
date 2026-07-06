@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — F10: 매뉴얼 다중 문서 (사용자: 공지사항처럼 복수 문서 + 한/영 + 드롭다운 목록)
+- 백엔드: `manual_docs` 다중 행 확장(title·language·sort_order + 백필), `extract_title`(md 첫 헤딩/html 첫 h태그), CRUD `GET/POST /api/manual/docs`·`GET/PUT/DELETE /api/manual/docs/{id}`(쓰기 sysadmin, 목록 language 필터·업로드순). 레거시 단일 게시본 GET/PUT·번들 fallback 유지(레거시 행은 ko 흡수·제목 읽기 시 추출). 테스트 +5(제목 추출·필터·재추출·삭제·403) — 420 passed.
+- 관리 패널: 문서 목록(언어 뱃지·자동 제목·작성자/시각·삭제 확인) + 새 문서/수정 편집기(포맷+**언어 세그먼트**·업로드·배포본·미리보기·게시). 뷰어(/manual): 제목=드롭다운(맵 제목 버튼식, 현재 한/영 목록만) + **언어 전환 시 동일 순번 문서 오픈**(docIndexRef), 문서 0건이면 번들 fallback. 관리자 매뉴얼 §11 en/ko 갱신.
+- 검증: pytest 420·ruff·lint 0·build. 브라우저 — 문서 4건 등록(제목 자동 추출), 뷰어 드롭다운 목록/선택, ko 2번째→EN 전환 시 "Using Subprocesses" 오픈, 관리 목록·세그먼트 렌더.
+
 ## 2026-07-06 — F9: MANUAL_URL 환경변수 + 에디터 매뉴얼 사이트 버튼
 - Settings `manual_url`(.env `MANUAL_URL`, 루트 .env.example 주석 포함) → `/api/me` 노출 → 에디터 툴바(정렬 행) **우측 끝** BookOpen 버튼(`toolbar-manual-site`, 새 탭 noopener). 미설정 시 숨김. 검증: pytest 415·me 응답·브라우저 버튼 위치/툴팁·lint 0.
 
