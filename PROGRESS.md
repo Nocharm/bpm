@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 F6: 펼침 레인 헤더 개선 (사용자: 호버 티나게 + 맵 이동 버튼 + 미저장 경고)
+- `InlineRegionBands` 헤더: 맵 이름 호버 시 액센트+밑줄(+틴트 배경)로 강조, 옆에 `ExternalLink` 12px 아이콘 버튼(`region-open-map`) 추가. 클릭 → ConfirmDialog(제목=맵 이름, "이 에디터를 떠납니다 — 저장하지 않은 내용은 잃을 수 있습니다") → 확인 시 `router.push(/maps/{링크맵})`. i18n `subprocess.openMap*` en/ko.
+- 검증: 브라우저 — 호버 강조·모달·/maps/1 이동 확인. lint 0·build 성공.
+
 ## 2026-07-06 — 서브프로세스 1차 검증 피드백 F1~F5 수정 (사용자: 비교 엣지·연쇄 펼침 엣지·임베드 핸들·더블클릭·타이틀)
 - F1 비교화면: unchanged subprocess가 전용 핸들을 렌더해 엣지 앵커 실패 → compare가 `sideHandles` 주입, 렌더는 diff 또는 sideHandles면 4변 핸들. F2 펼침 게이트웨이 targetHandle `t-left` 하드코딩 → `withSubprocessHandles` 보정(subprocess `in`/`__primary__`). F3 Handle에 `isConnectable` 미전달로 임베드 자식 connectable:false 무효 → 전 핸들 forward(시작/끝·내부→외부 끌기 차단) + 접힘 시 명시 엣지 없는 끝 핸들에 표시 전용 `sp-ends:*` 엣지 파생(전체 엔드→다음 노드 수렴). F4 더블클릭=편집 모달(드릴인 제거, 딥뷰는 임베드 자식 경로 유지). F5 타이틀 편집 4진입점 차단(인라인·인스펙터·모달·컨텍스트 메뉴).
 - 검증: 브라우저 전 항목(비교 엣지·게이트웨이 유지·connectable 클래스·합성 엣지·모달·비활성 입력) + lint 0 + build 성공. 상세는 `SUBPROCESS-DESIGNATION.md` F1~F5 요약.

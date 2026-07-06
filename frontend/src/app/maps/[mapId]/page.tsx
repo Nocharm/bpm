@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ArrowLeft, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronRight, Circle, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Group, Hand, Info, LayoutGrid, Lock, LogOut, Maximize2, Minus, MoreHorizontal, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -22,7 +22,7 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
@@ -314,10 +314,13 @@ function InlineRegionBands({
   regions,
   baseDepth,
   onCollapse,
+  onOpenMap,
 }: {
   regions: RegionBox[];
   baseDepth: number; // 현재 스코프의 절대깊이 — 셰브론을 절대깊이(루트 기준)로 표시해 포커스 레인과 통일
   onCollapse: (id: string) => void;
+  // 레인 헤더의 "링크맵 열기" — hostId(RegionBox.id)로 링크 대상 맵을 해석해 이동 확인 모달을 띄움 (F6)
+  onOpenMap: (hostId: string) => void;
 }) {
   const { t } = useI18n();
   const { y, zoom } = useViewport();
@@ -355,17 +358,32 @@ function InlineRegionBands({
               zIndex: 1,
             }}
           >
-            <button
-              type="button"
-              className="pointer-events-auto inline-flex items-center gap-1 rounded-xs px-1 py-0.5 text-fine hover:bg-accent-tint"
-              title={t("node.collapseChildTitle")}
-              onClick={() => onCollapse(box.id)}
-            >
-              <span className="font-semibold tracking-tight text-accent">
-                {"›".repeat(baseDepth + box.depth)}
-              </span>
-              <span className="text-ink-secondary">{box.label || t("node.childBadge")}</span>
-            </button>
+            <div className="pointer-events-auto inline-flex items-center gap-0.5">
+              {/* 맵 이름 — 호버 시 이름이 액센트+밑줄로 또렷하게(클릭=접기) (F6) */}
+              <button
+                type="button"
+                className="group inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine transition-colors hover:bg-accent-tint"
+                title={t("node.collapseChildTitle")}
+                onClick={() => onCollapse(box.id)}
+              >
+                <span className="font-semibold tracking-tight text-accent">
+                  {"›".repeat(baseDepth + box.depth)}
+                </span>
+                <span className="text-ink-secondary underline-offset-2 transition-colors group-hover:text-accent group-hover:underline">
+                  {box.label || t("node.childBadge")}
+                </span>
+              </button>
+              {/* 링크맵 열기 — 작은 아이콘 버튼, 클릭 시 미저장 경고 확인 모달 (F6) */}
+              <button
+                type="button"
+                data-id="region-open-map"
+                className="rounded-xs p-0.5 text-ink-tertiary transition-colors hover:bg-accent-tint hover:text-accent"
+                title={t("subprocess.openMap")}
+                onClick={() => onOpenMap(box.id)}
+              >
+                <ExternalLink size={12} strokeWidth={1.5} />
+              </button>
+            </div>
           </div>
         </Fragment>
       ))}
@@ -591,6 +609,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
 
 function MapEditor({ mapId }: { mapId: number }) {
   const { t } = useI18n();
+  const router = useRouter();
   const [mapName, setMapName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   // 승인 트랜지션 시 bump — 하단 버전 기록(MapDetailCard) 재조회 트리거 / bump to refresh version record.
@@ -2386,6 +2405,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 네이티브 prompt/confirm 대신 플로팅 모달 — 버전 생성/이름변경 입력, 삭제 확인.
   const [versionDialog, setVersionDialog] = useState<{ mode: "create" | "rename" } | null>(null);
   const [deleteVersionOpen, setDeleteVersionOpen] = useState(false);
+  // 펼침 레인 헤더 "링크맵 열기" 확인 — 에디터 이탈이라 미저장 경고 후 이동 (F6)
+  const [openMapPrompt, setOpenMapPrompt] = useState<{ mapId: number; name: string } | null>(null);
+
+  // 레인 헤더의 열기 버튼 → 호스트 노드의 링크 대상 맵 해석 후 확인 모달 (트리비얼 setter라 plain 함수)
+  const promptOpenLinkedMap = (hostId: string) => {
+    const host = fullGraphRef.current?.nodes.find((node) => node.id === hostId);
+    if (host?.linked_map_id != null) {
+      setOpenMapPrompt({ mapId: host.linked_map_id, name: host.title });
+    }
+  };
 
   // 트리비얼 핸들러는 plain 함수로 — React Compiler 자동 메모(수동 useCallback은 setter 추론과 충돌).
   const handleCreateVersion = () => {
@@ -6458,6 +6487,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             regions={inlineComposition.regions}
                             baseDepth={currentScopeDepth}
                             onCollapse={toggleInlineExpand}
+                            onOpenMap={promptOpenLinkedMap}
                           />
                         )}
                         {focusScopeLanes.map((lane, index) => (
@@ -7669,6 +7699,18 @@ function MapEditor({ mapId }: { mapId: number }) {
           danger
           onConfirm={() => void confirmDeleteVersion()}
           onClose={() => setDeleteVersionOpen(false)}
+        />
+      )}
+      {/* 펼침 레인 "링크맵 열기" 확인 — 에디터 이탈 시 미저장 내용 경고 (F6) */}
+      {openMapPrompt && (
+        <ConfirmDialog
+          icon={<ExternalLink size={28} strokeWidth={1.5} />}
+          title={openMapPrompt.name}
+          message={t("subprocess.openMapBody")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => router.push(`/maps/${openMapPrompt.mapId}`)}
+          onClose={() => setOpenMapPrompt(null)}
         />
       )}
       {/* 점유권 이전 다이얼로그 — searchable editor picker (T7); conditional render resets query state on close */}
