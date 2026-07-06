@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 U7: 데모 시드 + 통합 검증 (기능 구현 완료)
+- `seed_org_demo`: 지정 4종(Order Fulfillment·Incident Response·Customer Support·Release Pipeline — 부서=오너 리프, 시스템/소요시간) + Employee Onboarding draft에 소비 subprocess 노드 2개(지정/미지정 나란히). 나머지 8맵은 의도적 미지정(경고·피커 필터 시연).
+- 통합 스모크(:3001): 피커 지정 4종+부서 칩 → 미지정 경고 1·지정 펼침(임베드 자식 3) → 인스펙터 지정 카드. 최종 회귀: pytest 415·ruff·lint 0·build 성공. 전 단위(U1~U7) 검토 대기 — 사용자 검증 후 완료 처리.
+
 ## 2026-07-06 — 서브프로세스 지정 U6: 단일색 고정
 - subprocess 색 = 타입 기본(#7c6adc 바이올렛) 강제: 렌더(`ProcessNode`·`resolveNodeStroke`)가 저장 color 무시(데이터 무변경), 색 선택 UI 숨김 — 인스펙터 속성폼·노드 요약 모달(nodeType prop 신설)·컨텍스트 메뉴. `colorsForType('subprocess')=[""]` 방어.
 - 검증: lint 0, 브라우저 — 저장색 #c7a062 노드가 바이올렛로 강제(rgb 124,106,220), subprocess 스와치 0·process 스와치 5(회귀 없음), 인스펙터 색 행 숨김.
