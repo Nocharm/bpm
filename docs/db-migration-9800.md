@@ -79,25 +79,22 @@ Alembic은 아직 없다. backend가 기동할 때 `app/db.py::init_models()`가
 | 파일 | 역할 |
 |------|------|
 | `docker-compose.yml` | 공통 스택 정의(proxy 80←`APP_PORT`, frontend, backend, db). 운영·검증 공용 |
-| `docker-compose.dev.yml` | 9800 검증 스택 **오버라이드** — 브리지 서브넷만 172.37.0.0/16으로 분리(운영 172.36과 충돌 회피). 포트는 `.env.dev`의 `APP_PORT`로 주입 |
+| `docker-compose.dev.yml` | 9800 검증 스택 **오버라이드** — 브리지 서브넷을 172.42.0.0/16으로 분리(운영 172.36과 충돌 회피). **사내 71번 서버에선 병합 누적 문제로 미사용**(아래 참고) |
 | `.env.dev` | 서버에서 생성(§위) — 커밋 금지 대상 |
 
-검증 스택의 모든 compose 명령은 아래 형태를 쓴다(`-p bpm-dev`가 컨테이너·볼륨·이미지·네트워크
-이름을 운영과 분리해 준다):
+**사내 71번 서버 검증 경로(2026-07-06)** — 이 서버의 compose는 두 파일의 `ipam.config`를 교체가
+아니라 **누적 병합**해서 base의 172.36이 살아남아 `Pool overlaps with other one`이 난다(대역을
+어떤 값으로 바꿔도 동일). 따라서 오버라이드 파일을 쓰지 않고, **dev 클론의 `docker-compose.yml`
+맨 아래 서브넷을 직접 `172.42.0.0/16` / `172.42.0.1`로 수정**한 뒤 아래 alias로 실행한다
+(`-p bpm-dev`가 컨테이너·볼륨·이미지·네트워크 이름을 운영과 분리해 준다):
 
 ```bash
-alias dcdev='docker compose -p bpm-dev -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev'
+alias dcdev='docker compose -p bpm-dev --env-file .env.dev'
+docker network rm bpm-dev_default 2>/dev/null   # 이전 시도 잔재가 있으면 정리
 ```
 
-> ⚠️ compose 버전에 따라 두 파일의 `ipam.config`가 교체가 아니라 **누적 병합**되어 base의 172.36이
-> 살아남아 `Pool overlaps with other one` 에러가 난다(사내 71번 서버에서 재현 — 대역을 어떤 값으로
-> 바꿔도 동일). 그 경우 오버라이드 대신 **dev 클론의 `docker-compose.yml` 맨 아래 서브넷을 직접
-> 빈 대역으로 수정**(2026-07-06 검증값: `172.42.0.0/16` / `172.42.0.1`)하고 alias에서 dev 파일을 뺀다:
->
-> ```bash
-> alias dcdev='docker compose -p bpm-dev --env-file .env.dev'
-> docker network rm bpm-dev_default 2>/dev/null   # 이전 시도 잔재 정리 후 재시도
-> ```
+> 참고: 병합이 정상인 compose 환경이라면 오버라이드 방식도 가능 —
+> `alias dcdev='docker compose -p bpm-dev -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev'`
 
 ---
 
