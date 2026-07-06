@@ -299,7 +299,7 @@ git commit -m "feat(editor): thread node url end-to-end + inspector input — �
   - `buildGraphFromCsv(text: string): CsvImportOutcome`
   - `buildTemplateCsv(): string`
 
-- [x] **Step 1: 실패하는 테스트 작성**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 `frontend/src/lib/csv-import.test.ts` 전체:
 
@@ -453,12 +453,12 @@ describe("buildGraphFromCsv — 검증 에러", () => {
 });
 ```
 
-- [x] **Step 2: 실패 확인**
+- [ ] **Step 2: 실패 확인**
 
 Run (frontend/ 에서): `npx vitest run src/lib/csv-import.test.ts`
 Expected: FAIL — `Cannot find module './csv-import'` 류의 모듈 미존재 에러.
 
-- [x] **Step 3: 구현**
+- [ ] **Step 3: 구현**
 
 `frontend/src/lib/csv-import.ts` 전체:
 
