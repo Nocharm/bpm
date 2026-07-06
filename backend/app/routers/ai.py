@@ -13,7 +13,7 @@ from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
-from app.models import Employee, MapVersion
+from app.models import Employee, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal
 from app.settings import settings
@@ -58,6 +58,29 @@ def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
 
 
 _DIRECTORY_LIMIT = 100  # 프롬프트 크기 가드 — 대규모 AD 스케일링은 Phase 7
+_MANUAL_AI_LIMIT = 30000  # 프롬프트 크기 가드 — 등록 매뉴얼 합본 상한(문자)
+
+
+async def _load_manual_text(session: AsyncSession) -> str:
+    """AI 답변 근거 매뉴얼 — 등록 문서(manual_docs) 기준 동기화, 없으면 번들 manual.md 폴백.
+
+    한국어 문서 우선(프롬프트 언어와 일치), ko가 없으면 등록된 전체. html 문서는 태그 노이즈라 제외.
+    """
+    docs = (
+        await session.scalars(
+            select(ManualDoc)
+            .where(ManualDoc.format == "markdown")
+            .order_by(ManualDoc.sort_order, ManualDoc.id)
+        )
+    ).all()
+    korean = [doc for doc in docs if doc.language == "ko"]
+    picked = korean or list(docs)
+    if not picked:
+        return get_manual()
+    text = "\n\n".join(
+        f"# {doc.title}\n{doc.content}" if doc.title else doc.content for doc in picked
+    )
+    return text[:_MANUAL_AI_LIMIT]
 
 
 async def _load_directory(session: AsyncSession) -> list[str]:
@@ -123,8 +146,9 @@ async def ai_chat(
     )
     current = await _load_graph(session, version_id)
     directory = await _load_directory(session)
+    manual_text = await _load_manual_text(session)
     messages = build_messages(
-        get_manual(), current, can_edit, payload.instruction, payload.history, directory
+        manual_text, current, can_edit, payload.instruction, payload.history, directory
     )
 
     proposal = await _ask_and_validate(messages, payload.model)

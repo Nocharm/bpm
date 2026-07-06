@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — AI 챗 강화 1차: 히스토리 영속·매뉴얼 동기화·마크다운·분석 고도화 (feat/ai-chat)
+- 히스토리: 패널 닫힘=언마운트로 대화가 사라지던 것 → 버전별 localStorage(`bpm.aiChat.v{id}`, 최근 40개) 저장/복원 + '새 대화' 버튼(스레드·저장 삭제). 검증: 주입→복원·재오픈 유지·클리어(브라우저).
+- 매뉴얼 동기화: AI 근거를 번들 manual.md → **등록 문서(manual_docs, markdown·ko 우선, 30k자 가드)**로 교체, 문서 0건이면 번들 폴백. 테스트 +1(등록 문서 본문이 시스템 프롬프트에 포함).
+- 마크다운 우선: 프롬프트 규칙 6 신설 — message를 소제목/불릿/표로 서식화(짧은 답은 평문 허용). 스레드는 기존 MarkdownView 렌더라 프롬프트만으로 완결.
+- 데이터 피드백 고도화: `_structure_hints` 확장 — 도달성(시작에서/끝으로)·분기 없는 판단·라벨 없는 분기·막다른 노드·BPM 속성(담당자/부서/소요) 누락·중복 제목·start/end 부재를 사전탐지(id 8개 캡), analysis 카테고리 확장(reachability|branching|attributes|duplicate), 힌트 전수 반영 지시. 테스트 +1. pytest 422·ruff·lint·build PASS.
+
 ## 2026-07-06 — 맵 드롭다운 링크 추가도 지정 필터 적용 (사용자: 아코디언 '링크 노드로 추가' 우회로 지적)
 - `map-name-dropdown.tsx` — 라이브러리 피커와 동일 소스(`listLibraryProcesses`=서버가 지정 맵만 반환)를 lazy 로드해 '링크 노드로 추가' 버튼을 지정 맵에만 노출 + 순환 참조(closesCycle) 동일 차단. '맵 열기'는 유지. 목록 응답엔 sp_designated_at이 없어 백엔드 무변경으로 처리.
 - 검증: lint 0·브라우저(지정 맵=열기+링크, 미지정 맵=열기만, 콘솔 0). 로컬 백엔드가 지정 필터 이전 코드로 떠 있던 것 재기동 후 확인.
