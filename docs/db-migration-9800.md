@@ -89,6 +89,16 @@ Alembic은 아직 없다. backend가 기동할 때 `app/db.py::init_models()`가
 alias dcdev='docker compose -p bpm-dev -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev'
 ```
 
+> ⚠️ compose 버전에 따라 두 파일의 `ipam.config`가 교체가 아니라 **누적 병합**되어 base의 172.36이
+> 살아남아 `Pool overlaps with other one` 에러가 난다(사내 71번 서버에서 재현 — 대역을 어떤 값으로
+> 바꿔도 동일). 그 경우 오버라이드 대신 **dev 클론의 `docker-compose.yml` 맨 아래 서브넷을 직접
+> 빈 대역으로 수정**(2026-07-06 검증값: `172.42.0.0/16` / `172.42.0.1`)하고 alias에서 dev 파일을 뺀다:
+>
+> ```bash
+> alias dcdev='docker compose -p bpm-dev --env-file .env.dev'
+> docker network rm bpm-dev_default 2>/dev/null   # 이전 시도 잔재 정리 후 재시도
+> ```
+
 ---
 
 ## 3. DB 복사 (운영 9900 → 검증 9800)
@@ -100,7 +110,8 @@ docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}' | grep postgres   
 PROD_DB=<위에서 확인한 이름>   # 예: bpm-db-1
 
 # 커스텀 포맷 덤프(-Fc) — 압축 + pg_restore 선택 복원 가능
-docker exec -t "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-$(date +%Y%m%d-%H%M).dump
+# 주의: docker exec에 -t(TTY)를 붙이면 바이너리 덤프에 CR이 섞여 아카이브가 깨진다 — 반드시 -t 없이.
+docker exec "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-$(date +%Y%m%d-%H%M).dump
 ls -lh bpm-9900-*.dump   # 0바이트가 아닌지 확인
 ```
 
@@ -217,7 +228,7 @@ SQL
 
 ```bash
 # 운영 디렉터리에서
-docker exec -t "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-before-upgrade-$(date +%Y%m%d).dump
+docker exec "$PROD_DB" pg_dump -U processmap -d processmap -Fc > bpm-9900-before-upgrade-$(date +%Y%m%d).dump   # -t(TTY) 금지 — 바이너리 손상
 git fetch && git checkout <9800에서 검증한 커밋>   # 반드시 검증 스택과 같은 커밋으로
 docker compose up -d --build               # backend 기동 = 자동 보강 적용
 docker compose logs backend | head -30 && curl -s http://localhost:9900/api/health

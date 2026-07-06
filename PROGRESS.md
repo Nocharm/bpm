@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 9800 배포 실전 트러블 2건 문서 반영 (사용자: 서버 배포 중 Pool overlaps·복원 실패)
+- `docs/db-migration-9800.md` — ① 덤프 명령의 `docker exec -t` 제거(**TTY가 바이너리 덤프에 CR 섞어 아카이브 손상** — process_maps 미존재로 발현) ② compose 오버라이드 `ipam.config` 누적 병합으로 대역을 바꿔도 `Pool overlaps` 재현(서버 확인) → dev 클론 compose 직접 수정(검증값 172.42/16) + dev 파일 제외 alias 우회 명기.
+
 ## 2026-07-06 — 마이그레이션 문서·매뉴얼 최종화 + MANUAL_URL compose 전달 (사용자: 최신 기준 갱신 후 개발서버 배포)
 - `docs/db-migration-9800.md` 최신 main 기준 재정렬 — manual_docs 신규 컬럼 3(title·language·sort_order, 레거시 ko 흡수·제목 자동 추출로 별도 작업 불요) 추가(컬럼 12), .env.dev에 MANUAL_URL 선택 항목, /manual 체크리스트 다중 문서 기준, 승격 체크아웃 문구 일반화.
 - **compose 공백 수정**: `MANUAL_URL`이 Settings/.env.example에만 있고 docker-compose가 backend로 미전달 → 배포에서 무동작. backend environment에 추가(compose config로 전달 확인).
