@@ -124,7 +124,8 @@ export function ConfirmDialog({
                 } ${line.highlight ? "bg-accent-tint" : ""}`}
               >
                 <span className={`shrink-0 ${LINE_ICON_TONE[line.tone ?? "ink"]}`}>{line.icon}</span>
-                <span className="min-w-0 flex-1 truncate">{line.text}</span>
+                {/* 말줄임 대신 줄바꿈 — 확인 모달의 경고/안내가 잘리면 안 됨 (F7, break-keep로 단어 보존) */}
+                <span className="min-w-0 flex-1 break-keep">{line.text}</span>
                 {line.badge && (
                   <span
                     className={`shrink-0 rounded-xs border px-1.5 py-0.5 text-fine ${

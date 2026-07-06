@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — F7: 아이콘 확인 모달 요점 줄 말줄임 제거 (사용자: 버전 이동 모달 텍스트 잘림)
+- `confirm-dialog.tsx` 리치 폼 요점 줄 `truncate` → `break-keep` 줄바꿈 — 버전 전환 모달의 미저장 경고 등 긴 문구가 전문 표시(전 ConfirmDialog 공통). 검증: 브라우저 버전 전환 모달 2줄 표시·lint 0.
+
 ## 2026-07-06 — 서브프로세스 F6: 펼침 레인 헤더 개선 (사용자: 호버 티나게 + 맵 이동 버튼 + 미저장 경고)
 - `InlineRegionBands` 헤더: 맵 이름 호버 시 액센트+밑줄(+틴트 배경)로 강조, 옆에 `ExternalLink` 12px 아이콘 버튼(`region-open-map`) 추가. 클릭 → ConfirmDialog(제목=맵 이름, "이 에디터를 떠납니다 — 저장하지 않은 내용은 잃을 수 있습니다") → 확인 시 `router.push(/maps/{링크맵})`. i18n `subprocess.openMap*` en/ko.
 - 검증: 브라우저 — 호버 강조·모달·/maps/1 이동 확인. lint 0·build 성공.
