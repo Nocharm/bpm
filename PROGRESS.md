@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 테스트용 샘플 CSV 3종 (사용자: 분기 많은 20~40노드 임포트 확인용)
+- `docs/samples/csv-sample-01-procurement.csv`(구매 24노드·재작업 루프 4)·`02-recruitment.csv`(채용 31노드·3-way 분기·종결 경로 6)·`03-incident-change.csv`(장애/변경 39노드·P1~P3 트리아지·롤백 순환). 실제 파서(vitest 임시 테스트)로 에러 0·decision 추론·배치 검증, 사용자 실임포트 확인 완료.
+
 ## 2026-07-06 — Task 7: 통합 검증 (브라우저 E2E + 전체 회귀)
 CSV 임포트 — 새 맵 시작·기존 맵 전체 교체·노드 URL 필드, E2E 검증 완료. Task 5·6 리포트가 이미 다룬 시나리오 1·2·3·4·5·6은 인용, 남은 4건(시나리오 1 BOM+CRLF 바이트, 7 인스펙터 URL 필드 영속화·start/end/subprocess 미노출, 8 EUC-KR CSV 한글 파싱, 보너스 route-interception 생성실패 재현) 20/20 라이브 체크 전부 통과 — 결함 없음. 전체 회귀: backend pytest 423 passed·ruff clean, frontend vitest 83 passed·lint 0 errors·build 성공. (후속: 리뷰 반영 — Next 라벨 200자 검증·생성 실패 재시도 시 중복 생성 방지·스펙 §3 정합)
 
