@@ -22,6 +22,7 @@ import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
 import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
+import { AiChatSettingsPanel } from "@/components/settings/ai-chat-settings-panel";
 import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
 import { DashboardPanel } from "@/components/settings/dashboard-panel";
 
@@ -37,6 +38,7 @@ type TabId =
   | "trash"
   | "notices"
   | "manual"
+  | "aiChat"
   | "dashboard";
 type Access = "everyone" | "admin" | "sysadmin";
 
@@ -55,6 +57,7 @@ const CATEGORIES: Category[] = [
     tabs: [
       { id: "notices", labelKey: "nav.tab.notices" },
       { id: "manual", labelKey: "manual.manage.tab" },
+      { id: "aiChat", labelKey: "aiLog.tab" },
     ],
   },
   {
@@ -197,6 +200,9 @@ export default function SettingsPage() {
           )}
           {current === "manual" && (
             <ManualManagePanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
+          {current === "aiChat" && (
+            <AiChatSettingsPanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
           {current === "dashboard" && <DashboardPanel />}
           {current === "employees" && <EmployeeTable />}

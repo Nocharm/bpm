@@ -697,6 +697,26 @@ class EligibleAssigneesOut(BaseModel):
 AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 
+class AppSettingsOut(BaseModel):
+    """앱 런타임 설정 — AI 챗 Q&A DB 적재 플래그 + 기능 팁 목록."""
+
+    ai_chat_log_enabled: bool
+    ai_chat_tips: list[str]
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class AppSettingsUpdate(BaseModel):
+    """부분 갱신 — None 필드는 유지. 팁을 빈 목록으로 보내면 기본 팁으로 복원."""
+
+    ai_chat_log_enabled: bool | None = None
+    ai_chat_tips: list[str] | None = Field(default=None, max_length=50)
+
+
+class AiTipsOut(BaseModel):
+    tips: list[str]
+
+
 class AiChatTurn(BaseModel):
     # 경계에서 역할 제약 — 클라이언트가 system 역할을 주입하지 못하도록 (security.md)
     role: Literal["user", "assistant"]

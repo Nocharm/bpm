@@ -4,6 +4,7 @@
 import { Minimize2, Square, X } from "lucide-react";
 import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
+import { IconTip } from "@/components/icon-tip";
 import { useI18n } from "@/lib/i18n";
 import type { WindowGeom } from "@/lib/window-store";
 
@@ -193,46 +194,52 @@ export function ScopeWindow({
       >
         {headerLeft ?? <span className="flex-1 truncate font-medium">{title}</span>}
         {headerActions}
-        <button
-          type="button"
-          title={t("window.minimize")}
-          className="rounded-xs p-1 hover:bg-surface-pearl"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (!geom.minimized) onMinimize?.(event.clientX, event.clientY);
-            toggleMin();
-          }}
-        >
-          <Minimize2 size={15} strokeWidth={1.6} />
-        </button>
-        {canMaximize && (
+        <IconTip label={t("window.minimize")}>
           <button
             type="button"
-            title={t("window.maximize")}
+            aria-label={t("window.minimize")}
             className="rounded-xs p-1 hover:bg-surface-pearl"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
-              toggleMax();
+              if (!geom.minimized) onMinimize?.(event.clientX, event.clientY);
+              toggleMin();
             }}
           >
-            <Square size={14} strokeWidth={1.5} />
+            <Minimize2 size={15} strokeWidth={1.6} />
           </button>
+        </IconTip>
+        {canMaximize && (
+          <IconTip label={t("window.maximize")}>
+            <button
+              type="button"
+              aria-label={t("window.maximize")}
+              className="rounded-xs p-1 hover:bg-surface-pearl"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleMax();
+              }}
+            >
+              <Square size={14} strokeWidth={1.5} />
+            </button>
+          </IconTip>
         )}
         {canClose && (
-          <button
-            type="button"
-            title={t("window.close")}
-            className="rounded-xs p-1 hover:bg-error/10 hover:text-error"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onClose();
-            }}
-          >
-            <X size={16} strokeWidth={1.5} />
-          </button>
+          <IconTip label={t("window.close")}>
+            <button
+              type="button"
+              aria-label={t("window.close")}
+              className="rounded-xs p-1 hover:bg-error/10 hover:text-error"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              <X size={16} strokeWidth={1.5} />
+            </button>
+          </IconTip>
         )}
       </div>
 
