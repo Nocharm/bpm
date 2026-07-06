@@ -44,6 +44,9 @@ const ITEM_HEIGHT = 32;
 const EDGE_MARGIN = 10;
 const PANEL_CLASS = "w-48 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
 const WIDE_PANEL_CLASS = "w-64 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
+// 하위 플라이아웃 — EN 긴 라벨(예: 'Auto layout — horizontal')이 w-48을 넘쳐 단축키 정렬이 깨짐 → w-60
+const SUBMENU_WIDTH = 240;
+const SUBMENU_PANEL_CLASS = "w-60 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
 // 단축키 힌트 — 숏컷 레전드(shortcut-legend.tsx)의 kbd와 동일한 디자인
 const KBD_CLASS =
   "rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary";
@@ -192,7 +195,7 @@ function MenuList({
               onClose();
             }}
           >
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               {item.icon && (
                 <item.icon
                   size={14}
@@ -200,7 +203,8 @@ function MenuList({
                   className={`shrink-0 ${item.danger ? "text-error" : "text-ink-tertiary"}`}
                 />
               )}
-              {item.label}
+              {/* 라벨이 패널 폭을 넘으면 말줄임 — 단축키 kbd가 밖으로 밀리지 않게 */}
+              <span className="truncate">{item.label}</span>
             </span>
             {item.shortcut &&
               (Array.isArray(item.shortcut) ? (
@@ -448,7 +452,7 @@ function SubmenuItem({
   const handleEnter = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
-      setToLeft(rect.right + MENU_WIDTH + EDGE_MARGIN > window.innerWidth);
+      setToLeft(rect.right + SUBMENU_WIDTH + EDGE_MARGIN > window.innerWidth);
       // 하위 메뉴 높이 추정(항목당 ITEM_HEIGHT). 아래로 넘치고 위에 공간이 있으면 위로 펼침.
       const subHeight = item.submenu.length * ITEM_HEIGHT + 12;
       const overflowsBelow = rect.top + subHeight + EDGE_MARGIN > window.innerHeight;
@@ -467,18 +471,18 @@ function SubmenuItem({
           item.disabled ? "cursor-not-allowed text-ink-tertiary opacity-45" : "hover:bg-surface-alt text-ink"
         }`}
       >
-        <span className="flex items-center gap-2">
+        <span className="flex min-w-0 items-center gap-2">
           {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
-          {item.label}
+          <span className="truncate">{item.label}</span>
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex shrink-0 items-center gap-1.5">
           {item.shortcut && <kbd className={KBD_CLASS}>{item.shortcut}</kbd>}
           <ChevronRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
         </span>
       </button>
       {(open || keyboardOpen) && !item.disabled && (
         <div
-          className={`absolute z-[1200] ${PANEL_CLASS}`}
+          className={`absolute z-[1200] ${SUBMENU_PANEL_CLASS}`}
           style={{
             ...(toLeft ? { right: "100%" } : { left: "100%" }),
             ...(toUp ? { bottom: 0 } : { top: 0 }),

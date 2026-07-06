@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 우클릭 정렬 플라이아웃 폭 보정 (사용자: EN에서 글자·단축키 정렬 깨짐·밖으로 넘침)
+- `context-menu.tsx` 하위 플라이아웃을 w-48→**w-60**(240px, 가장자리 뒤집기 추정치 동기) — EN 'Auto layout — horizontal'이 nowrap으로 패널 밖까지 밀리던 문제. 방어적으로 항목·트리거 라벨에 min-w-0+truncate(단축키 kbd는 shrink-0로 우측 고정). 검증: lint 0·브라우저 DOM(패널 240px·라벨 전체 표시·kbd 패널 안) + 스크린샷.
+
 ## 2026-07-06 — 9800 배포 실전 트러블 2건 문서 반영 (사용자: 서버 배포 중 Pool overlaps·복원 실패)
 - `docs/db-migration-9800.md` — ① 덤프 명령의 `docker exec -t` 제거(**TTY가 바이너리 덤프에 CR 섞어 아카이브 손상** — process_maps 미존재로 발현) ② compose 오버라이드 `ipam.config` 누적 병합으로 대역을 바꿔도 `Pool overlaps` 재현(서버 확인) → dev 클론 compose 직접 수정(검증값 172.42/16) + dev 파일 제외 alias 우회 명기.
 
