@@ -3,7 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-07-06 — Task 7: 통합 검증 (브라우저 E2E + 전체 회귀)
-CSV 임포트 — 새 맵 시작·기존 맵 전체 교체·노드 URL 필드, E2E 검증 완료. Task 5·6 리포트가 이미 다룬 시나리오 1·2·3·4·5·6은 인용, 남은 4건(시나리오 1 BOM+CRLF 바이트, 7 인스펙터 URL 필드 영속화·start/end/subprocess 미노출, 8 EUC-KR CSV 한글 파싱, 보너스 route-interception 생성실패 재현) 20/20 라이브 체크 전부 통과 — 결함 없음. 전체 회귀: backend pytest 423 passed·ruff clean, frontend vitest 83 passed·lint 0 errors·build 성공.
+CSV 임포트 — 새 맵 시작·기존 맵 전체 교체·노드 URL 필드, E2E 검증 완료. Task 5·6 리포트가 이미 다룬 시나리오 1·2·3·4·5·6은 인용, 남은 4건(시나리오 1 BOM+CRLF 바이트, 7 인스펙터 URL 필드 영속화·start/end/subprocess 미노출, 8 EUC-KR CSV 한글 파싱, 보너스 route-interception 생성실패 재현) 20/20 라이브 체크 전부 통과 — 결함 없음. 전체 회귀: backend pytest 423 passed·ruff clean, frontend vitest 83 passed·lint 0 errors·build 성공. (후속: 리뷰 반영 — Next 라벨 200자 검증·생성 실패 재시도 시 중복 생성 방지·스펙 §3 정합)
 
 ## 2026-07-06 — Task 6: 에디터 툴바 — CSV 임포트(전체 교체)
 - `editor-toolbar.tsx` 우측 클러스터(`ml-auto` div)로 재구성 — `onImportCsv?`(FileUp) + 기존 매뉴얼 버튼(F9)을 함께 묶음. `page.tsx`: `csvImportOpen`/`csvOutcome`/`csvFileName`/`csvConfirmOpen` state + `applyCsvImport`(saveGraph PUT 성공 후에만 `pushHistory()`→PUT 응답으로 캔버스 반영, 실패 시 토스트만·캔버스 불변) — TDZ 방지로 `pushHistory` 선언 직후에 배치(브리프의 "saveCurrentScope 부근"보다 우선). 툴바 prop은 `checkout?.mine && currentParentId === null`(체크아웃 보유자·루트 스코프 한정) 게이트. 임포트 모달(`ModalBackdrop`+`CsvImportSection`) + 교체 확인 `ConfirmDialog`(삭제/생성 카운트) 추가. 검증: lint 0·build 성공, Playwright(system Chrome, devUser 전환 admin.sys/junho.lee)로 15+3개 체크 전부 통과 — 체크아웃 미보유 계정은 버튼 미노출(양방향)·임포트 후 6노드+"CSV imported" 토스트+새로고침 후 유지·Ctrl+Z undo가 임포트 전 3노드로 복원.

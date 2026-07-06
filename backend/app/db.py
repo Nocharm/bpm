@@ -54,7 +54,7 @@ def _add_missing_columns(conn: Connection) -> None:
             continue  # 신규 테이블은 create_all이 모든 컬럼 포함해 생성
         existing = {col["name"] for col in inspector.get_columns(table)}
         if column not in existing:
-            # nullable 컬럼 추가 — sqlite/postgres 모두 지원, 기존 행은 NULL
+            # nullable 컬럼 추가 — sqlite/postgres 모두 지원, 기존 행은 NULL(DDL에 DEFAULT 있으면 백필)
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 

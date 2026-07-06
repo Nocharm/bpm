@@ -144,4 +144,12 @@ describe("buildGraphFromCsv — 검증 에러", () => {
     const a = graph.nodes.find((n) => n.title === "A");
     expect(graph.edges.some((e) => e.source_node_id === a?.id && e.target_node_id === a?.id)).toBe(true);
   });
+
+  it("Next 라벨 200자 초과는 에러, 정확히 200자는 통과 (Edge.label String(200) 미러)", () => {
+    const over = buildGraphFromCsv(`${HEADER}\nA,,,,B:${"x".repeat(201)}\nB,,,,`).errors;
+    expect(over.some((e) => e.line === 2 && e.message.includes("label exceeds"))).toBe(true);
+
+    const exact = buildGraphFromCsv(`${HEADER}\nA,,,,B:${"y".repeat(200)}\nB,,,,`).errors;
+    expect(exact).toEqual([]);
+  });
 });

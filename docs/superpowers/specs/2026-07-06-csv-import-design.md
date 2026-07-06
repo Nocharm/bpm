@@ -58,7 +58,7 @@ Name,System,Duration,URL,Next
 - 파일 선택 즉시 파싱 → 인라인 요약("12 nodes · 14 edges will be created") 또는 에러 목록(최대 10건 표시). **에러 있으면 Create 차단**, 파일 제거 시 CSV 없이 생성 가능.
 - 생성 시퀀스(CSV 첨부 시): `POST /api/maps` → 응답 `versions[0].id`로 `POST /checkout`(신규 맵은 잠금 free — 항상 성공) → `PUT /graph` → `router.push(/maps/{id})`.
 - CSV 없으면 기존 동작(목록 갱신, 이동 없음) 유지.
-- `PUT` 실패 시: 맵은 생성된 상태 — 에러 토스트 후 에디터로 이동(툴바 임포트로 재시도 가능).
+- `PUT` 실패 시: 맵은 생성된 상태 — 다이얼로그 유지 + 인라인 에러 표시, Create 재클릭 시 생성 단계는 건너뛰고 체크아웃·그래프 반영만 재시도(중복 생성 방지).
 
 ## 4. 기존 맵 임포트 플로우 (전체 교체)
 

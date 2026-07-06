@@ -220,6 +220,11 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
         errors.push({ line: row.line, message: `Duplicate Next target "${target}"` });
         continue;
       }
+      // Edge.label String(200) 미러 — 로컬 sqlite는 통과하고 서버 postgres에서 500 나는 것 방지
+      if (label.length > 200) {
+        errors.push({ line: row.line, message: `label exceeds 200 characters — "${label.slice(0, 30)}…"` });
+        continue;
+      }
       seen.add(target);
       refs.push({ target, label });
     }

@@ -8,7 +8,7 @@
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, Globe, Lock } from "lucide-react";
 
@@ -132,6 +132,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   // CSV로 시작(선택) — 파싱 결과와 파일명. 에러 있으면 생성 차단
   const [csv, setCsv] = useState<CsvImportOutcome | null>(null);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  // 생성 완료 표시(맵/버전 id) — CSV 체크아웃·저장 실패 후 재시도 시 맵 재생성(중복) 방지용
+  const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
 
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
@@ -205,24 +207,28 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      // 1. 맵 생성 — 생성자가 owner(서버 부여), 선택한 공개 범위 즉시 반영 / Real map create (owner = creator).
-      const detail = await createMap(trimmed, description.trim(), visibility);
-      // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators (applied immediately).
-      for (const c of collaborators) {
-        // owner은 생성자에게 이미 부여됨 → viewer/editor만 / Owner already granted; only viewer/editor here.
-        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
-        await addMapPermission(detail.id, c.principalType, c.principalId, role);
+      // 생성 단계는 최초 1회만 — 재시도(CSV 실패 후 Create 재클릭) 시 이미 만든 맵을 재사용해 중복 생성 방지
+      if (createdRef.current === null) {
+        // 1. 맵 생성 — 생성자가 owner(서버 부여), 선택한 공개 범위 즉시 반영 / Real map create (owner = creator).
+        const detail = await createMap(trimmed, description.trim(), visibility);
+        // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators (applied immediately).
+        for (const c of collaborators) {
+          // owner은 생성자에게 이미 부여됨 → viewer/editor만 / Owner already granted; only viewer/editor here.
+          const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
+          await addMapPermission(detail.id, c.principalType, c.principalId, role);
+        }
+        // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
+        await setMapApprovers(detail.id, approvers.map((a) => a.userId));
+        createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
-      // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
-      await setMapApprovers(detail.id, approvers.map((a) => a.userId));
+      const created = createdRef.current;
       // 4. CSV 첨부 시 — 신규 As-Is 버전은 잠금 free: 체크아웃 획득 → 그래프 반영 → 에디터로 이동
       if (csv?.graph) {
-        const versionId = detail.versions[0].id;
         try {
-          await acquireCheckout(versionId);
-          await saveGraph(versionId, csv.graph);
+          await acquireCheckout(created.versionId);
+          await saveGraph(created.versionId, csv.graph);
         } catch (err) {
-          // 맵은 이미 생성됨 — 목록 갱신 + 다이얼로그에 안내(에디터 툴바에서 재시도 가능)
+          // 맵은 이미 생성됨 — 목록 갱신 + 다이얼로그 유지·인라인 에러(Create 재클릭 시 체크아웃·저장만 재시도)
           onCreated();
           setError(
             err instanceof Error
@@ -234,7 +240,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
         }
         onCreated();
         onClose();
-        router.push(`/maps/${detail.id}`);
+        router.push(`/maps/${created.mapId}`);
         return;
       }
       onCreated();
