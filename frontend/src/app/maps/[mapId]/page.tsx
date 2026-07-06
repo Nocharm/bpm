@@ -480,6 +480,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       department: node.department,
       system: node.system,
       duration: node.duration,
+      url: node.url ?? "",
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
@@ -574,6 +575,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       department: node.data.department,
       system: node.data.system,
       duration: node.data.duration,
+      url: node.data.url ?? "",
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -7192,6 +7194,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           {([
                             ["system", "field.system"],
                             ["duration", "field.duration"],
+                            ["url", "field.url"],
                           ] as const).map(([key, labelKey]) => (
                             <div
                               key={key}
@@ -7200,7 +7203,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
                               <input
                                 className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                                value={selectedNode.data[key]}
+                                value={selectedNode.data[key] ?? ""}
                                 disabled={readOnly}
                                 title={selectedNode.data[key] || undefined}
                                 onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}

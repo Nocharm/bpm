@@ -20,6 +20,8 @@ export type NodeData = {
   department: string;
   system: string;
   duration: string;
+  // 참조 링크(URL) — 노드당 1개, 빈 값 허용
+  url?: string;
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   groupIds: string[];
   hasChildren: boolean;

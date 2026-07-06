@@ -76,6 +76,8 @@ export interface GraphNode {
   department: string;
   system: string;
   duration: string;
+  // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
+  url?: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;

@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — Task 2: 프론트 노드 URL 왕복 배선 + 인스펙터 입력
+- `GraphNode.url?`(api.ts)·`NodeData.url?`(canvas.ts) 옵셔널 추가 → 에디터 페이지 `toAppNodes`/`buildGraph`(둘 다 모듈 레벨 함수)에서 `url ?? ""`로 왕복 배선 → 인스펙터 BPM 속성 카드의 System/Duration 행 배열에 `url`/`field.url` 추가(`value`를 `?? ""`로 안전화). i18n `field.url` en/ko(`"URL"`) 추가. 검증: lint 0(무관 경고 1건)·build 성공.
+
 ## 2026-07-06 — Task 1: 백엔드 노드 URL 필드 구현 (TDD)
 - `Node.url` 필드 추가(`models.py` String(500) default "") + `db.py _ADDED_COLUMNS` 보강 + `NodeIn.url` 스키마(max_length=500만, 패턴 검증 제거 — 인스펙터 자유 타이핑 자동저장 보호) + `graph.py` upsert 분기 업데이트 + `versions.py` clone_graph 노드 필드 추가. 스펙 문서(`2026-07-06-csv-import-design.md` §5) 편차 반영. 테스트 3개(roundtrip·길이 검증·복제 보존) — 423 passed, ruff clean (후속: 계획 체크박스 오기 원복·불필요 group_ids 라인 제거).
 
