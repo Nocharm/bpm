@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — 서브프로세스 지정 U6: 단일색 고정
+- subprocess 색 = 타입 기본(#7c6adc 바이올렛) 강제: 렌더(`ProcessNode`·`resolveNodeStroke`)가 저장 color 무시(데이터 무변경), 색 선택 UI 숨김 — 인스펙터 속성폼·노드 요약 모달(nodeType prop 신설)·컨텍스트 메뉴. `colorsForType('subprocess')=[""]` 방어.
+- 검증: lint 0, 브라우저 — 저장색 #c7a062 노드가 바이올렛로 강제(rgb 124,106,220), subprocess 스와치 0·process 스와치 5(회귀 없음), 인스펙터 색 행 숨김.
+
 ## 2026-07-06 — 서브프로세스 지정 U5: 노드 어트리뷰트 표시 + 인스펙터 읽기전용
 - 노드 카드: subprocess는 `NodeFields`가 지정 어트리뷰트(sp*, `injectSubEnds` 라이브 주입)를 표시 — 표시 필드 설정(displayFields) 준수, 미지정은 자동 생략. 인스펙터: 지정 subprocess 선택 시 4종 읽기전용 카드(`inspector-subprocess-attrs`, 소스=subprocess_refs) + "오너가 설정에서 지정" 안내.
 - 검증: lint 0, 브라우저 — 노드 카드 부서/시스템/소요시간 표시, 인스펙터 카드 읽기전용, 오너 수정(3d→5d) 후 소비 맵 반영(라이브) 확인. 관찰: 노드 표시 필드 localStorage 영속이 리로드 시 기본값 복귀(기존 동작, 본 작업 무관).

@@ -231,6 +231,8 @@ const TERMINAL_COLORS = ["", "#5e988f", "#c58a6b"]; // 3 (start/end)
 const DECISION_COLORS = ["", "#c7a062", "#9183c0", "#c2849a"]; // 4 (decision)
 
 function colorsForType(nodeType: string | undefined): string[] {
+  // subprocess는 단일색(타입 기본 = 바이올렛 톤) 고정 — 색 변경 불가 (spec 2026-07-06 §9)
+  if (nodeType === "subprocess") return [""];
   if (nodeType === "start" || nodeType === "end") return TERMINAL_COLORS;
   if (nodeType === "decision") return DECISION_COLORS;
   return NODE_COLORS;
@@ -4255,14 +4257,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             },
           ];
-      const colorItems: ContextMenuItem[] = readOnly
+      // subprocess는 단일색 고정 — 컨텍스트 메뉴 색 항목 자체를 숨김 (spec 2026-07-06 §9)
+      const menuNodeType = nodes.find((item) => item.id === menu.targetId)?.data.nodeType;
+      const colorItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
         ? []
         : [
             {
               // 노드 타입별 색 세트 (#8) — 메인6·start/end3·분기4
-              colors: colorsForType(
-                nodes.find((item) => item.id === menu.targetId)?.data.nodeType,
-              ),
+              colors: colorsForType(menuNodeType),
               current: nodes.find((item) => item.id === menu.targetId)?.data.color ?? "",
               onPick: handleRecolor,
               moreLabel: t("editor.moreColors"),
@@ -6813,6 +6815,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 nodeId={summaryNodeId}
                 title={node.data.label}
                 typeLabel={typeKey ? t(typeKey) : node.data.nodeType}
+                nodeType={node.data.nodeType}
                 showAttributes={hasBpmAttributes(node.data.nodeType)}
                 groupLabel={groupLabel}
                 predecessors={predecessors}
@@ -7033,6 +7036,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             )}
                           </span>
                         </div>
+                        {/* 색 — subprocess는 단일색 고정이라 선택 UI 숨김 (spec 2026-07-06 §9) */}
+                        {selectedNode.data.nodeType !== "subprocess" && (
                         <div className="flex items-center gap-3 py-1.5">
                           <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
                           <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
@@ -7090,6 +7095,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             )}
                           </div>
                         </div>
+                        )}
                       </div>
                       {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
                       {hasBpmAttributes(selectedNode.data.nodeType) && (

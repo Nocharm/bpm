@@ -170,7 +170,9 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
+// subprocess는 단일색 고정이라 저장 color 무시 (spec 2026-07-06 §9)
 export function resolveNodeStroke(color: string, nodeType: ProcessNodeType): string {
+  if (nodeType === "subprocess") return DEFAULT_COLORS.subprocess;
   return color || DEFAULT_COLORS[nodeType];
 }
 
@@ -406,7 +408,11 @@ function nodeStyle(color: string, fill: string): CSSProperties {
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 export function ProcessNode({ id, data }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const color = data.color || DEFAULT_COLORS[data.nodeType];
+  // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9)
+  const color =
+    data.nodeType === "subprocess"
+      ? DEFAULT_COLORS.subprocess
+      : data.color || DEFAULT_COLORS[data.nodeType];
   const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
   // 비교화면 diff — diff색 테두리/틴트/뱃지로 표시(에디터에선 diffStatus 미설정 → 자기색). 선택 링은 오버레이 담당.

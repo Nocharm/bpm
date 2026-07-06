@@ -87,6 +87,8 @@ interface NodeSummaryModalProps {
   nodeId: string;
   title: string;
   typeLabel: string;
+  // 원시 노드 타입 — subprocess 색 UI 숨김 게이트 (typeLabel은 번역 문자열이라 판별 불가)
+  nodeType: ProcessNodeType;
   groupLabel: string | null;
   predecessors: { id: string; label: string; nodeType: string }[];
   successors: { id: string; label: string; nodeType: string }[];
@@ -118,6 +120,7 @@ export function NodeSummaryModal({
   nodeId,
   title,
   typeLabel,
+  nodeType,
   groupLabel,
   predecessors,
   successors,
@@ -353,7 +356,8 @@ export function NodeSummaryModal({
                   <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</span>
                   <span className="min-w-0 flex-1 truncate text-right text-caption text-ink-secondary">{typeLabel}</span>
                 </div>
-                {/* 색 — 팔레트 우측 노출, "더 보기" 시 헥사 입력 인라인 */}
+                {/* 색 — 팔레트 우측 노출, "더 보기" 시 헥사 입력 인라인. subprocess는 단일색 고정이라 숨김 (spec 2026-07-06 §9) */}
+                {nodeType !== "subprocess" && (
                 <div className="flex items-center gap-3 py-1.5">
                   <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
                   <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
@@ -398,6 +402,7 @@ export function NodeSummaryModal({
                     )}
                   </div>
                 </div>
+                )}
                 {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
                 {showAttributes && (
                   <>
