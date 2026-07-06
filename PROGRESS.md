@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-06 — DB 마이그레이션 계획 + 9800 검증 스택 (사용자: 운영 9900=406c375b, 복사본으로 최신 검증)
+- `docs/db-migration-9800.md` — 기준 origin/main(2190e54). 스키마 diff(신규 테이블 4·컬럼 9·expired 상태), 마이그레이션=최신 backend 1회 기동(create_all+_ADDED_COLUMNS 멱등, DDL 스크립트 불요), pg_dump→db만 기동→복원→전체 기동 순서(순서 뒤집힘 금지 이유 포함), 스키마/행수/기능 검증 체크리스트, version_number 선택 백필 SQL, 운영 승격·롤백(additive라 코드 되돌리면 끝) 절차.
+- `docker-compose.dev.yml` — 9800 스택 오버라이드(서브넷 172.37/16만 분리, 포트는 .env.dev APP_PORT). `-p bpm-dev`로 컨테이너·볼륨·이미지 격리. `docker compose config`로 병합 검증(9800·172.37·bpm-dev_pgdata 확인). Keycloak 9800 redirect 추가·서브프로세스 지정 운영 작업을 주의사항으로 명기.
+
 ## 2026-07-06 — 로딩 개선: 피커 무한스크롤 25청크 (사용자: 직원 5000명 피커 부하, 훅 vs 일괄 판단 후 클라 증분 렌더 확정)
 - `lib/use-infinite-slice.ts` 신설 — 25개 렌더 후 목록 끝 센티널(IntersectionObserver) 도달 시 +25, resetKey(검색어) 변경 시 리셋. fetch는 기존 1회 유지(827KB/gzip 72KB·파싱 3ms로 전송은 병목 아님 — 병목은 5000행 DOM).
 - 적용: `principal-picker`(협업자·결재자·그룹 등 7곳 공용, 빈 포커스 전량 렌더가 주범), `search-select`(담당자·부서 등 6곳 공용), `transfer-checkout-dialog`. 검색 시 8개 캡은 유지.
