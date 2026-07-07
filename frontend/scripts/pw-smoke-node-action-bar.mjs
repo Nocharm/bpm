@@ -93,6 +93,19 @@ try {
   await page.waitForTimeout(500);
   if (((await panel.getAttribute("class")) ?? "").includes("translate-x-0")) fail("panel did not close on Esc");
 
+  // (d2) 라벨 입력 → 버튼 텍스트 대체 → 라벨 삭제 → 원복
+  await page.locator('[data-id="url-label-input"]').fill("WMS Doc");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  const linkBtn2 = page.locator('[data-id="node-action-link"]');
+  const btnText = ((await linkBtn2.textContent()) ?? "").trim();
+  if (!btnText.includes("WMS Doc")) fail(`label did not replace button text: "${btnText}"`);
+  if (/open link|링크 열기/i.test(btnText)) fail("default open-link text still present with label");
+  await page.locator('[data-id="url-label-remove"]').click();
+  await page.waitForTimeout(400);
+  const btnText2 = ((await linkBtn2.textContent()) ?? "").trim();
+  if (!/open link|링크 열기/i.test(btnText2)) fail(`label removal did not restore default text: "${btnText2}"`);
+
   // (e) 다중 선택 시 바 숨김 — RF 기본 multiSelectionKeyCode는 Mac에서 Meta(에디터 오버라이드 없음)
   const otherNode = page.locator(".react-flow__node", { hasText: "Procurement Flow" }).first();
   await taskNode.click();
@@ -112,6 +125,7 @@ try {
   if (await removeBtn.count()) await removeBtn.click();
   await page.waitForTimeout(2500); // AUTO_SAVE_DELAY_MS(2000) + PUT 여유
   urlWasSet = false; // 정상 경로에서 원복 완료 — finally의 best-effort 재시도 불필요
+  if (!(await page.locator('[data-id="url-field-input"]').count())) fail("url input did not return after removal");
 
   if (errors.length) fail(`console errors: ${errors.join(" | ")}`);
 } finally {
