@@ -10,6 +10,7 @@
 - Task 2: 프론트 배선 — NodeData.urlLabel·spUrl/spUrlLabel, 그래프 왕복(toAppNodes/buildGraph)·injectSubEnds 주입.
 - Task 3: UrlLabelField — 인스펙터·편집 모달 공용 2행 필 편집기(URL X=동반 삭제, 라벨 X=라벨만) + 스모크 셀렉터 이행.
 - Task 3 fix: 모달 isDirty·navSaveAndGo에 url/urlLabel 포함 — 칩 내비 시 URL 변경 유실 방지.
+- Task 4: 액션 바 — 라벨 텍스트 대체·호버 열기 아이콘·subprocess는 spUrl/spUrlLabel 소스.
 
 ## 2026-07-06 — 노드 액션 바 + 링크 미리보기 패널 설계 (feat/url-viewer)
 - 구현 계획 작성(Task 1~5: isHttpUrl TDD → NodeActionBar → LinkPreviewPanel → 구 버튼 제거 → 스모크): `docs/superpowers/plans/2026-07-06-node-action-bar-link-preview.md`. locked/undesignated 펼침 미노출 조건 유지 명시(사용자 재확인).

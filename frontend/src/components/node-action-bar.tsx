@@ -5,7 +5,7 @@
 // locked/undesignated subprocess는 기존 캔버스 동작대로 펼치기 버튼 미노출(노드 뱃지가 사유 표시).
 
 import { useStore } from "@xyflow/react";
-import { ChevronDown, Link, LogOut } from "lucide-react";
+import { ChevronDown, ExternalLink, Link, LogOut } from "lucide-react";
 
 import type { NodeData } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -20,6 +20,7 @@ interface BarTarget {
   cx: number; // 노드 하단 중앙 x (flow 좌표)
   bottom: number; // 노드 하단 y (flow 좌표)
   url?: string;
+  urlLabel: string;
   groupIds: string[];
   groupKey: string; // eq 비교용 join — 배열 참조 변동에 둔감
   expandable: boolean; // subprocess && subEnds>0 && !locked && !undesignated
@@ -33,6 +34,7 @@ function eq(a: BarTarget | null, b: BarTarget | null): boolean {
     a.cx === b.cx &&
     a.bottom === b.bottom &&
     a.url === b.url &&
+    a.urlLabel === b.urlLabel &&
     a.groupKey === b.groupKey &&
     a.expandable === b.expandable &&
     a.dragging === b.dragging
@@ -61,11 +63,13 @@ export function NodeActionBar({
       const h = n.measured?.height ?? 0;
       if (!w || !h) return null;
       const data = n.data as NodeData;
+      const isSub = data.nodeType === "subprocess";
       found = {
         id: n.id,
         cx: n.internals.positionAbsolute.x + w / 2,
         bottom: n.internals.positionAbsolute.y + h,
-        url: data.url,
+        url: (isSub ? data.spUrl : data.url) ?? undefined,
+        urlLabel: (isSub ? data.spUrlLabel : data.urlLabel) ?? "",
         groupIds: data.groupIds,
         groupKey: data.groupIds.join(","),
         expandable:
@@ -127,14 +131,27 @@ export function NodeActionBar({
         <button
           type="button"
           data-id="node-action-link"
-          aria-label={t("node.action.openLink")}
+          aria-label={target.urlLabel || t("node.action.openLink")}
           onClick={() => onOpenLink(target.url ?? "")}
-          className={accentBtn}
+          className={accentBtn + " group"}
         >
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-xs bg-accent-tint">
-            <Link size={12} strokeWidth={1.5} className="text-accent" />
-          </span>
-          {t("node.action.openLink")}
+          {target.urlLabel ? (
+            <>
+              <span className="min-w-0 max-w-[200px] truncate">{target.urlLabel}</span>
+              <ExternalLink
+                size={12}
+                strokeWidth={1.5}
+                className="ml-auto shrink-0 text-accent opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              />
+            </>
+          ) : (
+            <>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-xs bg-accent-tint">
+                <Link size={12} strokeWidth={1.5} className="text-accent" />
+              </span>
+              {t("node.action.openLink")}
+            </>
+          )}
         </button>
       )}
       {showLeave && (
