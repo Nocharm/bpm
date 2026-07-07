@@ -44,6 +44,18 @@ let urlInput = null;
 try {
   await page.goto("http://localhost:3000/maps/2", { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".react-flow__node", { timeout: 30000 });
+  // 게시본 기본 열람(읽기 전용) → 초안 버전으로 전환 — 상태 배너 기능 이후 에디터가 게시본을 먼저 연다 (2026-07-07 머지)
+  await page.getByRole("button", { name: /Select version|버전 선택/ }).first().click();
+  await page.waitForTimeout(300);
+  const draftRow = page.locator('button:has-text("(Draft)")').last();
+  if (await draftRow.count()) {
+    await draftRow.click();
+    await page.keyboard.press("Escape"); // 동일 버전 클릭 시 드롭다운 잔류 방어
+    await page.waitForSelector(".react-flow__node", { timeout: 30000 });
+  } else {
+    await page.keyboard.press("Escape");
+  }
+
   await page.waitForTimeout(3000); // 측정/레이아웃 + subprocess 메타 로드 안정화
 
   const bar = page.locator('[data-id="node-action-bar"]');
