@@ -22,9 +22,10 @@ export interface CsvImportOutcome {
   nodeCount: number;
   edgeCount: number;
   errors: CsvImportError[];
+  ignoredLabelCount: number;
 }
 
-const HEADER_COLUMNS = ["name", "system", "duration", "url", "next"] as const;
+const HEADER_COLUMNS = ["name", "system", "duration", "url", "url_label", "next"] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
 // 데이터 행 상한 — 초대형 파일 오업로드 방지
@@ -35,6 +36,7 @@ const MAX_LEN: Record<Exclude<HeaderColumn, "next">, number> = {
   system: 100,
   duration: 50,
   url: 500,
+  url_label: 100,
 };
 
 export function decodeCsvBuffer(buffer: ArrayBuffer): string {
@@ -107,6 +109,7 @@ const NODE_DEFAULTS = {
   system: "",
   duration: "",
   url: "",
+  url_label: "",
   pos_x: 0,
   pos_y: 0,
   group_ids: [] as string[],
@@ -123,6 +126,7 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     nodeCount: 0,
     edgeCount: 0,
     errors,
+    ignoredLabelCount: 0,
   });
 
   const records = parseCsvRecords(text);
@@ -171,9 +175,19 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
     url: cellOf(r, "url"),
+    url_label: cellOf(r, "url_label"),
     nextRaw: cellOf(r, "next"),
     line: r.line,
   }));
+
+  // URL 없는 라벨은 에러가 아니라 무시 — 임포트 전 서머리에 건수 안내 (url-label design 2026-07-07)
+  let ignoredLabelCount = 0;
+  for (const row of rows) {
+    if (row.url === "" && row.url_label !== "") {
+      ignoredLabelCount += 1;
+      row.url_label = "";
+    }
+  }
 
   const errors: CsvImportError[] = [];
   const names = new Set<string>();
@@ -187,7 +201,7 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "url"] as const) {
+    for (const col of ["name", "system", "duration", "url", "url_label"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -247,6 +261,7 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
       system: row.system,
       duration: row.duration,
       url: row.url,
+      url_label: row.url_label,
       sort_order: i + 1,
     })),
     {
@@ -306,6 +321,7 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
       system: node.system,
       duration: node.duration,
       url: node.url,
+      urlLabel: node.url_label ?? "",
       groupIds: [],
       hasChildren: false,
     },
@@ -328,17 +344,18 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     nodeCount: positioned.length,
     edgeCount: edges.length,
     errors: [],
+    ignoredLabelCount,
   };
 }
 
 /** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두). */
 export function buildTemplateCsv(): string {
   return [
-    "Name,System,Duration,URL,Next",
-    "Review request,SAP ERP,2 days,,Approval decision",
-    "Approval decision,,,,Sign contract:approved;Notify rejection:rejected",
-    "Sign contract,,3 days,https://example.com/contract,",
-    "Notify rejection,,1 day,,",
+    "Name,System,Duration,URL,URL_Label,Next",
+    "Review request,SAP ERP,2 days,,,Approval decision",
+    "Approval decision,,,,,Sign contract:approved;Notify rejection:rejected",
+    "Sign contract,,3 days,https://example.com/contract,Contract,",
+    "Notify rejection,,1 day,,,",
   ].join("\r\n");
 }
 
@@ -366,6 +383,7 @@ export function buildAiPromptText(): string {
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
     `- Duration: 선택, 소요 시간(예: 2 days, 3시간 — ${MAX_LEN.duration}자 이하).`,
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
+    `- URL_Label: 선택, 링크 표시 이름(${MAX_LEN.url_label}자 이하). URL이 있는 행에서만 의미(URL 없으면 무시됩니다).`,
     "- Next: 선택, 다음 단계의 Name을 세미콜론(;)으로 나열. 분기 조건은 \"대상이름:라벨\" 형식(라벨 200자 이하).",
     "  예: 승인 여부 단계가 승인/반려로 갈라지면 → 계약 체결:승인;반려 통보:반려",
     "",

@@ -165,9 +165,16 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled }: CsvI
             </button>
           </div>
           {outcome.errors.length === 0 ? (
-            <p className="text-caption text-ink-secondary">
-              {t("csvImport.summary", { nodes: outcome.nodeCount, edges: outcome.edgeCount })}
-            </p>
+            <>
+              <p className="text-caption text-ink-secondary">
+                {t("csvImport.summary", { nodes: outcome.nodeCount, edges: outcome.edgeCount })}
+              </p>
+              {outcome.ignoredLabelCount > 0 && (
+                <p className="text-caption text-ink-tertiary">
+                  {t("csvImport.ignoredLabels", { n: outcome.ignoredLabelCount })}
+                </p>
+              )}
+            </>
           ) : (
             <ul className="flex flex-col gap-0.5">
               {outcome.errors.slice(0, 10).map((err) => (
