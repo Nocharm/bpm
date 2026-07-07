@@ -7,6 +7,7 @@
 - 스펙 보정(사용자 검토): CSV url_label 컬럼 추가 — URL 없는 라벨은 에러 없이 무시 + 임포트 전 서머리에 무시 건수 표기.
 - 구현 계획 작성(Task 1~7: 백엔드 컬럼·캐스케이드 → 프론트 배선 → UrlLabelField → 액션 바 라벨 → 지정 모달 → CSV → 스모크): `docs/superpowers/plans/2026-07-07-url-label.md`.
 - Task 1: 백엔드 — nodes.url_label·process_maps.sp_url/sp_url_label + 캐스케이드 validator + refs 동봉 (pytest 430).
+- Task 2: 프론트 배선 — NodeData.urlLabel·spUrl/spUrlLabel, 그래프 왕복(toAppNodes/buildGraph)·injectSubEnds 주입.
 
 ## 2026-07-06 — 노드 액션 바 + 링크 미리보기 패널 설계 (feat/url-viewer)
 - 구현 계획 작성(Task 1~5: isHttpUrl TDD → NodeActionBar → LinkPreviewPanel → 구 버튼 제거 → 스모크): `docs/superpowers/plans/2026-07-06-node-action-bar-link-preview.md`. locked/undesignated 펼침 미노출 조건 유지 명시(사용자 재확인).

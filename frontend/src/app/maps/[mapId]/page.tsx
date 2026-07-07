@@ -486,6 +486,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       system: node.system,
       duration: node.duration,
       url: node.url ?? "",
+      urlLabel: node.url_label ?? "",
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
@@ -581,6 +582,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       system: node.data.system,
       duration: node.data.duration,
       url: node.data.url ?? "",
+      url_label: node.data.urlLabel ?? "",
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -1083,8 +1085,17 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spUrl: ref.url,
+            spUrlLabel: ref.url_label,
           }
-        : { spDepartment: null, spAssignee: null, spSystem: null, spDuration: null };
+        : {
+            spDepartment: null,
+            spAssignee: null,
+            spSystem: null,
+            spDuration: null,
+            spUrl: null,
+            spUrlLabel: null,
+          };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
         return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, updateAvailable } };
