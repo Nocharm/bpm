@@ -7332,6 +7332,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                               </span>
                             </div>
                           ))}
+                          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
+                            <span
+                              className="min-w-0 truncate text-right text-caption text-ink"
+                              title={selectedSpRef.url || undefined}
+                            >
+                              {selectedSpRef.url_label || selectedSpRef.url || "—"}
+                            </span>
+                          </div>
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         </div>
                       )}

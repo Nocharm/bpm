@@ -18,6 +18,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { isHttpUrl } from "@/lib/url";
 
 interface SubprocessDesignationPanelProps {
   mapId: string;
@@ -29,6 +30,8 @@ interface DesignationForm {
   assignee: string;
   system: string;
   duration: string;
+  url: string;
+  urlLabel: string;
 }
 
 const INPUT_CLASS =
@@ -45,6 +48,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     assignee: "",
     system: "",
     duration: "",
+    url: "",
+    urlLabel: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -98,6 +103,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       assignee: detail?.sp_assignee ?? "",
       system: detail?.sp_system ?? "",
       duration: detail?.sp_duration ?? "",
+      url: detail?.sp_url ?? "",
+      urlLabel: detail?.sp_url_label ?? "",
     });
     setError(null);
     setShowModal(true);
@@ -112,6 +119,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
         assignee: form.assignee,
         system: form.system,
         duration: form.duration,
+        url: form.url.trim(),
+        url_label: form.urlLabel.trim(),
       });
       setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
       onToast(t("perm.sp.saved"));
@@ -143,6 +152,9 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: detail.sp_duration },
   ];
+
+  // 지정 URL 클라이언트 검증 — 비어있지 않으면 http(s) 강제(액션 바 노출 게이트와 동일 규칙)
+  const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
 
   return (
     <div data-id="subprocess-designation-panel" className="flex max-w-xl flex-col gap-3">
@@ -259,6 +271,34 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
                     onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
                   />
                 </div>
+                <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                  <span className="shrink-0 text-caption text-ink-secondary">
+                    {t("field.url")}
+                  </span>
+                  <input
+                    data-id="subprocess-designation-url"
+                    className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+                    maxLength={500}
+                    value={form.url}
+                    onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
+                  />
+                </div>
+                {urlInvalid && (
+                  <p className="py-0.5 text-right text-fine text-error">{t("subprocess.urlInvalid")}</p>
+                )}
+                <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                  <span className="shrink-0 text-caption text-ink-secondary">
+                    {t("field.urlLabel")}
+                  </span>
+                  <input
+                    data-id="subprocess-designation-url-label"
+                    className={`${INPUT_CLASS} min-w-0 flex-1 text-right disabled:opacity-40`}
+                    maxLength={100}
+                    value={form.urlLabel}
+                    disabled={form.url.trim() === ""}
+                    onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
+                  />
+                </div>
               </div>
               {error && <p className="text-caption text-error">{error}</p>}
               <div className="flex justify-end gap-2">
@@ -273,7 +313,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
                   type="button"
                   data-id="subprocess-designation-save"
                   className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                  disabled={!form.department.trim() || saving}
+                  disabled={!form.department.trim() || saving || urlInvalid}
                   onClick={() => void handleSave()}
                 >
                   {t("perm.sp.save")}
