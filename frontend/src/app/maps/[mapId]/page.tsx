@@ -34,6 +34,7 @@ import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
+import { UrlLabelField } from "@/components/url-label-field";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
@@ -6969,6 +6970,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                url={node.data.url ?? ""}
+                urlLabel={node.data.urlLabel ?? ""}
                 colorPresets={colorsForType(node.data.nodeType)}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
@@ -7253,7 +7256,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                           {([
                             ["system", "field.system"],
                             ["duration", "field.duration"],
-                            ["url", "field.url"],
                           ] as const).map(([key, labelKey]) => (
                             <div
                               key={key}
@@ -7270,6 +7272,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                               />
                             </div>
                           ))}
+                          <UrlLabelField
+                            key={selectedNode.id}
+                            url={selectedNode.data.url ?? ""}
+                            urlLabel={selectedNode.data.urlLabel ?? ""}
+                            readOnly={readOnly}
+                            onChange={(patch) => updateSelectedData(patch, true)}
+                          />
                         </div>
                       )}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}

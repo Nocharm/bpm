@@ -69,11 +69,12 @@ try {
   const taskNode = page.locator(".react-flow__node", { hasText: "Process Request" }).first();
   await taskNode.click();
   await page.waitForTimeout(300);
-  urlInput = page.locator('[data-id="inspector-field-url"]');
+  urlInput = page.locator('[data-id="url-field-input"]');
   if (await urlInput.isDisabled().catch(() => false)) {
     fail("url input disabled — map 2 draft may be checked out by someone other than admin.sys");
   } else {
     await urlInput.fill("https://example.com/");
+    await page.keyboard.press("Enter");
     urlWasSet = true;
   }
   await page.waitForTimeout(500); // 상태 반영
@@ -107,7 +108,8 @@ try {
   // URL 원복 — 데모 시드 오염 방지. AUTO_SAVE_DELAY_MS(2000, page.tsx) 디바운스 후에야 PUT이
   // 나가므로 browser.close() 전에 그만큼 기다려야 실제로 반영된다(다른 pw-smoke-*.mjs와 동일 관례).
   await taskNode.click();
-  await urlInput.fill("");
+  const removeBtn = page.locator('[data-id="url-field-remove"]');
+  if (await removeBtn.count()) await removeBtn.click();
   await page.waitForTimeout(2500); // AUTO_SAVE_DELAY_MS(2000) + PUT 여유
   urlWasSet = false; // 정상 경로에서 원복 완료 — finally의 best-effort 재시도 불필요
 
@@ -118,7 +120,8 @@ try {
     // fill 후에도 AUTO_SAVE_DELAY_MS(2000)만큼 기다려야 PUT이 나간다 — 안 기다리면 close()가
     // 디바운스 타이머를 통째로 날려 원복이 로컬 상태에만 남고 서버엔 반영되지 않는다.
     try {
-      await urlInput.fill("");
+      const removeBtn = page.locator('[data-id="url-field-remove"]');
+      if (await removeBtn.count()) await removeBtn.click();
       await page.waitForTimeout(2500); // AUTO_SAVE_DELAY_MS(2000) + PUT 여유
     } catch {
       // 원복 실패는 무시 — browser.close()는 반드시 실행해야 하므로 여기서 재throw하지 않는다
