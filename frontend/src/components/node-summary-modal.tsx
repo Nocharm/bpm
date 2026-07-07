@@ -205,7 +205,9 @@ export function NodeSummaryModal({
     form.assignee !== assignee ||
     form.department !== department ||
     form.system !== system ||
-    form.duration !== duration;
+    form.duration !== duration ||
+    form.url !== url ||
+    form.urlLabel !== urlLabel;
   const requestNavigate = (id: string) => {
     if (isDirty) {
       setPendingNav(id);
@@ -221,6 +223,8 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      url: form.url,
+      urlLabel: form.urlLabel,
     });
     onCommitLabel?.(form.label);
     const id = pendingNav;
