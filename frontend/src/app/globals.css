@@ -334,6 +334,12 @@ button:not(:disabled):active {
 @keyframes edge-row-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
 .edge-row-in { animation: edge-row-in 260ms var(--ease-smooth) backwards; }
 
+/* 링크 미리보기 패널 로딩 — 진행 바/링 회전/글로브 펄스/점 페이드 (목업 Node Focus Actions 이식) */
+@keyframes lp-bar { 0% { width: 4%; } 22% { width: 38%; } 55% { width: 66%; } 100% { width: 88%; } }
+@keyframes lp-spin { to { transform: rotate(360deg); } }
+@keyframes lp-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes lp-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
   .edge-tile-pop,
   .edge-branchline,

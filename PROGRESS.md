@@ -20,6 +20,31 @@
 - 문서 정리: 매뉴얼 5종 갱신(번들 `backend/app/manual.md` §5 + user/admin ko·en — 다중 대화 4개·타임스탬프·청킹 로딩·입력 링·용량바·관리자 "AI 챗 설정" 12장 신설). 완료 트래커 4종 삭제(SCREEN-NEW-PAGES·SCREEN-REDESIGN-COMPARE·SCREEN-REDESIGN-EDITOR·SUBPROCESS-DESIGNATION — 전문은 git 이력). 트래커 잔여 후속 메모: 에디터 아웃라인 단축키 셋 정립·노드 정보 토글 카드 인스펙터 이전(에디터 D), 매뉴얼 읽기테마 범위·피드백 열람 정책(신규화면), U5 노드 표시필드 영속 복귀 현상(서브프로세스).
 - 후속 3: 기능 팁 20종 확대 + 설정 관리 — 기본 팁을 서비스 전반 FAQ 20종(`app/app_settings.py DEFAULT_AI_CHAT_TIPS`)으로 DB 관리 전환. `GET /api/ai/tips`(전 사용자)·`PUT /api/admin/app-settings` 부분 갱신(`ai_chat_tips`, 빈 목록=기본 복원, 팁당 200자·최대 50개). 설정 "AI 챗" 탭에 팁 편집기(한 줄당 1개, 개수 카운터). 패널은 서버 팁 조회(실패 시 i18n 5종 폴백). 잔여 링 숫자는 회색톤(text-ink-tertiary)으로. 검증: pytest 433·vitest 122·lint 0·build·스모크 41/41(커스텀 팁 저장→채팅 노출→기본 복원 e2e).
 - 후속 2: ① 입력 잔여 링(퀵칩 행 우측, instruction 2000자 대비 — 75% 주의 amber·90% 경고 error, 잔여 카운트+호버 툴팁, textarea maxLength) ② 세션 저장 용량 진행바(대화 전환 바 아래, 세션당 40개 캡 대비 동일 임계색) ③ 메시지 타임스탬프(`ChatMessage.at`, KST MM-DD HH:mm 노출, 저장은 시간 역순 `order:"desc"` — v2/레거시 파싱 호환) ④ 청킹 로딩(최근 12개 먼저, 스크롤 상단 도달 시 스피너+기능 팁 5종 노출 후 이전 청크, 스크롤 위치 보존) ⑤ AI 챗 Q&A DB 적재 토글 — 백엔드 `app_settings`(KV)+`ai_chat_logs` 테이블, GET/PUT `/api/admin/app-settings`(sysadmin), `ai_chat`서 설정 ON일 때 질문/답변/시간/사용자 적재(테스트 기간 ON 예정), 설정 콘솔 "AI 챗" 탭 토글 패널. 검증: pytest 430·vitest 122·lint 0·build·스모크 36/36.
+## 2026-07-07 — URL 라벨 + 필 입력 + 서브프로세스 지정 URL 설계 (feat/url-viewer)
+- 설계 스펙: 노드 url_label(액션 바 버튼 텍스트 대체·호버 열기 아이콘), 인스펙터/모달 공용 UrlLabelField 2행 필(URL X=동반 삭제·라벨 X=라벨만), subprocess는 지정 단계 sp_url/sp_url_label(호스트 수정 불가) — `docs/superpowers/specs/2026-07-07-url-label-design.md`. 풀스택(DB 컬럼 3·API·프론트) 사용자 확정.
+- 스펙 보정(사용자 검토): CSV url_label 컬럼 추가 — URL 없는 라벨은 에러 없이 무시 + 임포트 전 서머리에 무시 건수 표기.
+- 구현 계획 작성(Task 1~7: 백엔드 컬럼·캐스케이드 → 프론트 배선 → UrlLabelField → 액션 바 라벨 → 지정 모달 → CSV → 스모크): `docs/superpowers/plans/2026-07-07-url-label.md`.
+- Task 1: 백엔드 — nodes.url_label·process_maps.sp_url/sp_url_label + 캐스케이드 validator + refs 동봉 (pytest 430).
+- Task 2: 프론트 배선 — NodeData.urlLabel·spUrl/spUrlLabel, 그래프 왕복(toAppNodes/buildGraph)·injectSubEnds 주입.
+- Task 3: UrlLabelField — 인스펙터·편집 모달 공용 2행 필 편집기(URL X=동반 삭제, 라벨 X=라벨만) + 스모크 셀렉터 이행.
+- Task 3 fix: 모달 isDirty·navSaveAndGo에 url/urlLabel 포함 — 칩 내비 시 URL 변경 유실 방지.
+- Task 4: 액션 바 — 라벨 텍스트 대체·호버 열기 아이콘·subprocess는 spUrl/spUrlLabel 소스.
+- Task 5: 지정 모달 URL·라벨 입력(http(s) 검증·라벨은 URL 있을 때만) + 호스트 인스펙터 읽기전용 URL 행.
+- Task 6: CSV url_label 컬럼(선택) — URL 없는 라벨 무시+ignoredLabelCount 서머리 표기, 템플릿·AI 프롬프트 갱신.
+- Task 7: 스모크 라벨 대체/원복 시나리오 + 전체 게이트(pytest 430·lint·vitest 117·build) 클린.
+- 최종 리뷰 반영: 라벨 행 게이트를 url.trim()으로 — 공백 URL 레거시 행에서 라벨 유령 표시 방지.
+
+## 2026-07-06 — 노드 액션 바 + 링크 미리보기 패널 설계 (feat/url-viewer)
+- 구현 계획 작성(Task 1~5: isHttpUrl TDD → NodeActionBar → LinkPreviewPanel → 구 버튼 제거 → 스모크): `docs/superpowers/plans/2026-07-06-node-action-bar-link-preview.md`. locked/undesignated 펼침 미노출 조건 유지 명시(사용자 재확인).
+- 설계 스펙 작성: 단일 노드 포커스 시 하단 통합 액션 바(펼치기→링크 열기→그룹 나가기 고정 순서, NodeSelectionRing 패턴) + 우측 520px 슬라이드 링크 미리보기 패널(iframe·로딩 애니메이션·임베드 차단 폴백, feedback-side-panel 패턴) — `docs/superpowers/specs/2026-07-06-node-action-bar-link-preview-design.md`. 프론트 전용, `isHttpUrl` 가드로 링크 XSS 백로그 해소 예정.
+- Task 1: isHttpUrl 가드 헬퍼 + vitest 12케이스 (TDD).
+- Task 2: NodeActionBar — 단일 선택 노드 하단 통합 액션 바(펼치기/링크/그룹 나가기) + leaveGroups·linkPreviewUrl 연결.
+- Task 3: LinkPreviewPanel — 우측 520px 슬라이드 iframe 미리보기(로딩 애니메이션·6s 임베드 차단 폴백·Esc/스크림 닫기).
+- Task 4: 구 버튼 제거 — 그룹 모서리 나가기·ExpandToggleButton(+죽은 hasChildren 콜사이트)·leaveGroup·selectedGroupIds·고아 import 정리.
+- Task 5: 스모크(pw-smoke-node-action-bar, 실시드 map 2 기준) + inspector-field data-id + lint/test/build 클린 (pw-smoke-demo는 구시드 전제라 스킵).
+- Task 5 fix: 스모크 try/finally 원복(실패 경로 검증 포함) + expand·link 공존 순서 미커버 사유 주석.
+- 최종 리뷰 반영: 스모크 urlWasSet 플래그를 영속 대기 뒤로 이동(중단 시 finally 원복 보장).
+- 보안 하드닝: isSafePreviewUrl — 미리보기 표면(링크 버튼·iframe)에서 자기 오리진 URL 차단(sandbox 탈출 벡터 봉쇄, sandbox 속성은 스펙 유지).
 
 ## 2026-07-06 — CSV 외부 AI 왕복: 프롬프트 복사 + 붙여넣기 입력 (feat/csv-ai-prompt)
 - `csv-import.ts`: `buildAiPromptText()`(스펙 상수·템플릿에서 파생한 한국어 절차 추출 프롬프트 — 헤더/컬럼 규칙/Start·End 생략/세미콜론 Next/500행/예시) + `stripCsvFences()`(```csv 펜스 관용 처리). 테스트 +3.

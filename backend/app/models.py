@@ -75,6 +75,8 @@ class ProcessMap(Base):
     sp_assignee: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_system: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_duration: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
     sp_changed_by: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_changed_at: Mapped[datetime | None] = mapped_column(
@@ -173,6 +175,8 @@ class Node(Base):
     duration: Mapped[str] = mapped_column(String(50), default="")
     # 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
     url: Mapped[str] = mapped_column(String(500), default="")
+    # 참조 링크 표시 라벨 — url 있을 때만 의미(스키마 validator가 함께 소거) (url-label design 2026-07-07)
+    url_label: Mapped[str] = mapped_column(String(100), default="")
     # 복제 계보 루트(원본 노드 ID) — 버전 간 diff 매칭용, 복제 시 서버가 기록 (spec §7 Phase B)
     source_node_id: Mapped[str | None] = mapped_column(String(50), default=None)
     pos_x: Mapped[float] = mapped_column(Float, default=0.0)

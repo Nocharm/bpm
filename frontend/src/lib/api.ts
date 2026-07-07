@@ -58,6 +58,8 @@ export interface MapSummary {
   sp_assignee?: string | null;
   sp_system?: string | null;
   sp_duration?: string | null;
+  sp_url?: string | null;
+  sp_url_label?: string | null;
   sp_changed_by?: string | null;
   sp_changed_at?: string | null;
 }
@@ -78,6 +80,7 @@ export interface GraphNode {
   duration: string;
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
+  url_label?: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;
@@ -125,6 +128,8 @@ export interface SubprocessRef {
   assignee: string | null;
   system: string | null;
   duration: string | null;
+  url: string | null;
+  url_label: string | null;
 }
 
 export interface Graph {
@@ -233,6 +238,8 @@ export interface SubprocessDesignationBody {
   assignee?: string;
   system?: string;
   duration?: string;
+  url?: string;
+  url_label?: string;
 }
 
 export function putSubprocessDesignation(

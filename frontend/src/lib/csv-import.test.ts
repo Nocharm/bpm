@@ -159,7 +159,7 @@ describe("buildGraphFromCsv — 검증 에러", () => {
 describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
-    expect(prompt).toContain("Name,System,Duration,URL,Next"); // 헤더 명시
+    expect(prompt).toContain("Name,System,Duration,URL,URL_Label,Next"); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
     expect(prompt).toContain("최대 500개"); // MAX_DATA_ROWS 파생
@@ -178,5 +178,40 @@ describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
     const outcome = buildGraphFromCsv(stripCsvFences(fenced));
     expect(outcome.errors).toEqual([]);
     expect(outcome.nodeCount).toBe(4); // A·B + 자동 Start/End
+  });
+});
+
+describe("url_label column", () => {
+  it("carries url_label onto the node when url present", () => {
+    const out = buildGraphFromCsv(
+      "Name,System,Duration,URL,URL_Label,Next\nA,,,https://example.com/a,Doc A,\n",
+    );
+    expect(out.errors).toEqual([]);
+    const a = out.graph?.nodes.find((n) => n.title === "A");
+    expect(a?.url_label).toBe("Doc A");
+    expect(out.ignoredLabelCount).toBe(0);
+  });
+
+  it("ignores label without url and counts it (no error)", () => {
+    const out = buildGraphFromCsv(
+      "Name,System,Duration,URL,URL_Label,Next\nA,,,,Orphan,\nB,,,https://example.com/b,,\n",
+    );
+    expect(out.errors).toEqual([]);
+    expect(out.ignoredLabelCount).toBe(1);
+    const a = out.graph?.nodes.find((n) => n.title === "A");
+    expect(a?.url_label).toBe("");
+  });
+
+  it("rejects over-long url_label when url present", () => {
+    const out = buildGraphFromCsv(
+      `Name,System,Duration,URL,URL_Label,Next\nA,,,https://example.com/a,${"x".repeat(101)},\n`,
+    );
+    expect(out.errors.some((e) => e.message.includes("url_label"))).toBe(true);
+  });
+
+  it("old 5-column header still parses (url_label optional)", () => {
+    const out = buildGraphFromCsv("Name,System,Duration,URL,Next\nA,,,,\n");
+    expect(out.errors).toEqual([]);
+    expect(out.ignoredLabelCount).toBe(0);
   });
 });

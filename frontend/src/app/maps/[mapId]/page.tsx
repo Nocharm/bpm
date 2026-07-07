@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FilePlus2, FileUp, Group, Hand, Hourglass, Info, LayoutGrid, Lock, LogOut, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FilePlus2, FileUp, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -35,6 +35,9 @@ import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card"
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
+import { NodeActionBar } from "@/components/node-action-bar";
+import { UrlLabelField } from "@/components/url-label-field";
+import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
@@ -499,6 +502,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       system: node.system,
       duration: node.duration,
       url: node.url ?? "",
+      urlLabel: node.url_label ?? "",
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
@@ -594,6 +598,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       system: node.data.system,
       duration: node.data.duration,
       url: node.data.url ?? "",
+      url_label: node.data.urlLabel ?? "",
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -688,6 +693,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
+  // 링크 미리보기 패널 — non-null이면 열림. 액션 바 "링크 열기"가 세팅 (Task 3에서 패널 연결)
+  const [linkPreviewUrl, setLinkPreviewUrl] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   // F14 플로우 경로 하이라이트 길이 — anchor가 현재 선택과 다르면 reach=0 (선택 바뀌면 초기화, effect 없이 파생).
@@ -1113,7 +1120,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     return m;
   }, [rootGraph, resolvedCache]);
 
-  // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. Task4 게이트(ExpandToggleButton·핸들)가 읽음.
+  // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. NodeActionBar 펼침 게이트·핸들이 읽음.
   // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
   const injectSubEnds = useCallback(
     (node: AppNode): AppNode => {
@@ -1142,8 +1149,17 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spUrl: ref.url,
+            spUrlLabel: ref.url_label,
           }
-        : { spDepartment: null, spAssignee: null, spSystem: null, spDuration: null };
+        : {
+            spDepartment: null,
+            spAssignee: null,
+            spSystem: null,
+            spDuration: null,
+            spUrl: null,
+            spUrlLabel: null,
+          };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
         return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, updateAvailable } };
@@ -3167,14 +3183,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pruneSmallGroups, scheduleAutoSave],
   );
 
-  // 선택된 멤버 노드에서 이 그룹 태그만 제거. 멤버 2명 미만이 되면 그룹 자동 제거.
-  const leaveGroup = useCallback(
-    (groupId: string) => {
+  // 액션 바 "그룹 나가기" — 선택 멤버를 소속 그룹 전체에서 이탈(확정: 클릭 1회 전 그룹 탈퇴).
+  // leaveGroup과 같은 경로(setNodes→pruneSmallGroups→scheduleAutoSave)를 한 번에 태운다.
+  const leaveGroups = useCallback(
+    (groupIds: string[]) => {
+      const drop = new Set(groupIds);
       const next = nodesRef.current.map((node) =>
-        node.selected && node.data.groupIds.includes(groupId)
+        node.selected && node.data.groupIds.some((id) => drop.has(id))
           ? {
               ...node,
-              data: { ...node.data, groupIds: node.data.groupIds.filter((id) => id !== groupId) },
+              data: {
+                ...node.data,
+                groupIds: node.data.groupIds.filter((id) => !drop.has(id)),
+              },
             }
           : node,
       );
@@ -3231,7 +3252,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     scheduleAutoSave();
   }, [readOnly, pushHistory, setGroups, setNodes, scheduleAutoSave, showToast, t]);
 
-  // 그룹 해제(disband) — 모든 노드에서 이 그룹 태그 제거 + 그룹 자체 삭제. leaveGroup(선택 멤버만 이탈)과 구분.
+  // 그룹 해제(disband) — 모든 노드에서 이 그룹 태그 제거 + 그룹 자체 삭제. leaveGroups(선택 멤버만 이탈)과 구분.
   const disbandGroup = useCallback(
     (groupId: string) => {
       if (readOnly) {
@@ -5393,15 +5414,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     return lanes;
   }, [currentParentId, nodes, inlineComposition, ancestorContextNodes, fullGraph]);
 
-  // 선택된 멤버가 가진 그룹 태그(합집합) — 타이틀바에 "그룹 나가기" 노출 판정
-  const selectedGroupIds = useMemo(
-    () =>
-      new Set(
-        nodes.filter((node) => node.selected).flatMap((node) => node.data.groupIds),
-      ),
-    [nodes],
-  );
-
   const selectedComments = useMemo(
     () => comments.filter((comment) => comment.node_id === selectedId),
     [comments, selectedId],
@@ -6654,6 +6666,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <ViewportPortal>
                         {/* 선택 노드 추종 테두리 — 노드 사이를 슬라이드 */}
                         <NodeSelectionRing />
+                        {/* 단일 선택 노드 하단의 통합 액션 바 — 펼치기/링크/그룹 나가기 */}
+                        <NodeActionBar
+                          readOnly={readOnly}
+                          onLeaveGroups={leaveGroups}
+                          onOpenLink={setLinkPreviewUrl}
+                        />
                         {inlineComposition && (
                           <InlineRegionBands
                             regions={inlineComposition.regions}
@@ -6722,28 +6740,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 onBulkEdit={setBulkEditGroupId}
                               />
                             </div>
-                            {/* 그룹 나가기 — 박스 경계 우측 위 모서리. 선택 멤버가 있을 때만 */}
-                            {selectedGroupIds.has(box.id) && !readOnly && (
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  left: 0,
-                                  top: 0,
-                                  transform: `translate(${box.x + box.width - 26}px, ${box.y + 3}px)`,
-                                  zIndex: 2,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  className="pointer-events-auto rounded-sm border border-hairline bg-surface p-1 text-ink-tertiary shadow-sm hover:bg-error/10 hover:text-error"
-                                  title={t("group.leave")}
-                                  aria-label={t("group.leave")}
-                                  onClick={() => leaveGroup(box.id)}
-                                >
-                                  <LogOut size={12} strokeWidth={1.5} />
-                                </button>
-                              </div>
-                            )}
                           </Fragment>
                         ))}
                       </ViewportPortal>
@@ -7080,6 +7076,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                url={node.data.url ?? ""}
+                urlLabel={node.data.urlLabel ?? ""}
                 colorPresets={colorsForType(node.data.nodeType)}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
@@ -7360,7 +7358,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                           {([
                             ["system", "field.system"],
                             ["duration", "field.duration"],
-                            ["url", "field.url"],
                           ] as const).map(([key, labelKey]) => (
                             <div
                               key={key}
@@ -7368,6 +7365,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             >
                               <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
                               <input
+                                data-id={`inspector-field-${key}`}
                                 className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
                                 value={selectedNode.data[key] ?? ""}
                                 disabled={readOnly}
@@ -7376,6 +7374,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                               />
                             </div>
                           ))}
+                          <UrlLabelField
+                            key={selectedNode.id}
+                            url={selectedNode.data.url ?? ""}
+                            urlLabel={selectedNode.data.urlLabel ?? ""}
+                            readOnly={readOnly}
+                            onChange={(patch) => updateSelectedData(patch, true)}
+                          />
                         </div>
                       )}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
@@ -7429,6 +7434,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                               </span>
                             </div>
                           ))}
+                          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
+                            <span
+                              className="min-w-0 truncate text-right text-caption text-ink"
+                              title={selectedSpRef.url || undefined}
+                            >
+                              {selectedSpRef.url_label || selectedSpRef.url || "—"}
+                            </span>
+                          </div>
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         </div>
                       )}
@@ -8193,6 +8207,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         />
       )}
 
+      {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
+      <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
     </NodeActionsContext.Provider>
   );
 }

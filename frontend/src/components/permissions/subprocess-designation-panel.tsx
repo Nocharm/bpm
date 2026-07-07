@@ -35,6 +35,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     assignee: "",
     system: "",
     duration: "",
+    url: "",
+    urlLabel: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -88,6 +90,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       assignee: detail?.sp_assignee ?? "",
       system: detail?.sp_system ?? "",
       duration: detail?.sp_duration ?? "",
+      url: detail?.sp_url ?? "",
+      urlLabel: detail?.sp_url_label ?? "",
     });
     setError(null);
     setShowModal(true);
@@ -113,6 +117,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: detail.sp_duration },
   ];
+
 
   return (
     <div data-id="subprocess-designation-panel" className="flex max-w-xl flex-col gap-3">

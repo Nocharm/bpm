@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ScopePreview } from "@/components/scope-preview";
 import { SearchSelect } from "@/components/search-select";
+import { UrlLabelField } from "@/components/url-label-field";
 import {
   createComment,
   getEligibleAssignees,
@@ -44,6 +45,8 @@ export type NodeEditPatch = Partial<{
   department: string;
   system: string;
   duration: string;
+  url: string;
+  urlLabel: string;
 }>;
 
 const ATTR_FIELDS: { key: "system" | "duration"; labelKey: "field.system" | "field.duration" }[] = [
@@ -102,6 +105,8 @@ interface NodeSummaryModalProps {
   department: string;
   system: string;
   duration: string;
+  url: string;
+  urlLabel: string;
   colorPresets: string[];
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
   showAttributes: boolean;
@@ -133,6 +138,8 @@ export function NodeSummaryModal({
   department,
   system,
   duration,
+  url,
+  urlLabel,
   colorPresets,
   showAttributes,
   onPatch,
@@ -151,12 +158,12 @@ export function NodeSummaryModal({
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
-  const [form, setForm] = useState({ label: title, description, color, assignee, department, system, duration });
+  const [form, setForm] = useState({ label: title, description, color, assignee, department, system, duration, url, urlLabel });
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
     setPrevNodeId(nodeId);
-    setForm({ label: title, description, color, assignee, department, system, duration });
+    setForm({ label: title, description, color, assignee, department, system, duration, url, urlLabel });
   }
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
   const handleSave = useCallback(() => {
@@ -167,6 +174,8 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      url: form.url,
+      urlLabel: form.urlLabel,
     });
     onCommitLabel?.(form.label);
     onClose();
@@ -196,7 +205,9 @@ export function NodeSummaryModal({
     form.assignee !== assignee ||
     form.department !== department ||
     form.system !== system ||
-    form.duration !== duration;
+    form.duration !== duration ||
+    form.url !== url ||
+    form.urlLabel !== urlLabel;
   const requestNavigate = (id: string) => {
     if (isDirty) {
       setPendingNav(id);
@@ -212,6 +223,8 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      url: form.url,
+      urlLabel: form.urlLabel,
     });
     onCommitLabel?.(form.label);
     const id = pendingNav;
@@ -484,6 +497,13 @@ export function NodeSummaryModal({
                         </div>
                       </div>
                     ))}
+                    <UrlLabelField
+                      key={nodeId}
+                      url={form.url}
+                      urlLabel={form.urlLabel}
+                      readOnly={readOnly}
+                      onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                    />
                   </>
                 )}
               </div>

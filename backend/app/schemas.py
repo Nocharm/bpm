@@ -29,6 +29,9 @@ class SubprocessDesignationIn(BaseModel):
     assignee: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
+    # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
+    url: str = Field(default="", max_length=500)
+    url_label: str = Field(default="", max_length=100)
 
     @field_validator("department")
     @classmethod
@@ -36,6 +39,12 @@ class SubprocessDesignationIn(BaseModel):
         if not value.strip():
             raise ValueError("department must not be blank")
         return value.strip()
+
+    @model_validator(mode="after")
+    def _drop_label_without_url(self) -> "SubprocessDesignationIn":
+        if not self.url.strip():
+            self.url_label = ""
+        return self
 
 
 class VersionOut(BaseModel):
@@ -368,6 +377,8 @@ class MapOut(BaseModel):
     sp_assignee: str | None = None
     sp_system: str | None = None
     sp_duration: str | None = None
+    sp_url: str | None = None
+    sp_url_label: str | None = None
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
 
@@ -392,6 +403,8 @@ class NodeIn(BaseModel):
     duration: str = Field(default="", max_length=50)
     # 참조 링크 — 스킴 검증은 클라이언트(CSV 파서·링크 렌더)에서. 자유 타이핑 자동저장이 깨지지 않게 길이만 제한
     url: str = Field(default="", max_length=500)
+    # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
+    url_label: str = Field(default="", max_length=100)
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
@@ -409,6 +422,12 @@ class NodeIn(BaseModel):
     def _coerce_group_ids(cls, value: object) -> object:
         # 레거시 DB(컬럼 NULL)에서 from_attributes 로드 시 None → [] 로 보정
         return [] if value is None else value
+
+    @model_validator(mode="after")
+    def _drop_label_without_url(self) -> "NodeIn":
+        if not self.url.strip():
+            self.url_label = ""
+        return self
 
 
 HandleSide = Literal["top", "bottom", "left", "right"]
@@ -459,6 +478,8 @@ class SubprocessRefOut(BaseModel):
     assignee: str | None = None
     system: str | None = None
     duration: str | None = None
+    url: str | None = None
+    url_label: str | None = None
 
 
 class GraphOut(BaseModel):

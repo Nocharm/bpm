@@ -43,6 +43,10 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_changed_at", "TIMESTAMP"),
     # 노드 참조 링크 — CSV import design 2026-07-06
     ("nodes", "url", "VARCHAR(500) DEFAULT ''"),
+    # URL 라벨 + 서브프로세스 지정 URL — url-label design 2026-07-07
+    ("nodes", "url_label", "VARCHAR(100) DEFAULT ''"),
+    ("process_maps", "sp_url", "VARCHAR(500)"),
+    ("process_maps", "sp_url_label", "VARCHAR(100)"),
 ]
 
 

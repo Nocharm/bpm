@@ -36,6 +36,8 @@ export function SubprocessInspectorCard({
     assignee: "",
     system: "",
     duration: "",
+    url: "",
+    urlLabel: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -67,6 +69,8 @@ export function SubprocessInspectorCard({
       assignee: detail.sp_assignee ?? "",
       system: detail.sp_system ?? "",
       duration: detail.sp_duration ?? "",
+      url: detail.sp_url ?? "",
+      urlLabel: detail.sp_url_label ?? "",
     });
     setShowModal(true);
   };

@@ -205,3 +205,43 @@ def test_undesignate_keeps_attrs_and_is_idempotent(client: TestClient, enforce) 
     assert data["sp_department"] == "Sales"  # 어트리뷰트는 유지 → 재지정 프리필
     # 멱등 — 이미 미지정이어도 200
     assert client.delete(f"/api/maps/{map_id}/subprocess-designation").status_code == 200
+
+
+def test_designate_saves_url_and_label(client: TestClient, enforce) -> None:
+    map_id = seed_map("desig-url", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "url": "https://wms.example.com/inbound", "url_label": "WMS"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["sp_url"] == "https://wms.example.com/inbound"
+    assert data["sp_url_label"] == "WMS"
+
+
+def test_designate_label_without_url_dropped(client: TestClient, enforce) -> None:
+    # url이 비면 서버 validator가 라벨을 소거한다(캐스케이드)
+    map_id = seed_map("desig-orphan-label", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "url_label": "orphan"},
+    )
+    assert res.status_code == 200
+    assert res.json()["sp_url_label"] == ""
+
+
+def test_refs_include_url_and_label(client: TestClient, enforce) -> None:
+    target = seed_map("refs-url", published=True)
+    act_as(OWNER)
+    client.put(
+        f"/api/maps/{target}/subprocess-designation",
+        json={**BODY, "url": "https://wms.example.com/x", "url_label": "WMS"},
+    )
+    _host_map, host_version = seed_host_with_subprocess_node(target, "desig-sp-url")
+    act_as(SYSADMIN)
+    g = client.get(f"/api/versions/{host_version}/graph").json()
+    ref = g["subprocess_refs"][str(target)]
+    assert ref["url"] == "https://wms.example.com/x"
+    assert ref["url_label"] == "WMS"

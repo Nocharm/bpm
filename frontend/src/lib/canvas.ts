@@ -22,6 +22,8 @@ export type NodeData = {
   duration: string;
   // 참조 링크(URL) — 노드당 1개, 빈 값 허용
   url?: string;
+  // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
+  urlLabel?: string;
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   groupIds: string[];
   hasChildren: boolean;
@@ -57,6 +59,8 @@ export type NodeData = {
   spAssignee?: string | null;
   spSystem?: string | null;
   spDuration?: string | null;
+  spUrl?: string | null;
+  spUrlLabel?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)
   sideHandles?: boolean;
 };
