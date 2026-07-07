@@ -251,6 +251,7 @@ async def replace_graph(
             existing.system = node.system
             existing.duration = node.duration
             existing.url = node.url
+            existing.url_label = node.url_label
             existing.pos_x = node.pos_x
             existing.pos_y = node.pos_y
             existing.sort_order = node.sort_order

@@ -458,3 +458,48 @@ def test_node_url_too_long_rejected(client: TestClient) -> None:
 
     response = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert response.status_code == 422
+
+
+def test_node_url_label_roundtrip_and_cascade(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1",
+                "title": "계약",
+                "url": "https://contract.example.com/doc/1",
+                "url_label": "계약서",
+            },
+            # url 없이 라벨만 — 서버 validator가 라벨을 소거해야 한다(캐스케이드)
+            {"id": "n2", "title": "고아라벨", "url_label": "orphan"},
+        ],
+        "edges": [],
+    }
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert node["url_label"] == "계약서"
+    orphan = next(n for n in saved["nodes"] if n["id"] == "n2")
+    assert orphan["url_label"] == ""
+
+    # url을 지우면 라벨도 함께 소거된다
+    graph["nodes"][1]["url"] = ""
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert node["url"] == ""
+    assert node["url_label"] == ""
+
+
+def test_node_url_label_too_long_rejected(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n1", "title": "긴 라벨", "url": "https://e.com/", "url_label": "a" * 101},
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 422
