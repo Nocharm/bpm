@@ -75,7 +75,7 @@ export function UrlLabelField({
           />
         )}
       </div>
-      {url !== "" && (
+      {url.trim() !== "" && (
         <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
           <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
           {urlLabel ? (
