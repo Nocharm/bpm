@@ -4,6 +4,7 @@
 
 ## 2026-07-09 — AI 챗 서버 저장 구현 (feat/ai-chat-server-history)
 - Task 1: 세션/메시지 모델 + 계약 확장(AiChatRequest/AiProposal session_id, Out 스키마 4종).
+- Task 2: `/ai/chat` write-through — `derive_chat_title` 헬퍼(`app/chat_history.py`) + 라우터에 세션 소유/맵 검증(AI 호출 전 404 fail-fast)·질문/답변 2행 적재를 AI 실패 시 미적재로 한 트랜잭션 처리. pytest 457·ruff 0.
 
 ## 2026-07-08 — AI 챗 서버 저장 + 맵 단위 히스토리 설계 확정 (feat/ai-chat-server-history)
 - 브레인스토밍으로 결정 확정: 서버 DB 저장(정규화 2테이블 + `/ai/chat` write-through), 대화 귀속 사용자×맵(다른 맵 대화는 열람만+이동 버튼), 보존 개수+기간 혼합(app_settings 상한 3종), 히스토리 목록형 UX(4개 제한·LRU 제거), localStorage 마이그레이션 없음, ai_chat_logs 흡수·제거. 스펙: `docs/superpowers/specs/2026-07-08-ai-chat-server-history-design.md`.

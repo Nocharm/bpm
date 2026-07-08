@@ -8,13 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
 from app.app_settings import get_ai_chat_tips, is_ai_chat_log_enabled
+from app.chat_history import derive_chat_title
 from app.clock import now as now_kst
 from app.ai_prompt import build_messages
 from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
-from app.models import AiChatLog, Employee, ManualDoc, MapVersion
+from app.models import AiChatLog, AiChatMessage, AiChatSession, Employee, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
 from app.settings import settings
@@ -139,6 +140,19 @@ async def ai_chat(
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
 
+    # 이어쓰기 대상 세션 검증 — 소유·맵 일치 아니면 404(존재 노출 안 함). AI 호출 전에 확인.
+    chat_session: AiChatSession | None = None
+    if payload.session_id is not None:
+        chat_session = await session.get(AiChatSession, payload.session_id)
+        if (
+            chat_session is None
+            or chat_session.login_id != user
+            or chat_session.map_id != version.map_id
+        ):
+            raise HTTPException(
+                status_code=404, detail=f"chat session {payload.session_id} not found"
+            )
+
     now = now_kst()
     can_edit = (
         workflow.is_editable_status(version.status)
@@ -162,6 +176,35 @@ async def ai_chat(
         if missing:
             warning = _UNKNOWN_NODES_MSG.format(ids=", ".join(missing))
             proposal.message = f"{proposal.message}\n{warning}" if proposal.message else warning
+    # 대화 서버 적재(write-through) — 질문+최종 답변을 한 트랜잭션. AI 실패 시 여기 도달 안 함.
+    if chat_session is None:
+        chat_session = AiChatSession(
+            map_id=version.map_id,
+            login_id=user,
+            title=derive_chat_title(payload.instruction),
+        )
+        session.add(chat_session)
+        await session.flush()  # id 채번 — 메시지 FK에 필요
+    session.add(
+        AiChatMessage(
+            session_id=chat_session.id,
+            role="user",
+            content=payload.instruction,
+            version_id=version_id,
+        )
+    )
+    session.add(
+        AiChatMessage(
+            session_id=chat_session.id,
+            role="assistant",
+            content=proposal.message,
+            kind=proposal.kind,
+            version_id=version_id,
+        )
+    )
+    chat_session.updated_at = now  # 메시지 추가만으로는 onupdate가 안 돎 — 명시 갱신
+    await session.commit()
+    proposal.session_id = chat_session.id
     # 설정 ON일 때 최종 질문/답변을 DB 적재 — 테스트 기간 검증용 (app_settings.ai_chat_log_enabled)
     if await is_ai_chat_log_enabled(session):
         session.add(
