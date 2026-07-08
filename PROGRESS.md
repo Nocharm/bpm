@@ -13,6 +13,7 @@
 - Task 6 DONE_WITH_CONCERNS: 브라우저 스모크 11/12(신규/충돌 skip·overwrite·다운로드·테이블 반영 전부 PASS) — `pw-smoke-korean-names.mjs`. 기존 DB ALTER 자동보강 실증(레거시 dev.db 복사→재기동→401행 전부 `korean_name:""`). 발견: `korean-name-modal.tsx` 충돌 툴팁이 `<p>` 안에 `<div>`를 중첩해 콘솔 hydration-nesting 경고 2건(제품 결함, 미수정 — 컨트롤러 판단 대기). 최종 게이트 4종(pytest 445·ruff·lint·vitest 140·build) 전부 PASS.
 - Task 6 후속 fix(컨트롤러 승인): `korean-name-modal.tsx` 충돌 문구 래퍼 `<p>`→`<div>`로 div-in-p 중첩 제거 — 스모크 12/12 PASS(콘솔 에러 0), lint 0 err·vitest 140·build PASS.
 - 리뷰 후속: 스모크 헤더에 재실행 전제(DB `korean_name` 리셋) 주석 추가 — `pw-smoke-korean-names.mjs`, lint 0 err.
+- 전체 브랜치 최종 리뷰 반영: 툴팁 호버 갭 제거(`mt-1`→패딩 래퍼)로 flaky 닫힘 해소, `entries` 값 max_length=200 서버 검증 추가(Postgres VARCHAR(200) DataError 500 방지, 422 테스트 1건), BE 테스트 헬퍼 `_korean_name_of`→`_get_korean_name` 리네임, FE any 캐스트 제거(`Object.entries(data as Record<string, unknown>)`), 파일 읽기 실패 시 에러 표시(`onFile` try/catch), ko 조사 띄어쓰기·en 타이틀 대문자 통일, Cancel 버튼 `data-id` 추가, 스모크에 툴팁 유지 체크 추가(13/13 PASS) — pytest 446·ruff·lint·vitest 140·build 전부 PASS.
 
 ## 2026-07-07 — feat/url-viewer 머지 (main)
 - 머지 후속: 스모크가 초안 버전으로 전환 후 진행 — 상태 배너 기능이 게시본을 기본 열람으로 바꿔 스모크 전제가 깨진 것 보정.

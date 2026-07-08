@@ -26,7 +26,7 @@ def _seed(login_id: str, korean_name: str = "") -> None:
     asyncio.run(_run())
 
 
-def _korean_name_of(login_id: str) -> str | None:
+def _get_korean_name(login_id: str) -> str | None:
     async def _run() -> str | None:
         async with SessionLocal() as session:
             emp = await session.get(Employee, login_id)
@@ -69,7 +69,7 @@ def test_ad_upsert_preserves_korean_name(client: TestClient) -> None:
             await session.commit()
 
     asyncio.run(_run())
-    assert _korean_name_of("kr.sync") == "김철수"
+    assert _get_korean_name("kr.sync") == "김철수"
 
 
 @pytest.fixture
@@ -97,8 +97,8 @@ def test_import_skip_mode_and_unknown(client: TestClient) -> None:
     )
     assert res.status_code == 200
     assert res.json() == {"updated": 1, "skipped": 1, "unknown": ["kr.ghost"]}
-    assert _korean_name_of("kr.empty1") == "신규이름"  # trim 적용
-    assert _korean_name_of("kr.taken") == "기존이름"  # skip — 기존 값 유지
+    assert _get_korean_name("kr.empty1") == "신규이름"  # trim 적용
+    assert _get_korean_name("kr.taken") == "기존이름"  # skip — 기존 값 유지
 
 
 def test_import_overwrite_mode(client: TestClient) -> None:
@@ -110,7 +110,7 @@ def test_import_overwrite_mode(client: TestClient) -> None:
     )
     assert res.status_code == 200
     assert res.json() == {"updated": 1, "skipped": 0, "unknown": []}
-    assert _korean_name_of("kr.taken2") == "새이름"
+    assert _get_korean_name("kr.taken2") == "새이름"
 
 
 def test_import_ignores_blank_values(client: TestClient) -> None:
@@ -122,7 +122,7 @@ def test_import_ignores_blank_values(client: TestClient) -> None:
     )
     assert res.status_code == 200
     assert res.json() == {"updated": 0, "skipped": 0, "unknown": []}
-    assert _korean_name_of("kr.blank") == "기존"  # 빈 값은 삭제가 아니라 무시
+    assert _get_korean_name("kr.blank") == "기존"  # 빈 값은 삭제가 아니라 무시
 
 
 def test_import_rejects_bad_mode(client: TestClient) -> None:
@@ -141,3 +141,13 @@ def test_import_requires_sysadmin(client: TestClient, sysadmin_enforced: None) -
         json={"mode": "skip", "entries": {}},
     )
     assert res.status_code == 403
+
+
+def test_import_rejects_overlong_name(client: TestClient) -> None:
+    """VARCHAR(200) 초과 이름은 422 — PG DataError 500 방지(경계 검증)."""
+    res = client.put(
+        "/api/employees/korean-names",
+        headers={"X-Dev-User": "admin.kim"},
+        json={"mode": "overwrite", "entries": {"kr.long": "가" * 201}},
+    )
+    assert res.status_code == 422

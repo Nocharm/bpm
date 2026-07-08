@@ -33,7 +33,7 @@ export function parseKoreanNamesJson(
     return { error: 'Expected an object map: { "login_id": "korean name" }.' };
   }
   const entries: Record<string, string> = {};
-  for (const [key, value] of Object.entries(data)) {
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
     if (typeof value !== "string") {
       return { error: `Value for "${key}" must be a string.` };
     }

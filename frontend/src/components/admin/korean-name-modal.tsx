@@ -52,19 +52,21 @@ function ConflictHover({ conflicts }: { conflicts: KoreanNameConflict[] }) {
         {t("admin.krConflictUsers", { n: conflicts.length })}
       </span>
       {open && (
-        <div
-          data-id="kr-conflict-tooltip"
-          className="absolute left-0 top-full z-10 mt-1 max-h-64 w-80 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
-        >
-          {visible.map((c) => (
-            <div key={c.loginId} className="flex items-baseline gap-2 px-1 py-0.5 text-fine">
-              <span className="shrink-0 text-ink-secondary">{c.loginId}</span>
-              <span className="truncate text-ink-tertiary">{c.current}</span>
-              <span className="shrink-0 text-ink-tertiary">→</span>
-              <span className="truncate text-ink">{c.next}</span>
-            </div>
-          ))}
-          {hasMore && <div ref={sentinelRef} className="h-4" />}
+        <div className="absolute left-0 top-full z-10 pt-1">
+          <div
+            data-id="kr-conflict-tooltip"
+            className="max-h-64 w-80 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+          >
+            {visible.map((c) => (
+              <div key={c.loginId} className="flex items-baseline gap-2 px-1 py-0.5 text-fine">
+                <span className="shrink-0 text-ink-secondary">{c.loginId}</span>
+                <span className="truncate text-ink-tertiary">{c.current}</span>
+                <span className="shrink-0 text-ink-tertiary">→</span>
+                <span className="truncate text-ink">{c.next}</span>
+              </div>
+            ))}
+            {hasMore && <div ref={sentinelRef} className="h-4" />}
+          </div>
         </div>
       )}
     </span>
@@ -106,7 +108,14 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
 
   const onFile = async (file: File) => {
     setError("");
-    const parsed = parseKoreanNamesJson(await file.text());
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      setError("Failed to read file.");
+      return;
+    }
+    const parsed = parseKoreanNamesJson(text);
     if ("error" in parsed) {
       setError(parsed.error);
       return;
@@ -192,6 +201,7 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
             <div className="flex justify-end gap-2">
               <button
                 type="button"
+                data-id="kr-conflict-cancel"
                 className={BTN_SECONDARY}
                 disabled={busy}
                 onClick={() => setPhase("idle")}
