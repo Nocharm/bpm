@@ -508,7 +508,7 @@ export function AiChatPanel({
                 <span className="px-2 py-1.5 text-fine text-ink-tertiary">{t("ai.noChats")}</span>
               )}
               {mapSessions.map((item) => (
-                <div key={item.id} className="flex items-center">
+                <div key={item.id} className="group flex items-center">
                   <button
                     type="button"
                     data-id="ai-chat-list-item"
@@ -524,19 +524,26 @@ export function AiChatPanel({
                     <span className="shrink-0 text-[10px] tabular-nums text-ink-tertiary">
                       {formatKstShort(item.updated_at)}
                     </span>
+                  </button>
+                  {/* 우측 슬롯 — 평소엔 활성 체크만, 행 호버 시 삭제 버튼으로 크로스페이드 */}
+                  <div className="relative h-6 w-6 shrink-0">
                     {item.id === activeSessionId && (
-                      <Check size={13} strokeWidth={1.7} className="shrink-0 text-accent" />
+                      <Check
+                        size={13}
+                        strokeWidth={1.7}
+                        className="pointer-events-none absolute inset-0 m-auto text-accent opacity-100 transition-opacity duration-150 group-hover:opacity-0"
+                      />
                     )}
-                  </button>
-                  <button
-                    type="button"
-                    data-id="ai-chat-delete"
-                    aria-label={t("ai.deleteChat")}
-                    onClick={() => setDeleteTarget(item)}
-                    className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-                  >
-                    <Trash2 size={13} strokeWidth={1.5} />
-                  </button>
+                    <button
+                      type="button"
+                      data-id="ai-chat-delete"
+                      aria-label={t("ai.deleteChat")}
+                      onClick={() => setDeleteTarget(item)}
+                      className="absolute inset-0 flex items-center justify-center rounded-sm text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Trash2 size={13} strokeWidth={1.5} />
+                    </button>
+                  </div>
                 </div>
               ))}
               {otherSessions.length > 0 && (

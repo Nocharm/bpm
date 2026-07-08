@@ -238,9 +238,12 @@ await page.waitForTimeout(500);
 
 // ⑦ SMOKE-second 삭제 → ConfirmDialog → 확인 → 목록 제거 + 새 대화 폴백
 await openDropdown();
-await page
-  .locator('[data-id="ai-chat-list-item"]:has-text("SMOKE-second") + [data-id="ai-chat-delete"]')
-  .click();
+// 삭제 버튼은 행(.group) 호버 시에만 노출 — 행 컨테이너 기준으로 찾고, hover로 크로스페이드 발화 후 클릭
+const deleteRow = page.locator('div.group', {
+  has: page.locator('[data-id="ai-chat-list-item"]', { hasText: "SMOKE-second" }),
+});
+await deleteRow.hover();
+await deleteRow.locator('[data-id="ai-chat-delete"]').click();
 await page.waitForSelector('[data-id="confirm-dialog"]', { timeout: 3000 });
 await page.locator('[data-id="confirm-dialog-confirm"]').click();
 await page.waitForTimeout(700);
