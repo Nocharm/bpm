@@ -7,6 +7,7 @@
 - 구현 계획 작성(6 task: BE 컬럼/엔드포인트 TDD → FE 파서 lib/모달/탭 wiring → 브라우저 스모크) — `docs/superpowers/plans/2026-07-09-user-korean-name-import.md`.
 - Task 1 DONE: `korean_name` 컬럼 TDD 구현(2/2 테스트 통과·440 tests 회귀) — models.py Employee/schemas.py EmployeeOut 노출·AD _upsert 보존 검증.
 - Task 2 DONE: `PUT /api/employees/korean-names` 엔드포인트 TDD 구현(5개 신규 테스트·445 tests 통과) — skip/overwrite 모드·미보유 목록 반환·sysadmin 권한 검증.
+- Task 3 DONE: FE 파서·분류·다운로드 lib TDD 구현(6개 신규 테스트·140 tests 통과·0 lint 에러) — parseKoreanNamesJson/classifyKoreanNames/buildMissingIdsJson 순수함수·EmployeeRow korean_name 필드.
 
 ## 2026-07-07 — feat/url-viewer 머지 (main)
 - 머지 후속: 스모크가 초안 버전으로 전환 후 진행 — 상태 배너 기능이 게시본을 기본 열람으로 바꿔 스모크 전제가 깨진 것 보정.

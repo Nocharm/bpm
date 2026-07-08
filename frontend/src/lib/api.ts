@@ -501,6 +501,7 @@ export interface EmployeeRow {
   source: string;
   role: string;
   department: string;
+  korean_name: string;
 }
 
 export function listEmployees(): Promise<EmployeeRow[]> {
