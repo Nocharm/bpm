@@ -758,6 +758,8 @@ class AiModelsOut(BaseModel):
 
 
 class AiChatSessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     map_id: int
     map_name: str
@@ -767,10 +769,14 @@ class AiChatSessionOut(BaseModel):
 
 
 class AiChatSessionsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     sessions: list[AiChatSessionOut]  # updated_at desc
 
 
 class AiChatMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     role: Literal["user", "assistant"]
     content: str
@@ -780,6 +786,8 @@ class AiChatMessageOut(BaseModel):
 
 
 class AiChatMessagesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     messages: list[AiChatMessageOut]  # 시간 오름차순(페이지 내)
     has_more: bool  # before 커서로 더 오래된 기록 존재 여부
 

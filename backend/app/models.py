@@ -62,9 +62,7 @@ class AiChatSession(Base):
     )
 
     # ORM cascade로 세션 삭제 시 메시지 동반 삭제 — sqlite FK pragma에 의존하지 않는다
-    messages: Mapped[list["AiChatMessage"]] = relationship(
-        cascade="all, delete-orphan", passive_deletes=True
-    )
+    messages: Mapped[list["AiChatMessage"]] = relationship(cascade="all, delete-orphan")
 
 
 class AiChatMessage(Base):
