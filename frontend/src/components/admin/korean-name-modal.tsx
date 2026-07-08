@@ -183,10 +183,11 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
           <div className="flex flex-col gap-3" data-id="kr-conflict-step">
             <div className="flex items-start gap-2 rounded-sm bg-surface-alt p-3">
               <TriangleAlert size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-error" />
-              <p className="text-caption text-ink">
+              {/* div(not p) — 툴팁 div가 p 자손이면 invalid nesting(validateDOMNesting 경고) */}
+              <div className="text-caption text-ink">
                 <ConflictHover conflicts={classification.conflicts} />{" "}
                 {t("admin.krConflictRest")}
-              </p>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button

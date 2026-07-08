@@ -11,6 +11,7 @@
 - Task 4 DONE: FE API 클라이언트·i18n·모달 컴포넌트(api.ts KoreanNamesImportSummary/importKoreanNames + i18n 14 keys en/ko + korean-name-modal.tsx 모달·3단계·무한스크롤 충돌 툴팁 + lint 0 err·vitest 140 pass).
 - Task 5 DONE: FE Employees 탭 wiring(korean_name 열·Add Korean Names 버튼·모달 마운트, lint 0 err·vitest 140 pass·build PASS).
 - Task 6 DONE_WITH_CONCERNS: 브라우저 스모크 11/12(신규/충돌 skip·overwrite·다운로드·테이블 반영 전부 PASS) — `pw-smoke-korean-names.mjs`. 기존 DB ALTER 자동보강 실증(레거시 dev.db 복사→재기동→401행 전부 `korean_name:""`). 발견: `korean-name-modal.tsx` 충돌 툴팁이 `<p>` 안에 `<div>`를 중첩해 콘솔 hydration-nesting 경고 2건(제품 결함, 미수정 — 컨트롤러 판단 대기). 최종 게이트 4종(pytest 445·ruff·lint·vitest 140·build) 전부 PASS.
+- Task 6 후속 fix(컨트롤러 승인): `korean-name-modal.tsx` 충돌 문구 래퍼 `<p>`→`<div>`로 div-in-p 중첩 제거 — 스모크 12/12 PASS(콘솔 에러 0), lint 0 err·vitest 140·build PASS.
 
 ## 2026-07-07 — feat/url-viewer 머지 (main)
 - 머지 후속: 스모크가 초안 버전으로 전환 후 진행 — 상태 배너 기능이 게시본을 기본 열람으로 바꿔 스모크 전제가 깨진 것 보정.
