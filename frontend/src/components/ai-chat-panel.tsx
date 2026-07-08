@@ -23,12 +23,16 @@ import {
   Route,
   Search,
   Sparkles,
+  Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
 import {
   aiChat,
+  deleteAiChatSession,
   getAiChatMessages,
   getAiChatSessions,
   getAiModels,
@@ -68,6 +72,7 @@ interface AiChatPanelProps {
   versionId: number;
   aiEnabled: boolean;
   canEdit: boolean;
+  initialSessionId?: number | null; // ?aiChat=<id> 딥링크 — 세션 목록 최초 로딩 시 우선 활성화
   onGraphProposal: (proposal: AiProposal) => void;
   onOpsProposal: (proposal: AiProposal) => void;
   onHighlightNode: (nodeId: string) => void;
@@ -95,6 +100,7 @@ export function AiChatPanel({
   versionId,
   aiEnabled,
   canEdit,
+  initialSessionId,
   onGraphProposal,
   onOpsProposal,
   onHighlightNode,
@@ -108,11 +114,14 @@ export function AiChatPanel({
   onRegisterNewChat,
 }: AiChatPanelProps) {
   const { t } = useI18n();
+  const router = useRouter();
   // 서버 세션 히스토리 — 전체 목록(내 것 전부, 맵 정보 포함)과 활성 세션. null=새 대화(서버 행 없음, 첫 전송 시 생성)
   const [allSessions, setAllSessions] = useState<AiChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [sessionsReload, setSessionsReload] = useState(0);
   const [listOpen, setListOpen] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(false); // 드롭다운 "다른 맵 대화" 섹션 펼침
+  const [deleteTarget, setDeleteTarget] = useState<AiChatSessionSummary | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -141,6 +150,8 @@ export function AiChatPanel({
 
   const mapSessions = allSessions.filter((item) => item.map_id === mapId);
   const activeMeta = allSessions.find((item) => item.id === activeSessionId) ?? null;
+  const otherSessions = allSessions.filter((item) => item.map_id !== mapId);
+  const isForeign = activeMeta !== null && activeMeta.map_id !== mapId;
 
   // 이전 페이지 로딩 — 스피너+기능 팁을 최소 시간 보여주며 서버에서 더 오래된 기록을 붙인다
   const beginLoadOlder = () => {
@@ -183,8 +194,12 @@ export function AiChatPanel({
         setHistoryError(false);
         if (!initializedRef.current) {
           initializedRef.current = true;
+          const initial =
+            initialSessionId != null
+              ? result.sessions.find((item) => item.id === initialSessionId)
+              : undefined;
           const recent = result.sessions.find((item) => item.map_id === mapId);
-          setActiveSessionId(recent ? recent.id : null);
+          setActiveSessionId(initial ? initial.id : recent ? recent.id : null);
         }
       })
       .catch(() => {
@@ -193,7 +208,7 @@ export function AiChatPanel({
     return () => {
       alive = false;
     };
-  }, [mapId, sessionsReload]);
+  }, [mapId, sessionsReload, initialSessionId]);
 
   // 활성 세션 메시지 로딩 — 최근 페이지부터. 새 대화(null)는 빈 스레드.
   useEffect(() => {
@@ -343,7 +358,7 @@ export function AiChatPanel({
 
   const send = async (override?: string) => {
     const instruction = (override ?? input).trim();
-    if (!instruction || busy || !aiEnabled) return;
+    if (!instruction || busy || !aiEnabled || isForeign) return;
     if (override === undefined) setInput("");
     setBusy(true);
     const targetSessionId = activeSessionId;
@@ -396,6 +411,7 @@ export function AiChatPanel({
   };
 
   return (
+    <>
     <div className="flex h-full flex-col bg-surface">
       {models.length > 0 && (
         <div className="flex items-center gap-1 border-b border-hairline p-2">
@@ -480,27 +496,78 @@ export function AiChatPanel({
                 <span className="px-2 py-1.5 text-fine text-ink-tertiary">{t("ai.noChats")}</span>
               )}
               {mapSessions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-id="ai-chat-list-item"
-                  onClick={() => switchSession(item.id)}
-                  className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-fine hover:bg-surface-alt ${
-                    item.id === activeSessionId ? "text-ink" : "text-ink-secondary"
-                  }`}
-                >
-                  <MessageSquare size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  <span className="min-w-0 flex-1 truncate text-left">
-                    {item.title || t("ai.clearChat")}
-                  </span>
-                  <span className="shrink-0 text-[10px] tabular-nums text-ink-tertiary">
-                    {formatKstShort(item.updated_at)}
-                  </span>
-                  {item.id === activeSessionId && (
-                    <Check size={13} strokeWidth={1.7} className="shrink-0 text-accent" />
-                  )}
-                </button>
+                <div key={item.id} className="flex items-center">
+                  <button
+                    type="button"
+                    data-id="ai-chat-list-item"
+                    onClick={() => switchSession(item.id)}
+                    className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-2 py-1.5 text-fine hover:bg-surface-alt ${
+                      item.id === activeSessionId ? "text-ink" : "text-ink-secondary"
+                    }`}
+                  >
+                    <MessageSquare size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {item.title || t("ai.clearChat")}
+                    </span>
+                    <span className="shrink-0 text-[10px] tabular-nums text-ink-tertiary">
+                      {formatKstShort(item.updated_at)}
+                    </span>
+                    {item.id === activeSessionId && (
+                      <Check size={13} strokeWidth={1.7} className="shrink-0 text-accent" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    data-id="ai-chat-delete"
+                    aria-label={t("ai.deleteChat")}
+                    onClick={() => setDeleteTarget(item)}
+                    className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                  >
+                    <Trash2 size={13} strokeWidth={1.5} />
+                  </button>
+                </div>
               ))}
+              {otherSessions.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    data-id="ai-chat-other-toggle"
+                    onClick={() => setOtherOpen((value) => !value)}
+                    className="mt-1 flex items-center gap-1.5 rounded-sm border-t border-hairline px-2 py-1.5 text-fine text-ink-tertiary hover:bg-surface-alt"
+                  >
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={1.5}
+                      className={`shrink-0 transition-transform ${otherOpen ? "" : "-rotate-90"}`}
+                    />
+                    {t("ai.otherMaps")}
+                    <span className="rounded-full bg-surface-alt px-1.5 tabular-nums">
+                      {otherSessions.length}
+                    </span>
+                  </button>
+                  {otherOpen &&
+                    otherSessions.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        data-id="ai-chat-other-item"
+                        onClick={() => switchSession(item.id)}
+                        className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-fine hover:bg-surface-alt ${
+                          item.id === activeSessionId ? "text-ink" : "text-ink-secondary"
+                        }`}
+                      >
+                        <MessageSquare
+                          size={13}
+                          strokeWidth={1.5}
+                          className="shrink-0 text-ink-tertiary"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-left">
+                          <span className="text-ink-tertiary">{item.map_name}</span> · {item.title || t("ai.clearChat")}
+                        </span>
+                      </button>
+                    ))}
+                </>
+              )}
             </div>
           </>
         )}
@@ -794,6 +861,22 @@ export function AiChatPanel({
       )}
       </div>
       <div className="border-t border-hairline p-2">
+        {isForeign && activeMeta && (
+          <div
+            data-id="ai-foreign-banner"
+            className="mb-2 flex items-center justify-between gap-2 rounded-sm bg-accent-tint p-2 text-fine text-accent"
+          >
+            <span className="min-w-0">{t("ai.foreignChat", { map: activeMeta.map_name })}</span>
+            <button
+              type="button"
+              data-id="ai-open-map"
+              onClick={() => router.push(`/maps/${activeMeta.map_id}?aiChat=${activeMeta.id}`)}
+              className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus"
+            >
+              {t("ai.openMap")}
+            </button>
+          </div>
+        )}
         {/* 빠른 기능 — 첨부 + 아이콘 칩(호버 시 이름·설명 툴팁) */}
         <div className="mb-2 flex items-center gap-1.5">
           <button
@@ -811,7 +894,7 @@ export function AiChatPanel({
             <div key={chip.key} className="group relative">
               <button
                 type="button"
-                disabled={!aiEnabled || busy}
+                disabled={!aiEnabled || busy || isForeign}
                 onClick={() => void send(t(chip.key))}
                 aria-label={t(chip.key)}
                 className="flex h-9 w-9 items-center justify-center rounded-sm border border-hairline text-ink-secondary hover:border-accent hover:bg-accent-tint hover:text-accent disabled:opacity-40"
@@ -877,9 +960,11 @@ export function AiChatPanel({
             className="scrollbar-hidden max-h-32 min-h-[36px] flex-1 resize-none rounded-md border border-hairline px-3 py-2 text-caption outline-none focus:border-accent disabled:bg-surface-alt"
             rows={1}
             maxLength={MAX_INSTRUCTION_CHARS}
-            placeholder={aiEnabled ? t("ai.placeholder") : t("ai.disabled")}
+            placeholder={
+              aiEnabled ? (isForeign ? t("ai.foreignPlaceholder") : t("ai.placeholder")) : t("ai.disabled")
+            }
             value={input}
-            disabled={!aiEnabled}
+            disabled={!aiEnabled || isForeign}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               // ⌘/Ctrl+Enter=전송, Enter=줄바꿈. IME 조합 중(한글)엔 전송하지 않음.
@@ -897,7 +982,7 @@ export function AiChatPanel({
             type="button"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-accent text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={() => void send()}
-            disabled={!aiEnabled || busy || input.trim().length === 0}
+            disabled={!aiEnabled || busy || input.trim().length === 0 || isForeign}
             aria-label={t("ai.send")}
           >
             <ArrowUp size={16} strokeWidth={1.8} />
@@ -924,5 +1009,35 @@ export function AiChatPanel({
         </div>
       </div>
     </div>
+      {deleteTarget && (
+        <ConfirmDialog
+          icon={<Trash2 size={28} strokeWidth={1.5} />}
+          title={t("ai.deleteChat")}
+          message={t("ai.deleteChatMessage")}
+          lines={[
+            {
+              icon: <MessageSquare size={14} strokeWidth={1.5} />,
+              text: deleteTarget.title || t("ai.clearChat"),
+              highlight: true,
+            },
+          ]}
+          confirmLabel={t("ai.deleteChat")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const target = deleteTarget;
+            setDeleteTarget(null);
+            void deleteAiChatSession(target.id)
+              .then(() => {
+                if (activeSessionIdRef.current === target.id) switchSession(null);
+                refreshSessions();
+              })
+              .catch((err: unknown) =>
+                onToast?.(err instanceof Error ? err.message : t("ai.error")),
+              );
+          }}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
+    </>
   );
 }

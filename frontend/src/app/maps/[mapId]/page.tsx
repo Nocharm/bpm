@@ -808,6 +808,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // AI 채팅 패널 상태
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiInitialSessionId, setAiInitialSessionId] = useState<number | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
   // 편집용 매뉴얼 사이트 주소(.env MANUAL_URL) — 비어 있으면 툴바 버튼 숨김 (F9)
   const [manualUrl, setManualUrl] = useState("");
@@ -1842,6 +1843,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         const paramVersion = Number(new URLSearchParams(window.location.search).get("version"));
         if (paramVersion && detail.versions.some((v) => v.id === paramVersion)) {
           initialId = paramVersion;
+        }
+        // AI 챗 딥링크 — ?aiChat=<sessionId>로 진입 시 패널 자동 오픈 + 해당 세션 활성 (async 콜백이라 set-state-in-effect 아님)
+        const paramChat = Number(new URLSearchParams(window.location.search).get("aiChat"));
+        if (paramChat) {
+          setAiInitialSessionId(paramChat);
+          setAiOpen(true);
         }
         if (active) {
           setVersionId(initialId ?? detail.versions[0].id);
@@ -7248,6 +7255,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 versionId={versionId}
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
+                initialSessionId={aiInitialSessionId}
                 onGraphProposal={applyAiProposal}
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
