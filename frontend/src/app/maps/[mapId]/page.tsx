@@ -836,6 +836,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [aiTitleManual],
   );
+  // 딥링크 소비 콜백 — 패널 세션 목록 effect deps에 들어가므로 인라인 화살표(렌더마다 새 identity) 금지: refetch 스톰 방지
+  const handleAiInitialConsumed = useCallback(() => setAiInitialSessionId(null), []);
 
   // 엣지 스타일 — 맵 전역(모든 엣지 일괄). React Flow 빌트인 타입: default=곡선, smoothstep=꺾은선, straight=직선. localStorage 영속.
   const [edgeStyle, setEdgeStyle] = useState<"default" | "smoothstep" | "straight">("smoothstep");
@@ -7256,7 +7258,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 initialSessionId={aiInitialSessionId}
-                onInitialSessionConsumed={() => setAiInitialSessionId(null)}
+                onInitialSessionConsumed={handleAiInitialConsumed}
                 onGraphProposal={applyAiProposal}
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
