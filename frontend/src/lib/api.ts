@@ -795,8 +795,10 @@ export function putManual(format: ManualDoc["format"], content: string): Promise
 
 // ── 앱 런타임 설정 (sysadmin) ────────────────────────────────
 export interface AppSettings {
-  ai_chat_log_enabled: boolean; // AI 챗 질문/답변 DB 적재(테스트 기간 검증용)
   ai_chat_tips: string[]; // 이전 기록 로딩 중 노출되는 기능 팁(미설정 시 기본 20종)
+  ai_chat_max_sessions_per_map: number; // 보존 상한 — 사용자×맵당 대화 수
+  ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
+  ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -807,8 +809,10 @@ export function getAppSettings(): Promise<AppSettings> {
 
 // 부분 갱신 — 넘긴 필드만 변경. tips에 빈 배열을 보내면 기본 팁으로 복원.
 export function putAppSettings(patch: {
-  ai_chat_log_enabled?: boolean;
   ai_chat_tips?: string[];
+  ai_chat_max_sessions_per_map?: number;
+  ai_chat_max_messages_per_session?: number;
+  ai_chat_retention_days?: number;
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",

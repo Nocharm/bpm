@@ -1,7 +1,7 @@
 "use client";
 
-// AI 챗 설정(sysadmin) — 질문/답변 DB 적재 토글(테스트 기간 중 ON 예정) + 로딩 중 기능 팁 관리.
-import { Database, Info, Lightbulb } from "lucide-react";
+// AI 챗 설정(sysadmin) — 보존 상한(대화 수·메시지 수·보관 일수) + 로딩 중 기능 팁 관리.
+import { Database, Lightbulb } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAppSettings, putAppSettings, type AppSettings } from "@/lib/api";
@@ -17,6 +17,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [tipsDraft, setTipsDraft] = useState(""); // 한 줄당 팁 1개 편집 초안
+  const [limitsDraft, setLimitsDraft] = useState({ sessions: "", messages: "", days: "" });
 
   useEffect(() => {
     let alive = true;
@@ -25,6 +26,11 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
         if (alive) {
           setAppSettings(result);
           setTipsDraft(result.ai_chat_tips.join("\n"));
+          setLimitsDraft({
+            sessions: String(result.ai_chat_max_sessions_per_map),
+            messages: String(result.ai_chat_max_messages_per_session),
+            days: String(result.ai_chat_retention_days),
+          });
         }
       })
       .catch(() => undefined);
@@ -33,17 +39,27 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
     };
   }, []);
 
-  const enabled = appSettings?.ai_chat_log_enabled ?? false;
-
-  const toggleLogging = async () => {
-    if (!appSettings || busy) return;
+  // 상한 저장 — 세 필드 모두 범위 검증 후 한 번에 PUT(범위 밖은 서버 422 전에 로컬 차단)
+  const saveLimits = async () => {
+    if (busy) return;
+    const sessions = Number(limitsDraft.sessions);
+    const messages = Number(limitsDraft.messages);
+    const days = Number(limitsDraft.days);
+    const inRange = (value: number, lo: number, hi: number) =>
+      Number.isInteger(value) && value >= lo && value <= hi;
+    if (!inRange(sessions, 1, 200) || !inRange(messages, 10, 2000) || !inRange(days, 7, 3650)) {
+      onToast?.(t("aiLog.invalidNumber"));
+      return;
+    }
     setBusy(true);
     try {
       const next = await putAppSettings({
-        ai_chat_log_enabled: !appSettings.ai_chat_log_enabled,
+        ai_chat_max_sessions_per_map: sessions,
+        ai_chat_max_messages_per_session: messages,
+        ai_chat_retention_days: days,
       });
       setAppSettings(next);
-      onToast?.(t(next.ai_chat_log_enabled ? "aiLog.enabledToast" : "aiLog.disabledToast"));
+      onToast?.(t("aiLog.limitsSaved"));
     } catch (err) {
       onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
     } finally {
@@ -76,45 +92,51 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
       <h2 className="text-body-strong text-ink">{t("aiLog.title")}</h2>
       <p className="mt-1 text-caption text-ink-secondary">{t("aiLog.desc")}</p>
 
-      <div className="mt-4 flex items-center justify-between gap-4 rounded-md border border-hairline p-4">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="mt-4 rounded-md border border-hairline p-4">
+        <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-accent-tint text-accent">
             <Database size={16} strokeWidth={1.5} />
           </span>
           <div className="min-w-0">
-            <div className="text-caption-strong text-ink">{t("aiLog.toggleLabel")}</div>
-            <div className="text-fine text-ink-tertiary">{t("aiLog.toggleHint")}</div>
+            <div className="text-caption-strong text-ink">{t("aiLog.limitsTitle")}</div>
+            <div className="text-fine text-ink-tertiary">{t("aiLog.limitsDesc")}</div>
           </div>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          aria-label={t("aiLog.toggleLabel")}
-          data-id="ai-log-toggle"
-          disabled={appSettings === null || busy}
-          onClick={() => void toggleLogging()}
-          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
-            enabled ? "bg-accent" : "bg-border-strong"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface transition-all ${
-              enabled ? "left-[18px]" : "left-0.5"
-            }`}
-          />
-        </button>
-      </div>
-
-      {enabled && (
-        <div
-          data-id="ai-log-active-notice"
-          className="mt-3 flex items-start gap-2 rounded-sm border border-notice-border bg-notice p-2.5 text-fine text-ink-secondary"
-        >
-          <Info size={14} strokeWidth={1.6} className="mt-px shrink-0 text-changed" />
-          {t("aiLog.activeNotice")}
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          {(
+            [
+              ["sessions", "aiLog.maxSessionsLabel", "ai-limit-sessions"],
+              ["messages", "aiLog.maxMessagesLabel", "ai-limit-messages"],
+              ["days", "aiLog.retentionLabel", "ai-limit-days"],
+            ] as const
+          ).map(([field, labelKey, dataId]) => (
+            <label key={field} className="flex items-center justify-between gap-3 text-caption text-ink-secondary">
+              <span className="min-w-0">{t(labelKey)}</span>
+              <input
+                type="number"
+                data-id={dataId}
+                value={limitsDraft[field]}
+                disabled={appSettings === null || busy}
+                onChange={(event) =>
+                  setLimitsDraft((prev) => ({ ...prev, [field]: event.target.value }))
+                }
+                className="w-24 rounded-sm border border-hairline px-2 py-1 text-right text-caption tabular-nums outline-none focus:border-accent disabled:bg-surface-alt"
+              />
+            </label>
+          ))}
         </div>
-      )}
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            data-id="ai-limits-save"
+            onClick={() => void saveLimits()}
+            disabled={appSettings === null || busy}
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+          >
+            {t("aiLog.limitsSave")}
+          </button>
+        </div>
+      </div>
 
       {appSettings?.updated_at && (
         <p className="mt-2 text-fine text-ink-tertiary">
