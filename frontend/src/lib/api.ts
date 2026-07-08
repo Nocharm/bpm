@@ -795,8 +795,10 @@ export function putManual(format: ManualDoc["format"], content: string): Promise
 
 // ── 앱 런타임 설정 (sysadmin) ────────────────────────────────
 export interface AppSettings {
-  ai_chat_log_enabled: boolean; // AI 챗 질문/답변 DB 적재(테스트 기간 검증용)
   ai_chat_tips: string[]; // 이전 기록 로딩 중 노출되는 기능 팁(미설정 시 기본 20종)
+  ai_chat_max_sessions_per_map: number; // 보존 상한 — 사용자×맵당 대화 수
+  ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
+  ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -807,8 +809,10 @@ export function getAppSettings(): Promise<AppSettings> {
 
 // 부분 갱신 — 넘긴 필드만 변경. tips에 빈 배열을 보내면 기본 팁으로 복원.
 export function putAppSettings(patch: {
-  ai_chat_log_enabled?: boolean;
   ai_chat_tips?: string[];
+  ai_chat_max_sessions_per_map?: number;
+  ai_chat_max_messages_per_session?: number;
+  ai_chat_retention_days?: number;
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",
@@ -1241,12 +1245,15 @@ export function deleteNotice(id: number): Promise<void> {
 
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
 
+// 부분 갱신 시맨틱(증분 편집) — null/생략=유지, ""=지움, 값=설정 (백엔드 AiNodeAttributes 미러)
 export interface AiNodeAttributes {
-  assignee: string;
-  department: string;
-  system: string;
-  duration: string;
-  color: string;
+  assignee?: string | null;
+  department?: string | null;
+  system?: string | null;
+  duration?: string | null;
+  color?: string | null;
+  url?: string | null;
+  url_label?: string | null;
 }
 
 export interface AiNode {
@@ -1274,7 +1281,15 @@ export interface AiGroup {
   parent_key: string | null;
 }
 
-export type AiOpAction = "add" | "remove" | "connect" | "relabel" | "set_attr";
+export type AiOpAction =
+  | "add"
+  | "remove"
+  | "connect"
+  | "relabel"
+  | "set_attr"
+  | "disconnect"
+  | "set_edge_label"
+  | "set_desc";
 
 // 증분 편집 연산 (D1 하이브리드) — 실제 적용은 Phase 3
 export interface AiOp {
@@ -1286,6 +1301,7 @@ export interface AiOp {
   label: string | null;
   title: string | null;
   attributes: AiNodeAttributes | null;
+  description: string | null;
 }
 
 // 워크스루 단계 (Phase 5)
@@ -1318,6 +1334,8 @@ export interface AiProposal {
   ops: AiOp[];
   steps: AiStep[];
   findings: AiFinding[];
+  // 적재된 대화 세션 id — 서버가 저장 후 세팅(새 대화 첫 전송 시 신규 id)
+  session_id?: number | null;
 }
 
 export interface AiChatTurn {
@@ -1330,11 +1348,57 @@ export function aiChat(
   instruction: string,
   history: AiChatTurn[],
   model: string | null,
+  sessionId: number | null,
 ): Promise<AiProposal> {
   return request<AiProposal>(`/versions/${versionId}/ai/chat`, {
     method: "POST",
-    body: JSON.stringify({ instruction, history, model }),
+    body: JSON.stringify({ instruction, history, model, session_id: sessionId }),
   });
+}
+
+// ── AI 챗 서버 저장 히스토리 (design 2026-07-08) ──────────────
+
+export interface AiChatSessionSummary {
+  id: number;
+  map_id: number;
+  map_name: string;
+  title: string;
+  message_count: number;
+  updated_at: string;
+}
+
+export interface AiChatMessageRow {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  kind: string | null;
+  version_id: number | null;
+  created_at: string;
+}
+
+// 내 세션 목록(최근 활동순) — mapId 생략 시 전체 맵(맵 이름 포함, "다른 맵 대화" 목록용)
+export function getAiChatSessions(
+  mapId?: number,
+): Promise<{ sessions: AiChatSessionSummary[] }> {
+  const query = mapId !== undefined ? `?map_id=${mapId}` : "";
+  return request<{ sessions: AiChatSessionSummary[] }>(`/ai/chat-sessions${query}`);
+}
+
+// 커서 페이징 — before(메시지 id)보다 오래된 limit개를 시간 오름차순으로
+export function getAiChatMessages(
+  sessionId: number,
+  before?: number,
+  limit = 30,
+): Promise<{ messages: AiChatMessageRow[]; has_more: boolean }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before !== undefined) params.set("before", String(before));
+  return request<{ messages: AiChatMessageRow[]; has_more: boolean }>(
+    `/ai/chat-sessions/${sessionId}/messages?${params.toString()}`,
+  );
+}
+
+export function deleteAiChatSession(sessionId: number): Promise<void> {
+  return request<void>(`/ai/chat-sessions/${sessionId}`, { method: "DELETE" });
 }
 
 export function getAiModels(): Promise<{ models: string[] }> {

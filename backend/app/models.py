@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.clock import now as _now_kst
@@ -29,20 +29,39 @@ class AppSetting(Base):
     )
 
 
-class AiChatLog(Base):
-    """AI 챗 질문/답변 기록 — 설정 ai_chat_log_enabled ON일 때만 적재(테스트 기간 검증용)."""
+class AiChatSession(Base):
+    """AI 챗 대화 세션 — 사용자×맵 귀속 서버 원장. 목록 정렬 기준은 updated_at desc."""
 
-    __tablename__ = "ai_chat_logs"
+    __tablename__ = "ai_chat_sessions"
+    __table_args__ = (Index("ix_ai_chat_sessions_login_map", "login_id", "map_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    version_id: Mapped[int] = mapped_column(
-        ForeignKey("map_versions.id", ondelete="CASCADE"), index=True
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
+    login_id: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
     )
-    login_id: Mapped[str] = mapped_column(String(100), index=True)
-    model: Mapped[str | None] = mapped_column(String(200), default=None)
-    kind: Mapped[str] = mapped_column(String(20))
-    instruction: Mapped[str] = mapped_column(Text)
-    answer: Mapped[str] = mapped_column(Text)
+
+    # ORM cascade로 세션 삭제 시 메시지 동반 삭제 — sqlite FK pragma에 의존하지 않는다
+    messages: Mapped[list["AiChatMessage"]] = relationship(cascade="all, delete-orphan")
+
+
+class AiChatMessage(Base):
+    """AI 챗 메시지 — user 질문/assistant 답변 텍스트만(제안 페이로드는 저장 안 함)."""
+
+    __tablename__ = "ai_chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_chat_sessions.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(10))  # user | assistant
+    content: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str | None] = mapped_column(String(20), default=None)  # assistant만
+    # 당시 열려 있던 버전 id — 추적용 순수 정수(FK 아님: 버전 삭제돼도 대화 보존)
+    version_id: Mapped[int | None] = mapped_column(Integer, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

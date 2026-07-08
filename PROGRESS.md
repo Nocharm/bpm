@@ -2,6 +2,29 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — AI 챗 서버 저장 구현 (feat/ai-chat-server-history)
+- Task 1: 세션/메시지 모델 + 계약 확장(AiChatRequest/AiProposal session_id, Out 스키마 4종).
+- Task 2: `/ai/chat` write-through — `derive_chat_title` 헬퍼(`app/chat_history.py`) + 라우터에 세션 소유/맵 검증(AI 호출 전 404 fail-fast)·질문/답변 2행 적재를 AI 실패 시 미적재로 한 트랜잭션 처리. pytest 457·ruff 0.
+- Task 3: 신규 라우터 `app/routers/ai_sessions.py` — `GET /api/ai/chat-sessions[?map_id=]`(맵 이름·메시지 수, 소프트삭제 맵 제외, 본인 것만)·`GET .../{id}/messages?before=&limit=`(최신순으로 떠서 has_more 판정 후 오름차순 페이지)·`DELETE .../{id}`(ORM cascade로 메시지 동반 삭제, 204). 전부 본인 소유만(타인 404). pytest 462·ruff 0.
+- Task 4: 보존 상한 3종을 `app_settings`(런타임 조정, 기본 세션 20/메시지 200/기간 180일)로 노출 — `chat_history.py`에 `prune_chat_session_messages`(세션 내 메시지 상한, 오래된 순 삭제)·`prune_map_chat_sessions`(사용자×맵 세션 상한, ORM delete로 메시지 cascade)·`prune_expired_chat_sessions`(기간 만료, 목록 조회 시 기회적 실행) 추가. `/ai/chat` 적재 직후 메시지·세션 상한 훅업, `GET /ai/chat-sessions` 진입 시 만료 정리 훅업. PUT `/admin/app-settings`가 3필드(1–200/10–2000/7–3650) 부분 갱신 수용. pytest 466·ruff 0.
+- Task 5: `ai_chat_logs` 흡수·제거 — `AiChatLog` 모델·`AI_CHAT_LOG_KEY`/`is_ai_chat_log_enabled`·`AppSettingsOut/Update.ai_chat_log_enabled`·`/ai/chat`의 구 로깅 write 블록·구 로깅 테스트 2종 삭제. `_to_out`은 관리 4키 중 최신 갱신 행 기준으로 `updated_by/updated_at` 산출. **서버 배포 시 `DROP TABLE ai_chat_logs;` 1회 수동 실행 필요**(더 이상 코드가 쓰지 않는 잔여 테이블). pytest 464·ruff 0.
+- Task 6+7: 프론트 서버 세션 전환 — `chat-sessions.ts` 재작성(뷰모델 `ChatMessage`{id/role/content/at}·`createLocalMessage`(음수 낙관 id)·`toChatMessage`, localStorage 스토어 폐기)·`api.ts`에 `getAiChatSessions/getAiChatMessages/deleteAiChatSession`+`aiChat(session_id)`+`AiProposal.session_id`. `AiChatPanel` 코어를 서버 세션 로딩·전송·커서 페이징으로 전환(`mapId` prop, 현재 맵 세션 드롭다운·지연 새 대화·상단 스크롤 페이징·404 폴백·인라인 재시도), 세션 한도/용량바/카운터 제거. i18n 5키 삭제·3키 추가. 편차: 브리프의 `set-state-in-effect` disable 4개가 React Compiler 컴포넌트 bail로 전부 unused 경고 → 제거(0/0 유지). vitest 120·lint 0·build.
+- Task 8: 히스토리 확장 — 드롭다운에 "다른 맵 대화" 섹션(맵 이름 접두 + 이동, 접기/펼침) 추가, 현재 맵 목록 항목에 삭제 버튼(`ConfirmDialog` 재도입) 추가, 다른 맵 세션은 읽기전용(입력·전송·빠른칩 비활성 + 안내 배너의 "이 맵 열기"로 이동), `AiChatPanelProps.initialSessionId`+`/maps/{mapId}?aiChat=<sessionId>` 딥링크로 패널 자동 오픈+세션 활성. i18n 6키 추가(EN/KO). vitest 120·lint 0(1 pre-existing warning)·build.
+- Task 9: 관리자 설정 패널 — Q&A 적재 토글(+activeNotice)을 보존 상한 3필드(대화 수/메시지 수/보관 일수) 편집 카드로 교체. `AppSettings`/`putAppSettings` 타입에서 `ai_chat_log_enabled` 제거, 3필드 추가. 저장 전 로컬 범위 검증(1–200/10–2000/7–3650, 서버 422 이전 차단). i18n 5키 삭제 + 8키 추가(EN/KO). 팁 관리 섹션 무변경. vitest 120·lint 0(1 pre-existing warning)·build.
+- Task 10: 기본 팁·매뉴얼 동기화 — `DEFAULT_AI_CHAT_TIPS` 구식 2건(4개 제한·40개 캡) 교체, `backend/app/manual.md`·`docs/manual/user-manual-{ko,en}.md` §AI 도우미를 서버 저장·다른 맵 대화·관리자 보존 상한 문구로 갱신(날짜 2026-07-09), `docs/manual/admin-manual-{ko,en}.md` §12에서 Q&A 적재 토글 설명을 보존 상한 3키(표)와 "항상 서버 저장(사용자·맵 단위, 본인만 조회)" 설명으로 교체 + 콘솔 지도 "AI 챗" 행 설명 갱신. pytest 7/7(test_app_settings.py), 잔재 grep 0.
+- Task 11: 브라우저 e2e 스모크 + 전체 게이트 — 신규 `frontend/scripts/pw-smoke-ai-chat-history.mjs`(playwright-core + 시스템 Chrome, dev.db `SMOKE-` 세션 3종 시드) 13개 어서션 전부 PASS: 대화 바 자동 활성·현재 맵 2건/다른 맵 토글 1건·서버 페이징 30→(로딩 팁)→40·타맵 세션 포린 배너+입력 disabled+이 맵 열기·`?aiChat=` 딥링크 이동+자동 오픈·mocked `/ai/chat` 낙관 말풍선·삭제+새 대화 폴백·콘솔 에러 0. 제거된 UX(localStorage 4개 제한·용량바)를 테스트하던 구 스모크 `pw-smoke-ai-chat-sessions.mjs` 삭제(컨트롤러 승인). dev.db는 시드 정리 후 백업으로 원복(SMOKE 0행·ai_chat 테이블 없음·맵 12건). 게이트: pytest 464·ruff 0·vitest 120·lint 0(1 pre-existing warning)·build 성공.
+- 최종 리뷰 반영: `fix(ai-chat): reload thread on retry + clear stale thread on switch` — 메시지 로딩 effect deps에 `messagesReload` 추가(Retry 버튼이 목록뿐 아니라 활성 스레드도 재시도), non-null 분기 진입 시 `setMessages([])`로 스테일 스레드 즉시 클리어(세션 전환 실패 시 이전 세션 스레드가 새 제목 아래 오귀속되던 버그 해소). 스모크에 체크 9(a/b/c) 추가 — 실패 경로에서 historyError+Retry 노출, 오귀속 없음(li 0개), Retry로 30개 복구. 16/16 PASS. 게이트 재확인(vitest 120·lint 0·build).
+- 드롭다운 삭제 버튼 호버 노출 — 대화 목록 항목의 삭제 버튼을 행 호버 시에만 표시하고, 활성 대화는 같은 슬롯에 체크 표시를 두었다가 호버 시 삭제 버튼으로 크로스페이드(duration-150). 스모크 체크 ⑦ 셀렉터를 행(.group) 기준 hover→클릭으로 보정. 스모크 16/16 재확인·vitest 120·lint 0·build.
+
+## 2026-07-08 — AI 챗 서버 저장 + 맵 단위 히스토리 설계 확정 (feat/ai-chat-server-history)
+- 브레인스토밍으로 결정 확정: 서버 DB 저장(정규화 2테이블 + `/ai/chat` write-through), 대화 귀속 사용자×맵(다른 맵 대화는 열람만+이동 버튼), 보존 개수+기간 혼합(app_settings 상한 3종), 히스토리 목록형 UX(4개 제한·LRU 제거), localStorage 마이그레이션 없음, ai_chat_logs 흡수·제거. 스펙: `docs/superpowers/specs/2026-07-08-ai-chat-server-history-design.md`.
+- 구현 계획 작성: 11개 태스크(백엔드 모델→write-through→조회 API→보존 상한→로그 제거→프론트 API→패널 코어→히스토리 확장→설정 패널→매뉴얼→e2e 스모크), TDD·커밋 단위 명세. 플랜: `docs/superpowers/plans/2026-07-08-ai-chat-server-history.md`.
+
+## 2026-07-08 — AI 계약 URL 갭 보완 + 증분편집(ops) 확장 (feat/ai-incremental-edit)
+- URL 갭: `AiNodeAttributes`에 url/url_label 추가(NodeIn 동일 제약), `ai_prompt` 직렬화에 `링크=` 노출 + 규칙 ⑦(재생성 시 에코 보존), `aiNodeToGraphNode` url 매핑 — graph 재생성 시 기존 노드 URL 소실 해소.
+- 증분편집 확장: ops 신규 액션 3종 — `disconnect`(연결 끊기)·`set_edge_label`(분기 라벨)·`set_desc`(노드 설명) + 사이 삽입 패턴(add+disconnect+connect) 프롬프트 예시. **set_attr 부분 갱신 시맨틱**(None=유지·""=지움 — 기존엔 생략 필드가 ""로 덮여 소실되던 잠재 버그 해소). 라우터 미지 참조 표면화에 신규 액션 반영. 매뉴얼 3종(번들·user ko/en) 증분 편집 능력 갱신.
+- 검증: pytest 451(신규 6)·ruff·vitest 134·lint 0·build. 브라우저 e2e 14/14(AI 응답 playwright 모킹 — 사이 삽입/disconnect/엣지 라벨/set_desc/url만 set_attr 후 기존 담당자 보존 실증/graph 재생성 url 에코/베이스라인 원복).
+
 ## 2026-07-08 — 임베드 체크: 차단 사이트 폴백 카드 즉시 표시 (feat/embed-check)
 - 보안 리뷰 반영: 프로브가 루프백·링크로컬(메타데이터)·비유니캐스트 대상 거부(사설 RFC1918은 기능 목적상 허용 유지, httpx2는 저장소 표준이라 교체 제안 기각). pytest +1(445).
 - `GET /api/embed-check`(신규 embed_probe·routers/embed) — 대상 URL의 X-Frame-Options/CSP frame-ancestors를 서버가 판독(httpx2, 4s, 리다이렉트 추종), 미리보기 패널이 차단 verdict 수신 시 크롬 오류 화면 대신 기존 폴백 카드를 즉시 표시(판정 불가는 기존 동작 유지). pytest +6(444)·vitest 134·build 클린, E2E(google→카드/wikipedia→iframe) PASS. SSRF 노트: 인증 전용·http(s)만·불리언만 노출.

@@ -719,10 +719,12 @@ AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 
 class AppSettingsOut(BaseModel):
-    """앱 런타임 설정 — AI 챗 Q&A DB 적재 플래그 + 기능 팁 목록."""
+    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한."""
 
-    ai_chat_log_enabled: bool
     ai_chat_tips: list[str]
+    ai_chat_max_sessions_per_map: int
+    ai_chat_max_messages_per_session: int
+    ai_chat_retention_days: int
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -730,8 +732,10 @@ class AppSettingsOut(BaseModel):
 class AppSettingsUpdate(BaseModel):
     """부분 갱신 — None 필드는 유지. 팁을 빈 목록으로 보내면 기본 팁으로 복원."""
 
-    ai_chat_log_enabled: bool | None = None
     ai_chat_tips: list[str] | None = Field(default=None, max_length=50)
+    ai_chat_max_sessions_per_map: int | None = Field(default=None, ge=1, le=200)
+    ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
+    ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
 
 
 class AiTipsOut(BaseModel):
@@ -749,20 +753,64 @@ class AiChatRequest(BaseModel):
     history: list[AiChatTurn] = Field(default_factory=list, max_length=20)
     # 사용할 모델 id — 없으면 서버 기본(settings.ai_model). 프론트가 /ai/models에서 선택
     model: str | None = None
+    # 대화 세션 — None이면 첫 메시지 시점에 서버가 새 세션 생성(지연 생성)
+    session_id: int | None = None
 
 
 class AiModelsOut(BaseModel):
     models: list[str]
 
 
-class AiNodeAttributes(BaseModel):
-    """노드 비즈니스 메타 (선택) — NodeIn과 동일 제약. AI 생성/제안에 실어 보냄 (Phase 2)."""
+class AiChatSessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    assignee: str = Field(default="", max_length=100)
-    department: str = Field(default="", max_length=100)
-    system: str = Field(default="", max_length=100)
-    duration: str = Field(default="", max_length=50)
-    color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
+    id: int
+    map_id: int
+    map_name: str
+    title: str
+    message_count: int
+    updated_at: datetime
+
+
+class AiChatSessionsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    sessions: list[AiChatSessionOut]  # updated_at desc
+
+
+class AiChatMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role: Literal["user", "assistant"]
+    content: str
+    kind: str | None = None
+    version_id: int | None = None
+    created_at: datetime
+
+
+class AiChatMessagesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    messages: list[AiChatMessageOut]  # 시간 오름차순(페이지 내)
+    has_more: bool  # before 커서로 더 오래된 기록 존재 여부
+
+
+class AiNodeAttributes(BaseModel):
+    """노드 비즈니스 메타 (선택) — NodeIn과 동일 제약. AI 생성/제안에 실어 보냄 (Phase 2).
+
+    부분 갱신 시맨틱(증분 편집): None(생략)=기존 값 유지, ""=지움, 값=설정.
+    graph 생성/ops add에서는 None을 빈값으로 취급한다(프론트 aiNodeToGraphNode).
+    """
+
+    assignee: str | None = Field(default=None, max_length=100)
+    department: str | None = Field(default=None, max_length=100)
+    system: str | None = Field(default=None, max_length=100)
+    duration: str | None = Field(default=None, max_length=50)
+    color: str | None = Field(default=None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
+    # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
+    url: str | None = Field(default=None, max_length=500)
+    url_label: str | None = Field(default=None, max_length=100)
 
 
 class AiNode(BaseModel):
@@ -791,7 +839,16 @@ class AiGroup(BaseModel):
     parent_key: str | None = Field(default=None, max_length=50)
 
 
-AiOpAction = Literal["add", "remove", "connect", "relabel", "set_attr"]
+AiOpAction = Literal[
+    "add",
+    "remove",
+    "connect",
+    "relabel",
+    "set_attr",
+    "disconnect",
+    "set_edge_label",
+    "set_desc",
+]
 
 
 class AiOp(BaseModel):
@@ -799,7 +856,8 @@ class AiOp(BaseModel):
 
     구조만 정의 — node_id 교차검증·실제 적용은 라우터/프론트(Phase 3). action별 사용 필드:
     add(node) · remove(node_id) · connect(source/target/label) · relabel(node_id/title)
-    · set_attr(node_id/attributes).
+    · set_attr(node_id/attributes, 부분 갱신) · disconnect(source/target)
+    · set_edge_label(source/target/label) · set_desc(node_id/description).
     """
 
     action: AiOpAction
@@ -807,9 +865,10 @@ class AiOp(BaseModel):
     node: AiNode | None = None
     source: str | None = None
     target: str | None = None
-    label: str | None = None
+    label: str | None = Field(default=None, max_length=200)
     title: str | None = None
     attributes: AiNodeAttributes | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class AiStep(BaseModel):
@@ -843,6 +902,8 @@ class AiProposal(BaseModel):
     ops: list[AiOp] = Field(default_factory=list)
     steps: list[AiStep] = Field(default_factory=list)
     findings: list[AiFinding] = Field(default_factory=list)
+    # 적재된 대화 세션 id — 라우터가 저장 후 세팅(AI 출력에는 없음)
+    session_id: int | None = None
 
     @model_validator(mode="after")
     def _check_graph_integrity(self) -> "AiProposal":
