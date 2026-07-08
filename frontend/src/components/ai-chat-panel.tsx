@@ -147,14 +147,17 @@ export function AiChatPanel({
     const el = scrollRef.current;
     const oldest = messages.find((message) => message.id > 0); // 낙관(음수 id) 제외
     if (!el || loadingOlder || !hasMore || activeSessionId === null || !oldest) return;
+    const targetSessionId = activeSessionId; // 응답 도착 시 세션 판별용 캡처 — send()와 같은 패턴
     prevScrollHeightRef.current = el.scrollHeight;
     setTipIndex(Math.floor(Math.random() * Math.max(1, tips.length || TIP_KEYS.length)));
     setLoadingOlder(true);
     void Promise.all([
-      getAiChatMessages(activeSessionId, oldest.id, CHAT_PAGE_SIZE),
+      getAiChatMessages(targetSessionId, oldest.id, CHAT_PAGE_SIZE),
       new Promise((resolve) => window.setTimeout(resolve, OLDER_LOAD_DELAY_MS)),
     ])
       .then(([result]) => {
+        // 지연(450ms) 중 세션 전환 — 다른 세션 스레드에 병합되지 않게 버린다
+        if (activeSessionIdRef.current !== targetSessionId) return;
         setMessages((prev) => [...result.messages.map(toChatMessage), ...prev]);
         setHasMore(result.has_more);
       })
@@ -195,6 +198,7 @@ export function AiChatPanel({
   // 활성 세션 메시지 로딩 — 최근 페이지부터. 새 대화(null)는 빈 스레드.
   useEffect(() => {
     if (activeSessionId === null) {
+      // 주의: React Compiler가 이 컴포넌트를 bail-out 중이라 set-state-in-effect 룰이 침묵 — 재컴파일되면 표면화됨(disable 주석 필요)
       setMessages([]); // reset thread for fresh chat
       setHasMore(false);
       return;
@@ -329,6 +333,7 @@ export function AiChatPanel({
   useEffect(() => {
     if (!autoplay || steps.length === 0) return;
     if (stepIndex >= steps.length - 1) {
+      // 주의: React Compiler가 이 컴포넌트를 bail-out 중이라 set-state-in-effect 룰이 침묵 — 재컴파일되면 표면화됨(disable 주석 필요)
       setAutoplay(false); // 마지막 스텝 도달 시 정지 — 기존 동작(세션 도입 전부터)
       return;
     }
@@ -362,13 +367,16 @@ export function AiChatPanel({
         setStepIndex(0);
         setAutoplay(false);
       }
-      if (targetSessionId === null && proposal.session_id != null) {
-        // 신규 세션 채택 — 목록 갱신. 활성 전환은 메시지 재로딩(서버 원장)을 데려온다
+      if (
+        targetSessionId === null &&
+        proposal.session_id != null &&
+        activeSessionIdRef.current === targetSessionId
+      ) {
+        // 신규 세션 채택 — 아직 새 대화를 보고 있을 때만(다른 대화로 이동했다면 끌어오지 않음).
+        // 활성 전환은 메시지 재로딩(서버 원장)을 데려온다
         setActiveSessionId(proposal.session_id);
-        refreshSessions();
-      } else {
-        refreshSessions(); // 목록의 updated_at·건수 갱신
       }
+      refreshSessions(); // 목록의 updated_at·건수 갱신
       if (proposal.kind === "graph") {
         onGraphProposal(proposal);
       } else if (proposal.kind === "ops") {
