@@ -8,6 +8,14 @@ from app.models import AppSetting
 
 AI_CHAT_LOG_KEY = "ai_chat_log_enabled"
 AI_CHAT_TIPS_KEY = "ai_chat_tips"
+AI_CHAT_MAX_SESSIONS_KEY = "ai_chat_max_sessions_per_map"
+AI_CHAT_MAX_MESSAGES_KEY = "ai_chat_max_messages_per_session"
+AI_CHAT_RETENTION_DAYS_KEY = "ai_chat_retention_days"
+
+# 보존 상한 기본값 — 사용자×맵당 세션 수 / 세션당 메시지 수 / 마지막 활동 후 보관 일수
+DEFAULT_AI_CHAT_MAX_SESSIONS = 20
+DEFAULT_AI_CHAT_MAX_MESSAGES = 200
+DEFAULT_AI_CHAT_RETENTION_DAYS = 180
 
 # 기본 기능 팁 — 이전 기록 로딩 중 노출되는 서비스 전반 FAQ. 설정 콘솔에서 교체 가능(비우면 기본 복원).
 DEFAULT_AI_CHAT_TIPS = [
@@ -63,3 +71,29 @@ async def set_app_setting(session: AsyncSession, key: str, value: str, user: str
         row.value = value
         row.updated_by = user
     return row
+
+
+async def _get_int_setting(session: AsyncSession, key: str, default: int) -> int:
+    """양의 정수 설정 — 행이 없거나 파싱 불가·0 이하면 기본값."""
+    row = await session.get(AppSetting, key)
+    if row is None:
+        return default
+    try:
+        value = int(row.value)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+async def get_ai_chat_max_sessions(session: AsyncSession) -> int:
+    return await _get_int_setting(session, AI_CHAT_MAX_SESSIONS_KEY, DEFAULT_AI_CHAT_MAX_SESSIONS)
+
+
+async def get_ai_chat_max_messages(session: AsyncSession) -> int:
+    return await _get_int_setting(session, AI_CHAT_MAX_MESSAGES_KEY, DEFAULT_AI_CHAT_MAX_MESSAGES)
+
+
+async def get_ai_chat_retention_days(session: AsyncSession) -> int:
+    return await _get_int_setting(
+        session, AI_CHAT_RETENTION_DAYS_KEY, DEFAULT_AI_CHAT_RETENTION_DAYS
+    )

@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.app_settings import get_ai_chat_retention_days
 from app.auth import get_current_user
+from app.chat_history import prune_expired_chat_sessions
 from app.db import get_session
 from app.models import AiChatMessage, AiChatSession, ProcessMap
 from app.schemas import AiChatMessageOut, AiChatMessagesOut, AiChatSessionOut, AiChatSessionsOut
@@ -29,6 +31,9 @@ async def list_chat_sessions(
     session: AsyncSession = Depends(get_session),
 ) -> AiChatSessionsOut:
     """내 세션 목록(최근 활동순) + 맵 이름·메시지 수 — 소프트삭제된 맵 제외."""
+    # 기간 만료 세션 기회적 정리 — 크론 없이 목록 조회 시점에 내 것만
+    await prune_expired_chat_sessions(session, user, await get_ai_chat_retention_days(session))
+    await session.commit()
     counts = (
         select(AiChatMessage.session_id, func.count().label("n"))
         .group_by(AiChatMessage.session_id)

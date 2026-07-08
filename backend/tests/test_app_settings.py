@@ -152,3 +152,32 @@ def test_ai_chat_not_logged_when_disabled(
     resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "no log"})
     assert resp.status_code == 200
     assert len(_read_logs(client)) == before
+
+
+def test_app_settings_retention_defaults_and_roundtrip(client: TestClient) -> None:
+    body = client.get("/api/admin/app-settings").json()
+    assert body["ai_chat_max_sessions_per_map"] == 20
+    assert body["ai_chat_max_messages_per_session"] == 200
+    assert body["ai_chat_retention_days"] == 180
+
+    body = client.put(
+        "/api/admin/app-settings",
+        json={"ai_chat_max_sessions_per_map": 5, "ai_chat_retention_days": 30},
+    ).json()
+    assert body["ai_chat_max_sessions_per_map"] == 5
+    assert body["ai_chat_max_messages_per_session"] == 200  # 부분 갱신 — 미전송 유지
+    assert body["ai_chat_retention_days"] == 30
+    # 범위 밖은 422 (pydantic Field 검증)
+    assert (
+        client.put("/api/admin/app-settings", json={"ai_chat_max_sessions_per_map": 0}).status_code
+        == 422
+    )
+    # 복원 — 공유 DB 오염 방지
+    client.put(
+        "/api/admin/app-settings",
+        json={
+            "ai_chat_max_sessions_per_map": 20,
+            "ai_chat_max_messages_per_session": 200,
+            "ai_chat_retention_days": 180,
+        },
+    )

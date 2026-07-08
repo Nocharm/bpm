@@ -7,8 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
-from app.app_settings import get_ai_chat_tips, is_ai_chat_log_enabled
-from app.chat_history import derive_chat_title
+from app.app_settings import (
+    get_ai_chat_max_messages,
+    get_ai_chat_max_sessions,
+    get_ai_chat_tips,
+    is_ai_chat_log_enabled,
+)
+from app.chat_history import (
+    derive_chat_title,
+    prune_chat_session_messages,
+    prune_map_chat_sessions,
+)
 from app.clock import now as now_kst
 from app.ai_prompt import build_messages
 from app.auth import get_current_user
@@ -203,6 +212,13 @@ async def ai_chat(
         )
     )
     chat_session.updated_at = now  # 메시지 추가만으로는 onupdate가 안 돎 — 명시 갱신
+    # 보존 정리 — 세션 내 메시지 상한·사용자×맵 세션 상한(설정 콘솔에서 런타임 조정)
+    await prune_chat_session_messages(
+        session, chat_session.id, await get_ai_chat_max_messages(session)
+    )
+    await prune_map_chat_sessions(
+        session, user, version.map_id, await get_ai_chat_max_sessions(session)
+    )
     await session.commit()
     proposal.session_id = chat_session.id
     # 설정 ON일 때 최종 질문/답변을 DB 적재 — 테스트 기간 검증용 (app_settings.ai_chat_log_enabled)

@@ -240,3 +240,57 @@ def test_delete_session_cascades_messages(
     assert client.delete(f"/api/ai/chat-sessions/{sid}").status_code == 204
     assert sid not in [s["id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"]]
     assert _session_messages(client, sid) == []
+
+
+def _put_limits(client: TestClient, **limits: int) -> None:
+    assert client.put("/api/admin/app-settings", json=limits).status_code == 200
+
+
+def test_prune_messages_over_cap(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _put_limits(client, ai_chat_max_messages_per_session=10)
+    try:
+        _, sid = _make_session_with_messages(client, monkeypatch, turns=7)  # 14개 적재 시도
+        msgs = _session_messages(client, sid)
+        assert len(msgs) == 10  # 오래된 4개 삭제
+        assert msgs[0]["content"] == "질문 3"  # 앞쪽(1~2턴)이 잘려나감
+    finally:
+        _put_limits(client, ai_chat_max_messages_per_session=200)
+
+
+def test_prune_sessions_over_cap_same_map(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _put_limits(client, ai_chat_max_sessions_per_map=2)
+    try:
+        version_id, sid1 = _make_session_with_messages(client, monkeypatch, turns=1)
+        sid2 = client.post(
+            f"/api/versions/{version_id}/ai/chat", json={"instruction": "세션2"}
+        ).json()["session_id"]
+        sid3 = client.post(
+            f"/api/versions/{version_id}/ai/chat", json={"instruction": "세션3"}
+        ).json()["session_id"]
+        ids = [s["id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"]]
+        assert sid1 not in ids  # 최오래(활동 기준) 퇴출
+        assert sid2 in ids and sid3 in ids
+        assert _session_messages(client, sid1) == []  # cascade
+    finally:
+        _put_limits(client, ai_chat_max_sessions_per_map=20)
+
+
+def test_retention_prunes_stale_sessions_on_list(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import timedelta
+
+    from app import clock
+
+    _, sid = _make_session_with_messages(client, monkeypatch, turns=1)
+    real_now = clock.now
+    # 목록 조회 시점의 '지금'을 200일 뒤로 — retention 180일 초과
+    monkeypatch.setattr(
+        "app.chat_history.now_kst", lambda: real_now() + timedelta(days=200)
+    )
+    ids = [s["id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"]]
+    assert sid not in ids
