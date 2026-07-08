@@ -201,6 +201,41 @@ check(
 await page.screenshot({ path: `${SHOT_DIR}/smoke-h-5-mocked-send.png` });
 await page.unroute("**/ai/chat");
 
+// ⑨ 메시지 로딩 실패 → 인라인 재시도(스레드 복구) + 세션 전환 시 오귀속 방지
+// SMOKE-second가 활성인 이 시점(체크7 삭제 전, 시드 살아있음)에 라우트를 끊고 SMOKE-paging으로 전환.
+await page.route("**/ai/chat-sessions/*/messages*", (route) => route.abort());
+await openDropdown();
+await page.locator('[data-id="ai-chat-list-item"]', { hasText: "SMOKE-paging" }).click();
+await page.waitForSelector('[data-id="ai-history-retry"]', { timeout: 4000 }).catch(() => undefined);
+const historyErrorVisible = await page.locator('[data-id="ai-history-error"]').isVisible().catch(() => false);
+const retryVisible = await page.locator('[data-id="ai-history-retry"]').isVisible().catch(() => false);
+check("9a historyError message + Retry button shown", historyErrorVisible && retryVisible,
+  `error=${historyErrorVisible} retry=${retryVisible}`);
+const threadCountOnFailure = await page.locator('[data-id="ai-thread"] li').count();
+check(
+  "9b no stale SMOKE-second thread under SMOKE-paging title (no misattribution)",
+  threadCountOnFailure === 0,
+  `liCount=${threadCountOnFailure}`,
+);
+await page.screenshot({ path: `${SHOT_DIR}/smoke-h-7-history-error.png` });
+await page.unroute("**/ai/chat-sessions/*/messages*");
+await page.locator('[data-id="ai-history-retry"]').click();
+await page.waitForFunction(
+  () =>
+    document.querySelectorAll('[data-id="ai-thread"] > li:not([data-id="ai-loading-older"])')
+      .length === 30,
+  { timeout: 4000 },
+).catch(() => undefined);
+const restoredCount = await countMessages();
+check("9c retry restores SMOKE-paging thread (30 messages)", restoredCount === 30, `count=${restoredCount}`);
+// route.abort()가 남긴 net::ERR_FAILED 콘솔 로그는 의도된 시뮬레이션 — 체크⑧(진짜 콘솔 에러 0)을 오염시키지 않게 비운다
+consoleErrors.length = 0;
+
+// 체크⑦(삭제→새 대화 폴백)이 SMOKE-second 활성을 전제하므로 원복
+await openDropdown();
+await page.locator('[data-id="ai-chat-list-item"]', { hasText: "SMOKE-second" }).click();
+await page.waitForTimeout(500);
+
 // ⑦ SMOKE-second 삭제 → ConfirmDialog → 확인 → 목록 제거 + 새 대화 폴백
 await openDropdown();
 await page

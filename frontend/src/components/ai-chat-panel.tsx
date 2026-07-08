@@ -121,6 +121,7 @@ export function AiChatPanel({
   const [allSessions, setAllSessions] = useState<AiChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [sessionsReload, setSessionsReload] = useState(0);
+  const [messagesReload, setMessagesReload] = useState(0); // 실패한 스레드 로딩 재시도 트리거 (Retry 버튼)
   const [listOpen, setListOpen] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false); // 드롭다운 "다른 맵 대화" 섹션 펼침
   const [deleteTarget, setDeleteTarget] = useState<AiChatSessionSummary | null>(null);
@@ -225,6 +226,10 @@ export function AiChatPanel({
       setHasMore(false);
       return;
     }
+    // 전환 직후 이전 세션 스레드가 새 제목 아래 남지 않게 즉시 비움 (로딩 실패 시 오귀속 방지)
+    // 주의: React Compiler가 이 컴포넌트를 bail-out 중이라 set-state-in-effect 룰이 침묵 — 재컴파일되면 표면화됨(disable 주석 필요)
+    setMessages([]);
+    setHasMore(false);
     let alive = true;
     void getAiChatMessages(activeSessionId, undefined, CHAT_PAGE_SIZE)
       .then((result) => {
@@ -246,7 +251,7 @@ export function AiChatPanel({
     return () => {
       alive = false;
     };
-  }, [activeSessionId]);
+  }, [activeSessionId, messagesReload]);
 
   const resetTransient = () => {
     setFindings([]);
@@ -603,12 +608,14 @@ export function AiChatPanel({
           <p className="mb-2 text-fine text-ink-tertiary">{t("ai.readOnly")}</p>
         )}
         {historyError && (
-          <div className="mb-2 flex items-center justify-between gap-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-secondary">
+          <div data-id="ai-history-error" className="mb-2 flex items-center justify-between gap-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-secondary">
             {t("ai.historyError")}
             <button
               type="button"
+              data-id="ai-history-retry"
               onClick={() => {
                 setHistoryError(false);
+                setMessagesReload((value) => value + 1);
                 refreshSessions();
               }}
               className="rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink hover:bg-surface"
