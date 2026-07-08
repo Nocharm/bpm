@@ -53,15 +53,20 @@ await page.waitForSelector(".react-flow__node", { timeout: 60000 });
 await page.waitForTimeout(800);
 await openPanel();
 
-// ① 대화 바 제목이 SMOKE 세션(최근 활동 자동 활성) — 세션 목록 비동기 로딩 후 활성 확정 대기
+// ① 대화 바 제목이 최근 세션 SMOKE-second — 목록 정렬(updated_at desc, id desc tie-break)상
+//    시드에서 s2가 결정적으로 최근. 세션 목록 비동기 로딩 후 활성 확정 대기.
 await page
   .waitForFunction(
-    () => document.querySelector('[data-id="ai-chat-list"]')?.textContent?.includes("SMOKE"),
+    () => document.querySelector('[data-id="ai-chat-list"]')?.textContent?.includes("SMOKE-second"),
     { timeout: 6000 },
   )
   .catch(() => undefined);
 const activeTitle = (await page.locator('[data-id="ai-chat-list"]').innerText()).replace(/\n/g, " ");
-check("1 active session is a SMOKE chat", activeTitle.includes("SMOKE"), activeTitle);
+check(
+  "1 most-recent session (SMOKE-second) auto-active",
+  activeTitle.includes("SMOKE-second"),
+  activeTitle,
+);
 
 // ② 드롭다운 — 현재 맵 2개(SMOKE-paging/SMOKE-second) + 다른 맵 토글 1건
 await openDropdown();
