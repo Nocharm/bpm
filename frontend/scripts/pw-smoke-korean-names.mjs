@@ -1,6 +1,8 @@
 // 한글이름 일괄 등록 스모크 — Employees 탭→모달→다운로드→임포트(신규/충돌 skip/overwrite)→테이블 반영.
 // 실행: frontend/ 에서 node scripts/pw-smoke-korean-names.mjs
 // 전제: 워크트리 backend(:8001)+frontend(:3000, BACKEND_URL=8001) 기동. playwright-core+시스템 Chrome.
+// 재실행 전제: 대상 유저 korean_name이 비어 있어야 ③(무충돌 1차 임포트) 전제가 성립 —
+//   sqlite3 backend/dev.db "UPDATE employees SET korean_name='';" 로 리셋 후 실행.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
