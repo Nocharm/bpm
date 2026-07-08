@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — 유저 한글이름 필드 + 일괄 등록 모달 설계 (worktree-ui-improvement)
+- AD 미제공 한글이름을 `Employee.korean_name`으로 추가하고 어드민 Employees 탭에서 JSON 임포트(skip/overwrite 충돌 확인·미보유 목록 다운로드)하는 설계 확정 — `docs/superpowers/specs/2026-07-09-user-korean-name-import-design.md`.
+
 ## 2026-07-07 — feat/url-viewer 머지 (main)
 - 머지 후속: 스모크가 초안 버전으로 전환 후 진행 — 상태 배너 기능이 게시본을 기본 열람으로 바꿔 스모크 전제가 깨진 것 보정.
 
