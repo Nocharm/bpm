@@ -251,8 +251,9 @@ Open the **AI assistant** from the editor top bar (when enabled).
 - **Edit incrementally** — ask for changes; existing layout and colors are preserved. Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions and links (URL). Review the preview, then **Add to map** or discard.
 - **Analyze** ("Find issues"), **summarize**, and **walk through** the flow step by step (prev / next / autoplay).
 - Ask **how-to questions** — answers are grounded in this manual.
-- **Multiple chats** — up to **4 chats** stay open. Switch from the chat-bar list (n/4 counter); start a new chat with the **+** in the window header. Opening a fifth chat asks to **close the oldest one** first. Titles are derived from the first question.
-- **History and times** — chats are stored in your browser and every message shows its time. Each chat keeps the latest 40 messages; the **progress bar** under the chat bar shows usage. Long chats load newest-first — scroll to the top to load earlier messages (feature tips show while loading).
+- **Multiple chats** — Chats are stored on the server and follow you across devices. Open past chats from the list in the chat bar, start a new one with the **+** icon in the window header, and delete chats from the list. Titles are derived from the first question.
+- **Chats from other maps** — The "Chats from other maps" section in the list shows conversations from other maps read-only; use "Open this map" to continue there.
+- **Storage & time** — Chats are stored per map with a timestamp on every message. Retention follows admin-configured caps (default: 20 chats per map, 200 messages per chat, 180 days since last activity); overflow is pruned oldest-first. Long chats load recent-first — scroll to the top to load earlier messages (feature tips show while loading).
 - **Input limit** — one message holds up to 2,000 characters. The **ring** at the right of the input toolbar shows what's left (caution at 75%, warning at 90%).
 - **Text size** — adjust chat text with **− T +** in the chat bar.
 - `Ctrl+Enter` sends your message. Read-only users can still use analysis, walkthrough, and how-to.
@@ -294,4 +295,4 @@ Open the **AI assistant** from the editor top bar (when enabled).
 
 ---
 
-*Business Process Map — User Manual · updated 2026-07-07*
+*Business Process Map — User Manual · updated 2026-07-09*

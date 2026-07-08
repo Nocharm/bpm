@@ -36,7 +36,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | --- | --- | --- |
 | **Notices** | Settings → Content | Create, edit, and delete announcements |
 | **Manual** | Settings → Content | Edit and publish the in-app manual (see section 11) |
-| **AI chat** | Settings → Content | Q&A DB logging toggle, chat loading-tips management (see section 12) |
+| **AI chat** | Settings → Content | Retention-cap settings, chat loading-tips management (see section 12) |
 | **Employees** | Settings → Directory | Org directory table, **Sync all from AD** |
 | **Permissions** | Settings → Permissions | Departments and Users tabs, sysadmin tags |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records) |
@@ -164,7 +164,15 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 **Settings → Content → AI chat** (sysadmin only). Changes apply immediately — no redeploy.
 
-- **Save Q&A to database**: when ON, every AI chat question/answer is stored in the `ai_chat_logs` table with time, user, version, and model (browse it in the table viewer). Keep it **ON during the test period** for quality review, then turn it off. Default is OFF.
+- **Chat storage**: AI chat conversations are always stored on the server (scoped to user + map; only the owner can view them) — this is not a toggle. They live in the `ai_chat_sessions` (chats) and `ai_chat_messages` (messages) tables, browsable in the table viewer.
+- **Retention caps**: admins tune the number of chats per map, messages per chat, and days kept since last activity. Overflow is pruned oldest-first.
+
+| Key | Default | Range |
+| --- | --- | --- |
+| `ai_chat_max_sessions_per_map` | 20 | 1–200 |
+| `ai_chat_max_messages_per_session` | 200 | 10–2000 |
+| `ai_chat_retention_days` | 180 | 7–3650 |
+
 - **Chat loading tips**: manage the feature tips shown while earlier messages load in chat. One tip per line (200 chars each, up to 50). **Save an empty list to restore the 20 defaults.**
 
 ---
@@ -184,4 +192,4 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-07-07*
+*Business Process Map — Administrator Manual · updated 2026-07-09*
