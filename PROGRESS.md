@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-08 — AI 챗 서버 저장 + 맵 단위 히스토리 설계 확정 (feat/ai-chat-server-history)
+- 브레인스토밍으로 결정 확정: 서버 DB 저장(정규화 2테이블 + `/ai/chat` write-through), 대화 귀속 사용자×맵(다른 맵 대화는 열람만+이동 버튼), 보존 개수+기간 혼합(app_settings 상한 3종), 히스토리 목록형 UX(4개 제한·LRU 제거), localStorage 마이그레이션 없음, ai_chat_logs 흡수·제거. 스펙: `docs/superpowers/specs/2026-07-08-ai-chat-server-history-design.md`.
+
 ## 2026-07-08 — AI 계약 URL 갭 보완 + 증분편집(ops) 확장 (feat/ai-incremental-edit)
 - URL 갭: `AiNodeAttributes`에 url/url_label 추가(NodeIn 동일 제약), `ai_prompt` 직렬화에 `링크=` 노출 + 규칙 ⑦(재생성 시 에코 보존), `aiNodeToGraphNode` url 매핑 — graph 재생성 시 기존 노드 URL 소실 해소.
 - 증분편집 확장: ops 신규 액션 3종 — `disconnect`(연결 끊기)·`set_edge_label`(분기 라벨)·`set_desc`(노드 설명) + 사이 삽입 패턴(add+disconnect+connect) 프롬프트 예시. **set_attr 부분 갱신 시맨틱**(None=유지·""=지움 — 기존엔 생략 필드가 ""로 덮여 소실되던 잠재 버그 해소). 라우터 미지 참조 표면화에 신규 액션 반영. 매뉴얼 3종(번들·user ko/en) 증분 편집 능력 갱신.
