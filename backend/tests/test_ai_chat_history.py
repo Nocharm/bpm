@@ -135,3 +135,108 @@ def test_chat_rejects_foreign_or_mismatched_session(
         json={"instruction": "다른 맵", "session_id": owned},
     )
     assert resp.status_code == 404
+
+
+def _make_session_with_messages(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, turns: int
+) -> tuple[int, int]:
+    """버전 하나 만들고 /ai/chat을 turns회 호출 — (version_id, session_id) 반환."""
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        ai_client, "call_ai", _fake_ai(json.dumps({"kind": "answer", "message": "ok"}))
+    )
+    version_id = _draft_version_checked_out(client)
+    session_id = None
+    for i in range(turns):
+        body = {"instruction": f"질문 {i + 1}"}
+        if session_id is not None:
+            body["session_id"] = session_id
+        session_id = client.post(
+            f"/api/versions/{version_id}/ai/chat", json=body
+        ).json()["session_id"]
+    assert session_id is not None
+    return version_id, session_id
+
+
+def test_list_sessions_scoped_and_with_map_info(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, sid_a = _make_session_with_messages(client, monkeypatch, turns=1)
+    _, sid_b = _make_session_with_messages(client, monkeypatch, turns=1)  # 다른 맵
+
+    body = client.get("/api/ai/chat-sessions").json()
+    ids = [s["id"] for s in body["sessions"]]
+    assert sid_a in ids and sid_b in ids
+    row = next(s for s in body["sessions"] if s["id"] == sid_a)
+    assert row["map_name"].startswith("ai map")
+    assert row["message_count"] == 2
+    assert row["title"] == "질문 1"
+
+    # map_id 필터 — 해당 맵 것만
+    map_id = row["map_id"]
+    filtered = client.get("/api/ai/chat-sessions", params={"map_id": map_id}).json()
+    assert all(s["map_id"] == map_id for s in filtered["sessions"])
+    assert sid_a in [s["id"] for s in filtered["sessions"]]
+    assert sid_b not in [s["id"] for s in filtered["sessions"]]
+
+    # 타 사용자 목록엔 안 보인다
+    other = client.get("/api/ai/chat-sessions", headers=OTHER_USER).json()
+    assert sid_a not in [s["id"] for s in other["sessions"]]
+
+
+def test_list_sessions_excludes_soft_deleted_map(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, sid = _make_session_with_messages(client, monkeypatch, turns=1)
+    map_id = next(
+        s["map_id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"] if s["id"] == sid
+    )
+    assert client.delete(f"/api/maps/{map_id}").status_code in (200, 204)  # 소프트 삭제
+    assert sid not in [s["id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"]]
+    client.post(f"/api/maps/{map_id}/restore")  # 공유 DB 원복
+
+
+def test_messages_paging_with_before_cursor(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, sid = _make_session_with_messages(client, monkeypatch, turns=4)  # 메시지 8개
+
+    first = client.get(f"/api/ai/chat-sessions/{sid}/messages", params={"limit": 3}).json()
+    assert len(first["messages"]) == 3 and first["has_more"] is True
+    # 시간 오름차순 — 페이지의 마지막이 가장 최근(assistant "ok")
+    assert first["messages"][-1]["role"] == "assistant"
+    ids = [m["id"] for m in first["messages"]]
+    assert ids == sorted(ids)
+
+    second = client.get(
+        f"/api/ai/chat-sessions/{sid}/messages",
+        params={"limit": 3, "before": first["messages"][0]["id"]},
+    ).json()
+    assert len(second["messages"]) == 3 and second["has_more"] is True
+    assert max(m["id"] for m in second["messages"]) < min(ids)
+
+    third = client.get(
+        f"/api/ai/chat-sessions/{sid}/messages",
+        params={"limit": 3, "before": second["messages"][0]["id"]},
+    ).json()
+    assert len(third["messages"]) == 2 and third["has_more"] is False
+
+
+def test_messages_and_delete_are_owner_only(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, sid = _make_session_with_messages(client, monkeypatch, turns=1)
+    assert (
+        client.get(f"/api/ai/chat-sessions/{sid}/messages", headers=OTHER_USER).status_code == 404
+    )
+    assert client.delete(f"/api/ai/chat-sessions/{sid}", headers=OTHER_USER).status_code == 404
+    assert client.get("/api/ai/chat-sessions/999999/messages").status_code == 404
+
+
+def test_delete_session_cascades_messages(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, sid = _make_session_with_messages(client, monkeypatch, turns=2)
+    assert client.delete(f"/api/ai/chat-sessions/{sid}").status_code == 204
+    assert sid not in [s["id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"]]
+    assert _session_messages(client, sid) == []
