@@ -646,6 +646,19 @@ class EmployeeOut(BaseModel):
     korean_name: str
 
 
+class KoreanNamesImportIn(BaseModel):
+    """한글이름 일괄 등록 — mode: skip(기존 값 보유 유저 건너뜀) | overwrite(덮어씀)."""
+
+    mode: Literal["skip", "overwrite"]
+    entries: dict[str, str]
+
+
+class KoreanNamesImportOut(BaseModel):
+    updated: int
+    skipped: int
+    unknown: list[str]
+
+
 class SyncSummaryOut(BaseModel):
     scanned: int
     upserted: int
