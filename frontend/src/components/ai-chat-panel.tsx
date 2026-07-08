@@ -436,7 +436,8 @@ export function AiChatPanel({
           >
             {models.map((name) => (
               <option key={name} value={name}>
-                {name}
+                {/* 다중 엔드포인트 id "이름::모델"은 "이름 / 모델"로 표시 — 전송 값은 원본 유지 */}
+                {name.replace("::", " / ")}
               </option>
             ))}
           </select>
