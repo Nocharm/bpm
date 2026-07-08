@@ -643,6 +643,7 @@ class EmployeeOut(BaseModel):
     source: str
     role: str
     department: str
+    korean_name: str
 
 
 class SyncSummaryOut(BaseModel):
