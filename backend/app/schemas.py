@@ -749,10 +749,39 @@ class AiChatRequest(BaseModel):
     history: list[AiChatTurn] = Field(default_factory=list, max_length=20)
     # 사용할 모델 id — 없으면 서버 기본(settings.ai_model). 프론트가 /ai/models에서 선택
     model: str | None = None
+    # 대화 세션 — None이면 첫 메시지 시점에 서버가 새 세션 생성(지연 생성)
+    session_id: int | None = None
 
 
 class AiModelsOut(BaseModel):
     models: list[str]
+
+
+class AiChatSessionOut(BaseModel):
+    id: int
+    map_id: int
+    map_name: str
+    title: str
+    message_count: int
+    updated_at: datetime
+
+
+class AiChatSessionsOut(BaseModel):
+    sessions: list[AiChatSessionOut]  # updated_at desc
+
+
+class AiChatMessageOut(BaseModel):
+    id: int
+    role: Literal["user", "assistant"]
+    content: str
+    kind: str | None = None
+    version_id: int | None = None
+    created_at: datetime
+
+
+class AiChatMessagesOut(BaseModel):
+    messages: list[AiChatMessageOut]  # 시간 오름차순(페이지 내)
+    has_more: bool  # before 커서로 더 오래된 기록 존재 여부
 
 
 class AiNodeAttributes(BaseModel):
@@ -861,6 +890,8 @@ class AiProposal(BaseModel):
     ops: list[AiOp] = Field(default_factory=list)
     steps: list[AiStep] = Field(default_factory=list)
     findings: list[AiFinding] = Field(default_factory=list)
+    # 적재된 대화 세션 id — 라우터가 저장 후 세팅(AI 출력에는 없음)
+    session_id: int | None = None
 
     @model_validator(mode="after")
     def _check_graph_integrity(self) -> "AiProposal":
