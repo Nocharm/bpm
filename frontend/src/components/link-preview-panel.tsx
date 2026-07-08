@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { checkEmbeddable } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { isSafePreviewUrl } from "@/lib/url";
 
@@ -34,6 +35,8 @@ export function LinkPreviewPanel({
   const { t } = useI18n();
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<LoadStatus>(null);
+  // 서버 임베드 체크 판정 — 차단(false) verdict가 온 key만 기록(크롬 오류 화면 대신 폴백 카드)
+  const [blockedKey, setBlockedKey] = useState<string | null>(null);
 
   // http(s) + 자기 오리진 차단만 로드 — 액션 바와 같은 가드(isSafePreviewUrl, 샌드박스 탈출 방지)
   const validUrl = url !== null && isSafePreviewUrl(url) ? url : null;
@@ -41,7 +44,10 @@ export function LinkPreviewPanel({
   const currentKey = `${validUrl ?? ""}#${reloadKey}`;
   // 로딩/실패는 status↔currentKey 비교로 파생 — effect 내 동기 setState 금지(react-hooks/set-state-in-effect)
   const loaded = status?.key === currentKey && status.state === "loaded";
-  const failed = status?.key === currentKey && status.state === "failed";
+  // 서버 판정 차단도 폴백 카드 경로로 — Chrome은 차단 로드에도 onLoad를 쏴 클라이언트 단독 감지 불가
+  const failed =
+    (status?.key === currentKey && status.state === "failed") ||
+    blockedKey === currentKey;
   const loading = open && !loaded && !failed;
 
   // 슬라이드 아웃 애니메이션 동안 주소 줄 유지 — 렌더 중 상태 조정(effect 아님).
@@ -61,6 +67,24 @@ export function LinkPreviewPanel({
     }, LOAD_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [open, currentKey]);
+
+  // 서버 임베드 체크 — iframe 로드와 병행, 차단 사이트는 폴백 카드를 즉시 표시 (embed-check design 2026-07-08).
+  // 판정 실패(null/네트워크 오류)는 무해 — 기존 onLoad+타임아웃 동작 유지.
+  useEffect(() => {
+    if (!open || validUrl === null) return;
+    let active = true;
+    const key = currentKey;
+    checkEmbeddable(validUrl)
+      .then((verdict) => {
+        if (active && verdict.embeddable === false) setBlockedKey(key);
+      })
+      .catch(() => {
+        // 체크 엔드포인트 실패 — 기능 저하 없이 기존 경로로
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, validUrl, currentKey]);
 
   // Esc 닫기 — 열려 있는 동안만 구독
   useEffect(() => {
