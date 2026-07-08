@@ -26,43 +26,28 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
 import {
   aiChat,
+  getAiChatMessages,
+  getAiChatSessions,
   getAiModels,
   getAiTips,
+  type AiChatSessionSummary,
   type AiChatTurn,
   type AiFinding,
   type AiProposal,
   type AiStep,
 } from "@/lib/api";
-import {
-  MAX_CHAT_SESSIONS,
-  SESSION_MESSAGE_LIMIT,
-  createChatMessage,
-  createChatSession,
-  deriveSessionTitle,
-  findOldestSession,
-  parseChatStore,
-  serializeChatStore,
-  type ChatMessage,
-  type ChatSession,
-} from "@/lib/chat-sessions";
+import { createLocalMessage, toChatMessage, type ChatMessage } from "@/lib/chat-sessions";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
-
-// 대화 영속 — 패널을 닫으면 언마운트되어 state가 사라지므로 버전별 localStorage에 저장/복원.
-// 포맷은 chat-sessions.ts의 다중 세션 스토어(구 단일 배열 포맷은 파싱 시 자동 이행).
-const HISTORY_KEY_PREFIX = "bpm.aiChat.v";
-
-const EMPTY_MESSAGES: ChatMessage[] = []; // 파생 messages의 안정 identity — 렌더마다 새 배열 방지
 
 const MAX_INSTRUCTION_CHARS = 2000; // 백엔드 AiChatRequest.instruction max_length와 동일
 const RING_CAUTION = 0.75; // 입력 사용률 주의 임계
 const RING_WARNING = 0.9; // 입력 사용률 경고 임계
-const CHAT_CHUNK_SIZE = 12; // 세션 전환 시 최근부터 로딩하는 청크 크기
-const OLDER_LOAD_DELAY_MS = 450; // 이전 기록 로딩 애니메이션(팁 노출) 시간
+const CHAT_PAGE_SIZE = 30; // 서버 커서 페이징 단위 — 최초/이전 기록 로딩 공통
+const OLDER_LOAD_DELAY_MS = 450; // 이전 기록 로딩 애니메이션(팁 노출) 최소 시간
 
 // 이전 기록 로딩 중 노출하는 기능 팁 — 서버(설정 콘솔 관리, 기본 20종) 조회 실패 시 i18n 폴백 5종
 const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
@@ -79,6 +64,7 @@ function formatMessageTime(at: number): string {
 }
 
 interface AiChatPanelProps {
+  mapId: number;
   versionId: number;
   aiEnabled: boolean;
   canEdit: boolean;
@@ -105,6 +91,7 @@ const QUICK_CHIPS = [
 ] as const;
 
 export function AiChatPanel({
+  mapId,
   versionId,
   aiEnabled,
   canEdit,
@@ -121,14 +108,16 @@ export function AiChatPanel({
   onRegisterNewChat,
 }: AiChatPanelProps) {
   const { t } = useI18n();
-  // 다중 대화 — 세션 목록(최대 MAX_CHAT_SESSIONS)과 활성 세션. 메시지는 활성 세션에서 파생.
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [activeId, setActiveId] = useState("");
-  const [listOpen, setListOpen] = useState(false); // 이전 대화 드롭다운
-  const [limitConfirm, setLimitConfirm] = useState(false); // 5번째 대화 시 최오래 세션 닫기 확인
-  // 청킹 로딩 — 최근 visibleCount개만 렌더, 스크롤 상단 도달 시 이전 청크 로딩(애니메이션+팁)
-  const [visibleCount, setVisibleCount] = useState(CHAT_CHUNK_SIZE);
+  // 서버 세션 히스토리 — 전체 목록(내 것 전부, 맵 정보 포함)과 활성 세션. null=새 대화(서버 행 없음, 첫 전송 시 생성)
+  const [allSessions, setAllSessions] = useState<AiChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+  const [sessionsReload, setSessionsReload] = useState(0);
+  const [listOpen, setListOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [historyError, setHistoryError] = useState(false); // 목록/메시지 로딩 실패 — 인라인 재시도
+  const initializedRef = useRef(false); // 최초 목록 로딩 시 1회만 최근 세션 자동 활성화
   const [tips, setTips] = useState<string[]>([]); // 서버 관리 기능 팁 — 빈 배열이면 i18n 폴백
   const [tipIndex, setTipIndex] = useState(0);
   const prevScrollHeightRef = useRef<number | null>(null);
@@ -144,31 +133,33 @@ export function AiChatPanel({
   // 스레드가 하단에서 떨어져 있으면 "맨 아래로" 버튼 노출.
   const [showToBottom, setShowToBottom] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // 저장 가드 — 하이드레이션 완료된 버전에서만 저장(버전 전환 직후 이전 세션이 새 키에 쓰이는 것 방지)
-  const hydratedVersionRef = useRef<number | null>(null);
   // 응답 도착 시 활성 세션 판별용 미러 — 전송 후 세션을 전환해도 findings/steps가 남의 세션에 뜨지 않게.
-  const activeIdRef = useRef(activeId);
+  const activeSessionIdRef = useRef(activeSessionId);
   useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
-  const activeSession = sessions.find((session) => session.id === activeId);
-  const messages = activeSession?.messages ?? EMPTY_MESSAGES;
-  // 최근 visibleCount개만 렌더 — 이전 기록은 스크롤 상단 도달 시 청크 단위로 추가 로딩
-  const hiddenCount = Math.max(0, messages.length - visibleCount);
-  const visibleMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages;
+  const mapSessions = allSessions.filter((item) => item.map_id === mapId);
+  const activeMeta = allSessions.find((item) => item.id === activeSessionId) ?? null;
 
-  // 이전 청크 로딩 시작 — 스피너+기능 팁을 잠깐 보여준 뒤 이전 기록을 붙인다
+  // 이전 페이지 로딩 — 스피너+기능 팁을 최소 시간 보여주며 서버에서 더 오래된 기록을 붙인다
   const beginLoadOlder = () => {
     const el = scrollRef.current;
-    if (!el || loadingOlder || hiddenCount === 0) return;
+    const oldest = messages.find((message) => message.id > 0); // 낙관(음수 id) 제외
+    if (!el || loadingOlder || !hasMore || activeSessionId === null || !oldest) return;
     prevScrollHeightRef.current = el.scrollHeight;
     setTipIndex(Math.floor(Math.random() * Math.max(1, tips.length || TIP_KEYS.length)));
     setLoadingOlder(true);
-    window.setTimeout(() => {
-      setVisibleCount((count) => count + CHAT_CHUNK_SIZE);
-      setLoadingOlder(false);
-    }, OLDER_LOAD_DELAY_MS);
+    void Promise.all([
+      getAiChatMessages(activeSessionId, oldest.id, CHAT_PAGE_SIZE),
+      new Promise((resolve) => window.setTimeout(resolve, OLDER_LOAD_DELAY_MS)),
+    ])
+      .then(([result]) => {
+        setMessages((prev) => [...result.messages.map(toChatMessage), ...prev]);
+        setHasMore(result.has_more);
+      })
+      .catch(() => onToast?.(t("ai.historyError")))
+      .finally(() => setLoadingOlder(false));
   };
 
   // 이전 청크가 붙은 뒤 스크롤 위치 보존 — 늘어난 높이만큼 내려서 보던 지점 유지
@@ -177,83 +168,87 @@ export function AiChatPanel({
     if (!el || prevScrollHeightRef.current === null) return;
     el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
     prevScrollHeightRef.current = null;
-  }, [visibleCount]);
+  }, [messages]);
 
-  // 저장된 대화 복원 — 마운트·버전 변경 시 1회 (SSR 초기 렌더와 일치시키기 위해 effect에서 복원)
+  // 세션 목록 로딩 — 마운트·갱신 트리거 시. 최초 1회만 현재 맵의 최근 세션을 자동 활성화.
   useEffect(() => {
-    const raw = window.localStorage.getItem(`${HISTORY_KEY_PREFIX}${versionId}`);
-    let stored = parseChatStore(raw, Date.now());
-    if (!stored) {
-      const fresh = createChatSession(Date.now());
-      stored = { sessions: [fresh], activeId: fresh.id };
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSessions(stored.sessions); // intentional: one-time hydration restore from localStorage
-    setActiveId(stored.activeId);
-    setVisibleCount(CHAT_CHUNK_SIZE); // 최근 청크부터 로딩
-    hydratedVersionRef.current = versionId;
-  }, [versionId]);
+    let alive = true;
+    void getAiChatSessions()
+      .then((result) => {
+        if (!alive) return;
+        setAllSessions(result.sessions); // server fetch hydration (async — no set-state-in-effect)
+        setHistoryError(false);
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+          const recent = result.sessions.find((item) => item.map_id === mapId);
+          setActiveSessionId(recent ? recent.id : null);
+        }
+      })
+      .catch(() => {
+        if (alive) setHistoryError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [mapId, sessionsReload]);
 
-  // 대화 저장 — 세션/활성이 바뀔 때마다. 전부 빈 대화면 키 삭제(구 clearChat 동작 유지).
+  // 활성 세션 메시지 로딩 — 최근 페이지부터. 새 대화(null)는 빈 스레드.
   useEffect(() => {
-    if (hydratedVersionRef.current !== versionId || sessions.length === 0) return;
-    const key = `${HISTORY_KEY_PREFIX}${versionId}`;
-    if (sessions.every((session) => session.messages.length === 0)) {
-      window.localStorage.removeItem(key);
+    if (activeSessionId === null) {
+      setMessages([]); // reset thread for fresh chat
+      setHasMore(false);
       return;
     }
-    window.localStorage.setItem(key, serializeChatStore({ sessions, activeId }));
-  }, [sessions, activeId, versionId]);
+    let alive = true;
+    void getAiChatMessages(activeSessionId, undefined, CHAT_PAGE_SIZE)
+      .then((result) => {
+        if (!alive) return;
+        setMessages(result.messages.map(toChatMessage)); // server fetch hydration (async — no set-state-in-effect)
+        setHasMore(result.has_more);
+        setHistoryError(false);
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        if (err instanceof Error && err.message.includes(" 404")) {
+          // 정리(보존 상한 등)로 사라진 세션 — 목록 새로고침 후 새 대화 폴백
+          setActiveSessionId(null);
+          setSessionsReload((value) => value + 1);
+        } else {
+          setHistoryError(true);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeSessionId]);
 
   const resetTransient = () => {
     setFindings([]);
     setSteps([]);
     setStepIndex(0);
     setAutoplay(false);
-    setVisibleCount(CHAT_CHUNK_SIZE); // 세션 전환 시 최근 청크부터 다시
     setLoadingOlder(false);
   };
 
-  const switchSession = (sessionId: string) => {
-    setListOpen(false);
-    if (sessionId === activeId) return;
-    setActiveId(sessionId);
-    resetTransient();
-  };
+  const refreshSessions = () => setSessionsReload((value) => value + 1);
 
-  const openFreshSession = (base: ChatSession[]) => {
-    const fresh = createChatSession(Date.now());
-    setSessions([...base, fresh]);
-    setActiveId(fresh.id);
+  const switchSession = (sessionId: number | null) => {
+    setListOpen(false);
+    if (sessionId === activeSessionId) return;
+    setActiveSessionId(sessionId);
     resetTransient();
   };
 
   const startNewChat = () => {
     setListOpen(false);
-    // 이미 빈 대화가 있으면 재사용 — 빈 세션이 한도만 차지하는 것 방지
-    const empty = sessions.find((session) => session.messages.length === 0);
-    if (empty) {
-      switchSession(empty.id);
-      return;
-    }
-    if (sessions.length >= MAX_CHAT_SESSIONS) {
-      setLimitConfirm(true); // 최대 개수 안내 + 최오래 대화 닫기 확인
-      return;
-    }
-    openFreshSession(sessions);
+    if (activeSessionId === null) return; // 이미 새 대화 — 빈 상태 재사용
+    switchSession(null);
   };
 
   // 새 대화 트리거를 창 헤더(page.tsx) 버튼에 노출 — 최신 클로저 유지 위해 매 렌더 재등록
   useEffect(() => {
     onRegisterNewChat?.(startNewChat);
   });
-
-  // 확인 시 가장 오래전에 연 대화를 닫고 새 대화 시작
-  const confirmCloseOldest = () => {
-    setLimitConfirm(false);
-    const oldest = findOldestSession(sessions);
-    openFreshSession(oldest ? sessions.filter((session) => session.id !== oldest.id) : sessions);
-  };
 
   // 입력 내용에 따라 textarea 높이 자동 확장(최대 max-h-32 = 128px)
   useEffect(() => {
@@ -334,49 +329,45 @@ export function AiChatPanel({
   useEffect(() => {
     if (!autoplay || steps.length === 0) return;
     if (stepIndex >= steps.length - 1) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAutoplay(false); // 마지막 스텝 도달 시 정지 — 기존 동작(세션 도입 전부터), 린트 표면화만 새로움
+      setAutoplay(false); // 마지막 스텝 도달 시 정지 — 기존 동작(세션 도입 전부터)
       return;
     }
     const timer = setTimeout(() => setStepIndex((index) => index + 1), 2500);
     return () => clearTimeout(timer);
   }, [autoplay, stepIndex, steps.length]);
 
-  // 지정 세션에 메시지 추가 — 응답 대기 중 세션을 전환해도 원래 대화에 붙는다.
-  const appendToSession = (sessionId: string, message: ChatMessage) => {
-    setSessions((prev) =>
-      prev.map((session) =>
-        session.id === sessionId
-          ? { ...session, messages: [...session.messages, message] }
-          : session,
-      ),
-    );
-  };
-
   const send = async (override?: string) => {
     const instruction = (override ?? input).trim();
     if (!instruction || busy || !aiEnabled) return;
     if (override === undefined) setInput("");
     setBusy(true);
-    const targetId = activeId;
-    const userMessage = createChatMessage("user", instruction);
+    const targetSessionId = activeSessionId;
+    const userMessage = createLocalMessage("user", instruction);
     const nextMessages: ChatMessage[] = [...messages, userMessage];
-    appendToSession(targetId, userMessage);
+    setMessages(nextMessages);
     // 최근 6턴만 history로 전송
     const history: AiChatTurn[] = nextMessages.slice(-6).map((message) => ({
       role: message.role,
       content: message.content,
     }));
     try {
-      const proposal = await aiChat(versionId, instruction, history, model || null);
+      const proposal = await aiChat(versionId, instruction, history, model || null, targetSessionId);
       // graph/ops/answer 활성 — 빈 message(핸들러 없는 kind)는 미지원 안내로 폴백 (규칙 ③b)
       const content = proposal.message || t("ai.unsupportedKind");
-      appendToSession(targetId, createChatMessage("assistant", content));
-      if (activeIdRef.current === targetId) {
+      // 응답 도착 시점에도 같은 세션을 보고 있을 때만 낙관 append — 전환했다면 서버 재로딩이 원장
+      if (activeSessionIdRef.current === targetSessionId) {
+        setMessages((prev) => [...prev, createLocalMessage("assistant", content)]);
         setFindings(proposal.kind === "analysis" ? proposal.findings : []);
         setSteps(proposal.kind === "walkthrough" ? proposal.steps : []);
         setStepIndex(0);
         setAutoplay(false);
+      }
+      if (targetSessionId === null && proposal.session_id != null) {
+        // 신규 세션 채택 — 목록 갱신. 활성 전환은 메시지 재로딩(서버 원장)을 데려온다
+        setActiveSessionId(proposal.session_id);
+        refreshSessions();
+      } else {
+        refreshSessions(); // 목록의 updated_at·건수 갱신
       }
       if (proposal.kind === "graph") {
         onGraphProposal(proposal);
@@ -384,10 +375,13 @@ export function AiChatPanel({
         onOpsProposal(proposal);
       }
     } catch (err) {
-      appendToSession(
-        targetId,
-        createChatMessage("assistant", err instanceof Error ? err.message : t("ai.error")),
-      );
+      if (activeSessionIdRef.current === targetSessionId) {
+        // 서버 미저장 에러 표시 — 새로고침하면 사라지는 게 의도
+        setMessages((prev) => [
+          ...prev,
+          createLocalMessage("assistant", err instanceof Error ? err.message : t("ai.error")),
+        ]);
+      }
     } finally {
       setBusy(false);
     }
@@ -412,7 +406,7 @@ export function AiChatPanel({
           </select>
         </div>
       )}
-      {/* 대화 전환 바 — 이전 대화 열기(드롭다운) + 새 대화. 동시 대화는 최대 MAX_CHAT_SESSIONS개. */}
+      {/* 대화 전환 바 — 현재 맵의 서버 세션 드롭다운 + 새 대화(지연 생성). */}
       <div className="relative flex items-center gap-1 border-b border-hairline px-2 py-1.5">
         <button
           type="button"
@@ -422,12 +416,7 @@ export function AiChatPanel({
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm px-1.5 py-1 text-fine text-ink-secondary hover:bg-surface-alt hover:text-ink"
         >
           <History size={14} strokeWidth={1.5} className="shrink-0" />
-          <span className="truncate">
-            {(activeSession && deriveSessionTitle(activeSession)) || t("ai.clearChat")}
-          </span>
-          <span className="shrink-0 rounded-full bg-surface-alt px-1.5 text-fine tabular-nums text-ink-tertiary">
-            {sessions.length}/{MAX_CHAT_SESSIONS}
-          </span>
+          <span className="truncate">{activeMeta?.title || t("ai.clearChat")}</span>
           <ChevronDown size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         </button>
         {/* 폰트 상대 배율 −T＋ — 창 헤더에서 이동(새 대화 버튼과 자리 교환) */}
@@ -465,23 +454,41 @@ export function AiChatPanel({
             <div className="fixed inset-0 z-20" onClick={() => setListOpen(false)} />
             <div
               data-id="ai-chat-list-menu"
-              className="absolute left-2 top-full z-30 mt-1 flex w-64 flex-col rounded-sm border border-hairline bg-surface p-1 shadow-lg"
+              className="absolute left-2 top-full z-30 mt-1 flex max-h-80 w-72 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface p-1 shadow-lg"
             >
-              {[...sessions].reverse().map((session) => (
+              <button
+                type="button"
+                data-id="ai-chat-new"
+                onClick={startNewChat}
+                className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-fine text-ink-secondary hover:bg-surface-alt"
+              >
+                <Plus size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                <span className="min-w-0 flex-1 truncate text-left">{t("ai.clearChat")}</span>
+                {activeSessionId === null && (
+                  <Check size={13} strokeWidth={1.7} className="shrink-0 text-accent" />
+                )}
+              </button>
+              {mapSessions.length === 0 && (
+                <span className="px-2 py-1.5 text-fine text-ink-tertiary">{t("ai.noChats")}</span>
+              )}
+              {mapSessions.map((item) => (
                 <button
-                  key={session.id}
+                  key={item.id}
                   type="button"
                   data-id="ai-chat-list-item"
-                  onClick={() => switchSession(session.id)}
+                  onClick={() => switchSession(item.id)}
                   className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-fine hover:bg-surface-alt ${
-                    session.id === activeId ? "text-ink" : "text-ink-secondary"
+                    item.id === activeSessionId ? "text-ink" : "text-ink-secondary"
                   }`}
                 >
                   <MessageSquare size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                   <span className="min-w-0 flex-1 truncate text-left">
-                    {deriveSessionTitle(session) || t("ai.clearChat")}
+                    {item.title || t("ai.clearChat")}
                   </span>
-                  {session.id === activeId && (
+                  <span className="shrink-0 text-[10px] tabular-nums text-ink-tertiary">
+                    {formatKstShort(item.updated_at)}
+                  </span>
+                  {item.id === activeSessionId && (
                     <Check size={13} strokeWidth={1.7} className="shrink-0 text-accent" />
                   )}
                 </button>
@@ -489,20 +496,6 @@ export function AiChatPanel({
             </div>
           </>
         )}
-      </div>
-      {/* 세션 저장 용량 사용률 — localStorage 세션당 상한(SESSION_MESSAGE_LIMIT) 대비 진행바 */}
-      <div
-        data-id="ai-session-usage"
-        title={t("ai.sessionUsage", { used: messages.length, max: SESSION_MESSAGE_LIMIT })}
-        className="h-[3px] w-full shrink-0 bg-surface-alt"
-      >
-        <div
-          className="h-full transition-[width] duration-350"
-          style={{
-            width: `${Math.min(100, (messages.length / SESSION_MESSAGE_LIMIT) * 100)}%`,
-            background: getUsageColor(messages.length / SESSION_MESSAGE_LIMIT),
-          }}
-        />
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col">
       {/* 헤더 경계 근처 페이드 — 스크롤 시 내용이 선에서 끊기지 않고 흐려지는 효과 */}
@@ -527,6 +520,21 @@ export function AiChatPanel({
         {aiEnabled && !canEdit && (
           <p className="mb-2 text-fine text-ink-tertiary">{t("ai.readOnly")}</p>
         )}
+        {historyError && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-sm bg-surface-alt p-2 text-fine text-ink-secondary">
+            {t("ai.historyError")}
+            <button
+              type="button"
+              onClick={() => {
+                setHistoryError(false);
+                refreshSessions();
+              }}
+              className="rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink hover:bg-surface"
+            >
+              {t("ai.retry")}
+            </button>
+          </div>
+        )}
         <ul data-id="ai-thread" className="flex flex-col gap-3">
           {/* 이전 기록 로딩 — 스피너 + 기능 팁 (스크롤 상단 도달 시) */}
           {loadingOlder && (
@@ -543,23 +551,23 @@ export function AiChatPanel({
               </span>
             </li>
           )}
-          {visibleMessages.map((message, index) =>
+          {messages.map((message) =>
             message.role === "user" ? (
               <li
-                key={`${message.role}-${hiddenCount + index}`}
+                key={message.id}
                 className="flex max-w-[80%] flex-col items-end gap-0.5 self-end"
               >
                 <span className="whitespace-pre-wrap rounded-md rounded-br-sm bg-accent px-3 py-2 text-caption text-on-accent">
                   {message.content}
                 </span>
-                {message.at !== undefined && (
+                {message.at !== null && (
                   <span className="text-[10px] text-ink-tertiary">
                     {formatMessageTime(message.at)}
                   </span>
                 )}
               </li>
             ) : (
-              <li key={`${message.role}-${hiddenCount + index}`} className="flex items-start gap-2">
+              <li key={message.id} className="flex items-start gap-2">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
                   <Sparkles size={12} strokeWidth={1.5} />
                 </span>
@@ -569,7 +577,7 @@ export function AiChatPanel({
                     className="min-w-0"
                     onCopy={() => onToast?.(t("ai.copied"))}
                   />
-                  {message.at !== undefined && (
+                  {message.at !== null && (
                     <span className="text-[10px] text-ink-tertiary">
                       {formatMessageTime(message.at)}
                     </span>
@@ -907,31 +915,6 @@ export function AiChatPanel({
           </span>
         </div>
       </div>
-      {/* 대화 한도 확인 — 최대 개수 안내 + 가장 오래전에 연 대화를 닫고 새 대화 시작 */}
-      {limitConfirm && (
-        <ConfirmDialog
-          icon={<History size={28} strokeWidth={1.5} />}
-          title={t("ai.limitTitle")}
-          message={t("ai.limitMessage", { max: MAX_CHAT_SESSIONS })}
-          lines={(() => {
-            const oldest = findOldestSession(sessions);
-            return oldest
-              ? [
-                  {
-                    icon: <MessageSquare size={14} strokeWidth={1.5} />,
-                    text: deriveSessionTitle(oldest) || t("ai.clearChat"),
-                    badge: { text: t("ai.limitCloses"), tone: "warn" as const },
-                    highlight: true,
-                  },
-                ]
-              : [];
-          })()}
-          confirmLabel={t("ai.limitConfirm")}
-          cancelLabel={t("common.cancel")}
-          onConfirm={confirmCloseOldest}
-          onClose={() => setLimitConfirm(false)}
-        />
-      )}
     </div>
   );
 }

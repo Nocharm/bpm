@@ -1330,6 +1330,8 @@ export interface AiProposal {
   ops: AiOp[];
   steps: AiStep[];
   findings: AiFinding[];
+  // 적재된 대화 세션 id — 서버가 저장 후 세팅(새 대화 첫 전송 시 신규 id)
+  session_id?: number | null;
 }
 
 export interface AiChatTurn {
@@ -1342,11 +1344,57 @@ export function aiChat(
   instruction: string,
   history: AiChatTurn[],
   model: string | null,
+  sessionId: number | null,
 ): Promise<AiProposal> {
   return request<AiProposal>(`/versions/${versionId}/ai/chat`, {
     method: "POST",
-    body: JSON.stringify({ instruction, history, model }),
+    body: JSON.stringify({ instruction, history, model, session_id: sessionId }),
   });
+}
+
+// ── AI 챗 서버 저장 히스토리 (design 2026-07-08) ──────────────
+
+export interface AiChatSessionSummary {
+  id: number;
+  map_id: number;
+  map_name: string;
+  title: string;
+  message_count: number;
+  updated_at: string;
+}
+
+export interface AiChatMessageRow {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  kind: string | null;
+  version_id: number | null;
+  created_at: string;
+}
+
+// 내 세션 목록(최근 활동순) — mapId 생략 시 전체 맵(맵 이름 포함, "다른 맵 대화" 목록용)
+export function getAiChatSessions(
+  mapId?: number,
+): Promise<{ sessions: AiChatSessionSummary[] }> {
+  const query = mapId !== undefined ? `?map_id=${mapId}` : "";
+  return request<{ sessions: AiChatSessionSummary[] }>(`/ai/chat-sessions${query}`);
+}
+
+// 커서 페이징 — before(메시지 id)보다 오래된 limit개를 시간 오름차순으로
+export function getAiChatMessages(
+  sessionId: number,
+  before?: number,
+  limit = 30,
+): Promise<{ messages: AiChatMessageRow[]; has_more: boolean }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before !== undefined) params.set("before", String(before));
+  return request<{ messages: AiChatMessageRow[]; has_more: boolean }>(
+    `/ai/chat-sessions/${sessionId}/messages?${params.toString()}`,
+  );
+}
+
+export function deleteAiChatSession(sessionId: number): Promise<void> {
+  return request<void>(`/ai/chat-sessions/${sessionId}`, { method: "DELETE" });
 }
 
 export function getAiModels(): Promise<{ models: string[] }> {

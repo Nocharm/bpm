@@ -7244,6 +7244,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               }
             >
               <AiChatPanel
+                mapId={mapId}
                 versionId={versionId}
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
