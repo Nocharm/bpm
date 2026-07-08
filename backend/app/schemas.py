@@ -756,13 +756,20 @@ class AiModelsOut(BaseModel):
 
 
 class AiNodeAttributes(BaseModel):
-    """노드 비즈니스 메타 (선택) — NodeIn과 동일 제약. AI 생성/제안에 실어 보냄 (Phase 2)."""
+    """노드 비즈니스 메타 (선택) — NodeIn과 동일 제약. AI 생성/제안에 실어 보냄 (Phase 2).
 
-    assignee: str = Field(default="", max_length=100)
-    department: str = Field(default="", max_length=100)
-    system: str = Field(default="", max_length=100)
-    duration: str = Field(default="", max_length=50)
-    color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
+    부분 갱신 시맨틱(증분 편집): None(생략)=기존 값 유지, ""=지움, 값=설정.
+    graph 생성/ops add에서는 None을 빈값으로 취급한다(프론트 aiNodeToGraphNode).
+    """
+
+    assignee: str | None = Field(default=None, max_length=100)
+    department: str | None = Field(default=None, max_length=100)
+    system: str | None = Field(default=None, max_length=100)
+    duration: str | None = Field(default=None, max_length=50)
+    color: str | None = Field(default=None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
+    # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
+    url: str | None = Field(default=None, max_length=500)
+    url_label: str | None = Field(default=None, max_length=100)
 
 
 class AiNode(BaseModel):
@@ -791,7 +798,16 @@ class AiGroup(BaseModel):
     parent_key: str | None = Field(default=None, max_length=50)
 
 
-AiOpAction = Literal["add", "remove", "connect", "relabel", "set_attr"]
+AiOpAction = Literal[
+    "add",
+    "remove",
+    "connect",
+    "relabel",
+    "set_attr",
+    "disconnect",
+    "set_edge_label",
+    "set_desc",
+]
 
 
 class AiOp(BaseModel):
@@ -799,7 +815,8 @@ class AiOp(BaseModel):
 
     구조만 정의 — node_id 교차검증·실제 적용은 라우터/프론트(Phase 3). action별 사용 필드:
     add(node) · remove(node_id) · connect(source/target/label) · relabel(node_id/title)
-    · set_attr(node_id/attributes).
+    · set_attr(node_id/attributes, 부분 갱신) · disconnect(source/target)
+    · set_edge_label(source/target/label) · set_desc(node_id/description).
     """
 
     action: AiOpAction
@@ -807,9 +824,10 @@ class AiOp(BaseModel):
     node: AiNode | None = None
     source: str | None = None
     target: str | None = None
-    label: str | None = None
+    label: str | None = Field(default=None, max_length=200)
     title: str | None = None
     attributes: AiNodeAttributes | None = None
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class AiStep(BaseModel):

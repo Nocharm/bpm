@@ -248,7 +248,7 @@ Groups let you grant map access to a named set of people in one step.
 Open the **AI assistant** from the editor top bar (when enabled).
 
 - **Generate** a flowchart from a plain-language prompt — nodes, edges, groups, and BPM attributes matched to the org directory.
-- **Edit incrementally** — ask for changes; existing layout and colors are preserved. Review the preview, then **Add to map** or discard.
+- **Edit incrementally** — ask for changes; existing layout and colors are preserved. Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions and links (URL). Review the preview, then **Add to map** or discard.
 - **Analyze** ("Find issues"), **summarize**, and **walk through** the flow step by step (prev / next / autoplay).
 - Ask **how-to questions** — answers are grounded in this manual.
 - **Multiple chats** — up to **4 chats** stay open. Switch from the chat-bar list (n/4 counter); start a new chat with the **+** in the window header. Opening a fifth chat asks to **close the oldest one** first. Titles are derived from the first question.

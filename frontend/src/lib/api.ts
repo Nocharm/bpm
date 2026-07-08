@@ -1241,12 +1241,15 @@ export function deleteNotice(id: number): Promise<void> {
 
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
 
+// 부분 갱신 시맨틱(증분 편집) — null/생략=유지, ""=지움, 값=설정 (백엔드 AiNodeAttributes 미러)
 export interface AiNodeAttributes {
-  assignee: string;
-  department: string;
-  system: string;
-  duration: string;
-  color: string;
+  assignee?: string | null;
+  department?: string | null;
+  system?: string | null;
+  duration?: string | null;
+  color?: string | null;
+  url?: string | null;
+  url_label?: string | null;
 }
 
 export interface AiNode {
@@ -1274,7 +1277,15 @@ export interface AiGroup {
   parent_key: string | null;
 }
 
-export type AiOpAction = "add" | "remove" | "connect" | "relabel" | "set_attr";
+export type AiOpAction =
+  | "add"
+  | "remove"
+  | "connect"
+  | "relabel"
+  | "set_attr"
+  | "disconnect"
+  | "set_edge_label"
+  | "set_desc";
 
 // 증분 편집 연산 (D1 하이브리드) — 실제 적용은 Phase 3
 export interface AiOp {
@@ -1286,6 +1297,7 @@ export interface AiOp {
   label: string | null;
   title: string | null;
   attributes: AiNodeAttributes | null;
+  description: string | null;
 }
 
 // 워크스루 단계 (Phase 5)

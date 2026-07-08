@@ -39,9 +39,9 @@ def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
             if op.action == "add" and op.node is not None:
                 known.add(op.node.key)
         for op in proposal.ops:
-            if op.action in ("remove", "relabel", "set_attr") and op.node_id:
+            if op.action in ("remove", "relabel", "set_attr", "set_desc") and op.node_id:
                 referenced.append(op.node_id)
-            elif op.action == "connect":
+            elif op.action in ("connect", "disconnect", "set_edge_label"):
                 referenced += [ref for ref in (op.source, op.target) if ref]
     elif proposal.kind == "walkthrough":
         referenced = [step.node_id for step in proposal.steps]

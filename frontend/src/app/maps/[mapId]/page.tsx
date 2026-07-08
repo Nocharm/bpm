@@ -562,6 +562,9 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     department: attr?.department ?? "",
     system: attr?.system ?? "",
     duration: attr?.duration ?? "",
+    // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
+    url: attr?.url ?? "",
+    url_label: attr?.url_label ?? "",
     pos_x: 0,
     pos_y: 0,
     sort_order: 0,
@@ -1604,6 +1607,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       const removed = new Set<string>();
       const relabels = new Map<string, string>();
       const setAttrs = new Map<string, AiNodeAttributes>();
+      const setDescs = new Map<string, string>(); // set_desc — 노드 설명 갱신
+      const disconnects = new Set<string>(); // "src→tgt" — 해당 방향 엣지 제거
+      const edgeLabels = new Map<string, string>(); // "src→tgt" → 새 라벨
       const addedGraphNodes: GraphNode[] = [];
       const keyToId = new Map<string, string>(); // add 임시키 → 새 id
       const connectEdges: GraphEdge[] = [];
@@ -1630,6 +1636,18 @@ function MapEditor({ mapId }: { mapId: number }) {
           relabels.set(op.node_id, op.title);
         } else if (op.action === "set_attr" && op.node_id && op.attributes) {
           setAttrs.set(op.node_id, op.attributes);
+        } else if (op.action === "set_desc" && op.node_id && op.description != null) {
+          setDescs.set(op.node_id, op.description);
+        } else if (op.action === "disconnect") {
+          const source = resolve(op.source);
+          const target = resolve(op.target);
+          if (source && target) disconnects.add(`${source}→${target}`);
+        } else if (op.action === "set_edge_label") {
+          const source = resolve(op.source);
+          const target = resolve(op.target);
+          if (source && target && op.label != null) {
+            edgeLabels.set(`${source}→${target}`, op.label);
+          }
         } else if (op.action === "connect") {
           const source = resolve(op.source);
           const target = resolve(op.target);
@@ -1648,25 +1666,30 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
 
-      // 기존 노드: remove 제외 + relabel/set_attr 적용 (좌표·나머지 보존)
+      // 기존 노드: remove 제외 + relabel/set_desc/set_attr 적용 (좌표·나머지 보존)
+      // set_attr는 부분 갱신 — null/생략 필드는 기존 값 유지, ""는 지움 (계약 시맨틱)
       const existingNodes = nodesRef.current
         .filter((node) => !removed.has(node.id))
         .map((node) => {
           const title = relabels.get(node.id);
+          const desc = setDescs.get(node.id);
           const attr = setAttrs.get(node.id);
-          if (title === undefined && attr === undefined) return node;
+          if (title === undefined && desc === undefined && attr === undefined) return node;
           return {
             ...node,
             data: {
               ...node.data,
               ...(title !== undefined ? { label: title } : {}),
+              ...(desc !== undefined ? { description: desc } : {}),
               ...(attr
                 ? {
-                    color: attr.color,
-                    assignee: attr.assignee,
-                    department: attr.department,
-                    system: attr.system,
-                    duration: attr.duration,
+                    ...(attr.color != null ? { color: attr.color } : {}),
+                    ...(attr.assignee != null ? { assignee: attr.assignee } : {}),
+                    ...(attr.department != null ? { department: attr.department } : {}),
+                    ...(attr.system != null ? { system: attr.system } : {}),
+                    ...(attr.duration != null ? { duration: attr.duration } : {}),
+                    ...(attr.url != null ? { url: attr.url } : {}),
+                    ...(attr.url_label != null ? { urlLabel: attr.url_label } : {}),
                   }
                 : {}),
             },
@@ -1681,9 +1704,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       });
       const finalNodes = [...existingNodes, ...addedNodes];
       const finalEdges = [
-        ...edgesRef.current.filter(
-          (edge) => !removed.has(edge.source) && !removed.has(edge.target),
-        ),
+        ...edgesRef.current
+          .filter(
+            (edge) =>
+              !removed.has(edge.source) &&
+              !removed.has(edge.target) &&
+              !disconnects.has(`${edge.source}→${edge.target}`),
+          )
+          .map((edge) => {
+            const label = edgeLabels.get(`${edge.source}→${edge.target}`);
+            return label === undefined ? edge : { ...edge, label: label || undefined };
+          }),
         ...toAppEdges({ nodes: [], edges: connectEdges, groups: [] }),
       ];
 

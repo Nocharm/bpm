@@ -722,3 +722,130 @@ def test_structure_hints_detect_data_feedback_targets() -> None:
     assert "담당자 미입력" in hints
     assert "소요시간 미입력" in hints
     assert '중복 제목 "검토"' in hints
+
+
+# ── 증분 편집 확장 + URL 계약 (feat/ai-incremental-edit) ──────────────────────
+
+
+def test_ops_new_actions_parse() -> None:
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "ops",
+            "message": "사이에 삽입",
+            "ops": [
+                {"action": "disconnect", "source": "a", "target": "b"},
+                {"action": "set_edge_label", "source": "a", "target": "c", "label": "승인"},
+                {"action": "set_desc", "node_id": "a", "description": "검수 후 승인"},
+            ],
+        }
+    )
+    assert [op.action for op in proposal.ops] == ["disconnect", "set_edge_label", "set_desc"]
+
+
+def test_ops_set_attr_partial_and_url() -> None:
+    # 부분 갱신 시맨틱 — 생략 필드는 None(유지), url/url_label 지원
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "ops",
+            "message": "링크 설정",
+            "ops": [
+                {
+                    "action": "set_attr",
+                    "node_id": "n1",
+                    "attributes": {"url": "https://example.com/spec", "url_label": "규정"},
+                }
+            ],
+        }
+    )
+    attr = proposal.ops[0].attributes
+    assert attr is not None
+    assert attr.url == "https://example.com/spec"
+    assert attr.url_label == "규정"
+    assert attr.assignee is None  # 생략 = 유지
+    assert attr.department is None
+
+
+def test_ai_node_attributes_url_length_capped() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas import AiNodeAttributes
+
+    with pytest.raises(ValidationError):
+        AiNodeAttributes.model_validate({"url": "https://" + "x" * 500})
+
+
+def test_graph_node_url_roundtrip_in_proposal() -> None:
+    # graph 생성 노드의 attributes.url 에코 — 프론트 aiNodeToGraphNode가 그대로 반영
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "graph",
+            "message": "재생성",
+            "nodes": [
+                {
+                    "key": "a",
+                    "title": "계약 체결",
+                    "node_type": "process",
+                    "attributes": {"url": "https://example.com/contract", "url_label": "계약서"},
+                }
+            ],
+            "edges": [],
+        }
+    )
+    assert proposal.nodes[0].attributes is not None
+    assert proposal.nodes[0].attributes.url == "https://example.com/contract"
+
+
+def test_prompt_serializes_node_url_and_documents_new_ops() -> None:
+    from app.ai_prompt import build_messages
+    from app.schemas import GraphOut, NodeOut
+
+    graph = GraphOut(
+        nodes=[
+            NodeOut(
+                id="n1",
+                title="계약 체결",
+                node_type="process",
+                url="https://example.com/contract",
+                url_label="계약서",
+            )
+        ],
+        edges=[],
+        groups=[],
+    )
+    system = build_messages("MANUAL", graph, True, "링크 유지하며 다시 그려줘", [])[0]["content"]
+    assert '링크=https://example.com/contract "계약서"' in system  # 현재 그래프 노출
+    assert "disconnect" in system and "set_edge_label" in system and "set_desc" in system
+    assert "에코해 보존" in system  # 재생성 시 url 보존 규칙
+
+
+def test_ai_ops_new_actions_passthrough_and_unknown_surfaced(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 새 액션이 엔드포인트를 통과하고, 미지 참조(disconnect의 유령 id)는 message로 표면화
+    _enable_ai(monkeypatch)
+    version_id = _draft_version_checked_out(client)  # 빈 그래프 → 모든 기존 id 참조는 미지
+    content = json.dumps(
+        {
+            "kind": "ops",
+            "message": "정리",
+            "ops": [
+                {"action": "disconnect", "source": "ghost-a", "target": "ghost-b"},
+                {"action": "set_desc", "node_id": "ghost-c", "description": "설명"},
+            ],
+        }
+    )
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(content))
+
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "정리해줘"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["kind"] == "ops"
+    assert [op["action"] for op in body["ops"]] == ["disconnect", "set_desc"]
+    for ghost in ("ghost-a", "ghost-b", "ghost-c"):
+        assert ghost in body["message"]  # 계약 규칙 ④ 표면화
