@@ -73,6 +73,7 @@ interface AiChatPanelProps {
   aiEnabled: boolean;
   canEdit: boolean;
   initialSessionId?: number | null; // ?aiChat=<id> 딥링크 — 세션 목록 최초 로딩 시 우선 활성화
+  onInitialSessionConsumed?: () => void; // 딥링크 1회 소비 보고 — 패널 리마운트(최소화/복원) 시 재적용 방지
   onGraphProposal: (proposal: AiProposal) => void;
   onOpsProposal: (proposal: AiProposal) => void;
   onHighlightNode: (nodeId: string) => void;
@@ -101,6 +102,7 @@ export function AiChatPanel({
   aiEnabled,
   canEdit,
   initialSessionId,
+  onInitialSessionConsumed,
   onGraphProposal,
   onOpsProposal,
   onHighlightNode,
@@ -172,7 +174,10 @@ export function AiChatPanel({
         setMessages((prev) => [...result.messages.map(toChatMessage), ...prev]);
         setHasMore(result.has_more);
       })
-      .catch(() => onToast?.(t("ai.historyError")))
+      .catch(() => {
+        // 삭제/전환 직후 stale 요청 실패(404 등) — 다른 세션을 보고 있으면 토스트 생략 (.then과 같은 가드)
+        if (activeSessionIdRef.current === targetSessionId) onToast?.(t("ai.historyError"));
+      })
       .finally(() => setLoadingOlder(false));
   };
 
@@ -200,6 +205,8 @@ export function AiChatPanel({
               : undefined;
           const recent = result.sessions.find((item) => item.map_id === mapId);
           setActiveSessionId(initial ? initial.id : recent ? recent.id : null);
+          // 딥링크 1회 소비 — 목록에 없어도(stale id) 소비 처리해 리마운트 시 재적용을 막는다
+          if (initialSessionId != null) onInitialSessionConsumed?.();
         }
       })
       .catch(() => {
@@ -208,7 +215,7 @@ export function AiChatPanel({
     return () => {
       alive = false;
     };
-  }, [mapId, sessionsReload, initialSessionId]);
+  }, [mapId, sessionsReload, initialSessionId, onInitialSessionConsumed]);
 
   // 활성 세션 메시지 로딩 — 최근 페이지부터. 새 대화(null)는 빈 스레드.
   useEffect(() => {

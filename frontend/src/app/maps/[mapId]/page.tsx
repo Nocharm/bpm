@@ -7256,6 +7256,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 aiEnabled={aiEnabled}
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 initialSessionId={aiInitialSessionId}
+                onInitialSessionConsumed={() => setAiInitialSessionId(null)}
                 onGraphProposal={applyAiProposal}
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
