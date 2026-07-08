@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-07-08 — 임베드 체크: 차단 사이트 폴백 카드 즉시 표시 (feat/embed-check)
+- 보안 리뷰 반영: 프로브가 루프백·링크로컬(메타데이터)·비유니캐스트 대상 거부(사설 RFC1918은 기능 목적상 허용 유지, httpx2는 저장소 표준이라 교체 제안 기각). pytest +1(445).
 - `GET /api/embed-check`(신규 embed_probe·routers/embed) — 대상 URL의 X-Frame-Options/CSP frame-ancestors를 서버가 판독(httpx2, 4s, 리다이렉트 추종), 미리보기 패널이 차단 verdict 수신 시 크롬 오류 화면 대신 기존 폴백 카드를 즉시 표시(판정 불가는 기존 동작 유지). pytest +6(444)·vitest 134·build 클린, E2E(google→카드/wikipedia→iframe) PASS. SSRF 노트: 인증 전용·http(s)만·불리언만 노출.
 
 ## 2026-07-07 — feat/url-viewer 머지 (main)

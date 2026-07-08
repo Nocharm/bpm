@@ -10,7 +10,8 @@
 - 판정 로직 `app/embed_probe.py`:
   - `parse_embeddable(xfo, csp)` 순수 함수 — XFO는 값과 무관하게 차단(DENY/SAMEORIGIN 모두 타 오리진 거부), `frame-ancestors`는 `*` 포함일 때만 허용(앱 오리진이 배포마다 달라 목록 매칭은 안 함 — 보수적 판정).
   - `probe_embeddable(url)` — `httpx2` GET, `follow_redirects=True`(최종 응답 헤더 기준), 타임아웃 4s(패널 6s 폴백보다 짧게), 실패는 `None`.
-- **SSRF 노트**: 인증 사용자 전용 + http(s)만 + 응답은 불리언만(본문·헤더 미노출). 사내 시스템 URL 판정이 목적이라 사설 대역 차단은 하지 않음(내부 도구 전제, 문서화로 수용).
+- **SSRF 노트**: 인증 사용자 전용 + http(s)만 + 응답은 불리언만(본문·헤더 미노출). 사내 시스템 URL 판정이 목적이라 **사설 대역(RFC1918)은 의도적으로 허용** — 대신 루프백·링크로컬(클라우드 메타데이터 169.254.x)·비유니캐스트는 프로브 거부(`_is_probe_refused_host`, 2026-07-08 보안 리뷰 반영). DNS 재바인딩은 사설 허용 전제상 완전 차단 불가(best-effort 문서화).
+- **의존성 노트**: HTTP 클라이언트는 저장소 표준 `httpx2`(requirements.txt 고정, ai_client와 동일) — 보안 리뷰의 "httpx로 교체" 제안은 이 저장소에 httpx 사용처가 없어 오탐으로 기각.
 - 테스트: parse 3케이스(XFO/frame-ancestors/허용) + 엔드포인트 3케이스(차단 verdict·도달 실패 null·스킴 422), 아웃바운드는 monkeypatch.
 
 ## 프론트

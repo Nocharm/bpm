@@ -50,3 +50,14 @@ def test_endpoint_unknown_on_unreachable(
 def test_endpoint_rejects_non_http_scheme(client: TestClient) -> None:
     res = client.get("/api/embed-check", params={"url": "javascript:alert(1)"})
     assert res.status_code == 422
+
+
+def test_probe_refuses_loopback_and_link_local_allows_private() -> None:
+    # SSRF 축소 가드 — 메타데이터/로컬 포트 프로빙 차단, 사내(RFC1918)는 기능 목적상 허용
+    from app.embed_probe import _is_probe_refused_host
+
+    assert _is_probe_refused_host("127.0.0.1") is True
+    assert _is_probe_refused_host("::1") is True
+    assert _is_probe_refused_host("169.254.169.254") is True
+    assert _is_probe_refused_host("192.168.0.10") is False
+    assert _is_probe_refused_host("10.1.2.3") is False
