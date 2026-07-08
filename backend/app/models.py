@@ -29,23 +29,6 @@ class AppSetting(Base):
     )
 
 
-class AiChatLog(Base):
-    """AI 챗 질문/답변 기록 — 설정 ai_chat_log_enabled ON일 때만 적재(테스트 기간 검증용)."""
-
-    __tablename__ = "ai_chat_logs"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    version_id: Mapped[int] = mapped_column(
-        ForeignKey("map_versions.id", ondelete="CASCADE"), index=True
-    )
-    login_id: Mapped[str] = mapped_column(String(100), index=True)
-    model: Mapped[str | None] = mapped_column(String(200), default=None)
-    kind: Mapped[str] = mapped_column(String(20))
-    instruction: Mapped[str] = mapped_column(Text)
-    answer: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-
-
 class AiChatSession(Base):
     """AI 챗 대화 세션 — 사용자×맵 귀속 서버 원장. 목록 정렬 기준은 updated_at desc."""
 

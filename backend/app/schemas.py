@@ -719,9 +719,8 @@ AI_NODE_TYPES = {"start", "process", "decision", "end"}
 
 
 class AppSettingsOut(BaseModel):
-    """앱 런타임 설정 — AI 챗 Q&A DB 적재 플래그 + 기능 팁 + 대화 보존 상한."""
+    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한."""
 
-    ai_chat_log_enabled: bool
     ai_chat_tips: list[str]
     ai_chat_max_sessions_per_map: int
     ai_chat_max_messages_per_session: int
@@ -733,7 +732,6 @@ class AppSettingsOut(BaseModel):
 class AppSettingsUpdate(BaseModel):
     """부분 갱신 — None 필드는 유지. 팁을 빈 목록으로 보내면 기본 팁으로 복원."""
 
-    ai_chat_log_enabled: bool | None = None
     ai_chat_tips: list[str] | None = Field(default=None, max_length=50)
     ai_chat_max_sessions_per_map: int | None = Field(default=None, ge=1, le=200)
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)

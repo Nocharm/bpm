@@ -3,10 +3,10 @@
 import json
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.app_settings import (
-    AI_CHAT_LOG_KEY,
     AI_CHAT_MAX_MESSAGES_KEY,
     AI_CHAT_MAX_SESSIONS_KEY,
     AI_CHAT_RETENTION_DAYS_KEY,
@@ -15,7 +15,6 @@ from app.app_settings import (
     get_ai_chat_max_sessions,
     get_ai_chat_retention_days,
     get_ai_chat_tips,
-    is_ai_chat_log_enabled,
     set_app_setting,
 )
 from app.auth import get_current_user, require_sysadmin
@@ -31,15 +30,23 @@ router = APIRouter(
 
 
 async def _to_out(session: AsyncSession) -> AppSettingsOut:
-    row = await session.get(AppSetting, AI_CHAT_LOG_KEY)
+    managed = [
+        AI_CHAT_TIPS_KEY,
+        AI_CHAT_MAX_SESSIONS_KEY,
+        AI_CHAT_MAX_MESSAGES_KEY,
+        AI_CHAT_RETENTION_DAYS_KEY,
+    ]
+    rows = (
+        await session.scalars(select(AppSetting).where(AppSetting.key.in_(managed)))
+    ).all()
+    latest = max(rows, key=lambda r: r.updated_at, default=None)
     return AppSettingsOut(
-        ai_chat_log_enabled=await is_ai_chat_log_enabled(session),
         ai_chat_tips=await get_ai_chat_tips(session),
         ai_chat_max_sessions_per_map=await get_ai_chat_max_sessions(session),
         ai_chat_max_messages_per_session=await get_ai_chat_max_messages(session),
         ai_chat_retention_days=await get_ai_chat_retention_days(session),
-        updated_by=row.updated_by if row else None,
-        updated_at=row.updated_at if row else None,
+        updated_by=latest.updated_by if latest else None,
+        updated_at=latest.updated_at if latest else None,
     )
 
 
@@ -54,10 +61,7 @@ async def put_app_settings(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> AppSettingsOut:
-    """부분 upsert — 적재 토글(테스트 기간 중 ON 예정)·기능 팁(빈 목록이면 기본 복원)."""
-    if payload.ai_chat_log_enabled is not None:
-        value = "true" if payload.ai_chat_log_enabled else "false"
-        await set_app_setting(session, AI_CHAT_LOG_KEY, value, user)
+    """부분 upsert — 보존 상한·기능 팁(빈 목록이면 기본 복원)."""
     if payload.ai_chat_tips is not None:
         # 공백 팁 제거 + 200자 컷 — 빈 목록이 되면 get_ai_chat_tips가 기본 팁으로 폴백
         tips = [tip.strip()[:200] for tip in payload.ai_chat_tips if tip.strip()]

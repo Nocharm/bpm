@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AppSetting
 
-AI_CHAT_LOG_KEY = "ai_chat_log_enabled"
 AI_CHAT_TIPS_KEY = "ai_chat_tips"
 AI_CHAT_MAX_SESSIONS_KEY = "ai_chat_max_sessions_per_map"
 AI_CHAT_MAX_MESSAGES_KEY = "ai_chat_max_messages_per_session"
@@ -40,12 +39,6 @@ DEFAULT_AI_CHAT_TIPS = [
     "노드를 더블클릭하면 이름을 바로 수정할 수 있습니다.",
     "편집이 잠긴 버전에서는 AI가 도움말 답변만 제공합니다.",
 ]
-
-
-async def is_ai_chat_log_enabled(session: AsyncSession) -> bool:
-    """AI 챗 질문/답변 DB 적재 여부 — 행이 없으면 기본 off."""
-    row = await session.get(AppSetting, AI_CHAT_LOG_KEY)
-    return row is not None and row.value == "true"
 
 
 async def get_ai_chat_tips(session: AsyncSession) -> list[str]:

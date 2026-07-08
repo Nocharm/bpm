@@ -11,7 +11,6 @@ from app.app_settings import (
     get_ai_chat_max_messages,
     get_ai_chat_max_sessions,
     get_ai_chat_tips,
-    is_ai_chat_log_enabled,
 )
 from app.chat_history import (
     derive_chat_title,
@@ -24,7 +23,7 @@ from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
 from app.manual import get_manual
-from app.models import AiChatLog, AiChatMessage, AiChatSession, Employee, ManualDoc, MapVersion
+from app.models import AiChatMessage, AiChatSession, Employee, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
 from app.settings import settings
@@ -221,19 +220,6 @@ async def ai_chat(
     )
     await session.commit()
     proposal.session_id = chat_session.id
-    # 설정 ON일 때 최종 질문/답변을 DB 적재 — 테스트 기간 검증용 (app_settings.ai_chat_log_enabled)
-    if await is_ai_chat_log_enabled(session):
-        session.add(
-            AiChatLog(
-                version_id=version_id,
-                login_id=user,
-                model=payload.model,
-                kind=proposal.kind,
-                instruction=payload.instruction,
-                answer=proposal.message,
-            )
-        )
-        await session.commit()
     return proposal
 
 
