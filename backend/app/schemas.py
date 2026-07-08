@@ -888,3 +888,9 @@ class TableDataOut(BaseModel):
     total: int
     page: int
     size: int
+
+
+class EmbedCheckOut(BaseModel):
+    """임베드 체크 — True/False=판정, None=대상 도달 실패(판정 불가) (embed-check design 2026-07-08)."""
+
+    embeddable: bool | None

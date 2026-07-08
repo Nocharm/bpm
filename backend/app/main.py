@@ -16,6 +16,7 @@ from app.routers import (
     admin,
     ai,
     app_settings,
+    embed,
     approvers,
     checkout,
     comments,
@@ -55,6 +56,7 @@ app = FastAPI(title="BPM API", lifespan=lifespan)
 app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(app_settings.router)
+app.include_router(embed.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
 app.include_router(checkout.router)

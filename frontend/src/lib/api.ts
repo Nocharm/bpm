@@ -242,6 +242,15 @@ export interface SubprocessDesignationBody {
   url_label?: string;
 }
 
+// 임베드 체크 — 미리보기 iframe이 열 수 있는 URL인지 서버가 대상 헤더로 판정 (embed-check design 2026-07-08)
+export interface EmbedCheck {
+  embeddable: boolean | null; // null = 판정 불가(도달 실패) — 프론트는 기존 onLoad+타임아웃 동작 유지
+}
+
+export function checkEmbeddable(url: string): Promise<EmbedCheck> {
+  return request<EmbedCheck>(`/embed-check?url=${encodeURIComponent(url)}`);
+}
+
 export function putSubprocessDesignation(
   mapId: number,
   body: SubprocessDesignationBody,
