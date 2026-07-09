@@ -47,6 +47,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "url_label", "VARCHAR(100) DEFAULT ''"),
     ("process_maps", "sp_url", "VARCHAR(500)"),
     ("process_maps", "sp_url_label", "VARCHAR(100)"),
+    # 한글이름 — AD 미제공, 어드민 임포트 전용 (2026-07-09). 기존 행은 ''로 백필(EmployeeOut str 비-nullable)
+    ("employees", "korean_name", "VARCHAR(200) DEFAULT ''"),
 ]
 
 

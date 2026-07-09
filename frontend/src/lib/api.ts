@@ -510,6 +510,7 @@ export interface EmployeeRow {
   source: string;
   role: string;
   department: string;
+  korean_name: string;
 }
 
 export function listEmployees(): Promise<EmployeeRow[]> {
@@ -524,6 +525,22 @@ export interface SyncSummary {
 
 export function syncEmployees(): Promise<SyncSummary> {
   return request<SyncSummary>("/employees/sync", { method: "POST" });
+}
+
+export interface KoreanNamesImportSummary {
+  updated: number;
+  skipped: number;
+  unknown: string[];
+}
+
+export function importKoreanNames(
+  mode: "skip" | "overwrite",
+  entries: Record<string, string>,
+): Promise<KoreanNamesImportSummary> {
+  return request<KoreanNamesImportSummary>("/employees/korean-names", {
+    method: "PUT",
+    body: JSON.stringify({ mode, entries }),
+  });
 }
 
 // ── 어드민 테이블 뷰어 (sysadmin 전용, 읽기전용) / Admin table viewer ──
