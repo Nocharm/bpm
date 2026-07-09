@@ -1078,6 +1078,8 @@ export interface AdminUser {
   is_sysadmin: boolean;
   org_levels: string[];
   active: boolean;     // false = AD account disabled (userAccountControl bit 0x2)
+  korean_name: string;
+  korean_dept: string;
 }
 
 export interface AdminDept {
@@ -1093,6 +1095,16 @@ export interface AdminDirectory {
 /** sysadmin 전용 — 관리 콘솔 직원·부서 목록 (영문, 풍부한 필드). active = AD userAccountControl 기반 (Task 2). */
 export function getAdminUsers(): Promise<AdminDirectory> {
   return request<AdminDirectory>("/admin/users");
+}
+
+export function setDeptKoreanDept(
+  orgLevels: string[],
+  koreanDept: string,
+): Promise<{ updated: number }> {
+  return request<{ updated: number }>("/admin/departments/korean-dept", {
+    method: "PUT",
+    body: JSON.stringify({ org_levels: orgLevels, korean_dept: koreanDept }),
+  });
 }
 
 export interface NotificationItem {
