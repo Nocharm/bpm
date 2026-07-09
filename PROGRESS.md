@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — AI 다중 엔드포인트+모델 .env 구성 (feat/ai-multi-endpoint)
+- `AI_ENDPOINTS`(JSON 배열, .env 전용 — 토큰 시크릿) 신설: 항목당 name·base_url·token·model(기본)·models(노출 목록, 비우면 /models 자동 조회). 비우면 기존 단일 AI_BASE_URL 폴백(하위호환). 모델 추가/삭제는 .env 수정+재기동.
+- `ai_client.py`: `AiEndpoint`/`get_ai_endpoints`(검증 포함)/`resolve_endpoint` — 모델 선택자 `"이름::모델"`로 엔드포인트 라우팅(무접두는 첫 엔드포인트, 구형 하위호환), `list_models`는 전 엔드포인트 합산(다중이면 `이름::모델` id, 단일이면 종전 형식·개별 조회 실패는 기본 모델 폴백). 채팅 셀렉터는 `이름 / 모델`로 표시(전송 값 원본).
+- 검증: pytest 471(신규 7 — 파싱/검증·라우팅·선택 엔드포인트 호출·합산·단일 형식 유지·조회 실패 폴백)·ruff 0·vitest 120·lint 0·build.
+
 ## 2026-07-09 — AI 챗 서버 저장 구현 (feat/ai-chat-server-history)
 - Task 1: 세션/메시지 모델 + 계약 확장(AiChatRequest/AiProposal session_id, Out 스키마 4종).
 - Task 2: `/ai/chat` write-through — `derive_chat_title` 헬퍼(`app/chat_history.py`) + 라우터에 세션 소유/맵 검증(AI 호출 전 404 fail-fast)·질문/답변 2행 적재를 AI 실패 시 미적재로 한 트랜잭션 처리. pytest 457·ruff 0.
