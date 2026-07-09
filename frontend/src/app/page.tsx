@@ -3,7 +3,7 @@
 // 홈 — 프로세스맵 목록 (공개범위 필터링) + 맵 생성 다이얼로그 /
 // Home: map list filtered by mock visibility + map creation dialog.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, ShieldCheck } from "lucide-react";
 
@@ -264,6 +264,16 @@ export default function MapListPage() {
   const searchPartition = partitionByRecency(mapHits, (h) => h.item.id, recentIds);
   const orderedHits = [...searchPartition.recent, ...searchPartition.rest];
 
+  // 브라우즈 전용 정렬 — 권한(owner→editor→viewer) > 최신 수정순. 검색·최근 밴드는 무변경 (batch2 ③)
+  const browseHits = useMemo(() => {
+    const rank = (r: string | null) => (r === "owner" ? 0 : r === "editor" ? 1 : 2);
+    return [...mapHits].sort((a, b) => {
+      const d = rank(a.item.my_role) - rank(b.item.my_role);
+      if (d !== 0) return d;
+      return b.item.updated_at.localeCompare(a.item.updated_at);
+    });
+  }, [mapHits]);
+
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋)
   const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}`;
   const {
@@ -275,7 +285,7 @@ export default function MapListPage() {
     visible: shownBrowseHits,
     hasMore: hasMoreBrowse,
     sentinelRef: browseSentinelRef,
-  } = useInfiniteSlice(mapHits, listKey);
+  } = useInfiniteSlice(browseHits, listKey);
 
   // 선택 파생 — 자동 첫-맵 선택 없음(초기 선택 없음). 삭제된 맵이면 해제 / no auto-select; clear if stale.
   const effectiveSelected =
@@ -561,13 +571,19 @@ export default function MapListPage() {
                     </div>
                   )}
                   <ul className="flex flex-col gap-2">
-                    {shownBrowseHits.map(({ item: processMap, matches }) =>
-                      renderRow(
-                        processMap,
-                        matches.find((m) => m.field === "name")?.ranges ?? [],
-                        undefined,
-                      ),
-                    )}
+                    {shownBrowseHits.map(({ item: processMap, matches }, i) => (
+                      <Fragment key={processMap.id}>
+                        {/* 권한 그룹 경계 — 라벨 없는 순수 간격 (batch2 ③) */}
+                        {i > 0 && shownBrowseHits[i - 1].item.my_role !== processMap.my_role && (
+                          <li aria-hidden className="h-2 shrink-0" />
+                        )}
+                        {renderRow(
+                          processMap,
+                          matches.find((m) => m.field === "name")?.ranges ?? [],
+                          undefined,
+                        )}
+                      </Fragment>
+                    ))}
                     {hasMoreBrowse && <li ref={browseSentinelRef} className="h-px shrink-0" />}
                   </ul>
                 </div>
