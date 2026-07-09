@@ -27,6 +27,7 @@ export interface User {
   departmentId: string;
   status: 'active' | 'inactive';
   isSysadmin: boolean;
+  korean_name?: string;            // 한글 이름 — 피커 검색·표시(picker-korean-search design 2026-07-09)
 }
 
 export interface UserGroup {

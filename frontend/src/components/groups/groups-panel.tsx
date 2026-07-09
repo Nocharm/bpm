@@ -26,6 +26,7 @@ import {
   type GroupStatus,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { genId } from "@/lib/id";
 import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
@@ -159,6 +160,7 @@ export function GroupsPanel() {
     departmentId: "",
     status: "active" as const,
     isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const pickerDepts: Department[] = dirDepts.map((d) => ({
     id: d.id,
@@ -456,6 +458,7 @@ export function GroupsPanel() {
                 departments={pickerDepts}
                 groups={[]}
                 excludeIds={memberExcludeIds}
+                deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
                 onSelect={handleMemberSelect}
               />
               {/* ≥2 멤버 안내 — 미달이면 표시 / Min-2 hint when below threshold. */}

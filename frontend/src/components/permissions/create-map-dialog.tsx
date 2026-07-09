@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
+import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissions-types";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
@@ -107,6 +108,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     departmentId: "",
     status: "active" as const,
     isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const pickerDepts: Department[] = dirDepts.map((d) => ({
     id: d.id,
@@ -429,6 +431,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
                 groups={toPickerGroups(groups)}
                 excludeIds={collabExcludeIds}
                 userDepartments={userDepartments}
+                deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
                 onSelect={addCollaborator}
               />
             </div>

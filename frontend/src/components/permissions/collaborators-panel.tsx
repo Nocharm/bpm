@@ -26,6 +26,7 @@ import {
   type PrincipalType,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 
 import { PrincipalIcon, PrincipalPicker } from "./principal-picker";
@@ -191,6 +192,7 @@ function AddCollaboratorForm({
     departmentId: "",
     status: "active" as const,
     isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const pickerDepts: Department[] = dirDepts.map((d) => ({
     id: d.id,
@@ -213,6 +215,7 @@ function AddCollaboratorForm({
             departments={pickerDepts}
             groups={toPickerGroups(groups)}
             excludeIds={excludeIds}
+            deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
             onSelect={(opt) => onAdd(opt.principalType, opt.principalId, role)}
           />
         </div>

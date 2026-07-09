@@ -60,6 +60,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
   const pickerUsers = dirUsers.map((u) => ({
     id: u.id, name: u.name, email: "", departmentId: "",
     status: "active" as const, isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
   const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? userName(id);

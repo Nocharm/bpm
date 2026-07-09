@@ -17,6 +17,9 @@ export interface PrincipalOption {
   principalId: string;
   displayName: string;
   department?: string;
+  koreanName?: string;
+  /** 부서 항목 전용 — 소속 유저들의 distinct 한글부서(검색 키워드) */
+  koreanKeywords?: string[];
 }
 
 interface PrincipalPickerProps {
@@ -27,6 +30,8 @@ interface PrincipalPickerProps {
   excludeIds: Set<string>;
   /** userId → 소속명(검색용) / department name per user, for dept search. */
   userDepartments?: Record<string, string>;
+  /** 부서 id(org_path) → distinct 한글부서 목록(검색 키워드) / dept id → korean dept keywords. */
+  deptKoreanKeywords?: Map<string, string[]>;
   onSelect: (option: PrincipalOption) => void;
 }
 
@@ -36,6 +41,7 @@ function buildOptions(
   departments: Department[],
   groups: UserGroup[],
   userDepartments?: Record<string, string>,
+  deptKoreanKeywords?: Map<string, string[]>,
 ): PrincipalOption[] {
   const userOpts: PrincipalOption[] = users
     .filter((u) => u.status === "active")
@@ -44,11 +50,13 @@ function buildOptions(
       principalId: u.id,
       displayName: u.name,
       department: userDepartments?.[u.id],
+      koreanName: u.korean_name ?? "",
     }));
   const deptOpts: PrincipalOption[] = departments.map((d) => ({
     principalType: "department",
     principalId: d.id,
     displayName: d.name,
+    koreanKeywords: deptKoreanKeywords?.get(d.id) ?? [],
   }));
   const groupOpts: PrincipalOption[] = groups
     .filter((g) => g.status === "active")
@@ -68,28 +76,33 @@ export function PrincipalPicker({
   groups,
   excludeIds,
   userDepartments,
+  deptKoreanKeywords,
   onSelect,
 }: PrincipalPickerProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState(false);
 
-  const all = buildOptions(users, departments, groups, userDepartments).filter(
+  const all = buildOptions(users, departments, groups, userDepartments, deptKoreanKeywords).filter(
     (o) => !excludeIds.has(o.principalId),
   );
 
   // 검색 한정: 유저=이름+아이디 / 부서·그룹=부서명·그룹명(displayName)만.
   // 유저를 소속 부서/그룹으로 매칭하지 않음 — "AI dev" 검색 시 그룹원들이 결과를 채워
-  // 정작 'AI dev' 그룹이 유저 무더기에 묻히는 노이즈 방지.
+  // 정작 'AI dev' 그룹이 유저 무더기에 묻히는 노이즈 방지. 한글그룹명은 부서 항목만 매칭.
   const hits = query.trim()
     ? filterByQuery(all, query, (o) =>
         o.principalType === "user"
           ? [
               { field: "name", text: o.displayName },
+              ...(o.koreanName ? [{ field: "koreanName", text: o.koreanName }] : []),
               { field: "id", text: o.principalId },
             ]
-          : [{ field: "name", text: o.displayName }],
+          : [
+              { field: "name", text: o.displayName },
+              ...(o.koreanKeywords ?? []).map((k) => ({ field: "koreanDept", text: k })),
+            ],
       )
     : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
   // 검색도 캡 없이 전량 노출 — 25개씩 증분 렌더가 DOM 부하를 막는다(~5000명).
@@ -168,19 +181,43 @@ export function PrincipalPicker({
                 }}
               >
                 <PrincipalIcon type={opt.principalType} />
-                <span className="min-w-0 truncate">
-                  <Highlight text={opt.displayName} ranges={nameRanges} />
-                  {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
-                  {opt.principalType === "user" && (
-                    <span className="ml-1.5 text-fine text-ink-tertiary">
-                      <Highlight text={opt.principalId} ranges={idRanges} />
-                      {opt.department ? ` · ${opt.department}` : ""}
+                {(() => {
+                  const koreanRanges: MatchRange[] =
+                    matches.find((m) => m.field === "koreanName")?.ranges ?? [];
+                  const hasKr = opt.principalType === "user" && !!opt.koreanName;
+                  const primaryKr = hasKr && lang === "ko";
+                  return (
+                    <span className="min-w-0 truncate">
+                      {primaryKr ? (
+                        <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
+                      ) : (
+                        <Highlight text={opt.displayName} ranges={nameRanges} />
+                      )}
+                      {/* 반대 언어 보조 — 한글 보유 유저만 */}
+                      {hasKr && (
+                        <span className="ml-1 text-fine text-ink-tertiary">
+                          (
+                          {primaryKr ? (
+                            <Highlight text={opt.displayName} ranges={nameRanges} />
+                          ) : (
+                            <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
+                          )}
+                          )
+                        </span>
+                      )}
+                      {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
+                      {opt.principalType === "user" && (
+                        <span className="ml-1.5 text-fine text-ink-tertiary">
+                          <Highlight text={opt.principalId} ranges={idRanges} />
+                          {opt.department ? ` · ${opt.department}` : ""}
+                        </span>
+                      )}
+                      {opt.principalType !== "user" && opt.department && (
+                        <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
+                      )}
                     </span>
-                  )}
-                  {opt.principalType !== "user" && opt.department && (
-                    <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
-                  )}
-                </span>
+                  );
+                })()}
                 <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
                   {t(
                     opt.principalType === "user"
