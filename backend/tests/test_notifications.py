@@ -24,10 +24,24 @@ def _add_employee(login_id: str, name: str) -> None:
     asyncio.run(_run())
 
 
+def _ensure_employee(login_id: str) -> None:
+    """승인자 직원 행 지연 시드 — 전역 선시드하면 공지 브로드캐스트 수신자에 섞여 개수 단언 오염."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            if await session.get(Employee, login_id) is None:
+                session.add(Employee(login_id=login_id, name=login_id, source="local", active=True))
+                await session.commit()
+
+    asyncio.run(_run())
+
+
 def _pending_version(client: TestClient, approvers: list[str]) -> tuple[int, int]:
     # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
     global _notif_seq
     _notif_seq += 1
+    for approver in approvers:
+        _ensure_employee(approver)  # 정족수 의미론(직원 행 필수, 2026-07-09)
     created = client.post("/api/maps", json={"name": f"notif map {_notif_seq}"}).json()
     map_id, version_id = created["id"], created["versions"][0]["id"]
     client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": approvers})
