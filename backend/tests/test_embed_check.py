@@ -61,3 +61,73 @@ def test_probe_refuses_loopback_and_link_local_allows_private() -> None:
     assert _is_probe_refused_host("169.254.169.254") is True
     assert _is_probe_refused_host("192.168.0.10") is False
     assert _is_probe_refused_host("10.1.2.3") is False
+
+
+def test_probe_follows_redirects_but_reapplies_ssrf_guard() -> None:
+    # 리다이렉트 경유 SSRF — 외부 서버가 302로 메타데이터 IP를 가리켜도 홉 가드에 걸려 None
+    import asyncio
+
+    class _Resp:
+        def __init__(self, status: int, headers: dict) -> None:
+            self.status_code = status
+            self.headers = headers
+
+    class _RedirClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.calls: list[str] = []
+
+        async def __aenter__(self) -> "_RedirClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> bool:
+            return False
+
+        async def get(self, url: str, headers: dict | None = None) -> _Resp:
+            self.calls.append(url)
+            # 첫 홉(외부)은 302로 클라우드 메타데이터로 유도
+            return _Resp(302, {"location": "http://169.254.169.254/latest/meta-data"})
+
+    client = _RedirClient()
+    import app.embed_probe as ep
+
+    orig = ep.httpx2.AsyncClient
+    ep.httpx2.AsyncClient = lambda *a, **k: client  # type: ignore[assignment]
+    try:
+        verdict = asyncio.run(ep.probe_embeddable("https://evil.example.com/start"))
+    finally:
+        ep.httpx2.AsyncClient = orig
+    assert verdict is None  # 메타데이터 홉에서 거부 → 판정 불가
+    # 최초 외부 홉은 요청했지만 메타데이터 URL은 GET하지 않았다(가드가 홉 진입 전에 차단)
+    assert client.calls == ["https://evil.example.com/start"]
+
+
+def test_probe_returns_verdict_after_safe_redirect() -> None:
+    # 안전한 외부 호스트로의 리다이렉트는 정상 추종해 최종 헤더로 판정
+    import asyncio
+
+    class _Resp:
+        def __init__(self, status: int, headers: dict) -> None:
+            self.status_code = status
+            self.headers = headers
+
+    class _Client:
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *args: object) -> bool:
+            return False
+
+        async def get(self, url: str, headers: dict | None = None) -> _Resp:
+            if url.endswith("/start"):
+                return _Resp(302, {"location": "https://example.org/final"})
+            return _Resp(200, {"x-frame-options": "DENY"})
+
+    import app.embed_probe as ep
+
+    orig = ep.httpx2.AsyncClient
+    ep.httpx2.AsyncClient = lambda *a, **k: _Client()  # type: ignore[assignment]
+    try:
+        verdict = asyncio.run(ep.probe_embeddable("https://example.com/start"))
+    finally:
+        ep.httpx2.AsyncClient = orig
+    assert verdict is False  # 최종 응답의 XFO:DENY → 임베드 불가

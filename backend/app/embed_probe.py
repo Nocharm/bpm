@@ -3,7 +3,7 @@
 import asyncio
 import ipaddress
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx2
 
@@ -52,21 +52,38 @@ def _is_probe_refused_host(host: str) -> bool:
     return False
 
 
+_MAX_REDIRECTS = 5  # 수동 추종 상한 — 홉마다 SSRF 가드 재적용(자동 추종은 가드 우회라 금지)
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
+
 async def probe_embeddable(url: str) -> bool | None:
-    """대상 URL을 GET(리다이렉트 추종)해 최종 응답 헤더로 판정. 도달 실패/프로브 거부는 None(판정 불가)."""
-    host = urlparse(url).hostname
-    # getaddrinfo는 블로킹(DNS) — 이벤트 루프 밖에서 (rules/languages/python.md Async)
-    if host is None or await asyncio.to_thread(_is_probe_refused_host, host):
-        return None
+    """대상 URL을 GET해 최종 응답 헤더로 판정. 도달 실패/프로브 거부는 None(판정 불가).
+
+    리다이렉트는 자동 추종하지 않고 **홉마다 스킴·호스트 가드를 재적용하며 수동 추종** —
+    외부 서버가 302로 루프백/메타데이터를 가리키게 해 최초-URL 검사만 통과하는 SSRF 우회 차단.
+    """
     try:
         async with httpx2.AsyncClient(
-            timeout=PROBE_TIMEOUT_SECONDS, follow_redirects=True
+            timeout=PROBE_TIMEOUT_SECONDS, follow_redirects=False
         ) as client:
-            response = await client.get(url, headers={"User-Agent": "bpm-embed-check"})
+            current = url
+            for _ in range(_MAX_REDIRECTS + 1):
+                parsed = urlparse(current)
+                if parsed.scheme not in ("http", "https") or parsed.hostname is None:
+                    return None  # 리다이렉트로 스킴이 바뀌는 우회(file:// 등)도 여기서 거부
+                # getaddrinfo는 블로킹(DNS) — 이벤트 루프 밖에서 (rules/languages/python.md Async)
+                if await asyncio.to_thread(_is_probe_refused_host, parsed.hostname):
+                    return None
+                response = await client.get(current, headers={"User-Agent": "bpm-embed-check"})
+                location = response.headers.get("location")
+                if response.status_code in _REDIRECT_STATUSES and location:
+                    current = urljoin(current, location)
+                    continue
+                return parse_embeddable(
+                    response.headers.get("x-frame-options"),
+                    response.headers.get("content-security-policy"),
+                )
+            return None  # 리다이렉트 과다 — 판정 불가
     except Exception:
         # 네트워크/DNS/타임아웃 — 판정 불가로 반환해 프론트가 기존 동작(onLoad+타임아웃)을 유지
         return None
-    return parse_embeddable(
-        response.headers.get("x-frame-options"),
-        response.headers.get("content-security-policy"),
-    )

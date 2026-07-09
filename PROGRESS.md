@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — 임베드 프로브 리다이렉트 SSRF 차단 (main)
+- 푸시 보안 리뷰 반영: `embed_probe.probe_embeddable`가 `follow_redirects=True`로 자동 추종하던 것을 **수동 추종(최대 5홉)**으로 교체 — 홉마다 스킴(http/https)·호스트 SSRF 가드(`_is_probe_refused_host`) 재적용. 외부 서버가 302로 루프백/메타데이터(169.254.169.254)를 가리켜 최초-URL 검사만 통과시키던 우회 차단. 리다이렉트로 스킴 변경(file:// 등)도 거부. pytest +2(481)·ruff 0.
+
 ## 2026-07-09 — 배포 문서·compose 동기화 (main)
 - `docker-compose.yml`에 `AI_ENDPOINTS` 패스스루 추가(누락 시 서버 .env에 설정해도 컨테이너 미전달 — 배포 브레이커였음). `docs/deploy.md` §2에 AI env 블록(AI_ENDPOINTS 포함), §3에 AI 런타임 반영 방법 + **업그레이드 노트(`DROP TABLE IF EXISTS ai_chat_logs;` 1회, psql 명령 포함)** 추가.
 
