@@ -8,12 +8,14 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
-  Boxes,
+  Building,
   Building2,
   Copy,
   Hand,
+  House,
   Landmark,
   Loader2,
+  Puzzle,
   Settings,
   Trash2,
   User,
@@ -62,7 +64,7 @@ function deptLevelRank(leaf: string): number {
 }
 
 // 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
-const LEVEL_ICONS = [Landmark, Building2, Users, UsersRound, Boxes];
+const LEVEL_ICONS = [Landmark, Building2, Building, House, Puzzle];
 
 // 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
 // 접힌 카드 2줄 높이 기준 확대(22px) — 컨테이너가 세로 중앙 정렬 (member-card design 2026-07-09)
