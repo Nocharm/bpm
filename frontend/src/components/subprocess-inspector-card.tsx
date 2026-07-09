@@ -126,8 +126,11 @@ export function SubprocessInspectorCard({
         </div>
       )}
 
-      {/* 연결 절차 노트 — 지정이 다른 맵과 연결(임베드)하기 위한 절차임을 안내 */}
-      <p className="mb-2 flex items-start gap-1.5 rounded-sm bg-surface px-2 py-1.5 text-fine leading-snug text-ink-tertiary">
+      {/* 연결 절차 노트 — 한 줄 요약, 전체 설명은 툴팁 (batch2 ⑤) */}
+      <p
+        title={t("inspector.spNoteFull")}
+        className="mb-2 flex items-start gap-1.5 rounded-sm bg-surface px-2 py-1.5 text-fine leading-snug text-ink-tertiary"
+      >
         <Info size={12} strokeWidth={1.6} className="mt-px shrink-0" />
         {t("inspector.spNote")}
       </p>
