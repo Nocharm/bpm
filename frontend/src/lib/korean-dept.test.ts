@@ -8,6 +8,7 @@ import {
   deriveDeptKoreanKeywords,
   formatRosterName,
   getDeptMembers,
+  sortManagersFirst,
 } from "./korean-dept";
 
 const user = (login_id: string, org: string[], korean_dept = "", korean_name = ""): AdminUser => ({
@@ -126,6 +127,31 @@ describe("buildAssigneeOptions", () => {
     const en = buildAssigneeOptions(users, "en");
     expect(en[0].label).toBe("Hyeonjin Jang (장현진)");
     expect(en[0].value).toBe("Hyeonjin Jang");
+  });
+});
+
+describe("sortManagersFirst", () => {
+  const items = [
+    { type: "user", id: "a" },
+    { type: "dept", id: "D1" },
+    { type: "user", id: "mgr.root" },
+    { type: "user", id: "b" },
+    { type: "user", id: "mgr.leaf" },
+  ];
+  const getUserId = (i: { type: string; id: string }) => (i.type === "user" ? i.id : null);
+
+  it("pins managers in managerIds order (leaf first), keeps rest stable", () => {
+    const out = sortManagersFirst(items, getUserId, ["mgr.leaf", "mgr.root"]);
+    expect(out.map((i) => i.id)).toEqual(["mgr.leaf", "mgr.root", "a", "D1", "b"]);
+  });
+
+  it("no managers — returns original order", () => {
+    expect(sortManagersFirst(items, getUserId, [])).toEqual(items);
+  });
+
+  it("dept items never match manager ids", () => {
+    const out = sortManagersFirst(items, getUserId, ["D1"]);
+    expect(out.map((i) => i.id)).toEqual(["a", "D1", "mgr.root", "b", "mgr.leaf"]);
   });
 });
 

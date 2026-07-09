@@ -67,6 +67,30 @@ def test_get_current_user_prefers_dev_header() -> None:
     assert get_current_user(authorization=None, x_dev_user=None) == settings.dev_user
 
 
+def test_me_includes_manager_ids_chain(client: TestClient) -> None:
+    """/api/me manager_ids — 내 org 체인(리프→루트) 부서장, 본인 제외·빈값 제외 (피커 Manager 라벨)."""
+    from app.models import DeptInfo
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            # admin.kim org: Management Support Division / Process Innovation Office / Process Innovation Team
+            await session.merge(DeptInfo(department="Process Innovation Team", korean_name="", manager="lead.kim"))
+            await session.merge(DeptInfo(department="Process Innovation Office", korean_name="", manager="head.lee"))
+            # 본인이 부서장인 상위 레벨 — 본인은 제외돼야 함
+            await session.merge(DeptInfo(department="Management Support Division", korean_name="", manager="admin.kim"))
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/me", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    # 리프(직속)→루트 순, 본인 제외
+    assert res.json()["manager_ids"] == ["lead.kim", "head.lee"]
+
+    # 직원 미존재 유저 — 빈 목록
+    res2 = client.get("/api/me", headers={"X-Dev-User": "unknown.person"})
+    assert res2.json()["manager_ids"] == []
+
+
 def test_me_uses_dev_user_header(client: TestClient) -> None:
     res = client.get("/api/me", headers={"X-Dev-User": "admin.kim"})
     assert res.status_code == 200

@@ -3,12 +3,14 @@
 // 협업자 추가용 피커 — 사용자/부서/그룹을 초성 포함 검색 후 선택 /
 // Principal picker: search users/departments/groups (with hangul chosung) and select one.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Building2, Search, User, Users } from "lucide-react";
 
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
+import { sortManagersFirst } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import type { Department, PrincipalType, User as MockUser, UserGroup } from "@/lib/mock/permissions";
 
@@ -35,6 +37,8 @@ interface PrincipalPickerProps {
   userDepartments?: Record<string, string>;
   /** 부서 id(org_path) → distinct 한글부서 목록(검색 키워드) / dept id → korean dept keywords. */
   deptKoreanKeywords?: Map<string, string[]>;
+  /** 브라우즈(빈 검색) 시 내 상위 부서장들을 맨 위로 — 승인자 피커용. 검색 랭킹은 불변. */
+  managersFirst?: boolean;
   onSelect: (option: PrincipalOption) => void;
 }
 
@@ -82,12 +86,20 @@ export function PrincipalPicker({
   excludeIds,
   userDepartments,
   deptKoreanKeywords,
+  managersFirst,
   onSelect,
 }: PrincipalPickerProps) {
   const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState(false);
+
+  // 현재 접속자 — 상위 부서장 체인(Manager 라벨·우선 정렬)과 소속 부서(My Dept 라벨) 판정용
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const managerIds = me?.managerIds ?? [];
+  const managerSet = new Set(managerIds);
+  const isMyDept = (deptPath: string): boolean =>
+    !!me?.orgPath && (me.orgPath === deptPath || me.orgPath.startsWith(`${deptPath}/`));
 
   const all = buildOptions(users, departments, groups, userDepartments, deptKoreanKeywords).filter(
     (o) => !excludeIds.has(o.principalId),
@@ -111,7 +123,14 @@ export function PrincipalPicker({
               ...(o.koreanKeywords ?? []).map((k) => ({ field: "koreanDept", text: k })),
             ],
       )
-    : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
+    : (managersFirst
+        ? sortManagersFirst(
+            all,
+            (o) => (o.principalType === "user" ? o.principalId : null),
+            managerIds,
+          )
+        : all
+      ).map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
   // 검색도 캡 없이 전량 노출 — 25개씩 증분 렌더가 DOM 부하를 막는다(~5000명).
   // 부서·그룹 매치는 이름이 비슷한 유저 무더기에 밀리지 않게, 최고 랭크 1개를 스코어 무시하고 맨 위로 고정.
   let ordered = hits;
@@ -226,15 +245,35 @@ export function PrincipalPicker({
                     </span>
                   );
                 })()}
-                <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
-                  {t(
-                    opt.principalType === "user"
-                      ? "perm.principalUser"
-                      : opt.principalType === "department"
-                        ? "perm.principalDept"
-                        : "perm.principalGroup",
-                  )}
-                </span>
+                {(() => {
+                  // 내 상위 부서장 → Manager, 내 소속 부서(체인) → My Dept — 약한 하이라이트 필
+                  const isManager =
+                    opt.principalType === "user" && managerSet.has(opt.principalId);
+                  const isMine =
+                    opt.principalType === "department" && isMyDept(opt.principalId);
+                  const label = isManager
+                    ? t("perm.principalManager")
+                    : isMine
+                      ? t("perm.principalMyDept")
+                      : t(
+                          opt.principalType === "user"
+                            ? "perm.principalUser"
+                            : opt.principalType === "department"
+                              ? "perm.principalDept"
+                              : "perm.principalGroup",
+                        );
+                  return (
+                    <span
+                      className={`ml-auto shrink-0 text-fine ${
+                        isManager || isMine
+                          ? "rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+                          : "text-ink-tertiary"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  );
+                })()}
               </button>
             );
           })}

@@ -126,6 +126,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
           groups={[]}
           excludeIds={new Set(selected)}
           userDepartments={userDepartments}
+          managersFirst
           onSelect={(opt) => {
             if (opt.principalType === "user") {
               setSelected((prev) =>

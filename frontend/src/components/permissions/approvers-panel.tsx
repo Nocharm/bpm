@@ -188,6 +188,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
             groups={[]}
             excludeIds={new Set(approverIds)}
             userDepartments={userDepartments}
+            managersFirst
             onSelect={(opt: PrincipalOption) => {
               if (opt.principalType !== "user") return;
               void (async () => {

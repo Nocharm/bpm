@@ -59,6 +59,21 @@ export function buildExportIds(
   }
 }
 
+/** 승인자 피커 브라우즈용 — 내 상위 부서장(managerIds 순=리프→루트)을 앞으로, 나머지는 원순서 유지(stable sort). */
+export function sortManagersFirst<T>(
+  items: T[],
+  getUserId: (item: T) => string | null,
+  managerIds: string[],
+): T[] {
+  if (managerIds.length === 0) return items;
+  const rank = new Map(managerIds.map((id, i) => [id, i]));
+  return [...items].sort((a, b) => {
+    const ra = rank.get(getUserId(a) ?? "") ?? Number.POSITIVE_INFINITY;
+    const rb = rank.get(getUserId(b) ?? "") ?? Number.POSITIVE_INFINITY;
+    return ra - rb;
+  });
+}
+
 /** org_path 정확 일치 그룹별 distinct 한글부서 — 피커 부서 항목 검색 키워드 파생. */
 export function deriveDeptKoreanKeywords(
   users: { org_path?: string; korean_dept?: string }[],

@@ -509,6 +509,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
             groups={[]}
             excludeIds={new Set(approvers.map((a) => a.userId))}
             userDepartments={userDepartments}
+            managersFirst
             onSelect={(opt) => {
               if (opt.principalType === "user") handleAddApprover(opt.principalId, opt.displayName);
             }}
