@@ -88,10 +88,13 @@ export function buildAssigneeOptions(
   }));
 }
 
-/** 부서 SelectOption 빌더 — 소속 유저들의 distinct 한글부서를 검색 키워드로. */
+/** 부서 SelectOption 빌더 — dept_info(확정 한글명·부서장) + 소속 유저 distinct 한글부서를 검색 키워드로.
+ *  label은 lang 토글(이름과 동일 규칙: ko=`한글 (영문)`), value(저장값)는 영문 유지. */
 export function buildDepartmentOptions(
   departments: string[],
   users: { department: string; korean_dept?: string }[],
+  lang: Lang,
+  deptInfos?: Record<string, { korean_name?: string; manager?: string }>,
 ): SelectOption[] {
   const byDept = new Map<string, string[]>();
   for (const u of users) {
@@ -101,9 +104,15 @@ export function buildDepartmentOptions(
     if (!list.includes(dept)) list.push(dept);
     byDept.set(u.department, list);
   }
-  return departments.map((d) => ({
-    value: d,
-    label: d,
-    keywords: byDept.get(d)?.join(" ") || undefined,
-  }));
+  return departments.map((d) => {
+    const info = deptInfos?.[d];
+    const koreanName = (info?.korean_name ?? "").trim();
+    const manager = (info?.manager ?? "").trim();
+    return {
+      value: d,
+      label: formatRosterName({ name: d, korean_name: koreanName }, lang),
+      keywords:
+        [koreanName, manager, ...(byDept.get(d) ?? [])].filter(Boolean).join(" ") || undefined,
+    };
+  });
 }

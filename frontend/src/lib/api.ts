@@ -231,6 +231,8 @@ export interface EligibleAssignees {
     korean_dept?: string;
   }[];
   departments: string[];
+  // 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시
+  dept_infos?: Record<string, { korean_name?: string; manager?: string }>;
 }
 export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
   return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
@@ -945,6 +947,8 @@ export interface DirectoryUser {
 export interface DirectoryDept {
   id: string;        // org_path string (e.g. "Management Support Division/Procurement Office")
   name: string;      // leaf segment
+  korean_name: string; // dept_info 조인(리프명 키) — 없으면 ""
+  manager: string;
 }
 
 export interface Directory {

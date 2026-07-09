@@ -18,6 +18,8 @@ export interface Department {       // AD 동기화 / synced from AD
   orgLevels: string[];             // org1..N 가변 — 레벨 수 하드코딩 금지 / variable depth
   parentId: string | null;
   rawDn: string;
+  korean_name?: string;            // dept_info 임포트값 — 피커 검색·한/영 표시 (2026-07-09)
+  manager?: string;                // 부서장 — 피커 검색 키워드
 }
 
 export interface User {

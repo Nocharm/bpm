@@ -18,6 +18,7 @@ from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
     CheckoutRequest,
+    DeptInfo,
     Edge,
     Employee,
     Group,
@@ -32,6 +33,7 @@ from app.schemas import (
     CheckoutIn,
     CheckoutOut,
     CheckoutTransferIn,
+    DeptInfoValueOut,
     DirectoryUserOut,
     EligibleAssigneesOut,
     PendingCheckoutRequestOut,
@@ -219,7 +221,15 @@ async def list_eligible_assignees(
         for e in eligible
     ]
     departments = sorted({e.department for e in eligible if e.department})
-    return EligibleAssigneesOut(users=users, departments=departments)
+    # 부서 부가정보(한글 부서명·부서장) — 후보 부서 중 dept_info 보유 행만 (셀렉트 검색·한/영 표시)
+    info_rows = (
+        await session.scalars(select(DeptInfo).where(DeptInfo.department.in_(departments)))
+    ).all()
+    dept_infos = {
+        d.department: DeptInfoValueOut(korean_name=d.korean_name, manager=d.manager)
+        for d in info_rows
+    }
+    return EligibleAssigneesOut(users=users, departments=departments, dept_infos=dept_infos)
 
 
 @router.patch(

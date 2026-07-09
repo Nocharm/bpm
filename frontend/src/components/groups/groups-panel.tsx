@@ -169,6 +169,8 @@ export function GroupsPanel() {
     orgLevels: [],
     parentId: null,
     rawDn: "",
+    korean_name: d.korean_name,
+    manager: d.manager,
   }));
 
   function openDialog() {

@@ -231,6 +231,8 @@ export function GroupDetail({
     orgLevels: [],
     parentId: null,
     rawDn: "",
+    korean_name: d.korean_name,
+    manager: d.manager,
   }));
 
   const userName = (id: string): string => dirUsers.find((u) => u.id === id)?.name ?? id;

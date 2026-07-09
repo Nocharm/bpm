@@ -117,6 +117,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     orgLevels: [],
     parentId: null,
     rawDn: "",
+    korean_name: d.korean_name,
+    manager: d.manager,
   }));
 
   // ── 폼 상태 / form state ──

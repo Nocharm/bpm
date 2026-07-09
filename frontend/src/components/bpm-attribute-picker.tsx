@@ -80,7 +80,7 @@ export function BpmAttributePicker({
           <SearchSelect
             fitContent
             value={department}
-            options={buildDepartmentOptions(data.departments, data.users)}
+            options={buildDepartmentOptions(data.departments, data.users, lang, data.dept_infos)}
             emptyLabel={t("summary.none")}
             placeholder={t("field.searchPlaceholder")}
             onChange={handleDeptChange}

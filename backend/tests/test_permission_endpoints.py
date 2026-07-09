@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import DeptInfo, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -242,6 +242,31 @@ def test_eligible_assignees_includes_korean_fields(client: TestClient, enforce: 
     by_id = {u["id"]: u for u in res.json()["users"]}
     assert by_id["user.lee"]["korean_name"] == "이민재"
     assert by_id["user.lee"]["korean_dept"] == "소싱1팀"
+
+
+def test_eligible_assignees_includes_dept_infos(client: TestClient, enforce: None) -> None:
+    """담당자 응답에 dept_infos(한글 부서명·부서장) 맵 전달 — 부서 피커 검색·한/영 표시용."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+    vid = first_version_id(map_id)
+
+    async def _run() -> str:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            dept = emp.department
+            await session.merge(DeptInfo(department=dept, korean_name="소싱1팀", manager="mgr.kim"))
+            await session.commit()
+            return dept
+
+    dept = asyncio.run(_run())
+    act_as("owner.u")
+    res = client.get(f"/api/versions/{vid}/eligible-assignees")
+    assert res.status_code == 200
+    body = res.json()
+    assert dept in body["departments"]
+    assert body["dept_infos"][dept] == {"korean_name": "소싱1팀", "manager": "mgr.kim"}
 
 
 def test_eligible_approvers_includes_korean_name(client: TestClient, enforce: None) -> None:

@@ -758,6 +758,8 @@ class DirectoryDeptOut(BaseModel):
 
     id: str       # org_path ("l1/l2/l3" or leaf segment)
     name: str     # leaf segment (display label)
+    korean_name: str = ""  # dept_info 조인(리프명 키) — 피커 한/영 표시·검색 (2026-07-09)
+    manager: str = ""
 
 
 class DirectoryOut(BaseModel):
@@ -765,11 +767,20 @@ class DirectoryOut(BaseModel):
     departments: list[DirectoryDeptOut]
 
 
+class DeptInfoValueOut(BaseModel):
+    """부서 부가정보 값 — dept_infos 맵 원소 (키는 영문 부서명)."""
+
+    korean_name: str = ""
+    manager: str = ""
+
+
 class EligibleAssigneesOut(BaseModel):
     """노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 직원들의 부서 (F5)."""
 
     users: list[DirectoryUserOut]
     departments: list[str]
+    # 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
+    dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
 AI_NODE_TYPES = {"start", "process", "decision", "end"}

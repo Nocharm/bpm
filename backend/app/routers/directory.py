@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Employee
+from app.models import DeptInfo, Employee
 from app.schemas import DirectoryDeptOut, DirectoryOut, DirectoryUserOut
 
 router = APIRouter(prefix="/api/directory", tags=["directory"])
@@ -56,12 +56,19 @@ async def get_directory(
         for i in range(1, len(levels) + 1):
             seen_paths.add("/".join(levels[:i]))
 
-    departments = [
-        DirectoryDeptOut(
-            id=path,
-            name=path.split("/")[-1],  # 리프 세그먼트를 표시명으로 / leaf segment as label
+    # dept_info 조인 — 리프 세그먼트명 키 (피커 한/영 표시·한글명/부서장 검색)
+    infos = {d.department: d for d in (await session.scalars(select(DeptInfo))).all()}
+    departments = []
+    for path in sorted(seen_paths):
+        leaf = path.split("/")[-1]  # 리프 세그먼트를 표시명으로 / leaf segment as label
+        info = infos.get(leaf)
+        departments.append(
+            DirectoryDeptOut(
+                id=path,
+                name=leaf,
+                korean_name=info.korean_name if info else "",
+                manager=info.manager if info else "",
+            )
         )
-        for path in sorted(seen_paths)
-    ]
 
     return DirectoryOut(users=users, departments=departments)

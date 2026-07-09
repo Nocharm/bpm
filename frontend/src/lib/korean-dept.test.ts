@@ -130,14 +130,37 @@ describe("buildAssigneeOptions", () => {
 });
 
 describe("buildDepartmentOptions", () => {
+  const users = [
+    { id: "a", name: "A", department: "TeamA", korean_dept: "팀에이" },
+    { id: "b", name: "B", department: "TeamA", korean_dept: "팀A그룹" },
+    { id: "c", name: "C", department: "TeamB" },
+  ];
+
   it("derives korean keywords from members by department string", () => {
-    const users = [
-      { id: "a", name: "A", department: "TeamA", korean_dept: "팀에이" },
-      { id: "b", name: "B", department: "TeamA", korean_dept: "팀A그룹" },
-      { id: "c", name: "C", department: "TeamB" },
-    ];
-    const opts = buildDepartmentOptions(["TeamA", "TeamB"], users);
+    const opts = buildDepartmentOptions(["TeamA", "TeamB"], users, "en");
     expect(opts[0]).toEqual({ value: "TeamA", label: "TeamA", keywords: "팀에이 팀A그룹" });
     expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: undefined });
+  });
+
+  it("dept_info korean name toggles label by lang, value stays English", () => {
+    const infos = { TeamA: { korean_name: "에이팀", manager: "kim.cs" } };
+    const ko = buildDepartmentOptions(["TeamA"], users, "ko", infos);
+    expect(ko[0].value).toBe("TeamA");
+    expect(ko[0].label).toBe("에이팀 (TeamA)");
+    const en = buildDepartmentOptions(["TeamA"], users, "en", infos);
+    expect(en[0].label).toBe("TeamA (에이팀)");
+  });
+
+  it("adds dept_info korean name and manager to keywords ahead of observations", () => {
+    const infos = { TeamA: { korean_name: "에이팀", manager: "kim.cs" } };
+    const opts = buildDepartmentOptions(["TeamA"], users, "en", infos);
+    expect(opts[0].keywords).toBe("에이팀 kim.cs 팀에이 팀A그룹");
+  });
+
+  it("missing korean name or manager degrades gracefully", () => {
+    const infos = { TeamB: { korean_name: "", manager: "lee.mj" } };
+    const opts = buildDepartmentOptions(["TeamA", "TeamB"], users, "ko", infos);
+    expect(opts[0].label).toBe("TeamA"); // info 없음 — 영문만
+    expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: "lee.mj" });
   });
 });

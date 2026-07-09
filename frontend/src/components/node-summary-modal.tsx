@@ -429,7 +429,12 @@ export function NodeSummaryModal({
                         <SearchSelect
                           fitContent
                           value={form.department}
-                          options={buildDepartmentOptions(eligible?.departments ?? [], users)}
+                          options={buildDepartmentOptions(
+                            eligible?.departments ?? [],
+                            users,
+                            lang,
+                            eligible?.dept_infos,
+                          )}
                           emptyLabel={t("summary.none")}
                           placeholder={t("field.searchPlaceholder")}
                           onChange={changeDept}

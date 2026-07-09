@@ -782,7 +782,12 @@ export function GroupBulkModal({
                   {/* Department selector */}
                   <SearchSelect
                     value={peopleDept}
-                    options={buildDepartmentOptions(eligible?.departments ?? [], users)}
+                    options={buildDepartmentOptions(
+                      eligible?.departments ?? [],
+                      users,
+                      lang,
+                      eligible?.dept_infos,
+                    )}
                     emptyLabel={t("field.department")}
                     placeholder={t("field.searchPlaceholder")}
                     onChange={handleDeptChange}
