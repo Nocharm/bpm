@@ -704,17 +704,6 @@ class AdminDeptOut(BaseModel):
     org_levels: list[str]  # full path levels root→leaf (variable depth)
 
 
-class DeptKoreanDeptIn(BaseModel):
-    """부서 전원 korean_dept 일괄 갱신 — 영어부서↔한글부서 1:N 정규화 (dept-korean-mapping §1b)."""
-
-    org_levels: list[str]
-    korean_dept: Annotated[str, StringConstraints(max_length=200)]
-
-
-class DeptKoreanDeptOut(BaseModel):
-    updated: int
-
-
 class AdminDirectoryOut(BaseModel):
     users: list[AdminUserOut]
     departments: list[AdminDeptOut]
@@ -731,6 +720,7 @@ class DirectoryUserOut(BaseModel):
     title: str = ""     # 직급 — 멤버 2번째 줄(H2)
     org_path: str = ""  # 루트→리프 org_path — 멤버 2번째 줄 말단 org·부서 카운트(H2)
     role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
+    korean_name: str = ""  # 멤버 카드 한/영 토글용
 
 
 class EligibleApproverOut(DirectoryUserOut):

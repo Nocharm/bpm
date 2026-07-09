@@ -7,6 +7,7 @@
 - 구현 완료(TDD): to_employee_fields 비활성 제외, sync_all 프룬(빈 스캔 가드·local 보존, 단일 DELETE)·SyncSummary/응답/탭 메시지에 purged 추가 — 신규 테스트 3종, pytest 492·ruff 0·lint 0·vitest 138·build 통과.
 - 멤버 카드 개선 설계: 아이콘 확대(접힌 카드 높이)·유저 이름 한/영 토글+펼침 반대말 필·그룹 이름 해석 + **부서 매핑 기능 철회**(모달·PUT·필터 삭제, 관찰용 열·툴팁 유지, 툴팁 1열화) — `docs/superpowers/specs/2026-07-09-member-card-korean-names-design.md`.
 - 멤버 카드 구현 계획(4 task: BE directory+철회 → FE 철회·툴팁 1열 → 카드 아이콘·토글·필 → 스모크) — `docs/superpowers/plans/2026-07-09-member-card-korean-names.md`. employees.korean_name/korean_dept·임포트는 유지 확인 완료.
+- Task 1(BE): `GET /api/directory` 유저 항목에 `korean_name` 추가(TDD, 신규 테스트 1종), `PUT /api/admin/departments/korean-dept`+`DeptKoreanDeptIn/Out`+매핑 테스트 5종 삭제(관찰용 `test_admin_users_include_korean_fields`는 유지). `test_ad_active.py`의 directory 최소필드 화이트리스트에 `korean_name` 반영. pytest 488·ruff 0.
 
 ## 2026-07-09 — 임베드 프로브 리다이렉트 SSRF 차단 (main)
 - 푸시 보안 리뷰 반영: `embed_probe.probe_embeddable`가 `follow_redirects=True`로 자동 추종하던 것을 **수동 추종(최대 5홉)**으로 교체 — 홉마다 스킴(http/https)·호스트 SSRF 가드(`_is_probe_refused_host`) 재적용. 외부 서버가 302로 루프백/메타데이터(169.254.169.254)를 가리켜 최초-URL 검사만 통과시키던 우회 차단. 리다이렉트로 스킴 변경(file:// 등)도 거부. pytest +2(481)·ruff 0.

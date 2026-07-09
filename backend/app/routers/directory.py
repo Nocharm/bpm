@@ -41,6 +41,7 @@ async def get_directory(
                 if lv is not None
             ),
             role=emp.role,
+            korean_name=emp.korean_name,
         )
         for emp in rows
     ]
