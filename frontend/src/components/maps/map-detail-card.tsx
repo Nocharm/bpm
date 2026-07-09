@@ -96,7 +96,7 @@ function MembersSkeleton() {
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
+          className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface py-1.5 pl-1.5 pr-2.5"
         >
           <span className="flex min-w-0 flex-1 items-center gap-1.5">
             <span className="h-9 w-9 shrink-0 rounded-full bg-surface-alt" />
@@ -514,7 +514,7 @@ export function MapDetailCard({
                                 : undefined
                             }
                             // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
-                            className={`group flex items-start justify-between gap-2 rounded-sm border px-2.5 py-1.5 transition-colors ${
+                            className={`group flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
                               perm.principal_type === "user"
                                 ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border"
                                 : ""
@@ -527,7 +527,7 @@ export function MapDetailCard({
                             }`}
                           >
                             <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
                                 <MemberIcon
                                   perm={perm}
                                   isMe={perm.principal_type === "user" && perm.principal_id === loginId}
