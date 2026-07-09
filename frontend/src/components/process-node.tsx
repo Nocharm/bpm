@@ -8,11 +8,11 @@ import {
   Building2,
   Clock,
   CornerDownRight,
+  Link as LinkIcon,
   Lock,
   type LucideIcon,
   MessageSquare,
   Server,
-  Tag,
   User,
   Workflow,
   Zap,
@@ -40,43 +40,33 @@ const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
   department: Building2,
   system: Server,
   duration: Clock,
-  nodeType: Tag,
-};
-
-const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
-  process: "nodeType.process",
-  decision: "nodeType.decision",
-  start: "nodeType.start",
-  end: "nodeType.end",
-  subprocess: "nodeType.subprocess",
+  url: LinkIcon,
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
 // start/end는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음.
 // subprocess는 노드 자체 필드 대신 지정 어트리뷰트(sp*, 라이브 참조)를 표시 (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
-  const { t } = useI18n();
   const { displayFields } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
-  const spValues: Record<Exclude<NodeDisplayField, "nodeType">, string | null | undefined> = {
+  const spValues: Record<NodeDisplayField, string | null | undefined> = {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
     duration: data.spDuration,
+    url: data.spUrl,
   };
   return (
     <>
       {displayFields.map((field) => {
-        // nodeType 외의 BPM 속성 필드는 process·decision(+지정 subprocess)만 표시
-        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType) && !isSubprocess) {
+        // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
+        if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
           return null;
         }
-        const value =
-          field === "nodeType"
-            ? t(NODE_TYPE_LABEL_KEY[data.nodeType])
-            : isSubprocess
-              ? spValues[field]
-              : data[field];
+        const raw = isSubprocess ? spValues[field] : data[field];
+        // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
+        const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
+        const value = field === "url" ? (raw ? urlLabel || "LINK" : null) : raw;
         if (!value) {
           return null;
         }

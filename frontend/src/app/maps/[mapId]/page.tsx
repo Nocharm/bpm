@@ -7653,7 +7653,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 ? "field.system"
                                 : field === "duration"
                                   ? "field.duration"
-                                  : "field.type";
+                                  : "field.url";
                         return (
                           <div
                             key={field}

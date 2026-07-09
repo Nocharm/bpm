@@ -3,20 +3,20 @@
 
 import { createContext, useContext } from "react";
 
-// 노드에 표시할 정보 필드 — 사용자가 좌측 사이드바 체크박스로 토글 (BPM 속성 + 유형)
+// 노드에 표시할 정보 필드 — 사용자가 좌측 사이드바 체크박스로 토글 (BPM 속성 + URL)
 export type NodeDisplayField =
   | "assignee"
   | "department"
   | "system"
   | "duration"
-  | "nodeType";
+  | "url";
 
 export const NODE_DISPLAY_FIELDS: NodeDisplayField[] = [
   "assignee",
   "department",
   "system",
   "duration",
-  "nodeType",
+  "url",
 ];
 
 export interface NodeActions {
