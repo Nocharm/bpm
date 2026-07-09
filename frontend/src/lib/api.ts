@@ -223,7 +223,13 @@ export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
 
 // 노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 부서 (F5, 자유입력 폐기)
 export interface EligibleAssignees {
-  users: { id: string; name: string; department: string }[];
+  users: {
+    id: string;
+    name: string;
+    department: string;
+    korean_name?: string;
+    korean_dept?: string;
+  }[];
   departments: string[];
 }
 export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
@@ -930,6 +936,7 @@ export interface DirectoryUser {
   org_path?: string; // 루트→리프 조직 경로. 멤버 2번째 줄 말단 org·부서 카운트(H2). 미채움 시 ""
   role?: string;     // admin | user — 로컬 로그인 피커 관리자 식별
   korean_name?: string; // 한글 이름 — 서버 기본 "" (member-card design 2026-07-09)
+  korean_dept?: string; // 한글 부서명 — 피커 검색 키워드 파생 (picker-korean-search design 2026-07-09)
 }
 
 export interface DirectoryDept {

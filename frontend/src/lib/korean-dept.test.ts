@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { AdminUser, EmployeeRow } from "./api";
-import { aggregateDeptKoreanDepts, buildExportIds, formatRosterName, getDeptMembers } from "./korean-dept";
+import {
+  aggregateDeptKoreanDepts,
+  buildAssigneeOptions,
+  buildDepartmentOptions,
+  buildExportIds,
+  deriveDeptKoreanKeywords,
+  formatRosterName,
+  getDeptMembers,
+} from "./korean-dept";
 
 const user = (login_id: string, org: string[], korean_dept = "", korean_name = ""): AdminUser => ({
   login_id,
@@ -87,5 +95,55 @@ describe("buildExportIds", () => {
     const picked = buildExportIds(rows, "random50", () => 0);
     expect(picked).toHaveLength(4);
     expect(new Set(picked).size).toBe(4);
+  });
+});
+
+describe("deriveDeptKoreanKeywords", () => {
+  it("groups distinct non-empty korean_dept by exact org_path", () => {
+    const users = [
+      { org_path: "HQ/TeamA", korean_dept: "팀에이" },
+      { org_path: "HQ/TeamA", korean_dept: "팀A그룹" },
+      { org_path: "HQ/TeamA", korean_dept: "팀에이" },
+      { org_path: "HQ/TeamA", korean_dept: "" },
+      { org_path: "HQ/TeamA/Cell", korean_dept: "셀" },
+      { korean_dept: "무경로" },
+    ];
+    const map = deriveDeptKoreanKeywords(users);
+    expect(map.get("HQ/TeamA")).toEqual(["팀에이", "팀A그룹"]);
+    expect(map.get("HQ/TeamA/Cell")).toEqual(["셀"]);
+    expect(map.has("")).toBe(false);
+  });
+});
+
+describe("buildAssigneeOptions", () => {
+  it("keeps value as english name, localizes label, adds korean keywords", () => {
+    const users = [
+      { id: "h.jang", name: "Hyeonjin Jang", department: "TeamA", korean_name: "장현진", korean_dept: "팀에이" },
+      { id: "no.kr", name: "No Korean", department: "TeamB" },
+    ];
+    const ko = buildAssigneeOptions(users, "ko");
+    expect(ko[0]).toEqual({
+      value: "Hyeonjin Jang",
+      label: "장현진 (Hyeonjin Jang)",
+      sub: "h.jang · TeamA",
+      keywords: "h.jang 장현진",
+    });
+    expect(ko[1].label).toBe("No Korean");
+    const en = buildAssigneeOptions(users, "en");
+    expect(en[0].label).toBe("Hyeonjin Jang (장현진)");
+    expect(en[0].value).toBe("Hyeonjin Jang");
+  });
+});
+
+describe("buildDepartmentOptions", () => {
+  it("derives korean keywords from members by department string", () => {
+    const users = [
+      { id: "a", name: "A", department: "TeamA", korean_dept: "팀에이" },
+      { id: "b", name: "B", department: "TeamA", korean_dept: "팀A그룹" },
+      { id: "c", name: "C", department: "TeamB" },
+    ];
+    const opts = buildDepartmentOptions(["TeamA", "TeamB"], users);
+    expect(opts[0]).toEqual({ value: "TeamA", label: "TeamA", keywords: "팀에이 팀A그룹" });
+    expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: undefined });
   });
 });
