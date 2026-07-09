@@ -651,14 +651,21 @@ class EmployeeOut(BaseModel):
     role: str
     department: str
     korean_name: str
+    korean_dept: str
+
+
+class KoreanNameEntryIn(BaseModel):
+    """임포트 항목 — 이름 필수, 그룹(dept) 선택. max_length 200 = VARCHAR(200) 초과 DataError 방지."""
+
+    name: Annotated[str, StringConstraints(max_length=200)]
+    dept: Annotated[str, StringConstraints(max_length=200)] = ""
 
 
 class KoreanNamesImportIn(BaseModel):
     """한글이름 일괄 등록 — mode: skip(기존 값 보유 유저 건너뜀) | overwrite(덮어씀)."""
 
     mode: Literal["skip", "overwrite"]
-    # max_length 200 — employees.korean_name은 VARCHAR(200)(Postgres), 초과 시 DataError 500 방지
-    entries: dict[str, Annotated[str, StringConstraints(max_length=200)]]
+    entries: dict[str, KoreanNameEntryIn]
 
 
 class KoreanNamesImportOut(BaseModel):

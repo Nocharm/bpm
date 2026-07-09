@@ -380,8 +380,9 @@ class Employee(Base):
     # AD-derived fields (Task 2) — active from userAccountControl bit 0x2; email from mail attr.
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     email: Mapped[str] = mapped_column(String(200), default="")
-    # 한글이름 — AD 미제공. 어드민 JSON 임포트로만 채운다(spec 2026-07-09). sync 미간섭.
+    # 한글이름·한글그룹 — AD 미제공. 어드민 JSON 임포트로만 채운다(spec 2026-07-09). sync 미간섭.
     korean_name: Mapped[str] = mapped_column(String(200), default="")
+    korean_dept: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

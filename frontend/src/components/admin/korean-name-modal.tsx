@@ -152,10 +152,12 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
               <p className="pb-1 text-fine uppercase tracking-wide text-ink-tertiary">
                 {t("admin.krSchema")}
               </p>
-              <pre className="overflow-x-auto text-fine text-ink-secondary">{`{
-  "hong.gd": "홍길동",
-  "kim.cs": "김철수"
-}`}</pre>
+              <pre className="overflow-x-auto text-fine text-ink-secondary">{`[
+  { "userId": "hong.gd", "status": "found",
+    "name": "홍길동", "dept": "AI Operations그룹" }
+]`}</pre>
+              {/* status가 found가 아닌 항목(not_found·error)은 무시된다 */}
+              <p className="pt-1 text-fine text-ink-tertiary">{t("admin.krSchemaAlt")}</p>
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" data-id="kr-download-btn" className={BTN_SECONDARY} onClick={onDownload}>

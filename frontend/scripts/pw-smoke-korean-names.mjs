@@ -1,8 +1,8 @@
-// 한글이름 일괄 등록 스모크 — Employees 탭→모달→다운로드→임포트(신규/충돌 skip/overwrite)→테이블 반영.
+// 한글이름·한글그룹 일괄 등록 스모크 — Employees 탭→모달→다운로드→임포트(배열/맵 포맷, 신규/충돌 skip/overwrite)→테이블 반영.
 // 실행: frontend/ 에서 node scripts/pw-smoke-korean-names.mjs
 // 전제: 워크트리 backend(:8001)+frontend(:3000, BACKEND_URL=8001) 기동. playwright-core+시스템 Chrome.
 // 재실행 전제: 대상 유저 korean_name이 비어 있어야 ③(무충돌 1차 임포트) 전제가 성립 —
-//   sqlite3 backend/dev.db "UPDATE employees SET korean_name='';" 로 리셋 후 실행.
+//   sqlite3 backend/dev.db "UPDATE employees SET korean_name='', korean_dept='';" 로 리셋 후 실행.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -38,6 +38,7 @@ await page.getByRole("button", { name: "Employees", exact: true }).click();
 await page.waitForSelector('[data-id="kr-add-btn"]', { timeout: 15000 });
 check("employees tab + kr-add button", true);
 check("korean name column", await page.locator("th", { hasText: "korean name" }).count() === 1);
+check("korean dept column", await page.locator("th", { hasText: "korean dept" }).count() === 1);
 
 // 대상 유저 2명 확보 — korean_name이 빈 앞 2명(재실행 시 이미 채워진 유저를 다시 고르지 않도록)
 const rows = await page.evaluate(async () => {
@@ -56,15 +57,29 @@ const download = await dlPromise;
 const ids = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
 check("download is id array incl. targets", Array.isArray(ids) && ids.includes(u1) && ids.includes(u2));
 
-// ③ 1차 임포트 — 충돌 없음 → 즉시 결과(updated 2, unknown 1)
+// ③ 1차 임포트 — 조회 응답 배열 포맷(status 필터·dept 포함), 충돌 없음 → 즉시 결과(updated 2, unknown 1)
 const tmp1 = path.join(os.tmpdir(), "kr-import-1.json");
-fs.writeFileSync(tmp1, JSON.stringify({ [u1]: "홍길동", [u2]: "김철수", "no.such.user": "유령" }));
+fs.writeFileSync(
+  tmp1,
+  JSON.stringify([
+    { userId: u1, status: "found", name: "홍길동", enName: "GD Hong", dept: "AI Operations그룹", email: "x@y.z" },
+    { userId: u2, status: "found", name: "김철수" },
+    { userId: "no.such.user", status: "found", name: "유령" },
+    { userId: "ignored.one", status: "not_found" },
+    { userId: "ignored.two", status: "error", name: "무시" },
+  ]),
+);
 await page.setInputFiles('[data-id="kr-file-input"]', tmp1);
 await page.waitForSelector('[data-id="kr-result"]');
 const result1 = await page.locator('[data-id="kr-result"]').innerText();
-check("first import applied", result1.includes("2") && result1.includes("no.such.user"), result1.replace(/\n/g, " "));
+check(
+  "first import applied (array format, not_found/error ignored)",
+  result1.includes("2") && result1.includes("no.such.user") && !result1.includes("ignored."),
+  result1.replace(/\n/g, " "),
+);
 await page.click('[data-id="kr-close-btn"]');
 check("table shows imported name", await page.locator("td", { hasText: "홍길동" }).count() >= 1);
+check("table shows imported dept", await page.locator("td", { hasText: "AI Operations그룹" }).count() >= 1);
 
 // ④ 2차 임포트 — 충돌 → 툴팁 확인 → Skip all(값 유지)
 const tmp2 = path.join(os.tmpdir(), "kr-import-2.json");

@@ -502,6 +502,7 @@ export interface EmployeeRow {
   role: string;
   department: string;
   korean_name: string;
+  korean_dept: string;
 }
 
 export function listEmployees(): Promise<EmployeeRow[]> {
@@ -526,7 +527,7 @@ export interface KoreanNamesImportSummary {
 
 export function importKoreanNames(
   mode: "skip" | "overwrite",
-  entries: Record<string, string>,
+  entries: Record<string, { name: string; dept: string }>,
 ): Promise<KoreanNamesImportSummary> {
   return request<KoreanNamesImportSummary>("/employees/korean-names", {
     method: "PUT",

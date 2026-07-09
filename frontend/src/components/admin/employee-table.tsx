@@ -73,6 +73,7 @@ export function EmployeeTable() {
             <th className={ADMIN_TH}>loginId</th>
             <th className={ADMIN_TH}>name</th>
             <th className={ADMIN_TH}>korean name</th>
+            <th className={ADMIN_TH}>korean dept</th>
             <th className={ADMIN_TH}>title</th>
             <th className={ADMIN_TH}>department</th>
             <th className={ADMIN_TH}>role</th>
@@ -85,6 +86,7 @@ export function EmployeeTable() {
               <td className={ADMIN_TD}>{r.login_id}</td>
               <td className={ADMIN_TD}>{r.name}</td>
               <td className={ADMIN_TD}>{r.korean_name}</td>
+              <td className={ADMIN_TD}>{r.korean_dept}</td>
               <td className={ADMIN_TD}>{r.title}</td>
               <td className={ADMIN_TD}>{r.department}</td>
               <td className={ADMIN_TD}>
@@ -95,7 +97,7 @@ export function EmployeeTable() {
           ))}
           {hasMore && (
             <tr ref={sentinelRef}>
-              <td className={ADMIN_TD} colSpan={7} />
+              <td className={ADMIN_TD} colSpan={8} />
             </tr>
           )}
         </tbody>
