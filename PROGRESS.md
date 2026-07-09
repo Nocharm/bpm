@@ -18,6 +18,7 @@
 - ⑬ 분기(마름모) 노드 코너 배지 안쪽 12px 조정(배지 position prop화, 타 노드 무변경). vitest 147·lint 0에러.
 - ⑭ 미니맵 페이드 줌 기준 교체 — ≥90% 유지·90→40% 선형 감소·≤40% 소멸. vitest 147·lint 0에러.
 - ⑮ Alt+←/→ 좌측 사이드바·우측 인스펙터 토글 + More shortcuts 플라이아웃 항목 추가. vitest 147·lint 0에러.
+- ③④ 스페이서를 순수 간격 → 회색 가로선(border-hairline)으로 교체(사용자 피드백). vitest 147·lint 0에러.
 
 ## 2026-07-09 — 멤버 카드 아이콘 톤·조직 레벨 아이콘 설계 (worktree-ui-improvement-4)
 - 멤버 카드 아이콘 ink-muted 회색·왼쪽 패딩 6px + `LEVEL_ICONS` 건축+조각 세트(Landmark/Building2/Building/House/Puzzle) 설계 확정 — 비주얼 컴패니언 시안 선정(톤 3안 중 C·세트 3안 중 C).

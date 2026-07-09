@@ -491,9 +491,9 @@ export function MapDetailCard({
                         }
                         return (
                           <Fragment key={perm.id}>
-                          {/* 역할 클러스터 경계 간격 (batch2 ④) */}
+                          {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
                           {i > 0 && rows[i - 1].role !== perm.role && (
-                            <div aria-hidden className="h-1.5" />
+                            <div aria-hidden className="my-0.5 border-t border-hairline" />
                           )}
                           <div
                             role={perm.principal_type === "user" ? "button" : undefined}

@@ -573,9 +573,9 @@ export default function MapListPage() {
                   <ul className="flex flex-col gap-2">
                     {shownBrowseHits.map(({ item: processMap, matches }, i) => (
                       <Fragment key={processMap.id}>
-                        {/* 권한 그룹 경계 — 라벨 없는 순수 간격 (batch2 ③) */}
+                        {/* 권한 그룹 경계 — 회색 가로선 구분 (batch2 ③) */}
                         {i > 0 && shownBrowseHits[i - 1].item.my_role !== processMap.my_role && (
-                          <li aria-hidden className="h-2 shrink-0" />
+                          <li aria-hidden className="shrink-0 border-t border-hairline" />
                         )}
                         {renderRow(
                           processMap,

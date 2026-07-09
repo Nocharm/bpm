@@ -27,14 +27,14 @@
 `frontend/src/app/page.tsx` 브라우즈 모드 전체 목록만. **최근 밴드·검색 결과는 현행 유지**(확정).
 
 - 정렬 키: `my_role` 순위 owner(0) → editor(1) → viewer(2), 동순위 내 `updated_at` desc.
-- 역할 그룹 사이 **순수 간격 스페이서**(라벨 없음, ≈8px)(확정). 정렬·그룹화는 렌더 직전 파생(useMemo), 서버 응답·필터 로직 무변경.
+- 역할 그룹 사이 **회색 가로선 구분**(`border-hairline`, 라벨 없음 — 순수 간격에서 사용자 피드백으로 변경). 정렬·그룹화는 렌더 직전 파생(useMemo), 서버 응답·필터 로직 무변경.
 
 ## ④ 허용된 인원 — 역할 클러스터 간격
 
 `frontend/src/components/maps/map-detail-card.tsx` 멤버 렌더 (홈 우측 패널·에디터 Map 탭 공용이라 양쪽 자동 적용)
 
 - 각 타입 그룹(Individuals/Teams/User groups) 내부 정렬을 역할 우선(owner→editor→viewer)으로, 부서는 같은 역할 안에서 기존 레벨 정렬 유지.
-- 역할 클러스터 사이 작은 간격(≈6px, 스페이서 요소). 그룹 라벨/행 마크업 무변경.
+- 역할 클러스터 사이 회색 가로선 구분(`border-hairline` — 순수 간격에서 사용자 피드백으로 변경). 그룹 라벨/행 마크업 무변경.
 
 ## ⑤ 서브프로세스 섹션 — 스캔성
 
