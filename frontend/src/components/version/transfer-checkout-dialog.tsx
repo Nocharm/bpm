@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, X } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { useI18n } from "@/lib/i18n";
@@ -67,14 +67,29 @@ export function TransferCheckoutDialog({
             <p className="text-caption text-ink-tertiary">{t("perm.transferNoEligible")}</p>
           ) : (
             <>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("approval.transferSearchPlaceholder")}
-                className="w-full rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink placeholder:text-ink-muted outline-none focus:border-accent"
-                autoFocus
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("approval.transferSearchPlaceholder")}
+                  className="w-full rounded-sm border border-hairline bg-surface px-2 py-1.5 pr-7 text-caption text-ink placeholder:text-ink-muted outline-none focus:border-accent"
+                  autoFocus
+                />
+                {/* 전체 지우기 — 검색어만 비움 (batch2 ⑪) */}
+                {query.length > 0 && (
+                  <button
+                    type="button"
+                    data-id="picker-clear-query"
+                    aria-label={t("perm.pickerClear")}
+                    title={t("perm.pickerClear")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                    onClick={() => setQuery("")}
+                  >
+                    <X size={14} strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
               <div className="max-h-48 overflow-y-auto rounded-sm border border-hairline">
                 {filtered.length === 0 ? (
                   <p className="px-3 py-2 text-caption text-ink-tertiary">{t("approval.transferNoResults")}</p>

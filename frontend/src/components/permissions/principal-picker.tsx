@@ -3,8 +3,8 @@
 // 협업자 추가용 피커 — 사용자/부서/그룹을 초성 포함 검색 후 선택 /
 // Principal picker: search users/departments/groups (with hangul chosung) and select one.
 
-import { useState } from "react";
-import { Building2, Search, User, Users } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Building2, Search, User, Users, X } from "lucide-react";
 
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
@@ -73,7 +73,15 @@ export function PrincipalPicker({
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [focused, setFocused] = useState(false);
+  // 열림 = 포커스 기준 — 바깥 클릭(blur) 시 검색어가 있어도 닫히고, 검색어는 유지돼
+  // 재포커스 시 남은 검색어로 재검색 (batch2 ⑪). 목록 내부 클릭은 mousedown preventDefault로 blur 미발생.
+  const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // 열림 시 목록이 스크롤 컨테이너(모달 본문 등) 밖이면 최소로 끌어내림 (batch2 ⑫)
+  useEffect(() => {
+    if (open) listRef.current?.scrollIntoView({ block: "nearest" });
+  }, [open]);
 
   const all = buildOptions(users, departments, groups, userDepartments).filter(
     (o) => !excludeIds.has(o.principalId),
@@ -142,14 +150,34 @@ export function PrincipalPicker({
             setQuery(e.target.value);
             setActive(0);
           }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
         />
+        {/* 전체 지우기 — 검색어만 비우고 포커스(목록) 유지. mousedown preventDefault로 blur 방지 (batch2 ⑪) */}
+        {query.length > 0 && (
+          <button
+            type="button"
+            data-id="picker-clear-query"
+            aria-label={t("perm.pickerClear")}
+            title={t("perm.pickerClear")}
+            className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setQuery("");
+              setActive(0);
+            }}
+          >
+            <X size={14} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
-      {/* 결과 목록 — 빈 입력(포커스)이면 전체, 검색 중엔 상위 8개 / floating results */}
-      {(focused || query.trim()) && (
-        <div className="absolute left-0 right-0 top-full z-[1001] mt-1 flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg">
+      {/* 결과 목록 — 열림(포커스) 동안만. 빈 입력이면 전체, 검색 중엔 랭킹순 / floating results */}
+      {open && (
+        <div
+          ref={listRef}
+          className="absolute left-0 right-0 top-full z-[1001] mt-1 flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg"
+        >
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
             const idRanges: MatchRange[] = matches.find((m) => m.field === "id")?.ranges ?? [];
