@@ -32,6 +32,8 @@ const emp = (login_id: string, department: string, korean_name = ""): EmployeeRo
   department,
   korean_name,
   korean_dept: "",
+  active: true,
+  is_sysadmin: false,
 });
 
 describe("getDeptMembers / aggregateDeptKoreanDepts", () => {

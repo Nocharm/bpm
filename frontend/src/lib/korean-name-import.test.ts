@@ -16,6 +16,8 @@ const row = (login_id: string, korean_name: string): EmployeeRow => ({
   department: "",
   korean_name,
   korean_dept: "",
+  active: true,
+  is_sysadmin: false,
 });
 
 describe("parseKoreanNamesJson — object map", () => {

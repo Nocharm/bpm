@@ -79,6 +79,7 @@ export function EmployeeTable() {
             <th className={ADMIN_TH}>title</th>
             <th className={ADMIN_TH}>department</th>
             <th className={ADMIN_TH}>role</th>
+            <th className={ADMIN_TH}>status</th>
             <th className={ADMIN_TH}>source</th>
           </tr>
         </thead>
@@ -86,7 +87,20 @@ export function EmployeeTable() {
           {visible.map((r) => (
             <tr key={r.login_id} className={ADMIN_ROW}>
               <td className={ADMIN_TD}>{r.login_id}</td>
-              <td className={ADMIN_TD}>{r.name}</td>
+              <td className={ADMIN_TD}>
+                <div className="flex items-center gap-2">
+                  <span>{r.name}</span>
+                  {/* 시스템 관리자 태그 — 읽기 전용(env 관리), 구 사용자 탭에서 이전 */}
+                  {r.is_sysadmin && (
+                    <span
+                      className="rounded-sm border border-accent px-1.5 py-0.5 text-fine text-accent"
+                      title={t("perm.sysadmin.userSysadminNote")}
+                    >
+                      {t("perm.sysadmin.userSysadminTag")}
+                    </span>
+                  )}
+                </div>
+              </td>
               <td className={ADMIN_TD}>{r.korean_name}</td>
               <td className={ADMIN_TD}>{r.korean_dept}</td>
               <td className={ADMIN_TD}>{r.title}</td>
@@ -94,12 +108,20 @@ export function EmployeeTable() {
               <td className={ADMIN_TD}>
                 <RolePill role={r.role} />
               </td>
+              <td className={ADMIN_TD}>
+                {/* AD active 상태 — userAccountControl bit 0x2 파생, 구 사용자 탭에서 이전 */}
+                <span className={r.active ? "text-ink" : "text-ink-tertiary"}>
+                  {r.active
+                    ? t("perm.sysadmin.userStatusActive")
+                    : t("perm.sysadmin.userStatusInactive")}
+                </span>
+              </td>
               <td className={`${ADMIN_TD} text-ink-tertiary`}>{r.source}</td>
             </tr>
           ))}
           {hasMore && (
             <tr ref={sentinelRef}>
-              <td className={ADMIN_TD} colSpan={8} />
+              <td className={ADMIN_TD} colSpan={9} />
             </tr>
           )}
         </tbody>

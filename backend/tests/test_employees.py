@@ -112,6 +112,18 @@ def test_employees_list_requires_admin(client: TestClient, sysadmin_enforced: No
     assert len(res.json()) >= 5
 
 
+def test_employees_list_includes_active_and_sysadmin(
+    client: TestClient, sysadmin_enforced: None
+) -> None:
+    # 설정 사용자 탭 흡수 — 직원 목록이 active와 is_sysadmin(env 계산값)을 함께 반환
+    res = client.get("/api/employees", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    by_id = {r["login_id"]: r for r in res.json()}
+    assert by_id["admin.kim"]["is_sysadmin"] is True
+    assert by_id["user.lee"]["is_sysadmin"] is False
+    assert isinstance(by_id["user.lee"]["active"], bool)
+
+
 def test_sync_requires_admin(client: TestClient, sysadmin_enforced: None) -> None:
     assert client.post("/api/employees/sync", headers={"X-Dev-User": "user.lee"}).status_code == 403
 

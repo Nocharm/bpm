@@ -530,6 +530,9 @@ export interface EmployeeRow {
   department: string;
   korean_name: string;
   korean_dept: string;
+  active: boolean;
+  // env(BPM_SYSADMINS) 계산값 — 구 사용자 탭 흡수로 직원 목록에 노출
+  is_sysadmin: boolean;
 }
 
 export function listEmployees(): Promise<EmployeeRow[]> {

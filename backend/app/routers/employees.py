@@ -8,6 +8,7 @@ from app.ad.service import SyncTooSoon, run_full_sync
 from app.auth import require_sysadmin
 from app.db import get_session
 from app.models import Employee
+from app.permissions.logic import is_sysadmin
 from app.schemas import (
     EmployeeOut,
     KoreanNamesImportIn,
@@ -23,9 +24,14 @@ router = APIRouter(prefix="/api/employees", tags=["employees"])
 async def list_employees(
     _: str = Depends(require_sysadmin),
     session: AsyncSession = Depends(get_session),
-) -> list[Employee]:
+) -> list[EmployeeOut]:
     rows = (await session.scalars(select(Employee).order_by(Employee.login_id))).all()
-    return list(rows)
+    out = []
+    for emp in rows:
+        item = EmployeeOut.model_validate(emp)
+        item.is_sysadmin = is_sysadmin(emp.login_id)
+        out.append(item)
+    return out
 
 
 @router.post("/sync", response_model=SyncSummaryOut)

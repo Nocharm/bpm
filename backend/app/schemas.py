@@ -652,6 +652,9 @@ class EmployeeOut(BaseModel):
     department: str
     korean_name: str
     korean_dept: str
+    active: bool
+    # env(BPM_SYSADMINS) 계산값 — ORM 속성이 아니라 라우터에서 채움
+    is_sysadmin: bool = False
 
 
 class KoreanNameEntryIn(BaseModel):
