@@ -8,6 +8,7 @@
 - ① 새맵 모달 max-h-[calc(100dvh-2rem)]·본문 scrollbar-hidden 내부 스크롤. vitest 147·lint 0에러.
 - ② 맵카드 목록 overflow-x-hidden — 가로 스크롤 방지(카드 min-w-0는 T8 실측 후 판단). vitest 147·lint 0에러.
 - ③ 브라우즈 전체맵 owner→editor→viewer·updated_at 정렬 + 역할 경계 순수 간격(h-2). vitest 147·lint 0에러.
+- ④ 허용 인원 타입 그룹 내 역할 정렬(owner→editor→viewer)·클러스터 간격(h-1.5) — 홈·인스펙터 공용. vitest 147·lint 0에러.
 
 ## 2026-07-09 — 멤버 카드 아이콘 톤·조직 레벨 아이콘 설계 (worktree-ui-improvement-4)
 - 멤버 카드 아이콘 ink-muted 회색·왼쪽 패딩 6px + `LEVEL_ICONS` 건축+조각 세트(Landmark/Building2/Building/House/Puzzle) 설계 확정 — 비주얼 컴패니언 시안 선정(톤 3안 중 C·세트 3안 중 C).
