@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setDevUser } from "@/lib/api";
-import { setAutoLoginSkip } from "@/lib/auth-return";
+import { saveSsoLogoutHint, setAutoLoginSkip } from "@/lib/auth-return";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
 import {
@@ -76,6 +76,11 @@ export function TopNav() {
         client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
         redirect_uri: window.location.origin,
       });
+      // "모든 세션 종료" 패널(/login)용 id_token 확보 — removeUser 후에는 사라지므로 먼저 저장
+      const user = await mgr.getUser();
+      if (user?.id_token) {
+        saveSsoLogoutHint(user.id_token);
+      }
       await mgr.removeUser();
     } else {
       storeDevUser(null);

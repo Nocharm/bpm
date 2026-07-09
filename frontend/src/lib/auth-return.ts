@@ -51,3 +51,18 @@ export function consumeAutoLoginSkip(): boolean {
   storage?.removeItem(AUTO_LOGIN_SKIP_KEY);
   return skipped;
 }
+
+const SSO_LOGOUT_HINT_KEY = "bpm.ssoLogoutHint";
+
+// 로그아웃 직전에 확보한 id_token — /login의 "모든 세션 종료" 패널이 id_token_hint로 1회 사용.
+// (removeUser 후에는 로컬 토큰이 없어 Keycloak end_session이 확인 화면을 요구하게 됨)
+export function saveSsoLogoutHint(idToken: string): void {
+  getStorage()?.setItem(SSO_LOGOUT_HINT_KEY, idToken);
+}
+
+export function consumeSsoLogoutHint(): string | null {
+  const storage = getStorage();
+  const value = storage?.getItem(SSO_LOGOUT_HINT_KEY) ?? null;
+  storage?.removeItem(SSO_LOGOUT_HINT_KEY);
+  return value;
+}

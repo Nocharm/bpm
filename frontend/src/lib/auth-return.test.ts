@@ -5,9 +5,11 @@ import {
   clearAutoLoginSkip,
   consumeAutoLoginSkip,
   consumeReturnTo,
+  consumeSsoLogoutHint,
   isSafeReturnPath,
   peekReturnTo,
   saveReturnTo,
+  saveSsoLogoutHint,
   setAutoLoginSkip,
 } from "@/lib/auth-return";
 
@@ -78,11 +80,20 @@ describe("autoLoginSkip flag", () => {
   });
 });
 
+describe("ssoLogoutHint", () => {
+  it("save 후 consume은 1회만 값을 돌려준다", () => {
+    saveSsoLogoutHint("id-token-abc");
+    expect(consumeSsoLogoutHint()).toBe("id-token-abc");
+    expect(consumeSsoLogoutHint()).toBeNull(); // 소비됨
+  });
+});
+
 describe("window 없음(SSR)·storage 접근 불가", () => {
   it("window가 없으면 조용히 no-op", () => {
     vi.stubGlobal("window", undefined);
     expect(() => saveReturnTo("/maps/1")).not.toThrow();
     expect(consumeReturnTo()).toBeNull();
     expect(consumeAutoLoginSkip()).toBe(false);
+    expect(consumeSsoLogoutHint()).toBeNull();
   });
 });

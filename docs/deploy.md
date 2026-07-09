@@ -22,6 +22,7 @@ realm `ai-portal`에 frontend용 **public(PKCE)** 클라이언트 생성:
 | Web origins | `http://<서버호스트>:3333` (+ 도메인). **token 교환 CORS는 redirect URI가 아니라 Web origins가 푼다** |
 
 - redirect_uri는 앱 origin이다 — 포트 직접 접속 단계는 `:3333`, 엣지 nginx에 도메인 붙이면 그 도메인도 추가.
+- **post logout redirect URI는 실제 사용된다** — 로그아웃 직후 `/login`의 "Sign out of all sessions" 패널이 Keycloak `end_session`(`post_logout_redirect_uri=<origin>/login`)을 호출한다. 미등록이면 Keycloak이 에러/확인 화면에 멈춘다.
 - **Mappers**: 토큰 `preferred_username`이 AD `sAMAccountName`(= loginId)을 담아야 한다(백엔드가 이 값으로 employees 매칭). Keycloak LDAP federation 기본 매핑이면 OK.
 
 **AD 인프라 (인프라 담당과 확인)** — Keycloak federation(로그인·토큰 발급용)과 백엔드 LDAP 동기화(employees 채우기용 독립 bind 계정)는 **별개**다. 둘 다 같은 AD를 보지만 접속 경로가 다르다.

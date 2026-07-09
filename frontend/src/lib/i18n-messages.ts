@@ -683,6 +683,9 @@ const en = {
   "login.devSearch": "Search name, id, or org...",
   "login.devMore": "+{n} more — refine your search",
   "login.subtitle": "Sign in to manage your process maps.",
+  "login.ssoActiveBody":
+    "Your Keycloak SSO session is still active — you may be signed back in automatically. Sign out of all apps on this browser?",
+  "login.ssoSignoutAll": "Sign out of all sessions",
   "login.or": "or",
   "login.terms": "COPYRIGHT SAMSUNG BIOLOGICS. ALL RIGHTS RESERVED",
   "action.close": "Close",
@@ -1935,6 +1938,9 @@ const ko: Record<MessageKey, string> = {
   "login.devSearch": "이름·아이디·조직 검색...",
   "login.devMore": "+{n}명 더 — 검색으로 좁히세요",
   "login.subtitle": "로그인하고 프로세스맵을 관리하세요.",
+  "login.ssoActiveBody":
+    "Keycloak SSO 세션이 아직 활성 상태라 재방문 시 자동 로그인될 수 있습니다. 이 브라우저의 모든 앱 세션을 종료할까요?",
+  "login.ssoSignoutAll": "모든 세션 로그아웃",
   "login.or": "또는",
   "login.terms": "COPYRIGHT SAMSUNG BIOLOGICS. ALL RIGHTS RESERVED",
   "action.close": "닫기",

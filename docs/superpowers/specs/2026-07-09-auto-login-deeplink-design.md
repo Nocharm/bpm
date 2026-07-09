@@ -80,3 +80,20 @@
    (Lock 아이콘, 단일 확인 버튼 — `cancelLabel` 옵셔널화) 표시, 확인/닫기 모두 홈 이동. `/maps/N/settings`·
    `/compare`의 403, 404 처리는 범위 외(후속).
    검증: `pw-smoke-map-403.mjs`(라우트 목 403 주입 — 권한 시뮬레이션 세팅 불필요) 4체크.
+
+## 3차 라운드 (2026-07-09, SSO 전체 로그아웃 패널)
+
+로그아웃이 `removeUser()`(BPM 로컬)만 수행 + 소비형 억제라 재방문 시 자동 재로그인됨 — 사용자 결정:
+자동 재로그인은 유지하되, **로그아웃 직후 로그인 카드 아래 1회성 패널**로 Keycloak 전체 세션 종료를 제공.
+
+- `onLogout`(top-nav): removeUser **직전** `getUser()`로 id_token을 확보해 `bpm.ssoLogoutHint`(sessionStorage)에
+  저장 — end_session이 확인 화면 없이 즉시 종료되려면 `id_token_hint` 필요.
+- `/login`: 힌트가 있으면(=로그아웃 직후) 카드 아래 패널 렌더("SSO 세션 활성 — 모든 세션 종료?"). 힌트는
+  모듈 캐시 consume(1회성·StrictMode 안전). 버튼 → `signoutAllSessions(hint)`:
+  `signoutRedirect({ id_token_hint, post_logout_redirect_uri: <origin>/login })`. 클릭 전 skip 플래그를 세워
+  종료 후 복귀 시 무의미한 prompt=none 왕복을 생략.
+- **같은 realm(ai-portal)의 다른 앱 세션도 함께 종료됨**(표준 single logout) — 패널 문구에 명시.
+- 전제: Keycloak 클라이언트 "Valid post logout redirect URIs"에 앱 origin 등록(`docs/deploy.md` §1 — 기존
+  등록 항목, 실사용 주석 추가).
+- 서버 실검증 추가 케이스: ⑥ 로그아웃 → 패널 노출 → "모든 세션 로그아웃" → Keycloak 확인 화면 없이
+  /login 복귀 → 재로그인 시 비밀번호 요구(세션 종료 확인) + AI 포털도 로그아웃됐는지 확인.
