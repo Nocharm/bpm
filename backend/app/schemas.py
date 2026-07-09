@@ -705,6 +705,26 @@ class AdminDeptOut(BaseModel):
 
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
+    korean_name: str = ""  # dept_info 조인 — 어드민 임포트 전용 (2026-07-09)
+    manager: str = ""
+
+
+class DeptInfoEntryIn(BaseModel):
+    """부서 임포트 항목 — 빈 필드는 미기입(기존 보존). max_length 200 = VARCHAR(200) 초과 방지."""
+
+    korean_name: Annotated[str, StringConstraints(max_length=200)] = ""
+    manager: Annotated[str, StringConstraints(max_length=200)] = ""
+
+
+class DeptInfoImportIn(BaseModel):
+    """부서 한글명·부서장 일괄 등록 — 키는 영문 부서명(리프), 비어있지 않은 필드만 덮어씀."""
+
+    entries: dict[str, DeptInfoEntryIn]
+
+
+class DeptInfoImportOut(BaseModel):
+    updated: int
+    unknown: list[str]  # 현존 부서와 매칭 실패한 부서명
 
 
 class AdminDirectoryOut(BaseModel):

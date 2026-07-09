@@ -10,12 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Base, Employee
+from app.models import Base, DeptInfo, Employee
 from app.permissions.logic import is_sysadmin
 from app.schemas import (
     AdminDeptOut,
     AdminDirectoryOut,
     AdminUserOut,
+    DeptInfoImportIn,
+    DeptInfoImportOut,
     TableDataOut,
     TableInfoOut,
 )
@@ -67,10 +69,20 @@ async def get_admin_users(
             if key not in seen_leaves:
                 seen_leaves[key] = levels
 
-    departments = [
-        AdminDeptOut(name=levels[-1] if levels else "", org_levels=levels)
-        for levels in sorted(seen_leaves.values(), key=lambda lv: lv)
-    ]
+    # dept_info 조인 — 임포트된 한글 부서명·부서장 (리프명 키)
+    infos = {d.department: d for d in (await session.scalars(select(DeptInfo))).all()}
+    departments = []
+    for levels in sorted(seen_leaves.values(), key=lambda lv: lv):
+        leaf = levels[-1] if levels else ""
+        info = infos.get(leaf)
+        departments.append(
+            AdminDeptOut(
+                name=leaf,
+                org_levels=levels,
+                korean_name=info.korean_name if info else "",
+                manager=info.manager if info else "",
+            )
+        )
 
     return AdminDirectoryOut(users=users, departments=departments)
 
@@ -79,6 +91,39 @@ def _require_sysadmin(login_id: str) -> None:
     """공통 게이트 — sysadmin 아니면 403 / Shared gate: 403 unless sysadmin."""
     if not is_sysadmin(login_id):
         raise HTTPException(status_code=403, detail="sysadmin required")
+
+
+@router.put("/dept-info", response_model=DeptInfoImportOut)
+async def import_dept_info(
+    payload: DeptInfoImportIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DeptInfoImportOut:
+    """부서 한글명·부서장 일괄 등록 — 현존 부서(employees.department distinct)만 반영, 미존재는 unknown."""
+    _require_sysadmin(login_id)
+    known = set((await session.scalars(select(Employee.department).distinct())).all())
+    updated = 0
+    unknown: list[str] = []
+    for dept_name, entry in payload.entries.items():
+        korean = entry.korean_name.strip()
+        manager = entry.manager.strip()
+        if not korean and not manager:
+            continue  # 둘 다 빈 항목은 통째로 무시 — 삭제 기능 아님
+        if dept_name not in known:
+            unknown.append(dept_name)
+            continue
+        info = await session.get(DeptInfo, dept_name)
+        if info is None:
+            info = DeptInfo(department=dept_name)
+            session.add(info)
+        # 빈 필드는 미기입 — 기존 값을 지우지 않는다 (korean-names의 dept 보존 규칙과 동일)
+        if korean:
+            info.korean_name = korean
+        if manager:
+            info.manager = manager
+        updated += 1
+    await session.commit()
+    return DeptInfoImportOut(updated=updated, unknown=unknown)
 
 
 @router.get("/tables", response_model=list[TableInfoOut])

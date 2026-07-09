@@ -1123,6 +1123,23 @@ export interface AdminUser {
 export interface AdminDept {
   name: string;        // leaf segment
   org_levels: string[];
+  korean_name: string; // dept_info 임포트값 — 없으면 ""
+  manager: string;
+}
+
+export interface DeptInfoImportSummary {
+  updated: number;
+  unknown: string[];
+}
+
+/** sysadmin 전용 — 부서 한글명·부서장 일괄 등록 (키: 영문 리프 부서명, 빈 필드는 기존 보존). */
+export function importDeptInfo(
+  entries: Record<string, { korean_name: string; manager: string }>,
+): Promise<DeptInfoImportSummary> {
+  return request<DeptInfoImportSummary>("/admin/dept-info", {
+    method: "PUT",
+    body: JSON.stringify({ entries }),
+  });
 }
 
 export interface AdminDirectory {

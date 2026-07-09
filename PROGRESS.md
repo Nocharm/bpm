@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-07-09 — 피커 한글 검색 (worktree-ui-improvement-3)
+- 부서 정보 JSON 임포트: 새 `dept_info` 테이블(영문 리프 부서명 PK + korean_name·manager) + `PUT /api/admin/dept-info`(현존 부서만·빈 필드 보존·unknown 보고) + `/admin/users` departments 조인. 부서 탭 열 개편(한글 부서=임포트값·부서장 신설, 직원 집계 필 폐기 — `aggregateDeptKoreanDepts` 제거), 임포트 모달(다운로드·충돌 단계 없음, 임시 필드명 dept/koreanName/manager — 소스 키 확정 시 `dept-info-import.ts` 상수만 변경). pytest 498·vitest 156·lint·build·브라우저 체크 8/8 GREEN.
 - 설정 사용자 탭 흡수·부서 탭 이동: 사용자 탭 고유 정보(sysadmin 태그·active 상태)를 직원관리 테이블로 옮기고(`EmployeeOut.active/is_sysadmin` 추가) UserTable·Permissions 카테고리 삭제, 부서 탭은 조직(Directory) 카테고리 하위로. 고아 i18n 키 6종 정리. pytest 493·vitest 150·lint·build·브라우저 체크 7/7 GREEN.
 - 최종 리뷰 폴리시: SelectOption 타입 중복 제거(search-select 것 재사용), eligible-approvers에 korean_dept 전달(+테스트 단언), 스펙 후속 섹션(점유권 이전 육안 확인·부서 하이라이트 툴팁·스모크 시드 원복 백로그). ⚠️ 최초 폴리시 커밋(5b5beb9)이 스펙 문서·테스트를 훼손해 리셋 후 재적용.
 - 전 피커(협업자·담당자/부서·점유권 이전) 한글이름·한글그룹(부서 항목 파생 키워드) 검색 + 행 표시 lang 연동 + 점유권 이전 스코어링 통일 설계 — `docs/superpowers/specs/2026-07-09-picker-korean-search-design.md`.

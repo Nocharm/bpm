@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { AdminUser, EmployeeRow } from "./api";
 import {
-  aggregateDeptKoreanDepts,
   buildAssigneeOptions,
   buildDepartmentOptions,
   buildExportIds,
@@ -36,7 +35,7 @@ const emp = (login_id: string, department: string, korean_name = ""): EmployeeRo
   is_sysadmin: false,
 });
 
-describe("getDeptMembers / aggregateDeptKoreanDepts", () => {
+describe("getDeptMembers", () => {
   const users = [
     user("a", ["HQ", "TeamA"], "팀에이"),
     user("b", ["HQ", "TeamA"], "팀A그룹"),
@@ -51,13 +50,6 @@ describe("getDeptMembers / aggregateDeptKoreanDepts", () => {
       "b",
       "c",
       "d",
-    ]);
-  });
-
-  it("aggregates distinct non-empty values, count desc", () => {
-    expect(aggregateDeptKoreanDepts(getDeptMembers(users, ["HQ", "TeamA"]))).toEqual([
-      { value: "팀A그룹", count: 2 },
-      { value: "팀에이", count: 1 },
     ]);
   });
 });

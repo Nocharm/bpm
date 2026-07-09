@@ -1,5 +1,5 @@
-// 부서 한글명 집계·유저 추출·옵션 빌더 순수 함수 — 부서 탭·한글이름 모달·피커용(DOM/fetch 없음).
-// 매핑 일괄 갱신(PUT /korean-dept) 룰은 철회됨 — 이 파일은 관찰용 집계만 담당.
+// 부서원 추출·이름 포맷·유저 추출·옵션 빌더 순수 함수 — 부서 탭·한글이름 모달·피커용(DOM/fetch 없음).
+// 부서 확정 한글명·부서장은 dept_info 임포트로 이관(2026-07-09) — 여기 남은 korean_dept 파생은 피커 검색 키워드용.
 // 설계: docs/superpowers/specs/2026-07-09-member-card-korean-names-design.md
 //      docs/superpowers/specs/2026-07-09-picker-korean-search-design.md
 
@@ -7,25 +7,9 @@ import type { SelectOption } from "@/components/search-select";
 import type { AdminUser, EmployeeRow } from "./api";
 import type { Lang } from "./i18n-messages";
 
-export interface DeptKoreanCandidate {
-  value: string;
-  count: number;
-}
-
 export function getDeptMembers(users: AdminUser[], orgLevels: string[]): AdminUser[] {
   const path = orgLevels.join("/");
   return users.filter((u) => u.org_levels.join("/") === path);
-}
-
-export function aggregateDeptKoreanDepts(members: AdminUser[]): DeptKoreanCandidate[] {
-  const counts = new Map<string, number>();
-  for (const member of members) {
-    if (!member.korean_dept) continue;
-    counts.set(member.korean_dept, (counts.get(member.korean_dept) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 }
 
 /** 명단 필 표기 — 언어 토글 연동: ko는 한글(영문), en은 영문(한글). 없는 쪽은 생략. */
