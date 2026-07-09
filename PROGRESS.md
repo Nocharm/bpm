@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — 자동 로그인+딥링크 복원 구현 (feat/auto-login-deeplink)
+- Task 1: `frontend/src/lib/auth-return.ts` 신설 — returnTo 저장/peek/consume(내부 경로 검증, open redirect 방지) + autoLoginSkip 플래그. vitest 7케이스 TDD(145 전체 통과).
+
 ## 2026-07-09 — 자동 로그인+딥링크 복원 설계 (feat/auto-login-deeplink)
 - 딥링크 진입 시 Keycloak SSO 세션 있으면 버튼 없이 자동 로그인 후 원래 페이지 복귀, 세션 없으면 현행 로그인 카드 유지(prompt=none 사전 체크) — 설계 승인·스펙 저장(`docs/superpowers/specs/2026-07-09-auto-login-deeplink-design.md`). 로그아웃 직후 자동 재로그인 억제 플래그 포함. 구현 계획: `docs/superpowers/plans/2026-07-09-auto-login-deeplink.md`(태스크 3 — 헬퍼 TDD·배선·스모크).
 
