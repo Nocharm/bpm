@@ -692,6 +692,8 @@ class AdminUserOut(BaseModel):
     is_sysadmin: bool
     org_levels: list[str]  # non-null org_l1..org_l5 in root→leaf order
     active: bool       # False = AD account disabled (userAccountControl bit 0x2)
+    korean_name: str   # AD 미제공 — 어드민 임포트 전용 (2026-07-09)
+    korean_dept: str
 
 
 class AdminDeptOut(BaseModel):
@@ -699,6 +701,17 @@ class AdminDeptOut(BaseModel):
 
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
+
+
+class DeptKoreanDeptIn(BaseModel):
+    """부서 전원 korean_dept 일괄 갱신 — 영어부서↔한글부서 1:N 정규화 (dept-korean-mapping §1b)."""
+
+    org_levels: list[str]
+    korean_dept: Annotated[str, StringConstraints(max_length=200)]
+
+
+class DeptKoreanDeptOut(BaseModel):
+    updated: int
 
 
 class AdminDirectoryOut(BaseModel):
