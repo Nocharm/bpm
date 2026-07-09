@@ -1138,6 +1138,28 @@ export interface DeptInfoImportSummary {
   unknown: string[];
 }
 
+export interface DeptRemapItem {
+  path: string;         // 현 조직에 없는 org_path (조직개편 잔재)
+  map_grants: number;   // 이 경로를 참조하는 맵 부서 권한 수
+  group_members: number; // 이 경로를 참조하는 그룹 부서 멤버 수
+}
+
+/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버 집계. */
+export function getDeptRemap(): Promise<DeptRemapItem[]> {
+  return request<DeptRemapItem[]>("/admin/dept-remap");
+}
+
+/** sysadmin 전용 — from_path 참조 전부를 현존 to_path로 일괄 이동(중복은 병합). */
+export function postDeptRemap(
+  fromPath: string,
+  toPath: string,
+): Promise<{ map_grants: number; group_members: number }> {
+  return request("/admin/dept-remap", {
+    method: "POST",
+    body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
+  });
+}
+
 /** sysadmin 전용 — 부서 한글명·부서장 일괄 등록 (키: 영문 리프 부서명, 빈 필드는 기존 보존). */
 export function importDeptInfo(
   entries: Record<string, { korean_name: string; manager: string }>,

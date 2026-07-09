@@ -6,10 +6,18 @@
 
 import { useEffect, useState } from "react";
 
-import { type AdminDept, type AdminUser, getAdminUsers } from "@/lib/api";
+import {
+  type AdminDept,
+  type AdminUser,
+  type DeptRemapItem,
+  getAdminUsers,
+  getDeptRemap,
+  postDeptRemap,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
+import { SearchSelect } from "@/components/search-select";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
 import { DeptInfoModal } from "./dept-info-modal";
 
@@ -54,8 +62,13 @@ export function DepartmentTable() {
   const [error, setError] = useState<string | null>(null);
   const [showOrg, setShowOrg] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  // 임포트 적용 후 재조회 트리거 — reloadKey 범프(effect 내 함수 dep 회피)
+  // 임포트/재지정 적용 후 재조회 트리거 — reloadKey 범프(effect 내 함수 dep 회피)
   const [reloadKey, setReloadKey] = useState(0);
+  // 소멸 부서(조직개편 잔재) 참조 목록 + 행별 재지정 대상 선택
+  const [missingRefs, setMissingRefs] = useState<DeptRemapItem[]>([]);
+  const [remapTargets, setRemapTargets] = useState<Record<string, string>>({});
+  const [remapBusy, setRemapBusy] = useState(false);
+  const [remapMsg, setRemapMsg] = useState("");
 
   useEffect(() => {
     getAdminUsers()
@@ -64,7 +77,26 @@ export function DepartmentTable() {
         setUsers(data.users);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+    getDeptRemap()
+      .then(setMissingRefs)
+      .catch(() => setMissingRefs([]));
   }, [reloadKey]);
+
+  const applyRemap = async (fromPath: string) => {
+    const toPath = remapTargets[fromPath];
+    if (!toPath) return;
+    setRemapBusy(true);
+    setRemapMsg("");
+    try {
+      const res = await postDeptRemap(fromPath, toPath);
+      setRemapMsg(`${fromPath} → ${toPath} · grants ${res.map_grants} · group members ${res.group_members}`);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setRemapMsg(err instanceof Error ? err.message : "remap failed");
+    } finally {
+      setRemapBusy(false);
+    }
+  };
 
   // 25행씩 증분 렌더.
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(departments, "");
@@ -74,6 +106,15 @@ export function DepartmentTable() {
   const maxOrgDepth = departments.reduce((max, d) => Math.max(max, d.org_levels.length), 0);
   const orgColIndices = Array.from({ length: maxOrgDepth }, (_, i) => i);
   const colCount = showOrg ? 3 + maxOrgDepth : 4;
+
+  // 재지정 대상 옵션 — 현 조직 전체 경로 프리픽스(상위 부서 포함)
+  const pathSet = new Set<string>();
+  for (const d of departments) {
+    for (let i = 1; i <= d.org_levels.length; i++) {
+      pathSet.add(d.org_levels.slice(0, i).join("/"));
+    }
+  }
+  const pathOptions = [...pathSet].sort().map((p) => ({ value: p, label: p }));
 
   if (error) {
     return (
@@ -152,6 +193,47 @@ export function DepartmentTable() {
           )}
         </tbody>
       </TableCard>
+      {/* 소멸 부서 재지정 — 조직개편으로 사라진 경로를 참조하는 권한/그룹 멤버 일괄 이동 */}
+      {missingRefs.length > 0 && (
+        <div
+          className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-alt p-4"
+          data-id="dept-remap-card"
+        >
+          <p className="text-caption-strong text-ink">{t("admin.deptRemapTitle")}</p>
+          <p className="text-fine text-ink-tertiary">{t("admin.deptRemapHint")}</p>
+          {missingRefs.map((ref) => (
+            <div key={ref.path} className="flex items-center gap-3" data-id="dept-remap-row">
+              <span className="min-w-0 flex-1 truncate font-mono text-caption text-error">
+                {ref.path}
+              </span>
+              <span className="shrink-0 text-fine text-ink-tertiary">
+                {t("admin.deptRemapRefs", {
+                  grants: String(ref.map_grants),
+                  members: String(ref.group_members),
+                })}
+              </span>
+              <SearchSelect
+                fitContent
+                value={remapTargets[ref.path] ?? ""}
+                options={pathOptions}
+                emptyLabel={t("admin.deptRemapPick")}
+                placeholder={t("field.searchPlaceholder")}
+                onChange={(v) => setRemapTargets((prev) => ({ ...prev, [ref.path]: v }))}
+              />
+              <button
+                type="button"
+                data-id="dept-remap-apply"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                disabled={remapBusy || !remapTargets[ref.path]}
+                onClick={() => void applyRemap(ref.path)}
+              >
+                {t("admin.deptRemapApply")}
+              </button>
+            </div>
+          ))}
+          {remapMsg && <p className="text-fine text-ink-tertiary">{remapMsg}</p>}
+        </div>
+      )}
       {showImportModal && (
         <DeptInfoModal
           onClose={() => setShowImportModal(false)}

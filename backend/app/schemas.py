@@ -729,6 +729,26 @@ class DeptInfoImportOut(BaseModel):
     unknown: list[str]  # 현존 부서와 매칭 실패한 부서명
 
 
+class DeptRemapItemOut(BaseModel):
+    """소멸 부서 참조 집계 — path는 현 조직(employees org 프리픽스)에 없는 org_path."""
+
+    path: str
+    map_grants: int      # 이 경로를 참조하는 맵 부서 권한 행 수
+    group_members: int   # 이 경로를 참조하는 그룹 부서 멤버 행 수
+
+
+class DeptRemapIn(BaseModel):
+    """소멸 부서 일괄 재지정 — from_path 참조 전부를 to_path(현존 경로)로 이동."""
+
+    from_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+    to_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+
+
+class DeptRemapOut(BaseModel):
+    map_grants: int
+    group_members: int
+
+
 class AdminDirectoryOut(BaseModel):
     users: list[AdminUserOut]
     departments: list[AdminDeptOut]
