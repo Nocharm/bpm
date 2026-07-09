@@ -4,6 +4,7 @@
 
 ## 2026-07-09 — 멤버 카드 아이콘 톤·조직 레벨 아이콘 설계 (worktree-ui-improvement-4)
 - 멤버 카드 아이콘 ink-muted 회색·왼쪽 패딩 6px + `LEVEL_ICONS` 건축+조각 세트(Landmark/Building2/Building/House/Puzzle) 설계 확정 — 비주얼 컴패니언 시안 선정(톤 3안 중 C·세트 3안 중 C).
+- 구현 계획 작성 — 3태스크(톤·패딩 / 아이콘 세트 / :3002 시각 검증), `docs/superpowers/plans/2026-07-09-member-card-icons.md`.
 
 ## 2026-07-09 — 자동 로그인 로딩 최소 노출 0.6s (feat/auto-login-min-visible)
 - `/login` silent 시도 전 `AUTO_LOGIN_MIN_VISIBLE_MS=600` 최소 대기(모듈 로드와 병렬) — 로딩 화면 순간 플래시 방지, 리다이렉트 중 화면 유지로 Keycloak 왕복 내내 이어져 보임. 수동 버튼·일반 페이지 로드에는 지연 없음. vitest 148·lint 0에러·build·딥링크 스모크 PASS.
