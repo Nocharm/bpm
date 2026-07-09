@@ -107,6 +107,14 @@ function CollaboratorRow({
   const { t } = useI18n();
   const principalType = perm.principal_type as PrincipalType;
   const displayName = resolvePrincipalName(principalType, perm.principal_id, dirUsers, dirDepts, groups);
+  // 유령 principal — 디렉터리에서 사라진 유저(퇴사) / 현 조직에 없는 부서(조직개편).
+  // 목록 로딩 전(빈 배열) 오탐 방지를 위해 로드된 뒤에만 판정.
+  const isGhost =
+    principalType === "user"
+      ? dirUsers.length > 0 && !dirUsers.some((u) => u.id === perm.principal_id)
+      : principalType === "department"
+        ? dirDepts.length > 0 && !dirDepts.some((d) => d.id === perm.principal_id)
+        : false;
   const role = perm.role as MapRole;
   const isOwner = role === "owner";
   // 자기 자신 행은 역할/제거 비활성 / Disable controls on own row.
@@ -119,7 +127,18 @@ function CollaboratorRow({
       <PrincipalIcon type={principalType} />
 
       {/* 이름 / Display name */}
-      <span className="min-w-0 flex-1 truncate text-caption text-ink">{displayName}</span>
+      <span className="min-w-0 flex-1 truncate text-caption text-ink">
+        {displayName}
+        {isGhost && (
+          <span
+            data-id="ghost-badge"
+            className="ml-1.5 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-error"
+            title={t(principalType === "department" ? "perm.badgeMissingNote" : "perm.badgeDepartedNote")}
+          >
+            {t(principalType === "department" ? "perm.badgeMissing" : "perm.badgeDeparted")}
+          </span>
+        )}
+      </span>
 
       {/* 역할 뱃지 or 드롭다운 / Role badge or dropdown */}
       {isOwner || isPending ? (
