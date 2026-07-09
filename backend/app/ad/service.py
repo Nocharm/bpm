@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import workflow
 from app.ad import client
 from app.ad.org import is_active, is_excluded, parse_org
 from app.models import Employee
@@ -185,12 +186,22 @@ async def sync_all(session: AsyncSession) -> SyncSummary:
     if valid_ids:
         # 스테일 프룬 — 이번 스캔 유효 집합 밖 ad 행 삭제(비활성·퇴사·신규 제외 대상).
         # 유효 집합이 비면 스킵(빈 스캔·전원 제외 → NOT IN 전삭제 방지). source='local' 시드는 보존.
-        result = await session.execute(
-            delete(Employee).where(
-                Employee.source == "ad", Employee.login_id.not_in(list(valid_ids))
-            )
+        # select→delete 2단계: 프룬 대상 id로 점유 해제·pending 재평가(reconcile)까지 수행.
+        stale_ids = set(
+            (
+                await session.scalars(
+                    select(Employee.login_id).where(
+                        Employee.source == "ad", Employee.login_id.not_in(list(valid_ids))
+                    )
+                )
+            ).all()
         )
-        purged = result.rowcount or 0
+        if stale_ids:
+            await session.execute(
+                delete(Employee).where(Employee.login_id.in_(list(stale_ids)))
+            )
+            purged = len(stale_ids)
+            await workflow.reconcile_departures(session, stale_ids)
     await session.commit()
     return SyncSummary(scanned=len(raws), upserted=upserted, excluded=excluded, purged=purged)
 

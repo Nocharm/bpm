@@ -408,6 +408,19 @@ class Employee(Base):
     )
 
 
+class DeptInfo(Base):
+    """부서 부가정보 — 영문 부서명(리프) 키. AD 미제공 필드(한글 부서명·부서장), 어드민 JSON 임포트로만 채운다."""
+
+    __tablename__ = "dept_info"
+
+    department: Mapped[str] = mapped_column(String(200), primary_key=True)
+    korean_name: Mapped[str] = mapped_column(String(200), default="")
+    manager: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class MapPermission(Base):
     """맵별 접근 권한 행 — principal(사용자/부서/그룹)에게 role 부여 (design 2026-06-21 §2.1)."""
 

@@ -223,8 +223,16 @@ export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
 
 // 노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 부서 (F5, 자유입력 폐기)
 export interface EligibleAssignees {
-  users: { id: string; name: string; department: string }[];
+  users: {
+    id: string;
+    name: string;
+    department: string;
+    korean_name?: string;
+    korean_dept?: string;
+  }[];
   departments: string[];
+  // 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시
+  dept_infos?: Record<string, { korean_name?: string; manager?: string }>;
 }
 export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
   return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
@@ -509,6 +517,8 @@ export interface Me {
   org_path: string;
   // BPM 시스템 관리자 여부 — sysadmin-only UI 게이팅 단일 소스
   is_sysadmin: boolean;
+  // 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬
+  manager_ids?: string[];
 }
 
 export function getMe(): Promise<Me> {
@@ -524,6 +534,9 @@ export interface EmployeeRow {
   department: string;
   korean_name: string;
   korean_dept: string;
+  active: boolean;
+  // env(BPM_SYSADMINS) 계산값 — 구 사용자 탭 흡수로 직원 목록에 노출
+  is_sysadmin: boolean;
 }
 
 export function listEmployees(): Promise<EmployeeRow[]> {
@@ -930,11 +943,14 @@ export interface DirectoryUser {
   org_path?: string; // 루트→리프 조직 경로. 멤버 2번째 줄 말단 org·부서 카운트(H2). 미채움 시 ""
   role?: string;     // admin | user — 로컬 로그인 피커 관리자 식별
   korean_name?: string; // 한글 이름 — 서버 기본 "" (member-card design 2026-07-09)
+  korean_dept?: string; // 한글 부서명 — 피커 검색 키워드 파생 (picker-korean-search design 2026-07-09)
 }
 
 export interface DirectoryDept {
   id: string;        // org_path string (e.g. "Management Support Division/Procurement Office")
   name: string;      // leaf segment
+  korean_name: string; // dept_info 조인(리프명 키) — 없으면 ""
+  manager: string;
 }
 
 export interface Directory {
@@ -1113,6 +1129,45 @@ export interface AdminUser {
 export interface AdminDept {
   name: string;        // leaf segment
   org_levels: string[];
+  korean_name: string; // dept_info 임포트값 — 없으면 ""
+  manager: string;
+}
+
+export interface DeptInfoImportSummary {
+  updated: number;
+  unknown: string[];
+}
+
+export interface DeptRemapItem {
+  path: string;         // 현 조직에 없는 org_path (조직개편 잔재)
+  map_grants: number;   // 이 경로를 참조하는 맵 부서 권한 수
+  group_members: number; // 이 경로를 참조하는 그룹 부서 멤버 수
+}
+
+/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버 집계. */
+export function getDeptRemap(): Promise<DeptRemapItem[]> {
+  return request<DeptRemapItem[]>("/admin/dept-remap");
+}
+
+/** sysadmin 전용 — from_path 참조 전부를 현존 to_path로 일괄 이동(중복은 병합). */
+export function postDeptRemap(
+  fromPath: string,
+  toPath: string,
+): Promise<{ map_grants: number; group_members: number }> {
+  return request("/admin/dept-remap", {
+    method: "POST",
+    body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
+  });
+}
+
+/** sysadmin 전용 — 부서 한글명·부서장 일괄 등록 (키: 영문 리프 부서명, 빈 필드는 기존 보존). */
+export function importDeptInfo(
+  entries: Record<string, { korean_name: string; manager: string }>,
+): Promise<DeptInfoImportSummary> {
+  return request<DeptInfoImportSummary>("/admin/dept-info", {
+    method: "PUT",
+    body: JSON.stringify({ entries }),
+  });
 }
 
 export interface AdminDirectory {

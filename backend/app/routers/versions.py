@@ -18,10 +18,9 @@ from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
     CheckoutRequest,
+    DeptInfo,
     Edge,
-    Employee,
     Group,
-    MapApprover,
     MapVersion,
     Node,
     ProcessMap,
@@ -32,6 +31,7 @@ from app.schemas import (
     CheckoutIn,
     CheckoutOut,
     CheckoutTransferIn,
+    DeptInfoValueOut,
     DirectoryUserOut,
     EligibleAssigneesOut,
     PendingCheckoutRequestOut,
@@ -209,11 +209,25 @@ async def list_eligible_assignees(
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
     eligible = await get_eligible_users(session, version.map_id)
     users = [
-        DirectoryUserOut(id=e.login_id, name=e.name or e.login_id, department=e.department or "")
+        DirectoryUserOut(
+            id=e.login_id,
+            name=e.name or e.login_id,
+            department=e.department or "",
+            korean_name=e.korean_name,
+            korean_dept=e.korean_dept,
+        )
         for e in eligible
     ]
     departments = sorted({e.department for e in eligible if e.department})
-    return EligibleAssigneesOut(users=users, departments=departments)
+    # 부서 부가정보(한글 부서명·부서장) — 후보 부서 중 dept_info 보유 행만 (셀렉트 검색·한/영 표시)
+    info_rows = (
+        await session.scalars(select(DeptInfo).where(DeptInfo.department.in_(departments)))
+    ).all()
+    dept_infos = {
+        d.department: DeptInfoValueOut(korean_name=d.korean_name, manager=d.manager)
+        for d in info_rows
+    }
+    return EligibleAssigneesOut(users=users, departments=departments, dept_infos=dept_infos)
 
 
 @router.patch(
@@ -390,27 +404,6 @@ async def delete_version(
     await session.commit()
 
 
-async def _load_approvers(session: AsyncSession, map_id: int) -> list[str]:
-    """Return ACTIVE approvers for a map (LEFT JOIN employees.active).
-
-    Approvers without an employee row (e.g. set before AD sync) are treated as active —
-    consistent with the missing-uac conservative rule. Only approvers with an explicit
-    employees.active=False are excluded.
-    The submit-gate 'no approvers → 409' now means 'no ACTIVE approvers'.
-    """
-    rows = await session.scalars(
-        select(MapApprover.user_id)
-        .outerjoin(Employee, Employee.login_id == MapApprover.user_id)
-        .where(
-            MapApprover.map_id == map_id,
-            # NULL (no employee row) → treated as active; False → excluded
-            (Employee.active.is_(None)) | (Employee.active.is_(True)),
-        )
-        .order_by(MapApprover.user_id)
-    )
-    return list(rows.all())
-
-
 @router.get("/versions/{version_id}/workflow", response_model=WorkflowStateOut)
 async def get_workflow_state(
     version_id: int, session: AsyncSession = Depends(get_session)
@@ -418,7 +411,7 @@ async def get_workflow_state(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    approvers = await _load_approvers(session, version.map_id)
+    approvers = await workflow.load_active_approvers(session, version.map_id)
     approvals = list(
         (
             await session.scalars(
@@ -496,7 +489,7 @@ async def submit_version(
     if not (is_checkout_active(version, now) and version.checked_out_by == user):
         raise HTTPException(status_code=403, detail="only the checkout holder can submit")
 
-    approvers = await _load_approvers(session, version.map_id)
+    approvers = await workflow.load_active_approvers(session, version.map_id)
     if not approvers:
         raise HTTPException(
             status_code=409, detail="map has no approvers — assign approvers first"
@@ -539,7 +532,7 @@ async def approve_version(
         raise HTTPException(
             status_code=409, detail=f"cannot approve from status {version.status}"
         )
-    approvers = await _load_approvers(session, version.map_id)
+    approvers = await workflow.load_active_approvers(session, version.map_id)
     if user not in approvers:
         raise HTTPException(
             status_code=403, detail="only a designated approver can approve"
@@ -593,7 +586,7 @@ async def reject_version(
         raise HTTPException(
             status_code=409, detail=f"cannot reject from status {version.status}"
         )
-    approvers = await _load_approvers(session, version.map_id)
+    approvers = await workflow.load_active_approvers(session, version.map_id)
     if user not in approvers:
         raise HTTPException(
             status_code=403, detail="only a designated approver can reject"
@@ -649,7 +642,7 @@ async def publish_version(
     version.version_number = (max_num or 0) + 1
 
     # 기존 published 버전 → expired (terminal; 승인 흐름으로 복귀 불가)
-    approvers = await _load_approvers(session, version.map_id)
+    approvers = await workflow.load_active_approvers(session, version.map_id)
     prior_published = await session.scalars(
         select(MapVersion).where(
             MapVersion.map_id == version.map_id,

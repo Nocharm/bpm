@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SearchSelect } from "@/components/search-select";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { useI18n } from "@/lib/i18n";
+import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 
 interface BpmAttributePickerProps {
   versionId: number | null;
@@ -28,7 +29,7 @@ export function BpmAttributePicker({
   readOnly,
   onChange,
 }: BpmAttributePickerProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [data, setData] = useState<EligibleAssignees>({ users: [], departments: [] });
   const loadedFor = useRef<number | null>(null);
   // 부서 변경 확인 — 담당자 있을 때 부서 변경 전 확인 대기
@@ -79,7 +80,7 @@ export function BpmAttributePicker({
           <SearchSelect
             fitContent
             value={department}
-            options={data.departments.map((d) => ({ value: d, label: d }))}
+            options={buildDepartmentOptions(data.departments, data.users, lang, data.dept_infos)}
             emptyLabel={t("summary.none")}
             placeholder={t("field.searchPlaceholder")}
             onChange={handleDeptChange}
@@ -129,15 +130,12 @@ export function BpmAttributePicker({
             <SearchSelect
               addMode
               value=""
-              options={data.users
-                .filter((u) => department === "" || u.department === department)
-                .filter((u) => !assignees.includes(u.name))
-                .map((u) => ({
-                  value: u.name,
-                  label: u.name,
-                  sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined,
-                  keywords: u.id,
-                }))}
+              options={buildAssigneeOptions(
+                data.users
+                  .filter((u) => department === "" || u.department === department)
+                  .filter((u) => !assignees.includes(u.name)),
+                lang,
+              )}
               emptyLabel={t("summary.none")}
               placeholder={t("field.searchPlaceholder")}
               onChange={(name) => {

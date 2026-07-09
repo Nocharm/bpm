@@ -5,7 +5,7 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
-from app.models import Employee
+from app.models import DeptInfo, Employee
 
 
 def test_directory_accessible_by_non_admin(client: TestClient) -> None:
@@ -63,3 +63,40 @@ def test_directory_includes_korean_name(client: TestClient) -> None:
     assert res.status_code == 200
     by_id = {u["id"]: u for u in res.json()["users"]}
     assert by_id["user.lee"]["korean_name"] == "이민재"
+
+
+def test_directory_includes_korean_dept(client: TestClient) -> None:
+    """멤버 카드 한/영 토글용 — /api/directory 유저 항목에 korean_dept 노출."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            emp.korean_dept = "소싱1팀"
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    by_id = {u["id"]: u for u in res.json()["users"]}
+    assert by_id["user.lee"]["korean_dept"] == "소싱1팀"
+
+
+def test_directory_departments_include_dept_info(client: TestClient) -> None:
+    """피커 부서 검색·한/영 표시용 — 부서 항목에 dept_info(한글 부서명·부서장) 조인."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            await session.merge(
+                DeptInfo(department="Sourcing Team 1", korean_name="구매1팀", manager="hong.gildong")
+            )
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    depts = {d["name"]: d for d in res.json()["departments"]}
+    assert depts["Sourcing Team 1"]["korean_name"] == "구매1팀"
+    assert depts["Sourcing Team 1"]["manager"] == "hong.gildong"
+    # dept_info 없는 부서(상위 조직 프리픽스)는 빈 문자열 기본값
+    assert depts["Management Support Division"]["korean_name"] == ""
+    assert depts["Management Support Division"]["manager"] == ""

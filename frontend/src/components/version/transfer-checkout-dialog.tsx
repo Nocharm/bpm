@@ -9,6 +9,8 @@ import { ArrowLeftRight } from "lucide-react";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { useI18n } from "@/lib/i18n";
 import { type DirectoryUser } from "@/lib/api";
+import { formatRosterName } from "@/lib/korean-dept";
+import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 interface TransferCheckoutDialogProps {
@@ -28,16 +30,15 @@ export function TransferCheckoutDialog({
   onConfirm,
   onCancel,
 }: TransferCheckoutDialogProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
 
-  const q = query.toLowerCase().trim();
-  const filtered = q
-    ? editors.filter(
-        (e) =>
-          e.name.toLowerCase().includes(q) ||
-          e.id.toLowerCase().includes(q),
-      )
+  const filtered = query.trim()
+    ? filterByQuery(editors, query, (e) => [
+        { field: "name", text: e.name },
+        ...(e.korean_name ? [{ field: "koreanName", text: e.korean_name }] : []),
+        { field: "id", text: e.id },
+      ]).map((h) => h.item)
     : editors;
   // 25개씩 증분 렌더 — 편집자 수가 많아도 목록 DOM 부하 없음(훅이라 early return보다 앞).
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
@@ -89,7 +90,9 @@ export function TransferCheckoutDialog({
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-caption text-ink">{editor.name}</p>
+                        <p className="truncate text-caption text-ink">
+                          {formatRosterName({ name: editor.name, korean_name: editor.korean_name ?? "" }, lang)}
+                        </p>
                         <p className="truncate text-fine text-ink-tertiary">{editor.id}</p>
                       </div>
                       {editor.id === value && (

@@ -61,6 +61,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
     departmentId: "",
     status: "active" as const,
     isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
   const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? id;
@@ -125,6 +126,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
           groups={[]}
           excludeIds={new Set(selected)}
           userDepartments={userDepartments}
+          managersFirst
           onSelect={(opt) => {
             if (opt.principalType === "user") {
               setSelected((prev) =>

@@ -10,12 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Base, Employee
-from app.permissions.logic import is_sysadmin
+from app.models import Base, DeptInfo, Employee, MapPermission, UserGroupMember
+from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
     AdminDirectoryOut,
     AdminUserOut,
+    DeptInfoImportIn,
+    DeptInfoImportOut,
+    DeptRemapIn,
+    DeptRemapItemOut,
+    DeptRemapOut,
     TableDataOut,
     TableInfoOut,
 )
@@ -67,10 +72,20 @@ async def get_admin_users(
             if key not in seen_leaves:
                 seen_leaves[key] = levels
 
-    departments = [
-        AdminDeptOut(name=levels[-1] if levels else "", org_levels=levels)
-        for levels in sorted(seen_leaves.values(), key=lambda lv: lv)
-    ]
+    # dept_info 조인 — 임포트된 한글 부서명·부서장 (리프명 키)
+    infos = {d.department: d for d in (await session.scalars(select(DeptInfo))).all()}
+    departments = []
+    for levels in sorted(seen_leaves.values(), key=lambda lv: lv):
+        leaf = levels[-1] if levels else ""
+        info = infos.get(leaf)
+        departments.append(
+            AdminDeptOut(
+                name=leaf,
+                org_levels=levels,
+                korean_name=info.korean_name if info else "",
+                manager=info.manager if info else "",
+            )
+        )
 
     return AdminDirectoryOut(users=users, departments=departments)
 
@@ -79,6 +94,158 @@ def _require_sysadmin(login_id: str) -> None:
     """공통 게이트 — sysadmin 아니면 403 / Shared gate: 403 unless sysadmin."""
     if not is_sysadmin(login_id):
         raise HTTPException(status_code=403, detail="sysadmin required")
+
+
+async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
+    """현 employees org 레벨에서 파생되는 모든 경로 프리픽스 — /api/directory 파생과 동일 규약."""
+    rows = (
+        await session.execute(
+            select(Employee.org_l1, Employee.org_l2, Employee.org_l3, Employee.org_l4, Employee.org_l5)
+        )
+    ).all()
+    paths: set[str] = set()
+    for level_row in rows:
+        levels = [lv for lv in level_row if lv is not None]
+        for i in range(1, len(levels) + 1):
+            paths.add("/".join(levels[:i]))
+    return paths
+
+
+@router.get("/dept-remap", response_model=list[DeptRemapItemOut])
+async def list_missing_dept_refs(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[DeptRemapItemOut]:
+    """sysadmin 전용 — 현 조직에 없는 부서 경로를 참조 중인 맵 권한·그룹 멤버 집계 (조직개편 잔재)."""
+    _require_sysadmin(login_id)
+    valid = await _load_valid_org_paths(session)
+    grant_counts = dict(
+        (
+            await session.execute(
+                select(MapPermission.principal_id, func.count())
+                .where(MapPermission.principal_type == "department")
+                .group_by(MapPermission.principal_id)
+            )
+        ).all()
+    )
+    member_counts = dict(
+        (
+            await session.execute(
+                select(UserGroupMember.member_id, func.count())
+                .where(UserGroupMember.member_type == "department")
+                .group_by(UserGroupMember.member_id)
+            )
+        ).all()
+    )
+    missing = sorted((set(grant_counts) | set(member_counts)) - valid)
+    return [
+        DeptRemapItemOut(
+            path=path,
+            map_grants=grant_counts.get(path, 0),
+            group_members=member_counts.get(path, 0),
+        )
+        for path in missing
+    ]
+
+
+@router.post("/dept-remap", response_model=DeptRemapOut)
+async def remap_dept_refs(
+    payload: DeptRemapIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DeptRemapOut:
+    """sysadmin 전용 — from_path를 참조하는 맵 권한·그룹 멤버를 to_path(현존 경로)로 일괄 이동.
+
+    대상에 같은 부서 행이 이미 있으면 병합 — 맵 권한은 높은 역할 유지, 그룹 멤버는 중복 제거.
+    """
+    _require_sysadmin(login_id)
+    valid = await _load_valid_org_paths(session)
+    if payload.to_path not in valid:
+        raise HTTPException(status_code=422, detail="to_path is not a current department path")
+
+    grants = (
+        await session.scalars(
+            select(MapPermission).where(
+                MapPermission.principal_type == "department",
+                MapPermission.principal_id == payload.from_path,
+            )
+        )
+    ).all()
+    moved_grants = 0
+    for grant in grants:
+        dup = await session.scalar(
+            select(MapPermission).where(
+                MapPermission.map_id == grant.map_id,
+                MapPermission.principal_type == "department",
+                MapPermission.principal_id == payload.to_path,
+            )
+        )
+        if dup is not None:
+            if role_rank(grant.role) > role_rank(dup.role):
+                dup.role = grant.role
+            await session.delete(grant)
+        else:
+            grant.principal_id = payload.to_path
+        moved_grants += 1
+
+    members = (
+        await session.scalars(
+            select(UserGroupMember).where(
+                UserGroupMember.member_type == "department",
+                UserGroupMember.member_id == payload.from_path,
+            )
+        )
+    ).all()
+    moved_members = 0
+    for member in members:
+        dup = await session.scalar(
+            select(UserGroupMember).where(
+                UserGroupMember.group_id == member.group_id,
+                UserGroupMember.member_type == "department",
+                UserGroupMember.member_id == payload.to_path,
+            )
+        )
+        if dup is not None:
+            await session.delete(member)
+        else:
+            member.member_id = payload.to_path
+        moved_members += 1
+
+    await session.commit()
+    return DeptRemapOut(map_grants=moved_grants, group_members=moved_members)
+
+
+@router.put("/dept-info", response_model=DeptInfoImportOut)
+async def import_dept_info(
+    payload: DeptInfoImportIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DeptInfoImportOut:
+    """부서 한글명·부서장 일괄 등록 — 현존 부서(employees.department distinct)만 반영, 미존재는 unknown."""
+    _require_sysadmin(login_id)
+    known = set((await session.scalars(select(Employee.department).distinct())).all())
+    updated = 0
+    unknown: list[str] = []
+    for dept_name, entry in payload.entries.items():
+        korean = entry.korean_name.strip()
+        manager = entry.manager.strip()
+        if not korean and not manager:
+            continue  # 둘 다 빈 항목은 통째로 무시 — 삭제 기능 아님
+        if dept_name not in known:
+            unknown.append(dept_name)
+            continue
+        info = await session.get(DeptInfo, dept_name)
+        if info is None:
+            info = DeptInfo(department=dept_name)
+            session.add(info)
+        # 빈 필드는 미기입 — 기존 값을 지우지 않는다 (korean-names의 dept 보존 규칙과 동일)
+        if korean:
+            info.korean_name = korean
+        if manager:
+            info.manager = manager
+        updated += 1
+    await session.commit()
+    return DeptInfoImportOut(updated=updated, unknown=unknown)
 
 
 @router.get("/tables", response_model=list[TableInfoOut])

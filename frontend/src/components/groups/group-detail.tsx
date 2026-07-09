@@ -20,6 +20,7 @@ import {
   type GroupMember,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 
@@ -104,6 +105,7 @@ function PickerDialog({
   pickerUsers,
   pickerDepts,
   excludeIds,
+  deptKoreanKeywords,
   onAdd,
   onClose,
 }: {
@@ -111,6 +113,7 @@ function PickerDialog({
   pickerUsers: MockUser[];
   pickerDepts: Department[];
   excludeIds: Set<string>;
+  deptKoreanKeywords: Map<string, string[]>;
   onAdd: (opts: PrincipalOption[]) => void;
   onClose: () => void;
 }) {
@@ -162,6 +165,7 @@ function PickerDialog({
           departments={pickerDepts}
           groups={[]}
           excludeIds={exclude}
+          deptKoreanKeywords={deptKoreanKeywords}
           onSelect={(opt) => setSelected((prev) => [...prev, opt])}
         />
         <div className="flex justify-end gap-2">
@@ -218,6 +222,7 @@ export function GroupDetail({
     departmentId: "",
     status: "active" as const,
     isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const pickerDepts: Department[] = dirDepts.map((d) => ({
     id: d.id,
@@ -226,6 +231,8 @@ export function GroupDetail({
     orgLevels: [],
     parentId: null,
     rawDn: "",
+    korean_name: d.korean_name,
+    manager: d.manager,
   }));
 
   const userName = (id: string): string => dirUsers.find((u) => u.id === id)?.name ?? id;
@@ -400,6 +407,7 @@ export function GroupDetail({
           pickerUsers={pickerUsers}
           pickerDepts={pickerDepts}
           excludeIds={memberExcludeIds}
+          deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
           onAdd={(opts) => void handleAddMembers(opts)}
           onClose={onAddMemberClose}
         />

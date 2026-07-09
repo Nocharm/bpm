@@ -10,6 +10,8 @@ export interface CurrentUser {
   orgPath: string;
   // 서버(/api/me)가 산정한 BPM 시스템 관리자 여부 — sysadmin-only UI 게이팅 단일 소스
   isSysadmin: boolean;
+  // 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬
+  managerIds: string[];
 }
 
 let currentUser: CurrentUser | null = null;

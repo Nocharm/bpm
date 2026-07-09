@@ -52,6 +52,7 @@ async function publishMe(): Promise<void> {
       department: me.department,
       orgPath: me.org_path,
       isSysadmin: me.is_sysadmin,
+      managerIds: me.manager_ids ?? [],
     });
   } catch {
     setCurrentUser(null);

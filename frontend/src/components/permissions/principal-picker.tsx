@@ -3,12 +3,14 @@
 // 협업자 추가용 피커 — 사용자/부서/그룹을 초성 포함 검색 후 선택 /
 // Principal picker: search users/departments/groups (with hangul chosung) and select one.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Building2, Search, User, Users } from "lucide-react";
 
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
+import { sortManagersFirst } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import type { Department, PrincipalType, User as MockUser, UserGroup } from "@/lib/mock/permissions";
 
@@ -17,6 +19,12 @@ export interface PrincipalOption {
   principalId: string;
   displayName: string;
   department?: string;
+  /** 한글명 — 유저는 korean_name, 부서는 dept_info 확정 한글 부서명. 표시 토글·검색 겸용 */
+  koreanName?: string;
+  /** 부서 항목 전용 — 부서장(검색 키워드, 표시 없음) */
+  manager?: string;
+  /** 부서 항목 전용 — 소속 유저들의 distinct 한글부서(검색 키워드) */
+  koreanKeywords?: string[];
 }
 
 interface PrincipalPickerProps {
@@ -27,6 +35,10 @@ interface PrincipalPickerProps {
   excludeIds: Set<string>;
   /** userId → 소속명(검색용) / department name per user, for dept search. */
   userDepartments?: Record<string, string>;
+  /** 부서 id(org_path) → distinct 한글부서 목록(검색 키워드) / dept id → korean dept keywords. */
+  deptKoreanKeywords?: Map<string, string[]>;
+  /** 브라우즈(빈 검색) 시 내 상위 부서장들을 맨 위로 — 승인자 피커용. 검색 랭킹은 불변. */
+  managersFirst?: boolean;
   onSelect: (option: PrincipalOption) => void;
 }
 
@@ -36,6 +48,7 @@ function buildOptions(
   departments: Department[],
   groups: UserGroup[],
   userDepartments?: Record<string, string>,
+  deptKoreanKeywords?: Map<string, string[]>,
 ): PrincipalOption[] {
   const userOpts: PrincipalOption[] = users
     .filter((u) => u.status === "active")
@@ -44,11 +57,15 @@ function buildOptions(
       principalId: u.id,
       displayName: u.name,
       department: userDepartments?.[u.id],
+      koreanName: u.korean_name ?? "",
     }));
   const deptOpts: PrincipalOption[] = departments.map((d) => ({
     principalType: "department",
     principalId: d.id,
     displayName: d.name,
+    koreanName: d.korean_name ?? "",
+    manager: d.manager ?? "",
+    koreanKeywords: deptKoreanKeywords?.get(d.id) ?? [],
   }));
   const groupOpts: PrincipalOption[] = groups
     .filter((g) => g.status === "active")
@@ -68,30 +85,52 @@ export function PrincipalPicker({
   groups,
   excludeIds,
   userDepartments,
+  deptKoreanKeywords,
+  managersFirst,
   onSelect,
 }: PrincipalPickerProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState(false);
 
-  const all = buildOptions(users, departments, groups, userDepartments).filter(
+  // 현재 접속자 — 상위 부서장 체인(Manager 라벨·우선 정렬)과 소속 부서(My Dept 라벨) 판정용
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const managerIds = me?.managerIds ?? [];
+  const managerSet = new Set(managerIds);
+  const isMyDept = (deptPath: string): boolean =>
+    !!me?.orgPath && (me.orgPath === deptPath || me.orgPath.startsWith(`${deptPath}/`));
+
+  const all = buildOptions(users, departments, groups, userDepartments, deptKoreanKeywords).filter(
     (o) => !excludeIds.has(o.principalId),
   );
 
   // 검색 한정: 유저=이름+아이디 / 부서·그룹=부서명·그룹명(displayName)만.
   // 유저를 소속 부서/그룹으로 매칭하지 않음 — "AI dev" 검색 시 그룹원들이 결과를 채워
-  // 정작 'AI dev' 그룹이 유저 무더기에 묻히는 노이즈 방지.
+  // 정작 'AI dev' 그룹이 유저 무더기에 묻히는 노이즈 방지. 한글그룹명은 부서 항목만 매칭.
   const hits = query.trim()
     ? filterByQuery(all, query, (o) =>
         o.principalType === "user"
           ? [
               { field: "name", text: o.displayName },
+              ...(o.koreanName ? [{ field: "koreanName", text: o.koreanName }] : []),
               { field: "id", text: o.principalId },
             ]
-          : [{ field: "name", text: o.displayName }],
+          : [
+              { field: "name", text: o.displayName },
+              ...(o.koreanName ? [{ field: "koreanName", text: o.koreanName }] : []),
+              ...(o.manager ? [{ field: "manager", text: o.manager }] : []),
+              ...(o.koreanKeywords ?? []).map((k) => ({ field: "koreanDept", text: k })),
+            ],
       )
-    : all.map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
+    : (managersFirst
+        ? sortManagersFirst(
+            all,
+            (o) => (o.principalType === "user" ? o.principalId : null),
+            managerIds,
+          )
+        : all
+      ).map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
   // 검색도 캡 없이 전량 노출 — 25개씩 증분 렌더가 DOM 부하를 막는다(~5000명).
   // 부서·그룹 매치는 이름이 비슷한 유저 무더기에 밀리지 않게, 최고 랭크 1개를 스코어 무시하고 맨 위로 고정.
   let ordered = hits;
@@ -168,28 +207,73 @@ export function PrincipalPicker({
                 }}
               >
                 <PrincipalIcon type={opt.principalType} />
-                <span className="min-w-0 truncate">
-                  <Highlight text={opt.displayName} ranges={nameRanges} />
-                  {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
-                  {opt.principalType === "user" && (
-                    <span className="ml-1.5 text-fine text-ink-tertiary">
-                      <Highlight text={opt.principalId} ranges={idRanges} />
-                      {opt.department ? ` · ${opt.department}` : ""}
+                {(() => {
+                  const koreanRanges: MatchRange[] =
+                    matches.find((m) => m.field === "koreanName")?.ranges ?? [];
+                  // 유저·부서 동일 규칙 — 한글명 보유 시 lang에 따라 주/보조 전환 (그룹은 한글명 없음)
+                  const hasKr = !!opt.koreanName;
+                  const primaryKr = hasKr && lang === "ko";
+                  return (
+                    <span className="min-w-0 truncate">
+                      {primaryKr ? (
+                        <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
+                      ) : (
+                        <Highlight text={opt.displayName} ranges={nameRanges} />
+                      )}
+                      {/* 반대 언어 보조 — 한글 보유 유저만 */}
+                      {hasKr && (
+                        <span className="ml-1 text-fine text-ink-tertiary">
+                          (
+                          {primaryKr ? (
+                            <Highlight text={opt.displayName} ranges={nameRanges} />
+                          ) : (
+                            <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
+                          )}
+                          )
+                        </span>
+                      )}
+                      {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
+                      {opt.principalType === "user" && (
+                        <span className="ml-1.5 text-fine text-ink-tertiary">
+                          <Highlight text={opt.principalId} ranges={idRanges} />
+                          {opt.department ? ` · ${opt.department}` : ""}
+                        </span>
+                      )}
+                      {opt.principalType !== "user" && opt.department && (
+                        <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
+                      )}
                     </span>
-                  )}
-                  {opt.principalType !== "user" && opt.department && (
-                    <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
-                  )}
-                </span>
-                <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
-                  {t(
-                    opt.principalType === "user"
-                      ? "perm.principalUser"
-                      : opt.principalType === "department"
-                        ? "perm.principalDept"
-                        : "perm.principalGroup",
-                  )}
-                </span>
+                  );
+                })()}
+                {(() => {
+                  // 내 상위 부서장 → Manager, 내 소속 부서(체인) → My Dept — 약한 하이라이트 필
+                  const isManager =
+                    opt.principalType === "user" && managerSet.has(opt.principalId);
+                  const isMine =
+                    opt.principalType === "department" && isMyDept(opt.principalId);
+                  const label = isManager
+                    ? t("perm.principalManager")
+                    : isMine
+                      ? t("perm.principalMyDept")
+                      : t(
+                          opt.principalType === "user"
+                            ? "perm.principalUser"
+                            : opt.principalType === "department"
+                              ? "perm.principalDept"
+                              : "perm.principalGroup",
+                        );
+                  return (
+                    <span
+                      className={`ml-auto shrink-0 text-fine ${
+                        isManager || isMine
+                          ? "rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+                          : "text-ink-tertiary"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  );
+                })()}
               </button>
             );
           })}

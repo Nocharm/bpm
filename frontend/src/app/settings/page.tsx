@@ -17,7 +17,6 @@ import { GroupsPanel } from "@/components/groups/groups-panel";
 import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
-import { UserTable } from "@/components/admin/user-table";
 import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
@@ -32,7 +31,6 @@ type TabId =
   | "employees"
   | "queue"
   | "depts"
-  | "users"
   | "tables"
   | "groups"
   | "trash"
@@ -61,16 +59,12 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
+    // 조직 — 직원(구 사용자 탭 흡수: sysadmin 태그·active 상태 포함) + 부서
     labelKey: "admin.catDirectory",
     access: "admin",
-    tabs: [{ id: "employees", labelKey: "admin.title" }],
-  },
-  {
-    labelKey: "admin.catPermissions",
-    access: "sysadmin",
     tabs: [
+      { id: "employees", labelKey: "admin.title" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
-      { id: "users", labelKey: "perm.sysadmin.tabUsers" },
     ],
   },
   {
@@ -217,7 +211,6 @@ export default function SettingsPage() {
               </p>
             ))}
           {current === "depts" && <DepartmentTable />}
-          {current === "users" && <UserTable />}
           {current === "tables" && <TableViewer />}
           {current === "trash" && (
             <div className="flex flex-col gap-8">

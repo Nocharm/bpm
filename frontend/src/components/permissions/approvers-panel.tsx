@@ -60,6 +60,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
   const pickerUsers = dirUsers.map((u) => ({
     id: u.id, name: u.name, email: "", departmentId: "",
     status: "active" as const, isSysadmin: false,
+    korean_name: u.korean_name ?? "",
   }));
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
   const dirName = (id: string) => dirUsers.find((u) => u.id === id)?.name ?? userName(id);
@@ -157,7 +158,19 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
                   <X size={12} strokeWidth={1.5} />
                 </button>
               )}
-              <span className="truncate pr-4 text-caption text-ink">{dirName(userId)}</span>
+              <span className="truncate pr-4 text-caption text-ink">
+                {dirName(userId)}
+                {/* 퇴사 승인자 — 디렉터리(자격자 목록)에 없음. 정족수에선 이미 제외됨 */}
+                {dirUsers.length > 0 && !dirUsers.some((u) => u.id === userId) && (
+                  <span
+                    data-id="ghost-badge"
+                    className="ml-1.5 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-error"
+                    title={t("perm.badgeDepartedNote")}
+                  >
+                    {t("perm.badgeDeparted")}
+                  </span>
+                )}
+              </span>
               <span className="truncate text-fine text-ink-tertiary">{userId}</span>
               {/* 소속(센터/부서/팀/그룹/파트) — 최대 5, 아래 공간 확보(카드 크기 동일) */}
               <div className="mt-auto flex flex-col overflow-hidden">
@@ -187,6 +200,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
             groups={[]}
             excludeIds={new Set(approverIds)}
             userDepartments={userDepartments}
+            managersFirst
             onSelect={(opt: PrincipalOption) => {
               if (opt.principalType !== "user") return;
               void (async () => {

@@ -67,6 +67,30 @@ def test_get_current_user_prefers_dev_header() -> None:
     assert get_current_user(authorization=None, x_dev_user=None) == settings.dev_user
 
 
+def test_me_includes_manager_ids_chain(client: TestClient) -> None:
+    """/api/me manager_ids — 내 org 체인(리프→루트) 부서장, 본인 제외·빈값 제외 (피커 Manager 라벨)."""
+    from app.models import DeptInfo
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            # admin.kim org: Management Support Division / Process Innovation Office / Process Innovation Team
+            await session.merge(DeptInfo(department="Process Innovation Team", korean_name="", manager="lead.kim"))
+            await session.merge(DeptInfo(department="Process Innovation Office", korean_name="", manager="head.lee"))
+            # 본인이 부서장인 상위 레벨 — 본인은 제외돼야 함
+            await session.merge(DeptInfo(department="Management Support Division", korean_name="", manager="admin.kim"))
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/me", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    # 리프(직속)→루트 순, 본인 제외
+    assert res.json()["manager_ids"] == ["lead.kim", "head.lee"]
+
+    # 직원 미존재 유저 — 빈 목록
+    res2 = client.get("/api/me", headers={"X-Dev-User": "unknown.person"})
+    assert res2.json()["manager_ids"] == []
+
+
 def test_me_uses_dev_user_header(client: TestClient) -> None:
     res = client.get("/api/me", headers={"X-Dev-User": "admin.kim"})
     assert res.status_code == 200
@@ -110,6 +134,18 @@ def test_employees_list_requires_admin(client: TestClient, sysadmin_enforced: No
     res = client.get("/api/employees", headers={"X-Dev-User": "admin.kim"})
     assert res.status_code == 200
     assert len(res.json()) >= 5
+
+
+def test_employees_list_includes_active_and_sysadmin(
+    client: TestClient, sysadmin_enforced: None
+) -> None:
+    # 설정 사용자 탭 흡수 — 직원 목록이 active와 is_sysadmin(env 계산값)을 함께 반환
+    res = client.get("/api/employees", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    by_id = {r["login_id"]: r for r in res.json()}
+    assert by_id["admin.kim"]["is_sysadmin"] is True
+    assert by_id["user.lee"]["is_sysadmin"] is False
+    assert isinstance(by_id["user.lee"]["active"], bool)
 
 
 def test_sync_requires_admin(client: TestClient, sysadmin_enforced: None) -> None:

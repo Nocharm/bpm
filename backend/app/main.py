@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session, init_models
-from app.models import Employee, LoginRecord
+from app.models import DeptInfo, Employee, LoginRecord
 from app.permissions.logic import is_sysadmin, org_path
 from app.routers import (
     admin,
@@ -105,6 +105,25 @@ async def get_me(
     if already is None:
         session.add(LoginRecord(login_id=login_id, name=emp.name if emp else None))
         await session.commit()
+    # 내 상위 부서장 체인 — org 레벨(리프→루트) 순으로 dept_info.manager 수집, 본인·빈값 제외
+    manager_ids: list[str] = []
+    if emp:
+        level_names = [
+            lv for lv in (emp.org_l5, emp.org_l4, emp.org_l3, emp.org_l2, emp.org_l1) if lv
+        ]
+        if level_names:
+            infos = {
+                d.department: d.manager
+                for d in (
+                    await session.scalars(
+                        select(DeptInfo).where(DeptInfo.department.in_(level_names))
+                    )
+                ).all()
+            }
+            for name in level_names:
+                manager = infos.get(name, "")
+                if manager and manager != login_id and manager not in manager_ids:
+                    manager_ids.append(manager)
     return MeOut(
         username=login_id,
         ai_enabled=settings.ai_enabled,
@@ -119,4 +138,5 @@ async def get_me(
             else ""
         ),
         is_sysadmin=is_sysadmin(login_id),
+        manager_ids=manager_ids,
     )

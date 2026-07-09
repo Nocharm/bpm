@@ -639,6 +639,8 @@ class MeOut(BaseModel):
     org_path: str = ""
     # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
     is_sysadmin: bool
+    # 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬 (2026-07-09)
+    manager_ids: list[str] = []
 
 
 class EmployeeOut(BaseModel):
@@ -652,6 +654,9 @@ class EmployeeOut(BaseModel):
     department: str
     korean_name: str
     korean_dept: str
+    active: bool
+    # env(BPM_SYSADMINS) 계산값 — ORM 속성이 아니라 라우터에서 채움
+    is_sysadmin: bool = False
 
 
 class KoreanNameEntryIn(BaseModel):
@@ -702,6 +707,46 @@ class AdminDeptOut(BaseModel):
 
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
+    korean_name: str = ""  # dept_info 조인 — 어드민 임포트 전용 (2026-07-09)
+    manager: str = ""
+
+
+class DeptInfoEntryIn(BaseModel):
+    """부서 임포트 항목 — 빈 필드는 미기입(기존 보존). max_length 200 = VARCHAR(200) 초과 방지."""
+
+    korean_name: Annotated[str, StringConstraints(max_length=200)] = ""
+    manager: Annotated[str, StringConstraints(max_length=200)] = ""
+
+
+class DeptInfoImportIn(BaseModel):
+    """부서 한글명·부서장 일괄 등록 — 키는 영문 부서명(리프), 비어있지 않은 필드만 덮어씀."""
+
+    entries: dict[str, DeptInfoEntryIn]
+
+
+class DeptInfoImportOut(BaseModel):
+    updated: int
+    unknown: list[str]  # 현존 부서와 매칭 실패한 부서명
+
+
+class DeptRemapItemOut(BaseModel):
+    """소멸 부서 참조 집계 — path는 현 조직(employees org 프리픽스)에 없는 org_path."""
+
+    path: str
+    map_grants: int      # 이 경로를 참조하는 맵 부서 권한 행 수
+    group_members: int   # 이 경로를 참조하는 그룹 부서 멤버 행 수
+
+
+class DeptRemapIn(BaseModel):
+    """소멸 부서 일괄 재지정 — from_path 참조 전부를 to_path(현존 경로)로 이동."""
+
+    from_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+    to_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+
+
+class DeptRemapOut(BaseModel):
+    map_grants: int
+    group_members: int
 
 
 class AdminDirectoryOut(BaseModel):
@@ -721,6 +766,7 @@ class DirectoryUserOut(BaseModel):
     org_path: str = ""  # 루트→리프 org_path — 멤버 2번째 줄 말단 org·부서 카운트(H2)
     role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
     korean_name: str = ""  # 멤버 카드 한/영 토글용
+    korean_dept: str = ""  # 담당자 피커 한글 부서 검색용
 
 
 class EligibleApproverOut(DirectoryUserOut):
@@ -734,6 +780,8 @@ class DirectoryDeptOut(BaseModel):
 
     id: str       # org_path ("l1/l2/l3" or leaf segment)
     name: str     # leaf segment (display label)
+    korean_name: str = ""  # dept_info 조인(리프명 키) — 피커 한/영 표시·검색 (2026-07-09)
+    manager: str = ""
 
 
 class DirectoryOut(BaseModel):
@@ -741,11 +789,20 @@ class DirectoryOut(BaseModel):
     departments: list[DirectoryDeptOut]
 
 
+class DeptInfoValueOut(BaseModel):
+    """부서 부가정보 값 — dept_infos 맵 원소 (키는 영문 부서명)."""
+
+    korean_name: str = ""
+    manager: str = ""
+
+
 class EligibleAssigneesOut(BaseModel):
     """노드 담당자/부서 후보 — 맵 조회권한(viewer+) 보유 직원 + 그 직원들의 부서 (F5)."""
 
     users: list[DirectoryUserOut]
     departments: list[str]
+    # 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
+    dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
 AI_NODE_TYPES = {"start", "process", "decision", "end"}

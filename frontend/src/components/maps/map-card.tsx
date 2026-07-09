@@ -116,6 +116,12 @@ export function MapCard({
         <span className="inline-flex min-w-0 items-center gap-1">
           <User size={12} strokeWidth={1.5} className="shrink-0" />
           <span className="truncate">{map.owner_name ?? map.created_by}</span>
+          {/* owner_name null = 디렉터리에 없는 오너(퇴사) — id 폴백 + 배지 */}
+          {!map.owner_name && map.created_by && (
+            <span className="shrink-0 rounded-sm border border-hairline px-1 text-fine text-error">
+              {t("perm.badgeDeparted")}
+            </span>
+          )}
         </span>
       )}
       <span className="inline-flex shrink-0 items-center gap-1">
@@ -279,7 +285,14 @@ export function MapCard({
               <User size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
               <span className="flex min-w-0 flex-col">
                 <span className="text-fine text-ink-tertiary">{t("home.owner")}</span>
-                <span className="truncate text-caption text-ink">{map.owner_name ?? map.created_by}</span>
+                <span className="truncate text-caption text-ink">
+                  {map.owner_name ?? map.created_by}
+                  {!map.owner_name && map.created_by && (
+                    <span className="ml-1.5 rounded-sm border border-hairline px-1 text-fine text-error">
+                      {t("perm.badgeDeparted")}
+                    </span>
+                  )}
+                </span>
               </span>
             </div>
 
