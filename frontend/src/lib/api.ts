@@ -522,6 +522,8 @@ export interface SyncSummary {
   scanned: number;
   upserted: number;
   excluded: number;
+  // 전체 동기화에서 삭제된 스테일 ad 행 수(비활성·퇴사·제외 대상)
+  purged: number;
 }
 
 export function syncEmployees(): Promise<SyncSummary> {

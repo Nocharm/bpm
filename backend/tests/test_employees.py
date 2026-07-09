@@ -150,3 +150,85 @@ def test_sync_mocked_filters_and_guards(client: TestClient, monkeypatch) -> None
     # 5분 가드 — 즉시 재호출 시 429
     res2 = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
     assert res2.status_code == 429
+
+
+# ── 비활성 계정 제외 + 스테일 프룬 (design 2026-07-09) ──────────────────
+
+
+def _seed_ad_row(login_id: str) -> None:
+    """source='ad' 행 멱등 시드 — 프룬 대상/생존 검증용."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, login_id)
+            if emp is None:
+                emp = Employee(login_id=login_id, source="ad")
+                session.add(emp)
+            emp.source = "ad"
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _employee_exists(login_id: str) -> bool:
+    async def _run() -> bool:
+        async with SessionLocal() as session:
+            return (await session.get(Employee, login_id)) is not None
+
+    return asyncio.run(_run())
+
+
+def _mock_ldap(monkeypatch, raws: list) -> None:
+    """LDAP 설정 위장 + 5분 가드 리셋 + fetch_all_users mock — mocked sync 공통 준비."""
+    from app.ad import client as ldap_client
+    from app.ad import service
+
+    monkeypatch.setattr(settings, "ldap_url", "ldaps://x")
+    monkeypatch.setattr(settings, "ldap_bind_dn", "cn=svc")
+    monkeypatch.setattr(settings, "ldap_bind_credentials", "pw")
+    monkeypatch.setattr(settings, "ldap_user_search_base", "dc=corp")
+    monkeypatch.setattr(service, "_last_full_sync_at", None)
+    monkeypatch.setattr(ldap_client, "fetch_all_users", lambda: raws)
+
+
+def test_to_employee_fields_excludes_disabled_account() -> None:
+    from app.ad.client import RawUser
+    from app.ad.service import to_employee_fields
+
+    disabled = RawUser("gone.user", "비활성계정", "사원", "OU=TeamA,DC=corp", 0x202, None, [])
+    assert to_employee_fields(disabled) is None  # uac 0x2 → 동기화 제외
+
+
+def test_sync_prunes_stale_ad_rows_and_keeps_local(client: TestClient, monkeypatch) -> None:
+    from app.ad.client import RawUser
+
+    _seed_ad_row("stale.user")  # 이번 스캔에 없는 기존 ad 행 → 프룬 대상
+    raws = [
+        RawUser("fresh.user", "Fresh User", "사원", "OU=TeamA,DC=corp", 0x200, None, []),
+        RawUser("disabled.user", "Disabled User", "사원", "OU=TeamA,DC=corp", 0x202, None, []),
+    ]
+    _mock_ldap(monkeypatch, raws)
+
+    res = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["scanned"] == 2
+    assert body["upserted"] == 1
+    assert body["excluded"] == 1  # disabled.user — 비활성 제외
+    assert body["purged"] >= 1  # stale.user 포함, 유효 집합 밖 ad 행 삭제
+    assert not _employee_exists("stale.user")
+    assert not _employee_exists("disabled.user")  # 비활성은 애초에 미생성
+    assert _employee_exists("fresh.user")
+    assert _employee_exists("user.lee")  # source='local' 시드는 보존
+
+
+def test_sync_empty_scan_skips_prune(client: TestClient, monkeypatch) -> None:
+    _seed_ad_row("survivor.ad")
+    _mock_ldap(monkeypatch, [])
+
+    res = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["scanned"] == 0
+    assert body["purged"] == 0
+    assert _employee_exists("survivor.ad")  # 빈 스캔 → 전멸 방지 가드

@@ -4,7 +4,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ad import client
@@ -100,6 +100,8 @@ class SyncSummary:
     scanned: int
     upserted: int
     excluded: int
+    # 전체 동기화에서 삭제된 스테일 source='ad' 행 수 — 비활성·퇴사·신규 제외 대상 (2026-07-09)
+    purged: int
 
 
 def resolve_role(login_id: str) -> str:
@@ -108,6 +110,8 @@ def resolve_role(login_id: str) -> str:
 
 def to_employee_fields(raw: client.RawUser) -> EmployeeFields | None:
     """RawUser → EmployeeFields. 제외 대상이면 None (순수 — DB 미접근)."""
+    if not is_active(raw.user_account_control):
+        return None  # AD 비활성(uac 0x2) 계정 — 동기화 제외 (design 2026-07-09)
     login_id = raw.sam_account_name
     name = raw.display_name or login_id
     org = parse_org(raw.distinguished_name)
@@ -168,6 +172,7 @@ async def sync_all(session: AsyncSession) -> SyncSummary:
     raws = await asyncio.to_thread(client.fetch_all_users)
     upserted = 0
     excluded = 0
+    valid_ids: set[str] = set()
     for raw in raws:
         fields = to_employee_fields(raw)
         if fields is None:
@@ -175,8 +180,19 @@ async def sync_all(session: AsyncSession) -> SyncSummary:
             continue
         await _upsert(session, fields)
         upserted += 1
+        valid_ids.add(fields.login_id)
+    purged = 0
+    if raws:
+        # 스테일 프룬 — 이번 스캔 유효 집합 밖 ad 행 삭제(비활성·퇴사·신규 제외 대상).
+        # 빈 스캔이면 스킵(LDAP 이상 시 전멸 방지). source='local' 시드는 보존.
+        result = await session.execute(
+            delete(Employee).where(
+                Employee.source == "ad", Employee.login_id.not_in(list(valid_ids))
+            )
+        )
+        purged = result.rowcount or 0
     await session.commit()
-    return SyncSummary(scanned=len(raws), upserted=upserted, excluded=excluded)
+    return SyncSummary(scanned=len(raws), upserted=upserted, excluded=excluded, purged=purged)
 
 
 # 전체 동기화 5분 가드 — 인메모리(단일 컨테이너 전제)

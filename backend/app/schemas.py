@@ -678,6 +678,7 @@ class SyncSummaryOut(BaseModel):
     scanned: int
     upserted: int
     excluded: int
+    purged: int  # 전체 동기화에서 삭제된 스테일 ad 행 수 (2026-07-09)
 
 
 # ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
