@@ -3,21 +3,14 @@
 // 부서 테이블 — 기본: 부서명 + 한글부서 + 인원수(호버 명단). 디버그 토글(org 보기) 시 인원수 대신 가변 orgLevels 컬럼 /
 // Department table — name + korean-dept pills + member count (roster on hover). Org-view swaps count for org columns.
 // orgLevels depth is VARIABLE — max depth computed at runtime, never hardcoded.
-// 한글부서 매핑: 필터(2개 이상/없음)·행 더블클릭 모달 — dept-korean-mapping design 2026-07-09.
 
 import { useEffect, useState } from "react";
 
 import { type AdminDept, type AdminUser, getAdminUsers } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import {
-  aggregateDeptKoreanDepts,
-  formatRosterName,
-  getDeptMembers,
-  shouldFlagDeptMapping,
-} from "@/lib/korean-dept";
+import { aggregateDeptKoreanDepts, formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
-import { DeptKoreanModal } from "./dept-korean-modal";
 
 const PILL =
   "inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary";
@@ -38,7 +31,7 @@ function RosterHover({ members, count }: { members: AdminUser[]; count: number }
         <div className="absolute left-0 top-full z-10 pt-1">
           <div
             data-id="dept-roster-tooltip"
-            className="flex max-h-64 w-72 flex-wrap content-start gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            className="flex max-h-64 w-72 flex-col items-start gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
           >
             {visible.map((m) => (
               <span key={m.login_id} className={PILL}>
@@ -59,32 +52,18 @@ export function DepartmentTable() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showOrg, setShowOrg] = useState(false);
-  const [needsOnly, setNeedsOnly] = useState(false);
-  const [mappingDept, setMappingDept] = useState<AdminDept | null>(null);
 
-  const loadDirectory = () => {
+  useEffect(() => {
     getAdminUsers()
       .then((data) => {
         setDepartments(data.departments);
         setUsers(data.users);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  };
-
-  useEffect(() => {
-    loadDirectory();
   }, []);
 
-  // 매핑 필요 필터 — 후보 2개 이상 또는 0개(인원 있는 부서)
-  const filtered = needsOnly
-    ? departments.filter((dept) => {
-        const members = getDeptMembers(users, dept.org_levels);
-        return shouldFlagDeptMapping(aggregateDeptKoreanDepts(members), members.length);
-      })
-    : departments;
-
-  // 25행씩 증분 렌더 — 필터 토글 시 처음부터(resetKey).
-  const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, needsOnly ? "needs" : "all");
+  // 25행씩 증분 렌더.
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(departments, "");
 
   // orgLevels 최대 깊이 동적 계산 — 절대 하드코딩 금지 /
   // Compute max orgLevels length dynamically across all departments.
@@ -111,17 +90,6 @@ export function DepartmentTable() {
           />
           {t("perm.sysadmin.deptDebugToggle")}
         </label>
-        {/* 매핑 필요 필터 — 한글부서 2개 이상 갈리거나 하나도 없는 부서만 */}
-        <label className="flex cursor-pointer items-center gap-2 text-fine text-ink-secondary">
-          <input
-            data-id="dept-needs-filter"
-            type="checkbox"
-            checked={needsOnly}
-            onChange={(e) => setNeedsOnly(e.target.checked)}
-            className="h-3.5 w-3.5"
-          />
-          {t("admin.deptNeedsFilter")}
-        </label>
       </div>
 
       <TableCard>
@@ -144,12 +112,7 @@ export function DepartmentTable() {
             const members = getDeptMembers(users, dept.org_levels);
             const candidates = aggregateDeptKoreanDepts(members);
             return (
-              <tr
-                key={idx}
-                className={`${ADMIN_ROW} cursor-pointer`}
-                data-id="dept-row"
-                onDoubleClick={() => setMappingDept(dept)}
-              >
+              <tr key={idx} className={ADMIN_ROW} data-id="dept-row">
                 <td className={ADMIN_TD}>{dept.name}</td>
                 {/* 매핑된 한글부서 — 복수면 상하 나열, 필 + 인원수 */}
                 <td className={ADMIN_TD} data-id="dept-kr-cell">
@@ -183,15 +146,6 @@ export function DepartmentTable() {
           )}
         </tbody>
       </TableCard>
-
-      {mappingDept && (
-        <DeptKoreanModal
-          dept={mappingDept}
-          candidates={aggregateDeptKoreanDepts(getDeptMembers(users, mappingDept.org_levels))}
-          onClose={() => setMappingDept(null)}
-          onApplied={loadDirectory}
-        />
-      )}
     </div>
   );
 }

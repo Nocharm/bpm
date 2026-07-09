@@ -1112,16 +1112,6 @@ export function getAdminUsers(): Promise<AdminDirectory> {
   return request<AdminDirectory>("/admin/users");
 }
 
-export function setDeptKoreanDept(
-  orgLevels: string[],
-  koreanDept: string,
-): Promise<{ updated: number }> {
-  return request<{ updated: number }>("/admin/departments/korean-dept", {
-    method: "PUT",
-    body: JSON.stringify({ org_levels: orgLevels, korean_dept: koreanDept }),
-  });
-}
-
 export interface NotificationItem {
   id: number;
   type: string;

@@ -25,14 +25,6 @@ export function aggregateDeptKoreanDepts(members: AdminUser[]): DeptKoreanCandid
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 }
 
-/** 매핑 필요 판정 — 한글부서가 2개 이상 갈리거나, 인원은 있는데 하나도 없을 때. */
-export function shouldFlagDeptMapping(
-  candidates: DeptKoreanCandidate[],
-  memberCount: number,
-): boolean {
-  return candidates.length >= 2 || (memberCount > 0 && candidates.length === 0);
-}
-
 /** 명단 필 표기 — 언어 토글 연동: ko는 한글(영문), en은 영문(한글). 없는 쪽은 생략. */
 export function formatRosterName(
   user: Pick<AdminUser, "name" | "korean_name">,
