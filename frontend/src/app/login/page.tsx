@@ -4,36 +4,55 @@ import { Lock, LogIn, Workflow } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AuthLoadingScreen } from "@/components/auth-loading";
 import { DevLoginModal } from "@/components/dev-login-modal";
 import { setDevUser } from "@/lib/api";
-import { clearAutoLoginSkip, consumeReturnTo, hasAutoLoginSkip, setAutoLoginSkip } from "@/lib/auth-return";
+import { clearAutoLoginSkip, consumeAutoLoginSkip, consumeReturnTo, setAutoLoginSkip } from "@/lib/auth-return";
 import { storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
+// 자동 silent 시도 여부 — 페이지 로드당 1회만 판정(모듈 캐시).
+// 렌더 첫 프레임부터 로딩 화면을 보여야 카드 플래시가 없으므로 useState 초기값에서 호출되고,
+// StrictMode 이중 렌더/이중 이펙트에서도 consume(부수효과)이 한 번만 실행되도록 여기서 멱등화한다.
+let autoAttemptDecision: boolean | null = null;
+let autoAttemptStarted = false;
+
+function shouldAutoAttempt(): boolean {
+  if (autoAttemptDecision === null) {
+    autoAttemptDecision = AUTH_ENABLED && !consumeAutoLoginSkip();
+  }
+  return autoAttemptDecision;
+}
+
 export default function LoginPage() {
   const { t } = useI18n();
   const router = useRouter();
   const [picking, setPicking] = useState(false);
+  const [autoSigning, setAutoSigning] = useState(shouldAutoAttempt);
 
   // 자동 silent 로그인 — SSO 세션 있으면 버튼 없이 즉시 복귀. 시도 "직전"에 skip 플래그를 세워
-  // 실패(login_required) 복귀 시 재시도 루프를 차단한다(성공 시 AuthGate가 해제).
+  // 실패(login_required) 복귀 시 다음 로그인 마운트 1회를 억제한다(성공 시 AuthGate가 해제).
   useEffect(() => {
-    if (!AUTH_ENABLED || hasAutoLoginSkip()) {
+    if (!autoSigning || autoAttemptStarted) {
       return;
     }
+    autoAttemptStarted = true;
     setAutoLoginSkip();
     void (async () => {
       try {
         const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
         await signinRedirectFromLogin({ promptNone: true });
       } catch (e) {
-        // Keycloak 미응답 등 — 카드에 머물러 수동 버튼으로 폴백
+        // Keycloak 미응답 등 — 카드로 폴백. 플래그는 원복해 다음 방문에 자동 시도 유지.
         console.error("silent login attempt failed", e);
+        clearAutoLoginSkip();
+        autoAttemptDecision = false;
+        setAutoSigning(false);
       }
     })();
-  }, []);
+  }, [autoSigning]);
 
   const onKeycloak = async () => {
     clearAutoLoginSkip();
@@ -47,6 +66,11 @@ export default function LoginPage() {
     setPicking(false);
     router.replace(consumeReturnTo() ?? "/");
   };
+
+  if (autoSigning) {
+    // silent 시도 중 — 클릭 가능한 카드 플래시 대신 로딩 화면(부드러운 전환)
+    return <AuthLoadingScreen />;
+  }
 
   return (
     <div className="flex flex-1 items-center justify-center bg-surface-pearl">

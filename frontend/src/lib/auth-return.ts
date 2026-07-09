@@ -44,6 +44,10 @@ export function clearAutoLoginSkip(): void {
   getStorage()?.removeItem(AUTO_LOGIN_SKIP_KEY);
 }
 
-export function hasAutoLoginSkip(): boolean {
-  return getStorage()?.getItem(AUTO_LOGIN_SKIP_KEY) === "1";
+// 소비형 — 억제는 "다음 로그인 페이지 1회"만. 이후 정상 재방문은 세션 있으면 다시 자동 로그인.
+export function consumeAutoLoginSkip(): boolean {
+  const storage = getStorage();
+  const skipped = storage?.getItem(AUTO_LOGIN_SKIP_KEY) === "1";
+  storage?.removeItem(AUTO_LOGIN_SKIP_KEY);
+  return skipped;
 }

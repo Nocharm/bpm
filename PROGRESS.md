@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — 로그인 전환 폴리시·정상접근 자동 로그인 (feat/login-polish-403-gate)
+- `AuthLoadingScreen` 신설(브랜드+스피너, item-fade) — `/login` silent 시도 중 카드 플래시 제거, AuthGate 로딩·returnTo 대기 화면 통일. 억제 플래그를 소비형으로 변경(`consumeAutoLoginSkip`) — 로그아웃/실패 직후 1회만 카드, 이후 정상접근은 세션 있으면 자동 로그인(모듈 캐시 1회 판정, StrictMode 안전, 실패 시 플래그 원복).
+
 ## 2026-07-09 — 자동 로그인+딥링크 복원 구현 (feat/auto-login-deeplink)
 - Task 3: `pw-smoke-login-deeplink.mjs` — dev 모드 딥링크(/maps/2)→/login→dev 로그인→원맵 복귀·consume·unsafe(//evil.com) 거부 4체크 ALL PASS. Keycloak prompt=none 경로는 서버 배포 후 3케이스 실검증 필요(스펙 §검증).
 - Task 2: silent 로그인 배선 — `/login` mount 시 `signinRedirect({prompt:"none"})` 자동 1회(시도 직전 skip 플래그로 루프 차단), AuthGate가 `login_required`를 에러 아닌 "카드로" 신호로 처리 + returnTo 저장/복원(복원 대기 중 홈 플래시 방지), DevGate·dev 픽에도 동일 복원, 로그아웃 시 자동 재로그인 억제. vitest 145·lint 0에러·build OK.

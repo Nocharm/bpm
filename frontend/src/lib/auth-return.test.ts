@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearAutoLoginSkip,
+  consumeAutoLoginSkip,
   consumeReturnTo,
-  hasAutoLoginSkip,
   isSafeReturnPath,
   peekReturnTo,
   saveReturnTo,
@@ -65,12 +65,16 @@ describe("returnTo save/peek/consume", () => {
 });
 
 describe("autoLoginSkip flag", () => {
-  it("set/has/clear 라운드트립", () => {
-    expect(hasAutoLoginSkip()).toBe(false);
+  it("consume은 1회만 true — 이후 재방문은 자동 로그인 재개", () => {
+    expect(consumeAutoLoginSkip()).toBe(false);
     setAutoLoginSkip();
-    expect(hasAutoLoginSkip()).toBe(true);
+    expect(consumeAutoLoginSkip()).toBe(true);
+    expect(consumeAutoLoginSkip()).toBe(false); // 소비됨
+  });
+  it("clear는 대기 중인 억제를 취소한다", () => {
+    setAutoLoginSkip();
     clearAutoLoginSkip();
-    expect(hasAutoLoginSkip()).toBe(false);
+    expect(consumeAutoLoginSkip()).toBe(false);
   });
 });
 
@@ -79,6 +83,6 @@ describe("window 없음(SSR)·storage 접근 불가", () => {
     vi.stubGlobal("window", undefined);
     expect(() => saveReturnTo("/maps/1")).not.toThrow();
     expect(consumeReturnTo()).toBeNull();
-    expect(hasAutoLoginSkip()).toBe(false);
+    expect(consumeAutoLoginSkip()).toBe(false);
   });
 });

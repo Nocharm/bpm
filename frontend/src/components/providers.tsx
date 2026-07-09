@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "react-oidc-context";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
+import { AuthLoadingScreen } from "@/components/auth-loading";
 import { getMe, setAuthToken, setDevUser } from "@/lib/api";
 import { clearAutoLoginSkip, consumeReturnTo, peekReturnTo, saveReturnTo, setAutoLoginSkip } from "@/lib/auth-return";
 import { setCurrentUser } from "@/lib/current-user";
@@ -110,12 +111,12 @@ function AuthGate({ children }: { children: ReactNode }) {
     return <div className="p-8 text-caption text-error">{t("auth.error", { msg: auth.error.message })}</div>;
   }
   if (auth.isLoading || !auth.isAuthenticated) {
-    return <div className="p-8 text-caption text-ink-tertiary">{t("auth.signingIn")}</div>;
+    return <AuthLoadingScreen />;
   }
   const pendingReturn = peekReturnTo();
   if (pendingReturn && pendingReturn !== pathname) {
     // returnTo로 replace되기 전 홈(콜백 착지점 "/")이 잠깐 렌더되는 플래시 방지
-    return <div className="p-8 text-caption text-ink-tertiary">{t("auth.signingIn")}</div>;
+    return <AuthLoadingScreen />;
   }
   return <>{children}</>;
 }
