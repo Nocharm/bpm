@@ -471,7 +471,7 @@ export default function MapListPage() {
                 </div>
               ) : isSearching ? (
                 /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹. 빈 공간 클릭=선택 해제 */
-                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pr-1">
                   {shownSearchHits.map(({ item: processMap, matches }) =>
                     renderRow(
                       processMap,
@@ -483,7 +483,7 @@ export default function MapListPage() {
                 </ul>
               ) : (
                 /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용). 빈 공간 클릭=선택 해제 */
-                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto pr-1">
                   {recentBand.length > 0 && (
                     <section data-id="home-recent-band" className="flex flex-col gap-2">
                       {/* 섹션 라벨 행 — 클릭 토글(접힘=전부 닫힘, 펼침=2개부터), 우측끝 쉐브론 */}
