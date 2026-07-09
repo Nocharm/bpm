@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AdminUser, EmployeeRow } from "./api";
-import {
-  aggregateDeptKoreanDepts,
-  buildExportIds,
-  formatRosterName,
-  getDeptMembers,
-  shouldFlagDeptMapping,
-} from "./korean-dept";
+import { aggregateDeptKoreanDepts, buildExportIds, formatRosterName, getDeptMembers } from "./korean-dept";
 
 const user = (login_id: string, org: string[], korean_dept = "", korean_name = ""): AdminUser => ({
   login_id,
@@ -55,15 +49,6 @@ describe("getDeptMembers / aggregateDeptKoreanDepts", () => {
       { value: "팀A그룹", count: 2 },
       { value: "팀에이", count: 1 },
     ]);
-  });
-});
-
-describe("shouldFlagDeptMapping", () => {
-  it("flags 2+ candidates or zero candidates with members", () => {
-    expect(shouldFlagDeptMapping([{ value: "x", count: 1 }, { value: "y", count: 1 }], 2)).toBe(true);
-    expect(shouldFlagDeptMapping([], 3)).toBe(true);
-    expect(shouldFlagDeptMapping([{ value: "x", count: 3 }], 3)).toBe(false);
-    expect(shouldFlagDeptMapping([], 0)).toBe(false);
   });
 });
 

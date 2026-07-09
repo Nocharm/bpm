@@ -42,7 +42,10 @@ async def sync_employees(
             status_code=429, detail=f"sync throttled — retry in {exc.remaining_seconds}s"
         ) from exc
     return SyncSummaryOut(
-        scanned=summary.scanned, upserted=summary.upserted, excluded=summary.excluded
+        scanned=summary.scanned,
+        upserted=summary.upserted,
+        excluded=summary.excluded,
+        purged=summary.purged,
     )
 
 

@@ -534,6 +534,8 @@ export interface SyncSummary {
   scanned: number;
   upserted: number;
   excluded: number;
+  // 전체 동기화에서 삭제된 스테일 ad 행 수(비활성·퇴사·제외 대상)
+  purged: number;
 }
 
 export function syncEmployees(): Promise<SyncSummary> {
@@ -927,6 +929,7 @@ export interface DirectoryUser {
   title?: string;    // 직급 — 멤버 2번째 줄(H2). 미채움 시 ""
   org_path?: string; // 루트→리프 조직 경로. 멤버 2번째 줄 말단 org·부서 카운트(H2). 미채움 시 ""
   role?: string;     // admin | user — 로컬 로그인 피커 관리자 식별
+  korean_name?: string; // 한글 이름 — 서버 기본 "" (member-card design 2026-07-09)
 }
 
 export interface DirectoryDept {
@@ -1120,16 +1123,6 @@ export interface AdminDirectory {
 /** sysadmin 전용 — 관리 콘솔 직원·부서 목록 (영문, 풍부한 필드). active = AD userAccountControl 기반 (Task 2). */
 export function getAdminUsers(): Promise<AdminDirectory> {
   return request<AdminDirectory>("/admin/users");
-}
-
-export function setDeptKoreanDept(
-  orgLevels: string[],
-  koreanDept: string,
-): Promise<{ updated: number }> {
-  return request<{ updated: number }>("/admin/departments/korean-dept", {
-    method: "PUT",
-    body: JSON.stringify({ org_levels: orgLevels, korean_dept: koreanDept }),
-  });
 }
 
 export interface NotificationItem {

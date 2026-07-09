@@ -22,6 +22,17 @@
 ## 2026-07-09 — 자동 로그인+딥링크 복원 설계 (feat/auto-login-deeplink)
 - 딥링크 진입 시 Keycloak SSO 세션 있으면 버튼 없이 자동 로그인 후 원래 페이지 복귀, 세션 없으면 현행 로그인 카드 유지(prompt=none 사전 체크) — 설계 승인·스펙 저장(`docs/superpowers/specs/2026-07-09-auto-login-deeplink-design.md`). 로그아웃 직후 자동 재로그인 억제 플래그 포함. 구현 계획: `docs/superpowers/plans/2026-07-09-auto-login-deeplink.md`(태스크 3 — 헬퍼 TDD·배선·스모크).
 
+## 2026-07-09 — AD 동기화 비활성 제외 + 프룬 (worktree-ui-improvement-2)
+- 비활성(uac 0x2) 계정 동기화 제외 + 전체 동기화 시 스테일 source=ad 행 프룬 설계 — `docs/superpowers/specs/2026-07-09-ad-sync-inactive-exclusion-design.md`.
+- 구현 완료(TDD): to_employee_fields 비활성 제외, sync_all 프룬(빈 스캔 가드·local 보존, 단일 DELETE)·SyncSummary/응답/탭 메시지에 purged 추가 — 신규 테스트 3종, pytest 492·ruff 0·lint 0·vitest 138·build 통과.
+- 멤버 카드 개선 설계: 아이콘 확대(접힌 카드 높이)·유저 이름 한/영 토글+펼침 반대말 필·그룹 이름 해석 + **부서 매핑 기능 철회**(모달·PUT·필터 삭제, 관찰용 열·툴팁 유지, 툴팁 1열화) — `docs/superpowers/specs/2026-07-09-member-card-korean-names-design.md`.
+- 멤버 카드 구현 계획(4 task: BE directory+철회 → FE 철회·툴팁 1열 → 카드 아이콘·토글·필 → 스모크) — `docs/superpowers/plans/2026-07-09-member-card-korean-names.md`. employees.korean_name/korean_dept·임포트는 유지 확인 완료.
+- Task 1(BE): `GET /api/directory` 유저 항목에 `korean_name` 추가(TDD, 신규 테스트 1종), `PUT /api/admin/departments/korean-dept`+`DeptKoreanDeptIn/Out`+매핑 테스트 5종 삭제(관찰용 `test_admin_users_include_korean_fields`는 유지). `test_ad_active.py`의 directory 최소필드 화이트리스트에 `korean_name` 반영. pytest 488·ruff 0.
+- Task 2(FE): 부서 매핑 UI 철회 — `dept-korean-modal.tsx` 삭제, `department-table.tsx`의 `needsOnly` 필터·`mappingDept`·행 더블클릭/cursor-pointer 제거(관찰용 `dept-kr-cell`·`RosterHover`·`dept-row`는 유지), `api.ts` `setDeptKoreanDept`·`korean-dept.ts` `shouldFlagDeptMapping`(+테스트)·i18n 7키 삭제(`admin.deptKrCol`은 유지). 명단 툴팁을 `flex-wrap`→`flex-col` 1열로 변경. `pw-smoke-korean-dept.mjs`에서 모달/필터 시나리오 제거하고 시드→탭 진입→2필→호버 툴팁만 유지(필터 소실로 대상 행은 스크롤 폴백 탐색). vitest 137·lint 0·build 성공, 잔재 grep 0.
+- Task 3(FE): `map-detail-card.tsx` 멤버 카드 — 아이콘 12→22px 확대(Me 뱃지 Hand 20+ME 9px 세로 스택, 컨테이너 `h-9 w-9` 중앙정렬), 유저 이름 `lang` 토글(ko=한글 우선, en=영문)+펼침 시 반대 언어 필(`data-id="member-alt-name"`), 그룹 행 id 노출을 `groupNameById`로 이름 해석, `MembersSkeleton` 아이콘 자리 `h-9 w-9`로 동기. `api.ts` `DirectoryUser.korean_name?` 추가. vitest 137·lint 0·build 성공.
+- Task 4(스모크+게이트): `pw-smoke-member-card.mjs` 신규(admin.sys 소유 테스트맵 자동 생성+협업자·그룹 부여+한글이름 임포트 → Me 뱃지·en/ko 이름줄·펼침 alt 필·그룹명 해석) 11/11(cleanup 체크 포함). `pw-smoke-korean-names.mjs` 17/17, `pw-smoke-korean-dept.mjs` 5/5 회귀 통과. 최종 게이트: pytest 488·ruff 0 / vitest 137·lint 0(무관 파일 warning 1)·build 성공. 서버 기동 중 발견: 메인 dev.db엔 admin.sys가 소유·멤버인 맵이 없어(Me 뱃지 전제 불충족) 스모크가 테스트맵을 직접 생성하도록 설계 — 제품 결함 아님, 데모 시드 특성.
+- 전체 브랜치 리뷰 반영: `sync_all` 프룬 가드를 `if raws:`→`if valid_ids:`로 강화(스캔이 비어있지 않아도 전원 제외면 프룬 스킵, 회귀 테스트 1종 추가) + `to_employee_fields`의 죽은 `is_active` 재계산 정리·`LDAP_USER_FILTER` 범위 주석·`docs/deploy.md` 프룬 백업 권고·`korean-dept.ts` 헤더 참조 수정·`test_ad_active.py` docstring 보정.
+
 ## 2026-07-09 — 임베드 프로브 리다이렉트 SSRF 차단 (main)
 - 푸시 보안 리뷰 반영: `embed_probe.probe_embeddable`가 `follow_redirects=True`로 자동 추종하던 것을 **수동 추종(최대 5홉)**으로 교체 — 홉마다 스킴(http/https)·호스트 SSRF 가드(`_is_probe_refused_host`) 재적용. 외부 서버가 302로 루프백/메타데이터(169.254.169.254)를 가리켜 최초-URL 검사만 통과시키던 우회 차단. 리다이렉트로 스킴 변경(file:// 등)도 거부. pytest +2(481)·ruff 0.
 

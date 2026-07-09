@@ -34,7 +34,9 @@ export function EmployeeTable() {
     setMsg("");
     try {
       const s: SyncSummary = await syncEmployees();
-      setMsg(`scanned ${s.scanned} · upserted ${s.upserted} · excluded ${s.excluded}`);
+      setMsg(
+        `scanned ${s.scanned} · upserted ${s.upserted} · excluded ${s.excluded} · purged ${s.purged}`,
+      );
       void listEmployees().then(setRows).catch(() => setRows([]));
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "sync failed");

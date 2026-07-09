@@ -1,6 +1,11 @@
 """GET /api/directory — 인증 사용자 공개 디렉터리 엔드포인트 테스트 (Layer 4 Task 0)."""
 
+import asyncio
+
 from fastapi.testclient import TestClient
+
+from app.db import SessionLocal
+from app.models import Employee
 
 
 def test_directory_accessible_by_non_admin(client: TestClient) -> None:
@@ -42,3 +47,19 @@ def test_directory_admin_also_accessible(client: TestClient) -> None:
     res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
     assert res.status_code == 200
     assert len(res.json()["users"]) >= 5
+
+
+def test_directory_includes_korean_name(client: TestClient) -> None:
+    """멤버 카드 한/영 토글용 — /api/directory 유저 항목에 korean_name 노출."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            emp.korean_name = "이민재"
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    by_id = {u["id"]: u for u in res.json()["users"]}
+    assert by_id["user.lee"]["korean_name"] == "이민재"

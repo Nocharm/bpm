@@ -1,5 +1,6 @@
-// 부서 한글명 매핑·유저 추출 순수 함수 — 부서 탭·한글이름 모달용(DOM/fetch 없음).
-// 설계: docs/superpowers/specs/2026-07-09-dept-korean-mapping-design.md
+// 부서 한글명 집계·유저 추출 순수 함수 — 부서 탭·한글이름 모달용(DOM/fetch 없음).
+// 매핑 일괄 갱신(PUT /korean-dept) 룰은 철회됨 — 이 파일은 관찰용 집계만 담당.
+// 설계: docs/superpowers/specs/2026-07-09-member-card-korean-names-design.md
 
 import type { AdminUser, EmployeeRow } from "./api";
 import type { Lang } from "./i18n-messages";
@@ -23,14 +24,6 @@ export function aggregateDeptKoreanDepts(members: AdminUser[]): DeptKoreanCandid
   return [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
-}
-
-/** 매핑 필요 판정 — 한글부서가 2개 이상 갈리거나, 인원은 있는데 하나도 없을 때. */
-export function shouldFlagDeptMapping(
-  candidates: DeptKoreanCandidate[],
-  memberCount: number,
-): boolean {
-  return candidates.length >= 2 || (memberCount > 0 && candidates.length === 0);
 }
 
 /** 명단 필 표기 — 언어 토글 연동: ko는 한글(영문), en은 영문(한글). 없는 쪽은 생략. */
