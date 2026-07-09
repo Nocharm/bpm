@@ -3,7 +3,7 @@
 // 한글이름 일괄 등록 모달 — 미보유 목록 다운로드 + JSON 임포트(충돌 시 skip/overwrite 확인).
 // 설계: docs/superpowers/specs/2026-07-09-user-korean-name-import-design.md
 
-import { FileDown, FileUp, Languages, TriangleAlert } from "lucide-react";
+import { ChevronDown, FileDown, FileUp, Languages, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -15,12 +15,12 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import {
-  buildMissingIdsJson,
   classifyKoreanNames,
   parseKoreanNamesJson,
   type KoreanNameClassification,
   type KoreanNameConflict,
 } from "@/lib/korean-name-import";
+import { buildExportIds, type ExportOption } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 const BTN_SECONDARY =
@@ -80,14 +80,24 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
   const [busy, setBusy] = useState(false);
   const [classification, setClassification] = useState<KoreanNameClassification | null>(null);
   const [summary, setSummary] = useState<KoreanNamesImportSummary | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const onDownload = () => {
-    const blob = new Blob([buildMissingIdsJson(rows)], { type: "application/json" });
+  const EXPORT_FILENAMES: Record<ExportOption, string> = {
+    missing: "korean-names-missing.json",
+    deptSample: "korean-names-sample-dept.json",
+    random50: "korean-names-sample-50.json",
+    all: "korean-names-all.json",
+  };
+
+  const onDownload = (option: ExportOption) => {
+    setExportMenuOpen(false);
+    const ids = buildExportIds(rows, option);
+    const blob = new Blob([JSON.stringify(ids, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "korean-names-missing.json";
+    anchor.download = EXPORT_FILENAMES[option];
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -160,10 +170,51 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
               <p className="pt-1 text-fine text-ink-tertiary">{t("admin.krSchemaAlt")}</p>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" data-id="kr-download-btn" className={BTN_SECONDARY} onClick={onDownload}>
-                <FileDown size={16} strokeWidth={1.5} />
-                {t("admin.krDownload")}
-              </button>
+              <span className="relative inline-flex">
+                <button
+                  type="button"
+                  data-id="kr-download-btn"
+                  className={`${BTN_SECONDARY} rounded-r-none`}
+                  onClick={() => onDownload("missing")}
+                >
+                  <FileDown size={16} strokeWidth={1.5} />
+                  {t("admin.krDownload")}
+                </button>
+                <button
+                  type="button"
+                  data-id="kr-export-menu-btn"
+                  aria-label="Export options"
+                  className={`${BTN_SECONDARY} rounded-l-none border-l-0 px-1.5`}
+                  onClick={() => setExportMenuOpen((open) => !open)}
+                >
+                  <ChevronDown size={16} strokeWidth={1.5} />
+                </button>
+                {exportMenuOpen && (
+                  <div
+                    data-id="kr-export-menu"
+                    className="absolute right-0 top-full z-10 mt-1 flex w-56 flex-col rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                  >
+                    {(
+                      [
+                        ["missing", "admin.krExportMissing"],
+                        ["deptSample", "admin.krExportDeptSample"],
+                        ["random50", "admin.krExportRandom50"],
+                        ["all", "admin.krExportAll"],
+                      ] as const
+                    ).map(([option, labelKey]) => (
+                      <button
+                        key={option}
+                        type="button"
+                        data-id={`kr-export-opt-${option}`}
+                        className="px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                        onClick={() => onDownload(option)}
+                      >
+                        {t(labelKey)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </span>
               <button
                 type="button"
                 data-id="kr-import-btn"
