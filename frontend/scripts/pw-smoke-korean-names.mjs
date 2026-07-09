@@ -57,6 +57,19 @@ const download = await dlPromise;
 const ids = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
 check("download is id array incl. targets", Array.isArray(ids) && ids.includes(u1) && ids.includes(u2));
 
+// ②-b 추출 옵션 메뉴 — 4옵션 노출 + 전체 목록 다운로드
+await page.click('[data-id="kr-export-menu-btn"]');
+await page.waitForSelector('[data-id="kr-export-menu"]');
+check(
+  "export menu shows 4 options",
+  (await page.locator('[data-id="kr-export-menu"] button').count()) === 4,
+);
+const dlAllPromise = page.waitForEvent("download");
+await page.click('[data-id="kr-export-opt-all"]');
+const dlAll = await dlAllPromise;
+const allIds = JSON.parse(fs.readFileSync(await dlAll.path(), "utf8"));
+check("all-users export covers directory", Array.isArray(allIds) && allIds.length === rows.length);
+
 // ③ 1차 임포트 — 조회 응답 배열 포맷(status 필터·dept 포함), 충돌 없음 → 즉시 결과(updated 2, unknown 1)
 const tmp1 = path.join(os.tmpdir(), "kr-import-1.json");
 fs.writeFileSync(
