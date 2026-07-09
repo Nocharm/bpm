@@ -7630,13 +7630,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                   // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
                   <div className="flex flex-col gap-4">
                     <MapInspectorTab mapId={mapId} readOnly={readOnly} />
-                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정 */}
-                    <SubprocessInspectorCard
-                      mapId={mapId}
-                      canManage={spCanManage}
-                      disabledReason={spDisabledReason}
-                      onToast={showToast}
-                    />
                     <div className="rounded-md border border-hairline p-3">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
@@ -7709,6 +7702,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                         ))}
                       </div>
                     </div>
+                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      onToast={showToast}
+                    />
                     <button
                       type="button"
                       onClick={() => void handleExportPng()}

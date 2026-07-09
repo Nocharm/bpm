@@ -62,6 +62,13 @@
 - **비교뷰에서는 자동 미표시** — 비교 노드 data에 url이 실리지 않음(compare/page.tsx buildNodes). 별도 게이팅 코드 불요.
 - 토큰만 사용(raw hex 금지).
 
+## ⑨ Map 탭 섹션 재배치 (구현 중 사용자 추가 요청)
+
+`frontend/src/components/map-inspector-tab.tsx` · `app/maps/[mapId]/page.tsx` mapTabSlot
+
+- 협업자(Collaborators) `<details>` 기본 접힘 — `open` 속성 제거.
+- 서브프로세스 지정 카드를 엣지 스타일 섹션 아래(PNG 내보내기 버튼 위)로 이동.
+
 ## 검증
 
 - `npx vitest run`(베이스라인 147) + `npm run lint`(에러 0, 기존 경고 1 무시).
