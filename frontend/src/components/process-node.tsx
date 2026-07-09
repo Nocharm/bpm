@@ -250,11 +250,18 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
 }
 
 // 미해결 코멘트 수 뱃지 (에디터 전용)
-function UnresolvedCommentBadge({ count }: { count: number }) {
+// className — 위치 오버라이드: 마름모(분기)는 사각 경계 코너가 도형에서 멀어 안쪽 오프셋 사용 (batch2 ⑬)
+function UnresolvedCommentBadge({
+  count,
+  className = "-left-2 -top-2",
+}: {
+  count: number;
+  className?: string;
+}) {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -left-2 -top-2 rounded-full bg-removed px-1 text-[10px] leading-4 text-white"
+      className={`absolute ${className} rounded-full bg-removed px-1 text-[10px] leading-4 text-white`}
       title={t("node.unresolvedAria", { n: count })}
     >
       <span className="inline-flex items-center gap-0.5">
@@ -268,11 +275,11 @@ function UnresolvedCommentBadge({ count }: { count: number }) {
 // URL 배지 — url 지정 노드 좌하단 표시 전용(반투명 액센트, 클릭 없음). 좌상단은 코멘트 배지,
 // 우상·우하단은 경고/펼침이 사용 — 좌하단이 에디터·비교뷰 통틀어 유일하게 빈 모서리.
 // 비교뷰는 노드 data에 url 미탑재(compare/page.tsx buildNodes)라 자동 미표시. (batch2 ⑧)
-function UrlBadge({ url }: { url: string }) {
+function UrlBadge({ url, className = "-bottom-2 -left-2" }: { url: string; className?: string }) {
   return (
     <span
       data-id="node-url-badge"
-      className="absolute -bottom-2 -left-2 rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70"
+      className={`absolute ${className} rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70`}
       title={url}
     >
       <LinkIcon size={12} strokeWidth={1.5} />
@@ -281,11 +288,11 @@ function UrlBadge({ url }: { url: string }) {
 }
 
 // 하위 계층에 변경이 있음을 알리는 뱃지 (비교 화면 전용)
-function DescendantChangeBadge() {
+function DescendantChangeBadge({ className = "-right-2 -top-2" }: { className?: string }) {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -right-2 -top-2 rounded-full bg-changed px-1 text-[10px] leading-4 text-white"
+      className={`absolute ${className} rounded-full bg-changed px-1 text-[10px] leading-4 text-white`}
       title={t("node.childChangedTitle")}
     >
       <Zap size={10} strokeWidth={1.5} />
@@ -294,11 +301,11 @@ function DescendantChangeBadge() {
 }
 
 // 담당자 부서 드리프트 경고 뱃지 — 담당자의 현재 부서가 노드 부서와 다를 때 (에디터 전용)
-function AssigneeWarningBadge() {
+function AssigneeWarningBadge({ className = "-bottom-2 -right-2" }: { className?: string }) {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -bottom-2 -right-2 rounded-full border border-hairline bg-surface p-0.5 shadow-sm"
+      className={`absolute ${className} rounded-full border border-hairline bg-surface p-0.5 shadow-sm`}
       title={t("assignee.driftWarn")}
     >
       <AlertTriangle size={12} strokeWidth={1.5} className="text-error" />
@@ -471,10 +478,11 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             </div>
           )}
         </div>
-        {data.hasDescendantChange && <DescendantChangeBadge />}
-        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-        {data.url && <UrlBadge url={data.url} />}
-        {data.assigneeWarning && <AssigneeWarningBadge />}
+        {/* 마름모는 코너가 도형에서 멀다 — 배지를 안쪽(12px)으로 당겨 대각 엣지 근처에 (batch2 ⑬) */}
+        {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
+        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="left-3 top-3" />}
+        {data.url && <UrlBadge url={data.url} className="bottom-3 left-3" />}
+        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-3 right-3" />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>
     );
