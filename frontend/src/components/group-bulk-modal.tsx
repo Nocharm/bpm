@@ -27,6 +27,7 @@ import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { hasBpmAttributes } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import type { MessageKey } from "@/lib/i18n-messages";
 
 // "people" = combined assignee+department mode; "system"/"duration" = single-field modes
@@ -93,7 +94,7 @@ export function GroupBulkModal({
   onApplyPeople,
   onClose,
 }: GroupBulkModalProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   // BPM 속성 대상 = process·decision만. start/end/subprocess는 일괄 속성(부서/담당자/시스템/소요)에서 제외.
   // 아래 속성 로직은 전부 editable(=members)만 순회하고, 헤더 카운트·제외 안내만 allMembers 사용.
@@ -161,9 +162,12 @@ export function GroupBulkModal({
   const hasAssignees = peopleAssignees.length > 0;
 
   // Dept-filtered user options for assignee picker (excludes already-added members)
-  const assigneePickOptions = users
-    .filter((u) => (!peopleDept || u.department === peopleDept) && !peopleAssignees.includes(u.name))
-    .map((u) => ({ value: u.name, label: u.name, sub: u.id || undefined, keywords: u.id }));
+  const assigneePickOptions = buildAssigneeOptions(
+    users.filter(
+      (u) => (!peopleDept || u.department === peopleDept) && !peopleAssignees.includes(u.name),
+    ),
+    lang,
+  );
 
   // ---- Conflict detection ----
 
@@ -778,7 +782,7 @@ export function GroupBulkModal({
                   {/* Department selector */}
                   <SearchSelect
                     value={peopleDept}
-                    options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                    options={buildDepartmentOptions(eligible?.departments ?? [], users)}
                     emptyLabel={t("field.department")}
                     placeholder={t("field.searchPlaceholder")}
                     onChange={handleDeptChange}

@@ -34,6 +34,7 @@ import {
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -148,7 +149,7 @@ export function NodeSummaryModal({
   onClose,
   onOpenChild,
 }: NodeSummaryModalProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -428,7 +429,7 @@ export function NodeSummaryModal({
                         <SearchSelect
                           fitContent
                           value={form.department}
-                          options={(eligible?.departments ?? []).map((d) => ({ value: d, label: d }))}
+                          options={buildDepartmentOptions(eligible?.departments ?? [], users)}
                           emptyLabel={t("summary.none")}
                           placeholder={t("field.searchPlaceholder")}
                           onChange={changeDept}
@@ -466,10 +467,12 @@ export function NodeSummaryModal({
                         <SearchSelect
                           addMode
                           value=""
-                          options={users
-                            .filter((u) => form.department === "" || u.department === form.department)
-                            .filter((u) => !assignees.includes(u.name))
-                            .map((u) => ({ value: u.name, label: u.name, sub: [u.id, u.department].filter(Boolean).join(" · ") || undefined, keywords: u.id }))}
+                          options={buildAssigneeOptions(
+                            users
+                              .filter((u) => form.department === "" || u.department === form.department)
+                              .filter((u) => !assignees.includes(u.name)),
+                            lang,
+                          )}
                           emptyLabel={t("summary.none")}
                           placeholder={t("field.searchPlaceholder")}
                           onChange={(name) => {

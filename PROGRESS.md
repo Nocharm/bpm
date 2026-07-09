@@ -8,6 +8,7 @@
 - Task 1(BE): `DirectoryUserOut.korean_dept` 추가 + directory/eligible-assignees·approvers/editors 4개 엔드포인트가 korean_name·korean_dept 실값 전달하도록 보강(스키마 미신설, 미전달 지점만 채움). pytest 492 GREEN·ruff 0.
 - Task 2(FE lib): api.ts `DirectoryUser.korean_dept?` + `EligibleAssignees.users` 항목에 `korean_name?, korean_dept?` 추가. korean-dept.ts 신규 함수 3개 + import/interface 정리(`deriveDeptKoreanKeywords`, `buildAssigneeOptions`, `buildDepartmentOptions`, `SelectOption` 신규). TDD 3개 describe 추가(테스트 150 GREEN·lint 0에러·무관 warning 1 허용)
 - Task 3(FE PrincipalPicker+어댑터): `PrincipalOption`에 `koreanName`(유저)·`koreanKeywords`(부서) 추가, 검색 필드 유저=이름+한글이름+아이디/부서=부서명+한글그룹명, 행 표시는 `lang` 연동(반대 언어 괄호 보조). `MockUser.korean_name?` 추가 + 어댑터 6곳(collaborators-panel·approvers-panel·approver-manager·create-map-dialog·groups-panel·group-detail)에 `korean_name` 배선, dept를 넘기는 4곳(collaborators-panel·create-map-dialog·groups-panel·group-detail)에 `deriveDeptKoreanKeywords` 전달. lint 0·vitest 150·build 통과.
+- Task 4(FE SearchSelect·점유권): 담당자/부서 옵션 구성 3화면(node-summary-modal·bpm-attribute-picker·group-bulk-modal)을 `buildAssigneeOptions`/`buildDepartmentOptions` 호출로 교체(사전 filter·value·onChange 불변), 점유권 이전 다이얼로그는 `filterByQuery`(name→koreanName→id)+`formatRosterName` lang 연동으로 전환. vitest 150·lint 0에러·build 성공.
 
 ## 2026-07-09 — 자동 로그인 로딩 최소 노출 0.6s (feat/auto-login-min-visible)
 - `/login` silent 시도 전 `AUTO_LOGIN_MIN_VISIBLE_MS=600` 최소 대기(모듈 로드와 병렬) — 로딩 화면 순간 플래시 방지, 리다이렉트 중 화면 유지로 Keycloak 왕복 내내 이어져 보임. 수동 버튼·일반 페이지 로드에는 지연 없음. vitest 148·lint 0에러·build·딥링크 스모크 PASS.
