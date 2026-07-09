@@ -40,6 +40,10 @@
 - 보안 리뷰 반영: 프로브가 루프백·링크로컬(메타데이터)·비유니캐스트 대상 거부(사설 RFC1918은 기능 목적상 허용 유지, httpx2는 저장소 표준이라 교체 제안 기각). pytest +1(445).
 - `GET /api/embed-check`(신규 embed_probe·routers/embed) — 대상 URL의 X-Frame-Options/CSP frame-ancestors를 서버가 판독(httpx2, 4s, 리다이렉트 추종), 미리보기 패널이 차단 verdict 수신 시 크롬 오류 화면 대신 기존 폴백 카드를 즉시 표시(판정 불가는 기존 동작 유지). pytest +6(444)·vitest 134·build 클린, E2E(google→카드/wikipedia→iframe) PASS. SSRF 노트: 인증 전용·http(s)만·불리언만 노출.
 ## 2026-07-09 — 유저 한글이름 필드 + 일괄 등록 모달 설계 (worktree-ui-improvement)
+- P2 최종 리뷰 반영: 이름만 임포트(dept 미기입) 시 부서 탭 매핑으로 채운 `korean_dept`를 소거하지 않도록 수정(빈 dept는 미기입으로 취급) + 회귀 테스트 1건, 추출 드롭다운 Esc/외부클릭 닫힘(투명 backdrop, 문서 리스너 없이), dept 스모크에 "매핑 후 단일 필" 직접 검증 추가, 설계 문서 파싱 실패 문단을 배열/객체 자동판별로 갱신 — pytest 454(신규 포함) PASS·ruff clean.
+- 부서 매핑·추출 옵션 구현 계획 작성(5 task: BE PUT/필드 → lib → 부서 탭 UI → 스플릿 버튼 → 스모크) — `docs/superpowers/plans/2026-07-09-dept-korean-mapping.md`.
+- 부서 한글명 매핑 관리(부서 탭 필터·korean dept 열·명단 툴팁·더블클릭 매핑 모달·전원 덮어쓰기 PUT) + 유저 추출 옵션(스플릿 버튼 4종) 설계 확정 — `docs/superpowers/specs/2026-07-09-dept-korean-mapping-design.md`.
+- 조회 도구 응답 배열 포맷 임포트 + `korean_dept` 컬럼 신설 — 루트 배열([{userId,status,name,dept,…}], not_found/error 무시)·객체 맵 양쪽 자동 판별, PUT entries가 {name,dept} 객체로 확장(양쪽 max_length 200), 테이블 korean dept 열 추가. 스모크 15/15(배열 1차·맵 충돌 경로)·pytest 447·vitest 144·build 통과.
 - AD 미제공 한글이름을 `Employee.korean_name`으로 추가하고 어드민 Employees 탭에서 JSON 임포트(skip/overwrite 충돌 확인·미보유 목록 다운로드)하는 설계 확정 — `docs/superpowers/specs/2026-07-09-user-korean-name-import-design.md`.
 - 구현 계획 작성(6 task: BE 컬럼/엔드포인트 TDD → FE 파서 lib/모달/탭 wiring → 브라우저 스모크) — `docs/superpowers/plans/2026-07-09-user-korean-name-import.md`.
 - Task 1 DONE: `korean_name` 컬럼 TDD 구현(2/2 테스트 통과·440 tests 회귀) — models.py Employee/schemas.py EmployeeOut 노출·AD _upsert 보존 검증.
@@ -51,6 +55,11 @@
 - Task 6 후속 fix(컨트롤러 승인): `korean-name-modal.tsx` 충돌 문구 래퍼 `<p>`→`<div>`로 div-in-p 중첩 제거 — 스모크 12/12 PASS(콘솔 에러 0), lint 0 err·vitest 140·build PASS.
 - 리뷰 후속: 스모크 헤더에 재실행 전제(DB `korean_name` 리셋) 주석 추가 — `pw-smoke-korean-names.mjs`, lint 0 err.
 - 전체 브랜치 최종 리뷰 반영: 툴팁 호버 갭 제거(`mt-1`→패딩 래퍼)로 flaky 닫힘 해소, `entries` 값 max_length=200 서버 검증 추가(Postgres VARCHAR(200) DataError 500 방지, 422 테스트 1건), BE 테스트 헬퍼 `_korean_name_of`→`_get_korean_name` 리네임, FE any 캐스트 제거(`Object.entries(data as Record<string, unknown>)`), 파일 읽기 실패 시 에러 표시(`onFile` try/catch), ko 조사 띄어쓰기·en 타이틀 대문자 통일, Cancel 버튼 `data-id` 추가, 스모크에 툴팁 유지 체크 추가(13/13 PASS) — pytest 446·ruff·lint·vitest 140·build 전부 PASS.
+- P2-Task 1 DONE: AdminUserOut korean 필드 + PUT /api/admin/departments/korean-dept 일괄 갱신 TDD 구현(6개 신규 테스트·453 tests 통과) — schemas.py DeptKoreanDeptIn/Out 2클래스 추가·admin.py 엔드포인트 등록·AdminUserOut korean_name/korean_dept 필드 노출·sysadmin 권한 검증.
+- P2-Task 2 DONE: FE korean-dept lib + api TDD 구현(8개 신규 테스트·152 tests 통과·0 lint errors) — api.ts AdminUser korean_name/korean_dept 필드 + setDeptKoreanDept 함수·korean-dept.ts getDeptMembers/aggregateDeptKoreanDepts/shouldFlagDeptMapping/formatRosterName/buildExportIds 순수함수·vitest 모든 엣지케이스 커버.
+- P2-Task 3 DONE: 부서 탭 UI 개편(매핑 필요 필터·korean dept 열·인원수 호버 명단 툴팁·행 더블클릭 매핑 모달) — department-table.tsx 확장·dept-korean-modal.tsx 신규·i18n 8키 en/ko, lint 0 err(불필요한 exhaustive-deps disable 제거)·vitest 152 pass·build 통과.
+- P2-Task 4 DONE: FE 스플릿 버튼 4옵션 추출(missing/deptSample/random50/all) — korean-name-modal.tsx split button·i18n 4키 en/ko + buildExportIds·EXPORT_FILENAMES·exportMenuOpen state·menu 드롭다운, lint 0 err·vitest 152 pass·build 통과.
+- P2-Task 5 DONE: 브라우저 스모크(부서 매핑 신규 9/9 `pw-smoke-korean-dept.mjs` + 추출 메뉴 체크 추가 후 17/17 `pw-smoke-korean-names.mjs`) 전부 첫 실행 PASS + 최종 게이트(pytest 453·ruff·lint 0 err·vitest 152·build) 전부 통과. 발견 결함 없음.
 
 ## 2026-07-07 — feat/url-viewer 머지 (main)
 - 머지 후속: 스모크가 초안 버전으로 전환 후 진행 — 상태 배너 기능이 게시본을 기본 열람으로 바꿔 스모크 전제가 깨진 것 보정.

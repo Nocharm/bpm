@@ -16,6 +16,8 @@ from app.schemas import (
     AdminDeptOut,
     AdminDirectoryOut,
     AdminUserOut,
+    DeptKoreanDeptIn,
+    DeptKoreanDeptOut,
     TableDataOut,
     TableInfoOut,
 )
@@ -58,6 +60,8 @@ async def get_admin_users(
                 is_sysadmin=is_sysadmin(emp.login_id),
                 org_levels=levels,
                 active=emp.active,
+                korean_name=emp.korean_name,
+                korean_dept=emp.korean_dept,
             )
         )
         if levels:
@@ -71,6 +75,34 @@ async def get_admin_users(
     ]
 
     return AdminDirectoryOut(users=users, departments=departments)
+
+
+@router.put("/departments/korean-dept", response_model=DeptKoreanDeptOut)
+async def set_department_korean_dept(
+    payload: DeptKoreanDeptIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DeptKoreanDeptOut:
+    """부서(org 경로 정확 일치) 전원의 korean_dept 덮어쓰기 — sysadmin 전용."""
+    if not is_sysadmin(login_id):
+        raise HTTPException(status_code=403, detail="sysadmin required")
+    korean_dept = payload.korean_dept.strip()
+    if not korean_dept or not payload.org_levels:
+        raise HTTPException(status_code=422, detail="org_levels and korean_dept required")
+    target = tuple(payload.org_levels)
+    rows = (await session.scalars(select(Employee))).all()
+    updated = 0
+    for emp in rows:
+        levels = tuple(
+            lv
+            for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5)
+            if lv is not None
+        )
+        if levels == target:
+            emp.korean_dept = korean_dept
+            updated += 1
+    await session.commit()
+    return DeptKoreanDeptOut(updated=updated)
 
 
 def _require_sysadmin(login_id: str) -> None:

@@ -52,14 +52,14 @@ async def import_korean_names(
     _: str = Depends(require_sysadmin),
     session: AsyncSession = Depends(get_session),
 ) -> KoreanNamesImportOut:
-    """한글이름 일괄 등록 — AD 미제공 필드. 서버가 mode 판정(클라이언트 diff 미신뢰)."""
+    """한글이름·한글그룹 일괄 등록 — AD 미제공 필드. 서버가 mode 판정(클라이언트 diff 미신뢰)."""
     updated = 0
     skipped = 0
     unknown: list[str] = []
-    for login_id, raw_name in payload.entries.items():
-        name = raw_name.strip()
+    for login_id, entry in payload.entries.items():
+        name = entry.name.strip()
         if not name:
-            continue  # 빈 값은 이름 삭제가 아니라 미기입 — 무시
+            continue  # 이름이 빈 항목은 dept가 있어도 통째로 무시 — 삭제 기능 아님
         emp = await session.get(Employee, login_id)
         if emp is None:
             unknown.append(login_id)
@@ -68,6 +68,10 @@ async def import_korean_names(
             skipped += 1
             continue
         emp.korean_name = name
+        dept = entry.dept.strip()
+        if dept:
+            # 빈 dept는 소거가 아니라 미기입 — 부서 탭 매핑 결과를 이름 임포트가 지우지 않게
+            emp.korean_dept = dept
         updated += 1
     await session.commit()
     return KoreanNamesImportOut(updated=updated, skipped=skipped, unknown=unknown)
