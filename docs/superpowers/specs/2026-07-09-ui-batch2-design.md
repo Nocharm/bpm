@@ -87,6 +87,15 @@
 
 `components/process-node.tsx` — 마름모는 사각 경계 코너가 도형 대각 엣지에서 ~32px 떨어져 코너 배지(코멘트·URL·변경·경고)가 붕 떠 보임. 배지 4종에 `className` 위치 prop(기본값 = 기존 코너 오프셋)을 추가하고, 분기 노드에서만 안쪽 12px(`left-3 top-3` 등)로 당겨 대각 엣지 근처에 표시. 다른 노드 타입은 무변경.
 
+## ⑭ 미니맵 페이드 — 줌 기준 (구현 중 사용자 추가 요청)
+
+`components/minimap-viewport-fill.tsx` — 기존 채움비(r) 기반 페이드를 줌 배율 기준으로 교체: 줌 ≥90% 최대 불투명도(0.65), 90%→40% 구간 선형 감소, ≤40% 완전 투명(클릭 비활성). 뷰포트 채움 오버레이는 동일 opacity 공유(무변경).
+
+## ⑮ Alt+←/→ 사이드바 토글 + 숏컷 플라이아웃 (구현 중 사용자 추가 요청)
+
+- `page.tsx` 전역 조합키 핸들러의 Alt 블록에 추가: Alt+ArrowLeft = `leftCollapsed` 토글(좌측 아웃라인), Alt+ArrowRight = `inspectorOpen` 토글(우측 인스펙터). 입력 중·모달 열림 중 무시(기존 가드), preventDefault로 브라우저 기본 동작 차단.
+- `editor-left-sidebar.tsx` "More shortcuts" 플라이아웃에 두 항목 추가(Alt+← / Alt+→), i18n `legend.toggleLeftSidebar`·`legend.toggleInspector` (EN/KO).
+
 ## 검증
 
 - `npx vitest run`(베이스라인 147) + `npm run lint`(에러 0, 기존 경고 1 무시).

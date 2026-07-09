@@ -21,37 +21,20 @@ const MM_W = 187; // 16:9 비율 폭(≈ 105 × 16/9)
 const MM_H = 105; // 높이 유지(기본 150의 70%)
 const OFFSET_SCALE = 5; // MiniMap offsetScale 기본값
 
-// 페이드 임계값 — 채움비 r = min(vp.w/vbW, vp.h/vbH).
-// r=1 이면 뷰포트 rect가 미니맵을 정확히 꽉 채움. 가득 차자마자 사라지지 않게
-// FADE_START까지 마진을 두고 최대 불투명도(MAX_OPACITY) 유지, FADE_END에서 완전히 사라진다(클릭 비활성).
+// 페이드 임계값 — 줌 배율 기준(에디터 % 표시와 동일 스케일). 줌아웃할수록 화면이 이미
+// 전체 조망이라 미니맵이 무의미해진다 — 90%부터 서서히 옅어져 40%에서 완전히 사라진다(클릭 비활성). (batch2 ⑭)
 const MAX_OPACITY = 0.65; // 미니맵 최대 불투명도 — 켜져 있어도 뒤쪽 노드가 비치도록 반투명 상한
-const FADE_START = 1.05; // 이 채움비까지는 최대 불투명도 유지 — 꽉 찬 직후(r=1)부터 바로 페이드 시작
-const FADE_END = 1.3; // 이 채움비 이상이면 완전 투명 — 지점을 당겨 더 빨리 사라짐
+const FADE_START_ZOOM = 0.9; // 이 줌 이상이면 최대 불투명도 유지
+const FADE_END_ZOOM = 0.4; // 이 줌 이하면 완전 투명
 const HIDDEN_EPS = 0.02; // opacity가 이 값 이하면 pointer-events 차단
 
-// 현재 채움비를 기반으로 미니맵 opacity(1→0)를 계산. nodes/viewport 훅을 쓰므로
-// 반드시 ReactFlow 컨텍스트 안에서 호출해야 한다.
+// 현재 줌을 기반으로 미니맵 opacity(1→0)를 계산 — ReactFlow 컨텍스트 안에서 호출해야 한다.
 function useMinimapFadeOpacity(): number {
-  const nodes = useNodes();
-  const { getNodesBounds } = useReactFlow();
   const { zoom } = useViewport();
-  const paneW = useStore((s) => s.width);
-  const paneH = useStore((s) => s.height);
 
-  if (nodes.length === 0 || zoom <= 0) return MAX_OPACITY;
-
-  const b = getNodesBounds(nodes);
-  if (b.width <= 0 || b.height <= 0) return MAX_OPACITY;
-
-  const viewScale = Math.max(b.width / MM_W, b.height / MM_H);
-  const offset = OFFSET_SCALE * viewScale;
-  const vbW = viewScale * MM_W + offset * 2;
-  const vbH = viewScale * MM_H + offset * 2;
-
-  const r = Math.min(paneW / zoom / vbW, paneH / zoom / vbH);
-  if (r <= FADE_START) return MAX_OPACITY;
-  if (r >= FADE_END) return 0;
-  return MAX_OPACITY * (1 - (r - FADE_START) / (FADE_END - FADE_START));
+  if (zoom >= FADE_START_ZOOM) return MAX_OPACITY;
+  if (zoom <= FADE_END_ZOOM) return 0;
+  return MAX_OPACITY * ((zoom - FADE_END_ZOOM) / (FADE_START_ZOOM - FADE_END_ZOOM));
 }
 
 // MiniMap + 뷰포트 채움 오버레이를 함께 렌더하며 채움비에 따라 페이드.
