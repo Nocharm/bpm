@@ -4,6 +4,7 @@
 
 ## 2026-07-09 — 피커 한글 검색 (worktree-ui-improvement-3)
 - 전 피커(협업자·담당자/부서·점유권 이전) 한글이름·한글그룹(부서 항목 파생 키워드) 검색 + 행 표시 lang 연동 + 점유권 이전 스코어링 통일 설계 — `docs/superpowers/specs/2026-07-09-picker-korean-search-design.md`.
+- 구현 계획(5 task: BE 필드 전달 → lib 빌더 → PrincipalPicker+어댑터 → SearchSelect·점유권 → 스모크) — `docs/superpowers/plans/2026-07-09-picker-korean-search.md`.
 
 ## 2026-07-09 — 자동 로그인 로딩 최소 노출 0.6s (feat/auto-login-min-visible)
 - `/login` silent 시도 전 `AUTO_LOGIN_MIN_VISIBLE_MS=600` 최소 대기(모듈 로드와 병렬) — 로딩 화면 순간 플래시 방지, 리다이렉트 중 화면 유지로 Keycloak 왕복 내내 이어져 보임. 수동 버튼·일반 페이지 로드에는 지연 없음. vitest 148·lint 0에러·build·딥링크 스모크 PASS.
