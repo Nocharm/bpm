@@ -8,11 +8,11 @@ import {
   Building2,
   Clock,
   CornerDownRight,
+  Link as LinkIcon,
   Lock,
   type LucideIcon,
   MessageSquare,
   Server,
-  Tag,
   User,
   Workflow,
   Zap,
@@ -40,43 +40,33 @@ const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
   department: Building2,
   system: Server,
   duration: Clock,
-  nodeType: Tag,
-};
-
-const NODE_TYPE_LABEL_KEY: Record<ProcessNodeType, MessageKey> = {
-  process: "nodeType.process",
-  decision: "nodeType.decision",
-  start: "nodeType.start",
-  end: "nodeType.end",
-  subprocess: "nodeType.subprocess",
+  url: LinkIcon,
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
 // start/end는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음.
 // subprocess는 노드 자체 필드 대신 지정 어트리뷰트(sp*, 라이브 참조)를 표시 (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
-  const { t } = useI18n();
   const { displayFields } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
-  const spValues: Record<Exclude<NodeDisplayField, "nodeType">, string | null | undefined> = {
+  const spValues: Record<NodeDisplayField, string | null | undefined> = {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
     duration: data.spDuration,
+    url: data.spUrl,
   };
   return (
     <>
       {displayFields.map((field) => {
-        // nodeType 외의 BPM 속성 필드는 process·decision(+지정 subprocess)만 표시
-        if (field !== "nodeType" && !hasBpmAttributes(data.nodeType) && !isSubprocess) {
+        // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
+        if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
           return null;
         }
-        const value =
-          field === "nodeType"
-            ? t(NODE_TYPE_LABEL_KEY[data.nodeType])
-            : isSubprocess
-              ? spValues[field]
-              : data[field];
+        const raw = isSubprocess ? spValues[field] : data[field];
+        // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
+        const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
+        const value = field === "url" ? (raw ? urlLabel || "LINK" : null) : raw;
         if (!value) {
           return null;
         }
@@ -260,11 +250,18 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
 }
 
 // 미해결 코멘트 수 뱃지 (에디터 전용)
-function UnresolvedCommentBadge({ count }: { count: number }) {
+// className — 위치 오버라이드: 마름모(분기)는 사각 경계 코너가 도형에서 멀어 안쪽 오프셋 사용 (batch2 ⑬)
+function UnresolvedCommentBadge({
+  count,
+  className = "-left-2 -top-2",
+}: {
+  count: number;
+  className?: string;
+}) {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -left-2 -top-2 rounded-full bg-removed px-1 text-[10px] leading-4 text-white"
+      className={`absolute ${className} rounded-full bg-removed px-1 text-[10px] leading-4 text-white`}
       title={t("node.unresolvedAria", { n: count })}
     >
       <span className="inline-flex items-center gap-0.5">
@@ -275,12 +272,27 @@ function UnresolvedCommentBadge({ count }: { count: number }) {
   );
 }
 
+// URL 배지 — url 지정 노드 좌하단 표시 전용(반투명 액센트, 클릭 없음). 좌상단은 코멘트 배지,
+// 우상·우하단은 경고/펼침이 사용 — 좌하단이 에디터·비교뷰 통틀어 유일하게 빈 모서리.
+// 비교뷰는 노드 data에 url 미탑재(compare/page.tsx buildNodes)라 자동 미표시. (batch2 ⑧)
+function UrlBadge({ url, className = "-bottom-2 -left-2" }: { url: string; className?: string }) {
+  return (
+    <span
+      data-id="node-url-badge"
+      className={`absolute ${className} rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70`}
+      title={url}
+    >
+      <LinkIcon size={12} strokeWidth={1.5} />
+    </span>
+  );
+}
+
 // 하위 계층에 변경이 있음을 알리는 뱃지 (비교 화면 전용)
-function DescendantChangeBadge() {
+function DescendantChangeBadge({ className = "-right-2 -top-2" }: { className?: string }) {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -right-2 -top-2 rounded-full bg-changed px-1 text-[10px] leading-4 text-white"
+      className={`absolute ${className} rounded-full bg-changed px-1 text-[10px] leading-4 text-white`}
       title={t("node.childChangedTitle")}
     >
       <Zap size={10} strokeWidth={1.5} />
@@ -289,11 +301,11 @@ function DescendantChangeBadge() {
 }
 
 // 담당자 부서 드리프트 경고 뱃지 — 담당자의 현재 부서가 노드 부서와 다를 때 (에디터 전용)
-function AssigneeWarningBadge() {
+function AssigneeWarningBadge({ className = "-bottom-2 -right-2" }: { className?: string }) {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -bottom-2 -right-2 rounded-full border border-hairline bg-surface p-0.5 shadow-sm"
+      className={`absolute ${className} rounded-full border border-hairline bg-surface p-0.5 shadow-sm`}
       title={t("assignee.driftWarn")}
     >
       <AlertTriangle size={12} strokeWidth={1.5} className="text-error" />
@@ -424,6 +436,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {data.spUrl && <UrlBadge url={data.spUrl} />}
         {data.assigneeWarning && <AssigneeWarningBadge />}
         {/* 미지정 경고가 권한 잠금보다 우선 — 원인(지정 해제)을 보여야 오너가 조치 가능 */}
         {data.undesignated ? (
@@ -465,9 +478,11 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             </div>
           )}
         </div>
-        {data.hasDescendantChange && <DescendantChangeBadge />}
-        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
-        {data.assigneeWarning && <AssigneeWarningBadge />}
+        {/* 마름모는 코너가 도형에서 멀다 — 배지를 안쪽(12px)으로 당겨 대각 엣지 근처에 (batch2 ⑬) */}
+        {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
+        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="left-3 top-3" />}
+        {data.url && <UrlBadge url={data.url} className="bottom-3 left-3" />}
+        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-3 right-3" />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>
     );
@@ -504,6 +519,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+      {data.url && <UrlBadge url={data.url} />}
       {data.assigneeWarning && <AssigneeWarningBadge />}
       <NodeHandles connectable={isConnectable ?? true} />
     </div>

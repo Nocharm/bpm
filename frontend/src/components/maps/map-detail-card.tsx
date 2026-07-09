@@ -5,7 +5,7 @@
 // 데이터는 getMap(+editor+면 listMapPermissions/listGroups). 선택 변경 시 key로 remount.
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
   Building,
@@ -39,6 +39,9 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { MapRole } from "@/lib/mock/permissions";
 import { visibilityPillClass } from "@/lib/version-status";
+
+// 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
+const ROLE_ORDER: Record<string, number> = { owner: 0, editor: 1, viewer: 2 };
 
 // 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
 const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
@@ -371,19 +374,20 @@ export function MapDetailCard({
                 {MEMBER_GROUPS.map((g) => {
                   const unsorted = members.filter((m) => m.principal_type === g.type);
                   if (unsorted.length === 0) return null;
-                  // 부서는 레벨 순(센터>담당>팀>그룹>파트)으로 정렬 (HM-3)
-                  const rows =
-                    g.type === "department"
-                      ? [...unsorted].sort(
-                          (a, b) =>
-                            deptLevelRank(deptLeaf(a.principal_id)) -
-                            deptLevelRank(deptLeaf(b.principal_id)),
-                        )
-                      : unsorted;
+                  // 역할 우선(owner→editor→viewer), 같은 역할 안에서 부서는 레벨 순 —
+                  // sort는 stable이라 그 외는 원순서 유지 (batch2 ④)
+                  const rows = [...unsorted].sort((a, b) => {
+                    const d = (ROLE_ORDER[a.role] ?? 3) - (ROLE_ORDER[b.role] ?? 3);
+                    if (d !== 0) return d;
+                    return g.type === "department"
+                      ? deptLevelRank(deptLeaf(a.principal_id)) -
+                          deptLevelRank(deptLeaf(b.principal_id))
+                      : 0;
+                  });
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
-                      {rows.map((perm) => {
+                      {rows.map((perm, i) => {
                         // 호버한 팀의 상위/하위 팀이면 하이라이트 (멤버수 중복 인지) (H2)
                         const related =
                           hoveredPath !== null &&
@@ -486,8 +490,12 @@ export function MapDetailCard({
                           );
                         }
                         return (
+                          <Fragment key={perm.id}>
+                          {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
+                          {i > 0 && rows[i - 1].role !== perm.role && (
+                            <div aria-hidden className="my-0.5 border-t border-hairline" />
+                          )}
                           <div
-                            key={perm.id}
                             role={perm.principal_type === "user" ? "button" : undefined}
                             tabIndex={perm.principal_type === "user" ? 0 : undefined}
                             onClick={
@@ -543,6 +551,7 @@ export function MapDetailCard({
                             </span>
                             <RoleBadge role={perm.role as MapRole} />
                           </div>
+                          </Fragment>
                         );
                       })}
                     </div>

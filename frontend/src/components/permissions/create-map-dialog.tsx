@@ -310,7 +310,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
       onClose={onClose}
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
     >
-      <div className="relative flex w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
+      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
           <h2 className="text-body-strong text-ink">{t("perm.createDialog.title")}</h2>
@@ -324,6 +324,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           </button>
         </div>
 
+        {/* 본문 — 작은 뷰포트에서만 내부 스크롤(스크롤바 숨김), 헤더·버튼 행은 고정 (batch2 ①) */}
+        <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
         {/* 사용자 없음 경고 / no user warning */}
         {!currentUser && (
           <p className="text-caption text-error">{t("perm.createDialog.noUser")}</p>
@@ -534,6 +536,7 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
             ))}
           </div>
           </div>
+        </div>
         </div>
 
         {/* 오류 / error */}

@@ -120,7 +120,11 @@ export default function NoticesPage() {
           </span>
         )}
       </div>
-      <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden">
+      {/* 빈 여백 클릭 = 선택 해제 — 맵 탭과 동일. 카드·상세는 stopPropagation으로 제외 (batch2 ⑩) */}
+      <div
+        className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 overflow-hidden"
+        onClick={() => setSelectedId(null)}
+      >
         {/* 좌 목록 — 폭은 맵 목록과 동일(flex-1 : flex-[2]) */}
         <aside className="flex min-w-[18rem] flex-1 flex-col">
           <div className="flex flex-col gap-2 py-3 pr-3">
@@ -139,7 +143,10 @@ export default function NoticesPage() {
                 <li key={n.id}>
                   <button
                     type="button"
-                    onClick={() => openNotice(n.id)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // 카드 선택이 배경(선택 해제)으로 버블링 방지
+                      openNotice(n.id);
+                    }}
                     className={
                       "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
                       (n.id === selectedId
@@ -186,8 +193,11 @@ export default function NoticesPage() {
           </ul>
         </aside>
 
-        {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스 */}
-        <div className="ml-4 min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt">
+        {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스. 상세 내부 클릭은 선택 해제로 버블링 방지 */}
+        <div
+          className="ml-4 min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt"
+          onClick={(e) => e.stopPropagation()}
+        >
           {selected ? (
             <article className="px-8 py-6">
               <div className="flex items-center gap-2">

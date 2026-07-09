@@ -5977,6 +5977,15 @@ function MapEditor({ mapId }: { mapId: number }) {
 
       // Alt 조합 — 전역 정렬/분배 (왼손 전용 키: 좌=W, 가로가운데=C, 상단=T, 세로가운데=X, 가로분배=R, 세로분배=V)
       if (event.altKey) {
+        // Alt+←/→ — 좌측 사이드바 / 우측 인스펙터 접기·펼치기 (batch2 ⑮)
+        if (event.code === "ArrowLeft") {
+          fire(() => setLeftCollapsed((v) => !v));
+          return;
+        }
+        if (event.code === "ArrowRight") {
+          fire(() => setInspectorOpen((v) => !v));
+          return;
+        }
         const alignByCode: Record<string, "left" | "centerX" | "top" | "centerY"> = {
           KeyW: "left",
           KeyC: "centerX",
@@ -7630,13 +7639,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                   // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
                   <div className="flex flex-col gap-4">
                     <MapInspectorTab mapId={mapId} readOnly={readOnly} />
-                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정 */}
-                    <SubprocessInspectorCard
-                      mapId={mapId}
-                      canManage={spCanManage}
-                      disabledReason={spDisabledReason}
-                      onToast={showToast}
-                    />
                     <div className="rounded-md border border-hairline p-3">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
@@ -7653,7 +7655,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 ? "field.system"
                                 : field === "duration"
                                   ? "field.duration"
-                                  : "field.type";
+                                  : "field.url";
                         return (
                           <div
                             key={field}
@@ -7709,6 +7711,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                         ))}
                       </div>
                     </div>
+                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      onToast={showToast}
+                    />
                     <button
                       type="button"
                       onClick={() => void handleExportPng()}

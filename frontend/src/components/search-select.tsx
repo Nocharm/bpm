@@ -8,9 +8,10 @@
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 
 import { Highlight } from "@/components/highlight";
+import { useI18n } from "@/lib/i18n";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
@@ -43,7 +44,9 @@ export function SearchSelect({
   // true면 flex-1로 늘리지 않고 값 내용폭(최대폭 캡)으로 — 라벨 옆 우측정렬용(부서 등).
   fitContent?: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  // 검색어는 닫아도 유지 — 재오픈 시 남은 검색어로 재검색, X 버튼으로만 전체 삭제 (batch2 ⑪)
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0); // 0=미지정, 1..n=hits
   const listRef = useRef<HTMLDivElement>(null);
@@ -69,7 +72,6 @@ export function SearchSelect({
     const top = Math.max(8, Math.min(clientY, window.innerHeight - FLYOUT_H));
     setFlyoutPos({ left, top });
     setOpen(true);
-    setQuery("");
     setActive(0);
   };
 
@@ -100,17 +102,35 @@ export function SearchSelect({
   // 플라이아웃 내용 — addMode(포털·fixed)와 기본(absolute·버튼 아래) 공용.
   const menu = (
     <>
-      <input
-        autoFocus
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setActive(0);
-        }}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        className="mx-2 mb-1 w-[calc(100%-1rem)] rounded-sm border border-hairline px-2 py-1 text-fine text-ink outline-none"
-      />
+      <div className="relative mx-2 mb-1">
+        <input
+          autoFocus
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+          }}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className="w-full rounded-sm border border-hairline px-2 py-1 pr-6 text-fine text-ink outline-none"
+        />
+        {/* 전체 지우기 — 검색어만 비움, 드롭다운 유지 (batch2 ⑪) */}
+        {query.length > 0 && (
+          <button
+            type="button"
+            data-id="picker-clear-query"
+            aria-label={t("perm.pickerClear")}
+            title={t("perm.pickerClear")}
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+            onClick={() => {
+              setQuery("");
+              setActive(0);
+            }}
+          >
+            <X size={12} strokeWidth={1.5} />
+          </button>
+        )}
+      </div>
       <div ref={listRef} className="max-h-56 overflow-y-auto">
         {/* 미지정 (index 0) */}
         <button
@@ -182,7 +202,6 @@ export function SearchSelect({
           } items-center justify-between gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink hover:bg-surface-alt`}
           onClick={() => {
             setOpen((prev) => !prev);
-            setQuery("");
             setActive(0);
           }}
         >

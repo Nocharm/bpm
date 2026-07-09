@@ -2,6 +2,24 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — UI 개선 배치 2 설계 (worktree-ui-improvement-5)
+- 7항목 설계 확정 — 새맵 모달 dvh+숨김 스크롤·맵 목록 가로스크롤 방지·전체맵 권한>시간 정렬(순수 간격)·허용인원 역할 간격·서브프로세스 노트 축약·노드 표시 URL(라벨/LINK)·URL 배지(좌상단 표시 전용). `docs/superpowers/specs/2026-07-09-ui-batch2-design.md`.
+- 구현 계획 작성 — 8태스크(항목당 1커밋 + 통합 시각 검증), `docs/superpowers/plans/2026-07-09-ui-batch2.md`. URL 배지는 좌상단이 코멘트 배지와 충돌해 좌하단으로 정정(사용자 확인).
+- ① 새맵 모달 max-h-[calc(100dvh-2rem)]·본문 scrollbar-hidden 내부 스크롤. vitest 147·lint 0에러.
+- ② 맵카드 목록 overflow-x-hidden — 가로 스크롤 방지(카드 min-w-0는 T8 실측 후 판단). vitest 147·lint 0에러.
+- ③ 브라우즈 전체맵 owner→editor→viewer·updated_at 정렬 + 역할 경계 순수 간격(h-2). vitest 147·lint 0에러.
+- ④ 허용 인원 타입 그룹 내 역할 정렬(owner→editor→viewer)·클러스터 간격(h-1.5) — 홈·인스펙터 공용. vitest 147·lint 0에러.
+- ⑤ 서브프로세스 노트 한 줄 축약 + 전체 문구 툴팁(spNoteFull, EN/KO) — 속성탭·Map 탭 공용. vitest 147·lint 0에러.
+- ⑦ 노드 표시 필드 nodeType→url(라벨 있으면 라벨, 없으면 LINK, subprocess는 spUrl/spUrlLabel) — localStorage 위생은 기존 hydration 필터가 처리. vitest 147·lint 0에러.
+- ⑧ 노드 URL 배지 좌하단 표시 전용(액센트 틴트·툴팁=URL) — 좌상단은 코멘트 배지와 충돌해 위치 정정, 비교뷰는 data 미탑재로 자동 미표시. vitest 147·lint 0에러.
+- ⑨ Map 탭 협업자 기본 접힘 + 서브프로세스 카드 엣지 스타일 아래로 이동(사용자 추가 요청). vitest 147·lint 0에러.
+- ⑩ 노티스·인박스 빈 여백 클릭 = 선택 해제(맵 탭 패턴 미러, 카드·상세 stopPropagation). vitest 147·lint 0에러.
+- ⑪ 피커 바깥 클릭 닫힘(검색어 유지·재검색)·전체 지우기 X 버튼 — principal-picker(open 상태화+scrollIntoView)·search-select(검색어 보존)·transfer 다이얼로그(X만). vitest 147·lint 0에러.
+- ⑬ 분기(마름모) 노드 코너 배지 안쪽 12px 조정(배지 position prop화, 타 노드 무변경). vitest 147·lint 0에러.
+- ⑭ 미니맵 페이드 줌 기준 교체 — ≥90% 유지·90→40% 선형 감소·≤40% 소멸. vitest 147·lint 0에러.
+- ⑮ Alt+←/→ 좌측 사이드바·우측 인스펙터 토글 + More shortcuts 플라이아웃 항목 추가. vitest 147·lint 0에러.
+- ③④ 스페이서를 순수 간격 → 회색 가로선(border-hairline)으로 교체(사용자 피드백). vitest 147·lint 0에러.
+
 ## 2026-07-09 — 피커 한글 검색 (worktree-ui-improvement-3)
 - 유령 principal 배지: 협업자 목록(퇴사 유저 Departed·소멸 부서 Missing, 로딩 전 오탐 가드)·승인자 카드(Departed)·맵 카드 오너(owner_name null → id 폴백 + Departed) — text-error 약한 배지 + title 안내. 점유자 표면은 프룬 자동 해제로 유령 케이스 소멸이라 미적용. 브라우저 체크 배지 4종 PASS.
 - 소멸 부서 일괄 재지정: `GET/POST /api/admin/dept-remap` — 현 조직 프리픽스에 없는 부서 경로의 맵 권한·그룹 멤버 참조 집계, 현존 경로로 일괄 이동(같은 맵/그룹 중복은 병합 — 권한은 높은 역할 유지). 부서 탭 하단 Missing departments 카드(경로·참조 수·SearchSelect 대상 선택·Reassign). pytest 509(+4)·브라우저 재지정 플로우 실측 PASS.
