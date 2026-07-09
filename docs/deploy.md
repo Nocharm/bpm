@@ -91,6 +91,7 @@ docker compose up -d --build
   ```bash
   docker compose exec db psql -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} -c 'DROP TABLE IF EXISTS ai_chat_logs;'
   ```
+- 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **데모 데이터 시드**(선택, 미런칭 빈 DB일 때): 시드 스크립트는 backend 이미지에 포함돼 있다 → `docker compose exec backend python -m scripts.reset_db`. ⚠️ `reset_db`는 `drop_all`로 전체 삭제 후 재시드 — 데이터가 있으면 날아간다. 상세·부분 시드는 `docs/db-seed.md`.
 
 ## 4. 헬스체크 + 인증/AD 검증

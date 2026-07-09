@@ -232,3 +232,20 @@ def test_sync_empty_scan_skips_prune(client: TestClient, monkeypatch) -> None:
     assert body["scanned"] == 0
     assert body["purged"] == 0
     assert _employee_exists("survivor.ad")  # 빈 스캔 → 전멸 방지 가드
+
+
+def test_sync_all_excluded_scan_skips_prune(client: TestClient, monkeypatch) -> None:
+    """스캔이 비어있지 않아도 전원 제외(유효 0명)면 프룬 스킵 — NOT IN 전삭제 방지 가드."""
+    from app.ad.client import RawUser
+
+    _seed_ad_row("survivor2.ad")
+    raws = [RawUser("disabled.only", "Disabled Only", "사원", "OU=TeamA,DC=corp", 0x202, None, [])]
+    _mock_ldap(monkeypatch, raws)
+
+    res = client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["scanned"] == 1
+    assert body["excluded"] == 1
+    assert body["purged"] == 0
+    assert _employee_exists("survivor2.ad")

@@ -128,7 +128,7 @@ def to_employee_fields(raw: client.RawUser) -> EmployeeFields | None:
         org_l5=org.org_l5,
         department=org.department,
         role=resolve_role(login_id),
-        active=is_active(raw.user_account_control),
+        active=True,  # 비활성은 위에서 제외 — 도달 시 항상 활성
         email=raw.mail or "",
     )
 
@@ -182,9 +182,9 @@ async def sync_all(session: AsyncSession) -> SyncSummary:
         upserted += 1
         valid_ids.add(fields.login_id)
     purged = 0
-    if raws:
+    if valid_ids:
         # 스테일 프룬 — 이번 스캔 유효 집합 밖 ad 행 삭제(비활성·퇴사·신규 제외 대상).
-        # 빈 스캔이면 스킵(LDAP 이상 시 전멸 방지). source='local' 시드는 보존.
+        # 유효 집합이 비면 스킵(빈 스캔·전원 제외 → NOT IN 전삭제 방지). source='local' 시드는 보존.
         result = await session.execute(
             delete(Employee).where(
                 Employee.source == "ad", Employee.login_id.not_in(list(valid_ids))

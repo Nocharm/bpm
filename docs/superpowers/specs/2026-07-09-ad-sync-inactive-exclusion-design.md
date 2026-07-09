@@ -38,3 +38,9 @@ AD 비활성 계정(userAccountControl 0x2)이 employees에 유입·잔류하지
 
 - 비활성 계정의 소프트 보관(archive 테이블 등) — 필요 시 후속.
 - `Employee.active` 컬럼 제거 — 프룬 후 사실상 항상 True지만 스키마 축소는 별건.
+
+## 후속 (2026-07-09 최종 리뷰 이관)
+
+- **프룬 비율 가드**: 부분 스캔 과삭제 방어(기존 ad 행의 N% 초과 삭제 시 스킵+로그) — 실 AD 라이브 검증 전 권장 안전판.
+- **실 AD 라이브 검증 체크리스트**: 첫 전체 동기화 시 `purged` 수 확인, `fetch_all_users` 부분 결과 여부 관찰(`conn.result` 검사 도입 검토).
+- `sync_one`(fetch_user)에 `LDAP_USER_FILTER` 적용 정합 — 현재는 .env.example 주석으로만 제약 명시.

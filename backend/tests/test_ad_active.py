@@ -172,7 +172,7 @@ def test_inactive_approver_does_not_count_toward_submit(
 # ── directory stays minimal ──────────────────────────────────────────────────
 
 def test_directory_response_excludes_sensitive_fields(client: TestClient) -> None:
-    """GET /api/directory users carry only display fields (id/name/department/title/org_path/korean_name)
+    """GET /api/directory users carry only display fields (id/name/department/title/org_path/role/korean_name)
     for the member 2nd line (H2) — never email/active."""
     resp = client.get("/api/directory")
     assert resp.status_code == 200, resp.text
