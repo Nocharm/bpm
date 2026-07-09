@@ -65,26 +65,27 @@ function deptLevelRank(leaf: string): number {
 const LEVEL_ICONS = [Landmark, Building2, Users, UsersRound, Boxes];
 
 // 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
+// 접힌 카드 2줄 높이 기준 확대(22px) — 컨테이너가 세로 중앙 정렬 (member-card design 2026-07-09)
 function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
   if (perm.principal_type === "user") {
     if (isMe) {
-      // 본인 — 손든 사람 아이콘 + 작은 ME, 악센트 선색으로 강조(아이콘과 동급 크기)
+      // 본인 — 손든 사람 아이콘 + 작은 ME, 악센트 선색으로 강조
       return (
         <span
           data-id="member-me-badge"
           title="me"
-          className="inline-flex shrink-0 items-center gap-px text-accent"
+          className="inline-flex shrink-0 flex-col items-center text-accent"
         >
-          <Hand size={13} strokeWidth={2} />
-          <span className="text-[7px] font-bold leading-none">ME</span>
+          <Hand size={20} strokeWidth={2} />
+          <span className="text-[9px] font-bold leading-none">ME</span>
         </span>
       );
     }
-    return <User size={12} strokeWidth={1.5} />;
+    return <User size={22} strokeWidth={1.5} />;
   }
-  if (perm.principal_type === "group") return <UsersRound size={12} strokeWidth={1.5} />;
+  if (perm.principal_type === "group") return <UsersRound size={22} strokeWidth={1.5} />;
   const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(perm.principal_id))] ?? Building2;
-  return <Icon size={12} strokeWidth={1.5} />;
+  return <Icon size={22} strokeWidth={1.5} />;
 }
 
 // 멤버 컬럼 고스트 — 권한·디렉터리·그룹 로딩 동안 우측 컬럼 폭을 미리 차지해,
@@ -98,7 +99,7 @@ function MembersSkeleton() {
           className="flex items-center justify-between gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5"
         >
           <span className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-surface-alt" />
+            <span className="h-9 w-9 shrink-0 rounded-full bg-surface-alt" />
             <span className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="h-3 w-3/5 rounded-xs bg-surface-alt" />
               <span className="h-2.5 w-2/5 rounded-xs bg-surface-alt" />
@@ -141,7 +142,7 @@ export function MapDetailCard({
   onGoToVersion,
   currentVersionId,
 }: MapDetailCardProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   const loginId = me?.loginId ?? null;
   const orgPath = me?.orgPath ?? "";
@@ -155,6 +156,10 @@ export function MapDetailCard({
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
   // loginId → 표시명 — 멤버(유저) 행을 "이름(아이디)"로 보여주기 위함 (#5)
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
+  // loginId → 한글이름 — 언어 토글 표시용(없으면 영문 폴백) (member-card design 2026-07-09)
+  const [koreanNameById, setKoreanNameById] = useState<Map<string, string>>(new Map());
+  // 그룹 id → 그룹 이름 — 그룹 카드가 id를 그대로 노출하던 누락 수정
+  const [groupNameById, setGroupNameById] = useState<Map<string, string>>(new Map());
   // 디렉터리 파생 — 멤버 2번째 줄(유저 직급·말단org, 부서 카운트) (H2) / directory-derived maps for the 2nd line.
   const [titleById, setTitleById] = useState<Map<string, string>>(new Map());
   const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
@@ -201,11 +206,13 @@ export function MapDetailCard({
             setMembers(perms);
             setMembersStatus("ready");
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
+            setKoreanNameById(new Map(dir.users.map((u) => [u.id, u.korean_name ?? ""])));
             setTitleById(new Map(dir.users.map((u) => [u.id, u.title ?? ""])));
             setOrgPathById(new Map(dir.users.map((u) => [u.id, u.org_path ?? ""])));
             setGroupInfo(
               new Map(groups.map((g) => [String(g.id), { count: g.members.length, status: g.status }])),
             );
+            setGroupNameById(new Map(groups.map((g) => [String(g.id), g.name])));
             if (loginId) {
               setMyGroupIds(
                 new Set(
@@ -389,7 +396,11 @@ export function MapDetailCard({
                         let nameLine: ReactNode;
                         let restNode: ReactNode = null;
                         if (perm.principal_type === "user") {
-                          nameLine = nameById.get(perm.principal_id) ?? perm.principal_id;
+                          const enName = nameById.get(perm.principal_id) ?? perm.principal_id;
+                          const krName = koreanNameById.get(perm.principal_id) ?? "";
+                          // 언어 토글: ko=한글(없으면 영문), en=영문. 반대 언어는 펼침 필로.
+                          nameLine = lang === "ko" ? krName || enName : enName;
+                          const altName = lang === "ko" ? (krName ? enName : "") : krName;
                           const path = orgPathById.get(perm.principal_id) ?? "";
                           const leaf = deptLeaf(path);
                           const title = titleById.get(perm.principal_id) ?? "";
@@ -409,6 +420,14 @@ export function MapDetailCard({
                                 <span className="overflow-hidden">
                                   {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명, 테두리는 하이라이트(me) 행에서도 보이게 divider (H2c) */}
                                   <span className="mt-1 flex flex-col items-start gap-1">
+                                    {altName && (
+                                      <span
+                                        data-id="member-alt-name"
+                                        className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary"
+                                      >
+                                        {altName}
+                                      </span>
+                                    )}
                                     <span className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary">
                                       {perm.principal_id}
                                     </span>
@@ -431,7 +450,7 @@ export function MapDetailCard({
                             </>
                           );
                         } else if (perm.principal_type === "group") {
-                          nameLine = perm.principal_id;
+                          nameLine = groupNameById.get(perm.principal_id) ?? perm.principal_id;
                           const g = groupInfo.get(perm.principal_id);
                           if (g) {
                             const status = t(
@@ -508,7 +527,7 @@ export function MapDetailCard({
                             }`}
                           >
                             <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
-                              <span className="mt-0.5 flex w-6 shrink-0 justify-center">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start">
                                 <MemberIcon
                                   perm={perm}
                                   isMe={perm.principal_type === "user" && perm.principal_id === loginId}
