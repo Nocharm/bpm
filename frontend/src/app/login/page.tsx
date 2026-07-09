@@ -2,10 +2,11 @@
 
 import { Lock, LogIn, Workflow } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DevLoginModal } from "@/components/dev-login-modal";
 import { setDevUser } from "@/lib/api";
+import { clearAutoLoginSkip, consumeReturnTo, hasAutoLoginSkip, setAutoLoginSkip } from "@/lib/auth-return";
 import { storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 
@@ -16,7 +17,26 @@ export default function LoginPage() {
   const router = useRouter();
   const [picking, setPicking] = useState(false);
 
+  // 자동 silent 로그인 — SSO 세션 있으면 버튼 없이 즉시 복귀. 시도 "직전"에 skip 플래그를 세워
+  // 실패(login_required) 복귀 시 재시도 루프를 차단한다(성공 시 AuthGate가 해제).
+  useEffect(() => {
+    if (!AUTH_ENABLED || hasAutoLoginSkip()) {
+      return;
+    }
+    setAutoLoginSkip();
+    void (async () => {
+      try {
+        const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
+        await signinRedirectFromLogin({ promptNone: true });
+      } catch (e) {
+        // Keycloak 미응답 등 — 카드에 머물러 수동 버튼으로 폴백
+        console.error("silent login attempt failed", e);
+      }
+    })();
+  }, []);
+
   const onKeycloak = async () => {
+    clearAutoLoginSkip();
     const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
     await signinRedirectFromLogin();
   };
@@ -25,7 +45,7 @@ export default function LoginPage() {
     storeDevUser(loginId);
     setDevUser(loginId);
     setPicking(false);
-    router.replace("/");
+    router.replace(consumeReturnTo() ?? "/");
   };
 
   return (

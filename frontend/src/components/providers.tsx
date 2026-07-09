@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import { getMe, setAuthToken, setDevUser } from "@/lib/api";
+import { clearAutoLoginSkip, consumeReturnTo, peekReturnTo, saveReturnTo, setAutoLoginSkip } from "@/lib/auth-return";
 import { setCurrentUser } from "@/lib/current-user";
 import { getStoredDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
@@ -27,6 +28,15 @@ function buildOidcConfig() {
       window.history.replaceState({}, document.title, window.location.pathname);
     },
   };
+}
+
+// prompt=none 실패(SSO 세션 없음) 신호 — 에러 화면이 아니라 "로그인 카드로" 신호로 해석
+function isLoginRequiredError(err: unknown): boolean {
+  if (!err || typeof err !== "object" || !("error" in err)) {
+    return false;
+  }
+  const code = (err as { error?: unknown }).error;
+  return code === "login_required" || code === "interaction_required";
 }
 
 // 로그인 후 /api/me로 표시 프로필 + role 발행
@@ -68,18 +78,43 @@ function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!auth.isLoading && !auth.isAuthenticated && !auth.activeNavigator && !auth.error) {
       if (pathname !== "/login") {
+        saveReturnTo(pathname + window.location.search); // 딥링크 보존 — 로그인 후 복귀
         router.replace("/login");
       }
     }
   }, [auth.isLoading, auth.isAuthenticated, auth.activeNavigator, auth.error, pathname, router]);
 
+  // prompt=none 복귀(error=login_required): 자동 재시도 억제 후 로그인 카드로
+  useEffect(() => {
+    if (auth.error && isLoginRequiredError(auth.error) && pathname !== "/login") {
+      setAutoLoginSkip();
+      router.replace("/login");
+    }
+  }, [auth.error, pathname, router]);
+
+  // 로그인 성공: skip 플래그 해제 + 저장된 딥링크 복원
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      clearAutoLoginSkip();
+      const returnTo = consumeReturnTo();
+      if (returnTo && returnTo !== pathname) {
+        router.replace(returnTo);
+      }
+    }
+  }, [auth.isAuthenticated, pathname, router]);
+
   if (pathname === "/login") {
     return <>{children}</>;
   }
-  if (auth.error) {
+  if (auth.error && !isLoginRequiredError(auth.error)) {
     return <div className="p-8 text-caption text-error">{t("auth.error", { msg: auth.error.message })}</div>;
   }
   if (auth.isLoading || !auth.isAuthenticated) {
+    return <div className="p-8 text-caption text-ink-tertiary">{t("auth.signingIn")}</div>;
+  }
+  const pendingReturn = peekReturnTo();
+  if (pendingReturn && pendingReturn !== pathname) {
+    // returnTo로 replace되기 전 홈(콜백 착지점 "/")이 잠깐 렌더되는 플래시 방지
     return <div className="p-8 text-caption text-ink-tertiary">{t("auth.signingIn")}</div>;
   }
   return <>{children}</>;
@@ -101,6 +136,7 @@ function DevGate({ children }: { children: ReactNode }) {
     } else {
       setCurrentUser(null);
       if (pathname !== "/login") {
+        saveReturnTo(pathname + window.location.search); // 딥링크 보존 — dev 로그인 후 복귀
         router.replace("/login");
       }
     }

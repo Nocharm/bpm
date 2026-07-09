@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setDevUser } from "@/lib/api";
+import { setAutoLoginSkip } from "@/lib/auth-return";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
 import {
@@ -66,6 +67,8 @@ export function TopNav() {
   }, [open]);
 
   const onLogout = async () => {
+    // 로그아웃은 removeUser()만 하고 Keycloak SSO 세션은 살아있음 — /login 자동 재로그인 차단
+    setAutoLoginSkip();
     if (AUTH_ENABLED) {
       const { UserManager } = await import("oidc-client-ts");
       const mgr = new UserManager({
