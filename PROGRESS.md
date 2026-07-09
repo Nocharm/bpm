@@ -4,6 +4,7 @@
 
 ## 2026-07-10 — AI 권한 게이트 + 페이로드 저장 설계 (main)
 - AI 챗·그래프 조회 viewer 게이트 + `ai_chat_messages.payload` 저장(카드 히스토리 재현) 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-10-ai-gate-payload-design.md`. 사용자 결정 3건(게이트 범위=AI+그래프 GET 2종, 과거 graph/ops=읽기전용, 카드=메시지 부착형 통일).
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-10-ai-gate-payload.md` (6태스크: 게이트→payload 백엔드→뷰모델→카드 통일→프론트 영향 점검→스모크·enforce 검증).
 
 ## 2026-07-10 — 문서 정리: 완료 SDD 문서 삭제 + PROGRESS compact (main)
 - `docs/superpowers/` 완료 plans·specs 72개 + editor-compare-redesign 에셋(1.9MB) + `docs/frontend-compare-verification.md` 삭제 — 최근 2건(ui-batch2·member-card-icons)만 유지, 전부 git history에 보존.
