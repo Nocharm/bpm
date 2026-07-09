@@ -37,6 +37,8 @@ services:
       AI_API_TOKEN: ${AI_API_TOKEN:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      # 다중 엔드포인트+모델(JSON 배열) — 비우면 위 단일 AI_* 사용 (.env.example 참고)
+      AI_ENDPOINTS: ${AI_ENDPOINTS:-}
       # 사내 AD(LDAP) 동기화 (design 2026-06-16) — 비우면 동기화 비활성(.env로 주입, 시크릿 포함)
       LDAP_URL: ${LDAP_URL:-}
       LDAP_BIND_DN: ${LDAP_BIND_DN:-}

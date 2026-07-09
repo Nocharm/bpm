@@ -62,6 +62,14 @@ LDAP_USER_SEARCH_BASE=DC=corp,DC=example,DC=com
 LDAP_START_TLS=false          # ldap://(389)+StartTLS면 true, ldaps://면 false
 LDAP_USER_FILTER=             # 비우면 기본 (&(objectCategory=person)(objectClass=user)(sAMAccountName=*))
 SYSTEM_ADMIN_LOGIN_IDS=hong.gildong,kim.cheolsu   # 초기 관리자 loginId(콤마)
+
+# 온프레미스 AI (OpenAI 호환) — 단일 엔드포인트면 AI_BASE_URL 3종, 여러 개면 AI_ENDPOINTS 사용
+AI_ENABLED=true
+AI_BASE_URL=http://<gpu>:8000/v1
+AI_API_TOKEN=<시크릿>
+AI_MODEL=<기본 모델 id>
+# 다중 엔드포인트+모델(JSON 배열 한 줄, 설정 시 위 3종 대신 사용 — 형식은 .env.example 참고)
+AI_ENDPOINTS=
 ```
 
 - `NEXT_PUBLIC_*`는 compose가 `AUTH_ENABLED`/`KEYCLOAK_ISSUER`/`KEYCLOAK_CLIENT_ID`로부터 build args로 자동 주입(docker-compose.yml). 별도 설정 불필요.
@@ -76,7 +84,13 @@ docker compose up -d --build
 
 - `AUTH_ENABLED`/`KEYCLOAK_*`는 frontend **빌드 타임**에 `NEXT_PUBLIC_*`로 번들 인라인된다 → 값 변경 시 `--build` 필수(§7).
 - `LDAP_*`는 backend **런타임** 환경변수 → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영.
-- DB 스키마는 backend 起動 시 `create_all`로 생성(마이그레이션은 후속).
+- `AI_*`(AI_ENDPOINTS 포함)는 backend **런타임** 환경변수 → 모델 추가/삭제는 `.env` 수정 후 `docker compose up -d`로 backend 재생성(재빌드 불필요).
+- DB 스키마는 backend 起動 시 `create_all`로 생성(마이그레이션은 후속). 신규 테이블은 자동 생성되지만 **제거된 테이블은 드롭되지 않는다** — 아래 업그레이드 노트.
+- **업그레이드 노트(2026-07-09, AI 챗 서버 저장 머지)**: 기존 배포 DB에는 더 이상 코드가 쓰지 않는 `ai_chat_logs` 테이블이 남는다. 배포 후 1회 정리:
+
+  ```bash
+  docker compose exec db psql -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} -c 'DROP TABLE IF EXISTS ai_chat_logs;'
+  ```
 - **데모 데이터 시드**(선택, 미런칭 빈 DB일 때): 시드 스크립트는 backend 이미지에 포함돼 있다 → `docker compose exec backend python -m scripts.reset_db`. ⚠️ `reset_db`는 `drop_all`로 전체 삭제 후 재시드 — 데이터가 있으면 날아간다. 상세·부분 시드는 `docs/db-seed.md`.
 
 ## 4. 헬스체크 + 인증/AD 검증
