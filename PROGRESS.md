@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
 ## 2026-07-09 — 피커 한글 검색 (worktree-ui-improvement-3)
+- 최종 리뷰 폴리시: SelectOption 타입 중복 제거(search-select 것 재사용), eligible-approvers에 korean_dept 전달(+테스트 단언), 스펙 후속 섹션(점유권 이전 육안 확인·부서 하이라이트 툴팁·스모크 시드 원복 백로그). ⚠️ 최초 폴리시 커밋(5b5beb9)이 스펙 문서·테스트를 훼손해 리셋 후 재적용.
 - 전 피커(협업자·담당자/부서·점유권 이전) 한글이름·한글그룹(부서 항목 파생 키워드) 검색 + 행 표시 lang 연동 + 점유권 이전 스코어링 통일 설계 — `docs/superpowers/specs/2026-07-09-picker-korean-search-design.md`.
 - 구현 계획(5 task: BE 필드 전달 → lib 빌더 → PrincipalPicker+어댑터 → SearchSelect·점유권 → 스모크) — `docs/superpowers/plans/2026-07-09-picker-korean-search.md`.
 - Task 1(BE): `DirectoryUserOut.korean_dept` 추가 + directory/eligible-assignees·approvers/editors 4개 엔드포인트가 korean_name·korean_dept 실값 전달하도록 보강(스키마 미신설, 미전달 지점만 채움). pytest 492 GREEN·ruff 0.

@@ -3,6 +3,7 @@
 // 설계: docs/superpowers/specs/2026-07-09-member-card-korean-names-design.md
 //      docs/superpowers/specs/2026-07-09-picker-korean-search-design.md
 
+import type { SelectOption } from "@/components/search-select";
 import type { AdminUser, EmployeeRow } from "./api";
 import type { Lang } from "./i18n-messages";
 
@@ -72,13 +73,6 @@ export function buildExportIds(
       return picked;
     }
   }
-}
-
-export interface SelectOption {
-  value: string;
-  label: string;
-  sub?: string;
-  keywords?: string;
 }
 
 /** org_path 정확 일치 그룹별 distinct 한글부서 — 피커 부서 항목 검색 키워드 파생. */

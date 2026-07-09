@@ -345,6 +345,7 @@ async def list_eligible_approvers(
                 e.org_l1, e.org_l2, e.org_l3, e.org_l4, e.org_l5, e.department or ""
             ),
             korean_name=e.korean_name,
+            korean_dept=e.korean_dept,
         )
         for e in eligible
     ]

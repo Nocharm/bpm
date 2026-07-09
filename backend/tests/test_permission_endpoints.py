@@ -255,6 +255,7 @@ def test_eligible_approvers_includes_korean_name(client: TestClient, enforce: No
         async with SessionLocal() as session:
             emp = await session.get(Employee, "user.lee")
             emp.korean_name = "이민재"
+            emp.korean_dept = "소싱1팀"
             await session.commit()
 
     asyncio.run(_run())
@@ -263,6 +264,7 @@ def test_eligible_approvers_includes_korean_name(client: TestClient, enforce: No
     assert res.status_code == 200
     by_id = {u["id"]: u for u in res.json()}
     assert by_id["user.lee"]["korean_name"] == "이민재"
+    assert by_id["user.lee"]["korean_dept"] == "소싱1팀"
 
 
 def test_eligible_assignees_public_all(client: TestClient, enforce: None) -> None:
