@@ -58,8 +58,8 @@
 
 `components/process-node.tsx`
 
-- url 있는 노드 좌상단 `-left-2 -top-2`에 표시 전용 배지: `rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70` + `Link` 12px, `title`=URL 툴팁(확정: 클릭 동작 없음).
-- **비교뷰에서는 미표시** — 좌상단 삭제 배지와 충돌 회피. 비교 렌더 구분 수단(prop/context)은 구현 시 기존 diff 배지 분기 재사용.
+- url 있는 노드 **좌하단** `-bottom-2 -left-2`에 표시 전용 배지: `rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70` + `Link` 12px, `title`=URL 툴팁(확정: 클릭 동작 없음). *좌상단은 에디터의 미해결 코멘트 배지가 이미 사용 중이라 좌하단으로 정정(사용자 재확인 완료) — 좌하단은 에디터·비교뷰 통틀어 유일하게 빈 모서리.*
+- **비교뷰에서는 자동 미표시** — 비교 노드 data에 url이 실리지 않음(compare/page.tsx buildNodes). 별도 게이팅 코드 불요.
 - 토큰만 사용(raw hex 금지).
 
 ## 검증

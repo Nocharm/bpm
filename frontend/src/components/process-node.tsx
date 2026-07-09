@@ -265,6 +265,21 @@ function UnresolvedCommentBadge({ count }: { count: number }) {
   );
 }
 
+// URL 배지 — url 지정 노드 좌하단 표시 전용(반투명 액센트, 클릭 없음). 좌상단은 코멘트 배지,
+// 우상·우하단은 경고/펼침이 사용 — 좌하단이 에디터·비교뷰 통틀어 유일하게 빈 모서리.
+// 비교뷰는 노드 data에 url 미탑재(compare/page.tsx buildNodes)라 자동 미표시. (batch2 ⑧)
+function UrlBadge({ url }: { url: string }) {
+  return (
+    <span
+      data-id="node-url-badge"
+      className="absolute -bottom-2 -left-2 rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70"
+      title={url}
+    >
+      <LinkIcon size={12} strokeWidth={1.5} />
+    </span>
+  );
+}
+
 // 하위 계층에 변경이 있음을 알리는 뱃지 (비교 화면 전용)
 function DescendantChangeBadge() {
   const { t } = useI18n();
@@ -414,6 +429,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {data.spUrl && <UrlBadge url={data.spUrl} />}
         {data.assigneeWarning && <AssigneeWarningBadge />}
         {/* 미지정 경고가 권한 잠금보다 우선 — 원인(지정 해제)을 보여야 오너가 조치 가능 */}
         {data.undesignated ? (
@@ -457,6 +473,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         </div>
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {data.url && <UrlBadge url={data.url} />}
         {data.assigneeWarning && <AssigneeWarningBadge />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>
@@ -494,6 +511,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+      {data.url && <UrlBadge url={data.url} />}
       {data.assigneeWarning && <AssigneeWarningBadge />}
       <NodeHandles connectable={isConnectable ?? true} />
     </div>
