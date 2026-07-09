@@ -266,6 +266,8 @@ export function EditorLeftSidebar({
     { keys: "⇧K", label: t("ctx.autoLayoutV") },
     { keys: "Alt+W/C/T/X", label: t("legend.align") },
     { keys: "Alt+R/V", label: t("legend.distribute") },
+    { keys: "Alt+←", label: t("legend.toggleLeftSidebar") },
+    { keys: "Alt+→", label: t("legend.toggleInspector") },
     { keys: "] [", label: t("legend.flowHighlight") },
     { keys: "Ctrl+G", label: t("legend.createGroup") },
     { keys: "Ctrl+⇧E", label: t("legend.exportPng") },

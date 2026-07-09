@@ -5977,6 +5977,15 @@ function MapEditor({ mapId }: { mapId: number }) {
 
       // Alt 조합 — 전역 정렬/분배 (왼손 전용 키: 좌=W, 가로가운데=C, 상단=T, 세로가운데=X, 가로분배=R, 세로분배=V)
       if (event.altKey) {
+        // Alt+←/→ — 좌측 사이드바 / 우측 인스펙터 접기·펼치기 (batch2 ⑮)
+        if (event.code === "ArrowLeft") {
+          fire(() => setLeftCollapsed((v) => !v));
+          return;
+        }
+        if (event.code === "ArrowRight") {
+          fire(() => setInspectorOpen((v) => !v));
+          return;
+        }
         const alignByCode: Record<string, "left" | "centerX" | "top" | "centerY"> = {
           KeyW: "left",
           KeyC: "centerX",
