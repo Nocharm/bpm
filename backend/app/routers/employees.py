@@ -68,7 +68,10 @@ async def import_korean_names(
             skipped += 1
             continue
         emp.korean_name = name
-        emp.korean_dept = entry.dept.strip()
+        dept = entry.dept.strip()
+        if dept:
+            # 빈 dept는 소거가 아니라 미기입 — 부서 탭 매핑 결과를 이름 임포트가 지우지 않게
+            emp.korean_dept = dept
         updated += 1
     await session.commit()
     return KoreanNamesImportOut(updated=updated, skipped=skipped, unknown=unknown)

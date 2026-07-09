@@ -170,7 +170,12 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
               <p className="pt-1 text-fine text-ink-tertiary">{t("admin.krSchemaAlt")}</p>
             </div>
             <div className="flex justify-end gap-2">
-              <span className="relative inline-flex">
+              <span
+                className="relative inline-flex"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setExportMenuOpen(false);
+                }}
+              >
                 <button
                   type="button"
                   data-id="kr-download-btn"
@@ -189,6 +194,16 @@ export function KoreanNameModal({ rows, onClose, onApplied }: KoreanNameModalPro
                 >
                   <ChevronDown size={16} strokeWidth={1.5} />
                 </button>
+                {exportMenuOpen && (
+                  <button
+                    type="button"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    data-id="kr-export-menu-backdrop"
+                    className="fixed inset-0 z-[5] cursor-default"
+                    onClick={() => setExportMenuOpen(false)}
+                  />
+                )}
                 {exportMenuOpen && (
                   <div
                     data-id="kr-export-menu"

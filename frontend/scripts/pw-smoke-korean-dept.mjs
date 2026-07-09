@@ -92,6 +92,19 @@ await page.click('[data-id="dept-kr-close"]');
 
 // ④ 반영: 해당 행이 단일 필이 되고, 필터 목록에서 사라짐(재조회 후)
 await page.waitForTimeout(800);
+
+// 필터 해제 후 대상 행의 korean dept 셀이 단일 필(선택값)만 남는지 직접 확인
+await page.click('[data-id="dept-needs-filter"]'); // 필터 해제
+const resolvedRow = page.locator('[data-id="dept-row"]', { hasText: deptLeaf }).first();
+await resolvedRow.waitFor({ timeout: 10000 });
+const resolvedCell = await resolvedRow.locator('[data-id="dept-kr-cell"]').innerText();
+check(
+  "single pill after mapping",
+  resolvedCell.includes("그룹시안") && !resolvedCell.includes("그룹구안"),
+  resolvedCell.replace(/\n/g, " "),
+);
+await page.click('[data-id="dept-needs-filter"]'); // 필터 재활성 — 기존 소실 체크 전제 복원
+
 const stillListed = await page
   .locator('[data-id="dept-row"]', { hasText: deptLeaf })
   .count();

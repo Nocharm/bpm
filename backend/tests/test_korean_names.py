@@ -165,6 +165,19 @@ def test_import_requires_sysadmin(client: TestClient, sysadmin_enforced: None) -
     assert res.status_code == 403
 
 
+def test_import_without_dept_preserves_existing_dept(client: TestClient) -> None:
+    """이름만 임포트(dept 미기입)해도 부서 탭 매핑으로 채운 korean_dept는 보존된다."""
+    _seed("kr.mapped", "", "매핑된그룹")
+    res = client.put(
+        "/api/employees/korean-names",
+        headers={"X-Dev-User": "admin.kim"},
+        json={"mode": "skip", "entries": {"kr.mapped": {"name": "홍길동"}}},
+    )
+    assert res.status_code == 200
+    assert res.json() == {"updated": 1, "skipped": 0, "unknown": []}
+    assert _get_korean_fields("kr.mapped") == ("홍길동", "매핑된그룹")
+
+
 def test_import_rejects_overlong_values(client: TestClient) -> None:
     """VARCHAR(200) 초과 이름/그룹은 422 — PG DataError 500 방지(경계 검증)."""
     for payload in (
