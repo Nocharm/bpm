@@ -209,7 +209,13 @@ async def list_eligible_assignees(
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
     eligible = await get_eligible_users(session, version.map_id)
     users = [
-        DirectoryUserOut(id=e.login_id, name=e.name or e.login_id, department=e.department or "")
+        DirectoryUserOut(
+            id=e.login_id,
+            name=e.name or e.login_id,
+            department=e.department or "",
+            korean_name=e.korean_name,
+            korean_dept=e.korean_dept,
+        )
         for e in eligible
     ]
     departments = sorted({e.department for e in eligible if e.department})

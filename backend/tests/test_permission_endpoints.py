@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -218,6 +218,51 @@ def test_eligible_approvers_private_filters(client: TestClient, enforce: None) -
     ids = {u["id"] for u in res.json()}
     assert "user.lee" in ids
     assert "user.park" not in ids
+
+
+def test_eligible_assignees_includes_korean_fields(client: TestClient, enforce: None) -> None:
+    """담당자 후보 응답에 korean_name/korean_dept 실값 전달 (피커 한글 검색 대상)."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+    vid = first_version_id(map_id)
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            emp.korean_name = "이민재"
+            emp.korean_dept = "소싱1팀"
+            await session.commit()
+
+    asyncio.run(_run())
+    act_as("owner.u")
+    res = client.get(f"/api/versions/{vid}/eligible-assignees")
+    assert res.status_code == 200
+    by_id = {u["id"]: u for u in res.json()["users"]}
+    assert by_id["user.lee"]["korean_name"] == "이민재"
+    assert by_id["user.lee"]["korean_dept"] == "소싱1팀"
+
+
+def test_eligible_approvers_includes_korean_name(client: TestClient, enforce: None) -> None:
+    """승인자 후보 응답에 korean_name 실값 전달 (승인자 카드 한/영 표시)."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
+    )
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            emp.korean_name = "이민재"
+            await session.commit()
+
+    asyncio.run(_run())
+    act_as("owner.u")
+    res = client.get(f"/api/maps/{map_id}/eligible-approvers")
+    assert res.status_code == 200
+    by_id = {u["id"]: u for u in res.json()}
+    assert by_id["user.lee"]["korean_name"] == "이민재"
 
 
 def test_eligible_assignees_public_all(client: TestClient, enforce: None) -> None:

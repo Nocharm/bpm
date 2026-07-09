@@ -42,6 +42,7 @@ async def get_directory(
             ),
             role=emp.role,
             korean_name=emp.korean_name,
+            korean_dept=emp.korean_dept,
         )
         for emp in rows
     ]

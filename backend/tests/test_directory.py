@@ -63,3 +63,19 @@ def test_directory_includes_korean_name(client: TestClient) -> None:
     assert res.status_code == 200
     by_id = {u["id"]: u for u in res.json()["users"]}
     assert by_id["user.lee"]["korean_name"] == "이민재"
+
+
+def test_directory_includes_korean_dept(client: TestClient) -> None:
+    """멤버 카드 한/영 토글용 — /api/directory 유저 항목에 korean_dept 노출."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            emp.korean_dept = "소싱1팀"
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    by_id = {u["id"]: u for u in res.json()["users"]}
+    assert by_id["user.lee"]["korean_dept"] == "소싱1팀"

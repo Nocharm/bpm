@@ -635,7 +635,14 @@ def test_editors_list_name_resolution_and_group(
                     granted_by="seed",
                 )
             )
-            session.add(Employee(login_id="editor.with.emp", name="홍길동", department="개발팀"))
+            session.add(
+                Employee(
+                    login_id="editor.with.emp",
+                    name="Hong Gildong",
+                    department="개발팀",
+                    korean_name="홍길동",
+                )
+            )
 
             # 직접 user editor — Employee 행 없음 → login_id 폴백
             session.add(
@@ -686,9 +693,10 @@ def test_editors_list_name_resolution_and_group(
 
     items = {e["id"]: e for e in res.json()}
 
-    # Employee 행 있는 편집자 → Employee.name 사용
+    # Employee 행 있는 편집자 → Employee.name/korean_name 사용
     assert "editor.with.emp" in items
-    assert items["editor.with.emp"]["name"] == "홍길동"
+    assert items["editor.with.emp"]["name"] == "Hong Gildong"
+    assert items["editor.with.emp"]["korean_name"] == "홍길동"
 
     # Employee 행 없는 편집자 → login_id 폴백
     assert "editor.no.emp" in items

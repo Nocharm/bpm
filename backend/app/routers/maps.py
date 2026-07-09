@@ -344,6 +344,7 @@ async def list_eligible_approvers(
             org_path=logic.org_path(
                 e.org_l1, e.org_l2, e.org_l3, e.org_l4, e.org_l5, e.department or ""
             ),
+            korean_name=e.korean_name,
         )
         for e in eligible
     ]
@@ -427,6 +428,7 @@ async def list_editors(
             id=lid,
             name=emp_map[lid].name if lid in emp_map else lid,
             department=emp_map[lid].department or "" if lid in emp_map else "",
+            korean_name=emp_map[lid].korean_name if lid in emp_map else "",
         )
         for lid in sorted(login_ids)
     ]

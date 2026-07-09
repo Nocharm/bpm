@@ -721,6 +721,7 @@ class DirectoryUserOut(BaseModel):
     org_path: str = ""  # 루트→리프 org_path — 멤버 2번째 줄 말단 org·부서 카운트(H2)
     role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
     korean_name: str = ""  # 멤버 카드 한/영 토글용
+    korean_dept: str = ""  # 담당자 피커 한글 부서 검색용
 
 
 class EligibleApproverOut(DirectoryUserOut):
