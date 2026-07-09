@@ -19,6 +19,10 @@ import { useI18n } from "@/lib/i18n";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
+// 자동 로그인 로딩 화면 최소 노출(ms) — 순간 플래시 방지. 리다이렉트 중에도 브라우저가 마지막 화면을
+// 유지하므로 Keycloak 왕복 내내 로딩 화면이 이어져 보인다. 줄이면 다시 깜빡임처럼 느껴질 수 있음.
+const AUTO_LOGIN_MIN_VISIBLE_MS = 600;
+
 // 자동 silent 시도 여부 — 페이지 로드당 1회만 판정(모듈 캐시).
 // 렌더 첫 프레임부터 로딩 화면을 보여야 카드 플래시가 없으므로 useState 초기값에서 호출되고,
 // StrictMode 이중 렌더/이중 이펙트에서도 consume(부수효과)이 한 번만 실행되도록 여기서 멱등화한다.
@@ -59,7 +63,11 @@ export default function LoginPage() {
     setAutoLoginSkip();
     void (async () => {
       try {
-        const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
+        // 모듈 로드와 최소 노출 대기를 병렬로 — 리다이렉트는 둘 다 끝난 뒤에
+        const [{ signinRedirectFromLogin }] = await Promise.all([
+          import("@/lib/keycloak-login"),
+          new Promise((resolve) => setTimeout(resolve, AUTO_LOGIN_MIN_VISIBLE_MS)),
+        ]);
         await signinRedirectFromLogin({ promptNone: true });
       } catch (e) {
         // Keycloak 미응답 등 — 카드로 폴백. 플래그는 원복해 다음 방문에 자동 시도 유지.

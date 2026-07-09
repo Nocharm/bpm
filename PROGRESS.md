@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — 자동 로그인 로딩 최소 노출 0.6s (feat/auto-login-min-visible)
+- `/login` silent 시도 전 `AUTO_LOGIN_MIN_VISIBLE_MS=600` 최소 대기(모듈 로드와 병렬) — 로딩 화면 순간 플래시 방지, 리다이렉트 중 화면 유지로 Keycloak 왕복 내내 이어져 보임. 수동 버튼·일반 페이지 로드에는 지연 없음. vitest 148·lint 0에러·build·딥링크 스모크 PASS.
+
 ## 2026-07-09 — SSO 전체 로그아웃 패널 (feat/logout-sso-panel)
 - 로그아웃 직후 /login 카드 아래 1회성 패널 — "모든 세션 로그아웃" 버튼이 Keycloak `end_session` 호출(같은 realm 다른 앱 세션도 종료, 문구 명시). removeUser 직전 id_token을 `bpm.ssoLogoutHint`로 확보해 확인 화면 없이 즉시 종료(id_token_hint). 자동 재로그인(소비형 억제)은 유지 — 사용자 결정. deploy.md §1 post-logout URI 실사용 명시. vitest 148·lint 0에러·build·딥링크 스모크 회귀 PASS. 서버 실검증 케이스 ⑥ 추가(스펙 3차 라운드).
 
