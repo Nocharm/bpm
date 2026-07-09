@@ -130,6 +130,7 @@ import {
 } from "@/lib/canvas";
 import {
   acquireCheckout,
+  ApiError,
   approveVersion,
   createComment,
   createVersion,
@@ -1810,6 +1811,9 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // ── 로드 ──────────────────────────────────────────────
 
+  // 비공개 맵 접근 게이트 — 로드 403이면 안내 모달 후 홈으로
+  const [accessDenied, setAccessDenied] = useState(false);
+
   // 맵 메타 로드 — 버전 확보 + 브레드크럼 루트 이름 + 기본 버전 선택(§6.1)
   // 기본 선택: 내가 점유 보유한 draft → 최신 published → 첫 번째
   useEffect(() => {
@@ -1859,7 +1863,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.loadMap"));
+          if (err instanceof ApiError && err.status === 403) {
+            setAccessDenied(true); // 권한 없음 — 에러 문자열 대신 안내 모달
+          } else {
+            setStatus(err instanceof Error ? err.message : t("err.loadMap"));
+          }
         }
       }
     })();
@@ -7949,6 +7957,17 @@ function MapEditor({ mapId }: { mapId: number }) {
           danger
           onConfirm={() => void confirmDeleteVersion()}
           onClose={() => setDeleteVersionOpen(false)}
+        />
+      )}
+      {/* 비공개 맵 접근 게이트 — 403 로드 실패 안내, 확인/닫기 모두 홈으로 */}
+      {accessDenied && (
+        <ConfirmDialog
+          icon={<Lock size={28} strokeWidth={1.5} />}
+          title={t("mapAccess.deniedTitle")}
+          message={t("mapAccess.deniedBody")}
+          confirmLabel={t("mapAccess.deniedConfirm")}
+          onConfirm={() => router.replace("/")}
+          onClose={() => router.replace("/")}
         />
       )}
       {/* 펼침 레인 "링크맵 열기" 확인 — 에디터 이탈 시 미저장 내용 경고 (F6) */}

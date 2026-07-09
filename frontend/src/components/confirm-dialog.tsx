@@ -46,7 +46,8 @@ interface ConfirmDialogProps {
   title: string;
   message?: string;
   confirmLabel: string;
-  cancelLabel: string;
+  // 미지정 시 cancel 버튼 숨김 — 단일 확인 버튼 안내 모달(예: 접근 거부)용.
+  cancelLabel?: string;
   danger?: boolean;
   onConfirm: () => void;
   onClose: () => void;
@@ -149,14 +150,16 @@ export function ConfirmDialog({
           />
         )}
         <div className={`flex w-full justify-end gap-2 ${isRich ? "" : ""}`}>
-          <button
-            type="button"
-            data-id="confirm-dialog-cancel"
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-            onClick={onClose}
-          >
-            {cancelLabel}
-          </button>
+          {cancelLabel && (
+            <button
+              type="button"
+              data-id="confirm-dialog-cancel"
+              className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+              onClick={onClose}
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
             type="button"
             data-id="confirm-dialog-confirm"

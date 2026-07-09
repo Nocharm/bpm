@@ -162,6 +162,17 @@ export function setDevUser(loginId: string | null): void {
   devUser = loginId;
 }
 
+// HTTP 상태로 분기해야 하는 호출자(403 접근 게이트 등)용 — 메시지 형식은 기존 Error와 동일.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (authToken) {
@@ -176,8 +187,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     // 서버 detail(검증 실패 사유 등)을 메시지에 포함 — 진단 용이
     const detail = await response.text().catch(() => "");
-    throw new Error(
+    throw new ApiError(
       `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
     );
   }
   if (response.status === 204) {

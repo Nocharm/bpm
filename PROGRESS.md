@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/superpowers/specs·plans/`·`docs/spec.md` 참조.
 
+## 2026-07-09 — 비공개 맵 403 안내 게이트 (feat/login-polish-403-gate)
+- `ApiError(status)` 신설(api.ts, 메시지 형식 유지) — 에디터 초기 로드 403이면 raw 에러 문자열 대신 Lock 아이콘 안내 모달(단일 확인 버튼, ConfirmDialog `cancelLabel` 옵셔널화) 표시, 확인/닫기 모두 홈 이동. i18n `mapAccess.*` en/ko. 스모크 `pw-smoke-map-403.mjs`(라우트 목 403) 4체크 + 딥링크 회귀 4체크 ALL PASS. vitest 147·lint 0에러·build OK.
+
 ## 2026-07-09 — 로그인 전환 폴리시·정상접근 자동 로그인 (feat/login-polish-403-gate)
 - `AuthLoadingScreen` 신설(브랜드+스피너, item-fade) — `/login` silent 시도 중 카드 플래시 제거, AuthGate 로딩·returnTo 대기 화면 통일. 억제 플래그를 소비형으로 변경(`consumeAutoLoginSkip`) — 로그아웃/실패 직후 1회만 카드, 이후 정상접근은 세션 있으면 자동 로그인(모듈 캐시 1회 판정, StrictMode 안전, 실패 시 플래그 원복).
 
