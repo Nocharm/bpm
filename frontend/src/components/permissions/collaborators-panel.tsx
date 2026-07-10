@@ -8,7 +8,7 @@
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { LockKeyhole, X } from "lucide-react";
 
 import {
   addMapPermission,
@@ -58,6 +58,9 @@ interface CollaboratorsPanelProps {
   onToast: (msg: string) => void;
   /** 공개 맵이면 viewer 그랜트 비활성 — 전원 열람 가능 / Disable viewer role when map is public. */
   viewerGrantDisabled?: boolean;
+  /** 오우닝 부서 org_path — 있으면 잠금 행(합성 표시, MapPermission 아님)을 목록 맨 위에 표시 /
+   * Owning department org_path — when set, renders a synthetic locked row (not a MapPermission). */
+  owningDepartment?: string | null;
 }
 
 // 표시명 해석 — 실 디렉터리/그룹 우선, 없으면 principalId 폴백 /
@@ -266,6 +269,7 @@ export function CollaboratorsPanel({
   canEdit,
   onToast,
   viewerGrantDisabled = false,
+  owningDepartment,
 }: CollaboratorsPanelProps) {
   const { t } = useI18n();
   const mapIdNum = Number(mapId);
@@ -393,9 +397,34 @@ export function CollaboratorsPanel({
       {/* 로딩 중 스켈레톤 / Skeleton while loading (F8) */}
       {loading && <SkeletonRows />}
 
-      {/* 빈 목록 안내 — 로딩 끝난 뒤에만 / Empty-state only after load */}
-      {!loading && perms.length === 0 && (
+      {/* 빈 목록 안내 — 로딩 끝난 뒤에만. 잠금 행이 보이면 "협업자 없음"과 모순이라 숨김 /
+          Empty-state only after load; suppressed when the owning-dept locked row is visible. */}
+      {!loading && perms.length === 0 && !owningDepartment && (
         <p className="py-4 text-caption text-ink-tertiary">{t("perm.noCollaborators")}</p>
+      )}
+
+      {/* 오우닝 부서 잠금 행 — 합성 표시(MapPermission 아님), 실 권한 목록 위에 고정 /
+          Owning-department locked row: synthetic display, not a real permission, pinned above the list. */}
+      {!loading && owningDepartment && (
+        <div
+          data-id="owning-dept-locked-row"
+          className="flex items-center gap-2 rounded-sm bg-surface-alt px-2 py-1.5"
+        >
+          <PrincipalIcon type="department" />
+          <span className="min-w-0 flex-1 truncate text-caption text-ink">
+            {resolvePrincipalName("department", owningDepartment, dirUsers, dirDepts, groups)}
+            <span className="ml-1.5 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
+              {t("perm.owningDept.title")}
+            </span>
+          </span>
+          <span
+            title={t("perm.owningDept.lockedNote")}
+            className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary"
+          >
+            <LockKeyhole size={14} strokeWidth={1.5} />
+            {t("perm.owningDept.lockedEditor")}
+          </span>
+        </div>
       )}
 
       {perms.map((perm) => (

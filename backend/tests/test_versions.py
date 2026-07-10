@@ -15,7 +15,7 @@ def _create_map(client: TestClient) -> dict:
     # 세션 공유 DB + 맵 이름 전역 유니크라 호출마다 고유 이름 사용
     global _map_seq
     _map_seq += 1
-    return client.post("/api/maps", json={"name": f"version map {_map_seq}"}).json()
+    return client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"version map {_map_seq}"}).json()
 
 
 def _approve_version(version_id: int) -> None:
@@ -270,7 +270,7 @@ def test_copy_map_without_approved_409(client: TestClient) -> None:
 
 
 def test_new_version_clone_preserves_url(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "url clone map"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "url clone map"}).json()
     v1 = created["versions"][0]["id"]
     client.post(f"/api/versions/{v1}/checkout", json={})
     client.put(

@@ -86,6 +86,9 @@ class ProcessMap(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 오우닝 부서 — org_path 문자열(예: "Division/Office/Team"). NULL=누락(레거시 맵).
+    # 소속 직원은 effective_role에서 editor 바닥값을 파생받는다 — 권한 행 없음 (spec 2026-07-10)
+    owning_department: Mapped[str | None] = mapped_column(String(200), default=None)
     # ── 서브프로세스 지정(designation) — 지정된 맵만 라이브러리 피커 노출 (spec 2026-07-06) ──
     # NULL=미지정. 값 있으면 지정 시각(플래그 겸용, KST).
     sp_designated_at: Mapped[datetime | None] = mapped_column(

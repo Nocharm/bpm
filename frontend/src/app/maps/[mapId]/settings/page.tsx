@@ -63,6 +63,8 @@ export default function SettingsPage() {
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   // 승인 진행 중(pending/approved 버전 존재) — 결재자 변경 금지 게이트용 / block approver edits mid-approval.
   const [underApproval, setUnderApproval] = useState(false);
+  // 오우닝 부서 org_path — null=미지정(레거시). 협업자 잠금 행 동기화용 / Owning department org_path (null = unassigned).
+  const [owningDepartment, setOwningDept] = useState<string | null>(null);
   // 역할 로드 완료 여부 — 로드 전 false "No access" 깜빡임 방지 / gate no-access screen until loaded.
   const [roleLoaded, setRoleLoaded] = useState(false);
 
@@ -77,6 +79,7 @@ export default function SettingsPage() {
       setUnderApproval(
         detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
       );
+      setOwningDept(detail.owning_department ?? null);
     } catch {
       // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
     }
@@ -95,6 +98,7 @@ export default function SettingsPage() {
           setUnderApproval(
             detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
           );
+          setOwningDept(detail.owning_department ?? null);
         }
       } catch {
         // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
@@ -351,7 +355,13 @@ export default function SettingsPage() {
                     {t(tab.labelKey)}
                   </h2>
                   {tab.id === "details" ? (
-                    <MapDetailsPanel mapId={mapIdStr} canEdit={canEdit} onToast={showToast} />
+                    <MapDetailsPanel
+                      mapId={mapIdStr}
+                      canEdit={canEdit}
+                      isOwner={isOwner}
+                      onToast={showToast}
+                      onChanged={() => void refreshMap()}
+                    />
                   ) : tab.id === "subprocess" && isOwner ? (
                     <SubprocessDesignationPanel mapId={mapIdStr} onToast={showToast} />
                   ) : tab.id === "collaborators" ? (
@@ -361,6 +371,7 @@ export default function SettingsPage() {
                       canEdit={canEdit}
                       onToast={showToast}
                       viewerGrantDisabled={isPublic}
+                      owningDepartment={owningDepartment}
                     />
                   ) : tab.id === "approvers" ? (
                     <ApproversPanel

@@ -62,6 +62,8 @@ export interface MapSummary {
   sp_url_label?: string | null;
   sp_changed_by?: string | null;
   sp_changed_at?: string | null;
+  // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
+  owning_department?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -204,12 +206,18 @@ export function listMaps(): Promise<MapSummary[]> {
 
 export function createMap(
   name: string,
-  description = "",
-  visibility: MapSummary["visibility"] = "private",
+  description: string,
+  visibility: MapSummary["visibility"],
+  owningDepartment: string,
 ): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
-    body: JSON.stringify({ name, description, visibility }),
+    body: JSON.stringify({
+      name,
+      description,
+      visibility,
+      owning_department: owningDepartment,
+    }),
   });
 }
 
@@ -245,6 +253,17 @@ export function updateMap(
   return request<MapSummary>(`/maps/${mapId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+}
+
+// 오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 새 부서를 따라간다 (spec 2026-07-10)
+export function setOwningDepartment(
+  mapId: number,
+  owningDepartment: string,
+): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/owning-department`, {
+    method: "PUT",
+    body: JSON.stringify({ owning_department: owningDepartment }),
   });
 }
 

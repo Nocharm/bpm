@@ -17,7 +17,7 @@ from app.settings import settings
 
 def _create_map(client: TestClient) -> tuple[int, int]:
     """새 맵 생성 후 (map_id, initial_version_id) 반환."""
-    created = client.post("/api/maps", json={"name": f"lc map {uuid4().hex[:8]}"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"lc map {uuid4().hex[:8]}"}).json()
     return created["id"], created["versions"][0]["id"]
 
 

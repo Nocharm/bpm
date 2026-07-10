@@ -51,6 +51,20 @@ def seed_test_approvers(client: TestClient) -> None:
                     session.add(
                         Employee(login_id=login_id, name=login_id, source="local", active=True)
                     )
+            # 오우닝 부서 필수화(2026-07-10) — 기존 테스트가 쓸 앵커 부서.
+            # 어떤 테스트 액터도 이 org에 속하지 않아 파생 editor가 발동하지 않는다.
+            # active=False: 공지 브로드캐스트 수신자 수 단언 오염 방지(known-path 검증은 active 무관).
+            if await session.get(Employee, "owning.anchor") is None:
+                session.add(
+                    Employee(
+                        login_id="owning.anchor",
+                        name="Owning Anchor",
+                        source="local",
+                        active=False,
+                        org_l1="Owning Anchor Division",
+                        department="Owning Anchor Division",
+                    )
+                )
             await session.commit()
 
     asyncio.run(_run())

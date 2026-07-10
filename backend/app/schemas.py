@@ -18,6 +18,8 @@ class MapCreate(BaseModel):
     description: str = ""
     # 생성 시 초기 공개 범위 — 생성자=owner라 즉시 반영(승인 워크플로 불필요)
     visibility: Literal["private", "public"] = "private"
+    # 오우닝 부서(필수) — known org_path 검증은 라우터에서 (spec 2026-07-10)
+    owning_department: str = Field(min_length=1, max_length=200)
 
 
 class MapCopy(BaseModel):
@@ -28,6 +30,11 @@ class MapCopy(BaseModel):
 class MapUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
+
+
+class OwningDepartmentIn(BaseModel):
+    # 오우닝 부서 지정/변경 — known org_path 검증은 라우터에서 (spec 2026-07-10)
+    owning_department: str = Field(min_length=1, max_length=200)
 
 
 class SubprocessDesignationIn(BaseModel):
@@ -388,6 +395,8 @@ class MapOut(BaseModel):
     sp_url_label: str | None = None
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
+    # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
+    owning_department: str | None = None
 
 
 class MapDetailOut(MapOut):

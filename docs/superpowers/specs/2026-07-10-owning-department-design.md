@@ -56,7 +56,7 @@ if map.owning_department and belongs_to_department(user_org_path, map.owning_dep
 
 ### 5. 중복 방지 가드
 
-`POST /maps/{id}/permissions`(`backend/app/routers/permissions.py:66`)에서 department principal이 현재 오우닝 부서와 동일하면 400 — 파생 editor가 이미 있으므로 중복 행은 혼란만 준다. (하위/상위 부서 행은 허용 — 의미가 다르다.)
+`POST /maps/{id}/permissions`(`backend/app/routers/permissions.py:66`)에서 department principal이 현재 오우닝 부서와 동일하면 409 — 파생 editor가 이미 있으므로 중복 행은 혼란만 준다. (하위/상위 부서 행은 허용 — 의미가 다르다.)
 
 ## 프론트엔드 — 생성 모달 (`frontend/src/components/permissions/create-map-dialog.tsx`)
 

@@ -97,6 +97,7 @@ async def get_effective_role(
         permissions,
         is_approver,
         user_group_ids,
+        owning_department=found_map.owning_department,
     )
 
 
@@ -174,6 +175,7 @@ async def get_eligible_users(session: AsyncSession, map_id: int) -> list[Employe
             permissions,
             emp.login_id in approver_ids,
             group_ids,
+            owning_department=found_map.owning_department if found_map is not None else None,
         )
         if role is not None:  # None=접근 불가, 그 외(viewer+)는 후보
             eligible.append(emp)

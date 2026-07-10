@@ -28,6 +28,7 @@ from app.schemas import (
     MapDetailOut,
     MapOut,
     MapUpdate,
+    OwningDepartmentIn,
     SubprocessDesignationIn,
 )
 from app.version_events import record_version_event
@@ -65,6 +66,31 @@ async def _assert_unique_name(
         query = query.where(ProcessMap.id != exclude_map_id)
     if await session.scalar(query) is not None:
         raise HTTPException(status_code=409, detail="map name already exists")
+
+
+async def _assert_known_department(session: AsyncSession, dept_path: str) -> None:
+    """오우닝 부서는 실제 조직 경로여야 한다 — 직원 org 레벨의 전 prefix와 대조, 아니면 422.
+
+    directory.py의 부서 목록과 같은 규약(각 깊이 슬라이스의 "/" 조인). active 여부는 무관.
+    """
+    rows = (
+        await session.execute(
+            select(
+                Employee.org_l1,
+                Employee.org_l2,
+                Employee.org_l3,
+                Employee.org_l4,
+                Employee.org_l5,
+            )
+        )
+    ).all()
+    known: set[str] = set()
+    for levels in rows:
+        parts = [lv for lv in levels if lv]
+        for i in range(1, len(parts) + 1):
+            known.add("/".join(parts[:i]))
+    if dept_path not in known:
+        raise HTTPException(status_code=422, detail=f"unknown department: {dept_path}")
 
 
 @router.get("", response_model=list[MapOut])
@@ -207,6 +233,7 @@ async def list_maps(
             perms_by_map.get(m.id, []),
             m.id in approver_map_ids,
             user_group_ids,
+            owning_department=m.owning_department,
         )
         if role is not None:  # is_visible == (effective_role is not None)
             m.my_role = role
@@ -223,12 +250,14 @@ async def create_map(
 ) -> ProcessMap:
     # 맵 생성 시 기본 버전(As-Is) 1개를 함께 만든다 — 캔버스는 버전에 귀속 (spec §1)
     await _assert_unique_name(session, payload.name)
+    await _assert_known_department(session, payload.owning_department)
     new_map = ProcessMap(
         name=payload.name,
         description=payload.description,
         created_by=user,
         owner_id=user,
         visibility=payload.visibility,  # 생성자가 고른 초기 공개 범위(기본 private)
+        owning_department=payload.owning_department,
     )
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
@@ -301,6 +330,7 @@ async def copy_map(
         created_by=user,
         owner_id=user,
         visibility="private",
+        owning_department=source_map.owning_department,
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
@@ -473,6 +503,27 @@ async def update_map(
         found_map.name = payload.name
     if payload.description is not None:
         found_map.description = payload.description
+    await session.commit()
+    await session.refresh(found_map)
+    return found_map
+
+
+@router.put(
+    "/{map_id}/owning-department",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def set_owning_department(
+    map_id: int,
+    payload: OwningDepartmentIn,
+    session: AsyncSession = Depends(get_session),
+) -> ProcessMap:
+    """오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 자동으로 새 부서를 따라간다."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    await _assert_known_department(session, payload.owning_department)
+    found_map.owning_department = payload.owning_department
     await session.commit()
     await session.refresh(found_map)
     return found_map

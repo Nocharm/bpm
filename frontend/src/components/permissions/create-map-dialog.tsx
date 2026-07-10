@@ -10,7 +10,7 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp } from "lucide-react";
+import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp, LockKeyhole } from "lucide-react";
 
 import {
   acquireCheckout,
@@ -153,12 +153,21 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
   const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
   const router = useRouter();
+  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path, manager=리더 login_id)
+  const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
+  // 자동 추가한 리더 승인자 추적 — 부서 변경 시 자동분만 교체하고 수동 추가는 보존
+  const autoLeaderRef = useRef<string | null>(null);
 
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
   const applyVisibilityChange = (v: MapVisibility) => {
     setVisibility(v);
-    setApprovers([]); // 후보군 변경 → 승인자 초기화
+    // 후보군 변경 → 승인자 초기화. 오우닝 부서 리더 자동 추가분은 다시 심는다(양쪽 후보군에서 유효).
+    const leader = owningDept?.manager ? userById.get(owningDept.manager) : undefined;
+    setApprovers(
+      leader ? [{ key: genId(), userId: leader.id, displayName: leader.name }] : [],
+    );
+    autoLeaderRef.current = leader?.id ?? null;
     if (v === "public" && pendingCollabRole === "viewer") {
       setPendingCollabRole("editor");
     }
@@ -193,6 +202,31 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
     );
   };
 
+  // 오우닝 부서 선택 — 리더를 승인자로 자동 추가(제거 가능), 이전 자동분은 교체
+  const applyOwningDept = (opt: PrincipalOption) => {
+    const dept = dirDepts.find((d) => d.id === opt.principalId);
+    if (!dept) return;
+    const removeId = autoLeaderRef.current;
+    const leader = dept.manager ? userById.get(dept.manager) : undefined;
+    const kept = removeId ? approvers.filter((a) => a.userId !== removeId) : approvers;
+    // 자동 추가로 기록하는 건 실제로 추가했을 때만 — 수동 추가분을 auto로 오인해 clear 시 지우는 버그 방지
+    const shouldAdd = leader !== undefined && !kept.some((a) => a.userId === leader.id);
+    setApprovers(
+      shouldAdd
+        ? [...kept, { key: genId(), userId: leader.id, displayName: leader.name }]
+        : kept,
+    );
+    autoLeaderRef.current = shouldAdd ? leader.id : null;
+    setOwningDept(dept);
+  };
+
+  const clearOwningDept = () => {
+    const removeId = autoLeaderRef.current;
+    autoLeaderRef.current = null;
+    if (removeId) setApprovers((prev) => prev.filter((a) => a.userId !== removeId));
+    setOwningDept(null);
+  };
+
   // ── 협업자 제거 / remove collaborator ──
   const handleRemoveCollab = useCallback((key: string) => {
     setCollaborators((prev) => prev.filter((c) => c.key !== key));
@@ -214,22 +248,27 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   }, []);
 
   // ── 결재자 제거 / remove approver ──
-  const handleRemoveApprover = useCallback((key: string) => {
+  // plain 함수 — React Compiler 자동 메모. 자동 추가된 리더를 지우면 추적 ref도 해제.
+  const handleRemoveApprover = (key: string) => {
+    const target = approvers.find((a) => a.key === key);
+    if (target && target.userId === autoLeaderRef.current) {
+      autoLeaderRef.current = null;
+    }
     setApprovers((prev) => prev.filter((a) => a.key !== key));
-  }, []);
+  };
 
   // ── 생성 / create ──
   const handleCreate = useCallback(async () => {
     if (!currentUser) return;
     const trimmed = name.trim();
-    if (!trimmed || approvers.length === 0) return;
+    if (!trimmed || approvers.length === 0 || !owningDept) return;
     setSubmitting(true);
     setError(null);
     try {
       // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
       // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
       if (createdRef.current === null) {
-        const detail = await createMap(trimmed, description.trim(), visibility);
+        const detail = await createMap(trimmed, description.trim(), visibility, owningDept.id);
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
@@ -280,11 +319,15 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, collaborators, approvers, csv, onCreated, onClose, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, onCreated, onClose, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
-    currentUser !== null && name.trim().length > 0 && approvers.length >= 1 && !submitting;
+    currentUser !== null &&
+    name.trim().length > 0 &&
+    approvers.length >= 1 &&
+    owningDept !== null &&
+    !submitting;
 
   // ── 부서 조회 맵 (사용자 ID → 부서명) / department lookup map for picker ──
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
@@ -317,11 +360,24 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
       }
     }
   }
+  // 오우닝 부서 소속원 — 파생 editor라 private 후보군에 포함 (org_path prefix, 서버 parity)
+  const owningDeptMemberIds = owningDept
+    ? dirUsers
+        .filter((u) => {
+          const p = u.org_path || (deptOrgPathByLeaf.get(u.department) ?? u.department);
+          return p === owningDept.id || p.startsWith(`${owningDept.id}/`);
+        })
+        .map((u) => u.id)
+    : [];
+  const owningLeaderId =
+    owningDept?.manager && userById.has(owningDept.manager) ? owningDept.manager : null;
   const approverEligibleIds = new Set<string>([
     ...(currentUser ? [currentUser.id] : []),
     ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
     ...dirUsers.filter(inChosenDept).map((u) => u.id),
     ...groupMemberIds,
+    ...owningDeptMemberIds,
+    ...(owningLeaderId ? [owningLeaderId] : []),
   ]);
   const approverPickerUsers =
     visibility === "public"
@@ -388,6 +444,50 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
             onChange={(e) => setDescription(e.target.value)}
             disabled={submitting}
           />
+        </div>
+
+        {/* 오우닝 부서(필수) — 선택 전 피커, 선택 후 잠금 표시 행 + X(재선택) */}
+        <div className="flex flex-col gap-1">
+          <label className="text-caption text-ink-secondary">
+            {t("perm.owningDept.label")}
+          </label>
+          {owningDept === null ? (
+            <PrincipalPicker
+              users={[]}
+              departments={pickerDepts}
+              groups={[]}
+              excludeIds={new Set<string>()}
+              deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+              onSelect={applyOwningDept}
+            />
+          ) : (
+            <div
+              data-id="owning-dept-selected"
+              className="flex items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink"
+            >
+              <PrincipalIcon type="department" />
+              <span className="min-w-0 flex-1 truncate">
+                {owningDept.korean_name || owningDept.name}
+                <span className="ml-1.5 text-fine text-ink-tertiary">{owningDept.id}</span>
+              </span>
+              <span
+                title={t("perm.owningDept.lockedNote")}
+                className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary"
+              >
+                <LockKeyhole size={12} strokeWidth={1.5} />
+                {t("perm.owningDept.lockedEditor")}
+              </span>
+              <button
+                type="button"
+                onClick={clearOwningDept}
+                className="text-ink-tertiary hover:text-ink"
+                aria-label={t("perm.removeButton")}
+                disabled={submitting}
+              >
+                <X size={16} strokeWidth={1.5} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 공개 범위 / visibility */}
@@ -502,6 +602,24 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
           {/* 추가된 협업자 목록 — 높이 고정(~3.5행)·내부 스크롤로 모달 크기 불변(추가해도 안 늘어남) /
               fixed ~3.5-row scroll area so the modal stays the same size as collaborators stack. */}
           <ul className="scroll-soft flex h-[7.5rem] flex-col gap-1">
+              {owningDept && (
+                <li
+                  data-id="owning-dept-locked-row"
+                  className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1 text-caption text-ink"
+                >
+                  <PrincipalIcon type="department" />
+                  <span className="flex-1 truncate">
+                    {owningDept.korean_name || owningDept.name}
+                  </span>
+                  <span
+                    title={t("perm.owningDept.lockedNote")}
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary"
+                  >
+                    <LockKeyhole size={12} strokeWidth={1.5} />
+                    {t("perm.owningDept.lockedEditor")}
+                  </span>
+                </li>
+              )}
               {collaborators.map((c) => (
                 <li
                   key={c.key}
@@ -552,6 +670,7 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
             excludeIds={new Set(approvers.map((a) => a.userId))}
             userDepartments={userDepartments}
             managersFirst
+            pinnedIds={owningLeaderId ? new Set([owningLeaderId]) : undefined}
             onSelect={(opt) => {
               if (opt.principalType === "user") handleAddApprover(opt.principalId, opt.displayName);
             }}
@@ -584,10 +703,13 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
 
         {/* 버튼 행 / action row */}
         <div className="flex items-center justify-end gap-2">
-          {!canCreate && approvers.length === 0 && name.trim().length > 0 && (
+          {!canCreate && approvers.length === 0 && name.trim().length > 0 && owningDept !== null && (
             <p className="mr-auto text-fine text-error">
               {t("perm.createDialog.approversHint")}
             </p>
+          )}
+          {name.trim().length > 0 && owningDept === null && (
+            <p className="mr-auto text-fine text-error">{t("perm.owningDept.requiredHint")}</p>
           )}
           <button
             type="button"

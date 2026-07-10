@@ -28,7 +28,7 @@ def _act_as(user: str) -> None:
 
 def _submit_pending(client: TestClient, approvers: list[str]) -> tuple[int, int]:
     """맵+버전 생성 → 승인자 지정 → 체크아웃 → 제출(pending). (map_id, version_id)."""
-    created = client.post("/api/maps", json={"name": f"inbox-{uuid4().hex[:6]}"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"inbox-{uuid4().hex[:6]}"}).json()
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
     client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": approvers})
@@ -87,7 +87,7 @@ def test_inbox_excludes_after_own_approval(client: TestClient) -> None:
 
 def test_inbox_checkout_transfer_for_holder(client: TestClient) -> None:
     """현 점유자는 자신 버전의 점유권 이전 요청을 checkout_transfer 항목으로 본다."""
-    created = client.post("/api/maps", json={"name": f"inbox-co-{uuid4().hex[:6]}"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"inbox-co-{uuid4().hex[:6]}"}).json()
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
     req_id = _seed_checkout_request(version_id, holder="holder.u", requester="editor.u")

@@ -62,6 +62,7 @@ def effective_role(
     permissions: list[Permission],
     is_approver: bool,
     user_group_ids: set[str],
+    owning_department: str | None = None,
 ) -> str | None:
     """맵에 대한 유효 역할 판정 (mock getEffectiveRole parity).
 
@@ -70,6 +71,7 @@ def effective_role(
     2. 적용되는 map_permissions 중 최고 역할 (user/department/group — 그룹은
        principal_id ∈ user_group_ids 일 때만 적용; user_group_ids 는 호출자가 속한
        ACTIVE 그룹 id들의 문자열 집합으로 caller가 주입한다 — 순수성 유지)
+    2.5 오우닝 부서 소속(하위 포함) → 'editor' 바닥값 — 권한 행 없는 파생 (2026-07-10)
     3. visibility == 'public' → 'viewer' baseline
     4. is_approver → 'viewer' floor (2/3 에서 역할 없을 때만)
     5. None (접근 불가)
@@ -91,6 +93,15 @@ def effective_role(
             continue  # 비적용 (다른 user/dept, 또는 미가입 group)
         if role_rank(role) > role_rank(best):
             best = role
+
+    # 2.5 오우닝 부서 파생 editor — 소속(prefix 하위 포함)이면 바닥값. 권한 행이 없어
+    # 해제·다운그레이드가 불가능하다 = "잠금" (spec 2026-07-10)
+    if (
+        owning_department
+        and belongs_to_department(emp_org_path, owning_department)
+        and role_rank("editor") > role_rank(best)
+    ):
+        best = "editor"
 
     if best is not None:
         return best
@@ -115,6 +126,7 @@ def is_visible(
     permissions: list[Permission],
     is_approver: bool,
     user_group_ids: set[str],
+    owning_department: str | None = None,
 ) -> bool:
     """effective_role is not None."""
     return (
@@ -126,6 +138,7 @@ def is_visible(
             permissions,
             is_approver,
             user_group_ids,
+            owning_department=owning_department,
         )
         is not None
     )
