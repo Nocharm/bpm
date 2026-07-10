@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createLocalMessage, toChatMessage } from "./chat-sessions";
+import { createLocalMessage, toChatMessage, toPayload } from "./chat-sessions";
 
 describe("chat-sessions view model", () => {
   it("converts a server row to a view message with epoch time", () => {
@@ -9,6 +9,7 @@ describe("chat-sessions view model", () => {
       role: "assistant",
       content: "안녕하세요",
       kind: "answer",
+      payload: null,
       version_id: 3,
       created_at: "2026-07-08T10:00:00+09:00",
     });
@@ -17,6 +18,8 @@ describe("chat-sessions view model", () => {
       role: "assistant",
       content: "안녕하세요",
       at: Date.parse("2026-07-08T10:00:00+09:00"),
+      kind: "answer",
+      payload: null,
     });
   });
 
@@ -40,5 +43,40 @@ describe("chat-sessions view model", () => {
     expect(a.id).not.toBe(b.id);
     expect(a.role).toBe("user");
     expect(typeof a.at).toBe("number");
+  });
+});
+
+describe("kind/payload preservation (2026-07-10)", () => {
+  it("toChatMessage preserves kind and payload", () => {
+    const row = {
+      id: 5,
+      role: "assistant" as const,
+      content: "분석",
+      kind: "analysis",
+      payload: { findings: [{ severity: "high", category: "orphan", node_ids: [], message: "m", suggestion: "s" }] },
+      version_id: 1,
+      created_at: "2026-07-10T09:00:00+09:00",
+    };
+    const message = toChatMessage(row);
+    expect(message.kind).toBe("analysis");
+    expect(message.payload?.findings?.[0]?.category).toBe("orphan");
+  });
+
+  it("createLocalMessage defaults kind/payload to null", () => {
+    const message = createLocalMessage("user", "hi");
+    expect(message.kind).toBeNull();
+    expect(message.payload).toBeNull();
+  });
+
+  it("toPayload maps kind-specific subsets and returns null for answer/empty", () => {
+    const base = { message: "", nodes: [], edges: [], groups: [], ops: [], steps: [], findings: [] };
+    const finding = { severity: "low" as const, category: "naming", node_ids: [], message: "m", suggestion: "" };
+    expect(toPayload({ ...base, kind: "analysis", findings: [finding] })).toEqual({ findings: [finding] });
+    expect(toPayload({ ...base, kind: "analysis" })).toBeNull(); // 빈 findings
+    expect(toPayload({ ...base, kind: "answer" })).toBeNull();
+    const node = { key: "a", title: "A", node_type: "start", description: "", attributes: null, group_key: null };
+    expect(toPayload({ ...base, kind: "graph", nodes: [node] })).toEqual({ nodes: [node], edges: [], groups: [] });
+    const op = { action: "remove" as const, node_id: "n1", node: null, source: null, target: null, label: null, title: null, attributes: null, description: null };
+    expect(toPayload({ ...base, kind: "ops", ops: [op] })).toEqual({ ops: [op] });
   });
 });

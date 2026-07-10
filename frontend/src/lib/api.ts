@@ -1457,11 +1457,22 @@ export interface AiChatSessionSummary {
   updated_at: string;
 }
 
+// 카드 재현용 제안 원자료 — kind별 서브셋(백엔드 serialize_proposal_payload 미러)
+export interface AiMessagePayload {
+  findings?: AiFinding[];
+  steps?: AiStep[];
+  nodes?: AiNode[];
+  edges?: AiEdge[];
+  groups?: AiGroup[];
+  ops?: AiOp[];
+}
+
 export interface AiChatMessageRow {
   id: number;
   role: "user" | "assistant";
   content: string;
   kind: string | null;
+  payload: AiMessagePayload | null;
   version_id: number | null;
   created_at: string;
 }
