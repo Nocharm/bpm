@@ -1,7 +1,7 @@
 // CSV 임포트 파서·그래프 변환 단위 테스트 (설계: docs/superpowers/specs/2026-07-06-csv-import-design.md)
 import { describe, expect, it } from "vitest";
 
-import type { Graph } from "./api";
+import type { Graph, GraphNode } from "./api";
 import {
   buildAiPromptText,
   buildGraphFromCsv,
@@ -10,6 +10,7 @@ import {
   decodeCsvBuffer,
   parseCsvRecords,
   stripCsvFences,
+  withKeptNodes,
 } from "./csv-import";
 
 const HEADER = "Name,System,Duration,URL,Next";
@@ -320,5 +321,166 @@ describe("buildGraphFromCsv — Description/Assignee/Department 컬럼", () => {
     expect(node.assignee).toBe("");
     expect(node.department).toBe("");
     expect(node.system).toBe("SAP");
+  });
+});
+
+// ── 머지 임포트 (base 지정) ─────────────────────────────────────
+
+const NODE_BASE: Omit<GraphNode, "id" | "title" | "node_type" | "sort_order"> = {
+  description: "", color: "", assignee: "", department: "", system: "", duration: "",
+  url: "", url_label: "", pos_x: 0, pos_y: 0, group_ids: [],
+  linked_map_id: null, follow_latest: false, linked_version_id: null, is_primary_end: false,
+};
+
+function baseGraph(): Graph {
+  return {
+    nodes: [
+      { ...NODE_BASE, id: "s1", title: "시작", node_type: "start", sort_order: 0 },
+      {
+        ...NODE_BASE, id: "a1", title: "Review request", node_type: "process", sort_order: 1,
+        pos_x: 300, pos_y: 40, color: "#334155", assignee: "홍길동", department: "Quality Part 1",
+        system: "SAP", description: "기존 설명", group_ids: ["g1"],
+      },
+      { ...NODE_BASE, id: "e1", title: "종료", node_type: "end", sort_order: 2, pos_x: 600, is_primary_end: true },
+    ],
+    edges: [
+      { id: "x1", source_node_id: "s1", target_node_id: "a1", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null },
+      { id: "x2", source_node_id: "a1", target_node_id: "e1", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null },
+    ],
+    groups: [{ id: "g1", parent_group_id: null, label: "검수", color: "" }],
+  };
+}
+
+function mergeOf(csv: string, base = baseGraph()) {
+  return buildGraphFromCsv(csv, { base });
+}
+
+describe("buildGraphFromCsv — 머지", () => {
+  it("제목이 같은 노드는 id를 재사용한다 (계보·코멘트 보존의 근거)", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    expect(o.errors).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "Review request")!.id).toBe("a1");
+    expect(o.merge.matchedCount).toBe(3); // start + Review request + end
+    expect(o.merge.addedNodeIds).toEqual([]);
+    expect(o.merge.removedNodes).toEqual([]);
+  });
+
+  it("빈 셀은 기존 값을 지킨다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.description).toBe("기존 설명");
+    expect(node.assignee).toBe("홍길동");
+    expect(node.department).toBe("Quality Part 1");
+    expect(node.system).toBe("SAP");
+  });
+
+  it("값이 있는 셀은 덮어쓴다", () => {
+    const o = buildGraphFromCsv(`${H9}\nReview request,새 설명,kim.cs,Quality Part 1,ERP,5 days,,,\n`, { base: baseGraph(), directory: DIR });
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.description).toBe("새 설명");
+    expect(node.assignee).toBe("김철수");
+    expect(node.department).toBe("Quality Part 1");
+    expect(node.system).toBe("ERP");
+    expect(node.duration).toBe("5 days");
+  });
+
+  it("CSV가 싣지 않는 필드는 언제나 보존한다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.color).toBe("#334155");
+    expect(node.group_ids).toEqual(["g1"]);
+    expect(node.pos_x).toBe(300);
+  });
+
+  it("기존 그룹을 그대로 통과시킨다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    expect(o.graph!.groups).toEqual([{ id: "g1", parent_group_id: null, label: "검수", color: "" }]);
+  });
+
+  it("Start/End는 타입으로 매칭하고 기존 제목을 유지한다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    const start = o.graph!.nodes.find((n) => n.node_type === "start")!;
+    const end = o.graph!.nodes.find((n) => n.node_type === "end")!;
+    expect([start.id, start.title]).toEqual(["s1", "시작"]);
+    expect([end.id, end.title]).toEqual(["e1", "종료"]);
+    expect(end.is_primary_end).toBe(true);
+  });
+
+  it("서브프로세스 노드는 node_type을 보존한다 (Call Activity 링크 유지)", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], node_type: "subprocess", linked_map_id: 7 };
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`, base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.node_type).toBe("subprocess");
+    expect(node.linked_map_id).toBe(7);
+  });
+
+  it("CSV에만 있는 행은 신규 노드가 되고 addedNodeIds에 담긴다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,Sign contract\nSign contract,,,,,,,,\n`);
+    const sign = o.graph!.nodes.find((n) => n.title === "Sign contract")!;
+    expect(o.merge.addedNodeIds).toEqual([sign.id]);
+    expect(sign.id).not.toBe("a1");
+  });
+
+  it("base에만 있는 노드는 결과에서 빠지고 removedNodes로 보고된다", () => {
+    const o = mergeOf(`${H9}\nSign contract,,,,,,,,\n`);
+    expect(o.graph!.nodes.some((n) => n.id === "a1")).toBe(false);
+    expect(o.merge.removedNodes.map((n) => n.id)).toEqual(["a1"]);
+  });
+
+  it("결과 그래프에 없는 base 엣지를 lostEdges로 보고한다", () => {
+    const o = mergeOf(`${H9}\nSign contract,,,,,,,,\n`);
+    expect(o.merge.lostEdges.map((e) => e.id).sort()).toEqual(["x1", "x2"]);
+  });
+
+  it("흐름이 그대로면 lostEdges가 비어 있다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    expect(o.merge.lostEdges).toEqual([]);
+  });
+
+  it("신규 노드만 재배치하고 매칭 노드 좌표는 건드리지 않는다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,Sign contract\nSign contract,,,,,,,,\n`);
+    expect(o.graph!.nodes.find((n) => n.id === "a1")!.pos_x).toBe(300);
+    expect(o.graph!.nodes.find((n) => n.id === "s1")!.pos_x).toBe(0);
+  });
+
+  it("base 미지정이면 전량 신규다 (회귀)", () => {
+    const o = buildGraphFromCsv(`${H9}\nReview request,,,,,,,,\n`);
+    expect(o.merge.removedNodes).toEqual([]);
+    expect(o.merge.matchedCount).toBe(0);
+    expect(o.merge.addedNodeIds).toHaveLength(3); // Start + 1행 + End
+    expect(o.graph!.groups).toEqual([]);
+  });
+
+  it("빈 base는 base 미지정과 같다", () => {
+    const o = buildGraphFromCsv(`${H9}\nReview request,,,,,,,,\n`, { base: { nodes: [], edges: [], groups: [] } });
+    expect(o.merge.matchedCount).toBe(0);
+    expect(o.merge.removedNodes).toEqual([]);
+  });
+});
+
+describe("withKeptNodes", () => {
+  it("소멸 노드를 엣지 없이 되돌리고 sort_order를 뒤에 붙인다", () => {
+    const o = mergeOf(`${H9}\nSign contract,,,,,,,,\n`);
+    const maxOrder = o.graph!.nodes.reduce((max, n) => Math.max(max, n.sort_order), 0);
+    const kept = withKeptNodes(o.graph!, o.merge.removedNodes);
+    const review = kept.nodes.find((n) => n.id === "a1")!;
+    expect(review.title).toBe("Review request");
+    expect(review.color).toBe("#334155");
+    expect(kept.edges.some((e) => e.source_node_id === "a1" || e.target_node_id === "a1")).toBe(false);
+    expect(review.sort_order).toBe(maxOrder + 1);
+  });
+
+  it("유지 노드가 대표 끝을 다시 들고 오지 않는다 (validate_process 위반 방지)", () => {
+    const base = baseGraph();
+    base.nodes.push({ ...NODE_BASE, id: "e2", title: "취소 종료", node_type: "end", sort_order: 3 });
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`, base);
+    const kept = withKeptNodes(o.graph!, o.merge.removedNodes);
+    expect(kept.nodes.filter((n) => n.is_primary_end)).toHaveLength(1);
+  });
+
+  it("빈 배열이면 그래프를 그대로 반환한다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    expect(withKeptNodes(o.graph!, [])).toBe(o.graph!);
   });
 });
