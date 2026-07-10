@@ -1,7 +1,7 @@
 // CSV 임포트 파서·그래프 변환 단위 테스트 (설계: docs/superpowers/specs/2026-07-10-csv-import-merge-design.md)
 import { describe, expect, it } from "vitest";
 
-import type { Graph, GraphNode } from "./api";
+import type { Directory, Graph, GraphNode } from "./api";
 import {
   buildAiPromptText,
   buildGraphFromCsv,
@@ -9,7 +9,9 @@ import {
   type CsvDirectory,
   decodeCsvBuffer,
   parseCsvRecords,
+  stripCsvExtension,
   stripCsvFences,
+  toCsvDirectory,
   withKeptNodes,
 } from "./csv-import";
 
@@ -482,5 +484,85 @@ describe("withKeptNodes", () => {
   it("빈 배열이면 그래프를 그대로 반환한다", () => {
     const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
     expect(withKeptNodes(o.graph!, [])).toBe(o.graph!);
+  });
+});
+
+// ── 생성 플로우용 순수 헬퍼 ──────────────────────────────────────
+
+describe("stripCsvExtension", () => {
+  it(".csv 확장자를 뗀다", () => {
+    expect(stripCsvExtension("sales-process.csv")).toBe("sales-process");
+  });
+
+  it("대문자 확장자도 뗀다", () => {
+    expect(stripCsvExtension("SALES.CSV")).toBe("SALES");
+  });
+
+  it("마지막 .csv만 뗀다 (앞의 점은 이름의 일부)", () => {
+    expect(stripCsvExtension("2026.q3.plan.csv")).toBe("2026.q3.plan");
+  });
+
+  it("다른 확장자는 건드리지 않는다", () => {
+    expect(stripCsvExtension("notes.txt")).toBe("notes.txt");
+  });
+
+  it("확장자가 없으면 그대로 둔다", () => {
+    expect(stripCsvExtension("plan")).toBe("plan");
+  });
+
+  it("확장자뿐이면 빈 문자열이 된다", () => {
+    expect(stripCsvExtension(".csv")).toBe("");
+  });
+
+  it("빈 문자열은 빈 문자열이다", () => {
+    expect(stripCsvExtension("")).toBe("");
+  });
+});
+
+describe("toCsvDirectory", () => {
+  const dir: Directory = {
+    users: [
+      { id: "hong.gd", name: "홍길동", department: "Quality Part 1" },
+      { id: "lee.yh", name: "이영희", department: "Finance Part" },
+    ],
+    departments: [
+      { id: "HQ/Quality Office/Quality Part 1", name: "Quality Part 1", korean_name: "품질1파트", manager: "hong.gd" },
+      { id: "HQ/Finance Part", name: "Finance Part", korean_name: "", manager: "" },
+    ],
+  };
+
+  it("부서 목록은 org_path가 아니라 말단명이다 (node.department가 담는 값)", () => {
+    expect(toCsvDirectory(dir).departments).toEqual(["Quality Part 1", "Finance Part"]);
+  });
+
+  it("한글 부서명이 있는 부서만 dept_infos에 담는다", () => {
+    expect(toCsvDirectory(dir).dept_infos).toEqual({
+      "Quality Part 1": { korean_name: "품질1파트" },
+    });
+  });
+
+  it("사용자는 id·name·department만 옮긴다", () => {
+    expect(toCsvDirectory(dir).users).toEqual([
+      { id: "hong.gd", name: "홍길동", department: "Quality Part 1" },
+      { id: "lee.yh", name: "이영희", department: "Finance Part" },
+    ]);
+  });
+
+  it("빈 디렉터리도 안전하다", () => {
+    expect(toCsvDirectory({ users: [], departments: [] })).toEqual({
+      users: [],
+      departments: [],
+      dept_infos: {},
+    });
+  });
+
+  it("결과를 buildGraphFromCsv가 그대로 쓸 수 있다 (login_id → 이름 해석)", () => {
+    const csv = "Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next\n검토,,hong.gd,품질1파트,,,,,\n";
+    const outcome = buildGraphFromCsv(csv, { directory: toCsvDirectory(dir) });
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.warnings).toEqual([]);
+    const node = outcome.graph!.nodes.find((n) => n.title === "검토")!;
+    expect(node.assignee).toBe("홍길동");
+    expect(node.department).toBe("Quality Part 1");
   });
 });

@@ -4,6 +4,8 @@
 // 코드블록/인라인코드·인용·수평선·링크·강조/기울임. 코드블록 hover 복사, 블록별 hover 하이라이트(현재 위치).
 // 출력은 esc(< > &) 처리 후 dangerouslySetInnerHTML — 스타일은 globals.css `.md`.
 
+import { copyText } from "@/lib/clipboard";
+
 const COPY_ICON =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
@@ -171,23 +173,28 @@ export function MarkdownView({
   onCopy?: () => void; // 복사 성공 시 호출(토스트 등). 프로그램 복사라 네이티브 copy 이벤트는 안 뜬다.
 }) {
   // 클릭 위임(dangerouslySetInnerHTML) — ①코드블록 복사 버튼 ②인라인 코드 클릭 복사.
+  // 복사 실패(서버는 insecure context) 시에는 성공 표시도 onCopy도 내지 않는다.
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     const btn = target.closest(".md-copy");
     if (btn) {
       const code = btn.parentElement?.querySelector("code")?.textContent ?? "";
-      void navigator.clipboard?.writeText(code);
-      btn.classList.add("md-copy-done");
-      window.setTimeout(() => btn.classList.remove("md-copy-done"), 1200);
-      onCopy?.();
+      void copyText(code).then((ok) => {
+        if (!ok) return;
+        btn.classList.add("md-copy-done");
+        window.setTimeout(() => btn.classList.remove("md-copy-done"), 1200);
+        onCopy?.();
+      });
       return;
     }
     // 인라인 코드(pre 밖의 code) 클릭 → 텍스트 복사.
     const codeEl = target.closest("code");
     if (codeEl && !codeEl.closest("pre")) {
-      void navigator.clipboard?.writeText(codeEl.textContent ?? "");
-      flashCopied(codeEl);
-      onCopy?.();
+      void copyText(codeEl.textContent ?? "").then((ok) => {
+        if (!ok) return;
+        flashCopied(codeEl);
+        onCopy?.();
+      });
     }
   };
 
@@ -195,9 +202,11 @@ export function MarkdownView({
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const line = (event.target as HTMLElement).closest(".md-codeline");
     if (!line) return;
-    void navigator.clipboard?.writeText(line.textContent ?? "");
-    flashCopied(line);
-    onCopy?.();
+    void copyText(line.textContent ?? "").then((ok) => {
+      if (!ok) return;
+      flashCopied(line);
+      onCopy?.();
+    });
   };
 
   return (

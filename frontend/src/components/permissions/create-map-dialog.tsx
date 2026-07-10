@@ -8,20 +8,23 @@
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock, Info } from "lucide-react";
+import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp } from "lucide-react";
 
 import {
+  acquireCheckout,
   addMapPermission,
   createMap,
   getDirectory,
   listGroups,
+  saveGraph,
   setApprovers as setMapApprovers,
   type DirectoryUser,
   type DirectoryDept,
   type Group,
 } from "@/lib/api";
+import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
@@ -30,7 +33,6 @@ import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissio
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { CsvTemplateActions } from "@/components/csv-template-actions";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
 
@@ -67,10 +69,12 @@ interface ApproverEntry {
 
 interface Props {
   onClose: () => void;
-  onCreated: () => void; // 생성 후 목록 갱신 콜백 / callback to refresh list after creation
+  onCreated: (silent?: boolean) => void; // 생성 후 목록 갱신 콜백 — silent=true면 성공 토스트 억제(임포트 실패 시) / refresh list; silent suppresses the success toast
+  // CSV로 만들기 — 홈의 CSV 모달이 넘긴다. **optional 필수**: map-name-dropdown.tsx도 이 컴포넌트를 마운트한다.
+  csv?: { outcome: CsvImportOutcome; fileName: string };
 }
 
-export function CreateMapDialog({ onClose, onCreated }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -128,8 +132,18 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   });
 
   // ── 폼 상태 / form state ──
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
+  const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
+  const [name, setName] = useState(csvBaseName);
+  const [description, setDescription] = useState(csvBaseName);
+  // 파일 아코디언 접힘 상태
+  const [csvOpen, setCsvOpen] = useState(false);
+  // 생성 완료 표시 — createMap 직후 즉시 기록해야 한다. 부분 실패 후 Create 재클릭 시
+  // 맵을 다시 만들면 이름 중복 409로 영영 막힌다(백엔드 _assert_unique_name).
+  const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
+  // 이미 부여한 협업자 권한 — addMapPermission은 중복 시 409를 던지는 비멱등 POST라
+  // 재시도에서 성공분을 건너뛰어야 한다. 렌더와 무관한 진행 상태라 state가 아닌 ref.
+  const grantedRef = useRef(new Set<string>());
   const [visibility, setVisibility] = useState<MapVisibility>("private");
   const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
@@ -212,24 +226,61 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      // 1. 맵 생성 — 생성자가 owner(서버 부여) / Real map create (owner = creator).
-      const detail = await createMap(trimmed, description.trim(), visibility);
-      // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators.
-      for (const c of collaborators) {
-        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
-        await addMapPermission(detail.id, c.principalType, c.principalId, role);
+      // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
+      // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
+      if (createdRef.current === null) {
+        const detail = await createMap(trimmed, description.trim(), visibility);
+        createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
-      // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
-      await setMapApprovers(detail.id, approvers.map((a) => a.userId));
+      const created = createdRef.current;
+
+      // 협업자 권한 — 매 시도마다 돌되, 이미 부여된 principal은 건너뛴다(중복 POST는 409)
+      for (const c of collaborators) {
+        if (grantedRef.current.has(c.principalId)) continue;
+        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
+        await addMapPermission(created.mapId, c.principalType, c.principalId, role);
+        grantedRef.current.add(c.principalId);
+      }
+      // 결재자 — 전체 교체 PUT(멱등)이라 매 시도마다 그대로 재전송해도 안전
+      await setMapApprovers(created.mapId, approvers.map((a) => a.userId));
+
+      if (csv?.outcome.graph) {
+        try {
+          // 신규 As-Is 버전은 잠금 free — 체크아웃 획득 후 그래프 반영
+          await acquireCheckout(created.versionId);
+          await saveGraph(created.versionId, csv.outcome.graph);
+        } catch (err) {
+          // 맵은 이미 있다 — 목록만 갱신(성공 토스트 없이)하고 다이얼로그를 유지, Create 재클릭 시 저장만 재시도
+          onCreated(true);
+          setError(
+            err instanceof Error
+              ? `${t("csvImport.mapCreatedImportFailed")} — ${err.message}`
+              : t("csvImport.mapCreatedImportFailed"),
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       onCreated();
       onClose();
-      // 4. 항상 에디터로 — CSV 임포트는 편집 화면에서 한다. draft 버전은 에디터가 체크아웃을 자동 획득한다.
-      router.push(`/maps/${detail.id}`);
+      router.push(`/maps/${created.mapId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.createMap"));
+      if (createdRef.current !== null) {
+        // 맵은 이미 생성됐다 — 목록을 갱신해 고아 맵을 보이게 하고(성공 토스트 없이),
+        // 재클릭이 이어서 진행함을 알린다
+        onCreated(true);
+        setError(
+          err instanceof Error
+            ? `${t("perm.createDialog.partialFailure")} — ${err.message}`
+            : t("perm.createDialog.partialFailure"),
+        );
+      } else {
+        setError(err instanceof Error ? err.message : t("err.createMap"));
+      }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, collaborators, approvers, onCreated, onClose, router, t]);
+  }, [currentUser, name, description, visibility, collaborators, approvers, csv, onCreated, onClose, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -379,17 +430,34 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           )}
         </div>
 
-        {/* CSV 준비 (선택) — 템플릿/프롬프트만. 실제 임포트는 에디터에서 한다. */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-caption text-ink-secondary">{t("csvImport.sectionTitle")}</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <CsvTemplateActions disabled={submitting} />
+        {/* CSV로 만들기 — 파일명 아코디언. 누르면 요약·경고를 펼친다. */}
+        {csv && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              data-id="csv-file-accordion"
+              aria-expanded={csvOpen}
+              onClick={() => setCsvOpen((open) => !open)}
+              className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-caption text-ink hover:bg-surface"
+            >
+              {csvOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
+              <FileUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="truncate">{csv.fileName}</span>
+            </button>
+            {csvOpen && (
+              <div data-id="csv-file-summary" className="flex flex-col gap-1 rounded-sm border border-hairline px-3 py-2">
+                <p className="text-caption text-ink-secondary">
+                  {t("csvImport.createSummary", { nodes: csv.outcome.nodeCount, edges: csv.outcome.edgeCount })}
+                </p>
+                {csv.outcome.warnings.map((warn) => (
+                  <p key={`${warn.line}-${warn.message}`} className="text-caption text-ink-tertiary">
+                    {t("csvImport.rowWarning", { line: warn.line, message: warn.message })}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
-          <p data-id="csv-create-notice" className="flex items-start gap-1.5 rounded-sm bg-surface-alt px-2.5 py-1.5 text-fine text-ink-tertiary">
-            <Info size={14} strokeWidth={1.5} className="mt-px shrink-0" />
-            {t("csvImport.createNotice")}
-          </p>
-        </div>
+        )}
 
         {/* 초기 협업자 / initial collaborators */}
         <div className="flex flex-col gap-1.5">

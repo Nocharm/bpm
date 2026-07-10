@@ -815,6 +815,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [aiEnabled, setAiEnabled] = useState(false);
   // 편집용 매뉴얼 사이트 주소(.env MANUAL_URL) — 비어 있으면 툴바 버튼 숨김 (F9)
   const [manualUrl, setManualUrl] = useState("");
+  // CSV 임포트 안내 문서 주소(.env CSV_MANUAL_URL) — 편집 매뉴얼과 별개, 비면 버튼 숨김
+  const [csvManualUrl, setCsvManualUrl] = useState("");
   // BPM 시스템 관리자 여부 — 활성 점유 강제 인수(force checkout)는 sysadmin만 노출
   const [isSysadmin, setIsSysadmin] = useState(false);
   // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
@@ -1955,6 +1957,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           setUsername(me.username);
           setAiEnabled(me.ai_enabled);
           setManualUrl(me.manual_url);
+          setCsvManualUrl(me.csv_manual_url);
           setIsSysadmin(me.is_sysadmin);
         }
       })
@@ -8306,6 +8309,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <CsvImportSection
               outcome={csvOutcome}
               fileName={csvFileName}
+              manualUrl={csvManualUrl}
               context={{
                 // refs가 아닌 렌더 state 사용 — ref.current를 렌더 중 읽으면 react-hooks/refs 위반
                 base: buildGraph(nodes, edges, groups),

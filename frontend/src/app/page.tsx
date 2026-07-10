@@ -5,9 +5,10 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronDown, ChevronUp, CircleDot, Crown, Eye, PencilLine, Plus, ShieldCheck } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronUp, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { type CsvImportOutcome } from "@/lib/csv-import";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -15,6 +16,7 @@ import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
+import { CsvCreateModal } from "@/components/csv-create-modal";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -33,6 +35,10 @@ export default function MapListPage() {
   const [maps, setMaps] = useState<MapSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
+  // CSV 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 파일명)
+  const [csvHandoff, setCsvHandoff] = useState<{ outcome: CsvImportOutcome; fileName: string } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -176,6 +182,21 @@ export default function MapListPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // 생성 메뉴 — 바깥 클릭·Escape로 닫기 (setState는 리스너 안에서만; 이펙트 본문 직접 호출 금지)
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    const close = () => setCreateMenuOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCreateMenuOpen(false);
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [createMenuOpen]);
 
   const handleDelete = useCallback(
     async (mapId: number) => {
@@ -362,13 +383,50 @@ export default function MapListPage() {
             <BookOpen size={16} strokeWidth={1.5} />
             {t("manual.title")}
           </button>
-          <button
-            className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
-            onClick={() => setDialogOpen(true)}
-          >
-            <Plus size={16} strokeWidth={1.5} />
-            {t("perm.createDialog.title")}
-          </button>
+          {/* 분할 버튼 — 왼쪽=빈 맵, 오른쪽 쉐브론=CSV로 만들기. 재사용할 드롭다운 프리미티브가 없어 1항목 메뉴를 직접 둔다.
+              stopPropagation은 메뉴를 소유한 쉐브론·메뉴 컨테이너에만 — 왼쪽 버튼은 버블시켜 빈 여백 선택 해제를 유지한다. */}
+          <div className="relative flex shrink-0">
+            <button
+              className="inline-flex shrink-0 items-center gap-1 rounded-l-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setDialogOpen(true);
+              }}
+            >
+              <Plus size={16} strokeWidth={1.5} />
+              {t("perm.createDialog.title")}
+            </button>
+            <button
+              data-id="home-create-menu-toggle"
+              aria-expanded={createMenuOpen}
+              aria-label={t("csvImport.createFromCsv")}
+              className="inline-flex shrink-0 items-center rounded-r-sm border-l border-accent-focus bg-accent px-2 py-2 text-on-accent hover:bg-accent-focus"
+              onClick={(event) => {
+                event.stopPropagation(); // 바깥클릭 닫기 리스너가 방금 연 메뉴를 닫지 않도록
+                setCreateMenuOpen((open) => !open);
+              }}
+            >
+              <ChevronDown size={16} strokeWidth={1.5} />
+            </button>
+            {createMenuOpen && (
+              <div
+                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border border-hairline bg-surface py-1 shadow-lg"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  data-id="home-create-from-csv"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setCsvModalOpen(true);
+                  }}
+                >
+                  <FileUp size={16} strokeWidth={1.5} />
+                  {t("csvImport.createFromCsv")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -614,12 +672,28 @@ export default function MapListPage() {
         )}
       </div>
 
+      {csvModalOpen && (
+        <CsvCreateModal
+          onClose={() => setCsvModalOpen(false)}
+          onContinue={(outcome, fileName) => {
+            setCsvModalOpen(false);
+            setCsvHandoff({ outcome, fileName });
+            setDialogOpen(true);
+          }}
+        />
+      )}
+
       {dialogOpen && (
         <CreateMapDialog
-          onClose={() => setDialogOpen(false)}
-          onCreated={() => {
+          csv={csvHandoff ?? undefined}
+          onClose={() => {
+            setDialogOpen(false);
+            setCsvHandoff(null);
+          }}
+          onCreated={(silent) => {
             void refresh();
-            showToast(t("perm.createDialog.toastSuccess"));
+            // silent — 임포트 실패 경로: 맵은 생겼지만 성공 토스트는 띄우지 않는다
+            if (!silent) showToast(t("perm.createDialog.toastSuccess"));
           }}
         />
       )}
