@@ -196,3 +196,74 @@ def test_owning_member_in_eligible_approvers(
     ids = {u["id"] for u in client.get(f"/api/maps/{map_id}/eligible-approvers").json()}
     assert "user.lee" in ids       # 파생 editor → viewer+ 후보
     assert "admin.kim" not in ids  # 비소속·무권한
+
+
+def test_put_owning_department_owner_only(client: TestClient, enforce: None) -> None:
+    map_id = seed_owning_map(PROC_OFFICE)
+    act_as("user.lee")  # 파생 editor일 뿐 owner 아님
+    res = client.put(
+        f"/api/maps/{map_id}/owning-department",
+        json={"owning_department": SOURCING_1},
+    )
+    assert res.status_code == 403
+
+
+def test_put_owning_department_moves_derived_editor(
+    client: TestClient, enforce: None
+) -> None:
+    map_id = seed_owning_map(PROC_OFFICE)
+    act_as(SYSADMIN)
+    res = client.put(
+        f"/api/maps/{map_id}/owning-department",
+        json={"owning_department": PIT},
+    )
+    assert res.status_code == 200
+    assert res.json()["owning_department"] == PIT
+    # 파생 권한이 새 부서로 이동 — 이전 부서원은 접근 상실, 새 부서원은 editor
+    act_as("user.lee")
+    assert client.get(f"/api/maps/{map_id}").status_code == 403
+    act_as("admin.kim")
+    assert client.get(f"/api/maps/{map_id}").json()["my_role"] == "editor"
+
+
+def test_put_owning_department_unknown_422(client: TestClient) -> None:
+    map_id = seed_owning_map(PROC_OFFICE)
+    res = client.put(
+        f"/api/maps/{map_id}/owning-department",
+        json={"owning_department": "No Such Division"},
+    )
+    assert res.status_code == 422
+
+
+def test_put_owning_department_assigns_missing(client: TestClient) -> None:
+    """레거시 누락 맵의 최초 지정 — 같은 엔드포인트."""
+    map_id = seed_owning_map(None, visibility="public")
+    res = client.put(
+        f"/api/maps/{map_id}/owning-department",
+        json={"owning_department": SOURCING_1},
+    )
+    assert res.status_code == 200
+    assert res.json()["owning_department"] == SOURCING_1
+
+
+def test_add_permission_for_owning_department_409(client: TestClient) -> None:
+    map_id = seed_owning_map(PROC_OFFICE, visibility="public")
+    res = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={
+            "principal_type": "department",
+            "principal_id": PROC_OFFICE,
+            "role": "editor",
+        },
+    )
+    assert res.status_code == 409
+    # 하위 부서 grant는 별개 의미 — 허용
+    res2 = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={
+            "principal_type": "department",
+            "principal_id": SOURCING_1,
+            "role": "editor",
+        },
+    )
+    assert res2.status_code == 201

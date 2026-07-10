@@ -32,6 +32,11 @@ class MapUpdate(BaseModel):
     description: str | None = None
 
 
+class OwningDepartmentIn(BaseModel):
+    # 오우닝 부서 지정/변경 — known org_path 검증은 라우터에서 (spec 2026-07-10)
+    owning_department: str = Field(min_length=1, max_length=200)
+
+
 class SubprocessDesignationIn(BaseModel):
     # 부서 필수 — 공백만은 불가 (지정의 핵심 메타). 나머지는 선택 (spec 2026-07-06)
     department: str = Field(min_length=1, max_length=100)

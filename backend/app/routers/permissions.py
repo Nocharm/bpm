@@ -83,6 +83,15 @@ async def add_permission(
             status_code=409,
             detail="public maps grant editor only — everyone can already view",
         )
+    # 오우닝 부서는 이미 파생 editor(잠금) — 동일 부서 행은 혼란만 준다 (spec 2026-07-10)
+    if (
+        payload.principal_type == "department"
+        and payload.principal_id == found_map.owning_department
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="department already owns this map — editor role is derived",
+        )
     existing = await session.scalar(
         select(MapPermission).where(
             MapPermission.map_id == map_id,

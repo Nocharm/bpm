@@ -28,6 +28,7 @@ from app.schemas import (
     MapDetailOut,
     MapOut,
     MapUpdate,
+    OwningDepartmentIn,
     SubprocessDesignationIn,
 )
 from app.version_events import record_version_event
@@ -502,6 +503,27 @@ async def update_map(
         found_map.name = payload.name
     if payload.description is not None:
         found_map.description = payload.description
+    await session.commit()
+    await session.refresh(found_map)
+    return found_map
+
+
+@router.put(
+    "/{map_id}/owning-department",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def set_owning_department(
+    map_id: int,
+    payload: OwningDepartmentIn,
+    session: AsyncSession = Depends(get_session),
+) -> ProcessMap:
+    """오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 자동으로 새 부서를 따라간다."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    await _assert_known_department(session, payload.owning_department)
+    found_map.owning_department = payload.owning_department
     await session.commit()
     await session.refresh(found_map)
     return found_map
