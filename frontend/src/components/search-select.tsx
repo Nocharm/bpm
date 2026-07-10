@@ -2,11 +2,12 @@
 
 // 검색 드롭다운 — 옵션 목록을 검색어로 필터 + 매치 하이라이트, 선택 시 value 저장 (F5 담당자/부서).
 // 자유입력 불가(목록에서만 선택). 기존 값이 옵션에 없으면 버튼에 그대로 표시(레거시 보존).
-// SR: 키 내비(Tab/↓ 다음, ↑/Shift+Tab 이전, Enter 선택) · 드롭다운은 absolute overlay라 입력창 위치 불변.
-// addMode: 트리거를 ＋아이콘으로, 플라이아웃을 "클릭한 마우스 위치"에 document.body 포털로 fixed 렌더.
-//   포털이라 모달(transform 조상)의 좌표계 영향을 안 받고, 화면 넘치면 좌/상으로 접어 캔버스 밖으로 안 나감.
+// SR: 키 내비(Tab/↓ 다음, ↑/Shift+Tab 이전, Enter 선택) · 드롭다운은 오버레이라 입력창 위치 불변.
+// 두 모드 모두 document.body 포털 + fixed — 모달(overflow-hidden)·인스펙터(overflow-y-auto)에 잘리지 않는다.
+//   addMode: 트리거가 ＋아이콘, 플라이아웃을 "클릭한 마우스 위치"에.
+//   기본: 트리거 버튼 rect 기준(아래 우선, 공간 없으면 위). fitContent면 우측 정렬.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 
@@ -23,7 +24,34 @@ export interface SelectOption {
 }
 
 const FLYOUT_W = 224; // w-56
-const FLYOUT_H = 300; // 대략 높이(화면 하단 클램프용)
+const FLYOUT_H = 300; // 대략 높이(화면 하단 클램프용) — 검색 입력 + max-h-56 목록
+const GAP = 4; // 트리거와 메뉴 사이
+const MARGIN = 8; // 뷰포트 가장자리 최소 여백
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+/** 기본 모드 메뉴 좌표 — 트리거 rect 기준. 아래 우선, 공간 없으면 위, 그래도 없으면 화면 안으로 클램프. */
+function computeMenuPos(
+  rect: DOMRect,
+  viewport: { width: number; height: number },
+  alignRight: boolean,
+): { left: number; top: number; width: number } {
+  const width = Math.max(FLYOUT_W, rect.width);
+  const rawLeft = alignRight ? rect.right - width : rect.left;
+  const left = clamp(rawLeft, MARGIN, Math.max(MARGIN, viewport.width - MARGIN - width));
+
+  const below = rect.bottom + GAP;
+  const above = rect.top - GAP - FLYOUT_H;
+  const top =
+    below + FLYOUT_H <= viewport.height - MARGIN
+      ? below
+      : above >= MARGIN
+        ? above
+        : Math.max(MARGIN, viewport.height - MARGIN - FLYOUT_H);
+  return { left, top, width };
+}
 
 export function SearchSelect({
   value,
@@ -52,6 +80,31 @@ export function SearchSelect({
   const listRef = useRef<HTMLDivElement>(null);
   // addMode 플라이아웃의 fixed 좌표(클릭 마우스 위치 기준).
   const [flyoutPos, setFlyoutPos] = useState<{ left: number; top: number } | null>(null);
+  // 기본 모드 메뉴의 fixed 좌표(트리거 rect 기준) — 열려 있는 동안 스크롤·리사이즈에 재계산.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (addMode || !open) return;
+    const updatePos = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      setMenuPos(
+        computeMenuPos(
+          trigger.getBoundingClientRect(),
+          { width: window.innerWidth, height: window.innerHeight },
+          fitContent,
+        ),
+      );
+    };
+    updatePos(); // DOM 측정은 커밋 후에만 — menuPos=null 동안은 렌더 안 하므로 잘못된 위치로 깜빡이지 않는다
+    window.addEventListener("resize", updatePos);
+    window.addEventListener("scroll", updatePos, true); // capture — 모달 본문·인스펙터 등 내부 스크롤까지
+    return () => {
+      window.removeEventListener("resize", updatePos);
+      window.removeEventListener("scroll", updatePos, true);
+    };
+  }, [open, addMode, fitContent]);
 
   // 검색은 label + keywords만 — sub(부서 등)는 표시 전용(검색 제외).
   const hits = query.trim()
@@ -75,13 +128,19 @@ export function SearchSelect({
     setActive(0);
   };
 
+  // 닫힘은 항상 좌표를 함께 비운다 — 남겨두면 재개방 첫 프레임이 옛 위치로 그려진다(effect는 페인트 후 실행).
+  const closeMenu = () => {
+    setOpen(false);
+    setMenuPos(null);
+  };
+
   const pick = (index: number) => {
     if (index <= 0) {
       onChange("");
     } else {
       onChange(shown[index - 1].item.value);
     }
-    setOpen(false);
+    closeMenu();
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -95,11 +154,11 @@ export function SearchSelect({
       event.preventDefault();
       pick(active);
     } else if (event.key === "Escape") {
-      setOpen(false);
+      closeMenu();
     }
   };
 
-  // 플라이아웃 내용 — addMode(포털·fixed)와 기본(absolute·버튼 아래) 공용.
+  // 플라이아웃 내용 — addMode(마우스 위치)와 기본(트리거 아래) 공용. 둘 다 body 포털·fixed.
   const menu = (
     <>
       <div className="relative mx-2 mb-1">
@@ -190,18 +249,21 @@ export function SearchSelect({
               ? "border-solid border-accent bg-accent-tint text-accent"
               : "border-dashed border-hairline text-ink-tertiary hover:border-solid hover:border-accent hover:text-accent"
           }`}
-          onClick={(event) => (open ? setOpen(false) : openAt(event.clientX, event.clientY))}
+          onClick={(event) => (open ? closeMenu() : openAt(event.clientX, event.clientY))}
         >
           <Plus size={14} strokeWidth={1.5} />
         </button>
       ) : (
         <button
+          ref={triggerRef}
           type="button"
+          data-id="search-select-trigger"
           className={`flex ${
             fitContent ? "w-auto min-w-0 max-w-[176px]" : "w-full"
           } items-center justify-between gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink hover:bg-surface-alt`}
           onClick={() => {
-            setOpen((prev) => !prev);
+            if (open) closeMenu();
+            else setOpen(true);
             setActive(0);
           }}
         >
@@ -216,7 +278,7 @@ export function SearchSelect({
           createPortal(
             // z는 노드 편집 모달(z-1200)보다 위 — 안 그러면 모달 뒤로 깔려 클릭 불가.
             <>
-              <div className="fixed inset-0 z-[1340]" onClick={() => setOpen(false)} />
+              <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
               <div
                 className="fixed z-[1350] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
                 style={flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
@@ -227,19 +289,23 @@ export function SearchSelect({
             document.body,
           )
         ) : (
-          <>
-            {/* 바깥 클릭 닫기 */}
-            <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-            {/* absolute overlay — 늘/줄어도 버튼·주변 레이아웃 불변 (SR-4).
-                fitContent(우측정렬)면 right-0으로 좌측으로 펼침 → 우측으로 넘쳐 화면 밀리는 것 방지. */}
-            <div
-              className={`absolute z-[1001] mt-1 min-w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg ${
-                fitContent ? "right-0" : "left-0 w-full"
-              }`}
-            >
-              {menu}
-            </div>
-          </>
+          menuPos &&
+          // 트리거 rect 포털(fixed) — 모달 overflow-hidden·인스펙터 overflow-y-auto에 잘리지 않는다.
+          // z는 노드 편집 모달(1200)·서브프로세스 지정 모달(1300)보다 위.
+          createPortal(
+            <>
+              {/* 바깥 클릭 닫기 */}
+              <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
+              <div
+                data-id="search-select-menu"
+                className="fixed z-[1350] rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                style={{ left: menuPos.left, top: menuPos.top, width: menuPos.width }}
+              >
+                {menu}
+              </div>
+            </>,
+            document.body,
+          )
         ))}
     </div>
   );
