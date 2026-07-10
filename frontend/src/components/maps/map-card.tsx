@@ -169,6 +169,15 @@ export function MapCard({
               {t(VERSION_STATUS_LABEL[map.latest_version_status])}
             </span>
           )}
+          {!map.owning_department && (
+            <span
+              data-id="map-card-owning-missing"
+              title={t("home.owningMissingNote")}
+              className="shrink-0 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-error"
+            >
+              {t("home.owningMissingBadge")}
+            </span>
+          )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {showRole && <RoleBadge role={map.my_role as MapRole} />}

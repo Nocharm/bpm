@@ -13,6 +13,7 @@
 - T5 리뷰 픽스 — `autoLeaderRef` 상태 오염 2건: ⓐ `applyOwningDept`가 dedup으로 실제 추가 안 했을 때도 리더를 auto로 기록해 수동 추가분이 clear 시 삭제되던 버그(실추가 시에만 ref 기록), ⓑ 자동 추가된 리더 pill을 수동 제거해도 ref가 남아 재선택/clear가 동명 수동 재추가분을 지우던 버그(`handleRemoveApprover`를 plain 함수로 전환·제거 대상이 추적 리더면 ref 해제). lint·build·vitest 234 passed.
 - T6 프론트 — 설정 화면에 오우닝 부서 Assign/Change(owner 게이트) + 협업자 잠금 행 추가. `map-details-panel.tsx`에 부서 표시/피커 블록(미지정 시 경고+Assign, 지정 시 잠금뱃지+Change), `collaborators-panel.tsx`에 합성 잠금 행(MapPermission 미생성, 표시 전용) 추가, `settings/page.tsx`에 `owningDepartment` state 배선(초기 로드+refreshMap 양쪽) + `isOwner`/`onChanged` prop 전달. i18n 키 `perm.owningDept.title/missingNotice/assignBtn/changeBtn/saved` (en/ko). npm run lint(경고 1건 무관)·build 0에러.
 - T6 리뷰 픽스 — 협업자 패널에서 잠금 행이 보이는데 "No collaborators yet."이 같이 뜨던 자기모순 UI 수정: 빈 목록 안내를 `perms.length === 0 && !owningDepartment`일 때만 렌더(오우닝 부서는 권한 행을 만들지 않아 신규 맵 대부분이 두 문구를 동시 노출하던 문제). lint(경고 1건 무관)·build 0에러.
+- T7 프론트 — 홈에서 오우닝 부서 누락 맵 구분: 카드에 "No owning dept" 배지(departed 배지와 동일 error 톤), Owning 필터 드롭다운(누락-only 토글, sessionStorage 영속·listKey·Clear 편입), i18n `home.filterOwning/owningMissing*` (en/ko). ⚠️ 구현 에이전트가 메인 체크아웃에 커밋한 것을 cherry-pick으로 워크트리 이관 후 main은 원복. npm run lint/build 0에러.
 
 ## 2026-07-10 — CSV로 새 맵 만들기 + 클립보드 수정 설계 (worktree-csv-create-flow)
 - **클립보드 버그 확정**: 복사 4곳(`csv-template-actions.tsx:32`, `markdown-view.tsx:179·188·198`)이 전부 `navigator.clipboard?.writeText()`. `navigator.clipboard`는 secure context 전용인데 서버는 원격 IP + 평문 HTTP → `undefined`. `?.`가 삼켜 **에러 없이 실패하고 버튼은 "복사됨!"을 띄운다**. localhost는 secure context라 재현 안 됨(`CLAUDE.md` 경고 그대로).

@@ -5,7 +5,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronDown, ChevronUp, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, ChevronUp, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
@@ -48,6 +48,7 @@ export default function MapListPage() {
   // 상태·권한 필터 — 다중 선택 드롭다운, 비어 있으면 전체 / status & role filters; empty = all (H1).
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [permFilter, setPermFilter] = useState<Set<string>>(new Set());
+  const [owningFilter, setOwningFilter] = useState<Set<string>>(new Set());
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -125,6 +126,7 @@ export default function MapListPage() {
         vis?: unknown;
         status?: unknown;
         perm?: unknown;
+        owning?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -138,6 +140,9 @@ export default function MapListPage() {
       }
       if (Array.isArray(s.perm)) {
         setPermFilter(new Set(s.perm.filter((x): x is string => typeof x === "string")));
+      }
+      if (Array.isArray(s.owning)) {
+        setOwningFilter(new Set(s.owning.filter((x): x is string => typeof x === "string")));
       }
     } catch {
       /* 손상된 저장값 무시 */
@@ -158,9 +163,10 @@ export default function MapListPage() {
         vis: visFilter,
         status: [...statusFilter],
         perm: [...permFilter],
+        owning: [...owningFilter],
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -257,9 +263,11 @@ export default function MapListPage() {
           (m.latest_version_status !== null && statusFilter.has(m.latest_version_status));
         const permOk =
           permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
-        return visOk && statusOk && permOk;
+        const owningOk =
+          owningFilter.size === 0 || (owningFilter.has("missing") && !m.owning_department);
+        return visOk && statusOk && permOk && owningOk;
       }),
-    [visibleMaps, visFilter, statusFilter, permFilter],
+    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter],
   );
 
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
@@ -296,7 +304,7 @@ export default function MapListPage() {
   }, [mapHits]);
 
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋)
-  const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}`;
+  const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}`;
   const {
     visible: shownSearchHits,
     hasMore: hasMoreSearch,
@@ -517,7 +525,28 @@ export default function MapListPage() {
                     })
                   }
                 />
-                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all") && (
+                <FilterDropdown
+                  label={t("home.filterOwning")}
+                  dataId="home-owning-filter"
+                  icon={<Building2 size={14} strokeWidth={1.5} />}
+                  options={[
+                    {
+                      value: "missing",
+                      label: t("home.owningMissingOption"),
+                      icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
+                    },
+                  ]}
+                  selected={owningFilter}
+                  onToggle={(v) =>
+                    setOwningFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
+                />
+                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0) && (
                   <button
                     type="button"
                     data-id="home-filter-clear"
@@ -526,6 +555,7 @@ export default function MapListPage() {
                       setStatusFilter(new Set());
                       setPermFilter(new Set());
                       setVisFilter("all");
+                      setOwningFilter(new Set());
                     }}
                   >
                     {t("home.filterClear")}
