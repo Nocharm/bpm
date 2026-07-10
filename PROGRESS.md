@@ -37,6 +37,13 @@
 - ③ 전체 브랜치 리뷰 픽스 — AI/CSV 프리뷰 상호 배타(중첩 시 미승인 AI 그래프가 자동저장되던 데이터 안전 버그), `previewRef`를 소스 유니온으로 통일, 고아 `disabled` prop 제거, 폐기된 설계문서 참조 갱신. vitest 197·lint 0에러.
 - ③ 브라우저 검증 스크립트 `pw-verify-csv-import-merge.mjs` 작성 — 프리뷰 충돌·머지 후 비교 무오탐·빈 셀 보존·삭제/유지·담당자 해석 경고·서브프로세스 보존·인스펙터 잠금 7시나리오. **아직 미실행**(서버 필요) — 실행 명령은 스크립트 헤더 주석 참조.
 
+## 2026-07-10 — SearchSelect 드롭다운 포털화 + 노드 편집 모달 스크롤 (worktree-select-portal)
+- 버그: BPM 속성의 부서 드롭다운이 `absolute`라 노드 편집 모달(`overflow-hidden`)·인스펙터(`overflow-y-auto`)에 잘림. `elementFromPoint`로 실측 — 모달은 전 높이에서, 인스펙터는 vh≤620에서 아래 모서리가 가려짐.
+- `search-select.tsx` 기본 모드도 addMode처럼 **body 포털 + fixed**로. 좌표는 트리거 rect 기준(`computeMenuPos`: 아래 우선 → 위 → 클램프, `fitContent`면 우측 정렬), 열린 동안 `resize`/`scroll`(capture) 재계산, 닫힘 시 좌표 비움. z=1350(백드롭 1340) — 노드 모달(1200)·서브프로세스 모달(1300) 위.
+- `node-summary-modal.tsx` 본문에 `min-h-0` + `scrollbar-hidden`. flex 자식의 `min-height:auto`(=min-content)가 축소를 막으면 `overflow-y-auto`가 죽고 카드의 `overflow-hidden`이 선행/후행 내비를 잘라 닿을 수 없게 되는 잠복 결함. 스크롤바만 감추고 스크롤은 유지.
+- ⚠️ 사용자가 보고한 "모달 세로 스크롤 소실"은 400~800px 전 구간에서 **재현 실패**(본문은 항상 스크롤됨). 위 `min-h-0`은 원인 가설에 대한 선제 방어이며, 재발 시 창 크기·노드 내용 필요.
+- 검증: `scripts/pw-verify-search-select-portal.mjs` 20/20(4개 높이 × 인스펙터·모달, 콘솔 에러 0) · 기존 스모크 21/21·10/10 회귀 없음 · vitest 184 · lint 0에러 · build.
+
 ## 2026-07-10 — 인원 카드 부서명 한글화 (worktree-korean-dept-card)
 - 버그: 한글 모드에서 이름은 한글인데 부서명이 전부 영문. `map-detail-card.tsx`가 부서 표시에 `dept_info.korean_name`도 `employees.korean_dept`도 **한 번도 읽지 않았다** — 영문 org 세그먼트만 렌더.
 - 수정 4곳(유저 행 말단 부서 · 펼침 레벨 필 · 팀 행 이름 · 팀 행 호버 상위 경로). 순수 함수 3종 신설: `buildKoreanDeptByPath`(확정 dept_info 우선, 없으면 직원 신고 korean_dept 폴백) · `buildOrgPathChain` · `formatDeptName`(ko=한글||영문, en=영문). 아이콘 레벨 판정·정렬은 영문 리프 유지.
