@@ -317,11 +317,11 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const dialog = (
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-start justify-center bg-ink/20 pt-8 backdrop-blur-sm"
+      className="fixed inset-0 z-[1200] flex items-start justify-center bg-ink/20 pt-4 backdrop-blur-sm"
     >
-      {/* 상단 정렬(pt-8) + max-h는 위아래 2rem씩만 비운다 — 폼이 길어 세로를 최대한 쓴다.
-          결재자 드롭다운 자리는 본문 하단 pb-40이 만든다(아래 참조). */}
-      <div className="relative flex max-h-[calc(100dvh-4rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
+      {/* 상단 정렬(pt-4) — 폼이 길어 세로를 최대한 쓴다. max-h는 위아래 1rem씩만 비운다.
+          내용이 다 들어가면 스크롤은 생기지 않는다(빈 패딩으로 스크롤을 만들지 않음). */}
+      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
           <h2 className="text-body-strong text-ink">{t("perm.createDialog.title")}</h2>
@@ -335,10 +335,8 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           </button>
         </div>
 
-        {/* 본문 — 작은 뷰포트에서만 내부 스크롤(스크롤바 숨김), 헤더·버튼 행은 고정 (batch2 ①).
-            pb-40(160px) = 결재자 드롭다운 한 판. 마지막 피커를 그만큼 위로 스크롤할 수 있어
-            뷰포트 하단 여유가 생기고, 드롭다운이 옆이 아니라 아래로 열린다. */}
-        <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-40">
+        {/* 본문 — 작은 뷰포트에서만 내부 스크롤(스크롤바 숨김), 헤더·버튼 행은 고정 (batch2 ①) */}
+        <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
         {/* 사용자 없음 경고 / no user warning */}
         {!currentUser && (
           <p className="text-caption text-error">{t("perm.createDialog.noUser")}</p>
