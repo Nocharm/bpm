@@ -4,10 +4,12 @@
 // Principal picker: search users/departments/groups (with hangul chosung) and select one.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Building2, Search, User, Users, X } from "lucide-react";
 
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
+import { computeDropdownPlacement, type DropdownPlacement } from "@/lib/dropdown-placement";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
 import { sortManagersFirst } from "@/lib/korean-dept";
@@ -95,11 +97,30 @@ export function PrincipalPicker({
   // 열림 = 포커스 기준 — 바깥 클릭(blur) 시 검색어가 있어도 닫히고, 검색어는 유지돼
   // 재포커스 시 남은 검색어로 재검색 (batch2 ⑪). 목록 내부 클릭은 mousedown preventDefault로 blur 미발생.
   const [open, setOpen] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  // 드롭다운은 body로 portal + fixed — 모달 본문의 overflow-y-auto에 잘리지 않고, 주변을 밀지도 않는다.
+  const [placement, setPlacement] = useState<DropdownPlacement | null>(null);
 
-  // 열림 시 목록이 스크롤 컨테이너(모달 본문 등) 밖이면 최소로 끌어내림 (batch2 ⑫)
+  // 열려 있는 동안 앵커 좌표 추적 — 리사이즈·스크롤(내부 스크롤 컨테이너 포함, capture)에 재계산.
   useEffect(() => {
-    if (open) listRef.current?.scrollIntoView({ block: "nearest" });
+    if (!open) return;
+    const updatePlacement = () => {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      setPlacement(
+        computeDropdownPlacement(anchor.getBoundingClientRect(), {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }),
+      );
+    };
+    updatePlacement(); // DOM 측정은 커밋 후에만 가능 — placement=null 동안은 렌더 안 하므로 잘못된 위치로 깜빡이지 않는다
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+    return () => {
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
   }, [open]);
 
   // 현재 접속자 — 상위 부서장 체인(Manager 라벨·우선 정렬)과 소속 부서(My Dept 라벨) 판정용
@@ -175,10 +196,9 @@ export function PrincipalPicker({
   };
 
   return (
-    // relative — 결과 목록을 absolute로 띄워(플로팅) 주변 레이아웃을 밀지 않음 (#9 / SR-4)
-    <div className="relative flex flex-col">
-      {/* 검색 입력 / Search input */}
-      <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
+    <div className="flex flex-col">
+      {/* 검색 입력 — 드롭다운 배치의 앵커 / Search input; anchors the floating dropdown */}
+      <div ref={anchorRef} className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1">
         <Search size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         <input
           type="text"
@@ -211,11 +231,19 @@ export function PrincipalPicker({
           </button>
         )}
       </div>
-      {/* 결과 목록 — 열림(포커스) 동안만. 빈 입력이면 전체, 검색 중엔 랭킹순 / floating results */}
-      {open && (
+      {/* 결과 목록 — 열림(포커스) 동안만. 빈 입력이면 전체, 검색 중엔 랭킹순 /
+          floating results, portaled so no scroll container can clip them. z=1250: 생성 모달(1200) 위, ConfirmDialog(1300) 아래 */}
+      {open && placement && createPortal(
         <div
-          ref={listRef}
-          className="absolute left-0 right-0 top-full z-[1001] mt-1 flex max-h-40 flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg"
+          data-id="principal-picker-dropdown"
+          data-side={placement.side}
+          style={{
+            top: placement.top,
+            left: placement.left,
+            width: placement.width,
+            maxHeight: placement.maxHeight,
+          }}
+          className="fixed z-[1250] flex flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg"
         >
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
@@ -309,7 +337,8 @@ export function PrincipalPicker({
           {hits.length === 0 && (
             <span className="px-3 py-2 text-caption text-ink-tertiary">—</span>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
