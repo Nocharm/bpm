@@ -72,6 +72,18 @@
 ## 2026-07-10 — AI 권한 게이트 + 페이로드 저장 설계 (main)
 - AI 챗·그래프 조회 viewer 게이트 + `ai_chat_messages.payload` 저장(카드 히스토리 재현) 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-10-ai-gate-payload-design.md`. 사용자 결정 3건(게이트 범위=AI+그래프 GET 2종, 과거 graph/ops=읽기전용, 카드=메시지 부착형 통일).
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-10-ai-gate-payload.md` (6태스크: 게이트→payload 백엔드→뷰모델→카드 통일→프론트 영향 점검→스모크·enforce 검증).
+- 게이트 1/2: ai/chat·graph GET 2종에 require_version_map_role("viewer") 부착 + 게이트 테스트 6종.
+- 페이로드 1/2: ai_chat_messages.payload TEXT(+_ADDED_COLUMNS)·kind별 서브셋 직렬화·조회 시 오염 NULL 강등.
+- 페이로드 2/2 준비: 프론트 뷰모델 kind/payload 보존·toPayload(vitest).
+- 픽스: chat-sessions 테스트 TS 컴파일 에러 2건(payload 필드 누락·리터럴 widening) — tsc 게이트로 검출.
+- 카드 통일: 분리 state 제거→메시지 부착(ai-chat-cards.tsx), graph/ops 읽기전용 요약+라이브 커밋 카드 부착, 히스토리 워크스루 자동재생 없음.
+- 프론트 영향 점검: 그래프 GET 호출처 5곳(editor 3·compare 2) 전수 조사 — 전부 선행 `getMap` viewer 게이트 통과 후에만 호출돼 신규 403 노출 없음(compare 페이지의 getMap 자체 에러 미처리는 Task1 이전부터의 기존 결함, 크래시 아닌 무한 로딩).
+- 픽스: `highlightNode`에 사라진 노드 가드(`nodesRef.current.some`) 추가 — 히스토리 카드가 삭제된 노드를 가리킬 때 전체 deselect + 원점(0,0) fitView 점프 방지.
+- Task 6(스모크·enforce 검증, 브랜치 마지막): `pw-smoke-ai-chat-history.mjs`에 체크 17(SMOKE-second에 `kind="analysis"` payload 메시지 시드 → `page.reload()` 후 `[data-id="ai-analysis-card"]` 재현 확인) 추가 + 기존 로딩-팁 대기에 `.catch()` 방어(크래시 방지, 판정은 그대로 FAIL 기록). 실행 결과 17개 체크 중 15개는 항상 PASS(신규 체크 17 포함), 체크 "3a/3b"(SMOKE-paging 초기 30개 로드)만 4회 중 3회 간헐적 FAIL — 원인은 `ai-chat-panel.tsx:285-290`(새 메시지 로딩 시 하단 스크롤 effect)과 `:564-569`(`onScroll`의 `beginLoadOlder` 상단 트리거)의 레이스: 30개가 패널 높이를 넘겨 스크롤 가능해지는 순간 브라우저 scroll-anchoring이 `scrollTop=0`인 중간 스크롤 이벤트를 발생시켜 `beginLoadOlder`가 오발동, 아직 스크롤 안 한 시점에 다음 페이지(10개)를 미리 당겨온다(초기 30 대신 40으로 관측). `git diff`로 대조 확인 — 이 두 구간은 Task 1~5가 건드리지 않은 기존 코드라 이번 브랜치의 회귀가 아님(선재 결함, 픽스는 스코프 밖 — 무단 수정 안 함, 컨트롤러 판단 필요).
+- enforce 수동 검증(`DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys AI_ENABLED=true`, port 8000, private map=2/version=11): ① 무권한 유저(`bora.choi`) GET graph → **403**, ② 동일 유저 POST ai/chat → **403**, ③ viewer 권한 유저(`doyun.lim2`) GET graph → **200**(실 데이터) + POST ai/chat → **502**(AI 서버 미구성 — 게이트 통과 확인, 403 아님). 3케이스 전부 기대대로.
+- 최종 게이트: backend pytest 521 passed · ruff 0 · frontend vitest 234 passed(18 files) · lint 0 errors(1건 pre-existing 경고) · build 성공(10 라우트).
+- **배포 노트**: 서버는 startup `_ADDED_COLUMNS`가 `ai_chat_messages.payload` 컬럼을 자동 보강 — 별도 수동 DDL 불요.
+- 최종리뷰 픽스: toPayload graph 판정을 백엔드 규칙(nodes|edges|groups)과 정렬 + stale 주석 정리.
 
 ## 2026-07-10 — 문서 정리: 완료 SDD 문서 삭제 + PROGRESS compact (main)
 - `docs/superpowers/` 완료 plans·specs 72개 + editor-compare-redesign 에셋(1.9MB) + `docs/frontend-compare-verification.md` 삭제 — 최근 2건(ui-batch2·member-card-icons)만 유지, 전부 git history에 보존.

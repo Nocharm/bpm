@@ -2,23 +2,16 @@
 
 // 에디터 AI 채팅 패널 — 순서도 생성/편집 지시 + 사용법 안내 (design 2026-06-15)
 import {
-  AlertTriangle,
   ArrowUp,
-  ArrowUpRight,
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   History,
-  Info,
   Lightbulb,
   Loader2,
   MessageSquare,
   Minus,
   Paperclip,
-  Pause,
-  Play,
   Plus,
   Route,
   Search,
@@ -28,6 +21,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { AnalysisCard, ProposalSummaryCard, WalkthroughCard } from "@/components/ai-chat-cards";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
 import {
@@ -39,11 +33,9 @@ import {
   getAiTips,
   type AiChatSessionSummary,
   type AiChatTurn,
-  type AiFinding,
   type AiProposal,
-  type AiStep,
 } from "@/lib/api";
-import { createLocalMessage, toChatMessage, type ChatMessage } from "@/lib/chat-sessions";
+import { createLocalMessage, toChatMessage, toPayload, type ChatMessage } from "@/lib/chat-sessions";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
@@ -137,15 +129,11 @@ export function AiChatPanel({
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>("");
-  const [findings, setFindings] = useState<AiFinding[]>([]); // 최근 analysis 결과 (Phase 4)
-  const [steps, setSteps] = useState<AiStep[]>([]); // 워크스루 단계 (Phase 5)
-  const [stepIndex, setStepIndex] = useState(0);
-  const [autoplay, setAutoplay] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // 스레드가 하단에서 떨어져 있으면 "맨 아래로" 버튼 노출.
   const [showToBottom, setShowToBottom] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // 응답 도착 시 활성 세션 판별용 미러 — 전송 후 세션을 전환해도 findings/steps가 남의 세션에 뜨지 않게.
+  // 응답 도착 시 활성 세션 판별용 미러 — 전송 후 세션을 전환해도 응답 메시지 append가 남의 세션에 붙지 않게.
   const activeSessionIdRef = useRef(activeSessionId);
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -155,6 +143,14 @@ export function AiChatPanel({
   const activeMeta = allSessions.find((item) => item.id === activeSessionId) ?? null;
   const otherSessions = allSessions.filter((item) => item.map_id !== mapId);
   const isForeign = activeMeta !== null && activeMeta.map_id !== mapId;
+
+  // 라이브 미리보기 카드 부착 대상 — 이번 세션(음수 id)의 마지막 graph/ops 제안 메시지
+  const latestAssistant = [...messages].reverse().find((m) => m.role === "assistant") ?? null;
+  const previewAttached =
+    latestAssistant !== null &&
+    latestAssistant.id < 0 &&
+    latestAssistant.payload !== null &&
+    (latestAssistant.kind === "graph" || latestAssistant.kind === "ops");
 
   // 이전 페이지 로딩 — 스피너+기능 팁을 최소 시간 보여주며 서버에서 더 오래된 기록을 붙인다
   const beginLoadOlder = () => {
@@ -254,10 +250,6 @@ export function AiChatPanel({
   }, [activeSessionId, messagesReload]);
 
   const resetTransient = () => {
-    setFindings([]);
-    setSteps([]);
-    setStepIndex(0);
-    setAutoplay(false);
     setLoadingOlder(false);
   };
 
@@ -341,33 +333,6 @@ export function AiChatPanel({
     };
   }, [aiEnabled]);
 
-  // 워크스루 스텝 변경 시 해당 노드 포커스 (공유 헬퍼 재사용).
-  // 초기 마운트(창 열림)에는 포커스하지 않는다 — 창을 열 때 캔버스가 이동하지 않도록. 스텝이 실제로 바뀔 때만 이동.
-  const focusKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    const key = steps.length > 0 ? `${stepIndex}:${steps[stepIndex]?.node_id ?? ""}` : "";
-    if (focusKeyRef.current === null || key === focusKeyRef.current) {
-      focusKeyRef.current = key; // 첫 실행(마운트)·변화 없음(StrictMode 재호출) → 포커스 생략
-      return;
-    }
-    focusKeyRef.current = key;
-    if (steps.length > 0 && steps[stepIndex]) {
-      onHighlightNode(steps[stepIndex].node_id);
-    }
-  }, [steps, stepIndex, onHighlightNode]);
-
-  // 자동재생 — 2.5초 간격, 마지막 스텝에서 정지 (D5)
-  useEffect(() => {
-    if (!autoplay || steps.length === 0) return;
-    if (stepIndex >= steps.length - 1) {
-      // 주의: React Compiler가 이 컴포넌트를 bail-out 중이라 set-state-in-effect 룰이 침묵 — 재컴파일되면 표면화됨(disable 주석 필요)
-      setAutoplay(false); // 마지막 스텝 도달 시 정지 — 기존 동작(세션 도입 전부터)
-      return;
-    }
-    const timer = setTimeout(() => setStepIndex((index) => index + 1), 2500);
-    return () => clearTimeout(timer);
-  }, [autoplay, stepIndex, steps.length]);
-
   const send = async (override?: string) => {
     const instruction = (override ?? input).trim();
     if (!instruction || busy || !aiEnabled || isForeign) return;
@@ -388,11 +353,10 @@ export function AiChatPanel({
       const content = proposal.message || t("ai.unsupportedKind");
       // 응답 도착 시점에도 같은 세션을 보고 있을 때만 낙관 append — 전환했다면 서버 재로딩이 원장
       if (activeSessionIdRef.current === targetSessionId) {
-        setMessages((prev) => [...prev, createLocalMessage("assistant", content)]);
-        setFindings(proposal.kind === "analysis" ? proposal.findings : []);
-        setSteps(proposal.kind === "walkthrough" ? proposal.steps : []);
-        setStepIndex(0);
-        setAutoplay(false);
+        setMessages((prev) => [
+          ...prev,
+          createLocalMessage("assistant", content, proposal.kind, toPayload(proposal)),
+        ]);
       }
       if (
         targetSessionId === null &&
@@ -674,6 +638,27 @@ export function AiChatPanel({
                     className="min-w-0"
                     onCopy={() => onToast?.(t("ai.copied"))}
                   />
+                  {message.kind === "analysis" && message.payload?.findings?.length ? (
+                    <AnalysisCard findings={message.payload.findings} onHighlightNode={onHighlightNode} />
+                  ) : null}
+                  {message.kind === "walkthrough" && message.payload?.steps?.length ? (
+                    <WalkthroughCard
+                      steps={message.payload.steps}
+                      live={message.id < 0}
+                      onHighlightNode={onHighlightNode}
+                    />
+                  ) : null}
+                  {(message.kind === "graph" || message.kind === "ops") && message.payload ? (
+                    <ProposalSummaryCard
+                      kind={message.kind}
+                      payload={message.payload}
+                      preview={
+                        aiPreviewActive && previewAttached && message.id === latestAssistant?.id
+                          ? { onCommit: onCommitPreview, onDiscard: onDiscardPreview }
+                          : undefined
+                      }
+                    />
+                  ) : null}
                   {message.at !== null && (
                     <span className="text-[10px] text-ink-tertiary">
                       {formatMessageTime(message.at)}
@@ -692,153 +677,8 @@ export function AiChatPanel({
             </li>
           )}
         </ul>
-        {findings.length > 0 && (
-          <div className="mt-3 flex max-w-[80%] flex-col gap-2">
-            <span className="flex items-center gap-1.5 px-0.5 text-caption-strong text-ink">
-              <Search size={14} strokeWidth={1.6} className="text-accent" />
-              {t("ai.analysisTitle")}
-              <span className="rounded-full bg-surface-alt px-1.5 text-fine text-ink-tertiary">
-                {findings.length}
-              </span>
-            </span>
-            {findings.map((finding, index) => {
-              const sev = finding.severity;
-              // 심각도별 좌측 레일·아이콘 톤 — high=경고 빨강, medium=액센트, low=중성
-              const rail =
-                sev === "high"
-                  ? "border-l-error"
-                  : sev === "medium"
-                    ? "border-l-accent"
-                    : "border-l-divider";
-              const iconTone =
-                sev === "high"
-                  ? "bg-error/10 text-error"
-                  : sev === "medium"
-                    ? "bg-accent-tint text-accent"
-                    : "bg-surface-alt text-ink-tertiary";
-              return (
-                // finding 클릭 → 해당 노드 캔버스 하이라이트 (D4: 설명+하이라이트만)
-                <button
-                  key={`finding-${index}`}
-                  type="button"
-                  className={`group flex w-full gap-2.5 rounded-[3px] border border-l-[3px] border-hairline ${rail} bg-surface p-2.5 text-left shadow-sm hover:bg-surface-alt disabled:opacity-60`}
-                  onClick={() => onHighlightNode(finding.node_ids[0])}
-                  disabled={finding.node_ids.length === 0}
-                >
-                  <span
-                    className={`mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${iconTone}`}
-                  >
-                    {sev === "high" ? (
-                      <AlertTriangle size={14} strokeWidth={1.7} />
-                    ) : (
-                      <Info size={14} strokeWidth={1.7} />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-caption-strong text-ink">{finding.category}</span>
-                      <span
-                        className={`rounded-full px-1.5 py-px text-[10px] font-semibold uppercase ${
-                          sev === "high" ? "bg-error/10 text-error" : "bg-surface-alt text-ink-tertiary"
-                        }`}
-                      >
-                        {finding.severity}
-                      </span>
-                    </span>
-                    <span className="mt-1 block text-fine leading-relaxed text-ink">
-                      {finding.message}
-                    </span>
-                    {finding.suggestion && (
-                      <span className="mt-1.5 flex items-start gap-1.5 rounded-xs bg-accent-tint px-2 py-1 text-fine text-accent">
-                        <Lightbulb size={13} strokeWidth={1.6} className="mt-px shrink-0" />
-                        <span>{finding.suggestion}</span>
-                      </span>
-                    )}
-                  </span>
-                  {finding.node_ids.length > 0 && (
-                    <ArrowUpRight
-                      size={14}
-                      strokeWidth={1.5}
-                      className="mt-px shrink-0 text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {steps.length > 0 && (
-          <div className="mt-3 max-w-[80%] overflow-hidden rounded-sm border border-hairline bg-surface shadow-sm">
-            <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
-              <span className="flex items-center gap-1.5 text-caption-strong text-ink">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
-                  <Route size={13} strokeWidth={1.7} />
-                </span>
-                {t("ai.walkthrough")}
-              </span>
-              <div className="flex items-center gap-0.5">
-                {/* 스텝 진행 도트 — 현재/완료/예정 */}
-                <span className="mr-1.5 flex items-center gap-1">
-                  {steps.map((step, i) => (
-                    <span
-                      key={step.order}
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        i === stepIndex
-                          ? "bg-accent"
-                          : i < stepIndex
-                            ? "bg-accent/40"
-                            : "border border-hairline bg-surface-pearl"
-                      }`}
-                    />
-                  ))}
-                </span>
-                <span className="mr-1 text-fine tabular-nums text-ink-tertiary">
-                  {stepIndex + 1} / {steps.length}
-                </span>
-                <button
-                  type="button"
-                  aria-label={t("ai.prevStep")}
-                  className="rounded-sm p-1 hover:bg-surface-pearl disabled:opacity-40"
-                  onClick={() => setStepIndex((index) => Math.max(0, index - 1))}
-                  disabled={stepIndex === 0}
-                >
-                  <ChevronLeft size={16} strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  aria-label={t("ai.nextStep")}
-                  className="rounded-sm p-1 hover:bg-surface-pearl disabled:opacity-40"
-                  onClick={() =>
-                    setStepIndex((index) => Math.min(steps.length - 1, index + 1))
-                  }
-                  disabled={stepIndex === steps.length - 1}
-                >
-                  <ChevronRight size={16} strokeWidth={1.5} />
-                </button>
-                <button
-                  type="button"
-                  aria-label={t("ai.autoplay")}
-                  className={`rounded-sm p-1 hover:bg-surface-pearl ${autoplay ? "text-accent" : ""}`}
-                  onClick={() => setAutoplay((value) => !value)}
-                >
-                  {autoplay ? (
-                    <Pause size={16} strokeWidth={1.5} />
-                  ) : (
-                    <Play size={16} strokeWidth={1.5} />
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className="flex items-start gap-2 px-2.5 py-2.5">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-on-accent">
-                {stepIndex + 1}
-              </span>
-              <p className="text-caption leading-relaxed text-ink">{steps[stepIndex]?.narration}</p>
-            </div>
-          </div>
-        )}
-        {/* graph/ops 제안 미리보기 — 캔버스에 적용된 미리보기를 채팅 안에서 커밋/취소 */}
-        {aiPreviewActive && (
+        {/* 미리보기 폴백 — 부착 대상 메시지가 없을 때만(빈 payload 등 예외 경로) */}
+        {aiPreviewActive && !previewAttached && (
           <div className="mt-3 max-w-[80%] overflow-hidden rounded-sm border border-accent-tint-border bg-surface shadow-md">
             <div className="flex items-center gap-2 border-b border-accent-tint-border bg-accent-tint px-2.5 py-1.5">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-on-accent">

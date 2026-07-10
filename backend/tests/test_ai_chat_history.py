@@ -294,3 +294,85 @@ def test_retention_prunes_stale_sessions_on_list(
     )
     ids = [s["id"] for s in client.get("/api/ai/chat-sessions").json()["sessions"]]
     assert sid not in ids
+
+
+# ── 제안 페이로드 저장 — 카드 히스토리 재현 (design 2026-07-10) ─────────────
+
+
+def test_parse_proposal_payload_degrades_corrupt_to_none() -> None:
+    from app.chat_history import parse_proposal_payload
+
+    assert parse_proposal_payload(None) is None
+    assert parse_proposal_payload("") is None
+    assert parse_proposal_payload("not json{") is None
+    assert parse_proposal_payload("[1, 2]") is None  # dict 아님 — 강등
+    assert parse_proposal_payload('{"findings": []}') == {"findings": []}
+
+
+def test_chat_stores_payload_for_analysis(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    finding = {
+        "severity": "high",
+        "category": "orphan",
+        "node_ids": [],
+        "message": "고아 노드",
+        "suggestion": "연결하세요",
+    }
+    monkeypatch.setattr(
+        ai_client,
+        "call_ai",
+        _fake_ai(json.dumps({"kind": "analysis", "message": "분석", "findings": [finding]})),
+    )
+    version_id = _draft_version_checked_out(client)
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "분석해줘"})
+    assert resp.status_code == 200
+    session_id = resp.json()["session_id"]
+
+    msgs = client.get(f"/api/ai/chat-sessions/{session_id}/messages").json()["messages"]
+    assert msgs[0]["payload"] is None  # user 메시지는 항상 NULL
+    assistant = msgs[1]
+    assert assistant["kind"] == "analysis"
+    assert assistant["payload"]["findings"][0]["category"] == "orphan"
+    assert assistant["payload"]["findings"][0]["severity"] == "high"
+
+
+def test_chat_answer_payload_is_null(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        ai_client, "call_ai", _fake_ai(json.dumps({"kind": "answer", "message": "도움말"}))
+    )
+    version_id = _draft_version_checked_out(client)
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "어떻게 써?"})
+    session_id = resp.json()["session_id"]
+    msgs = client.get(f"/api/ai/chat-sessions/{session_id}/messages").json()["messages"]
+    assert all(m["payload"] is None for m in msgs)
+
+
+def test_chat_stores_payload_for_graph(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    content = json.dumps(
+        {
+            "kind": "graph",
+            "message": "그렸어요",
+            "nodes": [
+                {"key": "a", "title": "시작", "node_type": "start"},
+                {"key": "b", "title": "처리", "node_type": "process"},
+            ],
+            "edges": [{"source": "a", "target": "b"}],
+        }
+    )
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(content))
+    version_id = _draft_version_checked_out(client)
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "그려줘"})
+    session_id = resp.json()["session_id"]
+    msgs = client.get(f"/api/ai/chat-sessions/{session_id}/messages").json()["messages"]
+    payload = msgs[1]["payload"]
+    assert [n["key"] for n in payload["nodes"]] == ["a", "b"]
+    assert payload["edges"][0]["source"] == "a"
+    assert payload["groups"] == []

@@ -445,3 +445,55 @@ def test_auth_off_gates_open(client: TestClient) -> None:
         == 200
     )
     assert client.delete(f"/api/maps/{map_id}").status_code == 204
+
+
+# ── AI 챗·그래프 조회 viewer 게이트 (design 2026-07-10) ─────────────
+
+
+def test_ai_chat_private_map_stranger_403(client: TestClient, enforce: None) -> None:
+    map_id = seed_map(visibility="private")
+    version_id = version_of(map_id)
+    act_as("stranger")
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "hi"})
+    assert resp.status_code == 403
+
+
+def test_ai_chat_viewer_grant_passes_gate(client: TestClient, enforce: None) -> None:
+    # 게이트 통과 증명 — AI 비활성(테스트 기본)이라 핸들러의 503에 도달하면 게이트는 열린 것.
+    # 403(게이트 거부)과 503(핸들러 도달)을 구분하므로 AI 목킹이 필요 없다.
+    map_id = seed_map(visibility="private", grants=[("user", "viewer.user", "viewer")])
+    version_id = version_of(map_id)
+    act_as("viewer.user")
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "hi"})
+    assert resp.status_code == 503
+
+
+def test_ai_chat_public_map_passes_gate(client: TestClient, enforce: None) -> None:
+    map_id = seed_map(visibility="public")
+    version_id = version_of(map_id)
+    act_as("anyone")
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "hi"})
+    assert resp.status_code == 503  # 게이트 통과 → AI 비활성 503
+
+
+def test_graph_get_private_map_stranger_403(client: TestClient, enforce: None) -> None:
+    map_id = seed_map(visibility="private")
+    version_id = version_of(map_id)
+    act_as("stranger")
+    assert client.get(f"/api/versions/{version_id}/graph").status_code == 403
+    assert client.get(f"/api/versions/{version_id}/graph/all").status_code == 403
+
+
+def test_graph_get_public_or_granted_200(client: TestClient, enforce: None) -> None:
+    public_id = seed_map(visibility="public")
+    act_as("anyone")
+    assert client.get(f"/api/versions/{version_of(public_id)}/graph").status_code == 200
+    granted_id = seed_map(visibility="private", grants=[("user", "viewer.user", "viewer")])
+    act_as("viewer.user")
+    assert client.get(f"/api/versions/{version_of(granted_id)}/graph").status_code == 200
+    assert client.get(f"/api/versions/{version_of(granted_id)}/graph/all").status_code == 200
+
+
+def test_graph_get_missing_version_404(client: TestClient, enforce: None) -> None:
+    act_as(SYSADMIN)
+    assert client.get("/api/versions/999999/graph").status_code == 404

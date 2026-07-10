@@ -49,7 +49,7 @@ class AiChatSession(Base):
 
 
 class AiChatMessage(Base):
-    """AI 챗 메시지 — user 질문/assistant 답변 텍스트만(제안 페이로드는 저장 안 함)."""
+    """AI 챗 메시지 — user 질문/assistant 답변 + 제안 페이로드(kind별 서브셋 JSON)."""
 
     __tablename__ = "ai_chat_messages"
 
@@ -60,6 +60,8 @@ class AiChatMessage(Base):
     role: Mapped[str] = mapped_column(String(10))  # user | assistant
     content: Mapped[str] = mapped_column(Text)
     kind: Mapped[str | None] = mapped_column(String(20), default=None)  # assistant만
+    # 제안 원자료(kind별 서브셋 JSON 문자열) — 히스토리 재열람 시 카드 재현. user/answer는 NULL
+    payload: Mapped[str | None] = mapped_column(Text, default=None)
     # 당시 열려 있던 버전 id — 추적용 순수 정수(FK 아님: 버전 삭제돼도 대화 보존)
     version_id: Mapped[int | None] = mapped_column(Integer, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
