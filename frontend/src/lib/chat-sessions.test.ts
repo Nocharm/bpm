@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { AiChatMessageRow } from "./api";
 import { createLocalMessage, toChatMessage, toPayload } from "./chat-sessions";
 
 describe("chat-sessions view model", () => {
@@ -29,6 +30,7 @@ describe("chat-sessions view model", () => {
       role: "user",
       content: "x",
       kind: null,
+      payload: null,
       version_id: null,
       created_at: "not-a-date",
     });
@@ -48,9 +50,9 @@ describe("chat-sessions view model", () => {
 
 describe("kind/payload preservation (2026-07-10)", () => {
   it("toChatMessage preserves kind and payload", () => {
-    const row = {
+    const row: AiChatMessageRow = {
       id: 5,
-      role: "assistant" as const,
+      role: "assistant",
       content: "분석",
       kind: "analysis",
       payload: { findings: [{ severity: "high", category: "orphan", node_ids: [], message: "m", suggestion: "s" }] },
