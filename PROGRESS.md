@@ -8,6 +8,7 @@
 - T1 백엔드 — `process_maps.owning_department` 컬럼 + `MapCreate` 필수 필드 + 라우터 `_assert_known_department`(known org_path 아니면 422) + copy 상속. conftest에 `owning.anchor`(비활성) 앵커 부서 시드, 기존 테스트 52곳에 앵커 부서 주입(sed 기계적 + 분할라인 1곳 수동). pytest 526 passed·ruff 0에러.
 - T2 백엔드 — `logic.effective_role`에 `owning_department: str | None = None` 키워드 추가, grants 루프와 baseline 사이에 소속(prefix 하위 포함)이면 editor 바닥값 삽입(권한 행이 없어 해제·다운그레이드 불가="잠금"). 호출부 3곳(`access.py` get_effective_role/get_eligible_users, `maps.py list_maps`) 패스스루. 순수 로직 4 + enforce 통합 3 테스트, pytest 533 passed·ruff 0에러.
 - T3 백엔드 — `PUT /maps/{id}/owning-department`(owner 게이트, `OwningDepartmentIn` 스키마, `_assert_known_department` 재검증) 추가, 레거시 NULL 맵의 최초 지정도 동일 엔드포인트로 처리. `POST /maps/{id}/permissions`에 오우닝 부서와 동일 department principal이면 409 가드(하위/상위 부서 grant는 허용). MapPermission 삽입 없음 — 컬럼만 갱신하면 파생 editor가 자동으로 새 부서를 따라간다. 스펙 문서 "중복 방지 가드" 400→409 정정. 신규 5 테스트, pytest 538 passed·ruff 0에러.
+- T4 프론트 — `api.ts` 인터페이스 `MapSummary.owning_department` 필드 + `setOwningDepartment()` 함수, `principal-picker.tsx` `pinnedIds` prop + 브라우즈 IIFE로 핀 고정 + 배지 로직 확장, i18n 키 `perm.principalDeptLead` (en/ko). npm run lint·build 0에러.
 
 ## 2026-07-10 — CSV로 새 맵 만들기 + 클립보드 수정 설계 (worktree-csv-create-flow)
 - **클립보드 버그 확정**: 복사 4곳(`csv-template-actions.tsx:32`, `markdown-view.tsx:179·188·198`)이 전부 `navigator.clipboard?.writeText()`. `navigator.clipboard`는 secure context 전용인데 서버는 원격 IP + 평문 HTTP → `undefined`. `?.`가 삼켜 **에러 없이 실패하고 버튼은 "복사됨!"을 띄운다**. localhost는 secure context라 재현 안 됨(`CLAUDE.md` 경고 그대로).

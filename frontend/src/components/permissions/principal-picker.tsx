@@ -41,6 +41,8 @@ interface PrincipalPickerProps {
   deptKoreanKeywords?: Map<string, string[]>;
   /** 브라우즈(빈 검색) 시 내 상위 부서장들을 맨 위로 — 승인자 피커용. 검색 랭킹은 불변. */
   managersFirst?: boolean;
+  /** 빈 검색(브라우즈) 시 최상단 고정할 user principalId — 오우닝 부서 리더 노출용. 검색 랭킹은 불변. */
+  pinnedIds?: Set<string>;
   onSelect: (option: PrincipalOption) => void;
 }
 
@@ -89,6 +91,7 @@ export function PrincipalPicker({
   userDepartments,
   deptKoreanKeywords,
   managersFirst,
+  pinnedIds,
   onSelect,
 }: PrincipalPickerProps) {
   const { t, lang } = useI18n();
@@ -152,14 +155,26 @@ export function PrincipalPicker({
               ...(o.koreanKeywords ?? []).map((k) => ({ field: "koreanDept", text: k })),
             ],
       )
-    : (managersFirst
-        ? sortManagersFirst(
-            all,
-            (o) => (o.principalType === "user" ? o.principalId : null),
-            managerIds,
-          )
-        : all
-      ).map((item) => ({ item, matches: [] as { field: string; ranges: MatchRange[] }[] }));
+    : (() => {
+        const browse = managersFirst
+          ? sortManagersFirst(
+              all,
+              (o) => (o.principalType === "user" ? o.principalId : null),
+              managerIds,
+            )
+          : all;
+        // 핀 고정 — 오우닝 부서 리더 등은 검색 없이도 맨 위 (안정 파티션)
+        const pinnedFirst = pinnedIds?.size
+          ? [
+              ...browse.filter((o) => o.principalType === "user" && pinnedIds.has(o.principalId)),
+              ...browse.filter((o) => !(o.principalType === "user" && pinnedIds.has(o.principalId))),
+            ]
+          : browse;
+        return pinnedFirst.map((item) => ({
+          item,
+          matches: [] as { field: string; ranges: MatchRange[] }[],
+        }));
+      })();
   // 검색도 캡 없이 전량 노출 — 25개씩 증분 렌더가 DOM 부하를 막는다(~5000명).
   // 부서·그룹 매치는 이름이 비슷한 유저 무더기에 밀리지 않게, 최고 랭크 1개를 스코어 무시하고 맨 위로 고정.
   let ordered = hits;
@@ -306,25 +321,29 @@ export function PrincipalPicker({
                 })()}
                 {(() => {
                   // 내 상위 부서장 → Manager, 내 소속 부서(체인) → My Dept — 약한 하이라이트 필
+                  const isPinnedLead =
+                    opt.principalType === "user" && (pinnedIds?.has(opt.principalId) ?? false);
                   const isManager =
                     opt.principalType === "user" && managerSet.has(opt.principalId);
                   const isMine =
                     opt.principalType === "department" && isMyDept(opt.principalId);
-                  const label = isManager
-                    ? t("perm.principalManager")
-                    : isMine
-                      ? t("perm.principalMyDept")
-                      : t(
-                          opt.principalType === "user"
-                            ? "perm.principalUser"
-                            : opt.principalType === "department"
-                              ? "perm.principalDept"
-                              : "perm.principalGroup",
-                        );
+                  const label = isPinnedLead
+                    ? t("perm.principalDeptLead")
+                    : isManager
+                      ? t("perm.principalManager")
+                      : isMine
+                        ? t("perm.principalMyDept")
+                        : t(
+                            opt.principalType === "user"
+                              ? "perm.principalUser"
+                              : opt.principalType === "department"
+                                ? "perm.principalDept"
+                                : "perm.principalGroup",
+                          );
                   return (
                     <span
                       className={`ml-auto shrink-0 text-fine ${
-                        isManager || isMine
+                        isPinnedLead || isManager || isMine
                           ? "rounded-full bg-accent-tint px-2 py-0.5 text-accent"
                           : "text-ink-tertiary"
                       }`}
