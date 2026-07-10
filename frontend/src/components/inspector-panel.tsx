@@ -6,6 +6,7 @@ import {
   Boxes,
   ChevronRight,
   CircleCheck,
+  FileUp,
   GitCompare,
   LayoutGrid,
   Map as MapIcon,
@@ -21,7 +22,7 @@ import { type ComponentType, type ReactNode, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
 
-type InspectorTab = "properties" | "map" | "approval" | "activity";
+type InspectorTab = "properties" | "map" | "approval" | "activity" | "import";
 type IconType = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 
 const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
@@ -30,6 +31,11 @@ const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
   { key: "approval", labelKey: "editor.tabApproval", icon: CircleCheck },
   { key: "activity", labelKey: "inspector.tabActivity", icon: MessageSquare },
 ];
+
+// CSV 프리뷰 중에만 나타나는 탭 — importSlot이 있을 때 TABS 뒤에 붙는다
+const IMPORT_TAB: { key: InspectorTab; labelKey: MessageKey; icon: IconType } = {
+  key: "import", labelKey: "csvImport.tabTitle", icon: FileUp,
+};
 
 interface InspectorPanelProps {
   onCollapse: () => void;
@@ -44,6 +50,12 @@ interface InspectorPanelProps {
   // 승인 탭(워크플로 대시보드)·활동 탭(코멘트·버전 타임라인) 콘텐츠 — page.tsx 주입. 없으면 placeholder.
   approvalSlot?: ReactNode;
   activitySlot?: ReactNode;
+  // CSV 임포트 프리뷰 — 슬롯이 있으면 Import 탭이 나타난다
+  importSlot?: ReactNode;
+  // 탭을 강제 고정(프리뷰 중). 내부 상태 대신 이 값이 이긴다.
+  forcedTab?: InspectorTab;
+  // 다른 탭·접기 잠금 — 프리뷰를 두고 빠져나가 자동저장 꺼진 상태에 갇히는 걸 막는다
+  lockTabs?: boolean;
   // 서브프로세스 지정 카드 — 속성 빈상태·맵 탭 공용. page.tsx 주입.
   subprocessSlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
@@ -70,6 +82,9 @@ export function InspectorPanel({
   mapTabSlot,
   approvalSlot,
   activitySlot,
+  importSlot,
+  forcedTab,
+  lockTabs,
   subprocessSlot,
   mapName,
   mapVersionMarker,
@@ -84,7 +99,9 @@ export function InspectorPanel({
   saveLabel,
 }: InspectorPanelProps) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<InspectorTab>("properties");
+  const [internalTab, setInternalTab] = useState<InspectorTab>("properties");
+  const tab = forcedTab ?? internalTab;
+  const tabs = importSlot ? [...TABS, IMPORT_TAB] : TABS;
 
   return (
     // @container — 패널 폭 기준 컨테이너 쿼리(탭 라벨 전체 펼침 판정용, ≥430px면 전 탭 라벨)
@@ -93,26 +110,28 @@ export function InspectorPanel({
       <div className="flex items-center gap-0.5 border-b border-hairline px-2 py-1">
         <button
           type="button"
-          className="shrink-0 rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+          disabled={lockTabs}
+          className="shrink-0 rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent"
           onClick={onCollapse}
           title={t("editor.inspectorToggle")}
           aria-label={t("editor.inspectorToggle")}
         >
           <ChevronRight size={16} strokeWidth={1.5} />
         </button>
-        {TABS.map(({ key, labelKey, icon: Icon }) => {
+        {tabs.map(({ key, labelKey, icon: Icon }) => {
           const active = tab === key;
           return (
             <button
               key={key}
               type="button"
+              disabled={lockTabs && key !== tab}
               title={t(labelKey)}
               aria-label={t(labelKey)}
               aria-pressed={active}
-              className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors ${
+              className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${
                 active ? "bg-accent-tint font-medium text-accent" : "text-ink-secondary hover:bg-surface-alt"
               }`}
-              onClick={() => setTab(key)}
+              onClick={() => setInternalTab(key)}
             >
               <Icon size={16} strokeWidth={1.5} className="shrink-0" />
               <span
@@ -155,6 +174,7 @@ export function InspectorPanel({
           (approvalSlot ?? <Placeholder text={`${t("editor.tabApproval")} · ${t("inspector.wip")}`} />)}
         {tab === "activity" &&
           (activitySlot ?? <Placeholder text={`${t("inspector.tabActivity")} · ${t("inspector.wip")}`} />)}
+        {tab === "import" && importSlot}
       </div>
 
       {/* 속성 빈상태 하단 스티키 — 비교 화면 진입(PNG 다운로드 버튼과 동일 accent 톤). 선택 없을 때만.

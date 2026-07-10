@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FilePlus2, FileUp, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -81,6 +81,7 @@ import { ScopePreview } from "@/components/scope-preview";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { WindowDock } from "@/components/window-dock";
 import { CsvImportSection } from "@/components/csv-import-section";
+import { CsvImportTab } from "@/components/csv-import-tab";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   alignSelected,
@@ -191,7 +192,7 @@ import {
   type NodeDisplayField,
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
-import { type CsvImportOutcome } from "@/lib/csv-import";
+import { type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -778,11 +779,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   // 언마운트/버전 전환 시 해제 여부 판단용 — 상태와 달리 cleanup에서 즉시 읽힘
   const checkoutMineRef = useRef(false);
-  // CSV 임포트(전체 교체) — 모달·파싱 결과·확인 단계 (design 2026-07-06)
+  // CSV 임포트(이름 기준 머지) — 모달·파싱 결과 (design 2026-07-06)
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [csvOutcome, setCsvOutcome] = useState<CsvImportOutcome | null>(null);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
-  const [csvConfirmOpen, setCsvConfirmOpen] = useState(false);
+  // CSV 임포트 프리뷰 — 소멸 노드를 삭제할지 유지할지. 기본 삭제(CSV가 정본).
+  const [csvKeepRemoved, setCsvKeepRemoved] = useState(false);
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
@@ -817,8 +819,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [isSysadmin, setIsSysadmin] = useState(false);
   // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
-  const [aiPreviewActive, setAiPreviewActive] = useState(false);
-  const aiPreviewRef = useRef(false);
+  // 미리보기 — AI 제안과 CSV 임포트가 공유. null이 아니면 자동저장이 꺼진다(Apply 전 영속화 방지).
+  const [previewSource, setPreviewSource] = useState<"ai" | "csv" | null>(null);
+  // previewSource와 항상 동기화되는 소스 유니온 — 하나의 undo 스냅샷/자동저장 억제 슬롯을 두 기능이 공유하므로
+  // 서로 중첩되면 승인 전 그래프가 자동저장될 수 있다. 슬롯은 배타적으로만 점유한다.
+  const previewRef = useRef<"ai" | "csv" | null>(null);
   // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그
   const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });
   const aiMinDragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(
@@ -1328,8 +1333,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── 저장 ──────────────────────────────────────────────
 
   const saveCurrentScope = useCallback(async () => {
-    // AI 미리보기 중에는 저장 생략 — Apply 전 자동 영속화 방지
-    if (aiPreviewRef.current) return;
+    // 미리보기 중에는 저장 생략 — Apply 전 자동 영속화 방지
+    if (previewRef.current !== null) return;
     // 딥뷰(읽기전용 하위프로세스 스코프)는 영속 대상이 아님 — 자동/블러/디바운스 저장 모두 차단.
     if (currentScopeIsReadOnlyRef.current) return;
     // 읽기 전용(타인 체크아웃)이면 저장 자체를 생략 — 스코프 이동은 계속 가능
@@ -1359,8 +1364,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [versionId, readOnly, refreshFullGraph]);
 
   const scheduleAutoSave = useCallback(() => {
-    // AI 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
-    if (aiPreviewRef.current) return;
+    // 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
+    if (previewRef.current !== null) return;
     if (readOnly) {
       return;
     }
@@ -1475,32 +1480,78 @@ function MapEditor({ mapId }: { mapId: number }) {
     setHistorySize({ past: history.past.length, future: 0 });
   }, []);
 
-  // CSV 전체 교체 — 서버 PUT 성공 후에만 캔버스 반영(423/409 시 캔버스 불변).
+  // CSV 머지 프리뷰 — 캔버스에만 반영(미저장). 소멸 노드/엣지는 삭제·유지와 무관하게 항상 빨간 점선으로 보여준다.
+  const enterCsvPreview = useCallback(() => {
+    // 슬롯이 이미 점유 중이면(주로 AI 프리뷰) 무시 — 툴바 게이팅이 우선 막지만 방어적으로 한 번 더 확인
+    if (previewRef.current !== null) return;
+    const outcome = csvOutcome;
+    if (versionId === null || !outcome?.graph) return;
+    const added = new Set(outcome.merge.addedNodeIds);
+    const removedIds = new Set(outcome.merge.removedNodes.map((node) => node.id));
+
+    // 캔버스 그래프 = 머지 결과 + 소멸 노드(하이라이트용). 저장 payload는 Apply 시 따로 만든다.
+    const canvasGraph = withKeptNodes(outcome.graph, outcome.merge.removedNodes);
+    const previewNodes = toAppNodes(canvasGraph, null).map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        diffStatus: removedIds.has(node.id)
+          ? ("removed" as const)
+          : added.has(node.id)
+            ? ("added" as const)
+            : undefined,
+      },
+    }));
+    const previewEdges = [
+      ...toAppEdges(canvasGraph),
+      // toAppEdges는 graph.edges만 읽는다 (page.tsx:527) — 소멸 엣지만 담아 스타일을 얹는다
+      ...toAppEdges({ nodes: [], edges: outcome.merge.lostEdges, groups: [] }).map((edge) => ({
+        ...edge,
+        // 비교 화면과 같은 시각 언어 (compare/page.tsx:257-259) — 사라질 엣지
+        style: { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" },
+      })),
+    ];
+
+    pushHistory(); // Cancel = undo 1회로 임포트 이전 캔버스 복귀
+    previewRef.current = "csv";
+    setNodes(previewNodes);
+    setEdges(previewEdges);
+    setGroups(canvasGraph.groups);
+    setSelectedId(null);
+    setSelectedEdgeId(null);
+    setMenu(null);
+    setCsvKeepRemoved(false);
+    setPreviewSource("csv");
+    setInspectorOpen(true); // Apply/Cancel이 인스펙터 Import 탭에 있다 — 접혀 있으면 갇히므로 강제로 펼친다
+    setCsvImportOpen(false);
+  }, [versionId, csvOutcome, pushHistory, setNodes, setEdges, setGroups]);
+
+  // 프리뷰 확정 — 삭제/유지 선택을 반영한 최종 그래프를 PUT. 소멸 엣지는 어느 쪽이든 저장하지 않는다.
   // 직접 saveGraph를 쓰는 이유: setState 직후 ref 동기화 전에 saveCurrentScope를 부르면 이전 상태가 저장됨.
   const applyCsvImport = useCallback(async () => {
-    if (versionId === null || !csvOutcome?.graph) return;
+    const outcome = csvOutcome;
+    if (versionId === null || !outcome?.graph) return;
+    const payload = csvKeepRemoved
+      ? withKeptNodes(outcome.graph, outcome.merge.removedNodes)
+      : outcome.graph;
     try {
-      const saved = await saveGraph(versionId, csvOutcome.graph);
-      pushHistory(); // undo = 임포트 이전 캔버스로 복귀(다음 자동저장이 서버도 되돌림)
+      const saved = await saveGraph(versionId, payload);
+      previewRef.current = null;
+      setPreviewSource(null);
       setNodes(toAppNodes(saved, null));
       setEdges(toAppEdges(saved));
       setGroups(saved.groups);
-      setSelectedId(null);
-      setSelectedEdgeId(null);
-      setMenu(null);
       dirtyRef.current = false;
       setSaveState("saved");
       refreshFullGraph();
-      setCsvConfirmOpen(false);
-      setCsvImportOpen(false);
       setCsvOutcome(null);
       setCsvFileName(null);
       showToast(t("csvImport.applied"));
     } catch (err) {
-      setCsvConfirmOpen(false);
+      // 프리뷰를 유지한 채 실패만 알린다 — 다시 Apply 하거나 Cancel 할 수 있다 (423/409)
       showToast(err instanceof Error ? err.message : t("err.save"));
     }
-  }, [versionId, csvOutcome, pushHistory, setNodes, setEdges, setGroups, refreshFullGraph, showToast, t]);
+  }, [versionId, csvOutcome, csvKeepRemoved, setNodes, setEdges, setGroups, refreshFullGraph, showToast, t]);
 
   // 타이핑은 간격 안에서 한 스냅샷으로 묶고, 그 외 변경은 즉시 기록
   const recordChange = useCallback(
@@ -1546,11 +1597,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     scheduleAutoSave();
   }, [setNodes, setEdges, setGroups, scheduleAutoSave]);
 
+  // CSV 프리뷰 취소 — 스냅샷 복원에 undo가 필요해 undo 선언 뒤에 둔다. Task 8이 Import 탭에 연결한다.
+  const cancelCsvPreview = useCallback(() => {
+    previewRef.current = null;
+    setPreviewSource(null);
+    setCsvOutcome(null);
+    setCsvFileName(null);
+    undo(); // enterCsvPreview가 밀어넣은 스냅샷으로 복귀
+  }, [undo]);
+
   // ── AI 제안 미리보기 / 적용 / 취소 ─────────────────────
   const applyAiProposal = useCallback(
     (proposal: AiProposal) => {
       // Phase 2: graph(전체 교체)만 적용. ops/walkthrough/analysis는 Phase 3~5(패널이 폴백 렌더)
       if (proposal.kind !== "graph") return;
+      // CSV 프리뷰가 슬롯을 점유 중이면 캔버스를 건드리지 않는다 — AI 프리뷰끼리 잇는 것은 기존 동작이라 허용
+      if (previewRef.current === "csv") {
+        showToast(t("preview.busy"));
+        return;
+      }
       // 그룹 임시키 → 실제 id (노드 group_key·그룹 parent_key 해석용)
       const groupKeyToId = new Map<string, string>();
       for (const group of proposal.groups) {
@@ -1594,19 +1659,24 @@ function MapEditor({ mapId }: { mapId: number }) {
       const laidOut = layoutWithDagre(toAppNodes(graph), toAppEdges(graph));
 
       pushHistory(); // Discard = undo restores the pre-preview state
-      aiPreviewRef.current = true;
+      previewRef.current = "ai";
       setNodes(laidOut);
       setEdges(toAppEdges(graph));
       setGroups(ggroups);
-      setAiPreviewActive(true);
+      setPreviewSource("ai");
     },
-    [pushHistory, setNodes, setEdges, setGroups],
+    [pushHistory, setNodes, setEdges, setGroups, showToast, t],
   );
 
   // ── AI 증분 편집(ops) 적용 — 기존 좌표·색·담당자·그룹 보존 (D1 편집 경로) ──
   const applyAiOps = useCallback(
     (proposal: AiProposal) => {
       if (proposal.kind !== "ops") return;
+      // CSV 프리뷰가 슬롯을 점유 중이면 캔버스를 건드리지 않는다 — AI 프리뷰끼리 잇는 것은 기존 동작이라 허용
+      if (previewRef.current === "csv") {
+        showToast(t("preview.busy"));
+        return;
+      }
       const existingGroupIds = new Set(groupsRef.current.map((group) => group.id));
       const removed = new Set<string>();
       const relabels = new Map<string, string>();
@@ -1723,23 +1793,23 @@ function MapEditor({ mapId }: { mapId: number }) {
       ];
 
       pushHistory(); // Discard = undo restores the pre-preview state
-      aiPreviewRef.current = true;
+      previewRef.current = "ai";
       setNodes(finalNodes);
       setEdges(finalEdges);
-      setAiPreviewActive(true);
+      setPreviewSource("ai");
     },
-    [pushHistory, setNodes, setEdges],
+    [pushHistory, setNodes, setEdges, showToast, t],
   );
 
   const commitAiPreview = useCallback(() => {
-    aiPreviewRef.current = false;
-    setAiPreviewActive(false);
+    previewRef.current = null;
+    setPreviewSource(null);
     void saveCurrentScope();
   }, [saveCurrentScope]);
 
   const discardAiPreview = useCallback(() => {
-    aiPreviewRef.current = false;
-    setAiPreviewActive(false);
+    previewRef.current = null;
+    setPreviewSource(null);
     undo(); // restore the snapshot pushed in applyAiProposal
   }, [undo]);
 
@@ -5983,7 +6053,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
         if (event.code === "ArrowRight") {
-          fire(() => setInspectorOpen((v) => !v));
+          // CSV 프리뷰 중에는 인스펙터를 못 접는다 — Apply/Cancel이 갇힌다
+          if (previewSource !== "csv") fire(() => setInspectorOpen((v) => !v));
           return;
         }
         const alignByCode: Record<string, "left" | "centerX" | "top" | "centerY"> = {
@@ -6017,6 +6088,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     decisionDrop,
     managingApprovers,
     pending,
+    previewSource,
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
@@ -6240,6 +6312,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const topIconBtn =
     "inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
+  // importSlot 렌더 조건과 forcedTab/lockTabs 잠금 조건은 반드시 동일해야 한다 —
+  // 어긋나면 Import 탭 없이 인스펙터가 잠기고(autosave도 중단) 빠져나올 방법이 없어진다.
+  const csvPreviewActive = previewSource === "csv" && csvOutcome !== null;
+
   return (
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
@@ -6399,7 +6475,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
             className={topIconBtn}
-            onClick={() => setInspectorOpen((open) => !open)}
+            // CSV 프리뷰 중에는 인스펙터를 못 접는다 — Apply/Cancel이 갇힌다
+            onClick={() => {
+              if (previewSource !== "csv") setInspectorOpen((open) => !open);
+            }}
             title={t("editor.inspectorToggle")}
             aria-label={t("editor.inspectorToggle")}
           >
@@ -6450,7 +6529,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
           manualUrl={manualUrl}
           onImportCsv={
-            checkout?.mine && currentParentId === null
+            checkout?.mine && currentParentId === null && eligible !== null && previewSource === null
               ? () => setCsvImportOpen(true)
               : undefined
           }
@@ -7280,7 +7359,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
                 onToast={showToast}
-                aiPreviewActive={aiPreviewActive}
+                aiPreviewActive={previewSource === "ai"}
                 onCommitPreview={commitAiPreview}
                 onDiscardPreview={discardAiPreview}
                 fontScale={aiFontScale}
@@ -7931,6 +8010,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                       ? t("editor.saveFailedPill")
                       : t("editor.saved")
                 }
+                importSlot={
+                  csvPreviewActive && csvOutcome ? (
+                    <CsvImportTab
+                      merge={csvOutcome.merge}
+                      warnings={csvOutcome.warnings}
+                      keepRemoved={csvKeepRemoved}
+                      onKeepRemovedChange={setCsvKeepRemoved}
+                      onFocusNode={highlightNode}
+                      onApply={() => void applyCsvImport()}
+                      onCancel={cancelCsvPreview}
+                    />
+                  ) : undefined
+                }
+                forcedTab={csvPreviewActive ? "import" : undefined}
+                lockTabs={csvPreviewActive}
               />
             </div>
           </div>
@@ -8212,6 +8306,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             <CsvImportSection
               outcome={csvOutcome}
               fileName={csvFileName}
+              context={{
+                // refs가 아닌 렌더 state 사용 — ref.current를 렌더 중 읽으면 react-hooks/refs 위반
+                base: buildGraph(nodes, edges, groups),
+                directory: eligible ?? undefined,
+              }}
               onChange={(nextOutcome, nextFileName) => {
                 setCsvOutcome(nextOutcome);
                 setCsvFileName(nextFileName);
@@ -8234,7 +8333,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 data-id="csv-import-continue"
                 className="rounded-sm bg-accent px-3 py-1.5 text-caption text-white hover:opacity-90 disabled:opacity-50"
                 disabled={!csvOutcome?.graph || csvOutcome.errors.length > 0}
-                onClick={() => setCsvConfirmOpen(true)}
+                onClick={enterCsvPreview}
               >
                 {t("csvImport.continue")}
               </button>
@@ -8242,42 +8341,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           </div>
         </ModalBackdrop>
       )}
-      {/* CSV 교체 확인 — 기존 노드·엣지·그룹 전부 삭제 경고 (맵 삭제 모달 컨벤션) */}
-      {csvConfirmOpen && csvOutcome?.graph && (
-        <ConfirmDialog
-          title={t("csvImport.confirmTitle")}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
-          danger
-          icon={<FileUp size={28} strokeWidth={1.5} className="text-error" />}
-          sections={[
-            [
-              {
-                icon: <Trash2 size={14} strokeWidth={1.5} />,
-                text: t("csvImport.confirmDelete", {
-                  n: nodes.length,
-                  m: edges.length,
-                  k: groups.length,
-                }),
-                tone: "error",
-              },
-            ],
-            [
-              {
-                icon: <FilePlus2 size={14} strokeWidth={1.5} />,
-                text: t("csvImport.confirmCreate", {
-                  x: csvOutcome.nodeCount,
-                  y: csvOutcome.edgeCount,
-                }),
-                tone: "accent",
-              },
-            ],
-          ]}
-          onConfirm={() => void applyCsvImport()}
-          onClose={() => setCsvConfirmOpen(false)}
-        />
-      )}
-
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
     </NodeActionsContext.Provider>
