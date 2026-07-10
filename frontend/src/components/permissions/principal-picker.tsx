@@ -210,7 +210,10 @@ export function PrincipalPicker({
             setActive(0);
           }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
+          onBlur={() => {
+            setOpen(false);
+            setPlacement(null); // 다음 개방 때 옛 좌표로 한 프레임 그려지는 것 방지(effect는 페인트 후 실행)
+          }}
           onKeyDown={onKeyDown}
         />
         {/* 전체 지우기 — 검색어만 비우고 포커스(목록) 유지. mousedown preventDefault로 blur 방지 (batch2 ⑪) */}
