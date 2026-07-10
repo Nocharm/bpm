@@ -74,7 +74,12 @@ async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVers
     return version
 
 
-@router.get("/{version_id}/graph/all", response_model=VersionGraphOut)
+@router.get(
+    "/{version_id}/graph/all",
+    response_model=VersionGraphOut,
+    # 읽기 viewer 게이트 — AI 챗 게이트와 짝(우회로 차단) (design 2026-07-10)
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
 async def get_full_graph(
     version_id: int,
     session: AsyncSession = Depends(get_session),
@@ -103,7 +108,11 @@ async def get_full_graph(
     )
 
 
-@router.get("/{version_id}/graph", response_model=GraphOut)
+@router.get(
+    "/{version_id}/graph",
+    response_model=GraphOut,
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
 async def get_graph(
     version_id: int,
     session: AsyncSession = Depends(get_session),

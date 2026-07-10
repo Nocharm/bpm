@@ -22,6 +22,7 @@ from app.ai_prompt import build_messages
 from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
+from app.permissions.deps import require_version_map_role
 from app.manual import get_manual
 from app.models import AiChatMessage, AiChatSession, Employee, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
@@ -135,7 +136,12 @@ async def _ask_and_validate(messages: list[dict], model: str | None) -> AiPropos
     raise HTTPException(status_code=502, detail="AI returned invalid response")
 
 
-@router.post("/versions/{version_id}/ai/chat", response_model=AiProposal)
+@router.post(
+    "/versions/{version_id}/ai/chat",
+    response_model=AiProposal,
+    # viewer 게이트 — 무권한자는 그래프가 프롬프트에 실리기 전에 403 (design 2026-07-10)
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
 async def ai_chat(
     version_id: int,
     payload: AiChatRequest,
