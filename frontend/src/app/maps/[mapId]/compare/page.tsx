@@ -39,12 +39,14 @@ import {
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { ProcessNode } from "@/components/process-node";
 import {
+  ApiError,
   getFullGraph,
   getMap,
   type VersionGraph,
@@ -1171,9 +1173,25 @@ function ComparePane({
   );
 }
 
+// 로드 실패 공통 처리 — 403은 접근 안내 모달, 그 외는 인라인 안내(무한 로딩 방지). 3개 로드 effect 공용.
+function applyLoadError(
+  err: unknown,
+  t: (key: MessageKey) => string,
+  setAccessDenied: (denied: boolean) => void,
+  setLoadError: (message: string | null) => void,
+): void {
+  if (err instanceof ApiError && err.status === 403) {
+    setAccessDenied(true);
+  } else {
+    setLoadError(err instanceof Error ? err.message : t("err.loadMap"));
+  }
+}
+
 export default function ComparePage() {
   const params = useParams<{ mapId: string }>();
   const mapId = Number(params.mapId);
+  const router = useRouter();
+  const { t } = useI18n();
 
   const [mapName, setMapName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
@@ -1181,47 +1199,62 @@ export default function ComparePage() {
   const [targetId, setTargetId] = useState<number | null>(null);
   const [baseGraph, setBaseGraph] = useState<VersionGraph | null>(null);
   const [targetGraph, setTargetGraph] = useState<VersionGraph | null>(null);
+  // 비공개 맵 접근 게이트 — 로드 403이면 에디터와 동일한 안내 모달 후 홈으로 (에디터 page.tsx accessDenied와 동일 패턴)
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      const detail = await getMap(mapId);
-      if (!active) return;
-      setMapName(detail.name);
-      setVersions(detail.versions);
-      // base=게시(published) 버전 우선(없으면 최초), target=최신 — 게시본을 기준선으로 비교.
-      const published = detail.versions.find((version) => version.status === "published");
-      setBaseId((published ?? detail.versions[0]).id);
-      setTargetId(detail.versions[detail.versions.length - 1].id);
+      try {
+        const detail = await getMap(mapId);
+        if (!active) return;
+        setMapName(detail.name);
+        setVersions(detail.versions);
+        // base=게시(published) 버전 우선(없으면 최초), target=최신 — 게시본을 기준선으로 비교.
+        const published = detail.versions.find((version) => version.status === "published");
+        setBaseId((published ?? detail.versions[0]).id);
+        setTargetId(detail.versions[detail.versions.length - 1].id);
+      } catch (err) {
+        if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
+      }
     })();
     return () => {
       active = false;
     };
-  }, [mapId]);
+  }, [mapId, t]);
 
   useEffect(() => {
     if (baseId === null) return;
     let active = true;
     void (async () => {
-      const graph = await getFullGraph(baseId);
-      if (active) setBaseGraph(graph);
+      try {
+        const graph = await getFullGraph(baseId);
+        if (active) setBaseGraph(graph);
+      } catch (err) {
+        if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
+      }
     })();
     return () => {
       active = false;
     };
-  }, [baseId]);
+  }, [baseId, t]);
 
   useEffect(() => {
     if (targetId === null) return;
     let active = true;
     void (async () => {
-      const graph = await getFullGraph(targetId);
-      if (active) setTargetGraph(graph);
+      try {
+        const graph = await getFullGraph(targetId);
+        if (active) setTargetGraph(graph);
+      } catch (err) {
+        if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
+      }
     })();
     return () => {
       active = false;
     };
-  }, [targetId]);
+  }, [targetId, t]);
 
   const ready =
     baseId !== null &&
@@ -1246,8 +1279,23 @@ export default function ComparePage() {
             onChangeTarget={setTargetId}
           />
         </ReactFlowProvider>
+      ) : loadError ? (
+        <div data-id="compare-load-error" className="p-8 text-caption text-error">
+          {loadError}
+        </div>
       ) : (
         <div className="p-8 text-caption text-ink-tertiary">…</div>
+      )}
+      {/* 비공개 맵 접근 게이트 — 403 로드 실패 안내, 확인/닫기 모두 홈으로 (에디터 page.tsx와 동일 패턴) */}
+      {accessDenied && (
+        <ConfirmDialog
+          icon={<Lock size={28} strokeWidth={1.5} />}
+          title={t("mapAccess.deniedTitle")}
+          message={t("mapAccess.deniedBody")}
+          confirmLabel={t("mapAccess.deniedConfirm")}
+          onConfirm={() => router.replace("/")}
+          onClose={() => router.replace("/")}
+        />
       )}
     </div>
   );

@@ -488,6 +488,7 @@ def test_graph_get_public_or_granted_200(client: TestClient, enforce: None) -> N
     public_id = seed_map(visibility="public")
     act_as("anyone")
     assert client.get(f"/api/versions/{version_of(public_id)}/graph").status_code == 200
+    assert client.get(f"/api/versions/{version_of(public_id)}/graph/all").status_code == 200
     granted_id = seed_map(visibility="private", grants=[("user", "viewer.user", "viewer")])
     act_as("viewer.user")
     assert client.get(f"/api/versions/{version_of(granted_id)}/graph").status_code == 200

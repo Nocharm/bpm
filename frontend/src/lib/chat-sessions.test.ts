@@ -79,9 +79,12 @@ describe("kind/payload preservation (2026-07-10)", () => {
     const node = { key: "a", title: "A", node_type: "start", description: "", attributes: null, group_key: null };
     expect(toPayload({ ...base, kind: "graph", nodes: [node] })).toEqual({ nodes: [node], edges: [], groups: [] });
     // 백엔드 any(data.values()) 규칙과 정렬 — edges만 있어도 저장/표시
-    const edge: typeof base.edges[number] = { source: "a", target: "b", label: "" };
+    const edge = { source: "a", target: "b", label: "" };
     expect(toPayload({ ...base, kind: "graph", edges: [edge] })).toEqual({ nodes: [], edges: [edge], groups: [] });
     const op = { action: "remove" as const, node_id: "n1", node: null, source: null, target: null, label: null, title: null, attributes: null, description: null };
     expect(toPayload({ ...base, kind: "ops", ops: [op] })).toEqual({ ops: [op] });
+    const step = { order: 1, node_id: "n1", narration: "설명" };
+    expect(toPayload({ ...base, kind: "walkthrough", steps: [step] })).toEqual({ steps: [step] });
+    expect(toPayload({ ...base, kind: "walkthrough" })).toBeNull(); // 빈 steps
   });
 });
