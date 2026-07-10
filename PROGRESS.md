@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-10 — 새 맵 모달 상단 정렬 + 하단 패딩 (worktree-modal-tall)
+- 사용자 피드백 반영: 모달을 중앙 정렬에서 **상단 정렬(`items-start pt-8`)**로, `max-h`를 `100dvh-13rem` → `100dvh-4rem`으로 늘려 세로를 최대한 쓴다. 본문 스크롤 컨테이너에 `pb-40`(160px) 추가 — 마지막 결재자 피커를 그만큼 위로 올릴 수 있어 드롭다운이 뷰포트 높이와 무관하게 아래로 열린다(끝까지 스크롤 시 피커 아래 ≈265px).
+- 대가: 본문이 스크롤되지 않는 긴 화면(≥1080px)에선 `pb-40`이 액션행 위 빈 여백으로 남는다(모달 993px). 짧은 화면에선 스크롤 여유로 소비.
+- 실측: 1280×580 모달 32~548(이전 372px 중앙) · vitest 172 · lint 0에러 · build 통과 · `pw-verify-hotfix-ui-6.mjs` 20/20(콘솔 에러 0).
+
 ## 2026-07-10 — 핫픽스 UI 6 설계 (worktree-hotfix-ui-6)
 - 4항목 설계 확정 — ① Back to editor 테두리 버튼, ② 피커 드롭다운 portal+fixed(아래 우선/부족하면 옆, 위 flip 금지), ③ 마스터-디테일 breakpoint 1280→980(`--breakpoint-split`) + 공지·인박스 탭 확대 적용, ④ 부서 tree JSON 임포트(파서 교체 + 백엔드 `known`을 org 전 레벨로 확장). `docs/superpowers/specs/2026-07-10-hotfix-ui-6-design.md`.
 - 조사: 피커는 이미 floating이었고 밀림 원인은 `scrollIntoView` 반창고 — 진짜 문제는 모달 본문 `overflow-y-auto` 클리핑. `/api/directory`는 이미 전 org 레벨을 내려주므로 `known` 확장만으로 상위 부서 한글 검색·부서장 체인이 켜짐.
