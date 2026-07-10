@@ -138,8 +138,12 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   const [description, setDescription] = useState(csvBaseName);
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
-  // 생성 완료 표시 — 저장 실패 후 Create 재클릭 시 맵 재생성(중복) 방지
+  // 생성 완료 표시 — createMap 직후 즉시 기록해야 한다. 부분 실패 후 Create 재클릭 시
+  // 맵을 다시 만들면 이름 중복 409로 영영 막힌다(백엔드 _assert_unique_name).
   const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
+  // 이미 부여한 협업자 권한 — addMapPermission은 중복 시 409를 던지는 비멱등 POST라
+  // 재시도에서 성공분을 건너뛰어야 한다. 렌더와 무관한 진행 상태라 state가 아닌 ref.
+  const grantedRef = useRef(new Set<string>());
   const [visibility, setVisibility] = useState<MapVisibility>("private");
   const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
@@ -222,17 +226,23 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      // 생성 단계는 최초 1회만 — 저장 실패 후 Create 재클릭 시 맵을 다시 만들지 않는다
+      // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
+      // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
       if (createdRef.current === null) {
         const detail = await createMap(trimmed, description.trim(), visibility);
-        for (const c of collaborators) {
-          const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
-          await addMapPermission(detail.id, c.principalType, c.principalId, role);
-        }
-        await setMapApprovers(detail.id, approvers.map((a) => a.userId));
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
+
+      // 협업자 권한 — 매 시도마다 돌되, 이미 부여된 principal은 건너뛴다(중복 POST는 409)
+      for (const c of collaborators) {
+        if (grantedRef.current.has(c.principalId)) continue;
+        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
+        await addMapPermission(created.mapId, c.principalType, c.principalId, role);
+        grantedRef.current.add(c.principalId);
+      }
+      // 결재자 — 전체 교체 PUT(멱등)이라 매 시도마다 그대로 재전송해도 안전
+      await setMapApprovers(created.mapId, approvers.map((a) => a.userId));
 
       if (csv?.outcome.graph) {
         try {
@@ -256,7 +266,18 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
       onClose();
       router.push(`/maps/${created.mapId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.createMap"));
+      if (createdRef.current !== null) {
+        // 맵은 이미 생성됐다 — 목록을 갱신해 고아 맵을 보이게 하고(성공 토스트 없이),
+        // 재클릭이 이어서 진행함을 알린다
+        onCreated(true);
+        setError(
+          err instanceof Error
+            ? `${t("perm.createDialog.partialFailure")} — ${err.message}`
+            : t("perm.createDialog.partialFailure"),
+        );
+      } else {
+        setError(err instanceof Error ? err.message : t("err.createMap"));
+      }
       setSubmitting(false);
     }
   }, [currentUser, name, description, visibility, collaborators, approvers, csv, onCreated, onClose, router, t]);

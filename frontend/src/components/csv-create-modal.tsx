@@ -83,7 +83,8 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
 
   const parsedOk = outcome?.graph != null && outcome.errors.length === 0;
   const canConfirm = parsedOk && directory !== null;
-  // 디렉터리 로드 중 — 드롭존을 비활성하고 로딩 문구로 클릭/드롭이 조용히 무시되지 않게
+  // 디렉터리 로드 중 표시용 — 드롭존 비활성은 로드 실패까지 포함해 directory === null로 판단
+  // (실패 상태에서 드롭한 파일이 loadFile의 가드에 걸려 조용히 사라지지 않게)
   const directoryLoading = directory === null && !loadError;
 
   return (
@@ -115,7 +116,7 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
             <button
               type="button"
               data-id="csv-dropzone"
-              disabled={directoryLoading}
+              disabled={directory === null}
               onClick={() => fileRef.current?.click()}
               onDragOver={(event) => {
                 event.preventDefault();
