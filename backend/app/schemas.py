@@ -632,6 +632,8 @@ class MeOut(BaseModel):
     ai_enabled: bool
     # 편집용 매뉴얼 사이트 주소 — 비어 있으면 에디터 버튼 숨김 (F9)
     manual_url: str = ""
+    # CSV 임포트 안내 문서 주소 — 비어 있으면 매뉴얼 버튼 숨김
+    csv_manual_url: str = ""
     name: str
     role: str
     department: str

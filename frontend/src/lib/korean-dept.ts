@@ -74,6 +74,41 @@ export function sortManagersFirst<T>(
   });
 }
 
+/** org_path "A/B/C" → 루트부터의 조상 경로들 ["A", "A/B", "A/B/C"]. 레벨별 표시명 조회용. */
+export function buildOrgPathChain(orgPath: string): string[] {
+  const parts = orgPath.split("/").filter(Boolean);
+  return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+}
+
+/** org_path → 한글 부서명 조회표. 확정값(dept_info)이 우선, 없으면 직원이 신고한 korean_dept로 폴백.
+ *  폴백은 직원이 실제로 소속된 말단 경로만 채운다 — 상위 조직은 dept_info 임포트 전엔 영문으로 남는다. */
+export function buildKoreanDeptByPath(
+  departments: { id: string; korean_name?: string }[],
+  users: { org_path?: string; korean_dept?: string }[],
+): Map<string, string> {
+  const byPath = new Map<string, string>();
+  for (const d of departments) {
+    const confirmed = (d.korean_name ?? "").trim();
+    if (confirmed) byPath.set(d.id, confirmed);
+  }
+  for (const [path, observed] of deriveDeptKoreanKeywords(users)) {
+    if (!byPath.has(path) && observed[0]) byPath.set(path, observed[0]);
+  }
+  return byPath;
+}
+
+/** 부서 표시명 — 이름과 같은 규칙: ko는 확정 한글명(dept_info), 없으면 영문 폴백. en은 영문 리프. */
+export function formatDeptName(
+  orgPath: string,
+  lang: Lang,
+  koreanByPath: Map<string, string>,
+): string {
+  const parts = orgPath.split("/").filter(Boolean);
+  const leaf = parts[parts.length - 1] ?? orgPath;
+  if (lang !== "ko") return leaf;
+  return (koreanByPath.get(orgPath) ?? "").trim() || leaf;
+}
+
 /** org_path 정확 일치 그룹별 distinct 한글부서 — 피커 부서 항목 검색 키워드 파생. */
 export function deriveDeptKoreanKeywords(
   users: { org_path?: string; korean_dept?: string }[],

@@ -510,6 +510,8 @@ export interface Me {
   ai_enabled: boolean;
   // 편집용 매뉴얼 사이트 주소 — 비어 있으면 에디터 버튼 숨김 (F9)
   manual_url: string;
+  // CSV 임포트 안내 문서 주소 — 비면 매뉴얼 버튼 숨김
+  csv_manual_url: string;
   name: string;
   role: "admin" | "user";
   department: string;

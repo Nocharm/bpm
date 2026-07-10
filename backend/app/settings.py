@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # 편집용 반응형 매뉴얼 사이트 주소 — 비우면 에디터의 매뉴얼 사이트 버튼 숨김 (F9)
     manual_url: str = ""
 
+    # CSV 임포트 안내 문서 주소 — 비우면 CSV 모달·에디터의 매뉴얼 버튼 숨김
+    csv_manual_url: str = ""
+
     # 온프레미스 AI (OpenAI 호환 GPU 서버) — 로컬 기본 비활성, 서버 compose만 활성 (design 2026-06-15)
     ai_enabled: bool = False
     ai_base_url: str = ""  # 예: http://<gpu>:8000/v1

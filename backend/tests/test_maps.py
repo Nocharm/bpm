@@ -162,3 +162,11 @@ def test_me_includes_is_sysadmin(client: TestClient) -> None:
 
     assert "is_sysadmin" in body
     assert body["is_sysadmin"] is True
+
+
+def test_me_includes_csv_manual_url(client: TestClient) -> None:
+    # /api/me 가 CSV 임포트 매뉴얼 주소 노출 — 비면 프론트가 버튼을 숨긴다
+    body = client.get("/api/me").json()
+
+    assert "csv_manual_url" in body
+    assert body["csv_manual_url"] == ""

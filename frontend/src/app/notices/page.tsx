@@ -6,7 +6,7 @@
 import { Circle, CircleAlert, List } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { listNotices, type NoticeImportance, type NoticeItem } from "@/lib/api";
+import { listNotices, type DirectoryUser, type NoticeImportance, type NoticeItem } from "@/lib/api";
 import { useDirectory } from "@/lib/directory";
 import { formatKstShort } from "@/lib/datetime";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
@@ -25,6 +25,8 @@ import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
 
 type Filter = "all" | NoticeImportance;
+
+type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
 const IMPORTANCE_STYLE: Record<NoticeImportance, string> = {
   important: "bg-error/15 text-error",
@@ -140,7 +142,7 @@ export default function NoticesPage() {
             {shownNotices.map((n) => {
               const isRead = readSet.has(n.id);
               return (
-                <li key={n.id}>
+                <li key={n.id} className="flex flex-col">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -181,6 +183,28 @@ export default function NoticesPage() {
                       </span>
                     </div>
                   </button>
+                  {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
+                  <div
+                    data-id="notice-detail-accordion"
+                    onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
+                    className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
+                      n.id === selectedId ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      {n.id === selectedId && (
+                        <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
+                          <NoticeDetail
+                            notice={n}
+                            nowMs={nowMs}
+                            dir={dir}
+                            t={t}
+                            onCopy={notifyCopied}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </li>
               );
             })}
@@ -193,55 +217,14 @@ export default function NoticesPage() {
           </ul>
         </aside>
 
-        {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스. 상세 내부 클릭은 선택 해제로 버블링 방지 */}
+        {/* 우 상세 — ≥ split(980px)만. 좁으면 카드 아래 아코디언이 대신한다. 상세 내부 클릭은 선택 해제로 버블링 방지 */}
         <div
-          className="ml-4 min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt"
+          data-id="notice-detail-aside"
+          className="ml-4 hidden min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt split:block"
           onClick={(e) => e.stopPropagation()}
         >
           {selected ? (
-            <article className="px-8 py-6">
-              <div className="flex items-center gap-2">
-                <span
-                  className={
-                    "rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[selected.importance]
-                  }
-                >
-                  {t(IMPORTANCE_LABEL[selected.importance])}
-                </span>
-                <span className="text-caption text-ink-tertiary">
-                  {t("notices.label")} · #{selected.id}
-                </span>
-              </div>
-              <h2 className="mt-2 text-tagline text-ink">{selected.title}</h2>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-caption text-ink-secondary">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
-                    {(dir.get(selected.created_by)?.name ?? selected.created_by).charAt(0).toUpperCase()}
-                  </span>
-                  <UserPill loginId={selected.created_by} />
-                  <span className="flex items-center gap-1">
-                    <TimePills iso={selected.created_at} nowMs={nowMs} />
-                  </span>
-                </div>
-                <span className="shrink-0 text-fine text-ink-tertiary">
-                  {t("notices.period")} {dateOnly(selected.starts_at)} ~{" "}
-                  {selected.ends_at ? dateOnly(selected.ends_at) : t("notices.unlimited")}
-                </span>
-              </div>
-              <hr className="my-5 border-hairline" />
-              <MarkdownView source={selected.body_md} onCopy={notifyCopied} />
-              <div className="mt-6 rounded-md bg-accent-tint px-4 py-3 text-caption text-ink-secondary">
-                {t("notices.contactPre")}{" "}
-                <button
-                  type="button"
-                  onClick={openFeedbackPanel}
-                  className="font-semibold text-accent hover:underline"
-                >
-                  {t("feedback.button")}
-                </button>{" "}
-                {t("notices.contactPost")}
-              </div>
-            </article>
+            <NoticeDetail notice={selected} nowMs={nowMs} dir={dir} t={t} onCopy={notifyCopied} />
           ) : (
             <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
               {t("notices.selectPrompt")}
@@ -251,5 +234,64 @@ export default function NoticesPage() {
       </div>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
+  );
+}
+
+// 공지 본문 — 우측 패널(넓은 화면)과 카드 아래 아코디언(좁은 화면)이 공유.
+function NoticeDetail({
+  notice,
+  nowMs,
+  dir,
+  t,
+  onCopy,
+}: {
+  notice: NoticeItem;
+  nowMs: number;
+  dir: Map<string, DirectoryUser>;
+  t: Translate;
+  onCopy: () => void;
+}) {
+  return (
+    <article className="px-8 py-6">
+      <div className="flex items-center gap-2">
+        <span
+          className={"rounded-sm px-1.5 py-0.5 text-fine " + IMPORTANCE_STYLE[notice.importance]}
+        >
+          {t(IMPORTANCE_LABEL[notice.importance])}
+        </span>
+        <span className="text-caption text-ink-tertiary">
+          {t("notices.label")} · #{notice.id}
+        </span>
+      </div>
+      <h2 className="mt-2 text-tagline text-ink">{notice.title}</h2>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-caption text-ink-secondary">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
+            {(dir.get(notice.created_by)?.name ?? notice.created_by).charAt(0).toUpperCase()}
+          </span>
+          <UserPill loginId={notice.created_by} />
+          <span className="flex items-center gap-1">
+            <TimePills iso={notice.created_at} nowMs={nowMs} />
+          </span>
+        </div>
+        <span className="shrink-0 text-fine text-ink-tertiary">
+          {t("notices.period")} {dateOnly(notice.starts_at)} ~{" "}
+          {notice.ends_at ? dateOnly(notice.ends_at) : t("notices.unlimited")}
+        </span>
+      </div>
+      <hr className="my-5 border-hairline" />
+      <MarkdownView source={notice.body_md} onCopy={onCopy} />
+      <div className="mt-6 rounded-md bg-accent-tint px-4 py-3 text-caption text-ink-secondary">
+        {t("notices.contactPre")}{" "}
+        <button
+          type="button"
+          onClick={openFeedbackPanel}
+          className="font-semibold text-accent hover:underline"
+        >
+          {t("feedback.button")}
+        </button>{" "}
+        {t("notices.contactPost")}
+      </div>
+    </article>
   );
 }

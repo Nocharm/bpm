@@ -10,7 +10,7 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock } from "lucide-react";
+import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp } from "lucide-react";
 
 import {
   acquireCheckout,
@@ -24,6 +24,7 @@ import {
   type DirectoryDept,
   type Group,
 } from "@/lib/api";
+import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
@@ -32,10 +33,8 @@ import type { MapRole, MapVisibility, PrincipalType } from "@/lib/mock/permissio
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { CsvImportSection } from "@/components/csv-import-section";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
-import type { CsvImportOutcome } from "@/lib/csv-import";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
 // Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
@@ -70,10 +69,12 @@ interface ApproverEntry {
 
 interface Props {
   onClose: () => void;
-  onCreated: () => void; // 생성 후 목록 갱신 콜백 / callback to refresh list after creation
+  onCreated: (silent?: boolean) => void; // 생성 후 목록 갱신 콜백 — silent=true면 성공 토스트 억제(임포트 실패 시) / refresh list; silent suppresses the success toast
+  // CSV로 만들기 — 홈의 CSV 모달이 넘긴다. **optional 필수**: map-name-dropdown.tsx도 이 컴포넌트를 마운트한다.
+  csv?: { outcome: CsvImportOutcome; fileName: string };
 }
 
-export function CreateMapDialog({ onClose, onCreated }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -110,20 +111,39 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     isSysadmin: false,
     korean_name: u.korean_name ?? "",
   }));
-  const pickerDepts: Department[] = dirDepts.map((d) => ({
-    id: d.id,
-    code: "",
-    name: d.name,
-    orgLevels: [],
-    parentId: null,
-    rawDn: "",
-    korean_name: d.korean_name,
-    manager: d.manager,
-  }));
+  // 부서장은 login_id로만 저장된다(dept_info.manager) — 부서를 부서장 "이름"으로도 찾을 수 있게
+  // 디렉터리로 한/영 이름을 해석해 검색 텍스트에 합친다. 표시엔 쓰이지 않고 검색 키워드 전용.
+  const userById = new Map(dirUsers.map((u) => [u.id, u]));
+  const pickerDepts: Department[] = dirDepts.map((d) => {
+    const head = d.manager ? userById.get(d.manager) : undefined;
+    const managerKeywords = [d.manager, head?.name, head?.korean_name]
+      .filter(Boolean)
+      .join(" ");
+    return {
+      id: d.id,
+      code: "",
+      name: d.name,
+      orgLevels: [],
+      parentId: null,
+      rawDn: "",
+      korean_name: d.korean_name,
+      manager: managerKeywords,
+    };
+  });
 
   // ── 폼 상태 / form state ──
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
+  const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
+  const [name, setName] = useState(csvBaseName);
+  const [description, setDescription] = useState(csvBaseName);
+  // 파일 아코디언 접힘 상태
+  const [csvOpen, setCsvOpen] = useState(false);
+  // 생성 완료 표시 — createMap 직후 즉시 기록해야 한다. 부분 실패 후 Create 재클릭 시
+  // 맵을 다시 만들면 이름 중복 409로 영영 막힌다(백엔드 _assert_unique_name).
+  const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
+  // 이미 부여한 협업자 권한 — addMapPermission은 중복 시 409를 던지는 비멱등 POST라
+  // 재시도에서 성공분을 건너뛰어야 한다. 렌더와 무관한 진행 상태라 state가 아닌 ref.
+  const grantedRef = useRef(new Set<string>());
   const [visibility, setVisibility] = useState<MapVisibility>("private");
   const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
@@ -133,11 +153,6 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
   const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
   const router = useRouter();
-  // CSV로 시작(선택) — 파싱 결과와 파일명. 에러 있으면 생성 차단
-  const [csv, setCsv] = useState<CsvImportOutcome | null>(null);
-  const [csvFileName, setCsvFileName] = useState<string | null>(null);
-  // 생성 완료 표시(맵/버전 id) — CSV 체크아웃·저장 실패 후 재시도 시 맵 재생성(중복) 방지용
-  const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
 
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
@@ -211,29 +226,32 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      // 생성 단계는 최초 1회만 — 재시도(CSV 실패 후 Create 재클릭) 시 이미 만든 맵을 재사용해 중복 생성 방지
+      // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
+      // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
       if (createdRef.current === null) {
-        // 1. 맵 생성 — 생성자가 owner(서버 부여), 선택한 공개 범위 즉시 반영 / Real map create (owner = creator).
         const detail = await createMap(trimmed, description.trim(), visibility);
-        // 2. 초기 협업자 권한 부여 — 즉시 적용(서버) / Grant initial collaborators (applied immediately).
-        for (const c of collaborators) {
-          // owner은 생성자에게 이미 부여됨 → viewer/editor만 / Owner already granted; only viewer/editor here.
-          const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
-          await addMapPermission(detail.id, c.principalType, c.principalId, role);
-        }
-        // 3. 필수 결재자 지정 — 전체 목록 PUT / Set required approvers (full list).
-        await setMapApprovers(detail.id, approvers.map((a) => a.userId));
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
-      // 4. CSV 첨부 시 — 신규 As-Is 버전은 잠금 free: 체크아웃 획득 → 그래프 반영 → 에디터로 이동
-      if (csv?.graph) {
+
+      // 협업자 권한 — 매 시도마다 돌되, 이미 부여된 principal은 건너뛴다(중복 POST는 409)
+      for (const c of collaborators) {
+        if (grantedRef.current.has(c.principalId)) continue;
+        const role: "viewer" | "editor" = c.role === "viewer" ? "viewer" : "editor";
+        await addMapPermission(created.mapId, c.principalType, c.principalId, role);
+        grantedRef.current.add(c.principalId);
+      }
+      // 결재자 — 전체 교체 PUT(멱등)이라 매 시도마다 그대로 재전송해도 안전
+      await setMapApprovers(created.mapId, approvers.map((a) => a.userId));
+
+      if (csv?.outcome.graph) {
         try {
+          // 신규 As-Is 버전은 잠금 free — 체크아웃 획득 후 그래프 반영
           await acquireCheckout(created.versionId);
-          await saveGraph(created.versionId, csv.graph);
+          await saveGraph(created.versionId, csv.outcome.graph);
         } catch (err) {
-          // 맵은 이미 생성됨 — 목록 갱신 + 다이얼로그 유지·인라인 에러(Create 재클릭 시 체크아웃·저장만 재시도)
-          onCreated();
+          // 맵은 이미 있다 — 목록만 갱신(성공 토스트 없이)하고 다이얼로그를 유지, Create 재클릭 시 저장만 재시도
+          onCreated(true);
           setError(
             err instanceof Error
               ? `${t("csvImport.mapCreatedImportFailed")} — ${err.message}`
@@ -242,26 +260,31 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           setSubmitting(false);
           return;
         }
-        onCreated();
-        onClose();
-        router.push(`/maps/${created.mapId}`);
-        return;
       }
+
       onCreated();
       onClose();
+      router.push(`/maps/${created.mapId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.createMap"));
+      if (createdRef.current !== null) {
+        // 맵은 이미 생성됐다 — 목록을 갱신해 고아 맵을 보이게 하고(성공 토스트 없이),
+        // 재클릭이 이어서 진행함을 알린다
+        onCreated(true);
+        setError(
+          err instanceof Error
+            ? `${t("perm.createDialog.partialFailure")} — ${err.message}`
+            : t("perm.createDialog.partialFailure"),
+        );
+      } else {
+        setError(err instanceof Error ? err.message : t("err.createMap"));
+      }
       setSubmitting(false);
     }
   }, [currentUser, name, description, visibility, collaborators, approvers, csv, onCreated, onClose, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
-    currentUser !== null &&
-    name.trim().length > 0 &&
-    approvers.length >= 1 &&
-    (csv === null || (csv.errors.length === 0 && csv.graph !== null)) &&
-    !submitting;
+    currentUser !== null && name.trim().length > 0 && approvers.length >= 1 && !submitting;
 
   // ── 부서 조회 맵 (사용자 ID → 부서명) / department lookup map for picker ──
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
@@ -308,8 +331,10 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const dialog = (
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
+      className="fixed inset-0 z-[1200] flex items-start justify-center bg-ink/20 pt-4 backdrop-blur-sm"
     >
+      {/* 상단 정렬(pt-4) — 폼이 길어 세로를 최대한 쓴다. max-h는 위아래 1rem씩만 비운다.
+          내용이 다 들어가면 스크롤은 생기지 않는다(빈 패딩으로 스크롤을 만들지 않음). */}
       <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
@@ -405,19 +430,34 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
           )}
         </div>
 
-        {/* CSV로 시작 (선택) — 양식 다운로드 + 파일 첨부 시 생성 직후 그래프 반영 후 에디터 이동 */}
-        <div className="flex flex-col gap-1">
-          <label className="text-caption text-ink-secondary">{t("csvImport.sectionTitle")}</label>
-          <CsvImportSection
-            outcome={csv}
-            fileName={csvFileName}
-            onChange={(nextOutcome, nextFileName) => {
-              setCsv(nextOutcome);
-              setCsvFileName(nextFileName);
-            }}
-            disabled={submitting}
-          />
-        </div>
+        {/* CSV로 만들기 — 파일명 아코디언. 누르면 요약·경고를 펼친다. */}
+        {csv && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              data-id="csv-file-accordion"
+              aria-expanded={csvOpen}
+              onClick={() => setCsvOpen((open) => !open)}
+              className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-caption text-ink hover:bg-surface"
+            >
+              {csvOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
+              <FileUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="truncate">{csv.fileName}</span>
+            </button>
+            {csvOpen && (
+              <div data-id="csv-file-summary" className="flex flex-col gap-1 rounded-sm border border-hairline px-3 py-2">
+                <p className="text-caption text-ink-secondary">
+                  {t("csvImport.createSummary", { nodes: csv.outcome.nodeCount, edges: csv.outcome.edgeCount })}
+                </p>
+                {csv.outcome.warnings.map((warn) => (
+                  <p key={`${warn.line}-${warn.message}`} className="text-caption text-ink-tertiary">
+                    {t("csvImport.rowWarning", { line: warn.line, message: warn.message })}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 초기 협업자 / initial collaborators */}
         <div className="flex flex-col gap-1.5">

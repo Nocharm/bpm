@@ -1,9 +1,8 @@
 // CSV 임포트 — 템플릿·RFC4180 파싱·그래프 변환(자동 Start/End·decision 추론).
-// 설계: docs/superpowers/specs/2026-07-06-csv-import-design.md
-import type { Edge } from "@xyflow/react";
-
-import type { Graph, GraphEdge, GraphNode } from "./api";
-import { type AppNode, layoutWithDagre, normalizeNodeType } from "./canvas";
+// 설계: docs/superpowers/specs/2026-07-10-csv-import-merge-design.md
+import type { Directory, Graph, GraphEdge, GraphNode } from "./api";
+import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
+import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { genId } from "./id";
 
 export interface CsvRecord {
@@ -17,22 +16,60 @@ export interface CsvImportError {
   message: string;
 }
 
+/** 비차단 경고 — 임포트를 막지 않는다. 백엔드는 담당자를 검증하지 않으므로 유일한 사전 안내다. */
+export interface CsvImportWarning {
+  line: number;
+  message: string;
+}
+
 export interface CsvImportOutcome {
   graph: Graph | null;
   nodeCount: number;
   edgeCount: number;
   errors: CsvImportError[];
+  warnings: CsvImportWarning[];
   ignoredLabelCount: number;
+  merge: CsvMergeInfo;
 }
 
-const HEADER_COLUMNS = ["name", "system", "duration", "url", "url_label", "next"] as const;
+/** base 그래프와의 이름 기준 머지 결과 — 프리뷰(added/removed 하이라이트)와 소멸 노드 처리에 쓴다. */
+export interface CsvMergeInfo {
+  // CSV에만 있어 새로 만든 노드 id — 프리뷰에서 "added" 하이라이트 대상
+  addedNodeIds: string[];
+  // base에만 있는 노드 — 삭제/유지 선택 대상
+  removedNodes: GraphNode[];
+  // base에 있으나 결과 그래프에 없는 엣지 — 프리뷰에서 빨간 점선
+  lostEdges: GraphEdge[];
+  // id를 재사용한 노드 수 (Start/End 포함)
+  matchedCount: number;
+}
+
+export interface CsvDirectory {
+  users: readonly { id: string; name: string; department: string }[];
+  departments: readonly string[];
+  // 정식 부서명 → { korean_name } — 한글로 적힌 부서 셀을 정식명으로 되돌린다
+  dept_infos?: Readonly<Record<string, { korean_name?: string }>>;
+}
+
+/** 임포트 문맥 — 디렉터리는 담당자/부서 해석에, base는 머지(제목 기준 id 재사용)에 쓴다. */
+export interface CsvImportContext {
+  directory?: CsvDirectory;
+  // 머지 대상 기존 그래프. 없거나 비어 있으면 전량 신규(현행 동작).
+  base?: Graph;
+}
+
+const HEADER_COLUMNS = [
+  "name", "description", "assignee", "department", "system", "duration", "url", "url_label", "next",
+] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
 // 데이터 행 상한 — 초대형 파일 오업로드 방지
 const MAX_DATA_ROWS = 500;
-// 백엔드 NodeIn max_length 미러 — 서버 422 전에 행 단위로 안내
-const MAX_LEN: Record<Exclude<HeaderColumn, "next">, number> = {
+// 백엔드 NodeIn 제약 미러. description은 NodeIn에 max_length가 없고 Node.description이 Text 컬럼이라 제외한다.
+const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
   name: 200,
+  assignee: 100,   // NodeIn.assignee — 해석된 "이름" 문자열 기준
+  department: 100, // NodeIn.department
   system: 100,
   duration: 50,
   url: 500,
@@ -119,14 +156,94 @@ const NODE_DEFAULTS = {
   is_primary_end: false,
 };
 
+/** login_id → 이름. 이미 이름이면 그대로(거짓 경고 방지). 못 찾으면 원문 + 경고. */
+function resolveAssignee(
+  raw: string, dir: CsvDirectory | undefined, line: number, warnings: CsvImportWarning[],
+): string {
+  if (raw === "" || dir === undefined) return raw;
+  const resolvedNames = parseAssignees(raw).map((token) => {
+    const byId = dir.users.find((user) => user.id === token);
+    if (byId) return byId.name;
+    if (dir.users.some((user) => user.name === token)) return token;
+    warnings.push({ line, message: `Unknown assignee "${token}"` });
+    return token;
+  });
+  return formatAssignees(resolvedNames);
+}
+
+/** 정식 부서명 그대로, 아니면 한글 부서명 역인덱스. 못 찾으면 원문 + 경고. */
+function resolveDepartment(
+  raw: string, dir: CsvDirectory | undefined, line: number, warnings: CsvImportWarning[],
+): string {
+  if (raw === "" || dir === undefined) return raw;
+  if (dir.departments.includes(raw)) return raw;
+  const canonical = Object.entries(dir.dept_infos ?? {}).find(
+    ([, info]) => info.korean_name === raw,
+  )?.[0];
+  if (canonical) return canonical;
+  warnings.push({ line, message: `Unknown department "${raw}"` });
+  return raw;
+}
+
+/** dagre가 요구하는 최소 AppNode — layoutWithDagre는 data.nodeType 크기만 쓴다. */
+function toLayoutNodes(nodes: GraphNode[]): AppNode[] {
+  return nodes.map((node) => ({
+    id: node.id,
+    type: "process",
+    position: { x: node.pos_x, y: node.pos_y },
+    data: {
+      label: node.title, description: "", nodeType: normalizeNodeType(node.node_type),
+      color: "", assignee: "", department: "", system: node.system, duration: node.duration,
+      url: node.url, urlLabel: node.url_label ?? "", groupIds: [], hasChildren: false,
+    },
+  }));
+}
+
+function toFlowEdges(edges: GraphEdge[]) {
+  return edges.map((e) => ({ id: e.id, source: e.source_node_id, target: e.target_node_id }));
+}
+
+function applyPositions(nodes: GraphNode[], laid: AppNode[]): GraphNode[] {
+  const posOf = new Map(laid.map((node) => [node.id, node.position]));
+  return nodes.map((node) => {
+    const pos = posOf.get(node.id);
+    return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
+  });
+}
+
+/** 전량 신규(base 없음) — 현행 동작: 전체 dagre LR. */
+function layoutEverything(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
+  return applyPositions(nodes, layoutWithDagre(toLayoutNodes(nodes), toFlowEdges(edges), "LR"));
+}
+
+/**
+ * 머지 — 매칭 노드 좌표는 불변. 신규 노드만 기존 그래프 아래에 씨앗 배치 후 부분 dagre.
+ * layoutSubsetWithDagre는 subset<2면 no-op이라 씨앗 배치가 1개짜리 신규 노드를 책임진다.
+ */
+function layoutAddedOnly(
+  nodes: GraphNode[], edges: GraphEdge[], added: ReadonlySet<string>, baseNodes: GraphNode[],
+): GraphNode[] {
+  if (added.size === 0) return nodes;
+  const baseMaxY = baseNodes.reduce((max, node) => Math.max(max, node.pos_y), 0);
+  let slot = 0;
+  const seeded = nodes.map((node) =>
+    added.has(node.id) ? { ...node, pos_x: 80, pos_y: baseMaxY + 140 + slot++ * 120 } : node,
+  );
+  return applyPositions(seeded, layoutSubsetWithDagre(toLayoutNodes(seeded), toFlowEdges(edges), added, "LR"));
+}
+
 /** CSV 텍스트 → 검증 + 그래프(자동 Start/End, decision 추론, dagre LR 배치). 에러 있으면 graph=null. */
-export function buildGraphFromCsv(text: string): CsvImportOutcome {
+export function buildGraphFromCsv(text: string, context?: CsvImportContext): CsvImportOutcome {
+  // 매번 새 객체를 만든다 — 공유 배열이면 한 호출자의 실수(mutate)가 이후 모든 실패 결과를 오염시킨다.
+  const emptyMerge = (): CsvMergeInfo => ({ addedNodeIds: [], removedNodes: [], lostEdges: [], matchedCount: 0 });
   const fail = (errors: CsvImportError[]): CsvImportOutcome => ({
     graph: null,
     nodeCount: 0,
     edgeCount: 0,
     errors,
+    warnings: [],
     ignoredLabelCount: 0,
+    merge: emptyMerge(),
   });
 
   const records = parseCsvRecords(text);
@@ -172,6 +289,9 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
   };
   const rows = dataRecords.map((r) => ({
     name: cellOf(r, "name"),
+    description: cellOf(r, "description"),
+    assignee: cellOf(r, "assignee"),
+    department: cellOf(r, "department"),
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
     url: cellOf(r, "url"),
@@ -179,15 +299,6 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     nextRaw: cellOf(r, "next"),
     line: r.line,
   }));
-
-  // URL 없는 라벨은 에러가 아니라 무시 — 임포트 전 서머리에 건수 안내 (url-label design 2026-07-07)
-  let ignoredLabelCount = 0;
-  for (const row of rows) {
-    if (row.url === "" && row.url_label !== "") {
-      ignoredLabelCount += 1;
-      row.url_label = "";
-    }
-  }
 
   const errors: CsvImportError[] = [];
   const names = new Set<string>();
@@ -244,35 +355,121 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     }
     nextsOf.set(row.name, refs);
   }
+
+  // 담당자/부서 해석 — id→이름, 한글 부서명→정식명. 해석 후 길이를 재야 한다(id는 짧아도 이름은 길 수 있음)
+  const warnings: CsvImportWarning[] = [];
+  const resolved = new Map<string, { assignee: string; department: string }>();
+  for (const row of rows) {
+    if (!names.has(row.name)) continue; // 이름 에러 행은 스킵
+    const assignee = resolveAssignee(row.assignee, context?.directory, row.line, warnings);
+    const department = resolveDepartment(row.department, context?.directory, row.line, warnings);
+    if (assignee.length > MAX_LEN.assignee) {
+      errors.push({ line: row.line, message: `assignee exceeds ${MAX_LEN.assignee} characters` });
+    }
+    if (department.length > MAX_LEN.department) {
+      errors.push({ line: row.line, message: `department exceeds ${MAX_LEN.department} characters` });
+    }
+    resolved.set(row.name, { assignee, department });
+  }
   if (errors.length > 0) return fail(errors);
 
-  // 노드 — Next 대상 2개 이상이면 decision. Start/End는 자동 생성
+  // ── 기존 그래프와 매칭 ────────────────────────────────────────
+  const baseNodes = context?.base?.nodes ?? [];
+  const baseStart = baseNodes.find((node) => node.node_type === "start") ?? null;
+  const baseEnds = baseNodes.filter((node) => node.node_type === "end");
+  // 대표 끝 우선, 없으면 sort_order 최소 (validate_process의 기본 지정 규칙과 동일)
+  const baseEnd =
+    baseEnds.find((node) => node.is_primary_end) ??
+    [...baseEnds].sort((a, b) => a.sort_order - b.sort_order)[0] ??
+    null;
+
+  // 제목 → 기존 노드. start/end는 타입으로 이미 잡았으니 제외.
+  // 제목 중복 시 sort_order 최소가 이긴다(결정적) — 나머지는 removedNodes로 떨어진다.
+  const reservedIds = new Set([baseStart?.id, baseEnd?.id].filter((id): id is string => id !== undefined));
+  const byTitle = new Map<string, GraphNode>();
+  for (const node of [...baseNodes].sort((a, b) => a.sort_order - b.sort_order)) {
+    if (reservedIds.has(node.id)) continue;
+    if (!byTitle.has(node.title)) byTitle.set(node.title, node);
+  }
+
+  const matchedIds = new Set<string>();
+  const addedNodeIds: string[] = [];
   const idOf = new Map<string, string>();
-  rows.forEach((row) => idOf.set(row.name, genId()));
-  const startId = genId();
-  const endId = genId();
+  for (const row of rows) {
+    const existing = byTitle.get(row.name);
+    if (existing) {
+      idOf.set(row.name, existing.id);
+      matchedIds.add(existing.id);
+    } else {
+      const id = genId();
+      idOf.set(row.name, id);
+      addedNodeIds.push(id);
+    }
+  }
+  const startId = baseStart?.id ?? genId();
+  const endId = baseEnd?.id ?? genId();
+  if (baseStart) matchedIds.add(startId); else addedNodeIds.push(startId);
+  if (baseEnd) matchedIds.add(endId); else addedNodeIds.push(endId);
+
+  // 빈 셀은 "건드리지 않음" — AI 프롬프트가 모르는 속성을 비워두라고 지시하므로,
+  // 빈 칸이 값을 지우면 AI 생성 CSV 재임포트마다 기존 속성이 전멸한다.
+  const pick = (next: string, existing: string): string => (next === "" ? existing : next);
+
+  // 매칭 노드: id·좌표·색·그룹·서브프로세스 링크 보존.
+  // 서브프로세스 노드는 node_type도 보존 — CSV 추론값으로 덮으면 Call Activity 렌더가 깨진다.
+  const mergeNode = (existing: GraphNode | null, next: GraphNode): GraphNode =>
+    existing === null
+      ? next
+      : {
+          ...existing,
+          title: next.title,
+          node_type: existing.linked_map_id !== null ? existing.node_type : next.node_type,
+          description: pick(next.description, existing.description),
+          assignee: pick(next.assignee, existing.assignee),
+          department: pick(next.department, existing.department),
+          system: pick(next.system, existing.system),
+          duration: pick(next.duration, existing.duration),
+          url: pick(next.url ?? "", existing.url ?? ""),
+          url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
+          sort_order: next.sort_order,
+        };
+
+  // 노드 — Next 대상 2개 이상이면 decision. Start/End는 자동 생성(또는 base에서 매칭)
   const nodes: GraphNode[] = [
-    { ...NODE_DEFAULTS, id: startId, title: "Start", node_type: "start", sort_order: 0 },
-    ...rows.map((row, i) => ({
-      ...NODE_DEFAULTS,
-      id: idOf.get(row.name) as string,
-      title: row.name,
-      node_type: (nextsOf.get(row.name) ?? []).length >= 2 ? "decision" : "process",
-      system: row.system,
-      duration: row.duration,
-      url: row.url,
-      url_label: row.url_label,
-      sort_order: i + 1,
-    })),
+    // Start/End는 CSV가 이름을 싣지 않는다 → 기존 제목 유지("시작"을 "Start"로 덮으면 거짓 변경)
+    mergeNode(baseStart, { ...NODE_DEFAULTS, id: startId, title: baseStart?.title ?? "Start", node_type: "start", sort_order: 0 }),
+    ...rows.map((row, i) =>
+      mergeNode(byTitle.get(row.name) ?? null, {
+        ...NODE_DEFAULTS,
+        id: idOf.get(row.name) as string,
+        title: row.name,
+        node_type: (nextsOf.get(row.name) ?? []).length >= 2 ? "decision" : "process",
+        description: row.description,
+        assignee: resolved.get(row.name)?.assignee ?? "",
+        department: resolved.get(row.name)?.department ?? "",
+        system: row.system,
+        duration: row.duration,
+        url: row.url,
+        url_label: row.url_label,
+        sort_order: i + 1,
+      }),
+    ),
     {
-      ...NODE_DEFAULTS,
-      id: endId,
-      title: "End",
-      node_type: "end",
-      sort_order: rows.length + 1,
+      ...mergeNode(baseEnd, { ...NODE_DEFAULTS, id: endId, title: baseEnd?.title ?? "End", node_type: "end", sort_order: rows.length + 1 }),
+      // 유일한 끝이므로 대표를 강제 — 기존 대표가 삭제 대상이었던 경우를 덮는다
       is_primary_end: true,
     },
   ];
+
+  // URL 없는 라벨 소거 — 머지 후 "최종" URL 기준으로 판정한다(행의 URL이 비어도 기존 노드에 있을 수 있다)
+  let ignoredLabelCount = 0;
+  const finalNodes = nodes.map((node) => {
+    if ((node.url ?? "") === "" && (node.url_label ?? "") !== "") {
+      ignoredLabelCount += 1;
+      return { ...node, url_label: "" };
+    }
+    return node;
+  });
 
   const edges: GraphEdge[] = [];
   const addEdge = (source: string, target: string, label: string) => {
@@ -306,56 +503,99 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     }
   }
 
-  // dagre LR 자동 배치 — layoutWithDagre는 data.nodeType 크기만 사용하므로 최소 AppNode로 충분
-  const appNodes: AppNode[] = nodes.map((node) => ({
-    id: node.id,
-    type: "process",
-    position: { x: 0, y: 0 },
-    data: {
-      label: node.title,
-      description: "",
-      nodeType: normalizeNodeType(node.node_type),
-      color: "",
-      assignee: "",
-      department: "",
-      system: node.system,
-      duration: node.duration,
-      url: node.url,
-      urlLabel: node.url_label ?? "",
-      groupIds: [],
-      hasChildren: false,
-    },
-  }));
-  const flowEdges: Edge[] = edges.map((e) => ({
-    id: e.id,
-    source: e.source_node_id,
-    target: e.target_node_id,
-  }));
-  const posOf = new Map(
-    layoutWithDagre(appNodes, flowEdges, "LR").map((n) => [n.id, n.position]),
+  // 좌표 — base 없으면 전체 dagre, 있으면 신규 노드만 부분 dagre(매칭 노드 좌표는 불변)
+  const isMerge = baseNodes.length > 0;
+  const positioned = isMerge
+    ? layoutAddedOnly(finalNodes, edges, new Set(addedNodeIds), baseNodes)
+    : layoutEverything(finalNodes, edges);
+
+  const removedNodes = baseNodes.filter((node) => !matchedIds.has(node.id));
+  const keptEdgeKeys = new Set(edges.map((e) => `${e.source_node_id}→${e.target_node_id}`));
+  const lostEdges = (context?.base?.edges ?? []).filter(
+    (e) => !keptEdgeKeys.has(`${e.source_node_id}→${e.target_node_id}`),
   );
-  const positioned = nodes.map((node) => {
-    const pos = posOf.get(node.id);
-    return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
-  });
+
+  // 부서 불일치 경고 — resolveAssignee가 이미 경고한 미해석 토큰은 제외(중복 경고 방지)
+  if (context?.directory) {
+    const dir = context.directory;
+    // driftedAssignees는 mutable Person[]을 받는다 — CsvDirectory.users는 readonly라 얕은 복사로 맞춘다
+    const users = [...dir.users];
+    for (const row of rows) {
+      const info = resolved.get(row.name);
+      if (!info || info.assignee === "") continue;
+      const known = parseAssignees(info.assignee).filter((n) => dir.users.some((u) => u.name === n));
+      const drifted = driftedAssignees(info.department, known, users);
+      for (const name of drifted) {
+        warnings.push({ line: row.line, message: `"${name}" is not in department "${info.department}"` });
+      }
+    }
+  }
 
   return {
-    graph: { nodes: positioned, edges, groups: [] },
+    graph: { nodes: positioned, edges, groups: context?.base?.groups ?? [] },
     nodeCount: positioned.length,
     edgeCount: edges.length,
     errors: [],
+    warnings,
     ignoredLabelCount,
+    merge: { addedNodeIds, removedNodes, lostEdges, matchedCount: matchedIds.size },
   };
 }
 
-/** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두). */
+/**
+ * 삭제 대신 유지 — 소멸 노드를 엣지 없이 되돌린다.
+ * 엣지를 못 살리는 이유: 노드 출력은 1개로 고정이라(canvas.ts `removeOutgoingEdges`)
+ * 들어오던 엣지를 살리면 출발 노드가 출력 2개가 된다. 나가던 엣지는 CSV가 흐름 전체를 규정하므로 사라진다.
+ * 대표 끝은 이미 결과 그래프의 End가 쥐고 있으므로 유지 노드에서 떼어낸다(validate_process: 대표 끝 ≤1).
+ */
+export function withKeptNodes(graph: Graph, kept: GraphNode[]): Graph {
+  if (kept.length === 0) return graph;
+  const maxOrder = graph.nodes.reduce((max, node) => Math.max(max, node.sort_order), 0);
+  return {
+    ...graph,
+    nodes: [
+      ...graph.nodes,
+      ...kept.map((node, i) => ({ ...node, sort_order: maxOrder + 1 + i, is_primary_end: false })),
+    ],
+  };
+}
+
+/** 맵 이름 프리필용 — 마지막 .csv 확장자만 뗀다. 다른 확장자는 이름의 일부로 본다. */
+export function stripCsvExtension(fileName: string): string {
+  return fileName.replace(/\.csv$/i, "");
+}
+
+/**
+ * `/api/directory` 응답 → CSV 담당자/부서 해석용 디렉터리.
+ * 맵 생성 시점엔 버전이 없어 listEligibleAssignees를 못 쓰므로 전 직원 디렉터리를 쓴다.
+ * departments는 말단 부서명(node.department가 담는 값) — DirectoryDept.id는 org_path라 쓰면 안 된다.
+ */
+export function toCsvDirectory(dir: Directory): CsvDirectory {
+  return {
+    users: dir.users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      department: user.department,
+    })),
+    departments: dir.departments.map((dept) => dept.name),
+    // korean_name은 없을 때 undefined가 아니라 "" 다
+    dept_infos: Object.fromEntries(
+      dir.departments
+        .filter((dept) => dept.korean_name !== "")
+        .map((dept) => [dept.name, { korean_name: dept.korean_name }]),
+    ),
+  };
+}
+
+/** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두).
+ *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
   return [
-    "Name,System,Duration,URL,URL_Label,Next",
-    "Review request,SAP ERP,2 days,,,Approval decision",
-    "Approval decision,,,,,Sign contract:approved;Notify rejection:rejected",
-    "Sign contract,,3 days,https://example.com/contract,Contract,",
-    "Notify rejection,,1 day,,,",
+    "Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next",
+    "Review request,Check the request against the purchasing policy,hong.gd,Quality Part 1,SAP ERP,2 days,,,Approval decision",
+    'Approval decision,,"hong.gd, kim.cs",Quality Part 1,,,,,Sign contract:approved;Notify rejection:rejected',
+    "Sign contract,,lee.yh,Finance Part,,3 days,https://example.com/contract,Contract,",
+    "Notify rejection,,,,,1 day,,,",
   ].join("\r\n");
 }
 
@@ -380,6 +620,9 @@ export function buildAiPromptText(): string {
     "",
     "[컬럼 규칙]",
     `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
+    "- Description: 선택, 그 단계가 무엇을 하는지 한두 문장. 콤마나 줄바꿈이 들어가면 셀 전체를 큰따옴표로 감싸세요. 길이 제한은 없습니다.",
+    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 — 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
+    `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
     `- Duration: 선택, 소요 시간(예: 2 days, 3시간 — ${MAX_LEN.duration}자 이하).`,
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
@@ -392,7 +635,8 @@ export function buildAiPromptText(): string {
     "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요.",
     "- Next의 대상 이름은 반드시 같은 CSV에 있는 Name이어야 합니다(오타 금지).",
     `- 데이터 행은 최대 ${MAX_DATA_ROWS}개입니다.`,
-    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(System·Duration·URL)은 비워두세요.",
+    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(Description·Assignee·Department·System·Duration·URL)은 비워두세요.",
+    "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 — 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
     "",
     "[예시]",
     buildTemplateCsv().replace(/\r\n/g, "\n"),
