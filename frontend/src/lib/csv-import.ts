@@ -1,6 +1,6 @@
 // CSV 임포트 — 템플릿·RFC4180 파싱·그래프 변환(자동 Start/End·decision 추론).
 // 설계: docs/superpowers/specs/2026-07-10-csv-import-merge-design.md
-import type { Graph, GraphEdge, GraphNode } from "./api";
+import type { Directory, Graph, GraphEdge, GraphNode } from "./api";
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { genId } from "./id";
@@ -557,6 +557,33 @@ export function withKeptNodes(graph: Graph, kept: GraphNode[]): Graph {
       ...graph.nodes,
       ...kept.map((node, i) => ({ ...node, sort_order: maxOrder + 1 + i, is_primary_end: false })),
     ],
+  };
+}
+
+/** 맵 이름 프리필용 — 마지막 .csv 확장자만 뗀다. 다른 확장자는 이름의 일부로 본다. */
+export function stripCsvExtension(fileName: string): string {
+  return fileName.replace(/\.csv$/i, "");
+}
+
+/**
+ * `/api/directory` 응답 → CSV 담당자/부서 해석용 디렉터리.
+ * 맵 생성 시점엔 버전이 없어 listEligibleAssignees를 못 쓰므로 전 직원 디렉터리를 쓴다.
+ * departments는 말단 부서명(node.department가 담는 값) — DirectoryDept.id는 org_path라 쓰면 안 된다.
+ */
+export function toCsvDirectory(dir: Directory): CsvDirectory {
+  return {
+    users: dir.users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      department: user.department,
+    })),
+    departments: dir.departments.map((dept) => dept.name),
+    // korean_name은 없을 때 undefined가 아니라 "" 다
+    dept_infos: Object.fromEntries(
+      dir.departments
+        .filter((dept) => dept.korean_name !== "")
+        .map((dept) => [dept.name, { korean_name: dept.korean_name }]),
+    ),
   };
 }
 
