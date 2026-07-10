@@ -1818,6 +1818,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── AI 노드 포커스/하이라이트 — 분석 finding·워크스루 공용 (Phase 4 신설, Phase 5 재사용) ──
   const highlightNode = useCallback(
     (nodeId: string) => {
+      if (!nodesRef.current.some((node) => node.id === nodeId)) return; // 히스토리 카드의 사라진 노드 — no-op
       setSelectedId(nodeId);
       setNodes((current) =>
         current.map((node) =>

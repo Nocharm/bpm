@@ -77,6 +77,8 @@
 - 페이로드 2/2 준비: 프론트 뷰모델 kind/payload 보존·toPayload(vitest).
 - 픽스: chat-sessions 테스트 TS 컴파일 에러 2건(payload 필드 누락·리터럴 widening) — tsc 게이트로 검출.
 - 카드 통일: 분리 state 제거→메시지 부착(ai-chat-cards.tsx), graph/ops 읽기전용 요약+라이브 커밋 카드 부착, 히스토리 워크스루 자동재생 없음.
+- 프론트 영향 점검: 그래프 GET 호출처 5곳(editor 3·compare 2) 전수 조사 — 전부 선행 `getMap` viewer 게이트 통과 후에만 호출돼 신규 403 노출 없음(compare 페이지의 getMap 자체 에러 미처리는 Task1 이전부터의 기존 결함, 크래시 아닌 무한 로딩).
+- 픽스: `highlightNode`에 사라진 노드 가드(`nodesRef.current.some`) 추가 — 히스토리 카드가 삭제된 노드를 가리킬 때 전체 deselect + 원점(0,0) fitView 점프 방지.
 
 ## 2026-07-10 — 문서 정리: 완료 SDD 문서 삭제 + PROGRESS compact (main)
 - `docs/superpowers/` 완료 plans·specs 72개 + editor-compare-redesign 에셋(1.9MB) + `docs/frontend-compare-verification.md` 삭제 — 최근 2건(ui-batch2·member-card-icons)만 유지, 전부 git history에 보존.
