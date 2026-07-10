@@ -113,7 +113,7 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled, contex
               <p className="text-caption text-ink-secondary">
                 {t("csvImport.mergeSummary", {
                   added: outcome.merge.addedNodeIds.length,
-                  updated: outcome.merge.matchedCount,
+                  matched: outcome.merge.matchedCount,
                   removed: outcome.merge.removedNodes.length,
                 })}
               </p>

@@ -81,6 +81,7 @@ import { ScopePreview } from "@/components/scope-preview";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { WindowDock } from "@/components/window-dock";
 import { CsvImportSection } from "@/components/csv-import-section";
+import { CsvImportTab } from "@/components/csv-import-tab";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   alignSelected,
@@ -1517,6 +1518,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     setMenu(null);
     setCsvKeepRemoved(false);
     setPreviewSource("csv");
+    setInspectorOpen(true); // Apply/Cancel이 인스펙터 Import 탭에 있다 — 접혀 있으면 갇히므로 강제로 펼친다
     setCsvImportOpen(false);
   }, [versionId, csvOutcome, pushHistory, setNodes, setEdges, setGroups]);
 
@@ -6037,7 +6039,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
         if (event.code === "ArrowRight") {
-          fire(() => setInspectorOpen((v) => !v));
+          // CSV 프리뷰 중에는 인스펙터를 못 접는다 — Apply/Cancel이 갇힌다
+          if (previewSource !== "csv") fire(() => setInspectorOpen((v) => !v));
           return;
         }
         const alignByCode: Record<string, "left" | "centerX" | "top" | "centerY"> = {
@@ -6071,6 +6074,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     decisionDrop,
     managingApprovers,
     pending,
+    previewSource,
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
@@ -6453,7 +6457,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
             className={topIconBtn}
-            onClick={() => setInspectorOpen((open) => !open)}
+            // CSV 프리뷰 중에는 인스펙터를 못 접는다 — Apply/Cancel이 갇힌다
+            onClick={() => {
+              if (previewSource !== "csv") setInspectorOpen((open) => !open);
+            }}
             title={t("editor.inspectorToggle")}
             aria-label={t("editor.inspectorToggle")}
           >
@@ -7985,6 +7992,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                       ? t("editor.saveFailedPill")
                       : t("editor.saved")
                 }
+                importSlot={
+                  previewSource === "csv" && csvOutcome !== null ? (
+                    <CsvImportTab
+                      merge={csvOutcome.merge}
+                      warnings={csvOutcome.warnings}
+                      keepRemoved={csvKeepRemoved}
+                      onKeepRemovedChange={setCsvKeepRemoved}
+                      onFocusNode={highlightNode}
+                      onApply={() => void applyCsvImport()}
+                      onCancel={cancelCsvPreview}
+                    />
+                  ) : undefined
+                }
+                forcedTab={previewSource === "csv" ? "import" : undefined}
+                lockTabs={previewSource === "csv"}
               />
             </div>
           </div>
