@@ -6298,6 +6298,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const topIconBtn =
     "inline-flex items-center justify-center rounded-sm p-1.5 text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
+  // importSlot 렌더 조건과 forcedTab/lockTabs 잠금 조건은 반드시 동일해야 한다 —
+  // 어긋나면 Import 탭 없이 인스펙터가 잠기고(autosave도 중단) 빠져나올 방법이 없어진다.
+  const csvPreviewActive = previewSource === "csv" && csvOutcome !== null;
+
   return (
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
@@ -7993,7 +7997,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       : t("editor.saved")
                 }
                 importSlot={
-                  previewSource === "csv" && csvOutcome !== null ? (
+                  csvPreviewActive && csvOutcome ? (
                     <CsvImportTab
                       merge={csvOutcome.merge}
                       warnings={csvOutcome.warnings}
@@ -8005,8 +8009,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                     />
                   ) : undefined
                 }
-                forcedTab={previewSource === "csv" ? "import" : undefined}
-                lockTabs={previewSource === "csv"}
+                forcedTab={csvPreviewActive ? "import" : undefined}
+                lockTabs={csvPreviewActive}
               />
             </div>
           </div>

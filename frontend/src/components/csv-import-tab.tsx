@@ -63,7 +63,7 @@ export function CsvImportTab({
     <div data-id="csv-import-tab" className="flex flex-col gap-4">
       <MarkdownView
         className="md"
-        source={t("csvImport.tabIntro", { updated: merge.matchedCount, added: merge.addedNodeIds.length })}
+        source={t("csvImport.tabIntro", { matched: merge.matchedCount, added: merge.addedNodeIds.length })}
       />
 
       {warnings.length > 0 && (
