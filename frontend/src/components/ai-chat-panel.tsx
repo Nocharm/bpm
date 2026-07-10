@@ -133,7 +133,7 @@ export function AiChatPanel({
   // 스레드가 하단에서 떨어져 있으면 "맨 아래로" 버튼 노출.
   const [showToBottom, setShowToBottom] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // 응답 도착 시 활성 세션 판별용 미러 — 전송 후 세션을 전환해도 findings/steps가 남의 세션에 뜨지 않게.
+  // 응답 도착 시 활성 세션 판별용 미러 — 전송 후 세션을 전환해도 응답 메시지 append가 남의 세션에 붙지 않게.
   const activeSessionIdRef = useRef(activeSessionId);
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;

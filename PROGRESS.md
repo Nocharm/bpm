@@ -83,6 +83,7 @@
 - enforce 수동 검증(`DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys AI_ENABLED=true`, port 8000, private map=2/version=11): ① 무권한 유저(`bora.choi`) GET graph → **403**, ② 동일 유저 POST ai/chat → **403**, ③ viewer 권한 유저(`doyun.lim2`) GET graph → **200**(실 데이터) + POST ai/chat → **502**(AI 서버 미구성 — 게이트 통과 확인, 403 아님). 3케이스 전부 기대대로.
 - 최종 게이트: backend pytest 521 passed · ruff 0 · frontend vitest 234 passed(18 files) · lint 0 errors(1건 pre-existing 경고) · build 성공(10 라우트).
 - **배포 노트**: 서버는 startup `_ADDED_COLUMNS`가 `ai_chat_messages.payload` 컬럼을 자동 보강 — 별도 수동 DDL 불요.
+- 최종리뷰 픽스: toPayload graph 판정을 백엔드 규칙(nodes|edges|groups)과 정렬 + stale 주석 정리.
 
 ## 2026-07-10 — 문서 정리: 완료 SDD 문서 삭제 + PROGRESS compact (main)
 - `docs/superpowers/` 완료 plans·specs 72개 + editor-compare-redesign 에셋(1.9MB) + `docs/frontend-compare-verification.md` 삭제 — 최근 2건(ui-batch2·member-card-icons)만 유지, 전부 git history에 보존.

@@ -43,7 +43,7 @@ export function toPayload(proposal: AiProposal): AiMessagePayload | null {
     case "walkthrough":
       return proposal.steps.length > 0 ? { steps: proposal.steps } : null;
     case "graph":
-      return proposal.nodes.length > 0 || proposal.groups.length > 0
+      return proposal.nodes.length > 0 || proposal.edges.length > 0 || proposal.groups.length > 0
         ? { nodes: proposal.nodes, edges: proposal.edges, groups: proposal.groups }
         : null;
     case "ops":
