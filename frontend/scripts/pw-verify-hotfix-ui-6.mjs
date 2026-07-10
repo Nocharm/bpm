@@ -51,11 +51,15 @@ await page.keyboard.press("Escape");
 await page.waitForTimeout(150);
 
 // 결재자 피커 = 두 번째 PrincipalPicker(협업자 다음).
-// 사용자가 실제로 겪는 순서를 재현: 피커까지 스크롤 → 정착 → 클릭 → 본문이 움직였는지.
+// 본문 하단 pb-40이 마지막 피커를 160px 위로 올릴 여지를 준다 — 사용자가 끝까지 스크롤한 상태를 재현.
 // (Playwright의 click은 대상을 먼저 스크롤하므로, 클릭 전에 스크롤을 끝내 둬야 밀림만 측정된다.)
 const bodySel = ".scrollbar-hidden";
 const approverInput = page.locator(PICKER).last();
-await approverInput.scrollIntoViewIfNeeded();
+const slack = await page.locator(bodySel).evaluate((el) => {
+  el.scrollTop = el.scrollHeight; // 끝까지
+  return el.scrollHeight - el.clientHeight;
+});
+check("본문에 스크롤 여유가 있음 (pb-40)", slack >= 160, `scrollHeight-clientHeight=${slack}`);
 await page.waitForTimeout(300);
 const scrollBefore = await page.locator(bodySel).evaluate((el) => el.scrollTop);
 await approverInput.click();
