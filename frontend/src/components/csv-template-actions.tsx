@@ -4,7 +4,7 @@
 // 외부 AI 왕복: [AI 프롬프트 복사]→외부 AI에 문서와 함께 붙여넣기→받은 CSV를 에디터에서 임포트.
 import { useState } from "react";
 
-import { AlertTriangle, Check, Download, Sparkles } from "lucide-react";
+import { AlertTriangle, BookOpen, Check, Download, Sparkles } from "lucide-react";
 
 import { copyText } from "@/lib/clipboard";
 import { buildAiPromptText, buildTemplateCsv } from "@/lib/csv-import";
@@ -13,7 +13,14 @@ import { useI18n } from "@/lib/i18n";
 export const CSV_OUTLINE_BTN =
   "inline-flex items-center gap-1.5 rounded-sm border border-hairline bg-surface px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
 
-export function CsvTemplateActions({ disabled }: { disabled?: boolean }) {
+export function CsvTemplateActions({
+  disabled,
+  manualUrl,
+}: {
+  disabled?: boolean;
+  // CSV 임포트 안내 문서(.env CSV_MANUAL_URL) — 비면 버튼 숨김. manual_url(편집 매뉴얼)과 별개다.
+  manualUrl?: string;
+}) {
   const { t } = useI18n();
   // 복사 결과 — idle | copied | failed. 서버(평문 HTTP)에선 실패할 수 있으므로 성공을 가정하지 않는다.
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -47,6 +54,18 @@ export function CsvTemplateActions({ disabled }: { disabled?: boolean }) {
         <Download size={14} strokeWidth={1.5} />
         {t("csvImport.template")}
       </button>
+      {manualUrl && (
+        <button
+          type="button"
+          data-id="csv-manual-link"
+          className={CSV_OUTLINE_BTN}
+          onClick={() => window.open(manualUrl, "_blank", "noopener,noreferrer")}
+          disabled={disabled}
+        >
+          <BookOpen size={14} strokeWidth={1.5} />
+          {t("csvImport.manualLink")}
+        </button>
+      )}
       <button
         type="button"
         data-id="csv-copy-ai-prompt"

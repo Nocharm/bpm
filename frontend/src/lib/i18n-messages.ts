@@ -81,8 +81,9 @@ const en = {
   // CSV import (design 2026-07-06)
   "csvImport.applied": "CSV imported",
   "csvImport.chooseFile": "Choose CSV file",
-  "csvImport.copyPrompt": "Copy AI prompt",
+  "csvImport.copyPrompt": "Ask another AI",
   "csvImport.copyPromptHint": "Copy a prompt for an external AI — paste it with your document, then paste the returned CSV here",
+  "csvImport.manualLink": "CSV import manual",
   "csvImport.promptCopied": "Copied!",
   "csvImport.promptCopyFailed": "Copy failed",
   "csvImport.pasteToggle": "Paste CSV",
@@ -1361,8 +1362,9 @@ const ko: Record<MessageKey, string> = {
   // CSV 임포트 (design 2026-07-06)
   "csvImport.applied": "CSV 임포트 완료",
   "csvImport.chooseFile": "CSV 파일 선택",
-  "csvImport.copyPrompt": "AI 프롬프트 복사",
+  "csvImport.copyPrompt": "다른 AI에게 부탁하기",
   "csvImport.copyPromptHint": "외부 AI에 줄 프롬프트 복사 — 업무 문서와 함께 붙여넣고, 받은 CSV를 여기에 붙여넣으세요",
+  "csvImport.manualLink": "CSV 임포트 매뉴얼",
   "csvImport.promptCopied": "복사됨!",
   "csvImport.promptCopyFailed": "복사 실패",
   "csvImport.pasteToggle": "CSV 붙여넣기",

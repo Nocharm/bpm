@@ -23,9 +23,11 @@ interface CsvImportSectionProps {
   onChange: (outcome: CsvImportOutcome | null, fileName: string | null) => void;
   // 머지 base + 담당자/부서 해석 디렉터리. 없으면 전량 신규·해석 없음.
   context?: CsvImportContext;
+  // CSV 임포트 안내 문서 주소 — 비면 버튼 숨김
+  manualUrl?: string;
 }
 
-export function CsvImportSection({ outcome, fileName, onChange, context }: CsvImportSectionProps) {
+export function CsvImportSection({ outcome, fileName, onChange, context, manualUrl }: CsvImportSectionProps) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   // 붙여넣기 입력 — 파일 선택과 상호 배타. 텍스트 변경 즉시 파싱(≤500행이라 디바운스 불필요).
@@ -61,7 +63,7 @@ export function CsvImportSection({ outcome, fileName, onChange, context }: CsvIm
   return (
     <div data-id="csv-import-section" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <CsvTemplateActions />
+        <CsvTemplateActions manualUrl={manualUrl} />
         <button type="button" data-id="csv-file-pick" className={CSV_OUTLINE_BTN} onClick={() => fileRef.current?.click()}>
           <Upload size={14} strokeWidth={1.5} />
           {t("csvImport.chooseFile")}
