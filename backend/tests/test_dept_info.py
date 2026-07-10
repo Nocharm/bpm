@@ -84,6 +84,37 @@ def test_dept_info_blank_entry_ignored(client: TestClient) -> None:
     assert res.json() == {"updated": 0, "unknown": []}
 
 
+def test_dept_info_accepts_parent_org_levels(client: TestClient) -> None:
+    """조직도 tree는 본부·실까지 담는다 — 직원이 직접 소속되지 않은 상위 레벨도 수용해야 한다.
+
+    상위 레벨 dept_info가 있어야 /api/me의 상위 부서장 체인(manager_ids)과
+    피커의 상위 부서 한글 검색이 동작한다.
+    """
+    res = client.put(
+        "/api/admin/dept-info",
+        headers=SYS,
+        json={
+            "entries": {
+                # org_l1 — 어떤 직원의 department도 아니다
+                "Management Support Division": {"korean_name": "경영지원본부", "manager": "admin.kim"},
+                # org_l2 — 마찬가지
+                "Process Innovation Office": {"korean_name": "공정혁신실", "manager": "admin.kim"},
+                "Still No Such Dept": {"korean_name": "없는부서", "manager": ""},
+            }
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["updated"] == 2
+    assert body["unknown"] == ["Still No Such Dept"]
+
+    # 디렉터리는 org-path 프리픽스를 모두 내려주므로 상위 부서에도 한글명이 조인된다
+    depts = client.get("/api/directory", headers=SYS).json()["departments"]
+    division = next(d for d in depts if d["id"] == "Management Support Division")
+    assert division["korean_name"] == "경영지원본부"
+    assert division["manager"] == "admin.kim"
+
+
 def test_dept_info_rejects_over_200_chars(client: TestClient) -> None:
     res = client.put(
         "/api/admin/dept-info",

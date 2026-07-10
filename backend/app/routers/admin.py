@@ -221,9 +221,23 @@ async def import_dept_info(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> DeptInfoImportOut:
-    """부서 한글명·부서장 일괄 등록 — 현존 부서(employees.department distinct)만 반영, 미존재는 unknown."""
+    """부서 한글명·부서장 일괄 등록 — 현존 부서만 반영, 미존재는 unknown.
+
+    현존 판정에 org_l1~l5를 모두 포함한다: 조직도 tree는 본부·실까지 담고, 상위 레벨
+    dept_info가 있어야 /api/me의 상위 부서장 체인과 피커의 상위 부서 한글 검색이 산다.
+    """
     _require_sysadmin(login_id)
-    known = set((await session.scalars(select(Employee.department).distinct())).all())
+    rows = await session.execute(
+        select(
+            Employee.org_l1,
+            Employee.org_l2,
+            Employee.org_l3,
+            Employee.org_l4,
+            Employee.org_l5,
+            Employee.department,
+        ).distinct()
+    )
+    known = {name for row in rows for name in row if name}
     updated = 0
     unknown: list[str] = []
     for dept_name, entry in payload.entries.items():

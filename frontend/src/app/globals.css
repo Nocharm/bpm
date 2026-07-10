@@ -94,6 +94,10 @@
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* 마스터-디테일 분기점 — 이하에선 상세를 카드 아래 아코디언으로 접는다(맵·공지·인박스 공통).
+     980px: 목록 min-w 18rem + 상세 min-w 24rem + 여백이 찌그러지지 않는 하한. */
+  --breakpoint-split: 61.25rem;
 }
 
 body {

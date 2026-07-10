@@ -110,16 +110,25 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     isSysadmin: false,
     korean_name: u.korean_name ?? "",
   }));
-  const pickerDepts: Department[] = dirDepts.map((d) => ({
-    id: d.id,
-    code: "",
-    name: d.name,
-    orgLevels: [],
-    parentId: null,
-    rawDn: "",
-    korean_name: d.korean_name,
-    manager: d.manager,
-  }));
+  // 부서장은 login_id로만 저장된다(dept_info.manager) — 부서를 부서장 "이름"으로도 찾을 수 있게
+  // 디렉터리로 한/영 이름을 해석해 검색 텍스트에 합친다. 표시엔 쓰이지 않고 검색 키워드 전용.
+  const userById = new Map(dirUsers.map((u) => [u.id, u]));
+  const pickerDepts: Department[] = dirDepts.map((d) => {
+    const head = d.manager ? userById.get(d.manager) : undefined;
+    const managerKeywords = [d.manager, head?.name, head?.korean_name]
+      .filter(Boolean)
+      .join(" ");
+    return {
+      id: d.id,
+      code: "",
+      name: d.name,
+      orgLevels: [],
+      parentId: null,
+      rawDn: "",
+      korean_name: d.korean_name,
+      manager: managerKeywords,
+    };
+  });
 
   // ── 폼 상태 / form state ──
   const [name, setName] = useState("");
@@ -310,7 +319,9 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
       onClose={onClose}
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
     >
-      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
+      {/* 13rem 여백 — 수직 중앙 정렬이라 결재자 피커 아래에 (뷰포트-모달)/2 + 73px 가 남는다.
+          드롭다운(160px)이 아래로 열리려면 172px 필요 → 뷰포트 580px에서도 확보된다. */}
+      <div className="relative flex max-h-[calc(100dvh-13rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
           <h2 className="text-body-strong text-ink">{t("perm.createDialog.title")}</h2>

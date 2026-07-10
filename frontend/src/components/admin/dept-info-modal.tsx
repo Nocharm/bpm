@@ -1,7 +1,7 @@
 "use client";
 
 // 부서 정보(한글 부서명·부서장) JSON 임포트 모달 — 부서 탭용. 다운로드·충돌 단계 없음(항상 덮어쓰기).
-// 필드명은 임시(dept/koreanName/manager) — 실제 소스 키 확정 시 lib/dept-info-import.ts 상수만 변경.
+// 조직도 export의 { flat, tree } 중 tree를 재귀 파싱한다 — 파서·필드명은 lib/dept-info-import.ts.
 
 import { Building2, FileUp } from "lucide-react";
 import { useRef, useState } from "react";
