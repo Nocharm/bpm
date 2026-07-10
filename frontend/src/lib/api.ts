@@ -206,12 +206,18 @@ export function listMaps(): Promise<MapSummary[]> {
 
 export function createMap(
   name: string,
-  description = "",
-  visibility: MapSummary["visibility"] = "private",
+  description: string,
+  visibility: MapSummary["visibility"],
+  owningDepartment: string,
 ): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
-    body: JSON.stringify({ name, description, visibility }),
+    body: JSON.stringify({
+      name,
+      description,
+      visibility,
+      owning_department: owningDepartment,
+    }),
   });
 }
 
