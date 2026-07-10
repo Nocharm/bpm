@@ -397,8 +397,9 @@ export function CollaboratorsPanel({
       {/* 로딩 중 스켈레톤 / Skeleton while loading (F8) */}
       {loading && <SkeletonRows />}
 
-      {/* 빈 목록 안내 — 로딩 끝난 뒤에만 / Empty-state only after load */}
-      {!loading && perms.length === 0 && (
+      {/* 빈 목록 안내 — 로딩 끝난 뒤에만. 잠금 행이 보이면 "협업자 없음"과 모순이라 숨김 /
+          Empty-state only after load; suppressed when the owning-dept locked row is visible. */}
+      {!loading && perms.length === 0 && !owningDepartment && (
         <p className="py-4 text-caption text-ink-tertiary">{t("perm.noCollaborators")}</p>
       )}
 
