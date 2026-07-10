@@ -6450,7 +6450,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
           manualUrl={manualUrl}
           onImportCsv={
-            checkout?.mine && currentParentId === null
+            checkout?.mine && currentParentId === null && eligible !== null
               ? () => setCsvImportOpen(true)
               : undefined
           }
@@ -8212,6 +8212,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             <CsvImportSection
               outcome={csvOutcome}
               fileName={csvFileName}
+              context={{
+                // refs가 아닌 렌더 state 사용 — ref.current를 렌더 중 읽으면 react-hooks/refs 위반
+                base: buildGraph(nodes, edges, groups),
+                directory: eligible ?? undefined,
+              }}
               onChange={(nextOutcome, nextFileName) => {
                 setCsvOutcome(nextOutcome);
                 setCsvFileName(nextFileName);
@@ -8242,7 +8247,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           </div>
         </ModalBackdrop>
       )}
-      {/* CSV 교체 확인 — 기존 노드·엣지·그룹 전부 삭제 경고 (맵 삭제 모달 컨벤션) */}
+      {/* CSV 머지 확인 — 이름 매칭 결과(추가/갱신/삭제) 실카운트 (맵 삭제 모달 컨벤션) */}
       {csvConfirmOpen && csvOutcome?.graph && (
         <ConfirmDialog
           title={t("csvImport.confirmTitle")}
@@ -8255,9 +8260,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               {
                 icon: <Trash2 size={14} strokeWidth={1.5} />,
                 text: t("csvImport.confirmDelete", {
-                  n: nodes.length,
-                  m: edges.length,
-                  k: groups.length,
+                  n: csvOutcome.merge.removedNodes.length,
+                  m: csvOutcome.merge.lostEdges.length,
                 }),
                 tone: "error",
               },
@@ -8266,9 +8270,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               {
                 icon: <FilePlus2 size={14} strokeWidth={1.5} />,
                 text: t("csvImport.confirmCreate", {
-                  x: csvOutcome.nodeCount,
+                  x: csvOutcome.merge.addedNodeIds.length,
                   y: csvOutcome.edgeCount,
                 }),
+                tone: "accent",
+              },
+              {
+                icon: <Check size={14} strokeWidth={1.5} />,
+                text: t("csvImport.confirmUpdate", { n: csvOutcome.merge.matchedCount }),
                 tone: "accent",
               },
             ],

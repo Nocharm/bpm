@@ -1,7 +1,7 @@
 "use client";
 
 // CSV 임포트 공용 섹션 — 템플릿 다운로드 + AI 프롬프트 복사 + 파일 선택/텍스트 붙여넣기 + 파싱 요약/행 에러.
-// 새 맵 다이얼로그와 에디터 임포트 모달이 함께 쓴다 (design 2026-07-06).
+// 에디터 임포트 모달만 쓴다 — 새 맵 다이얼로그는 CsvTemplateActions만 사용 (design 2026-07-06).
 // 외부 AI 왕복: [AI 프롬프트 복사]→외부 AI에 문서와 함께 붙여넣기→받은 CSV를 [붙여넣기]로 입력.
 import { useRef, useState } from "react";
 
@@ -11,6 +11,7 @@ import {
   buildGraphFromCsv,
   decodeCsvBuffer,
   stripCsvFences,
+  type CsvImportContext,
   type CsvImportOutcome,
 } from "@/lib/csv-import";
 import { useI18n } from "@/lib/i18n";
@@ -21,9 +22,11 @@ interface CsvImportSectionProps {
   fileName: string | null;
   onChange: (outcome: CsvImportOutcome | null, fileName: string | null) => void;
   disabled?: boolean;
+  // 머지 base + 담당자/부서 해석 디렉터리. 없으면 전량 신규·해석 없음.
+  context?: CsvImportContext;
 }
 
-export function CsvImportSection({ outcome, fileName, onChange, disabled }: CsvImportSectionProps) {
+export function CsvImportSection({ outcome, fileName, onChange, disabled, context }: CsvImportSectionProps) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   // 붙여넣기 입력 — 파일 선택과 상호 배타. 텍스트 변경 즉시 파싱(≤500행이라 디바운스 불필요).
@@ -38,7 +41,7 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled }: CsvI
     setPasteOpen(false);
     setPasteText("");
     const text = decodeCsvBuffer(await file.arrayBuffer());
-    onChange(buildGraphFromCsv(text), file.name);
+    onChange(buildGraphFromCsv(text, context), file.name);
   };
 
   const handlePasteText = (text: string) => {
@@ -48,7 +51,7 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled }: CsvI
       return;
     }
     // 외부 AI 답변 관용 처리 — ```csv 코드펜스 제거 후 파싱
-    onChange(buildGraphFromCsv(stripCsvFences(text)), t("csvImport.pastedName"));
+    onChange(buildGraphFromCsv(stripCsvFences(text), context), t("csvImport.pastedName"));
   };
 
   const handleClear = () => {
@@ -108,12 +111,30 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled }: CsvI
           {outcome.errors.length === 0 ? (
             <>
               <p className="text-caption text-ink-secondary">
-                {t("csvImport.summary", { nodes: outcome.nodeCount, edges: outcome.edgeCount })}
+                {t("csvImport.mergeSummary", {
+                  added: outcome.merge.addedNodeIds.length,
+                  updated: outcome.merge.matchedCount,
+                  removed: outcome.merge.removedNodes.length,
+                })}
               </p>
               {outcome.ignoredLabelCount > 0 && (
                 <p className="text-caption text-ink-tertiary">
                   {t("csvImport.ignoredLabels", { n: outcome.ignoredLabelCount })}
                 </p>
+              )}
+              {outcome.warnings.length > 0 && (
+                <ul className="flex flex-col gap-0.5">
+                  {outcome.warnings.slice(0, 5).map((warn) => (
+                    <li key={`${warn.line}-${warn.message}`} className="text-caption text-ink-tertiary">
+                      {t("csvImport.rowWarning", { line: warn.line, message: warn.message })}
+                    </li>
+                  ))}
+                  {outcome.warnings.length > 5 && (
+                    <li className="text-caption text-ink-tertiary">
+                      {t("csvImport.moreWarnings", { n: outcome.warnings.length - 5 })}
+                    </li>
+                  )}
+                </ul>
               )}
             </>
           ) : (
