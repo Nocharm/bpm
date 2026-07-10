@@ -212,8 +212,10 @@ await page.waitForSelector(".react-flow__node", { timeout: 60000 });
 await page.waitForSelector('[data-id="ai-chat-list"]', { timeout: 8000 });
 await page.waitForTimeout(600);
 const analysisCard = page.locator('[data-id="ai-analysis-card"]');
-await analysisCard.waitFor({ state: "visible", timeout: 5000 });
-check("17 history analysis card restored", (await analysisCard.locator("button").count()) >= 1);
+// waitFor 실패 시에도 스크립트가 죽지 않게 — 뒤따르는 체크(9·7·8)가 통째로 증발하지 않도록 (다른 대기와 동일 패턴)
+await analysisCard.waitFor({ state: "visible", timeout: 5000 }).catch(() => undefined);
+const analysisButtons = await analysisCard.locator("button").count();
+check("17 history analysis card restored", analysisButtons >= 1, `buttons=${analysisButtons}`);
 
 // ⑨ 메시지 로딩 실패 → 인라인 재시도(스레드 복구) + 세션 전환 시 오귀속 방지
 // SMOKE-second가 활성인 이 시점(체크7 삭제 전, 시드 살아있음)에 라우트를 끊고 SMOKE-paging으로 전환.

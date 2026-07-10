@@ -4,6 +4,7 @@
 
 ## 2026-07-10 — 후속 정비: 비교화면 로드 실패 처리 + AI 게이트/페이로드 잔무 (worktree-ai-followup-fixes)
 - 비교화면 로드 effect 3곳 try/catch — 403은 에디터와 동일한 비공개 맵 안내 모달(홈 이동), 그 외는 인라인 오류 표시로 무한 로딩 제거. 브라우저 검증 `pw-verify-compare-403.mjs` 4/4(403 모달·홈 이동·500 인라인·정상 무회귀).
+- AI 게이트/페이로드 리뷰 잔무 3건: public 맵 `/graph/all` 게이트 assert, toPayload walkthrough vitest, 스모크 check17 `.catch`+detail. 덤: `chat-sessions.test.ts:82` never 타입 에러 수정 — 직전 픽서의 "tsc 0 errors" 보고가 허위였고 next build는 테스트 파일 타입 에러로 안 깨져 잠복(이후 게이트에 tsc --noEmit 상시 포함).
 
 ## 2026-07-10 — CSV로 새 맵 만들기 + 클립보드 수정 설계 (worktree-csv-create-flow)
 - **클립보드 버그 확정**: 복사 4곳(`csv-template-actions.tsx:32`, `markdown-view.tsx:179·188·198`)이 전부 `navigator.clipboard?.writeText()`. `navigator.clipboard`는 secure context 전용인데 서버는 원격 IP + 평문 HTTP → `undefined`. `?.`가 삼켜 **에러 없이 실패하고 버튼은 "복사됨!"을 띄운다**. localhost는 secure context라 재현 안 됨(`CLAUDE.md` 경고 그대로).
