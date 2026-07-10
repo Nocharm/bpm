@@ -1,7 +1,8 @@
 // AI 챗 서버 저장 히스토리 스모크 — 대화 바 목록/다른 맵 토글 → 서버 페이징(30→40) →
 // 타맵 세션 열람(포린 배너·textarea disabled) → ?aiChat 딥링크 이동 → mocked 전송(낙관 말풍선) → 삭제+폴백.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3010 SHOT_DIR=<dir> node scripts/pw-smoke-ai-chat-history.mjs
-// 전제: backend AI_ENABLED=true(8010) + 프론트(3010) 기동, dev.db에 SMOKE- 세션 3개 시드(브리프 Step 2). playwright-core + 시스템 Chrome.
+// 전제: backend AI_ENABLED=true(8010) + 프론트(3010) 기동, dev.db에 SMOKE- 세션 3개 시드(브리프 Step 2) —
+// SMOKE-second(s2)에 kind="analysis" payload 메시지 1건 추가 포함(체크 17용, findings 1건). playwright-core + 시스템 Chrome.
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -100,7 +101,11 @@ await page.evaluate(() => {
   const el = document.querySelector('[data-id="ai-thread"]')?.parentElement;
   if (el) el.scrollTop = 0;
 });
-await page.waitForSelector('[data-id="ai-loading-older"]', { timeout: 3000 });
+// 방어적 대기 — 초기 페이지가 이미 has_more=false 상태(선행 체크 3a 실패 시나리오)면 이 로우가 안 뜬다.
+// 크래시 대신 FAIL로 기록되게(다음 체크 계속 진행) .catch로 완화.
+await page
+  .waitForSelector('[data-id="ai-loading-older"]', { timeout: 3000 })
+  .catch(() => undefined);
 const tipText = await page.evaluate(
   () =>
     document.querySelector('[data-id="ai-loading-older"] .bg-accent-tint')?.textContent?.trim() ?? "",
@@ -200,6 +205,15 @@ check(
 );
 await page.screenshot({ path: `${SHOT_DIR}/smoke-h-5-mocked-send.png` });
 await page.unroute("**/ai/chat");
+
+// ⑰ 히스토리 재열람 시 분석 카드 재현 — payload 저장 검증(SMOKE-second 세 번째 메시지, kind=analysis)
+await page.reload({ waitUntil: "domcontentloaded" });
+await page.waitForSelector(".react-flow__node", { timeout: 60000 });
+await page.waitForSelector('[data-id="ai-chat-list"]', { timeout: 8000 });
+await page.waitForTimeout(600);
+const analysisCard = page.locator('[data-id="ai-analysis-card"]');
+await analysisCard.waitFor({ state: "visible", timeout: 5000 });
+check("17 history analysis card restored", (await analysisCard.locator("button").count()) >= 1);
 
 // ⑨ 메시지 로딩 실패 → 인라인 재시도(스레드 복구) + 세션 전환 시 오귀속 방지
 // SMOKE-second가 활성인 이 시점(체크7 삭제 전, 시드 살아있음)에 라우트를 끊고 SMOKE-paging으로 전환.
