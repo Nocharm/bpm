@@ -383,11 +383,15 @@ export default function MapListPage() {
             <BookOpen size={16} strokeWidth={1.5} />
             {t("manual.title")}
           </button>
-          {/* 분할 버튼 — 왼쪽=빈 맵, 오른쪽 쉐브론=CSV로 만들기. 재사용할 드롭다운 프리미티브가 없어 1항목 메뉴를 직접 둔다. */}
-          <div className="relative flex shrink-0" onClick={(event) => event.stopPropagation()}>
+          {/* 분할 버튼 — 왼쪽=빈 맵, 오른쪽 쉐브론=CSV로 만들기. 재사용할 드롭다운 프리미티브가 없어 1항목 메뉴를 직접 둔다.
+              stopPropagation은 메뉴를 소유한 쉐브론·메뉴 컨테이너에만 — 왼쪽 버튼은 버블시켜 빈 여백 선택 해제를 유지한다. */}
+          <div className="relative flex shrink-0">
             <button
               className="inline-flex shrink-0 items-center gap-1 rounded-l-sm bg-accent px-3 py-2 text-caption-strong text-on-accent hover:bg-accent-focus"
-              onClick={() => setDialogOpen(true)}
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setDialogOpen(true);
+              }}
             >
               <Plus size={16} strokeWidth={1.5} />
               {t("perm.createDialog.title")}
@@ -397,12 +401,18 @@ export default function MapListPage() {
               aria-expanded={createMenuOpen}
               aria-label={t("csvImport.createFromCsv")}
               className="inline-flex shrink-0 items-center rounded-r-sm border-l border-accent-focus bg-accent px-2 py-2 text-on-accent hover:bg-accent-focus"
-              onClick={() => setCreateMenuOpen((open) => !open)}
+              onClick={(event) => {
+                event.stopPropagation(); // 바깥클릭 닫기 리스너가 방금 연 메뉴를 닫지 않도록
+                setCreateMenuOpen((open) => !open);
+              }}
             >
               <ChevronDown size={16} strokeWidth={1.5} />
             </button>
             {createMenuOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border border-hairline bg-surface py-1 shadow-lg">
+              <div
+                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border border-hairline bg-surface py-1 shadow-lg"
+                onClick={(event) => event.stopPropagation()}
+              >
                 <button
                   data-id="home-create-from-csv"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
@@ -680,9 +690,10 @@ export default function MapListPage() {
             setDialogOpen(false);
             setCsvHandoff(null);
           }}
-          onCreated={() => {
+          onCreated={(silent) => {
             void refresh();
-            showToast(t("perm.createDialog.toastSuccess"));
+            // silent — 임포트 실패 경로: 맵은 생겼지만 성공 토스트는 띄우지 않는다
+            if (!silent) showToast(t("perm.createDialog.toastSuccess"));
           }}
         />
       )}

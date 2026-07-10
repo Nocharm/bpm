@@ -69,7 +69,7 @@ interface ApproverEntry {
 
 interface Props {
   onClose: () => void;
-  onCreated: () => void; // 생성 후 목록 갱신 콜백 / callback to refresh list after creation
+  onCreated: (silent?: boolean) => void; // 생성 후 목록 갱신 콜백 — silent=true면 성공 토스트 억제(임포트 실패 시) / refresh list; silent suppresses the success toast
   // CSV로 만들기 — 홈의 CSV 모달이 넘긴다. **optional 필수**: map-name-dropdown.tsx도 이 컴포넌트를 마운트한다.
   csv?: { outcome: CsvImportOutcome; fileName: string };
 }
@@ -240,8 +240,8 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
           await acquireCheckout(created.versionId);
           await saveGraph(created.versionId, csv.outcome.graph);
         } catch (err) {
-          // 맵은 이미 있다 — 목록만 갱신하고 다이얼로그를 유지, Create 재클릭 시 저장만 재시도
-          onCreated();
+          // 맵은 이미 있다 — 목록만 갱신(성공 토스트 없이)하고 다이얼로그를 유지, Create 재클릭 시 저장만 재시도
+          onCreated(true);
           setError(
             err instanceof Error
               ? `${t("csvImport.mapCreatedImportFailed")} — ${err.message}`

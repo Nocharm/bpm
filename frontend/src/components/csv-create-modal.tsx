@@ -37,16 +37,22 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([getDirectory(), getMe()])
-      .then(([dir, me]) => {
-        if (!alive) return;
-        setDirectory(toCsvDirectory(dir));
-        setCsvManualUrl(me.csv_manual_url);
+    // 디렉터리는 담당자 해석에 필수 — 실패는 사용자에게 보이고 [확인]을 막는다
+    void getDirectory()
+      .then((dir) => {
+        if (alive) setDirectory(toCsvDirectory(dir));
       })
       .catch((err) => {
-        // 삼키지 않는다 — 사용자에게 보이고 [확인]을 막는다
-        console.warn("directory/me fetch failed", err);
+        console.warn("directory fetch failed", err);
         if (alive) setLoadError(true);
+      });
+    // 매뉴얼 URL은 안내 버튼 표시용일 뿐 — 실패해도 버튼만 숨기고 모달은 살린다
+    void getMe()
+      .then((me) => {
+        if (alive) setCsvManualUrl(me.csv_manual_url);
+      })
+      .catch((err) => {
+        console.warn("me fetch failed; csv manual button hidden", err);
       });
     return () => {
       alive = false;
@@ -77,6 +83,8 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
 
   const parsedOk = outcome?.graph != null && outcome.errors.length === 0;
   const canConfirm = parsedOk && directory !== null;
+  // 디렉터리 로드 중 — 드롭존을 비활성하고 로딩 문구로 클릭/드롭이 조용히 무시되지 않게
+  const directoryLoading = directory === null && !loadError;
 
   return (
     <ModalBackdrop
@@ -107,6 +115,7 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
             <button
               type="button"
               data-id="csv-dropzone"
+              disabled={directoryLoading}
               onClick={() => fileRef.current?.click()}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -114,12 +123,16 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
               }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
-              className={`flex flex-col items-center gap-2 rounded-sm border border-dashed px-4 py-10 text-caption ${
+              className={`flex flex-col items-center gap-2 rounded-sm border border-dashed px-4 py-10 text-caption disabled:opacity-40 ${
                 dragOver ? "border-accent bg-accent-tint text-accent" : "border-hairline text-ink-tertiary hover:bg-surface-alt"
               }`}
             >
               <FileUp size={16} strokeWidth={1.5} />
-              {dragOver ? t("csvImport.dropzoneActive") : t("csvImport.dropzone")}
+              {directoryLoading
+                ? t("csvImport.dropzoneLoading")
+                : dragOver
+                  ? t("csvImport.dropzoneActive")
+                  : t("csvImport.dropzone")}
               {fileName !== null && <span className="text-caption-strong text-ink">{fileName}</span>}
             </button>
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handlePick} />
