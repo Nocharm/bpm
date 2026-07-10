@@ -2,6 +2,12 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-10 — 인원 카드 부서명 한글화 (worktree-korean-dept-card)
+- 버그: 한글 모드에서 이름은 한글인데 부서명이 전부 영문. `map-detail-card.tsx`가 부서 표시에 `dept_info.korean_name`도 `employees.korean_dept`도 **한 번도 읽지 않았다** — 영문 org 세그먼트만 렌더.
+- 수정 4곳(유저 행 말단 부서 · 펼침 레벨 필 · 팀 행 이름 · 팀 행 호버 상위 경로). 순수 함수 3종 신설: `buildKoreanDeptByPath`(확정 dept_info 우선, 없으면 직원 신고 korean_dept 폴백) · `buildOrgPathChain` · `formatDeptName`(ko=한글||영문, en=영문). 아이콘 레벨 판정·정렬은 영문 리프 유지.
+- 폴백은 직원이 실제 소속된 말단 경로만 채운다 — 상위 조직은 dept_info 임포트 전엔 영문. 데이터 없는 한글명을 지어내지 않는다.
+- 실측(한글 모드): 「지원팀」(korean_dept 폴백) · 「배송실」(dept_info) · 「Operations Center」(둘 다 없음 → 영문). 영어 모드는 무변경. vitest 184 · lint 0에러 · build · `pw-verify-hotfix-ui-6.mjs` 21/21.
+
 ## 2026-07-10 — 새 맵 모달: 죽은 여백 제거, 시작 위치 상향 (worktree-modal-top)
 - 직전 `pb-40`(160px) 철회 — 긴 화면(≥900px)에서 스크롤 없이 액션행 위 죽은 여백만 남았다. 빈 패딩으로 스크롤을 만들지 않는다.
 - 모달 시작 위치 `pt-8`→**`pt-4`**, `max-h` `100dvh-4rem`→**`100dvh-2rem`**. 1280 폭 실측: 900px 이상에서 모달 833px·스크롤 0, 500px에서도 액션 버튼 화면 안(스크롤 컨테이너 밖이라 밀리지 않음).

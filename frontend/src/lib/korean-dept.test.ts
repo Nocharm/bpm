@@ -5,7 +5,10 @@ import {
   buildAssigneeOptions,
   buildDepartmentOptions,
   buildExportIds,
+  buildKoreanDeptByPath,
+  buildOrgPathChain,
   deriveDeptKoreanKeywords,
+  formatDeptName,
   formatRosterName,
   getDeptMembers,
   sortManagersFirst,
@@ -188,5 +191,85 @@ describe("buildDepartmentOptions", () => {
     const opts = buildDepartmentOptions(["TeamA", "TeamB"], users, "ko", infos);
     expect(opts[0].label).toBe("TeamA"); // info 없음 — 영문만
     expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: "lee.mj" });
+  });
+});
+
+describe("buildOrgPathChain", () => {
+  it("expands an org path into root→self ancestor paths", () => {
+    expect(buildOrgPathChain("A/B/C")).toEqual(["A", "A/B", "A/B/C"]);
+  });
+
+  it("handles a single-level path and empty input", () => {
+    expect(buildOrgPathChain("A")).toEqual(["A"]);
+    expect(buildOrgPathChain("")).toEqual([]);
+  });
+});
+
+describe("formatDeptName", () => {
+  const korean = new Map([
+    ["Growth Center", "성장센터"],
+    ["Growth Center/Brand Team", "브랜드팀"],
+  ]);
+
+  it("shows the confirmed korean name in ko", () => {
+    expect(formatDeptName("Growth Center/Brand Team", "ko", korean)).toBe("브랜드팀");
+  });
+
+  it("falls back to the english leaf when no korean name is imported", () => {
+    expect(formatDeptName("Growth Center/Ops Team", "ko", korean)).toBe("Ops Team");
+    expect(formatDeptName("Growth Center/Brand Team", "ko", new Map())).toBe("Brand Team");
+  });
+
+  it("ignores a blank korean name (dept_info row exists but empty)", () => {
+    expect(formatDeptName("X/Y", "ko", new Map([["X/Y", "  "]]))).toBe("Y");
+  });
+
+  it("always shows the english leaf in en, even with a korean name", () => {
+    expect(formatDeptName("Growth Center/Brand Team", "en", korean)).toBe("Brand Team");
+  });
+
+  it("keys by full org path, not by leaf name — same leaf under different parents", () => {
+    const byPath = new Map([
+      ["A/Sales Team", "가영업팀"],
+      ["B/Sales Team", "나영업팀"],
+    ]);
+    expect(formatDeptName("A/Sales Team", "ko", byPath)).toBe("가영업팀");
+    expect(formatDeptName("B/Sales Team", "ko", byPath)).toBe("나영업팀");
+  });
+});
+
+describe("buildKoreanDeptByPath", () => {
+  const departments = [
+    { id: "HQ", korean_name: "본사" },
+    { id: "HQ/TeamA", korean_name: "" }, // dept_info 행은 있으나 한글명 미기입
+    { id: "HQ/TeamB", korean_name: "비팀" },
+    { id: "HQ/TeamC" }, // dept_info 행 없음
+  ];
+  const users = [
+    { org_path: "HQ/TeamA", korean_dept: "관찰된에이팀" },
+    { org_path: "HQ/TeamB", korean_dept: "관찰된비팀" },
+    { org_path: "HQ/TeamC", korean_dept: "" },
+  ];
+
+  it("prefers the confirmed dept_info name over the observed korean_dept", () => {
+    expect(buildKoreanDeptByPath(departments, users).get("HQ/TeamB")).toBe("비팀");
+  });
+
+  it("falls back to the observed korean_dept when dept_info has none", () => {
+    expect(buildKoreanDeptByPath(departments, users).get("HQ/TeamA")).toBe("관찰된에이팀");
+  });
+
+  it("leaves a path out entirely when neither source has a name", () => {
+    expect(buildKoreanDeptByPath(departments, users).has("HQ/TeamC")).toBe(false);
+  });
+
+  it("keeps parent levels that only dept_info can name", () => {
+    expect(buildKoreanDeptByPath(departments, users).get("HQ")).toBe("본사");
+  });
+
+  it("with no dept_info at all, still names the leaf paths employees sit in", () => {
+    const map = buildKoreanDeptByPath([], users);
+    expect(map.get("HQ/TeamA")).toBe("관찰된에이팀");
+    expect(map.has("HQ")).toBe(false); // 상위 조직은 관찰값으로 알 수 없다
   });
 });
