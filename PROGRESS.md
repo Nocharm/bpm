@@ -2,6 +2,11 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-10 — CSV로 새 맵 만들기 + 클립보드 수정 설계 (worktree-csv-create-flow)
+- **클립보드 버그 확정**: 복사 4곳(`csv-template-actions.tsx:32`, `markdown-view.tsx:179·188·198`)이 전부 `navigator.clipboard?.writeText()`. `navigator.clipboard`는 secure context 전용인데 서버는 원격 IP + 평문 HTTP → `undefined`. `?.`가 삼켜 **에러 없이 실패하고 버튼은 "복사됨!"을 띄운다**. localhost는 secure context라 재현 안 됨(`CLAUDE.md` 경고 그대로).
+- 3조각 설계 — Ⓐ `lib/clipboard.ts` `copyText()`(execCommand 폴백 + boolean 반환, 호출부 4곳이 실패를 표시) Ⓑ 백엔드 `csv_manual_url`(Settings→`/api/me`, `manual_url`과 동일 경로, DB 무변경) Ⓒ 홈 분할 버튼 → CSV 드롭존 모달(요약 확인) → `CreateMapDialog`에 파일 아코디언·이름/설명 프리필·`createdRef` 재시도. `docs/superpowers/specs/2026-07-10-csv-create-flow-design.md`.
+- 생성 시점엔 `listEligibleAssignees(versionId)`를 못 쓴다(버전 부재) → `getDirectory()`로 `CsvDirectory` 조립. 순수 함수 `stripCsvExtension`·`toCsvDirectory`만 TDD, 클립보드는 vitest가 node 환경이라 **단위 테스트 불가**(브라우저·평문 HTTP 오리진에서 검증).
+
 ## 2026-07-10 — CSV 임포트 머지 전환 설계 (worktree-csv-import-merge)
 - 원인 규명: 임포트 후 비교가 전부 변경으로 잡는 건 비교 버그가 아니라 임포트의 전체 교체 탓 — ⓐ `diff.ts:203` `edgeKey`가 노드 계보 키만 써서 새 id면 전 엣지 오탐, ⓑ `NODE_DEFAULTS`(`csv-import.ts:104`)가 color/assignee/department/group_ids를 초기화해 정당한 `changed` 유발. 덤으로 코멘트(`graph.py:194`)·그룹까지 삭제 중.
 - 해법: 프론트에서 제목 일치 노드의 **id를 재사용**하면 `graph.py:242` upsert가 제자리 UPDATE라 계보·코멘트·그룹이 보존되고 엣지 키가 안정된다. **백엔드 변경 0줄.**
