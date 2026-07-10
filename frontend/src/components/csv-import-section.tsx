@@ -1,7 +1,7 @@
 "use client";
 
 // CSV 임포트 공용 섹션 — 템플릿 다운로드 + AI 프롬프트 복사 + 파일 선택/텍스트 붙여넣기 + 파싱 요약/행 에러.
-// 에디터 임포트 모달만 쓴다 — 새 맵 다이얼로그는 CsvTemplateActions만 사용 (design 2026-07-06).
+// 에디터 임포트 모달만 쓴다 — 새 맵 다이얼로그는 CsvTemplateActions만 사용 (docs/superpowers/specs/2026-07-10-csv-import-merge-design.md).
 // 외부 AI 왕복: [AI 프롬프트 복사]→외부 AI에 문서와 함께 붙여넣기→받은 CSV를 [붙여넣기]로 입력.
 import { useRef, useState } from "react";
 
@@ -21,12 +21,11 @@ interface CsvImportSectionProps {
   outcome: CsvImportOutcome | null;
   fileName: string | null;
   onChange: (outcome: CsvImportOutcome | null, fileName: string | null) => void;
-  disabled?: boolean;
   // 머지 base + 담당자/부서 해석 디렉터리. 없으면 전량 신규·해석 없음.
   context?: CsvImportContext;
 }
 
-export function CsvImportSection({ outcome, fileName, onChange, disabled, context }: CsvImportSectionProps) {
+export function CsvImportSection({ outcome, fileName, onChange, context }: CsvImportSectionProps) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   // 붙여넣기 입력 — 파일 선택과 상호 배타. 텍스트 변경 즉시 파싱(≤500행이라 디바운스 불필요).
@@ -62,8 +61,8 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled, contex
   return (
     <div data-id="csv-import-section" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <CsvTemplateActions disabled={disabled} />
-        <button type="button" data-id="csv-file-pick" className={CSV_OUTLINE_BTN} onClick={() => fileRef.current?.click()} disabled={disabled}>
+        <CsvTemplateActions />
+        <button type="button" data-id="csv-file-pick" className={CSV_OUTLINE_BTN} onClick={() => fileRef.current?.click()}>
           <Upload size={14} strokeWidth={1.5} />
           {t("csvImport.chooseFile")}
         </button>
@@ -72,7 +71,6 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled, contex
           data-id="csv-paste-toggle"
           className={`${CSV_OUTLINE_BTN} ${pasteOpen ? "border-accent bg-accent-tint text-accent" : ""}`}
           onClick={() => setPasteOpen((open) => !open)}
-          disabled={disabled}
           aria-expanded={pasteOpen}
         >
           <ClipboardPaste size={14} strokeWidth={1.5} />
@@ -86,7 +84,6 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled, contex
           value={pasteText}
           onChange={(event) => handlePasteText(event.target.value)}
           placeholder={t("csvImport.pastePlaceholder")}
-          disabled={disabled}
           rows={5}
           className="w-full resize-y rounded-sm border border-hairline bg-surface px-2 py-1.5 font-mono text-fine text-ink outline-none placeholder:text-ink-tertiary focus:border-accent"
         />
@@ -102,7 +99,6 @@ export function CsvImportSection({ outcome, fileName, onChange, disabled, contex
               data-id="csv-clear"
               className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface hover:text-ink"
               onClick={handleClear}
-              disabled={disabled}
               aria-label={t("common.cancel")}
             >
               <X size={14} strokeWidth={1.5} />

@@ -76,6 +76,8 @@ const en = {
   "common.confirm": "Confirm",
   "common.cancel": "Cancel",
   "common.loading": "Loading…",
+  // 미리보기 슬롯(AI 제안 ↔ CSV 임포트) 상호 배타 — 프리뷰 중첩 시 안내
+  "preview.busy": "Finish the current preview first — Apply or Cancel it.",
   // CSV import (design 2026-07-06)
   "csvImport.applied": "CSV imported",
   "csvImport.chooseFile": "Choose CSV file",
@@ -1353,6 +1355,8 @@ const ko: Record<MessageKey, string> = {
   "common.confirm": "확인",
   "common.cancel": "취소",
   "common.loading": "로딩 중…",
+  // 미리보기 슬롯(AI 제안 ↔ CSV 임포트) 상호 배타 — 프리뷰 중첩 시 안내
+  "preview.busy": "진행 중인 미리보기를 먼저 적용하거나 취소하세요.",
   // CSV 임포트 (design 2026-07-06)
   "csvImport.applied": "CSV 임포트 완료",
   "csvImport.chooseFile": "CSV 파일 선택",

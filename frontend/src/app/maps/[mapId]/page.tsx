@@ -821,7 +821,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 미리보기 — AI 제안과 CSV 임포트가 공유. null이 아니면 자동저장이 꺼진다(Apply 전 영속화 방지).
   const [previewSource, setPreviewSource] = useState<"ai" | "csv" | null>(null);
-  const previewRef = useRef(false);
+  // previewSource와 항상 동기화되는 소스 유니온 — 하나의 undo 스냅샷/자동저장 억제 슬롯을 두 기능이 공유하므로
+  // 서로 중첩되면 승인 전 그래프가 자동저장될 수 있다. 슬롯은 배타적으로만 점유한다.
+  const previewRef = useRef<"ai" | "csv" | null>(null);
   // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그
   const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });
   const aiMinDragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(
@@ -1332,7 +1334,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const saveCurrentScope = useCallback(async () => {
     // 미리보기 중에는 저장 생략 — Apply 전 자동 영속화 방지
-    if (previewRef.current) return;
+    if (previewRef.current !== null) return;
     // 딥뷰(읽기전용 하위프로세스 스코프)는 영속 대상이 아님 — 자동/블러/디바운스 저장 모두 차단.
     if (currentScopeIsReadOnlyRef.current) return;
     // 읽기 전용(타인 체크아웃)이면 저장 자체를 생략 — 스코프 이동은 계속 가능
@@ -1363,7 +1365,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const scheduleAutoSave = useCallback(() => {
     // 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
-    if (previewRef.current) return;
+    if (previewRef.current !== null) return;
     if (readOnly) {
       return;
     }
@@ -1480,6 +1482,8 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // CSV 머지 프리뷰 — 캔버스에만 반영(미저장). 소멸 노드/엣지는 삭제·유지와 무관하게 항상 빨간 점선으로 보여준다.
   const enterCsvPreview = useCallback(() => {
+    // 슬롯이 이미 점유 중이면(주로 AI 프리뷰) 무시 — 툴바 게이팅이 우선 막지만 방어적으로 한 번 더 확인
+    if (previewRef.current !== null) return;
     const outcome = csvOutcome;
     if (versionId === null || !outcome?.graph) return;
     const added = new Set(outcome.merge.addedNodeIds);
@@ -1509,7 +1513,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     ];
 
     pushHistory(); // Cancel = undo 1회로 임포트 이전 캔버스 복귀
-    previewRef.current = true;
+    previewRef.current = "csv";
     setNodes(previewNodes);
     setEdges(previewEdges);
     setGroups(canvasGraph.groups);
@@ -1532,7 +1536,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       : outcome.graph;
     try {
       const saved = await saveGraph(versionId, payload);
-      previewRef.current = false;
+      previewRef.current = null;
       setPreviewSource(null);
       setNodes(toAppNodes(saved, null));
       setEdges(toAppEdges(saved));
@@ -1595,7 +1599,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // CSV 프리뷰 취소 — 스냅샷 복원에 undo가 필요해 undo 선언 뒤에 둔다. Task 8이 Import 탭에 연결한다.
   const cancelCsvPreview = useCallback(() => {
-    previewRef.current = false;
+    previewRef.current = null;
     setPreviewSource(null);
     setCsvOutcome(null);
     setCsvFileName(null);
@@ -1607,6 +1611,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     (proposal: AiProposal) => {
       // Phase 2: graph(전체 교체)만 적용. ops/walkthrough/analysis는 Phase 3~5(패널이 폴백 렌더)
       if (proposal.kind !== "graph") return;
+      // CSV 프리뷰가 슬롯을 점유 중이면 캔버스를 건드리지 않는다 — AI 프리뷰끼리 잇는 것은 기존 동작이라 허용
+      if (previewRef.current === "csv") {
+        showToast(t("preview.busy"));
+        return;
+      }
       // 그룹 임시키 → 실제 id (노드 group_key·그룹 parent_key 해석용)
       const groupKeyToId = new Map<string, string>();
       for (const group of proposal.groups) {
@@ -1650,19 +1659,24 @@ function MapEditor({ mapId }: { mapId: number }) {
       const laidOut = layoutWithDagre(toAppNodes(graph), toAppEdges(graph));
 
       pushHistory(); // Discard = undo restores the pre-preview state
-      previewRef.current = true;
+      previewRef.current = "ai";
       setNodes(laidOut);
       setEdges(toAppEdges(graph));
       setGroups(ggroups);
       setPreviewSource("ai");
     },
-    [pushHistory, setNodes, setEdges, setGroups],
+    [pushHistory, setNodes, setEdges, setGroups, showToast, t],
   );
 
   // ── AI 증분 편집(ops) 적용 — 기존 좌표·색·담당자·그룹 보존 (D1 편집 경로) ──
   const applyAiOps = useCallback(
     (proposal: AiProposal) => {
       if (proposal.kind !== "ops") return;
+      // CSV 프리뷰가 슬롯을 점유 중이면 캔버스를 건드리지 않는다 — AI 프리뷰끼리 잇는 것은 기존 동작이라 허용
+      if (previewRef.current === "csv") {
+        showToast(t("preview.busy"));
+        return;
+      }
       const existingGroupIds = new Set(groupsRef.current.map((group) => group.id));
       const removed = new Set<string>();
       const relabels = new Map<string, string>();
@@ -1779,22 +1793,22 @@ function MapEditor({ mapId }: { mapId: number }) {
       ];
 
       pushHistory(); // Discard = undo restores the pre-preview state
-      previewRef.current = true;
+      previewRef.current = "ai";
       setNodes(finalNodes);
       setEdges(finalEdges);
       setPreviewSource("ai");
     },
-    [pushHistory, setNodes, setEdges],
+    [pushHistory, setNodes, setEdges, showToast, t],
   );
 
   const commitAiPreview = useCallback(() => {
-    previewRef.current = false;
+    previewRef.current = null;
     setPreviewSource(null);
     void saveCurrentScope();
   }, [saveCurrentScope]);
 
   const discardAiPreview = useCallback(() => {
-    previewRef.current = false;
+    previewRef.current = null;
     setPreviewSource(null);
     undo(); // restore the snapshot pushed in applyAiProposal
   }, [undo]);
@@ -6515,7 +6529,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
           manualUrl={manualUrl}
           onImportCsv={
-            checkout?.mine && currentParentId === null && eligible !== null
+            checkout?.mine && currentParentId === null && eligible !== null && previewSource === null
               ? () => setCsvImportOpen(true)
               : undefined
           }
