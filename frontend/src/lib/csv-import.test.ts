@@ -6,6 +6,7 @@ import {
   buildAiPromptText,
   buildGraphFromCsv,
   buildTemplateCsv,
+  type CsvDirectory,
   decodeCsvBuffer,
   parseCsvRecords,
   stripCsvFences,
@@ -213,5 +214,111 @@ describe("url_label column", () => {
     const out = buildGraphFromCsv("Name,System,Duration,URL,Next\nA,,,,\n");
     expect(out.errors).toEqual([]);
     expect(out.ignoredLabelCount).toBe(0);
+  });
+});
+
+// ── 설명 · 담당자(login_id) · 부서 컬럼 ──────────────────────────
+
+const H9 = "Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next";
+
+const DIR: CsvDirectory = {
+  users: [
+    { id: "hong.gd", name: "홍길동", department: "Quality Part 1" },
+    { id: "kim.cs", name: "김철수", department: "Quality Part 1" },
+    { id: "lee.yh", name: "이영희", department: "Finance Part" },
+  ],
+  departments: ["Quality Part 1", "Finance Part"],
+  dept_infos: { "Quality Part 1": { korean_name: "품질1파트" } },
+};
+
+function outcomeOf(csv: string, directory?: CsvDirectory) {
+  return buildGraphFromCsv(csv, directory ? { directory } : undefined);
+}
+
+describe("buildGraphFromCsv — Description/Assignee/Department 컬럼", () => {
+  it("설명 셀을 노드 description으로 싣는다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,담당자가 내용을 확인한다,,,,,,,\n`, DIR);
+    expect(o.errors).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "요청 검토")!.description).toBe("담당자가 내용을 확인한다");
+  });
+
+  it("따옴표 안 콤마·줄바꿈을 품은 설명을 그대로 싣는다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,"1줄, 쉼표\n2줄",,,,,,,\n`, DIR);
+    expect(o.errors).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "요청 검토")!.description).toBe("1줄, 쉼표\n2줄");
+  });
+
+  it("login_id를 이름으로 해석한다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,,hong.gd,Quality Part 1,,,,,\n`, DIR);
+    expect(o.errors).toEqual([]);
+    expect(o.warnings).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.title === "요청 검토")!;
+    expect(node.assignee).toBe("홍길동");
+    expect(node.department).toBe("Quality Part 1");
+  });
+
+  it("따옴표 셀의 복수 login_id를 해석해 \", \"로 잇는다", () => {
+    const o = outcomeOf(`${H9}\n승인,,"hong.gd, kim.cs",Quality Part 1,,,,,\n`, DIR);
+    expect(o.warnings).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "승인")!.assignee).toBe("홍길동, 김철수");
+  });
+
+  it("이미 이름으로 적힌 토큰은 경고 없이 통과시킨다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,,홍길동,Quality Part 1,,,,,\n`, DIR);
+    expect(o.warnings).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "요청 검토")!.assignee).toBe("홍길동");
+  });
+
+  it("해석되지 않는 담당자는 원문을 남기고 경고한다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,,ghost.id,Quality Part 1,,,,,\n`, DIR);
+    expect(o.errors).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "요청 검토")!.assignee).toBe("ghost.id");
+    expect(o.warnings).toHaveLength(1);
+    expect(o.warnings[0].line).toBe(2);
+    expect(o.warnings[0].message).toContain("ghost.id");
+  });
+
+  it("한글 부서명을 정식 부서명으로 되돌린다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,,hong.gd,품질1파트,,,,,\n`, DIR);
+    expect(o.warnings).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "요청 검토")!.department).toBe("Quality Part 1");
+  });
+
+  it("알 수 없는 부서는 원문을 남기고 경고한다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,,,없는파트,,,,,\n`, DIR);
+    expect(o.graph!.nodes.find((n) => n.title === "요청 검토")!.department).toBe("없는파트");
+    expect(o.warnings.some((w) => w.message.includes("없는파트"))).toBe(true);
+  });
+
+  it("담당자 부서가 행 부서와 다르면 경고한다 (assignee.ts 불변식)", () => {
+    const o = outcomeOf(`${H9}\n승인,,"hong.gd, lee.yh",Quality Part 1,,,,,\n`, DIR);
+    expect(o.errors).toEqual([]);
+    expect(o.warnings.some((w) => w.message.includes("이영희"))).toBe(true);
+  });
+
+  it("해석 후 길이가 100자를 넘으면 에러다 (NodeIn max_length 미러)", () => {
+    const longName = "가".repeat(101);
+    const dir: CsvDirectory = { users: [{ id: "x", name: longName, department: "Finance Part" }], departments: ["Finance Part"] };
+    const o = outcomeOf(`${H9}\n요청 검토,,x,Finance Part,,,,,\n`, dir);
+    expect(o.graph).toBeNull();
+    expect(o.errors[0].message).toContain("assignee");
+  });
+
+  it("디렉터리가 없으면 해석도 경고도 하지 않는다", () => {
+    const o = outcomeOf(`${H9}\n요청 검토,,hong.gd,품질1파트,,,,,\n`);
+    expect(o.warnings).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.title === "요청 검토")!;
+    expect(node.assignee).toBe("hong.gd");
+    expect(node.department).toBe("품질1파트");
+  });
+
+  it("새 열이 없는 옛 CSV도 그대로 파싱된다 (회귀)", () => {
+    const o = outcomeOf(`${HEADER}\nReview request,SAP,2 days,,\n`, DIR);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.title === "Review request")!;
+    expect(node.description).toBe("");
+    expect(node.assignee).toBe("");
+    expect(node.department).toBe("");
+    expect(node.system).toBe("SAP");
   });
 });

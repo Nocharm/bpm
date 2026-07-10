@@ -3,6 +3,7 @@
 import type { Edge } from "@xyflow/react";
 
 import type { Graph, GraphEdge, GraphNode } from "./api";
+import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { genId } from "./id";
 
@@ -17,22 +18,45 @@ export interface CsvImportError {
   message: string;
 }
 
+/** 비차단 경고 — 임포트를 막지 않는다. 백엔드는 담당자를 검증하지 않으므로 유일한 사전 안내다. */
+export interface CsvImportWarning {
+  line: number;
+  message: string;
+}
+
 export interface CsvImportOutcome {
   graph: Graph | null;
   nodeCount: number;
   edgeCount: number;
   errors: CsvImportError[];
+  warnings: CsvImportWarning[];
   ignoredLabelCount: number;
 }
 
-const HEADER_COLUMNS = ["name", "system", "duration", "url", "url_label", "next"] as const;
+export interface CsvDirectory {
+  users: readonly { id: string; name: string; department: string }[];
+  departments: readonly string[];
+  // 정식 부서명 → { korean_name } — 한글로 적힌 부서 셀을 정식명으로 되돌린다
+  dept_infos?: Readonly<Record<string, { korean_name?: string }>>;
+}
+
+/** 임포트 문맥 — 디렉터리는 담당자/부서 해석에, base(Task 4)는 머지에 쓴다. */
+export interface CsvImportContext {
+  directory?: CsvDirectory;
+}
+
+const HEADER_COLUMNS = [
+  "name", "description", "assignee", "department", "system", "duration", "url", "url_label", "next",
+] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
 // 데이터 행 상한 — 초대형 파일 오업로드 방지
 const MAX_DATA_ROWS = 500;
-// 백엔드 NodeIn max_length 미러 — 서버 422 전에 행 단위로 안내
-const MAX_LEN: Record<Exclude<HeaderColumn, "next">, number> = {
+// 백엔드 NodeIn 제약 미러. description은 NodeIn에 max_length가 없고 Node.description이 Text 컬럼이라 제외한다.
+const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
   name: 200,
+  assignee: 100,   // NodeIn.assignee — 해석된 "이름" 문자열 기준
+  department: 100, // NodeIn.department
   system: 100,
   duration: 50,
   url: 500,
@@ -119,13 +143,43 @@ const NODE_DEFAULTS = {
   is_primary_end: false,
 };
 
+/** login_id → 이름. 이미 이름이면 그대로(거짓 경고 방지). 못 찾으면 원문 + 경고. */
+function resolveAssignee(
+  raw: string, dir: CsvDirectory | undefined, line: number, warnings: CsvImportWarning[],
+): string {
+  if (raw === "" || dir === undefined) return raw;
+  const names = parseAssignees(raw).map((token) => {
+    const byId = dir.users.find((user) => user.id === token);
+    if (byId) return byId.name;
+    if (dir.users.some((user) => user.name === token)) return token;
+    warnings.push({ line, message: `Unknown assignee "${token}"` });
+    return token;
+  });
+  return formatAssignees(names);
+}
+
+/** 정식 부서명 그대로, 아니면 한글 부서명 역인덱스. 못 찾으면 원문 + 경고. */
+function resolveDepartment(
+  raw: string, dir: CsvDirectory | undefined, line: number, warnings: CsvImportWarning[],
+): string {
+  if (raw === "" || dir === undefined) return raw;
+  if (dir.departments.includes(raw)) return raw;
+  const canonical = Object.entries(dir.dept_infos ?? {}).find(
+    ([, info]) => info.korean_name === raw,
+  )?.[0];
+  if (canonical) return canonical;
+  warnings.push({ line, message: `Unknown department "${raw}"` });
+  return raw;
+}
+
 /** CSV 텍스트 → 검증 + 그래프(자동 Start/End, decision 추론, dagre LR 배치). 에러 있으면 graph=null. */
-export function buildGraphFromCsv(text: string): CsvImportOutcome {
+export function buildGraphFromCsv(text: string, context?: CsvImportContext): CsvImportOutcome {
   const fail = (errors: CsvImportError[]): CsvImportOutcome => ({
     graph: null,
     nodeCount: 0,
     edgeCount: 0,
     errors,
+    warnings: [],
     ignoredLabelCount: 0,
   });
 
@@ -172,6 +226,9 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
   };
   const rows = dataRecords.map((r) => ({
     name: cellOf(r, "name"),
+    description: cellOf(r, "description"),
+    assignee: cellOf(r, "assignee"),
+    department: cellOf(r, "department"),
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
     url: cellOf(r, "url"),
@@ -244,6 +301,22 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     }
     nextsOf.set(row.name, refs);
   }
+
+  // 담당자/부서 해석 — id→이름, 한글 부서명→정식명. 해석 후 길이를 재야 한다(id는 짧아도 이름은 길 수 있음)
+  const warnings: CsvImportWarning[] = [];
+  const resolved = new Map<string, { assignee: string; department: string }>();
+  for (const row of rows) {
+    if (!names.has(row.name)) continue; // 이름 에러 행은 스킵
+    const assignee = resolveAssignee(row.assignee, context?.directory, row.line, warnings);
+    const department = resolveDepartment(row.department, context?.directory, row.line, warnings);
+    if (assignee.length > MAX_LEN.assignee) {
+      errors.push({ line: row.line, message: `assignee exceeds ${MAX_LEN.assignee} characters` });
+    }
+    if (department.length > MAX_LEN.department) {
+      errors.push({ line: row.line, message: `department exceeds ${MAX_LEN.department} characters` });
+    }
+    resolved.set(row.name, { assignee, department });
+  }
   if (errors.length > 0) return fail(errors);
 
   // 노드 — Next 대상 2개 이상이면 decision. Start/End는 자동 생성
@@ -258,6 +331,9 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
       id: idOf.get(row.name) as string,
       title: row.name,
       node_type: (nextsOf.get(row.name) ?? []).length >= 2 ? "decision" : "process",
+      description: row.description,
+      assignee: resolved.get(row.name)?.assignee ?? "",
+      department: resolved.get(row.name)?.department ?? "",
       system: row.system,
       duration: row.duration,
       url: row.url,
@@ -339,11 +415,27 @@ export function buildGraphFromCsv(text: string): CsvImportOutcome {
     return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
   });
 
+  // 부서 불일치 경고 — resolveAssignee가 이미 경고한 미해석 토큰은 제외(중복 경고 방지)
+  if (context?.directory) {
+    const dir = context.directory;
+    for (const row of rows) {
+      const info = resolved.get(row.name);
+      if (!info || info.assignee === "") continue;
+      const known = parseAssignees(info.assignee).filter((n) => dir.users.some((u) => u.name === n));
+      // driftedAssignees는 mutable Person[]을 받는다 — CsvDirectory.users는 readonly라 얕은 복사로 맞춘다
+      const drifted = driftedAssignees(info.department, known, [...dir.users]);
+      for (const name of drifted) {
+        warnings.push({ line: row.line, message: `"${name}" is not in department "${info.department}"` });
+      }
+    }
+  }
+
   return {
     graph: { nodes: positioned, edges, groups: [] },
     nodeCount: positioned.length,
     edgeCount: edges.length,
     errors: [],
+    warnings,
     ignoredLabelCount,
   };
 }

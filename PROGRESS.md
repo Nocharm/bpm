@@ -11,6 +11,7 @@
 - **빈 셀 = 기존 값 유지**를 전 속성 열에 일관 적용. 근거: AI 프롬프트(`csv-import.ts:395`)가 "불명확한 속성은 비워두라"고 지시하므로 빈 칸이 값을 지우면 AI 생성 CSV 재임포트마다 속성이 전멸한다. `Next`만 예외(빈 값 = 말단).
 - `docs/samples/*.csv` 3종이 이미 낡음(헤더에 `URL_Label` 누락, 파서의 열 부분집합 허용이 은폐) — 8열로 재작성 예정.
 - ① 새맵 다이얼로그 축소 — CsvTemplateActions 추출(템플릿·프롬프트만), 노티스 추가, 생성 후 항상 에디터 이동. `mapCreatedImportFailed` 키 제거. vitest 162·lint 0에러.
+- ①-b CSV 컬럼 확장 — Description(길이 제한 없음, Text 컬럼)·Assignee(login_id→이름 해석, 이름 직접 표기도 통과)·Department(한글 부서명→정식명) + 비차단 경고(미해석 담당자·미지 부서·부서 불일치). 백엔드는 담당자를 검증하지 않아 프론트 드리프트 배지가 유일한 안전망. vitest 174·lint 0에러.
 
 ## 2026-07-10 — 문서 정리: 완료 SDD 문서 삭제 + PROGRESS compact (main)
 - `docs/superpowers/` 완료 plans·specs 72개 + editor-compare-redesign 에셋(1.9MB) + `docs/frontend-compare-verification.md` 삭제 — 최근 2건(ui-batch2·member-card-icons)만 유지, 전부 git history에 보존.
