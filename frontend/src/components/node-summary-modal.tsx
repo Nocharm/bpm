@@ -333,7 +333,12 @@ export function NodeSummaryModal({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary">
+        {/* min-h-0 — flex 자식의 min-height:auto(=min-content)가 축소를 막아 overflow-y-auto가 죽는 것 방지.
+            죽으면 카드의 overflow-hidden이 아래를 잘라 선행/후행 내비까지 닿을 수 없다. 스크롤바는 숨기고 스크롤만 남긴다. */}
+        <div
+          data-id="node-summary-body"
+          className="scrollbar-hidden flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary"
+        >
           {readOnly ? (
             <div className="flex gap-4">
               <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
