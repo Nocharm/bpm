@@ -208,12 +208,15 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
     if (!dept) return;
     const removeId = autoLeaderRef.current;
     const leader = dept.manager ? userById.get(dept.manager) : undefined;
-    setApprovers((prev) => {
-      const kept = removeId ? prev.filter((a) => a.userId !== removeId) : prev;
-      if (!leader || kept.some((a) => a.userId === leader.id)) return kept;
-      return [...kept, { key: genId(), userId: leader.id, displayName: leader.name }];
-    });
-    autoLeaderRef.current = leader?.id ?? null;
+    const kept = removeId ? approvers.filter((a) => a.userId !== removeId) : approvers;
+    // 자동 추가로 기록하는 건 실제로 추가했을 때만 — 수동 추가분을 auto로 오인해 clear 시 지우는 버그 방지
+    const shouldAdd = leader !== undefined && !kept.some((a) => a.userId === leader.id);
+    setApprovers(
+      shouldAdd
+        ? [...kept, { key: genId(), userId: leader.id, displayName: leader.name }]
+        : kept,
+    );
+    autoLeaderRef.current = shouldAdd ? leader.id : null;
     setOwningDept(dept);
   };
 
@@ -245,9 +248,14 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   }, []);
 
   // ── 결재자 제거 / remove approver ──
-  const handleRemoveApprover = useCallback((key: string) => {
+  // plain 함수 — React Compiler 자동 메모. 자동 추가된 리더를 지우면 추적 ref도 해제.
+  const handleRemoveApprover = (key: string) => {
+    const target = approvers.find((a) => a.key === key);
+    if (target && target.userId === autoLeaderRef.current) {
+      autoLeaderRef.current = null;
+    }
     setApprovers((prev) => prev.filter((a) => a.key !== key));
-  }, []);
+  };
 
   // ── 생성 / create ──
   const handleCreate = useCallback(async () => {
