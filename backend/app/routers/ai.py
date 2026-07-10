@@ -16,6 +16,7 @@ from app.chat_history import (
     derive_chat_title,
     prune_chat_session_messages,
     prune_map_chat_sessions,
+    serialize_proposal_payload,
 )
 from app.clock import now as now_kst
 from app.ai_prompt import build_messages
@@ -213,6 +214,7 @@ async def ai_chat(
             role="assistant",
             content=proposal.message,
             kind=proposal.kind,
+            payload=serialize_proposal_payload(proposal),
             version_id=version_id,
         )
     )

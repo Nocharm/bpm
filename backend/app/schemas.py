@@ -875,6 +875,8 @@ class AiChatMessageOut(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     kind: str | None = None
+    # 제안 원자료(kind별 서브셋) — 오염 행은 None (parse_proposal_payload 강등)
+    payload: dict | None = None
     version_id: int | None = None
     created_at: datetime
 

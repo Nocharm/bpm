@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.app_settings import get_ai_chat_retention_days
 from app.auth import get_current_user
-from app.chat_history import prune_expired_chat_sessions
+from app.chat_history import parse_proposal_payload, prune_expired_chat_sessions
 from app.db import get_session
 from app.models import AiChatMessage, AiChatSession, ProcessMap
 from app.schemas import AiChatMessageOut, AiChatMessagesOut, AiChatSessionOut, AiChatSessionsOut
@@ -88,6 +88,7 @@ async def list_chat_messages(
                 role=m.role,
                 content=m.content,
                 kind=m.kind,
+                payload=parse_proposal_payload(m.payload),
                 version_id=m.version_id,
                 created_at=m.created_at,
             )

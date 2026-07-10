@@ -50,6 +50,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # 한글이름·한글그룹 — AD 미제공, 어드민 임포트 전용 (2026-07-09). 기존 행은 ''로 백필(EmployeeOut str 비-nullable)
     ("employees", "korean_name", "VARCHAR(200) DEFAULT ''"),
     ("employees", "korean_dept", "VARCHAR(200) DEFAULT ''"),
+    # AI 제안 페이로드 — 카드 히스토리 재현 (design 2026-07-10)
+    ("ai_chat_messages", "payload", "TEXT"),
 ]
 
 
