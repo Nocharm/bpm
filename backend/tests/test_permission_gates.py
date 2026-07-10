@@ -348,7 +348,7 @@ def test_create_grants_owner_to_creator(client: TestClient, enforce: None) -> No
     from sqlalchemy import select
 
     act_as("maker.u")
-    created = client.post("/api/maps", json={"name": "mine"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "mine"}).json()
     map_id = created["id"]
 
     async def _check(session) -> tuple[str, str, list[tuple[str, str]]]:
@@ -433,7 +433,7 @@ def test_dev_enforce_flag_off_no_lock(client: TestClient) -> None:
 
 def test_auth_off_gates_open(client: TestClient) -> None:
     """기본(auth OFF) 경로: 전원 sysadmin → 게이트 통과(회귀 없음)."""
-    created = client.post("/api/maps", json={"name": "off map"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "off map"}).json()
     map_id = created["id"]
     vid = created["versions"][0]["id"]
 

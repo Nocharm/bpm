@@ -53,7 +53,7 @@ def test_version_event_relationship_orders_by_created_at(client: TestClient) -> 
 
 
 def test_create_map_records_created_event(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "evt create"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "evt create"}).json()
     version_id = created["versions"][0]["id"]
 
     async def read(session) -> list[tuple[str, str]]:
@@ -71,7 +71,7 @@ def test_create_map_records_created_event(client: TestClient) -> None:
 def test_full_lifecycle_records_events(client: TestClient) -> None:
     from app.settings import settings
 
-    created = client.post("/api/maps", json={"name": "evt lifecycle"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "evt lifecycle"}).json()
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
 
@@ -97,7 +97,7 @@ def test_full_lifecycle_records_events(client: TestClient) -> None:
 def test_reject_records_event_with_reason(client: TestClient) -> None:
     from app.settings import settings
 
-    created = client.post("/api/maps", json={"name": "evt reject"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "evt reject"}).json()
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
 
@@ -160,7 +160,7 @@ def test_backfill_created_events_idempotent(client: TestClient) -> None:
 
 
 def test_get_map_serializes_versions_with_events(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "evt serialize"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "evt serialize"}).json()
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
 

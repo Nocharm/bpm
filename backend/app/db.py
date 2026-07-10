@@ -52,6 +52,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("employees", "korean_dept", "VARCHAR(200) DEFAULT ''"),
     # AI 제안 페이로드 — 카드 히스토리 재현 (design 2026-07-10)
     ("ai_chat_messages", "payload", "TEXT"),
+    # 오우닝 부서 — 기존 행은 NULL=누락, 설정에서 owner가 수동 지정 (spec 2026-07-10)
+    ("process_maps", "owning_department", "VARCHAR(200)"),
 ]
 
 

@@ -15,7 +15,7 @@ def _ai_map(client: TestClient) -> dict:
     # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
     global _ai_seq
     _ai_seq += 1
-    return client.post("/api/maps", json={"name": f"ai map {_ai_seq}"}).json()
+    return client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"ai map {_ai_seq}"}).json()
 
 
 def test_ai_settings_default_disabled() -> None:

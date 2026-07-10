@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 
 def test_create_map_returns_default_version(client: TestClient) -> None:
-    response = client.post("/api/maps", json={"name": "구매 프로세스"})
+    response = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "구매 프로세스"})
 
     assert response.status_code == 201
     body = response.json()
@@ -14,20 +14,25 @@ def test_create_map_returns_default_version(client: TestClient) -> None:
 
 
 def test_create_map_defaults_private(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "default vis map"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "default vis map"}).json()
     assert created["visibility"] == "private"
 
 
 def test_create_map_honors_public_visibility(client: TestClient) -> None:
     """생성 시 public 선택이 반영돼야 함 (핫픽스: 항상 private로 생성되던 버그)."""
     created = client.post(
-        "/api/maps", json={"name": "public at create", "visibility": "public"}
+        "/api/maps",
+        json={
+            "owning_department": "Owning Anchor Division",
+            "name": "public at create",
+            "visibility": "public",
+        },
     ).json()
     assert created["visibility"] == "public"
 
 
 def test_get_map_returns_created_map(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "발주"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "발주"}).json()
 
     response = client.get(f"/api/maps/{created['id']}")
 
@@ -42,27 +47,27 @@ def test_get_missing_map_returns_404(client: TestClient) -> None:
 
 
 def test_create_map_rejects_blank_name(client: TestClient) -> None:
-    response = client.post("/api/maps", json={"name": ""})
+    response = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": ""})
 
     assert response.status_code == 422
 
 
 def test_create_map_rejects_duplicate_name(client: TestClient) -> None:
-    client.post("/api/maps", json={"name": "중복맵A"})
-    response = client.post("/api/maps", json={"name": "중복맵A"})
+    client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "중복맵A"})
+    response = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "중복맵A"})
     assert response.status_code == 409
 
 
 def test_update_map_rejects_duplicate_name(client: TestClient) -> None:
-    client.post("/api/maps", json={"name": "기존맵A"})
-    other = client.post("/api/maps", json={"name": "다른맵A"}).json()
+    client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "기존맵A"})
+    other = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "다른맵A"}).json()
     # 다른 맵 이름으로 변경 → 409, 자기 자신 이름 유지는 허용
     assert client.patch(f"/api/maps/{other['id']}", json={"name": "기존맵A"}).status_code == 409
     assert client.patch(f"/api/maps/{other['id']}", json={"name": "다른맵A"}).status_code == 200
 
 
 def test_list_maps_includes_created(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "검수"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "검수"}).json()
 
     response = client.get("/api/maps")
 
@@ -72,7 +77,7 @@ def test_list_maps_includes_created(client: TestClient) -> None:
 
 def test_list_maps_includes_latest_version_status(client: TestClient) -> None:
     """목록은 최신 버전 상태를 동봉 — 신규 맵은 기본 As-Is 버전이라 'draft'."""
-    created = client.post("/api/maps", json={"name": "상태확인"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "상태확인"}).json()
 
     row = next(m for m in client.get("/api/maps").json() if m["id"] == created["id"])
 
@@ -81,7 +86,7 @@ def test_list_maps_includes_latest_version_status(client: TestClient) -> None:
 
 def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     """목록은 카드 집계(전체 버전 수·라이브 노드 수·소유자명)를 동봉 (H5b)."""
-    created = client.post("/api/maps", json={"name": "카드집계"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "카드집계"}).json()
     vid = created["versions"][0]["id"]
     # 노드 2개 저장 — 라이브(published) 없으면 최신 버전 기준 폴백
     client.post(f"/api/versions/{vid}/checkout", json={})
@@ -105,7 +110,7 @@ def test_list_maps_includes_card_metrics(client: TestClient) -> None:
 
 
 def test_update_map_changes_name(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "old"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "old"}).json()
 
     response = client.patch(f"/api/maps/{created['id']}", json={"name": "new"})
 
@@ -114,7 +119,7 @@ def test_update_map_changes_name(client: TestClient) -> None:
 
 
 def test_delete_map_then_get_404(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "to delete"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "to delete"}).json()
 
     delete_response = client.delete(f"/api/maps/{created['id']}")
     get_response = client.get(f"/api/maps/{created['id']}")
@@ -125,7 +130,7 @@ def test_delete_map_then_get_404(client: TestClient) -> None:
 
 def test_delete_is_soft_and_restorable(client: TestClient) -> None:
     """삭제는 소프트삭제 — 목록/조회 제외, 휴지통에 노출, 복구하면 되살아남 (DL)."""
-    created = client.post("/api/maps", json={"name": "soft delete map"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "soft delete map"}).json()
     mid = created["id"]
     assert client.delete(f"/api/maps/{mid}").status_code == 204
     # 일반 조회·목록에서 제외
@@ -139,7 +144,7 @@ def test_delete_is_soft_and_restorable(client: TestClient) -> None:
 
 def test_get_map_includes_my_role(client: TestClient) -> None:
     # 서버가 호출자의 유효 역할을 노출 — 프론트 게이팅 단일 소스 (auth OFF → sysadmin owner)
-    created = client.post("/api/maps", json={"name": "with role"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "with role"}).json()
 
     body = client.get(f"/api/maps/{created['id']}").json()
 
@@ -148,7 +153,7 @@ def test_get_map_includes_my_role(client: TestClient) -> None:
 
 
 def test_list_maps_includes_my_role(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "list role"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "list role"}).json()
 
     body = client.get("/api/maps").json()
 

@@ -34,7 +34,7 @@ def _unique(name: str) -> str:
 
 def _new_version(client: TestClient, name: str = "p") -> int:
     version_id = (
-        client.post("/api/maps", json={"name": _unique(name)}).json()["versions"][0]["id"]
+        client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": _unique(name)}).json()["versions"][0]["id"]
     )
     # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})
@@ -91,7 +91,7 @@ def test_accepts_valid_process(client: TestClient) -> None:
 
 
 def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": _unique(name)}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": _unique(name)}).json()
     version_id = created["versions"][0]["id"]
     # PUT /graph는 체크아웃 보유자만 — 편집 워크플로우 재현
     client.post(f"/api/versions/{version_id}/checkout", json={})
@@ -181,14 +181,14 @@ def test_resolved_returns_pinned_graph(
 
 def _make_map(client: TestClient, name: str) -> dict:
     """Create a map and return its full JSON (id + versions list)."""
-    return client.post("/api/maps", json={"name": name}).json()
+    return client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": name}).json()
 
 
 def _make_map_with_published(
     client: TestClient, name: str, monkeypatch: pytest.MonkeyPatch
 ) -> dict:
     """Create a map and publish its first version. Returns {map_id, published_version_id}."""
-    created = client.post("/api/maps", json={"name": name}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": name}).json()
     map_id = created["id"]
     version_id = created["versions"][0]["id"]
     # Workflow: set approvers → checkout → submit → approve (as "boss") → publish

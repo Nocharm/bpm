@@ -663,7 +663,7 @@ def test_approvers_assigned_by_set(client: TestClient, enforce: None) -> None:
 
 
 def test_auth_off_management_open(client: TestClient) -> None:
-    created = client.post("/api/maps", json={"name": "off perm map"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "off perm map"}).json()
     map_id = created["id"]
 
     # collaborators

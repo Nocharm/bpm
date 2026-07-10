@@ -50,7 +50,7 @@ def _keepalive_raw():
 
 
 def _create_map_with_version(client: TestClient, name: str) -> tuple[int, int]:
-    created = client.post("/api/maps", json={"name": name}, headers=OWNER).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": name}, headers=OWNER).json()
     return created["id"], created["versions"][0]["id"]
 
 

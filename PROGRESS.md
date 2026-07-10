@@ -5,6 +5,7 @@
 ## 2026-07-10 — 맵 필수 필드 '오우닝 부서' 설계
 - 모든 맵에 책임 부서 필수화 설계 확정 — 생성 시 지정 필수(모든 조직 레벨), 파생 권한 방식(권한 행 없이 `effective_role`에서 오우닝 부서 소속 = editor 바닥값)으로 잠금 에디터 구현, 부서 리더 자동 승인자(제거 가능)·피커 우선 노출, 기존 맵은 NULL=누락 + 설정 owner/sysadmin 수동 지정 + 홈 필터·배지. `docs/superpowers/specs/2026-07-10-owning-department-design.md`.
 - 구현 계획 작성 — 8태스크(백엔드 3·프론트 4·시드/검증 1), `docs/superpowers/plans/2026-07-10-owning-department.md`. 기존 테스트 52곳의 생성 호출엔 **앵커 부서**(어떤 테스트 액터도 소속되지 않는 시드 직원 org)를 주입해 파생 editor가 기존 403 단언을 오염시키지 않게 한다. `MapCreate` 필수화로 프론트 미반영 중간 커밋은 맵 생성이 불가하므로 워크트리 브랜치에서 원자적으로 머지.
+- T1 백엔드 — `process_maps.owning_department` 컬럼 + `MapCreate` 필수 필드 + 라우터 `_assert_known_department`(known org_path 아니면 422) + copy 상속. conftest에 `owning.anchor`(비활성) 앵커 부서 시드, 기존 테스트 52곳에 앵커 부서 주입(sed 기계적 + 분할라인 1곳 수동). pytest 526 passed·ruff 0에러.
 
 ## 2026-07-10 — CSV로 새 맵 만들기 + 클립보드 수정 설계 (worktree-csv-create-flow)
 - **클립보드 버그 확정**: 복사 4곳(`csv-template-actions.tsx:32`, `markdown-view.tsx:179·188·198`)이 전부 `navigator.clipboard?.writeText()`. `navigator.clipboard`는 secure context 전용인데 서버는 원격 IP + 평문 HTTP → `undefined`. `?.`가 삼켜 **에러 없이 실패하고 버튼은 "복사됨!"을 띄운다**. localhost는 secure context라 재현 안 됨(`CLAUDE.md` 경고 그대로).

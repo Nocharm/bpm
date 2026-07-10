@@ -17,7 +17,7 @@ def _create_version(client: TestClient) -> int:
     # 세션 공유 DB + 맵 이름 전역 유니크 → 호출마다 고유 이름
     global _collab_seq
     _collab_seq += 1
-    created = client.post("/api/maps", json={"name": f"collab map {_collab_seq}"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"collab map {_collab_seq}"}).json()
     return created["versions"][0]["id"]
 
 
@@ -120,7 +120,7 @@ def test_checkout_is_sticky_no_ttl_expiry(
 def test_delete_version_rejected_while_locked_by_other(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    created = client.post("/api/maps", json={"name": "collab map delete-locked"}).json()
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "collab map delete-locked"}).json()
     version_id = created["versions"][0]["id"]
     # 삭제 가능하도록 두 번째 버전 생성 후, 첫 버전을 잠금
     client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be"})
