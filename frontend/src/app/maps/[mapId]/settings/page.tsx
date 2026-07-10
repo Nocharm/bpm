@@ -3,7 +3,7 @@
 // 맵 설정 화면 — 권한 관리 탭 셸 / Map settings page: tabbed shell for permission management.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Info } from "lucide-react";
+import { ArrowLeft, Info } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -271,11 +271,14 @@ export default function SettingsPage() {
       {/* 설정 페이지(/settings)와 동일한 좌측 세로 탭 레일 + 우측 콘텐츠 / Left tab rail + right content, like /settings */}
       <div className="flex h-full">
         <aside className="flex w-56 shrink-0 flex-col border-r border-hairline bg-surface p-3">
+          {/* 레일 폭을 채우면 탭 항목처럼 읽혀 self-start로 내용 폭만 차지 */}
           <Link
             href={`/maps/${mapIdStr}`}
-            className="px-1 pb-2 text-fine text-accent hover:underline"
+            data-id="settings-back-to-editor"
+            className="mb-2 inline-flex items-center gap-1.5 self-start rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption-strong text-ink hover:bg-surface-alt"
           >
-            ← {t("perm.backToEditor")}
+            <ArrowLeft size={16} strokeWidth={1.5} />
+            {t("perm.backToEditor")}
           </Link>
           <h1 className="truncate px-1 text-body-strong text-ink" title={mapName}>
             {mapName}

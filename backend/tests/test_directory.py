@@ -97,6 +97,6 @@ def test_directory_departments_include_dept_info(client: TestClient) -> None:
     depts = {d["name"]: d for d in res.json()["departments"]}
     assert depts["Sourcing Team 1"]["korean_name"] == "구매1팀"
     assert depts["Sourcing Team 1"]["manager"] == "hong.gildong"
-    # dept_info 없는 부서(상위 조직 프리픽스)는 빈 문자열 기본값
-    assert depts["Management Support Division"]["korean_name"] == ""
-    assert depts["Management Support Division"]["manager"] == ""
+    # dept_info 행이 없는 부서는 빈 문자열 기본값 (상위 프리픽스도 임포트 대상이라 미임포트 부서로 확인)
+    assert depts["Procurement Office"]["korean_name"] == ""
+    assert depts["Procurement Office"]["manager"] == ""

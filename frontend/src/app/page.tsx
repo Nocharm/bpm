@@ -322,7 +322,7 @@ export default function MapListPage() {
       <div
         data-id="map-detail-accordion"
         onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
-        className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth xl:hidden ${
+        className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
           effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
         }`}
       >
@@ -590,11 +590,11 @@ export default function MapListPage() {
               )}
             </div>
 
-            {/* ≥ xl — 우측 사이드 패널. 선택 없으면 플레이스홀더 / wide screens: side panel or empty placeholder */}
+            {/* ≥ split(980px) — 우측 사이드 패널. 선택 없으면 플레이스홀더 / wide screens: side panel or empty placeholder */}
             <aside
               data-id="map-detail-aside"
               onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
-              className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt xl:flex"
+              className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt split:flex"
             >
               {effectiveSelected !== null ? (
                 <MapDetailCard

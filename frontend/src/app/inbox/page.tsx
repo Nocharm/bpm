@@ -291,7 +291,7 @@ export default function InboxPage() {
                   {shownApprovals.map((a) => {
                     const key = approvalKey(a);
                     return (
-                      <li key={key}>
+                      <li key={key} className="flex flex-col">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -333,6 +333,29 @@ export default function InboxPage() {
                             </span>
                           </div>
                         </button>
+                        {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
+                        <div
+                          data-id="approval-detail-accordion"
+                          onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
+                          className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
+                            key === selectedApprovalKey ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                          }`}
+                        >
+                          <div className="min-h-0 overflow-hidden">
+                            {key === selectedApprovalKey && (
+                              <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
+                                <ApprovalDetail
+                                  approval={a}
+                                  busy={approvalBusy}
+                                  nowMs={nowMs}
+                                  dir={dir}
+                                  onAct={(approve, reason) => void actApproval(a, approve, reason)}
+                                  t={t}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </li>
                     );
                   })}
@@ -348,7 +371,7 @@ export default function InboxPage() {
                 {shownItems.map((n) => {
                   const TypeIcon = typeIcon(n.type);
                   return (
-                    <li key={n.id}>
+                    <li key={n.id} className="flex flex-col">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -383,6 +406,22 @@ export default function InboxPage() {
                           <TimePills iso={n.created_at} nowMs={nowMs} />
                         </div>
                       </button>
+                      {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
+                      <div
+                        data-id="notification-detail-accordion"
+                        onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
+                        className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
+                          n.id === selectedId ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                        }`}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                          {n.id === selectedId && (
+                            <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
+                              <NotificationDetail notification={n} nowMs={nowMs} t={t} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </li>
                   );
                 })}
@@ -391,9 +430,10 @@ export default function InboxPage() {
             )}
           </aside>
 
-          {/* 우 상세 — 맵 탭처럼 옅은 회색 바디박스 */}
+          {/* 우 상세 — ≥ split(980px)만. 좁으면 카드 아래 아코디언이 대신한다 */}
           <div
-            className="min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt"
+            data-id="inbox-detail-aside"
+            className="hidden min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt split:block"
             onClick={(e) => e.stopPropagation()}
           >
             {tab === "approvals" ? (
@@ -413,20 +453,7 @@ export default function InboxPage() {
                 </div>
               )
             ) : selected ? (
-              <article className="px-6 py-4">
-                <p className="whitespace-pre-wrap text-body text-ink">{selected.message}</p>
-                <div className="mt-2 flex">
-                  <TimePills iso={selected.created_at} nowMs={nowMs} />
-                </div>
-                {selected.map_id !== null && (
-                  <Link
-                    href={`/maps/${selected.map_id}`}
-                    className="mt-4 inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-                  >
-                    {t("inbox.relatedMap")}
-                  </Link>
-                )}
-              </article>
+              <NotificationDetail notification={selected} nowMs={nowMs} t={t} />
             ) : (
               <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
                 {t("inbox.selectPrompt")}
@@ -436,6 +463,34 @@ export default function InboxPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 알림 본문 — 우측 패널(넓은 화면)과 카드 아래 아코디언(좁은 화면)이 공유.
+function NotificationDetail({
+  notification,
+  nowMs,
+  t,
+}: {
+  notification: NotificationItem;
+  nowMs: number;
+  t: Translate;
+}) {
+  return (
+    <article className="px-6 py-4">
+      <p className="whitespace-pre-wrap text-body text-ink">{notification.message}</p>
+      <div className="mt-2 flex">
+        <TimePills iso={notification.created_at} nowMs={nowMs} />
+      </div>
+      {notification.map_id !== null && (
+        <Link
+          href={`/maps/${notification.map_id}`}
+          className="mt-4 inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+        >
+          {t("inbox.relatedMap")}
+        </Link>
+      )}
+    </article>
   );
 }
 

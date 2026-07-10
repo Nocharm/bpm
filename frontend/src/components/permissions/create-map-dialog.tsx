@@ -107,16 +107,25 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
     isSysadmin: false,
     korean_name: u.korean_name ?? "",
   }));
-  const pickerDepts: Department[] = dirDepts.map((d) => ({
-    id: d.id,
-    code: "",
-    name: d.name,
-    orgLevels: [],
-    parentId: null,
-    rawDn: "",
-    korean_name: d.korean_name,
-    manager: d.manager,
-  }));
+  // 부서장은 login_id로만 저장된다(dept_info.manager) — 부서를 부서장 "이름"으로도 찾을 수 있게
+  // 디렉터리로 한/영 이름을 해석해 검색 텍스트에 합친다. 표시엔 쓰이지 않고 검색 키워드 전용.
+  const userById = new Map(dirUsers.map((u) => [u.id, u]));
+  const pickerDepts: Department[] = dirDepts.map((d) => {
+    const head = d.manager ? userById.get(d.manager) : undefined;
+    const managerKeywords = [d.manager, head?.name, head?.korean_name]
+      .filter(Boolean)
+      .join(" ");
+    return {
+      id: d.id,
+      code: "",
+      name: d.name,
+      orgLevels: [],
+      parentId: null,
+      rawDn: "",
+      korean_name: d.korean_name,
+      manager: managerKeywords,
+    };
+  });
 
   // ── 폼 상태 / form state ──
   const [name, setName] = useState("");
@@ -271,8 +280,10 @@ export function CreateMapDialog({ onClose, onCreated }: Props) {
   const dialog = (
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
+      className="fixed inset-0 z-[1200] flex items-start justify-center bg-ink/20 pt-4 backdrop-blur-sm"
     >
+      {/* 상단 정렬(pt-4) — 폼이 길어 세로를 최대한 쓴다. max-h는 위아래 1rem씩만 비운다.
+          내용이 다 들어가면 스크롤은 생기지 않는다(빈 패딩으로 스크롤을 만들지 않음). */}
       <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">

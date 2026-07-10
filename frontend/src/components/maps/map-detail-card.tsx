@@ -37,6 +37,7 @@ import { VersionTimeline } from "@/components/maps/version-timeline";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { buildKoreanDeptByPath, buildOrgPathChain, formatDeptName } from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
 import { visibilityPillClass } from "@/lib/version-status";
 
@@ -168,6 +169,8 @@ export function MapDetailCard({
   // 디렉터리 파생 — 멤버 2번째 줄(유저 직급·말단org, 부서 카운트) (H2) / directory-derived maps for the 2nd line.
   const [titleById, setTitleById] = useState<Map<string, string>>(new Map());
   const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
+  // org_path → 확정 한글 부서명(dept_info) — 이름과 같은 규칙으로 부서도 언어 토글 (없으면 영문 폴백)
+  const [koreanDeptByPath, setKoreanDeptByPath] = useState<Map<string, string>>(new Map());
   // 그룹 id → {구성원수, 상태} — 그룹 멤버 2번째 줄 (H2) / group id → {count, status}.
   const [groupInfo, setGroupInfo] = useState<Map<string, { count: number; status: string }>>(new Map());
   // 호버한 부서(팀)의 org_path — 상위/하위 팀 하이라이트 + 상위 소속 노출 (H2) / hovered dept path.
@@ -214,6 +217,7 @@ export function MapDetailCard({
             setKoreanNameById(new Map(dir.users.map((u) => [u.id, u.korean_name ?? ""])));
             setTitleById(new Map(dir.users.map((u) => [u.id, u.title ?? ""])));
             setOrgPathById(new Map(dir.users.map((u) => [u.id, u.org_path ?? ""])));
+            setKoreanDeptByPath(buildKoreanDeptByPath(dir.departments, dir.users));
             setGroupInfo(
               new Map(groups.map((g) => [String(g.id), { count: g.members.length, status: g.status }])),
             );
@@ -408,14 +412,15 @@ export function MapDetailCard({
                           nameLine = lang === "ko" ? krName || enName : enName;
                           const altName = lang === "ko" ? (krName ? enName : "") : krName;
                           const path = orgPathById.get(perm.principal_id) ?? "";
-                          const leaf = deptLeaf(path);
                           const title = titleById.get(perm.principal_id) ?? "";
-                          const levels = path.split("/").filter(Boolean).reverse(); // 작은→큰 / leaf→root
+                          const levelPaths = buildOrgPathChain(path).reverse(); // 작은→큰 / leaf→root
                           restNode = (
                             <>
                               {/* 평소: 말단 부서 (펼치면 숨김) */}
-                              {leaf && !memberOpen && (
-                                <span className="block truncate text-fine text-ink-tertiary">{leaf}</span>
+                              {path && !memberOpen && (
+                                <span className="block truncate text-fine text-ink-tertiary">
+                                  {formatDeptName(path, lang, koreanDeptByPath)}
+                                </span>
                               )}
                               {/* 펼침: 아이디·타이틀·부서 레벨(작은→큰)을 필로 — 괄호 없이 (H2c) */}
                               <span
@@ -442,12 +447,12 @@ export function MapDetailCard({
                                         {title}
                                       </span>
                                     )}
-                                    {levels.map((lv) => (
+                                    {levelPaths.map((lv) => (
                                       <span
                                         key={lv}
                                         className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-tertiary"
                                       >
-                                        {lv}
+                                        {formatDeptName(lv, lang, koreanDeptByPath)}
                                       </span>
                                     ))}
                                   </span>
@@ -475,12 +480,15 @@ export function MapDetailCard({
                             );
                           }
                         } else {
-                          nameLine = deptLeaf(perm.principal_id);
+                          nameLine = formatDeptName(perm.principal_id, lang, koreanDeptByPath);
                           const count = [...orgPathById.values()].filter(
                             (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
                           ).length;
-                          const parts = perm.principal_id.split("/").filter(Boolean);
-                          const parent = parts.length > 1 ? parts.slice(0, -1).join(" › ") : (parts[0] ?? "");
+                          // 상위 경로 — 루트 부서면 자기 자신 (기존 동작 유지)
+                          const chain = buildOrgPathChain(perm.principal_id);
+                          const parent = (chain.length > 1 ? chain.slice(0, -1) : chain)
+                            .map((p) => formatDeptName(p, lang, koreanDeptByPath))
+                            .join(" › ");
                           restNode = (
                             <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
                               <Users size={11} strokeWidth={1.5} className="shrink-0" />
