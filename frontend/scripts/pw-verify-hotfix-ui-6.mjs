@@ -50,16 +50,21 @@ await page.screenshot({ path: `${SHOTS}/02a-collab-picker-1280x580.png` });
 await page.keyboard.press("Escape");
 await page.waitForTimeout(150);
 
-// 결재자 피커 = 두 번째 PrincipalPicker(협업자 다음).
-// 본문 하단 pb-40이 마지막 피커를 160px 위로 올릴 여지를 준다 — 사용자가 끝까지 스크롤한 상태를 재현.
-// (Playwright의 click은 대상을 먼저 스크롤하므로, 클릭 전에 스크롤을 끝내 둬야 밀림만 측정된다.)
+// 모달은 상단 정렬(pt-4)이고 빈 패딩으로 스크롤을 만들지 않는다 — 내용이 다 들어가면 스크롤 없음.
 const bodySel = ".scrollbar-hidden";
+const modal = page.locator(".max-w-lg").first();
+const createBtn = modal.getByRole("button", { name: "Create" });
+const createBox = await createBtn.boundingBox();
+check(
+  "액션 버튼이 뷰포트 안 (1280×580)",
+  createBox !== null && createBox.y >= 0 && createBox.y + createBox.height <= 580,
+  createBox ? `create y=${Math.round(createBox.y)}..${Math.round(createBox.y + createBox.height)}` : "no box",
+);
+
+// 결재자 피커 = 두 번째 PrincipalPicker(협업자 다음).
+// (Playwright의 click은 대상을 먼저 스크롤하므로, 클릭 전에 스크롤을 끝내 둬야 밀림만 측정된다.)
 const approverInput = page.locator(PICKER).last();
-const slack = await page.locator(bodySel).evaluate((el) => {
-  el.scrollTop = el.scrollHeight; // 끝까지
-  return el.scrollHeight - el.clientHeight;
-});
-check("본문에 스크롤 여유가 있음 (pb-40)", slack >= 160, `scrollHeight-clientHeight=${slack}`);
+await approverInput.scrollIntoViewIfNeeded();
 await page.waitForTimeout(300);
 const scrollBefore = await page.locator(bodySel).evaluate((el) => el.scrollTop);
 await approverInput.click();
@@ -70,23 +75,32 @@ check("모달 본문이 밀리지 않음 (scrollTop 불변)", scrollBefore === s
 
 const dd = page.locator('[data-id="principal-picker-dropdown"]');
 const side = await dd.getAttribute("data-side");
-check("결재자 드롭다운이 아래로 열림 (1280×580)", side === "below", `data-side=${side}`);
-
-// 후보가 1명뿐이라 실제 상자는 낮다 — 아래로 5줄(160px)이 확보됐는지는 maxHeight로 본다.
-const maxH = await dd.evaluate((el) => getComputedStyle(el).maxHeight);
-check("결재자 드롭다운에 5줄(160px)이 온전히 배정됨", maxH === "160px", `max-height=${maxH}`);
+// 580px에선 폼이 길어 피커 아래 여유가 없다 → 옆으로. 위로 flip은 어느 경우에도 안 한다.
+check("결재자 드롭다운이 옆으로 열림 (1280×580, 위 flip 없음)", side === "right" || side === "left", `data-side=${side}`);
 
 const box = await dd.boundingBox();
 const vh = await page.evaluate(() => window.innerHeight);
 check(
   "드롭다운이 뷰포트 안에 온전히 들어감",
-  box !== null && box.y >= 0 && box.y + 160 <= vh,
-  box ? `y=${Math.round(box.y)} +160 vs vh=${vh}` : "no box",
+  box !== null && box.y >= 0 && box.y + box.height <= vh,
+  box ? `y=${Math.round(box.y)} h=${Math.round(box.height)} vh=${vh}` : "no box",
 );
 // portal 확인 — 모달 서브트리 밖(body 직계)에 붙어야 클리핑을 벗어난다
 const portaled = await dd.evaluate((el) => el.parentElement === document.body);
 check("드롭다운이 body로 portal 됨", portaled);
 await page.screenshot({ path: `${SHOTS}/02-approver-picker-1280x580.png` });
+
+// 세로가 넉넉하면(≥1000px) 폼 전체가 스크롤 없이 들어가고 드롭다운은 아래로 5줄 열린다.
+await page.setViewportSize({ width: 1280, height: 1000 });
+await page.waitForTimeout(300);
+const scrollable = await page.locator(bodySel).evaluate((el) => el.scrollHeight - el.clientHeight);
+check("긴 화면에선 본문 스크롤 없음 (빈 패딩으로 스크롤 만들지 않음)", scrollable === 0, `scrollHeight-clientHeight=${scrollable}`);
+const sideTall = await dd.getAttribute("data-side");
+const maxHTall = await dd.evaluate((el) => getComputedStyle(el).maxHeight);
+check("긴 화면에선 아래로 5줄(160px)", sideTall === "below" && maxHTall === "160px", `data-side=${sideTall} max-height=${maxHTall}`);
+await page.screenshot({ path: `${SHOTS}/02c-approver-picker-1280x1000.png` });
+await page.setViewportSize({ width: 1280, height: 580 });
+await page.waitForTimeout(200);
 
 // 아주 낮은 뷰포트 — 아래 공간이 없으면 옆으로 열려야 한다(위로 flip 금지)
 await page.setViewportSize({ width: 1280, height: 420 });
