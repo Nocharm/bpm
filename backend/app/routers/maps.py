@@ -232,6 +232,7 @@ async def list_maps(
             perms_by_map.get(m.id, []),
             m.id in approver_map_ids,
             user_group_ids,
+            owning_department=m.owning_department,
         )
         if role is not None:  # is_visible == (effective_role is not None)
             m.my_role = role
