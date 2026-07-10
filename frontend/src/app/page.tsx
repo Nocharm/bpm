@@ -142,7 +142,7 @@ export default function MapListPage() {
         setPermFilter(new Set(s.perm.filter((x): x is string => typeof x === "string")));
       }
       if (Array.isArray(s.owning)) {
-        setOwningFilter(new Set(s.owning.filter((x): x is string => typeof x === "string")));
+        setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
       }
     } catch {
       /* 손상된 저장값 무시 */

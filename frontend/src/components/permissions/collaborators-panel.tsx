@@ -405,7 +405,7 @@ export function CollaboratorsPanel({
 
       {/* 오우닝 부서 잠금 행 — 합성 표시(MapPermission 아님), 실 권한 목록 위에 고정 /
           Owning-department locked row: synthetic display, not a real permission, pinned above the list. */}
-      {owningDepartment && (
+      {!loading && owningDepartment && (
         <div
           data-id="owning-dept-locked-row"
           className="flex items-center gap-2 rounded-sm bg-surface-alt px-2 py-1.5"
