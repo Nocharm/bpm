@@ -160,7 +160,7 @@ describe("buildGraphFromCsv — 검증 에러", () => {
 describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
-    expect(prompt).toContain("Name,System,Duration,URL,URL_Label,Next"); // 헤더 명시
+    expect(prompt).toContain("Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next"); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
     expect(prompt).toContain("최대 500개"); // MAX_DATA_ROWS 파생

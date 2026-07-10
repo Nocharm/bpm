@@ -440,14 +440,15 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   };
 }
 
-/** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두). */
+/** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두).
+ *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
   return [
-    "Name,System,Duration,URL,URL_Label,Next",
-    "Review request,SAP ERP,2 days,,,Approval decision",
-    "Approval decision,,,,,Sign contract:approved;Notify rejection:rejected",
-    "Sign contract,,3 days,https://example.com/contract,Contract,",
-    "Notify rejection,,1 day,,,",
+    "Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next",
+    "Review request,Check the request against the purchasing policy,hong.gd,Quality Part 1,SAP ERP,2 days,,,Approval decision",
+    'Approval decision,,"hong.gd, kim.cs",Quality Part 1,,,,,Sign contract:approved;Notify rejection:rejected',
+    "Sign contract,,lee.yh,Finance Part,,3 days,https://example.com/contract,Contract,",
+    "Notify rejection,,,,,1 day,,,",
   ].join("\r\n");
 }
 
@@ -472,6 +473,9 @@ export function buildAiPromptText(): string {
     "",
     "[컬럼 규칙]",
     `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
+    "- Description: 선택, 그 단계가 무엇을 하는지 한두 문장. 콤마나 줄바꿈이 들어가면 셀 전체를 큰따옴표로 감싸세요. 길이 제한은 없습니다.",
+    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 — 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
+    `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
     `- Duration: 선택, 소요 시간(예: 2 days, 3시간 — ${MAX_LEN.duration}자 이하).`,
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
@@ -484,7 +488,8 @@ export function buildAiPromptText(): string {
     "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요.",
     "- Next의 대상 이름은 반드시 같은 CSV에 있는 Name이어야 합니다(오타 금지).",
     `- 데이터 행은 최대 ${MAX_DATA_ROWS}개입니다.`,
-    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(System·Duration·URL)은 비워두세요.",
+    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(Description·Assignee·Department·System·Duration·URL)은 비워두세요.",
+    "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 — 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
     "",
     "[예시]",
     buildTemplateCsv().replace(/\r\n/g, "\n"),
