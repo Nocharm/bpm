@@ -82,10 +82,38 @@ def test_granted_user_can_view(client: TestClient, monkeypatch: pytest.MonkeyPat
 def test_me_exposes_can_view_dashboard(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """/api/me가 탭 게이팅용 플래그를 싣는다."""
+    """/api/me가 탭 게이팅용 플래그를 싣는다 — 자체 시드로 독립 실행 가능해야 함."""
+    _seed([
+        Employee(login_id="dash.meflag", name="Dash Me Flag", source="local", active=True),
+        DashboardPermission(
+            principal_type="user", principal_id="dash.meflag", granted_by="admin.sys"
+        ),
+    ])
     monkeypatch.setattr(settings, "dev_enforce_permissions", True)
     monkeypatch.setattr(settings, "bpm_sysadmins", "other.admin")
-    granted = client.get("/api/me", headers={"X-Dev-User": "dash.viewer"}).json()
+    granted = client.get("/api/me", headers={"X-Dev-User": "dash.meflag"}).json()
     denied = client.get("/api/me", headers={"X-Dev-User": "dash.nobody"}).json()
     assert granted["can_view_dashboard"] is True
     assert denied["can_view_dashboard"] is False
+
+
+def test_granted_user_denied_ai_usage(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """권한 받은 비-sysadmin도 /api/dashboard/ai-usage는 403 — 게이트 분리 검증."""
+    _seed([
+        Employee(login_id="dash.aiviewer", name="Dash AI Viewer", source="local", active=True),
+        DashboardPermission(
+            principal_type="user", principal_id="dash.aiviewer", granted_by="admin.sys"
+        ),
+    ])
+    monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+    monkeypatch.setattr(settings, "bpm_sysadmins", "other.admin")
+    dashboard_response = client.get(
+        "/api/dashboard", headers={"X-Dev-User": "dash.aiviewer"}
+    )
+    ai_usage_response = client.get(
+        "/api/dashboard/ai-usage", headers={"X-Dev-User": "dash.aiviewer"}
+    )
+    assert dashboard_response.status_code == 200
+    assert ai_usage_response.status_code == 403
