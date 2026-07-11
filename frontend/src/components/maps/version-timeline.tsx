@@ -173,31 +173,35 @@ export function VersionTimeline({
                     const showHint = !open; // 접힘 카드 — 클릭하면 펼쳐진다는 안내
                     return (
                       <span className="grid shrink-0 items-center justify-items-start">
+                        {/* 크로스페이드 700ms(토큰 최장) — 호버 초반에 상태 필이 남아 있어 상태를 인지하고 스왑된다 */}
                         <span
-                          className={`pointer-events-none col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-350 ease-smooth ${
+                          className={`pointer-events-none col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-700 ease-smooth ${
                             VERSION_STATUS_STYLE[version.status]
                           } ${canGo || showHint ? "group-hover:opacity-0" : ""}`}
                         >
                           {t(VERSION_STATUS_LABEL[version.status])}
                         </span>
                         {canGo && onGoToVersion && (
-                          <button
-                            type="button"
-                            data-id={`version-go-${version.id}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onGoToVersion(version.id);
-                            }}
-                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-accent/40 bg-accent-tint px-1.5 py-0.5 text-fine text-accent opacity-0 transition-all duration-350 ease-smooth hover:border-accent hover:bg-accent hover:text-on-accent group-hover:pointer-events-auto group-hover:opacity-100"
-                          >
-                            <ArrowRight size={12} strokeWidth={1.5} />
-                            {t("home.goToVersion")}
-                          </button>
+                          /* 페이드는 래퍼(700ms), 버튼 자체의 색 호버는 분리해 빠릿하게(150ms) */
+                          <span className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity duration-700 ease-smooth group-hover:pointer-events-auto group-hover:opacity-100">
+                            <button
+                              type="button"
+                              data-id={`version-go-${version.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onGoToVersion(version.id);
+                              }}
+                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-accent/40 bg-accent-tint px-1.5 py-0.5 text-fine text-accent transition-colors duration-150 hover:border-accent hover:bg-accent hover:text-on-accent"
+                            >
+                              <ArrowRight size={12} strokeWidth={1.5} />
+                              {t("home.goToVersion")}
+                            </button>
+                          </span>
                         )}
                         {showHint && (
                           <span
                             data-id={`version-hint-${version.id}`}
-                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-350 ease-smooth group-hover:opacity-100"
+                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-700 ease-smooth group-hover:opacity-100"
                           >
                             <MousePointerClick size={12} strokeWidth={1.5} />
                             {t("home.verClickHint")}
