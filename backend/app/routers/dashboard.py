@@ -384,13 +384,13 @@ async def get_dashboard_summary(
             .limit(_RECENT_EVENT_LIMIT)
         )
     ).all()
+    # 이벤트가 0건이면 in_([])가 되어 SQLAlchemy가 빈 IN 경고를 낸다 — status_rows와 동일하게 가드.
+    actor_ids = [event.actor for event, _, _ in event_rows]
     actor_names = {
         emp.login_id: emp.name
         for emp in (
             await session.scalars(
-                select(Employee).where(
-                    Employee.login_id.in_([event.actor for event, _, _ in event_rows])
-                )
+                select(Employee).where(Employee.login_id.in_(actor_ids) if actor_ids else false())
             )
         ).all()
     }

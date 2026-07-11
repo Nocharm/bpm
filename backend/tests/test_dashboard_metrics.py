@@ -1,11 +1,23 @@
 """운영 대시보드 집계 — /summary 스냅샷, /timeseries 시계열 (design 2026-07-11)."""
 
 import asyncio
+from datetime import timedelta
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.clock import now as now_kst
 from app.db import SessionLocal
-from app.models import DashboardCoverageDept, MapVersion, Notification, ProcessMap
+from app.models import (
+    CheckoutRequest,
+    Comment,
+    DashboardCoverageDept,
+    Employee,
+    MapVersion,
+    Notification,
+    ProcessMap,
+    VersionEvent,
+)
 
 
 def _seed_map(name: str, owning_department: str, statuses: list[str]) -> int:
@@ -24,6 +36,20 @@ def _seed_map(name: str, owning_department: str, statuses: list[str]) -> int:
                 )
             await session.commit()
             return found_map.id
+
+    return asyncio.run(_run())
+
+
+def _first_version_id(map_id: int) -> int:
+    """맵의 첫 버전 id — ops/이벤트 시드가 붙일 version_id를 얻는다."""
+
+    async def _run() -> int:
+        async with SessionLocal() as session:
+            version = (
+                await session.scalars(select(MapVersion).where(MapVersion.map_id == map_id))
+            ).first()
+            assert version is not None
+            return version.id
 
     return asyncio.run(_run())
 
@@ -125,3 +151,88 @@ def test_unread_notifications_scoped_to_requester(client: TestClient) -> None:
     ).json()["ops"]["unread_notifications"]
 
     assert after == before + 1
+
+
+def test_ops_counts_unresolved_comment_and_pending_checkout(client: TestClient) -> None:
+    """unresolved_comments·pending_checkouts는 전사 카운트라 델타(+1)로 비교한다."""
+    map_id = _seed_map("Ops Delta Map", "Ops Div/Ops Office", ["draft"])
+    version_id = _first_version_id(map_id)
+
+    before = client.get("/api/dashboard/summary").json()["ops"]
+
+    async def _seed_ops() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                Comment(
+                    version_id=version_id,
+                    node_id="n1",
+                    author="ops-delta-author",
+                    body="unresolved comment",
+                )
+            )
+            session.add(
+                CheckoutRequest(version_id=version_id, requested_by="ops-delta-requester")
+            )
+            await session.commit()
+
+    asyncio.run(_seed_ops())
+    after = client.get("/api/dashboard/summary").json()["ops"]
+
+    assert after["unresolved_comments"] == before["unresolved_comments"] + 1
+    assert after["pending_checkouts"] == before["pending_checkouts"] + 1
+
+
+def test_recent_events_sorted_desc_with_join_and_actor_fallback(client: TestClient) -> None:
+    """recent_events는 created_at desc 정렬·map_name/version_label 조인·actor_name 해석(Employee 있으면 이름, 없으면 login_id)을 지킨다."""
+    map_id = _seed_map("Events Order Map", "Events Div/Events Office", ["draft"])
+    version_id = _first_version_id(map_id)
+
+    known_actor = "events-order-known-actor"
+    unknown_actor = "events-order-unknown-actor"
+
+    async def _seed_events() -> None:
+        async with SessionLocal() as session:
+            session.add(Employee(login_id=known_actor, name="Known Actor Name", source="local"))
+            # 두 이벤트는 base 기준 1마이크로초 차이 — 세션 전체에서 항상 가장 최근 2건이 되도록
+            # "지금"에 최대한 붙인다. 초 단위로 과거로 물러나면 직전에 실행된 다른 테스트(예:
+            # test_collab.py의 맵 생성 "created" 이벤트)가 그 사이에 끼어 정렬 단언이 깨진다
+            # (단일 프로세스 순차 실행이라도, 앞서 실행된 테스트의 실제 이벤트가 그 시간대에 존재).
+            base = now_kst()
+            older = base - timedelta(microseconds=1)
+            newer = base
+            session.add(
+                VersionEvent(
+                    version_id=version_id,
+                    event_type="created",
+                    actor=unknown_actor,
+                    created_at=older,
+                )
+            )
+            session.add(
+                VersionEvent(
+                    version_id=version_id,
+                    event_type="submitted",
+                    actor=known_actor,
+                    created_at=newer,
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_seed_events())
+
+    events = client.get("/api/dashboard/summary").json()["recent_events"]
+    assert len(events) >= 2
+    newest, second = events[0], events[1]
+
+    # 정렬 — 방금 시드한 더 최근 이벤트가 항상 맨 앞
+    assert newest["event_type"] == "submitted"
+    assert newest["map_name"] == "Events Order Map"
+    assert newest["version_label"] == "v1"
+    assert newest["actor_name"] == "Known Actor Name"
+
+    assert second["event_type"] == "created"
+    assert second["map_name"] == "Events Order Map"
+    assert second["version_label"] == "v1"
+    assert second["actor_name"] == unknown_actor  # Employee 행 없음 → login_id 그대로 폴백
+
+    assert newest["created_at"] >= second["created_at"]
