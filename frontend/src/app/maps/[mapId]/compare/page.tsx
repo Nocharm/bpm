@@ -1148,7 +1148,18 @@ function ComparePane({
                       <span className="text-ink-tertiary">{t("summary.none")}</span>
                     )}
                   </InspectorRow>
-                  {(["assignee", "department", "system", "duration"] as const).map((key) => {
+                  {(
+                    [
+                      "assignee",
+                      "department",
+                      "system",
+                      "duration",
+                      "headcount",
+                      "etf",
+                      "cost",
+                      "extra",
+                    ] as const
+                  ).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
                     const current = selectedNode.node[key] || "";
                     return (
