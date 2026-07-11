@@ -138,3 +138,26 @@ def test_legacy_free_text_sp_duration_cleared_in_responses(
     assert graph_resp.status_code == 200
     ref = graph_resp.json()["subprocess_refs"][str(published_map_id)]
     assert ref["duration"] is None
+
+
+def test_legacy_free_text_sp_duration_cleared_in_library_list(
+    client: TestClient,
+    session: Callable[[Callable[[Any], Coroutine[Any, Any, Any]]], Any],
+    published_map_id: int,
+) -> None:
+    # 라이브러리 목록은 raw dict 직렬화라 스키마 validator를 안 탄다 — 조립부 소거 확인
+    designate = client.put(
+        f"/api/maps/{published_map_id}/subprocess-designation",
+        json={"department": "Owning Anchor Division"},
+    )
+    assert designate.status_code == 200
+
+    async def _set_legacy(db_session: Any) -> None:
+        found_map = await db_session.get(ProcessMap, published_map_id)
+        found_map.sp_duration = "3일"
+
+    session(_set_legacy)
+
+    rows = client.get("/api/library/processes").json()
+    mine = next(r for r in rows if r["map_id"] == published_map_id)
+    assert mine["duration"] is None

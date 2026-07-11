@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
+from app.duration import normalize_duration
 from app.models import MapVersion, Node, ProcessMap
 from app.permissions.access import get_effective_role
 from app.permissions.logic import role_rank
@@ -79,7 +80,9 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
             "department": department,
             "assignee": assignee,
             "system": system,
-            "duration": duration,
+            # raw dict 직렬화는 MapOut/SubprocessRefOut validator를 안 탄다 —
+            # 레거시 자유텍스트("2일")를 여기서도 소거(무효→None) (design 2026-07-11 SP)
+            "duration": normalize_duration(duration) if duration else duration,
         }
         for mid, name, latest, department, assignee, system, duration in latest_rows
     ]

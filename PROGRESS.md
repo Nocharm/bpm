@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Task 2 리뷰 픽스: 라이브러리 목록 레거시 sp_duration 소거 (sp-params-sum)
+- `routers/library.py` `list_processes`가 raw dict 직렬화로 MapOut/SubprocessRefOut validator를 우회 — 레거시 자유텍스트("3일")가 라이브러리 API로 누출되던 잔여 경로 봉합(조립부에서 `normalize_duration` 소거, 무효→None). `test_sp_params.py`에 라이브러리 목록 단언 1건 추가. pytest 572 passed(571+1)·ruff 0에러.
+
 ## 2026-07-11 — Task 2: 백엔드 sp 4컬럼 + 지정 경계 정규화 + 응답 레거시 소거 (sp-params-sum)
 - `ProcessMap`에 sp_headcount/sp_etf/sp_cost/sp_extra 4컬럼(`db.py _ADDED_COLUMNS` 멱등 보강 포함) 추가. `SubprocessDesignationIn`이 duration 포함 5필드를 경계에서 정규화(무효→`""`, NodeIn과 동일 시맨틱) — `designate_subprocess`·`get_subprocess_refs`에 4필드 배선. 응답 경로 레거시 소거 신설 — `MapOut.sp_duration`·`SubprocessRefOut.duration`에 무효→None validator(레거시 자유텍스트 직삽입이 GET을 깨지 않게). TDD 3케이스(지정 시 숫자 정규화·무효값 소거·레거시 응답 소거를 MapOut+subprocess_refs 양쪽에서 실단언) 신규 `test_sp_params.py`. pytest 571 passed(568+3)·ruff 0에러.
 
