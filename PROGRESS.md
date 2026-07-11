@@ -8,6 +8,12 @@
 ## 2026-07-11 — Task 2: 백엔드 숫자 파라미터 4컬럼 + NodeIn/AI 경계 정규화 (numeric-params-export)
 - Node에 headcount/etf/cost/extra 4컬럼(`db.py _ADDED_COLUMNS` 멱등 보강 포함) 추가, `NodeIn`이 duration 포함 5필드를 경계에서 정규화 — 무효값은 422 대신 `""` 소거(`from_attributes=True` 응답 경로가 레거시 자유텍스트로 깨지지 않게). `AiNodeAttributes.duration`은 None(생략)을 그대로 보존(부분 갱신 시맨틱). 필드 열거 지점(`routers/graph.py` upsert, `routers/versions.py` clone_graph) 미러 완료, `sp_duration`(ProcessMap SP 속성)은 미변경. AI 프롬프트에 duration H.MM 규칙 한 줄 추가. 시드에 데모값 채움. 기존 `test_bpm_attributes_roundtrip`의 자유텍스트 duration 단언을 새 정규화 계약에 맞춰 갱신. pytest 556 passed·ruff 0에러. 리뷰 픽스: `seed_compare_demo.py`의 자유텍스트 duration("3일"/"1일")을 H.MM 숫자("3"/"1")로 교체 — 경계 소거로 duration diff 시연이 사라지는 문제.
 
+## 2026-07-11 — Task 3: 프론트 입력·노드 칩·diff·AI apply (numeric-params-export)
+- `lib/params.ts` 신설(PARAM_FIELDS 5종 메타) + GraphNode/NodeData에 headcount/etf/cost/extra 옵셔널 추가 + 데이터 왕복 4곳(로드 매핑·buildGraph·신규노드 기본값 3곳·AI apply duration 정규화 경유) 배선.
+- 인스펙터·요약모달에 Parameters 입력 그룹(5필드, 타이핑은 숫자만 허용·blur에서 정규화) + 노드 카드에 파라미터 칩(아이콘+숫자만, subprocess는 spDuration만) — NodeDisplayField에서 duration 제거(구설정 잔재는 로드 시 필터).
+- 버전 비교 diff 필드 4종 추가(ChangedField·FIELD_KEYS·compare FIELD_MSG) + compare buildAppNodes에도 4필드 매핑(노드 칩이 비교화면에도 온전히 뜨도록).
+- 게이트: tsc 0에러·vitest 263 passed·lint(경고 1건, 기존 미관련 스크립트)·build 0에러.
+
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
 

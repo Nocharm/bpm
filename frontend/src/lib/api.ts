@@ -80,6 +80,11 @@ export interface GraphNode {
   department: string;
   system: string;
   duration: string;
+  // 숫자 파라미터 — design 2026-07-11
+  headcount?: string;
+  etf?: string;
+  cost?: string;
+  extra?: string;
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;

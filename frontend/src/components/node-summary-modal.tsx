@@ -33,8 +33,10 @@ import {
 } from "@/lib/api";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
+import { normalizeDuration, normalizeNumericParam } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
+import { PARAM_FIELDS, PARAM_LABEL_KEY } from "@/lib/params";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -46,13 +48,16 @@ export type NodeEditPatch = Partial<{
   department: string;
   system: string;
   duration: string;
+  headcount: string;
+  etf: string;
+  cost: string;
+  extra: string;
   url: string;
   urlLabel: string;
 }>;
 
-const ATTR_FIELDS: { key: "system" | "duration"; labelKey: "field.system" | "field.duration" }[] = [
+const ATTR_FIELDS: { key: "system"; labelKey: "field.system" }[] = [
   { key: "system", labelKey: "field.system" },
-  { key: "duration", labelKey: "field.duration" },
 ];
 
 // 선후행 칩의 노드 타입별 아이콘 (캔버스 노드타입 아이콘과 동일 매핑)
@@ -106,6 +111,10 @@ interface NodeSummaryModalProps {
   department: string;
   system: string;
   duration: string;
+  headcount: string;
+  etf: string;
+  cost: string;
+  extra: string;
   url: string;
   urlLabel: string;
   colorPresets: string[];
@@ -139,6 +148,10 @@ export function NodeSummaryModal({
   department,
   system,
   duration,
+  headcount,
+  etf,
+  cost,
+  extra,
   url,
   urlLabel,
   colorPresets,
@@ -159,12 +172,16 @@ export function NodeSummaryModal({
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
-  const [form, setForm] = useState({ label: title, description, color, assignee, department, system, duration, url, urlLabel });
+  const [form, setForm] = useState({
+    label: title, description, color, assignee, department, system, duration, headcount, etf, cost, extra, url, urlLabel,
+  });
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
     setPrevNodeId(nodeId);
-    setForm({ label: title, description, color, assignee, department, system, duration, url, urlLabel });
+    setForm({
+      label: title, description, color, assignee, department, system, duration, headcount, etf, cost, extra, url, urlLabel,
+    });
   }
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
   const handleSave = useCallback(() => {
@@ -175,6 +192,10 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      headcount: form.headcount,
+      etf: form.etf,
+      cost: form.cost,
+      extra: form.extra,
       url: form.url,
       urlLabel: form.urlLabel,
     });
@@ -207,6 +228,10 @@ export function NodeSummaryModal({
     form.department !== department ||
     form.system !== system ||
     form.duration !== duration ||
+    form.headcount !== headcount ||
+    form.etf !== etf ||
+    form.cost !== cost ||
+    form.extra !== extra ||
     form.url !== url ||
     form.urlLabel !== urlLabel;
   const requestNavigate = (id: string) => {
@@ -224,6 +249,10 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      headcount: form.headcount,
+      etf: form.etf,
+      cost: form.cost,
+      extra: form.extra,
       url: form.url,
       urlLabel: form.urlLabel,
     });
@@ -493,7 +522,7 @@ export function NodeSummaryModal({
                         />
                       </div>
                     </div>
-                    {/* 시스템 · 소요시간 — 우측 정렬 입력 */}
+                    {/* 시스템 — 우측 정렬 입력 */}
                     {ATTR_FIELDS.map(({ key, labelKey }) => (
                       <div key={key} className="flex min-h-[34px] items-center gap-3 py-1.5">
                         <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</span>
@@ -502,14 +531,39 @@ export function NodeSummaryModal({
                             className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
                             value={form[key]}
                             aria-label={t(labelKey)}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setForm((f) => (key === "system" ? { ...f, system: value } : { ...f, duration: value }));
-                            }}
+                            onChange={(event) => setForm((f) => ({ ...f, [key]: event.target.value }))}
                           />
                         </div>
                       </div>
                     ))}
+                    {/* 숫자 파라미터 5종 — 타이핑은 숫자·소수점만 허용, 정규화는 blur에서 */}
+                    <div className="py-1.5">
+                      <div className="mb-1 text-fine text-ink-tertiary">{t("inspector.parameters")}</div>
+                      {PARAM_FIELDS.map((key) => (
+                        <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
+                          <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
+                          <div className="flex min-w-0 flex-1 justify-end">
+                            <input
+                              data-id={`summary-param-${key}`}
+                              inputMode="decimal"
+                              className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                              value={form[key]}
+                              aria-label={t(PARAM_LABEL_KEY[key])}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                if (/^\d*\.?\d*$/.test(value)) setForm((f) => ({ ...f, [key]: value }));
+                              }}
+                              onBlur={(event) => {
+                                const raw = event.target.value.replace(/\.$/, "");
+                                const normalized =
+                                  key === "duration" ? normalizeDuration(raw) : normalizeNumericParam(raw);
+                                setForm((f) => ({ ...f, [key]: normalized ?? "" }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                     <UrlLabelField
                       key={nodeId}
                       url={form.url}

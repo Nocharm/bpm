@@ -20,6 +20,11 @@ export type NodeData = {
   department: string;
   system: string;
   duration: string;
+  // 숫자 파라미터 — design 2026-07-11
+  headcount?: string;
+  etf?: string;
+  cost?: string;
+  extra?: string;
   // 참조 링크(URL) — 노드당 1개, 빈 값 허용
   url?: string;
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
