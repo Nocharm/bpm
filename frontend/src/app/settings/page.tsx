@@ -73,11 +73,6 @@ const CATEGORIES: Category[] = [
     tabs: [{ id: "tables", labelKey: "db.tablesTab" }],
   },
   {
-    labelKey: "admin.catAnalytics",
-    access: "dashboard",
-    tabs: [{ id: "dashboard", labelKey: "dashboard.tab" }],
-  },
-  {
     // 승인큐 — 누구나 접근(추후 개인별 승인 모음 페이지). 현재 큐 내용은 sysadmin만, 그 외는 준비중 안내.
     labelKey: "admin.catApprovals",
     access: "everyone",
@@ -87,6 +82,13 @@ const CATEGORIES: Category[] = [
     labelKey: "nav.groups",
     access: "everyone",
     tabs: [{ id: "groups", labelKey: "perm.group.pageTitle" }],
+  },
+  {
+    // Analytics는 everyone 카테고리들보다 뒤 — 대시보드 권한만 받은 사용자가 설정을 열었을 때
+    // 첫 탭(=풀블리드 대시보드)에 강제 착지하지 않도록. 대시보드는 탭을 눌러 들어간다.
+    labelKey: "admin.catAnalytics",
+    access: "dashboard",
+    tabs: [{ id: "dashboard", labelKey: "dashboard.tab" }],
   },
   {
     // 휴지통(삭제 예정) — 누구나(오너 본인것만), sysadmin은 전체 (DL)
