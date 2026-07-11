@@ -3,6 +3,7 @@
 import type { AiEdge, AiGroup, AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
+import { normalizeDuration, normalizeNumericParam } from "./duration";
 import { genId } from "./id";
 
 export interface CsvRecord {
@@ -59,7 +60,8 @@ export interface CsvImportContext {
 }
 
 const HEADER_COLUMNS = [
-  "name", "description", "assignee", "department", "system", "duration", "url", "url_label", "next",
+  "name", "description", "assignee", "department", "system", "duration",
+  "headcount", "etf", "cost", "extra", "url", "url_label", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
@@ -72,6 +74,10 @@ const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
   department: 100, // NodeIn.department
   system: 100,
   duration: 50,
+  headcount: 50,
+  etf: 50,
+  cost: 50,
+  extra: 50,
   url: 500,
   url_label: 100,
 };
@@ -145,6 +151,10 @@ const NODE_DEFAULTS = {
   department: "",
   system: "",
   duration: "",
+  headcount: "",
+  etf: "",
+  cost: "",
+  extra: "",
   url: "",
   url_label: "",
   pos_x: 0,
@@ -173,6 +183,10 @@ const mergeNode = (existing: GraphNode | null, next: GraphNode): GraphNode =>
         department: pick(next.department, existing.department),
         system: pick(next.system, existing.system),
         duration: pick(next.duration, existing.duration),
+        headcount: pick(next.headcount ?? "", existing.headcount ?? ""),
+        etf: pick(next.etf ?? "", existing.etf ?? ""),
+        cost: pick(next.cost ?? "", existing.cost ?? ""),
+        extra: pick(next.extra ?? "", existing.extra ?? ""),
         url: pick(next.url ?? "", existing.url ?? ""),
         url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
         sort_order: next.sort_order,
@@ -316,6 +330,10 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     department: cellOf(r, "department"),
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
+    headcount: cellOf(r, "headcount"),
+    etf: cellOf(r, "etf"),
+    cost: cellOf(r, "cost"),
+    extra: cellOf(r, "extra"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
     nextRaw: cellOf(r, "next"),
@@ -334,7 +352,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "url", "url_label"] as const) {
+    for (const col of ["name", "system", "duration", "headcount", "etf", "cost", "extra", "url", "url_label"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -344,6 +362,15 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         line: row.line,
         message: `URL must start with http:// or https:// — "${row.url}"`,
       });
+    }
+    const durationNorm = normalizeDuration(row.duration);
+    if (durationNorm === null) {
+      errors.push({ line: row.line, message: `Duration must be a number in H.MM hours — "${row.duration}"` });
+    }
+    for (const col of ["headcount", "etf", "cost", "extra"] as const) {
+      if (normalizeNumericParam(row[col]) === null) {
+        errors.push({ line: row.line, message: `${col === "headcount" ? "Headcount" : col === "etf" ? "ETF" : col === "cost" ? "Cost" : "Extra"} must be a number — "${row[col]}"` });
+      }
     }
   }
 
@@ -447,7 +474,11 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         assignee: resolved.get(row.name)?.assignee ?? "",
         department: resolved.get(row.name)?.department ?? "",
         system: row.system,
-        duration: row.duration,
+        duration: normalizeDuration(row.duration) ?? "",
+        headcount: normalizeNumericParam(row.headcount) ?? "",
+        etf: normalizeNumericParam(row.etf) ?? "",
+        cost: normalizeNumericParam(row.cost) ?? "",
+        extra: normalizeNumericParam(row.extra) ?? "",
         url: row.url,
         url_label: row.url_label,
         sort_order: i + 1,
@@ -766,11 +797,11 @@ export function toCsvDirectory(dir: Directory): CsvDirectory {
  *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
   return [
-    "Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next",
-    "Review request,Check the request against the purchasing policy,hong.gd,Quality Part 1,SAP ERP,2 days,,,Approval decision",
-    'Approval decision,,"hong.gd, kim.cs",Quality Part 1,,,,,Sign contract:approved;Notify rejection:rejected',
-    "Sign contract,,lee.yh,Finance Part,,3 days,https://example.com/contract,Contract,",
-    "Notify rejection,,,,,1 day,,,",
+    "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+    "Review request,Check the request against the purchasing policy,hong.gd,Quality Part 1,SAP ERP,16,1,,,,,,Approval decision",
+    'Approval decision,,"hong.gd, kim.cs",Quality Part 1,,0.30,2,,,,,,Sign contract:approved;Notify rejection:rejected',
+    "Sign contract,,lee.yh,Finance Part,,24,1,,,,https://example.com/contract,Contract,",
+    "Notify rejection,,,,,8,,,,,,,",
   ].join("\r\n");
 }
 
@@ -799,7 +830,11 @@ export function buildAiPromptText(): string {
     `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 — 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
     `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
-    `- Duration: 선택, 소요 시간(예: 2 days, 3시간 — ${MAX_LEN.duration}자 이하).`,
+    "- Duration: 선택, 소요 시간(시간 단위 숫자, H.MM 표기 — 소수부 2자리는 분: 0.30=30분, 1.30=1시간 30분. \"2일\" 같은 텍스트 금지).",
+    "- Headcount: 선택, 투입 인력(숫자만). 모르면 비워두세요.",
+    "- ETF: 선택, 숫자만. 모르면 비워두세요.",
+    "- Cost: 선택, 비용(숫자만). 모르면 비워두세요.",
+    "- Extra: 선택, 예비 숫자 필드. 일반적으로 비워두세요.",
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
     `- URL_Label: 선택, 링크 표시 이름(${MAX_LEN.url_label}자 이하). URL이 있는 행에서만 의미(URL 없으면 무시됩니다).`,
     "- Next: 선택, 다음 단계의 Name을 세미콜론(;)으로 나열. 분기 조건은 \"대상이름:라벨\" 형식(라벨 200자 이하).",

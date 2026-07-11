@@ -15,6 +15,11 @@
 - 게이트: tsc 0에러·vitest 263 passed·lint(경고 1건, 기존 미관련 스크립트)·build 0에러.
 - 리뷰 픽스: compare 사이드 Properties 패널의 하드코딩 필드 목록에 4파라미터(headcount/etf/cost/extra) 추가 — FIELD_MSG·온캔버스 diff 필은 신규 파라미터를 보여주는데 상세 패널만 누락됐던 비일관 해소.
 
+## 2026-07-11 — Task 4: CSV 임포트 숫자 파라미터 5컬럼 확장 (numeric-params-export)
+- `lib/csv-import.ts`에 headcount/etf/cost/extra 4컬럼 추가(HEADER_COLUMNS·MAX_LEN·NODE_DEFAULTS·mergeNode pick·행 매핑), duration은 자유텍스트 대신 `normalizeDuration` H.MM 검증으로 전환, 5필드 모두 정규화된 값을 노드에 저장. `buildTemplateCsv`(13컬럼)·`buildAiPromptText`(Duration H.MM 규칙+4컬럼 규칙) 갱신.
+- TDD: 브리프 신규 테스트 2건 RED(`Unknown column "Headcount"`) 확인 후 구현 → GREEN. duration이 자유텍스트("2 days" 등)였던 기존 테스트 4건을 숫자값으로 갱신(테스트 수는 순감소 없이 73→75).
+- 게이트: csv-import 75/75·전체 vitest 265/265·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트).
+
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
 
