@@ -334,6 +334,36 @@ class DashboardMetricsOut(BaseModel):
     logins_7d: int  # 최근 7일 로그인 수
 
 
+class AiUsagePeriodOut(BaseModel):
+    calls: int
+    failed: int
+    prompt_tokens: int
+    completion_tokens: int
+
+
+class AiUsageTopUserOut(BaseModel):
+    login_id: str
+    name: str
+    calls: int
+    total_tokens: int
+
+
+class AiUsageTopMapOut(BaseModel):
+    map_id: int
+    name: str
+    calls: int
+    total_tokens: int
+
+
+class AiUsageOut(BaseModel):
+    """대시보드 AI 사용량 — 7/30일 합계와 30일 상위 사용자/맵 (design 2026-07-11 B1)."""
+
+    last7: AiUsagePeriodOut
+    last30: AiUsagePeriodOut
+    top_users: list[AiUsageTopUserOut]  # 30일, total_tokens desc, 5개
+    top_maps: list[AiUsageTopMapOut]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None

@@ -551,3 +551,23 @@ class LoginRecord(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, index=True
     )
+
+
+class AiUsageEvent(Base):
+    """AI 호출 1건의 usage 기록 — 원문(질문 내용) 없이 계량만. 대시보드 집계용 (design 2026-07-11)."""
+
+    __tablename__ = "ai_usage_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, index=True
+    )
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    # FK 아님 — 맵/버전이 삭제돼도 통계 보존 (ai_chat_messages.version_id와 동일 관례)
+    map_id: Mapped[int] = mapped_column(Integer)
+    version_id: Mapped[int] = mapped_column(Integer)
+    model: Mapped[str] = mapped_column(String(200), default="")  # 요청 선택자(빈값=서버 기본)
+    kind: Mapped[str | None] = mapped_column(String(20), default=None)  # 실패 시 None
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)

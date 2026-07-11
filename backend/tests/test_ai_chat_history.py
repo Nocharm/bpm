@@ -376,3 +376,53 @@ def test_chat_stores_payload_for_graph(
     assert [n["key"] for n in payload["nodes"]] == ["a", "b"]
     assert payload["edges"][0]["source"] == "a"
     assert payload["groups"] == []
+
+
+# ── AI 사용량 이벤트 (design 2026-07-11 B1) ─────────────
+
+
+def test_ai_usage_event_recorded_on_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        ai_client,
+        "call_ai",
+        _fake_ai(json.dumps({"kind": "answer", "message": "hi"}), prompt_tokens=1234, completion_tokens=56),
+    )
+    version_id = _draft_version_checked_out(client)
+    before = len(_read_table(client, "ai_usage_events"))
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "질문"})
+    assert resp.status_code == 200
+    events = _read_table(client, "ai_usage_events")
+    assert len(events) == before + 1
+    event = events[-1]
+    assert event["ok"] in (True, 1)  # sqlite bool 표현 관용
+    assert event["kind"] == "answer"
+    assert event["prompt_tokens"] == 1234
+    assert event["completion_tokens"] == 56
+    assert event["version_id"] == version_id
+    assert event["login_id"]  # 호출 사용자 기록
+
+
+def test_ai_usage_event_recorded_on_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+
+    async def _boom(messages: list[dict], model: str | None = None):
+        raise RuntimeError("gpu down")
+
+    monkeypatch.setattr(ai_client, "call_ai", _boom)
+    version_id = _draft_version_checked_out(client)
+    before = len(_read_table(client, "ai_usage_events"))
+    resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "유령?"})
+    assert resp.status_code == 502
+    events = _read_table(client, "ai_usage_events")
+    assert len(events) == before + 1
+    event = events[-1]
+    assert event["ok"] in (False, 0)
+    assert event["kind"] is None
+    assert event["prompt_tokens"] is None
+    # 실패 시에도 대화 메시지는 저장되지 않는다(기존 계약 유지)
+    # — test_chat_no_rows_when_ai_fails가 이미 보증하므로 여기선 이벤트만 단언
