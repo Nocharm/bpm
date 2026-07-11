@@ -26,7 +26,7 @@ from app.checkout import is_checkout_active
 from app.db import get_session
 from app.permissions.deps import require_version_map_role
 from app.manual import get_manual
-from app.models import AiChatMessage, AiChatSession, ManualDoc, MapVersion
+from app.models import AiChatMessage, AiChatSession, AiUsageEvent, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
 from app.settings import settings
@@ -194,7 +194,29 @@ async def ai_chat(
         manual_text, current, can_edit, payload.instruction, payload.history
     )
 
-    proposal, _usage = await _ask_and_validate(messages, payload.model)
+    try:
+        proposal, usage = await _ask_and_validate(messages, payload.model)
+    except HTTPException as exc:
+        totals = getattr(exc, "usage_totals", None)
+        # 실패도 계량 — 이벤트 기록이 502 전파를 막지 않게 별도 커밋·예외 무시
+        try:
+            session.add(
+                AiUsageEvent(
+                    login_id=user,
+                    map_id=version.map_id,
+                    version_id=version_id,
+                    model=payload.model or "",
+                    kind=None,
+                    prompt_tokens=getattr(totals, "prompt_tokens", None),
+                    completion_tokens=getattr(totals, "completion_tokens", None),
+                    ok=False,
+                )
+            )
+            await session.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답(502)을 바꾸지 않는다
+            await session.rollback()
+            logger.warning("AI usage event insert failed (failure path)")
+        raise
     # 편집 불가인데 편집계열(graph/ops)을 제안하면 적용 불가 — answer로 다운그레이드 (최종 가드는 saveGraph)
     if proposal.kind in ("graph", "ops") and not can_edit:
         proposal = AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
@@ -238,6 +260,19 @@ async def ai_chat(
     )
     await prune_map_chat_sessions(
         session, user, version.map_id, await get_ai_chat_max_sessions(session)
+    )
+    # 사용량 이벤트 — 대화와 같은 트랜잭션(원문 없이 계량만)
+    session.add(
+        AiUsageEvent(
+            login_id=user,
+            map_id=version.map_id,
+            version_id=version_id,
+            model=payload.model or "",
+            kind=proposal.kind,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            ok=True,
+        )
     )
     await session.commit()
     proposal.session_id = chat_session.id
