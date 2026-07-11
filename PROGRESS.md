@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Task 4: SP 지정 모달 숫자 5종 입력 + Σ 합산 버튼 (sp-params-sum)
+- `subprocess-designation-modal.tsx`의 duration 자유텍스트 입력을 `PARAM_FIELDS` 5종 블록(`ParamInput`, ariaLabel 포함 — Task 3 확정 계약)으로 교체, duration/etf/cost/extra 4필드에 Σ 버튼(게시본 그래프 `useRef` 1회 fetch 캐시·`sumParamField`로 setForm만 갱신·저장은 기존 Save 경유) 추가. headcount는 Σ 미지원. `DesignationForm`에 4필드 추가 + 호출측 2파일(`subprocess-inspector-card.tsx`·`subprocess-designation-panel.tsx`)의 initial 조립에 `sp_headcount` 등 4필드 미러(tsc 강제). i18n `sp.sumAllNodes`/`sp.sumNeedsPublished` en/ko.
+- 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
+
 ## 2026-07-11 — Task 3 리뷰 픽스: ParamInput ariaLabel 복원 (sp-params-sum)
 - 리팩터에서 탈락했던 요약모달 param 입력의 `aria-label` 회귀 픽스(라벨 span은 input과 미연결 — 스크린리더 접근명 공백). ParamInput에 옵셔널 `ariaLabel` prop 추가(브리프 인터페이스 결함 보강), 인스펙터·요약모달 양쪽에 `t(PARAM_LABEL_KEY[key])` 전달(인스펙터는 원래 없던 것을 이번에 추가). tsc 0에러·lint 0에러·vitest 304 passed.
 

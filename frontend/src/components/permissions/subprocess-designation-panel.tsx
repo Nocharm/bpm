@@ -35,6 +35,10 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     assignee: "",
     system: "",
     duration: "",
+    headcount: "",
+    etf: "",
+    cost: "",
+    extra: "",
     url: "",
     urlLabel: "",
   });
@@ -90,6 +94,10 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       assignee: detail?.sp_assignee ?? "",
       system: detail?.sp_system ?? "",
       duration: detail?.sp_duration ?? "",
+      headcount: detail?.sp_headcount ?? "",
+      etf: detail?.sp_etf ?? "",
+      cost: detail?.sp_cost ?? "",
+      extra: detail?.sp_extra ?? "",
       url: detail?.sp_url ?? "",
       urlLabel: detail?.sp_url_label ?? "",
     });
