@@ -576,3 +576,30 @@ class AiUsageEvent(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class DashboardPermission(Base):
+    """대시보드 열람 권한 행 — principal(사용자/부서/그룹)에게 부여. 역할 구분 없음
+    (행이 있으면 열람, 없으면 403). principal 해석 규약은 map_permissions과 동일.
+    """
+
+    __tablename__ = "dashboard_permissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 'user' | 'department' | 'group'
+    principal_type: Mapped[str] = mapped_column(String(20))
+    # user→login_id; department→org_path 문자열; group→user_groups.id 문자열
+    principal_id: Mapped[str] = mapped_column(String(200))
+    granted_by: Mapped[str] = mapped_column(String(100))
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class DashboardCoverageDept(Base):
+    """커버리지 % 의 분모가 되는 부서 목록 — sysadmin이 지정, 전원에게 동일 적용."""
+
+    __tablename__ = "dashboard_coverage_depts"
+
+    # org_path 문자열(루트→리프, "A/B/C") — 하위 부서 맵도 이 부서에 귀속해 센다
+    org_path: Mapped[str] = mapped_column(String(200), primary_key=True)
+    added_by: Mapped[str] = mapped_column(String(100))
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
