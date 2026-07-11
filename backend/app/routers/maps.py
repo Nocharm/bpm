@@ -559,6 +559,10 @@ async def designate_subprocess(
     found_map.sp_assignee = payload.assignee
     found_map.sp_system = payload.system
     found_map.sp_duration = payload.duration
+    found_map.sp_headcount = payload.headcount
+    found_map.sp_etf = payload.etf
+    found_map.sp_cost = payload.cost
+    found_map.sp_extra = payload.extra
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
     found_map.sp_changed_by = user

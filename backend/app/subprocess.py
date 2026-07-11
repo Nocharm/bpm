@@ -75,6 +75,10 @@ async def get_subprocess_refs(
                 ProcessMap.sp_assignee,
                 ProcessMap.sp_system,
                 ProcessMap.sp_duration,
+                ProcessMap.sp_headcount,
+                ProcessMap.sp_etf,
+                ProcessMap.sp_cost,
+                ProcessMap.sp_extra,
                 ProcessMap.sp_url,
                 ProcessMap.sp_url_label,
             ).where(ProcessMap.id.in_(targets))
@@ -87,10 +91,28 @@ async def get_subprocess_refs(
             assignee=assignee,
             system=system,
             duration=duration,
+            headcount=headcount,
+            etf=etf,
+            cost=cost,
+            extra=extra,
             url=url,
             url_label=url_label,
         )
-        for mid, designated_at, deleted_at, department, assignee, system, duration, url, url_label in rows
+        for (
+            mid,
+            designated_at,
+            deleted_at,
+            department,
+            assignee,
+            system,
+            duration,
+            headcount,
+            etf,
+            cost,
+            extra,
+            url,
+            url_label,
+        ) in rows
     }
     for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우
         refs[missing] = SubprocessRefOut(designated=False)

@@ -59,6 +59,11 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "etf", "VARCHAR(50) DEFAULT ''"),
     ("nodes", "cost", "VARCHAR(50) DEFAULT ''"),
     ("nodes", "extra", "VARCHAR(50) DEFAULT ''"),
+    # SP 숫자 파라미터 4종 (design 2026-07-11 SP)
+    ("process_maps", "sp_headcount", "VARCHAR(50)"),
+    ("process_maps", "sp_etf", "VARCHAR(50)"),
+    ("process_maps", "sp_cost", "VARCHAR(50)"),
+    ("process_maps", "sp_extra", "VARCHAR(50)"),
 ]
 
 
