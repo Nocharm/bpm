@@ -192,7 +192,7 @@ import {
   type NodeDisplayField,
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
-import { type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
+import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -826,6 +826,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // previewSource와 항상 동기화되는 소스 유니온 — 하나의 undo 스냅샷/자동저장 억제 슬롯을 두 기능이 공유하므로
   // 서로 중첩되면 승인 전 그래프가 자동저장될 수 있다. 슬롯은 배타적으로만 점유한다.
   const previewRef = useRef<"ai" | "csv" | null>(null);
+  // Import 탭 라벨용 원산지 — 프리뷰 상태 슬롯(previewSource="csv")은 CSV/AI graph가 공유한다
+  const [importOrigin, setImportOrigin] = useState<"csv" | "ai" | null>(null);
   // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그
   const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });
   const aiMinDragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(
@@ -1482,51 +1484,59 @@ function MapEditor({ mapId }: { mapId: number }) {
     setHistorySize({ past: history.past.length, future: 0 });
   }, []);
 
-  // CSV 머지 프리뷰 — 캔버스에만 반영(미저장). 소멸 노드/엣지는 삭제·유지와 무관하게 항상 빨간 점선으로 보여준다.
+  // 병합 프리뷰 진입 코어 — CSV 임포트와 AI graph 제안이 공유(previewSource="csv" 슬롯). 캔버스에만 반영(미저장).
+  // 소멸 노드/엣지는 삭제·유지와 무관하게 항상 빨간 점선으로 보여준다.
+  const startImportPreview = useCallback(
+    (outcome: CsvImportOutcome, origin: "csv" | "ai") => {
+      if (versionId === null || !outcome?.graph) return;
+      const added = new Set(outcome.merge.addedNodeIds);
+      const removedIds = new Set(outcome.merge.removedNodes.map((node) => node.id));
+
+      // 캔버스 그래프 = 머지 결과 + 소멸 노드(하이라이트용). 저장 payload는 Apply 시 따로 만든다.
+      const canvasGraph = withKeptNodes(outcome.graph, outcome.merge.removedNodes);
+      const previewNodes = toAppNodes(canvasGraph, null).map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          diffStatus: removedIds.has(node.id)
+            ? ("removed" as const)
+            : added.has(node.id)
+              ? ("added" as const)
+              : undefined,
+        },
+      }));
+      const previewEdges = [
+        ...toAppEdges(canvasGraph),
+        // toAppEdges는 graph.edges만 읽는다 (page.tsx:527) — 소멸 엣지만 담아 스타일을 얹는다
+        ...toAppEdges({ nodes: [], edges: outcome.merge.lostEdges, groups: [] }).map((edge) => ({
+          ...edge,
+          // 비교 화면과 같은 시각 언어 (compare/page.tsx:257-259) — 사라질 엣지
+          style: { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" },
+        })),
+      ];
+
+      pushHistory(); // Cancel = undo 1회로 임포트 이전 캔버스 복귀
+      previewRef.current = "csv";
+      setNodes(previewNodes);
+      setEdges(previewEdges);
+      setGroups(canvasGraph.groups);
+      setSelectedId(null);
+      setSelectedEdgeId(null);
+      setMenu(null);
+      setCsvKeepRemoved(false);
+      setPreviewSource("csv");
+      setImportOrigin(origin);
+      setInspectorOpen(true); // Apply/Cancel이 인스펙터 Import 탭에 있다 — 접혀 있으면 갇히므로 강제로 펼친다
+      setCsvImportOpen(false);
+    },
+    [versionId, pushHistory, setNodes, setEdges, setGroups],
+  );
+
   const enterCsvPreview = useCallback(() => {
     // 슬롯이 이미 점유 중이면(주로 AI 프리뷰) 무시 — 툴바 게이팅이 우선 막지만 방어적으로 한 번 더 확인
     if (previewRef.current !== null) return;
-    const outcome = csvOutcome;
-    if (versionId === null || !outcome?.graph) return;
-    const added = new Set(outcome.merge.addedNodeIds);
-    const removedIds = new Set(outcome.merge.removedNodes.map((node) => node.id));
-
-    // 캔버스 그래프 = 머지 결과 + 소멸 노드(하이라이트용). 저장 payload는 Apply 시 따로 만든다.
-    const canvasGraph = withKeptNodes(outcome.graph, outcome.merge.removedNodes);
-    const previewNodes = toAppNodes(canvasGraph, null).map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        diffStatus: removedIds.has(node.id)
-          ? ("removed" as const)
-          : added.has(node.id)
-            ? ("added" as const)
-            : undefined,
-      },
-    }));
-    const previewEdges = [
-      ...toAppEdges(canvasGraph),
-      // toAppEdges는 graph.edges만 읽는다 (page.tsx:527) — 소멸 엣지만 담아 스타일을 얹는다
-      ...toAppEdges({ nodes: [], edges: outcome.merge.lostEdges, groups: [] }).map((edge) => ({
-        ...edge,
-        // 비교 화면과 같은 시각 언어 (compare/page.tsx:257-259) — 사라질 엣지
-        style: { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" },
-      })),
-    ];
-
-    pushHistory(); // Cancel = undo 1회로 임포트 이전 캔버스 복귀
-    previewRef.current = "csv";
-    setNodes(previewNodes);
-    setEdges(previewEdges);
-    setGroups(canvasGraph.groups);
-    setSelectedId(null);
-    setSelectedEdgeId(null);
-    setMenu(null);
-    setCsvKeepRemoved(false);
-    setPreviewSource("csv");
-    setInspectorOpen(true); // Apply/Cancel이 인스펙터 Import 탭에 있다 — 접혀 있으면 갇히므로 강제로 펼친다
-    setCsvImportOpen(false);
-  }, [versionId, csvOutcome, pushHistory, setNodes, setEdges, setGroups]);
+    if (csvOutcome?.graph) startImportPreview(csvOutcome, "csv");
+  }, [csvOutcome, startImportPreview]);
 
   // 프리뷰 확정 — 삭제/유지 선택을 반영한 최종 그래프를 PUT. 소멸 엣지는 어느 쪽이든 저장하지 않는다.
   // 직접 saveGraph를 쓰는 이유: setState 직후 ref 동기화 전에 saveCurrentScope를 부르면 이전 상태가 저장됨.
@@ -1540,6 +1550,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const saved = await saveGraph(versionId, payload);
       previewRef.current = null;
       setPreviewSource(null);
+      setImportOrigin(null);
       setNodes(toAppNodes(saved, null));
       setEdges(toAppEdges(saved));
       setGroups(saved.groups);
@@ -1603,71 +1614,34 @@ function MapEditor({ mapId }: { mapId: number }) {
   const cancelCsvPreview = useCallback(() => {
     previewRef.current = null;
     setPreviewSource(null);
+    setImportOrigin(null);
     setCsvOutcome(null);
     setCsvFileName(null);
     undo(); // enterCsvPreview가 밀어넣은 스냅샷으로 복귀
   }, [undo]);
 
-  // ── AI 제안 미리보기 / 적용 / 취소 ─────────────────────
-  const applyAiProposal = useCallback(
+  // AI graph 제안 → CSV와 같은 병합 프리뷰 (design 2026-07-11) — 전량 교체 경로 폐기
+  const enterAiGraphPreview = useCallback(
     (proposal: AiProposal) => {
-      // Phase 2: graph(전체 교체)만 적용. ops/walkthrough/analysis는 Phase 3~5(패널이 폴백 렌더)
       if (proposal.kind !== "graph") return;
-      // CSV 프리뷰가 슬롯을 점유 중이면 캔버스를 건드리지 않는다 — AI 프리뷰끼리 잇는 것은 기존 동작이라 허용
-      if (previewRef.current === "csv") {
+      // 프리뷰 슬롯 점유 중(CSV든 AI ops든) 진입 금지 — aa87766 중첩 자동저장 방지 경계 유지
+      if (previewRef.current !== null) {
         showToast(t("preview.busy"));
         return;
       }
-      // 그룹 임시키 → 실제 id (노드 group_key·그룹 parent_key 해석용)
-      const groupKeyToId = new Map<string, string>();
-      for (const group of proposal.groups) {
-        groupKeyToId.set(group.key, genId());
+      if (versionId === null) return;
+      const outcome = buildGraphFromAiProposal(proposal, {
+        base: buildGraph(nodesRef.current, edgesRef.current, groupsRef.current),
+      });
+      if (!outcome.graph) {
+        showToast(t("ai.error"));
+        return;
       }
-      const ggroups: GraphGroup[] = proposal.groups.map((group) => {
-        const id = groupKeyToId.get(group.key) ?? genId();
-        const parentId = group.parent_key
-          ? groupKeyToId.get(group.parent_key) ?? null
-          : null;
-        return { id, parent_group_id: parentId, label: group.label, color: group.color };
-      });
-
-      const keyToId = new Map<string, string>();
-      const gnodes = proposal.nodes.map((node) => {
-        const id = genId();
-        keyToId.set(node.key, id);
-        // AI가 준 메타를 실제 노드에 반영 — 미제공은 빈값 (D1 생성=교체)
-        const groupId = node.group_key ? groupKeyToId.get(node.group_key) : undefined;
-        return aiNodeToGraphNode(node, id, groupId);
-      });
-      const gedges = proposal.edges
-        .map((edge) => {
-          const source = keyToId.get(edge.source);
-          const target = keyToId.get(edge.target);
-          if (!source || !target) return null;
-          return {
-            id: genId(),
-            source_node_id: source,
-            target_node_id: target,
-            label: edge.label,
-            source_side: "right",
-            target_side: "left",
-            source_handle: null,
-            target_handle: null,
-          };
-        })
-        .filter((edge): edge is NonNullable<typeof edge> => edge !== null);
-
-      const graph = { nodes: gnodes, edges: gedges, groups: ggroups };
-      const laidOut = layoutWithDagre(toAppNodes(graph), toAppEdges(graph));
-
-      pushHistory(); // Discard = undo restores the pre-preview state
-      previewRef.current = "ai";
-      setNodes(laidOut);
-      setEdges(toAppEdges(graph));
-      setGroups(ggroups);
-      setPreviewSource("ai");
+      setCsvFileName(null);
+      setCsvOutcome(outcome);
+      startImportPreview(outcome, "ai");
     },
-    [pushHistory, setNodes, setEdges, setGroups, showToast, t],
+    [versionId, startImportPreview, showToast, t],
   );
 
   // ── AI 증분 편집(ops) 적용 — 기존 좌표·색·담당자·그룹 보존 (D1 편집 경로) ──
@@ -1759,7 +1733,10 @@ function MapEditor({ mapId }: { mapId: number }) {
               ...(desc !== undefined ? { description: desc } : {}),
               ...(attr
                 ? {
-                    ...(attr.color != null ? { color: attr.color } : {}),
+                    // 서브프로세스 색은 시스템 고정(바이올렛) — AI가 보내도 데이터 오염 방지 (design 2026-07-11 ④)
+                    ...(attr.color != null && node.data.nodeType !== "subprocess"
+                      ? { color: attr.color }
+                      : {}),
                     ...(attr.assignee != null ? { assignee: attr.assignee } : {}),
                     ...(attr.department != null ? { department: attr.department } : {}),
                     ...(attr.system != null ? { system: attr.system } : {}),
@@ -1812,7 +1789,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const discardAiPreview = useCallback(() => {
     previewRef.current = null;
     setPreviewSource(null);
-    undo(); // restore the snapshot pushed in applyAiProposal
+    undo(); // restore the snapshot pushed in applyAiOps
   }, [undo]);
 
   // ── AI 노드 포커스/하이라이트 — 분석 finding·워크스루 공용 (Phase 4 신설, Phase 5 재사용) ──
@@ -7359,7 +7336,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 canEdit={!readOnly && (checkout?.mine ?? false)}
                 initialSessionId={aiInitialSessionId}
                 onInitialSessionConsumed={handleAiInitialConsumed}
-                onGraphProposal={applyAiProposal}
+                onGraphProposal={enterAiGraphPreview}
                 onOpsProposal={applyAiOps}
                 onHighlightNode={highlightNode}
                 onToast={showToast}
