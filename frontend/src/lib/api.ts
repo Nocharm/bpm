@@ -954,6 +954,39 @@ export function getDashboard(): Promise<DashboardMetrics> {
   return request<DashboardMetrics>("/dashboard");
 }
 
+export interface AiUsagePeriod {
+  calls: number;
+  failed: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+}
+
+export interface AiUsageTopUser {
+  login_id: string;
+  name: string;
+  calls: number;
+  total_tokens: number;
+}
+
+export interface AiUsageTopMap {
+  map_id: number;
+  name: string;
+  calls: number;
+  total_tokens: number;
+}
+
+export interface AiUsageMetrics {
+  last7: AiUsagePeriod;
+  last30: AiUsagePeriod;
+  top_users: AiUsageTopUser[];
+  top_maps: AiUsageTopMap[];
+}
+
+// AI 챗 사용량 지표 (sysadmin) — ai_usage_events 집계.
+export function getAiUsage(): Promise<AiUsageMetrics> {
+  return request<AiUsageMetrics>("/dashboard/ai-usage");
+}
+
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
 
 export interface DirectoryUser {
