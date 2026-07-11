@@ -88,6 +88,7 @@ docker-compose.yml
 - [`docs/lessons/scope-save-and-coordinates.md`](docs/lessons/scope-save-and-coordinates.md) — 자식 스코프 저장 `getGraph→변형→PUT`(그룹 보존), fullGraph 낙관적 갱신, 스코프상대↔표시 좌표(`childOffsets`/`scopeOffsets`), buildScope는 dagre 대신 저장 pos.
 - [`docs/lessons/browser-verification.md`](docs/lessons/browser-verification.md) — Playwright+시스템 Chrome 검증, **dev.db 오염/readonly 함정**("0 events"는 코드 아닌 오염일 수 있음), 연결 드롭 flaky, node cwd.
 - [`docs/lessons/react-ts-patterns.md`](docs/lessons/react-ts-patterns.md) — useCallback deps TDZ → ref 미러, set-state-in-effect 린트, 큰 상태 모델은 메인 state 오염 금지.
+- **노드 속성 추가 체크리스트** — 열거 지점 전부 갱신: `models.py` 컬럼 · `schemas.NodeIn`(+검증기) · `graph.py` upsert · `versions.py` clone_graph · `csv-import.ts`(NODE_DEFAULTS·mergeNode pick·행 변환) · AI 변환 2곳(`buildGraphFromAiProposal`, page.tsx `aiNodeToGraphNode`). 값 정규화는 CSV·AI 경로 대칭 필수 — 한쪽만 하면 무효 에코가 pick을 통과해 백엔드 소거로 기존값이 유실된다.
 
 ## Operations / Deployment
 
