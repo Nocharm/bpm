@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — AI 사용량 계측·매뉴얼 선별 (worktree-ai-usage-manual)
+- B1 1/3: call_ai가 usage를 AiReply로 반환, _ask_and_validate가 시도 전체 누적(실패 시 HTTPException에 동봉).
+
 ## 2026-07-11 — AI 사용량 계측(B1)·매뉴얼 섹션 선별(B2) 설계·계획 (main)
 - 설계 스펙 + 구현 계획(6태스크) 커밋 — `docs/superpowers/specs/2026-07-11-ai-usage-manual-select-design.md`, `docs/superpowers/plans/2026-07-11-ai-usage-manual-select.md`. 호출별 이벤트(`ai_usage_events`, 원문 미저장)·대시보드 스텁 확장·`## `분할+2-gram 섹션 선별(budget 12k, 소형 무변화). 머지는 사용자 최종 확인 후.
 

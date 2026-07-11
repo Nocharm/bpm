@@ -1,6 +1,7 @@
 """AI 채팅 — 순서도 생성/편집 제안 + 사용법 안내 (design 2026-06-15)."""
 
 import logging
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -102,25 +103,52 @@ def _extract_json(text: str) -> str:
     return text
 
 
-async def _ask_and_validate(messages: list[dict], model: str | None) -> AiProposal:
-    """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502."""
+@dataclass
+class AiUsageTotals:
+    """한 요청의 AI 호출 usage 누적 — 재프롬프트 재시도분 포함(둘 다 과금되므로 합산)."""
+
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+    def add(self, reply: ai_client.AiReply) -> None:
+        if reply.prompt_tokens is not None:
+            self.prompt_tokens = (self.prompt_tokens or 0) + reply.prompt_tokens
+        if reply.completion_tokens is not None:
+            self.completion_tokens = (self.completion_tokens or 0) + reply.completion_tokens
+
+
+async def _ask_and_validate(
+    messages: list[dict], model: str | None
+) -> tuple[AiProposal, AiUsageTotals]:
+    """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502.
+
+    usage는 시도 전체를 누적해 반환 — 실패로 끝나도 호출자가 기록할 수 있게
+    HTTPException에 totals를 실어 던진다(exc.usage_totals).
+    """
+    totals = AiUsageTotals()
     for attempt in range(2):
         try:
-            content = await ai_client.call_ai(messages, model)
+            reply = await ai_client.call_ai(messages, model)
         except Exception as exc:  # noqa: BLE001 -- 외부 AI 서버 오류는 502로 일괄 변환
             # exc는 내부 GPU 주소를 담을 수 있어 클라이언트엔 노출 금지 — 서버 로그에만 기록
             logger.warning("AI server call failed: %s", exc)
-            raise HTTPException(status_code=502, detail="AI server error") from exc
+            http_exc = HTTPException(status_code=502, detail="AI server error")
+            http_exc.usage_totals = totals  # type: ignore[attr-defined]
+            raise http_exc from exc
+        totals.add(reply)
         try:
-            return AiProposal.model_validate_json(_extract_json(content))
+            return AiProposal.model_validate_json(_extract_json(reply.content)), totals
         except ValueError as exc:
             # 원본 출력(모델 텍스트, 비밀 아님)을 서버 로그에만 기록 — 502 원인 진단용. 클라이언트엔 일반 메시지만.
-            logger.warning("AI response invalid (attempt %d): %s | raw=%.800s", attempt, exc, content)
+            logger.warning(
+                "AI response invalid (attempt %d): %s | raw=%.800s", attempt, exc, reply.content
+            )
             if attempt == 0:
                 messages = [*messages, {"role": "user", "content": "유효한 JSON 한 개만 반환하세요."}]
                 continue
-            raise HTTPException(status_code=502, detail="AI returned invalid response") from None
-    raise HTTPException(status_code=502, detail="AI returned invalid response")
+    http_exc = HTTPException(status_code=502, detail="AI returned invalid response")
+    http_exc.usage_totals = totals  # type: ignore[attr-defined]
+    raise http_exc
 
 
 @router.post(
@@ -166,7 +194,7 @@ async def ai_chat(
         manual_text, current, can_edit, payload.instruction, payload.history
     )
 
-    proposal = await _ask_and_validate(messages, payload.model)
+    proposal, _usage = await _ask_and_validate(messages, payload.model)
     # 편집 불가인데 편집계열(graph/ops)을 제안하면 적용 불가 — answer로 다운그레이드 (최종 가드는 saveGraph)
     if proposal.kind in ("graph", "ops") and not can_edit:
         proposal = AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
