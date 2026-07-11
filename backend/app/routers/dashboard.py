@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user, require_sysadmin
@@ -11,15 +11,21 @@ from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
     AiUsageEvent,
+    CheckoutRequest,
+    Comment,
     DashboardCoverageDept,
     DashboardPermission,
     DeptInfo,
     Employee,
     LoginRecord,
+    MapVersion,
+    Notification,
     ProcessMap,
     UserGroup,
+    VersionEvent,
 )
 from app.permissions.deps import require_dashboard_viewer
+from app.permissions.logic import belongs_to_department
 from app.schemas import (
     AiUsageOut,
     AiUsagePeriodOut,
@@ -27,9 +33,16 @@ from app.schemas import (
     AiUsageTopUserOut,
     CoverageDeptsIn,
     CoverageDeptsOut,
+    DashboardCoverageOut,
+    DashboardCoverageRowOut,
+    DashboardEventOut,
+    DashboardMapCountsOut,
     DashboardMetricsOut,
+    DashboardOpsOut,
     DashboardPermissionIn,
     DashboardPermissionOut,
+    DashboardSummaryOut,
+    DashboardVersionStatusOut,
 )
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -262,3 +275,146 @@ async def set_coverage_depts(
         session.add(DashboardCoverageDept(org_path=path, added_by=login_id))
     await session.commit()
     return CoverageDeptsOut(org_paths=wanted)
+
+
+_VERSION_STATUSES = ("published", "draft", "approved", "pending", "rejected")
+_RECENT_EVENT_LIMIT = 10  # 좌측 이벤트 리스트에 담기는 최대 건수
+
+
+@router.get(
+    "/dashboard/summary",
+    response_model=DashboardSummaryOut,
+    dependencies=[Depends(require_dashboard_viewer)],
+)
+async def get_dashboard_summary(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DashboardSummaryOut:
+    """기간 무관 스냅샷 — 맵 현황·버전 상태·부서 커버리지·운영 항목·최근 이벤트."""
+    live_maps = (
+        await session.scalars(select(ProcessMap).where(ProcessMap.deleted_at.is_(None)))
+    ).all()
+    live_ids = [m.id for m in live_maps]
+    trashed = await session.scalar(
+        select(func.count()).select_from(ProcessMap).where(ProcessMap.deleted_at.is_not(None))
+    )
+
+    # 버전 status 집계 — 미삭제 맵의 버전만.
+    # 맵이 하나도 없을 때 in_([])를 쓰면 SQLAlchemy가 경고를 내므로 명시적 거짓 조건(false())을 준다.
+    status_rows = (
+        await session.execute(
+            select(MapVersion.map_id, MapVersion.status).where(
+                MapVersion.map_id.in_(live_ids) if live_ids else false()
+            )
+        )
+    ).all()
+    status_counts = {status: 0 for status in _VERSION_STATUSES}
+    maps_with_status: dict[str, set[int]] = {status: set() for status in _VERSION_STATUSES}
+    for map_id, status in status_rows:
+        if status in status_counts:
+            status_counts[status] += 1
+            maps_with_status[status].add(map_id)
+
+    # 부서 커버리지 — 지정 부서별로 하위 포함 매칭 (belongs_to_department 규약)
+    dept_paths = [
+        row.org_path
+        for row in (
+            await session.scalars(
+                select(DashboardCoverageDept).order_by(DashboardCoverageDept.org_path)
+            )
+        ).all()
+    ]
+    korean = {
+        info.department: info.korean_name
+        for info in (await session.scalars(select(DeptInfo))).all()
+    }
+    coverage_rows: list[DashboardCoverageRowOut] = []
+    for path in dept_paths:
+        owned = [
+            m
+            for m in live_maps
+            if m.owning_department
+            and belongs_to_department(m.owning_department, path)
+        ]
+        leaf = path.rsplit("/", maxsplit=1)[-1]
+        coverage_rows.append(
+            DashboardCoverageRowOut(
+                org_path=path,
+                name=korean.get(leaf) or leaf,
+                maps=len(owned),
+                published=sum(
+                    1 for m in owned if m.id in maps_with_status["published"]
+                ),
+            )
+        )
+    coverage_rows.sort(key=lambda row: (-row.maps, row.org_path))
+    with_map = sum(1 for row in coverage_rows if row.maps > 0)
+    coverage = DashboardCoverageOut(
+        depts_total=len(dept_paths),
+        depts_with_map=with_map,
+        coverage_pct=round(with_map / len(dept_paths) * 100) if dept_paths else 0,
+        rows=coverage_rows,
+    )
+
+    ops = DashboardOpsOut(
+        unresolved_comments=await session.scalar(
+            select(func.count()).select_from(Comment).where(Comment.resolved.is_(False))
+        )
+        or 0,
+        unread_notifications=await session.scalar(
+            select(func.count())
+            .select_from(Notification)
+            .where(Notification.recipient == login_id, Notification.read.is_(False))
+        )
+        or 0,
+        pending_checkouts=await session.scalar(
+            select(func.count())
+            .select_from(CheckoutRequest)
+            .where(CheckoutRequest.status == "pending")
+        )
+        or 0,
+    )
+
+    event_rows = (
+        await session.execute(
+            select(VersionEvent, MapVersion, ProcessMap)
+            .join(MapVersion, MapVersion.id == VersionEvent.version_id)
+            .join(ProcessMap, ProcessMap.id == MapVersion.map_id)
+            .order_by(VersionEvent.created_at.desc())
+            .limit(_RECENT_EVENT_LIMIT)
+        )
+    ).all()
+    actor_names = {
+        emp.login_id: emp.name
+        for emp in (
+            await session.scalars(
+                select(Employee).where(
+                    Employee.login_id.in_([event.actor for event, _, _ in event_rows])
+                )
+            )
+        ).all()
+    }
+    recent_events = [
+        DashboardEventOut(
+            event_type=event.event_type,
+            map_name=found_map.name,
+            version_label=version.label,
+            actor_name=actor_names.get(event.actor) or event.actor,
+            created_at=event.created_at,
+        )
+        for event, version, found_map in event_rows
+    ]
+
+    return DashboardSummaryOut(
+        generated_at=now_kst(),
+        maps=DashboardMapCountsOut(
+            total=len(live_maps),
+            published=len(maps_with_status["published"]),
+            draft=len(maps_with_status["draft"]),
+            trashed=trashed or 0,
+        ),
+        version_status=DashboardVersionStatusOut(**status_counts),
+        coverage=coverage,
+        ops=ops,
+        recent_events=recent_events,
+    )

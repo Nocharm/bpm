@@ -393,6 +393,60 @@ class CoverageDeptsOut(BaseModel):
     org_paths: list[str]
 
 
+class DashboardMapCountsOut(BaseModel):
+    total: int
+    published: int
+    draft: int
+    trashed: int
+
+
+class DashboardVersionStatusOut(BaseModel):
+    published: int
+    draft: int
+    approved: int
+    pending: int
+    rejected: int
+
+
+class DashboardCoverageRowOut(BaseModel):
+    org_path: str
+    name: str  # 한글 부서명(dept_info) 없으면 리프 세그먼트
+    maps: int
+    published: int
+
+
+class DashboardCoverageOut(BaseModel):
+    depts_total: int
+    depts_with_map: int
+    coverage_pct: int  # 0..100, 반올림. depts_total=0이면 0
+    rows: list[DashboardCoverageRowOut]
+
+
+class DashboardOpsOut(BaseModel):
+    unresolved_comments: int
+    unread_notifications: int  # 요청자 본인 기준
+    pending_checkouts: int
+
+
+class DashboardEventOut(BaseModel):
+    event_type: str
+    map_name: str
+    version_label: str
+    actor_name: str
+    created_at: datetime
+
+
+class DashboardSummaryOut(BaseModel):
+    """기간 무관 스냅샷 — 맵 현황·버전 상태·부서 커버리지·운영 항목·최근 이벤트 (design 2026-07-11)."""
+
+    generated_at: datetime
+    maps: DashboardMapCountsOut
+    version_status: DashboardVersionStatusOut
+    coverage: DashboardCoverageOut
+    ops: DashboardOpsOut
+    recent_events: list[DashboardEventOut]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
