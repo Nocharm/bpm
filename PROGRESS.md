@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — 오우닝 부서 누락 태그 위치·표기 변경 (worktree-owning-badge-move)
+- 홈 카드의 누락 태그를 타이틀 행에서 우측 하단 카운트 자리(노드·버전·인원 수)로 이동 — 누락 맵은 카운트 대신 TriangleAlert + "No owning dept"(언어 무관 영어 고정, 역할/상태 패턴)로 대체 표시. data-id 유지로 pw-verify 스크립트 무변경. lint·tsc·build·vitest 234 초록.
+
 ## 2026-07-10 — 후속 정비: 비교화면 로드 실패 처리 + AI 게이트/페이로드 잔무 (worktree-ai-followup-fixes)
 - 비교화면 로드 effect 3곳 try/catch — 403은 에디터와 동일한 비공개 맵 안내 모달(홈 이동), 그 외는 인라인 오류 표시로 무한 로딩 제거. 브라우저 검증 `pw-verify-compare-403.mjs` 4/4(403 모달·홈 이동·500 인라인·정상 무회귀).
 - AI 게이트/페이로드 리뷰 잔무 3건: public 맵 `/graph/all` 게이트 assert, toPayload walkthrough vitest, 스모크 check17 `.catch`+detail. 덤: `chat-sessions.test.ts:82` never 타입 에러 수정 — 직전 픽서의 "tsc 0 errors" 보고가 허위였고 next build는 테스트 파일 타입 에러로 안 깨져 잠복(이후 게이트에 tsc --noEmit 상시 포함).

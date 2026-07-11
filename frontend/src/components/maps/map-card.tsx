@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Clock, GitBranch, Globe, Lock, User, Users, Workflow } from "lucide-react";
+import { Clock, GitBranch, Globe, Lock, TriangleAlert, User, Users, Workflow } from "lucide-react";
 
 import { type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -169,15 +169,6 @@ export function MapCard({
               {t(VERSION_STATUS_LABEL[map.latest_version_status])}
             </span>
           )}
-          {!map.owning_department && (
-            <span
-              data-id="map-card-owning-missing"
-              title={t("home.owningMissingNote")}
-              className="shrink-0 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-error"
-            >
-              {t("home.owningMissingBadge")}
-            </span>
-          )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {showRole && <RoleBadge role={map.my_role as MapRole} />}
@@ -197,7 +188,7 @@ export function MapCard({
         </div>
       </div>
 
-      {/* 메타 한 줄 — 좌: 소유자·수정시각(상대) / 우: 노드·버전·인원 수 (이미지 H4/H5) */}
+      {/* 메타 한 줄 — 좌: 소유자·수정시각(상대) / 우: 노드·버전·인원 수, 오우닝 부서 누락 맵은 경고 태그로 대체 (이미지 H4/H5) */}
       <div className="relative mt-2 flex items-center justify-between gap-2 text-fine text-ink-tertiary">
         <div className="flex min-w-0 items-center gap-2">
           {recentOpenedAt !== undefined ? (
@@ -220,22 +211,34 @@ export function MapCard({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
-          <span className="inline-flex items-center gap-1" title={t("home.nodeCount")}>
-            <Workflow size={12} strokeWidth={1.5} />
-            {map.node_count ?? 0}
+        {/* 오우닝 부서 누락 맵은 카운트 자리에 경고 태그로 대체 — 언어 무관 영어 고정 */}
+        {!map.owning_department ? (
+          <span
+            data-id="map-card-owning-missing"
+            title={t("home.owningMissingNote")}
+            className="inline-flex shrink-0 items-center gap-1 text-error"
+          >
+            <TriangleAlert size={12} strokeWidth={1.5} />
+            {t("home.owningMissingBadge")}
           </span>
-          <span className="inline-flex items-center gap-1" title={t("home.versionCount")}>
-            <GitBranch size={12} strokeWidth={1.5} />
-            {map.version_count ?? 0}
-          </span>
-          {canViewMembers && (
-            <span className="inline-flex items-center gap-1" title={t("home.viewMembers")}>
-              <Users size={12} strokeWidth={1.5} />
-              {map.member_count ?? 0}
+        ) : (
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="inline-flex items-center gap-1" title={t("home.nodeCount")}>
+              <Workflow size={12} strokeWidth={1.5} />
+              {map.node_count ?? 0}
             </span>
-          )}
-        </div>
+            <span className="inline-flex items-center gap-1" title={t("home.versionCount")}>
+              <GitBranch size={12} strokeWidth={1.5} />
+              {map.version_count ?? 0}
+            </span>
+            {canViewMembers && (
+              <span className="inline-flex items-center gap-1" title={t("home.viewMembers")}>
+                <Users size={12} strokeWidth={1.5} />
+                {map.member_count ?? 0}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 모든 카드 1초 호버 — 우측 요약+인원 모달. 카드/모달 벗어나면 닫힘 (요청) */}

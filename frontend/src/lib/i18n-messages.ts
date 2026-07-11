@@ -1361,7 +1361,8 @@ const ko: Record<MessageKey, string> = {
   "home.filterRole": "권한",
   "home.filterOwning": "오우닝",
   "home.owningMissingOption": "오우닝 부서 누락",
-  "home.owningMissingBadge": "오우닝 부서 없음",
+  // 카드 태그 — 역할/상태처럼 언어 무관 영어 고정 (2026-07-11 요청)
+  "home.owningMissingBadge": "No owning dept",
   "home.owningMissingNote": "오우닝 부서가 지정되지 않은 맵입니다 — 맵 설정에서 지정하세요.",
   "home.memberCount": "{count}명",
   "home.groupActive": "Active",
