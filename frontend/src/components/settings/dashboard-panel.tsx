@@ -1,185 +1,321 @@
 "use client";
 
-// 설정 · 분석 › 대시보드 진입 스텁 — 진입 카드(운영 대시보드 열기) + 클릭 시 상세 자리표시(추후 배치).
-// 상세 지표(맵/버전 현황·승인 파이프라인·조직·로그인 추이)는 별도 spec.
-// (design 2026-07-05, 시안 대시보드 진입점.png — 4b: 클릭 전환·돌아가기·세부 추후 보완)
+// 운영 대시보드 — 풀블리드 3열(좌 요약 레일 · 중앙 지표 · 우 Access/Coverage 사이드바).
+// 스냅샷(/summary)과 시계열(/timeseries)을 분리 조회 — 기간 필터는 시계열만 재조회한다.
+// (design 2026-07-11)
 
-import { ArrowLeft, ArrowRight, Info, LayoutGrid } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, Info } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { getAiUsage, getDashboard, type AiUsageMetrics, type DashboardMetrics } from "@/lib/api";
+import { AccessSidebar } from "@/components/dashboard/access-sidebar";
+import { BarChart } from "@/components/dashboard/bar-chart";
+import { HBarList } from "@/components/dashboard/hbar-list";
+import { LineChart } from "@/components/dashboard/line-chart";
+import { PeriodFilter } from "@/components/dashboard/period-filter";
+import { StatCard } from "@/components/dashboard/stat-card";
+import {
+  getAiUsage,
+  getDashboardSummary,
+  getDashboardTimeseries,
+  type AiUsageMetrics,
+  type DashboardSummary,
+  type DashboardTimeseries,
+} from "@/lib/api";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { resolvePeriod, todayKeyKst, type DateRange } from "@/lib/dashboard-chart";
+import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
-// 지표 카드 — 라벨·큰 값·보조 설명. 로딩 중이면 값 자리에 "—".
-function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-4 py-3">
-      <span className="text-fine uppercase tracking-wide text-ink-tertiary">{label}</span>
-      <span className="text-tagline text-ink">{value}</span>
-      {hint ? <span className="text-fine text-ink-tertiary">{hint}</span> : null}
-    </div>
-  );
+// 버전 상태별 막대 색 — globals.css @theme에 실재하는 토큰만 참조(Step 4에서 확인 완료).
+const STATUS_TONES: Record<string, string> = {
+  published: "var(--color-accent)",
+  approved: "var(--color-accent)",
+  pending: "var(--color-ink-secondary)",
+  draft: "var(--color-ink-tertiary)",
+  rejected: "var(--color-error)",
+};
+
+export interface DashboardPanelProps {
+  onBack?: () => void;
+  onToast?: (message: string) => void;
 }
 
-export function DashboardPanel() {
+export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
   const { t } = useI18n();
-  const [opened, setOpened] = useState(false);
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [series, setSeries] = useState<DashboardTimeseries | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsageMetrics | null>(null);
+  const [range, setRange] = useState<DateRange>(() => resolvePeriod("7d", todayKeyKst()));
+  const [failed, setFailed] = useState(false);
 
-  // 대시보드를 열 때 접속자 지표 + AI 사용량 지표 병렬 조회
+  // 스냅샷 — 마운트 1회. 기간 필터와 무관하다(핵심 불변식: deps에 range를 넣지 않는다).
   useEffect(() => {
-    if (!opened) return;
     let alive = true;
-    getDashboard()
+    getDashboardSummary()
       .then((data) => {
-        if (alive) setMetrics(data);
+        if (alive) setSummary(data);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 시계열 — 기간이 바뀔 때만 재조회.
+  useEffect(() => {
+    let alive = true;
+    getDashboardTimeseries(range.from, range.to)
+      .then((data) => {
+        if (alive) setSeries(data);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [range.from, range.to]);
+
+  // AI 사용량 — sysadmin 전용 엔드포인트라 sysadmin일 때만 조회한다(아니면 403).
+  useEffect(() => {
+    if (!user?.isSysadmin) return;
+    let alive = true;
     getAiUsage()
       .then((data) => {
         if (alive) setAiUsage(data);
       })
-      .catch(() => {});
+      .catch(() => {
+        /* AI 사용량은 비핵심 — 실패해도 대시보드는 뜬다 */
+      });
     return () => {
       alive = false;
     };
-  }, [opened]);
+  }, [user?.isSysadmin]);
 
-  // 상세 화면 — 접속자수만 실데이터, 나머지 칸·지표는 추후 보완
-  if (opened) {
-    const value = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString());
-    return (
-      <div className="flex h-full flex-col gap-6">
-        <button
-          type="button"
-          onClick={() => setOpened(false)}
-          className="inline-flex w-fit items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-        >
-          <ArrowLeft size={14} strokeWidth={1.5} />
-          {t("dashboard.back")}
-        </button>
+  const count = (value: number | undefined) =>
+    value === undefined ? "—" : value.toLocaleString();
 
-        <div className="flex flex-col gap-3">
-          <h2 className="text-body-strong text-ink">{t("dashboard.opsHeading")}</h2>
-          <div className="grid max-w-2xl grid-cols-3 gap-3">
-            <StatCard
-              label={t("dashboard.visitors")}
-              value={value(metrics?.visitors_unique)}
-              hint={t("dashboard.visitorsHint")}
-            />
-            <StatCard label={t("dashboard.loginsTotal")} value={value(metrics?.logins_total)} />
-            <StatCard label={t("dashboard.logins7d")} value={value(metrics?.logins_7d)} />
-          </div>
-          <p className="flex items-center gap-1.5 text-fine text-ink-tertiary">
-            <Info size={13} strokeWidth={1.5} />
-            {t("dashboard.metricsComingSoon")}
+  const points = series?.points ?? [];
+
+  return (
+    <div data-id="dashboard" className="flex h-full">
+      {/* 좌 요약 레일 — 설정 탭 레일 자리를 대신한다 */}
+      <aside className="flex w-64 shrink-0 flex-col gap-4 border-r border-hairline bg-surface p-4">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex w-fit items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+          >
+            <ArrowLeft size={16} strokeWidth={1.5} />
+            {t("dashboard.back")}
+          </button>
+        ) : null}
+
+        <div>
+          <h1 className="text-body-strong text-ink">{t("dashboard.opsTitle")}</h1>
+          <p className="mt-0.5 text-fine text-ink-tertiary">
+            {summary ? formatKstShort(summary.generated_at) : "—"}
           </p>
         </div>
 
-        <div data-id="dashboard-ai-usage" className="flex flex-col gap-3">
-          <h2 className="text-body-strong text-ink">{t("dashboard.aiHeading")}</h2>
-          {aiUsage && aiUsage.last30.calls === 0 ? (
-            <p className="text-caption text-ink-tertiary">{t("dashboard.aiEmpty")}</p>
-          ) : (
-            <>
-              <div className="grid max-w-2xl grid-cols-4 gap-3">
-                <StatCard label={t("dashboard.aiCalls7d")} value={value(aiUsage?.last7.calls)} />
-                <StatCard
-                  label={t("dashboard.aiFailRate7d")}
-                  value={
-                    aiUsage && aiUsage.last7.calls > 0
-                      ? `${Math.round((aiUsage.last7.failed / aiUsage.last7.calls) * 100)}%`
-                      : "—"
-                  }
-                />
-                <StatCard
-                  label={t("dashboard.aiTokens7d")}
-                  value={value(
-                    aiUsage ? aiUsage.last7.prompt_tokens + aiUsage.last7.completion_tokens : undefined,
-                  )}
-                />
-                <StatCard
-                  label={t("dashboard.aiTokens30d")}
-                  value={value(
-                    aiUsage ? aiUsage.last30.prompt_tokens + aiUsage.last30.completion_tokens : undefined,
-                  )}
-                />
-              </div>
-              <div className="grid max-w-2xl grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-4 py-3">
-                  <span className="text-fine uppercase tracking-wide text-ink-tertiary">
-                    {t("dashboard.aiTopUsers")}
-                  </span>
-                  <ul className="flex flex-col gap-0.5">
-                    {(aiUsage?.top_users ?? []).map((row) => (
-                      <li
-                        key={row.login_id}
-                        className="flex items-center justify-between gap-2 text-caption text-ink"
-                      >
-                        <span className="min-w-0 truncate">{row.name}</span>
-                        <span className="shrink-0 tabular-nums text-ink-tertiary">
-                          {row.total_tokens.toLocaleString()} · {t("dashboard.aiCallsShort", { n: row.calls })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-4 py-3">
-                  <span className="text-fine uppercase tracking-wide text-ink-tertiary">
-                    {t("dashboard.aiTopMaps")}
-                  </span>
-                  <ul className="flex flex-col gap-0.5">
-                    {(aiUsage?.top_maps ?? []).map((row) => (
-                      <li
-                        key={row.map_id}
-                        className="flex items-center justify-between gap-2 text-caption text-ink"
-                      >
-                        <span className="min-w-0 truncate">{row.name}</span>
-                        <span className="shrink-0 tabular-nums text-ink-tertiary">
-                          {row.total_tokens.toLocaleString()} · {t("dashboard.aiCallsShort", { n: row.calls })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </>
-          )}
+        <div className="flex flex-col gap-2">
+          <StatCard label={t("dashboard.mapsTotal")} value={count(summary?.maps.total)} />
+          <StatCard
+            label={t("dashboard.mapsPublished")}
+            value={count(summary?.maps.published)}
+            tone="accent"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <StatCard label={t("dashboard.mapsDraft")} value={count(summary?.maps.draft)} />
+            <StatCard label={t("dashboard.mapsTrashed")} value={count(summary?.maps.trashed)} />
+          </div>
         </div>
-      </div>
-    );
-  }
 
-  // 진입 화면 — 헤딩 + 진입 카드 + 추후 보완 각주
-  return (
-    <div className="flex max-w-xl flex-col gap-4">
-      <div>
-        <h2 className="text-body-strong text-ink">{t("dashboard.heading")}</h2>
-        <p className="mt-1 text-caption text-ink-tertiary">{t("dashboard.subtitle")}</p>
-      </div>
+        <ul className="mt-auto flex flex-col gap-1.5 border-t border-hairline pt-3">
+          {[
+            { key: "dashboard.opsComments" as const, value: summary?.ops.unresolved_comments },
+            {
+              key: "dashboard.opsNotifications" as const,
+              value: summary?.ops.unread_notifications,
+            },
+            { key: "dashboard.opsCheckouts" as const, value: summary?.ops.pending_checkouts },
+          ].map((row) => (
+            <li key={row.key} className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-fine text-ink-tertiary">{t(row.key)}</span>
+              <span className="shrink-0 text-caption-strong tabular-nums text-ink">
+                {count(row.value)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </aside>
 
-      <button
-        type="button"
-        onClick={() => setOpened(true)}
-        className="flex items-center gap-4 rounded-sm border border-hairline bg-surface px-4 py-3.5 text-left hover:bg-surface-alt"
-      >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-accent-tint text-accent">
-          <LayoutGrid size={20} strokeWidth={1.5} />
-        </span>
-        <span className="flex-1">
-          <span className="block text-body-strong text-ink">{t("dashboard.openCard")}</span>
-          <span className="block text-caption text-ink-tertiary">
-            {t("dashboard.openCardDesc")}
-          </span>
-        </span>
-        <ArrowRight size={18} strokeWidth={1.5} className="text-ink-tertiary" />
-      </button>
+      {/* 중앙 지표 그리드 */}
+      <main className="flex-1 overflow-y-auto bg-canvas p-6">
+        {failed ? (
+          <p className="flex items-center gap-1.5 pb-4 text-caption text-error">
+            <Info size={16} strokeWidth={1.5} />
+            {t("dashboard.loadFailed")}
+          </p>
+        ) : null}
 
-      <p className="flex items-center gap-1.5 text-fine text-ink-tertiary">
-        <Info size={13} strokeWidth={1.5} />
-        {t("dashboard.comingSoonNote")}
-      </p>
+        <div className="flex flex-col gap-4">
+          <section
+            data-id="dashboard-activity"
+            className="rounded-sm border border-hairline bg-surface p-5 shadow-md"
+          >
+            <div className="flex items-center justify-between gap-4 pb-4">
+              <h2 className="text-body-strong text-ink">{t("dashboard.activityTitle")}</h2>
+              <PeriodFilter range={range} onChange={setRange} />
+            </div>
+            <BarChart
+              points={points.map((point) => ({ label: point.date, value: point.logins }))}
+            />
+          </section>
+
+          <section
+            data-id="dashboard-growth"
+            className="rounded-sm border border-hairline bg-surface p-5 shadow-md"
+          >
+            <h2 className="pb-4 text-body-strong text-ink">{t("dashboard.growthTitle")}</h2>
+            <LineChart
+              labels={points.map((point) => point.date)}
+              series={[
+                {
+                  label: t("dashboard.growthMaps"),
+                  color: "var(--color-accent)",
+                  values: points.map((point) => point.maps_created),
+                },
+                {
+                  label: t("dashboard.growthVersions"),
+                  color: "var(--color-ink-tertiary)",
+                  values: points.map((point) => point.versions_created),
+                },
+              ]}
+            />
+          </section>
+
+          <div className="grid grid-cols-2 gap-4">
+            <section
+              data-id="dashboard-version-status"
+              className="rounded-sm border border-hairline bg-surface p-5 shadow-md"
+            >
+              <h2 className="pb-1 text-body-strong text-ink">
+                {t("dashboard.versionStatusTitle")}
+              </h2>
+              <p className="pb-4 text-fine text-ink-tertiary">{t("dashboard.snapshotNote")}</p>
+              <HBarList
+                rows={Object.entries(summary?.version_status ?? {}).map(([status, value]) => ({
+                  label: status,
+                  value,
+                  tone: STATUS_TONES[status],
+                }))}
+              />
+            </section>
+
+            <section
+              data-id="dashboard-coverage"
+              className="rounded-sm border border-hairline bg-surface p-5 shadow-md"
+            >
+              <h2 className="pb-1 text-body-strong text-ink">{t("dashboard.coverageTitle")}</h2>
+              {summary && summary.coverage.depts_total === 0 ? (
+                <p className="pt-3 text-caption text-ink-tertiary">
+                  {t("dashboard.coverageEmpty")}
+                </p>
+              ) : (
+                <>
+                  <p className="pb-4 text-fine text-ink-tertiary">
+                    {summary
+                      ? t("dashboard.coverageSummary", {
+                          withMap: summary.coverage.depts_with_map,
+                          total: summary.coverage.depts_total,
+                          pct: summary.coverage.coverage_pct,
+                        })
+                      : ""}
+                  </p>
+                  <HBarList
+                    rows={(summary?.coverage.rows ?? []).map((row) => ({
+                      label: row.name,
+                      value: row.maps,
+                      hint:
+                        row.maps === 0 ? t("dashboard.coverageMissing") : `↑${row.published}`,
+                    }))}
+                  />
+                </>
+              )}
+            </section>
+          </div>
+
+          <section
+            data-id="dashboard-events"
+            className="rounded-sm border border-hairline bg-surface p-5 shadow-md"
+          >
+            <h2 className="pb-4 text-body-strong text-ink">{t("dashboard.eventsTitle")}</h2>
+            {summary && summary.recent_events.length === 0 ? (
+              <p className="text-caption text-ink-tertiary">{t("dashboard.eventsEmpty")}</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {(summary?.recent_events ?? []).map((event) => (
+                  <li
+                    key={`${event.created_at}-${event.map_name}-${event.version_label}`}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="w-20 shrink-0 rounded-sm bg-surface-alt px-2 py-0.5 text-center text-fine text-ink-secondary">
+                      {event.event_type}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-caption text-ink">
+                      {event.map_name} {event.version_label} — {event.actor_name}
+                    </span>
+                    <span className="shrink-0 text-fine text-ink-tertiary">
+                      {formatKstShort(event.created_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* AI 사용량 — sysadmin 전용(엔드포인트가 sysadmin 게이트라 뷰어에겐 403) */}
+          {user?.isSysadmin && aiUsage ? (
+            <section
+              data-id="dashboard-ai-usage"
+              className="rounded-sm border border-hairline bg-surface p-5 shadow-md"
+            >
+              <h2 className="pb-4 text-body-strong text-ink">{t("dashboard.aiHeading")}</h2>
+              {aiUsage.last30.calls === 0 ? (
+                <p className="text-caption text-ink-tertiary">{t("dashboard.aiEmpty")}</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-3">
+                  <StatCard label={t("dashboard.aiCalls7d")} value={count(aiUsage.last7.calls)} />
+                  <StatCard
+                    label={t("dashboard.aiFailRate7d")}
+                    value={
+                      aiUsage.last7.calls > 0
+                        ? `${Math.round((aiUsage.last7.failed / aiUsage.last7.calls) * 100)}%`
+                        : "—"
+                    }
+                  />
+                  <StatCard
+                    label={t("dashboard.aiTokens7d")}
+                    value={count(aiUsage.last7.prompt_tokens + aiUsage.last7.completion_tokens)}
+                  />
+                  <StatCard
+                    label={t("dashboard.aiTokens30d")}
+                    value={count(aiUsage.last30.prompt_tokens + aiUsage.last30.completion_tokens)}
+                  />
+                </div>
+              )}
+            </section>
+          ) : null}
+        </div>
+      </main>
+
+      {/* 우 사이드바 — sysadmin만 */}
+      {user?.isSysadmin ? <AccessSidebar onToast={onToast} /> : null}
     </div>
   );
 }

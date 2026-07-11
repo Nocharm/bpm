@@ -950,17 +950,6 @@ export function deleteManualDoc(docId: number): Promise<void> {
 }
 
 // ── 운영 대시보드 (S10) ──────────────────────────────────────
-export interface DashboardMetrics {
-  visitors_unique: number; // 고유 접속자 수
-  logins_total: number; // 전체 로그인 수
-  logins_7d: number; // 최근 7일 로그인 수
-}
-
-// 접속자 현황 지표 (sysadmin) — login_records 집계.
-export function getDashboard(): Promise<DashboardMetrics> {
-  return request<DashboardMetrics>("/dashboard");
-}
-
 export interface AiUsagePeriod {
   calls: number;
   failed: number;

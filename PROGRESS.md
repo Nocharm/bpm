@@ -13,6 +13,7 @@
 - T6 프론트 기반 — `lib/dashboard-chart.ts` 순수 함수(nice 스케일·프리셋→KST 날짜범위·todayKeyKst, vitest 7케이스), api.ts 대시보드 바인딩 7종, `CurrentUser.canViewDashboard`(providers.tsx + settings dev-switch 양쪽 발행부 갱신), i18n 키 en/ko 39종. 기존 `dashboard.openCard` 등 4개 진입카드 키는 `dashboard-panel.tsx`가 아직 참조 중이라 삭제 보류(Task 8에서 참조 제거 확인 후 삭제).
 - T7 차트 컴포넌트 — StatCard·BarChart(값 비례 막대, 최댓값 액센트)·LineChart(자체 SVG viewBox)·HBarList(버전상태·커버리지 공용)·PeriodFilter(프리셋 3종+달력). 라이브러리 무추가, 색은 전부 토큰.
 - T9 우측 사이드바 — Access(인원·부서·그룹 피커로 권한 부여/제거)·Coverage(분모 부서 선택, 항상 전체 목록 PUT=멱등) 2탭. sysadmin에게만 렌더.
+- T8 대시보드 패널 재작성 — 진입 카드 제거(탭 클릭이 곧 대시보드), 설정 탭 레일을 풀블리드 3열로 교체. 좌 요약 레일·중앙 지표 그리드(활동·성장·버전상태·커버리지·최근 이벤트)·AI 사용량은 sysadmin 한정. 설정 탭 게이팅에 `dashboard` Access 추가. `getDashboard()`/`DashboardMetrics`(구 바인딩)와 진입카드 잔재 i18n 키 9종 삭제. tsc·lint·build·vitest(297) 전부 통과.
 
 ## 2026-07-11 — CLAUDE.md 노드 속성 체크리스트 (main)
 - Lessons에 노드 속성 추가 시 열거 지점 7곳 + CSV·AI 정규화 대칭 규칙 추가 — duration 정규화 갭(230a9e8) 재발 방지.
