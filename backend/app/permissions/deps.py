@@ -15,7 +15,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import Comment, MapApprover, MapVersion, UserGroupManager
 from app.permissions import logic
-from app.permissions.access import assert_map_role
+from app.permissions.access import assert_map_role, can_view_dashboard_db
 
 Dep = Callable[..., Coroutine[Any, Any, None]]
 
@@ -126,3 +126,13 @@ def require_approver_or_sysadmin() -> Dep:
         await assert_approver_or_sysadmin(session, user, map_id)
 
     return dep
+
+
+async def require_dashboard_viewer(
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    """대시보드 열람 권한(sysadmin 또는 dashboard_permissions 매칭)이 없으면 403."""
+    if not await can_view_dashboard_db(session, user):
+        raise HTTPException(status_code=403, detail="dashboard access required")
+    return user

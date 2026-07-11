@@ -35,10 +35,10 @@ def test_dashboard_counts_visitors(client: TestClient) -> None:
     assert after["logins_7d"] >= 3
 
 
-def test_dashboard_requires_sysadmin(
+def test_dashboard_requires_dashboard_viewer(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """비-sysadmin은 403 — 권한검증 ON + sysadmin=타인(baseline은 전원 sysadmin)."""
+    """권한 행 없는 비-sysadmin은 403 — 게이트는 sysadmin이 아니라 대시보드 뷰어(require_dashboard_viewer)."""
     monkeypatch.setattr(settings, "dev_enforce_permissions", True)
     monkeypatch.setattr(settings, "bpm_sysadmins", "other.admin")
     assert client.get("/api/dashboard").status_code == 403

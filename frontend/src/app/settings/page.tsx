@@ -38,7 +38,7 @@ type TabId =
   | "manual"
   | "aiChat"
   | "dashboard";
-type Access = "everyone" | "admin" | "sysadmin";
+type Access = "everyone" | "admin" | "sysadmin" | "dashboard";
 
 interface Category {
   labelKey: MessageKey;
@@ -73,11 +73,6 @@ const CATEGORIES: Category[] = [
     tabs: [{ id: "tables", labelKey: "db.tablesTab" }],
   },
   {
-    labelKey: "admin.catAnalytics",
-    access: "sysadmin",
-    tabs: [{ id: "dashboard", labelKey: "dashboard.tab" }],
-  },
-  {
     // 승인큐 — 누구나 접근(추후 개인별 승인 모음 페이지). 현재 큐 내용은 sysadmin만, 그 외는 준비중 안내.
     labelKey: "admin.catApprovals",
     access: "everyone",
@@ -87,6 +82,13 @@ const CATEGORIES: Category[] = [
     labelKey: "nav.groups",
     access: "everyone",
     tabs: [{ id: "groups", labelKey: "perm.group.pageTitle" }],
+  },
+  {
+    // Analytics는 everyone 카테고리들보다 뒤 — 대시보드 권한만 받은 사용자가 설정을 열었을 때
+    // 첫 탭(=풀블리드 대시보드)에 강제 착지하지 않도록. 대시보드는 탭을 눌러 들어간다.
+    labelKey: "admin.catAnalytics",
+    access: "dashboard",
+    tabs: [{ id: "dashboard", labelKey: "dashboard.tab" }],
   },
   {
     // 휴지통(삭제 예정) — 누구나(오너 본인것만), sysadmin은 전체 (DL)
@@ -132,6 +134,8 @@ export default function SettingsPage() {
 
   const canAccess = (access: Access): boolean => {
     if (access === "everyone") return true;
+    // 대시보드는 sysadmin 외에 dashboard_permissions로 부여된 인원·부서·그룹도 열람 (design 2026-07-11)
+    if (access === "dashboard") return Boolean(user?.canViewDashboard);
     // admin 권한은 시스템 관리자(sysadmin)가 흡수 (F6) — admin/sysadmin 모두 sysadmin 게이트.
     return Boolean(user?.isSysadmin);
   };
@@ -148,6 +152,22 @@ export default function SettingsPage() {
   // Fall back to the first visible tab when none selected or selection is no longer visible.
   const current =
     activeTab && allTabs.some((tab) => tab.id === activeTab) ? activeTab : allTabs[0].id;
+
+  // Dashboard 탭은 설정 탭 레일을 대시보드 전용 풀블리드 레이아웃으로 교체한다 —
+  // 좌측 레일까지 지표로 쓰기 위해서(design 2026-07-11). 복귀는 패널의 '설정으로 돌아가기'.
+  if (current === "dashboard") {
+    // 대시보드가 유일한 가시 탭인 사용자(권한만 받은 비-sysadmin)에게는 폴백이 없다 — 뒤로가기 버튼을 감춘다.
+    const fallbackTab = allTabs.find((tab) => tab.id !== "dashboard")?.id;
+    return (
+      <>
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        <DashboardPanel
+          onBack={fallbackTab ? () => setActiveTab(fallbackTab) : undefined}
+          onToast={(message) => showToast({ id: genId(), message })}
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -198,7 +218,6 @@ export default function SettingsPage() {
           {current === "aiChat" && (
             <AiChatSettingsPanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
-          {current === "dashboard" && <DashboardPanel />}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" &&
             user &&

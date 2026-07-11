@@ -149,6 +149,38 @@ def can_comment(role: str | None) -> bool:
     return role is not None
 
 
+# 대시보드 열람 principal 튜플: (principal_type, principal_id) — 역할 구분 없음
+DashboardPrincipal = tuple[str, str]
+
+
+def can_view_dashboard(
+    is_sysadmin_flag: bool,
+    login_id: str,
+    emp_org_path: str,
+    user_group_ids: set[str],
+    principals: list[DashboardPrincipal],
+) -> bool:
+    """대시보드 열람 권한 판정 (순수 함수 — DB 미접근).
+
+    sysadmin이면 True 반환. 그 외엔 principals에 적용되는 행이 있으면 True.
+    principal 해석 규약은 map_permissions과 동일:
+    - user: login_id 일치만 인정
+    - department: emp_org_path가 principal_id (또는 하위)에 속하면 인정
+    - group: principal_id가 user_group_ids (caller 소속 ACTIVE 그룹)에 있으면 인정
+    """
+    if is_sysadmin_flag:
+        return True
+
+    for ptype, pid in principals:
+        if ptype == "user" and pid == login_id:
+            return True
+        if ptype == "department" and belongs_to_department(emp_org_path, pid):
+            return True
+        if ptype == "group" and pid in user_group_ids:
+            return True
+    return False
+
+
 # Re-export org_path so callers can build emp_org_path without importing app.ad.org directly
 __all__ = [
     "ROLE_RANK",
@@ -160,6 +192,8 @@ __all__ = [
     "effective_role",
     "is_visible",
     "can_comment",
+    "can_view_dashboard",
     "org_path",
     "Permission",
+    "DashboardPrincipal",
 ]

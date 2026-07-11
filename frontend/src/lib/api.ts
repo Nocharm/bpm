@@ -560,6 +560,8 @@ export interface Me {
   is_sysadmin: boolean;
   // 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬
   manager_ids?: string[];
+  // 서버가 산정한 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅
+  can_view_dashboard: boolean;
 }
 
 export function getMe(): Promise<Me> {
@@ -963,17 +965,6 @@ export function deleteManualDoc(docId: number): Promise<void> {
 }
 
 // ── 운영 대시보드 (S10) ──────────────────────────────────────
-export interface DashboardMetrics {
-  visitors_unique: number; // 고유 접속자 수
-  logins_total: number; // 전체 로그인 수
-  logins_7d: number; // 최근 7일 로그인 수
-}
-
-// 접속자 현황 지표 (sysadmin) — login_records 집계.
-export function getDashboard(): Promise<DashboardMetrics> {
-  return request<DashboardMetrics>("/dashboard");
-}
-
 export interface AiUsagePeriod {
   calls: number;
   failed: number;
@@ -1005,6 +996,127 @@ export interface AiUsageMetrics {
 // AI 챗 사용량 지표 (sysadmin) — ai_usage_events 집계.
 export function getAiUsage(): Promise<AiUsageMetrics> {
   return request<AiUsageMetrics>("/dashboard/ai-usage");
+}
+
+export interface DashboardMapCounts {
+  total: number;
+  published: number;
+  draft: number;
+  trashed: number;
+}
+
+export interface DashboardVersionStatus {
+  published: number;
+  draft: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+}
+
+export interface DashboardCoverageRow {
+  org_path: string;
+  name: string;
+  maps: number;
+  published: number;
+}
+
+export interface DashboardCoverage {
+  depts_total: number;
+  depts_with_map: number;
+  coverage_pct: number;
+  rows: DashboardCoverageRow[];
+}
+
+export interface DashboardOps {
+  unresolved_comments: number;
+  unread_notifications: number;
+  pending_checkouts: number;
+}
+
+export interface DashboardEvent {
+  event_type: string;
+  map_name: string;
+  version_label: string;
+  actor_name: string;
+  created_at: string;
+}
+
+export interface DashboardSummary {
+  generated_at: string;
+  maps: DashboardMapCounts;
+  version_status: DashboardVersionStatus;
+  coverage: DashboardCoverage;
+  ops: DashboardOps;
+  recent_events: DashboardEvent[];
+}
+
+export interface DashboardTimeseriesPoint {
+  date: string;
+  logins: number;
+  maps_created: number;
+  versions_created: number;
+}
+
+export interface DashboardTimeseries {
+  from_date: string;
+  to_date: string;
+  points: DashboardTimeseriesPoint[];
+}
+
+export interface DashboardPermission {
+  id: number;
+  principal_type: PrincipalType;
+  principal_id: string;
+  display_name: string;
+  granted_by: string;
+  granted_at: string;
+}
+
+/** 기간 무관 스냅샷 — 맵·버전·커버리지·운영·최근 이벤트. */
+export function getDashboardSummary(): Promise<DashboardSummary> {
+  return request<DashboardSummary>("/dashboard/summary");
+}
+
+/** 일별 시계열 — from/to는 KST 날짜키(YYYY-MM-DD). */
+export function getDashboardTimeseries(
+  from: string,
+  to: string,
+): Promise<DashboardTimeseries> {
+  return request<DashboardTimeseries>(
+    `/dashboard/timeseries?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  );
+}
+
+export function listDashboardPermissions(): Promise<DashboardPermission[]> {
+  return request<DashboardPermission[]>("/dashboard/permissions");
+}
+
+export function addDashboardPermission(
+  principalType: PrincipalType,
+  principalId: string,
+): Promise<DashboardPermission> {
+  return request<DashboardPermission>("/dashboard/permissions", {
+    method: "POST",
+    body: JSON.stringify({ principal_type: principalType, principal_id: principalId }),
+  });
+}
+
+export function deleteDashboardPermission(permissionId: number): Promise<void> {
+  return request<void>(`/dashboard/permissions/${permissionId}`, { method: "DELETE" });
+}
+
+export function getCoverageDepts(): Promise<string[]> {
+  return request<{ org_paths: string[] }>("/dashboard/coverage-depts").then(
+    (body) => body.org_paths,
+  );
+}
+
+/** 목록 통째 교체 — 멱등. 항상 전체 목록을 보낸다. */
+export function setCoverageDepts(orgPaths: string[]): Promise<string[]> {
+  return request<{ org_paths: string[] }>("/dashboard/coverage-depts", {
+    method: "PUT",
+    body: JSON.stringify({ org_paths: orgPaths }),
+  }).then((body) => body.org_paths);
 }
 
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────

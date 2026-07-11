@@ -2,6 +2,24 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-12 — 운영 대시보드 마무리 (dashboard-design)
+- 설정 카테고리 순서 조정 — Analytics를 승인큐·그룹 뒤로. 대시보드 권한만 받은 비-sysadmin이 설정을 열 때 첫 탭(=풀블리드 대시보드)에 강제 착지하던 문제 해소(대시보드는 탭을 눌러 진입). sysadmin은 영향 없음.
+
+## 2026-07-11 — 운영 대시보드 설계 (dashboard-design)
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-dashboard.md` (10태스크: 모델·판정 → 열람 게이트·MeOut → 설정 API → /summary → /timeseries → 프론트 순수함수·바인딩·i18n → 차트 5종 → 풀블리드 패널·탭 게이팅 → 우측 사이드바 2탭 → 브라우저 검증). 실행 순서는 T9를 T8보다 먼저(사이드바 선행이라야 패널 빌드가 한 번에 통과).
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-dashboard-design.md`. 스텁(진입 카드+로그인 3지표)을 리더 보고용 실운영 대시보드로 재작성: 신규 테이블 2개(`dashboard_permissions` 인원·부서·그룹 열람 권한 / `dashboard_coverage_depts` 커버리지 분모 부서), summary(스냅샷)·timeseries(기간 필터 전용) API 분리, 풀블리드 3열(좌 요약 레일 · 중앙 지표 그리드 · 우 인스펙터형 Access/Coverage 사이드바), 차트는 의존성 없이 자체 SVG/CSS.
+- T1 모델·권한 판정 — `dashboard_permissions`·`dashboard_coverage_depts` 테이블 + `logic.can_view_dashboard()` 순수 함수(sysadmin·user·department 하위·group 멤버십·기본거부 5케이스 테스트, TDD RED→GREEN).
+- T2 열람 게이트 — `require_dashboard_viewer`(sysadmin 또는 권한 행) 도입, 라우터 게이트를 엔드포인트별로 분리(ai-usage는 sysadmin 유지), `/api/me`에 `can_view_dashboard` 노출.
+- T3 설정 API — 대시보드 권한 행 CRUD(중복 409·삭제 204)와 커버리지 분모 부서 GET/PUT(통째 교체·멱등). 열람은 뷰어, 변경은 sysadmin.
+- T4 `/summary` 스냅샷 — 맵 현황·버전 상태 분포·부서 커버리지(하위 부서 맵을 상위 지정 부서에 귀속)·운영 항목(코멘트/알림/점유요청)·최근 버전 이벤트 10건. 지정 부서 0개면 0% (0 나눗셈 차단).
+- T5 `/timeseries` — 일별 로그인·맵 생성·버전 생성(KST 버킷, 빈 날 0 채움). from>to·366일 초과는 422. 프리셋 환산은 프론트 책임.
+- T6 프론트 기반 — `lib/dashboard-chart.ts` 순수 함수(nice 스케일·프리셋→KST 날짜범위·todayKeyKst, vitest 7케이스), api.ts 대시보드 바인딩 7종, `CurrentUser.canViewDashboard`(providers.tsx + settings dev-switch 양쪽 발행부 갱신), i18n 키 en/ko 39종. 기존 `dashboard.openCard` 등 4개 진입카드 키는 `dashboard-panel.tsx`가 아직 참조 중이라 삭제 보류(Task 8에서 참조 제거 확인 후 삭제).
+- T7 차트 컴포넌트 — StatCard·BarChart(값 비례 막대, 최댓값 액센트)·LineChart(자체 SVG viewBox)·HBarList(버전상태·커버리지 공용)·PeriodFilter(프리셋 3종+달력). 라이브러리 무추가, 색은 전부 토큰.
+- T9 우측 사이드바 — Access(인원·부서·그룹 피커로 권한 부여/제거)·Coverage(분모 부서 선택, 항상 전체 목록 PUT=멱등) 2탭. sysadmin에게만 렌더.
+- T8 대시보드 패널 재작성 — 진입 카드 제거(탭 클릭이 곧 대시보드), 설정 탭 레일을 풀블리드 3열로 교체. 좌 요약 레일·중앙 지표 그리드(활동·성장·버전상태·커버리지·최근 이벤트)·AI 사용량은 sysadmin 한정. 설정 탭 게이팅에 `dashboard` Access 추가. `getDashboard()`/`DashboardMetrics`(구 바인딩)와 진입카드 잔재 i18n 키 9종 삭제. tsc·lint·build·vitest(297) 전부 통과.
+- T10 브라우저 검증 — `frontend/scripts/pw-verify-dashboard.mjs` 6항목(풀블리드 교체·스탯 렌더·막대 수=기간·기간 변경 시 스냅샷 불변·커버리지 부서 추가 반영·비-sysadmin 권한 열람 게이팅) 6/6 PASS. 초안 대비 2건 수정: ① Coverage 부서 추가는 `SearchSelect` 메뉴가 `document.body` 포털(fixed)이라 사이드바 스코프가 아니라 페이지 스코프로 찾아야 함, ② check6은 "Dashboard 탭 버튼 노출"이 아니라 대시보드 루트(`data-id="dashboard"`) 노출로 판정 — dashboard 권한만 있는 비-sysadmin은 그 카테고리가 `allTabs[0]`이 되어 클릭 없이 즉시 풀블리드로 전환되므로 탭 버튼 자체가 생기지 않는다. 실측 발견 1건(테스트 픽스, 프로덕션 무변경): summary/timeseries 응답 도착과 React 커밋 사이 한 틱 지연 — 좌 레일을 곧장 읽으면 "—" 자리표시를 오탐, 300ms 안정화 대기로 해결. 전 게이트 그린: pytest 595·ruff 0·vitest 297·tsc 0·lint 0(신규)·build 0.
+- 최종 리뷰 픽스(머지 전) — 11건: 커버리지 저장 시 중앙 카드 미갱신(`summaryNonce` 트리거, range는 여전히 deps 밖)·커스텀 기간 빈값/366일 초과 방지·라우터 default-deny 게이트 복원(`require_dashboard_viewer`)·죽은 `ChartScale.ticks` 제거·단일포인트 라인차트 원 중앙 정렬·이벤트 리스트 key에 event_type 추가·Access 피커 중복 후보 제외·`maps_created` deleted_at 비대칭 주석화·`CoverageDeptsIn.org_paths` 200자 제한·테스트명 `test_dashboard_requires_dashboard_viewer` 개명·`todayKeyKst`→`getTodayKeyKst`. 전 게이트 그린: pytest 595·ruff 0·vitest 297·tsc 0·lint 0(신규)·build 0. 상세: `.superpowers/sdd/final-review-fixes.md`.
+
 ## 2026-07-11 — CLAUDE.md 노드 속성 체크리스트 (main)
 - Lessons에 노드 속성 추가 시 열거 지점 7곳 + CSV·AI 정규화 대칭 규칙 추가 — duration 정규화 갭(230a9e8) 재발 방지.
 

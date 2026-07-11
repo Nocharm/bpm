@@ -384,6 +384,104 @@ class AiUsageOut(BaseModel):
     top_maps: list[AiUsageTopMapOut]
 
 
+class DashboardPermissionIn(BaseModel):
+    """대시보드 열람 권한 부여 입력."""
+
+    principal_type: Literal["user", "department", "group"]
+    principal_id: str = Field(min_length=1, max_length=200)
+
+
+class DashboardPermissionOut(BaseModel):
+    id: int
+    principal_type: str
+    principal_id: str
+    # 표시명 — user→직원 이름, department→한글 부서명(없으면 리프), group→그룹명. 해석 실패 시 principal_id
+    display_name: str
+    granted_by: str
+    granted_at: datetime
+
+
+class CoverageDeptsIn(BaseModel):
+    """커버리지 분모 부서 목록 — 통째 교체(멱등)."""
+
+    # 컬럼은 String(200) — 상한 없이 받으면 sqlite는 조용히 넘기지만 Postgres는
+    # StringDataRightTruncation으로 500이 난다. 422로 미리 거부.
+    org_paths: list[Annotated[str, StringConstraints(max_length=200)]] = Field(
+        default_factory=list
+    )
+
+
+class CoverageDeptsOut(BaseModel):
+    org_paths: list[str]
+
+
+class DashboardMapCountsOut(BaseModel):
+    total: int
+    published: int
+    draft: int
+    trashed: int
+
+
+class DashboardVersionStatusOut(BaseModel):
+    published: int
+    draft: int
+    approved: int
+    pending: int
+    rejected: int
+
+
+class DashboardCoverageRowOut(BaseModel):
+    org_path: str
+    name: str  # 한글 부서명(dept_info) 없으면 리프 세그먼트
+    maps: int
+    published: int
+
+
+class DashboardCoverageOut(BaseModel):
+    depts_total: int
+    depts_with_map: int
+    coverage_pct: int  # 0..100, 반올림. depts_total=0이면 0
+    rows: list[DashboardCoverageRowOut]
+
+
+class DashboardOpsOut(BaseModel):
+    unresolved_comments: int
+    unread_notifications: int  # 요청자 본인 기준
+    pending_checkouts: int
+
+
+class DashboardEventOut(BaseModel):
+    event_type: str
+    map_name: str
+    version_label: str
+    actor_name: str
+    created_at: datetime
+
+
+class DashboardSummaryOut(BaseModel):
+    """기간 무관 스냅샷 — 맵 현황·버전 상태·부서 커버리지·운영 항목·최근 이벤트 (design 2026-07-11)."""
+
+    generated_at: datetime
+    maps: DashboardMapCountsOut
+    version_status: DashboardVersionStatusOut
+    coverage: DashboardCoverageOut
+    ops: DashboardOpsOut
+    recent_events: list[DashboardEventOut]
+
+
+class DashboardTimeseriesPointOut(BaseModel):
+    date: str  # YYYY-MM-DD (KST)
+    logins: int
+    maps_created: int
+    versions_created: int
+
+
+class DashboardTimeseriesOut(BaseModel):
+    from_date: str
+    to_date: str
+    points: list[DashboardTimeseriesPointOut]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
@@ -748,6 +846,8 @@ class MeOut(BaseModel):
     org_path: str = ""
     # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
     is_sysadmin: bool
+    # 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅 (design 2026-07-11)
+    can_view_dashboard: bool = False
     # 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬 (2026-07-09)
     manager_ids: list[str] = []
 
