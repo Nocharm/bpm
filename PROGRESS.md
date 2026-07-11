@@ -39,6 +39,12 @@
 - i18n 6키(en/ko): `inspector.exportExcel`/`exportCsv`("Excel"/"CSV"), `err.exportExcel`, `export.csvWarnings`, `export.excelTruncated`. PNG 아이콘(`Download`)은 부수 동작 보존 원칙에 따라 유지, Excel/CSV는 `FileSpreadsheet`/`FileDown` 신규.
 - 게이트: vitest 288/288·tsc --noEmit 0에러·lint 경고 1건(기존 `pw-smoke-task8.mjs`, 무관)·build 0에러 — exceljs는 별도 청크(912K)로 분리, app-build-manifest 어디에도 정적 참조 없음(dynamic import 격리 확인).
 
+## 2026-07-11 — Task 8: 통합 검증(브라우저 실기동) + 배포 노트 (numeric-params-export)
+- `frontend/scripts/pw-verify-export.mjs` 신규 — reset_db 시드 + 스크래치 맵으로 6시나리오 21/22 PASS: ①파라미터 5입력 blur 정규화(0.75→1.15)+노드칩 5개 ②새로고침 저장왕복 ③CSV 다운로드 13컬럼·숫자값→재임포트 머지 프리뷰 0 added/0 removed·그래프 무변경 ④Excel 다운로드를 exceljs로 재독해 — 맵A(제어 데이터) 숫자 셀 5종 실수형·하이퍼링크 {text,hyperlink}, 맵2(Employee Onboarding) 서브프로세스 재귀 인라인 행+outlineLevel=1 ⑤콘솔 에러 0. 조정 2건: 내보내기 3버튼은 인스펙터 "Map" 탭 안(탭 전환 헬퍼), 노드/엣지 id는 rid() 32자 hex(소프트삭제된 이전 실행 행과 UNIQUE 충돌 — dev.db는 전역 유니크).
+- **유일 FAIL(Task 3 이월, 미수정)**: 디시전(마름모) 노드 파라미터 칩 overflow — 마름모 대각선 130.2px vs 콘텐츠 102.3×89.5(내접 조건 w+h≤D 위반, 191.8>130.2). 칩이 마름모 경계 밖 코너까지 침범. 증거: `/tmp/pw-verify-export/06-decision-params.png`. 픽스 여부는 컨트롤러 판단 대기.
+- 게이트 전종: pytest 556 passed·ruff 0에러·vitest 288/288·tsc --noEmit 0에러·lint 경고 1건(기존 `pw-smoke-task8.mjs`, 무관)·build 0에러.
+- **배포 노트**: ① 프론트/백 **동시 배포 필수** — `NodeIn` 5필드 정규화(백)와 인스펙터 입력/칩/CSV·Excel(프론트)이 스키마 연동, 한쪽만 배포 시 신규 파라미터 저장·표시 불일치. 신규 4컬럼은 `db.py _ADDED_COLUMNS` 멱등 보강으로 자동 추가(수동 DDL 불요). ② 서버 1회 정리 SQL(**선택** — validator가 무효 duration을 응답 경계에서 `""` 소거하므로 방치해도 무해, 물리 정리를 원할 때만): `UPDATE nodes SET duration = '' WHERE duration !~ '^[0-9]+(\.[0-9]{1,2})?$';`
+
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
 
