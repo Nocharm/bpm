@@ -386,7 +386,11 @@ class DashboardPermissionOut(BaseModel):
 class CoverageDeptsIn(BaseModel):
     """커버리지 분모 부서 목록 — 통째 교체(멱등)."""
 
-    org_paths: list[str] = Field(default_factory=list)
+    # 컬럼은 String(200) — 상한 없이 받으면 sqlite는 조용히 넘기지만 Postgres는
+    # StringDataRightTruncation으로 500이 난다. 422로 미리 거부.
+    org_paths: list[Annotated[str, StringConstraints(max_length=200)]] = Field(
+        default_factory=list
+    )
 
 
 class CoverageDeptsOut(BaseModel):

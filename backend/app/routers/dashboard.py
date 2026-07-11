@@ -49,14 +49,16 @@ from app.schemas import (
     DashboardVersionStatusOut,
 )
 
-router = APIRouter(prefix="/api", tags=["dashboard"])
-
-
-@router.get(
-    "/dashboard",
-    response_model=DashboardMetricsOut,
-    dependencies=[Depends(require_dashboard_viewer)],
+# 라우터 기본 게이트 — 이후 dependencies= 를 깜빡 빠뜨린 라우트가 추가돼도 완전 공개되지
+# 않도록 default-deny(뷰어 이상)를 바닥에 깐다. 더 강한 게이트가 필요한 라우트는 라우트별
+# dependencies=[Depends(require_sysadmin)]를 별도로 얹는다 — FastAPI가 라우터/라우트 deps를
+# 둘 다 실행하므로 두 게이트가 함께 적용된다.
+router = APIRouter(
+    prefix="/api", tags=["dashboard"], dependencies=[Depends(require_dashboard_viewer)]
 )
+
+
+@router.get("/dashboard", response_model=DashboardMetricsOut)
 async def get_dashboard(session: AsyncSession = Depends(get_session)) -> DashboardMetricsOut:
     """접속자 현황 — 고유 접속자·전체 로그인·최근 7일 로그인 (login_records 집계)."""
     since = now_kst() - timedelta(days=7)
@@ -248,11 +250,7 @@ async def delete_dashboard_permission(
     await session.commit()
 
 
-@router.get(
-    "/dashboard/coverage-depts",
-    response_model=CoverageDeptsOut,
-    dependencies=[Depends(require_dashboard_viewer)],
-)
+@router.get("/dashboard/coverage-depts", response_model=CoverageDeptsOut)
 async def get_coverage_depts(session: AsyncSession = Depends(get_session)) -> CoverageDeptsOut:
     rows = (
         await session.scalars(
@@ -285,11 +283,7 @@ _VERSION_STATUSES = ("published", "draft", "approved", "pending", "rejected")
 _RECENT_EVENT_LIMIT = 10  # 좌측 이벤트 리스트에 담기는 최대 건수
 
 
-@router.get(
-    "/dashboard/summary",
-    response_model=DashboardSummaryOut,
-    dependencies=[Depends(require_dashboard_viewer)],
-)
+@router.get("/dashboard/summary", response_model=DashboardSummaryOut)
 async def get_dashboard_summary(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -448,11 +442,7 @@ def _parse_date(raw: str, field: str) -> date:
         ) from exc
 
 
-@router.get(
-    "/dashboard/timeseries",
-    response_model=DashboardTimeseriesOut,
-    dependencies=[Depends(require_dashboard_viewer)],
-)
+@router.get("/dashboard/timeseries", response_model=DashboardTimeseriesOut)
 async def get_dashboard_timeseries(
     from_: str = Query(alias="from"),
     to: str = Query(),
@@ -495,6 +485,9 @@ async def get_dashboard_timeseries(
                 bucket[key] += 1
 
     await _tally(LoginRecord.occurred_at, "logins")
+    # 의도적으로 deleted_at 필터 없음 — summary의 maps.total(현재 상태 스냅샷)과 달리
+    # 이 성장 추이는 "그때 생성됐다"는 활동 이력이다. 이후 삭제됐어도 그날 만들어진 사실은
+    # 지우지 않는다.
     await _tally(ProcessMap.created_at, "maps_created")
     await _tally(MapVersion.created_at, "versions_created")
 
