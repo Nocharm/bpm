@@ -58,6 +58,11 @@ export interface MapSummary {
   sp_assignee?: string | null;
   sp_system?: string | null;
   sp_duration?: string | null;
+  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  sp_headcount?: string | null;
+  sp_etf?: string | null;
+  sp_cost?: string | null;
+  sp_extra?: string | null;
   sp_url?: string | null;
   sp_url_label?: string | null;
   sp_changed_by?: string | null;
@@ -135,6 +140,11 @@ export interface SubprocessRef {
   assignee: string | null;
   system: string | null;
   duration: string | null;
+  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  headcount: string | null;
+  etf: string | null;
+  cost: string | null;
+  extra: string | null;
   url: string | null;
   url_label: string | null;
 }
@@ -282,6 +292,11 @@ export interface SubprocessDesignationBody {
   assignee?: string;
   system?: string;
   duration?: string;
+  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  headcount?: string;
+  etf?: string;
+  cost?: string;
+  extra?: string;
   url?: string;
   url_label?: string;
 }

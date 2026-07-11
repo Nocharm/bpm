@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ParamInput } from "@/components/param-input";
 import { ScopePreview } from "@/components/scope-preview";
 import { SearchSelect } from "@/components/search-select";
 import { UrlLabelField } from "@/components/url-label-field";
@@ -33,10 +34,9 @@ import {
 } from "@/lib/api";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
-import { normalizeDuration, normalizeNumericParam } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
-import { PARAM_FIELDS, PARAM_LABEL_KEY } from "@/lib/params";
+import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -169,6 +169,8 @@ export function NodeSummaryModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colorMoreOpen, setColorMoreOpen] = useState(false);
+  // Parameters 그룹 접기 — 기본 접힘, 인스펙터와 공유 키(bpm.paramsCollapsed)로 localStorage 퍼시스트
+  const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
@@ -210,6 +212,8 @@ export function NodeSummaryModal({
   const users = eligible?.users ?? [];
   const assignees = parseAssignees(form.assignee);
   const drifted = driftedAssignees(form.department, assignees, users);
+  // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생
+  const filledParamCount = PARAM_FIELDS.filter((f) => form[f]).length;
 
   const changeDept = (dept: string) => {
     if (dept === form.department) return; // 같은 부서 재선택 — SearchSelect는 onChange를 항상 발화하므로 no-op(담당자 무단 초기화 방지)
@@ -536,33 +540,48 @@ export function NodeSummaryModal({
                         </div>
                       </div>
                     ))}
-                    {/* 숫자 파라미터 5종 — 타이핑은 숫자·소수점만 허용, 정규화는 blur에서 */}
+                    {/* 숫자 파라미터 5종 — 접기 그룹(기본 접힘, 인스펙터와 공유 키) */}
                     <div className="py-1.5">
-                      <div className="mb-1 text-fine text-ink-tertiary">{t("inspector.parameters")}</div>
-                      {PARAM_FIELDS.map((key) => (
-                        <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
-                          <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
-                          <div className="flex min-w-0 flex-1 justify-end">
-                            <input
-                              data-id={`summary-param-${key}`}
-                              inputMode="decimal"
-                              className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
-                              value={form[key]}
-                              aria-label={t(PARAM_LABEL_KEY[key])}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                if (/^\d*\.?\d*$/.test(value)) setForm((f) => ({ ...f, [key]: value }));
-                              }}
-                              onBlur={(event) => {
-                                const raw = event.target.value.replace(/\.$/, "");
-                                const normalized =
-                                  key === "duration" ? normalizeDuration(raw) : normalizeNumericParam(raw);
-                                setForm((f) => ({ ...f, [key]: normalized ?? "" }));
-                              }}
-                            />
-                          </div>
+                      <button
+                        type="button"
+                        data-id="summary-params-toggle"
+                        aria-expanded={!paramsCollapsed}
+                        className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                        onClick={() => {
+                          const next = !paramsCollapsed;
+                          setParamsCollapsed(next);
+                          writeParamsCollapsed(next);
+                        }}
+                      >
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={1.5}
+                          className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
+                        />
+                        {t("inspector.parameters")}
+                        {filledParamCount > 0 && (
+                          <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
+                        )}
+                      </button>
+                      {!paramsCollapsed && (
+                        <div className="ml-2 border-l border-divider pl-2">
+                          {PARAM_FIELDS.map((key) => (
+                            <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
+                              <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
+                              <div className="flex min-w-0 flex-1 justify-end">
+                                <ParamInput
+                                  field={key}
+                                  dataId={`summary-param-${key}`}
+                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                                  value={form[key]}
+                                  ariaLabel={t(PARAM_LABEL_KEY[key])}
+                                  onCommit={(next) => setForm((f) => ({ ...f, [key]: next }))}
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                     <UrlLabelField
                       key={nodeId}

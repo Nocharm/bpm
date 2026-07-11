@@ -45,6 +45,11 @@ class SubprocessDesignationIn(BaseModel):
     assignee: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
+    # 숫자 파라미터 4종 — duration과 함께 5필드 경계 정규화, 노드 NodeIn과 동일 소거 시맨틱 (design 2026-07-11 SP)
+    headcount: str = Field(default="", max_length=50)
+    etf: str = Field(default="", max_length=50)
+    cost: str = Field(default="", max_length=50)
+    extra: str = Field(default="", max_length=50)
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
@@ -55,6 +60,19 @@ class SubprocessDesignationIn(BaseModel):
         if not value.strip():
             raise ValueError("department must not be blank")
         return value.strip()
+
+    @field_validator("duration", mode="after")
+    @classmethod
+    def _normalize_duration(cls, value: str) -> str:
+        # 무효(레거시 자유텍스트 포함)는 "" — 노드 duration과 동일 결정 (design 2026-07-11 SP §2)
+        normalized = normalize_duration(value)
+        return "" if normalized is None else normalized
+
+    @field_validator("headcount", "etf", "cost", "extra", mode="after")
+    @classmethod
+    def _normalize_numeric_params(cls, value: str) -> str:
+        text = value.strip()
+        return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "SubprocessDesignationIn":
@@ -521,12 +539,25 @@ class MapOut(BaseModel):
     sp_assignee: str | None = None
     sp_system: str | None = None
     sp_duration: str | None = None
+    # 숫자 파라미터 4종 — duration과 함께 SP 5필드 (design 2026-07-11 SP)
+    sp_headcount: str | None = None
+    sp_etf: str | None = None
+    sp_cost: str | None = None
+    sp_extra: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
     owning_department: str | None = None
+
+    @field_validator("sp_duration", mode="after")
+    @classmethod
+    def _clear_invalid_sp_duration(cls, value: str | None) -> str | None:
+        # 레거시 자유텍스트("3일")가 응답 경계를 깨지 않게 소거 — NodeIn._normalize_duration과 동일 결정
+        if value is None or value == "":
+            return value
+        return normalize_duration(value)
 
 
 class MapDetailOut(MapOut):
@@ -646,8 +677,21 @@ class SubprocessRefOut(BaseModel):
     assignee: str | None = None
     system: str | None = None
     duration: str | None = None
+    # 숫자 파라미터 4종 — SP 지정 어트리뷰트와 동일 소스 (design 2026-07-11 SP)
+    headcount: str | None = None
+    etf: str | None = None
+    cost: str | None = None
+    extra: str | None = None
     url: str | None = None
     url_label: str | None = None
+
+    @field_validator("duration", mode="after")
+    @classmethod
+    def _clear_invalid_duration(cls, value: str | None) -> str | None:
+        # 레거시 자유텍스트("2일")가 칩/합산을 깨지 않게 응답 경계에서 소거
+        if value is None or value == "":
+            return value
+        return normalize_duration(value)  # 무효면 None
 
 
 class GraphOut(BaseModel):

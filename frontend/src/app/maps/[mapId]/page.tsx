@@ -37,6 +37,7 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
+import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
@@ -196,8 +197,8 @@ import {
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
-import { normalizeDuration, normalizeNumericParam } from "@/lib/duration";
-import { PARAM_FIELDS, PARAM_LABEL_KEY } from "@/lib/params";
+import { formatDurationHm, normalizeDuration } from "@/lib/duration";
+import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -768,6 +769,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
   const [showHexInput, setShowHexInput] = useState(false);
+  // Parameters 그룹 접기 — 기본 접힘, 인스펙터/요약모달 공유 키로 localStorage 퍼시스트
+  const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -1179,6 +1182,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spHeadcount: ref.headcount,
+            spEtf: ref.etf,
+            spCost: ref.cost,
+            spExtra: ref.extra,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1187,6 +1194,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: null,
             spSystem: null,
             spDuration: null,
+            spHeadcount: null,
+            spEtf: null,
+            spCost: null,
+            spExtra: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -4721,6 +4732,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생(가벼운 계산, useMemo 불요)
+  const filledParamCount = selectedNode ? PARAM_FIELDS.filter((f) => selectedNode.data[f]).length : 0;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -7573,33 +7586,47 @@ function MapEditor({ mapId }: { mapId: number }) {
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
                           <div className="mt-2 border-t border-divider pt-1">
-                            <div className="mb-0.5 text-fine font-semibold text-ink">{t("inspector.parameters")}</div>
-                            {PARAM_FIELDS.map((key) => (
-                              <div key={key} className="flex items-center justify-between gap-2 py-1">
-                                <span className="shrink-0 text-caption text-ink-secondary">
-                                  {t(PARAM_LABEL_KEY[key])}
-                                </span>
-                                <input
-                                  data-id={`inspector-param-${key}`}
-                                  inputMode="decimal"
-                                  className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                                  value={selectedNode.data[key] ?? ""}
-                                  disabled={readOnly}
-                                  onChange={(e) => {
-                                    // 숫자·소수점 1개만 타이핑 허용 — 정규화는 blur에서
-                                    if (/^\d*\.?\d*$/.test(e.target.value)) {
-                                      updateSelectedData({ [key]: e.target.value }, true);
-                                    }
-                                  }}
-                                  onBlur={(e) => {
-                                    const raw = e.target.value.replace(/\.$/, "");
-                                    const normalized =
-                                      key === "duration" ? normalizeDuration(raw) : normalizeNumericParam(raw);
-                                    updateSelectedData({ [key]: normalized ?? "" }, true);
-                                  }}
-                                />
+                            <button
+                              type="button"
+                              data-id="inspector-params-toggle"
+                              aria-expanded={!paramsCollapsed}
+                              className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                              onClick={() => {
+                                const next = !paramsCollapsed;
+                                setParamsCollapsed(next);
+                                writeParamsCollapsed(next);
+                              }}
+                            >
+                              <ChevronRight
+                                size={12}
+                                strokeWidth={1.5}
+                                className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
+                              />
+                              {t("inspector.parameters")}
+                              {filledParamCount > 0 && (
+                                <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
+                              )}
+                            </button>
+                            {!paramsCollapsed && (
+                              <div className="ml-2 border-l border-divider pl-2">
+                                {PARAM_FIELDS.map((key) => (
+                                  <div key={key} className="flex items-center justify-between gap-2 py-1">
+                                    <span className="shrink-0 text-caption text-ink-secondary">
+                                      {t(PARAM_LABEL_KEY[key])}
+                                    </span>
+                                    <ParamInput
+                                      field={key}
+                                      dataId={`inspector-param-${key}`}
+                                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                                      value={selectedNode.data[key] ?? ""}
+                                      disabled={readOnly}
+                                      ariaLabel={t(PARAM_LABEL_KEY[key])}
+                                      onCommit={(next) => updateSelectedData({ [key]: next }, true)}
+                                    />
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
                           </div>
                         </div>
                       )}
@@ -7640,20 +7667,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                             ["assignee", "field.assignee"],
                             ["system", "field.system"],
                             ["duration", "field.duration"],
-                          ] as const).map(([key, labelKey]) => (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
-                            >
-                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
-                              <span
-                                className="min-w-0 truncate text-right text-caption text-ink"
-                                title={selectedSpRef[key] || undefined}
+                            ["headcount", "field.headcount"],
+                            ["etf", "field.etf"],
+                            ["cost", "field.cost"],
+                            ["extra", "field.extra"],
+                          ] as const).map(([key, labelKey]) => {
+                            const value =
+                              key === "duration" ? formatDurationHm(selectedSpRef[key] ?? "") : selectedSpRef[key];
+                            return (
+                              <div
+                                key={key}
+                                className="flex items-center justify-between gap-2 border-t border-divider py-1"
                               >
-                                {selectedSpRef[key] || "—"}
-                              </span>
-                            </div>
-                          ))}
+                                <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                <span
+                                  className="min-w-0 truncate text-right text-caption text-ink"
+                                  title={value || undefined}
+                                >
+                                  {value || "—"}
+                                </span>
+                              </div>
+                            );
+                          })}
                           <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
                             <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
                             <span

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeDuration, normalizeNumericParam } from "./duration";
+import { formatDurationHm, normalizeDuration, normalizeNumericParam } from "./duration";
 
 describe("normalizeDuration", () => {
   it("빈값은 빈값", () => expect(normalizeDuration("")).toBe(""));
@@ -25,4 +25,15 @@ describe("normalizeNumericParam", () => {
   it("소수", () => expect(normalizeNumericParam("2.25")).toBe("2.25"));
   it("텍스트 무효", () => expect(normalizeNumericParam("2명")).toBeNull());
   it("음수 무효", () => expect(normalizeNumericParam("-2")).toBeNull());
+});
+
+describe("formatDurationHm", () => {
+  it("시+분", () => expect(formatDurationHm("1.30")).toBe("1h30m"));
+  it("정수 시간", () => expect(formatDurationHm("2")).toBe("2h"));
+  it("분만", () => expect(formatDurationHm("0.30")).toBe("30m"));
+  it("분 제로패딩 없음", () => expect(formatDurationHm("1.05")).toBe("1h5m"));
+  it("0은 0h", () => expect(formatDurationHm("0")).toBe("0h"));
+  it("빈값", () => expect(formatDurationHm("")).toBe(""));
+  it("무효(레거시)", () => expect(formatDurationHm("2일")).toBe(""));
+  it("비정규 입력도 정규화 후 포맷", () => expect(formatDurationHm("0.75")).toBe("1h15m"));
 });
