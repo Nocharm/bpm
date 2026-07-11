@@ -117,3 +117,53 @@ def test_granted_user_denied_ai_usage(
     )
     assert dashboard_response.status_code == 200
     assert ai_usage_response.status_code == 403
+
+
+def test_permission_crud_roundtrip(client: TestClient) -> None:
+    """권한 행 추가 → 목록 노출 → 중복 409 → 삭제."""
+    body = {"principal_type": "user", "principal_id": "dash.crud"}
+    created = client.post("/api/dashboard/permissions", json=body)
+    assert created.status_code == 201
+    row_id = created.json()["id"]
+
+    listed = client.get("/api/dashboard/permissions").json()
+    assert any(r["id"] == row_id for r in listed)
+
+    assert client.post("/api/dashboard/permissions", json=body).status_code == 409
+
+    assert client.delete(f"/api/dashboard/permissions/{row_id}").status_code == 204
+    after = client.get("/api/dashboard/permissions").json()
+    assert all(r["id"] != row_id for r in after)
+
+
+def test_permission_settings_require_sysadmin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """권한 행이 있어 열람은 되더라도, 설정 API는 sysadmin만."""
+    _seed([
+        DashboardPermission(
+            principal_type="user", principal_id="dash.viewer2", granted_by="admin.sys"
+        )
+    ])
+    monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+    monkeypatch.setattr(settings, "bpm_sysadmins", "other.admin")
+    headers = {"X-Dev-User": "dash.viewer2"}
+    assert client.get("/api/dashboard/permissions", headers=headers).status_code == 403
+    assert client.put(
+        "/api/dashboard/coverage-depts", json={"org_paths": []}, headers=headers
+    ).status_code == 403
+
+
+def test_coverage_depts_put_replaces(client: TestClient) -> None:
+    """PUT은 목록 통째 교체(멱등) — 같은 목록을 두 번 보내도 결과 동일."""
+    paths = ["Div A/Office 1", "Div B"]
+    first = client.put("/api/dashboard/coverage-depts", json={"org_paths": paths})
+    assert first.status_code == 200
+    assert sorted(first.json()["org_paths"]) == sorted(paths)
+
+    again = client.put("/api/dashboard/coverage-depts", json={"org_paths": paths})
+    assert sorted(again.json()["org_paths"]) == sorted(paths)
+
+    replaced = client.put("/api/dashboard/coverage-depts", json={"org_paths": ["Div C"]})
+    assert replaced.json()["org_paths"] == ["Div C"]
+    assert client.get("/api/dashboard/coverage-depts").json()["org_paths"] == ["Div C"]

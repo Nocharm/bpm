@@ -7,6 +7,7 @@
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-dashboard-design.md`. 스텁(진입 카드+로그인 3지표)을 리더 보고용 실운영 대시보드로 재작성: 신규 테이블 2개(`dashboard_permissions` 인원·부서·그룹 열람 권한 / `dashboard_coverage_depts` 커버리지 분모 부서), summary(스냅샷)·timeseries(기간 필터 전용) API 분리, 풀블리드 3열(좌 요약 레일 · 중앙 지표 그리드 · 우 인스펙터형 Access/Coverage 사이드바), 차트는 의존성 없이 자체 SVG/CSS.
 - T1 모델·권한 판정 — `dashboard_permissions`·`dashboard_coverage_depts` 테이블 + `logic.can_view_dashboard()` 순수 함수(sysadmin·user·department 하위·group 멤버십·기본거부 5케이스 테스트, TDD RED→GREEN).
 - T2 열람 게이트 — `require_dashboard_viewer`(sysadmin 또는 권한 행) 도입, 라우터 게이트를 엔드포인트별로 분리(ai-usage는 sysadmin 유지), `/api/me`에 `can_view_dashboard` 노출.
+- T3 설정 API — 대시보드 권한 행 CRUD(중복 409·삭제 204)와 커버리지 분모 부서 GET/PUT(통째 교체·멱등). 열람은 뷰어, 변경은 sysadmin.
 
 ## 2026-07-11 — CLAUDE.md 노드 속성 체크리스트 (main)
 - Lessons에 노드 속성 추가 시 열거 지점 7곳 + CSV·AI 정규화 대칭 규칙 추가 — duration 정규화 갭(230a9e8) 재발 방지.

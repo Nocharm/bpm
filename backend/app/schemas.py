@@ -366,6 +366,33 @@ class AiUsageOut(BaseModel):
     top_maps: list[AiUsageTopMapOut]
 
 
+class DashboardPermissionIn(BaseModel):
+    """대시보드 열람 권한 부여 입력."""
+
+    principal_type: Literal["user", "department", "group"]
+    principal_id: str = Field(min_length=1, max_length=200)
+
+
+class DashboardPermissionOut(BaseModel):
+    id: int
+    principal_type: str
+    principal_id: str
+    # 표시명 — user→직원 이름, department→한글 부서명(없으면 리프), group→그룹명. 해석 실패 시 principal_id
+    display_name: str
+    granted_by: str
+    granted_at: datetime
+
+
+class CoverageDeptsIn(BaseModel):
+    """커버리지 분모 부서 목록 — 통째 교체(멱등)."""
+
+    org_paths: list[str] = Field(default_factory=list)
+
+
+class CoverageDeptsOut(BaseModel):
+    org_paths: list[str]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None

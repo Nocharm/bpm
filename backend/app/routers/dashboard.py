@@ -2,21 +2,34 @@
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import case, func, select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_sysadmin
+from app.auth import get_current_user, require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
-from app.models import AiUsageEvent, Employee, LoginRecord, ProcessMap
+from app.models import (
+    AiUsageEvent,
+    DashboardCoverageDept,
+    DashboardPermission,
+    DeptInfo,
+    Employee,
+    LoginRecord,
+    ProcessMap,
+    UserGroup,
+)
 from app.permissions.deps import require_dashboard_viewer
 from app.schemas import (
     AiUsageOut,
     AiUsagePeriodOut,
     AiUsageTopMapOut,
     AiUsageTopUserOut,
+    CoverageDeptsIn,
+    CoverageDeptsOut,
     DashboardMetricsOut,
+    DashboardPermissionIn,
+    DashboardPermissionOut,
 )
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -124,3 +137,135 @@ async def get_ai_usage(session: AsyncSession = Depends(get_session)) -> AiUsageO
             for r in map_rows
         ],
     )
+
+
+async def _resolve_display_name(
+    session: AsyncSession, principal_type: str, principal_id: str
+) -> str:
+    """principal → 사람이 읽는 표시명. 해석 실패 시 principal_id 그대로."""
+    if principal_type == "user":
+        emp = await session.get(Employee, principal_id)
+        return emp.name if emp else principal_id
+    if principal_type == "department":
+        leaf = principal_id.rsplit("/", maxsplit=1)[-1]
+        info = await session.get(DeptInfo, leaf)
+        return info.korean_name if info and info.korean_name else leaf
+    if principal_type == "group":
+        group = await session.get(UserGroup, int(principal_id)) if principal_id.isdigit() else None
+        return group.name if group else principal_id
+    return principal_id
+
+
+@router.get(
+    "/dashboard/permissions",
+    response_model=list[DashboardPermissionOut],
+    dependencies=[Depends(require_sysadmin)],
+)
+async def list_dashboard_permissions(
+    session: AsyncSession = Depends(get_session),
+) -> list[DashboardPermissionOut]:
+    rows = (
+        await session.scalars(
+            select(DashboardPermission).order_by(DashboardPermission.granted_at.desc())
+        )
+    ).all()
+    return [
+        DashboardPermissionOut(
+            id=row.id,
+            principal_type=row.principal_type,
+            principal_id=row.principal_id,
+            display_name=await _resolve_display_name(
+                session, row.principal_type, row.principal_id
+            ),
+            granted_by=row.granted_by,
+            granted_at=row.granted_at,
+        )
+        for row in rows
+    ]
+
+
+@router.post(
+    "/dashboard/permissions",
+    response_model=DashboardPermissionOut,
+    status_code=201,
+    dependencies=[Depends(require_sysadmin)],
+)
+async def add_dashboard_permission(
+    body: DashboardPermissionIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DashboardPermissionOut:
+    existing = await session.scalar(
+        select(DashboardPermission.id).where(
+            DashboardPermission.principal_type == body.principal_type,
+            DashboardPermission.principal_id == body.principal_id,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="grant already exists")
+    row = DashboardPermission(
+        principal_type=body.principal_type,
+        principal_id=body.principal_id,
+        granted_by=login_id,
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return DashboardPermissionOut(
+        id=row.id,
+        principal_type=row.principal_type,
+        principal_id=row.principal_id,
+        display_name=await _resolve_display_name(
+            session, row.principal_type, row.principal_id
+        ),
+        granted_by=row.granted_by,
+        granted_at=row.granted_at,
+    )
+
+
+@router.delete(
+    "/dashboard/permissions/{permission_id}",
+    status_code=204,
+    dependencies=[Depends(require_sysadmin)],
+)
+async def delete_dashboard_permission(
+    permission_id: int, session: AsyncSession = Depends(get_session)
+) -> None:
+    row = await session.get(DashboardPermission, permission_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"permission {permission_id} not found")
+    await session.delete(row)
+    await session.commit()
+
+
+@router.get(
+    "/dashboard/coverage-depts",
+    response_model=CoverageDeptsOut,
+    dependencies=[Depends(require_dashboard_viewer)],
+)
+async def get_coverage_depts(session: AsyncSession = Depends(get_session)) -> CoverageDeptsOut:
+    rows = (
+        await session.scalars(
+            select(DashboardCoverageDept).order_by(DashboardCoverageDept.org_path)
+        )
+    ).all()
+    return CoverageDeptsOut(org_paths=[row.org_path for row in rows])
+
+
+@router.put(
+    "/dashboard/coverage-depts",
+    response_model=CoverageDeptsOut,
+    dependencies=[Depends(require_sysadmin)],
+)
+async def set_coverage_depts(
+    body: CoverageDeptsIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CoverageDeptsOut:
+    """목록 통째 교체 — 멱등. 부분 갱신 API는 두지 않는다(우측 사이드바가 항상 전체를 보낸다)."""
+    await session.execute(delete(DashboardCoverageDept))
+    wanted = sorted({path.strip() for path in body.org_paths if path.strip()})
+    for path in wanted:
+        session.add(DashboardCoverageDept(org_path=path, added_by=login_id))
+    await session.commit()
+    return CoverageDeptsOut(org_paths=wanted)
