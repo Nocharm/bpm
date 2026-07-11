@@ -211,12 +211,12 @@ export function MapCard({
           )}
         </div>
 
-        {/* 오우닝 부서 누락 맵은 카운트 자리에 경고 태그로 대체 — 언어 무관 영어 고정 */}
+        {/* 오우닝 부서 누락 맵은 카운트 자리에 경고 필로 대체 — 언어 무관 영어 고정, 반투명 error 틴트 */}
         {!map.owning_department ? (
           <span
             data-id="map-card-owning-missing"
             title={t("home.owningMissingNote")}
-            className="inline-flex shrink-0 items-center gap-1 text-error"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
           >
             <TriangleAlert size={12} strokeWidth={1.5} />
             {t("home.owningMissingBadge")}
