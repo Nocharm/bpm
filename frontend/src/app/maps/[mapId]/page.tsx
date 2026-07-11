@@ -197,7 +197,7 @@ import {
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
-import { normalizeDuration } from "@/lib/duration";
+import { formatDurationHm, normalizeDuration } from "@/lib/duration";
 import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
@@ -1182,6 +1182,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spHeadcount: ref.headcount,
+            spEtf: ref.etf,
+            spCost: ref.cost,
+            spExtra: ref.extra,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1190,6 +1194,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: null,
             spSystem: null,
             spDuration: null,
+            spHeadcount: null,
+            spEtf: null,
+            spCost: null,
+            spExtra: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -7659,20 +7667,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                             ["assignee", "field.assignee"],
                             ["system", "field.system"],
                             ["duration", "field.duration"],
-                          ] as const).map(([key, labelKey]) => (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
-                            >
-                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
-                              <span
-                                className="min-w-0 truncate text-right text-caption text-ink"
-                                title={selectedSpRef[key] || undefined}
+                            ["headcount", "field.headcount"],
+                            ["etf", "field.etf"],
+                            ["cost", "field.cost"],
+                            ["extra", "field.extra"],
+                          ] as const).map(([key, labelKey]) => {
+                            const value =
+                              key === "duration" ? formatDurationHm(selectedSpRef[key] ?? "") : selectedSpRef[key];
+                            return (
+                              <div
+                                key={key}
+                                className="flex items-center justify-between gap-2 border-t border-divider py-1"
                               >
-                                {selectedSpRef[key] || "—"}
-                              </span>
-                            </div>
-                          ))}
+                                <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                <span
+                                  className="min-w-0 truncate text-right text-caption text-ink"
+                                  title={value || undefined}
+                                >
+                                  {value || "—"}
+                                </span>
+                              </div>
+                            );
+                          })}
                           <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
                             <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
                             <span

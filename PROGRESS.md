@@ -2,6 +2,10 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Task 5: SP 표시 전면 — 칩 5종·1h30m 적용·읽기 표면 (sp-params-sum)
+- `NodeData`(canvas.ts)에 spHeadcount/spEtf/spCost/spExtra 추가 + page.tsx subprocess_refs→data 매핑 확장. `NodeParams`(process-node.tsx)의 subprocess 분기를 sp 5종으로 확장, duration 칩만 `formatDurationHm` 적용(filled 판정도 포맷 결과 기준 — 레거시 방어). 읽기 표면 3곳(subprocess-inspector-card·subprocess-designation-panel·page.tsx `inspector-subprocess-attrs`)에 파라미터 4행 추가 + duration 포맷. compare/page.tsx에 공용 `displayFieldValue` 헬퍼 신설, 3곳(fieldsOf·목록·사이드패널)의 duration before/after/current를 포맷.
+- 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
+
 ## 2026-07-11 — Task 4: SP 지정 모달 숫자 5종 입력 + Σ 합산 버튼 (sp-params-sum)
 - `subprocess-designation-modal.tsx`의 duration 자유텍스트 입력을 `PARAM_FIELDS` 5종 블록(`ParamInput`, ariaLabel 포함 — Task 3 확정 계약)으로 교체, duration/etf/cost/extra 4필드에 Σ 버튼(게시본 그래프 `useRef` 1회 fetch 캐시·`sumParamField`로 setForm만 갱신·저장은 기존 Save 경유) 추가. headcount는 Σ 미지원. `DesignationForm`에 4필드 추가 + 호출측 2파일(`subprocess-inspector-card.tsx`·`subprocess-designation-panel.tsx`)의 initial 조립에 `sp_headcount` 등 4필드 미러(tsc 강제). i18n `sp.sumAllNodes`/`sp.sumNeedsPublished` en/ko.
 - 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
