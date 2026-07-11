@@ -8001,6 +8001,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onFocusNode={highlightNode}
                       onApply={() => void applyCsvImport()}
                       onCancel={cancelCsvPreview}
+                      origin={importOrigin ?? "csv"}
                     />
                   ) : undefined
                 }

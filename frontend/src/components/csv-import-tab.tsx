@@ -20,6 +20,7 @@ interface CsvImportTabProps {
   onFocusNode: (nodeId: string) => void;
   onApply: () => void;
   onCancel: () => void;
+  origin: "csv" | "ai";
 }
 
 // 리치 툴팁 카드 — 굵은 결론 한 줄 + 이유 한 줄 (Tooltip content는 max-w-56)
@@ -33,7 +34,7 @@ function TipCard({ head, body }: { head: string; body?: string }) {
 }
 
 export function CsvImportTab({
-  merge, warnings, keepRemoved, onKeepRemovedChange, onFocusNode, onApply, onCancel,
+  merge, warnings, keepRemoved, onKeepRemovedChange, onFocusNode, onApply, onCancel, origin,
 }: CsvImportTabProps) {
   const { t } = useI18n();
   const removedCount = merge.removedNodes.length;
@@ -63,7 +64,7 @@ export function CsvImportTab({
     <div data-id="csv-import-tab" className="flex flex-col gap-4">
       <MarkdownView
         className="md"
-        source={t("csvImport.tabIntro", { matched: merge.matchedCount, added: merge.addedNodeIds.length })}
+        source={t(origin === "ai" ? "csvImport.tabIntroAi" : "csvImport.tabIntro", { matched: merge.matchedCount, added: merge.addedNodeIds.length })}
       />
 
       {warnings.length > 0 && (
