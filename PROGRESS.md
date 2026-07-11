@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — SP 숫자 파라미터 + Σ 합산 + duration 표시형(1h30m) 설계 (main)
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-sp-params-sum-duration-format-design.md`. SP 지정 속성을 숫자 5종으로 확장(sp 4컬럼 추가·레거시 자유텍스트 소거), 지정 모달에 Σ 합산 버튼(게시본 직합·sub는 subprocess_refs sp값·duration 분환산 캐리), duration 표시형 1h30m 통일(편집 중만 1.30, CSV/Excel 예외), 인스펙터 Parameters 그룹 들여쓰기+접기(기본 접힘·localStorage 퍼시스트).
+
 ## 2026-07-11 — AI duration 정규화 대칭 픽스 (main)
 - AI 그래프 제안 경로(`buildGraphFromAiProposal`·`aiNodeToGraphNode`)의 duration을 CSV와 동일하게 `normalizeDuration`으로 정규화 — 무효 에코("3일")가 pick에 채택돼 백엔드 소거로 기존 유효값이 유실되던 갭 봉합(numeric-params 머지 교차점 리뷰에서 발견). vitest 290·tsc 0·lint 0.
 
