@@ -512,17 +512,14 @@ def test_ai_analysis_surfaces_unknown_node(
 # === Phase 3: 생성(그룹/어트리뷰트) + 편집 ops ===
 
 
-def test_build_system_prompt_includes_directory() -> None:
-    # D2: 담당자/부서 매칭용 조직 디렉터리가 시스템 프롬프트에 주입
-    from app.ai_prompt import build_messages
+def test_build_system_prompt_has_no_directory_and_explicit_only_rule() -> None:
+    # 디렉터리 주입 폐기 — 담당자/부서는 사용자 지시가 명시적으로 요구할 때만 (design 2026-07-11)
+    from app.ai_prompt import build_system_prompt
     from app.schemas import GraphOut
 
-    graph = GraphOut(nodes=[], edges=[], groups=[])
-    system = build_messages(
-        "M", graph, True, "?", [], ["김철수 | 구매팀", "이영희 | 영업팀"]
-    )[0]["content"]
-    assert "조직 디렉터리" in system
-    assert "김철수 | 구매팀" in system
+    system = build_system_prompt("M", GraphOut(nodes=[], edges=[], groups=[]), True)
+    assert "조직 디렉터리" not in system
+    assert "명시적으로 요구" in system  # 규칙 ② 교체 확인
 
 
 def test_ai_ops_passes_through_when_editable(
@@ -719,7 +716,8 @@ def test_structure_hints_detect_data_feedback_targets() -> None:
     assert "시작에서 도달 불가" in hints and "x" in hints
     assert "끝으로 도달 불가" in hints and "p2" in hints
     assert "막다른 노드" in hints
-    assert "담당자 미입력" in hints
+    assert "담당자 미입력" not in hints
+    assert "부서 미입력" not in hints
     assert "소요시간 미입력" in hints
     assert '중복 제목 "검토"' in hints
 
