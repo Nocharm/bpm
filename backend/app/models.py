@@ -99,6 +99,11 @@ class ProcessMap(Base):
     sp_assignee: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_system: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_duration: Mapped[str | None] = mapped_column(String(50), default=None)
+    # 숫자 파라미터 — sp 확장, 값은 H.MM/십진수 문자열 (design 2026-07-11 SP)
+    sp_headcount: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_etf: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_cost: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_extra: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1

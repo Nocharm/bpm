@@ -30,6 +30,7 @@ import {
   terminalDisplayLabel,
   toPosition,
 } from "@/lib/canvas";
+import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
@@ -92,14 +93,18 @@ const PARAM_ICON: Record<ParamField, LucideIcon> = {
 };
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4)
-// subprocess는 지정 어트리뷰트의 sp_duration(자유텍스트, 무변경)만 Clock으로 표시.
+// subprocess는 지정 어트리뷰트(sp*, 라이브 참조)를 표시. duration만 1h30m로 포맷(나머지 4필드는 원문 숫자).
 function NodeParams({ data, className }: { data: AppNode["data"]; className?: string }) {
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
   const values: Partial<Record<ParamField, string | null | undefined>> = isSubprocess
-    ? { duration: data.spDuration }
+    ? { duration: data.spDuration, headcount: data.spHeadcount, etf: data.spEtf, cost: data.spCost, extra: data.spExtra }
     : { duration: data.duration, headcount: data.headcount, etf: data.etf, cost: data.cost, extra: data.extra };
-  const filled = PARAM_FIELDS.filter((f) => values[f]);
+  // duration은 formatDurationHm 결과 기준으로 filled 판정 — 무효(레거시 자유텍스트)는 ""가 되어 칩 자체를 숨김
+  // (백엔드가 이미 소거하므로 실제로는 도달하지 않는 방어 코드).
+  const displayValue = (f: ParamField): string | null | undefined =>
+    f === "duration" ? formatDurationHm(values[f] ?? "") : values[f];
+  const filled = PARAM_FIELDS.filter((f) => displayValue(f));
   if (filled.length === 0) return null;
   return (
     <div
@@ -110,7 +115,7 @@ function NodeParams({ data, className }: { data: AppNode["data"]; className?: st
         return (
           <span key={f} className="inline-flex items-center gap-1">
             <Icon size={12} strokeWidth={1.5} />
-            {values[f]}
+            {displayValue(f)}
           </span>
         );
       })}

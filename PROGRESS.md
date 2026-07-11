@@ -5,6 +5,41 @@
 ## 2026-07-11 — CLAUDE.md 노드 속성 체크리스트 (main)
 - Lessons에 노드 속성 추가 시 열거 지점 7곳 + CSV·AI 정규화 대칭 규칙 추가 — duration 정규화 갭(230a9e8) 재발 방지.
 
+## 2026-07-12 — 최종 리뷰 픽스: 그룹 일괄편집 duration 모드 계약 정합 (sp-params-sum)
+- `group-bulk-modal.tsx` duration 모드가 브랜치 계약(숫자 입력 강제+1h30m 표시)에서 누락 — 값 입력을 `ParamInput`(field="duration", ariaLabel, 신규 `placeholder` prop)으로 교체(자유텍스트가 applyGroupAttribute 경유로 들어갔다 백엔드 소거로 조용히 소실되던 갭 봉합, system 모드는 자유텍스트 유지), 충돌 팝오버·개별 마법사 existing/value·적용 요약 before/after의 duration 표시에 `displayAttrValue` 헬퍼(1h30m, 무효 시 원문 폴백 — compare 패턴) 적용. 게이트: vitest 304/304·tsc 0에러·lint 기존 경고 1건·build 0에러.
+
+## 2026-07-12 — Task 6: SP 파라미터 브라우저 실기동 검증 + 배포 노트 (sp-params-sum)
+- `pw-verify-sp-params.mjs` 신설 — 스크래치 맵 A(게시 체인 submit→approve→publish API 미러)에서 지정 모달 5입력+Σ 4개(headcount 제외) 확인, Σ(duration) 0.45+0.30=1.15(1h15m)·Σ(cost) 0.1+0.2=0.3·저장 200·영속 확인. 맵 B(미게시)는 Designate 진입 버튼 자체가 disabled(hasPublished 게이트)라 정상 UI로는 모달을 열 수 없음을 실측 — React `SimpleEventPlugin`이 DOM `disabled` 속성이 아니라 파이버 `props.disabled`를 보고 클릭을 억제하므로 속성만 지우는 우회는 무효였고, `__reactProps$*` 파이버 키로 실제 `onClick`(openModal) 핸들러를 직접 호출해 모달을 강제로 띄운 뒤 Σ 버튼 4개 전부 disabled임을 확인(진입 게이트와 Σ 내부 게이트가 동일 전제라 이 상태는 정상 내비게이션으로는 도달 불가 — 강제오픈 프로브로만 검증 가능). 맵 C에 맵 A를 subprocess로 링크해 노드 칩 `1h15m`+`0.3` 라이브 반영 확인. 에디터 인스펙터 Parameters 그룹 기본 접힘(`aria-expanded=false`)→펼침→duration `1.30`입력·blur `1h30m`·포커스 `1.30`복원·새로고침 후 펼침 유지(localStorage) 확인. 24/24 PASS, 콘솔 에러 0.
+- 게이트 재확인: backend pytest 572 passed·ruff clean. frontend vitest 22 files/304 tests passed·tsc --noEmit 0에러·lint 0에러(기존 미관련 경고 1건만)·build 성공.
+- **배포 노트**: sp 4컬럼(`sp_headcount`/`sp_etf`/`sp_cost`/`sp_extra`, Task 2)은 `create_all`이 기동 시 자동 보강하므로 프론트/백은 **반드시 동시 배포**(구버전 프론트가 신버전 백엔드에 4필드 없는 payload를 보내는 조합, 또는 그 역은 지정 모달 저장이 깨짐). 레거시 sp 자유텍스트(구 `sp_duration` 자유입력 값)는 API 응답 3표면(`MapOut`·`SubprocessRefOut`·라이브러리 목록, Task 2)에서 이미 정규식 미매치 시 `null`로 소거되므로 기능상 즉시 문제는 없으나, DB에 남은 원본 값은 그대로다. 원하면 배포 후 1회 물리 정리:
+  `UPDATE process_maps SET sp_duration = NULL WHERE sp_duration IS NOT NULL AND sp_duration !~ '^[0-9]+(\.[0-9]{1,2})?$';`
+- **dev.db 상태**: 로컬 검증에서 생성한 스크래치 맵(SP-Params A/B/C, 6회 실행분)은 전부 스크립트 종료 시 소프트삭제(`deleted_at` 설정) 완료 — 활성 맵 수는 시드 그대로 12개 유지, 휴지통에만 잔존(다른 pw-verify-*.mjs와 동일 패턴, 완전 복원은 `git checkout backend/dev.db` + 백엔드 재시작).
+
+## 2026-07-11 — Task 5: SP 표시 전면 — 칩 5종·1h30m 적용·읽기 표면 (sp-params-sum)
+- `NodeData`(canvas.ts)에 spHeadcount/spEtf/spCost/spExtra 추가 + page.tsx subprocess_refs→data 매핑 확장. `NodeParams`(process-node.tsx)의 subprocess 분기를 sp 5종으로 확장, duration 칩만 `formatDurationHm` 적용(filled 판정도 포맷 결과 기준 — 레거시 방어). 읽기 표면 3곳(subprocess-inspector-card·subprocess-designation-panel·page.tsx `inspector-subprocess-attrs`)에 파라미터 4행 추가 + duration 포맷. compare/page.tsx에 공용 `displayFieldValue` 헬퍼 신설, 3곳(fieldsOf·목록·사이드패널)의 duration before/after/current를 포맷.
+- 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
+
+## 2026-07-11 — Task 4: SP 지정 모달 숫자 5종 입력 + Σ 합산 버튼 (sp-params-sum)
+- `subprocess-designation-modal.tsx`의 duration 자유텍스트 입력을 `PARAM_FIELDS` 5종 블록(`ParamInput`, ariaLabel 포함 — Task 3 확정 계약)으로 교체, duration/etf/cost/extra 4필드에 Σ 버튼(게시본 그래프 `useRef` 1회 fetch 캐시·`sumParamField`로 setForm만 갱신·저장은 기존 Save 경유) 추가. headcount는 Σ 미지원. `DesignationForm`에 4필드 추가 + 호출측 2파일(`subprocess-inspector-card.tsx`·`subprocess-designation-panel.tsx`)의 initial 조립에 `sp_headcount` 등 4필드 미러(tsc 강제). i18n `sp.sumAllNodes`/`sp.sumNeedsPublished` en/ko.
+- 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
+
+## 2026-07-11 — Task 3 리뷰 픽스: ParamInput ariaLabel 복원 (sp-params-sum)
+- 리팩터에서 탈락했던 요약모달 param 입력의 `aria-label` 회귀 픽스(라벨 span은 input과 미연결 — 스크린리더 접근명 공백). ParamInput에 옵셔널 `ariaLabel` prop 추가(브리프 인터페이스 결함 보강), 인스펙터·요약모달 양쪽에 `t(PARAM_LABEL_KEY[key])` 전달(인스펙터는 원래 없던 것을 이번에 추가). tsc 0에러·lint 0에러·vitest 304 passed.
+
+## 2026-07-11 — Task 3: 공용 ParamInput + 인스펙터/요약모달 리팩터 + Parameters 접기 (sp-params-sum)
+- 신규 `components/param-input.tsx`(단일 input focus/blur 표시 스왑 — duration만 비포커스 시 `formatDurationHm`, 나머지 4필드는 항상 raw) + `lib/params.ts`에 `readParamsCollapsed`/`writeParamsCollapsed`(localStorage `bpm.paramsCollapsed`, 저장값 없으면 기본 접힘). 인스펙터(page.tsx)·노드 요약 모달의 Parameters 인라인 타이핑필터/blur정규화 중복 구현을 ParamInput으로 대체, 접기 헤더(들여쓰기 `ml-2 border-l pl-2`+채워진 개수 `(n)`)를 두 지점에 동일 패턴으로 추가(같은 localStorage 키 공유 — 인스펙터/요약모달 토글 상태 연동).
+- 게이트: vitest 304 passed·tsc --noEmit 0에러·lint 0에러(기존 미관련 경고 1건)·build 0에러.
+
+## 2026-07-11 — Task 2 리뷰 픽스: 라이브러리 목록 레거시 sp_duration 소거 (sp-params-sum)
+- `routers/library.py` `list_processes`가 raw dict 직렬화로 MapOut/SubprocessRefOut validator를 우회 — 레거시 자유텍스트("3일")가 라이브러리 API로 누출되던 잔여 경로 봉합(조립부에서 `normalize_duration` 소거, 무효→None). `test_sp_params.py`에 라이브러리 목록 단언 1건 추가. pytest 572 passed(571+1)·ruff 0에러.
+- 스펙 §2 보정 — 레거시 sp_duration 소거 경로에 library 목록(raw dict) 추가(Task 2 리뷰 발견 반영).
+
+## 2026-07-11 — Task 2: 백엔드 sp 4컬럼 + 지정 경계 정규화 + 응답 레거시 소거 (sp-params-sum)
+- `ProcessMap`에 sp_headcount/sp_etf/sp_cost/sp_extra 4컬럼(`db.py _ADDED_COLUMNS` 멱등 보강 포함) 추가. `SubprocessDesignationIn`이 duration 포함 5필드를 경계에서 정규화(무효→`""`, NodeIn과 동일 시맨틱) — `designate_subprocess`·`get_subprocess_refs`에 4필드 배선. 응답 경로 레거시 소거 신설 — `MapOut.sp_duration`·`SubprocessRefOut.duration`에 무효→None validator(레거시 자유텍스트 직삽입이 GET을 깨지 않게). TDD 3케이스(지정 시 숫자 정규화·무효값 소거·레거시 응답 소거를 MapOut+subprocess_refs 양쪽에서 실단언) 신규 `test_sp_params.py`. pytest 571 passed(568+3)·ruff 0에러.
+
+## 2026-07-11 — Task 1: formatDurationHm + sumParamField 순수 유틸 (sp-params-sum)
+- TDD 완료 — `lib/duration.ts`에 `formatDurationHm(raw: string): string` 추가(정규화 후 "1h30m" 표시형), `lib/param-sum.ts` 신규(sumParamField 게시본 직합·subprocess는 sp값·duration 분환산 캐리·부동소수 오차 차단). api.ts SubprocessRef/MapSummary/SubprocessDesignationBody에 headcount/etf/cost/extra 4필드 확장. vitest 304/304 (formatDurationHm 8케이스+param-sum 6케이스 포함)·tsc --noEmit 0에러·lint 경고 0건(기존 미관련).
+
 ## 2026-07-11 — SP 숫자 파라미터 + Σ 합산 + duration 표시형(1h30m) 설계 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-sp-params-sum-duration-format.md` (6태스크: 포맷·합산 유틸 → 백엔드 sp 4컬럼+경계 소거 → 공용 ParamInput+접기 → 지정 모달 5입력+Σ → 표시 전면(칩 5종·1h30m) → 브라우저 검증).
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-sp-params-sum-duration-format-design.md`. SP 지정 속성을 숫자 5종으로 확장(sp 4컬럼 추가·레거시 자유텍스트 소거), 지정 모달에 Σ 합산 버튼(게시본 직합·sub는 subprocess_refs sp값·duration 분환산 캐리), duration 표시형 1h30m 통일(편집 중만 1.30, CSV/Excel 예외), 인스펙터 Parameters 그룹 들여쓰기+접기(기본 접힘·localStorage 퍼시스트).

@@ -22,10 +22,12 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ParamInput } from "@/components/param-input";
 import { SearchSelect } from "@/components/search-select";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { hasBpmAttributes } from "@/lib/canvas";
+import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -58,6 +60,10 @@ const POLICY_META: { key: BulkPolicy; icon: LucideIcon }[] = [
   { key: "skip", icon: SkipForward }, // 건너뛰기 — 충돌 멤버 그대로 둠
   { key: "individual", icon: MousePointerClick }, // 개별 — 하나씩 선택
 ];
+
+// duration 값 표시 전용 — 1h30m 포맷, 무효/빈값은 원문 폴백(compare의 displayFieldValue 패턴). 편집 입력은 ParamInput이 담당.
+const displayAttrValue = (field: BulkAttrField, raw: string): string =>
+  field === "duration" ? formatDurationHm(raw) || raw : raw;
 
 export interface BulkMember {
   id: string;
@@ -348,8 +354,8 @@ export function GroupBulkModal({
         return {
           id: u.id,
           label: labelOf(u.id),
-          before: (m ? m[attrField] : "") || "—",
-          after: u.value || t("bulk.cleared"),
+          before: (m ? displayAttrValue(attrField, m[attrField]) : "") || "—",
+          after: displayAttrValue(attrField, u.value) || t("bulk.cleared"),
         };
       }),
     );
@@ -631,10 +637,10 @@ export function GroupBulkModal({
             </p>
             <p className="mb-1 text-fine text-ink-tertiary">
               {t("bulk.existing")}:{" "}
-              {attrField ? attrConflicts[wizard.step][attrField] : ""}
+              {attrField ? displayAttrValue(attrField, attrConflicts[wizard.step][attrField]) : ""}
             </p>
             <p className="mb-3 text-fine text-ink-tertiary">
-              {t("bulk.value")}: {value}
+              {t("bulk.value")}: {attrField ? displayAttrValue(attrField, value) : value}
             </p>
             <div className="flex gap-1">
               <button
@@ -823,15 +829,25 @@ export function GroupBulkModal({
                 </div>
               )}
 
-              {/* System/duration value input */}
-              {mode !== "people" && action === "set" && (
-                <input
-                  className="rounded-sm border border-hairline px-2 py-1 text-caption"
-                  placeholder={t("bulk.value")}
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                />
-              )}
+              {/* System/duration value input — duration은 숫자 강제+blur 정규화+비포커스 1h30m(ParamInput), system은 자유텍스트 */}
+              {mode !== "people" && action === "set" &&
+                (mode === "duration" ? (
+                  <ParamInput
+                    field="duration"
+                    className="rounded-sm border border-hairline px-2 py-1 text-caption"
+                    placeholder={t("bulk.value")}
+                    ariaLabel={t("bulk.value")}
+                    value={value}
+                    onCommit={setValue}
+                  />
+                ) : (
+                  <input
+                    className="rounded-sm border border-hairline px-2 py-1 text-caption"
+                    placeholder={t("bulk.value")}
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                  />
+                ))}
 
               {/* 충돌 처리 — 설정인데 이미 값 있는 멤버가 있을 때만. 디폴트 없음(필수) */}
               {hasConflict && (
@@ -859,7 +875,7 @@ export function GroupBulkModal({
                                 {mode === "people"
                                   ? [m.department, m.assignee].filter(Boolean).join(" / ")
                                   : attrField
-                                    ? m[attrField]
+                                    ? displayAttrValue(attrField, m[attrField])
                                     : ""}
                               </span>
                             </li>

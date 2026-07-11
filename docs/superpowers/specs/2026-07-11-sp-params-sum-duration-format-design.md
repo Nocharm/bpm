@@ -14,7 +14,7 @@
 
 - `process_maps`에 `sp_headcount`·`sp_etf`·`sp_cost`·`sp_extra` **String(50) 4컬럼** 추가 + `db.py _ADDED_COLUMNS`에 `VARCHAR(50) DEFAULT ''` 등록. `sp_duration`은 기존 컬럼 재사용, 값은 H.MM 숫자 문자열.
 - SP 지정 PUT(`/maps/{id}/subprocess-designation`) 페이로드 스키마에 4필드 추가. 검증은 노드와 동일: duration은 `app/duration.py normalize_duration`(무효→`""`), 나머지는 십진수 패턴(무효→`""`).
-- **레거시 sp 자유텍스트("2일" 등)는 전부 버림** — 응답 스키마(MapOut의 sp_duration, SubprocessRef.duration)에도 소거 validator를 달아 기존 행이 화면·합산을 깨지 않게 한다(노드 duration과 동일 결정·동일 근거: from_attributes 응답 경로).
+- **레거시 sp 자유텍스트("2일" 등)는 전부 버림** — 응답 경계 전부(MapOut의 sp_duration, SubprocessRef.duration, 그리고 raw dict로 직렬화하는 `GET /api/library/processes`의 duration)에서 소거해 기존 행이 화면·합산을 깨지 않게 한다(노드 duration과 동일 결정·동일 근거: from_attributes 응답 경로).
 - `SubprocessRef`에 `headcount/etf/cost/extra: str | None` 4필드 추가(백엔드 `subprocess.py` 조립 + 프론트 `api.ts` 미러) — 서브프로세스 노드 칩 표시와 Σ 합산의 데이터 소스.
 
 ## 3. SP 지정 모달 (프론트 `subprocess-designation-modal.tsx`)

@@ -24,3 +24,15 @@ export function normalizeNumericParam(raw: string): string | null {
   if (text === "") return "";
   return NUMERIC_PATTERN.test(text) ? text : null;
 }
+
+/** H.MM → "1h30m" 표시형(한/영 무관). 편집 중이 아닌 모든 화면 표시에 사용. 무효/빈값 → "". */
+export function formatDurationHm(raw: string): string {
+  const normalized = normalizeDuration(raw);
+  if (normalized === null || normalized === "") return "";
+  const [intPart, fracPart = ""] = normalized.split(".");
+  const hours = Number.parseInt(intPart, 10);
+  const minutes = fracPart === "" ? 0 : Number.parseInt(fracPart, 10);
+  if (minutes === 0) return `${hours}h`;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h${minutes}m`;
+}
