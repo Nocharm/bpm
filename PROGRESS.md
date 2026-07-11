@@ -33,6 +33,12 @@
 - 게이트: excel-export 10/10·전체 vitest 287/287·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트, 무변화).
 - 리뷰 픽스(Important): 루트 맵 자기/상호참조 순환이 스펙(조상 경로 즉시 차단, design §4)을 어기고 루트를 한 바퀴 더 인라인하던 결함 — args에 옵셔널 `rootMapId?: number` 추가(기존 필드 전부 유지), 초기 ancestry를 rootMapId로 시드. 루트 상호참조 테스트를 rootMapId 기준(즉시 circular + 루트 re-fetch 0회 스파이 단언)으로 갱신, rootMapId 생략 시 기존 지연 차단 동작 케이스를 별도로 남겨 하위호환 박제. **Task 7 소비 계약: `buildExcelModel` 호출 시 현재 맵 id를 `rootMapId`로 전달할 것.** excel-export 11/11·전체 vitest 288/288·tsc 0에러.
 
+## 2026-07-11 — Task 7: exceljs 기록 + 다운로드 3버튼 (numeric-params-export)
+- `exceljs`(dynamic import) 설치·`downloadExcel` 구현(`lib/excel-export.ts`) — 헤더 연보라 필·note 행 3종(circular/denied/rowLimit)·URL 하이퍼링크 셀·`outlineLevel=min(depth,7)`·duration 컬럼 `numFmt "0.00"`. exceljs 실 타입에 맞춰 브리프의 `as never` 캐스팅 없이 `AddWorksheetOptions.properties`가 이미 `Partial<WorksheetProperties>`라 그대로 대입.
+- 에디터 인스펙터(맵 탭) PNG 단일 버튼(`handleExportPng`, 옛 ~4297) → PNG/Excel/CSV 3버튼 나열로 교체. 공용 `buildExportFileName(ext)` 헬퍼로 파일명 규칙(sanitize+stamp) 통일 — PNG도 이 헬퍼로 리팩터(출력 동일, 라벨만 "Download PNG"→"PNG"로 축약해 3버튼 정렬). `buildGraph(nodesRef.current, edgesRef.current, groupsRef.current)`는 저장 경로(1366행)와 동일 소스 — 실물 확인 후 브리프 추정 그대로 사용. Excel은 `rootMapId: mapId` 전달(Task 6 소비 계약), `truncated`/CSV `warnings` 발생 시 토스트.
+- i18n 6키(en/ko): `inspector.exportExcel`/`exportCsv`("Excel"/"CSV"), `err.exportExcel`, `export.csvWarnings`, `export.excelTruncated`. PNG 아이콘(`Download`)은 부수 동작 보존 원칙에 따라 유지, Excel/CSV는 `FileSpreadsheet`/`FileDown` 신규.
+- 게이트: vitest 288/288·tsc --noEmit 0에러·lint 경고 1건(기존 `pw-smoke-task8.mjs`, 무관)·build 0에러 — exceljs는 별도 청크(912K)로 분리, app-build-manifest 어디에도 정적 참조 없음(dynamic import 격리 확인).
+
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
 

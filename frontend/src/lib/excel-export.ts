@@ -135,3 +135,75 @@ export async function buildExcelModel({
   await emit(graph, 0, new Set(rootMapId != null ? [rootMapId] : []));
   return { mapName, versionLabel, exportedAt, rows, truncated };
 }
+
+// 셀 색은 출력물이라 raw hex 허용 (design.md §1 예외 — csv-export.ts와 동일 논리)
+const HEADER_FILL = "FFF3F0FA"; // 연보라 헤더 (ARGB)
+const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
+  circular: "(circular reference)",
+  denied: "(access denied)",
+  rowLimit: `(row limit ${EXCEL_MAX_ROWS} reached — output truncated)`,
+};
+const COLUMNS = [
+  { header: "No", width: 6 }, { header: "Name", width: 32 }, { header: "Type", width: 12 },
+  { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Department", width: 18 },
+  { header: "System", width: 14 }, { header: "Duration (h)", width: 12 }, { header: "Headcount", width: 11 },
+  { header: "ETF", width: 9 }, { header: "Cost", width: 11 }, { header: "Extra", width: 9 },
+  { header: "URL", width: 24 }, { header: "Groups", width: 18 }, { header: "Next", width: 32 },
+];
+
+/** ExcelModel → .xlsx 파일 다운로드. exceljs는 dynamic import — 정적 import 시 에디터 번들에 항상 섞여든다. */
+export async function downloadExcel(model: ExcelModel, fileName: string): Promise<void> {
+  const { Workbook } = await import("exceljs");
+  const workbook = new Workbook();
+  const sheet = workbook.addWorksheet("Process Map", {
+    views: [{ state: "frozen", ySplit: 4 }],
+    properties: { outlineLevelRow: 1, defaultRowHeight: 16 },
+  });
+  sheet.addRow([model.mapName]);
+  sheet.getRow(1).font = { bold: true, size: 14 };
+  sheet.addRow([`Version: ${model.versionLabel}    Exported: ${model.exportedAt}${model.truncated ? "    (truncated)" : ""}`]);
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(COLUMNS.map((c) => c.header));
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+    cell.border = { bottom: { style: "thin" } };
+  });
+  COLUMNS.forEach((c, i) => { sheet.getColumn(i + 1).width = c.width; });
+
+  let no = 0;
+  for (const row of model.rows) {
+    if (row.kind !== "node") {
+      const r = sheet.addRow(["", NOTE_TEXT[row.kind]]);
+      r.getCell(2).font = { italic: true };
+      r.getCell(2).alignment = { indent: row.depth * 2 };
+      r.outlineLevel = Math.min(row.depth, 7);
+      continue;
+    }
+    no += 1;
+    const num = (v: string) => (v === "" ? "" : Number(v));
+    const r = sheet.addRow([
+      no, row.title, row.type, row.description, row.assignee, row.department, row.system,
+      num(row.duration), num(row.headcount), num(row.etf), num(row.cost), num(row.extra),
+      "", row.groups, row.next,
+    ]);
+    r.getCell(2).alignment = { indent: row.depth * 2 };
+    r.getCell(8).numFmt = "0.00"; // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
+    if (row.url) {
+      r.getCell(13).value = { text: row.urlLabel || row.url, hyperlink: row.url };
+      r.getCell(13).font = { color: { argb: "FF6A41FF" }, underline: true };
+    }
+    r.outlineLevel = Math.min(row.depth, 7); // Excel outline 한계 7
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

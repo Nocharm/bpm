@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -179,6 +179,9 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
+import { buildExcelModel, downloadExcel } from "@/lib/excel-export";
+import { buildCsvFromGraph } from "@/lib/csv-export";
+import { formatKst } from "@/lib/datetime";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
@@ -4291,22 +4294,57 @@ function MapEditor({ mapId }: { mapId: number }) {
     [currentParentId, reactFlow, navigateTo],
   );
 
+  // PNG/Excel/CSV 3버튼 공유 — 파일명 규칙(sanitize+stamp) 단일 소스
+  const buildExportFileName = useCallback(
+    (ext: string) => {
+      const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+      const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+      const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+      return `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.${ext}`;
+    },
+    [versions, versionId, mapName],
+  );
+
   const handleExportPng = useCallback(async () => {
-    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
-    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[-:T]/g, "")
-      .slice(0, 14);
     try {
-      await exportCanvasPng(
-        nodesRef.current,
-        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.png`,
-      );
+      await exportCanvasPng(nodesRef.current, buildExportFileName("png"));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.exportPng"));
     }
-  }, [versions, versionId, mapName, t]);
+  }, [buildExportFileName, t]);
+
+  const handleExportCsv = useCallback(() => {
+    // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
+    const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = buildExportFileName("csv");
+    anchor.click();
+    URL.revokeObjectURL(url);
+    if (warnings.length > 0) showToast(t("export.csvWarnings"));
+  }, [buildExportFileName, showToast, t]);
+
+  const handleExportExcel = useCallback(async () => {
+    try {
+      const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
+      const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+      const model = await buildExcelModel({
+        graph,
+        mapName,
+        versionLabel,
+        exportedAt: formatKst(new Date().toISOString()),
+        fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
+        rootMapId: mapId,
+      });
+      await downloadExcel(model, buildExportFileName("xlsx"));
+      if (model.truncated) showToast(t("export.excelTruncated"));
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.exportExcel"));
+    }
+  }, [versions, versionId, mapName, mapId, buildExportFileName, showToast, t]);
 
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
@@ -7836,14 +7874,35 @@ function MapEditor({ mapId }: { mapId: number }) {
                       disabledReason={spDisabledReason}
                       onToast={showToast}
                     />
-                    <button
-                      type="button"
-                      onClick={() => void handleExportPng()}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                    >
-                      <Download size={16} strokeWidth={1.5} />
-                      {t("inspector.exportPng")}
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        data-id="export-png"
+                        onClick={() => void handleExportPng()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <Download size={16} strokeWidth={1.5} />
+                        {t("inspector.exportPng")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-excel"
+                        onClick={() => void handleExportExcel()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileSpreadsheet size={16} strokeWidth={1.5} />
+                        {t("inspector.exportExcel")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-csv"
+                        onClick={handleExportCsv}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileDown size={16} strokeWidth={1.5} />
+                        {t("inspector.exportCsv")}
+                      </button>
+                    </div>
                   </div>
                 }
                 approvalSlot={
