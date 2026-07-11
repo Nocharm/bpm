@@ -52,7 +52,7 @@ const en = {
   "home.filterRole": "Role",
   "home.filterOwning": "Owning",
   "home.owningMissingOption": "Missing owning dept",
-  "home.owningMissingBadge": "No owning dept",
+  "home.owningMissingBadge": "Dept unassigned",
   "home.owningMissingNote": "Owning department not assigned — assign it in map settings.",
   "home.memberCount": "{count} members",
   "home.groupActive": "Active",
@@ -1362,7 +1362,7 @@ const ko: Record<MessageKey, string> = {
   "home.filterOwning": "오우닝",
   "home.owningMissingOption": "오우닝 부서 누락",
   // 카드 태그 — 역할/상태처럼 언어 무관 영어 고정 (2026-07-11 요청)
-  "home.owningMissingBadge": "No owning dept",
+  "home.owningMissingBadge": "Dept unassigned",
   "home.owningMissingNote": "오우닝 부서가 지정되지 않은 맵입니다 — 맵 설정에서 지정하세요.",
   "home.memberCount": "{count}명",
   "home.groupActive": "Active",
