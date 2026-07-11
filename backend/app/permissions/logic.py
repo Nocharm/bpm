@@ -158,7 +158,7 @@ def can_view_dashboard(
     login_id: str,
     emp_org_path: str,
     user_group_ids: set[str],
-    principals: list[tuple[str, str]],
+    principals: list[DashboardPrincipal],
 ) -> bool:
     """대시보드 열람 권한 판정 (순수 함수 — DB 미접근).
 
