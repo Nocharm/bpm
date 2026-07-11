@@ -1,9 +1,10 @@
 // CSV 임포트 파서·그래프 변환 단위 테스트 (설계: docs/superpowers/specs/2026-07-10-csv-import-merge-design.md)
 import { describe, expect, it } from "vitest";
 
-import type { Directory, Graph, GraphNode } from "./api";
+import type { AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
 import {
   buildAiPromptText,
+  buildGraphFromAiProposal,
   buildGraphFromCsv,
   buildTemplateCsv,
   type CsvDirectory,
@@ -564,5 +565,114 @@ describe("toCsvDirectory", () => {
     const node = outcome.graph!.nodes.find((n) => n.title === "검토")!;
     expect(node.assignee).toBe("홍길동");
     expect(node.department).toBe("Quality Part 1");
+  });
+});
+
+describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
+  const aiNode = (key: string, title: string, node_type = "process", attributes: Partial<NonNullable<AiNode["attributes"]>> | null = null): AiNode => ({
+    key, title, node_type, description: "",
+    attributes: attributes ? { assignee: null, department: null, system: null, duration: null, color: null, url: null, url_label: null, ...attributes } : null,
+    group_key: null,
+  });
+  const baseNode = (id: string, title: string, over: Partial<GraphNode> = {}): GraphNode => ({
+    id, title, description: "", node_type: "process", color: "#6a9985", assignee: "홍길동", department: "구매팀",
+    system: "", duration: "", url: "", url_label: "", pos_x: 300, pos_y: 200, sort_order: 1,
+    group_ids: ["g1"], linked_map_id: null, follow_latest: false, linked_version_id: null, is_primary_end: false,
+    ...over,
+  });
+  const base = (nodes: GraphNode[], edges: GraphEdge[] = []): Graph => ({
+    nodes, edges, groups: [{ id: "g1", parent_group_id: null, label: "Lane", color: "" }],
+  });
+
+  it("reuses matched node id and preserves coords/color/group/assignee", () => {
+    const existing = baseNode("n1", "견적 검토");
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토")], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    const merged = outcome.graph?.nodes.find((n) => n.title === "견적 검토");
+    expect(merged?.id).toBe("n1");
+    expect(merged?.pos_x).toBe(300);
+    expect(merged?.color).toBe("#6a9985");
+    expect(merged?.group_ids).toEqual(["g1"]);
+    expect(merged?.assignee).toBe("홍길동"); // AI가 비우면 기존 유지
+    expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("preserves subprocess node_type/link/color on title match", () => {
+    const sub = baseNode("s1", "발주 하위", { node_type: "subprocess", linked_map_id: 7, color: "" });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "발주 하위", "process", { color: "#aa0000" })], edges: [], groups: [] },
+      { base: base([sub]) },
+    );
+    const merged = outcome.graph?.nodes.find((n) => n.id === "s1");
+    expect(merged?.node_type).toBe("subprocess");
+    expect(merged?.linked_map_id).toBe(7);
+    expect(merged?.color).toBe(""); // 매칭 노드 색은 기존 유지(AI 색 무시)
+  });
+
+  it("sets assignee when AI provides one explicitly", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { assignee: "김담당" })], edges: [], groups: [] },
+      { base: base([baseNode("n1", "견적 검토")]) },
+    );
+    expect(outcome.graph?.nodes.find((n) => n.id === "n1")?.assignee).toBe("김담당");
+  });
+
+  it("lists unmatched base nodes as removed and lost edges", () => {
+    const a = baseNode("n1", "유지됨");
+    const b = baseNode("n2", "사라짐", { sort_order: 2 });
+    const edge: GraphEdge = { id: "e1", source_node_id: "n1", target_node_id: "n2", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null };
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "유지됨")], edges: [], groups: [] },
+      { base: base([a, b], [edge]) },
+    );
+    expect(outcome.merge.removedNodes.map((n) => n.id)).toEqual(["n2"]);
+    expect(outcome.merge.lostEdges.map((e) => e.id)).toEqual(["e1"]);
+  });
+
+  it("remaps AI edges to reused ids and ignores AI groups when base is non-empty", () => {
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [aiNode("a", "견적 검토"), aiNode("b", "신규 승인")],
+        edges: [{ source: "a", target: "b", label: "ok" }],
+        groups: [{ key: "gx", label: "AI lane", color: "", parent_key: null }],
+      },
+      { base: base([baseNode("n1", "견적 검토")]) },
+    );
+    const added = outcome.graph?.nodes.find((n) => n.title === "신규 승인");
+    expect(outcome.graph?.edges).toEqual([
+      expect.objectContaining({ source_node_id: "n1", target_node_id: added?.id, label: "ok" }),
+    ]);
+    expect(outcome.graph?.groups.map((g) => g.id)).toEqual(["g1"]); // 기존 그룹 유지, AI 그룹 무시
+    expect(added?.group_ids).toEqual([]);
+  });
+
+  it("matches start/end by type and keeps their titles", () => {
+    const start = baseNode("st", "시작", { node_type: "start", sort_order: 0 });
+    const end = baseNode("en", "완료", { node_type: "end", is_primary_end: true, sort_order: 9 });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("s", "Start", "start"), aiNode("e", "End", "end")], edges: [], groups: [] },
+      { base: base([start, end]) },
+    );
+    const ids = outcome.graph?.nodes.map((n) => n.id).sort();
+    expect(ids).toEqual(["en", "st"]);
+    expect(outcome.merge.addedNodeIds).toEqual([]);
+  });
+
+  it("creates AI groups and full layout on empty base", () => {
+    const node = { ...aiNode("a", "단독"), group_key: "gx" };
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [node], edges: [], groups: [{ key: "gx", label: "AI lane", color: "", parent_key: null }] },
+      { base: { nodes: [], edges: [], groups: [] } },
+    );
+    expect(outcome.graph?.groups).toHaveLength(1);
+    expect(outcome.graph?.nodes[0]?.group_ids).toEqual([outcome.graph?.groups[0]?.id]);
+  });
+
+  it("fails on empty proposal", () => {
+    const outcome = buildGraphFromAiProposal({ nodes: [], edges: [], groups: [] }, {});
+    expect(outcome.graph).toBeNull();
+    expect(outcome.errors).toHaveLength(1);
   });
 });
