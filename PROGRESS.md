@@ -12,6 +12,13 @@
 ## 2026-07-11 — AI graph 제안 CSV 병합 통합 + 담당자/부서 기본 금지 설계 (main)
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-ai-graph-merge-design.md`. AI graph 전량 교체가 비교모드 무의미화 + 서브프로세스 링크 파괴("색 변경" 현상의 진짜 원인 — 타입이 process로 바뀌며 바이올렛 고정 해제)를 CSV 병합 파이프라인 완전 공유로 해결. 디렉터리 프롬프트 제거, 담당자/부서는 사용자 명시 요청 시에만.
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-ai-graph-merge.md` (5태스크: 백엔드 프롬프트→병합 진입점→page.tsx 전환→탭/카드 UX→브라우저 검증).
+- 백엔드: 조직 디렉터리 프롬프트 제거, 담당자/부서는 명시 요청 시에만(규칙②)·미입력 힌트 축소(소요시간만).
+- 병합 공용화: pick/mergeNode 모듈 추출(무변경) + buildGraphFromAiProposal(매칭 id 재사용·서브프로세스 보존·base 있으면 AI 그룹 무시) vitest 8종.
+- 에디터: applyAiProposal(전량 교체) 폐기 → enterAiGraphPreview(병합 프리뷰, previewSource=csv 슬롯 공유+importOrigin), ops set_attr 서브프로세스 색 무시.
+- UX: Import 탭 origin 라벨(AI/CSV)·챗 graph 카드는 안내 푸터(커밋 버튼은 ops 전용), i18n 2키.
+- T5 브라우저 검증 + 최종 게이트 — `frontend/scripts/pw-verify-ai-graph-merge.mjs` 신규(맵2 draft, subprocess 노드 보유 시드로 4체크: ①graph 제안→Import 탭 노출 ②Apply 후 매칭 노드 id 불변+신규 노드 추가 ③챗 카드 안내 푸터 ④서브프로세스 node_type·linked_map_id 보존 +콘솔에러 0, 11/11 PASS). 브리프 골자에서 두 가지 조정: (a) 시드 draft 버전은 다른 사용자 체크아웃이 미리 걸려 있어(sticky 점유 데모) `force:true`로 인수해야 PUT /graph가 통과 — checkout 없이는 409/423; (b) 시드 그래프는 `node_type="process"`가 아니라 "task"/"subprocess"를 쓰고, AI 제안이 base의 start/end 노드를 echo하지 않으면 병합 결과에 시작 노드가 0개가 되어 백엔드 `validate_process`가 422 — 매칭 대상을 타입 무관 필터로 바꾸고 proposal에 start/end를 항상 echo하도록 수정. 맵 1 기본 선택 버전(published)은 편집 불가라 `?version=`으로 draft(id 12)에 직접 진입. 게이트 4종: pytest 538 passed·ruff 0에러·vitest 242 passed·tsc 0에러·lint(경고 1건, `pw-smoke-task8.mjs` 기존 미관련)·build 0에러.
+- 완료: AI graph 병합 파이프라인 — 비교모드 유의미화·서브프로세스 보존. 배포 영향 없음(DB 무변경).
+- 최종리뷰 픽스: 제안이 start/end 누락 시 base 유지(불투명 422 제거)·중복제목 테스트·ops 주석·카드 문구 중립화.
 
 ## 2026-07-11 — 오우닝 부서 누락 태그 위치·표기 변경 (worktree-owning-badge-move)
 - 홈 카드의 누락 태그를 타이틀 행에서 우측 하단 카운트 자리(노드·버전·인원 수)로 이동 — 누락 맵은 카운트 대신 TriangleAlert + "No owning dept"(언어 무관 영어 고정, 역할/상태 패턴)로 대체 표시. data-id 유지로 pw-verify 스크립트 무변경. lint·tsc·build·vitest 234 초록.

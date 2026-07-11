@@ -1,6 +1,6 @@
 // CSV 임포트 — 템플릿·RFC4180 파싱·그래프 변환(자동 Start/End·decision 추론).
 // 설계: docs/superpowers/specs/2026-07-10-csv-import-merge-design.md
-import type { Directory, Graph, GraphEdge, GraphNode } from "./api";
+import type { AiEdge, AiGroup, AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { genId } from "./id";
@@ -155,6 +155,28 @@ const NODE_DEFAULTS = {
   linked_version_id: null,
   is_primary_end: false,
 };
+
+// 빈 값은 "건드리지 않음" — 제안/CSV가 모르는 속성이 기존 값을 지우지 않게 (CSV·AI 병합 공용)
+const pick = (next: string, existing: string): string => (next === "" ? existing : next);
+
+// 매칭 노드: id·좌표·색·그룹·서브프로세스 링크 보존.
+// 서브프로세스 노드는 node_type도 보존 — 추론/제안값으로 덮으면 Call Activity 렌더가 깨진다.
+const mergeNode = (existing: GraphNode | null, next: GraphNode): GraphNode =>
+  existing === null
+    ? next
+    : {
+        ...existing,
+        title: next.title,
+        node_type: existing.linked_map_id !== null ? existing.node_type : next.node_type,
+        description: pick(next.description, existing.description),
+        assignee: pick(next.assignee, existing.assignee),
+        department: pick(next.department, existing.department),
+        system: pick(next.system, existing.system),
+        duration: pick(next.duration, existing.duration),
+        url: pick(next.url ?? "", existing.url ?? ""),
+        url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
+        sort_order: next.sort_order,
+      };
 
 /** login_id → 이름. 이미 이름이면 그대로(거짓 경고 방지). 못 찾으면 원문 + 경고. */
 function resolveAssignee(
@@ -411,29 +433,6 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   if (baseStart) matchedIds.add(startId); else addedNodeIds.push(startId);
   if (baseEnd) matchedIds.add(endId); else addedNodeIds.push(endId);
 
-  // 빈 셀은 "건드리지 않음" — AI 프롬프트가 모르는 속성을 비워두라고 지시하므로,
-  // 빈 칸이 값을 지우면 AI 생성 CSV 재임포트마다 기존 속성이 전멸한다.
-  const pick = (next: string, existing: string): string => (next === "" ? existing : next);
-
-  // 매칭 노드: id·좌표·색·그룹·서브프로세스 링크 보존.
-  // 서브프로세스 노드는 node_type도 보존 — CSV 추론값으로 덮으면 Call Activity 렌더가 깨진다.
-  const mergeNode = (existing: GraphNode | null, next: GraphNode): GraphNode =>
-    existing === null
-      ? next
-      : {
-          ...existing,
-          title: next.title,
-          node_type: existing.linked_map_id !== null ? existing.node_type : next.node_type,
-          description: pick(next.description, existing.description),
-          assignee: pick(next.assignee, existing.assignee),
-          department: pick(next.department, existing.department),
-          system: pick(next.system, existing.system),
-          duration: pick(next.duration, existing.duration),
-          url: pick(next.url ?? "", existing.url ?? ""),
-          url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
-          sort_order: next.sort_order,
-        };
-
   // 노드 — Next 대상 2개 이상이면 decision. Start/End는 자동 생성(또는 base에서 매칭)
   const nodes: GraphNode[] = [
     // Start/End는 CSV가 이름을 싣지 않는다 → 기존 제목 유지("시작"을 "Start"로 덮으면 거짓 변경)
@@ -538,6 +537,182 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     errors: [],
     warnings,
     ignoredLabelCount,
+    merge: { addedNodeIds, removedNodes, lostEdges, matchedCount: matchedIds.size },
+  };
+}
+
+/** AI graph 제안 입력 — AiProposal의 병합에 필요한 서브셋. */
+export interface AiGraphProposalInput {
+  nodes: AiNode[];
+  edges: AiEdge[];
+  groups: AiGroup[];
+}
+
+/**
+ * AI graph 제안 → base와 제목 매칭 병합 (CSV 임포트와 같은 규칙·같은 Outcome).
+ * 매칭 노드는 id·좌표·색·그룹·서브프로세스 링크 보존, AI가 비운 속성은 기존값 유지(pick).
+ * base가 비어있지 않으면 AI groups 무시(기존 그룹 유지) — 병합 모드의 의도는 기존 맵 다듬기.
+ */
+export function buildGraphFromAiProposal(
+  proposal: AiGraphProposalInput,
+  context?: CsvImportContext,
+): CsvImportOutcome {
+  const emptyMerge = (): CsvMergeInfo => ({ addedNodeIds: [], removedNodes: [], lostEdges: [], matchedCount: 0 });
+  if (proposal.nodes.length === 0) {
+    return {
+      graph: null, nodeCount: 0, edgeCount: 0,
+      errors: [{ line: 0, message: "AI proposal has no nodes" }],
+      warnings: [], ignoredLabelCount: 0, merge: emptyMerge(),
+    };
+  }
+
+  const baseNodes = context?.base?.nodes ?? [];
+  const isMerge = baseNodes.length > 0;
+
+  // start/end는 타입 우선 매칭 (CSV와 동일 규칙 — validate_process 기본 지정과 정합)
+  const baseStart = baseNodes.find((node) => node.node_type === "start") ?? null;
+  const baseEnds = baseNodes.filter((node) => node.node_type === "end");
+  const baseEnd =
+    baseEnds.find((node) => node.is_primary_end) ??
+    [...baseEnds].sort((a, b) => a.sort_order - b.sort_order)[0] ??
+    null;
+  const reservedIds = new Set([baseStart?.id, baseEnd?.id].filter((id): id is string => id !== undefined));
+  const byTitle = new Map<string, GraphNode>();
+  for (const node of [...baseNodes].sort((a, b) => a.sort_order - b.sort_order)) {
+    if (reservedIds.has(node.id)) continue;
+    if (!byTitle.has(node.title)) byTitle.set(node.title, node);
+  }
+
+  // 빈 캔버스 전용 — AI 그룹 생성(임시키 → 실제 id)
+  const groupKeyToId = new Map<string, string>();
+  const aiGroups: Graph["groups"] = isMerge
+    ? []
+    : proposal.groups.map((group) => {
+        const id = genId();
+        groupKeyToId.set(group.key, id);
+        return { id, parent_group_id: null, label: group.label, color: group.color };
+      });
+  if (!isMerge) {
+    // parent_key는 1차 생성 후 해석 (같은 응답 내 참조)
+    proposal.groups.forEach((group, index) => {
+      aiGroups[index].parent_group_id = group.parent_key
+        ? groupKeyToId.get(group.parent_key) ?? null
+        : null;
+    });
+  }
+
+  const matchedIds = new Set<string>();
+  const addedNodeIds: string[] = [];
+  const keyToId = new Map<string, string>(); // AI 임시키 → 최종 id (edges 재매핑용)
+  const byId = new Map(baseNodes.map((node) => [node.id, node]));
+  let startUsed = false;
+  let endUsed = false;
+  const resolveId = (node: AiNode): string => {
+    if (node.node_type === "start" && baseStart && !startUsed) {
+      startUsed = true;
+      matchedIds.add(baseStart.id);
+      return baseStart.id;
+    }
+    if (node.node_type === "end" && baseEnd && !endUsed) {
+      endUsed = true;
+      matchedIds.add(baseEnd.id);
+      return baseEnd.id;
+    }
+    const existing = byTitle.get(node.title);
+    if (existing && !matchedIds.has(existing.id)) {
+      matchedIds.add(existing.id);
+      return existing.id;
+    }
+    const id = genId();
+    addedNodeIds.push(id);
+    return id;
+  };
+
+  const nodes: GraphNode[] = proposal.nodes.map((node, index) => {
+    const id = resolveId(node);
+    keyToId.set(node.key, id);
+    const attr = node.attributes;
+    const existing = byId.get(id) ?? null;
+    const groupId = !isMerge && node.group_key ? groupKeyToId.get(node.group_key) : undefined;
+    const candidate: GraphNode = {
+      ...NODE_DEFAULTS,
+      id,
+      // start/end 타입 매칭은 기존 제목 유지 — "시작"을 "Start"로 덮으면 거짓 변경 (CSV와 동일)
+      title:
+        existing && (node.node_type === "start" || node.node_type === "end")
+          ? existing.title
+          : node.title,
+      node_type: node.node_type,
+      description: node.description,
+      assignee: attr?.assignee ?? "",
+      department: attr?.department ?? "",
+      system: attr?.system ?? "",
+      duration: attr?.duration ?? "",
+      url: attr?.url ?? "",
+      url_label: attr?.url_label ?? "",
+      color: attr?.color ?? "",
+      group_ids: groupId ? [groupId] : [],
+      sort_order: index,
+    };
+    const merged = mergeNode(existing, candidate);
+    // 신규 노드는 AI 색 허용, 매칭 노드는 mergeNode({...existing})가 기존 색 유지
+    return merged;
+  });
+
+  // 제안이 start/end 타입 노드를 누락하면 기존 start/end를 무변경으로 유지 — 지우면 백엔드
+  // validate_process(start/end 정확히 1개)에 걸려 Apply가 불투명한 422로 끝난다. 엣지는 합성하지
+  // 않는다 — 끊긴 기존 엣지는 lostEdges로 프리뷰에 남는 것이 의도된 동작. 복사본을 넣어 이후
+  // "대표 끝 보장" 등의 후속 변형이 caller가 쥔 base 그래프 객체를 직접 mutate하지 않게 한다.
+  if (!startUsed && baseStart) {
+    nodes.push({ ...baseStart });
+    matchedIds.add(baseStart.id);
+  }
+  if (!endUsed && baseEnd) {
+    nodes.push({ ...baseEnd });
+    matchedIds.add(baseEnd.id);
+  }
+
+  // 대표 끝 보장 — 백엔드 validate_process(대표 끝 1개)와 정합. 매칭 end는 기존 플래그를 이미 보존.
+  const ends = nodes.filter((node) => node.node_type === "end");
+  if (ends.length > 0 && !ends.some((node) => node.is_primary_end)) {
+    ends[0].is_primary_end = true;
+  }
+
+  const edges: GraphEdge[] = proposal.edges
+    .map((edge): GraphEdge | null => {
+      const source = keyToId.get(edge.source);
+      const target = keyToId.get(edge.target);
+      if (!source || !target) return null;
+      return {
+        id: genId(),
+        source_node_id: source,
+        target_node_id: target,
+        label: edge.label,
+        source_side: "right",
+        target_side: "left",
+        source_handle: null,
+        target_handle: null,
+      };
+    })
+    .filter((edge): edge is GraphEdge => edge !== null);
+
+  const positioned = isMerge
+    ? layoutAddedOnly(nodes, edges, new Set(addedNodeIds), baseNodes)
+    : layoutEverything(nodes, edges);
+
+  const removedNodes = baseNodes.filter((node) => !matchedIds.has(node.id));
+  const keptEdgeKeys = new Set(edges.map((e) => `${e.source_node_id}→${e.target_node_id}`));
+  const lostEdges = (context?.base?.edges ?? []).filter(
+    (e) => !keptEdgeKeys.has(`${e.source_node_id}→${e.target_node_id}`),
+  );
+
+  return {
+    graph: { nodes: positioned, edges, groups: isMerge ? context?.base?.groups ?? [] : aiGroups },
+    nodeCount: positioned.length,
+    edgeCount: edges.length,
+    errors: [],
+    warnings: [],
+    ignoredLabelCount: 0,
     merge: { addedNodeIds, removedNodes, lostEdges, matchedCount: matchedIds.size },
   };
 }

@@ -207,10 +207,12 @@ export function ProposalSummaryCard({
   kind,
   payload,
   preview,
+  footer,
 }: {
   kind: "graph" | "ops";
   payload: AiMessagePayload;
   preview?: { onCommit?: () => void; onDiscard?: () => void };
+  footer?: string;
 }) {
   const { t } = useI18n();
   const items =
@@ -276,7 +278,7 @@ export function ProposalSummaryCard({
         </div>
       ) : (
         <div className="border-t border-hairline px-2.5 py-1.5 text-fine text-ink-tertiary">
-          {t("ai.proposalReadOnly")}
+          {footer ?? t("ai.proposalReadOnly")}
         </div>
       )}
     </div>

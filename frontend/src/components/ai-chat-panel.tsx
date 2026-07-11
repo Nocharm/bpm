@@ -144,13 +144,14 @@ export function AiChatPanel({
   const otherSessions = allSessions.filter((item) => item.map_id !== mapId);
   const isForeign = activeMeta !== null && activeMeta.map_id !== mapId;
 
-  // 라이브 미리보기 카드 부착 대상 — 이번 세션(음수 id)의 마지막 graph/ops 제안 메시지
+  // 라이브 미리보기 카드 부착 대상 — 이번 세션(음수 id)의 마지막 ops 제안 메시지
+  // (graph 제안은 Import 탭 프리뷰로 흐르므로 커밋 버튼을 붙이지 않는다)
   const latestAssistant = [...messages].reverse().find((m) => m.role === "assistant") ?? null;
   const previewAttached =
     latestAssistant !== null &&
     latestAssistant.id < 0 &&
     latestAssistant.payload !== null &&
-    (latestAssistant.kind === "graph" || latestAssistant.kind === "ops");
+    latestAssistant.kind === "ops";
 
   // 이전 페이지 로딩 — 스피너+기능 팁을 최소 시간 보여주며 서버에서 더 오래된 기록을 붙인다
   const beginLoadOlder = () => {
@@ -655,6 +656,11 @@ export function AiChatPanel({
                       preview={
                         aiPreviewActive && previewAttached && message.id === latestAssistant?.id
                           ? { onCommit: onCommitPreview, onDiscard: onDiscardPreview }
+                          : undefined
+                      }
+                      footer={
+                        message.kind === "graph" && message.id < 0
+                          ? t("ai.proposalOpenImport")
                           : undefined
                       }
                     />
