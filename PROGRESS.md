@@ -10,6 +10,8 @@
 - B2: 매뉴얼 30k 절단 → 섹션 선별(## 분할·2-gram 점수·TOC 상시·budget 12k, 소형 매뉴얼 무변화).
 - 픽스: 매뉴얼 선별 header 단독 budget 초과 시 절단 보장(+테스트)·_extract_bigrams 개명.
 - B1 프론트: Dashboard 탭 스텁에 AI usage 섹션(StatCard 4·상위 2표·빈 상태), i18n 9키.
+- T6 브라우저 검증 + 최종 게이트 — `frontend/scripts/pw-verify-ai-usage.mjs` 신규(이벤트 2건 앱모델 시드→설정>Analytics>Dashboard 진입카드→AI usage 섹션 3체크: ①섹션 가시 ②토큰 합계(1,290) 렌더 ③상위 사용자 verify.user 노출, 3/3 PASS). 조정: 진입카드 클릭 직후 `GET /dashboard/ai-usage` 응답 도착 전에 텍스트를 읽어 "—" 자리표시로 오탐하던 레이스 — 응답 대기 추가로 해결. 스크립트는 실행마다 이벤트를 누적하므로 재실행 전 reset_db 필요(주석 명시). 게이트: pytest 550 passed·ruff 0에러·vitest 244 passed·tsc 0에러·lint(경고 1건, `pw-smoke-task8.mjs` 기존 미관련)·build 0에러.
+- 완료: B1 사용량 계측/집계·B2 매뉴얼 선별. 배포: 신규 테이블 create_all 자동 — 수동 DDL 불요. 머지는 사용자 확인 대기.
 
 ## 2026-07-11 — AI 사용량 계측(B1)·매뉴얼 섹션 선별(B2) 설계·계획 (main)
 - 설계 스펙 + 구현 계획(6태스크) 커밋 — `docs/superpowers/specs/2026-07-11-ai-usage-manual-select-design.md`, `docs/superpowers/plans/2026-07-11-ai-usage-manual-select.md`. 호출별 이벤트(`ai_usage_events`, 원문 미저장)·대시보드 스텁 확장·`## `분할+2-gram 섹션 선별(budget 12k, 소형 무변화). 머지는 사용자 최종 확인 후.
