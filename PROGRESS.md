@@ -14,6 +14,7 @@
 - 버전 비교 diff 필드 4종 추가(ChangedField·FIELD_KEYS·compare FIELD_MSG) + compare buildAppNodes에도 4필드 매핑(노드 칩이 비교화면에도 온전히 뜨도록).
 - 게이트: tsc 0에러·vitest 263 passed·lint(경고 1건, 기존 미관련 스크립트)·build 0에러.
 - 리뷰 픽스: compare 사이드 Properties 패널의 하드코딩 필드 목록에 4파라미터(headcount/etf/cost/extra) 추가 — FIELD_MSG·온캔버스 diff 필은 신규 파라미터를 보여주는데 상세 패널만 누락됐던 비일관 해소.
+- 브라우저 검증 픽스(Task 8 FAIL): 디시전 마름모 칩 overflow — 파라미터 칩을 타이틀 레이어(max-w-20)에서 빼 마름모 아래 절대배치 캡션(`top-full left-1/2 -translate-x-1/2 w-max max-w-40`, justify-center)으로 이동. 절대배치라 React Flow 측정 크기(h-24 w-24) 불변 → 핸들·엣지 앵커 무영향. NodeParams에 옵셔널 className만 추가, 타 셸 배치 무변경.
 
 ## 2026-07-11 — Task 4: CSV 임포트 숫자 파라미터 5컬럼 확장 (numeric-params-export)
 - `lib/csv-import.ts`에 headcount/etf/cost/extra 4컬럼 추가(HEADER_COLUMNS·MAX_LEN·NODE_DEFAULTS·mergeNode pick·행 매핑), duration은 자유텍스트 대신 `normalizeDuration` H.MM 검증으로 전환, 5필드 모두 정규화된 값을 노드에 저장. `buildTemplateCsv`(13컬럼)·`buildAiPromptText`(Duration H.MM 규칙+4컬럼 규칙) 갱신.

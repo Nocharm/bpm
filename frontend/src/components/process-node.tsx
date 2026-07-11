@@ -93,7 +93,7 @@ const PARAM_ICON: Record<ParamField, LucideIcon> = {
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4)
 // subprocess는 지정 어트리뷰트의 sp_duration(자유텍스트, 무변경)만 Clock으로 표시.
-function NodeParams({ data }: { data: AppNode["data"] }) {
+function NodeParams({ data, className }: { data: AppNode["data"]; className?: string }) {
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
   const values: Partial<Record<ParamField, string | null | undefined>> = isSubprocess
@@ -102,7 +102,9 @@ function NodeParams({ data }: { data: AppNode["data"] }) {
   const filled = PARAM_FIELDS.filter((f) => values[f]);
   if (filled.length === 0) return null;
   return (
-    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-ink-tertiary">
+    <div
+      className={`mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-ink-tertiary${className ? ` ${className}` : ""}`}
+    >
       {filled.map((f) => {
         const Icon = PARAM_ICON[f];
         return (
@@ -504,13 +506,17 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
           <NodeTitle id={id} label={data.label} />
-          <NodeParams data={data} />
           {data.hasChildren && (
             <div className="inline-flex items-center gap-0.5 text-[10px] text-accent">
               <CornerDownRight size={12} strokeWidth={1.5} />
               {t("node.childBadge")}
             </div>
           )}
+        </div>
+        {/* 파라미터 칩 — 마름모 내접(h-24 w-24)을 넘치지 않게 아래 절대배치 캡션으로.
+            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향 */}
+        <div className="absolute left-1/2 top-full w-max max-w-40 -translate-x-1/2">
+          <NodeParams data={data} className="justify-center" />
         </div>
         {/* 마름모는 코너가 도형에서 멀다 — 배지를 안쪽(12px)으로 당겨 대각 엣지 근처에 (batch2 ⑬) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
