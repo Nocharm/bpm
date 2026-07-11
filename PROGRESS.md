@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Task 1: duration 정규화 유틸 (FE/BE 동치) (numeric-params-export)
+- TDD 완료 — 프론트엔드 `lib/duration.ts`·`lib/duration.test.ts` + 백엔드 `app/duration.py`·`tests/test_duration.py` 신규. 브리프의 테스트 케이스 19개(FE) + 15개(BE) 전수 통과(`DURATION_PATTERN`/`NUMERIC_PATTERN` 정규식, H.MM 정규화·1자리 10분 단위·60분 이월·소수부 0 정수 변환). 타입/린트 검증: frontend npm run test 19/19·tsc--noEmit 0에러 / backend pytest 15/15·ruff 0에러.
+
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
 
