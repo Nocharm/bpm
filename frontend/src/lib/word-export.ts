@@ -330,3 +330,21 @@ export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blo
     type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   });
 }
+
+/** 현재 화면 노드/엣지를 Word 도형 순서도(.docx) 파일로 저장한다. 노드 0개면 no-op. */
+export function exportCanvasWord(
+  nodes: WordExportNode[],
+  edges: WordExportEdge[],
+  fileName: string,
+): void {
+  if (nodes.length === 0) {
+    return;
+  }
+  const blob = buildDocx(nodes, edges);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
