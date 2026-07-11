@@ -4,6 +4,8 @@
 // 박스 클릭 시 칩 대신 이벤트별 상세 행(단계 필·이름·아이디·시간)으로 펼침. 여러 개 동시 펼침 가능 (H3).
 // 펼침 상태는 부모(map-detail-card)가 보유 — '모두 접기' 공유.
 
+import { useState } from "react";
+
 import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
@@ -87,16 +89,24 @@ export function VersionTimeline({
 }) {
   const { t } = useI18n();
   const nameOf = (id: string) => nameById?.get(id) ?? id;
+  // 최근 3개만 기본 노출 — 나머지는 더보기로 접어둠 (2026-07-11 요청)
+  const [showAll, setShowAll] = useState(false);
+  const ordered = [...versions].reverse(); // idx 0 = 최신 = Current
+  const visibleVersions = showAll ? ordered : ordered.slice(0, 3);
+  const hiddenCount = ordered.length - 3;
 
   return (
     <div data-id="version-timeline" className="relative flex flex-col gap-3">
       {/* 좌측 세로 연결선 / left timeline rail */}
       <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-px bg-hairline" />
       {/* 최신 버전이 위로 — idx 0 = 최신 = Current / newest first. */}
-      {[...versions].reverse().map((version, idx) => {
+      {visibleVersions.map((version, idx) => {
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
         // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
         const events: VersionEvent[] = [...version.events].reverse();
+        // 접힘 칩 — 게시는 우측 고정·이름 생략(툴팁으로), 나머지 승인내역은 1줄만 (2026-07-11 요청)
+        const publishedEvt = events.find((evt) => evt.event_type === "published");
+        const chipEvents = events.filter((evt) => evt.event_type !== "published");
         // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
         const rawRows = events.map((evt) => {
           const full = formatStamp(evt.created_at);
@@ -190,20 +200,33 @@ export function VersionTimeline({
                     }`}
                   >
                     <div className="overflow-hidden">
-                      <div className="mt-1.5 flex max-h-12 flex-wrap gap-1.5">
-                        {events.map((evt) => (
+                      {/* 1줄 고정 — 넘치는 칩은 잘림. 게시 칩은 우측 고정·이름 생략(이름은 툴팁) */}
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <div className="flex min-w-0 flex-1 flex-nowrap gap-1.5 overflow-hidden">
+                          {chipEvents.map((evt) => (
+                            <span
+                              key={evt.id}
+                              data-id={`version-event-${evt.id}`}
+                              className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                                EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
+                              }`}
+                              title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                            >
+                              <EventIcon type={evt.event_type} />
+                              {nameOf(evt.actor)}
+                            </span>
+                          ))}
+                        </div>
+                        {publishedEvt && (
                           <span
-                            key={evt.id}
-                            data-id={`version-event-${evt.id}`}
-                            className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                              EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
-                            }`}
-                            title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                            data-id={`version-event-${publishedEvt.id}`}
+                            title={`${t("home.verEvent.published")} — ${nameOf(publishedEvt.actor)}`}
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP.published}`}
                           >
-                            <EventIcon type={evt.event_type} />
-                            {nameOf(evt.actor)}
+                            <EventIcon type="published" />
+                            {t("home.verEvent.published")}
                           </span>
-                        ))}
+                        )}
                       </div>
                     </div>
                   </div>
@@ -267,6 +290,17 @@ export function VersionTimeline({
           </div>
         );
       })}
+      {/* 4개 이상이면 접어두고 더보기 — 노드 열 폭만큼 들여쓰기해 카드와 정렬 */}
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          data-id="version-show-more"
+          className="z-[1] ml-9 self-start text-fine text-accent hover:underline"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? t("home.verShowLess") : t("home.verShowMore", { count: hiddenCount })}
+        </button>
+      )}
     </div>
   );
 }

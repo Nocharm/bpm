@@ -10,10 +10,15 @@ import {
   Building,
   Building2,
   Copy,
+  Crown,
+  Eye,
+  Globe,
   Hand,
   House,
   Landmark,
   Loader2,
+  Lock,
+  PencilLine,
   Puzzle,
   Settings,
   Trash2,
@@ -39,7 +44,6 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { buildKoreanDeptByPath, buildOrgPathChain, formatDeptName } from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
-import { visibilityPillClass } from "@/lib/version-status";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
 const ROLE_ORDER: Record<string, number> = { owner: 0, editor: 1, viewer: 2 };
@@ -281,11 +285,48 @@ export function MapDetailCard({
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-fine text-ink-tertiary">
-          {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
-          <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(detail.visibility)}`}>
+          {/* 공개 범위 — 반투명 필 + 아이콘 (public=green/private=중립, visibilityPillClass 색 의미 유지) */}
+          <span
+            data-id="map-detail-visibility"
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
+              detail.visibility === "public" ? "bg-added/10 text-added" : "bg-ink/5 text-ink-secondary"
+            }`}
+          >
+            {detail.visibility === "public" ? (
+              <Globe size={12} strokeWidth={1.5} />
+            ) : (
+              <Lock size={12} strokeWidth={1.5} />
+            )}
             {t(detail.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
           </span>
-          {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
+          {/* 내 역할 — RoleBadge 색 의미(owner=accent/editor=green/viewer=중립)를 반투명 필로 */}
+          {detail.my_role && (
+            <span
+              data-id="map-detail-role"
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
+                detail.my_role === "owner"
+                  ? "bg-accent/10 text-accent"
+                  : detail.my_role === "editor"
+                    ? "bg-added/10 text-added"
+                    : "bg-ink/5 text-ink-secondary"
+              }`}
+            >
+              {detail.my_role === "owner" ? (
+                <Crown size={12} strokeWidth={1.5} />
+              ) : detail.my_role === "editor" ? (
+                <PencilLine size={12} strokeWidth={1.5} />
+              ) : (
+                <Eye size={12} strokeWidth={1.5} />
+              )}
+              {t(
+                detail.my_role === "owner"
+                  ? "perm.roleOwner"
+                  : detail.my_role === "editor"
+                    ? "perm.roleEditor"
+                    : "perm.roleViewer",
+              )}
+            </span>
+          )}
           {/* 오우닝 부서 — 지정 시 부서명 필(한글명 우선), 미지정 시 홈 카드와 동일한 경고 필 */}
           {detail.owning_department ? (
             <span
