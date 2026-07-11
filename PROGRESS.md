@@ -13,6 +13,7 @@
 - 우측 상세 카드(map-detail-card) 가시성·역할 필 행에 오우닝 부서 필 추가 — 지정 시 Building2 + 부서명(accent-tint 필, 한글명 우선 formatDeptName), 미지정 시 홈 카드와 동일한 "Dept unassigned" 반투명 경고 필. lint·tsc·build 초록.
 - 상세 헤더 Open 버튼 삭제 + 필 3종(공개·역할·오우닝 부서)을 설명 아래에서 헤더 우측으로 이동(열기는 카드 타이틀 링크로 유지). 무용해진 `hideOpen` prop 제거 — 소비처 2곳(inspector 탭·에디터 page.tsx, 후자는 ugrep 브래킷 함정으로 tsc가 적발) 정리. lint·tsc·build·vitest 234 초록.
 - 상세 헤더 공개·역할 필을 오우닝 부서 필과 동일한 반투명 필로 통일(+아이콘: Globe/Lock·Crown/PencilLine/Eye, 색 의미는 기존 visibilityPillClass·RoleBadge 유지 — public/editor=added, owner=accent, private/viewer=중립). 버전 타임라인은 최근 3개만 기본 노출 + "{n}개 더보기/접기" 토글, 접힌 카드 이벤트 칩은 1줄 고정(nowrap 잘림)·게시 칩은 우측 고정에 이름 생략(이름은 툴팁, 좌측 칩에서 제외). lint·tsc·build·vitest 234 초록.
+- 버전 카드 "이 버전으로 가기" — 펼침 전용 버튼을 없애고 카드 호버 시 상태 필이 버튼으로 페이드 교체(grid 겹침 + opacity 전환, 이동 불가 카드는 상태 필 고정, 비호버 시 pointer-events 차단으로 오클릭 방지). 우측 생성일시는 제목과 세로 중앙정렬(items-center). lint·tsc·build·vitest 234 초록.
 
 ## 2026-07-10 — 후속 정비: 비교화면 로드 실패 처리 + AI 게이트/페이로드 잔무 (worktree-ai-followup-fixes)
 - 비교화면 로드 effect 3곳 try/catch — 403은 에디터와 동일한 비공개 맵 안내 모달(홈 이동), 그 외는 인라인 오류 표시로 무한 로딩 제거. 브라우저 검증 `pw-verify-compare-403.mjs` 4/4(403 모달·홈 이동·500 인라인·정상 무회귀).

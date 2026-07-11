@@ -155,18 +155,44 @@ export function VersionTimeline({
                   : "border-hairline bg-surface hover:bg-surface-alt"
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
+              {/* 우측 날짜는 제목과 세로 중앙정렬 (items-center) */}
+              <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">
                   {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임. */}
                   <span className="min-w-0 flex-1 truncate">
                     <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
                     <span className="text-caption-strong text-ink">{version.label}</span>
                   </span>
-                  <span
-                    className={`shrink-0 rounded-xs border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
-                  >
-                    {t(VERSION_STATUS_LABEL[version.status])}
-                  </span>
+                  {/* 상태 필 ↔ "이 버전으로 가기" — 같은 자리에 겹쳐 두고 카드 호버 시 페이드 교체
+                      (map-card recent-badge 패턴). 이동 불가 카드(현재 보는 버전·핸들러 없음)는 상태 필 고정. */}
+                  {(() => {
+                    const canGo = !!onGoToVersion && version.id !== currentVersionId;
+                    return (
+                      <span className="grid shrink-0 items-center justify-items-end">
+                        <span
+                          className={`col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-350 ease-smooth ${
+                            VERSION_STATUS_STYLE[version.status]
+                          } ${canGo ? "group-hover:opacity-0" : ""}`}
+                        >
+                          {t(VERSION_STATUS_LABEL[version.status])}
+                        </span>
+                        {canGo && onGoToVersion && (
+                          <button
+                            type="button"
+                            data-id={`version-go-${version.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onGoToVersion(version.id);
+                            }}
+                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-accent/40 bg-accent-tint px-1.5 py-0.5 text-fine text-accent opacity-0 transition-opacity duration-350 ease-smooth hover:bg-accent-tint/70 group-hover:pointer-events-auto group-hover:opacity-100"
+                          >
+                            <ArrowRight size={12} strokeWidth={1.5} />
+                            {t("home.goToVersion")}
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })()}
                   {idx === 0 && (
                     <span className="shrink-0 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
                       {t("home.verCurrent")}
@@ -175,21 +201,6 @@ export function VersionTimeline({
                 </span>
                 <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
               </div>
-
-              {/* 펼친 카드 — 버전 이름 바로 아래 "이 버전으로 가기"(현재 보는 버전 제외). 카드 토글과 분리(stopPropagation). */}
-              {open && onGoToVersion && version.id !== currentVersionId && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onGoToVersion(version.id);
-                  }}
-                  className="mt-1.5 inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-accent-tint px-2 py-0.5 text-fine text-accent hover:bg-accent-tint/70"
-                >
-                  <ArrowRight size={12} strokeWidth={1.5} />
-                  {t("home.goToVersion")}
-                </button>
-              )}
 
               {events.length > 0 && (
                 <>
