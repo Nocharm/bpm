@@ -10,6 +10,7 @@ from app.auth import require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
 from app.models import AiUsageEvent, Employee, LoginRecord, ProcessMap
+from app.permissions.deps import require_dashboard_viewer
 from app.schemas import (
     AiUsageOut,
     AiUsagePeriodOut,
@@ -18,10 +19,14 @@ from app.schemas import (
     DashboardMetricsOut,
 )
 
-router = APIRouter(prefix="/api", tags=["dashboard"], dependencies=[Depends(require_sysadmin)])
+router = APIRouter(prefix="/api", tags=["dashboard"])
 
 
-@router.get("/dashboard", response_model=DashboardMetricsOut)
+@router.get(
+    "/dashboard",
+    response_model=DashboardMetricsOut,
+    dependencies=[Depends(require_dashboard_viewer)],
+)
 async def get_dashboard(session: AsyncSession = Depends(get_session)) -> DashboardMetricsOut:
     """접속자 현황 — 고유 접속자·전체 로그인·최근 7일 로그인 (login_records 집계)."""
     since = now_kst() - timedelta(days=7)
@@ -37,7 +42,11 @@ async def get_dashboard(session: AsyncSession = Depends(get_session)) -> Dashboa
     )
 
 
-@router.get("/dashboard/ai-usage", response_model=AiUsageOut)
+@router.get(
+    "/dashboard/ai-usage",
+    response_model=AiUsageOut,
+    dependencies=[Depends(require_sysadmin)],  # AI 토큰·비용은 sysadmin 전용 유지
+)
 async def get_ai_usage(session: AsyncSession = Depends(get_session)) -> AiUsageOut:
     """AI 호출 사용량 — 7/30일 합계와 30일 상위 사용자/맵 (ai_usage_events 집계)."""
 

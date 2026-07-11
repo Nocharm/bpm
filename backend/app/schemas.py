@@ -704,6 +704,8 @@ class MeOut(BaseModel):
     org_path: str = ""
     # BPM 시스템 관리자 여부 — 프론트 sysadmin-only UI 게이팅용
     is_sysadmin: bool
+    # 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅 (design 2026-07-11)
+    can_view_dashboard: bool = False
     # 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬 (2026-07-09)
     manager_ids: list[str] = []
 

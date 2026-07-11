@@ -11,6 +11,7 @@ from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session, init_models
 from app.models import DeptInfo, Employee, LoginRecord
+from app.permissions.access import can_view_dashboard_db
 from app.permissions.logic import is_sysadmin, org_path
 from app.routers import (
     admin,
@@ -139,5 +140,6 @@ async def get_me(
             else ""
         ),
         is_sysadmin=is_sysadmin(login_id),
+        can_view_dashboard=await can_view_dashboard_db(session, login_id),
         manager_ids=manager_ids,
     )

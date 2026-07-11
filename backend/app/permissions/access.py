@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
 from app.models import (
+    DashboardPermission,
     Employee,
     MapApprover,
     MapPermission,
@@ -180,3 +181,26 @@ async def get_eligible_users(session: AsyncSession, map_id: int) -> list[Employe
         if role is not None:  # None=접근 불가, 그 외(viewer+)는 후보
             eligible.append(emp)
     return eligible
+
+
+async def can_view_dashboard_db(session: AsyncSession, login_id: str) -> bool:
+    """대시보드 열람 가능 여부 — dashboard_permissions 로딩 후 순수 판정에 위임."""
+    if logic.is_sysadmin(login_id):
+        return True
+
+    emp = await session.get(Employee, login_id)
+    emp_org_path = (
+        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
+        if emp is not None
+        else ""
+    )
+    rows = (
+        await session.execute(
+            select(DashboardPermission.principal_type, DashboardPermission.principal_id)
+        )
+    ).all()
+    principals: list[logic.DashboardPrincipal] = [(p, pid) for p, pid in rows]
+    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
+    return logic.can_view_dashboard(
+        False, login_id, emp_org_path, user_group_ids, principals
+    )
