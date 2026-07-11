@@ -49,6 +49,7 @@ export async function buildExcelModel({
   exportedAt,
   fetchResolved,
   maxRows = EXCEL_MAX_ROWS,
+  rootMapId,
 }: {
   graph: Graph;
   mapName: string;
@@ -56,6 +57,8 @@ export async function buildExcelModel({
   exportedAt: string;
   fetchResolved: (mapId: number, followLatest: boolean, pinned: number | null) => Promise<Graph>;
   maxRows?: number;
+  // 루트 맵 자신의 id — 전달 시 루트 역참조 순환을 재펼침 없이 즉시 circular 차단(조상 경로에 루트 포함, design §4)
+  rootMapId?: number;
 }): Promise<ExcelModel> {
   const rows: ExcelRow[] = [];
   let truncated = false;
@@ -129,6 +132,6 @@ export async function buildExcelModel({
     }
   };
 
-  await emit(graph, 0, new Set());
+  await emit(graph, 0, new Set(rootMapId != null ? [rootMapId] : []));
   return { mapName, versionLabel, exportedAt, rows, truncated };
 }

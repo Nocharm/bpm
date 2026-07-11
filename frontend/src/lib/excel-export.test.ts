@@ -70,13 +70,55 @@ describe("buildExcelModel", () => {
     ]);
   });
 
-  it("순환 참조는 무한루프 없이 정확히 circular 1행으로 수렴한다", async () => {
-    // 맵1(루트) sub→맵2(id2), 맵2 sub→맵1(id1) — mutual reference.
-    // 주의(자체 결정 규칙): buildExcelModel 인터페이스엔 루트 그래프 자신의 mapId가 없다(Graph 타입에 id 필드 없음).
-    // 따라서 ancestry는 루트 자신의 id를 모르는 채 빈 Set으로 시작 — 맵2 안의 "맵1 역참조"는 맵2 시점(ancestry={2})엔
-    // 아직 걸리지 않고, fetchResolved(1,...)로 맵1을 한 번 더 확장(depth2)한 뒤 그 복제본의 자기참조(linked=2가
-    // ancestry={2,1}에 있음)에서 비로소 circular로 닫힌다. 유한 정지는 보장되고(ancestry가 매 단계 누적) circular
-    // 행은 정확히 1개만 생긴다 — 다만 "직관적 즉시 차단"과 달리 한 바퀴 더 인라인된 뒤 닫힌다.
+  it("rootMapId 전달 시 루트 상호참조 순환은 재펼침 없이 즉시 circular 1행 — 루트 맵 re-fetch 없음", async () => {
+    // 맵1(루트, rootMapId:1) sub→맵2(id2), 맵2 sub→맵1(id1) — 조상 경로가 루트를 포함해 즉시 차단(design §4)
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeSubNode("sub1", "SubToMap2", 1, 2),
+        makeNode("e1", "End", "end", 2, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("x1", "s1", "sub1"), makeEdge("x2", "sub1", "e1")],
+      groups: [],
+    };
+    const map2: Graph = {
+      nodes: [
+        makeNode("s2", "Start", "start", 0),
+        makeSubNode("sub2", "SubToMap1", 1, 1),
+        makeNode("e2", "End", "end", 2, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("y1", "s2", "sub2"), makeEdge("y2", "sub2", "e2")],
+      groups: [],
+    };
+    const registry: Record<number, Graph> = { 1: map1, 2: map2 };
+    const fetchedIds: number[] = [];
+    const fetchResolved = async (mapId: number): Promise<Graph> => {
+      fetchedIds.push(mapId);
+      const g = registry[mapId];
+      if (!g) throw new Error("not found");
+      return g;
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-11T00:00:00+09:00",
+      fetchResolved, rootMapId: 1,
+    });
+    expect(model.rows.filter((r) => r.kind === "circular")).toEqual([
+      { kind: "circular", depth: 2, title: "SubToMap1" },
+    ]);
+    expect(fetchedIds).toEqual([2]); // 루트 맵(1)은 re-fetch되지 않는다
+    const kindsWithDepth = model.rows.map((r) => [r.kind === "node" ? r.title : r.kind, r.depth]);
+    expect(kindsWithDepth).toEqual([
+      ["Start", 0], ["SubToMap2", 0],
+      ["Start", 1], ["SubToMap1", 1],
+      ["circular", 2],
+      ["End", 1], ["End", 0],
+    ]);
+  });
+
+  it("rootMapId 생략 시(하위호환) 루트 상호참조는 한 바퀴 더 인라인된 뒤 circular 1행으로 닫힌다", async () => {
+    // 하위호환 박제: rootMapId 없이는 ancestry가 빈 Set으로 시작 — 맵2 안의 "맵1 역참조"는 맵2 시점(ancestry={2})엔
+    // 걸리지 않고, 맵1을 한 번 더 확장(depth2)한 뒤 그 복제본의 참조(linked=2 ∈ ancestry={2,1})에서 닫힌다.
+    // 유한 정지·circular 정확히 1행은 여전히 보장.
     const map1: Graph = {
       nodes: [
         makeNode("s1", "Start", "start", 0),

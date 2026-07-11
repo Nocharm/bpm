@@ -31,6 +31,7 @@
 - 자체 결정 규칙: ①rowLimit 행 자체는 상한을 넘겨서라도 push되어 최종 rows.length가 maxRows보다 1 클 수 있음(브리프 코드 그대로, 테스트로 박제). ②truncated는 클로저 공유 플래그라 상한 도달 즉시 모든 재귀 레벨의 다음 for-반복에서 무조건 return — rowLimit 행은 정확히 1개만 생성됨. ③인터페이스에 루트 그래프 자신의 mapId가 없어(Graph 타입에 id 없음) ancestry가 빈 Set으로 시작 — 루트를 직접 역참조하는 순환은 fetchResolved로 루트를 한 번 더 확장(한 단계 깊은 복제)한 뒤에야 닫힌다(circular 1행은 여전히 보장, 유한 정지도 보장). 루트가 아닌 두 서브맵 간 순환은 즉시 차단됨 — 두 케이스 모두 테스트로 구분.
 - TDD: `excel-export.test.ts` 10케이스(재귀 인라인+depth·루트 자기참조 순환 1행(지연 차단 확인)·비루트 서브맵간 순환 즉시차단·다이아몬드 인라인+fetch 1회 스파이·locked denied·fetch reject denied·행 상한 단순+재귀중 상한(rowLimit 1개 보장)·start/end 포함 next에 End 라벨 표기·groups는 링크 맵 자신 기준) 모듈 부재로 RED 확인 후 구현 → 1회 실행에 10/10 GREEN.
 - 게이트: excel-export 10/10·전체 vitest 287/287·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트, 무변화).
+- 리뷰 픽스(Important): 루트 맵 자기/상호참조 순환이 스펙(조상 경로 즉시 차단, design §4)을 어기고 루트를 한 바퀴 더 인라인하던 결함 — args에 옵셔널 `rootMapId?: number` 추가(기존 필드 전부 유지), 초기 ancestry를 rootMapId로 시드. 루트 상호참조 테스트를 rootMapId 기준(즉시 circular + 루트 re-fetch 0회 스파이 단언)으로 갱신, rootMapId 생략 시 기존 지연 차단 동작 케이스를 별도로 남겨 하위호환 박제. **Task 7 소비 계약: `buildExcelModel` 호출 시 현재 맵 id를 `rootMapId`로 전달할 것.** excel-export 11/11·전체 vitest 288/288·tsc 0에러.
 
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
