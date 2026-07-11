@@ -150,7 +150,7 @@ try {
   check("① Word 버튼 존재", (await wordBtn.count()) === 1);
   check(
     "① PNG 버튼 유지",
-    (await page.getByRole("button", { name: "Download PNG" }).count()) === 1,
+    (await page.locator('[data-id="export-png"]').count()) === 1,
   );
 
   // ② 다운로드 + 파일명 패턴
