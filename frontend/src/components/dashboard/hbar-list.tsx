@@ -7,7 +7,11 @@ export interface HBarRow {
   tone?: string; // 막대 색 — "var(--color-*)" 문자열. 미지정 시 액센트
 }
 
-export function HBarList({ rows }: { rows: HBarRow[] }) {
+export interface HBarListProps {
+  rows: HBarRow[];
+}
+
+export function HBarList({ rows }: HBarListProps) {
   const peak = Math.max(1, ...rows.map((row) => row.value)); // 0 나눗셈 차단
 
   return (

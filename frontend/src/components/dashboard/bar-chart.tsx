@@ -7,7 +7,11 @@ export interface BarPoint {
   value: number;
 }
 
-export function BarChart({ points }: { points: BarPoint[] }) {
+export interface BarChartProps {
+  points: BarPoint[];
+}
+
+export function BarChart({ points }: BarChartProps) {
   const scale = buildScale(points.map((point) => point.value));
   const peak = Math.max(0, ...points.map((point) => point.value));
 

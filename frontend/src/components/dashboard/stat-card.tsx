@@ -1,16 +1,18 @@
 // 좌 레일 요약 스탯 — 라벨·큰 값·보조 설명. 값이 아직 없으면 "—".
 
+export interface StatCardProps {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "default" | "accent";
+}
+
 export function StatCard({
   label,
   value,
   hint,
   tone = "default",
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "default" | "accent";
-}) {
+}: StatCardProps) {
   return (
     <div
       data-id="dashboard-stat-card"

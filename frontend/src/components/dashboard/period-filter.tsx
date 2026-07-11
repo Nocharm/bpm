@@ -18,13 +18,12 @@ const PRESETS: { id: PeriodPreset; labelKey: "dashboard.period7d" | "dashboard.p
   { id: "3m", labelKey: "dashboard.period3m" },
 ];
 
-export function PeriodFilter({
-  range,
-  onChange,
-}: {
+export interface PeriodFilterProps {
   range: DateRange;
   onChange: (next: DateRange) => void;
-}) {
+}
+
+export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
   const { t } = useI18n();
   const [custom, setCustom] = useState(false);
   const today = todayKeyKst();

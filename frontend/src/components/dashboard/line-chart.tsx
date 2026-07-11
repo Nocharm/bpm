@@ -23,13 +23,12 @@ function toPath(values: number[], max: number): string {
     .join(" ");
 }
 
-export function LineChart({
-  series,
-  labels,
-}: {
+export interface LineChartProps {
   series: LineSeries[];
   labels: string[];
-}) {
+}
+
+export function LineChart({ series, labels }: LineChartProps) {
   const scale = buildScale(series.flatMap((line) => line.values));
 
   return (
@@ -41,18 +40,30 @@ export function LineChart({
         role="img"
         aria-label={series.map((line) => line.label).join(", ")}
       >
-        {series.map((line) => (
-          <path
-            key={line.label}
-            d={toPath(line.values, scale.max)}
-            fill="none"
-            stroke={line.color}
-            strokeWidth={0.8}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
+        {series.map((line) =>
+          // 포인트가 1개면 toPath가 "M..."만 내놓는데, moveto뿐인 path는 SVG 스펙상
+          // 아무것도 그리지 않는다(하루짜리 기간 필터로 자주 발생) — 원 마커로 대체 표시.
+          line.values.length === 1 ? (
+            <circle
+              key={line.label}
+              cx={0}
+              cy={(VIEW_H - (line.values[0] / scale.max) * VIEW_H).toFixed(2)}
+              r={0.8}
+              fill={line.color}
+            />
+          ) : (
+            <path
+              key={line.label}
+              d={toPath(line.values, scale.max)}
+              fill="none"
+              stroke={line.color}
+              strokeWidth={0.8}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ),
+        )}
       </svg>
       <div className="flex items-center justify-between text-fine text-ink-tertiary">
         <span>{labels[0] ?? ""}</span>
