@@ -110,6 +110,23 @@ describe("buildCsvFromGraph — round trip", () => {
     expect(aCells?.[12]).toBe("B:approve"); // Next — reject 브랜치는 드롭됨
   });
 
+  it("무라벨 End행 엣지도 다른 outgoing과 병존하면 경고와 함께 생략", () => {
+    // A(process)의 outgoing 2개 — 무라벨 End행 + 실제 대상 B. Next 없음≠outgoing 있음이라 임포트가 재생성 못 함.
+    const graph: Graph = {
+      nodes: [
+        makeNode("a1", "A", "process", 1),
+        makeNode("b1", "B", "process", 2),
+        makeNode("e1", "End", "end", 3, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("x1", "a1", "e1"), makeEdge("x2", "a1", "b1")],
+      groups: [],
+    };
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV — dropped']);
+    const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
+    expect(aCells?.[12]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
+  });
+
   it("제목 중복 노드는 그대로 내보내되 경고", () => {
     const graph: Graph = {
       nodes: [makeNode("a1", "A", "process", 1), makeNode("a2", "A", "process", 2)],
