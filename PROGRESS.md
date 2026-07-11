@@ -14,6 +14,7 @@
 - T7 차트 컴포넌트 — StatCard·BarChart(값 비례 막대, 최댓값 액센트)·LineChart(자체 SVG viewBox)·HBarList(버전상태·커버리지 공용)·PeriodFilter(프리셋 3종+달력). 라이브러리 무추가, 색은 전부 토큰.
 - T9 우측 사이드바 — Access(인원·부서·그룹 피커로 권한 부여/제거)·Coverage(분모 부서 선택, 항상 전체 목록 PUT=멱등) 2탭. sysadmin에게만 렌더.
 - T8 대시보드 패널 재작성 — 진입 카드 제거(탭 클릭이 곧 대시보드), 설정 탭 레일을 풀블리드 3열로 교체. 좌 요약 레일·중앙 지표 그리드(활동·성장·버전상태·커버리지·최근 이벤트)·AI 사용량은 sysadmin 한정. 설정 탭 게이팅에 `dashboard` Access 추가. `getDashboard()`/`DashboardMetrics`(구 바인딩)와 진입카드 잔재 i18n 키 9종 삭제. tsc·lint·build·vitest(297) 전부 통과.
+- T10 브라우저 검증 — `frontend/scripts/pw-verify-dashboard.mjs` 6항목(풀블리드 교체·스탯 렌더·막대 수=기간·기간 변경 시 스냅샷 불변·커버리지 부서 추가 반영·비-sysadmin 권한 열람 게이팅) 6/6 PASS. 초안 대비 2건 수정: ① Coverage 부서 추가는 `SearchSelect` 메뉴가 `document.body` 포털(fixed)이라 사이드바 스코프가 아니라 페이지 스코프로 찾아야 함, ② check6은 "Dashboard 탭 버튼 노출"이 아니라 대시보드 루트(`data-id="dashboard"`) 노출로 판정 — dashboard 권한만 있는 비-sysadmin은 그 카테고리가 `allTabs[0]`이 되어 클릭 없이 즉시 풀블리드로 전환되므로 탭 버튼 자체가 생기지 않는다. 실측 발견 1건(테스트 픽스, 프로덕션 무변경): summary/timeseries 응답 도착과 React 커밋 사이 한 틱 지연 — 좌 레일을 곧장 읽으면 "—" 자리표시를 오탐, 300ms 안정화 대기로 해결. 전 게이트 그린: pytest 595·ruff 0·vitest 297·tsc 0·lint 0(신규)·build 0.
 
 ## 2026-07-11 — CLAUDE.md 노드 속성 체크리스트 (main)
 - Lessons에 노드 속성 추가 시 열거 지점 7곳 + CSV·AI 정규화 대칭 규칙 추가 — duration 정규화 갭(230a9e8) 재발 방지.
