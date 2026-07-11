@@ -12,6 +12,8 @@ export interface CurrentUser {
   isSysadmin: boolean;
   // 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬
   managerIds: string[];
+  // 서버(/api/me)가 산정한 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅
+  canViewDashboard: boolean;
 }
 
 let currentUser: CurrentUser | null = null;
