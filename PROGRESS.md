@@ -20,6 +20,11 @@
 - TDD: 브리프 신규 테스트 2건 RED(`Unknown column "Headcount"`) 확인 후 구현 → GREEN. duration이 자유텍스트("2 days" 등)였던 기존 테스트 4건을 숫자값으로 갱신(테스트 수는 순감소 없이 73→75).
 - 게이트: csv-import 75/75·전체 vitest 265/265·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트).
 
+## 2026-07-11 — Task 5: CSV 내보내기(왕복) (numeric-params-export)
+- `lib/csv-export.ts`(`buildCsvFromGraph`·`orderNodesByFlow`) 신규 — csv-import 13컬럼 포맷 미러, 표현 불가 구조(추가 end·라벨있는 End행 엣지·제목 중복·outgoing<2 decision·start 연결 상이)는 warnings로 명시. 브리프 코드에서 `orderNodesByFlow`의 outgoing Map 초기화를 `Map.set().get()` 체이닝 트릭에서 통상적인 get-or-set 패턴으로 단순화(동작 동일, 가독성만 개선).
+- TDD: `csv-export.test.ts` 11케이스(왕복 불변·분기라벨 보존·이스케이프 원문보존·추가 end 경고·라벨 End행 경고·제목중복 경고·start 불일치 경고·숫자파라미터 undefined 안전 직렬화·orderNodesByFlow 3종[정상/무-start/사이클]) 모듈 부재로 RED 확인 후 구현 → 1회 실행에 11/11 GREEN.
+- 게이트: csv-export 11/11·전체 vitest 276/276·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트, 무변화).
+
 ## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
 
