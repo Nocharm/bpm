@@ -22,6 +22,8 @@ uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.tx
 # pip 대안: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/uvicorn app.main:app --reload --port 8000   # 개발 서버
 .venv/bin/python -m pytest tests/ -q                  # 테스트
+# ⚠️ backend/.env(AI_ENABLED 등)가 있으면 "기본 비활성" 가정 테스트가 깨짐 — 전체 그린 확인은:
+# AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/ -q
 .venv/bin/ruff check app/ tests/                      # 린트
 
 # frontend (frontend/ 에서, 로컬 네이티브)
@@ -38,6 +40,7 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\uvicorn app.main:app --reload --port 8000   # 개발 서버
 .venv\Scripts\python -m pytest tests/ -q                  # 테스트
+# .env 존재 시 전체 그린 확인: $env:AI_ENABLED="false"; $env:DEV_ENFORCE_PERMISSIONS="false"; $env:BPM_SYSADMINS=""; .venv\Scripts\python -m pytest tests/ -q
 .venv\Scripts\ruff check app/ tests/                      # 린트
 
 # frontend (frontend\ 에서) — npm 명령은 동일
@@ -89,6 +92,7 @@ docker-compose.yml
 - [`docs/lessons/browser-verification.md`](docs/lessons/browser-verification.md) — Playwright+시스템 Chrome 검증, **dev.db 오염/readonly 함정**("0 events"는 코드 아닌 오염일 수 있음), 연결 드롭 flaky, node cwd.
 - [`docs/lessons/react-ts-patterns.md`](docs/lessons/react-ts-patterns.md) — useCallback deps TDZ → ref 미러, set-state-in-effect 린트, 큰 상태 모델은 메인 state 오염 금지.
 - **노드 속성 추가 체크리스트** — 열거 지점 전부 갱신: `models.py` 컬럼 · `schemas.NodeIn`(+검증기) · `graph.py` upsert · `versions.py` clone_graph · `csv-import.ts`(NODE_DEFAULTS·mergeNode pick·행 변환) · AI 변환 2곳(`buildGraphFromAiProposal`, page.tsx `aiNodeToGraphNode`). 값 정규화는 CSV·AI 경로 대칭 필수 — 한쪽만 하면 무효 에코가 pick을 통과해 백엔드 소거로 기존값이 유실된다.
+- **숫자 파라미터(duration H.MM) 계약** — duration 소수부는 분(0.30=30분, ≥60 이월). 정규화는 FE `lib/duration.ts` ↔ BE `app/duration.py` 동치 이중 구현(수정 시 양쪽+테스트 동기화). 무효값은 경계에서 `""` 소거(422 아님 — from_attributes 응답 겸용) → **시드/픽스처의 자유텍스트 duration은 조용히 증발**. 표시는 편집 중만 `1.30`, 그 외 `formatDurationHm`(`1h30m`) — CSV(왕복)/Excel(숫자 셀) 예외. raw dict 직렬화 엔드포인트(library.py류)는 응답 validator를 우회 — 경계 규칙 추가 시 별도 스윕.
 
 ## Operations / Deployment
 

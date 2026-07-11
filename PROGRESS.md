@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-12 — CLAUDE.md 세션 학습 반영 (main)
+- 숫자 파라미터(duration H.MM) 계약 레슨 추가(이중 정규화 동기화·경계 소거 증발·표시형·raw dict 우회), backend pytest .env 함정 커맨드(bash/PS 병기), frontend AGENTS.md에 ParamInput 필수·내보내기 라이브러리 dynamic import 규칙.
+
 ## 2026-07-12 — 운영 대시보드 마무리 (dashboard-design)
 - 설정 카테고리 순서 조정 — Analytics를 승인큐·그룹 뒤로. 대시보드 권한만 받은 비-sysadmin이 설정을 열 때 첫 탭(=풀블리드 대시보드)에 강제 착지하던 문제 해소(대시보드는 탭을 눌러 진입). sysadmin은 영향 없음.
 
