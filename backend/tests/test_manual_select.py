@@ -52,3 +52,12 @@ def test_no_headings_returns_truncated_text() -> None:
     plain = "헤딩 없는 매뉴얼 " * 200
     out = select_manual_sections(plain, "질문", budget=500)
     assert len(out) <= 500
+
+
+def test_header_alone_over_budget_is_capped() -> None:
+    # 섹션 헤딩이 많아 TOC만으로 budget을 넘는 극단 — 반환은 항상 budget 이하
+    bloated = "# 제목\n\n" + "\n\n".join(
+        f"## {i}. 아주아주아주아주아주아주 긴 섹션 제목 {i}\n본문 {i}" for i in range(1, 40)
+    )
+    out = select_manual_sections(bloated, "질문", budget=300)
+    assert len(out) <= 300

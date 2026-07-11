@@ -6,7 +6,7 @@ _HEADING = re.compile(r"^## ", re.MULTILINE)
 _TITLE_WEIGHT = 3  # 제목 매칭 가중 — 본문 우연 일치보다 제목 일치가 신호가 강하다
 
 
-def _bigrams(text: str) -> set[str]:
+def _extract_bigrams(text: str) -> set[str]:
     """공백·기호 제거 후 2-gram — 형태소 분석 없이 한국어 어휘 겹침을 근사."""
     compact = re.sub(r"[\s\W_]+", "", text)
     return {compact[i : i + 2] for i in range(len(compact) - 1)}
@@ -34,10 +34,10 @@ def select_manual_sections(text: str, instruction: str, budget: int) -> str:
         title = body.splitlines()[0].removeprefix("## ").strip()
         sections.append((title, body))
 
-    query = _bigrams(instruction)
+    query = _extract_bigrams(instruction)
     scored = []
     for index, (title, body) in enumerate(sections):
-        score = len(query & _bigrams(title)) * _TITLE_WEIGHT + len(query & _bigrams(body))
+        score = len(query & _extract_bigrams(title)) * _TITLE_WEIGHT + len(query & _extract_bigrams(body))
         scored.append((score, index))
     if all(score == 0 for score, _ in scored):
         picked_order = list(range(len(sections)))  # 폴백 — 원문 앞쪽부터
@@ -46,6 +46,9 @@ def select_manual_sections(text: str, instruction: str, budget: int) -> str:
 
     toc = "\n".join(f"- {title}" for title, _ in sections)
     header = f"{preamble}\n\n[매뉴얼 목차]\n{toc}\n" if preamble else f"[매뉴얼 목차]\n{toc}\n"
+    if len(header) >= budget:
+        # 프리앰블+TOC만으로 예산 초과 — 상한이 이 함수의 존재 이유이므로 절단으로 보장
+        return header[:budget]
     remaining = budget - len(header)
     chosen: set[int] = set()
     for index in picked_order:
