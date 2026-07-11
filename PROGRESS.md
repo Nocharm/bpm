@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
+
 ## 2026-07-11 — 숫자 파라미터 5종 + Excel/CSV 내보내기 설계 (main)
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md`. duration 자유텍스트 → 숫자 파라미터 5종(duration H.MM 표기·60분 이월, headcount/etf/cost/extra 십진수, 기존 컬럼 재사용+4컬럼 추가), CSV 임포트 갱신+왕복용 CSV 내보내기 신설(재임포트 diff 0 기준), Excel(.xlsx) 클라이언트 exceljs 내보내기(서브프로세스 전체 재귀 인라인·순환 조상검사·행 상한 2,000·locked 마스킹). Word는 다음 세션.
 
