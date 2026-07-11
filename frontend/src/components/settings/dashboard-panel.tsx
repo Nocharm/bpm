@@ -26,10 +26,11 @@ import { resolvePeriod, todayKeyKst, type DateRange } from "@/lib/dashboard-char
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
-// 버전 상태별 막대 색 — globals.css @theme에 실재하는 토큰만 참조(Step 4에서 확인 완료).
+// 버전 상태별 막대 색 — globals.css @theme에 실재하는 토큰만 참조.
+// approved는 published(violet)와 구분되도록 added(green, 승인=긍정 의미)로 분리.
 const STATUS_TONES: Record<string, string> = {
   published: "var(--color-accent)",
-  approved: "var(--color-accent)",
+  approved: "var(--color-added)",
   pending: "var(--color-ink-secondary)",
   draft: "var(--color-ink-tertiary)",
   rejected: "var(--color-error)",
@@ -47,17 +48,22 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
   const [series, setSeries] = useState<DashboardTimeseries | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsageMetrics | null>(null);
   const [range, setRange] = useState<DateRange>(() => resolvePeriod("7d", todayKeyKst()));
-  const [failed, setFailed] = useState(false);
+  // 실패 플래그는 fetch별로 분리 — 하나로 공유하면 한쪽 성공이 다른 쪽 실패를 감춘다.
+  const [summaryFailed, setSummaryFailed] = useState(false);
+  const [seriesFailed, setSeriesFailed] = useState(false);
 
   // 스냅샷 — 마운트 1회. 기간 필터와 무관하다(핵심 불변식: deps에 range를 넣지 않는다).
   useEffect(() => {
     let alive = true;
     getDashboardSummary()
       .then((data) => {
-        if (alive) setSummary(data);
+        if (alive) {
+          setSummary(data);
+          setSummaryFailed(false);
+        }
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (alive) setSummaryFailed(true);
       });
     return () => {
       alive = false;
@@ -69,10 +75,13 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
     let alive = true;
     getDashboardTimeseries(range.from, range.to)
       .then((data) => {
-        if (alive) setSeries(data);
+        if (alive) {
+          setSeries(data);
+          setSeriesFailed(false);
+        }
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (alive) setSeriesFailed(true);
       });
     return () => {
       alive = false;
@@ -156,7 +165,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
 
       {/* 중앙 지표 그리드 */}
       <main className="flex-1 overflow-y-auto bg-canvas p-6">
-        {failed ? (
+        {summaryFailed || seriesFailed ? (
           <p className="flex items-center gap-1.5 pb-4 text-caption text-error">
             <Info size={16} strokeWidth={1.5} />
             {t("dashboard.loadFailed")}
