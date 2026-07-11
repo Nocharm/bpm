@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.duration import NUMERIC_RE, normalize_duration
+
 
 class MapCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -43,6 +45,11 @@ class SubprocessDesignationIn(BaseModel):
     assignee: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
+    # 숫자 파라미터 4종 — duration과 함께 5필드 경계 정규화, 노드 NodeIn과 동일 소거 시맨틱 (design 2026-07-11 SP)
+    headcount: str = Field(default="", max_length=50)
+    etf: str = Field(default="", max_length=50)
+    cost: str = Field(default="", max_length=50)
+    extra: str = Field(default="", max_length=50)
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
@@ -53,6 +60,19 @@ class SubprocessDesignationIn(BaseModel):
         if not value.strip():
             raise ValueError("department must not be blank")
         return value.strip()
+
+    @field_validator("duration", mode="after")
+    @classmethod
+    def _normalize_duration(cls, value: str) -> str:
+        # 무효(레거시 자유텍스트 포함)는 "" — 노드 duration과 동일 결정 (design 2026-07-11 SP §2)
+        normalized = normalize_duration(value)
+        return "" if normalized is None else normalized
+
+    @field_validator("headcount", "etf", "cost", "extra", mode="after")
+    @classmethod
+    def _normalize_numeric_params(cls, value: str) -> str:
+        text = value.strip()
+        return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "SubprocessDesignationIn":
@@ -334,6 +354,36 @@ class DashboardMetricsOut(BaseModel):
     logins_7d: int  # 최근 7일 로그인 수
 
 
+class AiUsagePeriodOut(BaseModel):
+    calls: int
+    failed: int
+    prompt_tokens: int
+    completion_tokens: int
+
+
+class AiUsageTopUserOut(BaseModel):
+    login_id: str
+    name: str
+    calls: int
+    total_tokens: int
+
+
+class AiUsageTopMapOut(BaseModel):
+    map_id: int
+    name: str
+    calls: int
+    total_tokens: int
+
+
+class AiUsageOut(BaseModel):
+    """대시보드 AI 사용량 — 7/30일 합계와 30일 상위 사용자/맵 (design 2026-07-11 B1)."""
+
+    last7: AiUsagePeriodOut
+    last30: AiUsagePeriodOut
+    top_users: list[AiUsageTopUserOut]  # 30일, total_tokens desc, 5개
+    top_maps: list[AiUsageTopMapOut]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
@@ -391,12 +441,25 @@ class MapOut(BaseModel):
     sp_assignee: str | None = None
     sp_system: str | None = None
     sp_duration: str | None = None
+    # 숫자 파라미터 4종 — duration과 함께 SP 5필드 (design 2026-07-11 SP)
+    sp_headcount: str | None = None
+    sp_etf: str | None = None
+    sp_cost: str | None = None
+    sp_extra: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
     owning_department: str | None = None
+
+    @field_validator("sp_duration", mode="after")
+    @classmethod
+    def _clear_invalid_sp_duration(cls, value: str | None) -> str | None:
+        # 레거시 자유텍스트("3일")가 응답 경계를 깨지 않게 소거 — NodeIn._normalize_duration과 동일 결정
+        if value is None or value == "":
+            return value
+        return normalize_duration(value)
 
 
 class MapDetailOut(MapOut):
@@ -417,6 +480,11 @@ class NodeIn(BaseModel):
     department: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
+    # 숫자 파라미터 4종 — duration과 함께 5필드, 무효값은 validator가 경계에서 "" 소거 (design 2026-07-11)
+    headcount: str = Field(default="", max_length=50)
+    etf: str = Field(default="", max_length=50)
+    cost: str = Field(default="", max_length=50)
+    extra: str = Field(default="", max_length=50)
     # 참조 링크 — 스킴 검증은 클라이언트(CSV 파서·링크 렌더)에서. 자유 타이핑 자동저장이 깨지지 않게 길이만 제한
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
@@ -438,6 +506,23 @@ class NodeIn(BaseModel):
     def _coerce_group_ids(cls, value: object) -> object:
         # 레거시 DB(컬럼 NULL)에서 from_attributes 로드 시 None → [] 로 보정
         return [] if value is None else value
+
+    @field_validator("duration", mode="after")
+    @classmethod
+    def _normalize_duration(cls, value: str) -> str:
+        # 무효(레거시 자유텍스트 포함)는 "" — model_config(from_attributes=True)가 GET 응답
+        # 직렬화에도 쓰여 422를 내면 레거시 행 조회가 깨진다. "" 소거로 ①화면에서 즉시 사라지고
+        # ②다음 저장 때 물리적으로도 비워져 "기존 duration 전부 버림"(design 2026-07-11 §2.3)을
+        # 경계에서 집행한다.
+        normalized = normalize_duration(value)
+        return "" if normalized is None else normalized
+
+    @field_validator("headcount", "etf", "cost", "extra", mode="after")
+    @classmethod
+    def _normalize_numeric_params(cls, value: str) -> str:
+        # duration과 동일한 이유로 무효값은 "" 소거 (위 _normalize_duration 주석 참고)
+        text = value.strip()
+        return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "NodeIn":
@@ -494,8 +579,21 @@ class SubprocessRefOut(BaseModel):
     assignee: str | None = None
     system: str | None = None
     duration: str | None = None
+    # 숫자 파라미터 4종 — SP 지정 어트리뷰트와 동일 소스 (design 2026-07-11 SP)
+    headcount: str | None = None
+    etf: str | None = None
+    cost: str | None = None
+    extra: str | None = None
     url: str | None = None
     url_label: str | None = None
+
+    @field_validator("duration", mode="after")
+    @classmethod
+    def _clear_invalid_duration(cls, value: str | None) -> str | None:
+        # 레거시 자유텍스트("2일")가 칩/합산을 깨지 않게 응답 경계에서 소거
+        if value is None or value == "":
+            return value
+        return normalize_duration(value)  # 무효면 None
 
 
 class GraphOut(BaseModel):
@@ -914,6 +1012,15 @@ class AiNodeAttributes(BaseModel):
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
     url_label: str | None = Field(default=None, max_length=100)
+
+    @field_validator("duration", mode="after")
+    @classmethod
+    def _normalize_duration(cls, value: str | None) -> str | None:
+        # None(생략)은 부분 갱신 시맨틱상 "유지"라 정규화 대상이 아니다 — 그대로 보존
+        if value is None:
+            return None
+        normalized = normalize_duration(value)
+        return "" if normalized is None else normalized
 
 
 class AiNode(BaseModel):

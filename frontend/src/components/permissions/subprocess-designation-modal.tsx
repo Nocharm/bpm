@@ -1,15 +1,19 @@
 "use client";
 
-// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템·소요시간 자유 입력.
+// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템 자유 입력 + 숫자 파라미터 5종(Σ 합산 지원).
 // 설정 화면 패널과 에디터 인스펙터 카드가 공용으로 사용한다.
 
-import { useState } from "react";
+import { Sigma } from "lucide-react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { putSubprocessDesignation, type MapSummary } from "@/lib/api";
+import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
+import { PARAM_FIELDS, PARAM_LABEL_KEY } from "@/lib/params";
+import { sumParamField, type SummableField } from "@/lib/param-sum";
 import { isHttpUrl } from "@/lib/url";
 
 export interface DesignationForm {
@@ -17,6 +21,10 @@ export interface DesignationForm {
   assignee: string;
   system: string;
   duration: string;
+  headcount: string;
+  etf: string;
+  cost: string;
+  extra: string;
   url: string;
   urlLabel: string;
 }
@@ -43,9 +51,27 @@ export function SubprocessDesignationModal({
   const [form, setForm] = useState<DesignationForm>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [summing, setSumming] = useState(false);
+  // 게시본 그래프 — 모달 수명 동안 1회만 fetch(Σ 반복 클릭에 재요청 안 함)
+  const graphRef = useRef<Graph | null>(null);
 
   // 지정 URL 클라이언트 검증 — 비어있지 않으면 http(s) 강제(액션 바 노출 게이트와 동일 규칙)
   const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
+
+  async function handleSum(field: SummableField) {
+    if (publishedVersionId === null) return;
+    setSumming(true);
+    setError(null);
+    try {
+      if (graphRef.current === null) graphRef.current = await getGraph(publishedVersionId);
+      const total = sumParamField(graphRef.current, field);
+      setForm((prev) => ({ ...prev, [field]: total }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSumming(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -56,6 +82,10 @@ export function SubprocessDesignationModal({
         assignee: form.assignee,
         system: form.system,
         duration: form.duration,
+        headcount: form.headcount,
+        etf: form.etf,
+        cost: form.cost,
+        extra: form.extra,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
       });
@@ -95,16 +125,34 @@ export function SubprocessDesignationModal({
               onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-            <span className="shrink-0 text-caption text-ink-secondary">{t("field.duration")}</span>
-            <input
-              data-id="subprocess-designation-duration"
-              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
-              maxLength={50}
-              value={form.duration}
-              onChange={(e) => setForm((prev) => ({ ...prev, duration: e.target.value }))}
-            />
-          </div>
+          {PARAM_FIELDS.map((key) => (
+            <div key={key} className="flex items-center justify-between gap-2 border-t border-divider py-1">
+              <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+                <ParamInput
+                  field={key}
+                  dataId={`subprocess-designation-${key}`}
+                  className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+                  value={form[key]}
+                  ariaLabel={t(PARAM_LABEL_KEY[key])}
+                  onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
+                />
+                {key !== "headcount" && (
+                  <button
+                    type="button"
+                    data-id={`subprocess-designation-sum-${key}`}
+                    title={publishedVersionId === null ? t("sp.sumNeedsPublished") : t("sp.sumAllNodes")}
+                    aria-label={t("sp.sumAllNodes")}
+                    disabled={publishedVersionId === null || summing}
+                    className="shrink-0 rounded-sm border border-hairline px-1.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                    onClick={() => void handleSum(key as SummableField)}
+                  >
+                    <Sigma size={14} strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
           <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
             <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
             <input

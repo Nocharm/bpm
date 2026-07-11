@@ -14,6 +14,10 @@ export type ChangedField =
   | "department"
   | "system"
   | "duration"
+  | "headcount"
+  | "etf"
+  | "cost"
+  | "extra"
   | "location";
 
 export interface NodeDiffEntry {
@@ -49,6 +53,10 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["department", "department"],
   ["system", "system"],
   ["duration", "duration"],
+  ["headcount", "headcount"],
+  ["etf", "etf"],
+  ["cost", "cost"],
+  ["extra", "extra"],
 ];
 
 // 계보 키 — 복제본은 원본 노드 ID를 공유한다

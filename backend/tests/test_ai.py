@@ -98,9 +98,11 @@ def _enable_ai(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ai_enabled", True)
 
 
-def _fake_ai(content: str):
-    async def _call(messages: list[dict], model: str | None = None) -> str:
-        return content
+def _fake_ai(content: str, prompt_tokens: int | None = 100, completion_tokens: int | None = 50):
+    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        return ai_client.AiReply(
+            content=content, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens
+        )
 
     return _call
 
@@ -194,9 +196,9 @@ def test_ai_invalid_then_retry_succeeds(
     valid = json.dumps({"kind": "answer", "message": "ok"})
     calls = {"n": 0}
 
-    async def _flaky(messages: list[dict], model: str | None = None) -> str:
+    async def _flaky(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
         calls["n"] += 1
-        return "not json" if calls["n"] == 1 else valid
+        return ai_client.AiReply(content="not json" if calls["n"] == 1 else valid)
 
     monkeypatch.setattr(ai_client, "call_ai", _flaky)
 
@@ -248,9 +250,9 @@ def test_ai_chat_uses_selected_model(
     version_id = _draft_version_checked_out(client)
     captured: dict[str, str | None] = {}
 
-    async def _capture(messages: list[dict], model: str | None = None) -> str:
+    async def _capture(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
         captured["model"] = model
-        return json.dumps({"kind": "answer", "message": "ok"})
+        return ai_client.AiReply(content=json.dumps({"kind": "answer", "message": "ok"}))
 
     monkeypatch.setattr(ai_client, "call_ai", _capture)
 
@@ -673,9 +675,9 @@ def test_ai_grounds_on_registered_manual_docs(
 
     captured: dict = {}
 
-    async def fake_call(messages: list[dict], model: str | None = None) -> str:
+    async def fake_call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
         captured["messages"] = messages
-        return json.dumps({"kind": "answer", "message": "ok"})
+        return ai_client.AiReply(content=json.dumps({"kind": "answer", "message": "ok"}))
 
     monkeypatch.setattr(ai_client, "call_ai", fake_call)
     resp = client.post(f"/api/versions/{version_id}/ai/chat", json={"instruction": "사용법?"})
@@ -697,7 +699,7 @@ def test_structure_hints_detect_data_feedback_targets() -> None:
         nodes=[
             NodeOut(id="s", title="시작", node_type="start"),
             NodeOut(id="d", title="판단", node_type="decision"),  # 출력 1개 + 라벨 없음 + 속성 비움
-            NodeOut(id="p1", title="검토", node_type="process", assignee="김담당", department="팀", duration="1일"),
+            NodeOut(id="p1", title="검토", node_type="process", assignee="김담당", department="팀", duration="1"),
             NodeOut(id="p2", title="검토", node_type="process"),  # 중복 제목 + 막다른(끝 못 감) + 속성 비움
             NodeOut(id="x", title="외딴 처리", node_type="process"),  # 시작에서 도달 불가(끝으로는 감)
             NodeOut(id="e", title="끝", node_type="end"),
@@ -847,3 +849,64 @@ def test_ai_ops_new_actions_passthrough_and_unknown_surfaced(
     assert [op["action"] for op in body["ops"]] == ["disconnect", "set_desc"]
     for ghost in ("ghost-a", "ghost-b", "ghost-c"):
         assert ghost in body["message"]  # 계약 규칙 ④ 표면화
+
+
+# ── usage 계측 — AiReply·누적 (design 2026-07-11 B1) ─────────────
+
+
+def asyncio_run_reply():
+    import asyncio
+
+    from app.ai_client import call_ai
+
+    return asyncio.run(call_ai([{"role": "user", "content": "x"}]))
+
+
+def test_call_ai_returns_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenAI 호환 usage를 AiReply로 반환 — usage 없는 비표준 응답은 None 방어."""
+    import httpx2
+
+    class _Resp:
+        def raise_for_status(self) -> None: ...
+        def json(self) -> dict:
+            return {
+                "choices": [{"message": {"content": "{}"}}],
+                "usage": {"prompt_tokens": 321, "completion_tokens": 45},
+            }
+
+    class _Client:
+        def __init__(self, *args, **kwargs) -> None: ...
+        async def __aenter__(self) -> "_Client":
+            return self
+        async def __aexit__(self, *exc) -> None: ...
+        async def post(self, *args, **kwargs) -> _Resp:
+            return _Resp()
+
+    monkeypatch.setattr(httpx2, "AsyncClient", _Client)
+    reply = asyncio_run_reply()
+    assert reply.content == "{}"
+    assert reply.prompt_tokens == 321
+    assert reply.completion_tokens == 45
+
+
+def test_call_ai_usage_absent_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx2
+
+    class _Resp:
+        def raise_for_status(self) -> None: ...
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    class _Client:
+        def __init__(self, *args, **kwargs) -> None: ...
+        async def __aenter__(self) -> "_Client":
+            return self
+        async def __aexit__(self, *exc) -> None: ...
+        async def post(self, *args, **kwargs) -> _Resp:
+            return _Resp()
+
+    monkeypatch.setattr(httpx2, "AsyncClient", _Client)
+    reply = asyncio_run_reply()
+    assert reply.content == "ok"
+    assert reply.prompt_tokens is None
+    assert reply.completion_tokens is None

@@ -65,10 +65,10 @@ describe("buildGraphFromCsv — 그래프 변환", () => {
     const graph = graphOf(
       [
         HEADER,
-        "Review,SAP ERP,2 days,https://ex.com/doc,Decide",
+        "Review,SAP ERP,2,https://ex.com/doc,Decide",
         "Decide,,,,Sign:approved;Reject:rejected",
-        "Sign,,3 days,,",
-        "Reject,,1 day,,",
+        "Sign,,3,,",
+        "Reject,,1,,",
       ].join("\n"),
     );
     // 4행 + Start + End = 6 노드
@@ -80,7 +80,7 @@ describe("buildGraphFromCsv — 그래프 변환", () => {
     expect(byTitle.get("Decide")?.node_type).toBe("decision"); // Next 2개 → decision
     expect(byTitle.get("Review")?.node_type).toBe("process");
     expect(byTitle.get("Review")?.system).toBe("SAP ERP");
-    expect(byTitle.get("Review")?.duration).toBe("2 days");
+    expect(byTitle.get("Review")?.duration).toBe("2");
     expect(byTitle.get("Review")?.url).toBe("https://ex.com/doc");
     // 엣지: Start→Review, Review→Decide, Decide→Sign(approved), Decide→Reject(rejected), Sign→End, Reject→End
     expect(graph.edges).toHaveLength(6);
@@ -146,6 +146,28 @@ describe("buildGraphFromCsv — 검증 에러", () => {
     expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
   });
 
+  it("숫자 파라미터 컬럼을 파싱·정규화한다", () => {
+    const csv = [
+      "Name,Duration,Headcount,ETF,Cost,Extra,Next",
+      "A,0.75,2,1.5,300,7,B",
+      "B,,,,,,",
+    ].join("\r\n");
+    const outcome = buildGraphFromCsv(csv);
+    const a = outcome.graph?.nodes.find((n) => n.title === "A");
+    expect(a?.duration).toBe("1.15"); // 60분 이월
+    expect([a?.headcount, a?.etf, a?.cost, a?.extra]).toEqual(["2", "1.5", "300", "7"]);
+  });
+
+  it("비숫자 파라미터는 행 번호와 함께 에러", () => {
+    const csv = ["Name,Duration,Headcount", "A,2일,두명"].join("\r\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.graph).toBeNull();
+    expect(outcome.errors).toEqual([
+      { line: 2, message: expect.stringContaining("Duration") },
+      { line: 2, message: expect.stringContaining("Headcount") },
+    ]);
+  });
+
   it("자기 참조(재작업 루프)는 허용한다", () => {
     const graph = graphOf(`${HEADER}\nA,,,,A;B\nB,,,,`);
     const a = graph.nodes.find((n) => n.title === "A");
@@ -164,7 +186,9 @@ describe("buildGraphFromCsv — 검증 에러", () => {
 describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
-    expect(prompt).toContain("Name,Description,Assignee,Department,System,Duration,URL,URL_Label,Next"); // 헤더 명시
+    expect(prompt).toContain(
+      "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+    ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
     expect(prompt).toContain("최대 500개"); // MAX_DATA_ROWS 파생
@@ -317,7 +341,7 @@ describe("buildGraphFromCsv — Description/Assignee/Department 컬럼", () => {
   });
 
   it("새 열이 없는 옛 CSV도 그대로 파싱된다 (회귀)", () => {
-    const o = outcomeOf(`${HEADER}\nReview request,SAP,2 days,,\n`, DIR);
+    const o = outcomeOf(`${HEADER}\nReview request,SAP,2,,\n`, DIR);
     expect(o.errors).toEqual([]);
     const node = o.graph!.nodes.find((n) => n.title === "Review request")!;
     expect(node.description).toBe("");
@@ -378,13 +402,13 @@ describe("buildGraphFromCsv — 머지", () => {
   });
 
   it("값이 있는 셀은 덮어쓴다", () => {
-    const o = buildGraphFromCsv(`${H9}\nReview request,새 설명,kim.cs,Quality Part 1,ERP,5 days,,,\n`, { base: baseGraph(), directory: DIR });
+    const o = buildGraphFromCsv(`${H9}\nReview request,새 설명,kim.cs,Quality Part 1,ERP,5,,,\n`, { base: baseGraph(), directory: DIR });
     const node = o.graph!.nodes.find((n) => n.id === "a1")!;
     expect(node.description).toBe("새 설명");
     expect(node.assignee).toBe("김철수");
     expect(node.department).toBe("Quality Part 1");
     expect(node.system).toBe("ERP");
-    expect(node.duration).toBe("5 days");
+    expect(node.duration).toBe("5");
   });
 
   it("CSV가 싣지 않는 필드는 언제나 보존한다", () => {
@@ -617,6 +641,20 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
       { base: base([baseNode("n1", "견적 검토")]) },
     );
     expect(outcome.graph?.nodes.find((n) => n.id === "n1")?.assignee).toBe("김담당");
+  });
+
+  it("normalizes AI duration — invalid echo keeps existing, valid form adopted", () => {
+    const existing = baseNode("n1", "견적 검토", { duration: "1.30" });
+    const invalid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { duration: "3일" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(invalid.graph?.nodes.find((n) => n.id === "n1")?.duration).toBe("1.30");
+    const valid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { duration: "2.90" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(valid.graph?.nodes.find((n) => n.id === "n1")?.duration).toBe("3.30"); // 60분 이월 정규화
   });
 
   it("lists unmatched base nodes as removed and lost edges", () => {

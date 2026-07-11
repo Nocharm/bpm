@@ -13,6 +13,7 @@ import {
   SubprocessDesignationModal,
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
+import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 
 interface SubprocessInspectorCardProps {
@@ -36,6 +37,10 @@ export function SubprocessInspectorCard({
     assignee: "",
     system: "",
     duration: "",
+    headcount: "",
+    etf: "",
+    cost: "",
+    extra: "",
     url: "",
     urlLabel: "",
   });
@@ -69,6 +74,10 @@ export function SubprocessInspectorCard({
       assignee: detail.sp_assignee ?? "",
       system: detail.sp_system ?? "",
       duration: detail.sp_duration ?? "",
+      headcount: detail.sp_headcount ?? "",
+      etf: detail.sp_etf ?? "",
+      cost: detail.sp_cost ?? "",
+      extra: detail.sp_extra ?? "",
       url: detail.sp_url ?? "",
       urlLabel: detail.sp_url_label ?? "",
     });
@@ -93,7 +102,11 @@ export function SubprocessInspectorCard({
     { label: t("field.department"), value: detail.sp_department },
     { label: t("field.assignee"), value: detail.sp_assignee },
     { label: t("field.system"), value: detail.sp_system },
-    { label: t("field.duration"), value: detail.sp_duration },
+    { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
+    { label: t("field.headcount"), value: detail.sp_headcount },
+    { label: t("field.etf"), value: detail.sp_etf },
+    { label: t("field.cost"), value: detail.sp_cost },
+    { label: t("field.extra"), value: detail.sp_extra },
   ];
 
   return (

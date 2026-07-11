@@ -99,6 +99,11 @@ class ProcessMap(Base):
     sp_assignee: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_system: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_duration: Mapped[str | None] = mapped_column(String(50), default=None)
+    # 숫자 파라미터 — sp 확장, 값은 H.MM/십진수 문자열 (design 2026-07-11 SP)
+    sp_headcount: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_etf: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_cost: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_extra: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
@@ -197,6 +202,11 @@ class Node(Base):
     department: Mapped[str] = mapped_column(String(100), default="")
     system: Mapped[str] = mapped_column(String(100), default="")
     duration: Mapped[str] = mapped_column(String(50), default="")
+    # 숫자 파라미터 — duration(H.MM 시간)과 함께 5종, 값은 숫자 문자열(경계 검증) (design 2026-07-11)
+    headcount: Mapped[str] = mapped_column(String(50), default="")
+    etf: Mapped[str] = mapped_column(String(50), default="")
+    cost: Mapped[str] = mapped_column(String(50), default="")
+    extra: Mapped[str] = mapped_column(String(50), default="")
     # 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
     url: Mapped[str] = mapped_column(String(500), default="")
     # 참조 링크 표시 라벨 — url 있을 때만 의미(스키마 validator가 함께 소거) (url-label design 2026-07-07)
@@ -551,3 +561,23 @@ class LoginRecord(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, index=True
     )
+
+
+class AiUsageEvent(Base):
+    """AI 호출 1건의 usage 기록 — 원문(질문 내용) 없이 계량만. 대시보드 집계용 (design 2026-07-11)."""
+
+    __tablename__ = "ai_usage_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, index=True
+    )
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    # FK 아님 — 맵/버전이 삭제돼도 통계 보존 (ai_chat_messages.version_id와 동일 관례)
+    map_id: Mapped[int] = mapped_column(Integer)
+    version_id: Mapped[int] = mapped_column(Integer)
+    model: Mapped[str] = mapped_column(String(200), default="")  # 요청 선택자(빈값=서버 기본)
+    kind: Mapped[str | None] = mapped_column(String(20), default=None)  # 실패 시 None
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)

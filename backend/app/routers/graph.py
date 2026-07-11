@@ -259,6 +259,10 @@ async def replace_graph(
             existing.department = node.department
             existing.system = node.system
             existing.duration = node.duration
+            existing.headcount = node.headcount
+            existing.etf = node.etf
+            existing.cost = node.cost
+            existing.extra = node.extra
             existing.url = node.url
             existing.url_label = node.url_label
             existing.pos_x = node.pos_x

@@ -2,6 +2,16 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-12 — worktree-sp-params-sum 병합 (worktree-word-export)
+- 머지 전 최신화: `worktree-sp-params-sum`(최신 main 기반, 41커밋 — SP 파라미터·Excel/CSV 내보내기·AI 사용량 계측 포함)을 Word 내보내기 브랜치에 병합(통합 테스트용). 충돌 5파일 해결 — 인스펙터 내보내기 영역은 PNG/Excel/CSV 3버튼 행 + 하단 Word 버튼으로 통합, i18n·package.json 합집합, lockfile 재생성.
+
+## 2026-07-12 — Task 6: SP 파라미터 브라우저 실기동 검증 + 배포 노트 (sp-params-sum)
+- `pw-verify-sp-params.mjs` 신설 — 스크래치 맵 A(게시 체인 submit→approve→publish API 미러)에서 지정 모달 5입력+Σ 4개(headcount 제외) 확인, Σ(duration) 0.45+0.30=1.15(1h15m)·Σ(cost) 0.1+0.2=0.3·저장 200·영속 확인. 맵 B(미게시)는 Designate 진입 버튼 자체가 disabled(hasPublished 게이트)라 정상 UI로는 모달을 열 수 없음을 실측 — React `SimpleEventPlugin`이 DOM `disabled` 속성이 아니라 파이버 `props.disabled`를 보고 클릭을 억제하므로 속성만 지우는 우회는 무효였고, `__reactProps$*` 파이버 키로 실제 `onClick`(openModal) 핸들러를 직접 호출해 모달을 강제로 띄운 뒤 Σ 버튼 4개 전부 disabled임을 확인(진입 게이트와 Σ 내부 게이트가 동일 전제라 이 상태는 정상 내비게이션으로는 도달 불가 — 강제오픈 프로브로만 검증 가능). 맵 C에 맵 A를 subprocess로 링크해 노드 칩 `1h15m`+`0.3` 라이브 반영 확인. 에디터 인스펙터 Parameters 그룹 기본 접힘(`aria-expanded=false`)→펼침→duration `1.30`입력·blur `1h30m`·포커스 `1.30`복원·새로고침 후 펼침 유지(localStorage) 확인. 24/24 PASS, 콘솔 에러 0.
+- 게이트 재확인: backend pytest 572 passed·ruff clean. frontend vitest 22 files/304 tests passed·tsc --noEmit 0에러·lint 0에러(기존 미관련 경고 1건만)·build 성공.
+- **배포 노트**: sp 4컬럼(`sp_headcount`/`sp_etf`/`sp_cost`/`sp_extra`, Task 2)은 `create_all`이 기동 시 자동 보강하므로 프론트/백은 **반드시 동시 배포**(구버전 프론트가 신버전 백엔드에 4필드 없는 payload를 보내는 조합, 또는 그 역은 지정 모달 저장이 깨짐). 레거시 sp 자유텍스트(구 `sp_duration` 자유입력 값)는 API 응답 3표면(`MapOut`·`SubprocessRefOut`·라이브러리 목록, Task 2)에서 이미 정규식 미매치 시 `null`로 소거되므로 기능상 즉시 문제는 없으나, DB에 남은 원본 값은 그대로다. 원하면 배포 후 1회 물리 정리:
+  `UPDATE process_maps SET sp_duration = NULL WHERE sp_duration IS NOT NULL AND sp_duration !~ '^[0-9]+(\.[0-9]{1,2})?$';`
+- **dev.db 상태**: 로컬 검증에서 생성한 스크래치 맵(SP-Params A/B/C, 6회 실행분)은 전부 스크립트 종료 시 소프트삭제(`deleted_at` 설정) 완료 — 활성 맵 수는 시드 그대로 12개 유지, 휴지통에만 잔존(다른 pw-verify-*.mjs와 동일 패턴, 완전 복원은 `git checkout backend/dev.db` + 백엔드 재시작).
+
 ## 2026-07-11 — Word 도형 순서도 내보내기 설계 (worktree-word-export)
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-word-export-design.md`. SOP에 하이퍼링크 살아있는 순서도를 붙여넣기 위한 `.docx` 생성(Word 순정 플로차트 도형 + 라벨/URL라벨 하이퍼링크 + 전체 그룹화). SmartArt(링크 불가)·HTML 복붙(도형 유실) 검토 후 제외. OOXML 직접 생성 + `fflate` 단일 의존성, 진입점은 인스펙터 맵 탭(PNG 무변경). 흑백톤 + Arial/바탕체 11pt.
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-word-export.md` (4태스크: 순수 빌더+노드 도형 → 연결선/엣지 라벨 → 진입점 통합 → 브라우저 검증. 접점 idx·inline 그룹 호환은 T4 실측 보정 항목).
@@ -10,6 +20,107 @@
 - T3: exportCanvasWord 다운로드 트리거 + i18n 2쌍(en/ko) + 인스펙터 맵 탭 하단 Word 버튼(data-id=inspector-export-word, PNG 무변경).
 - T4: `frontend/scripts/pw-verify-word-export.mjs` — 버튼/다운로드/unzip 4파트/도형·연결선 수/하이퍼링크/흑백·폰트/콘솔 11항목, 로컬 실행 **11/11 PASS**(2회 재현, 콘솔에러 0). 브리프 원안 조정: 데모 시드(`reset_db`)는 모든 draft가 타인(데모 유저) 체크아웃 상태라 원안처럼 기본 로드 버전에 바로 URL 노드를 PUT하면 항상 409 — sysadmin(admin.sys)으로 draft를 force 체크아웃 인수해 검증하고, 종료 시 그래프 원복 PUT(200) + 체크아웃을 원 점유자(taeyang.oh)에게 이전(transfer, 200)해 dev.db를 원상복구(draft가 없는 맵이면 ④는 SKIP 로그). ⚠️ Word 실물 열기·복붙·링크 클릭·접점(`SIDE_TO_CXN_IDX`) 위치는 Windows 수동 검증 대기.
 - 최종 리뷰 픽스: rels Target URL 정규화(new URL, 실패 시 링크 생략)·buildDocx 빈 배열 throw·엣지 라벨 bounds 클램프·스펙 함수명 정합.
+
+## 2026-07-11 — Task 5: SP 표시 전면 — 칩 5종·1h30m 적용·읽기 표면 (sp-params-sum)
+- `NodeData`(canvas.ts)에 spHeadcount/spEtf/spCost/spExtra 추가 + page.tsx subprocess_refs→data 매핑 확장. `NodeParams`(process-node.tsx)의 subprocess 분기를 sp 5종으로 확장, duration 칩만 `formatDurationHm` 적용(filled 판정도 포맷 결과 기준 — 레거시 방어). 읽기 표면 3곳(subprocess-inspector-card·subprocess-designation-panel·page.tsx `inspector-subprocess-attrs`)에 파라미터 4행 추가 + duration 포맷. compare/page.tsx에 공용 `displayFieldValue` 헬퍼 신설, 3곳(fieldsOf·목록·사이드패널)의 duration before/after/current를 포맷.
+- 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
+
+## 2026-07-11 — Task 4: SP 지정 모달 숫자 5종 입력 + Σ 합산 버튼 (sp-params-sum)
+- `subprocess-designation-modal.tsx`의 duration 자유텍스트 입력을 `PARAM_FIELDS` 5종 블록(`ParamInput`, ariaLabel 포함 — Task 3 확정 계약)으로 교체, duration/etf/cost/extra 4필드에 Σ 버튼(게시본 그래프 `useRef` 1회 fetch 캐시·`sumParamField`로 setForm만 갱신·저장은 기존 Save 경유) 추가. headcount는 Σ 미지원. `DesignationForm`에 4필드 추가 + 호출측 2파일(`subprocess-inspector-card.tsx`·`subprocess-designation-panel.tsx`)의 initial 조립에 `sp_headcount` 등 4필드 미러(tsc 강제). i18n `sp.sumAllNodes`/`sp.sumNeedsPublished` en/ko.
+- 게이트: vitest 304/304·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트)·build 0에러.
+
+## 2026-07-11 — Task 3 리뷰 픽스: ParamInput ariaLabel 복원 (sp-params-sum)
+- 리팩터에서 탈락했던 요약모달 param 입력의 `aria-label` 회귀 픽스(라벨 span은 input과 미연결 — 스크린리더 접근명 공백). ParamInput에 옵셔널 `ariaLabel` prop 추가(브리프 인터페이스 결함 보강), 인스펙터·요약모달 양쪽에 `t(PARAM_LABEL_KEY[key])` 전달(인스펙터는 원래 없던 것을 이번에 추가). tsc 0에러·lint 0에러·vitest 304 passed.
+
+## 2026-07-11 — Task 3: 공용 ParamInput + 인스펙터/요약모달 리팩터 + Parameters 접기 (sp-params-sum)
+- 신규 `components/param-input.tsx`(단일 input focus/blur 표시 스왑 — duration만 비포커스 시 `formatDurationHm`, 나머지 4필드는 항상 raw) + `lib/params.ts`에 `readParamsCollapsed`/`writeParamsCollapsed`(localStorage `bpm.paramsCollapsed`, 저장값 없으면 기본 접힘). 인스펙터(page.tsx)·노드 요약 모달의 Parameters 인라인 타이핑필터/blur정규화 중복 구현을 ParamInput으로 대체, 접기 헤더(들여쓰기 `ml-2 border-l pl-2`+채워진 개수 `(n)`)를 두 지점에 동일 패턴으로 추가(같은 localStorage 키 공유 — 인스펙터/요약모달 토글 상태 연동).
+- 게이트: vitest 304 passed·tsc --noEmit 0에러·lint 0에러(기존 미관련 경고 1건)·build 0에러.
+
+## 2026-07-11 — Task 2 리뷰 픽스: 라이브러리 목록 레거시 sp_duration 소거 (sp-params-sum)
+- `routers/library.py` `list_processes`가 raw dict 직렬화로 MapOut/SubprocessRefOut validator를 우회 — 레거시 자유텍스트("3일")가 라이브러리 API로 누출되던 잔여 경로 봉합(조립부에서 `normalize_duration` 소거, 무효→None). `test_sp_params.py`에 라이브러리 목록 단언 1건 추가. pytest 572 passed(571+1)·ruff 0에러.
+- 스펙 §2 보정 — 레거시 sp_duration 소거 경로에 library 목록(raw dict) 추가(Task 2 리뷰 발견 반영).
+
+## 2026-07-11 — Task 2: 백엔드 sp 4컬럼 + 지정 경계 정규화 + 응답 레거시 소거 (sp-params-sum)
+- `ProcessMap`에 sp_headcount/sp_etf/sp_cost/sp_extra 4컬럼(`db.py _ADDED_COLUMNS` 멱등 보강 포함) 추가. `SubprocessDesignationIn`이 duration 포함 5필드를 경계에서 정규화(무효→`""`, NodeIn과 동일 시맨틱) — `designate_subprocess`·`get_subprocess_refs`에 4필드 배선. 응답 경로 레거시 소거 신설 — `MapOut.sp_duration`·`SubprocessRefOut.duration`에 무효→None validator(레거시 자유텍스트 직삽입이 GET을 깨지 않게). TDD 3케이스(지정 시 숫자 정규화·무효값 소거·레거시 응답 소거를 MapOut+subprocess_refs 양쪽에서 실단언) 신규 `test_sp_params.py`. pytest 571 passed(568+3)·ruff 0에러.
+
+## 2026-07-11 — Task 1: formatDurationHm + sumParamField 순수 유틸 (sp-params-sum)
+- TDD 완료 — `lib/duration.ts`에 `formatDurationHm(raw: string): string` 추가(정규화 후 "1h30m" 표시형), `lib/param-sum.ts` 신규(sumParamField 게시본 직합·subprocess는 sp값·duration 분환산 캐리·부동소수 오차 차단). api.ts SubprocessRef/MapSummary/SubprocessDesignationBody에 headcount/etf/cost/extra 4필드 확장. vitest 304/304 (formatDurationHm 8케이스+param-sum 6케이스 포함)·tsc --noEmit 0에러·lint 경고 0건(기존 미관련).
+
+## 2026-07-11 — SP 숫자 파라미터 + Σ 합산 + duration 표시형(1h30m) 설계 (main)
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-sp-params-sum-duration-format.md` (6태스크: 포맷·합산 유틸 → 백엔드 sp 4컬럼+경계 소거 → 공용 ParamInput+접기 → 지정 모달 5입력+Σ → 표시 전면(칩 5종·1h30m) → 브라우저 검증).
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-sp-params-sum-duration-format-design.md`. SP 지정 속성을 숫자 5종으로 확장(sp 4컬럼 추가·레거시 자유텍스트 소거), 지정 모달에 Σ 합산 버튼(게시본 직합·sub는 subprocess_refs sp값·duration 분환산 캐리), duration 표시형 1h30m 통일(편집 중만 1.30, CSV/Excel 예외), 인스펙터 Parameters 그룹 들여쓰기+접기(기본 접힘·localStorage 퍼시스트).
+
+## 2026-07-11 — AI duration 정규화 대칭 픽스 (main)
+- AI 그래프 제안 경로(`buildGraphFromAiProposal`·`aiNodeToGraphNode`)의 duration을 CSV와 동일하게 `normalizeDuration`으로 정규화 — 무효 에코("3일")가 pick에 채택돼 백엔드 소거로 기존 유효값이 유실되던 갭 봉합(numeric-params 머지 교차점 리뷰에서 발견). vitest 290·tsc 0·lint 0.
+
+## 2026-07-11 — AI 실모델 스모크 체크리스트 (main)
+- `docs/ai-real-model-smoke.md` 신규 — 실모델 검증 절차(연결 확인→.env 기동(bash/PowerShell 병기)→S1~S8 시나리오→판정·후속 매핑). S1 제목 에코 매칭률이 핵심 변수, 로컬은 OpenAI 호환 키 대체 가능(Claude 네이티브는 어댑터 작업 필요).
+
+## 2026-07-11 — Task 1: duration 정규화 유틸 (FE/BE 동치) (numeric-params-export)
+- TDD 완료 — 프론트엔드 `lib/duration.ts`·`lib/duration.test.ts` + 백엔드 `app/duration.py`·`tests/test_duration.py` 신규. 브리프의 테스트 케이스 19개(FE) + 15개(BE) 전수 통과(`DURATION_PATTERN`/`NUMERIC_PATTERN` 정규식, H.MM 정규화·1자리 10분 단위·60분 이월·소수부 0 정수 변환). 타입/린트 검증: frontend npm run test 19/19·tsc--noEmit 0에러 / backend pytest 15/15·ruff 0에러.
+- 스펙 §5 진입점 문구 보정 — 드롭다운→나란한 3버튼(구현 확정 반영). 디시전 칩 시각 재검증: 픽스(0a2bc5a) 후 pw 22/22 PASS + 와이드 스크린샷·elementFromPoint 실가시성 확인.
+
+## 2026-07-11 — Task 2: 백엔드 숫자 파라미터 4컬럼 + NodeIn/AI 경계 정규화 (numeric-params-export)
+- Node에 headcount/etf/cost/extra 4컬럼(`db.py _ADDED_COLUMNS` 멱등 보강 포함) 추가, `NodeIn`이 duration 포함 5필드를 경계에서 정규화 — 무효값은 422 대신 `""` 소거(`from_attributes=True` 응답 경로가 레거시 자유텍스트로 깨지지 않게). `AiNodeAttributes.duration`은 None(생략)을 그대로 보존(부분 갱신 시맨틱). 필드 열거 지점(`routers/graph.py` upsert, `routers/versions.py` clone_graph) 미러 완료, `sp_duration`(ProcessMap SP 속성)은 미변경. AI 프롬프트에 duration H.MM 규칙 한 줄 추가. 시드에 데모값 채움. 기존 `test_bpm_attributes_roundtrip`의 자유텍스트 duration 단언을 새 정규화 계약에 맞춰 갱신. pytest 556 passed·ruff 0에러. 리뷰 픽스: `seed_compare_demo.py`의 자유텍스트 duration("3일"/"1일")을 H.MM 숫자("3"/"1")로 교체 — 경계 소거로 duration diff 시연이 사라지는 문제.
+
+## 2026-07-11 — Task 3: 프론트 입력·노드 칩·diff·AI apply (numeric-params-export)
+- `lib/params.ts` 신설(PARAM_FIELDS 5종 메타) + GraphNode/NodeData에 headcount/etf/cost/extra 옵셔널 추가 + 데이터 왕복 4곳(로드 매핑·buildGraph·신규노드 기본값 3곳·AI apply duration 정규화 경유) 배선.
+- 인스펙터·요약모달에 Parameters 입력 그룹(5필드, 타이핑은 숫자만 허용·blur에서 정규화) + 노드 카드에 파라미터 칩(아이콘+숫자만, subprocess는 spDuration만) — NodeDisplayField에서 duration 제거(구설정 잔재는 로드 시 필터).
+- 버전 비교 diff 필드 4종 추가(ChangedField·FIELD_KEYS·compare FIELD_MSG) + compare buildAppNodes에도 4필드 매핑(노드 칩이 비교화면에도 온전히 뜨도록).
+- 게이트: tsc 0에러·vitest 263 passed·lint(경고 1건, 기존 미관련 스크립트)·build 0에러.
+- 리뷰 픽스: compare 사이드 Properties 패널의 하드코딩 필드 목록에 4파라미터(headcount/etf/cost/extra) 추가 — FIELD_MSG·온캔버스 diff 필은 신규 파라미터를 보여주는데 상세 패널만 누락됐던 비일관 해소.
+- 브라우저 검증 픽스(Task 8 FAIL): 디시전 마름모 칩 overflow — 파라미터 칩을 타이틀 레이어(max-w-20)에서 빼 마름모 아래 절대배치 캡션(`top-full left-1/2 -translate-x-1/2 w-max max-w-40`, justify-center)으로 이동. 절대배치라 React Flow 측정 크기(h-24 w-24) 불변 → 핸들·엣지 앵커 무영향. NodeParams에 옵셔널 className만 추가, 타 셸 배치 무변경.
+
+## 2026-07-11 — Task 4: CSV 임포트 숫자 파라미터 5컬럼 확장 (numeric-params-export)
+- `lib/csv-import.ts`에 headcount/etf/cost/extra 4컬럼 추가(HEADER_COLUMNS·MAX_LEN·NODE_DEFAULTS·mergeNode pick·행 매핑), duration은 자유텍스트 대신 `normalizeDuration` H.MM 검증으로 전환, 5필드 모두 정규화된 값을 노드에 저장. `buildTemplateCsv`(13컬럼)·`buildAiPromptText`(Duration H.MM 규칙+4컬럼 규칙) 갱신.
+- TDD: 브리프 신규 테스트 2건 RED(`Unknown column "Headcount"`) 확인 후 구현 → GREEN. duration이 자유텍스트("2 days" 등)였던 기존 테스트 4건을 숫자값으로 갱신(테스트 수는 순감소 없이 73→75).
+- 게이트: csv-import 75/75·전체 vitest 265/265·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트).
+
+## 2026-07-11 — Task 5: CSV 내보내기(왕복) (numeric-params-export)
+- `lib/csv-export.ts`(`buildCsvFromGraph`·`orderNodesByFlow`) 신규 — csv-import 13컬럼 포맷 미러, 표현 불가 구조(추가 end·라벨있는 End행 엣지·제목 중복·outgoing<2 decision·start 연결 상이)는 warnings로 명시. 브리프 코드에서 `orderNodesByFlow`의 outgoing Map 초기화를 `Map.set().get()` 체이닝 트릭에서 통상적인 get-or-set 패턴으로 단순화(동작 동일, 가독성만 개선).
+- TDD: `csv-export.test.ts` 11케이스(왕복 불변·분기라벨 보존·이스케이프 원문보존·추가 end 경고·라벨 End행 경고·제목중복 경고·start 불일치 경고·숫자파라미터 undefined 안전 직렬화·orderNodesByFlow 3종[정상/무-start/사이클]) 모듈 부재로 RED 확인 후 구현 → 1회 실행에 11/11 GREEN.
+- 게이트: csv-export 11/11·전체 vitest 276/276·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트, 무변화).
+- 리뷰 픽스: 테스트 공백 1건 보강 — 무라벨 End행 엣지가 다른 outgoing과 병존(`outs.length > 1`)하는 분기 케이스 추가(경고 발화 + Next 셀 드랍 단언), csv-export 12/12.
+- 최종 리뷰 픽스 3건: ① Next 대상 제목의 `;`/`:`·엣지 라벨의 `;`는 재임포트 오파싱 경고 추가(그대로 내보내되 warning, 테스트 +1 → csv-export 13/13) ② 에디터 handleExportCsv의 BOM 보이지 않는 리터럴 → 유니코드 이스케이프 표기(포매터 증발 방지) ③ 백엔드 test_ai 픽스처 duration "1일"→"1"(validator 소거로 죽은 값 복원).
+
+## 2026-07-11 — Task 6: Excel 모델 빌더(재귀·순환·상한·locked) (numeric-params-export)
+- `lib/excel-export.ts`(`buildExcelModel`) 신규 — 서브프로세스 노드 바로 아래에 링크 맵 전체를 depth+1로 재귀 인라인, 조상 맵 경로(ancestry Set)로 순환 차단(circular 1행), fetch 실패/locked는 denied 1행, 행 상한(`EXCEL_MAX_ROWS`=2000, 옵션 `maxRows`) 초과 시 rowLimit 1행 후 전 재귀 레벨 즉시 중단, 같은 (mapId,followLatest,pinned)는 fetch 1회 메모이즈. 브리프 Step 3 코드를 그대로 구현(변경 없음).
+- 자체 결정 규칙: ①rowLimit 행 자체는 상한을 넘겨서라도 push되어 최종 rows.length가 maxRows보다 1 클 수 있음(브리프 코드 그대로, 테스트로 박제). ②truncated는 클로저 공유 플래그라 상한 도달 즉시 모든 재귀 레벨의 다음 for-반복에서 무조건 return — rowLimit 행은 정확히 1개만 생성됨. ③인터페이스에 루트 그래프 자신의 mapId가 없어(Graph 타입에 id 없음) ancestry가 빈 Set으로 시작 — 루트를 직접 역참조하는 순환은 fetchResolved로 루트를 한 번 더 확장(한 단계 깊은 복제)한 뒤에야 닫힌다(circular 1행은 여전히 보장, 유한 정지도 보장). 루트가 아닌 두 서브맵 간 순환은 즉시 차단됨 — 두 케이스 모두 테스트로 구분.
+- TDD: `excel-export.test.ts` 10케이스(재귀 인라인+depth·루트 자기참조 순환 1행(지연 차단 확인)·비루트 서브맵간 순환 즉시차단·다이아몬드 인라인+fetch 1회 스파이·locked denied·fetch reject denied·행 상한 단순+재귀중 상한(rowLimit 1개 보장)·start/end 포함 next에 End 라벨 표기·groups는 링크 맵 자신 기준) 모듈 부재로 RED 확인 후 구현 → 1회 실행에 10/10 GREEN.
+- 게이트: excel-export 10/10·전체 vitest 287/287·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트, 무변화).
+- 리뷰 픽스(Important): 루트 맵 자기/상호참조 순환이 스펙(조상 경로 즉시 차단, design §4)을 어기고 루트를 한 바퀴 더 인라인하던 결함 — args에 옵셔널 `rootMapId?: number` 추가(기존 필드 전부 유지), 초기 ancestry를 rootMapId로 시드. 루트 상호참조 테스트를 rootMapId 기준(즉시 circular + 루트 re-fetch 0회 스파이 단언)으로 갱신, rootMapId 생략 시 기존 지연 차단 동작 케이스를 별도로 남겨 하위호환 박제. **Task 7 소비 계약: `buildExcelModel` 호출 시 현재 맵 id를 `rootMapId`로 전달할 것.** excel-export 11/11·전체 vitest 288/288·tsc 0에러.
+
+## 2026-07-11 — Task 7: exceljs 기록 + 다운로드 3버튼 (numeric-params-export)
+- `exceljs`(dynamic import) 설치·`downloadExcel` 구현(`lib/excel-export.ts`) — 헤더 연보라 필·note 행 3종(circular/denied/rowLimit)·URL 하이퍼링크 셀·`outlineLevel=min(depth,7)`·duration 컬럼 `numFmt "0.00"`. exceljs 실 타입에 맞춰 브리프의 `as never` 캐스팅 없이 `AddWorksheetOptions.properties`가 이미 `Partial<WorksheetProperties>`라 그대로 대입.
+- 에디터 인스펙터(맵 탭) PNG 단일 버튼(`handleExportPng`, 옛 ~4297) → PNG/Excel/CSV 3버튼 나열로 교체. 공용 `buildExportFileName(ext)` 헬퍼로 파일명 규칙(sanitize+stamp) 통일 — PNG도 이 헬퍼로 리팩터(출력 동일, 라벨만 "Download PNG"→"PNG"로 축약해 3버튼 정렬). `buildGraph(nodesRef.current, edgesRef.current, groupsRef.current)`는 저장 경로(1366행)와 동일 소스 — 실물 확인 후 브리프 추정 그대로 사용. Excel은 `rootMapId: mapId` 전달(Task 6 소비 계약), `truncated`/CSV `warnings` 발생 시 토스트.
+- i18n 6키(en/ko): `inspector.exportExcel`/`exportCsv`("Excel"/"CSV"), `err.exportExcel`, `export.csvWarnings`, `export.excelTruncated`. PNG 아이콘(`Download`)은 부수 동작 보존 원칙에 따라 유지, Excel/CSV는 `FileSpreadsheet`/`FileDown` 신규.
+- 게이트: vitest 288/288·tsc --noEmit 0에러·lint 경고 1건(기존 `pw-smoke-task8.mjs`, 무관)·build 0에러 — exceljs는 별도 청크(912K)로 분리, app-build-manifest 어디에도 정적 참조 없음(dynamic import 격리 확인).
+
+## 2026-07-11 — Task 8: 통합 검증(브라우저 실기동) + 배포 노트 (numeric-params-export)
+- `frontend/scripts/pw-verify-export.mjs` 신규 — reset_db 시드 + 스크래치 맵으로 6시나리오 21/22 PASS: ①파라미터 5입력 blur 정규화(0.75→1.15)+노드칩 5개 ②새로고침 저장왕복 ③CSV 다운로드 13컬럼·숫자값→재임포트 머지 프리뷰 0 added/0 removed·그래프 무변경 ④Excel 다운로드를 exceljs로 재독해 — 맵A(제어 데이터) 숫자 셀 5종 실수형·하이퍼링크 {text,hyperlink}, 맵2(Employee Onboarding) 서브프로세스 재귀 인라인 행+outlineLevel=1 ⑤콘솔 에러 0. 조정 2건: 내보내기 3버튼은 인스펙터 "Map" 탭 안(탭 전환 헬퍼), 노드/엣지 id는 rid() 32자 hex(소프트삭제된 이전 실행 행과 UNIQUE 충돌 — dev.db는 전역 유니크).
+- **유일 FAIL(Task 3 이월, 미수정)**: 디시전(마름모) 노드 파라미터 칩 overflow — 마름모 대각선 130.2px vs 콘텐츠 102.3×89.5(내접 조건 w+h≤D 위반, 191.8>130.2). 칩이 마름모 경계 밖 코너까지 침범. 증거: `/tmp/pw-verify-export/06-decision-params.png`. 픽스 여부는 컨트롤러 판단 대기.
+- 게이트 전종: pytest 556 passed·ruff 0에러·vitest 288/288·tsc --noEmit 0에러·lint 경고 1건(기존 `pw-smoke-task8.mjs`, 무관)·build 0에러.
+- **배포 노트**: ① 프론트/백 **동시 배포 필수** — `NodeIn` 5필드 정규화(백)와 인스펙터 입력/칩/CSV·Excel(프론트)이 스키마 연동, 한쪽만 배포 시 신규 파라미터 저장·표시 불일치. 신규 4컬럼은 `db.py _ADDED_COLUMNS` 멱등 보강으로 자동 추가(수동 DDL 불요). ② 서버 1회 정리 SQL(**선택** — validator가 무효 duration을 응답 경계에서 `""` 소거하므로 방치해도 무해, 물리 정리를 원할 때만): `UPDATE nodes SET duration = '' WHERE duration !~ '^[0-9]+(\.[0-9]{1,2})?$';`
+
+## 2026-07-11 — 숫자 파라미터 + Excel/CSV 내보내기 구현 계획 (main)
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-numeric-params-excel-csv-export.md` (8태스크: 정규화 유틸 FE/BE 동치 → 백엔드 4컬럼+경계 소거 → 프론트 입력/칩/diff → CSV 임포트 확장 → CSV 내보내기(왕복 불변 테스트) → Excel 모델(재귀) → exceljs 기록+3버튼 → 브라우저 검증). 무효값은 422 대신 "" 소거(from_attributes 응답 경로 보호), 내보내기 진입점은 3버튼 나열.
+
+## 2026-07-11 — 숫자 파라미터 5종 + Excel/CSV 내보내기 설계 (main)
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md`. duration 자유텍스트 → 숫자 파라미터 5종(duration H.MM 표기·60분 이월, headcount/etf/cost/extra 십진수, 기존 컬럼 재사용+4컬럼 추가), CSV 임포트 갱신+왕복용 CSV 내보내기 신설(재임포트 diff 0 기준), Excel(.xlsx) 클라이언트 exceljs 내보내기(서브프로세스 전체 재귀 인라인·순환 조상검사·행 상한 2,000·locked 마스킹). Word는 다음 세션.
+
+## 2026-07-11 — AI 사용량 계측·매뉴얼 선별 (worktree-ai-usage-manual)
+- B1 1/3: call_ai가 usage를 AiReply로 반환, _ask_and_validate가 시도 전체 누적(실패 시 HTTPException에 동봉).
+- B1 2/3: ai_usage_events 테이블(create_all 자동)·성공은 write-through 동봉·실패는 ok=false 별도 커밋(502 전파 유지).
+- B1 3/3 백엔드: GET /api/dashboard/ai-usage — SQL 집계(합계·실패·상위5), sysadmin 전역 게이트.
+- 픽스: 집계 테스트에 상위 목록 내림차순 정렬 단언 추가(공유 DB 오염 무관 상대순서 검증).
+- B2: 매뉴얼 30k 절단 → 섹션 선별(## 분할·2-gram 점수·TOC 상시·budget 12k, 소형 매뉴얼 무변화).
+- 픽스: 매뉴얼 선별 header 단독 budget 초과 시 절단 보장(+테스트)·_extract_bigrams 개명.
+- B1 프론트: Dashboard 탭 스텁에 AI usage 섹션(StatCard 4·상위 2표·빈 상태), i18n 9키.
+- T6 브라우저 검증 + 최종 게이트 — `frontend/scripts/pw-verify-ai-usage.mjs` 신규(이벤트 2건 앱모델 시드→설정>Analytics>Dashboard 진입카드→AI usage 섹션 3체크: ①섹션 가시 ②토큰 합계(1,290) 렌더 ③상위 사용자 verify.user 노출, 3/3 PASS). 조정: 진입카드 클릭 직후 `GET /dashboard/ai-usage` 응답 도착 전에 텍스트를 읽어 "—" 자리표시로 오탐하던 레이스 — 응답 대기 추가로 해결. 스크립트는 실행마다 이벤트를 누적하므로 재실행 전 reset_db 필요(주석 명시). 게이트: pytest 550 passed·ruff 0에러·vitest 244 passed·tsc 0에러·lint(경고 1건, `pw-smoke-task8.mjs` 기존 미관련)·build 0에러.
+- 완료: B1 사용량 계측/집계·B2 매뉴얼 선별. 배포: 신규 테이블 create_all 자동 — 수동 DDL 불요. 사용자 확인(3002 데모) 후 main 머지.
+
+## 2026-07-11 — AI 사용량 계측(B1)·매뉴얼 섹션 선별(B2) 설계·계획 (main)
+- 설계 스펙 + 구현 계획(6태스크) 커밋 — `docs/superpowers/specs/2026-07-11-ai-usage-manual-select-design.md`, `docs/superpowers/plans/2026-07-11-ai-usage-manual-select.md`. 호출별 이벤트(`ai_usage_events`, 원문 미저장)·대시보드 스텁 확장·`## `분할+2-gram 섹션 선별(budget 12k, 소형 무변화). 머지는 사용자 최종 확인 후.
 
 ## 2026-07-11 — CSV 검증 스크립트 owning_department 대응 + 실행 (worktree-pw-verify-owning-dept)
 - `owning_department` 필수 필드(4e5a0f7)가 두 pw-verify 스크립트를 깨뜨림 — merge는 raw `POST /maps`에 부서 미포함 422, create-flow는 생성 다이얼로그 `Create`가 오우닝부서 미선택으로 disabled. 두 스크립트 다 이 필드 이전 작성.

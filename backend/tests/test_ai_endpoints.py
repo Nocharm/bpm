@@ -117,7 +117,7 @@ def test_call_ai_hits_selected_endpoint(
 ) -> None:
     monkeypatch.setattr(settings, "ai_endpoints", _TWO_ENDPOINTS)
     result = asyncio.run(ai_client.call_ai([{"role": "user", "content": "hi"}], "OpenAI::gpt-4o"))
-    assert result == "ok"
+    assert result.content == "ok"
     call = fake_http.calls[0]
     assert call["url"] == "https://api.openai.com/v1/chat/completions"
     assert call["headers"] == {"Authorization": "Bearer tok-oai"}

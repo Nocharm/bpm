@@ -7,13 +7,17 @@ import {
   AlertTriangle,
   Building2,
   Clock,
+  Coins,
   CornerDownRight,
   Link as LinkIcon,
   Lock,
   type LucideIcon,
   MessageSquare,
   Server,
+  Tag,
+  Target,
   User,
+  Users,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -26,9 +30,11 @@ import {
   terminalDisplayLabel,
   toPosition,
 } from "@/lib/canvas";
+import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import { PARAM_FIELDS, type ParamField } from "@/lib/params";
 import {
   PRIMARY_END_HANDLE,
   SUBPROCESS_IN_HANDLE,
@@ -39,7 +45,6 @@ const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
   assignee: User,
   department: Building2,
   system: Server,
-  duration: Clock,
   url: LinkIcon,
 };
 
@@ -53,7 +58,6 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
-    duration: data.spDuration,
     url: data.spUrl,
   };
   return (
@@ -81,6 +85,41 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
         );
       })}
     </>
+  );
+}
+
+const PARAM_ICON: Record<ParamField, LucideIcon> = {
+  duration: Clock, headcount: Users, etf: Target, cost: Coins, extra: Tag,
+};
+
+// 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4)
+// subprocess는 지정 어트리뷰트(sp*, 라이브 참조)를 표시. duration만 1h30m로 포맷(나머지 4필드는 원문 숫자).
+function NodeParams({ data, className }: { data: AppNode["data"]; className?: string }) {
+  const isSubprocess = data.nodeType === "subprocess";
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const values: Partial<Record<ParamField, string | null | undefined>> = isSubprocess
+    ? { duration: data.spDuration, headcount: data.spHeadcount, etf: data.spEtf, cost: data.spCost, extra: data.spExtra }
+    : { duration: data.duration, headcount: data.headcount, etf: data.etf, cost: data.cost, extra: data.extra };
+  // duration은 formatDurationHm 결과 기준으로 filled 판정 — 무효(레거시 자유텍스트)는 ""가 되어 칩 자체를 숨김
+  // (백엔드가 이미 소거하므로 실제로는 도달하지 않는 방어 코드).
+  const displayValue = (f: ParamField): string | null | undefined =>
+    f === "duration" ? formatDurationHm(values[f] ?? "") : values[f];
+  const filled = PARAM_FIELDS.filter((f) => displayValue(f));
+  if (filled.length === 0) return null;
+  return (
+    <div
+      className={`mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-ink-tertiary${className ? ` ${className}` : ""}`}
+    >
+      {filled.map((f) => {
+        const Icon = PARAM_ICON[f];
+        return (
+          <span key={f} className="inline-flex items-center gap-1">
+            <Icon size={12} strokeWidth={1.5} />
+            {displayValue(f)}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -427,6 +466,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
           </div>
           {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
           <NodeFields data={data} />
+          <NodeParams data={data} />
           {data.updateAvailable && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
@@ -478,6 +518,11 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             </div>
           )}
         </div>
+        {/* 파라미터 칩 — 마름모 내접(h-24 w-24)을 넘치지 않게 아래 절대배치 캡션으로.
+            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향 */}
+        <div className="absolute left-1/2 top-full w-max max-w-40 -translate-x-1/2">
+          <NodeParams data={data} className="justify-center" />
+        </div>
         {/* 마름모는 코너가 도형에서 멀다 — 배지를 안쪽(12px)으로 당겨 대각 엣지 근처에 (batch2 ⑬) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="left-3 top-3" />}
@@ -511,6 +556,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         />
       </div>
       <NodeFields data={data} />
+      <NodeParams data={data} />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">
           <CornerDownRight size={12} strokeWidth={1.5} />

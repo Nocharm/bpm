@@ -7,7 +7,7 @@
 import { ArrowLeft, ArrowRight, Info, LayoutGrid } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { getDashboard, type DashboardMetrics } from "@/lib/api";
+import { getAiUsage, getDashboard, type AiUsageMetrics, type DashboardMetrics } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 // 지표 카드 — 라벨·큰 값·보조 설명. 로딩 중이면 값 자리에 "—".
@@ -25,14 +25,20 @@ export function DashboardPanel() {
   const { t } = useI18n();
   const [opened, setOpened] = useState(false);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageMetrics | null>(null);
 
-  // 대시보드를 열 때 접속자 지표 조회 (login_records 집계)
+  // 대시보드를 열 때 접속자 지표 + AI 사용량 지표 병렬 조회
   useEffect(() => {
     if (!opened) return;
     let alive = true;
     getDashboard()
       .then((data) => {
         if (alive) setMetrics(data);
+      })
+      .catch(() => {});
+    getAiUsage()
+      .then((data) => {
+        if (alive) setAiUsage(data);
       })
       .catch(() => {});
     return () => {
@@ -69,6 +75,77 @@ export function DashboardPanel() {
             <Info size={13} strokeWidth={1.5} />
             {t("dashboard.metricsComingSoon")}
           </p>
+        </div>
+
+        <div data-id="dashboard-ai-usage" className="flex flex-col gap-3">
+          <h2 className="text-body-strong text-ink">{t("dashboard.aiHeading")}</h2>
+          {aiUsage && aiUsage.last30.calls === 0 ? (
+            <p className="text-caption text-ink-tertiary">{t("dashboard.aiEmpty")}</p>
+          ) : (
+            <>
+              <div className="grid max-w-2xl grid-cols-4 gap-3">
+                <StatCard label={t("dashboard.aiCalls7d")} value={value(aiUsage?.last7.calls)} />
+                <StatCard
+                  label={t("dashboard.aiFailRate7d")}
+                  value={
+                    aiUsage && aiUsage.last7.calls > 0
+                      ? `${Math.round((aiUsage.last7.failed / aiUsage.last7.calls) * 100)}%`
+                      : "—"
+                  }
+                />
+                <StatCard
+                  label={t("dashboard.aiTokens7d")}
+                  value={value(
+                    aiUsage ? aiUsage.last7.prompt_tokens + aiUsage.last7.completion_tokens : undefined,
+                  )}
+                />
+                <StatCard
+                  label={t("dashboard.aiTokens30d")}
+                  value={value(
+                    aiUsage ? aiUsage.last30.prompt_tokens + aiUsage.last30.completion_tokens : undefined,
+                  )}
+                />
+              </div>
+              <div className="grid max-w-2xl grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-4 py-3">
+                  <span className="text-fine uppercase tracking-wide text-ink-tertiary">
+                    {t("dashboard.aiTopUsers")}
+                  </span>
+                  <ul className="flex flex-col gap-0.5">
+                    {(aiUsage?.top_users ?? []).map((row) => (
+                      <li
+                        key={row.login_id}
+                        className="flex items-center justify-between gap-2 text-caption text-ink"
+                      >
+                        <span className="min-w-0 truncate">{row.name}</span>
+                        <span className="shrink-0 tabular-nums text-ink-tertiary">
+                          {row.total_tokens.toLocaleString()} · {t("dashboard.aiCallsShort", { n: row.calls })}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-4 py-3">
+                  <span className="text-fine uppercase tracking-wide text-ink-tertiary">
+                    {t("dashboard.aiTopMaps")}
+                  </span>
+                  <ul className="flex flex-col gap-0.5">
+                    {(aiUsage?.top_maps ?? []).map((row) => (
+                      <li
+                        key={row.map_id}
+                        className="flex items-center justify-between gap-2 text-caption text-ink"
+                      >
+                        <span className="min-w-0 truncate">{row.name}</span>
+                        <span className="shrink-0 tabular-nums text-ink-tertiary">
+                          {row.total_tokens.toLocaleString()} · {t("dashboard.aiCallsShort", { n: row.calls })}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

@@ -1,6 +1,7 @@
 """AI 채팅 — 순서도 생성/편집 제안 + 사용법 안내 (design 2026-06-15)."""
 
 import logging
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -12,6 +13,7 @@ from app.app_settings import (
     get_ai_chat_max_sessions,
     get_ai_chat_tips,
 )
+from app.manual_select import select_manual_sections
 from app.chat_history import (
     derive_chat_title,
     prune_chat_session_messages,
@@ -25,7 +27,7 @@ from app.checkout import is_checkout_active
 from app.db import get_session
 from app.permissions.deps import require_version_map_role
 from app.manual import get_manual
-from app.models import AiChatMessage, AiChatSession, ManualDoc, MapVersion
+from app.models import AiChatMessage, AiChatSession, AiUsageEvent, ManualDoc, MapVersion
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
 from app.settings import settings
@@ -70,6 +72,7 @@ def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
 
 
 _MANUAL_AI_LIMIT = 30000  # 프롬프트 크기 가드 — 등록 매뉴얼 합본 상한(문자)
+_MANUAL_SELECT_BUDGET = 12000  # 섹션 선별 예산(자) — 전체가 이하면 무변화
 
 
 async def _load_manual_text(session: AsyncSession) -> str:
@@ -102,25 +105,52 @@ def _extract_json(text: str) -> str:
     return text
 
 
-async def _ask_and_validate(messages: list[dict], model: str | None) -> AiProposal:
-    """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502."""
+@dataclass
+class AiUsageTotals:
+    """한 요청의 AI 호출 usage 누적 — 재프롬프트 재시도분 포함(둘 다 과금되므로 합산)."""
+
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+    def add(self, reply: ai_client.AiReply) -> None:
+        if reply.prompt_tokens is not None:
+            self.prompt_tokens = (self.prompt_tokens or 0) + reply.prompt_tokens
+        if reply.completion_tokens is not None:
+            self.completion_tokens = (self.completion_tokens or 0) + reply.completion_tokens
+
+
+async def _ask_and_validate(
+    messages: list[dict], model: str | None
+) -> tuple[AiProposal, AiUsageTotals]:
+    """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502.
+
+    usage는 시도 전체를 누적해 반환 — 실패로 끝나도 호출자가 기록할 수 있게
+    HTTPException에 totals를 실어 던진다(exc.usage_totals).
+    """
+    totals = AiUsageTotals()
     for attempt in range(2):
         try:
-            content = await ai_client.call_ai(messages, model)
+            reply = await ai_client.call_ai(messages, model)
         except Exception as exc:  # noqa: BLE001 -- 외부 AI 서버 오류는 502로 일괄 변환
             # exc는 내부 GPU 주소를 담을 수 있어 클라이언트엔 노출 금지 — 서버 로그에만 기록
             logger.warning("AI server call failed: %s", exc)
-            raise HTTPException(status_code=502, detail="AI server error") from exc
+            http_exc = HTTPException(status_code=502, detail="AI server error")
+            http_exc.usage_totals = totals  # type: ignore[attr-defined]
+            raise http_exc from exc
+        totals.add(reply)
         try:
-            return AiProposal.model_validate_json(_extract_json(content))
+            return AiProposal.model_validate_json(_extract_json(reply.content)), totals
         except ValueError as exc:
             # 원본 출력(모델 텍스트, 비밀 아님)을 서버 로그에만 기록 — 502 원인 진단용. 클라이언트엔 일반 메시지만.
-            logger.warning("AI response invalid (attempt %d): %s | raw=%.800s", attempt, exc, content)
+            logger.warning(
+                "AI response invalid (attempt %d): %s | raw=%.800s", attempt, exc, reply.content
+            )
             if attempt == 0:
                 messages = [*messages, {"role": "user", "content": "유효한 JSON 한 개만 반환하세요."}]
                 continue
-            raise HTTPException(status_code=502, detail="AI returned invalid response") from None
-    raise HTTPException(status_code=502, detail="AI returned invalid response")
+    http_exc = HTTPException(status_code=502, detail="AI returned invalid response")
+    http_exc.usage_totals = totals  # type: ignore[attr-defined]
+    raise http_exc
 
 
 @router.post(
@@ -161,12 +191,36 @@ async def ai_chat(
         and version.checked_out_by == user
     )
     current = await _load_graph(session, version_id)
-    manual_text = await _load_manual_text(session)
+    manual_text = select_manual_sections(
+        await _load_manual_text(session), payload.instruction, _MANUAL_SELECT_BUDGET
+    )
     messages = build_messages(
         manual_text, current, can_edit, payload.instruction, payload.history
     )
 
-    proposal = await _ask_and_validate(messages, payload.model)
+    try:
+        proposal, usage = await _ask_and_validate(messages, payload.model)
+    except HTTPException as exc:
+        totals = getattr(exc, "usage_totals", None)
+        # 실패도 계량 — 이벤트 기록이 502 전파를 막지 않게 별도 커밋·예외 무시
+        try:
+            session.add(
+                AiUsageEvent(
+                    login_id=user,
+                    map_id=version.map_id,
+                    version_id=version_id,
+                    model=payload.model or "",
+                    kind=None,
+                    prompt_tokens=getattr(totals, "prompt_tokens", None),
+                    completion_tokens=getattr(totals, "completion_tokens", None),
+                    ok=False,
+                )
+            )
+            await session.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답(502)을 바꾸지 않는다
+            await session.rollback()
+            logger.warning("AI usage event insert failed (failure path)")
+        raise
     # 편집 불가인데 편집계열(graph/ops)을 제안하면 적용 불가 — answer로 다운그레이드 (최종 가드는 saveGraph)
     if proposal.kind in ("graph", "ops") and not can_edit:
         proposal = AiProposal(kind="answer", message=_NOT_EDITABLE_MSG)
@@ -210,6 +264,19 @@ async def ai_chat(
     )
     await prune_map_chat_sessions(
         session, user, version.map_id, await get_ai_chat_max_sessions(session)
+    )
+    # 사용량 이벤트 — 대화와 같은 트랜잭션(원문 없이 계량만)
+    session.add(
+        AiUsageEvent(
+            login_id=user,
+            map_id=version.map_id,
+            version_id=version_id,
+            model=payload.model or "",
+            kind=proposal.kind,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            ok=True,
+        )
     )
     await session.commit()
     proposal.session_id = chat_session.id

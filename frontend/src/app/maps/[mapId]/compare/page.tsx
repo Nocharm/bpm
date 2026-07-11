@@ -65,6 +65,7 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
+import { formatDurationHm } from "@/lib/duration";
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -165,8 +166,16 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   department: "field.department",
   system: "field.system",
   duration: "field.duration",
+  headcount: "field.headcount",
+  etf: "field.etf",
+  cost: "field.cost",
+  extra: "field.extra",
   location: "field.location",
 };
+
+// duration 필드만 1h30m로 포맷 — 나머지 필드는 원문 그대로. 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
+const displayFieldValue = (field: ChangedField, value: string): string =>
+  field === "duration" ? formatDurationHm(value) || value : value;
 
 // 병합 노드 status → ProcessNode diffStatus (unchanged는 중립=undefined)
 function toDiffStatus(status: MergedNodeStatus): "added" | "removed" | "changed" | undefined {
@@ -194,6 +203,10 @@ function buildAppNodes(
       department: m.node.department,
       system: m.node.system,
       duration: m.node.duration,
+      headcount: m.node.headcount,
+      etf: m.node.etf,
+      cost: m.node.cost,
+      extra: m.node.extra,
       groupIds: m.node.group_ids ?? [],
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
@@ -466,8 +479,8 @@ function ComparePane({
       m.status === "changed"
         ? m.fieldChanges.map((fc) => ({
             label: t(FIELD_MSG[fc.field]),
-            before: fc.before || t("summary.none"),
-            after: fc.after || t("summary.none"),
+            before: displayFieldValue(fc.field, fc.before) || t("summary.none"),
+            after: displayFieldValue(fc.field, fc.after) || t("summary.none"),
           }))
         : undefined,
     [t],
@@ -618,8 +631,8 @@ function ComparePane({
           m.status === "changed"
             ? m.fieldChanges.map((fc) => ({
                 label: t(FIELD_MSG[fc.field]),
-                before: fc.before || t("summary.none"),
-                after: fc.after || t("summary.none"),
+                before: displayFieldValue(fc.field, fc.before) || t("summary.none"),
+                after: displayFieldValue(fc.field, fc.after) || t("summary.none"),
               }))
             : undefined,
       }));
@@ -1140,19 +1153,30 @@ function ComparePane({
                       <span className="text-ink-tertiary">{t("summary.none")}</span>
                     )}
                   </InspectorRow>
-                  {(["assignee", "department", "system", "duration"] as const).map((key) => {
+                  {(
+                    [
+                      "assignee",
+                      "department",
+                      "system",
+                      "duration",
+                      "headcount",
+                      "etf",
+                      "cost",
+                      "extra",
+                    ] as const
+                  ).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
-                    const current = selectedNode.node[key] || "";
+                    const current = displayFieldValue(key, selectedNode.node[key] || "");
                     return (
                       <InspectorRow key={key} label={t(FIELD_MSG[key])}>
                         {change ? (
                           <>
                             <span className="text-ink-muted line-through">
-                              {change.before || t("summary.none")}
+                              {displayFieldValue(key, change.before) || t("summary.none")}
                             </span>
                             <span className="mx-1 text-ink-tertiary">→</span>
                             <span className="font-semibold text-changed">
-                              {change.after || t("summary.none")}
+                              {displayFieldValue(key, change.after) || t("summary.none")}
                             </span>
                           </>
                         ) : (

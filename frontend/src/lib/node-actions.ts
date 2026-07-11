@@ -8,14 +8,12 @@ export type NodeDisplayField =
   | "assignee"
   | "department"
   | "system"
-  | "duration"
   | "url";
 
 export const NODE_DISPLAY_FIELDS: NodeDisplayField[] = [
   "assignee",
   "department",
   "system",
-  "duration",
   "url",
 ];
 

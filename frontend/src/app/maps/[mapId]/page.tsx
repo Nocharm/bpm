@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileText, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -37,6 +37,7 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
+import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
@@ -180,6 +181,9 @@ import {
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
+import { buildExcelModel, downloadExcel } from "@/lib/excel-export";
+import { buildCsvFromGraph } from "@/lib/csv-export";
+import { formatKst } from "@/lib/datetime";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
@@ -194,6 +198,8 @@ import {
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
+import { formatDurationHm, normalizeDuration } from "@/lib/duration";
+import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -504,6 +510,10 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       department: node.department,
       system: node.system,
       duration: node.duration,
+      headcount: node.headcount ?? "",
+      etf: node.etf ?? "",
+      cost: node.cost ?? "",
+      extra: node.extra ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       groupIds: node.group_ids ?? [],
@@ -564,7 +574,8 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     assignee: attr?.assignee ?? "",
     department: attr?.department ?? "",
     system: attr?.system ?? "",
-    duration: attr?.duration ?? "",
+    // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
+    duration: normalizeDuration(attr?.duration ?? "") ?? "",
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -603,6 +614,10 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       department: node.data.department,
       system: node.data.system,
       duration: node.data.duration,
+      headcount: node.data.headcount ?? "",
+      etf: node.data.etf ?? "",
+      cost: node.data.cost ?? "",
+      extra: node.data.extra ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       pos_x: node.position.x,
@@ -755,6 +770,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
   const [showHexInput, setShowHexInput] = useState(false);
+  // Parameters 그룹 접기 — 기본 접힘, 인스펙터/요약모달 공유 키로 localStorage 퍼시스트
+  const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -1166,6 +1183,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spHeadcount: ref.headcount,
+            spEtf: ref.etf,
+            spCost: ref.cost,
+            spExtra: ref.extra,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1174,6 +1195,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: null,
             spSystem: null,
             spDuration: null,
+            spHeadcount: null,
+            spEtf: null,
+            spCost: null,
+            spExtra: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -1742,7 +1767,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                     ...(attr.assignee != null ? { assignee: attr.assignee } : {}),
                     ...(attr.department != null ? { department: attr.department } : {}),
                     ...(attr.system != null ? { system: attr.system } : {}),
-                    ...(attr.duration != null ? { duration: attr.duration } : {}),
+                    ...(attr.duration != null
+                      ? { duration: normalizeDuration(attr.duration) ?? "" }
+                      : {}),
                     ...(attr.url != null ? { url: attr.url } : {}),
                     ...(attr.url_label != null ? { urlLabel: attr.url_label } : {}),
                   }
@@ -3020,6 +3047,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             department: "",
             system: "",
             duration: "",
+            headcount: "",
+            etf: "",
+            cost: "",
+            extra: "",
             groupIds: [],
             hasChildren: false,
           },
@@ -3631,6 +3662,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           department: "",
           system: "",
           duration: "",
+          headcount: "",
+          etf: "",
+          cost: "",
+          extra: "",
           groupIds: [],
           hasChildren: false,
           linkedMapId,
@@ -3677,6 +3712,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           department: "",
           system: "",
           duration: "",
+          headcount: "",
+          etf: "",
+          cost: "",
+          extra: "",
           groupIds: [],
           hasChildren: false,
           linkedMapId,
@@ -4268,22 +4307,58 @@ function MapEditor({ mapId }: { mapId: number }) {
     [currentParentId, reactFlow, navigateTo],
   );
 
+  // PNG/Excel/CSV 3버튼 공유 — 파일명 규칙(sanitize+stamp) 단일 소스
+  const buildExportFileName = useCallback(
+    (ext: string) => {
+      const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+      const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+      const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+      return `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.${ext}`;
+    },
+    [versions, versionId, mapName],
+  );
+
   const handleExportPng = useCallback(async () => {
-    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
-    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[-:T]/g, "")
-      .slice(0, 14);
     try {
-      await exportCanvasPng(
-        nodesRef.current,
-        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.png`,
-      );
+      await exportCanvasPng(nodesRef.current, buildExportFileName("png"));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.exportPng"));
     }
-  }, [versions, versionId, mapName, t]);
+  }, [buildExportFileName, t]);
+
+  const handleExportCsv = useCallback(() => {
+    // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
+    const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    // BOM은 이스케이프로 명시 — 보이지 않는 리터럴은 포매터/편집에서 증발할 수 있다
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = buildExportFileName("csv");
+    anchor.click();
+    URL.revokeObjectURL(url);
+    if (warnings.length > 0) showToast(t("export.csvWarnings"));
+  }, [buildExportFileName, showToast, t]);
+
+  const handleExportExcel = useCallback(async () => {
+    try {
+      const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
+      const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+      const model = await buildExcelModel({
+        graph,
+        mapName,
+        versionLabel,
+        exportedAt: formatKst(new Date().toISOString()),
+        fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
+        rootMapId: mapId,
+      });
+      await downloadExcel(model, buildExportFileName("xlsx"));
+      if (model.truncated) showToast(t("export.excelTruncated"));
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.exportExcel"));
+    }
+  }, [versions, versionId, mapName, mapId, buildExportFileName, showToast, t]);
 
   const handleExportWord = () => {
     const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
@@ -4697,6 +4772,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생(가벼운 계산, useMemo 불요)
+  const filledParamCount = selectedNode ? PARAM_FIELDS.filter((f) => selectedNode.data[f]).length : 0;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -5566,8 +5643,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     const saved = window.localStorage.getItem("bpm.nodeDisplayFields");
     if (saved) {
       try {
-        const parsed = JSON.parse(saved) as NodeDisplayField[];
-        const valid = parsed.filter((field) => NODE_DISPLAY_FIELDS.includes(field));
+        // 저장된 값에 폐기된 필드(예: "duration")가 남아 있을 수 있어 현재 유효 필드로 걸러낸다
+        const parsed = JSON.parse(saved) as string[];
+        const valid = parsed.filter(
+          (f): f is NodeDisplayField => (NODE_DISPLAY_FIELDS as readonly string[]).includes(f),
+        );
         // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
         setDisplayFields(valid);
       } catch {
@@ -7234,6 +7314,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                headcount={node.data.headcount ?? ""}
+                etf={node.data.etf ?? ""}
+                cost={node.data.cost ?? ""}
+                extra={node.data.extra ?? ""}
                 url={node.data.url ?? ""}
                 urlLabel={node.data.urlLabel ?? ""}
                 colorPresets={colorsForType(node.data.nodeType)}
@@ -7518,7 +7602,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                           />
                           {([
                             ["system", "field.system"],
-                            ["duration", "field.duration"],
                           ] as const).map(([key, labelKey]) => (
                             <div
                               key={key}
@@ -7542,6 +7625,49 @@ function MapEditor({ mapId }: { mapId: number }) {
                             readOnly={readOnly}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
+                          <div className="mt-2 border-t border-divider pt-1">
+                            <button
+                              type="button"
+                              data-id="inspector-params-toggle"
+                              aria-expanded={!paramsCollapsed}
+                              className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                              onClick={() => {
+                                const next = !paramsCollapsed;
+                                setParamsCollapsed(next);
+                                writeParamsCollapsed(next);
+                              }}
+                            >
+                              <ChevronRight
+                                size={12}
+                                strokeWidth={1.5}
+                                className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
+                              />
+                              {t("inspector.parameters")}
+                              {filledParamCount > 0 && (
+                                <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
+                              )}
+                            </button>
+                            {!paramsCollapsed && (
+                              <div className="ml-2 border-l border-divider pl-2">
+                                {PARAM_FIELDS.map((key) => (
+                                  <div key={key} className="flex items-center justify-between gap-2 py-1">
+                                    <span className="shrink-0 text-caption text-ink-secondary">
+                                      {t(PARAM_LABEL_KEY[key])}
+                                    </span>
+                                    <ParamInput
+                                      field={key}
+                                      dataId={`inspector-param-${key}`}
+                                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                                      value={selectedNode.data[key] ?? ""}
+                                      disabled={readOnly}
+                                      ariaLabel={t(PARAM_LABEL_KEY[key])}
+                                      onCommit={(next) => updateSelectedData({ [key]: next }, true)}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
@@ -7581,20 +7707,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                             ["assignee", "field.assignee"],
                             ["system", "field.system"],
                             ["duration", "field.duration"],
-                          ] as const).map(([key, labelKey]) => (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
-                            >
-                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
-                              <span
-                                className="min-w-0 truncate text-right text-caption text-ink"
-                                title={selectedSpRef[key] || undefined}
+                            ["headcount", "field.headcount"],
+                            ["etf", "field.etf"],
+                            ["cost", "field.cost"],
+                            ["extra", "field.extra"],
+                          ] as const).map(([key, labelKey]) => {
+                            const value =
+                              key === "duration" ? formatDurationHm(selectedSpRef[key] ?? "") : selectedSpRef[key];
+                            return (
+                              <div
+                                key={key}
+                                className="flex items-center justify-between gap-2 border-t border-divider py-1"
                               >
-                                {selectedSpRef[key] || "—"}
-                              </span>
-                            </div>
-                          ))}
+                                <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                <span
+                                  className="min-w-0 truncate text-right text-caption text-ink"
+                                  title={value || undefined}
+                                >
+                                  {value || "—"}
+                                </span>
+                              </div>
+                            );
+                          })}
                           <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
                             <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
                             <span
@@ -7754,9 +7888,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               ? "field.department"
                               : field === "system"
                                 ? "field.system"
-                                : field === "duration"
-                                  ? "field.duration"
-                                  : "field.url";
+                                : "field.url";
                         return (
                           <div
                             key={field}
@@ -7819,14 +7951,35 @@ function MapEditor({ mapId }: { mapId: number }) {
                       disabledReason={spDisabledReason}
                       onToast={showToast}
                     />
-                    <button
-                      type="button"
-                      onClick={() => void handleExportPng()}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                    >
-                      <Download size={16} strokeWidth={1.5} />
-                      {t("inspector.exportPng")}
-                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        data-id="export-png"
+                        onClick={() => void handleExportPng()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <Download size={16} strokeWidth={1.5} />
+                        {t("inspector.exportPng")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-excel"
+                        onClick={() => void handleExportExcel()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileSpreadsheet size={16} strokeWidth={1.5} />
+                        {t("inspector.exportExcel")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-csv"
+                        onClick={handleExportCsv}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileDown size={16} strokeWidth={1.5} />
+                        {t("inspector.exportCsv")}
+                      </button>
+                    </div>
                     <button
                       type="button"
                       data-id="inspector-export-word"

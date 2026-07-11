@@ -58,6 +58,11 @@ export interface MapSummary {
   sp_assignee?: string | null;
   sp_system?: string | null;
   sp_duration?: string | null;
+  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  sp_headcount?: string | null;
+  sp_etf?: string | null;
+  sp_cost?: string | null;
+  sp_extra?: string | null;
   sp_url?: string | null;
   sp_url_label?: string | null;
   sp_changed_by?: string | null;
@@ -80,6 +85,11 @@ export interface GraphNode {
   department: string;
   system: string;
   duration: string;
+  // 숫자 파라미터 — design 2026-07-11
+  headcount?: string;
+  etf?: string;
+  cost?: string;
+  extra?: string;
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
@@ -130,6 +140,11 @@ export interface SubprocessRef {
   assignee: string | null;
   system: string | null;
   duration: string | null;
+  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  headcount: string | null;
+  etf: string | null;
+  cost: string | null;
+  extra: string | null;
   url: string | null;
   url_label: string | null;
 }
@@ -277,6 +292,11 @@ export interface SubprocessDesignationBody {
   assignee?: string;
   system?: string;
   duration?: string;
+  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  headcount?: string;
+  etf?: string;
+  cost?: string;
+  extra?: string;
   url?: string;
   url_label?: string;
 }
@@ -952,6 +972,39 @@ export interface DashboardMetrics {
 // 접속자 현황 지표 (sysadmin) — login_records 집계.
 export function getDashboard(): Promise<DashboardMetrics> {
   return request<DashboardMetrics>("/dashboard");
+}
+
+export interface AiUsagePeriod {
+  calls: number;
+  failed: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+}
+
+export interface AiUsageTopUser {
+  login_id: string;
+  name: string;
+  calls: number;
+  total_tokens: number;
+}
+
+export interface AiUsageTopMap {
+  map_id: number;
+  name: string;
+  calls: number;
+  total_tokens: number;
+}
+
+export interface AiUsageMetrics {
+  last7: AiUsagePeriod;
+  last30: AiUsagePeriod;
+  top_users: AiUsageTopUser[];
+  top_maps: AiUsageTopMap[];
+}
+
+// AI 챗 사용량 지표 (sysadmin) — ai_usage_events 집계.
+export function getAiUsage(): Promise<AiUsageMetrics> {
+  return request<AiUsageMetrics>("/dashboard/ai-usage");
 }
 
 // ── 디렉터리 API (collaborator picker, Layer 4 Task 0) ──────────────────────
