@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — AI graph 제안 CSV 병합 통합 + 담당자/부서 기본 금지 설계 (main)
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-ai-graph-merge-design.md`. AI graph 전량 교체가 비교모드 무의미화 + 서브프로세스 링크 파괴("색 변경" 현상의 진짜 원인 — 타입이 process로 바뀌며 바이올렛 고정 해제)를 CSV 병합 파이프라인 완전 공유로 해결. 디렉터리 프롬프트 제거, 담당자/부서는 사용자 명시 요청 시에만.
+
 ## 2026-07-11 — 오우닝 부서 누락 태그 위치·표기 변경 (worktree-owning-badge-move)
 - 홈 카드의 누락 태그를 타이틀 행에서 우측 하단 카운트 자리(노드·버전·인원 수)로 이동 — 누락 맵은 카운트 대신 TriangleAlert + "No owning dept"(언어 무관 영어 고정, 역할/상태 패턴)로 대체 표시. data-id 유지로 pw-verify 스크립트 무변경. lint·tsc·build·vitest 234 초록.
 - 누락 태그를 필 형태로 — `rounded-full bg-error/10`(토큰 color-mix 10% 반투명 틴트, recent-badge 필 패턴) + text-error. 빌드 CSS에서 유틸 생성 실측 확인. lint·build 초록.
