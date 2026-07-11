@@ -156,6 +156,20 @@ async def _resolve_display_name(
     return principal_id
 
 
+async def _to_permission_out(
+    session: AsyncSession, row: DashboardPermission
+) -> DashboardPermissionOut:
+    """권한 행 → 응답 스키마. 표시명 해석을 한 곳에 모은다."""
+    return DashboardPermissionOut(
+        id=row.id,
+        principal_type=row.principal_type,
+        principal_id=row.principal_id,
+        display_name=await _resolve_display_name(session, row.principal_type, row.principal_id),
+        granted_by=row.granted_by,
+        granted_at=row.granted_at,
+    )
+
+
 @router.get(
     "/dashboard/permissions",
     response_model=list[DashboardPermissionOut],
@@ -169,19 +183,7 @@ async def list_dashboard_permissions(
             select(DashboardPermission).order_by(DashboardPermission.granted_at.desc())
         )
     ).all()
-    return [
-        DashboardPermissionOut(
-            id=row.id,
-            principal_type=row.principal_type,
-            principal_id=row.principal_id,
-            display_name=await _resolve_display_name(
-                session, row.principal_type, row.principal_id
-            ),
-            granted_by=row.granted_by,
-            granted_at=row.granted_at,
-        )
-        for row in rows
-    ]
+    return [await _to_permission_out(session, row) for row in rows]
 
 
 @router.post(
@@ -211,16 +213,7 @@ async def add_dashboard_permission(
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return DashboardPermissionOut(
-        id=row.id,
-        principal_type=row.principal_type,
-        principal_id=row.principal_id,
-        display_name=await _resolve_display_name(
-            session, row.principal_type, row.principal_id
-        ),
-        granted_by=row.granted_by,
-        granted_at=row.granted_at,
-    )
+    return await _to_permission_out(session, row)
 
 
 @router.delete(

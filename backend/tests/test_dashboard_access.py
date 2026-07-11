@@ -154,6 +154,30 @@ def test_permission_settings_require_sysadmin(
     ).status_code == 403
 
 
+def test_granted_user_can_read_coverage_but_not_write(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """coverage-depts는 읽기/쓰기 비대칭 — 권한 받은 비-sysadmin은 GET 200, PUT 403.
+
+    GET이 require_dashboard_viewer로 실수 없이 남아있는지 지키는 회귀 가드.
+    이 의존성이 require_sysadmin으로 바뀌면 모든 비-sysadmin 열람자의
+    커버리지 UI가 조용히 깨진다.
+    """
+    _seed([
+        Employee(login_id="dash.covreader", name="Dash Cov Reader", source="local", active=True),
+        DashboardPermission(
+            principal_type="user", principal_id="dash.covreader", granted_by="admin.sys"
+        ),
+    ])
+    monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+    monkeypatch.setattr(settings, "bpm_sysadmins", "other.admin")
+    headers = {"X-Dev-User": "dash.covreader"}
+    assert client.get("/api/dashboard/coverage-depts", headers=headers).status_code == 200
+    assert client.put(
+        "/api/dashboard/coverage-depts", json={"org_paths": []}, headers=headers
+    ).status_code == 403
+
+
 def test_coverage_depts_put_replaces(client: TestClient) -> None:
     """PUT은 목록 통째 교체(멱등) — 같은 목록을 두 번 보내도 결과 동일."""
     paths = ["Div A/Office 1", "Div B"]
