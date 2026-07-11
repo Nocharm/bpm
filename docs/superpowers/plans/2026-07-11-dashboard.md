@@ -2422,7 +2422,9 @@ grep -rn "dashboard.openCard\|dashboard.comingSoonNote\|dashboard.metricsComingS
 
 Expected: `i18n-messages.ts`의 정의부만 나온다 → 그 줄들을 삭제한다. (`dashboard.tab`/`dashboard.heading`/`dashboard.subtitle`/`dashboard.back`/`dashboard.ai*`는 계속 쓰이므로 남긴다.)
 
-`getDashboard()`/`DashboardMetrics`(구 `/api/dashboard`)는 프론트에서 더 이상 쓰이지 않는다 — `api.ts`에서 **삭제하지 않고 남긴다**(백엔드 엔드포인트와 기존 pytest가 유지되므로). 다만 `dashboard-panel.tsx`에서 import하지 않는다.
+`getDashboard()`/`DashboardMetrics`(구 `/api/dashboard`)는 새 패널이 쓰지 않으므로 **`api.ts`에서 삭제한다** — 남기면 죽은 코드가 된다. 백엔드 엔드포인트 `/api/dashboard` 자체는 **유지**한다(Task 2의 게이트 테스트와 기존 pytest가 사용).
+
+Run: `grep -rn "getDashboard\b\|DashboardMetrics" frontend/src` → 참조 0건인지 확인 후 삭제.
 
 - [ ] **Step 6: 게이트**
 
