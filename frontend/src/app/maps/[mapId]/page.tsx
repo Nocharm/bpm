@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -180,6 +180,7 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
+import { exportCanvasWord } from "@/lib/word-export";
 import { buildExcelModel, downloadExcel } from "@/lib/excel-export";
 import { buildCsvFromGraph } from "@/lib/csv-export";
 import { formatKst } from "@/lib/datetime";
@@ -4359,6 +4360,45 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
   }, [versions, versionId, mapName, mapId, buildExportFileName, showToast, t]);
 
+  const handleExportWord = () => {
+    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:T]/g, "")
+      .slice(0, 14);
+    try {
+      const exportNodes = nodesRef.current.map((node) => {
+        const size = nodeSizeOf(node.data.nodeType);
+        return {
+          id: node.id,
+          title: node.data.label,
+          nodeType: node.data.nodeType,
+          x: node.position.x,
+          y: node.position.y,
+          w: size.w,
+          h: size.h,
+          url: node.data.url,
+          urlLabel: node.data.urlLabel,
+        };
+      });
+      const exportEdges = edgesRef.current.map((edge) => ({
+        sourceId: edge.source,
+        targetId: edge.target,
+        label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
+        sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
+        targetSide: sideFromHandleId(edge.targetHandle, "left"),
+      }));
+      exportCanvasWord(
+        exportNodes,
+        exportEdges,
+        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.docx`,
+      );
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : t("err.exportWord"));
+    }
+  };
+
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
   const openMenu = useCallback(
@@ -7940,6 +7980,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {t("inspector.exportCsv")}
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      data-id="inspector-export-word"
+                      onClick={handleExportWord}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
+                    >
+                      <FileText size={16} strokeWidth={1.5} />
+                      {t("inspector.exportWord")}
+                    </button>
                   </div>
                 }
                 approvalSlot={

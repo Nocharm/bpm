@@ -26,12 +26,25 @@
 ## 2026-07-12 — 최종 리뷰 픽스: 그룹 일괄편집 duration 모드 계약 정합 (sp-params-sum)
 - `group-bulk-modal.tsx` duration 모드가 브랜치 계약(숫자 입력 강제+1h30m 표시)에서 누락 — 값 입력을 `ParamInput`(field="duration", ariaLabel, 신규 `placeholder` prop)으로 교체(자유텍스트가 applyGroupAttribute 경유로 들어갔다 백엔드 소거로 조용히 소실되던 갭 봉합, system 모드는 자유텍스트 유지), 충돌 팝오버·개별 마법사 existing/value·적용 요약 before/after의 duration 표시에 `displayAttrValue` 헬퍼(1h30m, 무효 시 원문 폴백 — compare 패턴) 적용. 게이트: vitest 304/304·tsc 0에러·lint 기존 경고 1건·build 0에러.
 
+## 2026-07-12 — worktree-sp-params-sum 병합 (worktree-word-export)
+- 머지 전 최신화: `worktree-sp-params-sum`(최신 main 기반, 41커밋 — SP 파라미터·Excel/CSV 내보내기·AI 사용량 계측 포함)을 Word 내보내기 브랜치에 병합(통합 테스트용). 충돌 5파일 해결 — 인스펙터 내보내기 영역은 PNG/Excel/CSV 3버튼 행 + 하단 Word 버튼으로 통합, i18n·package.json 합집합, lockfile 재생성. main 잔여 문서 커밋(b502df0)도 후속 머지.
+- 병합 검증: vitest 322/322(word-export 18 포함)·tsc 0·lint 0에러(기존 경고 1)·build 성공·pytest 572. e2e — pw-verify-word-export 11/11(PNG 버튼 체크를 옛 라벨 "Download PNG" → `data-id="export-png"`로 보정, 병합으로 3버튼 행 라벨이 "PNG"로 바뀜)·pw-verify-sp-params 24/24, 콘솔 에러 0.
+
 ## 2026-07-12 — Task 6: SP 파라미터 브라우저 실기동 검증 + 배포 노트 (sp-params-sum)
 - `pw-verify-sp-params.mjs` 신설 — 스크래치 맵 A(게시 체인 submit→approve→publish API 미러)에서 지정 모달 5입력+Σ 4개(headcount 제외) 확인, Σ(duration) 0.45+0.30=1.15(1h15m)·Σ(cost) 0.1+0.2=0.3·저장 200·영속 확인. 맵 B(미게시)는 Designate 진입 버튼 자체가 disabled(hasPublished 게이트)라 정상 UI로는 모달을 열 수 없음을 실측 — React `SimpleEventPlugin`이 DOM `disabled` 속성이 아니라 파이버 `props.disabled`를 보고 클릭을 억제하므로 속성만 지우는 우회는 무효였고, `__reactProps$*` 파이버 키로 실제 `onClick`(openModal) 핸들러를 직접 호출해 모달을 강제로 띄운 뒤 Σ 버튼 4개 전부 disabled임을 확인(진입 게이트와 Σ 내부 게이트가 동일 전제라 이 상태는 정상 내비게이션으로는 도달 불가 — 강제오픈 프로브로만 검증 가능). 맵 C에 맵 A를 subprocess로 링크해 노드 칩 `1h15m`+`0.3` 라이브 반영 확인. 에디터 인스펙터 Parameters 그룹 기본 접힘(`aria-expanded=false`)→펼침→duration `1.30`입력·blur `1h30m`·포커스 `1.30`복원·새로고침 후 펼침 유지(localStorage) 확인. 24/24 PASS, 콘솔 에러 0.
 - 게이트 재확인: backend pytest 572 passed·ruff clean. frontend vitest 22 files/304 tests passed·tsc --noEmit 0에러·lint 0에러(기존 미관련 경고 1건만)·build 성공.
 - **배포 노트**: sp 4컬럼(`sp_headcount`/`sp_etf`/`sp_cost`/`sp_extra`, Task 2)은 `create_all`이 기동 시 자동 보강하므로 프론트/백은 **반드시 동시 배포**(구버전 프론트가 신버전 백엔드에 4필드 없는 payload를 보내는 조합, 또는 그 역은 지정 모달 저장이 깨짐). 레거시 sp 자유텍스트(구 `sp_duration` 자유입력 값)는 API 응답 3표면(`MapOut`·`SubprocessRefOut`·라이브러리 목록, Task 2)에서 이미 정규식 미매치 시 `null`로 소거되므로 기능상 즉시 문제는 없으나, DB에 남은 원본 값은 그대로다. 원하면 배포 후 1회 물리 정리:
   `UPDATE process_maps SET sp_duration = NULL WHERE sp_duration IS NOT NULL AND sp_duration !~ '^[0-9]+(\.[0-9]{1,2})?$';`
 - **dev.db 상태**: 로컬 검증에서 생성한 스크래치 맵(SP-Params A/B/C, 6회 실행분)은 전부 스크립트 종료 시 소프트삭제(`deleted_at` 설정) 완료 — 활성 맵 수는 시드 그대로 12개 유지, 휴지통에만 잔존(다른 pw-verify-*.mjs와 동일 패턴, 완전 복원은 `git checkout backend/dev.db` + 백엔드 재시작).
+
+## 2026-07-11 — Word 도형 순서도 내보내기 설계 (worktree-word-export)
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-word-export-design.md`. SOP에 하이퍼링크 살아있는 순서도를 붙여넣기 위한 `.docx` 생성(Word 순정 플로차트 도형 + 라벨/URL라벨 하이퍼링크 + 전체 그룹화). SmartArt(링크 불가)·HTML 복붙(도형 유실) 검토 후 제외. OOXML 직접 생성 + `fflate` 단일 의존성, 진입점은 인스펙터 맵 탭(PNG 무변경). 흑백톤 + Arial/바탕체 11pt.
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-word-export.md` (4태스크: 순수 빌더+노드 도형 → 연결선/엣지 라벨 → 진입점 통합 → 브라우저 검증. 접점 idx·inline 그룹 호환은 T4 실측 보정 항목).
+- T1: word-export.ts 순수 빌더 — docx 4파트 조립 + 노드 도형(프리셋 매핑·흑백·Arial/바탕체 11pt·하이퍼링크 rels) + fflate 도입, vitest 10건.
+- T2: 연결선 bentConnector3 + stCxn/endCxn 접점(도형 이동 시 추종) + 분기 라벨 텍스트박스 + 역방향 flip, vitest 4건 추가.
+- T3: exportCanvasWord 다운로드 트리거 + i18n 2쌍(en/ko) + 인스펙터 맵 탭 하단 Word 버튼(data-id=inspector-export-word, PNG 무변경).
+- T4: `frontend/scripts/pw-verify-word-export.mjs` — 버튼/다운로드/unzip 4파트/도형·연결선 수/하이퍼링크/흑백·폰트/콘솔 11항목, 로컬 실행 **11/11 PASS**(2회 재현, 콘솔에러 0). 브리프 원안 조정: 데모 시드(`reset_db`)는 모든 draft가 타인(데모 유저) 체크아웃 상태라 원안처럼 기본 로드 버전에 바로 URL 노드를 PUT하면 항상 409 — sysadmin(admin.sys)으로 draft를 force 체크아웃 인수해 검증하고, 종료 시 그래프 원복 PUT(200) + 체크아웃을 원 점유자(taeyang.oh)에게 이전(transfer, 200)해 dev.db를 원상복구(draft가 없는 맵이면 ④는 SKIP 로그). ⚠️ Word 실물 열기·복붙·링크 클릭·접점(`SIDE_TO_CXN_IDX`) 위치는 Windows 수동 검증 대기.
+- 최종 리뷰 픽스: rels Target URL 정규화(new URL, 실패 시 링크 생략)·buildDocx 빈 배열 throw·엣지 라벨 bounds 클램프·스펙 함수명 정합.
 
 ## 2026-07-11 — Task 5: SP 표시 전면 — 칩 5종·1h30m 적용·읽기 표면 (sp-params-sum)
 - `NodeData`(canvas.ts)에 spHeadcount/spEtf/spCost/spExtra 추가 + page.tsx subprocess_refs→data 매핑 확장. `NodeParams`(process-node.tsx)의 subprocess 분기를 sp 5종으로 확장, duration 칩만 `formatDurationHm` 적용(filled 판정도 포맷 결과 기준 — 레거시 방어). 읽기 표면 3곳(subprocess-inspector-card·subprocess-designation-panel·page.tsx `inspector-subprocess-attrs`)에 파라미터 4행 추가 + duration 포맷. compare/page.tsx에 공용 `displayFieldValue` 헬퍼 신설, 3곳(fieldsOf·목록·사이드패널)의 duration before/after/current를 포맷.
