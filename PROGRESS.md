@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Word 도형 순서도 내보내기 설계 (worktree-word-export)
+- 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-word-export-design.md`. SOP에 하이퍼링크 살아있는 순서도를 붙여넣기 위한 `.docx` 생성(Word 순정 플로차트 도형 + 라벨/URL라벨 하이퍼링크 + 전체 그룹화). SmartArt(링크 불가)·HTML 복붙(도형 유실) 검토 후 제외. OOXML 직접 생성 + `fflate` 단일 의존성, 진입점은 인스펙터 맵 탭(PNG 무변경).
+
 ## 2026-07-11 — CSV 검증 스크립트 owning_department 대응 + 실행 (worktree-pw-verify-owning-dept)
 - `owning_department` 필수 필드(4e5a0f7)가 두 pw-verify 스크립트를 깨뜨림 — merge는 raw `POST /maps`에 부서 미포함 422, create-flow는 생성 다이얼로그 `Create`가 오우닝부서 미선택으로 disabled. 두 스크립트 다 이 필드 이전 작성.
 - 수정: merge는 `/directory`에서 부서 id 얻어 POST 바디에 `owning_department` 추가. create-flow는 결재자 앞에 오우닝부서 피커 선택(첫 `Search by name` 입력) 추가, 없으면 남은 ⑥ 검사 스킵.
