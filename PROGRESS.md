@@ -3,6 +3,7 @@
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
 ## 2026-07-11 — 운영 대시보드 설계 (dashboard-design)
+- 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-dashboard.md` (10태스크: 모델·판정 → 열람 게이트·MeOut → 설정 API → /summary → /timeseries → 프론트 순수함수·바인딩·i18n → 차트 5종 → 풀블리드 패널·탭 게이팅 → 우측 사이드바 2탭 → 브라우저 검증). 실행 순서는 T9를 T8보다 먼저(사이드바 선행이라야 패널 빌드가 한 번에 통과).
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-dashboard-design.md`. 스텁(진입 카드+로그인 3지표)을 리더 보고용 실운영 대시보드로 재작성: 신규 테이블 2개(`dashboard_permissions` 인원·부서·그룹 열람 권한 / `dashboard_coverage_depts` 커버리지 분모 부서), summary(스냅샷)·timeseries(기간 필터 전용) API 분리, 풀블리드 3열(좌 요약 레일 · 중앙 지표 그리드 · 우 인스펙터형 Access/Coverage 사이드바), 차트는 의존성 없이 자체 SVG/CSS.
 
 ## 2026-07-11 — CLAUDE.md 노드 속성 체크리스트 (main)
