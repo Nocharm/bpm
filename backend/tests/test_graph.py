@@ -94,7 +94,7 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
                 "assignee": "김담당",
                 "department": "구매팀",
                 "system": "ERP",
-                "duration": "2일",
+                "duration": "2",
             },
         ],
         "edges": [],
@@ -107,7 +107,8 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
     assert node["assignee"] == "김담당"
     assert node["department"] == "구매팀"
     assert node["system"] == "ERP"
-    assert node["duration"] == "2일"
+    # duration은 경계에서 H.MM 숫자로 정규화됨(design 2026-07-11) — 자유텍스트는 여기서 다루지 않음
+    assert node["duration"] == "2"
 
 
 def test_full_graph_returns_all_nodes(client: TestClient) -> None:

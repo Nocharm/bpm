@@ -699,7 +699,7 @@ def test_structure_hints_detect_data_feedback_targets() -> None:
         nodes=[
             NodeOut(id="s", title="시작", node_type="start"),
             NodeOut(id="d", title="판단", node_type="decision"),  # 출력 1개 + 라벨 없음 + 속성 비움
-            NodeOut(id="p1", title="검토", node_type="process", assignee="김담당", department="팀", duration="1일"),
+            NodeOut(id="p1", title="검토", node_type="process", assignee="김담당", department="팀", duration="1"),
             NodeOut(id="p2", title="검토", node_type="process"),  # 중복 제목 + 막다른(끝 못 감) + 속성 비움
             NodeOut(id="x", title="외딴 처리", node_type="process"),  # 시작에서 도달 불가(끝으로는 감)
             NodeOut(id="e", title="끝", node_type="end"),

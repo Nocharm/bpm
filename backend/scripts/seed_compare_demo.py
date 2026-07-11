@@ -39,8 +39,9 @@ NODES = [
         "배송 완료",
         "process",
         "changed",
-        {"duration": "3일", "assignee": "정하늘"},
-        {"duration": "1일", "assignee": "김민수", "description": "고객에게 당일 배송 완료 안내"},
+        # duration은 H.MM 숫자 표기 — 자유텍스트는 NodeIn 경계에서 "" 소거되어 diff 시연이 사라짐 (design 2026-07-11)
+        {"duration": "3", "assignee": "정하늘"},
+        {"duration": "1", "assignee": "김민수", "description": "고객에게 당일 배송 완료 안내"},
     ),
     ("notify", "고객 알림", "process", "unchanged", {}, {}),
     ("complete", "완료", "end", "unchanged", {}, {}),

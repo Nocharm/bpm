@@ -165,6 +165,10 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   department: "field.department",
   system: "field.system",
   duration: "field.duration",
+  headcount: "field.headcount",
+  etf: "field.etf",
+  cost: "field.cost",
+  extra: "field.extra",
   location: "field.location",
 };
 
@@ -194,6 +198,10 @@ function buildAppNodes(
       department: m.node.department,
       system: m.node.system,
       duration: m.node.duration,
+      headcount: m.node.headcount,
+      etf: m.node.etf,
+      cost: m.node.cost,
+      extra: m.node.extra,
       groupIds: m.node.group_ids ?? [],
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
@@ -1140,7 +1148,18 @@ function ComparePane({
                       <span className="text-ink-tertiary">{t("summary.none")}</span>
                     )}
                   </InspectorRow>
-                  {(["assignee", "department", "system", "duration"] as const).map((key) => {
+                  {(
+                    [
+                      "assignee",
+                      "department",
+                      "system",
+                      "duration",
+                      "headcount",
+                      "etf",
+                      "cost",
+                      "extra",
+                    ] as const
+                  ).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
                     const current = selectedNode.node[key] || "";
                     return (
