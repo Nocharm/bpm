@@ -7,6 +7,7 @@
 - B1 2/3: ai_usage_events 테이블(create_all 자동)·성공은 write-through 동봉·실패는 ok=false 별도 커밋(502 전파 유지).
 - B1 3/3 백엔드: GET /api/dashboard/ai-usage — SQL 집계(합계·실패·상위5), sysadmin 전역 게이트.
 - 픽스: 집계 테스트에 상위 목록 내림차순 정렬 단언 추가(공유 DB 오염 무관 상대순서 검증).
+- B2: 매뉴얼 30k 절단 → 섹션 선별(## 분할·2-gram 점수·TOC 상시·budget 12k, 소형 매뉴얼 무변화).
 
 ## 2026-07-11 — AI 사용량 계측(B1)·매뉴얼 섹션 선별(B2) 설계·계획 (main)
 - 설계 스펙 + 구현 계획(6태스크) 커밋 — `docs/superpowers/specs/2026-07-11-ai-usage-manual-select-design.md`, `docs/superpowers/plans/2026-07-11-ai-usage-manual-select.md`. 호출별 이벤트(`ai_usage_events`, 원문 미저장)·대시보드 스텁 확장·`## `분할+2-gram 섹션 선별(budget 12k, 소형 무변화). 머지는 사용자 최종 확인 후.

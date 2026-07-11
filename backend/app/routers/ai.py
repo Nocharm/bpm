@@ -13,6 +13,7 @@ from app.app_settings import (
     get_ai_chat_max_sessions,
     get_ai_chat_tips,
 )
+from app.manual_select import select_manual_sections
 from app.chat_history import (
     derive_chat_title,
     prune_chat_session_messages,
@@ -71,6 +72,7 @@ def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:
 
 
 _MANUAL_AI_LIMIT = 30000  # 프롬프트 크기 가드 — 등록 매뉴얼 합본 상한(문자)
+_MANUAL_SELECT_BUDGET = 12000  # 섹션 선별 예산(자) — 전체가 이하면 무변화
 
 
 async def _load_manual_text(session: AsyncSession) -> str:
@@ -189,7 +191,9 @@ async def ai_chat(
         and version.checked_out_by == user
     )
     current = await _load_graph(session, version_id)
-    manual_text = await _load_manual_text(session)
+    manual_text = select_manual_sections(
+        await _load_manual_text(session), payload.instruction, _MANUAL_SELECT_BUDGET
+    )
     messages = build_messages(
         manual_text, current, can_edit, payload.instruction, payload.history
     )
