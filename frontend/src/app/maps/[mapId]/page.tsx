@@ -4317,7 +4317,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
     const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
     const { csv, warnings } = buildCsvFromGraph(graph);
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    // BOM은 이스케이프로 명시 — 보이지 않는 리터럴은 포매터/편집에서 증발할 수 있다
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;

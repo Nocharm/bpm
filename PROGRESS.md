@@ -27,6 +27,7 @@
 - TDD: `csv-export.test.ts` 11케이스(왕복 불변·분기라벨 보존·이스케이프 원문보존·추가 end 경고·라벨 End행 경고·제목중복 경고·start 불일치 경고·숫자파라미터 undefined 안전 직렬화·orderNodesByFlow 3종[정상/무-start/사이클]) 모듈 부재로 RED 확인 후 구현 → 1회 실행에 11/11 GREEN.
 - 게이트: csv-export 11/11·전체 vitest 276/276·tsc --noEmit 0에러·lint 경고 1건(기존 미관련 스크립트, 무변화).
 - 리뷰 픽스: 테스트 공백 1건 보강 — 무라벨 End행 엣지가 다른 outgoing과 병존(`outs.length > 1`)하는 분기 케이스 추가(경고 발화 + Next 셀 드랍 단언), csv-export 12/12.
+- 최종 리뷰 픽스 3건: ① Next 대상 제목의 `;`/`:`·엣지 라벨의 `;`는 재임포트 오파싱 경고 추가(그대로 내보내되 warning, 테스트 +1 → csv-export 13/13) ② 에디터 handleExportCsv의 BOM 보이지 않는 리터럴 → 유니코드 이스케이프 표기(포매터 증발 방지) ③ 백엔드 test_ai 픽스처 duration "1일"→"1"(validator 소거로 죽은 값 복원).
 
 ## 2026-07-11 — Task 6: Excel 모델 빌더(재귀·순환·상한·locked) (numeric-params-export)
 - `lib/excel-export.ts`(`buildExcelModel`) 신규 — 서브프로세스 노드 바로 아래에 링크 맵 전체를 depth+1로 재귀 인라인, 조상 맵 경로(ancestry Set)로 순환 차단(circular 1행), fetch 실패/locked는 denied 1행, 행 상한(`EXCEL_MAX_ROWS`=2000, 옵션 `maxRows`) 초과 시 rowLimit 1행 후 전 재귀 레벨 즉시 중단, 같은 (mapId,followLatest,pinned)는 fetch 1회 메모이즈. 브리프 Step 3 코드를 그대로 구현(변경 없음).

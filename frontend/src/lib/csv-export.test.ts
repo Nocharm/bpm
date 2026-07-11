@@ -127,6 +127,26 @@ describe("buildCsvFromGraph — round trip", () => {
     expect(aCells?.[12]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
   });
 
+  it("Next 대상 제목의 ;/:와 라벨의 ;는 그대로 내보내되 오파싱 경고", () => {
+    // 임포트 파서는 Next를 ";"로 쪼개고 첫 ":"에서 target/label을 가른다 — 재임포트가 조용히 어긋나는 조합
+    const graph: Graph = {
+      nodes: [
+        makeNode("a1", "A", "process", 1),
+        makeNode("b1", "B", "process", 2),
+        makeNode("c1", "C:review", "process", 3), // 제목에 ":" — 재임포트가 target "C"/label "review"로 오파싱
+      ],
+      edges: [makeEdge("x1", "a1", "c1"), makeEdge("x2", "a1", "b1", "ok;fine")],
+      groups: [],
+    };
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toEqual([
+      'Next target "C:review" contains ";" or ":" — re-import will misparse this reference',
+      'Edge label "ok;fine" (from "A") contains ";" — re-import will misparse this reference',
+    ]);
+    const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
+    expect(aCells?.[12]).toBe("C:review;B:ok;fine"); // 드랍 없이 그대로 직렬화
+  });
+
   it("제목 중복 노드는 그대로 내보내되 경고", () => {
     const graph: Graph = {
       nodes: [makeNode("a1", "A", "process", 1), makeNode("a2", "A", "process", 2)],

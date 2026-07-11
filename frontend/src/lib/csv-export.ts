@@ -70,6 +70,13 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
       }
       const target = byId.get(e.target_node_id);
       if (!target || !rowIds.has(target.id)) continue;
+      // 임포트 파서는 Next를 ";"로 쪼개고 첫 ":"에서 target/label을 가른다 — 그 문자가 제목/라벨에 있으면 오파싱
+      if (/[;:]/.test(target.title)) {
+        warnings.push(`Next target "${target.title}" contains ";" or ":" — re-import will misparse this reference`);
+      }
+      if (e.label.includes(";")) {
+        warnings.push(`Edge label "${e.label}" (from "${node.title}") contains ";" — re-import will misparse this reference`);
+      }
       parts.push(e.label === "" ? target.title : `${target.title}:${e.label}`);
     }
     if (node.node_type === "decision" && parts.length < 2) {
