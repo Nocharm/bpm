@@ -5,12 +5,16 @@
 import { useState } from "react";
 
 import {
+  getTodayKeyKst,
   resolvePeriod,
-  todayKeyKst,
+  shiftDays,
   type DateRange,
   type PeriodPreset,
 } from "@/lib/dashboard-chart";
 import { useI18n } from "@/lib/i18n";
+
+// 커스텀 "from" 하한 — 서버 상한(366일)을 넘는 범위를 애초에 입력하지 못하게 막는다.
+const MAX_CUSTOM_RANGE_DAYS = 365;
 
 const PRESETS: { id: PeriodPreset; labelKey: "dashboard.period7d" | "dashboard.period1m" | "dashboard.period3m" }[] = [
   { id: "7d", labelKey: "dashboard.period7d" },
@@ -26,7 +30,8 @@ export interface PeriodFilterProps {
 export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
   const { t } = useI18n();
   const [custom, setCustom] = useState(false);
-  const today = todayKeyKst();
+  const today = getTodayKeyKst();
+  const minFrom = shiftDays(today, -MAX_CUSTOM_RANGE_DAYS);
 
   // 현재 range가 어느 프리셋과 일치하는지 — 활성 표시용
   const activePreset = PRESETS.find(
@@ -71,8 +76,13 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
           <input
             type="date"
             value={range.from}
+            min={minFrom}
             max={range.to}
-            onChange={(event) => onChange({ ...range, from: event.target.value })}
+            onChange={(event) => {
+              // 빈 값(입력 중 지움)은 무시 — 그대로 넘기면 서버에 ?from= 빈 문자열이 가서 422가 난다.
+              if (!event.target.value) return;
+              onChange({ ...range, from: event.target.value });
+            }}
             aria-label={t("dashboard.periodFrom")}
             className="rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink"
           />
@@ -82,7 +92,10 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
             value={range.to}
             min={range.from}
             max={today}
-            onChange={(event) => onChange({ ...range, to: event.target.value })}
+            onChange={(event) => {
+              if (!event.target.value) return;
+              onChange({ ...range, to: event.target.value });
+            }}
             aria-label={t("dashboard.periodTo")}
             className="rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink"
           />

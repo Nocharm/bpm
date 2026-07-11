@@ -46,7 +46,7 @@ export function LineChart({ series, labels }: LineChartProps) {
           line.values.length === 1 ? (
             <circle
               key={line.label}
-              cx={0}
+              cx={VIEW_W / 2}
               cy={(VIEW_H - (line.values[0] / scale.max) * VIEW_H).toFixed(2)}
               r={0.8}
               fill={line.color}

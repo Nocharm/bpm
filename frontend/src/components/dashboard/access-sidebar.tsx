@@ -28,6 +28,9 @@ import type { MessageKey } from "@/lib/i18n-messages";
 
 export interface AccessSidebarProps {
   onToast?: (message: string) => void;
+  // 커버리지 부서 목록이 바뀌면 호출 — 중앙 "부서별 도입 현황" 카드가 마운트 1회 fetch한
+  // summary를 쓰므로, 이 사이드바가 저장한 뒤 그 카드가 재조회하도록 부모에게 알려야 한다.
+  onCoverageChange?: () => void;
 }
 
 type SidebarTab = "access" | "coverage";
@@ -60,7 +63,7 @@ function resolveDeptLabel(path: string, directory: Directory | null): string {
   return dept ? dept.korean_name || dept.name : path;
 }
 
-export function AccessSidebar({ onToast }: AccessSidebarProps) {
+export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps) {
   const { t } = useI18n();
   const [tab, setTab] = useState<SidebarTab>("access");
   const [permissions, setPermissions] = useState<DashboardPermission[]>([]);
@@ -98,28 +101,41 @@ export function AccessSidebar({ onToast }: AccessSidebarProps) {
   }, []);
 
   // 피커 후보 — principalType에 따라 바뀐다. 부서는 org_path, 그룹은 id 문자열이 값.
+  // 이미 권한이 있는 principal은 후보에서 제외 — 안 그러면 같은 사람을 다시 골라 확정적으로 409가 난다
+  // (Coverage 탭 피커와 동일 관례).
   function buildPrincipalOptions(): SelectOption[] {
+    const granted = new Set(
+      permissions
+        .filter((row) => row.principal_type === principalType)
+        .map((row) => row.principal_id),
+    );
     if (principalType === "user") {
-      return (directory?.users ?? []).map((entry) => ({
-        value: entry.id,
-        label: entry.name,
-        sub: entry.department,
-        keywords: `${entry.id} ${entry.korean_name ?? ""}`,
-      }));
+      return (directory?.users ?? [])
+        .filter((entry) => !granted.has(entry.id))
+        .map((entry) => ({
+          value: entry.id,
+          label: entry.name,
+          sub: entry.department,
+          keywords: `${entry.id} ${entry.korean_name ?? ""}`,
+        }));
     }
     if (principalType === "department") {
-      return (directory?.departments ?? []).map((dept) => ({
-        value: dept.id,
-        label: dept.korean_name || dept.name,
-        sub: dept.id,
-        keywords: dept.name,
-      }));
+      return (directory?.departments ?? [])
+        .filter((dept) => !granted.has(dept.id))
+        .map((dept) => ({
+          value: dept.id,
+          label: dept.korean_name || dept.name,
+          sub: dept.id,
+          keywords: dept.name,
+        }));
     }
-    return groups.map((group) => ({
-      value: String(group.id),
-      label: group.name,
-      sub: group.description,
-    }));
+    return groups
+      .filter((group) => !granted.has(String(group.id)))
+      .map((group) => ({
+        value: String(group.id),
+        label: group.name,
+        sub: group.description,
+      }));
   }
 
   async function handleGrant(principalId: string): Promise<void> {
@@ -152,6 +168,7 @@ export function AccessSidebar({ onToast }: AccessSidebarProps) {
       const saved = await setCoverageDepts(next);
       setCoverage(saved);
       onToast?.(t("dashboard.coverageSaved"));
+      onCoverageChange?.();
     } catch (err) {
       onToast?.(describeError(err));
     }

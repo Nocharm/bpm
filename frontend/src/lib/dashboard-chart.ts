@@ -2,25 +2,23 @@
 
 export interface ChartScale {
   max: number;
-  ticks: number[];
 }
 
 // nice 단계 — 1·2·5 × 10^n 사다리로 올림해 축 눈금을 읽기 좋게 만든다.
 const NICE_STEPS = [1, 2, 5];
 
-/** 데이터 최댓값을 nice한 상한으로 올리고 균등 틱을 만든다. 전부 0이면 max=1(0 나눗셈 차단). */
+/** 데이터 최댓값을 nice한 상한으로 올린다. 전부 0이면 max=1(0 나눗셈 차단). */
 export function buildScale(values: number[], tickCount = 4): ChartScale {
   const peak = Math.max(0, ...values);
   if (peak <= 0) {
-    return { max: 1, ticks: [0, 1] };
+    return { max: 1 };
   }
   const rough = peak / tickCount;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const step =
     (NICE_STEPS.find((candidate) => candidate * magnitude >= rough) ?? 10) * magnitude;
   const max = step * tickCount;
-  const ticks = Array.from({ length: tickCount + 1 }, (_, index) => index * step);
-  return { max, ticks };
+  return { max };
 }
 
 export type PeriodPreset = "7d" | "1m" | "3m";
@@ -34,13 +32,13 @@ export interface DateRange {
 const PRESET_DAYS: Record<PeriodPreset, number> = { "7d": 7, "1m": 30, "3m": 90 };
 
 /** KST 날짜키(YYYY-MM-DD) — 브라우저 tz와 무관하게 Asia/Seoul 기준. */
-export function todayKeyKst(now: Date = new Date()): string {
+export function getTodayKeyKst(now: Date = new Date()): string {
   // en-CA 로케일이 ISO 형태(YYYY-MM-DD)를 준다 — 수동 포맷보다 tz 처리가 안전하다.
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
 }
 
 /** 날짜키에서 n일 뺀 날짜키. UTC 기준으로 더해 DST·tz 이동의 영향을 받지 않는다. */
-function shiftDays(dateKey: string, days: number): string {
+export function shiftDays(dateKey: string, days: number): string {
   const shifted = new Date(`${dateKey}T00:00:00Z`);
   shifted.setUTCDate(shifted.getUTCDate() + days);
   return shifted.toISOString().slice(0, 10);

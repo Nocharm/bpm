@@ -22,7 +22,7 @@ import {
   type DashboardTimeseries,
 } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
-import { resolvePeriod, todayKeyKst, type DateRange } from "@/lib/dashboard-chart";
+import { getTodayKeyKst, resolvePeriod, type DateRange } from "@/lib/dashboard-chart";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
@@ -47,12 +47,16 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [series, setSeries] = useState<DashboardTimeseries | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsageMetrics | null>(null);
-  const [range, setRange] = useState<DateRange>(() => resolvePeriod("7d", todayKeyKst()));
+  const [range, setRange] = useState<DateRange>(() => resolvePeriod("7d", getTodayKeyKst()));
   // 실패 플래그는 fetch별로 분리 — 하나로 공유하면 한쪽 성공이 다른 쪽 실패를 감춘다.
   const [summaryFailed, setSummaryFailed] = useState(false);
   const [seriesFailed, setSeriesFailed] = useState(false);
+  // 설정 저장(커버리지 부서 변경) 후 summary만 재조회시키는 트리거 — 증가시키면 effect가 재실행된다.
+  // 기간 변경으로는 절대 늘어나지 않는다(핵심 불변식: deps에 range를 넣지 않는다).
+  const [summaryNonce, setSummaryNonce] = useState(0);
 
-  // 스냅샷 — 마운트 1회. 기간 필터와 무관하다(핵심 불변식: deps에 range를 넣지 않는다).
+  // 스냅샷 — 마운트 1회 + summaryNonce 변경 시(설정 저장 트리거). 기간 필터와는 무관하다
+  // (핵심 불변식: deps에 range를 넣지 않는다).
   useEffect(() => {
     let alive = true;
     getDashboardSummary()
@@ -68,7 +72,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [summaryNonce]);
 
   // 시계열 — 기간이 바뀔 때만 재조회.
   useEffect(() => {
@@ -270,7 +274,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
               <ul className="flex flex-col gap-2">
                 {(summary?.recent_events ?? []).map((event) => (
                   <li
-                    key={`${event.created_at}-${event.map_name}-${event.version_label}`}
+                    key={`${event.created_at}-${event.map_name}-${event.version_label}-${event.event_type}`}
                     className="flex items-center gap-3"
                   >
                     <span className="w-20 shrink-0 rounded-sm bg-surface-alt px-2 py-0.5 text-center text-fine text-ink-secondary">
@@ -324,7 +328,12 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
       </main>
 
       {/* 우 사이드바 — sysadmin만 */}
-      {user?.isSysadmin ? <AccessSidebar onToast={onToast} /> : null}
+      {user?.isSysadmin ? (
+        <AccessSidebar
+          onToast={onToast}
+          onCoverageChange={() => setSummaryNonce((prev) => prev + 1)}
+        />
+      ) : null}
     </div>
   );
 }

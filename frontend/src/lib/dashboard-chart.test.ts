@@ -1,18 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { buildScale, resolvePeriod, todayKeyKst } from "./dashboard-chart";
+import { buildScale, getTodayKeyKst, resolvePeriod } from "./dashboard-chart";
 
 describe("buildScale", () => {
-  it("올림한 nice max와 균등 틱을 만든다", () => {
+  it("올림한 nice max를 만든다", () => {
     const scale = buildScale([3, 7, 12], 4);
     expect(scale.max).toBe(20);
-    expect(scale.ticks).toEqual([0, 5, 10, 15, 20]);
   });
 
   it("전부 0이면 max를 1로 둬 0 나눗셈을 막는다", () => {
     const scale = buildScale([0, 0], 4);
     expect(scale.max).toBe(1);
-    expect(scale.ticks[0]).toBe(0);
   });
 
   it("빈 배열도 안전하다", () => {
@@ -41,10 +39,10 @@ describe("resolvePeriod", () => {
   });
 });
 
-describe("todayKeyKst", () => {
+describe("getTodayKeyKst", () => {
   it("KST 기준 YYYY-MM-DD를 만든다 — 브라우저 tz와 무관", () => {
     // UTC 2026-07-11T20:00Z = KST 2026-07-12 05:00 → 날짜키는 07-12
-    expect(todayKeyKst(new Date("2026-07-11T20:00:00Z"))).toBe("2026-07-12");
-    expect(todayKeyKst(new Date("2026-07-11T10:00:00Z"))).toBe("2026-07-11");
+    expect(getTodayKeyKst(new Date("2026-07-11T20:00:00Z"))).toBe("2026-07-12");
+    expect(getTodayKeyKst(new Date("2026-07-11T10:00:00Z"))).toBe("2026-07-11");
   });
 });
