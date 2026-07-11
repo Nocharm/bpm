@@ -1,8 +1,8 @@
 """운영 대시보드 지표 API — 접속자 현황(login_records)·AI 사용량(ai_usage_events) 집계 (S10, B1)."""
 
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, delete, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +42,8 @@ from app.schemas import (
     DashboardPermissionIn,
     DashboardPermissionOut,
     DashboardSummaryOut,
+    DashboardTimeseriesOut,
+    DashboardTimeseriesPointOut,
     DashboardVersionStatusOut,
 )
 
@@ -417,4 +419,72 @@ async def get_dashboard_summary(
         coverage=coverage,
         ops=ops,
         recent_events=recent_events,
+    )
+
+
+_MAX_RANGE_DAYS = 366  # 기간 상한 — 넘으면 422 (버킷 폭주 방지)
+
+
+def _parse_date(raw: str, field: str) -> date:
+    try:
+        return date.fromisoformat(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"{field} must be YYYY-MM-DD, got {raw!r}"
+        ) from exc
+
+
+@router.get(
+    "/dashboard/timeseries",
+    response_model=DashboardTimeseriesOut,
+    dependencies=[Depends(require_dashboard_viewer)],
+)
+async def get_dashboard_timeseries(
+    from_: str = Query(alias="from"),
+    to: str = Query(),
+    session: AsyncSession = Depends(get_session),
+) -> DashboardTimeseriesOut:
+    """일별 로그인·맵 생성·버전 생성 (KST 날짜 버킷). 빈 날은 0으로 채운다."""
+    start = _parse_date(from_, "from")
+    end = _parse_date(to, "to")
+    if start > end:
+        raise HTTPException(status_code=422, detail="from must be on or before to")
+    span = (end - start).days + 1
+    if span > _MAX_RANGE_DAYS:
+        raise HTTPException(
+            status_code=422, detail=f"range must be {_MAX_RANGE_DAYS} days or fewer, got {span}"
+        )
+
+    # 경계 — [start 00:00, end+1일 00:00). 저장 시각이 KST이므로 그대로 비교한다.
+    lower = datetime.combine(start, time.min)
+    upper = datetime.combine(end + timedelta(days=1), time.min)
+
+    buckets: dict[str, dict[str, int]] = {
+        (start + timedelta(days=offset)).isoformat(): {
+            "logins": 0,
+            "maps_created": 0,
+            "versions_created": 0,
+        }
+        for offset in range(span)
+    }
+
+    async def _tally(column, key: str) -> None:
+        for (occurred,) in (
+            await session.execute(select(column).where(column >= lower, column < upper))
+        ).all():
+            bucket = buckets.get(occurred.date().isoformat())
+            if bucket is not None:
+                bucket[key] += 1
+
+    await _tally(LoginRecord.occurred_at, "logins")
+    await _tally(ProcessMap.created_at, "maps_created")
+    await _tally(MapVersion.created_at, "versions_created")
+
+    return DashboardTimeseriesOut(
+        from_date=start.isoformat(),
+        to_date=end.isoformat(),
+        points=[
+            DashboardTimeseriesPointOut(date=day, **counts)
+            for day, counts in buckets.items()
+        ],
     )

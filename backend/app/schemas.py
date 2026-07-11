@@ -447,6 +447,19 @@ class DashboardSummaryOut(BaseModel):
     recent_events: list[DashboardEventOut]
 
 
+class DashboardTimeseriesPointOut(BaseModel):
+    date: str  # YYYY-MM-DD (KST)
+    logins: int
+    maps_created: int
+    versions_created: int
+
+
+class DashboardTimeseriesOut(BaseModel):
+    from_date: str
+    to_date: str
+    points: list[DashboardTimeseriesPointOut]
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None

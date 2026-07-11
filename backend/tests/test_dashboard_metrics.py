@@ -13,6 +13,7 @@ from app.models import (
     Comment,
     DashboardCoverageDept,
     Employee,
+    LoginRecord,
     MapVersion,
     Notification,
     ProcessMap,
@@ -236,3 +237,57 @@ def test_recent_events_sorted_desc_with_join_and_actor_fallback(client: TestClie
     assert second["actor_name"] == unknown_actor  # Employee 행 없음 → login_id 그대로 폴백
 
     assert newest["created_at"] >= second["created_at"]
+
+
+def _date_key(value) -> str:
+    return value.strftime("%Y-%m-%d")
+
+
+def test_timeseries_zero_fills_and_buckets_logins(client: TestClient) -> None:
+    """빈 날도 0으로 채우고, 로그인은 KST 날짜 버킷에 담긴다."""
+    today = now_kst()
+    start = today - timedelta(days=2)
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            session.add(LoginRecord(login_id="ts.user"))  # 오늘
+            await session.commit()
+
+    asyncio.run(_seed())
+
+    response = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": _date_key(start), "to": _date_key(today)},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert [point["date"] for point in body["points"]] == [
+        _date_key(start),
+        _date_key(start + timedelta(days=1)),
+        _date_key(today),
+    ]
+    today_point = body["points"][-1]
+    assert today_point["logins"] >= 1
+
+
+def test_timeseries_rejects_inverted_and_oversized_range(client: TestClient) -> None:
+    today = now_kst()
+    inverted = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": _date_key(today), "to": _date_key(today - timedelta(days=1))},
+    )
+    assert inverted.status_code == 422
+
+    oversized = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": _date_key(today - timedelta(days=400)), "to": _date_key(today)},
+    )
+    assert oversized.status_code == 422
+
+
+def test_timeseries_rejects_malformed_date(client: TestClient) -> None:
+    """`from`/`to`가 YYYY-MM-DD 형식이 아니면 422 — 파싱 실패를 명시적으로 거부한다."""
+    response = client.get(
+        "/api/dashboard/timeseries", params={"from": "2026/07/01", "to": "2026-07-05"}
+    )
+    assert response.status_code == 422
