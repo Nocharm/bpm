@@ -153,3 +153,57 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
     expect(parts["word/document.xml"]).not.toContain("bentConnector3");
   });
 });
+
+describe("buildDocx — 하이퍼링크 URL 정규화", () => {
+  it("공백·한글 URL은 percent-encode해 rels Target에 담고 본문에 하이퍼링크를 만든다", async () => {
+    const node: WordExportNode = {
+      ...nodeWithUrl, url: "http://server/문서 목록.docx", urlLabel: "문서 목록",
+    };
+    const parts = await unzipDocx(buildDocx([node], noEdges));
+    const rels = parts["word/_rels/document.xml.rels"];
+    const doc = parts["word/document.xml"];
+    expect(rels).toContain(
+      'Target="http://server/%EB%AC%B8%EC%84%9C%20%EB%AA%A9%EB%A1%9D.docx"',
+    );
+    expect(doc).toContain("<w:hyperlink ");
+  });
+
+  it("정규화 불가 URL은 링크 없이 라벨을 일반 텍스트 문단으로 렌더한다", async () => {
+    const node: WordExportNode = {
+      ...nodeWithUrl, url: "메모만 적음", urlLabel: undefined,
+    };
+    const parts = await unzipDocx(buildDocx([node], noEdges));
+    const rels = parts["word/_rels/document.xml.rels"];
+    const doc = parts["word/document.xml"];
+    expect(rels).not.toContain("hyperlink");
+    expect(doc).not.toContain("<w:hyperlink");
+    expect(doc).toContain("메모만 적음</w:t>");
+  });
+});
+
+describe("buildDocx — 빈 노드 계약", () => {
+  it("노드 0개면 명확한 메시지로 throw한다", () => {
+    expect(() => buildDocx([], [])).toThrow(/node/i);
+  });
+});
+
+describe("buildDocx — 엣지 라벨 bounds 클램프", () => {
+  it("좌상단 노드 사이 긴 라벨이어도 모든 a:off 좌표가 0 이상이다", async () => {
+    const nodeTL1: WordExportNode = {
+      id: "tl1", title: "N1", nodeType: "process", x: 0, y: 0, w: 60, h: 40,
+    };
+    const nodeTL2: WordExportNode = {
+      id: "tl2", title: "N2", nodeType: "process", x: 80, y: 0, w: 60, h: 40,
+    };
+    const longLabelEdge: WordExportEdge = {
+      sourceId: "tl1", targetId: "tl2", label: "아주 아주 아주 긴 분기 라벨입니다 매우 깁니다",
+      sourceSide: "right", targetSide: "left",
+    };
+    const parts = await unzipDocx(buildDocx([nodeTL1, nodeTL2], [longLabelEdge]));
+    const doc = parts["word/document.xml"];
+    for (const m of doc.matchAll(/<a:off x="(-?\d+)" y="(-?\d+)"\/>/g)) {
+      expect(Number(m[1])).toBeGreaterThanOrEqual(0);
+      expect(Number(m[2])).toBeGreaterThanOrEqual(0);
+    }
+  });
+});

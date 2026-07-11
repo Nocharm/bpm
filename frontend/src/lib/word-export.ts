@@ -42,6 +42,16 @@ const NODE_PRESET: Record<ProcessNodeType, string> = {
   subprocess: "flowChartPredefinedProcess",
 };
 
+// 하이퍼링크 rels Target(xsd:anyURI)용 정규화 — 공백·한글이 든 URL을 raw로 넣으면
+// Word가 문서 전체를 손상으로 거부할 수 있다. 스킴 없는 값 등 파싱 실패 시 null(링크 생략).
+function normalizeHyperlinkUrl(url: string): string | null {
+  try {
+    return new URL(url).href;
+  } catch {
+    return null;
+  }
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -117,11 +127,12 @@ function buildNodeShape(
   layout: Layout,
   hyperlinkRelId: string | null,
 ): string {
-  const paragraphs =
-    buildCenteredParagraph(node.title, { bold: true }) +
-    (hyperlinkRelId && node.url
+  const urlLine = node.url
+    ? hyperlinkRelId
       ? buildHyperlinkParagraph(node.urlLabel || node.url, hyperlinkRelId)
-      : "");
+      : buildCenteredParagraph(node.urlLabel || node.url, {}) // 정규화 실패 URL — 링크 없이 일반 텍스트
+    : "";
+  const paragraphs = buildCenteredParagraph(node.title, { bold: true }) + urlLine;
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="${escapeXml(node.title)}"/>` +
@@ -196,6 +207,12 @@ function buildConnectorShape(
 const EDGE_LABEL_CHAR_PX = 14; // 11pt 한글 폭 어림 — 라벨 박스 크기 산정용
 const EDGE_LABEL_H_PX = 24;
 
+// 좌상단 경계 노드 + 긴 라벨은 mid 계산이 음수 off를 낼 수 있다 — 그룹 chExt(groupExt) 안에 들어오게 클램프.
+function clampOffset(value: number, boxSize: number, groupExt: number): number {
+  const maxOff = Math.max(0, groupExt - boxSize);
+  return Math.min(Math.max(value, 0), maxOff);
+}
+
 // 분기 라벨 — 연결선 중점 위 무테두리 텍스트박스(흰 배경으로 선을 가림)
 function buildEdgeLabelShape(
   label: string,
@@ -212,13 +229,17 @@ function buildEdgeLabelShape(
     x: (start.x + end.x) / 2 - w / 2,
     y: (start.y + end.y) / 2 - EDGE_LABEL_H_PX / 2,
   };
+  const boxW = layout.toLen(w);
+  const boxH = layout.toLen(EDGE_LABEL_H_PX);
+  const offX = clampOffset(layout.toX(mid.x), boxW, layout.extW);
+  const offY = clampOffset(layout.toY(mid.y), boxH, layout.extH);
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="label-${shapeId}"/>` +
     "<wps:cNvSpPr/>" +
     "<wps:spPr>" +
-    `<a:xfrm><a:off x="${layout.toX(mid.x)}" y="${layout.toY(mid.y)}"/>` +
-    `<a:ext cx="${layout.toLen(w)}" cy="${layout.toLen(EDGE_LABEL_H_PX)}"/></a:xfrm>` +
+    `<a:xfrm><a:off x="${offX}" y="${offY}"/>` +
+    `<a:ext cx="${boxW}" cy="${boxH}"/></a:xfrm>` +
     '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
     '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>' +
     "<a:ln><a:noFill/></a:ln>" +
@@ -286,6 +307,9 @@ function buildDocumentXml(shapesXml: string, extW: number, extH: number): string
 
 /** 노드/엣지를 Word 도형 순서도 docx Blob으로 만든다 (순수 — DOM 불의존). */
 export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blob {
+  if (nodes.length === 0) {
+    throw new Error("buildDocx: nodes must not be empty");
+  }
   const layout = computeLayout(nodes);
   // 도형 id: 1은 docPr, 노드는 2부터
   const shapeIdOf = new Map(nodes.map((node, i) => [node.id, i + 2]));
@@ -293,9 +317,10 @@ export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blo
   const shapes: string[] = [];
   nodes.forEach((node, i) => {
     let relId: string | null = null;
-    if (node.url) {
+    const normalizedUrl = node.url ? normalizeHyperlinkUrl(node.url) : null;
+    if (normalizedUrl) {
       relId = `rIdHl${hyperlinks.length + 1}`;
-      hyperlinks.push({ relId, url: node.url });
+      hyperlinks.push({ relId, url: normalizedUrl });
     }
     shapes.push(buildNodeShape(node, i + 2, layout, relId));
   });

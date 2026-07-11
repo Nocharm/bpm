@@ -31,8 +31,8 @@
 
 ### 신규 모듈 `frontend/src/lib/word-export.ts`
 
-- `buildDocxBlob(nodes, edges, options): Blob` — 내보내기 모델을 받아 docx Blob을 만드는 **순수 함수** (DOM 불의존 → vitest 단위 테스트 가능).
-- `exportCanvasWord(nodes, edges, fileName): Promise<void>` — Blob 생성 후 `URL.createObjectURL` + 앵커 클릭으로 다운로드 (평문 HTTP 인시큐어 컨텍스트에서도 동작. `crypto.*` 사용 금지 준수).
+- `buildDocx(nodes, edges): Blob` — 내보내기 모델을 받아 docx Blob을 만드는 **순수 함수** (DOM 불의존 → vitest 단위 테스트 가능).
+- `exportCanvasWord(nodes, edges, fileName): void` — Blob 생성 후 `URL.createObjectURL` + 앵커 클릭으로 다운로드 (평문 HTTP 인시큐어 컨텍스트에서도 동작. `crypto.*` 사용 금지 준수).
 - 기존 `src/lib/export.ts`(PNG)는 손대지 않는다.
 
 ### OOXML 직접 생성 + `fflate`
@@ -53,7 +53,7 @@
 page.tsx handleExportWord
   → nodesRef.current(표시 좌표·타입·title·url·url_label) + edges(source/target/label/sides)
   → 내보내기 모델로 변환 (React Flow 타입 의존 제거)
-  → word-export.ts buildDocxBlob → 다운로드
+  → word-export.ts buildDocx → 다운로드
 ```
 
 - 파일명: PNG와 동일 규칙 `${맵이름}_${버전라벨}_${타임스탬프}.docx`.
