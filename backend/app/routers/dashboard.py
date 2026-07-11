@@ -5,8 +5,10 @@ from datetime import date, datetime, time, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, delete, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.auth import get_current_user, require_sysadmin
+from app.clock import KST
 from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
@@ -425,6 +427,18 @@ async def get_dashboard_summary(
 _MAX_RANGE_DAYS = 366  # 기간 상한 — 넘으면 422 (버킷 폭주 방지)
 
 
+def _kst_date_key(moment: datetime) -> str:
+    """저장 시각 → KST 날짜키.
+
+    드라이버별로 tz-aware 컬럼 반환값이 다르다: sqlite(로컬 테스트)는 저장한 그대로
+    naive datetime을 돌려주므로(이미 KST로 저장됨) KST로 간주하고, asyncpg(Postgres,
+    서버 배포)는 항상 UTC tz-aware datetime으로 돌려주므로 KST로 변환해야 한다.
+    이 분기를 지우면 Postgres에서 KST 09:00 이전 이벤트가 전날 버킷으로 새어 들어간다.
+    """
+    aware = moment if moment.tzinfo is not None else moment.replace(tzinfo=KST)
+    return aware.astimezone(KST).date().isoformat()
+
+
 def _parse_date(raw: str, field: str) -> date:
     try:
         return date.fromisoformat(raw)
@@ -448,16 +462,20 @@ async def get_dashboard_timeseries(
     start = _parse_date(from_, "from")
     end = _parse_date(to, "to")
     if start > end:
-        raise HTTPException(status_code=422, detail="from must be on or before to")
+        raise HTTPException(
+            status_code=422,
+            detail=f"from must be on or before to, got from={from_!r} to={to!r}",
+        )
     span = (end - start).days + 1
     if span > _MAX_RANGE_DAYS:
         raise HTTPException(
             status_code=422, detail=f"range must be {_MAX_RANGE_DAYS} days or fewer, got {span}"
         )
 
-    # 경계 — [start 00:00, end+1일 00:00). 저장 시각이 KST이므로 그대로 비교한다.
-    lower = datetime.combine(start, time.min)
-    upper = datetime.combine(end + timedelta(days=1), time.min)
+    # 경계 — [start 00:00, end+1일 00:00) KST. tz-aware 컬럼(DateTime(timezone=True))에
+    # naive datetime을 바인딩하면 asyncpg(Postgres)가 실패하거나 UTC로 오인한다 — 반드시 tz-aware.
+    lower = datetime.combine(start, time.min, tzinfo=KST)
+    upper = datetime.combine(end + timedelta(days=1), time.min, tzinfo=KST)
 
     buckets: dict[str, dict[str, int]] = {
         (start + timedelta(days=offset)).isoformat(): {
@@ -468,11 +486,11 @@ async def get_dashboard_timeseries(
         for offset in range(span)
     }
 
-    async def _tally(column, key: str) -> None:
+    async def _tally(column: InstrumentedAttribute[datetime], key: str) -> None:
         for (occurred,) in (
             await session.execute(select(column).where(column >= lower, column < upper))
         ).all():
-            bucket = buckets.get(occurred.date().isoformat())
+            bucket = buckets.get(_kst_date_key(occurred))
             if bucket is not None:
                 bucket[key] += 1
 

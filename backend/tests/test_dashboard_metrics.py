@@ -1,11 +1,12 @@
 """운영 대시보드 집계 — /summary 스냅샷, /timeseries 시계열 (design 2026-07-11)."""
 
 import asyncio
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.clock import KST
 from app.clock import now as now_kst
 from app.db import SessionLocal
 from app.models import (
@@ -291,3 +292,64 @@ def test_timeseries_rejects_malformed_date(client: TestClient) -> None:
         "/api/dashboard/timeseries", params={"from": "2026/07/01", "to": "2026-07-05"}
     )
     assert response.status_code == 422
+
+
+def test_kst_date_key_normalizes_naive_and_aware_datetimes() -> None:
+    """_kst_date_key 단위 회귀 — Finding 2(UTC 버킷 밀림)는 DB를 거치지 않고 여기서 잡는다.
+    sqlite는 tz-aware 컬럼도 naive로 왕복시켜(이미 KST 값) 로컬 테스트로는
+    asyncpg(Postgres, UTC aware 반환) 버그가 절대 재현되지 않는다 — 이 테스트가 유일한 방어선."""
+    from app.routers.dashboard import _kst_date_key
+
+    naive = datetime(2026, 7, 11, 23, 0)  # sqlite 왕복값 — tzinfo 없음, 이미 KST로 저장된 값
+    assert _kst_date_key(naive) == "2026-07-11"
+
+    utc_aware = datetime(2026, 7, 11, 20, 0, tzinfo=timezone.utc)  # KST로는 07-12 05:00
+    assert _kst_date_key(utc_aware) == "2026-07-12"  # 픽스 전 코드라면 "2026-07-11"을 냄
+
+    kst_aware = datetime(2026, 7, 12, 5, 0, tzinfo=KST)
+    assert _kst_date_key(kst_aware) == "2026-07-12"
+
+
+def test_timeseries_accepts_max_range_and_rejects_one_more(client: TestClient) -> None:
+    """상한이 정확히 366일임을 못박는다 — off-by-one 방지."""
+    start = date(2024, 1, 1)
+    ok = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": start.isoformat(), "to": (start + timedelta(days=365)).isoformat()},
+    )
+    assert ok.status_code == 200
+    assert len(ok.json()["points"]) == 366
+
+    too_big = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": start.isoformat(), "to": (start + timedelta(days=366)).isoformat()},
+    )
+    assert too_big.status_code == 422
+
+
+def test_timeseries_single_day_range_returns_one_point(client: TestClient) -> None:
+    """from == to 는 유효한 하루짜리 범위 — 포인트 정확히 1개."""
+    today = now_kst()
+    response = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": _date_key(today), "to": _date_key(today)},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["points"]) == 1
+    assert body["points"][0]["date"] == _date_key(today)
+
+
+def test_timeseries_buckets_maps_created_and_versions_created(client: TestClient) -> None:
+    """맵·버전 생성이 오늘 버킷에 집계된다 — 기존 테스트는 logins만 검증해 공백이 있었다."""
+    today = now_kst()
+    _seed_map("TS Bucket Map", "TS Div/TS Office", ["draft"])
+
+    response = client.get(
+        "/api/dashboard/timeseries",
+        params={"from": _date_key(today), "to": _date_key(today)},
+    )
+    assert response.status_code == 200
+    today_point = response.json()["points"][-1]
+    assert today_point["maps_created"] >= 1
+    assert today_point["versions_created"] >= 1
