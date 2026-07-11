@@ -22,6 +22,7 @@
 - 상세 헤더 공개·역할 필을 오우닝 부서 필과 동일한 반투명 필로 통일(+아이콘: Globe/Lock·Crown/PencilLine/Eye, 색 의미는 기존 visibilityPillClass·RoleBadge 유지 — public/editor=added, owner=accent, private/viewer=중립). 버전 타임라인은 최근 3개만 기본 노출 + "{n}개 더보기/접기" 토글, 접힌 카드 이벤트 칩은 1줄 고정(nowrap 잘림)·게시 칩은 우측 고정에 이름 생략(이름은 툴팁, 좌측 칩에서 제외). lint·tsc·build·vitest 234 초록.
 - 버전 카드 "이 버전으로 가기" — 펼침 전용 버튼을 없애고 카드 호버 시 상태 필이 버튼으로 페이드 교체(grid 겹침 + opacity 전환, 이동 불가 카드는 상태 필 고정, 비호버 시 pointer-events 차단으로 오클릭 방지). 우측 생성일시는 제목과 세로 중앙정렬(items-center). lint·tsc·build·vitest 234 초록.
 - 상태 필(+호버 버튼)을 버전 이름 바로 우측으로 — 이름 span의 flex-1 제거, 겹침 셀 justify-items-start(이름에 밀착·버튼은 오른쪽으로 성장). lint·tsc·build 초록.
+- Current 배지 제거 — 기준이 "최신 생성 버전"(idx 0)일 뿐 열람 중/게시본과 무관해 정보가치 낮음(사용자 결정). 최신 카드의 연보라 하이라이트는 유지, 고아가 된 `home.verCurrent` 키 en/ko 삭제. lint·tsc·build·vitest 234 초록.
 
 ## 2026-07-10 — 후속 정비: 비교화면 로드 실패 처리 + AI 게이트/페이로드 잔무 (worktree-ai-followup-fixes)
 - 비교화면 로드 effect 3곳 try/catch — 403은 에디터와 동일한 비공개 맵 안내 모달(홈 이동), 그 외는 인라인 오류 표시로 무한 로딩 제거. 브라우저 검증 `pw-verify-compare-403.mjs` 4/4(403 모달·홈 이동·500 인라인·정상 무회귀).

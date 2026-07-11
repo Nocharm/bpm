@@ -194,11 +194,6 @@ export function VersionTimeline({
                       </span>
                     );
                   })()}
-                  {idx === 0 && (
-                    <span className="shrink-0 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
-                      {t("home.verCurrent")}
-                    </span>
-                  )}
                 </span>
                 <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
               </div>
