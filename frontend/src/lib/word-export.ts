@@ -140,6 +140,95 @@ function buildNodeShape(
   );
 }
 
+// 프리셋 4접점(cxnLst) 인덱스 — flowChart류 프리셋은 top/left/bottom/right 순.
+// ⚠️ 실제 Word에서 접점 위치는 Task 4 수동 검증으로 확인한다(스펙 §4 — 구현 시 실측 확정).
+const SIDE_TO_CXN_IDX: Record<HandleSide, number> = { top: 0, left: 1, bottom: 2, right: 3 };
+
+// 노드 변의 중앙점 (캔버스 px)
+function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: number } {
+  switch (side) {
+    case "top":
+      return { x: node.x + node.w / 2, y: node.y };
+    case "bottom":
+      return { x: node.x + node.w / 2, y: node.y + node.h };
+    case "left":
+      return { x: node.x, y: node.y + node.h / 2 };
+    case "right":
+      return { x: node.x + node.w, y: node.y + node.h / 2 };
+  }
+}
+
+// 엣지 1개 → 꺾인 연결선. 접점 연결로 Word에서 도형을 움직여도 선이 따라온다.
+function buildConnectorShape(
+  edge: WordExportEdge,
+  shapeId: number,
+  sourceNode: WordExportNode,
+  targetNode: WordExportNode,
+  sourceShapeId: number,
+  targetShapeId: number,
+  layout: Layout,
+): string {
+  const start = getSideAnchor(sourceNode, edge.sourceSide);
+  const end = getSideAnchor(targetNode, edge.targetSide);
+  const flipH = end.x < start.x;
+  const flipV = end.y < start.y;
+  const off = { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y) };
+  const ext = { w: Math.abs(end.x - start.x), h: Math.abs(end.y - start.y) };
+  return (
+    "<wps:wsp>" +
+    `<wps:cNvPr id="${shapeId}" name="edge-${shapeId}"/>` +
+    "<wps:cNvCnPr>" +
+    `<a:stCxn id="${sourceShapeId}" idx="${SIDE_TO_CXN_IDX[edge.sourceSide]}"/>` +
+    `<a:endCxn id="${targetShapeId}" idx="${SIDE_TO_CXN_IDX[edge.targetSide]}"/>` +
+    "</wps:cNvCnPr>" +
+    "<wps:spPr>" +
+    `<a:xfrm${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}>` +
+    `<a:off x="${layout.toX(off.x)}" y="${layout.toY(off.y)}"/>` +
+    `<a:ext cx="${layout.toLen(ext.w)}" cy="${layout.toLen(ext.h)}"/></a:xfrm>` +
+    '<a:prstGeom prst="bentConnector3"><a:avLst/></a:prstGeom>' +
+    "<a:noFill/>" +
+    '<a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>' +
+    '<a:tailEnd type="triangle"/></a:ln>' +
+    "</wps:spPr><wps:bodyPr/></wps:wsp>"
+  );
+}
+
+const EDGE_LABEL_CHAR_PX = 14; // 11pt 한글 폭 어림 — 라벨 박스 크기 산정용
+const EDGE_LABEL_H_PX = 24;
+
+// 분기 라벨 — 연결선 중점 위 무테두리 텍스트박스(흰 배경으로 선을 가림)
+function buildEdgeLabelShape(
+  label: string,
+  shapeId: number,
+  sourceNode: WordExportNode,
+  targetNode: WordExportNode,
+  edge: WordExportEdge,
+  layout: Layout,
+): string {
+  const start = getSideAnchor(sourceNode, edge.sourceSide);
+  const end = getSideAnchor(targetNode, edge.targetSide);
+  const w = Math.max(30, label.length * EDGE_LABEL_CHAR_PX);
+  const mid = {
+    x: (start.x + end.x) / 2 - w / 2,
+    y: (start.y + end.y) / 2 - EDGE_LABEL_H_PX / 2,
+  };
+  return (
+    "<wps:wsp>" +
+    `<wps:cNvPr id="${shapeId}" name="label-${shapeId}"/>` +
+    "<wps:cNvSpPr/>" +
+    "<wps:spPr>" +
+    `<a:xfrm><a:off x="${layout.toX(mid.x)}" y="${layout.toY(mid.y)}"/>` +
+    `<a:ext cx="${layout.toLen(w)}" cy="${layout.toLen(EDGE_LABEL_H_PX)}"/></a:xfrm>` +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+    '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>' +
+    "<a:ln><a:noFill/></a:ln>" +
+    "</wps:spPr>" +
+    `<wps:txbx><w:txbxContent>${buildCenteredParagraph(label, {})}</w:txbxContent></wps:txbx>` +
+    '<wps:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/>' +
+    "</wps:wsp>"
+  );
+}
+
 const CONTENT_TYPES_XML =
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -210,8 +299,26 @@ export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blo
     }
     shapes.push(buildNodeShape(node, i + 2, layout, relId));
   });
-  void edges; // 연결선은 Task 2에서 shapes에 추가
-  void shapeIdOf;
+  const nodeOf = new Map(nodes.map((node) => [node.id, node]));
+  let nextShapeId = nodes.length + 2;
+  for (const edge of edges) {
+    const sourceNode = nodeOf.get(edge.sourceId);
+    const targetNode = nodeOf.get(edge.targetId);
+    if (!sourceNode || !targetNode) {
+      continue; // 없는 노드 참조 — 저장 데이터 이상, 도형만 건너뛴다
+    }
+    const sourceShapeId = shapeIdOf.get(edge.sourceId);
+    const targetShapeId = shapeIdOf.get(edge.targetId);
+    if (sourceShapeId === undefined || targetShapeId === undefined) {
+      continue;
+    }
+    shapes.push(
+      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, sourceShapeId, targetShapeId, layout),
+    );
+    if (edge.label) {
+      shapes.push(buildEdgeLabelShape(edge.label, nextShapeId++, sourceNode, targetNode, edge, layout));
+    }
+  }
   const documentXml = buildDocumentXml(shapes.join(""), layout.extW, layout.extH);
   const zipped = zipSync({
     "[Content_Types].xml": strToU8(CONTENT_TYPES_XML),

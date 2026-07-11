@@ -111,3 +111,45 @@ describe("buildDocx — 좌표·축척", () => {
     expect(parts["word/document.xml"]).toContain('cx="1638300"');
   });
 });
+
+describe("buildDocx — 연결선·엣지 라벨", () => {
+  const edgeAB: WordExportEdge = {
+    sourceId: "a", targetId: "b", label: "적합", sourceSide: "right", targetSide: "left",
+  };
+
+  it("bentConnector3 + 화살촉 + 도형 접점(stCxn/endCxn)으로 연결한다", async () => {
+    const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [edgeAB]));
+    const doc = parts["word/document.xml"];
+    expect(doc).toContain('prst="bentConnector3"');
+    expect(doc).toContain('<a:tailEnd type="triangle"/>');
+    // 노드 도형 id: a=2, b=3. right=3, left=1 (top0/left1/bottom2/right3)
+    expect(doc).toContain('<a:stCxn id="2" idx="3"/>');
+    expect(doc).toContain('<a:endCxn id="3" idx="1"/>');
+  });
+
+  it("라벨 있는 엣지만 중점에 라벨 텍스트박스를 만든다", async () => {
+    const noLabel: WordExportEdge = { ...edgeAB, label: undefined };
+    const withLabel = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [edgeAB]));
+    const without = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [noLabel]));
+    expect(withLabel["word/document.xml"]).toContain("적합</w:t>");
+    // 라벨 박스는 테두리 없음(noFill 라인) + 흰 배경으로 선을 가린다
+    expect(withLabel["word/document.xml"]).toContain("<a:ln><a:noFill/></a:ln>");
+    expect(without["word/document.xml"]).not.toContain("적합</w:t>");
+  });
+
+  it("역방향(오른→왼) 엣지는 flip으로 표현한다", async () => {
+    const back: WordExportEdge = {
+      sourceId: "b", targetId: "a", sourceSide: "left", targetSide: "right",
+    };
+    const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [back]));
+    expect(parts["word/document.xml"]).toContain('flipH="1"');
+  });
+
+  it("없는 노드를 참조하는 엣지는 조용히 건너뛴다", async () => {
+    const dangling: WordExportEdge = {
+      sourceId: "a", targetId: "ghost", sourceSide: "right", targetSide: "left",
+    };
+    const parts = await unzipDocx(buildDocx([nodeWithUrl], [dangling]));
+    expect(parts["word/document.xml"]).not.toContain("bentConnector3");
+  });
+});
