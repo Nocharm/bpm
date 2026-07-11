@@ -158,8 +158,9 @@ export function VersionTimeline({
               {/* 우측 날짜는 제목과 세로 중앙정렬 (items-center) */}
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임. */}
-                  <span className="min-w-0 flex-1 truncate">
+                  {/* 버전 마커 + 이름 — 버전 필과 동일(번호 작게 회색·이름 강조). 좁아지면 이름 말줄임.
+                      flex-1 없음 — 상태 필이 이름 바로 우측에 붙는다. */}
+                  <span className="min-w-0 truncate">
                     <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
                     <span className="text-caption-strong text-ink">{version.label}</span>
                   </span>
@@ -168,7 +169,7 @@ export function VersionTimeline({
                   {(() => {
                     const canGo = !!onGoToVersion && version.id !== currentVersionId;
                     return (
-                      <span className="grid shrink-0 items-center justify-items-end">
+                      <span className="grid shrink-0 items-center justify-items-start">
                         <span
                           className={`col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-350 ease-smooth ${
                             VERSION_STATUS_STYLE[version.status]
