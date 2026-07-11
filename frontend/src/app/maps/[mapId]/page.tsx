@@ -7955,7 +7955,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                     <MapDetailCard
                       mapId={mapId}
                       only="versions"
-                      hideOpen
                       showFooter={false}
                       reloadKey={versionsReloadKey}
                       onGoToVersion={(id) => void switchVersion(id)}

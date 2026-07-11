@@ -11,6 +11,7 @@
 - 누락 태그를 필 형태로 — `rounded-full bg-error/10`(토큰 color-mix 10% 반투명 틴트, recent-badge 필 패턴) + text-error. 빌드 CSS에서 유틸 생성 실측 확인. lint·build 초록.
 - 태그 문구 "No owning dept" → "Dept unassigned" (사용자 선택 — 상태 서술·2단어, en/ko 사전 동일 영어). lint·build 초록.
 - 우측 상세 카드(map-detail-card) 가시성·역할 필 행에 오우닝 부서 필 추가 — 지정 시 Building2 + 부서명(accent-tint 필, 한글명 우선 formatDeptName), 미지정 시 홈 카드와 동일한 "Dept unassigned" 반투명 경고 필. lint·tsc·build 초록.
+- 상세 헤더 Open 버튼 삭제 + 필 3종(공개·역할·오우닝 부서)을 설명 아래에서 헤더 우측으로 이동(열기는 카드 타이틀 링크로 유지). 무용해진 `hideOpen` prop 제거 — 소비처 2곳(inspector 탭·에디터 page.tsx, 후자는 ugrep 브래킷 함정으로 tsc가 적발) 정리. lint·tsc·build·vitest 234 초록.
 
 ## 2026-07-10 — 후속 정비: 비교화면 로드 실패 처리 + AI 게이트/페이로드 잔무 (worktree-ai-followup-fixes)
 - 비교화면 로드 effect 3곳 try/catch — 403은 에디터와 동일한 비공개 맵 안내 모달(홈 이동), 그 외는 인라인 오류 표시로 무한 로딩 제거. 브라우저 검증 `pw-verify-compare-403.mjs` 4/4(403 모달·홈 이동·500 인라인·정상 무회귀).

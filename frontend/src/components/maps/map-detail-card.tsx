@@ -7,7 +7,6 @@
 import Link from "next/link";
 import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
-  ArrowUpRight,
   Building,
   Building2,
   Copy,
@@ -123,8 +122,6 @@ interface MapDetailCardProps {
   mapId: number;
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
   showFooter?: boolean;
-  // 헤더 Open 버튼 숨김 — 에디터에선 이미 그 맵을 보고 있어 무의미 (#6).
-  hideOpen?: boolean;
   onDelete?: (mapId: number) => void;
   // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
   onCopy?: (mapId: number, name: string) => void;
@@ -141,7 +138,6 @@ interface MapDetailCardProps {
 export function MapDetailCard({
   mapId,
   showFooter = true,
-  hideOpen = false,
   onDelete,
   onCopy,
   only,
@@ -281,17 +277,36 @@ export function MapDetailCard({
     <>
       {!only && (
         <>
+      {/* 헤더 — 좌: 타이틀 / 우: 공개·역할·오우닝 부서 필 (Open 버튼 제거 — 열기는 카드 타이틀 링크) */}
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-body-strong text-ink">{detail.name}</h2>
-        {!hideOpen && (
-          <Link
-            href={`/maps/${detail.id}`}
-            className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus"
-          >
-            <ArrowUpRight size={14} strokeWidth={1.5} />
-            {t("home.open")}
-          </Link>
-        )}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-fine text-ink-tertiary">
+          {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
+          <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(detail.visibility)}`}>
+            {t(detail.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+          </span>
+          {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
+          {/* 오우닝 부서 — 지정 시 부서명 필(한글명 우선), 미지정 시 홈 카드와 동일한 경고 필 */}
+          {detail.owning_department ? (
+            <span
+              data-id="map-detail-owning-dept"
+              title={t("perm.owningDept.title")}
+              className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+            >
+              <Building2 size={12} strokeWidth={1.5} />
+              {formatDeptName(detail.owning_department, lang, koreanDeptByPath)}
+            </span>
+          ) : (
+            <span
+              data-id="map-detail-owning-missing"
+              title={t("home.owningMissingNote")}
+              className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
+            >
+              <TriangleAlert size={12} strokeWidth={1.5} />
+              {t("home.owningMissingBadge")}
+            </span>
+          )}
+        </div>
       </div>
 
       <div
@@ -302,34 +317,6 @@ export function MapDetailCard({
           detail.description
         ) : (
           <span className="text-ink-tertiary">{t("home.descEmpty")}</span>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 text-fine text-ink-tertiary">
-        {/* 공개 범위 — public/private 색 구분 / visibility pill, colored */}
-        <span className={`rounded-sm border px-1.5 py-0.5 ${visibilityPillClass(detail.visibility)}`}>
-          {t(detail.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
-        </span>
-        {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
-        {/* 오우닝 부서 — 지정 시 부서명 필(한글명 우선), 미지정 시 홈 카드와 동일한 경고 필 */}
-        {detail.owning_department ? (
-          <span
-            data-id="map-detail-owning-dept"
-            title={t("perm.owningDept.title")}
-            className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
-          >
-            <Building2 size={12} strokeWidth={1.5} />
-            {formatDeptName(detail.owning_department, lang, koreanDeptByPath)}
-          </span>
-        ) : (
-          <span
-            data-id="map-detail-owning-missing"
-            title={t("home.owningMissingNote")}
-            className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
-          >
-            <TriangleAlert size={12} strokeWidth={1.5} />
-            {t("home.owningMissingBadge")}
-          </span>
         )}
       </div>
         </>

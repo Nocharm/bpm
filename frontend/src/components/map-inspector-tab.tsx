@@ -70,7 +70,7 @@ export function MapInspectorTab({ mapId, readOnly }: MapInspectorTabProps) {
           {t("inspector.collaborators")}
         </summary>
         <div className="mt-2">
-          <MapDetailCard mapId={mapId} only="members" hideOpen showFooter={false} />
+          <MapDetailCard mapId={mapId} only="members" showFooter={false} />
         </div>
       </details>
 
