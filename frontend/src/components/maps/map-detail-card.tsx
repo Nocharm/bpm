@@ -18,6 +18,7 @@ import {
   Puzzle,
   Settings,
   Trash2,
+  TriangleAlert,
   User,
   Users,
   UsersRound,
@@ -310,6 +311,26 @@ export function MapDetailCard({
           {t(detail.visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
         </span>
         {detail.my_role && <RoleBadge role={detail.my_role as MapRole} />}
+        {/* 오우닝 부서 — 지정 시 부서명 필(한글명 우선), 미지정 시 홈 카드와 동일한 경고 필 */}
+        {detail.owning_department ? (
+          <span
+            data-id="map-detail-owning-dept"
+            title={t("perm.owningDept.title")}
+            className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+          >
+            <Building2 size={12} strokeWidth={1.5} />
+            {formatDeptName(detail.owning_department, lang, koreanDeptByPath)}
+          </span>
+        ) : (
+          <span
+            data-id="map-detail-owning-missing"
+            title={t("home.owningMissingNote")}
+            className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
+          >
+            <TriangleAlert size={12} strokeWidth={1.5} />
+            {t("home.owningMissingBadge")}
+          </span>
+        )}
       </div>
         </>
       )}
