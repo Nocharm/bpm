@@ -7,12 +7,13 @@ import { useState } from "react";
 import { formatDurationHm, normalizeDuration, normalizeNumericParam } from "@/lib/duration";
 import type { ParamField } from "@/lib/params";
 
-export function ParamInput({ field, value, disabled, dataId, className, onCommit }: {
+export function ParamInput({ field, value, disabled, dataId, className, ariaLabel, onCommit }: {
   field: ParamField;
   value: string;
   disabled?: boolean;
   dataId?: string;
   className?: string;
+  ariaLabel?: string;
   onCommit: (next: string) => void;
 }) {
   const [focused, setFocused] = useState(false);
@@ -24,6 +25,7 @@ export function ParamInput({ field, value, disabled, dataId, className, onCommit
       className={className}
       value={display}
       disabled={disabled}
+      aria-label={ariaLabel}
       onFocus={() => setFocused(true)}
       onChange={(e) => {
         if (/^\d*\.?\d*$/.test(e.target.value)) onCommit(e.target.value);

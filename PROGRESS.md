@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — Task 3 리뷰 픽스: ParamInput ariaLabel 복원 (sp-params-sum)
+- 리팩터에서 탈락했던 요약모달 param 입력의 `aria-label` 회귀 픽스(라벨 span은 input과 미연결 — 스크린리더 접근명 공백). ParamInput에 옵셔널 `ariaLabel` prop 추가(브리프 인터페이스 결함 보강), 인스펙터·요약모달 양쪽에 `t(PARAM_LABEL_KEY[key])` 전달(인스펙터는 원래 없던 것을 이번에 추가). tsc 0에러·lint 0에러·vitest 304 passed.
+
 ## 2026-07-11 — Task 3: 공용 ParamInput + 인스펙터/요약모달 리팩터 + Parameters 접기 (sp-params-sum)
 - 신규 `components/param-input.tsx`(단일 input focus/blur 표시 스왑 — duration만 비포커스 시 `formatDurationHm`, 나머지 4필드는 항상 raw) + `lib/params.ts`에 `readParamsCollapsed`/`writeParamsCollapsed`(localStorage `bpm.paramsCollapsed`, 저장값 없으면 기본 접힘). 인스펙터(page.tsx)·노드 요약 모달의 Parameters 인라인 타이핑필터/blur정규화 중복 구현을 ParamInput으로 대체, 접기 헤더(들여쓰기 `ml-2 border-l pl-2`+채워진 개수 `(n)`)를 두 지점에 동일 패턴으로 추가(같은 localStorage 키 공유 — 인스펙터/요약모달 토글 상태 연동).
 - 게이트: vitest 304 passed·tsc --noEmit 0에러·lint 0에러(기존 미관련 경고 1건)·build 0에러.

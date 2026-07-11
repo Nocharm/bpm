@@ -574,6 +574,7 @@ export function NodeSummaryModal({
                                   dataId={`summary-param-${key}`}
                                   className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
                                   value={form[key]}
+                                  ariaLabel={t(PARAM_LABEL_KEY[key])}
                                   onCommit={(next) => setForm((f) => ({ ...f, [key]: next }))}
                                 />
                               </div>
