@@ -675,4 +675,29 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.graph).toBeNull();
     expect(outcome.errors).toHaveLength(1);
   });
+
+  it("retains base start/end when the proposal omits them (no opaque 422)", () => {
+    const start = baseNode("st", "시작", { node_type: "start", sort_order: 0 });
+    const end = baseNode("en", "완료", { node_type: "end", is_primary_end: true, sort_order: 9 });
+    const mid = baseNode("n1", "견적 검토");
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토")], edges: [], groups: [] },
+      { base: base([start, mid, end]) },
+    );
+    const ids = outcome.graph?.nodes.map((n) => n.id).sort();
+    expect(ids).toEqual(["en", "n1", "st"]); // start/end 유지 — 소멸 아님
+    expect(outcome.merge.removedNodes).toEqual([]);
+    expect(outcome.graph?.nodes.filter((n) => n.node_type === "start")).toHaveLength(1);
+  });
+
+  it("duplicate base titles — lowest sort_order wins the id, the rest become removed", () => {
+    const first = baseNode("n1", "중복", { sort_order: 1 });
+    const second = baseNode("n2", "중복", { sort_order: 5 });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "중복")], edges: [], groups: [] },
+      { base: base([first, second]) },
+    );
+    expect(outcome.graph?.nodes.find((n) => n.title === "중복")?.id).toBe("n1");
+    expect(outcome.merge.removedNodes.map((n) => n.id)).toEqual(["n2"]);
+  });
 });

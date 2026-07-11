@@ -1648,7 +1648,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const applyAiOps = useCallback(
     (proposal: AiProposal) => {
       if (proposal.kind !== "ops") return;
-      // CSV 프리뷰가 슬롯을 점유 중이면 캔버스를 건드리지 않는다 — AI 프리뷰끼리 잇는 것은 기존 동작이라 허용
+      // graph 제안도 startImportPreview를 거쳐 "csv" 슬롯을 점유한다 — CSV 임포트든 graph 제안이든
+      // 여기서 함께 막힌다. 허용되는 유일한 연쇄는 ops 프리뷰 위에 ops를 다시 적용하는 것(previewRef === "ai").
       if (previewRef.current === "csv") {
         showToast(t("preview.busy"));
         return;

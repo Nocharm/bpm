@@ -659,6 +659,19 @@ export function buildGraphFromAiProposal(
     return merged;
   });
 
+  // 제안이 start/end 타입 노드를 누락하면 기존 start/end를 무변경으로 유지 — 지우면 백엔드
+  // validate_process(start/end 정확히 1개)에 걸려 Apply가 불투명한 422로 끝난다. 엣지는 합성하지
+  // 않는다 — 끊긴 기존 엣지는 lostEdges로 프리뷰에 남는 것이 의도된 동작. 복사본을 넣어 이후
+  // "대표 끝 보장" 등의 후속 변형이 caller가 쥔 base 그래프 객체를 직접 mutate하지 않게 한다.
+  if (!startUsed && baseStart) {
+    nodes.push({ ...baseStart });
+    matchedIds.add(baseStart.id);
+  }
+  if (!endUsed && baseEnd) {
+    nodes.push({ ...baseEnd });
+    matchedIds.add(baseEnd.id);
+  }
+
   // 대표 끝 보장 — 백엔드 validate_process(대표 끝 1개)와 정합. 매칭 end는 기존 플래그를 이미 보존.
   const ends = nodes.filter((node) => node.node_type === "end");
   if (ends.length > 0 && !ends.some((node) => node.is_primary_end)) {
