@@ -6,7 +6,11 @@ from app.permissions.logic import can_view_dashboard
 def test_sysadmin_always_views() -> None:
     """sysadmin은 권한 행이 없어도 통과."""
     assert can_view_dashboard(True, "admin", "", set(), []) is True
-    assert can_view_dashboard(True, "admin", "", set(), []) is True
+
+
+def test_no_principal_row_denied() -> None:
+    """권한 행이 없으면 비-sysadmin은 거부 — 기본값은 '거부'다."""
+    assert can_view_dashboard(False, "u1", "Div/Office", set(), []) is False
 
 
 def test_user_principal() -> None:
