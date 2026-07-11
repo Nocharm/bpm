@@ -27,10 +27,11 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
   {"action":"relabel","node_id":<기존id>,"title":<새제목>},
   {"action":"set_desc","node_id":<기존id>,"description":<새설명>},
   {"action":"set_edge_label","source":<기존id>,"target":<기존id>,"label":<새라벨>},
-  {"action":"set_attr","node_id":<기존id>,"attributes":{"duration":"2일"}},
+  {"action":"set_attr","node_id":<기존id>,"attributes":{"duration":"1.30"}},
   {"action":"remove","node_id":<기존id>}]}
 - set_attr의 attributes에는 바꿀 필드만 넣으세요 — 생략한 필드는 유지되고, 빈 문자열("")은 그 값을 지웁니다.
   url/url_label로 노드 링크를 설정합니다(url은 http:// 또는 https:// 로 시작, 지어내지 말 것).
+- duration은 시간 단위 숫자 H.MM 표기만 허용 — 소수부 2자리는 분(0.30=30분, 1.30=1시간 30분). "2일" 같은 텍스트 금지, 모르면 비워두세요.
 예) "견적 검토 뒤에 '승인' 추가해" → add(승인) + connect(견적검토 id → 승인 새키).
 예) "A와 B 사이에 '검수' 넣어줘" → add(검수) + disconnect(A→B) + connect(A→검수새키) + connect(검수새키→B).
 

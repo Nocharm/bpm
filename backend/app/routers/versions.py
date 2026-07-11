@@ -69,6 +69,10 @@ async def clone_graph(
             department=node.department,
             system=node.system,
             duration=node.duration,
+            headcount=node.headcount,
+            etf=node.etf,
+            cost=node.cost,
+            extra=node.extra,
             url=node.url,
             url_label=node.url_label,
             # 계보 루트 전파 — 복제의 복제도 최초 원본을 가리켜 diff 매칭 유지
