@@ -5,7 +5,7 @@
 // 게이팅(sysadmin 노출 여부)은 이 컴포넌트가 아니라 호출부(설정 패널)가 담당한다.
 // 탭 배열 구조라 추후 일반 유저용 탭을 더할 수 있다 (design 2026-07-11).
 
-import { X } from "lucide-react";
+import { TriangleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { SearchSelect, type SelectOption } from "@/components/search-select";
@@ -68,6 +68,8 @@ export function AccessSidebar({ onToast }: AccessSidebarProps) {
   const [directory, setDirectory] = useState<Directory | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [principalType, setPrincipalType] = useState<PrincipalType>("user");
+  // 로드 실패 표식 — 빈 목록과 구별해야 한다. 실패 시 "권한/부서 없음" 문구 대신 이 배너를 보여준다.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -85,8 +87,9 @@ export function AccessSidebar({ onToast }: AccessSidebarProps) {
         setDirectory(dir);
         setGroups(groupList.filter((group) => group.status === "active"));
       } catch {
-        // 사이드바 로딩 실패는 대시보드 본문을 막지 않는다(빈 목록으로 저하) — 토스트는 t/onToast를
-        // effect deps에 끌어들여 매 렌더 재요청을 유발하므로 여기선 쓰지 않는다(mount-only 관례, cf. ai-chat-settings-panel).
+        // 토스트는 t/onToast를 effect deps에 끌어들여 매 렌더 재요청을 유발하므로 여기선 쓰지 않는다
+        // (mount-only 관례, cf. ai-chat-settings-panel). 대신 본문에 실패 배너를 렌더해 빈 상태와 구별한다.
+        if (alive) setLoadFailed(true);
       }
     })();
     return () => {
@@ -178,7 +181,18 @@ export function AccessSidebar({ onToast }: AccessSidebarProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {tab === "access" ? (
+        {loadFailed ? (
+          // 로드 실패는 빈 목록과 구별되어야 한다 — "권한 없음" 문구 대신 실패 배너만 렌더.
+          <div
+            data-id="dashboard-sidebar-load-failed"
+            className="flex items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-3 py-2"
+          >
+            <TriangleAlert size={16} strokeWidth={1.5} className="shrink-0 text-error" />
+            <span className="min-w-0 flex-1 text-caption text-ink-secondary">
+              {t("dashboard.sidebarLoadFailed")}
+            </span>
+          </div>
+        ) : tab === "access" ? (
           <div className="flex flex-col gap-3">
             <p className="text-fine text-ink-tertiary">{t("dashboard.accessDesc")}</p>
 
