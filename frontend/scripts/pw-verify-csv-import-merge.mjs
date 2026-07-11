@@ -140,14 +140,22 @@ let mapBId = null;
 try {
   // ── 시드 — 서브프로세스 링크 대상 맵 + 본 맵(start→Alpha→Beta→Gamma→SubStep→end) ──
   const stamp = Date.now();
+  // 오우닝 부서는 필수 필드 — 서버가 known org_path 존재를 검증하므로 디렉터리에서 실제 부서 id를 얻는다
+  const dir0 = await api("/directory");
+  const owningDept = dir0.departments[0]?.id;
+  if (!owningDept) {
+    console.error("FATAL directory has no departments — cannot supply the required owning_department");
+    await browser.close();
+    process.exit(1);
+  }
   const mapB = await api("/maps", {
     method: "POST",
-    body: { name: `CSV-PW Sub ${stamp}`, description: "", visibility: "public" },
+    body: { name: `CSV-PW Sub ${stamp}`, description: "", visibility: "public", owning_department: owningDept },
   });
   mapBId = mapB.id;
   const mapA = await api("/maps", {
     method: "POST",
-    body: { name: `CSV-PW Main ${stamp}`, description: "", visibility: "public" },
+    body: { name: `CSV-PW Main ${stamp}`, description: "", visibility: "public", owning_department: owningDept },
   });
   mapAId = mapA.id;
   const v1 = mapA.versions[0].id;
@@ -243,7 +251,23 @@ try {
 
   // ⑦ 인스펙터 잠금 — 다른 탭·접기 비활성, Apply/Cancel 존재
   check("other inspector tabs disabled during preview", await page.locator('button[aria-label="Properties"]').first().isDisabled());
-  check("inspector collapse disabled during preview", await page.locator('button[aria-label="Toggle inspector"]').first().isDisabled());
+  // 인스펙터 잠금 — "Toggle inspector" 라벨 버튼은 둘이다: 툴바 토글(프리뷰 중 no-op이나 enabled)과
+  // 패널 접기 버튼(disabled={lockTabs}). 접기 경로가 둘 다 막혔음을 각각 확인한다.
+  check(
+    "inspector panel collapse button disabled during preview",
+    (await page.locator('button[aria-label="Toggle inspector"][disabled]').count()) >= 1,
+  );
+  // 툴바 토글은 프리뷰 중 클릭해도 no-op이라 Import 탭이 그대로 남아야 한다
+  await page
+    .locator('button[aria-label="Toggle inspector"]:not([disabled])')
+    .first()
+    .click()
+    .catch(() => {});
+  await page.waitForTimeout(150);
+  check(
+    "toolbar inspector toggle is a no-op during preview (Import tab stays)",
+    await page.locator('[data-id="csv-import-tab"]').isVisible(),
+  );
   check(
     "Apply and Cancel present in Import tab",
     (await page.locator('[data-id="csv-import-apply"]').isVisible()) && (await page.locator('[data-id="csv-import-cancel"]').isVisible()),

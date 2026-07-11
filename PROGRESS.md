@@ -2,6 +2,13 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — CSV 검증 스크립트 owning_department 대응 + 실행 (worktree-pw-verify-owning-dept)
+- `owning_department` 필수 필드(4e5a0f7)가 두 pw-verify 스크립트를 깨뜨림 — merge는 raw `POST /maps`에 부서 미포함 422, create-flow는 생성 다이얼로그 `Create`가 오우닝부서 미선택으로 disabled. 두 스크립트 다 이 필드 이전 작성.
+- 수정: merge는 `/directory`에서 부서 id 얻어 POST 바디에 `owning_department` 추가. create-flow는 결재자 앞에 오우닝부서 피커 선택(첫 `Search by name` 입력) 추가, 없으면 남은 ⑥ 검사 스킵.
+- 실측 실행(localhost): **create-flow 21/21**(클립보드 SKIP=secure context, drag-drop·createdRef NOT COVERED), **merge 31/31**(AI챗 2 NOT COVERED). 콘솔 에러 0, 시드 소프트삭제.
+- merge ⑦ 접기잠금 FAIL은 스크립트 버그였음(제품 정상) — "Toggle inspector" 라벨 버튼이 둘(툴바 no-op enabled + 패널 접기 disabled), `.first()`가 툴바를 잡음. 불변식 기준(패널 접기 `[disabled]` + 툴바 클릭해도 Import 탭 유지)으로 교체. **csv-import-merge 브랜치 인스펙터 잠금이 코드리뷰 아닌 실행으로 처음 검증됨.**
+- ⚠️ 클립보드 수정은 여전히 미검증 — localhost는 secure context라 SKIP. 평문 HTTP 서버(:3333)에서 `BASE_URL=http://<IP>:3333`로 재실행해야 실검증.
+
 ## 2026-07-11 — AI graph 제안 CSV 병합 통합 + 담당자/부서 기본 금지 설계 (main)
 - 설계 스펙 커밋 — `docs/superpowers/specs/2026-07-11-ai-graph-merge-design.md`. AI graph 전량 교체가 비교모드 무의미화 + 서브프로세스 링크 파괴("색 변경" 현상의 진짜 원인 — 타입이 process로 바뀌며 바이올렛 고정 해제)를 CSV 병합 파이프라인 완전 공유로 해결. 디렉터리 프롬프트 제거, 담당자/부서는 사용자 명시 요청 시에만.
 - 구현 계획 커밋 — `docs/superpowers/plans/2026-07-11-ai-graph-merge.md` (5태스크: 백엔드 프롬프트→병합 진입점→page.tsx 전환→탭/카드 UX→브라우저 검증).

@@ -294,51 +294,74 @@ try {
   await page.waitForTimeout(200);
   check("accordion collapses again", (await page.locator('[data-id="csv-file-summary"]').count()) === 0);
 
-  // ── ⑥ 생성 — 결재자(기본 private에선 본인만 후보) 추가 후 Create → 에디터 이동 ──
+  // ── ⑥ 생성 — 오우닝 부서(필수) + 결재자 추가 후 Create → 에디터 이동 ──
   // 이름을 유일하게 바꿔 실데이터 충돌·정리 오삭제를 막는다 (프리필 단언은 위에서 끝났다)
   await page.locator('input[placeholder="Map name"]').fill(uniqueName);
-  const approverInput = page.locator('input[placeholder^="Search by name"]').last();
-  await approverInput.scrollIntoViewIfNeeded();
-  await approverInput.click();
-  await page.waitForSelector('[data-id="principal-picker-dropdown"]');
-  await page.locator('[data-id="principal-picker-dropdown"] button').first().click();
-  await page.waitForSelector('[data-id^="create-approver-pill-"]');
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  // 성공 = 에디터로 이동. 임포트 실패면 다이얼로그가 남아 여기서 타임아웃 → FAIL로 드러난다.
-  await page.waitForURL(/\/maps\/\d+/, { timeout: 20000 });
-  mapId = Number(page.url().match(/\/maps\/(\d+)/)[1]);
-  await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length >= 4, null, {
-    timeout: 20000,
-  });
-  check("created map opens in the editor with 4 nodes", true, `mapId=${mapId}`);
-  await page.screenshot({ path: `${SHOTS}/05-created-editor.png` });
 
-  // 저장된 그래프 검증 — 담당자 해석은 노드 데이터로 관찰한다
-  const detail = await api(`/maps/${mapId}`);
-  const graph = await api(`/versions/${detail.versions[0].id}/graph`);
-  const draft = graph.nodes.find((n) => n.title === "Draft proposal");
-  const review = graph.nodes.find((n) => n.title === "Review proposal");
-  check(
-    "saved graph has the CSV rows plus auto start/end",
-    graph.nodes.length === 4 && draft !== undefined && review !== undefined,
-    `nodes=${graph.nodes.map((n) => n.title).join(",")}`,
-  );
-  check(
-    "unresolvable token imported verbatim",
-    review?.assignee === bogusToken,
-    `assignee=${review?.assignee}`,
-  );
-  if (realUser && realUser.name !== realUser.id) {
-    check(
+  // 오우닝 부서(신규 필수 필드) — 첫 피커에서 선택해야 Create가 활성화된다.
+  // 없으면 맵 자체를 못 만드므로 남은 ⑥ 검사 전체를 스킵한다(FATAL 방지).
+  const owningDept = dir.departments[0] ?? null;
+  if (owningDept === null) {
+    for (const nm of [
+      "created map opens in the editor with 4 nodes",
+      "saved graph has the CSV rows plus auto start/end",
+      "unresolvable token imported verbatim",
       "assignee login_id resolved to the display name",
-      draft?.assignee === realUser.name && draft?.assignee !== realUser.id,
-      `assignee=${draft?.assignee} (id=${realUser.id})`,
-    );
+    ]) {
+      skip(nm, "directory has no departments — required owning_department cannot be set");
+    }
   } else {
-    skip(
-      "assignee login_id resolved to the display name",
-      realUser ? `directory user ${realUser.id} has no distinct display name` : "no usable directory user",
+    const owningInput = page.locator('input[placeholder^="Search by name"]').first();
+    await owningInput.scrollIntoViewIfNeeded();
+    await owningInput.click();
+    await owningInput.fill(owningDept.name);
+    await page.waitForSelector('[data-id="principal-picker-dropdown"]');
+    await page.locator('[data-id="principal-picker-dropdown"] button').first().click();
+    await page.waitForSelector('[data-id="owning-dept-selected"]');
+
+    const approverInput = page.locator('input[placeholder^="Search by name"]').last();
+    await approverInput.scrollIntoViewIfNeeded();
+    await approverInput.click();
+    await page.waitForSelector('[data-id="principal-picker-dropdown"]');
+    await page.locator('[data-id="principal-picker-dropdown"] button').first().click();
+    await page.waitForSelector('[data-id^="create-approver-pill-"]');
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    // 성공 = 에디터로 이동. 임포트 실패면 다이얼로그가 남아 여기서 타임아웃 → FAIL로 드러난다.
+    await page.waitForURL(/\/maps\/\d+/, { timeout: 20000 });
+    mapId = Number(page.url().match(/\/maps\/(\d+)/)[1]);
+    await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length >= 4, null, {
+      timeout: 20000,
+    });
+    check("created map opens in the editor with 4 nodes", true, `mapId=${mapId}`);
+    await page.screenshot({ path: `${SHOTS}/05-created-editor.png` });
+
+    // 저장된 그래프 검증 — 담당자 해석은 노드 데이터로 관찰한다
+    const detail = await api(`/maps/${mapId}`);
+    const graph = await api(`/versions/${detail.versions[0].id}/graph`);
+    const draft = graph.nodes.find((n) => n.title === "Draft proposal");
+    const review = graph.nodes.find((n) => n.title === "Review proposal");
+    check(
+      "saved graph has the CSV rows plus auto start/end",
+      graph.nodes.length === 4 && draft !== undefined && review !== undefined,
+      `nodes=${graph.nodes.map((n) => n.title).join(",")}`,
     );
+    check(
+      "unresolvable token imported verbatim",
+      review?.assignee === bogusToken,
+      `assignee=${review?.assignee}`,
+    );
+    if (realUser && realUser.name !== realUser.id) {
+      check(
+        "assignee login_id resolved to the display name",
+        draft?.assignee === realUser.name && draft?.assignee !== realUser.id,
+        `assignee=${draft?.assignee} (id=${realUser.id})`,
+      );
+    } else {
+      skip(
+        "assignee login_id resolved to the display name",
+        realUser ? `directory user ${realUser.id} has no distinct display name` : "no usable directory user",
+      );
+    }
   }
 
   console.log(
