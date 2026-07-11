@@ -678,7 +678,8 @@ export function buildGraphFromAiProposal(
       assignee: attr?.assignee ?? "",
       department: attr?.department ?? "",
       system: attr?.system ?? "",
-      duration: attr?.duration ?? "",
+      // 무효 duration 에코는 ""로 — pick이 기존 유효값을 지키게 (CSV 행 변환과 동일 규칙)
+      duration: normalizeDuration(attr?.duration ?? "") ?? "",
       url: attr?.url ?? "",
       url_label: attr?.url_label ?? "",
       color: attr?.color ?? "",

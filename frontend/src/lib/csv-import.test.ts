@@ -643,6 +643,20 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.graph?.nodes.find((n) => n.id === "n1")?.assignee).toBe("김담당");
   });
 
+  it("normalizes AI duration — invalid echo keeps existing, valid form adopted", () => {
+    const existing = baseNode("n1", "견적 검토", { duration: "1.30" });
+    const invalid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { duration: "3일" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(invalid.graph?.nodes.find((n) => n.id === "n1")?.duration).toBe("1.30");
+    const valid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { duration: "2.90" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(valid.graph?.nodes.find((n) => n.id === "n1")?.duration).toBe("3.30"); // 60분 이월 정규화
+  });
+
   it("lists unmatched base nodes as removed and lost edges", () => {
     const a = baseNode("n1", "유지됨");
     const b = baseNode("n2", "사라짐", { sort_order: 2 });

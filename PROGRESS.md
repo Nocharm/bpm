@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-11 — AI duration 정규화 대칭 픽스 (main)
+- AI 그래프 제안 경로(`buildGraphFromAiProposal`·`aiNodeToGraphNode`)의 duration을 CSV와 동일하게 `normalizeDuration`으로 정규화 — 무효 에코("3일")가 pick에 채택돼 백엔드 소거로 기존 유효값이 유실되던 갭 봉합(numeric-params 머지 교차점 리뷰에서 발견). vitest 290·tsc 0·lint 0.
+
 ## 2026-07-11 — AI 실모델 스모크 체크리스트 (main)
 - `docs/ai-real-model-smoke.md` 신규 — 실모델 검증 절차(연결 확인→.env 기동(bash/PowerShell 병기)→S1~S8 시나리오→판정·후속 매핑). S1 제목 에코 매칭률이 핵심 변수, 로컬은 OpenAI 호환 키 대체 가능(Claude 네이티브는 어댑터 작업 필요).
 

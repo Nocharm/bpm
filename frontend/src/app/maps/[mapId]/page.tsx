@@ -572,7 +572,8 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     assignee: attr?.assignee ?? "",
     department: attr?.department ?? "",
     system: attr?.system ?? "",
-    duration: attr?.duration ?? "",
+    // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
+    duration: normalizeDuration(attr?.duration ?? "") ?? "",
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
