@@ -79,3 +79,12 @@ def test_ai_usage_aggregates_and_top_lists(client: TestClient) -> None:
     assert user_a is not None and user_a["total_tokens"] >= 3300
     assert any(m["map_id"] == 901 for m in body["top_maps"])
     assert len(top) <= 5 and len(body["top_maps"]) <= 5
+    # 정렬 계약(total_tokens desc) — 공유 DB 오염과 무관하게 상대 순서로 검증
+    assert all(
+        top[i]["total_tokens"] >= top[i + 1]["total_tokens"] for i in range(len(top) - 1)
+    )
+    top_maps = body["top_maps"]
+    assert all(
+        top_maps[i]["total_tokens"] >= top_maps[i + 1]["total_tokens"]
+        for i in range(len(top_maps) - 1)
+    )
