@@ -23,6 +23,7 @@
 - 버전 카드 "이 버전으로 가기" — 펼침 전용 버튼을 없애고 카드 호버 시 상태 필이 버튼으로 페이드 교체(grid 겹침 + opacity 전환, 이동 불가 카드는 상태 필 고정, 비호버 시 pointer-events 차단으로 오클릭 방지). 우측 생성일시는 제목과 세로 중앙정렬(items-center). lint·tsc·build·vitest 234 초록.
 - 상태 필(+호버 버튼)을 버전 이름 바로 우측으로 — 이름 span의 flex-1 제거, 겹침 셀 justify-items-start(이름에 밀착·버튼은 오른쪽으로 성장). lint·tsc·build 초록.
 - Current 배지 제거 — 기준이 "최신 생성 버전"(idx 0)일 뿐 열람 중/게시본과 무관해 정보가치 낮음(사용자 결정). 최신 카드의 연보라 하이라이트는 유지, 고아가 된 `home.verCurrent` 키 en/ko 삭제. lint·tsc·build·vitest 234 초록.
+- 호버 스왑 정련 — "이 버전으로 가기"는 펼침 상태에서만(위치는 이름 우측 유지), 접힘 카드는 "Click for details" 안내 필로 스왑. 버튼 좌측 클릭 불가 버그 수정(투명 상태 필이 opacity<1 스태킹 컨텍스트로 위에 떠 클릭을 삼킴 → 필 pointer-events-none). 버튼 자체 호버는 accent 채움(hover:bg-accent+text-on-accent). i18n `home.verClickHint` en/ko. lint·tsc·build·vitest 234 초록.
 
 ## 2026-07-10 — 후속 정비: 비교화면 로드 실패 처리 + AI 게이트/페이로드 잔무 (worktree-ai-followup-fixes)
 - 비교화면 로드 effect 3곳 try/catch — 403은 에디터와 동일한 비공개 맵 안내 모달(홈 이동), 그 외는 인라인 오류 표시로 무한 로딩 제거. 브라우저 검증 `pw-verify-compare-403.mjs` 4/4(403 모달·홈 이동·500 인라인·정상 무회귀).

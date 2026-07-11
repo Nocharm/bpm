@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 
-import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -164,16 +164,19 @@ export function VersionTimeline({
                     <span className="text-fine text-ink-tertiary">{formatVersionMarker(version, versions)}</span>{" "}
                     <span className="text-caption-strong text-ink">{version.label}</span>
                   </span>
-                  {/* 상태 필 ↔ "이 버전으로 가기" — 같은 자리에 겹쳐 두고 카드 호버 시 페이드 교체
-                      (map-card recent-badge 패턴). 이동 불가 카드(현재 보는 버전·핸들러 없음)는 상태 필 고정. */}
+                  {/* 상태 필 ↔ 호버 스왑 — 같은 자리에 겹쳐 두고 카드 호버 시 페이드 교체(map-card recent-badge 패턴).
+                      펼침: "이 버전으로 가기" 버튼(이동 가능 카드만) / 접힘: "클릭=상세" 안내 필.
+                      상태 필은 pointer-events-none — opacity<1이 스태킹 컨텍스트를 만들어 투명해진 필이
+                      버튼 좌측 클릭을 삼키던 버그 방지. */}
                   {(() => {
-                    const canGo = !!onGoToVersion && version.id !== currentVersionId;
+                    const canGo = open && !!onGoToVersion && version.id !== currentVersionId;
+                    const showHint = !open; // 접힘 카드 — 클릭하면 펼쳐진다는 안내
                     return (
                       <span className="grid shrink-0 items-center justify-items-start">
                         <span
-                          className={`col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-350 ease-smooth ${
+                          className={`pointer-events-none col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-350 ease-smooth ${
                             VERSION_STATUS_STYLE[version.status]
-                          } ${canGo ? "group-hover:opacity-0" : ""}`}
+                          } ${canGo || showHint ? "group-hover:opacity-0" : ""}`}
                         >
                           {t(VERSION_STATUS_LABEL[version.status])}
                         </span>
@@ -185,11 +188,20 @@ export function VersionTimeline({
                               e.stopPropagation();
                               onGoToVersion(version.id);
                             }}
-                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-accent/40 bg-accent-tint px-1.5 py-0.5 text-fine text-accent opacity-0 transition-opacity duration-350 ease-smooth hover:bg-accent-tint/70 group-hover:pointer-events-auto group-hover:opacity-100"
+                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-accent/40 bg-accent-tint px-1.5 py-0.5 text-fine text-accent opacity-0 transition-all duration-350 ease-smooth hover:border-accent hover:bg-accent hover:text-on-accent group-hover:pointer-events-auto group-hover:opacity-100"
                           >
                             <ArrowRight size={12} strokeWidth={1.5} />
                             {t("home.goToVersion")}
                           </button>
+                        )}
+                        {showHint && (
+                          <span
+                            data-id={`version-hint-${version.id}`}
+                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-350 ease-smooth group-hover:opacity-100"
+                          >
+                            <MousePointerClick size={12} strokeWidth={1.5} />
+                            {t("home.verClickHint")}
+                          </span>
                         )}
                       </span>
                     );
