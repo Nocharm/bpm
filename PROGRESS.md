@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-13 — 노드 파라미터 재정의 T4: Σ 합산 규칙 재작성 (node-params)
+- `lib/param-sum.ts`의 `sumParamField`가 `SpParamField`(4종) 전체를 받도록 확장. `duration`/`cost_krw`/`cost_usd`는 기존대로 합(통화 2필드 독립), `headcount`는 값 있는 일반 노드의 평균(소수점 2자리, SP 노드는 분자·분모 모두 제외)으로 변경. 호출부(`subprocess-designation-modal.tsx`)는 `SummableField` 대신 `SpParamField`로 시그니처만 갱신(headcount Σ 버튼 추가는 Task 6). 339 tests green(신규 5), tsc/lint clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T3: 프론트 개명 스윕 + 편집 가능 필드 정의 (node-params)
 - 프론트 전 표면을 신규 키(`duration`/`cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte`)로 개명하고 `lib/params.ts`에 `PARAM_FIELDS`(표시 순서)·`SP_PARAM_FIELDS`(SP 지정 4종)·`getEditableParamFields(nodeType)`(start/end 없음, subprocess는 연간건수·FTE만) 도입. i18n은 `field.costKrw`/`costUsd`/`annualCount`/`fte` 신규 키(EN·KO), 구 `field.etf`/`cost`/`extra` 삭제. `NodeData`의 회당 파라미터 키는 `PARAM_FIELDS`로 일반 인덱싱하므로 snake 유지, SP 라이브 참조는 `spCostKrw`/`spCostUsd`. 동작 변경 없음(콤마 서식·통화 배타·Σ 규칙·CSV/Excel 스키마·AI 가드는 후속 태스크). 329→334 tests green, tsc/lint/build clean.
 

@@ -12,8 +12,8 @@ import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
-import { PARAM_LABEL_KEY, SP_PARAM_FIELDS } from "@/lib/params";
-import { sumParamField, type SummableField } from "@/lib/param-sum";
+import { PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
+import { sumParamField } from "@/lib/param-sum";
 import { isHttpUrl } from "@/lib/url";
 
 export interface DesignationForm {
@@ -57,7 +57,7 @@ export function SubprocessDesignationModal({
   // 지정 URL 클라이언트 검증 — 비어있지 않으면 http(s) 강제(액션 바 노출 게이트와 동일 규칙)
   const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
 
-  async function handleSum(field: SummableField) {
+  async function handleSum(field: SpParamField) {
     if (publishedVersionId === null) return;
     setSumming(true);
     setError(null);
@@ -143,7 +143,7 @@ export function SubprocessDesignationModal({
                     aria-label={t("sp.sumAllNodes")}
                     disabled={publishedVersionId === null || summing}
                     className="shrink-0 rounded-sm border border-hairline px-1.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
-                    onClick={() => void handleSum(key as SummableField)}
+                    onClick={() => void handleSum(key)}
                   >
                     <Sigma size={14} strokeWidth={1.5} />
                   </button>
