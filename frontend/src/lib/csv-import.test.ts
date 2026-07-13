@@ -799,4 +799,58 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.graph?.nodes.find((n) => n.title === "중복")?.id).toBe("n1");
     expect(outcome.merge.removedNodes.map((n) => n.id)).toEqual(["n2"]);
   });
+
+  // AI 계약 강제(design 2026-07-13 §6) — 프롬프트만 믿지 않고 변환단에서 다시 막는다
+  it("subprocess 노드는 annual_count·fte만 반영 — 나머지 4필드는 드롭 + 경고", () => {
+    const sub = baseNode("s1", "구매 승인", {
+      node_type: "subprocess", linked_map_id: 7,
+      duration: "2", cost_krw: "5000", headcount: "3", annual_count: "10", fte: "0.2",
+    });
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [aiNode("a", "구매 승인", "subprocess", {
+          duration: "9", cost_krw: "999", headcount: "9", annual_count: "1200", fte: "0.8",
+        })],
+        edges: [], groups: [],
+      },
+      { base: base([sub]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "s1");
+    // 부모가 편집 가능한 2필드는 AI 값이 반영된다
+    expect(node?.annual_count).toBe("1200");
+    expect(node?.fte).toBe("0.8");
+    // 링크 맵이 소유한 4필드는 무변경(기존값 유지)
+    expect(node?.duration).toBe("2");
+    expect(node?.cost_krw).toBe("5000");
+    expect(node?.headcount).toBe("3");
+    expect(outcome.warnings.some((w) => /subprocess/i.test(w.message) && w.message.includes("구매 승인"))).toBe(true);
+  });
+
+  it("AI가 원·달러 비용을 둘 다 채우면 그 노드의 비용은 반영하지 않고 경고한다", () => {
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [aiNode("a", "검토", "process", { cost_krw: "1000", cost_usd: "10" })],
+        edges: [], groups: [],
+      },
+      {},
+    );
+    const node = outcome.graph?.nodes.find((n) => n.title === "검토");
+    expect(node?.cost_krw).toBe("");
+    expect(node?.cost_usd).toBe("");
+    expect(outcome.warnings.some((w) => /only one/i.test(w.message))).toBe(true);
+  });
+
+  it("숫자 파라미터 무효 에코는 기존값을 지키고, 유효값은 콤마를 벗겨 반영한다", () => {
+    const existing = baseNode("n1", "견적 검토", { headcount: "3" });
+    const invalid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { headcount: "다수" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(invalid.graph?.nodes.find((n) => n.id === "n1")?.headcount).toBe("3");
+    const valid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { cost_krw: "1,250,000" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(valid.graph?.nodes.find((n) => n.id === "n1")?.cost_krw).toBe("1250000");
+  });
 });

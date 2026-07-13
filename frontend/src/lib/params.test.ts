@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dropConflictingCurrency,
   dropUneditableParams,
   formatParamValue,
   getEditableParamFields,
   getInheritedParams,
   isCostFieldDisabled,
   PARAM_FIELDS,
+  resolveAiParamPatch,
   SP_PARAM_FIELDS,
 } from "./params";
 
@@ -144,5 +146,70 @@ describe("dropUneditableParams", () => {
     const { allowed, droppedFields } = dropUneditableParams("subprocess", { headcount: "3" });
     expect(allowed).toEqual({});
     expect(droppedFields).toEqual(["headcount"]);
+  });
+});
+
+describe("dropConflictingCurrency", () => {
+  it("둘 다 값이 있으면 위반 — 둘 다 드롭한다", () => {
+    const { values, conflict } = dropConflictingCurrency({ cost_krw: "1000", cost_usd: "10" });
+    expect(conflict).toBe(true);
+    expect(values.cost_krw).toBe("");
+    expect(values.cost_usd).toBe("");
+  });
+
+  it("한쪽만 값이 있으면 위반 아님 — 그대로 통과", () => {
+    const { values, conflict } = dropConflictingCurrency({ cost_krw: "1000", cost_usd: "" });
+    expect(conflict).toBe(false);
+    expect(values.cost_krw).toBe("1000");
+    expect(values.cost_usd).toBe("");
+  });
+
+  it("둘 다 비었거나 미제공이면 위반 아님", () => {
+    expect(dropConflictingCurrency({}).conflict).toBe(false);
+    expect(dropConflictingCurrency({ cost_krw: "", cost_usd: "" }).conflict).toBe(false);
+  });
+
+  it("비용 외 필드는 그대로 보존한다", () => {
+    const { values } = dropConflictingCurrency({
+      cost_krw: "1000", cost_usd: "10", headcount: "3", fte: "0.5",
+    });
+    expect(values.headcount).toBe("3");
+    expect(values.fte).toBe("0.5");
+  });
+});
+
+// AI ops set_attr(page.tsx)가 쓰는 파라미터 부분 갱신 결정 — buildGraphFromAiProposal(csv-import.ts)과
+// 같은 두 규칙(dropConflictingCurrency·dropUneditableParams)을 재사용하는지 여기서 검증한다.
+describe("resolveAiParamPatch", () => {
+  it("건드리지 않은 필드는 결과에 없다 (부분 갱신)", () => {
+    const patch = resolveAiParamPatch("process", { headcount: "3" });
+    expect(patch).toEqual({ headcount: "3" });
+  });
+
+  it("일반 노드는 6필드 모두 반영, 무효 에코는 빈 문자열", () => {
+    const patch = resolveAiParamPatch("process", {
+      duration: "1.30", cost_krw: "1,000", headcount: "숫자아님", annual_count: "50", fte: "0.5",
+    });
+    expect(patch).toEqual({
+      duration: "1.30", cost_krw: "1000", headcount: "", annual_count: "50", fte: "0.5",
+    });
+  });
+
+  it("서브프로세스는 annual_count·fte만 통과 — 나머지는 값이 있어도 드롭", () => {
+    const patch = resolveAiParamPatch("subprocess", {
+      duration: "9", cost_krw: "999", headcount: "9", annual_count: "1200", fte: "0.8",
+    });
+    expect(patch).toEqual({ annual_count: "1200", fte: "0.8" });
+  });
+
+  it("통화를 둘 다 채우면 둘 다 명시적으로 비운다(일반 노드는 편집 가능 필드라 '' 반영)", () => {
+    const process = resolveAiParamPatch("process", { cost_krw: "1000", cost_usd: "10" });
+    expect(process.cost_krw).toBe("");
+    expect(process.cost_usd).toBe("");
+  });
+
+  it("subprocess에서 통화 충돌 필드는 이미 ''라 SP 드롭과 이중으로 겹치지 않는다", () => {
+    const sub = resolveAiParamPatch("subprocess", { cost_krw: "1000", cost_usd: "10", fte: "0.5" });
+    expect(sub).toEqual({ fte: "0.5" });
   });
 });

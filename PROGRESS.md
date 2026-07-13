@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T10: AI 변환단 SP 제한·비용 배타 강제 (worktree-node-params)
+- 프론트 `AiNodeAttributes`(api.ts)에 백엔드 T2가 이미 노출한 `cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte` 5필드를 추가(그동안 프론트 AI 타입엔 없었음). `lib/params.ts`에 순수 헬퍼 2종 신설 — `dropConflictingCurrency`(원·달러 동시 지정 시 둘 다 드롭)와 `resolveAiParamPatch`(page.tsx ops set_attr 전용, 정규화→통화배타→`dropUneditableParams` 순으로 적용해 SP 노드에서 통화 위반이 SP 드롭 경고에 겹치지 않게 함). `csv-import.ts`의 `buildGraphFromAiProposal`(graph 병합)이 두 헬퍼 + 기존 `mergeNode`/`dropUneditableParams`를 재사용해 SP 4필드 드롭·통화 배타를 CSV와 동일한 문구로 warnings에 싣는다. `page.tsx`의 `aiNodeToGraphNode`(ops add, 신규 노드라 SP 게이트는 미적용·통화 배타만)와 ops `set_attr` 블록(기존 노드, `resolveAiParamPatch` 호출 — SP/통화 위반은 색과 같은 방식으로 조용히 드롭, 이 경로엔 프리뷰 경고 채널이 없음)도 동일 규칙으로 맞춰 두 AI 경로의 비대칭을 없앴다. 377→389 tests green(신규 12), tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T9: Excel 내보내기 컬럼·서식 (worktree-node-params)
 - `excel-export.ts` 컬럼을 `No,Name,Type,Description,Assignee,Department,System,Duration (h),Cost (KRW),Cost (USD),Headcount,Annual volume,FTE,URL,Groups,Next` 16컬럼으로 개편, numFmt 6종(`0.00`/`#,##0`/`#,##0.00`)을 `COLUMNS` 정의에서 파생시켜(`"numFmt" in c` 순회) 셀 인덱스 하드코딩을 없앰(컬럼 재배열 시 인덱스 어긋남 방지). 서브프로세스 행의 duration/cost_krw/cost_usd/headcount는 노드 자신의 값이 아니라 링크 맵의 sp_* 라이브 참조(`graph.subprocess_refs`, `getInheritedParams` 재사용 — 캔버스 인스펙터·Σ 합산과 동일 소스)에서 가져오도록 수정, annual_count·fte는 노드 행 그대로. 시트 기록 로직을 `writeExcelSheet(workbook, model)`로 분리해 Blob/anchor(DOM) 없이도 vitest로 numFmt·빈 셀 유지를 검증(exceljs는 여전히 `downloadExcel`에서만 dynamic import — 번들 분리 유지). 377 tests green(신규 7), tsc/lint/build clean.
 

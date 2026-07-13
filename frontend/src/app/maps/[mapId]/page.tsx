@@ -198,8 +198,9 @@ import {
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
-import { normalizeDuration } from "@/lib/duration";
+import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
 import {
+  dropConflictingCurrency,
   formatParamValue,
   getEditableParamFields,
   getInheritedParams,
@@ -208,6 +209,7 @@ import {
   PARAM_FIELDS,
   PARAM_LABEL_KEY,
   readParamsCollapsed,
+  resolveAiParamPatch,
   writeParamsCollapsed,
   type ParamField,
 } from "@/lib/params";
@@ -575,8 +577,12 @@ function offsetAtX(savedX: number, steps: { x: number; footprint: number }[]): n
 }
 
 // AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
+// 신규 노드라 보호할 기존 SP 지정값이 없다 — SP 게이트는 미적용(csv-import mergeNode의
+// existing===null 분기와 동일 전제). 통화 배타는 신규 여부와 무관해 그대로 적용.
 function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined): GraphNode {
   const attr = node.attributes;
+  const num = (raw: string | null | undefined) => normalizeNumericParam(stripThousands(raw ?? "")) ?? "";
+  const { values: cost } = dropConflictingCurrency({ cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd) });
   return {
     id,
     title: node.title,
@@ -588,6 +594,11 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     system: attr?.system ?? "",
     // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
     duration: normalizeDuration(attr?.duration ?? "") ?? "",
+    cost_krw: cost.cost_krw ?? "",
+    cost_usd: cost.cost_usd ?? "",
+    headcount: num(attr?.headcount),
+    annual_count: num(attr?.annual_count),
+    fte: num(attr?.fte),
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -1778,9 +1789,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                     ...(attr.assignee != null ? { assignee: attr.assignee } : {}),
                     ...(attr.department != null ? { department: attr.department } : {}),
                     ...(attr.system != null ? { system: attr.system } : {}),
-                    ...(attr.duration != null
-                      ? { duration: normalizeDuration(attr.duration) ?? "" }
-                      : {}),
+                    // 파라미터 6종 — SP 노드는 annual_count·fte만 수정 가능(design 2026-07-13 §6) + 통화
+                    // 배타를 resolveAiParamPatch(buildGraphFromAiProposal과 같은 규칙 재사용)로 강제.
+                    // 위반 필드는 색과 같은 방식으로 조용히 드롭 — 이 경로엔 프리뷰 경고 채널이 없다.
+                    ...resolveAiParamPatch(node.data.nodeType, attr),
                     ...(attr.url != null ? { url: attr.url } : {}),
                     ...(attr.url_label != null ? { urlLabel: attr.url_label } : {}),
                   }

@@ -5,7 +5,7 @@ import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { genId } from "./id";
-import { dropUneditableParams, type ParamField } from "./params";
+import { dropConflictingCurrency, dropUneditableParams, type ParamField } from "./params";
 
 export interface CsvRecord {
   cells: string[];
@@ -647,6 +647,9 @@ export function buildGraphFromAiProposal(
     };
   }
 
+  // AI 변환 가드 경고 — 프롬프트만 믿지 않고 SP 제한·통화 배타를 여기서 다시 강제한다 (design 2026-07-13 §6)
+  const warnings: CsvImportWarning[] = [];
+
   const baseNodes = context?.base?.nodes ?? [];
   const isMerge = baseNodes.length > 0;
 
@@ -715,29 +718,53 @@ export function buildGraphFromAiProposal(
     const attr = node.attributes;
     const existing = byId.get(id) ?? null;
     const groupId = !isMerge && node.group_key ? groupKeyToId.get(node.group_key) : undefined;
+    const title =
+      // start/end 타입 매칭은 기존 제목 유지 — "시작"을 "Start"로 덮으면 거짓 변경 (CSV와 동일)
+      existing && (node.node_type === "start" || node.node_type === "end")
+        ? existing.title
+        : node.title;
+
+    // 값 정규화는 CSV 행 변환과 동일 규칙 — 무효 에코는 ""(=mergeNode pick이 기존값 유지)
+    const num = (raw: string | null | undefined) => normalizeNumericParam(stripThousands(raw ?? "")) ?? "";
+    // 통화 배타 — 백엔드가 둘 다 채워지면 저장 전체를 422시키므로 여기서 먼저 드롭 + 경고
+    const { values: costGuarded, conflict } = dropConflictingCurrency({
+      cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd),
+    });
+    if (conflict) {
+      warnings.push({ line: 0, message: `"${title}": fill only one of Cost_KRW / Cost_USD — both were ignored` });
+    }
+
     const candidate: GraphNode = {
       ...NODE_DEFAULTS,
       id,
-      // start/end 타입 매칭은 기존 제목 유지 — "시작"을 "Start"로 덮으면 거짓 변경 (CSV와 동일)
-      title:
-        existing && (node.node_type === "start" || node.node_type === "end")
-          ? existing.title
-          : node.title,
+      title,
       node_type: node.node_type,
       description: node.description,
       assignee: attr?.assignee ?? "",
       department: attr?.department ?? "",
       system: attr?.system ?? "",
-      // 무효 duration 에코는 ""로 — pick이 기존 유효값을 지키게 (CSV 행 변환과 동일 규칙)
       duration: normalizeDuration(attr?.duration ?? "") ?? "",
+      cost_krw: costGuarded.cost_krw ?? "",
+      cost_usd: costGuarded.cost_usd ?? "",
+      headcount: num(attr?.headcount),
+      annual_count: num(attr?.annual_count),
+      fte: num(attr?.fte),
       url: attr?.url ?? "",
       url_label: attr?.url_label ?? "",
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,
     };
-    // droppedParamFields(서브프로세스 4필드 드롭)는 여기선 무시 — AI 경로 경고는 Task 10에서 배선
-    const { node: merged } = mergeNode(existing, candidate);
+    // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
+    // 프롬프트와 무관하게 다시 강제하고, 실제로 드롭된 값이 있으면 CSV와 같은 문구로 경고한다.
+    const { node: merged, droppedParamFields } = mergeNode(existing, candidate);
+    if (droppedParamFields.length > 0) {
+      const fields = droppedParamFields.map((f) => PARAM_FIELD_LABEL[f]).join(", ");
+      warnings.push({
+        line: 0,
+        message: `Subprocess "${title}" only accepts Annual_Count/FTE from AI — ${fields} come from the linked map and were ignored`,
+      });
+    }
     // 신규 노드는 AI 색 허용, 매칭 노드는 mergeNode({...existing})가 기존 색 유지
     return merged;
   });
@@ -794,7 +821,7 @@ export function buildGraphFromAiProposal(
     nodeCount: positioned.length,
     edgeCount: edges.length,
     errors: [],
-    warnings: [],
+    warnings,
     ignoredLabelCount: 0,
     merge: { addedNodeIds, removedNodes, lostEdges, matchedCount: matchedIds.size },
   };

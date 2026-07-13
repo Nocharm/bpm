@@ -1,6 +1,6 @@
 // 회당 단가 파라미터 6종 메타 — 필드·순서·라벨·노드 타입별 편집 가능 집합의 단일 소스
 // (design 2026-07-13 §2.1, §3.1)
-import { formatDurationHm, formatThousands } from "./duration";
+import { formatDurationHm, formatThousands, normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import type { MessageKey } from "./i18n-messages";
 
 export const PARAM_FIELDS = [
@@ -90,6 +90,54 @@ export function dropUneditableParams(
     }
   }
   return { allowed, droppedFields };
+}
+
+/**
+ * 통화 배타 — cost_krw·cost_usd가 후보값에 동시에 있으면 위반. 백엔드 NodeIn 검증기가 둘 다
+ * 채워지면 저장 전체를 422시키므로, AI 변환단(graph 병합·ops set_attr 공용)에서 먼저 둘 다 드롭한다.
+ */
+export function dropConflictingCurrency(
+  candidate: Partial<Record<ParamField, string>>,
+): { values: Partial<Record<ParamField, string>>; conflict: boolean } {
+  if ((candidate.cost_krw ?? "") !== "" && (candidate.cost_usd ?? "") !== "") {
+    return { values: { ...candidate, cost_krw: "", cost_usd: "" }, conflict: true };
+  }
+  return { values: candidate, conflict: false };
+}
+
+/** AI ops set_attr가 보내는 부분 갱신 후보(파라미터 6종만) — 나머지 AiNodeAttributes 필드는 무관. */
+export interface AiParamPatchInput {
+  duration?: string | null;
+  cost_krw?: string | null;
+  cost_usd?: string | null;
+  headcount?: string | null;
+  annual_count?: string | null;
+  fte?: string | null;
+}
+
+/**
+ * AI ops set_attr의 파라미터 부분 갱신 → 실제 반영할 패치. 정규화(무효 에코 "") → 통화 배타
+ * 드롭 → 노드 타입별 편집 가능 필드 게이트 순으로 처리(순서를 바꾸면 SP 노드의 통화 위반이 SP
+ * 드롭 경고에 묻힌다). buildGraphFromAiProposal(csv-import.ts)과 같은 두 규칙
+ * (dropConflictingCurrency·dropUneditableParams)을 그대로 재사용 — 새 규칙을 만들지 않는다.
+ * 결과에 없는 필드는 "AI가 이 필드를 건드리지 않음"(undefined 유지, 미터치 vs 명시적 "" 구분).
+ */
+export function resolveAiParamPatch(
+  nodeType: string,
+  attr: AiParamPatchInput,
+): Partial<Record<ParamField, string>> {
+  const touched: Partial<Record<ParamField, string>> = {};
+  if (attr.duration != null) touched.duration = normalizeDuration(attr.duration) ?? "";
+  const applyNumeric = (field: Exclude<ParamField, "duration">, raw: string | null | undefined) => {
+    if (raw != null) touched[field] = normalizeNumericParam(stripThousands(raw)) ?? "";
+  };
+  applyNumeric("cost_krw", attr.cost_krw);
+  applyNumeric("cost_usd", attr.cost_usd);
+  applyNumeric("headcount", attr.headcount);
+  applyNumeric("annual_count", attr.annual_count);
+  applyNumeric("fte", attr.fte);
+  const { values: guarded } = dropConflictingCurrency(touched);
+  return dropUneditableParams(nodeType, guarded).allowed;
 }
 
 /** 서브프로세스 노드가 링크 맵에서 상속하는 회당 4필드의 원천(subprocess_refs 행의 부분집합). */

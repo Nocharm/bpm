@@ -1525,6 +1525,13 @@ export interface AiNodeAttributes {
   department?: string | null;
   system?: string | null;
   duration?: string | null;
+  // 회당 단가 파라미터 — subprocess 노드는 annual_count·fte만 AI가 수정 가능(design 2026-07-13 §6),
+  // 프론트 변환단(csv-import.ts·page.tsx)이 프롬프트와 무관하게 다시 강제한다.
+  cost_krw?: string | null;
+  cost_usd?: string | null;
+  headcount?: string | null;
+  annual_count?: string | null;
+  fte?: string | null;
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
