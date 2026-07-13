@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-13 — Σ 인원 평균 정수 도메인 (worktree-node-params)
+- 인원 평균을 float 나눗셈에서 정수 스케일 도메인으로 이동 — 1.005×3이 1.00으로 깎이던 반올림 손실 차단(리뷰 Important).
+
+
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
 ## 2026-07-13 — 노드 파라미터 재정의 T4: Σ 합산 규칙 재작성 (node-params)

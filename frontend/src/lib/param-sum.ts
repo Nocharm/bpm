@@ -24,13 +24,18 @@ function collectValues(graph: Graph, field: SpParamField, includeSubprocess: boo
   return values;
 }
 
-/** 십진 문자열 합 — 스케일 정수 합산으로 부동소수 오차 차단. */
+/** 십진 문자열을 정수 도메인으로 — 소수 자릿수 스케일과 그 스케일의 정수합. 부동소수 오차 차단. */
+function scaleValues(values: string[]): { scale: number; total: number } {
+  const maxDecimals = values.reduce((max, v) => Math.max(max, v.split(".")[1]?.length ?? 0), 0);
+  const scale = 10 ** maxDecimals;
+  return { scale, total: values.reduce((sum, v) => sum + Math.round(Number(v) * scale), 0) };
+}
+
+/** 십진 문자열 합. */
 function sumDecimal(values: string[]): string {
   const valid = values.filter((v) => NUMERIC_PATTERN.test(v));
   if (valid.length === 0) return "";
-  const maxDecimals = valid.reduce((max, v) => Math.max(max, v.split(".")[1]?.length ?? 0), 0);
-  const scale = 10 ** maxDecimals;
-  const total = valid.reduce((sum, v) => sum + Math.round(Number(v) * scale), 0);
+  const { scale, total } = scaleValues(valid);
   return String(total / scale);
 }
 
@@ -55,11 +60,13 @@ export function sumParamField(graph: Graph, field: SpParamField): string {
     return minutes === 0 ? String(hours) : `${hours}.${String(minutes).padStart(2, "0")}`;
   }
   if (field === "headcount") {
-    // 평균 — SP 노드는 하위 맵의 대표값이라 이중 반영을 피해 제외 (design 2026-07-13 §4)
+    // 평균 — SP 노드는 하위 맵의 대표값이라 이중 반영을 피해 제외 (design 2026-07-13 §4).
+    // 나눗셈까지 정수 도메인에서 — float로 하면 1.005×3의 평균이 1.00으로 깎인다.
     const valid = collectValues(graph, field, false).filter((v) => NUMERIC_PATTERN.test(v));
     if (valid.length === 0) return "";
-    const total = valid.reduce((sum, v) => sum + Number(v), 0);
-    return (total / valid.length).toFixed(2);
+    const { scale, total } = scaleValues(valid);
+    const hundredths = Math.round((total * 100) / (scale * valid.length));
+    return (hundredths / 100).toFixed(2);
   }
   return sumDecimal(collectValues(graph, field, true));
 }

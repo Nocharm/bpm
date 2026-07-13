@@ -84,6 +84,16 @@ describe("sumParamField", () => {
     expect(sumParamField(g, "headcount")).toBe("1.33");
   });
 
+  // float 나눗셈이면 1.005가 1.00으로 깎인다 — 정수 도메인 평균인지 고정
+  it("인원 평균은 부동소수 오차로 반올림이 깎이지 않는다", () => {
+    const g = makeGraph([
+      { id: "a", headcount: "1.005" },
+      { id: "b", headcount: "1.005" },
+      { id: "c", headcount: "1.005" },
+    ]);
+    expect(sumParamField(g, "headcount")).toBe("1.01");
+  });
+
   it("인원 평균은 서브프로세스 노드를 제외한다 (design §4)", () => {
     const g = makeGraph([
       { id: "a", headcount: "2" },
