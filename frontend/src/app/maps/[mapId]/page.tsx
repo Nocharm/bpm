@@ -201,6 +201,7 @@ import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "
 import { formatDurationHm, normalizeDuration } from "@/lib/duration";
 import {
   getEditableParamFields,
+  isCostFieldDisabled,
   PARAM_LABEL_KEY,
   readParamsCollapsed,
   writeParamsCollapsed,
@@ -7672,7 +7673,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                                       dataId={`inspector-param-${key}`}
                                       className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
                                       value={selectedNode.data[key] ?? ""}
-                                      disabled={readOnly}
+                                      disabled={
+                                        readOnly ||
+                                        isCostFieldDisabled(
+                                          key,
+                                          selectedNode.data.cost_krw ?? "",
+                                          selectedNode.data.cost_usd ?? "",
+                                        )
+                                      }
                                       ariaLabel={t(PARAM_LABEL_KEY[key])}
                                       onCommit={(next) => updateSelectedData({ [key]: next }, true)}
                                     />

@@ -12,7 +12,7 @@ import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
-import { PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
+import { isCostFieldDisabled, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
 import { sumParamField } from "@/lib/param-sum";
 import { isHttpUrl } from "@/lib/url";
 
@@ -130,8 +130,9 @@ export function SubprocessDesignationModal({
                 <ParamInput
                   field={key}
                   dataId={`subprocess-designation-${key}`}
-                  className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+                  className={`${INPUT_CLASS} min-w-0 flex-1 text-right disabled:opacity-40`}
                   value={form[key]}
+                  disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                   ariaLabel={t(PARAM_LABEL_KEY[key])}
                   onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
                 />

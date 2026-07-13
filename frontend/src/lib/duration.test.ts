@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDurationHm, normalizeDuration, normalizeNumericParam } from "./duration";
+import {
+  formatDurationHm,
+  formatThousands,
+  normalizeDuration,
+  normalizeNumericParam,
+  stripThousands,
+} from "./duration";
 
 describe("normalizeDuration", () => {
   it("빈값은 빈값", () => expect(normalizeDuration("")).toBe(""));
@@ -36,4 +42,36 @@ describe("formatDurationHm", () => {
   it("빈값", () => expect(formatDurationHm("")).toBe(""));
   it("무효(레거시)", () => expect(formatDurationHm("2일")).toBe(""));
   it("비정규 입력도 정규화 후 포맷", () => expect(formatDurationHm("0.75")).toBe("1h15m"));
+});
+
+describe("formatThousands", () => {
+  it("정수부에 세 자리마다 콤마", () => {
+    expect(formatThousands("1250000")).toBe("1,250,000");
+    expect(formatThousands("380000")).toBe("380,000");
+    expect(formatThousands("999")).toBe("999");
+  });
+
+  it("소수부는 콤마 없이 보존", () => {
+    expect(formatThousands("1200.50")).toBe("1,200.50");
+  });
+
+  it("빈값·무효값은 빈 문자열", () => {
+    expect(formatThousands("")).toBe("");
+    expect(formatThousands("abc")).toBe("");
+  });
+
+  it("4자리는 콤마 1개만", () => expect(formatThousands("1000")).toBe("1,000"));
+});
+
+describe("stripThousands", () => {
+  it("콤마를 제거한다 — CSV의 '1,250,000' 같은 입력 허용", () => {
+    expect(stripThousands("1,250,000")).toBe("1250000");
+    expect(stripThousands("1200.50")).toBe("1200.50");
+  });
+
+  it("콤마 없는 값은 그대로", () => expect(stripThousands("999")).toBe("999"));
+
+  it("왕복 — strip 후 재포맷하면 원래 표시형으로 복원", () => {
+    expect(formatThousands(stripThousands("1,250,000"))).toBe("1,250,000");
+  });
 });

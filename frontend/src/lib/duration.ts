@@ -36,3 +36,17 @@ export function formatDurationHm(raw: string): string {
   if (hours === 0) return `${minutes}m`;
   return `${hours}h${minutes}m`;
 }
+
+/** 천단위 콤마 표시형 — 비용 필드 전용(편집 중이 아닐 때). 소수부는 콤마 없이 보존. 무효/빈값 → "". */
+export function formatThousands(raw: string): string {
+  const text = raw.trim();
+  if (text === "" || !NUMERIC_PATTERN.test(text)) return "";
+  const [intPart, fracPart] = text.split(".");
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fracPart === undefined ? withCommas : `${withCommas}.${fracPart}`;
+}
+
+/** 콤마 제거 — CSV·붙여넣기의 "1,250,000" 같은 입력을 받아들이기 위한 역변환. */
+export function stripThousands(raw: string): string {
+  return raw.replace(/,/g, "");
+}

@@ -38,6 +38,7 @@ import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import {
   getEditableParamFields,
+  isCostFieldDisabled,
   PARAM_LABEL_KEY,
   readParamsCollapsed,
   writeParamsCollapsed,
@@ -587,8 +588,9 @@ export function NodeSummaryModal({
                                 <ParamInput
                                   field={key}
                                   dataId={`summary-param-${key}`}
-                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
                                   value={form[key]}
+                                  disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                                   ariaLabel={t(PARAM_LABEL_KEY[key])}
                                   onCommit={(next) => setForm((f) => ({ ...f, [key]: next }))}
                                 />

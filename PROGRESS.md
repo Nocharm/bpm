@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T5: 천단위 콤마 + 비용 배타 + 칩 표시 (worktree-node-params)
+- `lib/duration.ts`에 `formatThousands`/`stripThousands` 추가, `ParamInput`이 비용 2필드(cost_krw/cost_usd)에 포커스아웃 시 콤마 표시(포커스 중은 원문) 적용, `process-node.tsx` 칩은 `₩1,250,000`/`$1,200.50` 서식(cost_usd 아이콘도 Coins로 통일). 비용 배타(한쪽 값 있으면 반대쪽 disabled)는 `lib/params.ts`의 `isCostFieldDisabled` 헬퍼로 통일해 인스펙터(page.tsx)·노드 요약 모달·SP 지정 모달 3개 호출부에 적용. `@testing-library/react`·jsdom 미설치라 컴포넌트 테스트는 추가하지 않고 `duration.test.ts`/`params.test.ts`에 순수 로직 테스트로 대체(350 tests green), tsc/lint/build clean.
+
 ## 2026-07-13 — Σ 인원 평균 정수 도메인 (worktree-node-params)
 - 인원 평균을 float 나눗셈에서 정수 스케일 도메인으로 이동 — 1.005×3이 1.00으로 깎이던 반올림 손실 차단(리뷰 Important).
 

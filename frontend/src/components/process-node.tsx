@@ -9,7 +9,6 @@ import {
   Clock,
   Coins,
   CornerDownRight,
-  DollarSign,
   Link as LinkIcon,
   Lock,
   type LucideIcon,
@@ -31,7 +30,7 @@ import {
   terminalDisplayLabel,
   toPosition,
 } from "@/lib/canvas";
-import { formatDurationHm } from "@/lib/duration";
+import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
@@ -90,12 +89,12 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 }
 
 const PARAM_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, cost_krw: Coins, cost_usd: DollarSign, headcount: Users, annual_count: Tag, fte: Target,
+  duration: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
 };
 
-// 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4)
+// 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4, 2026-07-13 §3.2)
 // subprocess는 회당 4필드를 지정 어트리뷰트(sp*, 라이브 참조)로, 연간 건수·FTE는 노드 자체 값으로 표시.
-// duration만 1h30m로 포맷(나머지는 원문 숫자).
+// duration은 1h30m, 비용 2필드는 통화기호+천단위 콤마, 나머지는 원문 숫자.
 function NodeParams({ data, className }: { data: AppNode["data"]; className?: string }) {
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
@@ -116,10 +115,16 @@ function NodeParams({ data, className }: { data: AppNode["data"]; className?: st
           headcount: data.headcount,
         }),
   };
-  // duration은 formatDurationHm 결과 기준으로 filled 판정 — 무효(레거시 자유텍스트)는 ""가 되어 칩 자체를 숨김
-  // (백엔드가 이미 소거하므로 실제로는 도달하지 않는 방어 코드).
-  const displayValue = (f: ParamField): string | null | undefined =>
-    f === "duration" ? formatDurationHm(values[f] ?? "") : values[f];
+  // duration·비용은 표시형(formatDurationHm/formatThousands) 결과 기준으로 filled 판정 — 무효(레거시
+  // 자유텍스트)는 ""가 되어 칩 자체를 숨김(백엔드가 이미 소거하므로 실제로는 도달하지 않는 방어 코드).
+  const displayValue = (f: ParamField): string | null | undefined => {
+    const raw = values[f] ?? "";
+    if (f === "duration") return formatDurationHm(raw);
+    // truthy 체크는 raw가 아니라 formatThousands 결과 기준 — 무효 raw가 "₩" 단독 표시되는 것 방지
+    if (f === "cost_krw") { const n = formatThousands(raw); return n ? `₩${n}` : ""; }
+    if (f === "cost_usd") { const n = formatThousands(raw); return n ? `$${n}` : ""; }
+    return raw;
+  };
   const filled = PARAM_FIELDS.filter((f) => displayValue(f));
   if (filled.length === 0) return null;
   return (

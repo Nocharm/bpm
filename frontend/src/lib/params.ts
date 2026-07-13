@@ -37,6 +37,13 @@ export function getEditableParamFields(nodeType: string): readonly ParamField[] 
   return PARAM_FIELDS;
 }
 
+/** 비용 배타 — 한쪽 비용에 값이 있으면 반대쪽 입력은 비활성 (design 2026-07-13 §3.2) */
+export function isCostFieldDisabled(field: ParamField, costKrw: string, costUsd: string): boolean {
+  if (field === "cost_krw") return costUsd.trim() !== "";
+  if (field === "cost_usd") return costKrw.trim() !== "";
+  return false;
+}
+
 export const PARAMS_COLLAPSED_KEY = "bpm.paramsCollapsed";
 
 /** 저장값 없으면 기본 접힘(true). 직전 토글 상태는 세션 간 유지 (design 2026-07-11 SP §5). */
