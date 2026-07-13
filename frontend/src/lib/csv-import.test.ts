@@ -704,6 +704,8 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.graph?.nodes.find((n) => n.id === "n1")?.assignee).toBe("김담당");
   });
 
+  // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 무효 에코 케이스가
+  // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
   it("normalizes AI duration — invalid echo keeps existing, valid form adopted", () => {
     const existing = baseNode("n1", "견적 검토", { duration: "1.30" });
     const invalid = buildGraphFromAiProposal(
@@ -840,6 +842,22 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.warnings.some((w) => /only one/i.test(w.message))).toBe(true);
   });
 
+  // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 위반 케이스가
+  // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
+  it("통화 배타 위반 시 기존 cost_krw는 지워지지 않고 유지된다(매칭 노드)", () => {
+    const existing = baseNode("n1", "검토", { cost_krw: "5000" });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "검토", "process", { cost_krw: "1000", cost_usd: "10" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(node?.cost_krw).toBe("5000");
+    expect(node?.cost_usd).toBe("");
+    expect(outcome.warnings.some((w) => /only one/i.test(w.message))).toBe(true);
+  });
+
+  // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 무효 숫자 에코 케이스가
+  // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
   it("숫자 파라미터 무효 에코는 기존값을 지키고, 유효값은 콤마를 벗겨 반영한다", () => {
     const existing = baseNode("n1", "견적 검토", { headcount: "3" });
     const invalid = buildGraphFromAiProposal(

@@ -150,11 +150,11 @@ describe("dropUneditableParams", () => {
 });
 
 describe("dropConflictingCurrency", () => {
-  it("둘 다 값이 있으면 위반 — 둘 다 드롭한다", () => {
+  it("둘 다 값이 있으면 위반 — 둘 다 키 자체를 뺀다(''가 아님, 기존 값 보존을 위해)", () => {
     const { values, conflict } = dropConflictingCurrency({ cost_krw: "1000", cost_usd: "10" });
     expect(conflict).toBe(true);
-    expect(values.cost_krw).toBe("");
-    expect(values.cost_usd).toBe("");
+    expect("cost_krw" in values).toBe(false);
+    expect("cost_usd" in values).toBe(false);
   });
 
   it("한쪽만 값이 있으면 위반 아님 — 그대로 통과", () => {
@@ -186,13 +186,14 @@ describe("resolveAiParamPatch", () => {
     expect(patch).toEqual({ headcount: "3" });
   });
 
-  it("일반 노드는 6필드 모두 반영, 무효 에코는 빈 문자열", () => {
+  it("일반 노드는 유효 필드는 정규화 반영, 무효 에코(숫자아님)는 키 자체를 뺀다 — 기존 값 보존", () => {
     const patch = resolveAiParamPatch("process", {
       duration: "1.30", cost_krw: "1,000", headcount: "숫자아님", annual_count: "50", fte: "0.5",
     });
     expect(patch).toEqual({
-      duration: "1.30", cost_krw: "1000", headcount: "", annual_count: "50", fte: "0.5",
+      duration: "1.30", cost_krw: "1000", annual_count: "50", fte: "0.5",
     });
+    expect("headcount" in patch).toBe(false);
   });
 
   it("서브프로세스는 annual_count·fte만 통과 — 나머지는 값이 있어도 드롭", () => {
@@ -202,14 +203,44 @@ describe("resolveAiParamPatch", () => {
     expect(patch).toEqual({ annual_count: "1200", fte: "0.8" });
   });
 
-  it("통화를 둘 다 채우면 둘 다 명시적으로 비운다(일반 노드는 편집 가능 필드라 '' 반영)", () => {
-    const process = resolveAiParamPatch("process", { cost_krw: "1000", cost_usd: "10" });
-    expect(process.cost_krw).toBe("");
-    expect(process.cost_usd).toBe("");
+  // finding: 무효 duration 에코("2일")가 과거엔 ""로 정규화돼 patch에 들어가 기존 값을 지웠다.
+  // 이제는 키 자체가 생략되어 ops set_attr(page.tsx)가 스프레드해도 기존 duration이 살아남는다.
+  it("무효 duration 에코('2일')는 키를 생략한다(기존 값을 지우지 않음)", () => {
+    const patch = resolveAiParamPatch("process", { duration: "2일" });
+    expect("duration" in patch).toBe(false);
   });
 
-  it("subprocess에서 통화 충돌 필드는 이미 ''라 SP 드롭과 이중으로 겹치지 않는다", () => {
+  it("무효 숫자 에코('abc')는 키를 생략한다", () => {
+    const patch = resolveAiParamPatch("process", { cost_krw: "abc" });
+    expect("cost_krw" in patch).toBe(false);
+  });
+
+  it("명시적 빈 문자열 에코는 '지움' 의도이므로 ''를 그대로 patch에 남긴다", () => {
+    const patch = resolveAiParamPatch("process", { duration: "", cost_krw: "" });
+    expect(patch).toEqual({ duration: "", cost_krw: "" });
+  });
+
+  // finding: 통화 배타 위반 시 과거엔 둘 다 ""가 patch에 들어가 기존 값을 지웠다.
+  it("통화를 둘 다 채우면 위반 — 둘 다 키를 생략한다(기존 값을 지우지 않음)", () => {
+    const patch = resolveAiParamPatch("process", { cost_krw: "1000", cost_usd: "10" });
+    expect("cost_krw" in patch).toBe(false);
+    expect("cost_usd" in patch).toBe(false);
+  });
+
+  it("subprocess에서 통화 충돌 필드는 위반 단계에서 이미 생략돼 SP 드롭과 이중으로 겹치지 않는다", () => {
     const sub = resolveAiParamPatch("subprocess", { cost_krw: "1000", cost_usd: "10", fte: "0.5" });
     expect(sub).toEqual({ fte: "0.5" });
+  });
+
+  it("천단위 콤마 에코('1,250,000')는 콤마를 벗겨 patch에 담는다", () => {
+    const patch = resolveAiParamPatch("process", { cost_krw: "1,250,000" });
+    expect(patch).toEqual({ cost_krw: "1250000" });
+  });
+
+  it("서브프로세스는 annual_count·fte만 patch에 담긴다(나머지는 값이 있어도 생략)", () => {
+    const patch = resolveAiParamPatch("subprocess", {
+      duration: "1.30", cost_krw: "1000", headcount: "3", annual_count: "50", fte: "0.5",
+    });
+    expect(Object.keys(patch).sort()).toEqual(["annual_count", "fte"]);
   });
 });

@@ -95,12 +95,18 @@ export function dropUneditableParams(
 /**
  * 통화 배타 — cost_krw·cost_usd가 후보값에 동시에 있으면 위반. 백엔드 NodeIn 검증기가 둘 다
  * 채워지면 저장 전체를 422시키므로, AI 변환단(graph 병합·ops set_attr 공용)에서 먼저 둘 다 드롭한다.
+ * 위반 시 두 키를 결과에서 아예 뺀다("" 명시가 아님) — ops set_attr(resolveAiParamPatch)는 이 값을
+ * 그대로 patch에 스프레드하므로, ""를 채우면 "명시적 지움"으로 해석돼 기존 값을 지워버린다. 부재만이
+ * "건드리지 않음"이며, graph 병합 경로(mergeNode의 pick)는 부재를 `?? ""`로 받아 기존과 동일하게 동작.
  */
 export function dropConflictingCurrency(
   candidate: Partial<Record<ParamField, string>>,
 ): { values: Partial<Record<ParamField, string>>; conflict: boolean } {
   if ((candidate.cost_krw ?? "") !== "" && (candidate.cost_usd ?? "") !== "") {
-    return { values: { ...candidate, cost_krw: "", cost_usd: "" }, conflict: true };
+    const values = { ...candidate };
+    delete values.cost_krw;
+    delete values.cost_usd;
+    return { values, conflict: true };
   }
   return { values: candidate, conflict: false };
 }
@@ -116,20 +122,28 @@ export interface AiParamPatchInput {
 }
 
 /**
- * AI ops set_attr의 파라미터 부분 갱신 → 실제 반영할 패치. 정규화(무효 에코 "") → 통화 배타
+ * AI ops set_attr의 파라미터 부분 갱신 → 실제 반영할 패치. 정규화(무효 에코는 키 생략) → 통화 배타
  * 드롭 → 노드 타입별 편집 가능 필드 게이트 순으로 처리(순서를 바꾸면 SP 노드의 통화 위반이 SP
  * 드롭 경고에 묻힌다). buildGraphFromAiProposal(csv-import.ts)과 같은 두 규칙
  * (dropConflictingCurrency·dropUneditableParams)을 그대로 재사용 — 새 규칙을 만들지 않는다.
- * 결과에 없는 필드는 "AI가 이 필드를 건드리지 않음"(undefined 유지, 미터치 vs 명시적 "" 구분).
+ * 결과에 없는 필드는 "AI가 이 필드를 건드리지 않음"(undefined 유지). 무효 에코(정규화 실패)도 같은
+ * 이유로 키를 생략한다 — page.tsx가 이 패치를 node.data에 그대로 스프레드하므로, ""를 넣으면
+ * "명시적 지움"과 구분이 안 돼 기존 값을 지워버린다. 빈 문자열 에코("지움" 의도)는 정규화가 그대로
+ * ""를 돌려주므로 patch에 "" 그대로 남는다 — 무효(키 생략) vs 명시적 지움("")을 구분하는 지점.
  */
 export function resolveAiParamPatch(
   nodeType: string,
   attr: AiParamPatchInput,
 ): Partial<Record<ParamField, string>> {
   const touched: Partial<Record<ParamField, string>> = {};
-  if (attr.duration != null) touched.duration = normalizeDuration(attr.duration) ?? "";
+  if (attr.duration != null) {
+    const normalized = normalizeDuration(attr.duration);
+    if (normalized !== null) touched.duration = normalized;
+  }
   const applyNumeric = (field: Exclude<ParamField, "duration">, raw: string | null | undefined) => {
-    if (raw != null) touched[field] = normalizeNumericParam(stripThousands(raw)) ?? "";
+    if (raw == null) return;
+    const normalized = normalizeNumericParam(stripThousands(raw));
+    if (normalized !== null) touched[field] = normalized;
   };
   applyNumeric("cost_krw", attr.cost_krw);
   applyNumeric("cost_usd", attr.cost_usd);

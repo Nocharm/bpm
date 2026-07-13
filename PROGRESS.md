@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 리뷰 픽스: resolveAiParamPatch 무효 에코가 기존값을 지우던 결함 (worktree-node-params)
+- `resolveAiParamPatch`(`lib/params.ts`)가 무효 에코(예: duration "2일", cost_krw "abc")를 `""`로 정규화해 patch에 그대로 담던 결함 수정 — page.tsx ops `set_attr`가 patch를 `node.data`에 직접 스프레드하므로 기존 값이 조용히 지워졌다(graph-merge 경로는 `mergeNode`의 `pick`이 `""`를 "건드리지 않음"으로 해석해 이미 안전했음). 정규화 실패 시 이제 키 자체를 결과에서 생략(명시적 `""` 에코는 여전히 "지움"으로 patch에 남음). 같은 원리로 `dropConflictingCurrency`도 통화 배타 위반 시 `cost_krw`/`cost_usd`를 `""`로 채우는 대신 키를 생략하도록 변경(csv-import.ts 호출부는 `?? ""`로 받아 동작 불변, resolveAiParamPatch 호출부는 이제 두 키가 patch에서 빠져 기존 값을 보존). `params.test.ts`에 무효 에코/명시적 빈값/통화충돌/콤마 에코/SP 게이트 6종 신규 pin, `csv-import.test.ts`에 병합 경로가 같은 위반 케이스에서 기존값을 지키는지 확인하는 pin 3종 추가(두 AI 경로 드리프트 방지). 395 tests green(389→395), tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T10: AI 변환단 SP 제한·비용 배타 강제 (worktree-node-params)
 - 프론트 `AiNodeAttributes`(api.ts)에 백엔드 T2가 이미 노출한 `cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte` 5필드를 추가(그동안 프론트 AI 타입엔 없었음). `lib/params.ts`에 순수 헬퍼 2종 신설 — `dropConflictingCurrency`(원·달러 동시 지정 시 둘 다 드롭)와 `resolveAiParamPatch`(page.tsx ops set_attr 전용, 정규화→통화배타→`dropUneditableParams` 순으로 적용해 SP 노드에서 통화 위반이 SP 드롭 경고에 겹치지 않게 함). `csv-import.ts`의 `buildGraphFromAiProposal`(graph 병합)이 두 헬퍼 + 기존 `mergeNode`/`dropUneditableParams`를 재사용해 SP 4필드 드롭·통화 배타를 CSV와 동일한 문구로 warnings에 싣는다. `page.tsx`의 `aiNodeToGraphNode`(ops add, 신규 노드라 SP 게이트는 미적용·통화 배타만)와 ops `set_attr` 블록(기존 노드, `resolveAiParamPatch` 호출 — SP/통화 위반은 색과 같은 방식으로 조용히 드롭, 이 경로엔 프리뷰 경고 채널이 없음)도 동일 규칙으로 맞춰 두 AI 경로의 비대칭을 없앴다. 377→389 tests green(신규 12), tsc/lint/build clean.
 
