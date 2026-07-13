@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-13 — 노드 파라미터 재정의 설계 (main)
+- 회당 단가 모델로 의미 확정(회당 소요시간·회당 추가비용(원/달러 배타 2필드)·회당 투입인원·연간 건수·FTE), SP 지정은 3종만 + 인원 Σ는 평균(SP 제외)·Σ 미리보기 placeholder, CSV 14컬럼·Excel 서식·AI 계약(6필드 읽기/쓰기, SP는 연간건수·FTE만) 반영 — 스펙 `docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md`. 운영 미배포라 DB 재생성 전제(기존 cost 값 폐기).
+
 ## 2026-07-12 — CLAUDE.md 세션 학습 반영 (main)
 - 숫자 파라미터(duration H.MM) 계약 레슨 추가(이중 정규화 동기화·경계 소거 증발·표시형·raw dict 우회), backend pytest .env 함정 커맨드(bash/PS 병기), frontend AGENTS.md에 ParamInput 필수·내보내기 라이브러리 dynamic import 규칙.
 
