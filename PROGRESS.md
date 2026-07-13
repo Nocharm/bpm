@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-13 — 노드 파라미터 재정의 T2: AI 계약 확장 (node-params)
+- `AiNodeAttributes`에 `cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte` 추가(부분 갱신 시맨틱: None=유지) + 공용 `_assert_single_currency` 재사용한 통화 배타 검증. `ai_prompt.py` 3곳(그래프 스키마 예시·규칙 텍스트·`_serialize_node`) 동기화, subprocess 노드는 `annual_count`·`fte`만 수정 가능하다는 제한을 프롬프트에 명시. 603→607 tests green, ruff clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T1: 백엔드 개명·비용 배타 (node-params)
 - `duration`/`cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte`로 개명(구 `etf`/`cost`/`extra` 폐기, 이관 없음), SP 지정은 `sp_duration`/`sp_cost_krw`/`sp_cost_usd`/`sp_headcount` 3종만. cost_krw·cost_usd 동시 값은 model_validator에서 422(공용 `_assert_single_currency`). models/db/schemas/routers(graph·versions·maps)/subprocess.py 갱신, `get_subprocess_refs` select/unpack 동시 수정. 599→603 tests green, ruff clean.
 

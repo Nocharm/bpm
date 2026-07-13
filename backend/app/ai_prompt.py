@@ -14,7 +14,7 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 {"kind":"graph","message":<설명>,
  "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
  "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-           "attributes":{"assignee":"","department":"","system":"","duration":"","url":"","url_label":"","color":""},
+           "attributes":{"assignee":"","department":"","system":"","duration":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","url":"","url_label":"","color":""},
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
@@ -32,6 +32,10 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 - set_attr의 attributes에는 바꿀 필드만 넣으세요 — 생략한 필드는 유지되고, 빈 문자열("")은 그 값을 지웁니다.
   url/url_label로 노드 링크를 설정합니다(url은 http:// 또는 https:// 로 시작, 지어내지 말 것).
 - duration은 시간 단위 숫자 H.MM 표기만 허용 — 소수부 2자리는 분(0.30=30분, 1.30=1시간 30분). "2일" 같은 텍스트 금지, 모르면 비워두세요.
+- 파라미터 의미 — duration=회당 소요시간(H.MM 시간, 소수부 2자리는 분: 0.30=30분, "2일" 같은 텍스트 금지),
+  cost_krw/cost_usd=회당 추가비용(인건비 제외), headcount=회당 투입 인원, annual_count=연간 처리 건수, fte=FTE. 모르면 비워두세요.
+- 비용은 cost_krw·cost_usd 중 하나만 채웁니다 — 둘 다 채우면 제안 전체가 거절됩니다.
+- subprocess 노드는 annual_count·fte만 수정할 수 있습니다. duration·cost_krw·cost_usd·headcount는 하위 맵의 지정값이라 수정할 수 없습니다(무시됩니다).
 예) "견적 검토 뒤에 '승인' 추가해" → add(승인) + connect(견적검토 id → 승인 새키).
 예) "A와 B 사이에 '검수' 넣어줘" → add(검수) + disconnect(A→B) + connect(A→검수새키) + connect(검수새키→B).
 
@@ -67,6 +71,16 @@ def _serialize_node(node: NodeOut) -> str:
         meta.append(f"시스템={node.system}")
     if node.duration:
         meta.append(f"소요={node.duration}")
+    if node.cost_krw:
+        meta.append(f"비용={node.cost_krw}원")
+    if node.cost_usd:
+        meta.append(f"비용=${node.cost_usd}")
+    if node.headcount:
+        meta.append(f"인원={node.headcount}")
+    if node.annual_count:
+        meta.append(f"연간건수={node.annual_count}")
+    if node.fte:
+        meta.append(f"FTE={node.fte}")
     if node.url:
         # 링크 노출 — 재생성(graph) 시 모델이 에코해 보존할 수 있게 (계약 규칙 ⑦)
         meta.append(f"링크={node.url}" + (f' "{node.url_label}"' if node.url_label else ""))

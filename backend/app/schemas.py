@@ -1122,6 +1122,12 @@ class AiNodeAttributes(BaseModel):
     department: str | None = Field(default=None, max_length=100)
     system: str | None = Field(default=None, max_length=100)
     duration: str | None = Field(default=None, max_length=50)
+    # 회당 단가 파라미터 — NodeIn과 동일 제약. None=유지, ""=삭제 (design 2026-07-13 §6)
+    cost_krw: str | None = Field(default=None, max_length=50)
+    cost_usd: str | None = Field(default=None, max_length=50)
+    headcount: str | None = Field(default=None, max_length=50)
+    annual_count: str | None = Field(default=None, max_length=50)
+    fte: str | None = Field(default=None, max_length=50)
     color: str | None = Field(default=None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
@@ -1135,6 +1141,12 @@ class AiNodeAttributes(BaseModel):
             return None
         normalized = normalize_duration(value)
         return "" if normalized is None else normalized
+
+    @model_validator(mode="after")
+    def _check_single_currency(self) -> "AiNodeAttributes":
+        # None(미제공=유지)은 배타 검사에서 빈 값으로 취급 — 부분 갱신 시맨틱과 동치
+        _assert_single_currency(self.cost_krw or "", self.cost_usd or "")
+        return self
 
 
 class AiNode(BaseModel):
