@@ -120,8 +120,9 @@ export function dropConflictingCurrency(
  * 통화 병합 — 후보(next)가 한쪽에 값을 채우면 통화 전환으로 보고 반대쪽을 명시적으로 비운다.
  * 후보가 둘 다 비어있으면(건드리지 않음) 기존 값을 그대로 지킨다. csv-import.ts mergeNode 전용
  * (finding: 필드별 독립 pick은 KRW→USD 전환 시 기존 USD가 안 지워져 두 통화가 동시에 남는다 —
- * 백엔드 422 또는 SP set_attr 자동저장 루프로 이어진다). next는 이미 dropUneditableParams를
- * 거친 값이라 둘 다 non-empty로 들어오지 않는다(CSV 행 검증·dropConflictingCurrency가 상류에서 보장).
+ * 백엔드 422 또는 SP set_attr 자동저장 루프로 이어진다). next가 둘 다 non-empty로 들어오는 일은
+ * 상류에서 막힌다 — CSV는 행 검증에서 에러로 걷어내고(csv-import.ts), AI는 dropConflictingCurrency가
+ * 둘 다 떨군다. 그래도 들어오면 KRW 우선으로 단일 통화 결과를 낸다(불변식은 유지).
  */
 export function resolveCostFields(
   nextKrw: string,
