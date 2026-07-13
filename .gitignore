@@ -36,3 +36,6 @@ dist/
 
 # Tooling caches (superpowers brainstorm 등 — 프로젝트 코드 아님)
 .superpowers/
+
+# SDD 격리 워크스페이스 (git worktree)
+.worktrees/
