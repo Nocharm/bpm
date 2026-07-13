@@ -17,7 +17,7 @@ import {
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
 import { formatKst } from "@/lib/datetime";
-import { formatDurationHm } from "@/lib/duration";
+import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 
 interface SubprocessDesignationPanelProps {
@@ -118,13 +118,19 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     }
   }
 
+  // 캔버스 노드 칩과 동일 표시형(₩/$ + 천단위 콤마) — process-node.tsx 컨벤션과 정합
+  const formatCost = (raw: string | null | undefined, symbol: string): string => {
+    const n = formatThousands(raw ?? "");
+    return n ? `${symbol}${n}` : "";
+  };
+
   const attrRows: { label: string; value: string | null | undefined }[] = [
     { label: t("field.department"), value: detail.sp_department },
     { label: t("field.assignee"), value: detail.sp_assignee },
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
-    { label: t("field.costKrw"), value: detail.sp_cost_krw },
-    { label: t("field.costUsd"), value: detail.sp_cost_usd },
+    { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
+    { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },
     { label: t("field.headcount"), value: detail.sp_headcount },
   ];
 

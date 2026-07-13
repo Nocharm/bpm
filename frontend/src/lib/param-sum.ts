@@ -2,7 +2,7 @@
 // duration은 분 환산 캐리, 비용은 통화별 독립 합, 인원은 "값 있는 일반 노드의 평균"(SP 제외).
 // design 2026-07-13 §4.
 import type { Graph } from "./api";
-import { DURATION_PATTERN, NUMERIC_PATTERN, normalizeDuration } from "./duration";
+import { DURATION_PATTERN, formatDurationHm, formatThousands, NUMERIC_PATTERN, normalizeDuration } from "./duration";
 import type { SpParamField } from "./params";
 
 /**
@@ -69,4 +69,15 @@ export function sumParamField(graph: Graph, field: SpParamField): string {
     return (hundredths / 100).toFixed(2);
   }
   return sumDecimal(collectValues(graph, field, true));
+}
+
+/**
+ * Σ 원시값 → SP 지정 모달 placeholder 표시형. 빈 값이면 placeholder 자체를 없앤다(undefined) —
+ * 빈 문자열 placeholder와 구분해 HTML 기본 동작(값 있으면 placeholder 숨김)에 맡긴다.
+ */
+export function formatSumPreview(field: SpParamField, raw: string): string | undefined {
+  if (raw === "") return undefined;
+  if (field === "duration") return formatDurationHm(raw) || undefined;
+  if (field === "cost_krw" || field === "cost_usd") return formatThousands(raw) || undefined;
+  return raw;
 }

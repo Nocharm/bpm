@@ -4,7 +4,7 @@
 // 설정 화면 패널과 에디터 인스펙터 카드가 공용으로 사용한다.
 
 import { Sigma } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
@@ -13,7 +13,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
 import { isCostFieldDisabled, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
-import { sumParamField } from "@/lib/param-sum";
+import { formatSumPreview, sumParamField } from "@/lib/param-sum";
 import { isHttpUrl } from "@/lib/url";
 
 export interface DesignationForm {
@@ -37,7 +37,7 @@ interface SubprocessDesignationModalProps {
 }
 
 const INPUT_CLASS =
-  "rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:text-ink-tertiary focus:border-accent";
+  "rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
 
 export function SubprocessDesignationModal({
   mapId,
@@ -51,8 +51,35 @@ export function SubprocessDesignationModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summing, setSumming] = useState(false);
-  // 게시본 그래프 — 모달 수명 동안 1회만 fetch(Σ 반복 클릭에 재요청 안 함)
+  // 게시본 그래프 — 모달 수명 동안 1회만 fetch(Σ 반복 클릭·미리보기 계산에 재요청 안 함)
   const graphRef = useRef<Graph | null>(null);
+  // Σ 미리보기(4종) 원시값 — placeholder 표시형은 렌더 중 formatSumPreview로 파생
+  const [previews, setPreviews] = useState<Partial<Record<SpParamField, string>>>({});
+
+  // 모달 오픈 시 게시본이 있으면 그래프를 1회 로드해 4개 Σ 미리보기를 계산(design §4.1)
+  useEffect(() => {
+    if (publishedVersionId === null) return;
+    let active = true;
+    void getGraph(publishedVersionId)
+      .then((graph) => {
+        graphRef.current = graph;
+        if (!active) return;
+        const next: Partial<Record<SpParamField, string>> = {};
+        for (const field of SP_PARAM_FIELDS) next[field] = sumParamField(graph, field);
+        setPreviews(next);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      active = false;
+    };
+  }, [publishedVersionId]);
+
+  // placeholder는 표시 전용(저장 안 됨) — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김
+  function previewText(field: SpParamField): string | undefined {
+    return formatSumPreview(field, previews[field] ?? "");
+  }
 
   // 지정 URL 클라이언트 검증 — 비어있지 않으면 http(s) 강제(액션 바 노출 게이트와 동일 규칙)
   const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
@@ -134,21 +161,22 @@ export function SubprocessDesignationModal({
                   value={form[key]}
                   disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                   ariaLabel={t(PARAM_LABEL_KEY[key])}
+                  placeholder={previewText(key)}
                   onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
                 />
-                {key !== "headcount" && (
-                  <button
-                    type="button"
-                    data-id={`subprocess-designation-sum-${key}`}
-                    title={publishedVersionId === null ? t("sp.sumNeedsPublished") : t("sp.sumAllNodes")}
-                    aria-label={t("sp.sumAllNodes")}
-                    disabled={publishedVersionId === null || summing}
-                    className="shrink-0 rounded-sm border border-hairline px-1.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
-                    onClick={() => void handleSum(key)}
-                  >
-                    <Sigma size={14} strokeWidth={1.5} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  data-id={`subprocess-designation-sum-${key}`}
+                  title={publishedVersionId === null ? t("sp.sumNeedsPublished") : t("sp.sumAllNodes")}
+                  aria-label={t("sp.sumAllNodes")}
+                  disabled={
+                    publishedVersionId === null || summing || isCostFieldDisabled(key, form.cost_krw, form.cost_usd)
+                  }
+                  className="shrink-0 rounded-sm border border-hairline px-1.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                  onClick={() => void handleSum(key)}
+                >
+                  <Sigma size={14} strokeWidth={1.5} />
+                </button>
               </div>
             </div>
           ))}

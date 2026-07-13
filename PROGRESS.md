@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T6: SP 지정 Σ 4버튼 + placeholder 미리보기 (worktree-node-params)
+- SP 지정 모달에 Σ 버튼을 4행 전부(duration/cost_krw/cost_usd/headcount)로 확장(기존 headcount 제외 조건 삭제), 모달 오픈 시 게시본 그래프를 1회 로드해 4개 Σ 결과를 각 입력의 `placeholder`(회색 이탤릭, `placeholder:italic placeholder:text-ink-tertiary`)로 미리 노출 — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김, 채우려면 Σ 클릭 필요. 비용 배타(`isCostFieldDisabled`)를 Σ 버튼에도 적용. placeholder 표시형 결정은 순수 함수 `lib/param-sum.ts`의 `formatSumPreview(field, raw)`로 분리해 vitest로 검증(jsdom 미설치라 DOM 마운트 테스트는 추가하지 않음 — CLAUDE.md 방침). 패널·인스펙터 카드의 SP 어트리뷰트 표시행도 비용 2필드를 캔버스 칩과 동일 서식(`₩`/`$` + `formatThousands`)으로 통일. 354 tests green(신규 4), tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T5: 천단위 콤마 + 비용 배타 + 칩 표시 (worktree-node-params)
 - `lib/duration.ts`에 `formatThousands`/`stripThousands` 추가, `ParamInput`이 비용 2필드(cost_krw/cost_usd)에 포커스아웃 시 콤마 표시(포커스 중은 원문) 적용, `process-node.tsx` 칩은 `₩1,250,000`/`$1,200.50` 서식(cost_usd 아이콘도 Coins로 통일). 비용 배타(한쪽 값 있으면 반대쪽 disabled)는 `lib/params.ts`의 `isCostFieldDisabled` 헬퍼로 통일해 인스펙터(page.tsx)·노드 요약 모달·SP 지정 모달 3개 호출부에 적용. `@testing-library/react`·jsdom 미설치라 컴포넌트 테스트는 추가하지 않고 `duration.test.ts`/`params.test.ts`에 순수 로직 테스트로 대체(350 tests green), tsc/lint/build clean.
 

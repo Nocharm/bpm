@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Graph, GraphNode, SubprocessRef } from "./api";
-import { sumParamField } from "./param-sum";
+import { formatSumPreview, sumParamField } from "./param-sum";
 
 const node = (id: string, over: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id, description: "", node_type: "process", color: "",
@@ -110,5 +110,21 @@ describe("sumParamField", () => {
     const g = makeGraph([{ id: "a", headcount: "" }]);
     expect(sumParamField(g, "headcount")).toBe("");
     expect(sumParamField(g, "cost_usd")).toBe("");
+  });
+});
+
+describe("formatSumPreview", () => {
+  it("빈 Σ 값은 placeholder 없음(undefined)", () => {
+    expect(formatSumPreview("duration", "")).toBeUndefined();
+  });
+  it("duration은 1h30m 표시형", () => {
+    expect(formatSumPreview("duration", "1.30")).toBe("1h30m");
+  });
+  it("비용은 천단위 콤마", () => {
+    expect(formatSumPreview("cost_krw", "1630000")).toBe("1,630,000");
+    expect(formatSumPreview("cost_usd", "1200.5")).toBe("1,200.5");
+  });
+  it("headcount는 평균 문자열 그대로", () => {
+    expect(formatSumPreview("headcount", "1.50")).toBe("1.50");
   });
 });
