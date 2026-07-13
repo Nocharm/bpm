@@ -24,37 +24,43 @@ function makeEdge(id: string, source: string, target: string, label = ""): Graph
 describe("buildCsvFromGraph — round trip", () => {
   it("round-trip: export → re-import produces no changes", () => {
     const csv = [
-      "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
-      "A,first step,홍길동,Quality Part 1,SAP,16,1,,,,,,B",
-      'B,,,,,0.30,2,,,,,,C:yes;D:no',
-      "C,,,,,,,,,,https://example.com/x,Doc,",
-      "D,,,,,,,,,,,,",
+      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
+      "A,first step,홍길동,Quality Part 1,SAP,16,1250000,,1,1200,0.8,,,B",
+      "B,,,,,0.30,,,2,,,,,C:yes;D:no",
+      "C,,,,,,,,,,,https://example.com/x,Doc,",
+      "D,,,,,,,,,,,,,",
     ].join("\r\n");
     const first = buildGraphFromCsv(csv);
     expect(first.errors).toEqual([]);
     const graph = first.graph!;
     const { csv: exported, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([]);
+    // 비용은 콤마 없이(raw 숫자) 내보내야 왕복이 무손실 — "1,250,000"이 아니라 "1250000"
+    expect(exported).toContain(",1250000,,1,1200,0.8,");
     const second = buildGraphFromCsv(exported, { base: graph });
     expect(second.errors).toEqual([]);
     expect(second.merge.addedNodeIds).toEqual([]);
     expect(second.merge.removedNodes).toEqual([]);
     expect(second.merge.lostEdges).toEqual([]);
+    const a = second.graph!.nodes.find((n) => n.title === "A")!;
+    expect(a.cost_krw).toBe("1250000");
+    expect(a.annual_count).toBe("1200");
+    expect(a.fte).toBe("0.8");
   });
 
   it("분기 라벨(대상:라벨)이 왕복에서 보존된다", () => {
     const csv = [
-      "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
-      "A,,,,,,,,,,,,B",
-      "B,,,,,,,,,,,,C:approved;D:rejected",
-      "C,,,,,,,,,,,,",
-      "D,,,,,,,,,,,,",
+      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
+      "A,,,,,,,,,,,,,B",
+      "B,,,,,,,,,,,,,C:approved;D:rejected",
+      "C,,,,,,,,,,,,,",
+      "D,,,,,,,,,,,,,",
     ].join("\r\n");
     const graph = buildGraphFromCsv(csv).graph!;
     const { csv: exported } = buildCsvFromGraph(graph);
     const bCells = exported.split("\r\n").find((line) => line.startsWith("B,"))?.split(",");
     expect(bCells?.[0]).toBe("B"); // Name
-    expect(bCells?.[12]).toBe("C:approved;D:rejected"); // Next (13번째 컬럼)
+    expect(bCells?.[13]).toBe("C:approved;D:rejected"); // Next (14번째 컬럼)
   });
 
   it("따옴표·쉼표·줄바꿈 셀 이스케이프 — export → re-import에서 원문 보존", () => {
@@ -107,7 +113,7 @@ describe("buildCsvFromGraph — round trip", () => {
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[0]).toBe("A"); // Name
-    expect(aCells?.[12]).toBe("B:approve"); // Next — reject 브랜치는 드롭됨
+    expect(aCells?.[13]).toBe("B:approve"); // Next — reject 브랜치는 드롭됨
   });
 
   it("무라벨 End행 엣지도 다른 outgoing과 병존하면 경고와 함께 생략", () => {
@@ -124,7 +130,7 @@ describe("buildCsvFromGraph — round trip", () => {
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV — dropped']);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[12]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
+    expect(aCells?.[13]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
   });
 
   it("Next 대상 제목의 ;/:와 라벨의 ;는 그대로 내보내되 오파싱 경고", () => {
@@ -144,7 +150,7 @@ describe("buildCsvFromGraph — round trip", () => {
       'Edge label "ok;fine" (from "A") contains ";" — re-import will misparse this reference',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[12]).toBe("C:review;B:ok;fine"); // 드랍 없이 그대로 직렬화
+    expect(aCells?.[13]).toBe("C:review;B:ok;fine"); // 드랍 없이 그대로 직렬화
   });
 
   it("제목 중복 노드는 그대로 내보내되 경고", () => {
@@ -185,8 +191,8 @@ describe("buildCsvFromGraph — round trip", () => {
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([]);
     const cells = csv.split("\r\n")[1].split(",");
-    // Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next
-    expect(cells.slice(6, 10)).toEqual(["", "", "", ""]);
+    // Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next
+    expect(cells.slice(6, 11)).toEqual(["", "", "", "", ""]);
   });
 });
 

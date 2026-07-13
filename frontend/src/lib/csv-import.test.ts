@@ -146,6 +146,44 @@ describe("buildGraphFromCsv — 검증 에러", () => {
     expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
   });
 
+  it("14컬럼 헤더를 파싱한다", () => {
+    const csv = [
+      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
+      "검토,,,,,1.30,1250000,,2,1200,0.8,,,",
+    ].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.errors).toEqual([]);
+    const node = outcome.graph!.nodes.find((n) => n.title === "검토")!;
+    expect(node.duration).toBe("1.30");
+    expect(node.cost_krw).toBe("1250000");
+    expect(node.cost_usd).toBe("");
+    expect(node.headcount).toBe("2");
+    expect(node.annual_count).toBe("1200");
+    expect(node.fte).toBe("0.8");
+  });
+
+  it("콤마 표기 비용을 허용한다", () => {
+    const csv = ["Name,Duration,Cost_KRW", '검토,1.30,"1,250,000"'].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.graph!.nodes.find((n) => n.title === "검토")!.cost_krw).toBe("1250000");
+  });
+
+  it("원·달러를 동시에 채운 행은 에러", () => {
+    const csv = ["Name,Cost_KRW,Cost_USD", "검토,1000,10"].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.graph).toBeNull();
+    expect(outcome.errors[0].message).toMatch(/only one/i);
+  });
+
+  it("구 헤더(ETF/Cost/Extra)는 미지원 헤더 에러", () => {
+    const csv = ["Name,ETF", "검토,1"].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.graph).toBeNull();
+    expect(outcome.errors.length).toBeGreaterThan(0);
+    expect(outcome.errors[0].message).toContain('Unknown column "ETF"');
+  });
+
   it("숫자 파라미터 컬럼을 파싱·정규화한다", () => {
     const csv = [
       "Name,Duration,Headcount,FTE,Cost_KRW,Annual_Count,Next",
@@ -187,7 +225,7 @@ describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
     ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
@@ -440,6 +478,29 @@ describe("buildGraphFromCsv — 머지", () => {
     const node = o.graph!.nodes.find((n) => n.id === "a1")!;
     expect(node.node_type).toBe("subprocess");
     expect(node.linked_map_id).toBe(7);
+  });
+
+  it("서브프로세스 매칭 행은 annual_count·fte만 반영하고 나머지 4필드는 드롭 + 경고 (링크 맵 지정값 보호)", () => {
+    const base = baseGraph();
+    base.nodes[1] = {
+      ...base.nodes[1], node_type: "subprocess", linked_map_id: 7,
+      duration: "2", cost_krw: "5000", headcount: "3", annual_count: "10", fte: "0.2",
+    };
+    const csv = [
+      "Name,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE",
+      "Review request,9,99999,,9,50,0.9",
+    ].join("\n");
+    const o = mergeOf(csv, base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    // 링크 맵이 소유한 4필드는 CSV 값이 반영되지 않고 기존값을 그대로 지킨다
+    expect(node.duration).toBe("2");
+    expect(node.cost_krw).toBe("5000");
+    expect(node.headcount).toBe("3");
+    // 부모가 편집 가능한 2필드는 CSV 값이 반영된다
+    expect(node.annual_count).toBe("50");
+    expect(node.fte).toBe("0.9");
+    expect(o.warnings.some((w) => w.line === 2 && w.message.includes("Review request"))).toBe(true);
   });
 
   it("CSV에만 있는 행은 신규 노드가 되고 addedNodeIds에 담긴다", () => {

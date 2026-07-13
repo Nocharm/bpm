@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dropUneditableParams,
   formatParamValue,
   getEditableParamFields,
   getInheritedParams,
@@ -114,5 +115,34 @@ describe("getInheritedParams", () => {
 
   it("키 집합은 SP_PARAM_FIELDS와 일치", () => {
     expect(Object.keys(getInheritedParams(null)).sort()).toEqual([...SP_PARAM_FIELDS].sort());
+  });
+});
+
+describe("dropUneditableParams", () => {
+  const full = { duration: "1", cost_krw: "1000", cost_usd: "", headcount: "2", annual_count: "5", fte: "0.5" };
+
+  it("일반 노드는 아무것도 드롭하지 않는다", () => {
+    const { allowed, droppedFields } = dropUneditableParams("process", full);
+    expect(droppedFields).toEqual([]);
+    expect(allowed).toEqual(full);
+  });
+
+  it("서브프로세스는 annual_count·fte만 통과시키고 값 있는 나머지는 드롭 보고", () => {
+    const { allowed, droppedFields } = dropUneditableParams("subprocess", full);
+    expect(allowed).toEqual({ annual_count: "5", fte: "0.5" });
+    expect(droppedFields).toEqual(["duration", "cost_krw", "headcount"]);
+  });
+
+  it("서브프로세스라도 원래 빈 값이던 필드는 드롭 보고하지 않는다", () => {
+    const { droppedFields } = dropUneditableParams("subprocess", {
+      duration: "", cost_krw: "", cost_usd: "", annual_count: "5", fte: "0.5",
+    });
+    expect(droppedFields).toEqual([]);
+  });
+
+  it("candidate에 없는 키는 결과에도 없다", () => {
+    const { allowed, droppedFields } = dropUneditableParams("subprocess", { headcount: "3" });
+    expect(allowed).toEqual({});
+    expect(droppedFields).toEqual(["headcount"]);
   });
 });

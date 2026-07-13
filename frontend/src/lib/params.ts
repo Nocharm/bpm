@@ -68,6 +68,30 @@ export function isSpParamField(field: ParamField): field is SpParamField {
   return (SP_PARAM_FIELDS as readonly string[]).includes(field);
 }
 
+/**
+ * 노드 타입이 편집할 수 없는 파라미터 필드를 후보값에서 드롭 — CSV(Task 8)·AI(Task 10) 병합 공용.
+ * subprocess는 annual_count·fte만 통과(나머지 4개는 링크 맵 지정값이라 부모가 못 건드림). 실제 값이
+ * 있던 드롭 필드만 droppedFields에 담아, caller(임포트/제안 병합)가 사용자에게 경고할 수 있게 한다.
+ */
+export function dropUneditableParams(
+  nodeType: string,
+  candidate: Partial<Record<ParamField, string>>,
+): { allowed: Partial<Record<ParamField, string>>; droppedFields: ParamField[] } {
+  const editable = new Set<ParamField>(getEditableParamFields(nodeType));
+  const allowed: Partial<Record<ParamField, string>> = {};
+  const droppedFields: ParamField[] = [];
+  for (const field of PARAM_FIELDS) {
+    const value = candidate[field];
+    if (value === undefined) continue;
+    if (editable.has(field)) {
+      allowed[field] = value;
+    } else if (value !== "") {
+      droppedFields.push(field);
+    }
+  }
+  return { allowed, droppedFields };
+}
+
 /** 서브프로세스 노드가 링크 맵에서 상속하는 회당 4필드의 원천(subprocess_refs 행의 부분집합). */
 export interface InheritedParamSource {
   designated: boolean;

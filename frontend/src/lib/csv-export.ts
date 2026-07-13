@@ -2,7 +2,7 @@
 // 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §3
 import type { Graph, GraphEdge, GraphNode } from "./api";
 
-const HEADER = "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next";
+const HEADER = "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next";
 
 function escapeCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -40,7 +40,7 @@ export function orderNodesByFlow(nodes: GraphNode[], edges: GraphEdge[]): GraphN
   return ordered;
 }
 
-/** Graph → CSV(13컬럼) + 표현 불가 경고. BOM 없음·CRLF 조인 — BOM은 다운로드 시 접두(Task 7). */
+/** Graph → CSV(14컬럼) + 표현 불가 경고. BOM 없음·CRLF 조인 — BOM은 다운로드 시 접두(Task 7). */
 export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string[] } {
   const warnings: string[] = [];
   const nodes = orderNodesByFlow(graph.nodes, graph.edges);
@@ -84,8 +84,8 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     }
     return [
       node.title, node.description, node.assignee, node.department, node.system,
-      node.duration, node.headcount ?? "", node.fte ?? "", node.cost_krw ?? "", node.annual_count ?? "",
-      node.url ?? "", node.url_label ?? "", parts.join(";"),
+      node.duration, node.cost_krw ?? "", node.cost_usd ?? "", node.headcount ?? "",
+      node.annual_count ?? "", node.fte ?? "", node.url ?? "", node.url_label ?? "", parts.join(";"),
     ].map(escapeCell).join(",");
   };
   if (start) {

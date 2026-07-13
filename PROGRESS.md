@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T8: CSV 임포트/익스포트 14컬럼 (worktree-node-params)
+- CSV 헤더를 `Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next` 14컬럼으로 개편(`csv-import.ts`/`csv-export.ts` 대칭). 숫자 셀은 `stripThousands`로 천단위 콤마를 허용, 원·달러 동시 기재 행은 `Row N: fill only one of Cost_KRW / Cost_USD` 에러로 저장 전 차단(백엔드 422 사전 방지). 리뷰 지적 수정: `mergeNode`가 서브프로세스 매칭 행에 duration/cost_krw/cost_usd/headcount(링크 맵 지정값)를 그대로 덮어쓰던 결함 — `lib/params.ts`에 공유 순수 헬퍼 `dropUneditableParams(nodeType, candidate)` 신설(subprocess는 annual_count·fte만 통과), CSV 경로는 드롭 발생 시 기존 warnings 채널로 안내. Task 10(AI 변환단)이 같은 헬퍼를 재사용할 수 있게 시그니처를 공용으로 유지. `buildAiPromptText`의 개명 이전 잔재 컬럼 설명(ETF/Cost/Extra)도 정리. `docs/samples/*.csv` 3종을 새 컬럼으로 재작성(자유텍스트 duration→H.MM 숫자, 파일당 1행 Cost_USD 배타 예시) — 재작성 전 3종 전부 duration 형식 불일치로 임포트 100% 실패였던 선재 결함도 함께 해소. 370 tests green(신규 9), tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T7: SP 노드 부분 편집(연간 건수·FTE) + 인스펙터/요약/비교 반영 (worktree-node-params)
 - Parameters 섹션을 `hasBpmAttributes` 게이트에서 분리해 자체 카드/그룹으로 승격 — start/end 외 모든 타입이 `PARAM_FIELDS` 6행을 렌더한다. subprocess는 회당 4필드가 링크 맵 지정값(라이브 참조)이라 읽기전용 텍스트(`—` 폴백)로, 연간 건수·FTE만 `ParamInput`으로 편집·저장(같은 SP를 쓰는 두 맵이 서로 다른 연간 물량을 가질 수 있음, design 2026-07-13 §3.1). 표시형은 순수 함수 `lib/params.ts`의 `formatParamValue`(duration→1h30m, 비용→₩/$+천단위)로 단일화해 캔버스 칩(`process-node.tsx`)과 인스펙터·요약 모달이 같은 규칙을 쓰고, 상속값 추출은 `getInheritedParams(SubprocessRef)`로 분리(미지정→전부 빈 값). 인스펙터 SP 어트리뷰트 카드에서 파라미터 4행은 제거(중복 표시 방지). 비교 화면 `displayFieldValue`에 비용 천단위 콤마 추가. 361 tests green(신규 7), tsc/lint/build clean.
 
