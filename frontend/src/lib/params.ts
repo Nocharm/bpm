@@ -1,5 +1,6 @@
 // 회당 단가 파라미터 6종 메타 — 필드·순서·라벨·노드 타입별 편집 가능 집합의 단일 소스
 // (design 2026-07-13 §2.1, §3.1)
+import { formatDurationHm, formatThousands } from "./duration";
 import type { MessageKey } from "./i18n-messages";
 
 export const PARAM_FIELDS = [
@@ -42,6 +43,54 @@ export function isCostFieldDisabled(field: ParamField, costKrw: string, costUsd:
   if (field === "cost_krw") return costUsd.trim() !== "";
   if (field === "cost_usd") return costKrw.trim() !== "";
   return false;
+}
+
+/**
+ * 파라미터 표시형(편집 중 아닌 모든 화면) — duration은 1h30m, 비용은 통화기호+천단위 콤마, 나머지는 원문 숫자.
+ * 무효(레거시 자유텍스트)·빈값은 "" — 비용에서 통화기호만 남는 것을 막는다. 캔버스 칩·인스펙터·요약 모달 공용.
+ */
+export function formatParamValue(field: ParamField, raw: string | null | undefined): string {
+  const value = (raw ?? "").trim();
+  if (field === "duration") return formatDurationHm(value);
+  if (field === "cost_krw") {
+    const amount = formatThousands(value);
+    return amount ? `₩${amount}` : "";
+  }
+  if (field === "cost_usd") {
+    const amount = formatThousands(value);
+    return amount ? `$${amount}` : "";
+  }
+  return value;
+}
+
+/** 링크 맵에서 상속되는(=부모 맵에서 편집 불가) 파라미터인지 — 읽기전용 행 렌더 분기용 */
+export function isSpParamField(field: ParamField): field is SpParamField {
+  return (SP_PARAM_FIELDS as readonly string[]).includes(field);
+}
+
+/** 서브프로세스 노드가 링크 맵에서 상속하는 회당 4필드의 원천(subprocess_refs 행의 부분집합). */
+export interface InheritedParamSource {
+  designated: boolean;
+  duration: string | null;
+  cost_krw: string | null;
+  cost_usd: string | null;
+  headcount: string | null;
+}
+
+/**
+ * 링크 맵 지정값 → 서브프로세스 노드의 읽기전용 파라미터 4종. 미지정·참조 미수신이면 전부 "".
+ * 노드 행에 저장하지 않는 라이브 참조라, 부모 맵은 이 값을 편집·저장할 수 없다 (design 2026-07-13 §3.1).
+ */
+export function getInheritedParams(
+  ref: InheritedParamSource | null | undefined,
+): Record<SpParamField, string> {
+  const pick = (value: string | null): string => (ref?.designated ? value ?? "" : "");
+  return {
+    duration: pick(ref?.duration ?? null),
+    cost_krw: pick(ref?.cost_krw ?? null),
+    cost_usd: pick(ref?.cost_usd ?? null),
+    headcount: pick(ref?.headcount ?? null),
+  };
 }
 
 export const PARAMS_COLLAPSED_KEY = "bpm.paramsCollapsed";

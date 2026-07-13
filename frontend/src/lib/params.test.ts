@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { getEditableParamFields, isCostFieldDisabled, PARAM_FIELDS, SP_PARAM_FIELDS } from "./params";
+import {
+  formatParamValue,
+  getEditableParamFields,
+  getInheritedParams,
+  isCostFieldDisabled,
+  PARAM_FIELDS,
+  SP_PARAM_FIELDS,
+} from "./params";
 
 describe("PARAM_FIELDS", () => {
   it("표시 순서는 소요시간 → 비용(원/달러) → 인원 → 연간 건수 → FTE", () => {
@@ -48,5 +55,64 @@ describe("isCostFieldDisabled", () => {
 
   it("비용 아닌 필드는 항상 활성", () => {
     expect(isCostFieldDisabled("duration", "10", "10")).toBe(false);
+  });
+});
+
+describe("formatParamValue", () => {
+  it("duration은 1h30m 표시형", () => {
+    expect(formatParamValue("duration", "1.30")).toBe("1h30m");
+    expect(formatParamValue("duration", "2")).toBe("2h");
+  });
+
+  it("비용은 통화기호 + 천단위 콤마", () => {
+    expect(formatParamValue("cost_krw", "1250000")).toBe("₩1,250,000");
+    expect(formatParamValue("cost_usd", "1200.5")).toBe("$1,200.5");
+  });
+
+  it("나머지 필드는 원문 숫자", () => {
+    expect(formatParamValue("headcount", "3")).toBe("3");
+    expect(formatParamValue("annual_count", "120")).toBe("120");
+    expect(formatParamValue("fte", "0.5")).toBe("0.5");
+  });
+
+  it("빈값·무효값·null은 빈 문자열 — 통화기호만 남지 않음", () => {
+    expect(formatParamValue("cost_krw", "")).toBe("");
+    expect(formatParamValue("cost_krw", "약 100만원")).toBe("");
+    expect(formatParamValue("duration", "half a day")).toBe("");
+    expect(formatParamValue("headcount", null)).toBe("");
+    expect(formatParamValue("fte", undefined)).toBe("");
+  });
+});
+
+describe("getInheritedParams", () => {
+  it("지정된 링크 맵의 회당 4필드를 그대로 상속", () => {
+    expect(
+      getInheritedParams({
+        designated: true,
+        duration: "1.30",
+        cost_krw: "1000",
+        cost_usd: null,
+        headcount: "2",
+      }),
+    ).toEqual({ duration: "1.30", cost_krw: "1000", cost_usd: "", headcount: "2" });
+  });
+
+  it("미지정·참조 없음은 전부 빈 값 — 표시는 호출부가 —로", () => {
+    const empty = { duration: "", cost_krw: "", cost_usd: "", headcount: "" };
+    expect(
+      getInheritedParams({
+        designated: false,
+        duration: "9",
+        cost_krw: "9",
+        cost_usd: "9",
+        headcount: "9",
+      }),
+    ).toEqual(empty);
+    expect(getInheritedParams(undefined)).toEqual(empty);
+    expect(getInheritedParams(null)).toEqual(empty);
+  });
+
+  it("키 집합은 SP_PARAM_FIELDS와 일치", () => {
+    expect(Object.keys(getInheritedParams(null)).sort()).toEqual([...SP_PARAM_FIELDS].sort());
   });
 });

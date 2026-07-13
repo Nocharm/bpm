@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T7: SP 노드 부분 편집(연간 건수·FTE) + 인스펙터/요약/비교 반영 (worktree-node-params)
+- Parameters 섹션을 `hasBpmAttributes` 게이트에서 분리해 자체 카드/그룹으로 승격 — start/end 외 모든 타입이 `PARAM_FIELDS` 6행을 렌더한다. subprocess는 회당 4필드가 링크 맵 지정값(라이브 참조)이라 읽기전용 텍스트(`—` 폴백)로, 연간 건수·FTE만 `ParamInput`으로 편집·저장(같은 SP를 쓰는 두 맵이 서로 다른 연간 물량을 가질 수 있음, design 2026-07-13 §3.1). 표시형은 순수 함수 `lib/params.ts`의 `formatParamValue`(duration→1h30m, 비용→₩/$+천단위)로 단일화해 캔버스 칩(`process-node.tsx`)과 인스펙터·요약 모달이 같은 규칙을 쓰고, 상속값 추출은 `getInheritedParams(SubprocessRef)`로 분리(미지정→전부 빈 값). 인스펙터 SP 어트리뷰트 카드에서 파라미터 4행은 제거(중복 표시 방지). 비교 화면 `displayFieldValue`에 비용 천단위 콤마 추가. 361 tests green(신규 7), tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T6: SP 지정 Σ 4버튼 + placeholder 미리보기 (worktree-node-params)
 - SP 지정 모달에 Σ 버튼을 4행 전부(duration/cost_krw/cost_usd/headcount)로 확장(기존 headcount 제외 조건 삭제), 모달 오픈 시 게시본 그래프를 1회 로드해 4개 Σ 결과를 각 입력의 `placeholder`(회색 이탤릭, `placeholder:italic placeholder:text-ink-tertiary`)로 미리 노출 — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김, 채우려면 Σ 클릭 필요. 비용 배타(`isCostFieldDisabled`)를 Σ 버튼에도 적용. placeholder 표시형 결정은 순수 함수 `lib/param-sum.ts`의 `formatSumPreview(field, raw)`로 분리해 vitest로 검증(jsdom 미설치라 DOM 마운트 테스트는 추가하지 않음 — CLAUDE.md 방침). 패널·인스펙터 카드의 SP 어트리뷰트 표시행도 비용 2필드를 캔버스 칩과 동일 서식(`₩`/`$` + `formatThousands`)으로 통일. 354 tests green(신규 4), tsc/lint/build clean.
 
