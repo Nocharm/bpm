@@ -1,8 +1,10 @@
 // Excel 내보내기 모델 — 서브프로세스 전체 재귀 인라인(조상 검사·행 상한·locked) 순수 로직.
 // exceljs 기록(다운로드)은 별도 모듈(Task 7) — 모델과 분리해 vitest로 검증한다.
-// 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §4
-import type { Graph } from "./api";
+// 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §4,
+//       docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md §5.2
+import type { Graph, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
+import { getInheritedParams } from "./params";
 
 export interface ExcelNodeRow {
   kind: "node";
@@ -13,11 +15,13 @@ export interface ExcelNodeRow {
   assignee: string;
   department: string;
   system: string;
+  // 회당 파라미터 6종 — 표시 순서는 lib/params.ts PARAM_FIELDS와 동일
   duration: string;
-  headcount: string;
-  fte: string;
   cost_krw: string;
+  cost_usd: string;
+  headcount: string;
   annual_count: string;
+  fte: string;
   url: string;
   urlLabel: string;
   groups: string; // 그룹 라벨 ", " 조인
@@ -41,6 +45,23 @@ export interface ExcelModel {
 }
 
 export const EXCEL_MAX_ROWS = 2000;
+
+/**
+ * 노드가 노출하는 회당 4필드(duration/cost_krw/cost_usd/headcount) — 서브프로세스는 자기 행이 아니라
+ * 링크 맵의 sp_* 라이브 참조(g.subprocess_refs)에서 가져온다(캔버스 인스펙터·Σ 합산과 동일 소스,
+ * design 2026-07-13 §3.1). annual_count·fte는 부모 맥락 값이라 노드 행 그대로 별도 취급.
+ */
+function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, "duration" | "cost_krw" | "cost_usd" | "headcount"> {
+  if (node.node_type === "subprocess" && node.linked_map_id !== null) {
+    return getInheritedParams(g.subprocess_refs?.[node.linked_map_id]);
+  }
+  return {
+    duration: node.duration,
+    cost_krw: node.cost_krw ?? "",
+    cost_usd: node.cost_usd ?? "",
+    headcount: node.headcount ?? "",
+  };
+}
 
 export async function buildExcelModel({
   graph,
@@ -101,11 +122,9 @@ export async function buildExcelModel({
         assignee: node.assignee,
         department: node.department,
         system: node.system,
-        duration: node.duration,
-        headcount: node.headcount ?? "",
-        fte: node.fte ?? "",
-        cost_krw: node.cost_krw ?? "",
+        ...getNodeRunParams(g, node),
         annual_count: node.annual_count ?? "",
+        fte: node.fte ?? "",
         url: node.url ?? "",
         urlLabel: node.url_label ?? "",
         groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
@@ -143,18 +162,28 @@ const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
   denied: "(access denied)",
   rowLimit: `(row limit ${EXCEL_MAX_ROWS} reached — output truncated)`,
 };
-const COLUMNS = [
+// 컬럼 순서·서식 단일 소스(design 2026-07-13 §5.2) — numFmt는 셀 인덱스 대신 이 정의에서 파생시켜
+// 컬럼 추가/재배열 시 인덱스가 조용히 어긋나는 사고를 막는다.
+export const COLUMNS = [
   { header: "No", width: 6 }, { header: "Name", width: 32 }, { header: "Type", width: 12 },
   { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Department", width: 18 },
-  { header: "System", width: 14 }, { header: "Duration (h)", width: 12 }, { header: "Headcount", width: 11 },
-  { header: "FTE", width: 9 }, { header: "Cost (KRW)", width: 11 }, { header: "Annual volume", width: 13 },
+  { header: "System", width: 14 },
+  { header: "Duration (h)", width: 12, numFmt: "0.00" }, // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
+  { header: "Cost (KRW)", width: 14, numFmt: "#,##0" },
+  { header: "Cost (USD)", width: 14, numFmt: "#,##0.00" },
+  { header: "Headcount", width: 11, numFmt: "0.00" },
+  { header: "Annual volume", width: 13, numFmt: "#,##0" },
+  { header: "FTE", width: 8, numFmt: "0.00" },
   { header: "URL", width: 24 }, { header: "Groups", width: 18 }, { header: "Next", width: 32 },
-];
+] as const;
 
-/** ExcelModel → .xlsx 파일 다운로드. exceljs는 dynamic import — 정적 import 시 에디터 번들에 항상 섞여든다. */
-export async function downloadExcel(model: ExcelModel, fileName: string): Promise<void> {
-  const { Workbook } = await import("exceljs");
-  const workbook = new Workbook();
+const URL_COLUMN = COLUMNS.findIndex((c) => c.header === "URL") + 1; // 1-based — exceljs getCell 인덱스
+
+/**
+ * ExcelModel → 워크시트 기록(시트 생성·스타일·셀 값). Blob/anchor(브라우저 다운로드)와 분리해
+ * DOM 없이도(vitest) 컬럼 서식·값을 검증할 수 있게 한다.
+ */
+export function writeExcelSheet(workbook: import("exceljs").Workbook, model: ExcelModel): void {
   const sheet = workbook.addWorksheet("Process Map", {
     views: [{ state: "frozen", ySplit: 4 }],
     properties: { outlineLevelRow: 1, defaultRowHeight: 16 },
@@ -184,17 +213,26 @@ export async function downloadExcel(model: ExcelModel, fileName: string): Promis
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
       no, row.title, row.type, row.description, row.assignee, row.department, row.system,
-      num(row.duration), num(row.headcount), num(row.fte), num(row.cost_krw), num(row.annual_count),
+      num(row.duration), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
       "", row.groups, row.next,
     ]);
     r.getCell(2).alignment = { indent: row.depth * 2 };
-    r.getCell(8).numFmt = "0.00"; // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
+    COLUMNS.forEach((c, i) => {
+      if ("numFmt" in c) r.getCell(i + 1).numFmt = c.numFmt;
+    });
     if (row.url) {
-      r.getCell(13).value = { text: row.urlLabel || row.url, hyperlink: row.url };
-      r.getCell(13).font = { color: { argb: "FF6A41FF" }, underline: true };
+      r.getCell(URL_COLUMN).value = { text: row.urlLabel || row.url, hyperlink: row.url };
+      r.getCell(URL_COLUMN).font = { color: { argb: "FF6A41FF" }, underline: true };
     }
     r.outlineLevel = Math.min(row.depth, 7); // Excel outline 한계 7
   }
+}
+
+/** ExcelModel → .xlsx 파일 다운로드. exceljs는 dynamic import — 정적 import 시 에디터 번들에 항상 섞여든다. */
+export async function downloadExcel(model: ExcelModel, fileName: string): Promise<void> {
+  const { Workbook } = await import("exceljs");
+  const workbook = new Workbook();
+  writeExcelSheet(workbook, model);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {

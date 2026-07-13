@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T9: Excel 내보내기 컬럼·서식 (worktree-node-params)
+- `excel-export.ts` 컬럼을 `No,Name,Type,Description,Assignee,Department,System,Duration (h),Cost (KRW),Cost (USD),Headcount,Annual volume,FTE,URL,Groups,Next` 16컬럼으로 개편, numFmt 6종(`0.00`/`#,##0`/`#,##0.00`)을 `COLUMNS` 정의에서 파생시켜(`"numFmt" in c` 순회) 셀 인덱스 하드코딩을 없앰(컬럼 재배열 시 인덱스 어긋남 방지). 서브프로세스 행의 duration/cost_krw/cost_usd/headcount는 노드 자신의 값이 아니라 링크 맵의 sp_* 라이브 참조(`graph.subprocess_refs`, `getInheritedParams` 재사용 — 캔버스 인스펙터·Σ 합산과 동일 소스)에서 가져오도록 수정, annual_count·fte는 노드 행 그대로. 시트 기록 로직을 `writeExcelSheet(workbook, model)`로 분리해 Blob/anchor(DOM) 없이도 vitest로 numFmt·빈 셀 유지를 검증(exceljs는 여전히 `downloadExcel`에서만 dynamic import — 번들 분리 유지). 377 tests green(신규 7), tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T8: CSV 임포트/익스포트 14컬럼 (worktree-node-params)
 - CSV 헤더를 `Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next` 14컬럼으로 개편(`csv-import.ts`/`csv-export.ts` 대칭). 숫자 셀은 `stripThousands`로 천단위 콤마를 허용, 원·달러 동시 기재 행은 `Row N: fill only one of Cost_KRW / Cost_USD` 에러로 저장 전 차단(백엔드 422 사전 방지). 리뷰 지적 수정: `mergeNode`가 서브프로세스 매칭 행에 duration/cost_krw/cost_usd/headcount(링크 맵 지정값)를 그대로 덮어쓰던 결함 — `lib/params.ts`에 공유 순수 헬퍼 `dropUneditableParams(nodeType, candidate)` 신설(subprocess는 annual_count·fte만 통과), CSV 경로는 드롭 발생 시 기존 warnings 채널로 안내. Task 10(AI 변환단)이 같은 헬퍼를 재사용할 수 있게 시그니처를 공용으로 유지. `buildAiPromptText`의 개명 이전 잔재 컬럼 설명(ETF/Cost/Extra)도 정리. `docs/samples/*.csv` 3종을 새 컬럼으로 재작성(자유텍스트 duration→H.MM 숫자, 파일당 1행 Cost_USD 배타 예시) — 재작성 전 3종 전부 duration 형식 불일치로 임포트 100% 실패였던 선재 결함도 함께 해소. 370 tests green(신규 9), tsc/lint/build clean.
 
