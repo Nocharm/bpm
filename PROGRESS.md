@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 노드 파라미터 재정의 T11: 시드·문서 갱신 + 전체 게이트 (worktree-node-params)
+- `seed_org_demo.py` 데모값을 신규 6필드 모델에 맞게 갱신 — SP 지정 시드(`DESIGNATED_SPECS`)의 옛 자유텍스트 duration("3 days" 등)이 `normalize_duration` 무효 판정으로 응답 경계에서 조용히 소거되던 걸 발견해 H.MM 유효값(72/24/48/4)으로 교체하고 `sp_cost_krw`/`sp_headcount`도 채움, Vendor Management 맵(idx 11) 노드는 `cost_usd`만 채워 통화 배타를 실측 시연. `docs/db-seed.md`에 컬럼 개명(구 `etf`/`cost`/`extra`, SP `sp_etf`/`sp_cost`/`sp_extra` 폐기)으로 인한 DB 재생성 필수 경고 추가, `CLAUDE.md` 노드 속성 체크리스트·숫자 파라미터 계약 문단을 신규 6필드 + 비용 배타(422) + SP 편집 제한(3표면 강제) 기준으로 갱신. 전 레포 구 명칭 스윕 — 실사용 코드/문서 잔재 0건(테스트·주석의 매치는 전부 의도된 회귀 pin/폐기 서술). 게이트 전부 그린: pytest 607, vitest 395, ruff/tsc/lint/build clean, reset_db 무오류.
+
 ## 2026-07-13 — 리뷰 픽스: resolveAiParamPatch 무효 에코가 기존값을 지우던 결함 (worktree-node-params)
 - `resolveAiParamPatch`(`lib/params.ts`)가 무효 에코(예: duration "2일", cost_krw "abc")를 `""`로 정규화해 patch에 그대로 담던 결함 수정 — page.tsx ops `set_attr`가 patch를 `node.data`에 직접 스프레드하므로 기존 값이 조용히 지워졌다(graph-merge 경로는 `mergeNode`의 `pick`이 `""`를 "건드리지 않음"으로 해석해 이미 안전했음). 정규화 실패 시 이제 키 자체를 결과에서 생략(명시적 `""` 에코는 여전히 "지움"으로 patch에 남음). 같은 원리로 `dropConflictingCurrency`도 통화 배타 위반 시 `cost_krw`/`cost_usd`를 `""`로 채우는 대신 키를 생략하도록 변경(csv-import.ts 호출부는 `?? ""`로 받아 동작 불변, resolveAiParamPatch 호출부는 이제 두 키가 patch에서 빠져 기존 값을 보존). `params.test.ts`에 무효 에코/명시적 빈값/통화충돌/콤마 에코/SP 게이트 6종 신규 pin, `csv-import.test.ts`에 병합 경로가 같은 위반 케이스에서 기존값을 지키는지 확인하는 pin 3종 추가(두 AI 경로 드리프트 방지). 395 tests green(389→395), tsc/lint/build clean.
 

@@ -2,6 +2,16 @@
 
 로컬/서버 DB를 비우고 데모 데이터를 채우는 방법. 데모·QA·화면 검증용. **서비스 미런칭 상태라 리셋은 자유롭게 가능** — 단 운영 데이터가 생긴 뒤에는 금지(아래 ⚠️).
 
+> ⚠️ **회당 파라미터 개명(2026-07-13) — DB 재생성 필수.** `nodes`의 `etf`/`cost`/`extra`, `process_maps`의 `sp_etf`/`sp_cost`/`sp_extra` 컬럼이 폐기되고 `cost_krw`/`cost_usd`/`annual_count`/`fte`(+SP는 `sp_cost_krw`/`sp_cost_usd`)로 교체됐다. `create_all`은 컬럼을 ALTER하지 않으므로 **기존 DB는 반드시 아래 한 줄 리셋으로 재생성**할 것 — 구 컬럼의 값은 이관되지 않는다(운영 미배포라 이관 스크립트 없음).
+> ```bash
+> # === bash (macOS/Linux) ===
+> cd backend && .venv/bin/python -m scripts.reset_db
+> ```
+> ```powershell
+> # === PowerShell (Windows) ===
+> cd backend; .venv\Scripts\python -m scripts.reset_db
+> ```
+
 진입점: **`backend/scripts/reset_db.py`** — 단일 명령으로 전체 리셋 + 종합 데모 시드(`scripts/seed_org_demo.py`).
 
 ## 한 줄 리셋
