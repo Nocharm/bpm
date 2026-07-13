@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  coerceAiNewNodeType,
   dropConflictingCurrency,
   dropUneditableParams,
   formatParamValue,
@@ -9,6 +10,7 @@ import {
   isCostFieldDisabled,
   PARAM_FIELDS,
   resolveAiParamPatch,
+  resolveCostFields,
   SP_PARAM_FIELDS,
 } from "./params";
 
@@ -58,6 +60,13 @@ describe("isCostFieldDisabled", () => {
 
   it("비용 아닌 필드는 항상 활성", () => {
     expect(isCostFieldDisabled("duration", "10", "10")).toBe(false);
+  });
+
+  // finding 1 — 편도 pick 버그가 두 통화를 동시에 채운 상태를 만들면, 종전 로직은 양쪽 다
+  // disabled(true)라 사용자가 어느 쪽도 지울 수 없는 막다른 상태였다. 탈출구로 both-filled는 활성.
+  it("양쪽 다 값이 있으면(레거시/병합 잔존) 잠그지 않는다 — 지울 수 있는 탈출구", () => {
+    expect(isCostFieldDisabled("cost_krw", "10", "20")).toBe(false);
+    expect(isCostFieldDisabled("cost_usd", "10", "20")).toBe(false);
   });
 });
 
@@ -190,8 +199,9 @@ describe("resolveAiParamPatch", () => {
     const patch = resolveAiParamPatch("process", {
       duration: "1.30", cost_krw: "1,000", headcount: "숫자아님", annual_count: "50", fte: "0.5",
     });
+    // cost_krw가 값으로 설정되면 반대쪽 cost_usd는 명시적 ""로 함께 담긴다(통화 전환 완결, 아래 describe 참고)
     expect(patch).toEqual({
-      duration: "1.30", cost_krw: "1000", annual_count: "50", fte: "0.5",
+      duration: "1.30", cost_krw: "1000", cost_usd: "", annual_count: "50", fte: "0.5",
     });
     expect("headcount" in patch).toBe(false);
   });
@@ -234,7 +244,7 @@ describe("resolveAiParamPatch", () => {
 
   it("천단위 콤마 에코('1,250,000')는 콤마를 벗겨 patch에 담는다", () => {
     const patch = resolveAiParamPatch("process", { cost_krw: "1,250,000" });
-    expect(patch).toEqual({ cost_krw: "1250000" });
+    expect(patch).toEqual({ cost_krw: "1250000", cost_usd: "" });
   });
 
   it("서브프로세스는 annual_count·fte만 patch에 담긴다(나머지는 값이 있어도 생략)", () => {
@@ -242,5 +252,73 @@ describe("resolveAiParamPatch", () => {
       duration: "1.30", cost_krw: "1000", headcount: "3", annual_count: "50", fte: "0.5",
     });
     expect(Object.keys(patch).sort()).toEqual(["annual_count", "fte"]);
+  });
+});
+
+// finding 1(critical) — 편도 pick은 candidate 자기 자신 안에서만 배타를 체크해 반대쪽 "기존" 값이
+// 그대로 남는다(예: 기존 cost_usd="20"에 cost_krw="50000"을 patch로 얹으면 두 통화가 동시에 채워진
+// 채 node.data에 스프레드된다). resolveAiParamPatch는 patch 자체(반대쪽 "기존값"은 모른다)가 통화
+// 전환을 완결하도록 반대쪽에 명시적 ""를 채워 넣는지 검증한다.
+describe("resolveAiParamPatch — 통화 전환 시 반대쪽을 명시적으로 지운다 (finding 1)", () => {
+  it("cost_krw만 값으로 설정하면 patch에 cost_usd: ''가 함께 담긴다", () => {
+    const patch = resolveAiParamPatch("process", { cost_krw: "50000" });
+    expect(patch).toEqual({ cost_krw: "50000", cost_usd: "" });
+  });
+
+  it("cost_usd만 값으로 설정하면 patch에 cost_krw: ''가 함께 담긴다", () => {
+    const patch = resolveAiParamPatch("process", { cost_usd: "20" });
+    expect(patch).toEqual({ cost_usd: "20", cost_krw: "" });
+  });
+
+  it("둘 다 건드리지 않으면(부재) 반대쪽 소거도 없다 — 무효 에코 보존 규칙과 충돌하지 않는다", () => {
+    const patch = resolveAiParamPatch("process", { headcount: "3" });
+    expect("cost_krw" in patch).toBe(false);
+    expect("cost_usd" in patch).toBe(false);
+  });
+
+  it("명시적으로 둘 다 지우면('') 반대쪽 소거 로직이 추가로 끼어들지 않는다", () => {
+    const patch = resolveAiParamPatch("process", { cost_krw: "", cost_usd: "" });
+    expect(patch).toEqual({ cost_krw: "", cost_usd: "" });
+  });
+});
+
+// finding 1 — dropUneditableParams 게이트가 반대쪽 소거 이후에도 SP 노드에서 cost 필드를 전부
+// 걸러내는지(=clearCounterpartCurrency가 SP 게이트를 우회하는 값을 만들지 않는지) 확인.
+describe("resolveAiParamPatch — 서브프로세스는 반대쪽 소거가 있어도 cost 필드가 patch에 남지 않는다", () => {
+  it("cost_krw만 온 서브프로세스는 annual_count/fte만 patch에 남는다", () => {
+    const patch = resolveAiParamPatch("subprocess", { cost_krw: "999", fte: "0.5" });
+    expect(patch).toEqual({ fte: "0.5" });
+  });
+});
+
+// finding 1(critical) — csv-import.ts mergeNode 전용 통화 병합. 편도 pick(next===""?existing:next)을
+// cost_krw/cost_usd에 그대로 쓰면 "KRW→USD 전환" CSV 행이 기존 KRW를 안 지워 두 통화가 동시에 남는다.
+describe("resolveCostFields", () => {
+  it("next가 KRW만 채우면 반대쪽(USD)은 기존값과 무관하게 비운다(통화 전환은 완전 교체)", () => {
+    expect(resolveCostFields("50000", "", "", "20")).toEqual({ cost_krw: "50000", cost_usd: "" });
+  });
+
+  it("next가 USD만 채우면 반대쪽(KRW)을 비운다", () => {
+    expect(resolveCostFields("", "20", "5000", "")).toEqual({ cost_krw: "", cost_usd: "20" });
+  });
+
+  it("next가 둘 다 비어있으면(건드리지 않음) 기존 값을 그대로 지킨다", () => {
+    expect(resolveCostFields("", "", "5000", "20")).toEqual({ cost_krw: "5000", cost_usd: "20" });
+  });
+});
+
+// finding 2(minor) — AiNode.node_type은 자유 문자열이라 AI가 링크 없이 "subprocess"를 보낼 수 있다.
+// 신규 노드 변환 경로(page.tsx aiNodeToGraphNode·csv-import.ts buildGraphFromAiProposal)는 이
+// 함수로 링크 없는 subprocess를 process로 강등해야 대칭이 유지된다.
+describe("coerceAiNewNodeType", () => {
+  it("링크 없는 신규 노드의 subprocess 타입은 process로 강등한다", () => {
+    expect(coerceAiNewNodeType("subprocess")).toBe("process");
+  });
+
+  it("subprocess가 아닌 타입은 그대로 통과시킨다", () => {
+    expect(coerceAiNewNodeType("process")).toBe("process");
+    expect(coerceAiNewNodeType("decision")).toBe("decision");
+    expect(coerceAiNewNodeType("start")).toBe("start");
+    expect(coerceAiNewNodeType("end")).toBe("end");
   });
 });

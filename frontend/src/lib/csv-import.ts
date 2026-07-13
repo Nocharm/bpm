@@ -5,7 +5,13 @@ import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { genId } from "./id";
-import { dropConflictingCurrency, dropUneditableParams, type ParamField } from "./params";
+import {
+  coerceAiNewNodeType,
+  dropConflictingCurrency,
+  dropUneditableParams,
+  type ParamField,
+  resolveCostFields,
+} from "./params";
 
 export interface CsvRecord {
   cells: string[];
@@ -202,6 +208,9 @@ const mergeNode = (
     annual_count: next.annual_count ?? "",
     fte: next.fte ?? "",
   });
+  // 통화 전환은 편도 pick이 아니라 반대쪽을 함께 비우는 병합 — resolveCostFields(finding: 한쪽만
+  // pick하면 기존 반대쪽 통화값이 안 지워져 두 통화가 동시에 채워진 채로 저장 시도돼 422 루프에 빠진다)
+  const cost = resolveCostFields(allowed.cost_krw ?? "", allowed.cost_usd ?? "", existing.cost_krw ?? "", existing.cost_usd ?? "");
   return {
     node: {
       ...existing,
@@ -212,8 +221,8 @@ const mergeNode = (
       department: pick(next.department, existing.department),
       system: pick(next.system, existing.system),
       duration: pick(allowed.duration ?? "", existing.duration),
-      cost_krw: pick(allowed.cost_krw ?? "", existing.cost_krw ?? ""),
-      cost_usd: pick(allowed.cost_usd ?? "", existing.cost_usd ?? ""),
+      cost_krw: cost.cost_krw,
+      cost_usd: cost.cost_usd,
       headcount: pick(allowed.headcount ?? "", existing.headcount ?? ""),
       annual_count: pick(allowed.annual_count ?? "", existing.annual_count ?? ""),
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
@@ -738,7 +747,9 @@ export function buildGraphFromAiProposal(
       ...NODE_DEFAULTS,
       id,
       title,
-      node_type: node.node_type,
+      // 링크 없는 subprocess는 process로 강등(coerceAiNewNodeType) — 신규 노드도, 아직 링크가 없는
+      // 매칭 노드도 이 candidate.node_type을 그대로 쓰므로 한 곳에서 막으면 두 경로가 대칭 유지된다.
+      node_type: coerceAiNewNodeType(node.node_type),
       description: node.description,
       assignee: attr?.assignee ?? "",
       department: attr?.department ?? "",

@@ -3,18 +3,22 @@
 // design 2026-07-13 §4.
 import type { Graph } from "./api";
 import { DURATION_PATTERN, formatDurationHm, formatThousands, NUMERIC_PATTERN, normalizeDuration } from "./duration";
-import type { SpParamField } from "./params";
+import { getInheritedParams, type SpParamField } from "./params";
 
 /**
  * 합산 기여값 — SP 노드는 링크 맵 지정값. includeSubprocess=false면 SP 노드를 건너뛴다
  * (headcount 평균은 SP를 분자·분모 어디에도 넣지 않는다 — 하위 맵 값의 이중 반영 방지).
+ * getInheritedParams로 designated 게이트를 거친다 — 지정 해제(undesignate_subprocess는
+ * sp_designated_at만 null화하고 sp_duration 등 행 값은 남겨둔다) 후에도 인스펙터·칩은 "—"인데
+ * Σ만 남은 값을 합산하는 불일치(finding)를 막는다. 인스펙터가 쓰는 getInheritedParams와 같은
+ * 소스라 두 규칙이 어긋날 수 없다.
  */
 function collectValues(graph: Graph, field: SpParamField, includeSubprocess: boolean): string[] {
   const values: string[] = [];
   for (const node of graph.nodes) {
     if (node.node_type === "subprocess" && node.linked_map_id !== null) {
       if (!includeSubprocess) continue;
-      const raw = graph.subprocess_refs?.[node.linked_map_id]?.[field] ?? "";
+      const raw = getInheritedParams(graph.subprocess_refs?.[node.linked_map_id])[field];
       if (raw !== "") values.push(raw);
       continue;
     }

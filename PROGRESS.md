@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-07-13 — 최종 whole-branch 리뷰 픽스: 통화 편도 pick·링크 없는 AI subprocess·Σ designated 게이트 (worktree-node-params)
+- **[Critical]** `mergeNode`(csv-import.ts)·`resolveAiParamPatch`(params.ts)가 통화 배타를 candidate 자기 안에서만 체크해, 한쪽 통화만 채운 CSV 행/AI patch가 반대쪽 "기존" 통화값을 못 지워 두 통화가 동시에 저장되는 결함(422 루프·`isCostFieldDisabled`가 양쪽을 동시 잠가 탈출구 없음) 수정. `resolveCostFields`(mergeNode용, next/existing 병합)·`clearCounterpartCurrency`(resolveAiParamPatch용, patch에 반대쪽 `""` 추가) 신설, `isCostFieldDisabled`는 둘 다 값이 있으면 잠그지 않도록 탈출구 추가.
+- **[Minor]** `AiNode.node_type`이 자유 문자열이라 AI가 링크 없는 `"subprocess"` 노드를 신규 생성할 수 있던 결함 — `coerceAiNewNodeType`(params.ts) 신설, `aiNodeToGraphNode`(page.tsx)·`buildGraphFromAiProposal`의 신규 노드 후보 생성 지점 2곳에서 링크 없는 subprocess를 process로 강등.
+- **[Minor]** `param-sum.ts`의 `collectValues`가 `subprocess_refs`를 `designated` 게이트 없이 읽어, 지정 해제(`undesignate_subprocess`는 `sp_designated_at`만 null화하고 행 값은 남김) 후에도 Σ가 남은 값을 합산하던 불일치 — 인스펙터와 동일한 `getInheritedParams`로 소스 통일.
+- **[Minor, comment only]** `AiNodeAttributes`(schemas.py) 독스트링이 "NodeIn과 동일 제약"이라 오해를 유발 — 실제로는 숫자 정규화기가 없고 duration·통화 배타만 검증함을 명시, 최종 정규화는 PUT /graph의 NodeIn에서 일어남을 기록. `csv-export.ts`에 서브프로세스 자기값 vs excel-export.ts 상속값 의도적 차이를 설명하는 주석 추가.
+- TDD로 진행(신규 테스트 15종 먼저 추가 → 소스 stash로 red 확인 → 소스 복원 후 green). 게이트 전부 그린: pytest 607, vitest 413(395→413, 신규 18), ruff/tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T11: 시드·문서 갱신 + 전체 게이트 (worktree-node-params)
 - `seed_org_demo.py` 데모값을 신규 6필드 모델에 맞게 갱신 — SP 지정 시드(`DESIGNATED_SPECS`)의 옛 자유텍스트 duration("3 days" 등)이 `normalize_duration` 무효 판정으로 응답 경계에서 조용히 소거되던 걸 발견해 H.MM 유효값(72/24/48/4)으로 교체하고 `sp_cost_krw`/`sp_headcount`도 채움, Vendor Management 맵(idx 11) 노드는 `cost_usd`만 채워 통화 배타를 실측 시연. `docs/db-seed.md`에 컬럼 개명(구 `etf`/`cost`/`extra`, SP `sp_etf`/`sp_cost`/`sp_extra` 폐기)으로 인한 DB 재생성 필수 경고 추가, `CLAUDE.md` 노드 속성 체크리스트·숫자 파라미터 계약 문단을 신규 6필드 + 비용 배타(422) + SP 편집 제한(3표면 강제) 기준으로 갱신. 전 레포 구 명칭 스윕 — 실사용 코드/문서 잔재 0건(테스트·주석의 매치는 전부 의도된 회귀 pin/폐기 서술). 게이트 전부 그린: pytest 607, vitest 395, ruff/tsc/lint/build clean, reset_db 무오류.
 

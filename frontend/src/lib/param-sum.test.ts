@@ -106,6 +106,19 @@ describe("sumParamField", () => {
     expect(sumParamField(g, "cost_krw")).toBe("500");
   });
 
+  // finding 3(minor) — undesignate_subprocess(백엔드)는 sp_designated_at만 null화하고 sp_duration
+  // 등 행 값은 지우지 않는다. 인스펙터/칩은 getInheritedParams로 designated를 게이트해 "—"를 보여
+  // 주지만, 과거 collectValues는 이 게이트 없이 subprocess_refs 값을 그대로 읽어 Σ만 남은 값을
+  // 합산했다 — 화면 곳곳이 "—"인데 합계만 예전 값을 반영하는 불일치.
+  it("designated=false(지정 해제)면 남은 sp값이 있어도 Σ에 기여하지 않는다", () => {
+    const g = makeGraph(
+      [node("a", { duration: "1" }), node("s", { node_type: "subprocess", linked_map_id: 7 })],
+      { 7: spRef({ designated: false, duration: "0.30", cost_krw: "500" }) },
+    );
+    expect(sumParamField(g, "duration")).toBe("1"); // SP 기여 없음 — 일반 노드 "a"만
+    expect(sumParamField(g, "cost_krw")).toBe("");  // 일반 노드 없음 + SP 지정 해제로 기여 0개
+  });
+
   it("기여값이 없으면 빈 문자열 — 0과 구분", () => {
     const g = makeGraph([{ id: "a", headcount: "" }]);
     expect(sumParamField(g, "headcount")).toBe("");

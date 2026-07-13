@@ -82,6 +82,10 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     if (node.node_type === "decision" && parts.length < 2) {
       warnings.push(`Decision "${node.title}" has fewer than 2 branches — re-import will infer process`);
     }
+    // 서브프로세스 노드는 자기 행의 duration/cost_*/headcount(보통 빈값)를 쓴다 — 링크 맵의
+    // 상속값(excel-export.ts는 getInheritedParams로 이 값을 씀)을 쓰지 않는 것은 의도적 차이다.
+    // CSV는 왕복(export→import) 포맷이라, 상속값을 쓰면 재임포트 시 "링크 맵 지정값이라 무시됨"
+    // drop-warning이 매번 뜬다(mergeNode의 dropUneditableParams). Excel은 읽기전용 리포트라 무관.
     return [
       node.title, node.description, node.assignee, node.department, node.system,
       node.duration, node.cost_krw ?? "", node.cost_usd ?? "", node.headcount ?? "",

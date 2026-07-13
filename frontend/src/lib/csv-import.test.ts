@@ -547,6 +547,42 @@ describe("buildGraphFromCsv — 머지", () => {
   });
 });
 
+// finding 1(critical) — mergeNode(csv-import.ts)의 통화 배타는 과거 candidate 자기 안에서만 체크됐다.
+// 편도 pick(next===""?existing:next)을 cost_krw/cost_usd에 그대로 쓰면, 기존 cost_usd="20"에
+// CSV가 Cost_KRW=50000만 채운 행이 반대쪽(cost_usd)을 못 지워 두 통화가 동시에 저장 시도된다
+// (백엔드 _assert_single_currency가 422 — 사용자는 어느 노드/필드인지 못 봄).
+describe("buildGraphFromCsv — 통화 전환은 반대쪽 기존값을 지운다 (finding 1)", () => {
+  const H_COST = "Name,Cost_KRW,Cost_USD";
+
+  it("Cost_KRW만 채운 행은 기존 Cost_USD를 지운다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], cost_usd: "20" };
+    const o = mergeOf(`${H_COST}\nReview request,50000,\n`, base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.cost_krw).toBe("50000");
+    expect(node.cost_usd).toBe("");
+  });
+
+  it("Cost_USD만 채운 행은 기존 Cost_KRW를 지운다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], cost_krw: "5000" };
+    const o = mergeOf(`${H_COST}\nReview request,,20\n`, base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.cost_usd).toBe("20");
+    expect(node.cost_krw).toBe("");
+  });
+
+  it("둘 다 빈 셀이면(건드리지 않음) 기존 통화값을 그대로 지킨다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], cost_usd: "20" };
+    const o = mergeOf(`${H_COST}\nReview request,,\n`, base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.cost_usd).toBe("20");
+    expect(node.cost_krw).toBe("");
+  });
+});
+
 describe("withKeptNodes", () => {
   it("소멸 노드를 엣지 없이 되돌리고 sort_order를 뒤에 붙인다", () => {
     const o = mergeOf(`${H9}\nSign contract,,,,,,,,\n`);
@@ -870,5 +906,43 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
       { base: base([existing]) },
     );
     expect(valid.graph?.nodes.find((n) => n.id === "n1")?.cost_krw).toBe("1250000");
+  });
+
+  // finding 1(critical) — buildGraphFromAiProposal도 mergeNode를 거치므로 CSV와 같은 통화 전환
+  // 버그를 공유한다: AI가 cost_krw만 채우면 기존 cost_usd가 반대쪽에 그대로 남아 두 통화가
+  // 동시에 채워진 채 저장 시도된다.
+  it("AI가 한쪽 통화만 채우면 기존 반대쪽 통화값을 지운다(통화 전환, finding 1)", () => {
+    const existing = baseNode("n1", "검토", { cost_usd: "20" });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "검토", "process", { cost_krw: "50000" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(node?.cost_krw).toBe("50000");
+    expect(node?.cost_usd).toBe("");
+  });
+
+  // finding 2(minor) — AiNode.node_type은 자유 문자열이라 AI가 링크 없이 "subprocess"를 보낼 수
+  // 있다. 신규 노드는 linked_map_id가 항상 null이라, 강등 없이는 칩/인스펙터엔 값이 안 보이는
+  // 죽은 노드가 CSV export·비교 diff엔 값이 새는 채로 남는다.
+  it("AI가 링크 없는 신규 노드에 subprocess 타입을 보내면 process로 강등한다 (finding 2)", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "미러 노드", "subprocess")], edges: [], groups: [] },
+      {},
+    );
+    const node = outcome.graph?.nodes.find((n) => n.title === "미러 노드");
+    expect(node?.node_type).toBe("process");
+    expect(node?.linked_map_id).toBeNull();
+  });
+
+  it("이미 링크된 서브프로세스 매칭 노드는 강등 대상이 아니다 (node_type/링크 보존, 회귀)", () => {
+    const sub = baseNode("s1", "발주 하위", { node_type: "subprocess", linked_map_id: 7 });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "발주 하위", "subprocess")], edges: [], groups: [] },
+      { base: base([sub]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "s1");
+    expect(node?.node_type).toBe("subprocess");
+    expect(node?.linked_map_id).toBe(7);
   });
 });

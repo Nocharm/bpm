@@ -200,6 +200,7 @@ import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
 import {
+  coerceAiNewNodeType,
   dropConflictingCurrency,
   formatParamValue,
   getEditableParamFields,
@@ -587,7 +588,9 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     id,
     title: node.title,
     description: node.description,
-    node_type: node.node_type,
+    // 링크 없는 subprocess는 process로 강등 — linked_map_id는 바로 아래서 null 고정이라
+    // node_type만 subprocess면 칩/인스펙터에 값이 렌더되지 않는 죽은 상태가 된다(finding)
+    node_type: coerceAiNewNodeType(node.node_type),
     color: attr?.color ?? "",
     assignee: attr?.assignee ?? "",
     department: attr?.department ?? "",

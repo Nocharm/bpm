@@ -1112,7 +1112,13 @@ class AiChatMessagesOut(BaseModel):
 
 
 class AiNodeAttributes(BaseModel):
-    """노드 비즈니스 메타 (선택) — NodeIn과 동일 제약. AI 생성/제안에 실어 보냄 (Phase 2).
+    """노드 비즈니스 메타 (선택) — NodeIn보다 느슨한 제약. AI 생성/제안에 실어 보냄 (Phase 2).
+
+    실제로 검증하는 것은 max_length·duration 정규화(_normalize_duration)·통화 배타
+    (_check_single_currency)뿐이다. cost_krw/cost_usd/headcount/annual_count/fte는 숫자 형식
+    정규화기가 없다(NodeIn._normalize_numeric_params와 달리) — 최종 정규화·소거는 프론트가
+    변환해 보내는 PUT /graph의 NodeIn 검증에서 일어난다(finding: 과거 주석이 "NodeIn과 동일
+    제약"이라 적어 이 클래스만으로 숫자 검증이 끝난다고 오해할 수 있었다).
 
     부분 갱신 시맨틱(증분 편집): None(생략)=기존 값 유지, ""=지움, 값=설정.
     graph 생성/ops add에서는 None을 빈값으로 취급한다(프론트 aiNodeToGraphNode).
@@ -1122,7 +1128,8 @@ class AiNodeAttributes(BaseModel):
     department: str | None = Field(default=None, max_length=100)
     system: str | None = Field(default=None, max_length=100)
     duration: str | None = Field(default=None, max_length=50)
-    # 회당 단가 파라미터 — NodeIn과 동일 제약. None=유지, ""=삭제 (design 2026-07-13 §6)
+    # 회당 단가 파라미터 — 길이·통화 배타만 여기서 검증(숫자 형식 정규화는 없음). None=유지, ""=삭제
+    # (design 2026-07-13 §6). 숫자 형식 정규화는 PUT /graph의 NodeIn._normalize_numeric_params에서.
     cost_krw: str | None = Field(default=None, max_length=50)
     cost_usd: str | None = Field(default=None, max_length=50)
     headcount: str | None = Field(default=None, max_length=50)

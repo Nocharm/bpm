@@ -38,8 +38,13 @@ export function getEditableParamFields(nodeType: string): readonly ParamField[] 
   return PARAM_FIELDS;
 }
 
-/** 비용 배타 — 한쪽 비용에 값이 있으면 반대쪽 입력은 비활성 (design 2026-07-13 §3.2) */
+/**
+ * 비용 배타 — 한쪽 비용에 값이 있으면 반대쪽 입력은 비활성 (design 2026-07-13 §3.2).
+ * 단, 둘 다 값이 있는 상태(레거시 행·CSV/AI 병합 이전 데이터 등)는 잠그지 않는다 — 잠그면
+ * 어느 쪽도 지울 수 없는 막다른 상태가 된다(finding: 병합 경로가 반대쪽을 못 지우면 도달 가능).
+ */
 export function isCostFieldDisabled(field: ParamField, costKrw: string, costUsd: string): boolean {
+  if (costKrw.trim() !== "" && costUsd.trim() !== "") return false;
   if (field === "cost_krw") return costUsd.trim() !== "";
   if (field === "cost_usd") return costKrw.trim() !== "";
   return false;
@@ -111,6 +116,37 @@ export function dropConflictingCurrency(
   return { values: candidate, conflict: false };
 }
 
+/**
+ * 통화 병합 — 후보(next)가 한쪽에 값을 채우면 통화 전환으로 보고 반대쪽을 명시적으로 비운다.
+ * 후보가 둘 다 비어있으면(건드리지 않음) 기존 값을 그대로 지킨다. csv-import.ts mergeNode 전용
+ * (finding: 필드별 독립 pick은 KRW→USD 전환 시 기존 USD가 안 지워져 두 통화가 동시에 남는다 —
+ * 백엔드 422 또는 SP set_attr 자동저장 루프로 이어진다). next는 이미 dropUneditableParams를
+ * 거친 값이라 둘 다 non-empty로 들어오지 않는다(CSV 행 검증·dropConflictingCurrency가 상류에서 보장).
+ */
+export function resolveCostFields(
+  nextKrw: string,
+  nextUsd: string,
+  existingKrw: string,
+  existingUsd: string,
+): { cost_krw: string; cost_usd: string } {
+  if (nextKrw !== "") return { cost_krw: nextKrw, cost_usd: "" };
+  if (nextUsd !== "") return { cost_krw: "", cost_usd: nextUsd };
+  return { cost_krw: existingKrw, cost_usd: existingUsd };
+}
+
+/**
+ * 패치에 한쪽 통화가 값으로 설정되면 반대쪽을 ""로 추가 — 스프레드 대상(node.data)에 반대쪽
+ * 값이 남지 않게 한다. 둘 다 손대지 않았으면(키 부재) 그대로 둔다. resolveAiParamPatch 전용
+ * (mergeNode와 달리 여기는 기존값을 모르는 "패치"라 반대쪽을 지우려면 ""를 명시해야 한다).
+ */
+function clearCounterpartCurrency(
+  patch: Partial<Record<ParamField, string>>,
+): Partial<Record<ParamField, string>> {
+  if (patch.cost_krw !== undefined && patch.cost_krw !== "") return { ...patch, cost_usd: "" };
+  if (patch.cost_usd !== undefined && patch.cost_usd !== "") return { ...patch, cost_krw: "" };
+  return patch;
+}
+
 /** AI ops set_attr가 보내는 부분 갱신 후보(파라미터 6종만) — 나머지 AiNodeAttributes 필드는 무관. */
 export interface AiParamPatchInput {
   duration?: string | null;
@@ -123,13 +159,16 @@ export interface AiParamPatchInput {
 
 /**
  * AI ops set_attr의 파라미터 부분 갱신 → 실제 반영할 패치. 정규화(무효 에코는 키 생략) → 통화 배타
- * 드롭 → 노드 타입별 편집 가능 필드 게이트 순으로 처리(순서를 바꾸면 SP 노드의 통화 위반이 SP
- * 드롭 경고에 묻힌다). buildGraphFromAiProposal(csv-import.ts)과 같은 두 규칙
- * (dropConflictingCurrency·dropUneditableParams)을 그대로 재사용 — 새 규칙을 만들지 않는다.
+ * 드롭 → 통화 전환 시 반대쪽 소거(clearCounterpartCurrency) → 노드 타입별 편집 가능 필드 게이트
+ * 순으로 처리(순서를 바꾸면 SP 노드의 통화 위반이 SP 드롭 경고에 묻힌다).
+ * buildGraphFromAiProposal(csv-import.ts)과 같은 두 규칙(dropConflictingCurrency·dropUneditableParams)을
+ * 그대로 재사용 — 새 규칙을 만들지 않는다.
  * 결과에 없는 필드는 "AI가 이 필드를 건드리지 않음"(undefined 유지). 무효 에코(정규화 실패)도 같은
  * 이유로 키를 생략한다 — page.tsx가 이 패치를 node.data에 그대로 스프레드하므로, ""를 넣으면
  * "명시적 지움"과 구분이 안 돼 기존 값을 지워버린다. 빈 문자열 에코("지움" 의도)는 정규화가 그대로
  * ""를 돌려주므로 patch에 "" 그대로 남는다 — 무효(키 생략) vs 명시적 지움("")을 구분하는 지점.
+ * 단, 한쪽 통화가 유효값으로 설정되면 반대쪽은 명시적 ""가 patch에 추가된다(통화 전환 완결 —
+ * finding: 편도만 반영하면 두 통화가 동시에 채워진 상태로 남아 다음 autosave가 422 루프에 빠진다).
  */
 export function resolveAiParamPatch(
   nodeType: string,
@@ -151,7 +190,19 @@ export function resolveAiParamPatch(
   applyNumeric("annual_count", attr.annual_count);
   applyNumeric("fte", attr.fte);
   const { values: guarded } = dropConflictingCurrency(touched);
-  return dropUneditableParams(nodeType, guarded).allowed;
+  return dropUneditableParams(nodeType, clearCounterpartCurrency(guarded)).allowed;
+}
+
+/**
+ * AI가 신규 노드에 링크 없이 보낸 subprocess 타입은 process로 강등 — Call Activity는
+ * linked_map_id가 있어야 렌더/조회되므로, 링크 없는 subprocess는 칩·인스펙터 어디에도 값이
+ * 나오지 않는 죽은 상태이면서 CSV export·비교 diff엔 값이 샌다 (finding: AiNode.node_type은
+ * 자유 문자열). 신규 노드 변환 경로 전용(page.tsx aiNodeToGraphNode·buildGraphFromAiProposal의
+ * 신규 노드 분기) — 두 경로가 이 함수 하나로 대칭을 유지한다. 이미 링크된 매칭 노드는
+ * mergeNode가 node_type을 별도로 보존하므로 이 함수를 거치지 않는다.
+ */
+export function coerceAiNewNodeType(nodeType: string): string {
+  return nodeType === "subprocess" ? "process" : nodeType;
 }
 
 /** 서브프로세스 노드가 링크 맵에서 상속하는 회당 4필드의 원천(subprocess_refs 행의 부분집합). */
