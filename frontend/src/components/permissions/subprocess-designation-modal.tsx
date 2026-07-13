@@ -77,7 +77,7 @@ export function SubprocessDesignationModal({
   }, [publishedVersionId]);
 
   // placeholder는 표시 전용(저장 안 됨) — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김
-  function previewText(field: SpParamField): string | undefined {
+  function getPreviewText(field: SpParamField): string | undefined {
     return formatSumPreview(field, previews[field] ?? "");
   }
 
@@ -161,7 +161,7 @@ export function SubprocessDesignationModal({
                   value={form[key]}
                   disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                   ariaLabel={t(PARAM_LABEL_KEY[key])}
-                  placeholder={previewText(key)}
+                  placeholder={getPreviewText(key)}
                   onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
                 />
                 <button
