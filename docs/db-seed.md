@@ -1,16 +1,18 @@
 # DB 초기화 & 데모 시드
 
-로컬/서버 DB를 비우고 데모 데이터를 채우는 방법. 데모·QA·화면 검증용. **서비스 미런칭 상태라 리셋은 자유롭게 가능** — 단 운영 데이터가 생긴 뒤에는 금지(아래 ⚠️).
+로컬/서버 DB를 비우고 데모 데이터를 채우는 방법. **로컬·데모 전용**이다.
 
-> ⚠️ **회당 파라미터 개명(2026-07-13) — DB 재생성 필수.** `nodes`의 `etf`/`cost`/`extra`, `process_maps`의 `sp_etf`/`sp_cost`/`sp_extra` 컬럼이 폐기되고 `cost_krw`/`cost_usd`/`annual_count`/`fte`(+SP는 `sp_cost_krw`/`sp_cost_usd`)로 교체됐다. `create_all`은 컬럼을 ALTER하지 않으므로 **기존 DB는 반드시 아래 한 줄 리셋으로 재생성**할 것 — 구 컬럼의 값은 이관되지 않는다(운영 미배포라 이관 스크립트 없음).
-> ```bash
-> # === bash (macOS/Linux) ===
-> cd backend && .venv/bin/python -m scripts.reset_db
-> ```
-> ```powershell
-> # === PowerShell (Windows) ===
-> cd backend; .venv\Scripts\python -m scripts.reset_db
-> ```
+> 🚫 **서비스는 런칭됨(운영 데이터 존재). 운영 서버에서 `reset_db`를 실행하지 말 것** — `drop_all`이라 현업이 만든 맵·버전이 전부 사라진다. 서버 스키마 변경은 배포(앱 기동)만으로 반영된다 — 아래 참고.
+
+## 서버 배포 시 스키마 (리셋 불필요)
+
+앱 기동 시 `app/db.py`의 `_add_missing_columns`가 **모델에 있는데 DB에 없는 컬럼을 `ALTER TABLE ADD COLUMN`으로 보강**하고, 새 테이블은 `create_all`이 만든다. 따라서 **컬럼 추가·신규 테이블은 배포만 하면 적용된다.**
+
+주의할 것은 두 가지뿐:
+- **새 컬럼은 `_ADDED_COLUMNS`에 수동 등록**해야 한다(등록 누락 시 서버에서 "column does not exist"로 터진다).
+- **컬럼 삭제·개명은 자동으로 반영되지 않는다** — 구 컬럼은 DB에 남는다. 코드가 더 이상 그 컬럼에 값을 넣지 않으므로, 구 컬럼이 `NOT NULL`(모델의 `Mapped[str]`로 `create_all`이 만든 경우)이면 INSERT가 깨진다. 그런 개명을 할 때는 배포 전에 해당 컬럼을 직접 `DROP`하거나 nullable로 바꿔야 한다.
+
+> 참고 — 회당 파라미터 개명(2026-07-13, `etf`/`cost`/`extra` → `cost_krw`/`cost_usd`/`annual_count`/`fte`)은 서버에 **위험이 없었다**: 구 컬럼들이 배포된 적 없는(2026-07-11 도입) 컬럼이라 운영 DB에 존재하지 않았다. 다만 형식 검증이 없던 시절의 **자유텍스트 `duration`("3일" 등)은 새 코드의 H.MM 검증에서 무효로 판정돼 경계에서 소거된다**(의미 없는 데이터라 폐기하기로 결정, 2026-07-13).
 
 진입점: **`backend/scripts/reset_db.py`** — 단일 명령으로 전체 리셋 + 종합 데모 시드(`scripts/seed_org_demo.py`).
 
@@ -77,7 +79,7 @@ docker compose exec backend python -m scripts.reset_db
 
 성공 시 컨테이너 로그에 `schema drop_all+create_all` → `seed org demo …` → `verify …` 요약이 출력된다.
 
-> ⚠️ 서버에서도 `reset_db`는 postgres의 **모든 테이블을 삭제**한다(`drop_all`). 미런칭 데모 서버라 데이터가 없을 때만 안전.
+> 🚫 **운영 서버에서는 실행 금지.** `reset_db`는 postgres의 **모든 테이블을 삭제**한다(`drop_all`) — 서비스가 런칭된 뒤로는 현업 데이터가 사라진다. 이 절차는 데모/스테이징 컨테이너 전용이다. 서버 스키마 변경은 배포만으로 반영된다(위 "서버 배포 시 스키마" 참고).
 
 ## 권한 강제 모드로 검증
 

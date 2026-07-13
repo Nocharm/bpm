@@ -46,13 +46,19 @@
 
 ### 2.3 마이그레이션
 
-컬럼 개명·삭제는 `create_all`과 `db.py` `_ADDED_COLUMNS`(additive 전용)로 따라갈 수 없다.
-운영 미배포이므로 **DB 재생성**을 전제한다.
+> **정정(2026-07-13, 구현 후):** 설계 시점엔 "운영 미배포"를 전제해 DB 재생성을 계획했으나,
+> **서비스는 이미 런칭돼 운영 데이터가 있다**(서버는 `0a9d19d`, 2026-07-10 기준). 운영 DB에
+> `reset_db`(=`drop_all`)를 실행하면 안 된다. 실제 필요한 조치는 아래와 같다.
 
-- 로컬: `python -m scripts.reset_db` (bash) / `.venv\Scripts\python -m scripts.reset_db` (PowerShell)
-- 서버: compose DB 볼륨 초기화 후 시드 재실행
-- 기존 `cost` 값은 이관하지 않고 버린다(빈 값에서 시작).
-- `docs/db-seed.md`에 재생성 필요를 명시한다.
+- **로컬(데모 DB)**: `python -m scripts.reset_db` (bash) / `.venv\Scripts\python -m scripts.reset_db` (PowerShell).
+- **서버**: **배포만 하면 된다.** 기동 시 `db.py` `_add_missing_columns`가 신규 컬럼
+  (`cost_krw`·`cost_usd`·`headcount`·`annual_count`·`fte`·`sp_cost_krw`·`sp_cost_usd`·`sp_headcount`)을
+  `ALTER TABLE ADD COLUMN`으로 보강하고(기존 행은 `''` 백필), 신규 테이블은 `create_all`이 만든다.
+  구 컬럼(`etf`/`cost`/`extra`, `sp_*`)은 2026-07-11에 도입돼 **서버에 배포된 적이 없으므로 운영 DB에
+  존재하지 않는다** → 드롭할 것도, `NOT NULL` 충돌도 없다.
+- **데이터 영향**: 형식 검증이 없던 시절의 자유텍스트 `duration`("3일" 등)은 새 H.MM 검증에서 무효로
+  판정돼 경계에서 `""`로 소거된다. 의미 없는 데이터라 **이관 없이 폐기**하기로 결정(2026-07-13).
+- 기존 `cost` 값은 애초에 운영에 없으므로 이관 대상이 아니다.
 
 ## 3. 파라미터 UI
 

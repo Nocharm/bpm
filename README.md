@@ -73,7 +73,7 @@ npm run dev
 
 ## 데이터 초기화 / 데모 시드
 
-서비스 미런칭 상태 — DB를 비우고 종합 데모 데이터를 채울 수 있다. backend/ 에서:
+**로컬·데모 전용** — 운영 서버는 런칭되어 현업 데이터가 있으므로 `reset_db`를 실행하면 안 된다(`drop_all`). 서버 스키마는 배포 시 자동 보강된다(`docs/db-seed.md`). 로컬에서 DB를 비우고 종합 데모 데이터를 채우려면 backend/ 에서:
 
 ```bash
 .venv/bin/python -m scripts.reset_db        # drop+create + 종합 데모(조직도·직원401·맵12·그룹6)

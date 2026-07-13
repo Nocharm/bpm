@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-13 — 런칭 사실 문서 반영 (main)
+- 서비스가 이미 런칭돼 운영 데이터가 있음(서버는 `0a9d19d`, 7/10 기준)이 확인돼 `docs/db-seed.md`·`README.md`·`CLAUDE.md`·회당 파라미터 설계문서에서 "미런칭이라 리셋 자유"·"DB 재생성 필수" 전제를 제거하고 **운영 서버 `reset_db`(drop_all) 금지**를 명시. 서버 스키마는 배포만으로 자동 보강(`db.py _add_missing_columns`; 신규 컬럼은 `_ADDED_COLUMNS` 수동 등록 필수)이고, 폐기된 구 파라미터 컬럼(`etf`/`cost`/`extra`·`sp_*`)은 7/11 도입분이라 운영 DB에 존재하지 않아 드롭·NOT NULL 충돌 위험 없음. 형식 검증 이전의 자유텍스트 `duration`은 이관 없이 폐기 결정.
+
 ## 2026-07-13 — 최종 whole-branch 리뷰 픽스: 통화 편도 pick·링크 없는 AI subprocess·Σ designated 게이트 (worktree-node-params)
 - **[Critical]** `mergeNode`(csv-import.ts)·`resolveAiParamPatch`(params.ts)가 통화 배타를 candidate 자기 안에서만 체크해, 한쪽 통화만 채운 CSV 행/AI patch가 반대쪽 "기존" 통화값을 못 지워 두 통화가 동시에 저장되는 결함(422 루프·`isCostFieldDisabled`가 양쪽을 동시 잠가 탈출구 없음) 수정. `resolveCostFields`(mergeNode용, next/existing 병합)·`clearCounterpartCurrency`(resolveAiParamPatch용, patch에 반대쪽 `""` 추가) 신설, `isCostFieldDisabled`는 둘 다 값이 있으면 잠그지 않도록 탈출구 추가.
 - **[Minor]** `AiNode.node_type`이 자유 문자열이라 AI가 링크 없는 `"subprocess"` 노드를 신규 생성할 수 있던 결함 — `coerceAiNewNodeType`(params.ts) 신설, `aiNodeToGraphNode`(page.tsx)·`buildGraphFromAiProposal`의 신규 노드 후보 생성 지점 2곳에서 링크 없는 subprocess를 process로 강등.
