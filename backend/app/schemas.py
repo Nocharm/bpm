@@ -15,6 +15,12 @@ from pydantic import (
 from app.duration import NUMERIC_RE, normalize_duration
 
 
+def _assert_single_currency(krw: str, usd: str) -> None:
+    """비용은 원/달러 중 하나만 — 둘 다 채우면 422 (design 2026-07-13 §3.3)."""
+    if krw.strip() and usd.strip():
+        raise ValueError("cost_krw and cost_usd are mutually exclusive — fill only one")
+
+
 class MapCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
@@ -45,11 +51,10 @@ class SubprocessDesignationIn(BaseModel):
     assignee: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
-    # 숫자 파라미터 4종 — duration과 함께 5필드 경계 정규화, 노드 NodeIn과 동일 소거 시맨틱 (design 2026-07-11 SP)
+    # SP 지정 파라미터 3종 — 연간 건수·FTE는 부모 맥락 값이라 여기 없다 (design 2026-07-13 §2.2)
+    cost_krw: str = Field(default="", max_length=50)
+    cost_usd: str = Field(default="", max_length=50)
     headcount: str = Field(default="", max_length=50)
-    etf: str = Field(default="", max_length=50)
-    cost: str = Field(default="", max_length=50)
-    extra: str = Field(default="", max_length=50)
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
@@ -68,7 +73,7 @@ class SubprocessDesignationIn(BaseModel):
         normalized = normalize_duration(value)
         return "" if normalized is None else normalized
 
-    @field_validator("headcount", "etf", "cost", "extra", mode="after")
+    @field_validator("cost_krw", "cost_usd", "headcount", mode="after")
     @classmethod
     def _normalize_numeric_params(cls, value: str) -> str:
         text = value.strip()
@@ -78,6 +83,11 @@ class SubprocessDesignationIn(BaseModel):
     def _drop_label_without_url(self) -> "SubprocessDesignationIn":
         if not self.url.strip():
             self.url_label = ""
+        return self
+
+    @model_validator(mode="after")
+    def _check_single_currency(self) -> "SubprocessDesignationIn":
+        _assert_single_currency(self.cost_krw, self.cost_usd)
         return self
 
 
@@ -539,11 +549,10 @@ class MapOut(BaseModel):
     sp_assignee: str | None = None
     sp_system: str | None = None
     sp_duration: str | None = None
-    # 숫자 파라미터 4종 — duration과 함께 SP 5필드 (design 2026-07-11 SP)
+    # SP 지정 파라미터 3종 — duration과 함께 4필드 (design 2026-07-13 §2.2)
+    sp_cost_krw: str | None = None
+    sp_cost_usd: str | None = None
     sp_headcount: str | None = None
-    sp_etf: str | None = None
-    sp_cost: str | None = None
-    sp_extra: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
     sp_changed_by: str | None = None
@@ -578,11 +587,12 @@ class NodeIn(BaseModel):
     department: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
-    # 숫자 파라미터 4종 — duration과 함께 5필드, 무효값은 validator가 경계에서 "" 소거 (design 2026-07-11)
+    # 회당 단가 파라미터 — 무효값은 validator가 경계에서 "" 소거, 비용 배타만 422 (design 2026-07-13)
+    cost_krw: str = Field(default="", max_length=50)
+    cost_usd: str = Field(default="", max_length=50)
     headcount: str = Field(default="", max_length=50)
-    etf: str = Field(default="", max_length=50)
-    cost: str = Field(default="", max_length=50)
-    extra: str = Field(default="", max_length=50)
+    annual_count: str = Field(default="", max_length=50)
+    fte: str = Field(default="", max_length=50)
     # 참조 링크 — 스킴 검증은 클라이언트(CSV 파서·링크 렌더)에서. 자유 타이핑 자동저장이 깨지지 않게 길이만 제한
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
@@ -615,7 +625,7 @@ class NodeIn(BaseModel):
         normalized = normalize_duration(value)
         return "" if normalized is None else normalized
 
-    @field_validator("headcount", "etf", "cost", "extra", mode="after")
+    @field_validator("cost_krw", "cost_usd", "headcount", "annual_count", "fte", mode="after")
     @classmethod
     def _normalize_numeric_params(cls, value: str) -> str:
         # duration과 동일한 이유로 무효값은 "" 소거 (위 _normalize_duration 주석 참고)
@@ -626,6 +636,11 @@ class NodeIn(BaseModel):
     def _drop_label_without_url(self) -> "NodeIn":
         if not self.url.strip():
             self.url_label = ""
+        return self
+
+    @model_validator(mode="after")
+    def _check_single_currency(self) -> "NodeIn":
+        _assert_single_currency(self.cost_krw, self.cost_usd)
         return self
 
 
@@ -677,11 +692,10 @@ class SubprocessRefOut(BaseModel):
     assignee: str | None = None
     system: str | None = None
     duration: str | None = None
-    # 숫자 파라미터 4종 — SP 지정 어트리뷰트와 동일 소스 (design 2026-07-11 SP)
+    # SP 지정 파라미터 3종 — SP 지정 어트리뷰트와 동일 소스 (design 2026-07-13 §2.2)
+    cost_krw: str | None = None
+    cost_usd: str | None = None
     headcount: str | None = None
-    etf: str | None = None
-    cost: str | None = None
-    extra: str | None = None
     url: str | None = None
     url_label: str | None = None
 
