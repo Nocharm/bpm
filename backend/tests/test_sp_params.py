@@ -91,20 +91,13 @@ def test_designation_normalizes_numeric_params(client: TestClient, published_map
             "department": "Owning Anchor Division",
             "duration": "0.75",
             "headcount": "2",
-            "etf": "1.5",
-            "cost": "300",
-            "extra": "7",
+            "cost_krw": "300",
         },
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["sp_duration"] == "1.15"  # 60분 이월
-    assert (body["sp_headcount"], body["sp_etf"], body["sp_cost"], body["sp_extra"]) == (
-        "2",
-        "1.5",
-        "300",
-        "7",
-    )
+    assert (body["sp_headcount"], body["sp_cost_krw"], body["sp_cost_usd"]) == ("2", "300", "")
 
 
 def test_designation_clears_invalid_values(client: TestClient, published_map_id: int) -> None:
@@ -115,6 +108,32 @@ def test_designation_clears_invalid_values(client: TestClient, published_map_id:
     assert resp.status_code == 200
     assert resp.json()["sp_duration"] == ""
     assert resp.json()["sp_headcount"] == ""
+
+
+def test_sp_designation_rejects_both_currencies(client: TestClient, published_map_id: int) -> None:
+    resp = client.put(
+        f"/api/maps/{published_map_id}/subprocess-designation",
+        json={"department": "Owning Anchor Division", "cost_krw": "1000", "cost_usd": "10"},
+    )
+    assert resp.status_code == 422
+
+
+def test_sp_designation_has_no_annual_or_fte(client: TestClient, published_map_id: int) -> None:
+    """연간 건수·FTE는 부모 맥락 값이라 SP 지정에 존재하지 않는다 — 보내도 무시된다."""
+    resp = client.put(
+        f"/api/maps/{published_map_id}/subprocess-designation",
+        json={
+            "department": "Owning Anchor Division",
+            "duration": "1.30",
+            "annual_count": "999",
+            "fte": "9",
+        },
+    )
+    assert resp.status_code == 200
+    detail = client.get(f"/api/maps/{published_map_id}").json()
+    assert detail["sp_duration"] == "1.30"
+    assert "sp_annual_count" not in detail
+    assert "sp_fte" not in detail
 
 
 def test_legacy_free_text_sp_duration_cleared_in_responses(

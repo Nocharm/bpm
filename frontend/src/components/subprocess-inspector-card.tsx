@@ -13,7 +13,7 @@ import {
   SubprocessDesignationModal,
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
-import { formatDurationHm } from "@/lib/duration";
+import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 
 interface SubprocessInspectorCardProps {
@@ -37,10 +37,9 @@ export function SubprocessInspectorCard({
     assignee: "",
     system: "",
     duration: "",
+    cost_krw: "",
+    cost_usd: "",
     headcount: "",
-    etf: "",
-    cost: "",
-    extra: "",
     url: "",
     urlLabel: "",
   });
@@ -74,10 +73,9 @@ export function SubprocessInspectorCard({
       assignee: detail.sp_assignee ?? "",
       system: detail.sp_system ?? "",
       duration: detail.sp_duration ?? "",
+      cost_krw: detail.sp_cost_krw ?? "",
+      cost_usd: detail.sp_cost_usd ?? "",
       headcount: detail.sp_headcount ?? "",
-      etf: detail.sp_etf ?? "",
-      cost: detail.sp_cost ?? "",
-      extra: detail.sp_extra ?? "",
       url: detail.sp_url ?? "",
       urlLabel: detail.sp_url_label ?? "",
     });
@@ -98,15 +96,20 @@ export function SubprocessInspectorCard({
     }
   };
 
+  // 캔버스 노드 칩과 동일 표시형(₩/$ + 천단위 콤마) — process-node.tsx 컨벤션과 정합
+  const formatCost = (raw: string | null | undefined, symbol: string): string => {
+    const n = formatThousands(raw ?? "");
+    return n ? `${symbol}${n}` : "";
+  };
+
   const attrRows: { label: string; value: string | null | undefined }[] = [
     { label: t("field.department"), value: detail.sp_department },
     { label: t("field.assignee"), value: detail.sp_assignee },
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
+    { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
+    { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },
     { label: t("field.headcount"), value: detail.sp_headcount },
-    { label: t("field.etf"), value: detail.sp_etf },
-    { label: t("field.cost"), value: detail.sp_cost },
-    { label: t("field.extra"), value: detail.sp_extra },
   ];
 
   return (

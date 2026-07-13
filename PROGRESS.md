@@ -1,6 +1,53 @@
 # Progress
 
+## 2026-07-13 — 최종 whole-branch 리뷰 픽스: 통화 편도 pick·링크 없는 AI subprocess·Σ designated 게이트 (worktree-node-params)
+- **[Critical]** `mergeNode`(csv-import.ts)·`resolveAiParamPatch`(params.ts)가 통화 배타를 candidate 자기 안에서만 체크해, 한쪽 통화만 채운 CSV 행/AI patch가 반대쪽 "기존" 통화값을 못 지워 두 통화가 동시에 저장되는 결함(422 루프·`isCostFieldDisabled`가 양쪽을 동시 잠가 탈출구 없음) 수정. `resolveCostFields`(mergeNode용, next/existing 병합)·`clearCounterpartCurrency`(resolveAiParamPatch용, patch에 반대쪽 `""` 추가) 신설, `isCostFieldDisabled`는 둘 다 값이 있으면 잠그지 않도록 탈출구 추가.
+- **[Minor]** `AiNode.node_type`이 자유 문자열이라 AI가 링크 없는 `"subprocess"` 노드를 신규 생성할 수 있던 결함 — `coerceAiNewNodeType`(params.ts) 신설, `aiNodeToGraphNode`(page.tsx)·`buildGraphFromAiProposal`의 신규 노드 후보 생성 지점 2곳에서 링크 없는 subprocess를 process로 강등.
+- **[Minor]** `param-sum.ts`의 `collectValues`가 `subprocess_refs`를 `designated` 게이트 없이 읽어, 지정 해제(`undesignate_subprocess`는 `sp_designated_at`만 null화하고 행 값은 남김) 후에도 Σ가 남은 값을 합산하던 불일치 — 인스펙터와 동일한 `getInheritedParams`로 소스 통일.
+- **[Minor, comment only]** `AiNodeAttributes`(schemas.py) 독스트링이 "NodeIn과 동일 제약"이라 오해를 유발 — 실제로는 숫자 정규화기가 없고 duration·통화 배타만 검증함을 명시, 최종 정규화는 PUT /graph의 NodeIn에서 일어남을 기록. `csv-export.ts`에 서브프로세스 자기값 vs excel-export.ts 상속값 의도적 차이를 설명하는 주석 추가.
+- TDD로 진행(신규 테스트 15종 먼저 추가 → 소스 stash로 red 확인 → 소스 복원 후 green). 게이트 전부 그린: pytest 607, vitest 413(395→413, 신규 18), ruff/tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T11: 시드·문서 갱신 + 전체 게이트 (worktree-node-params)
+- `seed_org_demo.py` 데모값을 신규 6필드 모델에 맞게 갱신 — SP 지정 시드(`DESIGNATED_SPECS`)의 옛 자유텍스트 duration("3 days" 등)이 `normalize_duration` 무효 판정으로 응답 경계에서 조용히 소거되던 걸 발견해 H.MM 유효값(72/24/48/4)으로 교체하고 `sp_cost_krw`/`sp_headcount`도 채움, Vendor Management 맵(idx 11) 노드는 `cost_usd`만 채워 통화 배타를 실측 시연. `docs/db-seed.md`에 컬럼 개명(구 `etf`/`cost`/`extra`, SP `sp_etf`/`sp_cost`/`sp_extra` 폐기)으로 인한 DB 재생성 필수 경고 추가, `CLAUDE.md` 노드 속성 체크리스트·숫자 파라미터 계약 문단을 신규 6필드 + 비용 배타(422) + SP 편집 제한(3표면 강제) 기준으로 갱신. 전 레포 구 명칭 스윕 — 실사용 코드/문서 잔재 0건(테스트·주석의 매치는 전부 의도된 회귀 pin/폐기 서술). 게이트 전부 그린: pytest 607, vitest 395, ruff/tsc/lint/build clean, reset_db 무오류.
+
+## 2026-07-13 — 리뷰 픽스: resolveAiParamPatch 무효 에코가 기존값을 지우던 결함 (worktree-node-params)
+- `resolveAiParamPatch`(`lib/params.ts`)가 무효 에코(예: duration "2일", cost_krw "abc")를 `""`로 정규화해 patch에 그대로 담던 결함 수정 — page.tsx ops `set_attr`가 patch를 `node.data`에 직접 스프레드하므로 기존 값이 조용히 지워졌다(graph-merge 경로는 `mergeNode`의 `pick`이 `""`를 "건드리지 않음"으로 해석해 이미 안전했음). 정규화 실패 시 이제 키 자체를 결과에서 생략(명시적 `""` 에코는 여전히 "지움"으로 patch에 남음). 같은 원리로 `dropConflictingCurrency`도 통화 배타 위반 시 `cost_krw`/`cost_usd`를 `""`로 채우는 대신 키를 생략하도록 변경(csv-import.ts 호출부는 `?? ""`로 받아 동작 불변, resolveAiParamPatch 호출부는 이제 두 키가 patch에서 빠져 기존 값을 보존). `params.test.ts`에 무효 에코/명시적 빈값/통화충돌/콤마 에코/SP 게이트 6종 신규 pin, `csv-import.test.ts`에 병합 경로가 같은 위반 케이스에서 기존값을 지키는지 확인하는 pin 3종 추가(두 AI 경로 드리프트 방지). 395 tests green(389→395), tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T10: AI 변환단 SP 제한·비용 배타 강제 (worktree-node-params)
+- 프론트 `AiNodeAttributes`(api.ts)에 백엔드 T2가 이미 노출한 `cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte` 5필드를 추가(그동안 프론트 AI 타입엔 없었음). `lib/params.ts`에 순수 헬퍼 2종 신설 — `dropConflictingCurrency`(원·달러 동시 지정 시 둘 다 드롭)와 `resolveAiParamPatch`(page.tsx ops set_attr 전용, 정규화→통화배타→`dropUneditableParams` 순으로 적용해 SP 노드에서 통화 위반이 SP 드롭 경고에 겹치지 않게 함). `csv-import.ts`의 `buildGraphFromAiProposal`(graph 병합)이 두 헬퍼 + 기존 `mergeNode`/`dropUneditableParams`를 재사용해 SP 4필드 드롭·통화 배타를 CSV와 동일한 문구로 warnings에 싣는다. `page.tsx`의 `aiNodeToGraphNode`(ops add, 신규 노드라 SP 게이트는 미적용·통화 배타만)와 ops `set_attr` 블록(기존 노드, `resolveAiParamPatch` 호출 — SP/통화 위반은 색과 같은 방식으로 조용히 드롭, 이 경로엔 프리뷰 경고 채널이 없음)도 동일 규칙으로 맞춰 두 AI 경로의 비대칭을 없앴다. 377→389 tests green(신규 12), tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T9: Excel 내보내기 컬럼·서식 (worktree-node-params)
+- `excel-export.ts` 컬럼을 `No,Name,Type,Description,Assignee,Department,System,Duration (h),Cost (KRW),Cost (USD),Headcount,Annual volume,FTE,URL,Groups,Next` 16컬럼으로 개편, numFmt 6종(`0.00`/`#,##0`/`#,##0.00`)을 `COLUMNS` 정의에서 파생시켜(`"numFmt" in c` 순회) 셀 인덱스 하드코딩을 없앰(컬럼 재배열 시 인덱스 어긋남 방지). 서브프로세스 행의 duration/cost_krw/cost_usd/headcount는 노드 자신의 값이 아니라 링크 맵의 sp_* 라이브 참조(`graph.subprocess_refs`, `getInheritedParams` 재사용 — 캔버스 인스펙터·Σ 합산과 동일 소스)에서 가져오도록 수정, annual_count·fte는 노드 행 그대로. 시트 기록 로직을 `writeExcelSheet(workbook, model)`로 분리해 Blob/anchor(DOM) 없이도 vitest로 numFmt·빈 셀 유지를 검증(exceljs는 여전히 `downloadExcel`에서만 dynamic import — 번들 분리 유지). 377 tests green(신규 7), tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T8: CSV 임포트/익스포트 14컬럼 (worktree-node-params)
+- CSV 헤더를 `Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next` 14컬럼으로 개편(`csv-import.ts`/`csv-export.ts` 대칭). 숫자 셀은 `stripThousands`로 천단위 콤마를 허용, 원·달러 동시 기재 행은 `Row N: fill only one of Cost_KRW / Cost_USD` 에러로 저장 전 차단(백엔드 422 사전 방지). 리뷰 지적 수정: `mergeNode`가 서브프로세스 매칭 행에 duration/cost_krw/cost_usd/headcount(링크 맵 지정값)를 그대로 덮어쓰던 결함 — `lib/params.ts`에 공유 순수 헬퍼 `dropUneditableParams(nodeType, candidate)` 신설(subprocess는 annual_count·fte만 통과), CSV 경로는 드롭 발생 시 기존 warnings 채널로 안내. Task 10(AI 변환단)이 같은 헬퍼를 재사용할 수 있게 시그니처를 공용으로 유지. `buildAiPromptText`의 개명 이전 잔재 컬럼 설명(ETF/Cost/Extra)도 정리. `docs/samples/*.csv` 3종을 새 컬럼으로 재작성(자유텍스트 duration→H.MM 숫자, 파일당 1행 Cost_USD 배타 예시) — 재작성 전 3종 전부 duration 형식 불일치로 임포트 100% 실패였던 선재 결함도 함께 해소. 370 tests green(신규 9), tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T7: SP 노드 부분 편집(연간 건수·FTE) + 인스펙터/요약/비교 반영 (worktree-node-params)
+- Parameters 섹션을 `hasBpmAttributes` 게이트에서 분리해 자체 카드/그룹으로 승격 — start/end 외 모든 타입이 `PARAM_FIELDS` 6행을 렌더한다. subprocess는 회당 4필드가 링크 맵 지정값(라이브 참조)이라 읽기전용 텍스트(`—` 폴백)로, 연간 건수·FTE만 `ParamInput`으로 편집·저장(같은 SP를 쓰는 두 맵이 서로 다른 연간 물량을 가질 수 있음, design 2026-07-13 §3.1). 표시형은 순수 함수 `lib/params.ts`의 `formatParamValue`(duration→1h30m, 비용→₩/$+천단위)로 단일화해 캔버스 칩(`process-node.tsx`)과 인스펙터·요약 모달이 같은 규칙을 쓰고, 상속값 추출은 `getInheritedParams(SubprocessRef)`로 분리(미지정→전부 빈 값). 인스펙터 SP 어트리뷰트 카드에서 파라미터 4행은 제거(중복 표시 방지). 비교 화면 `displayFieldValue`에 비용 천단위 콤마 추가. 361 tests green(신규 7), tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T6: SP 지정 Σ 4버튼 + placeholder 미리보기 (worktree-node-params)
+- SP 지정 모달에 Σ 버튼을 4행 전부(duration/cost_krw/cost_usd/headcount)로 확장(기존 headcount 제외 조건 삭제), 모달 오픈 시 게시본 그래프를 1회 로드해 4개 Σ 결과를 각 입력의 `placeholder`(회색 이탤릭, `placeholder:italic placeholder:text-ink-tertiary`)로 미리 노출 — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김, 채우려면 Σ 클릭 필요. 비용 배타(`isCostFieldDisabled`)를 Σ 버튼에도 적용. placeholder 표시형 결정은 순수 함수 `lib/param-sum.ts`의 `formatSumPreview(field, raw)`로 분리해 vitest로 검증(jsdom 미설치라 DOM 마운트 테스트는 추가하지 않음 — CLAUDE.md 방침). 패널·인스펙터 카드의 SP 어트리뷰트 표시행도 비용 2필드를 캔버스 칩과 동일 서식(`₩`/`$` + `formatThousands`)으로 통일. 354 tests green(신규 4), tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T5: 천단위 콤마 + 비용 배타 + 칩 표시 (worktree-node-params)
+- `lib/duration.ts`에 `formatThousands`/`stripThousands` 추가, `ParamInput`이 비용 2필드(cost_krw/cost_usd)에 포커스아웃 시 콤마 표시(포커스 중은 원문) 적용, `process-node.tsx` 칩은 `₩1,250,000`/`$1,200.50` 서식(cost_usd 아이콘도 Coins로 통일). 비용 배타(한쪽 값 있으면 반대쪽 disabled)는 `lib/params.ts`의 `isCostFieldDisabled` 헬퍼로 통일해 인스펙터(page.tsx)·노드 요약 모달·SP 지정 모달 3개 호출부에 적용. `@testing-library/react`·jsdom 미설치라 컴포넌트 테스트는 추가하지 않고 `duration.test.ts`/`params.test.ts`에 순수 로직 테스트로 대체(350 tests green), tsc/lint/build clean.
+
+## 2026-07-13 — Σ 인원 평균 정수 도메인 (worktree-node-params)
+- 인원 평균을 float 나눗셈에서 정수 스케일 도메인으로 이동 — 1.005×3이 1.00으로 깎이던 반올림 손실 차단(리뷰 Important).
+
+
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
+
+## 2026-07-13 — 노드 파라미터 재정의 T4: Σ 합산 규칙 재작성 (node-params)
+- `lib/param-sum.ts`의 `sumParamField`가 `SpParamField`(4종) 전체를 받도록 확장. `duration`/`cost_krw`/`cost_usd`는 기존대로 합(통화 2필드 독립), `headcount`는 값 있는 일반 노드의 평균(소수점 2자리, SP 노드는 분자·분모 모두 제외)으로 변경. 호출부(`subprocess-designation-modal.tsx`)는 `SummableField` 대신 `SpParamField`로 시그니처만 갱신(headcount Σ 버튼 추가는 Task 6). 339 tests green(신규 5), tsc/lint clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T3: 프론트 개명 스윕 + 편집 가능 필드 정의 (node-params)
+- 프론트 전 표면을 신규 키(`duration`/`cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte`)로 개명하고 `lib/params.ts`에 `PARAM_FIELDS`(표시 순서)·`SP_PARAM_FIELDS`(SP 지정 4종)·`getEditableParamFields(nodeType)`(start/end 없음, subprocess는 연간건수·FTE만) 도입. i18n은 `field.costKrw`/`costUsd`/`annualCount`/`fte` 신규 키(EN·KO), 구 `field.etf`/`cost`/`extra` 삭제. `NodeData`의 회당 파라미터 키는 `PARAM_FIELDS`로 일반 인덱싱하므로 snake 유지, SP 라이브 참조는 `spCostKrw`/`spCostUsd`. 동작 변경 없음(콤마 서식·통화 배타·Σ 규칙·CSV/Excel 스키마·AI 가드는 후속 태스크). 329→334 tests green, tsc/lint/build clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T2: AI 계약 확장 (node-params)
+- `AiNodeAttributes`에 `cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte` 추가(부분 갱신 시맨틱: None=유지) + 공용 `_assert_single_currency` 재사용한 통화 배타 검증. `ai_prompt.py` 3곳(그래프 스키마 예시·규칙 텍스트·`_serialize_node`) 동기화, subprocess 노드는 `annual_count`·`fte`만 수정 가능하다는 제한을 프롬프트에 명시. 603→607 tests green, ruff clean.
+
+## 2026-07-13 — 노드 파라미터 재정의 T1: 백엔드 개명·비용 배타 (node-params)
+- `duration`/`cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte`로 개명(구 `etf`/`cost`/`extra` 폐기, 이관 없음), SP 지정은 `sp_duration`/`sp_cost_krw`/`sp_cost_usd`/`sp_headcount` 3종만. cost_krw·cost_usd 동시 값은 model_validator에서 422(공용 `_assert_single_currency`). models/db/schemas/routers(graph·versions·maps)/subprocess.py 갱신, `get_subprocess_refs` select/unpack 동시 수정. 599→603 tests green, ruff clean.
 
 ## 2026-07-13 — 노드 파라미터 재정의 설계 (main)
 - 회당 단가 모델로 의미 확정(회당 소요시간·회당 추가비용(원/달러 배타 2필드)·회당 투입인원·연간 건수·FTE), SP 지정은 3종만 + 인원 Σ는 평균(SP 제외)·Σ 미리보기 placeholder, CSV 14컬럼·Excel 서식·AI 계약(6필드 읽기/쓰기, SP는 연간건수·FTE만) 반영 — 스펙 `docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md`. 운영 미배포라 DB 재생성 전제(기존 cost 값 폐기).

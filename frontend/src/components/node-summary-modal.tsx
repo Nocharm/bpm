@@ -36,7 +36,18 @@ import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
-import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
+import {
+  formatParamValue,
+  getEditableParamFields,
+  isCostFieldDisabled,
+  isSpParamField,
+  PARAM_FIELDS,
+  PARAM_LABEL_KEY,
+  readParamsCollapsed,
+  writeParamsCollapsed,
+  type ParamField,
+  type SpParamField,
+} from "@/lib/params";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -48,10 +59,11 @@ export type NodeEditPatch = Partial<{
   department: string;
   system: string;
   duration: string;
+  cost_krw: string;
+  cost_usd: string;
   headcount: string;
-  etf: string;
-  cost: string;
-  extra: string;
+  annual_count: string;
+  fte: string;
   url: string;
   urlLabel: string;
 }>;
@@ -111,13 +123,16 @@ interface NodeSummaryModalProps {
   department: string;
   system: string;
   duration: string;
+  cost_krw: string;
+  cost_usd: string;
   headcount: string;
-  etf: string;
-  cost: string;
-  extra: string;
+  annual_count: string;
+  fte: string;
   url: string;
   urlLabel: string;
   colorPresets: string[];
+  // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
+  spParams: Record<SpParamField, string> | null;
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
   showAttributes: boolean;
   onPatch: (patch: NodeEditPatch) => void;
@@ -148,13 +163,15 @@ export function NodeSummaryModal({
   department,
   system,
   duration,
+  cost_krw,
+  cost_usd,
   headcount,
-  etf,
-  cost,
-  extra,
+  annual_count,
+  fte,
   url,
   urlLabel,
   colorPresets,
+  spParams,
   showAttributes,
   onPatch,
   onCommitLabel,
@@ -175,14 +192,16 @@ export function NodeSummaryModal({
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
   const [form, setForm] = useState({
-    label: title, description, color, assignee, department, system, duration, headcount, etf, cost, extra, url, urlLabel,
+    label: title, description, color, assignee, department, system, duration,
+    cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
   });
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
     setPrevNodeId(nodeId);
     setForm({
-      label: title, description, color, assignee, department, system, duration, headcount, etf, cost, extra, url, urlLabel,
+      label: title, description, color, assignee, department, system, duration,
+      cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
     });
   }
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
@@ -194,10 +213,11 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      cost_krw: form.cost_krw,
+      cost_usd: form.cost_usd,
       headcount: form.headcount,
-      etf: form.etf,
-      cost: form.cost,
-      extra: form.extra,
+      annual_count: form.annual_count,
+      fte: form.fte,
       url: form.url,
       urlLabel: form.urlLabel,
     });
@@ -212,8 +232,13 @@ export function NodeSummaryModal({
   const users = eligible?.users ?? [];
   const assignees = parseAssignees(form.assignee);
   const drifted = driftedAssignees(form.department, assignees, users);
+  // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
+  const editableParams = getEditableParamFields(nodeType);
   // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생
-  const filledParamCount = PARAM_FIELDS.filter((f) => form[f]).length;
+  const filledParamCount = editableParams.filter((f) => form[f]).length;
+  // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 값 없으면 ""(행은 "—")
+  const inheritedDisplay = (field: ParamField): string =>
+    spParams && isSpParamField(field) ? formatParamValue(field, spParams[field]) : "";
 
   const changeDept = (dept: string) => {
     if (dept === form.department) return; // 같은 부서 재선택 — SearchSelect는 onChange를 항상 발화하므로 no-op(담당자 무단 초기화 방지)
@@ -232,10 +257,11 @@ export function NodeSummaryModal({
     form.department !== department ||
     form.system !== system ||
     form.duration !== duration ||
+    form.cost_krw !== cost_krw ||
+    form.cost_usd !== cost_usd ||
     form.headcount !== headcount ||
-    form.etf !== etf ||
-    form.cost !== cost ||
-    form.extra !== extra ||
+    form.annual_count !== annual_count ||
+    form.fte !== fte ||
     form.url !== url ||
     form.urlLabel !== urlLabel;
   const requestNavigate = (id: string) => {
@@ -253,10 +279,11 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      cost_krw: form.cost_krw,
+      cost_usd: form.cost_usd,
       headcount: form.headcount,
-      etf: form.etf,
-      cost: form.cost,
-      extra: form.extra,
+      annual_count: form.annual_count,
+      fte: form.fte,
       url: form.url,
       urlLabel: form.urlLabel,
     });
@@ -540,57 +567,75 @@ export function NodeSummaryModal({
                         </div>
                       </div>
                     ))}
-                    {/* 숫자 파라미터 5종 — 접기 그룹(기본 접힘, 인스펙터와 공유 키) */}
-                    <div className="py-1.5">
-                      <button
-                        type="button"
-                        data-id="summary-params-toggle"
-                        aria-expanded={!paramsCollapsed}
-                        className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
-                        onClick={() => {
-                          const next = !paramsCollapsed;
-                          setParamsCollapsed(next);
-                          writeParamsCollapsed(next);
-                        }}
-                      >
-                        <ChevronRight
-                          size={12}
-                          strokeWidth={1.5}
-                          className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
-                        />
-                        {t("inspector.parameters")}
-                        {filledParamCount > 0 && (
-                          <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
-                        )}
-                      </button>
-                      {!paramsCollapsed && (
-                        <div className="ml-2 border-l border-divider pl-2">
-                          {PARAM_FIELDS.map((key) => (
-                            <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
-                              <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
-                              <div className="flex min-w-0 flex-1 justify-end">
+                  </>
+                )}
+                {/* 회당 파라미터 — 접기 그룹(기본 접힘, 인스펙터와 공유 키). start/end 외 모든 타입에 표시.
+                    subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
+                {editableParams.length > 0 && (
+                  <div className="py-1.5">
+                    <button
+                      type="button"
+                      data-id="summary-params-toggle"
+                      aria-expanded={!paramsCollapsed}
+                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                      onClick={() => {
+                        const next = !paramsCollapsed;
+                        setParamsCollapsed(next);
+                        writeParamsCollapsed(next);
+                      }}
+                    >
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={1.5}
+                        className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
+                      />
+                      {t("inspector.parameters")}
+                      {filledParamCount > 0 && (
+                        <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
+                      )}
+                    </button>
+                    {!paramsCollapsed && (
+                      <div className="ml-2 border-l border-divider pl-2">
+                        {PARAM_FIELDS.map((key) => (
+                          <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
+                            <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
+                            <div className="flex min-w-0 flex-1 justify-end">
+                              {editableParams.includes(key) ? (
                                 <ParamInput
                                   field={key}
                                   dataId={`summary-param-${key}`}
-                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
                                   value={form[key]}
+                                  disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                                   ariaLabel={t(PARAM_LABEL_KEY[key])}
                                   onCommit={(next) => setForm((f) => ({ ...f, [key]: next }))}
                                 />
-                              </div>
+                              ) : (
+                                <span
+                                  data-id={`summary-param-${key}`}
+                                  className="min-w-0 truncate text-right text-caption text-ink"
+                                >
+                                  {inheritedDisplay(key) || "—"}
+                                </span>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <UrlLabelField
-                      key={nodeId}
-                      url={form.url}
-                      urlLabel={form.urlLabel}
-                      readOnly={readOnly}
-                      onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                    />
-                  </>
+                          </div>
+                        ))}
+                        {nodeType === "subprocess" && (
+                          <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {showAttributes && (
+                  <UrlLabelField
+                    key={nodeId}
+                    url={form.url}
+                    urlLabel={form.urlLabel}
+                    readOnly={readOnly}
+                    onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                  />
                 )}
               </div>
               {groupLabel && (

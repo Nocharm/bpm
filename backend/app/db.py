@@ -54,16 +54,15 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("ai_chat_messages", "payload", "TEXT"),
     # 오우닝 부서 — 기존 행은 NULL=누락, 설정에서 owner가 수동 지정 (spec 2026-07-10)
     ("process_maps", "owning_department", "VARCHAR(200)"),
-    # 숫자 파라미터 4종 — duration 세분화 (design 2026-07-11)
+    # 회당 단가 파라미터 (design 2026-07-13) — 운영 미배포라 구 컬럼(etf/cost/extra)은 이관 없이 폐기
+    ("nodes", "cost_krw", "VARCHAR(50) DEFAULT ''"),
+    ("nodes", "cost_usd", "VARCHAR(50) DEFAULT ''"),
     ("nodes", "headcount", "VARCHAR(50) DEFAULT ''"),
-    ("nodes", "etf", "VARCHAR(50) DEFAULT ''"),
-    ("nodes", "cost", "VARCHAR(50) DEFAULT ''"),
-    ("nodes", "extra", "VARCHAR(50) DEFAULT ''"),
-    # SP 숫자 파라미터 4종 (design 2026-07-11 SP)
+    ("nodes", "annual_count", "VARCHAR(50) DEFAULT ''"),
+    ("nodes", "fte", "VARCHAR(50) DEFAULT ''"),
+    ("process_maps", "sp_cost_krw", "VARCHAR(50)"),
+    ("process_maps", "sp_cost_usd", "VARCHAR(50)"),
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
-    ("process_maps", "sp_etf", "VARCHAR(50)"),
-    ("process_maps", "sp_cost", "VARCHAR(50)"),
-    ("process_maps", "sp_extra", "VARCHAR(50)"),
 ]
 
 

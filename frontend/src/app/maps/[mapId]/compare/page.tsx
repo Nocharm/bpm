@@ -65,7 +65,7 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import type { ChangedField } from "@/lib/diff";
-import { formatDurationHm } from "@/lib/duration";
+import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -166,16 +166,21 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   department: "field.department",
   system: "field.system",
   duration: "field.duration",
+  cost_krw: "field.costKrw",
+  cost_usd: "field.costUsd",
   headcount: "field.headcount",
-  etf: "field.etf",
-  cost: "field.cost",
-  extra: "field.extra",
+  annual_count: "field.annualCount",
+  fte: "field.fte",
   location: "field.location",
 };
 
-// duration 필드만 1h30m로 포맷 — 나머지 필드는 원문 그대로. 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
-const displayFieldValue = (field: ChangedField, value: string): string =>
-  field === "duration" ? formatDurationHm(value) || value : value;
+// duration은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
+// 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
+const displayFieldValue = (field: ChangedField, value: string): string => {
+  if (field === "duration") return formatDurationHm(value) || value;
+  if (field === "cost_krw" || field === "cost_usd") return formatThousands(value) || value;
+  return value;
+};
 
 // 병합 노드 status → ProcessNode diffStatus (unchanged는 중립=undefined)
 function toDiffStatus(status: MergedNodeStatus): "added" | "removed" | "changed" | undefined {
@@ -203,10 +208,11 @@ function buildAppNodes(
       department: m.node.department,
       system: m.node.system,
       duration: m.node.duration,
+      cost_krw: m.node.cost_krw,
+      cost_usd: m.node.cost_usd,
       headcount: m.node.headcount,
-      etf: m.node.etf,
-      cost: m.node.cost,
-      extra: m.node.extra,
+      annual_count: m.node.annual_count,
+      fte: m.node.fte,
       groupIds: m.node.group_ids ?? [],
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
@@ -1159,10 +1165,11 @@ function ComparePane({
                       "department",
                       "system",
                       "duration",
+                      "cost_krw",
+                      "cost_usd",
                       "headcount",
-                      "etf",
-                      "cost",
-                      "extra",
+                      "annual_count",
+                      "fte",
                     ] as const
                   ).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);

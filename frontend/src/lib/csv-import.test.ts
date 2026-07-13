@@ -146,16 +146,54 @@ describe("buildGraphFromCsv — 검증 에러", () => {
     expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
   });
 
+  it("14컬럼 헤더를 파싱한다", () => {
+    const csv = [
+      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
+      "검토,,,,,1.30,1250000,,2,1200,0.8,,,",
+    ].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.errors).toEqual([]);
+    const node = outcome.graph!.nodes.find((n) => n.title === "검토")!;
+    expect(node.duration).toBe("1.30");
+    expect(node.cost_krw).toBe("1250000");
+    expect(node.cost_usd).toBe("");
+    expect(node.headcount).toBe("2");
+    expect(node.annual_count).toBe("1200");
+    expect(node.fte).toBe("0.8");
+  });
+
+  it("콤마 표기 비용을 허용한다", () => {
+    const csv = ["Name,Duration,Cost_KRW", '검토,1.30,"1,250,000"'].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.graph!.nodes.find((n) => n.title === "검토")!.cost_krw).toBe("1250000");
+  });
+
+  it("원·달러를 동시에 채운 행은 에러", () => {
+    const csv = ["Name,Cost_KRW,Cost_USD", "검토,1000,10"].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.graph).toBeNull();
+    expect(outcome.errors[0].message).toMatch(/only one/i);
+  });
+
+  it("구 헤더(ETF/Cost/Extra)는 미지원 헤더 에러", () => {
+    const csv = ["Name,ETF", "검토,1"].join("\n");
+    const outcome = buildGraphFromCsv(csv);
+    expect(outcome.graph).toBeNull();
+    expect(outcome.errors.length).toBeGreaterThan(0);
+    expect(outcome.errors[0].message).toContain('Unknown column "ETF"');
+  });
+
   it("숫자 파라미터 컬럼을 파싱·정규화한다", () => {
     const csv = [
-      "Name,Duration,Headcount,ETF,Cost,Extra,Next",
+      "Name,Duration,Headcount,FTE,Cost_KRW,Annual_Count,Next",
       "A,0.75,2,1.5,300,7,B",
       "B,,,,,,",
     ].join("\r\n");
     const outcome = buildGraphFromCsv(csv);
     const a = outcome.graph?.nodes.find((n) => n.title === "A");
     expect(a?.duration).toBe("1.15"); // 60분 이월
-    expect([a?.headcount, a?.etf, a?.cost, a?.extra]).toEqual(["2", "1.5", "300", "7"]);
+    expect([a?.headcount, a?.fte, a?.cost_krw, a?.annual_count]).toEqual(["2", "1.5", "300", "7"]);
   });
 
   it("비숫자 파라미터는 행 번호와 함께 에러", () => {
@@ -187,7 +225,7 @@ describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
     ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
@@ -442,6 +480,29 @@ describe("buildGraphFromCsv — 머지", () => {
     expect(node.linked_map_id).toBe(7);
   });
 
+  it("서브프로세스 매칭 행은 annual_count·fte만 반영하고 나머지 4필드는 드롭 + 경고 (링크 맵 지정값 보호)", () => {
+    const base = baseGraph();
+    base.nodes[1] = {
+      ...base.nodes[1], node_type: "subprocess", linked_map_id: 7,
+      duration: "2", cost_krw: "5000", headcount: "3", annual_count: "10", fte: "0.2",
+    };
+    const csv = [
+      "Name,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE",
+      "Review request,9,99999,,9,50,0.9",
+    ].join("\n");
+    const o = mergeOf(csv, base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    // 링크 맵이 소유한 4필드는 CSV 값이 반영되지 않고 기존값을 그대로 지킨다
+    expect(node.duration).toBe("2");
+    expect(node.cost_krw).toBe("5000");
+    expect(node.headcount).toBe("3");
+    // 부모가 편집 가능한 2필드는 CSV 값이 반영된다
+    expect(node.annual_count).toBe("50");
+    expect(node.fte).toBe("0.9");
+    expect(o.warnings.some((w) => w.line === 2 && w.message.includes("Review request"))).toBe(true);
+  });
+
   it("CSV에만 있는 행은 신규 노드가 되고 addedNodeIds에 담긴다", () => {
     const o = mergeOf(`${H9}\nReview request,,,,,,,,Sign contract\nSign contract,,,,,,,,\n`);
     const sign = o.graph!.nodes.find((n) => n.title === "Sign contract")!;
@@ -483,6 +544,42 @@ describe("buildGraphFromCsv — 머지", () => {
     const o = buildGraphFromCsv(`${H9}\nReview request,,,,,,,,\n`, { base: { nodes: [], edges: [], groups: [] } });
     expect(o.merge.matchedCount).toBe(0);
     expect(o.merge.removedNodes).toEqual([]);
+  });
+});
+
+// finding 1(critical) — mergeNode(csv-import.ts)의 통화 배타는 과거 candidate 자기 안에서만 체크됐다.
+// 편도 pick(next===""?existing:next)을 cost_krw/cost_usd에 그대로 쓰면, 기존 cost_usd="20"에
+// CSV가 Cost_KRW=50000만 채운 행이 반대쪽(cost_usd)을 못 지워 두 통화가 동시에 저장 시도된다
+// (백엔드 _assert_single_currency가 422 — 사용자는 어느 노드/필드인지 못 봄).
+describe("buildGraphFromCsv — 통화 전환은 반대쪽 기존값을 지운다 (finding 1)", () => {
+  const H_COST = "Name,Cost_KRW,Cost_USD";
+
+  it("Cost_KRW만 채운 행은 기존 Cost_USD를 지운다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], cost_usd: "20" };
+    const o = mergeOf(`${H_COST}\nReview request,50000,\n`, base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.cost_krw).toBe("50000");
+    expect(node.cost_usd).toBe("");
+  });
+
+  it("Cost_USD만 채운 행은 기존 Cost_KRW를 지운다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], cost_krw: "5000" };
+    const o = mergeOf(`${H_COST}\nReview request,,20\n`, base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.cost_usd).toBe("20");
+    expect(node.cost_krw).toBe("");
+  });
+
+  it("둘 다 빈 셀이면(건드리지 않음) 기존 통화값을 그대로 지킨다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], cost_usd: "20" };
+    const o = mergeOf(`${H_COST}\nReview request,,\n`, base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.cost_usd).toBe("20");
+    expect(node.cost_krw).toBe("");
   });
 });
 
@@ -643,6 +740,8 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.graph?.nodes.find((n) => n.id === "n1")?.assignee).toBe("김담당");
   });
 
+  // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 무효 에코 케이스가
+  // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
   it("normalizes AI duration — invalid echo keeps existing, valid form adopted", () => {
     const existing = baseNode("n1", "견적 검토", { duration: "1.30" });
     const invalid = buildGraphFromAiProposal(
@@ -737,5 +836,113 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     );
     expect(outcome.graph?.nodes.find((n) => n.title === "중복")?.id).toBe("n1");
     expect(outcome.merge.removedNodes.map((n) => n.id)).toEqual(["n2"]);
+  });
+
+  // AI 계약 강제(design 2026-07-13 §6) — 프롬프트만 믿지 않고 변환단에서 다시 막는다
+  it("subprocess 노드는 annual_count·fte만 반영 — 나머지 4필드는 드롭 + 경고", () => {
+    const sub = baseNode("s1", "구매 승인", {
+      node_type: "subprocess", linked_map_id: 7,
+      duration: "2", cost_krw: "5000", headcount: "3", annual_count: "10", fte: "0.2",
+    });
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [aiNode("a", "구매 승인", "subprocess", {
+          duration: "9", cost_krw: "999", headcount: "9", annual_count: "1200", fte: "0.8",
+        })],
+        edges: [], groups: [],
+      },
+      { base: base([sub]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "s1");
+    // 부모가 편집 가능한 2필드는 AI 값이 반영된다
+    expect(node?.annual_count).toBe("1200");
+    expect(node?.fte).toBe("0.8");
+    // 링크 맵이 소유한 4필드는 무변경(기존값 유지)
+    expect(node?.duration).toBe("2");
+    expect(node?.cost_krw).toBe("5000");
+    expect(node?.headcount).toBe("3");
+    expect(outcome.warnings.some((w) => /subprocess/i.test(w.message) && w.message.includes("구매 승인"))).toBe(true);
+  });
+
+  it("AI가 원·달러 비용을 둘 다 채우면 그 노드의 비용은 반영하지 않고 경고한다", () => {
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [aiNode("a", "검토", "process", { cost_krw: "1000", cost_usd: "10" })],
+        edges: [], groups: [],
+      },
+      {},
+    );
+    const node = outcome.graph?.nodes.find((n) => n.title === "검토");
+    expect(node?.cost_krw).toBe("");
+    expect(node?.cost_usd).toBe("");
+    expect(outcome.warnings.some((w) => /only one/i.test(w.message))).toBe(true);
+  });
+
+  // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 위반 케이스가
+  // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
+  it("통화 배타 위반 시 기존 cost_krw는 지워지지 않고 유지된다(매칭 노드)", () => {
+    const existing = baseNode("n1", "검토", { cost_krw: "5000" });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "검토", "process", { cost_krw: "1000", cost_usd: "10" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(node?.cost_krw).toBe("5000");
+    expect(node?.cost_usd).toBe("");
+    expect(outcome.warnings.some((w) => /only one/i.test(w.message))).toBe(true);
+  });
+
+  // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 무효 숫자 에코 케이스가
+  // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
+  it("숫자 파라미터 무효 에코는 기존값을 지키고, 유효값은 콤마를 벗겨 반영한다", () => {
+    const existing = baseNode("n1", "견적 검토", { headcount: "3" });
+    const invalid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { headcount: "다수" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(invalid.graph?.nodes.find((n) => n.id === "n1")?.headcount).toBe("3");
+    const valid = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { cost_krw: "1,250,000" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    expect(valid.graph?.nodes.find((n) => n.id === "n1")?.cost_krw).toBe("1250000");
+  });
+
+  // finding 1(critical) — buildGraphFromAiProposal도 mergeNode를 거치므로 CSV와 같은 통화 전환
+  // 버그를 공유한다: AI가 cost_krw만 채우면 기존 cost_usd가 반대쪽에 그대로 남아 두 통화가
+  // 동시에 채워진 채 저장 시도된다.
+  it("AI가 한쪽 통화만 채우면 기존 반대쪽 통화값을 지운다(통화 전환, finding 1)", () => {
+    const existing = baseNode("n1", "검토", { cost_usd: "20" });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "검토", "process", { cost_krw: "50000" })], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(node?.cost_krw).toBe("50000");
+    expect(node?.cost_usd).toBe("");
+  });
+
+  // finding 2(minor) — AiNode.node_type은 자유 문자열이라 AI가 링크 없이 "subprocess"를 보낼 수
+  // 있다. 신규 노드는 linked_map_id가 항상 null이라, 강등 없이는 칩/인스펙터엔 값이 안 보이는
+  // 죽은 노드가 CSV export·비교 diff엔 값이 새는 채로 남는다.
+  it("AI가 링크 없는 신규 노드에 subprocess 타입을 보내면 process로 강등한다 (finding 2)", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "미러 노드", "subprocess")], edges: [], groups: [] },
+      {},
+    );
+    const node = outcome.graph?.nodes.find((n) => n.title === "미러 노드");
+    expect(node?.node_type).toBe("process");
+    expect(node?.linked_map_id).toBeNull();
+  });
+
+  it("이미 링크된 서브프로세스 매칭 노드는 강등 대상이 아니다 (node_type/링크 보존, 회귀)", () => {
+    const sub = baseNode("s1", "발주 하위", { node_type: "subprocess", linked_map_id: 7 });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "발주 하위", "subprocess")], edges: [], groups: [] },
+      { base: base([sub]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "s1");
+    expect(node?.node_type).toBe("subprocess");
+    expect(node?.linked_map_id).toBe(7);
   });
 });

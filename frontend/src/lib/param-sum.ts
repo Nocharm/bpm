@@ -1,28 +1,57 @@
-// Σ 합산 — 게시본 그래프의 파라미터 직합. subprocess 노드는 링크 맵의 sp값(subprocess_refs).
-// duration은 분 환산 캐리, 나머지는 스케일 정수 합산(부동소수 오차 차단). design 2026-07-11 SP §3.
+// Σ 합산 — 게시본 그래프의 파라미터. subprocess 노드는 링크 맵의 sp값(subprocess_refs).
+// duration은 분 환산 캐리, 비용은 통화별 독립 합, 인원은 "값 있는 일반 노드의 평균"(SP 제외).
+// design 2026-07-13 §4.
 import type { Graph } from "./api";
-import { DURATION_PATTERN, NUMERIC_PATTERN, normalizeDuration } from "./duration";
+import { DURATION_PATTERN, formatDurationHm, formatThousands, NUMERIC_PATTERN, normalizeDuration } from "./duration";
+import { getInheritedParams, type SpParamField } from "./params";
 
-export type SummableField = "duration" | "etf" | "cost" | "extra";
-
-function collectValues(graph: Graph, field: SummableField): string[] {
+/**
+ * 합산 기여값 — SP 노드는 링크 맵 지정값. includeSubprocess=false면 SP 노드를 건너뛴다
+ * (headcount 평균은 SP를 분자·분모 어디에도 넣지 않는다 — 하위 맵 값의 이중 반영 방지).
+ * getInheritedParams로 designated 게이트를 거친다 — 지정 해제(undesignate_subprocess는
+ * sp_designated_at만 null화하고 sp_duration 등 행 값은 남겨둔다) 후에도 인스펙터·칩은 "—"인데
+ * Σ만 남은 값을 합산하는 불일치(finding)를 막는다. 인스펙터가 쓰는 getInheritedParams와 같은
+ * 소스라 두 규칙이 어긋날 수 없다.
+ */
+function collectValues(graph: Graph, field: SpParamField, includeSubprocess: boolean): string[] {
   const values: string[] = [];
   for (const node of graph.nodes) {
-    const raw =
-      node.node_type === "subprocess" && node.linked_map_id !== null
-        ? graph.subprocess_refs?.[node.linked_map_id]?.[field] ?? ""
-        : (node[field] ?? "");
+    if (node.node_type === "subprocess" && node.linked_map_id !== null) {
+      if (!includeSubprocess) continue;
+      const raw = getInheritedParams(graph.subprocess_refs?.[node.linked_map_id])[field];
+      if (raw !== "") values.push(raw);
+      continue;
+    }
+    const raw = node[field] ?? "";
     if (raw !== "") values.push(raw);
   }
   return values;
 }
 
-/** 유효 기여값 합. 기여값 0개면 "" — 입력을 비워두는 것과 0을 구분한다. */
-export function sumParamField(graph: Graph, field: SummableField): string {
+/** 십진 문자열을 정수 도메인으로 — 소수 자릿수 스케일과 그 스케일의 정수합. 부동소수 오차 차단. */
+function scaleValues(values: string[]): { scale: number; total: number } {
+  const maxDecimals = values.reduce((max, v) => Math.max(max, v.split(".")[1]?.length ?? 0), 0);
+  const scale = 10 ** maxDecimals;
+  return { scale, total: values.reduce((sum, v) => sum + Math.round(Number(v) * scale), 0) };
+}
+
+/** 십진 문자열 합. */
+function sumDecimal(values: string[]): string {
+  const valid = values.filter((v) => NUMERIC_PATTERN.test(v));
+  if (valid.length === 0) return "";
+  const { scale, total } = scaleValues(valid);
+  return String(total / scale);
+}
+
+/**
+ * 파라미터 4종 Σ. duration·cost_krw·cost_usd는 합, headcount는 값 있는 일반 노드의 평균(소수점 2자리).
+ * 기여값 0개면 "" — 입력을 비워두는 것과 0을 구분한다.
+ */
+export function sumParamField(graph: Graph, field: SpParamField): string {
   if (field === "duration") {
     let totalMinutes = 0;
     let contributed = 0;
-    for (const raw of collectValues(graph, field)) {
+    for (const raw of collectValues(graph, field, true)) {
       const normalized = normalizeDuration(raw);
       if (normalized === null || normalized === "" || !DURATION_PATTERN.test(normalized)) continue;
       const [h, mm = ""] = normalized.split(".");
@@ -34,11 +63,25 @@ export function sumParamField(graph: Graph, field: SummableField): string {
     const minutes = totalMinutes % 60;
     return minutes === 0 ? String(hours) : `${hours}.${String(minutes).padStart(2, "0")}`;
   }
-  const valid = collectValues(graph, field).filter((v) => NUMERIC_PATTERN.test(v));
-  if (valid.length === 0) return "";
-  const maxDecimals = valid.reduce((max, v) => Math.max(max, v.split(".")[1]?.length ?? 0), 0);
-  const scale = 10 ** maxDecimals;
-  const total = valid.reduce((sum, v) => sum + Math.round(Number(v) * scale), 0);
-  const result = total / scale;
-  return String(result);
+  if (field === "headcount") {
+    // 평균 — SP 노드는 하위 맵의 대표값이라 이중 반영을 피해 제외 (design 2026-07-13 §4).
+    // 나눗셈까지 정수 도메인에서 — float로 하면 1.005×3의 평균이 1.00으로 깎인다.
+    const valid = collectValues(graph, field, false).filter((v) => NUMERIC_PATTERN.test(v));
+    if (valid.length === 0) return "";
+    const { scale, total } = scaleValues(valid);
+    const hundredths = Math.round((total * 100) / (scale * valid.length));
+    return (hundredths / 100).toFixed(2);
+  }
+  return sumDecimal(collectValues(graph, field, true));
+}
+
+/**
+ * Σ 원시값 → SP 지정 모달 placeholder 표시형. 빈 값이면 placeholder 자체를 없앤다(undefined) —
+ * 빈 문자열 placeholder와 구분해 HTML 기본 동작(값 있으면 placeholder 숨김)에 맡긴다.
+ */
+export function formatSumPreview(field: SpParamField, raw: string): string | undefined {
+  if (raw === "") return undefined;
+  if (field === "duration") return formatDurationHm(raw) || undefined;
+  if (field === "cost_krw" || field === "cost_usd") return formatThousands(raw) || undefined;
+  return raw;
 }

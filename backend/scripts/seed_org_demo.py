@@ -79,14 +79,18 @@ MAP_SPECS = [
     ("Vendor Management", "private"),
 ]
 
-# 서브프로세스 지정 — 대표 업무 4종(맵 인덱스 → 시스템/소요시간). 부서는 오너 소속 리프.
+# 서브프로세스 지정 — 대표 업무 4종(맵 인덱스 → 시스템/소요시간(H.MM)/KRW비용/인원). 부서는 오너 소속 리프.
 # 나머지 맵은 의도적으로 미지정 → 피커 미노출·소비 노드 경고+잠금 시연 (spec 2026-07-06)
-DESIGNATED_SPECS: dict[int, tuple[str, str]] = {
-    0: ("SAP ERP", "3 days"),      # Order Fulfillment
-    2: ("PagerDuty", "1 day"),     # Incident Response
-    5: ("Zendesk", "2 days"),      # Customer Support
-    6: ("Jenkins", "4 hours"),     # Release Pipeline
+# duration은 시간 단위 숫자만 유효(자유텍스트 "3일"류는 경계에서 소거) — 옛 일수 표기를 시간으로 환산 (design 2026-07-13)
+DESIGNATED_SPECS: dict[int, tuple[str, str, str, str]] = {
+    0: ("SAP ERP", "72", "2000000", "6"),   # Order Fulfillment — 3 business days
+    2: ("PagerDuty", "24", "300000", "2"),  # Incident Response — 1 day
+    5: ("Zendesk", "48", "900000", "4"),    # Customer Support — 2 days
+    6: ("Jenkins", "4", "150000", "3"),     # Release Pipeline — 4 hours
 }
+
+# USD 데모 — 해외 벤더 결제라 cost_usd만 채운 노드로 통화 배타(원/달러 상호배제)를 시연 (design 2026-07-13)
+USD_DEMO_MAP_IDX = 11  # Vendor Management
 
 
 def _build_leaves() -> list[dict]:
@@ -113,14 +117,16 @@ def _org_path(leaf: dict) -> str:
     return "/".join(v for v in (leaf["l1"], leaf["l2"], leaf["l3"], leaf["l4"]) if v)
 
 
-def _flow(version_id: int, prefix: str) -> list:
+def _flow(version_id: int, prefix: str, use_usd: bool = False) -> list:
+    # 회당 단가 데모값 — duration=H.MM(1.30=1시간30분), fte 1.5명, 연간 1200건 (design 2026-07-13)
+    # 비용은 원/달러 상호배제 — USD_DEMO_MAP_IDX 맵만 cost_usd로 채워 배타 규칙을 시연한다.
+    cost_krw, cost_usd = ("", "850") if use_usd else ("500000", "")
     return [
         Node(id=f"{prefix}-s", version_id=version_id, title="Start", node_type="start",
              pos_x=80.0, pos_y=200.0, sort_order=0),
-        # 숫자 파라미터 4종 데모값 — duration=H.MM(1.30=1시간30분) (design 2026-07-11)
         Node(id=f"{prefix}-t", version_id=version_id, title="Process Request", node_type="task",
              pos_x=300.0, pos_y=200.0, sort_order=1, duration="1.30",
-             headcount="3", etf="1.5", cost="500", extra="2"),
+             headcount="3", fte="1.5", cost_krw=cost_krw, cost_usd=cost_usd, annual_count="1200"),
         Node(id=f"{prefix}-e", version_id=version_id, title="End", node_type="end",
              pos_x=520.0, pos_y=200.0, sort_order=2, is_primary_end=True),
         Edge(id=f"{prefix}-e1", version_id=version_id, source_node_id=f"{prefix}-s",
@@ -233,6 +239,7 @@ async def _seed_groups(session: AsyncSession, people: list[dict]) -> dict:
 async def _seed_versions(
     session: AsyncSession, map_id: int, owner: str, approvers: list[str], base, map_idx: int,
 ) -> None:
+    use_usd = map_idx == USD_DEMO_MAP_IDX
     for n in range(1, 6):
         status = workflow.PUBLISHED if n == 5 else workflow.EXPIRED
         created = base - timedelta(days=(6 - n) * 7)
@@ -241,7 +248,7 @@ async def _seed_versions(
         session.add(v)
         await session.flush()
         if n == 5:
-            session.add_all(_flow(v.id, f"m{map_id}v{n}"))
+            session.add_all(_flow(v.id, f"m{map_id}v{n}", use_usd))
         _publish_events(session, v.id, owner, approvers, created,
                         reject=(map_idx % 4 == 1 and n == 3),
                         withdraw=(map_idx % 4 == 2 and n == 4))
@@ -254,7 +261,7 @@ async def _seed_versions(
                        reject_reason="Needs revision before release", created_at=created)
         session.add(v)
         await session.flush()
-        session.add_all(_flow(v.id, f"m{map_id}v6"))
+        session.add_all(_flow(v.id, f"m{map_id}v6", use_usd))
         session.add(VersionEvent(version_id=v.id, event_type="created", actor=owner, created_at=created))
         session.add(VersionEvent(version_id=v.id, event_type="submitted", actor=owner,
                                  created_at=created + timedelta(hours=1)))
@@ -267,7 +274,7 @@ async def _seed_versions(
                        created_at=created)
         session.add(v)
         await session.flush()
-        session.add_all(_flow(v.id, f"m{map_id}v6"))
+        session.add_all(_flow(v.id, f"m{map_id}v6", use_usd))
         session.add(VersionEvent(version_id=v.id, event_type="created", actor=owner, created_at=created))
 
 
@@ -287,11 +294,13 @@ async def _seed_maps(session: AsyncSession, people: list[dict], groups: dict) ->
             m.owning_department = owner["path"]
         # 서브프로세스 지정 — 대표 업무만(게시 v5 존재 전제 충족). 부서 필수 + 최근 변경 기록.
         if idx in DESIGNATED_SPECS:
-            system, duration = DESIGNATED_SPECS[idx]
+            system, duration, cost_krw, headcount = DESIGNATED_SPECS[idx]
             m.sp_designated_at = base
             m.sp_department = owner["leaf"]["department"]
             m.sp_system = system
             m.sp_duration = duration
+            m.sp_cost_krw = cost_krw
+            m.sp_headcount = headcount
             m.sp_changed_by = owner["login_id"]
             m.sp_changed_at = base
         session.add(m)

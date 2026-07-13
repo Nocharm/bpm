@@ -18,7 +18,7 @@ export function normalizeDuration(raw: string): string | null {
   return minutes === 0 ? String(hours) : `${hours}.${String(minutes).padStart(2, "0")}`;
 }
 
-/** 일반 십진 파라미터(headcount·etf·cost·extra) — 유효하면 트림 원문, 무효면 null. */
+/** 일반 십진 파라미터(duration 외 — cost_krw·cost_usd·headcount·annual_count·fte) — 유효하면 트림 원문, 무효면 null. */
 export function normalizeNumericParam(raw: string): string | null {
   const text = raw.trim();
   if (text === "") return "";
@@ -35,4 +35,18 @@ export function formatDurationHm(raw: string): string {
   if (minutes === 0) return `${hours}h`;
   if (hours === 0) return `${minutes}m`;
   return `${hours}h${minutes}m`;
+}
+
+/** 천단위 콤마 표시형 — 비용 필드 전용(편집 중이 아닐 때). 소수부는 콤마 없이 보존. 무효/빈값 → "". */
+export function formatThousands(raw: string): string {
+  const text = raw.trim();
+  if (text === "" || !NUMERIC_PATTERN.test(text)) return "";
+  const [intPart, fracPart] = text.split(".");
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fracPart === undefined ? withCommas : `${withCommas}.${fracPart}`;
+}
+
+/** 콤마 제거 — CSV·붙여넣기의 "1,250,000" 같은 입력을 받아들이기 위한 역변환. */
+export function stripThousands(raw: string): string {
+  return raw.replace(/,/g, "");
 }

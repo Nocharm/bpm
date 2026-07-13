@@ -910,3 +910,58 @@ def test_call_ai_usage_absent_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
     assert reply.content == "ok"
     assert reply.prompt_tokens is None
     assert reply.completion_tokens is None
+
+
+# ── 회당 파라미터 AI 계약 확장 (design 2026-07-13 §6, Task 2) ─────────────────
+
+
+def test_ai_node_attributes_parses_new_params() -> None:
+    from app.schemas import AiNodeAttributes
+
+    attr = AiNodeAttributes.model_validate(
+        {"cost_krw": "1250000", "headcount": "2", "annual_count": "1200", "fte": "0.8"}
+    )
+    assert attr.cost_krw == "1250000"
+    assert attr.headcount == "2"
+    assert attr.annual_count == "1200"
+    assert attr.fte == "0.8"
+    assert attr.cost_usd is None  # 미제공 = 기존값 유지(부분 갱신 시맨틱)
+
+
+def test_ai_node_attributes_rejects_both_currencies() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas import AiNodeAttributes
+
+    with pytest.raises(ValidationError):
+        AiNodeAttributes.model_validate({"cost_krw": "1000", "cost_usd": "10"})
+
+
+def test_ai_prompt_states_subprocess_param_limit() -> None:
+    """SP 노드는 annual_count·fte만 수정 가능하다는 제한이 프롬프트에 명시돼야 한다."""
+    from app.ai_prompt import _INSTRUCTIONS
+
+    assert "subprocess 노드는 annual_count·fte만 수정할 수 있습니다" in _INSTRUCTIONS
+    for field in ("cost_krw", "cost_usd", "headcount", "annual_count", "fte"):
+        assert field in _INSTRUCTIONS  # graph 스키마 예시 + 규칙 텍스트 모두 갱신됐는지 확인
+
+
+def test_serialize_node_exposes_new_params() -> None:
+    """_serialize_node가 새 파라미터를 노출해야 모델이 기존값을 보존/판단할 수 있다."""
+    from app.ai_prompt import _serialize_node
+    from app.schemas import NodeOut
+
+    node = NodeOut(
+        id="n1",
+        title="처리",
+        node_type="process",
+        cost_krw="50000",
+        headcount="3",
+        annual_count="500",
+        fte="0.5",
+    )
+    text = _serialize_node(node)
+    assert "비용=50000원" in text
+    assert "인원=3" in text
+    assert "연간건수=500" in text
+    assert "FTE=0.5" in text

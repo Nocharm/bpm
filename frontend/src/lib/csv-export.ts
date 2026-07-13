@@ -2,7 +2,7 @@
 // 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §3
 import type { Graph, GraphEdge, GraphNode } from "./api";
 
-const HEADER = "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next";
+const HEADER = "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next";
 
 function escapeCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -40,7 +40,7 @@ export function orderNodesByFlow(nodes: GraphNode[], edges: GraphEdge[]): GraphN
   return ordered;
 }
 
-/** Graph → CSV(13컬럼) + 표현 불가 경고. BOM 없음·CRLF 조인 — BOM은 다운로드 시 접두(Task 7). */
+/** Graph → CSV(14컬럼) + 표현 불가 경고. BOM 없음·CRLF 조인 — BOM은 다운로드 시 접두(Task 7). */
 export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string[] } {
   const warnings: string[] = [];
   const nodes = orderNodesByFlow(graph.nodes, graph.edges);
@@ -82,10 +82,14 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     if (node.node_type === "decision" && parts.length < 2) {
       warnings.push(`Decision "${node.title}" has fewer than 2 branches — re-import will infer process`);
     }
+    // 서브프로세스 노드는 자기 행의 duration/cost_*/headcount(보통 빈값)를 쓴다 — 링크 맵의
+    // 상속값(excel-export.ts는 getInheritedParams로 이 값을 씀)을 쓰지 않는 것은 의도적 차이다.
+    // CSV는 왕복(export→import) 포맷이라, 상속값을 쓰면 재임포트 시 "링크 맵 지정값이라 무시됨"
+    // drop-warning이 매번 뜬다(mergeNode의 dropUneditableParams). Excel은 읽기전용 리포트라 무관.
     return [
       node.title, node.description, node.assignee, node.department, node.system,
-      node.duration, node.headcount ?? "", node.etf ?? "", node.cost ?? "", node.extra ?? "",
-      node.url ?? "", node.url_label ?? "", parts.join(";"),
+      node.duration, node.cost_krw ?? "", node.cost_usd ?? "", node.headcount ?? "",
+      node.annual_count ?? "", node.fte ?? "", node.url ?? "", node.url_label ?? "", parts.join(";"),
     ].map(escapeCell).join(",");
   };
   if (start) {

@@ -198,8 +198,22 @@ import {
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
-import { formatDurationHm, normalizeDuration } from "@/lib/duration";
-import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
+import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
+import {
+  coerceAiNewNodeType,
+  dropConflictingCurrency,
+  formatParamValue,
+  getEditableParamFields,
+  getInheritedParams,
+  isCostFieldDisabled,
+  isSpParamField,
+  PARAM_FIELDS,
+  PARAM_LABEL_KEY,
+  readParamsCollapsed,
+  resolveAiParamPatch,
+  writeParamsCollapsed,
+  type ParamField,
+} from "@/lib/params";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -510,10 +524,11 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       department: node.department,
       system: node.system,
       duration: node.duration,
+      cost_krw: node.cost_krw ?? "",
+      cost_usd: node.cost_usd ?? "",
       headcount: node.headcount ?? "",
-      etf: node.etf ?? "",
-      cost: node.cost ?? "",
-      extra: node.extra ?? "",
+      annual_count: node.annual_count ?? "",
+      fte: node.fte ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       groupIds: node.group_ids ?? [],
@@ -563,19 +578,30 @@ function offsetAtX(savedX: number, steps: { x: number; footprint: number }[]): n
 }
 
 // AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
+// 신규 노드라 보호할 기존 SP 지정값이 없다 — SP 게이트는 미적용(csv-import mergeNode의
+// existing===null 분기와 동일 전제). 통화 배타는 신규 여부와 무관해 그대로 적용.
 function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined): GraphNode {
   const attr = node.attributes;
+  const num = (raw: string | null | undefined) => normalizeNumericParam(stripThousands(raw ?? "")) ?? "";
+  const { values: cost } = dropConflictingCurrency({ cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd) });
   return {
     id,
     title: node.title,
     description: node.description,
-    node_type: node.node_type,
+    // 링크 없는 subprocess는 process로 강등 — linked_map_id는 바로 아래서 null 고정이라
+    // node_type만 subprocess면 칩/인스펙터에 값이 렌더되지 않는 죽은 상태가 된다(finding)
+    node_type: coerceAiNewNodeType(node.node_type),
     color: attr?.color ?? "",
     assignee: attr?.assignee ?? "",
     department: attr?.department ?? "",
     system: attr?.system ?? "",
     // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
     duration: normalizeDuration(attr?.duration ?? "") ?? "",
+    cost_krw: cost.cost_krw ?? "",
+    cost_usd: cost.cost_usd ?? "",
+    headcount: num(attr?.headcount),
+    annual_count: num(attr?.annual_count),
+    fte: num(attr?.fte),
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -614,10 +640,11 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       department: node.data.department,
       system: node.data.system,
       duration: node.data.duration,
+      cost_krw: node.data.cost_krw ?? "",
+      cost_usd: node.data.cost_usd ?? "",
       headcount: node.data.headcount ?? "",
-      etf: node.data.etf ?? "",
-      cost: node.data.cost ?? "",
-      extra: node.data.extra ?? "",
+      annual_count: node.data.annual_count ?? "",
+      fte: node.data.fte ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       pos_x: node.position.x,
@@ -1183,10 +1210,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spCostKrw: ref.cost_krw,
+            spCostUsd: ref.cost_usd,
             spHeadcount: ref.headcount,
-            spEtf: ref.etf,
-            spCost: ref.cost,
-            spExtra: ref.extra,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1195,10 +1221,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: null,
             spSystem: null,
             spDuration: null,
+            spCostKrw: null,
+            spCostUsd: null,
             spHeadcount: null,
-            spEtf: null,
-            spCost: null,
-            spExtra: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -1767,9 +1792,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                     ...(attr.assignee != null ? { assignee: attr.assignee } : {}),
                     ...(attr.department != null ? { department: attr.department } : {}),
                     ...(attr.system != null ? { system: attr.system } : {}),
-                    ...(attr.duration != null
-                      ? { duration: normalizeDuration(attr.duration) ?? "" }
-                      : {}),
+                    // 파라미터 6종 — SP 노드는 annual_count·fte만 수정 가능(design 2026-07-13 §6) + 통화
+                    // 배타를 resolveAiParamPatch(buildGraphFromAiProposal과 같은 규칙 재사용)로 강제.
+                    // 위반 필드는 색과 같은 방식으로 조용히 드롭 — 이 경로엔 프리뷰 경고 채널이 없다.
+                    ...resolveAiParamPatch(node.data.nodeType, attr),
                     ...(attr.url != null ? { url: attr.url } : {}),
                     ...(attr.url_label != null ? { urlLabel: attr.url_label } : {}),
                   }
@@ -3047,10 +3073,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             department: "",
             system: "",
             duration: "",
+            cost_krw: "",
+            cost_usd: "",
             headcount: "",
-            etf: "",
-            cost: "",
-            extra: "",
+            annual_count: "",
+            fte: "",
             groupIds: [],
             hasChildren: false,
           },
@@ -3662,10 +3689,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           department: "",
           system: "",
           duration: "",
+          cost_krw: "",
+          cost_usd: "",
           headcount: "",
-          etf: "",
-          cost: "",
-          extra: "",
+          annual_count: "",
+          fte: "",
           groupIds: [],
           hasChildren: false,
           linkedMapId,
@@ -3712,10 +3740,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           department: "",
           system: "",
           duration: "",
+          cost_krw: "",
+          cost_usd: "",
           headcount: "",
-          etf: "",
-          cost: "",
-          extra: "",
+          annual_count: "",
+          fte: "",
           groupIds: [],
           hasChildren: false,
           linkedMapId,
@@ -4772,8 +4801,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
+  const editableParams = selectedNode ? getEditableParamFields(selectedNode.data.nodeType) : [];
+  // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 미지정이면 ""(행은 "—")
+  const selectedInheritedParams = getInheritedParams(selectedSpRef);
+  const inheritedParamDisplay = (field: ParamField): string =>
+    isSpParamField(field) ? formatParamValue(field, selectedInheritedParams[field]) : "";
   // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생(가벼운 계산, useMemo 불요)
-  const filledParamCount = selectedNode ? PARAM_FIELDS.filter((f) => selectedNode.data[f]).length : 0;
+  const filledParamCount = selectedNode
+    ? editableParams.filter((f) => selectedNode.data[f]).length
+    : 0;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -7294,6 +7331,11 @@ function MapEditor({ mapId }: { mapId: number }) {
               .filter((label): label is string => Boolean(label));
             const groupLabel = groupLabels.length > 0 ? groupLabels.join(", ") : null;
             const typeKey = NODE_TYPE_OPTIONS.find((option) => option.value === node.data.nodeType)?.labelKey;
+            // subprocess가 링크 맵에서 상속하는 회당 4필드 — 읽기전용 표시용(라이브 참조)
+            const summarySpRef =
+              node.data.nodeType === "subprocess" && node.data.linkedMapId != null
+                ? subprocessRefs.get(node.data.linkedMapId)
+                : undefined;
             return (
               <NodeSummaryModal
                 versionId={versionId}
@@ -7314,13 +7356,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                cost_krw={node.data.cost_krw ?? ""}
+                cost_usd={node.data.cost_usd ?? ""}
                 headcount={node.data.headcount ?? ""}
-                etf={node.data.etf ?? ""}
-                cost={node.data.cost ?? ""}
-                extra={node.data.extra ?? ""}
+                annual_count={node.data.annual_count ?? ""}
+                fte={node.data.fte ?? ""}
                 url={node.data.url ?? ""}
                 urlLabel={node.data.urlLabel ?? ""}
                 colorPresets={colorsForType(node.data.nodeType)}
+                spParams={
+                  node.data.nodeType === "subprocess" ? getInheritedParams(summarySpRef) : null
+                }
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onNavigate={(id) => setSummaryNodeId(id)}
@@ -7625,49 +7671,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                             readOnly={readOnly}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
-                          <div className="mt-2 border-t border-divider pt-1">
-                            <button
-                              type="button"
-                              data-id="inspector-params-toggle"
-                              aria-expanded={!paramsCollapsed}
-                              className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
-                              onClick={() => {
-                                const next = !paramsCollapsed;
-                                setParamsCollapsed(next);
-                                writeParamsCollapsed(next);
-                              }}
-                            >
-                              <ChevronRight
-                                size={12}
-                                strokeWidth={1.5}
-                                className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
-                              />
-                              {t("inspector.parameters")}
-                              {filledParamCount > 0 && (
-                                <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
-                              )}
-                            </button>
-                            {!paramsCollapsed && (
-                              <div className="ml-2 border-l border-divider pl-2">
-                                {PARAM_FIELDS.map((key) => (
-                                  <div key={key} className="flex items-center justify-between gap-2 py-1">
-                                    <span className="shrink-0 text-caption text-ink-secondary">
-                                      {t(PARAM_LABEL_KEY[key])}
-                                    </span>
-                                    <ParamInput
-                                      field={key}
-                                      dataId={`inspector-param-${key}`}
-                                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                                      value={selectedNode.data[key] ?? ""}
-                                      disabled={readOnly}
-                                      ariaLabel={t(PARAM_LABEL_KEY[key])}
-                                      onCommit={(next) => updateSelectedData({ [key]: next }, true)}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
                         </div>
                       )}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
@@ -7698,7 +7701,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </button>
                         </div>
                       )}
-                      {/* subprocess — 지정 어트리뷰트(라이브 참조, 읽기전용). 수정은 링크 대상 맵 설정의 지정 모달에서만 */}
+                      {/* subprocess — 지정 어트리뷰트(라이브 참조, 읽기전용). 수정은 링크 대상 맵 설정의 지정 모달에서만.
+                          회당 파라미터 4종은 아래 Parameters 카드에서 같이 표시(중복 방지) */}
                       {selectedNode.data.nodeType === "subprocess" && selectedSpRef?.designated && (
                         <div data-id="inspector-subprocess-attrs" className="rounded-md border border-hairline p-3">
                           <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
@@ -7706,14 +7710,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             ["department", "field.department"],
                             ["assignee", "field.assignee"],
                             ["system", "field.system"],
-                            ["duration", "field.duration"],
-                            ["headcount", "field.headcount"],
-                            ["etf", "field.etf"],
-                            ["cost", "field.cost"],
-                            ["extra", "field.extra"],
                           ] as const).map(([key, labelKey]) => {
-                            const value =
-                              key === "duration" ? formatDurationHm(selectedSpRef[key] ?? "") : selectedSpRef[key];
+                            const value = selectedSpRef[key];
                             return (
                               <div
                                 key={key}
@@ -7739,6 +7737,72 @@ function MapEditor({ mapId }: { mapId: number }) {
                             </span>
                           </div>
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                        </div>
+                      )}
+                      {/* 회당 파라미터 — 접기 그룹(기본 접힘). start/end 외 모든 타입에 표시.
+                          subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
+                      {editableParams.length > 0 && (
+                        <div data-id="inspector-params" className="rounded-md border border-hairline p-3">
+                          <button
+                            type="button"
+                            data-id="inspector-params-toggle"
+                            aria-expanded={!paramsCollapsed}
+                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                            onClick={() => {
+                              const next = !paramsCollapsed;
+                              setParamsCollapsed(next);
+                              writeParamsCollapsed(next);
+                            }}
+                          >
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.5}
+                              className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
+                            />
+                            {t("inspector.parameters")}
+                            {filledParamCount > 0 && (
+                              <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
+                            )}
+                          </button>
+                          {!paramsCollapsed && (
+                            <div className="ml-2 border-l border-divider pl-2">
+                              {PARAM_FIELDS.map((key) => (
+                                <div key={key} className="flex items-center justify-between gap-2 py-1">
+                                  <span className="shrink-0 text-caption text-ink-secondary">
+                                    {t(PARAM_LABEL_KEY[key])}
+                                  </span>
+                                  {editableParams.includes(key) ? (
+                                    <ParamInput
+                                      field={key}
+                                      dataId={`inspector-param-${key}`}
+                                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                                      value={selectedNode.data[key] ?? ""}
+                                      disabled={
+                                        readOnly ||
+                                        isCostFieldDisabled(
+                                          key,
+                                          selectedNode.data.cost_krw ?? "",
+                                          selectedNode.data.cost_usd ?? "",
+                                        )
+                                      }
+                                      ariaLabel={t(PARAM_LABEL_KEY[key])}
+                                      onCommit={(next) => updateSelectedData({ [key]: next }, true)}
+                                    />
+                                  ) : (
+                                    <span
+                                      data-id={`inspector-param-${key}`}
+                                      className="min-w-0 flex-1 truncate px-1 py-0.5 text-right text-caption text-ink"
+                                    >
+                                      {inheritedParamDisplay(key) || "—"}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                              {selectedNode.data.nodeType === "subprocess" && (
+                                <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
