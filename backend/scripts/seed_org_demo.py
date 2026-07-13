@@ -118,9 +118,10 @@ def _flow(version_id: int, prefix: str) -> list:
         Node(id=f"{prefix}-s", version_id=version_id, title="Start", node_type="start",
              pos_x=80.0, pos_y=200.0, sort_order=0),
         # 숫자 파라미터 4종 데모값 — duration=H.MM(1.30=1시간30분) (design 2026-07-11)
+        # fte 1.5명 투입, 연간 1200건, 회당 50만원 추가비용(KRW) · cost_krw/cost_usd 상호배제
         Node(id=f"{prefix}-t", version_id=version_id, title="Process Request", node_type="task",
              pos_x=300.0, pos_y=200.0, sort_order=1, duration="1.30",
-             headcount="3", etf="1.5", cost="500", extra="2"),
+             headcount="3", fte="1.5", cost_krw="500000", cost_usd="", annual_count="1200"),
         Node(id=f"{prefix}-e", version_id=version_id, title="End", node_type="end",
              pos_x=520.0, pos_y=200.0, sort_order=2, is_primary_end=True),
         Edge(id=f"{prefix}-e1", version_id=version_id, source_node_id=f"{prefix}-s",
