@@ -5,6 +5,9 @@
 ## 2026-07-13 — 노드 파라미터 재정의 설계 (main)
 - 회당 단가 모델로 의미 확정(회당 소요시간·회당 추가비용(원/달러 배타 2필드)·회당 투입인원·연간 건수·FTE), SP 지정은 3종만 + 인원 Σ는 평균(SP 제외)·Σ 미리보기 placeholder, CSV 14컬럼·Excel 서식·AI 계약(6필드 읽기/쓰기, SP는 연간건수·FTE만) 반영 — 스펙 `docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md`. 운영 미배포라 DB 재생성 전제(기존 cost 값 폐기).
 
+## 2026-07-13 — 노드 파라미터 재정의 구현 계획 (main)
+- 11개 태스크 TDD 체크리스트 작성 — 백엔드 개명·비용 배타(T1), AI 계약(T2), 프론트 개명 스윕·편집 집합(T3), Σ 규칙(T4), 콤마 서식(T5), SP Σ placeholder(T6), 에디터 SP 부분편집(T7), CSV 14컬럼(T8), Excel 서식(T9), AI 변환단 강제(T10), 시드·문서·전체검증(T11). 계획 `docs/superpowers/plans/2026-07-13-node-params-redefinition.md`.
+
 ## 2026-07-12 — CLAUDE.md 세션 학습 반영 (main)
 - 숫자 파라미터(duration H.MM) 계약 레슨 추가(이중 정규화 동기화·경계 소거 증발·표시형·raw dict 우회), backend pytest .env 함정 커맨드(bash/PS 병기), frontend AGENTS.md에 ParamInput 필수·내보내기 라이브러리 dynamic import 규칙.
 
