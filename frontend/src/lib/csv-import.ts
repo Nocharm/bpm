@@ -59,9 +59,10 @@ export interface CsvImportContext {
   base?: Graph;
 }
 
+// cost_usd 컬럼은 아직 없음 — CSV 스키마 개편은 후속 태스크 (여기선 기존 컬럼의 1:1 개명만)
 const HEADER_COLUMNS = [
   "name", "description", "assignee", "department", "system", "duration",
-  "headcount", "etf", "cost", "extra", "url", "url_label", "next",
+  "headcount", "fte", "cost_krw", "annual_count", "url", "url_label", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
@@ -75,11 +76,20 @@ const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
   system: 100,
   duration: 50,
   headcount: 50,
-  etf: 50,
-  cost: 50,
-  extra: 50,
+  fte: 50,
+  cost_krw: 50,
+  annual_count: 50,
   url: 500,
   url_label: 100,
+};
+
+// 십진 파라미터 컬럼 — 검증 에러 문구는 컬럼명이 아닌 사람이 읽는 라벨로
+const NUMERIC_COLUMNS = ["headcount", "fte", "cost_krw", "annual_count"] as const;
+const NUMERIC_COLUMN_LABEL: Record<(typeof NUMERIC_COLUMNS)[number], string> = {
+  headcount: "Headcount",
+  fte: "FTE",
+  cost_krw: "Cost (KRW)",
+  annual_count: "Annual volume",
 };
 
 export function decodeCsvBuffer(buffer: ArrayBuffer): string {
@@ -151,10 +161,11 @@ const NODE_DEFAULTS = {
   department: "",
   system: "",
   duration: "",
+  cost_krw: "",
+  cost_usd: "",
   headcount: "",
-  etf: "",
-  cost: "",
-  extra: "",
+  annual_count: "",
+  fte: "",
   url: "",
   url_label: "",
   pos_x: 0,
@@ -183,10 +194,11 @@ const mergeNode = (existing: GraphNode | null, next: GraphNode): GraphNode =>
         department: pick(next.department, existing.department),
         system: pick(next.system, existing.system),
         duration: pick(next.duration, existing.duration),
+        cost_krw: pick(next.cost_krw ?? "", existing.cost_krw ?? ""),
+        cost_usd: pick(next.cost_usd ?? "", existing.cost_usd ?? ""),
         headcount: pick(next.headcount ?? "", existing.headcount ?? ""),
-        etf: pick(next.etf ?? "", existing.etf ?? ""),
-        cost: pick(next.cost ?? "", existing.cost ?? ""),
-        extra: pick(next.extra ?? "", existing.extra ?? ""),
+        annual_count: pick(next.annual_count ?? "", existing.annual_count ?? ""),
+        fte: pick(next.fte ?? "", existing.fte ?? ""),
         url: pick(next.url ?? "", existing.url ?? ""),
         url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
         sort_order: next.sort_order,
@@ -331,9 +343,9 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
     headcount: cellOf(r, "headcount"),
-    etf: cellOf(r, "etf"),
-    cost: cellOf(r, "cost"),
-    extra: cellOf(r, "extra"),
+    fte: cellOf(r, "fte"),
+    cost_krw: cellOf(r, "cost_krw"),
+    annual_count: cellOf(r, "annual_count"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
     nextRaw: cellOf(r, "next"),
@@ -352,7 +364,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "headcount", "etf", "cost", "extra", "url", "url_label"] as const) {
+    for (const col of ["name", "system", "duration", "headcount", "fte", "cost_krw", "annual_count", "url", "url_label"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -367,9 +379,9 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     if (durationNorm === null) {
       errors.push({ line: row.line, message: `Duration must be a number in H.MM hours — "${row.duration}"` });
     }
-    for (const col of ["headcount", "etf", "cost", "extra"] as const) {
+    for (const col of NUMERIC_COLUMNS) {
       if (normalizeNumericParam(row[col]) === null) {
-        errors.push({ line: row.line, message: `${col === "headcount" ? "Headcount" : col === "etf" ? "ETF" : col === "cost" ? "Cost" : "Extra"} must be a number — "${row[col]}"` });
+        errors.push({ line: row.line, message: `${NUMERIC_COLUMN_LABEL[col]} must be a number — "${row[col]}"` });
       }
     }
   }
@@ -475,10 +487,10 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         department: resolved.get(row.name)?.department ?? "",
         system: row.system,
         duration: normalizeDuration(row.duration) ?? "",
+        cost_krw: normalizeNumericParam(row.cost_krw) ?? "",
         headcount: normalizeNumericParam(row.headcount) ?? "",
-        etf: normalizeNumericParam(row.etf) ?? "",
-        cost: normalizeNumericParam(row.cost) ?? "",
-        extra: normalizeNumericParam(row.extra) ?? "",
+        annual_count: normalizeNumericParam(row.annual_count) ?? "",
+        fte: normalizeNumericParam(row.fte) ?? "",
         url: row.url,
         url_label: row.url_label,
         sort_order: i + 1,
@@ -798,7 +810,7 @@ export function toCsvDirectory(dir: Directory): CsvDirectory {
  *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
   return [
-    "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+    "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
     "Review request,Check the request against the purchasing policy,hong.gd,Quality Part 1,SAP ERP,16,1,,,,,,Approval decision",
     'Approval decision,,"hong.gd, kim.cs",Quality Part 1,,0.30,2,,,,,,Sign contract:approved;Notify rejection:rejected',
     "Sign contract,,lee.yh,Finance Part,,24,1,,,,https://example.com/contract,Contract,",

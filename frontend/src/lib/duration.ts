@@ -18,7 +18,7 @@ export function normalizeDuration(raw: string): string | null {
   return minutes === 0 ? String(hours) : `${hours}.${String(minutes).padStart(2, "0")}`;
 }
 
-/** 일반 십진 파라미터(headcount·etf·cost·extra) — 유효하면 트림 원문, 무효면 null. */
+/** 일반 십진 파라미터(duration 외 — cost_krw·cost_usd·headcount·annual_count·fte) — 유효하면 트림 원문, 무효면 null. */
 export function normalizeNumericParam(raw: string): string | null {
   const text = raw.trim();
   if (text === "") return "";

@@ -20,11 +20,12 @@ export type NodeData = {
   department: string;
   system: string;
   duration: string;
-  // 숫자 파라미터 — design 2026-07-11
+  // 회당 파라미터 — 키는 ParamField와 동일(PARAM_FIELDS로 일반 인덱싱하므로 snake 유지). design 2026-07-13
+  cost_krw?: string;
+  cost_usd?: string;
   headcount?: string;
-  etf?: string;
-  cost?: string;
-  extra?: string;
+  annual_count?: string;
+  fte?: string;
   // 참조 링크(URL) — 노드당 1개, 빈 값 허용
   url?: string;
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
@@ -64,11 +65,10 @@ export type NodeData = {
   spAssignee?: string | null;
   spSystem?: string | null;
   spDuration?: string | null;
-  // 숫자 파라미터 — sp 확장 (design 2026-07-11 SP)
+  // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
+  spCostKrw?: string | null;
+  spCostUsd?: string | null;
   spHeadcount?: string | null;
-  spEtf?: string | null;
-  spCost?: string | null;
-  spExtra?: string | null;
   spUrl?: string | null;
   spUrlLabel?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)

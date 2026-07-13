@@ -3,7 +3,8 @@
 import type { Graph } from "./api";
 import { DURATION_PATTERN, NUMERIC_PATTERN, normalizeDuration } from "./duration";
 
-export type SummableField = "duration" | "etf" | "cost" | "extra";
+// 노드와 SP 지정값 양쪽에 존재하는 파라미터만 합산 가능 — headcount는 Σ 버튼 없음(기존 동작 유지)
+export type SummableField = "duration" | "cost_krw" | "cost_usd";
 
 function collectValues(graph: Graph, field: SummableField): string[] {
   const values: string[] = [];

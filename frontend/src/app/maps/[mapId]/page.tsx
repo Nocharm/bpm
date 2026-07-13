@@ -199,7 +199,12 @@ import {
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 import { formatDurationHm, normalizeDuration } from "@/lib/duration";
-import { PARAM_FIELDS, PARAM_LABEL_KEY, readParamsCollapsed, writeParamsCollapsed } from "@/lib/params";
+import {
+  getEditableParamFields,
+  PARAM_LABEL_KEY,
+  readParamsCollapsed,
+  writeParamsCollapsed,
+} from "@/lib/params";
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -510,10 +515,11 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       department: node.department,
       system: node.system,
       duration: node.duration,
+      cost_krw: node.cost_krw ?? "",
+      cost_usd: node.cost_usd ?? "",
       headcount: node.headcount ?? "",
-      etf: node.etf ?? "",
-      cost: node.cost ?? "",
-      extra: node.extra ?? "",
+      annual_count: node.annual_count ?? "",
+      fte: node.fte ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       groupIds: node.group_ids ?? [],
@@ -614,10 +620,11 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       department: node.data.department,
       system: node.data.system,
       duration: node.data.duration,
+      cost_krw: node.data.cost_krw ?? "",
+      cost_usd: node.data.cost_usd ?? "",
       headcount: node.data.headcount ?? "",
-      etf: node.data.etf ?? "",
-      cost: node.data.cost ?? "",
-      extra: node.data.extra ?? "",
+      annual_count: node.data.annual_count ?? "",
+      fte: node.data.fte ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       pos_x: node.position.x,
@@ -1183,10 +1190,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: ref.assignee,
             spSystem: ref.system,
             spDuration: ref.duration,
+            spCostKrw: ref.cost_krw,
+            spCostUsd: ref.cost_usd,
             spHeadcount: ref.headcount,
-            spEtf: ref.etf,
-            spCost: ref.cost,
-            spExtra: ref.extra,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1195,10 +1201,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             spAssignee: null,
             spSystem: null,
             spDuration: null,
+            spCostKrw: null,
+            spCostUsd: null,
             spHeadcount: null,
-            spEtf: null,
-            spCost: null,
-            spExtra: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -3047,10 +3052,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             department: "",
             system: "",
             duration: "",
+            cost_krw: "",
+            cost_usd: "",
             headcount: "",
-            etf: "",
-            cost: "",
-            extra: "",
+            annual_count: "",
+            fte: "",
             groupIds: [],
             hasChildren: false,
           },
@@ -3662,10 +3668,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           department: "",
           system: "",
           duration: "",
+          cost_krw: "",
+          cost_usd: "",
           headcount: "",
-          etf: "",
-          cost: "",
-          extra: "",
+          annual_count: "",
+          fte: "",
           groupIds: [],
           hasChildren: false,
           linkedMapId,
@@ -3712,10 +3719,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           department: "",
           system: "",
           duration: "",
+          cost_krw: "",
+          cost_usd: "",
           headcount: "",
-          etf: "",
-          cost: "",
-          extra: "",
+          annual_count: "",
+          fte: "",
           groupIds: [],
           hasChildren: false,
           linkedMapId,
@@ -4772,8 +4780,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
+  const editableParams = selectedNode ? getEditableParamFields(selectedNode.data.nodeType) : [];
   // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생(가벼운 계산, useMemo 불요)
-  const filledParamCount = selectedNode ? PARAM_FIELDS.filter((f) => selectedNode.data[f]).length : 0;
+  const filledParamCount = selectedNode
+    ? editableParams.filter((f) => selectedNode.data[f]).length
+    : 0;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -7314,10 +7326,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                cost_krw={node.data.cost_krw ?? ""}
+                cost_usd={node.data.cost_usd ?? ""}
                 headcount={node.data.headcount ?? ""}
-                etf={node.data.etf ?? ""}
-                cost={node.data.cost ?? ""}
-                extra={node.data.extra ?? ""}
+                annual_count={node.data.annual_count ?? ""}
+                fte={node.data.fte ?? ""}
                 url={node.data.url ?? ""}
                 urlLabel={node.data.urlLabel ?? ""}
                 colorPresets={colorsForType(node.data.nodeType)}
@@ -7649,7 +7662,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             </button>
                             {!paramsCollapsed && (
                               <div className="ml-2 border-l border-divider pl-2">
-                                {PARAM_FIELDS.map((key) => (
+                                {editableParams.map((key) => (
                                   <div key={key} className="flex items-center justify-between gap-2 py-1">
                                     <span className="shrink-0 text-caption text-ink-secondary">
                                       {t(PARAM_LABEL_KEY[key])}
@@ -7707,10 +7720,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                             ["assignee", "field.assignee"],
                             ["system", "field.system"],
                             ["duration", "field.duration"],
+                            ["cost_krw", "field.costKrw"],
+                            ["cost_usd", "field.costUsd"],
                             ["headcount", "field.headcount"],
-                            ["etf", "field.etf"],
-                            ["cost", "field.cost"],
-                            ["extra", "field.extra"],
                           ] as const).map(([key, labelKey]) => {
                             const value =
                               key === "duration" ? formatDurationHm(selectedSpRef[key] ?? "") : selectedSpRef[key];

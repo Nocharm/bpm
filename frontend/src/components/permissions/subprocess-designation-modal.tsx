@@ -1,6 +1,6 @@
 "use client";
 
-// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템 자유 입력 + 숫자 파라미터 5종(Σ 합산 지원).
+// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템 자유 입력 + SP 파라미터 4종(Σ 합산 지원).
 // 설정 화면 패널과 에디터 인스펙터 카드가 공용으로 사용한다.
 
 import { Sigma } from "lucide-react";
@@ -12,7 +12,7 @@ import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
-import { PARAM_FIELDS, PARAM_LABEL_KEY } from "@/lib/params";
+import { PARAM_LABEL_KEY, SP_PARAM_FIELDS } from "@/lib/params";
 import { sumParamField, type SummableField } from "@/lib/param-sum";
 import { isHttpUrl } from "@/lib/url";
 
@@ -21,10 +21,9 @@ export interface DesignationForm {
   assignee: string;
   system: string;
   duration: string;
+  cost_krw: string;
+  cost_usd: string;
   headcount: string;
-  etf: string;
-  cost: string;
-  extra: string;
   url: string;
   urlLabel: string;
 }
@@ -82,10 +81,9 @@ export function SubprocessDesignationModal({
         assignee: form.assignee,
         system: form.system,
         duration: form.duration,
+        cost_krw: form.cost_krw,
+        cost_usd: form.cost_usd,
         headcount: form.headcount,
-        etf: form.etf,
-        cost: form.cost,
-        extra: form.extra,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
       });
@@ -125,7 +123,7 @@ export function SubprocessDesignationModal({
               onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
             />
           </div>
-          {PARAM_FIELDS.map((key) => (
+          {SP_PARAM_FIELDS.map((key) => (
             <div key={key} className="flex items-center justify-between gap-2 border-t border-divider py-1">
               <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
               <div className="flex min-w-0 flex-1 items-center justify-end gap-1">

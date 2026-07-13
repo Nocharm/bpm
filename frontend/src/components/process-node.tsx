@@ -9,6 +9,7 @@ import {
   Clock,
   Coins,
   CornerDownRight,
+  DollarSign,
   Link as LinkIcon,
   Lock,
   type LucideIcon,
@@ -89,17 +90,32 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 }
 
 const PARAM_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, headcount: Users, etf: Target, cost: Coins, extra: Tag,
+  duration: Clock, cost_krw: Coins, cost_usd: DollarSign, headcount: Users, annual_count: Tag, fte: Target,
 };
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4)
-// subprocess는 지정 어트리뷰트(sp*, 라이브 참조)를 표시. duration만 1h30m로 포맷(나머지 4필드는 원문 숫자).
+// subprocess는 회당 4필드를 지정 어트리뷰트(sp*, 라이브 참조)로, 연간 건수·FTE는 노드 자체 값으로 표시.
+// duration만 1h30m로 포맷(나머지는 원문 숫자).
 function NodeParams({ data, className }: { data: AppNode["data"]; className?: string }) {
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
-  const values: Partial<Record<ParamField, string | null | undefined>> = isSubprocess
-    ? { duration: data.spDuration, headcount: data.spHeadcount, etf: data.spEtf, cost: data.spCost, extra: data.spExtra }
-    : { duration: data.duration, headcount: data.headcount, etf: data.etf, cost: data.cost, extra: data.extra };
+  const values: Partial<Record<ParamField, string | null | undefined>> = {
+    annual_count: data.annual_count,
+    fte: data.fte,
+    ...(isSubprocess
+      ? {
+          duration: data.spDuration,
+          cost_krw: data.spCostKrw,
+          cost_usd: data.spCostUsd,
+          headcount: data.spHeadcount,
+        }
+      : {
+          duration: data.duration,
+          cost_krw: data.cost_krw,
+          cost_usd: data.cost_usd,
+          headcount: data.headcount,
+        }),
+  };
   // duration은 formatDurationHm 결과 기준으로 filled 판정 — 무효(레거시 자유텍스트)는 ""가 되어 칩 자체를 숨김
   // (백엔드가 이미 소거하므로 실제로는 도달하지 않는 방어 코드).
   const displayValue = (f: ParamField): string | null | undefined =>

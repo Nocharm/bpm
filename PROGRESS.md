@@ -2,6 +2,9 @@
 
 프로젝트 진행 현황 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 
+## 2026-07-13 — 노드 파라미터 재정의 T3: 프론트 개명 스윕 + 편집 가능 필드 정의 (node-params)
+- 프론트 전 표면을 신규 키(`duration`/`cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte`)로 개명하고 `lib/params.ts`에 `PARAM_FIELDS`(표시 순서)·`SP_PARAM_FIELDS`(SP 지정 4종)·`getEditableParamFields(nodeType)`(start/end 없음, subprocess는 연간건수·FTE만) 도입. i18n은 `field.costKrw`/`costUsd`/`annualCount`/`fte` 신규 키(EN·KO), 구 `field.etf`/`cost`/`extra` 삭제. `NodeData`의 회당 파라미터 키는 `PARAM_FIELDS`로 일반 인덱싱하므로 snake 유지, SP 라이브 참조는 `spCostKrw`/`spCostUsd`. 동작 변경 없음(콤마 서식·통화 배타·Σ 규칙·CSV/Excel 스키마·AI 가드는 후속 태스크). 329→334 tests green, tsc/lint/build clean.
+
 ## 2026-07-13 — 노드 파라미터 재정의 T2: AI 계약 확장 (node-params)
 - `AiNodeAttributes`에 `cost_krw`/`cost_usd`/`headcount`/`annual_count`/`fte` 추가(부분 갱신 시맨틱: None=유지) + 공용 `_assert_single_currency` 재사용한 통화 배타 검증. `ai_prompt.py` 3곳(그래프 스키마 예시·규칙 텍스트·`_serialize_node`) 동기화, subprocess 노드는 `annual_count`·`fte`만 수정 가능하다는 제한을 프롬프트에 명시. 603→607 tests green, ruff clean.
 

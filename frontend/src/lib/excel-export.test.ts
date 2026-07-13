@@ -9,7 +9,7 @@ import { buildExcelModel } from "./excel-export";
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
   return {
     id, title, description: "", node_type, color: "", assignee: "", department: "", system: "",
-    duration: "", headcount: "", etf: "", cost: "", extra: "", url: "", url_label: "",
+    duration: "", headcount: "", fte: "", cost_krw: "", cost_usd: "", annual_count: "", url: "", url_label: "",
     pos_x: 0, pos_y: 0, sort_order, group_ids: [], linked_map_id: null,
     follow_latest: false, linked_version_id: null, is_primary_end: false,
     ...over,

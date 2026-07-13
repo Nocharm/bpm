@@ -36,10 +36,9 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     assignee: "",
     system: "",
     duration: "",
+    cost_krw: "",
+    cost_usd: "",
     headcount: "",
-    etf: "",
-    cost: "",
-    extra: "",
     url: "",
     urlLabel: "",
   });
@@ -95,10 +94,9 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       assignee: detail?.sp_assignee ?? "",
       system: detail?.sp_system ?? "",
       duration: detail?.sp_duration ?? "",
+      cost_krw: detail?.sp_cost_krw ?? "",
+      cost_usd: detail?.sp_cost_usd ?? "",
       headcount: detail?.sp_headcount ?? "",
-      etf: detail?.sp_etf ?? "",
-      cost: detail?.sp_cost ?? "",
-      extra: detail?.sp_extra ?? "",
       url: detail?.sp_url ?? "",
       urlLabel: detail?.sp_url_label ?? "",
     });
@@ -125,10 +123,9 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     { label: t("field.assignee"), value: detail.sp_assignee },
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
+    { label: t("field.costKrw"), value: detail.sp_cost_krw },
+    { label: t("field.costUsd"), value: detail.sp_cost_usd },
     { label: t("field.headcount"), value: detail.sp_headcount },
-    { label: t("field.etf"), value: detail.sp_etf },
-    { label: t("field.cost"), value: detail.sp_cost },
-    { label: t("field.extra"), value: detail.sp_extra },
   ];
 
 

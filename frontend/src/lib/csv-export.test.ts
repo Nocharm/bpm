@@ -10,7 +10,7 @@ import { buildCsvFromGraph, orderNodesByFlow } from "./csv-export";
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
   return {
     id, title, description: "", node_type, color: "", assignee: "", department: "", system: "",
-    duration: "", headcount: "", etf: "", cost: "", extra: "", url: "", url_label: "",
+    duration: "", headcount: "", fte: "", cost_krw: "", cost_usd: "", annual_count: "", url: "", url_label: "",
     pos_x: 0, pos_y: 0, sort_order, group_ids: [], linked_map_id: null,
     follow_latest: false, linked_version_id: null, is_primary_end: false,
     ...over,
@@ -24,7 +24,7 @@ function makeEdge(id: string, source: string, target: string, label = ""): Graph
 describe("buildCsvFromGraph — round trip", () => {
   it("round-trip: export → re-import produces no changes", () => {
     const csv = [
-      "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
       "A,first step,홍길동,Quality Part 1,SAP,16,1,,,,,,B",
       'B,,,,,0.30,2,,,,,,C:yes;D:no',
       "C,,,,,,,,,,https://example.com/x,Doc,",
@@ -44,7 +44,7 @@ describe("buildCsvFromGraph — round trip", () => {
 
   it("분기 라벨(대상:라벨)이 왕복에서 보존된다", () => {
     const csv = [
-      "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
       "A,,,,,,,,,,,,B",
       "B,,,,,,,,,,,,C:approved;D:rejected",
       "C,,,,,,,,,,,,",
@@ -177,7 +177,7 @@ describe("buildCsvFromGraph — round trip", () => {
     const bare: GraphNode = {
       id: "n1", title: "N", description: "", node_type: "process", color: "",
       assignee: "", department: "", system: "", duration: "",
-      // headcount/etf/cost/extra 의도적으로 생략(undefined) — optional 필드 안전성 검증
+      // headcount/fte/cost_krw/annual_count 의도적으로 생략(undefined) — optional 필드 안전성 검증
       url: "", url_label: "", pos_x: 0, pos_y: 0, sort_order: 1,
       group_ids: [], linked_map_id: null, follow_latest: false, linked_version_id: null, is_primary_end: false,
     };
@@ -185,7 +185,7 @@ describe("buildCsvFromGraph — round trip", () => {
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([]);
     const cells = csv.split("\r\n")[1].split(",");
-    // Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next
+    // Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next
     expect(cells.slice(6, 10)).toEqual(["", "", "", ""]);
   });
 });

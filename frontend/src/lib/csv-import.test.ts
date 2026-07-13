@@ -148,14 +148,14 @@ describe("buildGraphFromCsv — 검증 에러", () => {
 
   it("숫자 파라미터 컬럼을 파싱·정규화한다", () => {
     const csv = [
-      "Name,Duration,Headcount,ETF,Cost,Extra,Next",
+      "Name,Duration,Headcount,FTE,Cost_KRW,Annual_Count,Next",
       "A,0.75,2,1.5,300,7,B",
       "B,,,,,,",
     ].join("\r\n");
     const outcome = buildGraphFromCsv(csv);
     const a = outcome.graph?.nodes.find((n) => n.title === "A");
     expect(a?.duration).toBe("1.15"); // 60분 이월
-    expect([a?.headcount, a?.etf, a?.cost, a?.extra]).toEqual(["2", "1.5", "300", "7"]);
+    expect([a?.headcount, a?.fte, a?.cost_krw, a?.annual_count]).toEqual(["2", "1.5", "300", "7"]);
   });
 
   it("비숫자 파라미터는 행 번호와 함께 에러", () => {
@@ -187,7 +187,7 @@ describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next",
     ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙

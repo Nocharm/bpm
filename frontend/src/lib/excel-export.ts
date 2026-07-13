@@ -15,9 +15,9 @@ export interface ExcelNodeRow {
   system: string;
   duration: string;
   headcount: string;
-  etf: string;
-  cost: string;
-  extra: string;
+  fte: string;
+  cost_krw: string;
+  annual_count: string;
   url: string;
   urlLabel: string;
   groups: string; // 그룹 라벨 ", " 조인
@@ -103,9 +103,9 @@ export async function buildExcelModel({
         system: node.system,
         duration: node.duration,
         headcount: node.headcount ?? "",
-        etf: node.etf ?? "",
-        cost: node.cost ?? "",
-        extra: node.extra ?? "",
+        fte: node.fte ?? "",
+        cost_krw: node.cost_krw ?? "",
+        annual_count: node.annual_count ?? "",
         url: node.url ?? "",
         urlLabel: node.url_label ?? "",
         groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
@@ -147,7 +147,7 @@ const COLUMNS = [
   { header: "No", width: 6 }, { header: "Name", width: 32 }, { header: "Type", width: 12 },
   { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Department", width: 18 },
   { header: "System", width: 14 }, { header: "Duration (h)", width: 12 }, { header: "Headcount", width: 11 },
-  { header: "ETF", width: 9 }, { header: "Cost", width: 11 }, { header: "Extra", width: 9 },
+  { header: "FTE", width: 9 }, { header: "Cost (KRW)", width: 11 }, { header: "Annual volume", width: 13 },
   { header: "URL", width: 24 }, { header: "Groups", width: 18 }, { header: "Next", width: 32 },
 ];
 
@@ -184,7 +184,7 @@ export async function downloadExcel(model: ExcelModel, fileName: string): Promis
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
       no, row.title, row.type, row.description, row.assignee, row.department, row.system,
-      num(row.duration), num(row.headcount), num(row.etf), num(row.cost), num(row.extra),
+      num(row.duration), num(row.headcount), num(row.fte), num(row.cost_krw), num(row.annual_count),
       "", row.groups, row.next,
     ]);
     r.getCell(2).alignment = { indent: row.depth * 2 };

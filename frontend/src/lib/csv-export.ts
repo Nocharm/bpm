@@ -2,7 +2,7 @@
 // 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §3
 import type { Graph, GraphEdge, GraphNode } from "./api";
 
-const HEADER = "Name,Description,Assignee,Department,System,Duration,Headcount,ETF,Cost,Extra,URL,URL_Label,Next";
+const HEADER = "Name,Description,Assignee,Department,System,Duration,Headcount,FTE,Cost_KRW,Annual_Count,URL,URL_Label,Next";
 
 function escapeCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -84,7 +84,7 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     }
     return [
       node.title, node.description, node.assignee, node.department, node.system,
-      node.duration, node.headcount ?? "", node.etf ?? "", node.cost ?? "", node.extra ?? "",
+      node.duration, node.headcount ?? "", node.fte ?? "", node.cost_krw ?? "", node.annual_count ?? "",
       node.url ?? "", node.url_label ?? "", parts.join(";"),
     ].map(escapeCell).join(",");
   };
