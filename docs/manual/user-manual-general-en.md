@@ -35,6 +35,8 @@ This manual covers everything outside of editing — from signing in through map
 | **Viewer** | Read-only — browse, compare, comment |
 | **Approver** | Review and approve/reject versions submitted for approval |
 
+Every map has an **owning department**; people who belong to it automatically hold **Editor** access (see 2. Map List for creation and 5. Map Settings).
+
 A map with **Public** visibility is viewable by everyone; **Private** maps are visible only to collaborators and approvers. If you navigate to a private map you're not allowed to see, a no-access notice is shown.
 
 ---
@@ -52,8 +54,9 @@ A map with **Public** visibility is viewable by everyone; **Private** maps are v
 
 1. Click **New map**.
 2. Enter a name and description, and choose **Visibility** (Public / Private).
-3. Optionally add **initial collaborators** — individuals, teams, or user groups, each as Viewer or Editor.
-4. Add **at least one approver** — a map cannot be created without one.
+3. Set the **owning department** (required) — it must be a real org department, and people in it always hold Editor access to this map.
+4. Optionally add **initial collaborators** — individuals, teams, or user groups, each as Viewer or Editor.
+5. Add **at least one approver** — a map cannot be created without one.
 
 > **Create from CSV:** From the dropdown next to **New map**, choose **Create from CSV** to drop a CSV file and immediately create a map pre-filled with nodes. For the CSV format and rules, see "Importing" in the **Editing Maps** manual.
 
@@ -94,7 +97,7 @@ A map holds multiple **versions** (As-Is, To-Be, or free labels). A new version 
 2. **Submit for approval** — the version becomes #Pending and locks, and all approvers are notified.
 3. Approvers **Approve** or **Reject** (rejection requires a reason). Approval is **unanimous** — every approver must approve.
 4. **Publish** the approved version. The previously published version automatically becomes #Expired.
-5. **Withdraw** returns a pending version to draft (approvals reset). **Republish** creates a fresh draft from a published or expired version to run the cycle again.
+5. **Withdraw** returns a Pending or Approved version to draft (approvals reset) — only the **submitter** can do this. A Rejected version can also be withdrawn by the map owner or a sysadmin, and whoever withdraws it gets the checkout (edit lock). **Republish** creates a fresh draft from a published or expired version to run the cycle again.
 
 The **approval dashboard** at the bottom of the right inspector shows the stepper (Submit → Review → Publish), each approver's check state, and the available actions.
 
@@ -117,6 +120,7 @@ Open **Compare** from the editor top bar (requires at least one published versio
 Open **Map Settings** from the editor. Tabs:
 
 - **Details** — name and description.
+- **Owning department** — assign or change the map's owning department (Owner / sysadmin only). Its members automatically get Editor access, and changing the department moves that derived Editor access with it.
 - **Collaborators** — add individuals, teams, or user groups as Viewer / Editor. Removing or downgrading an editor may require approval.
 - **Approvers** — manage the approver list (locked while a version is under approval).
 - **Visibility** — Public / Private. Changing visibility **requires approval** and shows "Awaiting approval" until decided.

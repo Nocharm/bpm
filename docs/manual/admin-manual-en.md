@@ -102,6 +102,12 @@ Each entry shows the requester and context; decide with Approve / Reject (reject
 - **Sync all from AD** refreshes the directory from Active Directory. Run it when people join, move, or leave.
 - Assignee pickers in the editor resolve against this directory — a stale directory means missing people in pickers.
 
+Import tools fill in the Korean names and department info that AD doesn't provide:
+
+- **Korean name import** — upload employees' Korean names by CSV. Download the schema and the current data (missing only / a sample / a random 50 / all) to prepare it, and choose **skip / overwrite** on conflicts. Used for Korean-name display in pickers and member cards.
+- **Department info import** — upload departments' Korean names and department heads. Used for Korean department search in pickers and for showing the department-head chain.
+- **Department remap** — move an employee to a different department. The **department table** shows the list of org departments.
+
 ---
 
 ## 8. Database Viewer & Operations Dashboard
@@ -140,7 +146,7 @@ Deleting a map or group is a **soft delete** — it moves to the trash and is pe
 Everything in the user manual's workflow section applies, plus:
 
 - **Force checkout** — take an active editing lock when the holder is unavailable. Use it sparingly; the previous holder loses unsaved work context. Idle locks already auto-release after 30 minutes.
-- **Decide anywhere** — as effective owner you can submit, publish, and withdraw on any map, and decide checkout requests and transfers.
+- **Decide anywhere** — as effective owner you can submit and publish on any map, and decide checkout requests and transfers. **Withdraw** is the exception: Pending and Approved versions can be withdrawn only by the **submitter**; only a Rejected version can be withdrawn by the map owner or a sysadmin.
 - **Approver reassignment** — when a map has no active approver (e.g. the only approver left the company), use the forced-reassign flow in Map Settings → Approvers to appoint new ones.
 - Remember the publish rule: publishing a version marks the previously published one #Expired — a terminal state that cannot re-enter approval. Use **Republish** to start a new cycle from it.
 

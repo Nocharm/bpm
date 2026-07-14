@@ -49,7 +49,7 @@ Select a node and edit in the right inspector:
 - A plain node has a **single output** — to branch, use a **Decision** node. Its outgoing edges get branch labels (**Yes** / **No** / **Other**).
 - Edge labels (branch conditions etc.) are edited via the edge context menu or `F2`.
 - **Line style** per edge: Curved, Stepped, or Straight.
-- Dragging a node close to another reveals **drop zones** — **Before** / **Group** / **After** — to insert it into the flow in one motion.
+- Dragging a node close to another reveals **drop zones** — **Before** / **After** / **Swap** / **Group** — to insert it into the flow in one motion, or swap the two nodes' places.
 - Dropping an edge onto a node that already has connections asks whether to **Insert between** or **Keep** the existing link; dropping onto a **Decision** node offers **Branch** or **Insert** into an existing output.
 
 ---
@@ -212,6 +212,7 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 | `Ctrl+G` | Create group from selection |
 | `Alt+W` / `Alt+C` / `Alt+T` / `Alt+X` | Align left / center / top / middle |
 | `Alt+R` / `Alt+V` | Distribute horizontally / vertically |
+| `Alt+←` / `Alt+→` | Collapse/expand the left sidebar (outline) / the inspector |
 | `]` / `[` | Grow / shrink flow highlight |
 | `Tab` / `Shift+Tab` | Next / previous node along the flow |
 | `Ctrl+Shift+E` | Export PNG |
