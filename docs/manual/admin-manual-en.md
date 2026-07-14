@@ -1,6 +1,6 @@
 # Business Process Map — Administrator Manual
 
-> This manual is for **system administrators (sysadmin)**. It covers the admin consoles, moderation duties, and the extra powers a sysadmin holds across every map. Read the **User Manual** first — everything there applies to you too.
+> This manual is for **system administrators (sysadmin)**. It covers the admin consoles, moderation duties, and the extra powers a sysadmin holds across every map. Read the **User Manual** (Editing Maps · Getting Around) first — everything there applies to you too.
 
 ---
 
@@ -41,7 +41,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **Permissions** | Settings → Permissions | Departments and Users tabs, sysadmin tags |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records) |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
-| **Dashboard** | Settings → Analytics | Operational metrics from the live database |
+| **Dashboard** | Settings → Analytics | Operational metrics from the live database — access can be delegated to others (see section 8) |
 | **Groups** | Settings → Groups | Approve group requests, see all groups |
 | **Scheduled deletion** | Settings → Trash | All soft-deleted maps and groups |
 
@@ -104,13 +104,24 @@ Each entry shows the requester and context; decide with Approve / Reject (reject
 
 ---
 
-## 8. Database Viewer and Login Records
+## 8. Database Viewer & Operations Dashboard
 
 **Settings → Database → Tables** is a read-only browser over the backend database with server-side paging, sorting, and filtering.
 
 - Use it for spot checks — it never writes.
 - **Login records** live in the `login_records` table: one row per user per day, written on first authentication of the day. This is the audit view for "who used the app when".
-- The **Dashboard** (Settings → Analytics) summarizes these records at a glance: **Visitors** (unique login IDs), **Total logins**, and **Logins · last 7 days**. More metrics arrive in a later release.
+
+### Dashboard (Settings → Analytics)
+
+Live operational metrics from the database, at a glance:
+
+- **Operations** — counts of all maps, published, in-progress, and trash; open comments; unread notifications; and checkout transfer requests.
+- **Version status** — the distribution of versions across draft, in-review, approved, published, and expired.
+- **Adoption by department** — the share of departments that own a map. The denominator (which departments count) is picked by the admin in the **Coverage** sidebar.
+- **Login & activity** and **Cumulative growth** (map/version creation over time) — a period filter (**7 days** / **1 month** / **3 months** / **Custom**) adjusts the time series. Snapshot metrics ignore the period filter.
+- **Recent version events** and **AI usage** (7-day / 30-day call counts, top maps).
+
+**Dashboard access** can be delegated by a sysadmin — grant it from the **Access** sidebar on the right of the dashboard to people, departments, or user groups, and a non-admin with a grant can open the dashboard (sysadmins always can). With no grants, only sysadmins see it.
 
 ---
 
@@ -192,4 +203,4 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-07-09*
+*Business Process Map — Administrator Manual · updated 2026-07-13*
