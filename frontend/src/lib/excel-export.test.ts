@@ -66,10 +66,7 @@ describe("buildExcelModel", () => {
     expect(rows.map((r) => (r.kind === "node" ? [r.title, r.depth] : [r.kind, r.depth]))).toEqual([
       ["Start", 0],
       ["Sub", 0],
-      ["Start", 1],
       ["P", 1],
-      ["End", 1],
-      ["End", 0],
     ]);
   });
 
@@ -112,9 +109,8 @@ describe("buildExcelModel", () => {
     const kindsWithDepth = model.rows.map((r) => [r.kind === "node" ? r.title : r.kind, r.depth]);
     expect(kindsWithDepth).toEqual([
       ["Start", 0], ["SubToMap2", 0],
-      ["Start", 1], ["SubToMap1", 1],
+      ["SubToMap1", 1],
       ["circular", 2],
-      ["End", 1], ["End", 0],
     ]);
   });
 
@@ -155,10 +151,9 @@ describe("buildExcelModel", () => {
     const kindsWithDepth = model.rows.map((r) => [r.kind === "node" ? r.title : r.kind, r.depth]);
     expect(kindsWithDepth).toEqual([
       ["Start", 0], ["SubToMap2", 0],
-      ["Start", 1], ["SubToMap1", 1],
-      ["Start", 2], ["SubToMap2", 2],
+      ["SubToMap1", 1],
+      ["SubToMap2", 2],
       ["circular", 3],
-      ["End", 2], ["End", 1], ["End", 0],
     ]);
   });
 
@@ -198,7 +193,7 @@ describe("buildExcelModel", () => {
       { kind: "circular", depth: 3, title: "SubToMap2Again" },
     ]);
     const kinds = model.rows.map((r) => (r.kind === "node" ? r.title : r.kind));
-    expect(kinds).toEqual(["Start", "SubToMap2", "SubToMap3", "SubToMap2Again", "circular", "End"]);
+    expect(kinds).toEqual(["Start", "SubToMap2", "SubToMap3", "SubToMap2Again", "circular"]);
   });
 
   it("같은 맵 2회 참조는 각각 인라인(다이아몬드), fetch는 1회(메모이즈)", async () => {
@@ -240,7 +235,6 @@ describe("buildExcelModel", () => {
       ["Shared", 1],
       ["SubB", 0],
       ["Shared", 1],
-      ["End", 0],
     ]);
   });
 
@@ -280,11 +274,11 @@ describe("buildExcelModel", () => {
       graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-11T00:00:00+09:00",
       fetchResolved,
     });
-    expect(model.rows.map((r) => (r.kind === "node" ? r.title : r.kind))).toEqual(["Start", "Sub", "denied", "End"]);
+    expect(model.rows.map((r) => (r.kind === "node" ? r.title : r.kind))).toEqual(["Start", "Sub", "denied"]);
   });
 
   it("행 상한 초과 시 rowLimit 행과 truncated=true", async () => {
-    // maxRows: 5 로 작게 줘서 검증 — start,a,b,c,d,end 6개 노드
+    // maxRows: 5 로 작게 줘서 검증 — start,a,b,c,d,f 6개 행 후보(기본 End는 행 미생성)
     const map1: Graph = {
       nodes: [
         makeNode("s1", "Start", "start", 0),
@@ -292,11 +286,12 @@ describe("buildExcelModel", () => {
         makeNode("b1", "B", "process", 2),
         makeNode("c1", "C", "process", 3),
         makeNode("d1", "D", "process", 4),
-        makeNode("e1", "End", "end", 5, { is_primary_end: true }),
+        makeNode("f1", "F", "process", 5),
+        makeNode("e1", "End", "end", 6, { is_primary_end: true }),
       ],
       edges: [
         makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "b1"), makeEdge("x3", "b1", "c1"),
-        makeEdge("x4", "c1", "d1"), makeEdge("x5", "d1", "e1"),
+        makeEdge("x4", "c1", "d1"), makeEdge("x5", "d1", "f1"), makeEdge("x6", "f1", "e1"),
       ],
       groups: [],
     };
@@ -338,7 +333,7 @@ describe("buildExcelModel", () => {
       if (mapId === 2) return map2;
       throw new Error("not found");
     };
-    // maxRows:3 → Start(1), Sub(2), map2.Start(3)에서 rowLimit 도달 → rowLimit 1행, 이후 전부 중단(맵1의 End 미포함)
+    // maxRows:3 → Start(1), Sub(2), map2의 start는 행 미생성이라 P2A(3), P2B에서 rowLimit → 이후 전부 중단
     const model = await buildExcelModel({
       graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-11T00:00:00+09:00",
       fetchResolved, maxRows: 3,
@@ -346,10 +341,10 @@ describe("buildExcelModel", () => {
     expect(model.truncated).toBe(true);
     expect(model.rows.filter((r) => r.kind === "rowLimit").length).toBe(1);
     const kinds = model.rows.map((r) => (r.kind === "node" ? r.title : r.kind));
-    expect(kinds).toEqual(["Start", "Sub", "Start", "rowLimit"]);
+    expect(kinds).toEqual(["Start", "Sub", "P2A", "rowLimit"]);
   });
 
-  it("start/end 포함 전체 노드가 행으로 나오고 next에 End도 표기", async () => {
+  it("루트 start는 남고 기본 end 행은 빠지되 next엔 End 표기가 유지된다", async () => {
     const map1: Graph = {
       nodes: [
         makeNode("s1", "Start", "start", 0),
@@ -373,13 +368,11 @@ describe("buildExcelModel", () => {
       fetchResolved,
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
-    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B", "End"]);
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B"]);
     const aRow = nodeRows.find((r) => r.title === "A");
     expect(aRow?.next).toBe("B:approve;End:reject");
     const bRow = nodeRows.find((r) => r.title === "B");
     expect(bRow?.next).toBe("End");
-    const endRow = nodeRows.find((r) => r.title === "End");
-    expect(endRow?.next).toBe("");
   });
 
   it("groups 라벨 조인은 링크 맵 자신의 groups 기준(부모 맵 그룹 아님)", async () => {
@@ -503,6 +496,47 @@ describe("buildExcelModel", () => {
     });
     const subRow = model.rows.find((r) => r.kind === "node" && r.title === "Sub");
     expect(subRow).toMatchObject({ duration: "", cost_krw: "", cost_usd: "", headcount: "" });
+  });
+
+  it("규칙3: 기본 제목 end는 대소문자·공백 무관 삭제, 커스텀 제목 end는 유지", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("e1", "  END ", "end", 2, { is_primary_end: true }),
+        makeNode("e2", "출하 종료", "end", 3),
+      ],
+      edges: [makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "e1"), makeEdge("x3", "a1", "e2")],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const titles = model.rows.filter((r) => r.kind === "node").map((r) => r.title);
+    expect(titles).toEqual(["Start", "A", "출하 종료"]);
+    // 행만 삭제 — next의 종착 표기는 유지된다
+    const aRow = model.rows.find((r) => r.kind === "node" && r.title === "A");
+    expect(aRow && aRow.kind === "node" ? aRow.next : "").toBe("  END ;출하 종료");
+  });
+
+  it("규칙2: 루트에 start가 2개면 BFS 기점만 남는다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("s2", "Start 2", "start", 5),
+      ],
+      edges: [makeEdge("x1", "s1", "a1")],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    expect(model.rows.filter((r) => r.kind === "node").map((r) => r.title)).toEqual(["Start", "A"]);
   });
 });
 

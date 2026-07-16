@@ -1,8 +1,9 @@
 // Excel 내보내기 모델 — 서브프로세스 전체 재귀 인라인(조상 검사·행 상한·locked) 순수 로직.
 // exceljs 기록(다운로드)은 별도 모듈(Task 7) — 모델과 분리해 vitest로 검증한다.
 // 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §4,
-//       docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md §5.2
-import type { Graph, GraphNode } from "./api";
+//       docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md §5.2,
+//       docs/superpowers/specs/2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석)
+import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
 import { getInheritedParams } from "./params";
 
@@ -97,15 +98,30 @@ export async function buildExcelModel({
   const emit = async (g: Graph, depth: number, ancestry: ReadonlySet<number>): Promise<void> => {
     const byId = new Map(g.nodes.map((n) => [n.id, n]));
     const groupLabel = new Map(g.groups.map((gr) => [gr.id, gr.label]));
-    for (const node of orderNodesByFlow(g.nodes, g.edges)) {
+    const outgoing = new Map<string, GraphEdge[]>();
+    for (const e of g.edges) {
+      const list = outgoing.get(e.source_node_id);
+      if (list) list.push(e);
+      else outgoing.set(e.source_node_id, [e]);
+    }
+    const ordered = orderNodesByFlow(g.nodes, g.edges);
+    // 규칙2: 루트 스코프 BFS 기점 start만 유지 — 서브프로세스 인라인·미도달 추가 start는 행 미생성
+    const keptStartId = depth === 0 ? ordered.find((n) => n.node_type === "start")?.id : undefined;
+    // 규칙3: 기본 제목 end는 행 미생성(커스텀 제목 end는 유지) — next의 "End" 표기는 그대로 남는다
+    const isDefaultEnd = (n: GraphNode): boolean =>
+      n.node_type === "end" && n.title.trim().toLowerCase() === "end";
+    const isRowRemoved = (n: GraphNode): boolean =>
+      (n.node_type === "start" && n.id !== keptStartId) || isDefaultEnd(n);
+
+    for (const node of ordered) {
+      if (isRowRemoved(node)) continue; // 삭제 행은 상한(maxRows)을 소비하지 않는다
       if (rows.length >= maxRows) {
         // 재귀 레벨 무관 상한 공유 — truncated 이미 true면 rowLimit 재생성 없이 즉시 중단 전파
         if (!truncated) rows.push({ kind: "rowLimit", depth, title: "" });
         truncated = true;
         return;
       }
-      const next = g.edges
-        .filter((e) => e.source_node_id === node.id)
+      const next = (outgoing.get(node.id) ?? [])
         .map((e) => {
           const target = byId.get(e.target_node_id);
           if (!target) return null;
