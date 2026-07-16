@@ -110,6 +110,7 @@ import {
   rectWithExclusions,
   branchKindOf,
   canSwapTypes,
+  isCopyableNodeType,
   sideFromHandleId,
   sourceHandleId,
   targetHandleId,
@@ -130,6 +131,7 @@ import {
   type OutlineNode,
   type ProcessNodeType,
 } from "@/lib/canvas";
+import { buildPaste, readClipboard, writeClipboard } from "@/lib/node-clipboard";
 import {
   acquireCheckout,
   ApiError,
@@ -3137,6 +3139,97 @@ function MapEditor({ mapId }: { mapId: number }) {
       highlightNode,
     ],
   );
+
+  // Ctrl+C — 선택 노드 중 복사 가능한 것(process/decision/end)만 + 내부 엣지를 클립보드에 저장(다른 탭·맵 붙여넣기 가능).
+  const handleCopy = useCallback(() => {
+    const selected = nodesRef.current.filter(
+      (node) => node.selected && isCopyableNodeType(node.data.nodeType),
+    );
+    if (selected.length === 0) {
+      showToast(t("copy.blocked"));
+      return;
+    }
+    const ids = new Set(selected.map((node) => node.id));
+    writeClipboard({
+      sourceMapId: mapId,
+      nodes: selected.map((node) => ({ id: node.id, position: node.position, data: node.data })),
+      edges: edgesRef.current
+        .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
+        .map((edge) => ({
+          source: edge.source,
+          target: edge.target,
+          label: typeof edge.label === "string" ? edge.label : undefined,
+        })),
+    });
+  }, [mapId, showToast, t]);
+
+  // Ctrl+V — 같은 맵이면 {16,16} 오프셋, 다른 맵(다른 탭 포함)이면 현재 뷰포트 중앙 기준으로 배치.
+  const handlePaste = useCallback(() => {
+    if (readOnly) {
+      return;
+    }
+    const clip = readClipboard();
+    if (!clip) {
+      return;
+    }
+    let offset = { x: 16, y: 16 };
+    if (clip.sourceMapId !== mapId) {
+      const container = canvasContainerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const center = reactFlow.screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+        const minX = Math.min(...clip.nodes.map((n) => n.position.x));
+        const maxX = Math.max(...clip.nodes.map((n) => n.position.x)) + NODE_WIDTH;
+        const minY = Math.min(...clip.nodes.map((n) => n.position.y));
+        const maxY = Math.max(...clip.nodes.map((n) => n.position.y)) + NODE_HEIGHT;
+        offset = { x: center.x - (minX + maxX) / 2, y: center.y - (minY + maxY) / 2 };
+      }
+    }
+    const { nodes: pastedNodes, edges: pastedEdges } = buildPaste(clip, {
+      newId: genId,
+      existingLabels: nodesRef.current.map((node) => node.data.label),
+      offset,
+    });
+    if (pastedNodes.length === 0) {
+      return;
+    }
+    pushHistory();
+    setNodes((current) => [
+      ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+      ...pastedNodes.map((node) => ({
+        id: node.id,
+        type: "process" as const,
+        position: node.position,
+        selected: true,
+        className: "bpm-node-flash",
+        data: node.data,
+      })),
+    ]);
+    if (pastedEdges.length > 0) {
+      setEdges((current) => [
+        ...current,
+        ...pastedEdges.map((edge) => ({
+          ...EDGE_DEFAULTS,
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: sourceHandleId("right"),
+          targetHandle: targetHandleId("left"),
+          label: edge.label || undefined,
+        })),
+      ]);
+    }
+    setSelectedId(pastedNodes.length === 1 ? pastedNodes[0].id : null);
+    setSelectedEdgeId(null);
+    for (const node of pastedNodes) {
+      flashNode(node.id);
+    }
+    scheduleAutoSave();
+    showToast(t("copy.pasted", { n: pastedNodes.length }));
+  }, [readOnly, mapId, reactFlow, setNodes, setEdges, pushHistory, scheduleAutoSave, flashNode, showToast, t]);
 
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
   const applyNodesTransform = useCallback(
@@ -6221,12 +6314,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         fire(() => applyAutoLayout(dir));
         return;
       }
-      // Ctrl 조합 — 그룹 생성 / PNG 내보내기 (undo/redo·검색은 별도 핸들러)
+      // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
       if (event.ctrlKey || event.metaKey) {
         if (event.code === "KeyG" && !event.shiftKey) {
           fire(() => createGroupFromSelection());
         } else if (event.code === "KeyE" && event.shiftKey) {
           fire(() => void handleExportPng());
+        } else if (event.code === "KeyC" && !event.shiftKey) {
+          fire(() => handleCopy());
+        } else if (event.code === "KeyV" && !event.shiftKey) {
+          fire(() => handlePaste());
         }
         return;
       }
@@ -6279,6 +6376,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyAutoLayout,
     createGroupFromSelection,
     handleExportPng,
+    handleCopy,
+    handlePaste,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
