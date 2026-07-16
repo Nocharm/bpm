@@ -2,9 +2,10 @@
 "use client";
 
 import { Network, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
+import { filterByQuery } from "@/lib/search";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -18,6 +19,7 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,16 +31,25 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
     };
   }, []);
 
+  // 패널은 열릴 때마다 새로 마운트되므로 모든 오픈 경로에서 검색창에 포커스된다.
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
   // 순환 참조 판별 맵 — map_id → refs[]
   const refsByMap = useMemo(
     () => new Map(rows.map((r) => [r.map_id, r.refs])),
     [rows],
   );
 
+  // 부분일치+초성+로마자+시퀀스 매칭(filterByQuery) — 이름·부서 대상, 랭크순 정렬
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) return rows;
-    return rows.filter((r) => r.name.toLowerCase().includes(q));
+    return filterByQuery(rows, q, (r) => [
+      { field: "name", text: r.name },
+      { field: "department", text: r.department ?? "" },
+    ]).map((h) => h.item);
   }, [rows, query]);
   // 25개씩 증분 렌더 — 라이브러리 맵이 수백 개여도 패널 오픈 부하 없음
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
@@ -81,6 +92,7 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
         <div className="flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5">
           <Search size={12} strokeWidth={1.5} className="shrink-0 text-ink/40" />
           <input
+            ref={searchRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
