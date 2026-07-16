@@ -420,6 +420,30 @@ def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
     assert saved["edges"][0]["source_handle"] == "__primary__"
 
 
+def test_subprocess_follow_latest_defaults_on(client: TestClient) -> None:
+    """follow_latest 생략 시 기본 True(최신본 추종)로 저장된다."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {
+                "id": "sub",
+                "title": "결재",
+                "node_type": "subprocess",
+                "linked_map_id": 999,
+                # follow_latest 생략 — 기본값 검증
+                "sort_order": 1,
+            },
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
+        ],
+        "edges": [],
+    }
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    sub = next(n for n in saved["nodes"] if n["id"] == "sub")
+    assert sub["follow_latest"] is True
+
+
 def test_node_url_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
     graph = {

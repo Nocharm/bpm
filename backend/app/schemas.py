@@ -604,7 +604,7 @@ class NodeIn(BaseModel):
     group_ids: list[str] = Field(default_factory=list)
     # 하위프로세스 참조 (node_type="subprocess")
     linked_map_id: int | None = None
-    follow_latest: bool = False
+    follow_latest: bool = True
     linked_version_id: int | None = None
     # 대표 끝 (node_type="end")
     is_primary_end: bool = False

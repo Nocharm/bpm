@@ -223,7 +223,7 @@ class Node(Base):
     group_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     # 하위프로세스 노드(node_type="subprocess") — 다른 프로세스를 참조(Call Activity)
     linked_map_id: Mapped[int | None] = mapped_column(Integer, default=None)
-    follow_latest: Mapped[bool] = mapped_column(Boolean, default=False)
+    follow_latest: Mapped[bool] = mapped_column(Boolean, default=True)
     # follow_latest=False면 고정 버전. True면 무시하고 렌더 시 최신 발행본 해석.
     linked_version_id: Mapped[int | None] = mapped_column(Integer, default=None)
     # 끝 노드(node_type="end") — 대표 끝(프로세스당 1개, 버전업에도 유지되는 주 출구)
