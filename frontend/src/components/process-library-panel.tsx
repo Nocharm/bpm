@@ -68,6 +68,7 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
 
   return (
     <div
+      data-id="process-library-panel"
       className="flex w-56 flex-col border-r border-hairline bg-surface"
       style={{ boxShadow: "var(--shadow-md)" }}
     >

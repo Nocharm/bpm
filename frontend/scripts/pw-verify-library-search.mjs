@@ -159,7 +159,7 @@ try {
 
   // 지정된 두 항목이 필터 전에는 모두 노출
   const preFilterText = await page.evaluate(
-    () => document.querySelector(".w-56.flex-col.border-r.border-hairline.bg-surface")?.innerText ?? "",
+    () => document.querySelector('[data-id="process-library-panel"]')?.innerText ?? "",
   );
   check("before query: map A (dept=구매팀…) listed", preFilterText.includes(nameA));
   check("before query: map B (dept=영업팀…) listed", preFilterText.includes(nameB));
@@ -173,7 +173,7 @@ try {
   });
   await page.waitForTimeout(400);
   const postFilterText = await page.evaluate(
-    () => document.querySelector(".w-56.flex-col.border-r.border-hairline.bg-surface")?.innerText ?? "",
+    () => document.querySelector('[data-id="process-library-panel"]')?.innerText ?? "",
   );
   check(
     "초성 query 'ㄱㅁ': map A (dept=구매팀…) still listed",
@@ -195,7 +195,7 @@ try {
   });
   await page.waitForTimeout(300);
   const resetText = await page.evaluate(
-    () => document.querySelector(".w-56.flex-col.border-r.border-hairline.bg-surface")?.innerText ?? "",
+    () => document.querySelector('[data-id="process-library-panel"]')?.innerText ?? "",
   );
   check("query cleared: both listed again", resetText.includes(nameA) && resetText.includes(nameB));
 } catch (err) {
