@@ -3,7 +3,7 @@
 // 알림 기간 퍼지 모달 — preview(고유 묶음)를 체크박스로 확정 후 하드 삭제 (sysadmin, design 2026-07-16)
 
 import { Loader2, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   previewNotificationPurge,
@@ -31,6 +31,15 @@ export function NotificationPurgeModal({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 언마운트 후 setState 가드 — runPurge catch 보호 (preview effect의 alive와 동일 목적)
+  const aliveRef = useRef(true);
+  useEffect(
+    () => () => {
+      aliveRef.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -60,6 +69,7 @@ export function NotificationPurgeModal({
   const runPurge = async () => {
     if (!groups || busy) return;
     setBusy(true);
+    setError(null);
     try {
       const confirmed = groups
         .filter((g) => checked.has(keyOf(g)))
@@ -68,6 +78,7 @@ export function NotificationPurgeModal({
       onPurged(result.deleted);
       onClose();
     } catch (err) {
+      if (!aliveRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
@@ -78,7 +89,12 @@ export function NotificationPurgeModal({
     .reduce((sum, g) => sum + g.count, 0);
 
   return (
-    <div className="fixed inset-0 z-[1340] flex items-center justify-center bg-ink/30" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[1340] flex items-center justify-center bg-ink/30"
+      onClick={() => {
+        if (!busy) onClose(); // purge in-flight 중 닫힘 차단 — onPurged가 다른 테이블 상태를 오염시키는 경로 방지
+      }}
+    >
       <div
         className="flex max-h-[80vh] w-[36rem] flex-col gap-3 rounded-md bg-surface p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
@@ -89,10 +105,13 @@ export function NotificationPurgeModal({
         </p>
         {error && <p className="text-caption text-error">{error}</p>}
         {groups === null ? (
-          <div className="flex items-center gap-2 py-6 text-caption text-ink-tertiary">
-            <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
-            {t("db.loading")}
-          </div>
+          // preview 로드 실패(error) 시 스피너 숨김 — 에러와 무한 로딩 동시 표시 모순 방지
+          !error && (
+            <div className="flex items-center gap-2 py-6 text-caption text-ink-tertiary">
+              <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
+              {t("db.loading")}
+            </div>
+          )
         ) : groups.length === 0 ? (
           <p className="py-6 text-caption text-ink-tertiary">{t("db.purgeEmpty")}</p>
         ) : (
@@ -124,8 +143,9 @@ export function NotificationPurgeModal({
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
+            disabled={busy}
             onClick={onClose}
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
           >
             {t("db.purgeCancel")}
           </button>
