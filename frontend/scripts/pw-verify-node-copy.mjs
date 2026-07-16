@@ -114,11 +114,13 @@ try {
   await api(`/versions/${versionId}/graph`, {
     method: "PUT",
     body: {
+      // pos는 캔버스 원점에서 충분히 아래·오른쪽으로 — 기본 줌에서 좌상단 MapTitleChecklist 칩
+      // (components/save-checklist.tsx, 캔버스 top-left 고정) 밑에 노드가 깔려 클릭이 가로채이는 것을 방지.
       nodes: [
-        { id: s, title: "Start", node_type: "start", pos_x: 0, pos_y: 200, sort_order: 0 },
-        { id: a, title: "Step A", node_type: "process", pos_x: 220, pos_y: 100, sort_order: 1 },
-        { id: b, title: "Step B", node_type: "process", pos_x: 220, pos_y: 300, sort_order: 2 },
-        { id: e, title: "End", node_type: "end", pos_x: 440, pos_y: 200, sort_order: 3, is_primary_end: true },
+        { id: s, title: "Start", node_type: "start", pos_x: 250, pos_y: 480, sort_order: 0 },
+        { id: a, title: "Step A", node_type: "process", pos_x: 470, pos_y: 380, sort_order: 1 },
+        { id: b, title: "Step B", node_type: "process", pos_x: 470, pos_y: 580, sort_order: 2 },
+        { id: e, title: "End", node_type: "end", pos_x: 690, pos_y: 480, sort_order: 3, is_primary_end: true },
       ],
       edges: [
         { id: rid(), source_node_id: s, target_node_id: a },
@@ -135,7 +137,8 @@ try {
 
   // ===== (a) 단일 노드 선택→Ctrl+C→Ctrl+V: "(2)" 중복라벨 + {16,16} 오프셋, 새 노드가 유일 선택 =====
   const beforeCountA = await page.locator(".react-flow__node").count();
-  await page.locator(`.react-flow__node[data-id="${a}"]`).click();
+  // force:true — 좌상단 크롬(체크리스트 칩 등)이 노드를 가릴 때 actionability 타임아웃을 피함(노드 위치도 이미 원점에서 이격).
+  await page.locator(`.react-flow__node[data-id="${a}"]`).click({ force: true });
   const beforePosA = await readNodePos(page, a);
   await page.keyboard.press(COPY_KEY);
   await page.waitForTimeout(150);
@@ -161,7 +164,7 @@ try {
 
   // ===== (b) start 노드(비복사 타입) 선택→Ctrl+C: copy.blocked 토스트 + 클립보드 미변경 =====
   const clipBefore = await page.evaluate(() => window.localStorage.getItem("bpm.nodeClipboard"));
-  await page.locator(`.react-flow__node[data-id="${s}"]`).click();
+  await page.locator(`.react-flow__node[data-id="${s}"]`).click({ force: true });
   await page.keyboard.press(COPY_KEY);
   await page.waitForTimeout(200);
   const blockedToastVisible = await page
@@ -174,53 +177,63 @@ try {
   check("(b) clipboard unchanged after a blocked copy", clipAfter === clipBefore);
 
   // ===== (c) 다중선택(A+B, 내부 엣지 포함) Ctrl+C→Ctrl+V: 노드 2개 + 엣지 1개 함께 복제 =====
-  const beforeCountC = await page.locator(".react-flow__node").count();
-  const beforeEdgeCountC = await page.locator(".react-flow__edge").count();
-  await page.locator(`.react-flow__node[data-id="${a}"]`).click();
-  await page.keyboard.down("Meta"); // RF 기본 multiSelectionKeyCode="Meta" — shift-drag 검증 스크립트와 동일 관례
-  await page.locator(`.react-flow__node[data-id="${b}"]`).click();
-  await page.keyboard.up("Meta");
-  await page.waitForTimeout(150);
-  const multiSelectedCount = await page.locator(".react-flow__node.selected").count();
-  check("(c) multi-select picks up 2 nodes", multiSelectedCount === 2, `selected=${multiSelectedCount}`);
+  // 자체 try/catch — (c)가 던져도 (d)가 건너뛰어지지 않도록 격리. 실패 시 실패 체크를 기록해 non-zero 종료는 유지.
+  try {
+    const beforeCountC = await page.locator(".react-flow__node").count();
+    const beforeEdgeCountC = await page.locator(".react-flow__edge").count();
+    await page.locator(`.react-flow__node[data-id="${a}"]`).click({ force: true });
+    await page.keyboard.down("Meta"); // RF 기본 multiSelectionKeyCode="Meta" — shift-drag 검증 스크립트와 동일 관례
+    await page.locator(`.react-flow__node[data-id="${b}"]`).click({ force: true });
+    await page.keyboard.up("Meta");
+    await page.waitForTimeout(150);
+    const multiSelectedCount = await page.locator(".react-flow__node.selected").count();
+    check("(c) multi-select picks up 2 nodes", multiSelectedCount === 2, `selected=${multiSelectedCount}`);
 
-  await page.keyboard.press(COPY_KEY);
-  await page.waitForTimeout(150);
-  await page.keyboard.press(PASTE_KEY);
-  await page.waitForTimeout(300);
+    await page.keyboard.press(COPY_KEY);
+    await page.waitForTimeout(150);
+    await page.keyboard.press(PASTE_KEY);
+    await page.waitForTimeout(300);
 
-  const afterCountC = await page.locator(".react-flow__node").count();
-  const afterEdgeCountC = await page.locator(".react-flow__edge").count();
-  check("(c) paste adds exactly 2 nodes", afterCountC === beforeCountC + 2, `before=${beforeCountC} after=${afterCountC}`);
-  check(
-    "(c) paste adds exactly 1 internal edge (A→B)",
-    afterEdgeCountC === beforeEdgeCountC + 1,
-    `before=${beforeEdgeCountC} after=${afterEdgeCountC}`,
-  );
+    const afterCountC = await page.locator(".react-flow__node").count();
+    const afterEdgeCountC = await page.locator(".react-flow__edge").count();
+    check("(c) paste adds exactly 2 nodes", afterCountC === beforeCountC + 2, `before=${beforeCountC} after=${afterCountC}`);
+    check(
+      "(c) paste adds exactly 1 internal edge (A→B)",
+      afterEdgeCountC === beforeEdgeCountC + 1,
+      `before=${beforeEdgeCountC} after=${afterEdgeCountC}`,
+    );
+  } catch (err) {
+    check("(c) multi-select copy/paste ran without throwing", false, err instanceof Error ? err.message : String(err));
+  }
 
   // ===== (d) 크로스탭 — 같은 컨텍스트의 다른 탭(같은 origin → localStorage 공유)에서 Ctrl+V =====
   // note: 다른 맵으로 붙여넣는 크로스맵 케이스(뷰포트 중앙 오프셋)는 여기서 별도 커버하지 않음 — 오프셋 계산 로직은
   // handlePaste 코드 리뷰로 확인(cross-map 분기), 별도 맵을 여는 브라우저 왕복은 이 스크립트 범위 밖으로 남김.
-  const page2 = await ctx.newPage();
-  const consoleErrors2 = [];
-  page2.on("console", (m) => {
-    if (m.type() === "error") consoleErrors2.push(m.text());
-  });
-  page2.on("pageerror", (e) => consoleErrors2.push(`pageerror: ${e.message}`));
-  await page2.goto(`${BASE}/maps/${mapId}?version=${versionId}`, { waitUntil: "networkidle" });
-  await page2.waitForSelector(".react-flow__node", { timeout: 20000 });
-  await page2.waitForTimeout(500);
-  const beforeCountD = await page2.locator(".react-flow__node").count();
-  await page2.keyboard.press(PASTE_KEY); // 조합키 핸들러는 window 레벨이라 별도 포커스 불필요
-  await page2.waitForTimeout(300);
-  const afterCountD = await page2.locator(".react-flow__node").count();
-  check(
-    "(d) cross-tab paste reads the shared localStorage clipboard (same map, new tab)",
-    afterCountD > beforeCountD,
-    `before=${beforeCountD} after=${afterCountD}`,
-  );
-  consoleErrors.push(...consoleErrors2);
-  await page2.close();
+  // (c)와 독립된 try/catch — 위가 실패해도 여기는 항상 실행되고, 여기 실패도 별도 체크로 기록된다.
+  try {
+    const page2 = await ctx.newPage();
+    const consoleErrors2 = [];
+    page2.on("console", (m) => {
+      if (m.type() === "error") consoleErrors2.push(m.text());
+    });
+    page2.on("pageerror", (e) => consoleErrors2.push(`pageerror: ${e.message}`));
+    await page2.goto(`${BASE}/maps/${mapId}?version=${versionId}`, { waitUntil: "networkidle" });
+    await page2.waitForSelector(".react-flow__node", { timeout: 20000 });
+    await page2.waitForTimeout(500);
+    const beforeCountD = await page2.locator(".react-flow__node").count();
+    await page2.keyboard.press(PASTE_KEY); // 조합키 핸들러는 window 레벨이라 별도 포커스 불필요
+    await page2.waitForTimeout(300);
+    const afterCountD = await page2.locator(".react-flow__node").count();
+    check(
+      "(d) cross-tab paste reads the shared localStorage clipboard (same map, new tab)",
+      afterCountD > beforeCountD,
+      `before=${beforeCountD} after=${afterCountD}`,
+    );
+    consoleErrors.push(...consoleErrors2);
+    await page2.close();
+  } catch (err) {
+    check("(d) cross-tab paste ran without throwing", false, err instanceof Error ? err.message : String(err));
+  }
 } catch (err) {
   results.push({ name: "fatal", ok: false });
   console.error(`FATAL ${err instanceof Error ? err.message : String(err)}`);
