@@ -1,6 +1,10 @@
 # Progress
 
-## 2026-07-13 — 매뉴얼 커버리지 감사 후속 픽스: 번들 스테일·오우닝 부서·회수 규칙 (main)
+## 2026-07-16 — 알람(알림) 기능 전수 조사·퍼지(삭제) 경로 분류 (worktree-alarm-audit)
+- 읽기 전용 감사 — 코드 변경 없음. 산출물: `docs/alarm-audit.md`.
+- **명확화**: "알람" = 3개 서브시스템(벨 notifications / 수신함 inbox / 공지 notices). inbox는 테이블 없는 실시간 집계 뷰. 생성 경로는 단일 헬퍼 `create_notifications` 호출 7지점·type 6종. checkout(점유권 이전)은 inbox 전용 — 벨 알림 미생성(비대칭).
+- **퍼지 분류**: 프로덕션 삭제 경로는 공지 sysadmin 하드 삭제(D1) 단 1개. 벨 알림(`Notification`)은 삭제 API·프론트 UI·retention·cascade 전부 없음(FK 의도적 미설정, `models.py:325`) — 읽음 UPDATE만 가능, 무한 누적. 스크립트 경로는 reset_db(D2)·seed_inbox_demo(D3)뿐.
+- 부수 발견: `notifications` 테이블 인덱스 전무 + GET 전건 반환 + 전 사용자 5초 폴링 → 장기 성능 리스크. 매뉴얼 불일치 4건(인박스 갱신 주기·보존 정책 공백·공지 하드삭제·공지 읽음 localStorage). 후속 후보는 docs/alarm-audit.md §9.
 - fable 에이전트 커버리지 감사(READ-ONLY, i18n·라우터 대조) 결과 중 "핵심" 갭을 반영. 지적 4건은 코드로 직접 재검증(swap 드롭존은 초기 grep이 `[mapId]` 대괄호 디렉터리에서 누락되는 ugrep 함정이라 Python으로 재확인).
 - **번들 `backend/app/manual.md` 스테일 교정(AI 사용법 근거 — 적극적 오답 제거)**: 게시 시 직전 게시본은 "Approved로 강등"이 아니라 **Expired(만료·최종)** + 순차 버전번호 채번(`versions.py:641–659`); 폐기된 인라인 드릴다운 서술 삭제→하위프로세스 참조/딥뷰(⑦)로 교정; 드롭존 "하위"→swap; 강제 점유는 **sysadmin 전용**·체크아웃 요청/이전 추가(`versions.py:289`); 회수 규칙(Pending/Approved=제출자만, Rejected=+오너/sysadmin, 회수자 체크아웃 재부여, `versions.py:744–763`); 맵 생성 필수(오우닝 부서·결재자·공개범위); 코멘트 진입은 더블클릭이 아니라 컨텍스트 메뉴.
 - **오우닝 부서(Owning department) 문서화(한/영)**: general 역할 표·§2 맵 만들기 필수 단계·§5 설정 탭 3곳 추가 — 부서원 자동 Editor 권한(`maps.py:253`, 생성 다이얼로그 필수).
