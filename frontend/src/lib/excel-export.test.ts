@@ -764,6 +764,109 @@ describe("buildExcelModel", () => {
       [5, "SubB"], [6, "D"], [7, "T [6:ok]"],
     ]);
   });
+
+  it("재수렴: 삭제 디시전 경유로 같은 대상에 두 번 도달해도 next는 중복 없이 1회 표기", async () => {
+    // A→P(무라벨)→B, P→Q(무라벨)→B — 중복 제거 전엔 A.next가 "B;B"
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("p1", "P", "decision", 2),
+        makeNode("q1", "Q", "decision", 3),
+        makeNode("b1", "B", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "p1"),
+        makeEdge("x3", "p1", "b1"), makeEdge("x4", "p1", "q1"), makeEdge("x5", "q1", "b1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B"]);
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B");
+  });
+
+  it("재수렴: 라벨 디시전이 삭제 디시전 경유로 같은 대상에 재수렴해도 주석은 1회", async () => {
+    // D ─go→ P(무라벨)→B, P→Q(무라벨)→B — 중복 제거 전엔 "B [2:go] [2:go]"
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("p1", "P", "decision", 2),
+        makeNode("q1", "Q", "decision", 3),
+        makeNode("b1", "B", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"), makeEdge("x2", "d1", "p1", "go"),
+        makeEdge("x3", "p1", "b1"), makeEdge("x4", "p1", "q1"), makeEdge("x5", "q1", "b1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B [2:go]"]);
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:go");
+  });
+
+  it("행 상한 도달 시 이미 출력된 행의 주석은 보존된다", async () => {
+    // maxRows:3 — Start, D, T까지 출력 후 U에서 상한. T의 [2:ok] 주석은 살아야 한다(break 전환)
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("t1", "T", "process", 2),
+        makeNode("u1", "U", "process", 3),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"), makeEdge("x2", "d1", "t1", "ok"), makeEdge("x3", "t1", "u1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved, maxRows: 3,
+    });
+    expect(model.truncated).toBe(true);
+    const kinds = model.rows.map((r) => (r.kind === "node" ? r.title : r.kind));
+    expect(kinds).toEqual(["Start", "D", "T [2:ok]", "rowLimit"]);
+  });
+
+  it("혼합 디시전의 무라벨 분기가 삭제 디시전을 가리켜도 flow-through된다", async () => {
+    // D: yes→B(주석) + 무라벨→P(삭제 디시전)→C — D.next는 "B:yes;C", C는 주석 없음
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("b1", "B", "process", 2),
+        makeNode("p1", "P", "decision", 3),
+        makeNode("c1", "C", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"),
+        makeEdge("x2", "d1", "b1", "yes"), makeEdge("x3", "d1", "p1"),
+        makeEdge("x4", "p1", "c1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B [2:yes]", "C"]);
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:yes;C");
+  });
 });
 
 describe("COLUMNS", () => {

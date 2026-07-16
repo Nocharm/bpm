@@ -142,15 +142,18 @@ export async function buildExcelModel({
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 행은 상한(maxRows)을 소비하지 않는다
       if (rows.length >= maxRows) {
-        // 재귀 레벨 무관 상한 공유 — truncated 이미 true면 rowLimit 재생성 없이 즉시 중단 전파
+        // 재귀 레벨 무관 상한 공유 — truncated 이미 true면 rowLimit 재생성 없이 중단 전파.
+        // return이 아닌 break — 스코프 잔여 행만 포기하고 주석 수집 패스는 실행해 이미 출력된 행의 주석을 보존
         if (!truncated) rows.push({ kind: "rowLimit", depth, title: "" });
         truncated = true;
-        return;
+        break;
       }
-      const next = (outgoing.get(node.id) ?? [])
-        .flatMap((e) => resolveTargets(e, e.label, new Set()))
-        .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`))
-        .join(";");
+      // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨)이 2회 도달("B;B") 방지
+      const next = Array.from(new Set(
+        (outgoing.get(node.id) ?? [])
+          .flatMap((e) => resolveTargets(e, e.label, new Set()))
+          .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`)),
+      )).join(";");
       const row: ExcelNodeRow = {
         kind: "node",
         no: 0, // finalize에서 부여
@@ -196,11 +199,18 @@ export async function buildExcelModel({
       if (node.node_type !== "decision") continue;
       const decisionRow = rowByNodeId.get(node.id);
       if (!decisionRow) continue; // 무라벨(삭제) 디시전
+      // 재수렴 중복 주석 방지 — next 중복 제거와 동일 정책(같은 대상·라벨 쌍은 1회만)
+      const seenPairs = new Map<ExcelNodeRow, Set<string>>();
       for (const e of outgoing.get(node.id) ?? []) {
         if (e.label === "") continue;
         for (const { node: t, label } of resolveTargets(e, e.label, new Set())) {
           const targetRow = rowByNodeId.get(t.id);
-          if (targetRow) annotations.push({ target: targetRow, decision: decisionRow, label });
+          if (!targetRow) continue;
+          const labels = seenPairs.get(targetRow) ?? new Set<string>();
+          if (labels.has(label)) continue;
+          labels.add(label);
+          seenPairs.set(targetRow, labels);
+          annotations.push({ target: targetRow, decision: decisionRow, label });
         }
       }
     }

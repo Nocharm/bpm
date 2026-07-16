@@ -116,14 +116,16 @@ try {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(xlsxPath);
   const sheet = wb.worksheets[0];
-  const rows = []; // { no, name, next }
+  const rows = []; // { no, name, type, next }
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber < 5) return;
-    rows.push({ no: row.getCell(1).value, name: String(row.getCell(2).value ?? ""), next: String(row.getCell(16).value ?? "") });
+    rows.push({ no: row.getCell(1).value, name: String(row.getCell(2).value ?? ""), type: String(row.getCell(3).value ?? ""), next: String(row.getCell(16).value ?? "") });
   });
 
   check("규칙1: 무라벨 디시전(Par) 행 없음", rows.every((r) => !r.name.startsWith("Par")), rows.map((r) => r.name).join("|"));
-  check("규칙2: Start 행은 정확히 1개", rows.filter((r) => r.name === "Start").length === 1);
+  // 이름 아닌 Type 컬럼 기준 — 제목 바뀐 start 행 누출도 잡는다. (미도달 start 픽스처는 PUT /graph의
+  // start 정확히 1개 검증(validate_process) 때문에 불가 — 규칙2 판별 회귀는 모델 vitest가 담당)
+  check("규칙2: start 타입 행은 정확히 1개", rows.filter((r) => r.type === "start").length === 1);
   check("규칙3: 기본 End 행 없음·커스텀 end(Archived) 유지",
     rows.every((r) => r.name !== "End") && rows.some((r) => r.name === "Archived"));
   const prepare = rows.find((r) => r.name === "Prepare");
