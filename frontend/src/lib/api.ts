@@ -1394,7 +1394,7 @@ export function deleteNotification(id: number): Promise<void> {
 // bulk-delete — ids/read_only/before 중 정확히 1개 (백엔드 422 검증)
 export interface NotificationBulkDelete {
   ids?: number[];
-  read_only?: boolean;
+  read_only?: true; // 백엔드가 false를 422로 거부 — 컴파일 타임에 차단
   before?: string; // YYYY-MM-DD — 해당 날짜 00:00 KST 미만 삭제
 }
 
@@ -1426,7 +1426,7 @@ export function previewNotificationPurge(
   to: string,
 ): Promise<NotificationPurgeGroup[]> {
   return request<NotificationPurgeGroup[]>(
-    `/admin/notifications/purge-preview?from=${from}&to=${to}`,
+    `/admin/notifications/purge-preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
   );
 }
 

@@ -2,6 +2,7 @@
 
 ## 2026-07-16 — Task 7 완료: FE API 클라이언트 + 카테고리 lib
 - **Task 7 완료** — FE notification delete/purge API 클라이언트 + 카테고리 매핑: `notification-categories.ts` 신설(type → category 매핑 함수 `getNotificationCategory`, 상수 `NOTIFICATION_CATEGORIES` 4종: version/checkout/permission/notice) · `api.ts` 신규 5함수·3인터페이스 추가(`deleteNotification`·`bulkDeleteNotifications`/`NotificationBulkDelete`/`NotificationBulkDeleteResult`·`previewNotificationPurge`·`purgeNotifications`/`NotificationPurgeGroup` — 백엔드 T5/T6 머지됨 계약 구현) · 신규 테스트 3건(TDD RED→GREEN) · vitest 3/3 passed, tsc 0 errors. 회귀 무변화(기존 모듈만 신규 export 추가).
+- **Task 7 리뷰 픽스** — `previewNotificationPurge` 쿼리스트링 `encodeURIComponent` 부착(getDashboardTimeseries 관례 일치) · `NotificationBulkDelete.read_only`를 `boolean`→`true`로 협소화(백엔드가 false를 422로 거부 — 컴파일 타임 차단). vitest 3/3 passed, tsc 0 errors.
 
 ## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 구현 계획 (worktree-alarm-audit)
 - 산출물: `docs/superpowers/plans/2026-07-16-notification-purge.md` — 12태스크 TDD 체크리스트(백엔드 6·프론트 4·매뉴얼 1·게이트/pw 1). 실제 코드·테스트 코드 포함, 수정 지점 file:line 명시.
