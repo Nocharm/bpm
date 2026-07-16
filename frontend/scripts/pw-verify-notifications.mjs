@@ -123,12 +123,25 @@ seedNotifications([
   const detailText = await detail.innerText().catch(() => "");
   const card = page.locator('div[role="button"]', { hasText: "T12-S1 deep link target" });
   const cardText = await card.innerText().catch(() => "");
+  // 알림 탭 활성 직접 단언 — 탭 세그먼트(div.inline-grid)로 스코프해 벨 버튼(aria-label
+  // "Notifications")과 구분. 활성 탭은 text-accent, 비활성(Approvals)은 아님.
+  const notifTabClass =
+    (await page
+      .locator("div.inline-grid button", { hasText: "Notifications" })
+      .getAttribute("class")) ?? "";
+  const approvalsTabClass =
+    (await page
+      .locator("div.inline-grid button", { hasText: "Approvals" })
+      .getAttribute("class")) ?? "";
+  const notifTabActive =
+    notifTabClass.includes("text-accent") && !approvalsTabClass.includes("text-accent");
   check(
-    "1 bell deep link opens inbox + marks read",
+    "1 bell deep link opens inbox + notifications tab active + marks read",
     page.url().endsWith("/inbox") &&
+      notifTabActive &&
       detailText.includes("T12-S1 deep link target") &&
       cardText.includes("Read"),
-    page.url(),
+    `${page.url()} tabActive=${notifTabActive}`,
   );
 }
 
@@ -255,9 +268,11 @@ seedNotifications([
   await tableRowsDone.catch(() => undefined);
   await page.waitForTimeout(300);
 
-  const pillCountBefore = await page
-    .getByRole("button", { name: /^notifications/ })
-    .innerText();
+  // pill 텍스트 "notifications\n3" → 행수 숫자만 추출("notifications"엔 숫자 없음)
+  const parsePillCount = (text) => Number(text.replace(/\D+/g, ""));
+  const pillCountBefore = parsePillCount(
+    await page.getByRole("button", { name: /^notifications/ }).innerText(),
+  );
   const rowsShownBefore = await page.getByText(/rows · \d+ shown/).innerText();
 
   const dateInputs = page.locator('input[type="date"]');
@@ -272,29 +287,41 @@ seedNotifications([
   const modalText = await page.locator("div.shadow-lg", { hasText: "Purge notifications" }).innerText();
   const groupShown = modalText.includes("T12-S6 purge batch") && modalText.includes("3 recipient");
 
+  // 확정 버튼 라벨("Delete {N} rows")에서 체크된 묶음의 count 합 N을 읽어 정확 감소 단언에 사용
+  const purgeBtn = page.getByRole("button", { name: /Delete \d+ rows/ });
+  const confirmedRows = Number((await purgeBtn.innerText()).match(/Delete (\d+) rows/)?.[1] ?? NaN);
+
   const purgeDone = waitApi("POST", (u) => u.pathname === "/api/admin/notifications/purge");
-  await page.getByRole("button", { name: /Delete \d+ rows/ }).click();
+  await purgeBtn.click();
   await purgeDone.catch(() => undefined);
   await page.waitForTimeout(300);
 
-  const pillCountAfter = await page
-    .getByRole("button", { name: /^notifications/ })
-    .innerText();
+  const pillCountAfter = parsePillCount(
+    await page.getByRole("button", { name: /^notifications/ }).innerText(),
+  );
 
   check(
-    "6 admin purge preview groups + row count decreases",
-    groupShown && pillCountBefore !== pillCountAfter,
-    `before="${pillCountBefore.trim()}" after="${pillCountAfter.trim()}" rowsShownBefore="${rowsShownBefore}"`,
+    "6 admin purge preview groups + exact row count decrease",
+    groupShown && confirmedRows > 0 && pillCountAfter === pillCountBefore - confirmedRows,
+    `before=${pillCountBefore} confirmed=${confirmedRows} after=${pillCountAfter} rowsShownBefore="${rowsShownBefore}"`,
   );
 }
 
 // ── 콘솔 에러 — T9에서 픽스한 button-in-button(validateDOMNesting) 회귀 확인 ──────────
 const domNestingErrors = consoleErrors.filter((e) => e.includes("validateDOMNesting"));
 check(
-  "7 no console errors (validateDOMNesting = 0)",
+  "7 no validateDOMNesting console errors",
   domNestingErrors.length === 0,
-  `total console errors=${consoleErrors.length}, validateDOMNesting=${domNestingErrors.length}` +
-    (consoleErrors.length > 0 ? ` | sample: ${consoleErrors.slice(0, 3).join(" || ")}` : ""),
+  `validateDOMNesting=${domNestingErrors.length}`,
+);
+
+// ── 콘솔 에러 총량 게이트 — error 타입 콘솔 메시지·pageerror 전부 0건이어야 통과
+// (validateDOMNesting 외 임의의 런타임 에러도 FAIL 유발. allowlist 없음 — 현재 클린 실측 기준)
+check(
+  "8 zero console errors overall",
+  consoleErrors.length === 0,
+  `total=${consoleErrors.length}` +
+    (consoleErrors.length > 0 ? ` | ${consoleErrors.slice(0, 5).join(" || ")}` : ""),
 );
 
 await browser.close();
