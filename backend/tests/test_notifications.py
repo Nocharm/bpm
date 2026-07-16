@@ -231,3 +231,31 @@ def test_visibility_request_notifies_approvers_and_decision_notifies_requester(
     monkeypatch.setattr(settings, "dev_user", "perm-owner1")
     types = [n["type"] for n in client.get("/api/notifications?unread_only=true").json()]
     assert "permission_rejected" in types
+
+
+def test_visibility_approve_notifies_requester_approved(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """가시성 변경 승인 → 요청자에게 permission_approved (approve 경로 내용 단언)."""
+    _ensure_employee("perm-appr2")
+    monkeypatch.setattr(settings, "dev_user", "perm-owner2")
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": "perm map n2"},
+    ).json()
+    map_id = created["id"]
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["perm-appr2"]})
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+
+    monkeypatch.setattr(settings, "dev_user", "perm-appr2")
+    decided = client.post(
+        f"/api/approval-requests/{req['id']}/decide", json={"decision": "approve"}
+    )
+    assert decided.status_code == 200
+
+    monkeypatch.setattr(settings, "dev_user", "perm-owner2")
+    got = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "permission_approved"]
+    assert len(got) == 1 and got[0]["map_id"] == map_id
+    assert "approved" in got[0]["message"]

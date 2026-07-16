@@ -332,6 +332,53 @@ def test_change_role_downgrade_deferred_non_owner(client: TestClient, enforce: N
     assert grant_role(map_id, "ed") == "editor"  # 아직 적용 안 됨
 
 
+def _ensure_employee(login_id: str) -> None:
+    """활성 직원 행 시드 — load_active_approvers 는 employees.active 조인이라 행 필수."""
+
+    async def _make(session) -> None:
+        if await session.get(Employee, login_id) is None:
+            session.add(Employee(login_id=login_id, name=login_id, source="local", active=True))
+
+    _seed(_make)
+
+
+def test_downgrade_request_notifies_approvers_not_requester(
+    client: TestClient, enforce: None
+) -> None:
+    """다운그레이드 지연 생성 → 활성 승인자에게 permission_requested(kind·맵명 내용 단언), 요청자 미수신."""
+    _ensure_employee("nappr.dg")
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.dg", "owner"),
+            ("user", "actor.dg", "editor"),
+            ("user", "ed.dg", "editor"),
+        ],
+        approvers=["nappr.dg"],
+    )
+    gid = grant_id(map_id, "ed.dg")
+    act_as("actor.dg")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is True
+
+    act_as("nappr.dg")
+    got = [
+        n
+        for n in client.get("/api/notifications?unread_only=true").json()
+        if n["type"] == "permission_requested" and n["map_id"] == map_id
+    ]
+    assert len(got) == 1
+    assert "a permission change" in got[0]["message"]  # kind 배선 (visibility 문구 아님)
+    assert "'perm map'" in got[0]["message"]  # map_name 배선
+
+    act_as("actor.dg")
+    mine = [
+        n
+        for n in client.get("/api/notifications").json()
+        if n["type"] == "permission_requested" and n["map_id"] == map_id
+    ]
+    assert mine == []  # 요청자 본인 제외
+
+
 def test_remove_editor_deferred_grant_present_non_owner(client: TestClient, enforce: None) -> None:
     """비-오너(editor) 행위자의 editor 제거는 승인 지연 — 행 유지."""
     map_id = seed_map(
