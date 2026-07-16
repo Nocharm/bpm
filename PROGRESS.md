@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-17 — Excel 출력 양식 2안(WBS) 설계 확정 (worktree-excel-export)
+- 레벨 컬럼 WBS 시트+형식 선택 모달(토글 탭·미리보기) 설계 — 사용자 확정 4건(모든 행 반복+회색 톤다운·start/end 전부 삭제·SP Next 이름 유지·모달 토글탭). 설계 docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md, 계획 docs/superpowers/plans/2026-07-17-excel-export-wbs-v2.md.
+
 ## 2026-07-17 — Excel 출력 양식 개선 1안 구현 (worktree-excel-export)
 - 설계 `docs/superpowers/specs/2026-07-17-excel-export-format-v1-design.md` 4규칙 구현: ①무라벨 병렬 디시전 행 제거+Next flow-through(라벨은 최종 대상까지 전파) ②첫 start 외 start 행 제거 ③기본 제목("end", trim·대소문자 무시) end 행 제거(Next의 End 표기는 유지) ④라벨 분기 대상 Name에 `[디시전No:라벨]` 주석(행 객체 참조로 역방향·다이아몬드 안전). No는 모델에서 확정(`ExcelNodeRow.no`).
 - CSV 내보내기는 왕복 계약이라 미적용. 게이트: vitest 전체·tsc·lint·build 그린.
