@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-16 — 서브프로세스 워크플로 2건 개선 — 설계 (worktree-workflow-improvements)
+- 설계 문서 `docs/superpowers/specs/2026-07-16-subprocess-workflow-improvements-design.md` 작성. (1) 서브프로세스 생성 시 `follow_latest`(최신본 추종) 기본 ON — 모든 생성 경로 통일(라이브러리 드롭·AI 변환·CSV 임포트 기본값·`NodeIn` 스키마·DB 컬럼 ORM 기본값 5지점, `addLinkNodeFromMap`은 이미 ON). 읽기/직렬화 폴백 `?? false`는 유지(기존 노드 드리프트 방지, 마이그레이션 없음). (2) 게시본 승인 탭에 기존 `SubprocessInspectorCard`를 재사용해 "서브프로세스 지정" 카드 노출(백엔드 변경 없음, `spCanManage` 게이팅 재사용).
+
 ## 2026-07-13 — 매뉴얼 커버리지 감사 후속 픽스: 번들 스테일·오우닝 부서·회수 규칙 (main)
 - fable 에이전트 커버리지 감사(READ-ONLY, i18n·라우터 대조) 결과 중 "핵심" 갭을 반영. 지적 4건은 코드로 직접 재검증(swap 드롭존은 초기 grep이 `[mapId]` 대괄호 디렉터리에서 누락되는 ugrep 함정이라 Python으로 재확인).
 - **번들 `backend/app/manual.md` 스테일 교정(AI 사용법 근거 — 적극적 오답 제거)**: 게시 시 직전 게시본은 "Approved로 강등"이 아니라 **Expired(만료·최종)** + 순차 버전번호 채번(`versions.py:641–659`); 폐기된 인라인 드릴다운 서술 삭제→하위프로세스 참조/딥뷰(⑦)로 교정; 드롭존 "하위"→swap; 강제 점유는 **sysadmin 전용**·체크아웃 요청/이전 추가(`versions.py:289`); 회수 규칙(Pending/Approved=제출자만, Rejected=+오너/sysadmin, 회수자 체크아웃 재부여, `versions.py:744–763`); 맵 생성 필수(오우닝 부서·결재자·공개범위); 코멘트 진입은 더블클릭이 아니라 컨텍스트 메뉴.
