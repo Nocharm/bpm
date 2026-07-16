@@ -96,4 +96,4 @@ async def bulk_delete_notifications(
         stmt = stmt.where(Notification.created_at < cutoff)
     result = await session.execute(stmt)
     await session.commit()
-    return NotificationBulkDeleteOut(deleted=result.rowcount or 0)
+    return NotificationBulkDeleteOut(deleted=max(result.rowcount, 0))
