@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-16 — Task 10 완료: 관리자 퍼지 UI (테이블 뷰어 + 모달)
+- **Task 10 완료** — `notification-purge-modal.tsx` 신규(preview `(type,message)` 묶음을 체크박스로 확정 후 하드 삭제, 기본 전체 선택, `bg-error`/`text-on-accent`는 `confirm-dialog.tsx` 등에서 이미 쓰이는 기존 theme 토큰이라 그대로 사용) · `table-viewer.tsx` 훅업 — 헤더 바 우측에 `selected === "notifications"`일 때만 기간 입력 2개+삭제 버튼(날짜 역전 시 disabled) 노출, 퍼지 완료 시 `setPage(1)`/`setLoadedPage(0)`/`setRows([])`+`listDbTables()` 재조회로 표·pill 카운트 동기화 · i18n 8키 EN·KO 양쪽. tsc 0 errors, lint 0 errors(무관 사전 경고 1건), next build 통과.
+
 ## 2026-07-16 — Task 9 완료: 알림 탭 딥링크·카테고리 필·선택/읽음/날짜 삭제
 - **Task 9 완료** — `inbox/page.tsx`: 벨 딥링크(`?notification=<id>`) 마운트 effect fetch `.then` 안에서 소비(탭 전환·선택·읽음 처리·`router.replace("/inbox")`로 파라미터 소거) · 카테고리 필 필터(`getNotificationCategory` 체인, `useInfiniteSlice` resetKey에 `categoryFilter` 포함) · 선택모드(체크박스 토글, 카드 클릭이 selectMode에서 toggle로만 동작)+읽음 삭제+날짜 이전 삭제 툴바 · 개별 삭제 버튼(카드 시간 필 옆) · `ConfirmDialog`는 같은 파일 `ApprovalDetail` 승인/반려 모달 시그니처 그대로 재사용(danger+icon+message 1줄) · `typeIcon`에 `checkout_`/`permission_` prefix 매핑 추가 · i18n 14키 EN·KO 양쪽 추가. tsc 0 errors, lint 0 errors(무관 사전 경고 1건), vitest 416/416 passed.
 - **Task 9 리뷰 픽스** — 알림 카드 외곽 `<button>`→`<div role="button" tabIndex={0}>`(내부 삭제 버튼과의 button-in-button `validateDOMNesting` 콘솔 에러 해소 — 클라이언트 마운트 시 renderer가 검사하므로 SSR 무관하게 실측 발생하던 문제, onKeyDown Enter/Space+`cursor-pointer` 부착, 승인 탭 카드는 내부 버튼 없어 미접촉) · 체크박스 input→Lucide `CheckSquare`/`Square` 시각 표현(토글은 카드 클릭 유지) · `performBulkDelete` 성공 후 `setBeforeDate("")` 리셋 · `deleteOne`이 selectedIds에서도 해당 id 제거. tsc/lint/vitest 재실행 전부 그린(416/416).

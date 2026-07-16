@@ -5,10 +5,12 @@
 // 데이터: GET /api/admin/tables(이름+행수), /api/admin/tables/{name}(서버측 정렬/필터/페이징).
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2, Table2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Table2, Trash2 } from "lucide-react";
 
 import { getDbTable, listDbTables, type TableData, type TableInfo } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+
+import { NotificationPurgeModal } from "./notification-purge-modal";
 
 const PAGE_SIZE = 50; // 무한 스크롤 1회 로드 행수 / rows per scroll-load
 const FILTER_DEBOUNCE_MS = 300;
@@ -39,6 +41,12 @@ export function TableViewer() {
   const [order, setOrder] = useState<Order>("asc");
   const [filterInput, setFilterInput] = useState("");
   const [query, setQuery] = useState(""); // debounced filter applied to fetch
+
+  // notifications 전용 기간 퍼지 — 다른 테이블에선 노출되지 않음 (selected === "notifications" 가드)
+  const [purgeFrom, setPurgeFrom] = useState("");
+  const [purgeTo, setPurgeTo] = useState("");
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeResult, setPurgeResult] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false); // 스크롤 트리거 동기 가드
@@ -211,6 +219,27 @@ export function TableViewer() {
                   {t("db.rowsTotalShown", { total, loaded })}
                 </span>
               )}
+              {selected === "notifications" && (
+                <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
+                  <input type="date" value={purgeFrom} onChange={(e) => setPurgeFrom(e.target.value)}
+                    className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink" />
+                  –
+                  <input type="date" value={purgeTo} onChange={(e) => setPurgeTo(e.target.value)}
+                    className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink" />
+                  <button
+                    type="button"
+                    disabled={!purgeFrom || !purgeTo || purgeTo < purgeFrom}
+                    onClick={() => setPurgeOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-error disabled:opacity-40"
+                  >
+                    <Trash2 size={13} strokeWidth={1.5} />
+                    {t("db.purgeButton")}
+                  </button>
+                  {purgeResult !== null && (
+                    <span className="text-ink-tertiary">{t("db.purgeDeleted", { count: purgeResult })}</span>
+                  )}
+                </span>
+              )}
             </div>
           </div>
 
@@ -277,6 +306,21 @@ export function TableViewer() {
             )}
           </div>
         </div>
+      )}
+
+      {purgeOpen && (
+        <NotificationPurgeModal
+          from={purgeFrom}
+          to={purgeTo}
+          onClose={() => setPurgeOpen(false)}
+          onPurged={(deleted) => {
+            setPurgeResult(deleted);
+            setPage(1);
+            setLoadedPage(0);
+            setRows([]);
+            void listDbTables().then(setTables); // pill 행수 갱신
+          }}
+        />
       )}
     </div>
   );
