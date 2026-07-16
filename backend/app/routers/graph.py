@@ -181,6 +181,19 @@ async def replace_graph(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # 링크 유일성 — 같은 대상 맵을 2개 이상 노드가 링크하면 거부 (design 2026-07-16)
+    linked_ids = [
+        n.linked_map_id
+        for n in payload.nodes
+        if n.node_type == "subprocess" and n.linked_map_id is not None
+    ]
+    dupes = sorted({mid for mid in linked_ids if linked_ids.count(mid) > 1})
+    if dupes:
+        raise HTTPException(
+            status_code=422,
+            detail=f"subprocess map already linked in this map: {dupes}",
+        )
+
     # 버전 전체 노드를 payload로 교체 — 사라진 노드의 엣지·코멘트도 정리
     existing_ids = set(
         (

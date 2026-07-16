@@ -532,3 +532,60 @@ def test_node_url_label_too_long_rejected(client: TestClient) -> None:
     }
     res = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert res.status_code == 422
+
+
+def test_graph_rejects_duplicate_subprocess_link(client: TestClient) -> None:
+    # 같은 링크 대상 맵을 두 노드가 동시에 지정하면 저장 거부 — 링크 유일성 (design 2026-07-16)
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {
+                "id": "sub1",
+                "title": "결재1",
+                "node_type": "subprocess",
+                "linked_map_id": 999,
+                "sort_order": 1,
+            },
+            {
+                "id": "sub2",
+                "title": "결재2",
+                "node_type": "subprocess",
+                "linked_map_id": 999,
+                "sort_order": 2,
+            },
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+        ],
+        "edges": [],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 422
+    assert "already linked" in response.json()["detail"].lower()
+
+
+def test_graph_allows_distinct_subprocess_links(client: TestClient) -> None:
+    # 대조: 서로 다른 대상 맵을 링크하면 정상 저장된다
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {
+                "id": "sub1",
+                "title": "결재1",
+                "node_type": "subprocess",
+                "linked_map_id": 999,
+                "sort_order": 1,
+            },
+            {
+                "id": "sub2",
+                "title": "결재2",
+                "node_type": "subprocess",
+                "linked_map_id": 1000,
+                "sort_order": 2,
+            },
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+        ],
+        "edges": [],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 200
