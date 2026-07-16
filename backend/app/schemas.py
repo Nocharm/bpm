@@ -797,6 +797,31 @@ class NotificationBulkDeleteOut(BaseModel):
     deleted: int
 
 
+class NotificationPurgeGroupOut(BaseModel):
+    """purge-preview 1묶음 — type+message 동일 행 집계 (design 2026-07-16)."""
+
+    type: str
+    message: str
+    count: int
+    first_at: datetime
+    last_at: datetime
+
+
+class NotificationPurgeGroupIn(BaseModel):
+    type: str
+    message: str
+
+
+class NotificationPurgeIn(BaseModel):
+    """확정 퍼지 — [from 00:00, to+1일 00:00) KST 내 선택 묶음 전 수신자 행 삭제."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_date: date = Field(alias="from")
+    to_date: date = Field(alias="to")
+    groups: list[NotificationPurgeGroupIn] = Field(min_length=1)
+
+
 class FeedbackCreate(BaseModel):
     kind: Literal["bug", "suggestion", "question", "etc"]
     body: str = Field(min_length=1, max_length=4000)
