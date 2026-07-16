@@ -184,6 +184,7 @@ import { exportCanvasWord } from "@/lib/word-export";
 import { buildExcelModel, downloadExcel } from "@/lib/excel-export";
 import { buildCsvFromGraph } from "@/lib/csv-export";
 import { formatKst } from "@/lib/datetime";
+import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
@@ -918,14 +919,34 @@ function MapEditor({ mapId }: { mapId: number }) {
   const draggedNodeIdRef = useRef<string | null>(null);
   // 드래그 시작 시점의 노드 위치 — 위치 교환(swap) 시 드래그 노드의 원래 자리 복원용
   const dragStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  // Shift 축 고정용 — 현재 제스처로 함께 움직이는 모든 노드의 시작 표시좌표(단일 드래그=1개, 다중선택 드래그
+  // 시 onNodeDragStart 세 번째 인자(nodes)로 전원 채움 — RF는 노드를 직접 잡아 끌 때도 선택된 나머지를 같은
+  // 콜백으로 보고하고 onSelectionDrag는 안 씀). onNodeDragStop에서 비운다.
+  const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // Shift 드래그 축 고정용 — 드래그 중에만 참조하므로 입력창 포커스 중 추적돼도 무방.
+  const shiftHeldRef = useRef(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      shiftHeldRef.current = e.shiftKey;
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, []);
   // 펼침 중 루트 드래그: 드래그 중인 노드별 라이브 표시좌표(커서 1:1 추종). 드래그 중에만 항목 존재.
   // state로 둬야 displayNodes가 매 프레임 재렌더돼 커서를 따라온다(ref면 안 됨).
   const [dragLiveById, setDragLiveById] = useState<ReadonlyMap<string, { x: number; y: number }>>(
     EMPTY_DRAG_LIVE,
   );
   const dragLiveByIdRef = useRef(dragLiveById); // 핸들러에서 stale 없이 최신 라이브 맵 읽기용
-  // 드래그 시작 시 캡처한 노드별 (저장좌표, footprint 오프셋) — 드롭 시 표시→저장 환산에 사용.
-  const dragStartOffsetRef = useRef<Map<string, { offset: { x: number; y: number } }>>(new Map());
+  // 드래그 시작 시 캡처한 노드별 (저장좌표, footprint 오프셋, 시작 표시좌표) — 드롭 시 표시→저장 환산 및
+  // Shift 축 고정(다중선택, start 필드)에 사용.
+  const dragStartOffsetRef = useRef<
+    Map<string, { offset: { x: number; y: number }; start: { x: number; y: number } }>
+  >(new Map());
   // footprint-shift된 루트 노드의 position write를 nodes state에서 차단할 id 집합. 드래그 시작 시 채우고,
   // 드롭 후 몇 프레임까지 유지한다. RF는 표시좌표(=저장+offset)를 controlled nodes로 받아 드롭 직후 마지막
   // position 변경으로 돌려보내는데, 이게 새면 표시좌표가 저장좌표로 기록돼 재파생에서 또 밀린다(이중쉬프트).
@@ -1300,6 +1321,21 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 등 비-position 변경은 그대로 통과.
   const dropDraggingPositions = useCallback(
     (changes: NodeChange<AppNode>[]): NodeChange<AppNode>[] => {
+      // Shift 드래그 축 고정 — 단일·다중선택 드래그 공통 경로(각자 시작점 기준). suppress 필터와 무관하게
+      // (펼침 추적 여부 상관없이) 적용. dragging true/false(드롭 확정) 둘 다 보정 — RF는 드롭 시 자체 내부
+      // 좌표(우리가 보정한 적 없는 원본 대각 이동)로 마지막 position 변경을 한 번 더 흘려보내므로, true만
+      // 잡으면 드롭 순간 원위치로 튄다.
+      const starts = dragStartPositionsRef.current;
+      if (starts.size > 0) {
+        for (const change of changes) {
+          if (change.type === "position" && change.position) {
+            const start = starts.get(change.id);
+            if (start) {
+              change.position = constrainToAxis(start, change.position, shiftHeldRef.current);
+            }
+          }
+        }
+      }
       const suppress = suppressPosIdsRef.current;
       if (suppress.size === 0) {
         return changes;
@@ -3956,16 +3992,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (!rootOffsets || rootOffsets.size === 0) {
       return;
     }
-    const offsets = new Map<string, { offset: { x: number; y: number } }>();
+    const offsets = new Map<
+      string,
+      { offset: { x: number; y: number }; start: { x: number; y: number } }
+    >();
     const live = new Map<string, { x: number; y: number }>();
     for (const node of dragged) {
       const offset = rootOffsets.get(node.id);
       if (!offset) {
         continue; // 펼침에 안 밀린 노드(offset 0 미등록 포함은 아래에서 0 처리)
       }
-      offsets.set(node.id, { offset });
-      // RF가 보고하는 node.position은 이미 표시좌표(=저장+offset). 그대로 라이브 시드.
-      live.set(node.id, { x: node.position.x, y: node.position.y });
+      // RF가 보고하는 node.position은 이미 표시좌표(=저장+offset). 그대로 라이브 시드 겸 축 고정 기준점.
+      const start = { x: node.position.x, y: node.position.y };
+      offsets.set(node.id, { offset, start });
+      live.set(node.id, start);
     }
     if (offsets.size === 0) {
       return;
@@ -6855,9 +6895,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                         openMenu(event, "edge", edge.id);
                       }}
                       onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
-                      onNodeDragStart={(_, node) => {
+                      onNodeDragStart={(_, node, nodes) => {
                         pushHistory();
                         dragStartPosRef.current = { id: node.id, x: node.position.x, y: node.position.y };
+                        // RF는 다중선택을 노드 하나로 잡아 끌 때도 이 콜백에 전체 목록을 세 번째 인자로 준다.
+                        dragStartPositionsRef.current = new Map(
+                          nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+                        );
                         captureRootDragStart([node]);
                       }}
                       onNodeDrag={handleNodeDrag}
@@ -6885,6 +6929,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setDropTarget(null);
                         setGroupDropTarget(null);
                         draggedNodeIdRef.current = null;
+                        // 제스처 종료 — 다음 무관한 position 변경(화살표 이동 등)이 축 고정에 새지 않게 해제.
+                        dragStartPosRef.current = null;
+                        dragStartPositionsRef.current = new Map();
                       }}
                       onSelectionDragStart={(_, nodes) => {
                         pushHistory();
@@ -6896,11 +6943,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                         if (tracked.size === 0) {
                           return;
                         }
+                        const shiftHeld = shiftHeldRef.current;
                         setDragLiveById((cur) => {
                           const next = new Map(cur);
                           for (const node of nodes) {
-                            if (tracked.has(node.id)) {
-                              next.set(node.id, { x: node.position.x, y: node.position.y });
+                            const entry = tracked.get(node.id);
+                            if (entry) {
+                              // 다중선택은 노드별 시작점이 달라 개별 보정(entry.start 기준).
+                              next.set(
+                                node.id,
+                                constrainToAxis(entry.start, node.position, shiftHeld),
+                              );
                             }
                           }
                           return next;
@@ -6924,6 +6977,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesDelete={() => scheduleAutoSave()}
                       onMoveStart={() => setMenu(null)}
                       selectionOnDrag
+                      // 기본값 Shift가 축 고정 키와 충돌 — pane 빈 영역 드래그 선택은 selectionOnDrag로 이미 가능하므로 비활성화.
+                      selectionKeyCode={null}
                       panOnDrag={[1]}
                       panActivationKeyCode="Space"
                       deleteKeyCode={["Delete"]}
