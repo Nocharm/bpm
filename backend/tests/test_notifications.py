@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from app.models import Employee
 from app.settings import settings
+from app.workflow import create_notifications
 
 
 _notif_seq = 0
@@ -116,3 +117,25 @@ def test_read_all_marks_every_unread(
     resp = client.post("/api/notifications/read-all")
     assert resp.status_code == 204
     assert client.get("/api/notifications?unread_only=true").json() == []
+
+
+def test_notification_cap_trims_oldest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """인당 100개 초과분은 읽음 여부 무관 오래된 순 삭제 — 생성 시점 트리밍."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            for i in range(105):
+                await create_notifications(
+                    session, ["cap-user"], type="notice", message=f"cap {i}"
+                )
+            await session.commit()
+
+    asyncio.run(_run())
+    monkeypatch.setattr(settings, "dev_user", "cap-user")
+    items = client.get("/api/notifications").json()
+    assert len(items) == 100
+    messages = {n["message"] for n in items}
+    assert "cap 104" in messages  # 최신 생존
+    assert "cap 4" not in messages  # 최고령 5개(0..4) 삭제

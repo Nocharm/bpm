@@ -509,7 +509,7 @@ async def submit_version(
     version.checked_out_by = None
     version.checked_out_at = None
     requester_name = await workflow.get_display_name(session, user)
-    workflow.create_notifications(
+    await workflow.create_notifications(
         session,
         approvers,
         type="review_requested",
@@ -563,7 +563,7 @@ async def approve_version(
     if approved_count is not None and approved_count >= len(approvers):
         version.status = workflow.APPROVED
         if version.submitted_by:
-            workflow.create_notifications(
+            await workflow.create_notifications(
                 session,
                 [version.submitted_by],
                 type="approved",
@@ -607,7 +607,7 @@ async def reject_version(
         )
     )
     if version.submitted_by:
-        workflow.create_notifications(
+        await workflow.create_notifications(
             session,
             [version.submitted_by],
             type="rejected",
@@ -659,7 +659,7 @@ async def publish_version(
         record_version_event(session, prior.id, "expired", user)
 
     version.status = workflow.PUBLISHED
-    workflow.create_notifications(
+    await workflow.create_notifications(
         session,
         approvers,
         type="published",
