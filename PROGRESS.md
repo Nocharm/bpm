@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-16 — Task 12 완료: 전체 게이트 + Playwright 실검증 (알림 퍼지 브랜치 최종)
+- **Task 12 완료** — 전체 게이트 그린: backend pytest 624 passed·ruff clean, frontend vitest 416 passed·tsc 0 errors·lint 0 errors(무관 사전 경고 1건)·next build 성공. `frontend/scripts/pw-verify-notifications.mjs` 신규(`pw-verify-dashboard.mjs` 하네스 재사용 — playwright-core+시스템 Chrome, devUser `admin.sys`) — 벨 딥링크/개별삭제, 알림탭 카테고리 필·선택삭제·읽음삭제·날짜이전삭제, 관리자 기간 퍼지(미리보기→확정→행수 감소) 6개 시나리오 + 콘솔 에러(validateDOMNesting) 수집, 클린 DB(reset_db+seed_org_demo)에서 8/8 PASS. 잔여 리스크: `worktree-workflow-improvements`(미머지, `inbox/page.tsx` 승인 탭 수정)와 향후 머지 시 충돌 가능성 — 상세: `.superpowers/sdd/task-12-report.md`.
+
 ## 2026-07-16 — Task 11 완료: 매뉴얼 알림 삭제·보존·퍼지 반영 + 감사 불일치 4건 교정
 - **Task 11 완료** — `user-manual-general-{ko,en}.md` 알림·승인 절 재작성: 벨 5초 폴링·클릭 시 알림 탭 이동+자동읽음·항목별 삭제(X), 알림 탭은 페이지 진입 시 1회 로드(자동 갱신 없음), 카테고리 필터 5종(전체/버전/점유권/권한/공지)+선택모드 일괄삭제+읽은 알림 삭제+날짜지정 삭제(확인 모달, 복구불가), 1인당 최근 100건 보존, checkout·permission 벨 알림 반영 · 공지 읽음이 브라우저(기기)별 localStorage임을 명시. `admin-manual-{ko,en}.md` — 공지 삭제는 하드 삭제·휴지통 없음·복구불가(단 기 발송 벨 알림은 잔존)로 교정 + "알림 기간 삭제(퍼지)" 절 신설(§8, `notifications` 테이블 선택 시 기간 지정→preview 모달 기본 전체선택→체크 해제 확정→하드삭제) + 100건 보존 항목 추가. `backend/app/manual.md` 벨 서술 1문장 확장(클릭 이동·삭제·100건). `docs/alarm-audit.md` §8 불일치 4건(①인박스 갱신주기 ②보존정책 공백 ③공지 하드삭제 ④공지 읽음 기기별) 전부 교정 완료.
 
