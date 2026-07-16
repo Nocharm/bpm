@@ -9,6 +9,7 @@ import { getInheritedParams } from "./params";
 
 export interface ExcelNodeRow {
   kind: "node";
+  no: number; // 최종 행 번호(1..n) — 삭제 규칙 적용 후 모델에서 부여, 시트는 그대로 기록
   depth: number; // 0=현재 맵, 서브프로세스 인라인마다 +1
   title: string;
   type: string;
@@ -84,6 +85,8 @@ export async function buildExcelModel({
 }): Promise<ExcelModel> {
   const rows: ExcelRow[] = [];
   let truncated = false;
+  // 규칙4 주석 — 행 "객체" 참조로 기록해 번호 부여 후 일괄 조립(역방향 분기·다이아몬드 이중 인라인 안전)
+  const annotations: Array<{ target: ExcelNodeRow; decision: ExcelNodeRow; label: string }> = [];
   // 같은 (mapId,followLatest,pinned) 조합은 fetch 1회 — 다이아몬드 참조(같은 맵 2회 인라인) 대비
   const cache = new Map<string, Promise<Graph>>();
   const fetchMemo = (mapId: number, followLatest: boolean, pinned: number | null): Promise<Graph> => {
@@ -134,6 +137,8 @@ export async function buildExcelModel({
       return (outgoing.get(target.id) ?? []).flatMap((e) => resolveTargets(e, label, nextSeen));
     };
 
+    const rowByNodeId = new Map<string, ExcelNodeRow>(); // 스코프(맵 인스턴스) 한정 — 이중 인라인 안전
+
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 행은 상한(maxRows)을 소비하지 않는다
       if (rows.length >= maxRows) {
@@ -146,8 +151,9 @@ export async function buildExcelModel({
         .flatMap((e) => resolveTargets(e, e.label, new Set()))
         .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`))
         .join(";");
-      rows.push({
+      const row: ExcelNodeRow = {
         kind: "node",
+        no: 0, // finalize에서 부여
         depth,
         title: node.title,
         type: node.node_type,
@@ -162,7 +168,9 @@ export async function buildExcelModel({
         urlLabel: node.url_label ?? "",
         groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
         next,
-      });
+      };
+      rows.push(row);
+      rowByNodeId.set(node.id, row);
       if (node.node_type === "subprocess" && node.linked_map_id !== null && !truncated) {
         if (ancestry.has(node.linked_map_id)) {
           rows.push({ kind: "circular", depth: depth + 1, title: node.title });
@@ -182,9 +190,36 @@ export async function buildExcelModel({
         await emit(resolved, depth + 1, new Set([...ancestry, node.linked_map_id]));
       }
     }
+
+    // 규칙4: 유지된 디시전의 라벨 분기 → 최종 대상 행에 (디시전 행, 라벨) 기록 — 대상 행이 삭제됐으면 소멸
+    for (const node of ordered) {
+      if (node.node_type !== "decision") continue;
+      const decisionRow = rowByNodeId.get(node.id);
+      if (!decisionRow) continue; // 무라벨(삭제) 디시전
+      for (const e of outgoing.get(node.id) ?? []) {
+        if (e.label === "") continue;
+        for (const { node: t, label } of resolveTargets(e, e.label, new Set())) {
+          const targetRow = rowByNodeId.get(t.id);
+          if (targetRow) annotations.push({ target: targetRow, decision: decisionRow, label });
+        }
+      }
+    }
   };
 
   await emit(graph, 0, new Set(rootMapId != null ? [rootMapId] : []));
+
+  // 번호 부여(삭제 후 1..n 연속) → 주석 조립. next 문자열은 emit 시점 확정이라 주석이 섞이지 않는다.
+  let no = 0;
+  for (const row of rows) {
+    if (row.kind === "node") {
+      no += 1;
+      row.no = no;
+    }
+  }
+  for (const { target, decision, label } of annotations) {
+    target.title += ` [${decision.no}:${label}]`;
+  }
+
   return { mapName, versionLabel, exportedAt, rows, truncated };
 }
 
@@ -233,7 +268,6 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
   });
   COLUMNS.forEach((c, i) => { sheet.getColumn(i + 1).width = c.width; });
 
-  let no = 0;
   for (const row of model.rows) {
     if (row.kind !== "node") {
       const r = sheet.addRow(["", NOTE_TEXT[row.kind]]);
@@ -242,10 +276,9 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
       r.outlineLevel = Math.min(row.depth, 7);
       continue;
     }
-    no += 1;
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
-      no, row.title, row.type, row.description, row.assignee, row.department, row.system,
+      row.no, row.title, row.type, row.description, row.assignee, row.department, row.system,
       num(row.duration), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
       "", row.groups, row.next,
     ]);

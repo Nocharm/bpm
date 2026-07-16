@@ -368,10 +368,10 @@ describe("buildExcelModel", () => {
       fetchResolved,
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
-    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B"]);
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B [2:approve]"]);
     const aRow = nodeRows.find((r) => r.title === "A");
     expect(aRow?.next).toBe("B:approve;End:reject");
-    const bRow = nodeRows.find((r) => r.title === "B");
+    const bRow = nodeRows[2];
     expect(bRow?.next).toBe("End");
   });
 
@@ -611,7 +611,7 @@ describe("buildExcelModel", () => {
       fetchResolved,
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
-    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B", "C"]);
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B [2:yes]", "C"]);
     expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:yes;C");
   });
 
@@ -652,8 +652,117 @@ describe("buildExcelModel", () => {
       fetchResolved,
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
-    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "A", "B"]);
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "A [2:go]", "B [2:go]"]);
     expect(nodeRows.find((r) => r.title === "D")?.next).toBe("A:go;B:go");
+  });
+
+  it("규칙4: 라벨 분기 대상 Name에 [디시전No:라벨] 주석 — 역방향(앞 행) 대상도 최종 No 참조", async () => {
+    // start→A→D, D→A "retry"(역방향), D→B "pass" — A(2행)는 D(3행)보다 앞
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("d1", "D", "decision", 2),
+        makeNode("b1", "B", "process", 3),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "d1"),
+        makeEdge("x3", "d1", "a1", "retry"), makeEdge("x4", "d1", "b1", "pass"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => [r.no, r.title])).toEqual([
+      [1, "Start"], [2, "A [3:retry]"], [3, "D"], [4, "B [3:pass]"],
+    ]);
+    // next는 주석 없는 원제목 기준 — 주석이 섞이지 않는다
+    expect(nodeRows.find((r) => r.no === 3)?.next).toBe("A:retry;B:pass");
+  });
+
+  it("규칙4: 복수 디시전의 대상이면 주석이 연접된다", async () => {
+    // D1→T "a", D1→D2 "next", D2→T "b" — T에 [2:a] [3:b]
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D1", "decision", 1),
+        makeNode("d2", "D2", "decision", 2),
+        makeNode("t1", "T", "process", 3),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"),
+        makeEdge("x2", "d1", "t1", "a"), makeEdge("x3", "d1", "d2", "next"),
+        makeEdge("x4", "d2", "t1", "b"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D1", "D2 [2:next]", "T [2:a] [3:b]"]);
+  });
+
+  it("규칙4: 라벨 전파 — 라벨 디시전→무라벨 디시전 경유 최종 대상에도 주석", async () => {
+    // D ─go→ P(무라벨, 행 삭제) → A,B — A·B에 [2:go]
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("p1", "P", "decision", 2),
+        makeNode("a1", "A", "process", 3),
+        makeNode("b1", "B", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"), makeEdge("x2", "d1", "p1", "go"),
+        makeEdge("x3", "p1", "a1"), makeEdge("x4", "p1", "b1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "A [2:go]", "B [2:go]"]);
+  });
+
+  it("규칙4: 다이아몬드 이중 인라인에서 주석 번호가 인스턴스별로 분리된다", async () => {
+    // map1: start→subA(2)→subB(2) / 공유 맵: D ─ok→ T — 인스턴스별 D의 No로 각각 주석
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeSubNode("subA", "SubA", 1, 2),
+        makeSubNode("subB", "SubB", 2, 2),
+      ],
+      edges: [makeEdge("x1", "s1", "subA"), makeEdge("x2", "subA", "subB")],
+      groups: [],
+    };
+    const sharedMap: Graph = {
+      nodes: [makeNode("dd", "D", "decision", 0), makeNode("tt", "T", "process", 1)],
+      edges: [makeEdge("y1", "dd", "tt", "ok")],
+      groups: [],
+    };
+    const fetchResolved = async (mapId: number): Promise<Graph> => {
+      if (mapId !== 2) throw new Error("not found");
+      return sharedMap;
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => [r.no, r.title])).toEqual([
+      [1, "Start"], [2, "SubA"], [3, "D"], [4, "T [3:ok]"],
+      [5, "SubB"], [6, "D"], [7, "T [6:ok]"],
+    ]);
   });
 });
 
@@ -684,7 +793,7 @@ describe("writeExcelSheet", () => {
     writeExcelSheet(workbook, {
       mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-13T00:00:00+09:00", truncated: false,
       rows: [{
-        kind: "node", depth: 0, title: "P", type: "process", description: "", assignee: "",
+        kind: "node", no: 1, depth: 0, title: "P", type: "process", description: "", assignee: "",
         department: "", system: "", url: "", urlLabel: "", groups: "", next: "", ...base,
       }],
     });
@@ -716,5 +825,19 @@ describe("writeExcelSheet", () => {
       const value = dataRow.getCell(findColumnIndex(header)).value;
       expect(value).not.toBe(0);
     }
+  });
+
+  it("No 셀은 모델의 row.no를 그대로 기록한다", () => {
+    const workbook = new Workbook();
+    writeExcelSheet(workbook, {
+      mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00", truncated: false,
+      rows: [{
+        kind: "node", no: 7, depth: 0, title: "P", type: "process", description: "", assignee: "",
+        department: "", system: "", duration: "", cost_krw: "", cost_usd: "", headcount: "",
+        annual_count: "", fte: "", url: "", urlLabel: "", groups: "", next: "",
+      }],
+    });
+    const sheet = workbook.getWorksheet("Process Map");
+    expect(sheet?.getRow(5).getCell(1).value).toBe(7);
   });
 });
