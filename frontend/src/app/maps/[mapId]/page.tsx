@@ -8196,6 +8196,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
                     />
                     )}
+                    {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스 */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      onToast={showToast}
+                    />
                     <MapDetailCard
                       mapId={mapId}
                       only="versions"
