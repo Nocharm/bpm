@@ -538,6 +538,7 @@ export default function InboxPage() {
                           else void openNotification(n);
                         }}
                         onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return; // 내부 삭제 버튼의 Enter/Space 버블링이 카드 동작으로 새는 것 방지
                           if (e.key !== "Enter" && e.key !== " ") return;
                           e.preventDefault();
                           if (selectMode) toggleSelected(n.id);
