@@ -4,7 +4,7 @@
 // 외부 AI 왕복: [AI 프롬프트 복사]→외부 AI에 문서와 함께 붙여넣기→받은 CSV를 에디터에서 임포트.
 import { useState } from "react";
 
-import { AlertTriangle, BookOpen, Check, Download, Sparkles } from "lucide-react";
+import { AlertTriangle, BookOpen, Check, Download, ExternalLink, Sparkles } from "lucide-react";
 
 import { copyText } from "@/lib/clipboard";
 import { buildAiPromptText, buildTemplateCsv } from "@/lib/csv-import";
@@ -64,6 +64,7 @@ export function CsvTemplateActions({
         >
           <BookOpen size={14} strokeWidth={1.5} />
           {t("csvImport.manualLink")}
+          <ExternalLink size={12} strokeWidth={1.5} className="text-ink-tertiary" />
         </button>
       )}
       <button
