@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-16 — CSV 매뉴얼 버튼 배포 파이프라인 개통 + compose 누락 방지 룰 (worktree-manual-buttons)
+- CSV 임포트 안내 버튼(`csv-manual-link`, 홈 CSV 생성 모달·에디터 임포트 모달)이 프로덕션에서 절대 안 뜨던 문제 — `settings.csv_manual_url`(env `CSV_MANUAL_URL`)이 `.env.example`·`settings.py`·`schemas.py`·`main.py`엔 있었으나 **`docker-compose.yml` backend `environment:`에만 누락**. backend 서비스엔 `env_file:`가 없어 `.env` 값이 컨테이너에 도달 못 함 → `/me`가 빈 값 반환 → 버튼 영구 숨김(로컬 네이티브에선 정상이라 미발견). `MANUAL_URL`(편집 매뉴얼, 툴바 F9)은 이미 전달됨.
+- `docker-compose.yml`에 `CSV_MANUAL_URL: ${CSV_MANUAL_URL:-}` 추가(파이프라인 개통).
+- 재발 방지: `rules/backend/config.md`에 "새 Environment 카테고리 Settings 필드는 backend `environment:` 블록에도 반드시 매핑" 룰 명문화(no `env_file:` 근본 원인·`CSV_MANUAL_URL` 선례 기록). CLAUDE.md `@import` 대상이라 다음 세션 자동 로드.
+
 ## 2026-07-16 — 새 맵 생성 시 Start·End 자동 시드 (worktree-workflow-improvements)
 - 빈 새 맵이 캔버스가 비어 있던 문제 — `create_map`(`backend/app/routers/maps.py`)이 초기 버전에 Start·End 노드 2개를 자동 삽입(엣지 없음, 고정 LR 좌표, id=uuid hex). CSV 임포트 생성과 동일한 UX. 설계 `docs/superpowers/specs/2026-07-16-new-map-start-end-seed-design.md`.
 - 범위: 새 맵의 초기 버전만(빈 새 버전·복사는 대상 아님). CSV 생성 경로 무영향(`PUT /graph` 전체 교체로 시드가 CSV 노드로 대체 — 중복 없음). `validate_process` 통과(start 1·대표 end 1·제목 유니크).
