@@ -182,3 +182,25 @@ def test_checkout_decision_notifies_requester(
     monkeypatch.setattr(settings, "dev_user", "co-req2")
     types = [n["type"] for n in client.get("/api/notifications?unread_only=true").json()]
     assert "checkout_rejected" in types
+
+
+def test_checkout_approve_notifies_winner_and_auto_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """승인 시 승자에게 checkout_approved, 자동거절된 다른 미결 요청자에게 checkout_rejected."""
+    _map_id, version_id = _checkout_map(client, monkeypatch, "co-owner3", "n3")
+    monkeypatch.setattr(settings, "dev_user", "co-req3a")
+    req_a_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+    monkeypatch.setattr(settings, "dev_user", "co-req3b")
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 201
+
+    monkeypatch.setattr(settings, "dev_user", "co-owner3")
+    assert client.post(f"/api/checkout-requests/{req_a_id}/decide", json={"approve": True}).status_code == 200
+
+    monkeypatch.setattr(settings, "dev_user", "co-req3a")
+    approved = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "checkout_approved"]
+    assert len(approved) == 1
+    assert "approved" in approved[0]["message"]
+    monkeypatch.setattr(settings, "dev_user", "co-req3b")
+    rejected = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "checkout_rejected"]
+    assert len(rejected) == 1  # 벌크 자동거절 전 캡처된 통지
