@@ -53,7 +53,7 @@ export const EXCEL_MAX_ROWS = 2000;
  * 링크 맵의 sp_* 라이브 참조(g.subprocess_refs)에서 가져온다(캔버스 인스펙터·Σ 합산과 동일 소스,
  * design 2026-07-13 §3.1). annual_count·fte는 부모 맥락 값이라 노드 행 그대로 별도 취급.
  */
-function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, "duration" | "cost_krw" | "cost_usd" | "headcount"> {
+export function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, "duration" | "cost_krw" | "cost_usd" | "headcount"> {
   if (node.node_type === "subprocess" && node.linked_map_id !== null) {
     return getInheritedParams(g.subprocess_refs?.[node.linked_map_id]);
   }
@@ -234,8 +234,8 @@ export async function buildExcelModel({
 }
 
 // 셀 색은 출력물이라 raw hex 허용 (design.md §1 예외 — csv-export.ts와 동일 논리)
-const HEADER_FILL = "FFF3F0FA"; // 연보라 헤더 (ARGB)
-const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
+export const HEADER_FILL = "FFF3F0FA"; // 연보라 헤더 (ARGB)
+export const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
   circular: "(circular reference)",
   denied: "(access denied)",
   rowLimit: `(row limit ${EXCEL_MAX_ROWS} reached — output truncated)`,
