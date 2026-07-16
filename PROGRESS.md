@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-17 — Excel 출력 양식 개선 1안 설계 확정 (worktree-excel-export)
+- 엑셀 산출물 2종 분리 작업의 1단계 설계 — 구조 노드 행 정리(무라벨 디시전·첫 start 외·기본 제목 end)+분기 주석(`Name [디시전No:라벨]`)·Next flow-through 규칙 확정. 설계 `docs/superpowers/specs/2026-07-17-excel-export-format-v1-design.md`. CSV는 왕복 계약이라 미적용. Groups 반영 검토 — 정상(무명 그룹만 제외됨).
+
 ## 2026-07-16 — 새 맵 생성 시 Start·End 자동 시드 (worktree-workflow-improvements)
 - 빈 새 맵이 캔버스가 비어 있던 문제 — `create_map`(`backend/app/routers/maps.py`)이 초기 버전에 Start·End 노드 2개를 자동 삽입(엣지 없음, 고정 LR 좌표, id=uuid hex). CSV 임포트 생성과 동일한 UX. 설계 `docs/superpowers/specs/2026-07-16-new-map-start-end-seed-design.md`.
 - 범위: 새 맵의 초기 버전만(빈 새 버전·복사는 대상 아님). CSV 생성 경로 무영향(`PUT /graph` 전체 교체로 시드가 CSV 노드로 대체 — 중복 없음). `validate_process` 통과(start 1·대표 end 1·제목 유니크).
