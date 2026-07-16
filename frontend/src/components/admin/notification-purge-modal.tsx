@@ -34,12 +34,12 @@ export function NotificationPurgeModal({
 
   // 언마운트 후 setState 가드 — runPurge catch 보호 (preview effect의 alive와 동일 목적)
   const aliveRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    aliveRef.current = true; // StrictMode 재마운트에서 cleanup이 남긴 false 복원
+    return () => {
       aliveRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;

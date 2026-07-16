@@ -1,6 +1,7 @@
 # Progress
 
 ## 2026-07-16 — Task 10 완료: 관리자 퍼지 UI (테이블 뷰어 + 모달)
+- **Task 10 재리뷰 픽스** — aliveRef effect setup에서 `aliveRef.current = true;` 복원 1줄(StrictMode dev의 mount→cleanup→re-mount에서 useRef(true) 초기값이 재설정되지 않아 영구 false → purge 실패 시 catch 즉시 return으로 에러 무표시+busy 데드락 방지). tsc/lint 그린.
 - **Task 10 리뷰 픽스** — 퍼지 모달 3건(`notification-purge-modal.tsx`만): busy 중 닫힘 차단(백드롭 onClick `if (!busy)` 가드 + Cancel `disabled={busy}` — in-flight 중 닫혀 onPurged가 다른 테이블 상태를 오염시키는 경로 차단) · runPurge catch에 `aliveRef` 언마운트 가드(preview effect의 alive와 일관) · 로딩/에러 배타(preview 실패 시 스피너 숨김 — `groups === null` 분기 안에서 `!error &&`로 처리해 TS null-narrowing 유지, 리뷰 제안의 `groups === null && !error ?` 삼항 조건 변경은 else 분기 `groups.length` null 타입 에러라 조정) + runPurge 시작 시 `setError(null)`. tsc/lint/build 그린.
 - **Task 10 완료** — `notification-purge-modal.tsx` 신규(preview `(type,message)` 묶음을 체크박스로 확정 후 하드 삭제, 기본 전체 선택, `bg-error`/`text-on-accent`는 `confirm-dialog.tsx` 등에서 이미 쓰이는 기존 theme 토큰이라 그대로 사용) · `table-viewer.tsx` 훅업 — 헤더 바 우측에 `selected === "notifications"`일 때만 기간 입력 2개+삭제 버튼(날짜 역전 시 disabled) 노출, 퍼지 완료 시 `setPage(1)`/`setLoadedPage(0)`/`setRows([])`+`listDbTables()` 재조회로 표·pill 카운트 동기화 · i18n 8키 EN·KO 양쪽. tsc 0 errors, lint 0 errors(무관 사전 경고 1건), next build 통과.
 
