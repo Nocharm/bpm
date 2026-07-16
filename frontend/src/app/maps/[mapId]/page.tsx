@@ -3550,8 +3550,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           .map((node) => [node.id, { ...node.position }]),
       );
       const onMove = (ev: PointerEvent) => {
-        const dx = (ev.clientX - startX) / zoom;
-        const dy = (ev.clientY - startY) / zoom;
+        let dx = (ev.clientX - startX) / zoom;
+        let dy = (ev.clientY - startY) / zoom;
+        if (shiftHeldRef.current) {
+          // Shift = 그룹 전체를 한 축으로만 이동 — (dx,dy)를 원점 기준 점으로 보고 더 작은 변위 축을 0으로
+          // (constrainToAxis와 동일 규칙, 동률=수평 유지). 전 멤버가 같은 델타를 쓰므로 그룹이 통째로 잠긴다.
+          const locked = constrainToAxis({ x: 0, y: 0 }, { x: dx, y: dy }, true);
+          dx = locked.x;
+          dy = locked.y;
+        }
         setNodes((current) =>
           current.map((node) => {
             const start = startPositions.get(node.id);
@@ -6935,10 +6942,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onSelectionDragStart={(_, nodes) => {
                         pushHistory();
+                        // 선택박스 오버레이(빈 공간)를 잡아 끄는 평범한 다중선택 드래그는 onNodeDragStart가 아니라
+                        // 여기로 온다 — Shift 축 고정 기준점을 노드별로 시드해야 dropDraggingPositions가 각 노드를 보정한다.
+                        dragStartPositionsRef.current = new Map(
+                          nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+                        );
                         captureRootDragStart(nodes);
                       }}
                       onSelectionDrag={(_, nodes) => {
                         // 다중선택 드래그 — onNodeDrag가 안 발화하므로 여기서 라이브 표시좌표를 갱신.
+                        // 인라인 펼침(dragLiveById 렌더) 경로 전용. 평범한 다중선택은 nodes state로 렌더되고
+                        // dropDraggingPositions가 dragStartPositionsRef 기준으로 이미 축 고정하므로 여긴 건너뛴다
+                        // (여기서 dragLiveById를 써도 inlineComposition이 없으면 렌더에 안 쓰이고 잔여 항목만 남긴다).
                         const tracked = dragStartOffsetRef.current;
                         if (tracked.size === 0) {
                           return;
@@ -6965,6 +6980,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         if (!tracked || committed) {
                           scheduleAutoSave();
                         }
+                        // 제스처 종료 — 다음 무관한 position 변경이 축 고정에 새지 않게 해제(onNodeDragStop과 동일).
+                        dragStartPositionsRef.current = new Map();
                       }}
                       onBeforeDelete={async () => {
                         if (readOnly) {

@@ -1,12 +1,18 @@
-// Shift 드래그 축 고정 검증 (Task 4.2) — 단일 노드·다중선택 노드를 Shift 누른 채 대각선으로 드래그하면
+// Shift 드래그 축 고정 검증 (Task 4.2) — 단일 노드·다중선택 노드·그룹을 Shift 누른 채 대각선으로 드래그하면
 // 드롭 후에도(드롭 확정 change까지 포함) 시작점 대비 더 큰 변위의 축만 움직이고 나머지 축은 고정되는지 확인.
 // 대조군으로 Shift 없이 드래그하면 두 축 모두 움직이는지도 확인(항상-고정 회귀 방지).
 //
 // 시나리오: 새 맵 생성(Start/End 자동 시드, pw-verify-new-map-seed.mjs와 동일 패턴 — 데모 시드/체크아웃 점유에
-// 의존하지 않음) → ①Start 단일 Shift+대각 드래그: y 고정·x만 이동 ②Shift 없이 대각 드래그(대조군): x·y 둘 다 이동
-// ③Start+End 다중선택(클릭+Meta클릭) 후 Start를 Shift+대각 드래그: 두 노드 모두 y 고정·x만 이동(그룹 이동인데
-// End는 Start를 안 잡았으므로 onSelectionDrag가 아니라 onNodeDrag 경로로 처리됨 — dragStartPositionsRef가
-// nodes 전체를 커버해야 통과) ④콘솔 에러 0.
+// 의존하지 않음) →
+//   ① Start 단일 Shift+대각 드래그: y 고정·x만 이동
+//   ② Shift 없이 대각 드래그(대조군): x·y 둘 다 이동
+//   ③ Start+End 다중선택(클릭+Meta클릭) 후 Start '노드'를 Shift+대각 드래그: 두 노드 모두 y 고정·x만 이동
+//      (노드를 잡는 경로 = onNodeDragStart → dragStartPositionsRef가 nodes 전체를 커버해야 통과)
+//   ④ Start+End 다중선택 후 '선택박스 오버레이'(두 노드 사이 빈 공간)를 Shift+대각 드래그: 두 노드 모두 y 고정
+//      (오버레이 경로 = onSelectionDragStart → 여기서도 dragStartPositionsRef 시드 + dropDraggingPositions 보정)
+//   ⑤ 두 노드를 그룹핑(Meta+G) 후 그룹 타이틀바 이동 핸들을 Shift+대각 드래그: 멤버 전원 한 축만 이동
+//      (startGroupMove onMove가 constrainToAxis로 델타를 잠금)
+//   ⑥ 콘솔 에러 0.
 //
 // 실행 (frontend/ 에서): node scripts/pw-verify-shift-drag.mjs
 // 전제: backend :8000(reset_db 시드 무관, API로 맵을 새로 만듦), frontend :3000, playwright-core(--no-save)
@@ -82,6 +88,29 @@ async function dragBy(nodeId, dx, dy, { shiftKey = false } = {}) {
   await page.waitForTimeout(300);
 }
 
+// 임의의 화면 점에서 마우스 다운→다각 이동→업 (노드가 아닌 선택박스 오버레이·그룹 핸들 드래그용).
+async function dragFromPoint(sx, sy, dx, dy, { shiftKey = false } = {}) {
+  if (shiftKey) await page.keyboard.down("Shift");
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  const steps = 10;
+  for (let i = 1; i <= steps; i += 1) {
+    await page.mouse.move(sx + (dx * i) / steps, sy + (dy * i) / steps, { steps: 1 });
+  }
+  await page.mouse.up();
+  if (shiftKey) await page.keyboard.up("Shift");
+  await page.waitForTimeout(300);
+}
+
+// 두 노드를 Meta+클릭으로 다중선택. (플레인 클릭이 나머지를 해제하므로 첫 노드는 일반 클릭.)
+async function selectBoth(aId, bId) {
+  await page.locator(`.react-flow__node[data-id="${aId}"]`).click();
+  await page.keyboard.down("Meta");
+  await page.locator(`.react-flow__node[data-id="${bId}"]`).click();
+  await page.keyboard.up("Meta");
+  await page.waitForTimeout(200);
+}
+
 let mapId = null;
 try {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded", timeout: 15000 });
@@ -135,11 +164,8 @@ try {
     `before=${JSON.stringify(beforePlain)} after=${JSON.stringify(afterPlain)}`,
   );
 
-  // ===== ③ 다중선택(Start+End) 후 Start를 Shift+대각 드래그 — 둘 다 y 고정, x만 이동 =====
-  await page.locator(`.react-flow__node[data-id="${startId}"]`).click();
-  await page.keyboard.down("Meta");
-  await page.locator(`.react-flow__node[data-id="${endId}"]`).click();
-  await page.keyboard.up("Meta");
+  // ===== ③ 다중선택(Start+End) 후 Start '노드'를 Shift+대각 드래그 — 둘 다 y 고정, x만 이동 =====
+  await selectBoth(startId, endId);
   const selectedCount = await page.locator(".react-flow__node.selected").count();
   check("다중선택 성사(2개 selected)", selectedCount === 2, `selected=${selectedCount}`);
 
@@ -154,17 +180,94 @@ try {
   const multiEndYLocked = Math.abs(afterMultiEnd.y - beforeMultiEnd.y) <= LOCK_EPS;
   const multiEndXMoved = Math.abs(afterMultiEnd.x - beforeMultiEnd.x) >= MOVE_MIN;
   check(
-    "다중선택 드래그: 잡은 노드(Start) y축 고정",
+    "다중선택(노드잡기) 드래그: 잡은 노드(Start) y축 고정",
     multiStartYLocked,
     `before=${JSON.stringify(beforeMultiStart)} after=${JSON.stringify(afterMultiStart)}`,
   );
-  check("다중선택 드래그: 잡은 노드(Start) x축 이동", multiStartXMoved);
+  check("다중선택(노드잡기) 드래그: 잡은 노드(Start) x축 이동", multiStartXMoved);
   check(
-    "다중선택 드래그: 동반 노드(End) y축도 고정",
+    "다중선택(노드잡기) 드래그: 동반 노드(End) y축도 고정",
     multiEndYLocked,
     `before=${JSON.stringify(beforeMultiEnd)} after=${JSON.stringify(afterMultiEnd)}`,
   );
-  check("다중선택 드래그: 동반 노드(End) x축도 이동", multiEndXMoved);
+  check("다중선택(노드잡기) 드래그: 동반 노드(End) x축도 이동", multiEndXMoved);
+
+  // ===== ④ 다중선택 후 '선택박스 오버레이'를 Shift+대각 드래그 — onSelectionDragStart 경로 =====
+  // 두 노드 사이 빈 공간(선택박스 rect만 있고 노드는 없는 지점)에 마우스를 눌러 오버레이 드래그를 발동.
+  await selectBoth(startId, endId);
+  const rectPresent = (await page.locator(".react-flow__nodesselection-rect").count()) > 0;
+  check("선택박스 오버레이(.react-flow__nodesselection-rect) 렌더", rectPresent);
+
+  const startBox = await page.locator(`.react-flow__node[data-id="${startId}"]`).boundingBox();
+  const endBox = await page.locator(`.react-flow__node[data-id="${endId}"]`).boundingBox();
+  // Start·End는 같은 y라 두 노드 사이(수평 중앙, 수직 중앙)가 오버레이만 있는 빈 지점.
+  const [leftBox, rightBox] = startBox.x <= endBox.x ? [startBox, endBox] : [endBox, startBox];
+  const gapX = (leftBox.x + leftBox.width + rightBox.x) / 2;
+  const gapY = leftBox.y + leftBox.height / 2;
+  // 그 지점의 최상위 요소가 실제로 오버레이 rect인지 확인(노드 위면 onNodeDrag 경로로 새므로 검증 무의미).
+  const hitClass = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.className?.toString() ?? "",
+    { x: gapX, y: gapY },
+  );
+  check(
+    "오버레이 빈 지점 적중(nodesselection-rect)",
+    hitClass.includes("nodesselection-rect"),
+    `hit="${hitClass}"`,
+  );
+
+  const beforeOvStart = await readNodePos(startId);
+  const beforeOvEnd = await readNodePos(endId);
+  await dragFromPoint(gapX, gapY, 140, 90, { shiftKey: true });
+  const afterOvStart = await readNodePos(startId);
+  const afterOvEnd = await readNodePos(endId);
+  check(
+    "오버레이 드래그: Start y축 고정",
+    Math.abs(afterOvStart.y - beforeOvStart.y) <= LOCK_EPS,
+    `before=${JSON.stringify(beforeOvStart)} after=${JSON.stringify(afterOvStart)}`,
+  );
+  check("오버레이 드래그: Start x축 이동", Math.abs(afterOvStart.x - beforeOvStart.x) >= MOVE_MIN);
+  check(
+    "오버레이 드래그: End y축도 고정",
+    Math.abs(afterOvEnd.y - beforeOvEnd.y) <= LOCK_EPS,
+    `before=${JSON.stringify(beforeOvEnd)} after=${JSON.stringify(afterOvEnd)}`,
+  );
+  check("오버레이 드래그: End x축도 이동", Math.abs(afterOvEnd.x - beforeOvEnd.x) >= MOVE_MIN);
+
+  // ===== ⑤ 그룹핑(Meta+G) 후 그룹 타이틀바 이동 핸들을 Shift+대각 드래그 — startGroupMove 경로 =====
+  await selectBoth(startId, endId);
+  await page.keyboard.down("Meta");
+  await page.keyboard.press("g"); // event.code === "KeyG" — createGroupFromSelection
+  await page.keyboard.up("Meta");
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Escape"); // 갓 생성된 그룹의 이름 편집모드 종료
+  await page.waitForTimeout(200);
+
+  const moveHandle = page.locator('[aria-label="Move group"]').first();
+  const groupPresent = (await moveHandle.count()) > 0;
+  check("그룹 타이틀바 이동 핸들 렌더", groupPresent);
+
+  if (groupPresent) {
+    const handleBox = await moveHandle.boundingBox();
+    const hx = handleBox.x + handleBox.width / 2;
+    const hy = handleBox.y + handleBox.height / 2;
+    const beforeGrpStart = await readNodePos(startId);
+    const beforeGrpEnd = await readNodePos(endId);
+    await dragFromPoint(hx, hy, 150, 90, { shiftKey: true }); // x 우세 → y 고정, x 이동
+    const afterGrpStart = await readNodePos(startId);
+    const afterGrpEnd = await readNodePos(endId);
+    check(
+      "그룹 이동: 멤버 Start y축 고정",
+      Math.abs(afterGrpStart.y - beforeGrpStart.y) <= LOCK_EPS,
+      `before=${JSON.stringify(beforeGrpStart)} after=${JSON.stringify(afterGrpStart)}`,
+    );
+    check("그룹 이동: 멤버 Start x축 이동", Math.abs(afterGrpStart.x - beforeGrpStart.x) >= MOVE_MIN);
+    check(
+      "그룹 이동: 멤버 End y축도 고정",
+      Math.abs(afterGrpEnd.y - beforeGrpEnd.y) <= LOCK_EPS,
+      `before=${JSON.stringify(beforeGrpEnd)} after=${JSON.stringify(afterGrpEnd)}`,
+    );
+    check("그룹 이동: 멤버 End x축도 이동", Math.abs(afterGrpEnd.x - beforeGrpEnd.x) >= MOVE_MIN);
+  }
 } catch (err) {
   results.push({ name: "fatal", ok: false });
   console.error(`FATAL ${err instanceof Error ? err.message : String(err)}`);
