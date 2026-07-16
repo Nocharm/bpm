@@ -1387,6 +1387,60 @@ export function markAllNotificationsRead(): Promise<void> {
   return request<void>("/notifications/read-all", { method: "POST" });
 }
 
+export function deleteNotification(id: number): Promise<void> {
+  return request<void>(`/notifications/${id}`, { method: "DELETE" });
+}
+
+// bulk-delete — ids/read_only/before 중 정확히 1개 (백엔드 422 검증)
+export interface NotificationBulkDelete {
+  ids?: number[];
+  read_only?: boolean;
+  before?: string; // YYYY-MM-DD — 해당 날짜 00:00 KST 미만 삭제
+}
+
+export interface NotificationBulkDeleteResult {
+  deleted: number;
+}
+
+export function bulkDeleteNotifications(
+  body: NotificationBulkDelete,
+): Promise<NotificationBulkDeleteResult> {
+  return request<NotificationBulkDeleteResult>("/notifications/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// ── 관리자 알림 퍼지 (sysadmin, design 2026-07-16) ──────────────
+
+export interface NotificationPurgeGroup {
+  type: string;
+  message: string;
+  count: number;
+  first_at: string;
+  last_at: string;
+}
+
+export function previewNotificationPurge(
+  from: string,
+  to: string,
+): Promise<NotificationPurgeGroup[]> {
+  return request<NotificationPurgeGroup[]>(
+    `/admin/notifications/purge-preview?from=${from}&to=${to}`,
+  );
+}
+
+export function purgeNotifications(
+  from: string,
+  to: string,
+  groups: { type: string; message: string }[],
+): Promise<NotificationBulkDeleteResult> {
+  return request<NotificationBulkDeleteResult>("/admin/notifications/purge", {
+    method: "POST",
+    body: JSON.stringify({ from, to, groups }),
+  });
+}
+
 // ── 피드백 (design 2026-07-05) ──────────────
 
 export type FeedbackKind = "bug" | "suggestion" | "question" | "etc";
