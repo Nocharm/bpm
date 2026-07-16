@@ -105,13 +105,34 @@ export async function buildExcelModel({
       else outgoing.set(e.source_node_id, [e]);
     }
     const ordered = orderNodesByFlow(g.nodes, g.edges);
+    // 규칙1: 나가는 엣지가 있고 전부 무라벨인 디시전 = 단순 병렬 분기 — 행 미생성(엣지 없는 디시전은 WIP로 유지)
+    const isRemovedDecision = (n: GraphNode): boolean => {
+      if (n.node_type !== "decision") return false;
+      const out = outgoing.get(n.id) ?? [];
+      return out.length > 0 && out.every((e) => e.label === "");
+    };
     // 규칙2: 루트 스코프 BFS 기점 start만 유지 — 서브프로세스 인라인·미도달 추가 start는 행 미생성
     const keptStartId = depth === 0 ? ordered.find((n) => n.node_type === "start")?.id : undefined;
     // 규칙3: 기본 제목 end는 행 미생성(커스텀 제목 end는 유지) — next의 "End" 표기는 그대로 남는다
     const isDefaultEnd = (n: GraphNode): boolean =>
       n.node_type === "end" && n.title.trim().toLowerCase() === "end";
     const isRowRemoved = (n: GraphNode): boolean =>
-      (n.node_type === "start" && n.id !== keptStartId) || isDefaultEnd(n);
+      (n.node_type === "start" && n.id !== keptStartId) || isDefaultEnd(n) || isRemovedDecision(n);
+
+    // 삭제된 무라벨 디시전을 통과(flow-through)해 최종 (대상, 라벨)로 전개 — 라벨은 최종 대상까지 전파.
+    // next 표기와 규칙4 주석이 공용. seen은 삭제 디시전끼리의 순환 가드.
+    const resolveTargets = (
+      edge: GraphEdge,
+      label: string,
+      seen: ReadonlySet<string>,
+    ): Array<{ node: GraphNode; label: string }> => {
+      const target = byId.get(edge.target_node_id);
+      if (!target) return [];
+      if (!isRemovedDecision(target)) return [{ node: target, label }];
+      if (seen.has(target.id)) return [];
+      const nextSeen = new Set([...seen, target.id]);
+      return (outgoing.get(target.id) ?? []).flatMap((e) => resolveTargets(e, label, nextSeen));
+    };
 
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 행은 상한(maxRows)을 소비하지 않는다
@@ -122,12 +143,8 @@ export async function buildExcelModel({
         return;
       }
       const next = (outgoing.get(node.id) ?? [])
-        .map((e) => {
-          const target = byId.get(e.target_node_id);
-          if (!target) return null;
-          return e.label === "" ? target.title : `${target.title}:${e.label}`;
-        })
-        .filter((s): s is string => s !== null)
+        .flatMap((e) => resolveTargets(e, e.label, new Set()))
+        .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`))
         .join(";");
       rows.push({
         kind: "node",

@@ -538,6 +538,123 @@ describe("buildExcelModel", () => {
     });
     expect(model.rows.filter((r) => r.kind === "node").map((r) => r.title)).toEqual(["Start", "A"]);
   });
+
+  it("규칙1: 전부 무라벨 디시전은 행에서 빠지고 선행 노드 next가 대상들로 flow-through된다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("p1", "Par", "decision", 2),
+        makeNode("b1", "B", "process", 3),
+        makeNode("c1", "C", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "p1"),
+        makeEdge("x3", "p1", "b1"), makeEdge("x4", "p1", "c1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B", "C"]);
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B;C");
+  });
+
+  it("규칙1: 연쇄 무라벨 디시전은 재귀 통과하고 삭제 디시전 간 순환은 무한루프 없이 닫힌다", async () => {
+    // A→P1→P2→B, P2→P1 역엣지 — P1·P2 모두 무라벨 디시전(삭제), A.next는 "B"
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("p1", "P1", "decision", 2),
+        makeNode("p2", "P2", "decision", 3),
+        makeNode("b1", "B", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "p1"), makeEdge("x3", "p1", "p2"),
+        makeEdge("x4", "p2", "b1"), makeEdge("x5", "p2", "p1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B"]);
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B");
+  });
+
+  it("규칙1: 일부 분기만 라벨이면(혼합) 행 유지", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("b1", "B", "process", 2),
+        makeNode("c1", "C", "process", 3),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"),
+        makeEdge("x2", "d1", "b1", "yes"),
+        makeEdge("x3", "d1", "c1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B", "C"]);
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:yes;C");
+  });
+
+  it("규칙1: 나가는 엣지 없는 디시전은 유지(WIP 보호)", async () => {
+    const map1: Graph = {
+      nodes: [makeNode("s1", "Start", "start", 0), makeNode("d1", "D", "decision", 1)],
+      edges: [makeEdge("x1", "s1", "d1")],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    expect(model.rows.filter((r) => r.kind === "node").map((r) => r.title)).toEqual(["Start", "D"]);
+  });
+
+  it("라벨 디시전→무라벨 디시전 경유 시 라벨이 최종 대상까지 전파된다(next)", async () => {
+    // D ─go→ P(무라벨 디시전) → A,B — D.next는 "A:go;B:go"
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("p1", "P", "decision", 2),
+        makeNode("a1", "A", "process", 3),
+        makeNode("b1", "B", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"),
+        makeEdge("x2", "d1", "p1", "go"),
+        makeEdge("x3", "p1", "a1"), makeEdge("x4", "p1", "b1"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+      fetchResolved,
+    });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "A", "B"]);
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("A:go;B:go");
+  });
 });
 
 describe("COLUMNS", () => {
