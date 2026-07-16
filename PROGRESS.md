@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 구현 계획 (worktree-alarm-audit)
+- 산출물: `docs/superpowers/plans/2026-07-16-notification-purge.md` — 12태스크 TDD 체크리스트(백엔드 6·프론트 4·매뉴얼 1·게이트/pw 1). 실제 코드·테스트 코드 포함, 수정 지점 file:line 명시.
+- 주요 결정: `create_notifications` async화(호출 7지점 await), permission 알림은 공용 헬퍼 `_notify_permission_request`로 3지점 공유, purge 응답은 `NotificationBulkDeleteOut` 재사용, 딥링크는 useSearchParams 대신 window.location 파싱(Suspense 회피).
+
 ## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 설계 스펙 (worktree-alarm-audit)
 - 감사 결과 기반 설계 확정 — 산출물: `docs/superpowers/specs/2026-07-16-notification-purge-design.md`.
 - 사용자 확정 4건: 승인 알림은 요청+처리결과 양쪽 / 100캡은 읽음 무관 오래된 순 / 관리자 퍼지 미리보기는 type+message 묶음(수신자 수 표시) / 후속 중 인덱스+매뉴얼 보정 포함(페이지네이션·자동 retention 제외).
