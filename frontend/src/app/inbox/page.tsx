@@ -5,24 +5,30 @@
 import {
   ArrowLeftRight,
   Bell,
+  CalendarClock,
   Check,
+  CheckSquare,
   FileCheck,
   List,
   Mail,
   Megaphone,
   ShieldCheck,
+  Trash2,
   User,
   Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   approveVersion,
+  bulkDeleteNotifications,
   decideApprovalRequest,
   decideCheckoutRequest,
+  deleteNotification,
   getWorkflowState,
   listInboxApprovals,
   listMapPermissions,
@@ -40,6 +46,7 @@ import {
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
@@ -84,6 +91,8 @@ const TABS: { id: Tab; labelKey: MessageKey }[] = [
 function typeIcon(type: string): LucideIcon {
   if (type === "notice") return Megaphone;
   if (type === "review_requested") return FileCheck;
+  if (type.startsWith("checkout_")) return ArrowLeftRight;
+  if (type.startsWith("permission_")) return ShieldCheck;
   return Bell;
 }
 
@@ -110,11 +119,17 @@ function approvalKindLabel(kind: InboxApprovalKind): MessageKey {
 
 export default function InboxPage() {
   const { t } = useI18n();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("notifications");
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | NotificationCategory>("all");
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [beforeDate, setBeforeDate] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<null | "ids" | "read" | "before">(null);
   const [approvals, setApprovals] = useState<InboxApproval[]>([]);
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
@@ -126,7 +141,23 @@ export default function InboxPage() {
   useEffect(() => {
     let alive = true;
     listNotifications().then((data) => {
-      if (alive) setItems(data);
+      if (!alive) return;
+      setItems(data);
+      // 벨의 딥링크(`?notification=<id>`) 소비 — 탭 전환·선택·읽음 처리 후 URL 파라미터 소거(재트리거 방지)
+      const target = Number(new URLSearchParams(window.location.search).get("notification"));
+      if (target) {
+        setTab("notifications");
+        const hit = data.find((n) => n.id === target);
+        if (hit) {
+          setSelectedId(hit.id);
+          if (!hit.read) {
+            void markNotificationRead(hit.id).then((updated) => {
+              setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+            });
+          }
+        }
+        router.replace("/inbox");
+      }
     });
     listInboxApprovals().then((data) => {
       if (alive) setApprovals(data);
@@ -134,19 +165,23 @@ export default function InboxPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [router]);
 
   const unread = items.filter((n) => !n.read).length;
   const byRead = readFilter === "unread" ? items.filter((n) => !n.read) : items;
-  const filtered = filterByQuery(byRead, search, (n) => [
+  const byCategory =
+    categoryFilter === "all"
+      ? byRead
+      : byRead.filter((n) => getNotificationCategory(n.type) === categoryFilter);
+  const filtered = filterByQuery(byCategory, search, (n) => [
     { field: "message", text: n.message },
   ]).map((hit) => hit.item);
-  // 25개씩 증분 렌더 — 알림·승인 두 목록 각각(읽음 필터·검색 변경 시 리셋)
+  // 25개씩 증분 렌더 — 알림·승인 두 목록 각각(읽음/카테고리 필터·검색 변경 시 리셋)
   const {
     visible: shownItems,
     hasMore: hasMoreItems,
     sentinelRef: itemsSentinelRef,
-  } = useInfiniteSlice(filtered, `${readFilter}:${search}`);
+  } = useInfiniteSlice(filtered, `${readFilter}:${categoryFilter}:${search}`);
   const selected = items.find((n) => n.id === selectedId) ?? null;
 
   // 승인 큐도 검색 — 제목·맵·요청자(id+이름) 대상
@@ -179,6 +214,39 @@ export default function InboxPage() {
     setItems((prev) => prev.map((x) => ({ ...x, read: true })));
   };
 
+  // 선택/읽음/날짜 삭제 3종 — 서버 삭제 후 재조회(unread 배지·목록 서버 진실 반영)
+  const performBulkDelete = async () => {
+    if (!confirmDelete) return;
+    const body =
+      confirmDelete === "ids"
+        ? { ids: [...selectedIds] }
+        : confirmDelete === "read"
+          ? { read_only: true as const }
+          : { before: beforeDate };
+    await bulkDeleteNotifications(body);
+    const next = await listNotifications();
+    setItems(next);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    setConfirmDelete(null);
+    if (selectedId !== null && !next.some((n) => n.id === selectedId)) setSelectedId(null);
+  };
+
+  const deleteOne = async (id: number) => {
+    await deleteNotification(id);
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // 승인/반려 — kind별 기존 엔드포인트 호출 후 큐 재조회(서버 진실, 낙관적 갱신 금지)
   const actApproval = async (a: InboxApproval, approve: boolean, reason: string) => {
     if (approvalBusy) return;
@@ -203,6 +271,21 @@ export default function InboxPage() {
   const filterOptions: IconPillOption<ReadFilter>[] = [
     { value: "all", label: t("inbox.filterAll"), Icon: List },
     { value: "unread", label: t("inbox.filterUnread"), Icon: Mail },
+  ];
+
+  const CATEGORY_ICONS: Record<NotificationCategory, LucideIcon> = {
+    version: FileCheck,
+    checkout: ArrowLeftRight,
+    permission: ShieldCheck,
+    notice: Megaphone,
+  };
+  const categoryOptions: IconPillOption<"all" | NotificationCategory>[] = [
+    { value: "all", label: t("inbox.catAll"), Icon: List },
+    ...NOTIFICATION_CATEGORIES.map((c) => ({
+      value: c,
+      label: t(`inbox.cat.${c}` as MessageKey),
+      Icon: CATEGORY_ICONS[c],
+    })),
   ];
 
   return (
@@ -279,6 +362,71 @@ export default function InboxPage() {
                   })}
                 </div>
               </div>
+              {/* 카테고리 필 필터 — 알림 전용(버전/점유권/권한/공지) */}
+              {tab === "notifications" && (
+                <IconPillFilter
+                  options={categoryOptions}
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                />
+              )}
+              {/* 선택/읽음/날짜 삭제 3종 툴바 — 알림 전용 */}
+              {tab === "notifications" && (
+                <div className="flex flex-wrap items-center gap-2 pb-2 pr-3 text-fine">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectMode((v) => !v);
+                      setSelectedIds(new Set());
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 ${
+                      selectMode
+                        ? "border-accent-tint-border bg-accent-tint text-accent"
+                        : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                    }`}
+                  >
+                    <CheckSquare size={14} strokeWidth={1.5} />
+                    {t("inbox.selectMode")}
+                  </button>
+                  {selectMode && (
+                    <button
+                      type="button"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => setConfirmDelete("ids")}
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-error disabled:opacity-40"
+                    >
+                      <Trash2 size={14} strokeWidth={1.5} />
+                      {t("inbox.deleteSelected", { count: selectedIds.size })}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!items.some((n) => n.read)}
+                    onClick={() => setConfirmDelete("read")}
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                  >
+                    <Trash2 size={14} strokeWidth={1.5} />
+                    {t("inbox.deleteRead")}
+                  </button>
+                  <span className="ml-auto inline-flex items-center gap-1.5">
+                    <CalendarClock size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                    <input
+                      type="date"
+                      value={beforeDate}
+                      onChange={(e) => setBeforeDate(e.target.value)}
+                      className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
+                    />
+                    <button
+                      type="button"
+                      disabled={!beforeDate}
+                      onClick={() => setConfirmDelete("before")}
+                      className="rounded-sm border border-hairline px-2 py-1 text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                    >
+                      {t("inbox.deleteBefore")}
+                    </button>
+                  </span>
+                </div>
+              )}
             </div>
 
             {tab === "approvals" ? (
@@ -376,7 +524,8 @@ export default function InboxPage() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation(); // 카드 선택이 배경(선택 해제)으로 버블링 방지
-                          void openNotification(n);
+                          if (selectMode) toggleSelected(n.id);
+                          else void openNotification(n);
                         }}
                         className={
                           "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
@@ -385,9 +534,19 @@ export default function InboxPage() {
                             : "bg-surface hover:bg-surface-alt")
                         }
                       >
-                        {/* 유형 아이콘(좌) · 읽음(우) */}
+                        {/* 선택 체크박스(선택모드) · 유형 아이콘(좌) · 읽음(우) */}
                         <div className="flex items-center justify-between">
-                          <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                          <span className="flex items-center gap-1.5">
+                            {selectMode && (
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(n.id)}
+                                readOnly
+                                className="pointer-events-none"
+                              />
+                            )}
+                            <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                          </span>
                           {n.read ? (
                             <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
                           ) : (
@@ -402,7 +561,18 @@ export default function InboxPage() {
                         >
                           {n.message}
                         </span>
-                        <div className="flex justify-end gap-1">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            aria-label={t("notif.delete")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteOne(n.id);
+                            }}
+                            className="text-ink-tertiary hover:text-error"
+                          >
+                            <Trash2 size={13} strokeWidth={1.5} />
+                          </button>
                           <TimePills iso={n.created_at} nowMs={nowMs} />
                         </div>
                       </button>
@@ -461,6 +631,29 @@ export default function InboxPage() {
             )}
           </div>
         </div>
+
+        {/* 삭제 확인 모달 — 선택/읽음/날짜 3종 공용, 요약 1줄만 다르게 */}
+        {confirmDelete && (
+          <ConfirmDialog
+            icon={<Trash2 size={28} strokeWidth={1.5} />}
+            danger
+            title={t("inbox.deleteConfirmTitle")}
+            message={
+              confirmDelete === "ids"
+                ? t("inbox.deleteConfirmIds", { count: selectedIds.size })
+                : confirmDelete === "read"
+                  ? t("inbox.deleteConfirmRead", { count: items.filter((n) => n.read).length })
+                  : t("inbox.deleteConfirmBefore", {
+                      date: beforeDate,
+                      count: items.filter((n) => n.created_at.slice(0, 10) < beforeDate).length,
+                    })
+            }
+            confirmLabel={t("inbox.deleteConfirmAction")}
+            cancelLabel={t("common.cancel")}
+            onConfirm={() => void performBulkDelete()}
+            onClose={() => setConfirmDelete(null)}
+          />
+        )}
       </div>
     </div>
   );

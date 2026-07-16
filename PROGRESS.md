@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-16 — Task 9 완료: 알림 탭 딥링크·카테고리 필·선택/읽음/날짜 삭제
+- **Task 9 완료** — `inbox/page.tsx`: 벨 딥링크(`?notification=<id>`) 마운트 effect fetch `.then` 안에서 소비(탭 전환·선택·읽음 처리·`router.replace("/inbox")`로 파라미터 소거) · 카테고리 필 필터(`getNotificationCategory` 체인, `useInfiniteSlice` resetKey에 `categoryFilter` 포함) · 선택모드(체크박스 토글, 카드 클릭이 selectMode에서 toggle로만 동작)+읽음 삭제+날짜 이전 삭제 툴바 · 개별 삭제 버튼(카드 시간 필 옆) · `ConfirmDialog`는 같은 파일 `ApprovalDetail` 승인/반려 모달 시그니처 그대로 재사용(danger+icon+message 1줄) · `typeIcon`에 `checkout_`/`permission_` prefix 매핑 추가 · i18n 14키 EN·KO 양쪽 추가. tsc 0 errors, lint 0 errors(무관 사전 경고 1건), vitest 416/416 passed.
+
 ## 2026-07-16 — Task 8 완료: 벨 드롭다운 삭제 버튼 + 클릭 네비게이션
 - **Task 8 완료** — FE 벨 드롭다운: import 추가(lucide-react `X`, next/navigation `useRouter`, api `deleteNotification`) · 핸들러 2개(plain function, async catch 주석) · `handleDelete` — API 호출 후 UI 필터 제거 · `handleOpen` — 드롭다운 닫고 `/inbox?notification=${id}` 라우트 · `<li>` 교체 — `cursor-pointer` + `hover:bg-surface-alt` + onClick 핸들러 + 기존 mark-read 버튼 stopPropagation + 신규 delete 버튼(`X` icon 12px strokeWidth 1.5, text-error hover) · i18n 2개 키 추가(EN `"notif.delete": "Delete"` 615행, KO `"notif.delete": "삭제"` 1986행) · tsc 0 errors, npm run lint 0 errors (unrelated test warning). `git diff --stat`: notification-bell.tsx 39줄 추가/4줄 제거, i18n-messages.ts 2줄 추가.
 
