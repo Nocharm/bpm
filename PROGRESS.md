@@ -6,6 +6,7 @@
 - **Task 1 완료** — 인덱스 2종 + `_ADDED_INDEXES` 부트스트랩: `models.py` Notification `__table_args__` 추가 · `db.py` `_ADDED_INDEXES` + `_add_missing_indexes` 함수 + init_models 호출 · 테스트 3/3 passed.
 - **Task 2 완료** — `create_notifications` async화 + 인당 `NOTIFICATION_CAP=100` 트리밍(오래된 순 삭제, 읽음 무관): `workflow.py` 시그니처 async 전환 + 호출 7지점 전부 `await` 부착(`workflow.py` 내부 2·`versions.py` 4·`notices.py` 1) · 신규 테스트 1건(TDD RED→GREEN) · 회귀 5개 파일 86 passed, 전체 스위트 609 passed, ruff clean.
 - **Task 3 완료** — checkout 벨 알림 3종(`checkout_requested/approved/rejected`, inbox 전용이던 비대칭 해소): `checkout.py` `request_checkout`에 요청 통지(현 점유자+오너, 요청자 제외, 중복 제거) · `decide_checkout_request`에 결과 통지(요청자 본인 + 벌크 자동거절 전 캡처한 다른 미결 요청자) · 신규 테스트 2건(TDD RED→GREEN) · 회귀 3개 파일 18 passed, 전체 스위트 611 passed, ruff clean.
+- **Task 4 완료** — permission 벨 알림 3종(`permission_requested/approved/rejected`): `permissions.py` 생성 3지점(update/delete_permission 다운그레이드, request_visibility_change)에 공용 헬퍼 `_notify_permission_request`(활성 승인자, 요청자 제외) 훅업 · `decide_approval_request`는 reject/approve 양 분기에 `_notify_permission_decision`(요청자에게 결과) 훅업 · 신규 테스트 1건(TDD RED→GREEN) · 회귀 3개 파일 80 passed, 전체 스위트 613 passed, ruff clean.
 
 ## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 설계 스펙 (worktree-alarm-audit)
 - 감사 결과 기반 설계 확정 — 산출물: `docs/superpowers/specs/2026-07-16-notification-purge-design.md`.
