@@ -11,6 +11,8 @@ import {
   getPrevNodeAlongFlow,
   hasReciprocalEdge,
   insertNodeAfter,
+  isCopyableNodeType,
+  makeCopyLabel,
   removeOutgoingEdges,
   terminalDisplayLabel,
   violatesTerminalRule,
@@ -162,5 +164,29 @@ describe("flow path highlight (F14 — growing/shrinking)", () => {
       { id: "y", source: "B", target: "A" },
     ] as Edge[];
     expect(getFlowPathForward(cyclic, "A", 99)).toEqual(["x"]); // A→B, then B→A revisits A → stop
+  });
+});
+
+describe("isCopyableNodeType", () => {
+  it("allows process, decision, end", () => {
+    expect(isCopyableNodeType("process")).toBe(true);
+    expect(isCopyableNodeType("decision")).toBe(true);
+    expect(isCopyableNodeType("end")).toBe(true);
+  });
+  it("blocks start and subprocess", () => {
+    expect(isCopyableNodeType("start")).toBe(false);
+    expect(isCopyableNodeType("subprocess")).toBe(false);
+  });
+});
+
+describe("makeCopyLabel", () => {
+  it("appends (2) for a fresh copy", () => {
+    expect(makeCopyLabel("새 단계", ["새 단계"])).toBe("새 단계 (2)");
+  });
+  it("increments an existing (n) suffix instead of nesting", () => {
+    expect(makeCopyLabel("새 단계 (2)", ["새 단계", "새 단계 (2)"])).toBe("새 단계 (3)");
+  });
+  it("skips occupied numbers", () => {
+    expect(makeCopyLabel("A", ["A", "A (2)", "A (3)"])).toBe("A (4)");
   });
 });
