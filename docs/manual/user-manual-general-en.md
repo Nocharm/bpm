@@ -135,12 +135,14 @@ Open **Map Settings** from the editor. Tabs:
 
 ### Notices
 
-The **Notices** tab lists currently active announcements. Filter by All / Important / General, search, and **Mark Read**; bodies are rendered as Markdown.
+The **Notices** tab lists currently active announcements. Filter by All / Important / General, search, and **Mark Read**; bodies are rendered as Markdown. The read mark is stored **only in this browser (device)** — opening on another device or browser shows it as unread again.
 
 ### Inbox
 
-- **Approvals** tab — your personal review queue: version approvals, checkout transfers, and permission / visibility requests. Approve or reject (with a reason) inline; **Open map** jumps to the source.
-- **Notifications** tab — event notifications, refreshed every few seconds. **Mark all read** or mark items individually.
+- **Approvals** tab — your personal review queue: version approvals, checkout transfers, and permission / visibility requests. Approve or reject (with a reason) inline; **Open map** jumps to the source. Checkout transfers and permission/visibility changes also show their requests and outcomes on the Notifications tab.
+- **Bell** — the bell icon top right refreshes every **5 seconds**. Clicking an item jumps to the **Notifications tab** and opens it (marking it read); you can also mark read or delete (X) an item directly from the bell. Version-approval progress, checkout transfer requests/approvals/rejections, and permission/visibility change requests/approvals/rejections all arrive here.
+- **Notifications** tab — unlike the bell, this **loads once when you open the page** (no auto-refresh — refresh the page for the latest). Besides **Mark all read**, a category filter (All/Version/Checkout/Permission/Notice), and per-item delete (X), it supports **selection mode** to check and delete several at once, **delete read notifications**, and **delete before a date** (before that date's midnight). All three bulk actions go through a confirmation dialog, and **every deletion is permanent**.
+- **Retention**: notifications keep only the **most recent 100 per person** — anything beyond that is auto-deleted oldest-first, regardless of read state.
 
 ### Feedback
 

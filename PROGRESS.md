@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-16 — Task 11 완료: 매뉴얼 알림 삭제·보존·퍼지 반영 + 감사 불일치 4건 교정
+- **Task 11 완료** — `user-manual-general-{ko,en}.md` 알림·승인 절 재작성: 벨 5초 폴링·클릭 시 알림 탭 이동+자동읽음·항목별 삭제(X), 알림 탭은 페이지 진입 시 1회 로드(자동 갱신 없음), 카테고리 필터 5종(전체/버전/점유권/권한/공지)+선택모드 일괄삭제+읽은 알림 삭제+날짜지정 삭제(확인 모달, 복구불가), 1인당 최근 100건 보존, checkout·permission 벨 알림 반영 · 공지 읽음이 브라우저(기기)별 localStorage임을 명시. `admin-manual-{ko,en}.md` — 공지 삭제는 하드 삭제·휴지통 없음·복구불가(단 기 발송 벨 알림은 잔존)로 교정 + "알림 기간 삭제(퍼지)" 절 신설(§8, `notifications` 테이블 선택 시 기간 지정→preview 모달 기본 전체선택→체크 해제 확정→하드삭제) + 100건 보존 항목 추가. `backend/app/manual.md` 벨 서술 1문장 확장(클릭 이동·삭제·100건). `docs/alarm-audit.md` §8 불일치 4건(①인박스 갱신주기 ②보존정책 공백 ③공지 하드삭제 ④공지 읽음 기기별) 전부 교정 완료.
+
 ## 2026-07-16 — Task 10 완료: 관리자 퍼지 UI (테이블 뷰어 + 모달)
 - **Task 10 재리뷰 픽스** — aliveRef effect setup에서 `aliveRef.current = true;` 복원 1줄(StrictMode dev의 mount→cleanup→re-mount에서 useRef(true) 초기값이 재설정되지 않아 영구 false → purge 실패 시 catch 즉시 return으로 에러 무표시+busy 데드락 방지). tsc/lint 그린.
 - **Task 10 리뷰 픽스** — 퍼지 모달 3건(`notification-purge-modal.tsx`만): busy 중 닫힘 차단(백드롭 onClick `if (!busy)` 가드 + Cancel `disabled={busy}` — in-flight 중 닫혀 onPurged가 다른 테이블 상태를 오염시키는 경로 차단) · runPurge catch에 `aliveRef` 언마운트 가드(preview effect의 alive와 일관) · 로딩/에러 배타(preview 실패 시 스피너 숨김 — `groups === null` 분기 안에서 `!error &&`로 처리해 TS null-narrowing 유지, 리뷰 제안의 `groups === null && !error ?` 삼항 조건 변경은 else 분기 `groups.length` null 타입 에러라 조정) + runPurge 시작 시 `setError(null)`. tsc/lint/build 그린.
