@@ -17,15 +17,19 @@ def _create_version(client: TestClient) -> int:
     return version_id
 
 
-def test_new_version_has_empty_graph(client: TestClient) -> None:
+def test_new_map_version_seeds_start_end(client: TestClient) -> None:
+    # 새 맵의 초기 버전은 Start·End 노드로 시작한다(빈 캔버스 아님). 엣지·그룹은 없음.
     version_id = _create_version(client)
 
     response = client.get(f"/api/versions/{version_id}/graph")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "nodes": [], "edges": [], "groups": [], "locked": False, "subprocess_refs": {},
-    }
+    body = response.json()
+    assert sorted(n["node_type"] for n in body["nodes"]) == ["end", "start"]
+    assert body["edges"] == []
+    assert body["groups"] == []
+    assert body["locked"] is False
+    assert body["subprocess_refs"] == {}
 
 
 def test_replace_graph_roundtrips(client: TestClient) -> None:
@@ -418,6 +422,30 @@ def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
     end = next(n for n in saved["nodes"] if n["id"] == "e")
     assert end["is_primary_end"] is True
     assert saved["edges"][0]["source_handle"] == "__primary__"
+
+
+def test_subprocess_follow_latest_defaults_on(client: TestClient) -> None:
+    """follow_latest 생략 시 기본 True(최신본 추종)로 저장된다."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {
+                "id": "sub",
+                "title": "결재",
+                "node_type": "subprocess",
+                "linked_map_id": 999,
+                # follow_latest 생략 — 기본값 검증
+                "sort_order": 1,
+            },
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
+        ],
+        "edges": [],
+    }
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    sub = next(n for n in saved["nodes"] if n["id"] == "sub")
+    assert sub["follow_latest"] is True
 
 
 def test_node_url_roundtrip(client: TestClient) -> None:

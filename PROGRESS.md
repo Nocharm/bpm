@@ -1,5 +1,16 @@
 # Progress
 
+## 2026-07-16 — 새 맵 생성 시 Start·End 자동 시드 (worktree-workflow-improvements)
+- 빈 새 맵이 캔버스가 비어 있던 문제 — `create_map`(`backend/app/routers/maps.py`)이 초기 버전에 Start·End 노드 2개를 자동 삽입(엣지 없음, 고정 LR 좌표, id=uuid hex). CSV 임포트 생성과 동일한 UX. 설계 `docs/superpowers/specs/2026-07-16-new-map-start-end-seed-design.md`.
+- 범위: 새 맵의 초기 버전만(빈 새 버전·복사는 대상 아님). CSV 생성 경로 무영향(`PUT /graph` 전체 교체로 시드가 CSV 노드로 대체 — 중복 없음). `validate_process` 통과(start 1·대표 end 1·제목 유니크).
+- 테스트: `test_maps.py`(생성 후 graph에 start/end 존재)·`test_graph.py`의 `test_new_version_has_empty_graph`→`test_new_map_version_seeds_start_end` 갱신. 게이트: pytest 609 pass·ruff clean. 브라우저 실검증 `pw-verify-new-map-seed.mjs` 5/5(에디터 Start·End 2노드 렌더, 엣지 0, 콘솔 에러 0).
+
+## 2026-07-16 — 서브프로세스 워크플로 2건 개선 — 구현 완료 (worktree-workflow-improvements)
+- 설계 `docs/superpowers/specs/2026-07-16-subprocess-workflow-improvements-design.md` + 계획 `docs/superpowers/plans/2026-07-16-subprocess-workflow-improvements.md`(TDD 3태스크). 구현 커밋: 백엔드 `f54f1dd`·프론트 생성경로 `432f8bf`·승인탭 카드 `cd25843`.
+- **(1) `follow_latest`(최신본 추종) 생성 기본 ON — 모든 생성 경로 통일**: 라이브러리 드롭(`page.tsx:3701`)·AI 변환(`page.tsx:613`)·CSV 임포트 기본값(`csv-import.ts:186`)·`NodeIn` 스키마(`schemas.py`)·`Node` DB 컬럼 ORM 기본값(`models.py`) 5지점 `false→true`. `addLinkNodeFromMap`은 이미 ON. 읽기/직렬화 폴백 `?? false`는 유지(기존 노드 드리프트 방지, 마이그레이션 없음). 테스트: `test_graph.py`(생략 시 True 저장)·`csv-import.test.ts`(임포트 노드 follow_latest true).
+- **(2) 게시본 승인 탭에 서브프로세스 지정 카드 노출**: 기존 `SubprocessInspectorCard`를 승인 탭(`approvalSlot`)의 `ApprovalPanel` 아래·버전 목록 위에 재사용(백엔드 무변경, `spCanManage`/`spDisabledReason` 게이팅 재사용).
+- **게이트**: 백엔드 pytest 608 pass·ruff clean. 프론트 vitest 414 pass·tsc 0·lint 0 err(pre-existing 경고 1)·build OK. 브라우저 실검증 `pw-verify-approval-sp-card.mjs` 9/9 pass(게시본 카드 활성+지정 모달 진입, 미게시본 비활성+사유 노트, 콘솔 에러 0).
+
 ## 2026-07-13 — 매뉴얼 커버리지 감사 후속 픽스: 번들 스테일·오우닝 부서·회수 규칙 (main)
 - fable 에이전트 커버리지 감사(READ-ONLY, i18n·라우터 대조) 결과 중 "핵심" 갭을 반영. 지적 4건은 코드로 직접 재검증(swap 드롭존은 초기 grep이 `[mapId]` 대괄호 디렉터리에서 누락되는 ugrep 함정이라 Python으로 재확인).
 - **번들 `backend/app/manual.md` 스테일 교정(AI 사용법 근거 — 적극적 오답 제거)**: 게시 시 직전 게시본은 "Approved로 강등"이 아니라 **Expired(만료·최종)** + 순차 버전번호 채번(`versions.py:641–659`); 폐기된 인라인 드릴다운 서술 삭제→하위프로세스 참조/딥뷰(⑦)로 교정; 드롭존 "하위"→swap; 강제 점유는 **sysadmin 전용**·체크아웃 요청/이전 추가(`versions.py:289`); 회수 규칙(Pending/Approved=제출자만, Rejected=+오너/sysadmin, 회수자 체크아웃 재부여, `versions.py:744–763`); 맵 생성 필수(오우닝 부서·결재자·공개범위); 코멘트 진입은 더블클릭이 아니라 컨텍스트 메뉴.

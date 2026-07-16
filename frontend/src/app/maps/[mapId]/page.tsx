@@ -610,7 +610,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     sort_order: 0,
     group_ids: groupId ? [groupId] : [],
     linked_map_id: null,
-    follow_latest: false,
+    follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
   };
@@ -3698,7 +3698,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           hasChildren: false,
           linkedMapId,
           linkedVersionId: pinned,
-          followLatest: false,
+          followLatest: true,
           subEnds,
         },
       };
@@ -8196,6 +8196,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
                     />
                     )}
+                    {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스 */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      onToast={showToast}
+                    />
                     <MapDetailCard
                       mapId={mapId}
                       only="versions"

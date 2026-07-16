@@ -13,6 +13,24 @@ def test_create_map_returns_default_version(client: TestClient) -> None:
     assert body["versions"][0]["label"] == "As-Is"
 
 
+def test_create_map_seeds_start_and_end_nodes(client: TestClient) -> None:
+    """새 맵의 초기 버전은 Start·End 노드를 자동 생성한다(엣지 없음)."""
+    created = client.post(
+        "/api/maps", json={"owning_department": "Owning Anchor Division", "name": "자동 시드 맵"}
+    ).json()
+    version_id = created["versions"][0]["id"]
+
+    graph = client.get(f"/api/versions/{version_id}/graph").json()
+    types = sorted(n["node_type"] for n in graph["nodes"])
+    assert types == ["end", "start"]
+    start = next(n for n in graph["nodes"] if n["node_type"] == "start")
+    end = next(n for n in graph["nodes"] if n["node_type"] == "end")
+    assert start["title"] == "Start"
+    assert end["title"] == "End"
+    assert end["is_primary_end"] is True
+    assert graph["edges"] == []
+
+
 def test_create_map_defaults_private(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "default vis map"}).json()
     assert created["visibility"] == "private"
