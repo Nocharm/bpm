@@ -4,13 +4,16 @@
 Admin console directory — richer fields than /api/directory, sysadmin-gated.
 """
 
+from datetime import date, datetime, time, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import String, Text, asc, cast, desc, func, or_, select
+from sqlalchemy import String, Text, and_, asc, cast, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.clock import KST
 from app.db import get_session
-from app.models import Base, DeptInfo, Employee, MapPermission, UserGroupMember
+from app.models import Base, DeptInfo, Employee, MapPermission, Notification, UserGroupMember
 from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
@@ -21,6 +24,9 @@ from app.schemas import (
     DeptRemapIn,
     DeptRemapItemOut,
     DeptRemapOut,
+    NotificationBulkDeleteOut,
+    NotificationPurgeGroupOut,
+    NotificationPurgeIn,
     TableDataOut,
     TableInfoOut,
 )
@@ -332,3 +338,62 @@ async def read_table(
     result = (await session.execute(stmt)).mappings().all()
     rows = [dict(row) for row in result]
     return TableDataOut(columns=columns, rows=rows, total=total, page=page, size=size)
+
+
+def _build_kst_range(from_date: date, to_date: date) -> tuple[datetime, datetime]:
+    """[from 00:00, to+1일 00:00) KST — to 날짜 하루 전체 포함."""
+    start = datetime.combine(from_date, time.min, tzinfo=KST)
+    end = datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=KST)
+    return start, end
+
+
+@router.get("/notifications/purge-preview", response_model=list[NotificationPurgeGroupOut])
+async def preview_notification_purge(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    from_date: date = Query(alias="from"),
+    to_date: date = Query(alias="to"),
+) -> list[NotificationPurgeGroupOut]:
+    """sysadmin 전용 — 기간 내 알림을 (type, message)로 묶어 검토 목록 반환 (last_at desc)."""
+    _require_sysadmin(login_id)
+    start, end = _build_kst_range(from_date, to_date)
+    rows = await session.execute(
+        select(
+            Notification.type,
+            Notification.message,
+            func.count(),
+            func.min(Notification.created_at),
+            func.max(Notification.created_at),
+        )
+        .where(Notification.created_at >= start, Notification.created_at < end)
+        .group_by(Notification.type, Notification.message)
+        .order_by(func.max(Notification.created_at).desc())
+    )
+    return [
+        NotificationPurgeGroupOut(type=r[0], message=r[1], count=r[2], first_at=r[3], last_at=r[4])
+        for r in rows.all()
+    ]
+
+
+@router.post("/notifications/purge", response_model=NotificationBulkDeleteOut)
+async def purge_notifications(
+    payload: NotificationPurgeIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> NotificationBulkDeleteOut:
+    """sysadmin 전용 — 확정된 (type, message) 묶음의 기간 내 전 수신자 행 하드 삭제."""
+    _require_sysadmin(login_id)
+    start, end = _build_kst_range(payload.from_date, payload.to_date)
+    group_match = or_(
+        *[
+            and_(Notification.type == g.type, Notification.message == g.message)
+            for g in payload.groups
+        ]
+    )
+    result = await session.execute(
+        delete(Notification).where(
+            Notification.created_at >= start, Notification.created_at < end, group_match
+        )
+    )
+    await session.commit()
+    return NotificationBulkDeleteOut(deleted=max(result.rowcount, 0))

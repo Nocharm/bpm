@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import workflow
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
@@ -165,6 +166,13 @@ async def update_permission(
             status="pending",
         )
         session.add(req)
+        await _notify_permission_request(
+            session,
+            map_id=map_id,
+            map_name=found_map.name,
+            requested_by=user,
+            kind="permission_downgrade",
+        )
         await session.commit()
         await session.refresh(req)
         # 지연 — 아직 적용 안 됨. pending 마커로 응답
@@ -194,6 +202,7 @@ async def delete_permission(
     # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
+        found_map = await _get_map_or_404(session, map_id)
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -208,6 +217,13 @@ async def delete_permission(
             status="pending",
         )
         session.add(req)
+        await _notify_permission_request(
+            session,
+            map_id=map_id,
+            map_name=found_map.name,
+            requested_by=user,
+            kind="permission_downgrade",
+        )
         await session.commit()
         await session.refresh(req)
         return {"pending": True, "approval_request": _serialize_request(req)}
@@ -302,6 +318,13 @@ async def request_visibility_change(
         status="pending",
     )
     session.add(req)
+    await _notify_permission_request(
+        session,
+        map_id=map_id,
+        map_name=found_map.name,
+        requested_by=user,
+        kind="visibility_change",
+    )
     await session.commit()
     await session.refresh(req)
     return req
@@ -369,6 +392,7 @@ async def decide_approval_request(
     req.decided_at = _now()
     if payload.decision == "reject":
         req.status = "rejected"
+        await _notify_permission_decision(session, req, outcome="rejected")
         await session.commit()
         await session.refresh(req)
         return req
@@ -376,6 +400,7 @@ async def decide_approval_request(
     # approve → payload 적용
     await _apply_request(session, req)
     req.status = "applied"
+    await _notify_permission_decision(session, req, outcome="approved")
     await session.commit()
     await session.refresh(req)
     return req
@@ -410,6 +435,39 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
                 ).all()
                 for grant in viewer_grants:
                     await session.delete(grant)
+
+
+async def _notify_permission_request(
+    session: AsyncSession, *, map_id: int, map_name: str, requested_by: str, kind: str
+) -> None:
+    """승인 지연 요청 발생 → 활성 승인자에게 벨 알림 (요청자 제외, design 2026-07-16)."""
+    requester_name = await workflow.get_display_name(session, requested_by)
+    what = "a visibility change" if kind == "visibility_change" else "a permission change"
+    recipients = [
+        a for a in await workflow.load_active_approvers(session, map_id) if a != requested_by
+    ]
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="permission_requested",
+        map_id=map_id,
+        message=f"{requester_name} requested {what} on '{map_name}'",
+    )
+
+
+async def _notify_permission_decision(
+    session: AsyncSession, req: ApprovalRequest, *, outcome: str
+) -> None:
+    """승인/반려 결과 → 요청자에게 벨 알림 (design 2026-07-16)."""
+    found_map = await session.get(ProcessMap, req.map_id)
+    map_name = found_map.name if found_map is not None else f"map {req.map_id}"
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type=f"permission_{outcome}",
+        map_id=req.map_id,
+        message=f"Your request on '{map_name}' was {outcome}",
+    )
 
 
 def _serialize_request(req: ApprovalRequest) -> dict:

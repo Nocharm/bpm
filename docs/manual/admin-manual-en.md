@@ -56,7 +56,7 @@ Create and manage announcements shown on every user's **Notices** tab.
 3. Check **Notify all users on publish** to push a notification to everyone's Inbox.
 
 - Users only see notices whose posting period is currently active; the admin list shows all of them.
-- Editing or deleting a notice takes effect immediately.
+- Editing a notice takes effect immediately. **Deleting is a hard delete** — it is permanently removed on the spot, with no trash and no recovery (unlike the 7-day trash for maps and groups). However, if "Notify all users on publish" was checked, the bell notifications already sent stay in place even after the notice is deleted.
 
 > **Tip:** Notice bodies render with the same Markdown viewer as this manual — headings, tables, code blocks, and `#tag` pills all work.
 
@@ -116,6 +116,15 @@ Import tools fill in the Korean names and department info that AD doesn't provid
 
 - Use it for spot checks — it never writes.
 - **Login records** live in the `login_records` table: one row per user per day, written on first authentication of the day. This is the audit view for "who used the app when".
+- **Notification retention**: `notifications` keeps only the **most recent 100 rows per person**, a fixed policy (not adjustable) — overflow is auto-deleted oldest-first, regardless of read state, whenever a new notification arrives.
+
+### Purging Notifications by Date Range
+
+Selecting `notifications` in **Tables** adds a from–to date range and a **Delete in range** button to the header.
+
+1. Pick the range to delete and click **Delete in range**.
+2. A **preview dialog** groups that range's notifications by content (type + message), showing recipient counts and the date span — everything is **selected by default**.
+3. Uncheck any groups you want to keep, then confirm — every recipient row in the selected groups, within the range, is **hard-deleted**. **There is no undo** — use with care.
 
 ### Dashboard (Settings → Analytics)
 

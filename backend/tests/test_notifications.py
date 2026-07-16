@@ -1,13 +1,16 @@
 """In-app notification tests — submit/publish side-effects + read (design 2026-06-14)."""
 
 import asyncio
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.clock import KST
 from app.db import SessionLocal
-from app.models import Employee
+from app.models import Employee, Notification
 from app.settings import settings
+from app.workflow import create_notifications
 
 
 _notif_seq = 0
@@ -116,3 +119,223 @@ def test_read_all_marks_every_unread(
     resp = client.post("/api/notifications/read-all")
     assert resp.status_code == 204
     assert client.get("/api/notifications?unread_only=true").json() == []
+
+
+def test_notification_cap_trims_oldest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """인당 100개 초과분은 읽음 여부 무관 오래된 순 삭제 — 생성 시점 트리밍."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            for i in range(105):
+                await create_notifications(
+                    session, ["cap-user"], type="notice", message=f"cap {i}"
+                )
+            await session.commit()
+
+    asyncio.run(_run())
+    monkeypatch.setattr(settings, "dev_user", "cap-user")
+    items = client.get("/api/notifications").json()
+    assert len(items) == 100
+    messages = {n["message"] for n in items}
+    assert "cap 104" in messages  # 최신 생존
+    assert "cap 4" not in messages  # 최고령 5개(0..4) 삭제
+
+
+def _checkout_map(client: TestClient, monkeypatch: pytest.MonkeyPatch, owner: str, seq: str) -> tuple[int, int]:
+    """owner가 맵 생성(+v1 점유). 반환 (map_id, version_id)."""
+    monkeypatch.setattr(settings, "dev_user", owner)
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"co map {seq}"},
+    ).json()
+    map_id, version_id = created["id"], created["versions"][0]["id"]
+    client.post(f"/api/versions/{version_id}/checkout", json={})  # 이미 점유 중이면 409 — 무시
+    return map_id, version_id
+
+
+def test_checkout_request_notifies_holder_and_owner(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """점유 요청 → 현 점유자+오너에게 checkout_requested (요청자 제외, 중복 제거로 1건)."""
+    _map_id, version_id = _checkout_map(client, monkeypatch, "co-owner1", "n1")
+    monkeypatch.setattr(settings, "dev_user", "co-req1")
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 201
+
+    monkeypatch.setattr(settings, "dev_user", "co-owner1")
+    got = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "checkout_requested"]
+    assert len(got) == 1  # holder==owner 중복 제거
+    assert got[0]["version_id"] == version_id
+    monkeypatch.setattr(settings, "dev_user", "co-req1")
+    assert [n for n in client.get("/api/notifications").json() if n["type"] == "checkout_requested"] == []
+
+
+def test_checkout_decision_notifies_requester(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """승인/거절 결과가 요청자에게 checkout_approved/rejected로 간다."""
+    _map_id, version_id = _checkout_map(client, monkeypatch, "co-owner2", "n2")
+    monkeypatch.setattr(settings, "dev_user", "co-req2")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+    monkeypatch.setattr(settings, "dev_user", "co-owner2")
+    assert client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": False}).status_code == 200
+
+    monkeypatch.setattr(settings, "dev_user", "co-req2")
+    types = [n["type"] for n in client.get("/api/notifications?unread_only=true").json()]
+    assert "checkout_rejected" in types
+
+
+def test_checkout_approve_notifies_winner_and_auto_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """승인 시 승자에게 checkout_approved, 자동거절된 다른 미결 요청자에게 checkout_rejected."""
+    _map_id, version_id = _checkout_map(client, monkeypatch, "co-owner3", "n3")
+    monkeypatch.setattr(settings, "dev_user", "co-req3a")
+    req_a_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+    monkeypatch.setattr(settings, "dev_user", "co-req3b")
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 201
+
+    monkeypatch.setattr(settings, "dev_user", "co-owner3")
+    assert client.post(f"/api/checkout-requests/{req_a_id}/decide", json={"approve": True}).status_code == 200
+
+    monkeypatch.setattr(settings, "dev_user", "co-req3a")
+    approved = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "checkout_approved"]
+    assert len(approved) == 1
+    assert "approved" in approved[0]["message"]
+    monkeypatch.setattr(settings, "dev_user", "co-req3b")
+    rejected = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "checkout_rejected"]
+    assert len(rejected) == 1  # 벌크 자동거절 전 캡처된 통지
+
+
+def test_visibility_request_notifies_approvers_and_decision_notifies_requester(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """가시성 변경 요청 → 활성 승인자에게 permission_requested, 반려 → 요청자에게 permission_rejected."""
+    _ensure_employee("perm-appr1")
+    monkeypatch.setattr(settings, "dev_user", "perm-owner1")
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": "perm map n1"},
+    ).json()
+    map_id = created["id"]
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["perm-appr1"]})
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+
+    monkeypatch.setattr(settings, "dev_user", "perm-appr1")
+    got = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "permission_requested"]
+    assert len(got) == 1 and got[0]["map_id"] == map_id
+    assert "visibility change" in got[0]["message"]
+
+    client.post(f"/api/approval-requests/{req['id']}/decide", json={"decision": "reject"})
+    monkeypatch.setattr(settings, "dev_user", "perm-owner1")
+    types = [n["type"] for n in client.get("/api/notifications?unread_only=true").json()]
+    assert "permission_rejected" in types
+
+
+def test_visibility_approve_notifies_requester_approved(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """가시성 변경 승인 → 요청자에게 permission_approved (approve 경로 내용 단언)."""
+    _ensure_employee("perm-appr2")
+    monkeypatch.setattr(settings, "dev_user", "perm-owner2")
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": "perm map n2"},
+    ).json()
+    map_id = created["id"]
+    client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["perm-appr2"]})
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+
+    monkeypatch.setattr(settings, "dev_user", "perm-appr2")
+    decided = client.post(
+        f"/api/approval-requests/{req['id']}/decide", json={"decision": "approve"}
+    )
+    assert decided.status_code == 200
+
+    monkeypatch.setattr(settings, "dev_user", "perm-owner2")
+    got = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "permission_approved"]
+    assert len(got) == 1 and got[0]["map_id"] == map_id
+    assert "approved" in got[0]["message"]
+
+
+def _seed_notifs(recipient: str, count: int, *, read: bool = False, old: bool = False) -> list[int]:
+    """직접 시드 — bulk-delete 모드 테스트용. old=True면 created_at을 과거로."""
+
+    async def _run() -> list[int]:
+        async with SessionLocal() as session:
+            rows = [
+                Notification(
+                    recipient=recipient,
+                    type="notice",
+                    message=f"bd {i}",
+                    read=read,
+                    created_at=datetime(2026, 1, 1, tzinfo=KST) if old else None,
+                )
+                for i in range(count)
+            ]
+            for row in rows:
+                if row.created_at is None:
+                    row.created_at = datetime(2026, 7, 15, tzinfo=KST)
+                session.add(row)
+            await session.commit()
+            return [r.id for r in rows]
+
+    return asyncio.run(_run())
+
+
+def test_delete_notification_own_and_foreign(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (nid,) = _seed_notifs("del-a1", 1)
+    monkeypatch.setattr(settings, "dev_user", "del-b1")
+    assert client.delete(f"/api/notifications/{nid}").status_code == 404  # 타인 → 404
+    monkeypatch.setattr(settings, "dev_user", "del-a1")
+    assert client.delete(f"/api/notifications/{nid}").status_code == 204
+    assert client.get("/api/notifications").json() == []
+
+
+def test_bulk_delete_ids_only_own_rows(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mine = _seed_notifs("bd-a2", 2)
+    other = _seed_notifs("bd-b2", 1)
+    monkeypatch.setattr(settings, "dev_user", "bd-a2")
+    res = client.post("/api/notifications/bulk-delete", json={"ids": mine + other})
+    assert res.status_code == 200 and res.json()["deleted"] == 2  # 타인 행은 교집합에서 제외
+    monkeypatch.setattr(settings, "dev_user", "bd-b2")
+    assert len(client.get("/api/notifications").json()) == 1
+
+
+def test_bulk_delete_read_only_and_before(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_notifs("bd-a3", 2, read=True)
+    _seed_notifs("bd-a3", 1, read=False)
+    monkeypatch.setattr(settings, "dev_user", "bd-a3")
+    assert client.post("/api/notifications/bulk-delete", json={"read_only": True}).json()["deleted"] == 2
+    assert len(client.get("/api/notifications").json()) == 1
+
+    _seed_notifs("bd-a4", 2, old=True)  # 2026-01-01
+    _seed_notifs("bd-a4", 1)  # 2026-07-15
+    monkeypatch.setattr(settings, "dev_user", "bd-a4")
+    assert client.post("/api/notifications/bulk-delete", json={"before": "2026-07-01"}).json()["deleted"] == 2
+    assert len(client.get("/api/notifications").json()) == 1
+
+
+def test_bulk_delete_requires_exactly_one_criterion(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "bd-a5")
+    assert client.post("/api/notifications/bulk-delete", json={}).status_code == 422
+    assert (
+        client.post(
+            "/api/notifications/bulk-delete", json={"read_only": True, "before": "2026-07-01"}
+        ).status_code
+        == 422
+    )
+    assert client.post("/api/notifications/bulk-delete", json={"read_only": False}).status_code == 422

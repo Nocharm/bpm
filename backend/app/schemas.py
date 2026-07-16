@@ -1,6 +1,6 @@
 """Pydantic request/response models — API boundary validation."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -771,6 +771,55 @@ class NotificationOut(BaseModel):
     message: str
     read: bool
     created_at: datetime
+
+
+class NotificationBulkDeleteIn(BaseModel):
+    """알림 일괄 삭제 — ids/read_only/before 중 정확히 1개 (design 2026-07-16).
+
+    before는 해당 날짜 00:00 KST 미만(그 이전 날들) 삭제.
+    """
+
+    ids: list[int] | None = None
+    read_only: bool | None = None
+    before: date | None = None
+
+    @model_validator(mode="after")
+    def validate_exactly_one_criterion(self) -> "NotificationBulkDeleteIn":
+        provided = [self.ids is not None, self.read_only is not None, self.before is not None]
+        if sum(provided) != 1:
+            raise ValueError("provide exactly one of: ids, read_only, before")
+        if self.read_only is False:
+            raise ValueError("read_only must be true when provided")
+        return self
+
+
+class NotificationBulkDeleteOut(BaseModel):
+    deleted: int
+
+
+class NotificationPurgeGroupOut(BaseModel):
+    """purge-preview 1묶음 — type+message 동일 행 집계 (design 2026-07-16)."""
+
+    type: str
+    message: str
+    count: int
+    first_at: datetime
+    last_at: datetime
+
+
+class NotificationPurgeGroupIn(BaseModel):
+    type: str
+    message: str
+
+
+class NotificationPurgeIn(BaseModel):
+    """확정 퍼지 — [from 00:00, to+1일 00:00) KST 내 선택 묶음 전 수신자 행 삭제."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_date: date = Field(alias="from")
+    to_date: date = Field(alias="to")
+    groups: list[NotificationPurgeGroupIn] = Field(min_length=1)
 
 
 class FeedbackCreate(BaseModel):

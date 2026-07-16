@@ -1,10 +1,11 @@
 "use client";
 
 // 인앱 알림 벨 — 5초 폴링, 미읽음 점 + 드롭다운 (design 2026-06-14)
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
+import { deleteNotification, listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
@@ -12,6 +13,7 @@ const POLL_MS = 5000;
 
 export function NotificationBell() {
   const { t } = useI18n();
+  const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -63,6 +65,25 @@ export function NotificationBell() {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteNotification(id);
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } catch {
+      // 무시 — 다음 폴링에서 정합
+    }
+  };
+
+  const handleOpen = (id: number) => {
+    setOpen(false);
+    if (window.location.pathname === "/inbox") {
+      // 같은 라우트에선 push가 리마운트를 안 일으켜 딥링크 소비(마운트 1회 effect)가 무동작 — 하드 네비게이션으로 강제
+      window.location.assign(`/inbox?notification=${id}`);
+      return;
+    }
+    router.push(`/inbox?notification=${id}`);
+  };
+
   return (
     <div className="relative" ref={rootRef}>
       <button
@@ -87,7 +108,8 @@ export function NotificationBell() {
               {visible.map((item) => (
                 <li
                   key={item.id}
-                  className={`flex items-start gap-2 rounded-sm px-1 py-1.5 text-caption ${
+                  onClick={() => handleOpen(item.id)}
+                  className={`flex cursor-pointer items-start gap-2 rounded-sm px-1 py-1.5 text-caption hover:bg-surface-alt ${
                     item.read ? "text-ink-tertiary" : "text-ink"
                   }`}
                 >
@@ -96,11 +118,25 @@ export function NotificationBell() {
                     <button
                       type="button"
                       className="text-fine text-accent"
-                      onClick={() => void handleRead(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleRead(item.id);
+                      }}
                     >
                       {t("notif.markRead")}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    aria-label={t("notif.delete")}
+                    className="mt-0.5 shrink-0 text-ink-tertiary hover:text-error"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDelete(item.id);
+                    }}
+                  >
+                    <X size={12} strokeWidth={1.5} />
+                  </button>
                 </li>
               ))}
               {hasMore && <li ref={sentinelRef} className="h-px" />}
