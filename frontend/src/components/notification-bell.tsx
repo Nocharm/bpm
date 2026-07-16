@@ -76,6 +76,11 @@ export function NotificationBell() {
 
   const handleOpen = (id: number) => {
     setOpen(false);
+    if (window.location.pathname === "/inbox") {
+      // 같은 라우트에선 push가 리마운트를 안 일으켜 딥링크 소비(마운트 1회 effect)가 무동작 — 하드 네비게이션으로 강제
+      window.location.assign(`/inbox?notification=${id}`);
+      return;
+    }
     router.push(`/inbox?notification=${id}`);
   };
 

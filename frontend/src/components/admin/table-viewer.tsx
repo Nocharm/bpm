@@ -41,6 +41,7 @@ export function TableViewer() {
   const [order, setOrder] = useState<Order>("asc");
   const [filterInput, setFilterInput] = useState("");
   const [query, setQuery] = useState(""); // debounced filter applied to fetch
+  const [refreshTick, setRefreshTick] = useState(0); // 퍼지 등 page 불변 갱신 강제 트리거 — setPage(1) no-op(이미 1) 대응
 
   // notifications 전용 기간 퍼지 — 다른 테이블에선 노출되지 않음 (selected === "notifications" 가드)
   const [purgeFrom, setPurgeFrom] = useState("");
@@ -115,7 +116,7 @@ export function TableViewer() {
     return () => {
       active = false;
     };
-  }, [selected, page, sort, order, query]);
+  }, [selected, page, sort, order, query, refreshTick]);
 
   // 테이블 pill 선택 — 누적/정렬/필터 초기화 / Pick a table; reset accumulation, sort, filter.
   const selectTable = (name: string) => {
@@ -318,6 +319,7 @@ export function TableViewer() {
             setPage(1);
             setLoadedPage(0);
             setRows([]);
+            setRefreshTick((t) => t + 1); // page가 이미 1이면 setPage(1)이 no-op → effect 재실행 강제
             void listDbTables().then(setTables); // pill 행수 갱신
           }}
         />

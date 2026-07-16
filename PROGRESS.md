@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-16 — whole-branch 최종 리뷰 픽스: 퍼지 후 재조회 + 벨 인박스 내 이동
+- **Finding 1(Critical) 픽스** — `table-viewer.tsx`: 퍼지 확정 시 `setPage(1)`이 이미 page=1이라 no-op되어 fetch effect가 재실행되지 않고 `isFetching`이 영구 true(무한 "Loading…")로 굳는 버그. `refreshTick` state 추가 + fetch effect deps에 포함 + `onPurged`에서 tick 증가로 강제 재트리거.
+- **Finding 2(Important) 픽스** — `notification-bell.tsx` `handleOpen`: `/inbox` 체류 중 클릭 시 `router.push`가 같은 라우트라 리마운트 없어 딥링크 소비 무동작 → 현재 경로가 `/inbox`면 `window.location.assign`으로 하드 네비게이션 강제.
+- **검증 보강** — `pw-verify-notifications.mjs` 시나리오 6에 회귀 가드 신설(check "6b"): 퍼지 후 테이블 재조회 GET 대기 + "Loading…" 스피너 미잔존·"No rows"/실제 행 렌더 확인.
+- 게이트: tsc/lint/build 그린. E2E 클린 재시드 후 재실행 10/10 PASS(신설 6b 포함). 상세: `.superpowers/sdd/final-review-fixes.md`.
+
 ## 2026-07-16 — Task 12 완료: 전체 게이트 + Playwright 실검증 (알림 퍼지 브랜치 최종)
 - **Task 12 리뷰 픽스** — pw 스크립트 단언 강화 3건: 콘솔 에러 총량 게이트 신설(check 8 `consoleErrors.length === 0` — validateDOMNesting 외 임의 런타임 에러도 FAIL, 실측 0건이라 allowlist 불요) · 퍼지 정확 감소 단언(확정 버튼 라벨에서 N 파싱 → `after === before - N`, 부분 삭제 버그 감지) · 시나리오 ① 알림 탭 활성 직접 단언(탭 세그먼트 스코프 `text-accent` + Approvals 비활성). 클린 DB 전체 재실행 9/9 PASS, 서버 종료·dev.db 재시드 정리 완료.
 - **Task 12 완료** — 전체 게이트 그린: backend pytest 624 passed·ruff clean, frontend vitest 416 passed·tsc 0 errors·lint 0 errors(무관 사전 경고 1건)·next build 성공. `frontend/scripts/pw-verify-notifications.mjs` 신규(`pw-verify-dashboard.mjs` 하네스 재사용 — playwright-core+시스템 Chrome, devUser `admin.sys`) — 벨 딥링크/개별삭제, 알림탭 카테고리 필·선택삭제·읽음삭제·날짜이전삭제, 관리자 기간 퍼지(미리보기→확정→행수 감소) 6개 시나리오 + 콘솔 에러(validateDOMNesting) 수집, 클린 DB(reset_db+seed_org_demo)에서 8/8 PASS. 잔여 리스크: `worktree-workflow-improvements`(미머지, `inbox/page.tsx` 승인 탭 수정)와 향후 머지 시 충돌 가능성 — 상세: `.superpowers/sdd/task-12-report.md`.

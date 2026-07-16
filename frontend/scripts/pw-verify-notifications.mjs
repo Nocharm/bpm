@@ -292,8 +292,11 @@ seedNotifications([
   const confirmedRows = Number((await purgeBtn.innerText()).match(/Delete (\d+) rows/)?.[1] ?? NaN);
 
   const purgeDone = waitApi("POST", (u) => u.pathname === "/api/admin/notifications/purge");
+  // 퍼지 후 테이블 재조회(page 1 그대로라 setPage(1)만으론 재트리거 안 됨 — refreshTick 픽스 대상 요청)
+  const reloadDone = waitApi("GET", (u) => u.pathname === "/api/admin/tables/notifications");
   await purgeBtn.click();
   await purgeDone.catch(() => undefined);
+  await reloadDone.catch(() => undefined);
   await page.waitForTimeout(300);
 
   const pillCountAfter = parsePillCount(
@@ -304,6 +307,17 @@ seedNotifications([
     "6 admin purge preview groups + exact row count decrease",
     groupShown && confirmedRows > 0 && pillCountAfter === pillCountBefore - confirmedRows,
     `before=${pillCountBefore} confirmed=${confirmedRows} after=${pillCountAfter} rowsShownBefore="${rowsShownBefore}"`,
+  );
+
+  // 회귀 가드 — 퍼지 확정 후 행 영역이 무한 "Loading…" 스피너로 멈추지 않고 실제 재렌더됨을 확인
+  // (스피너 텍스트 소멸 + 빈 상태 문구("No rows") 또는 실제 행 렌더 중 하나)
+  const stuckSpinner = await page.getByText("Loading…").count();
+  const emptyStateShown = await page.getByText("No rows").count();
+  const dataRowsShown = await page.locator("table tbody tr td[title]").count();
+  check(
+    "6b table area reloads after purge (no infinite loading spinner)",
+    stuckSpinner === 0 && (emptyStateShown > 0 || dataRowsShown > 0),
+    `stuckSpinner=${stuckSpinner} emptyStateShown=${emptyStateShown} dataRowsShown=${dataRowsShown}`,
   );
 }
 
