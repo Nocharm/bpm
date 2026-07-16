@@ -13,7 +13,8 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
 };
 
-// api.ts Me 인터페이스 필수 필드 전부 포함 — 누락 시 페이지가 접근하는 필드에서 undefined 전파 가능.
+// Me 인터페이스 공통 필드 — 페이지가 접근하는 필드의 undefined 전파 방지. 테스트 대상인
+// manual_url·csv_manual_url 2필드는 케이스별로 meOverrides로 주입한다(여기엔 없음).
 const baseMe = {
   username: "admin.sys",
   ai_enabled: false,
