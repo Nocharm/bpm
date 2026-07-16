@@ -183,7 +183,7 @@ const NODE_DEFAULTS = {
   pos_y: 0,
   group_ids: [] as string[],
   linked_map_id: null,
-  follow_latest: false,
+  follow_latest: true,
   linked_version_id: null,
   is_primary_end: false,
 };

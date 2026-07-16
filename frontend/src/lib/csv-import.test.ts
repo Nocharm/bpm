@@ -111,6 +111,12 @@ describe("buildGraphFromCsv — 그래프 변환", () => {
     expect(outcome.errors).toEqual([]);
     expect(outcome.graph).not.toBeNull();
   });
+
+  it("임포트 노드는 follow_latest 기본 ON(최신본 추종)으로 생성된다", () => {
+    const graph = graphOf(`${HEADER}\nA,,,,`);
+    const a = graph.nodes.find((n) => n.title === "A");
+    expect(a?.follow_latest).toBe(true);
+  });
 });
 
 describe("buildGraphFromCsv — 검증 에러", () => {

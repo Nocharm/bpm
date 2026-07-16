@@ -610,7 +610,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     sort_order: 0,
     group_ids: groupId ? [groupId] : [],
     linked_map_id: null,
-    follow_latest: false,
+    follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
   };
@@ -3698,7 +3698,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           hasChildren: false,
           linkedMapId,
           linkedVersionId: pinned,
-          followLatest: false,
+          followLatest: true,
           subEnds,
         },
       };
