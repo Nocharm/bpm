@@ -13,6 +13,7 @@ import {
   Mail,
   Megaphone,
   ShieldCheck,
+  Square,
   Trash2,
   User,
   Users,
@@ -228,6 +229,7 @@ export default function InboxPage() {
     setItems(next);
     setSelectedIds(new Set());
     setSelectMode(false);
+    setBeforeDate("");
     setConfirmDelete(null);
     if (selectedId !== null && !next.some((n) => n.id === selectedId)) setSelectedId(null);
   };
@@ -235,6 +237,12 @@ export default function InboxPage() {
   const deleteOne = async (id: number) => {
     await deleteNotification(id);
     setItems((prev) => prev.filter((n) => n.id !== id));
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     if (selectedId === id) setSelectedId(null);
   };
 
@@ -520,31 +528,37 @@ export default function InboxPage() {
                   const TypeIcon = typeIcon(n.type);
                   return (
                     <li key={n.id} className="flex flex-col">
-                      <button
-                        type="button"
+                      {/* div role=button — 내부 삭제 버튼과의 button-in-button 중첩(validateDOMNesting) 회피 */}
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation(); // 카드 선택이 배경(선택 해제)으로 버블링 방지
                           if (selectMode) toggleSelected(n.id);
                           else void openNotification(n);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          if (selectMode) toggleSelected(n.id);
+                          else void openNotification(n);
+                        }}
                         className={
-                          "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
+                          "flex w-full cursor-pointer flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
                           (n.id === selectedId
                             ? "border-l-2 border-l-accent bg-accent-tint"
                             : "bg-surface hover:bg-surface-alt")
                         }
                       >
-                        {/* 선택 체크박스(선택모드) · 유형 아이콘(좌) · 읽음(우) */}
+                        {/* 선택 표시(선택모드, 시각 전용 — 토글은 카드 클릭) · 유형 아이콘(좌) · 읽음(우) */}
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
-                            {selectMode && (
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(n.id)}
-                                readOnly
-                                className="pointer-events-none"
-                              />
-                            )}
+                            {selectMode &&
+                              (selectedIds.has(n.id) ? (
+                                <CheckSquare size={14} strokeWidth={1.5} className="text-accent" />
+                              ) : (
+                                <Square size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                              ))}
                             <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
                           </span>
                           {n.read ? (
@@ -575,7 +589,7 @@ export default function InboxPage() {
                           </button>
                           <TimePills iso={n.created_at} nowMs={nowMs} />
                         </div>
-                      </button>
+                      </div>
                       {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
                       <div
                         data-id="notification-detail-accordion"
