@@ -3,6 +3,7 @@
 ## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 구현 계획 (worktree-alarm-audit)
 - 산출물: `docs/superpowers/plans/2026-07-16-notification-purge.md` — 12태스크 TDD 체크리스트(백엔드 6·프론트 4·매뉴얼 1·게이트/pw 1). 실제 코드·테스트 코드 포함, 수정 지점 file:line 명시.
 - 주요 결정: `create_notifications` async화(호출 7지점 await), permission 알림은 공용 헬퍼 `_notify_permission_request`로 3지점 공유, purge 응답은 `NotificationBulkDeleteOut` 재사용, 딥링크는 useSearchParams 대신 window.location 파싱(Suspense 회피).
+- **Task 1 완료** — 인덱스 2종 + `_ADDED_INDEXES` 부트스트랩: `models.py` Notification `__table_args__` 추가 · `db.py` `_ADDED_INDEXES` + `_add_missing_indexes` 함수 + init_models 호출 · 테스트 3/3 passed.
 
 ## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 설계 스펙 (worktree-alarm-audit)
 - 감사 결과 기반 설계 확정 — 산출물: `docs/superpowers/specs/2026-07-16-notification-purge-design.md`.

@@ -329,6 +329,12 @@ class Notification(Base):
     read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
+    __table_args__ = (
+        # recipient 축 인덱스 — 5초 폴링 목록/미읽음 카운트, 정렬·캡 트리밍·날짜 삭제 (design 2026-07-16)
+        Index("ix_notifications_recipient_read", "recipient", "read"),
+        Index("ix_notifications_recipient_created", "recipient", "created_at"),
+    )
+
 
 class Feedback(Base):
     """사용자 피드백 — 유형·본문·컨텍스트·상태·관리자 답글 (design 2026-07-05)."""
