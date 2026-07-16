@@ -1,12 +1,14 @@
 """In-app notification tests — submit/publish side-effects + read (design 2026-06-14)."""
 
 import asyncio
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.clock import KST
 from app.db import SessionLocal
-from app.models import Employee
+from app.models import Employee, Notification
 from app.settings import settings
 from app.workflow import create_notifications
 
@@ -259,3 +261,81 @@ def test_visibility_approve_notifies_requester_approved(
     got = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "permission_approved"]
     assert len(got) == 1 and got[0]["map_id"] == map_id
     assert "approved" in got[0]["message"]
+
+
+def _seed_notifs(recipient: str, count: int, *, read: bool = False, old: bool = False) -> list[int]:
+    """직접 시드 — bulk-delete 모드 테스트용. old=True면 created_at을 과거로."""
+
+    async def _run() -> list[int]:
+        async with SessionLocal() as session:
+            rows = [
+                Notification(
+                    recipient=recipient,
+                    type="notice",
+                    message=f"bd {i}",
+                    read=read,
+                    created_at=datetime(2026, 1, 1, tzinfo=KST) if old else None,
+                )
+                for i in range(count)
+            ]
+            for row in rows:
+                if row.created_at is None:
+                    row.created_at = datetime(2026, 7, 15, tzinfo=KST)
+                session.add(row)
+            await session.commit()
+            return [r.id for r in rows]
+
+    return asyncio.run(_run())
+
+
+def test_delete_notification_own_and_foreign(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (nid,) = _seed_notifs("del-a1", 1)
+    monkeypatch.setattr(settings, "dev_user", "del-b1")
+    assert client.delete(f"/api/notifications/{nid}").status_code == 404  # 타인 → 404
+    monkeypatch.setattr(settings, "dev_user", "del-a1")
+    assert client.delete(f"/api/notifications/{nid}").status_code == 204
+    assert client.get("/api/notifications").json() == []
+
+
+def test_bulk_delete_ids_only_own_rows(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mine = _seed_notifs("bd-a2", 2)
+    other = _seed_notifs("bd-b2", 1)
+    monkeypatch.setattr(settings, "dev_user", "bd-a2")
+    res = client.post("/api/notifications/bulk-delete", json={"ids": mine + other})
+    assert res.status_code == 200 and res.json()["deleted"] == 2  # 타인 행은 교집합에서 제외
+    monkeypatch.setattr(settings, "dev_user", "bd-b2")
+    assert len(client.get("/api/notifications").json()) == 1
+
+
+def test_bulk_delete_read_only_and_before(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_notifs("bd-a3", 2, read=True)
+    _seed_notifs("bd-a3", 1, read=False)
+    monkeypatch.setattr(settings, "dev_user", "bd-a3")
+    assert client.post("/api/notifications/bulk-delete", json={"read_only": True}).json()["deleted"] == 2
+    assert len(client.get("/api/notifications").json()) == 1
+
+    _seed_notifs("bd-a4", 2, old=True)  # 2026-01-01
+    _seed_notifs("bd-a4", 1)  # 2026-07-15
+    monkeypatch.setattr(settings, "dev_user", "bd-a4")
+    assert client.post("/api/notifications/bulk-delete", json={"before": "2026-07-01"}).json()["deleted"] == 2
+    assert len(client.get("/api/notifications").json()) == 1
+
+
+def test_bulk_delete_requires_exactly_one_criterion(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "bd-a5")
+    assert client.post("/api/notifications/bulk-delete", json={}).status_code == 422
+    assert (
+        client.post(
+            "/api/notifications/bulk-delete", json={"read_only": True, "before": "2026-07-01"}
+        ).status_code
+        == 422
+    )
+    assert client.post("/api/notifications/bulk-delete", json={"read_only": False}).status_code == 422

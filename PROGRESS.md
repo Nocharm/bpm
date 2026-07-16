@@ -8,6 +8,7 @@
 - **Task 3 완료** — checkout 벨 알림 3종(`checkout_requested/approved/rejected`, inbox 전용이던 비대칭 해소): `checkout.py` `request_checkout`에 요청 통지(현 점유자+오너, 요청자 제외, 중복 제거) · `decide_checkout_request`에 결과 통지(요청자 본인 + 벌크 자동거절 전 캡처한 다른 미결 요청자) · 신규 테스트 2건(TDD RED→GREEN) · 회귀 3개 파일 18 passed, 전체 스위트 611 passed, ruff clean.
 - **Task 4 완료** — permission 벨 알림 3종(`permission_requested/approved/rejected`): `permissions.py` 생성 3지점(update/delete_permission 다운그레이드, request_visibility_change)에 공용 헬퍼 `_notify_permission_request`(활성 승인자, 요청자 제외) 훅업 · `decide_approval_request`는 reject/approve 양 분기에 `_notify_permission_decision`(요청자에게 결과) 훅업 · 신규 테스트 1건(TDD RED→GREEN) · 회귀 3개 파일 80 passed, 전체 스위트 613 passed, ruff clean.
 - **Task 4 리뷰 픽스** — 테스트 공백 2건 보강(production 무변경): approve 경로 `permission_approved` 내용 단언(test_notifications.py) · 다운그레이드 생성 지점 kind("a permission change")·map_name·요청자 제외 단언(test_permission_endpoints.py, enforce 필요라 해당 파일 — auth off는 전원 owner라 지연 분기 미도달) · 전체 스위트 615 passed, ruff clean.
+- **Task 5 완료** — 사용자 삭제 API 2개(개별 DELETE + 범용 bulk-delete): `schemas.py` `NotificationBulkDeleteIn`(ids/read_only/before 택1 검증)·`NotificationBulkDeleteOut` · `notifications.py` `DELETE /{id}` 본인 수신분만(타인 404) · `POST /bulk-delete` 조건 3종(ids 교집합, read=true 필터, before 날짜 00:00 미만) · `test_notifications.py` 신규 테스트 4건 TDD RED→GREEN · 전체 스위트 615→615 passed(15개 알림 테스트), ruff clean.
 
 ## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 설계 스펙 (worktree-alarm-audit)
 - 감사 결과 기반 설계 확정 — 산출물: `docs/superpowers/specs/2026-07-16-notification-purge-design.md`.
