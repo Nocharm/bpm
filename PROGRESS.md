@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-16 — Task 8 완료: 벨 드롭다운 삭제 버튼 + 클릭 네비게이션
+- **Task 8 완료** — FE 벨 드롭다운: import 추가(lucide-react `X`, next/navigation `useRouter`, api `deleteNotification`) · 핸들러 2개(plain function, async catch 주석) · `handleDelete` — API 호출 후 UI 필터 제거 · `handleOpen` — 드롭다운 닫고 `/inbox?notification=${id}` 라우트 · `<li>` 교체 — `cursor-pointer` + `hover:bg-surface-alt` + onClick 핸들러 + 기존 mark-read 버튼 stopPropagation + 신규 delete 버튼(`X` icon 12px strokeWidth 1.5, text-error hover) · i18n 2개 키 추가(EN `"notif.delete": "Delete"` 615행, KO `"notif.delete": "삭제"` 1986행) · tsc 0 errors, npm run lint 0 errors (unrelated test warning). `git diff --stat`: notification-bell.tsx 39줄 추가/4줄 제거, i18n-messages.ts 2줄 추가.
+
 ## 2026-07-16 — Task 7 완료: FE API 클라이언트 + 카테고리 lib
 - **Task 7 완료** — FE notification delete/purge API 클라이언트 + 카테고리 매핑: `notification-categories.ts` 신설(type → category 매핑 함수 `getNotificationCategory`, 상수 `NOTIFICATION_CATEGORIES` 4종: version/checkout/permission/notice) · `api.ts` 신규 5함수·3인터페이스 추가(`deleteNotification`·`bulkDeleteNotifications`/`NotificationBulkDelete`/`NotificationBulkDeleteResult`·`previewNotificationPurge`·`purgeNotifications`/`NotificationPurgeGroup` — 백엔드 T5/T6 머지됨 계약 구현) · 신규 테스트 3건(TDD RED→GREEN) · vitest 3/3 passed, tsc 0 errors. 회귀 무변화(기존 모듈만 신규 export 추가).
 - **Task 7 리뷰 픽스** — `previewNotificationPurge` 쿼리스트링 `encodeURIComponent` 부착(getDashboardTimeseries 관례 일치) · `NotificationBulkDelete.read_only`를 `boolean`→`true`로 협소화(백엔드가 false를 422로 거부 — 컴파일 타임 차단). vitest 3/3 passed, tsc 0 errors.
