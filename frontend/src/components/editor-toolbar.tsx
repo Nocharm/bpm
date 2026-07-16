@@ -11,6 +11,7 @@ import {
   AlignVerticalDistributeCenter,
   BookOpen,
   ChevronDown,
+  ExternalLink,
   FileUp,
   MoveHorizontal,
   MoveVertical,
@@ -21,6 +22,7 @@ import { type ComponentType, useEffect, useState } from "react";
 import { type FlowDir } from "@/lib/flow-layout";
 
 import { AddNodeMenu } from "@/components/add-node-menu";
+import { Tooltip } from "@/components/tooltip";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
@@ -159,16 +161,18 @@ export function EditorToolbar({
           </button>
         )}
         {manualUrl && (
-          <button
-            type="button"
-            data-id="toolbar-manual-site"
-            className={iconBtn}
-            onClick={() => window.open(manualUrl, "_blank", "noopener,noreferrer")}
-            title={t("editor.manualSite")}
-            aria-label={t("editor.manualSite")}
-          >
-            <BookOpen size={16} strokeWidth={1.5} />
-          </button>
+          <Tooltip label={t("editor.manualSite")}>
+            <button
+              type="button"
+              data-id="toolbar-manual-site"
+              className={`${iconBtn} gap-0.5`}
+              onClick={() => window.open(manualUrl, "_blank", "noopener,noreferrer")}
+              aria-label={t("editor.manualSite")}
+            >
+              <BookOpen size={16} strokeWidth={1.5} />
+              <ExternalLink size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>
