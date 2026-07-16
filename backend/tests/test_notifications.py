@@ -139,3 +139,46 @@ def test_notification_cap_trims_oldest(
     messages = {n["message"] for n in items}
     assert "cap 104" in messages  # 최신 생존
     assert "cap 4" not in messages  # 최고령 5개(0..4) 삭제
+
+
+def _checkout_map(client: TestClient, monkeypatch: pytest.MonkeyPatch, owner: str, seq: str) -> tuple[int, int]:
+    """owner가 맵 생성(+v1 점유). 반환 (map_id, version_id)."""
+    monkeypatch.setattr(settings, "dev_user", owner)
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"co map {seq}"},
+    ).json()
+    map_id, version_id = created["id"], created["versions"][0]["id"]
+    client.post(f"/api/versions/{version_id}/checkout", json={})  # 이미 점유 중이면 409 — 무시
+    return map_id, version_id
+
+
+def test_checkout_request_notifies_holder_and_owner(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """점유 요청 → 현 점유자+오너에게 checkout_requested (요청자 제외, 중복 제거로 1건)."""
+    _map_id, version_id = _checkout_map(client, monkeypatch, "co-owner1", "n1")
+    monkeypatch.setattr(settings, "dev_user", "co-req1")
+    assert client.post(f"/api/versions/{version_id}/checkout/request").status_code == 201
+
+    monkeypatch.setattr(settings, "dev_user", "co-owner1")
+    got = [n for n in client.get("/api/notifications?unread_only=true").json() if n["type"] == "checkout_requested"]
+    assert len(got) == 1  # holder==owner 중복 제거
+    assert got[0]["version_id"] == version_id
+    monkeypatch.setattr(settings, "dev_user", "co-req1")
+    assert [n for n in client.get("/api/notifications").json() if n["type"] == "checkout_requested"] == []
+
+
+def test_checkout_decision_notifies_requester(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """승인/거절 결과가 요청자에게 checkout_approved/rejected로 간다."""
+    _map_id, version_id = _checkout_map(client, monkeypatch, "co-owner2", "n2")
+    monkeypatch.setattr(settings, "dev_user", "co-req2")
+    req_id = client.post(f"/api/versions/{version_id}/checkout/request").json()["id"]
+    monkeypatch.setattr(settings, "dev_user", "co-owner2")
+    assert client.post(f"/api/checkout-requests/{req_id}/decide", json={"approve": False}).status_code == 200
+
+    monkeypatch.setattr(settings, "dev_user", "co-req2")
+    types = [n["type"] for n in client.get("/api/notifications?unread_only=true").json()]
+    assert "checkout_rejected" in types

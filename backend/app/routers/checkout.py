@@ -74,6 +74,29 @@ async def request_checkout(
 
     req = CheckoutRequest(version_id=version_id, requested_by=user, status="pending")
     session.add(req)
+
+    # 벨 알림 — 처리 가능자(현 점유자+오너)에게 요청 발생 통지, 요청자 제외 (design 2026-07-16)
+    requester_name = await workflow.get_display_name(session, user)
+    owner_ids = (
+        await session.scalars(
+            select(MapPermission.principal_id).where(
+                MapPermission.map_id == version.map_id,
+                MapPermission.principal_type == "user",
+                MapPermission.role == "owner",
+            )
+        )
+    ).all()
+    holder = [version.checked_out_by] if version.checked_out_by else []
+    recipients = [r for r in dict.fromkeys(holder + list(owner_ids)) if r != user]
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="checkout_requested",
+        map_id=version.map_id,
+        version_id=version_id,
+        message=f"{requester_name} requested checkout of '{version.label}'",
+    )
+
     await session.commit()
     await session.refresh(req)
     return req
@@ -124,7 +147,20 @@ async def decide_checkout_request(
             detail="only the checkout holder, map owner, or sysadmin can decide",
         )
 
+    auto_rejected: list[str] = []
     if payload.approve:
+        # 벌크 update 전에 캡처 — update 후엔 status가 pending이 아니라 select에 안 잡힘
+        auto_rejected = list(
+            (
+                await session.scalars(
+                    select(CheckoutRequest.requested_by).where(
+                        CheckoutRequest.version_id == req.version_id,
+                        CheckoutRequest.status == "pending",
+                        CheckoutRequest.id != req.id,
+                    )
+                )
+            ).all()
+        )
         now = now_kst()
         version.checked_out_from = version.checked_out_by  # 출처(누구에게서)
         version.checked_out_by = req.requested_by
@@ -142,6 +178,26 @@ async def decide_checkout_request(
         )
     else:
         req.status = "rejected"
+
+    # 벨 알림 — 결과를 요청자에게, 자동 거절된 다른 요청자에게도 (design 2026-07-16)
+    outcome = "approved" if payload.approve else "rejected"
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type=f"checkout_{outcome}",
+        map_id=version.map_id,
+        version_id=version.id,
+        message=f"Your checkout request for '{version.label}' was {outcome}",
+    )
+    if auto_rejected:
+        await workflow.create_notifications(
+            session,
+            list(dict.fromkeys(auto_rejected)),
+            type="checkout_rejected",
+            map_id=version.map_id,
+            version_id=version.id,
+            message=f"Your checkout request for '{version.label}' was rejected",
+        )
 
     await session.commit()
     await session.refresh(req)
