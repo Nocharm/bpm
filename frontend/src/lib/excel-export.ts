@@ -304,11 +304,14 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
   }
 }
 
-/** ExcelModel → .xlsx 파일 다운로드. exceljs는 dynamic import — 정적 import 시 에디터 번들에 항상 섞여든다. */
-export async function downloadExcel(model: ExcelModel, fileName: string): Promise<void> {
+/** 워크북 조립 콜백 → .xlsx 다운로드 — exceljs 동적 import 공용(1안/2안 시트가 공유). */
+export async function downloadWorkbookXlsx(
+  write: (workbook: import("exceljs").Workbook) => void,
+  fileName: string,
+): Promise<void> {
   const { Workbook } = await import("exceljs");
   const workbook = new Workbook();
-  writeExcelSheet(workbook, model);
+  write(workbook);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
@@ -320,4 +323,9 @@ export async function downloadExcel(model: ExcelModel, fileName: string): Promis
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/** ExcelModel → .xlsx 파일 다운로드. */
+export async function downloadExcel(model: ExcelModel, fileName: string): Promise<void> {
+  await downloadWorkbookXlsx((workbook) => writeExcelSheet(workbook, model), fileName);
 }

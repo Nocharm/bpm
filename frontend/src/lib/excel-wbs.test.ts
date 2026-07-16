@@ -1,9 +1,11 @@
 // WBS 모델 빌더 단위 테스트 — 레벨 경로·SP 무행·start/end 전부 삭제·주석·상한.
 // 설계: docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md
 import { describe, expect, it } from "vitest";
+import { Workbook } from "exceljs";
 
 import type { Graph, GraphEdge, GraphNode } from "./api";
-import { buildWbsModel } from "./excel-wbs";
+import { buildWbsModel, writeWbsSheet } from "./excel-wbs";
+import { COLUMNS } from "./excel-export";
 
 /** GraphNode 조립 헬퍼 — excel-export.test.ts 스타일 재사용. */
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
@@ -250,5 +252,72 @@ describe("buildWbsModel", () => {
     const model = await build(map1);
     expect(model.rows).toEqual([]);
     expect(model.maxLevel).toBe(1);
+  });
+});
+
+describe("writeWbsSheet", () => {
+  function buildSheet(model: Parameters<typeof writeWbsSheet>[1]) {
+    const workbook = new Workbook();
+    writeWbsSheet(workbook, model);
+    const sheet = workbook.getWorksheet("WBS");
+    if (!sheet) throw new Error("sheet missing");
+    return sheet;
+  }
+  const baseRow = {
+    kind: "node" as const, no: 1, levels: ["Root", "Sub"], title: "P", type: "process",
+    description: "", assignee: "", department: "", system: "",
+    duration: "1.30", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+    url: "https://example.com/doc", urlLabel: "Doc", groups: "", next: "Next step",
+  };
+  const model = {
+    mapName: "Root", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+    maxLevel: 2, truncated: false, rows: [baseRow],
+  };
+
+  it("동적 헤더: No, Level 1..N, Task, 그리고 1안 속성 꼬리(Type~Next)", () => {
+    const sheet = buildSheet(model);
+    const header = sheet.getRow(4).values as unknown[];
+    expect(header.slice(1)).toEqual([
+      "No", "Level 1", "Level 2", "Task",
+      ...COLUMNS.slice(2).map((c) => c.header),
+    ]);
+  });
+
+  it("레벨 셀은 모든 행에 반복 기재 + 회색 폰트, No·Task는 모델 그대로", () => {
+    const sheet = buildSheet(model);
+    const r = sheet.getRow(5);
+    expect(r.getCell(1).value).toBe(1);
+    expect(r.getCell(2).value).toBe("Root");
+    expect(r.getCell(3).value).toBe("Sub");
+    expect(r.getCell(4).value).toBe("P");
+    expect(r.getCell(2).font?.color?.argb).toBe("FF9CA3AF");
+    expect(r.getCell(3).font?.color?.argb).toBe("FF9CA3AF");
+  });
+
+  it("numFmt는 레벨 수만큼 시프트된 위치에 적용되고 숫자 셀은 실제 숫자", () => {
+    const sheet = buildSheet(model);
+    const r = sheet.getRow(5);
+    // Task(4열) 다음이 Type(5열) — Duration은 COLUMNS 꼬리에서 찾은 인덱스 + 시프트
+    const tail = COLUMNS.slice(2);
+    const durationCol = 5 + tail.findIndex((c) => c.header === "Duration (h)");
+    expect(r.getCell(durationCol).numFmt).toBe("0.00");
+    expect(r.getCell(durationCol).value).toBe(1.3);
+    const krwCol = 5 + tail.findIndex((c) => c.header === "Cost (KRW)");
+    expect(r.getCell(krwCol).numFmt).toBe("#,##0");
+    expect(r.getCell(krwCol).value).toBe(1250000);
+  });
+
+  it("URL 하이퍼링크·노트 행 이탤릭이 시프트된 위치에 기록된다", () => {
+    const sheet = buildSheet({
+      ...model,
+      rows: [baseRow, { kind: "denied" as const, levels: ["Root"], title: "Sub" }],
+    });
+    const tail = COLUMNS.slice(2);
+    const urlCol = 5 + tail.findIndex((c) => c.header === "URL");
+    const r5 = sheet.getRow(5);
+    expect(r5.getCell(urlCol).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    const r6 = sheet.getRow(6);
+    expect(r6.getCell(4).value).toBe("(access denied)");
+    expect(r6.getCell(4).font?.italic).toBe(true);
   });
 });

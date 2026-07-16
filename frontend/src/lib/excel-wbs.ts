@@ -3,7 +3,7 @@
 // 설계: docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
-import { EXCEL_MAX_ROWS, getNodeRunParams } from "./excel-export";
+import { COLUMNS, EXCEL_MAX_ROWS, HEADER_FILL, NOTE_TEXT, downloadWorkbookXlsx, getNodeRunParams } from "./excel-export";
 
 export interface WbsNodeRow {
   kind: "node";
@@ -204,4 +204,65 @@ export async function buildWbsModel({
 
   const maxLevel = rows.reduce((m, r) => Math.max(m, r.levels.length), 1);
   return { mapName, versionLabel, exportedAt, maxLevel, rows, truncated };
+}
+
+const LEVEL_FONT_ARGB = "FF9CA3AF"; // 레벨 경로 회색 톤다운 — 출력물이라 raw hex 허용(design.md §1 예외)
+
+/** WbsModel → "WBS" 워크시트 기록 — 동적 레벨 컬럼(No | Level 1..N | Task | 1안 속성 꼬리). */
+export function writeWbsSheet(workbook: import("exceljs").Workbook, model: WbsModel): void {
+  const sheet = workbook.addWorksheet("WBS", { views: [{ state: "frozen", ySplit: 4 }] });
+  sheet.addRow([model.mapName]);
+  sheet.getRow(1).font = { bold: true, size: 14 };
+  sheet.addRow([`Version: ${model.versionLabel}    Exported: ${model.exportedAt}${model.truncated ? "    (truncated)" : ""}`]);
+  sheet.addRow([]);
+  // 속성 꼬리는 1안 COLUMNS의 Type~Next 정의 재사용 — numFmt를 인덱스가 아닌 정의에서 파생(1안 교훈)
+  const tail = COLUMNS.slice(2);
+  const headerRow = sheet.addRow([
+    "No",
+    ...Array.from({ length: model.maxLevel }, (_, i) => `Level ${i + 1}`),
+    "Task",
+    ...tail.map((c) => c.header),
+  ]);
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+    cell.border = { bottom: { style: "thin" } };
+  });
+  const taskCol = 2 + model.maxLevel; // 1=No, 2..1+N=레벨, 그 다음이 Task
+  sheet.getColumn(1).width = 6;
+  for (let i = 0; i < model.maxLevel; i += 1) sheet.getColumn(2 + i).width = 18;
+  sheet.getColumn(taskCol).width = 32;
+  tail.forEach((c, i) => {
+    sheet.getColumn(taskCol + 1 + i).width = c.width;
+  });
+  const urlCol = taskCol + 1 + tail.findIndex((c) => c.header === "URL");
+
+  for (const row of model.rows) {
+    const levelCells = Array.from({ length: model.maxLevel }, (_, i) => row.levels[i] ?? "");
+    if (row.kind !== "node") {
+      const r = sheet.addRow(["", ...levelCells, NOTE_TEXT[row.kind]]);
+      r.getCell(taskCol).font = { italic: true };
+      for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };
+      continue;
+    }
+    const num = (v: string) => (v === "" ? "" : Number(v));
+    const r = sheet.addRow([
+      row.no, ...levelCells, row.title, row.type, row.description, row.assignee, row.department, row.system,
+      num(row.duration), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
+      "", row.groups, row.next,
+    ]);
+    for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };
+    tail.forEach((c, i) => {
+      if ("numFmt" in c) r.getCell(taskCol + 1 + i).numFmt = c.numFmt;
+    });
+    if (row.url) {
+      r.getCell(urlCol).value = { text: row.urlLabel || row.url, hyperlink: row.url };
+      r.getCell(urlCol).font = { color: { argb: "FF6A41FF" }, underline: true };
+    }
+  }
+}
+
+/** WbsModel → .xlsx 다운로드 — 1안과 동일한 공용 다운로드 경로. */
+export async function downloadWbsExcel(model: WbsModel, fileName: string): Promise<void> {
+  await downloadWorkbookXlsx((workbook) => writeWbsSheet(workbook, model), fileName);
 }
