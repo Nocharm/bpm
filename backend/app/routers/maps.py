@@ -1,5 +1,6 @@
 """Process map CRUD endpoints (docs/spec.md §3.5)."""
 
+import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -262,6 +263,15 @@ async def create_map(
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
     await session.flush()
+    # 빈 캔버스 대신 Start·End 노드로 시작 — CSV 임포트가 생성하는 것과 동일한 사용자 경험.
+    # 엣지는 만들지 않는다(사용자가 사이에 노드를 넣어 연결). 고정 좌표(LR), id는 clone_graph 스타일(uuid hex).
+    version_id = new_map.versions[0].id
+    session.add(
+        Node(id=uuid.uuid4().hex, version_id=version_id, title="Start", node_type="start", pos_x=120, pos_y=200, sort_order=0)
+    )
+    session.add(
+        Node(id=uuid.uuid4().hex, version_id=version_id, title="End", node_type="end", is_primary_end=True, pos_x=480, pos_y=200, sort_order=1)
+    )
     # 초기 버전 생성 이벤트 — 버전 히스토리 타임라인 시작점
     record_version_event(session, new_map.versions[0].id, "created", user)
     # 생성자에게 owner 권한 행 부여 — enforcement ON에서 본인 맵 잠금 방지 (brief §C)

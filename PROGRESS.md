@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-16 — 새 맵 생성 시 Start·End 자동 시드 (worktree-workflow-improvements)
+- 빈 새 맵이 캔버스가 비어 있던 문제 — `create_map`(`backend/app/routers/maps.py`)이 초기 버전에 Start·End 노드 2개를 자동 삽입(엣지 없음, 고정 LR 좌표, id=uuid hex). CSV 임포트 생성과 동일한 UX. 설계 `docs/superpowers/specs/2026-07-16-new-map-start-end-seed-design.md`.
+- 범위: 새 맵의 초기 버전만(빈 새 버전·복사는 대상 아님). CSV 생성 경로 무영향(`PUT /graph` 전체 교체로 시드가 CSV 노드로 대체 — 중복 없음). `validate_process` 통과(start 1·대표 end 1·제목 유니크).
+- 테스트: `test_maps.py`(생성 후 graph에 start/end 존재)·`test_graph.py`의 `test_new_version_has_empty_graph`→`test_new_map_version_seeds_start_end` 갱신. 게이트: pytest 609 pass·ruff clean. 브라우저 실검증 `pw-verify-new-map-seed.mjs` 5/5(에디터 Start·End 2노드 렌더, 엣지 0, 콘솔 에러 0).
+
 ## 2026-07-16 — 서브프로세스 워크플로 2건 개선 — 구현 완료 (worktree-workflow-improvements)
 - 설계 `docs/superpowers/specs/2026-07-16-subprocess-workflow-improvements-design.md` + 계획 `docs/superpowers/plans/2026-07-16-subprocess-workflow-improvements.md`(TDD 3태스크). 구현 커밋: 백엔드 `f54f1dd`·프론트 생성경로 `432f8bf`·승인탭 카드 `cd25843`.
 - **(1) `follow_latest`(최신본 추종) 생성 기본 ON — 모든 생성 경로 통일**: 라이브러리 드롭(`page.tsx:3701`)·AI 변환(`page.tsx:613`)·CSV 임포트 기본값(`csv-import.ts:186`)·`NodeIn` 스키마(`schemas.py`)·`Node` DB 컬럼 ORM 기본값(`models.py`) 5지점 `false→true`. `addLinkNodeFromMap`은 이미 ON. 읽기/직렬화 폴백 `?? false`는 유지(기존 노드 드리프트 방지, 마이그레이션 없음). 테스트: `test_graph.py`(생략 시 True 저장)·`csv-import.test.ts`(임포트 노드 follow_latest true).
