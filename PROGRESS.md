@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 설계 스펙 (worktree-alarm-audit)
+- 감사 결과 기반 설계 확정 — 산출물: `docs/superpowers/specs/2026-07-16-notification-purge-design.md`.
+- 사용자 확정 4건: 승인 알림은 요청+처리결과 양쪽 / 100캡은 읽음 무관 오래된 순 / 관리자 퍼지 미리보기는 type+message 묶음(수신자 수 표시) / 후속 중 인덱스+매뉴얼 보정 포함(페이지네이션·자동 retention 제외).
+- 골자: 신규 알림 type 6종(checkout·permission 요청/결과, 수신자=inbox 노출 대상과 일치) · 사용자 삭제 API 2개(개별 DELETE + 범용 bulk-delete: ids/read_only/before 택1) · 관리자 purge-preview/purge(기간+묶음 확정, sysadmin) · `create_notifications` 내 인당 100캡 트리밍 · 인덱스 2종 + db.py `_ADDED_INDEXES` 자동 보강 · 벨 클릭→`/inbox?notification=<id>` 딥링크 · 알림 탭 카테고리 필 5종+선택/조건 삭제 · 테이블 뷰어 notifications 한정 퍼지 UI. DB 신규 컬럼 없음.
+
 ## 2026-07-16 — 알람(알림) 기능 전수 조사·퍼지(삭제) 경로 분류 (worktree-alarm-audit)
 - 읽기 전용 감사 — 코드 변경 없음. 산출물: `docs/alarm-audit.md`.
 - **명확화**: "알람" = 3개 서브시스템(벨 notifications / 수신함 inbox / 공지 notices). inbox는 테이블 없는 실시간 집계 뷰. 생성 경로는 단일 헬퍼 `create_notifications` 호출 7지점·type 6종. checkout(점유권 이전)은 inbox 전용 — 벨 알림 미생성(비대칭).
