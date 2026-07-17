@@ -200,6 +200,19 @@ button:not(:disabled):active {
   }
 }
 
+/* Excel 내보내기 미리보기 행 — 위에서부터 쌓이며 등장. 딜레이는 행별 --row-delay로 주입,
+   fill both라 자기 차례 전엔 숨김 상태를 유지한다(스태거 핵심). */
+.preview-row-in {
+  animation: item-fade-in 350ms var(--ease-smooth) both;
+  animation-delay: var(--row-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-row-in {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .window-open {
     animation: none;

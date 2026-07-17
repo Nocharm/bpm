@@ -48,6 +48,7 @@ import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
+import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { FlowConflictModal } from "@/components/flow-conflict-modal";
@@ -181,7 +182,8 @@ import {
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
-import { buildExcelModel, downloadExcel } from "@/lib/excel-export";
+import { buildExcelModel } from "@/lib/excel-export";
+import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
 import { formatKst } from "@/lib/datetime";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
@@ -830,6 +832,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   // CSV 임포트 프리뷰 — 소멸 노드를 삭제할지 유지할지. 기본 삭제(CSV가 정본).
   const [csvKeepRemoved, setCsvKeepRemoved] = useState(false);
+  // Excel 내보내기 형식 선택 모달(Process Map/WBS 토글) — design 2026-07-17-excel-export-wbs-v2
+  const [excelExportOpen, setExcelExportOpen] = useState(false);
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
@@ -4370,24 +4374,39 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (warnings.length > 0) showToast(t("export.csvWarnings"));
   }, [buildExportFileName, showToast, t]);
 
-  const handleExportExcel = useCallback(async () => {
-    try {
-      const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
-      const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
-      const model = await buildExcelModel({
-        graph,
-        mapName,
-        versionLabel,
-        exportedAt: formatKst(new Date().toISOString()),
-        fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
-        rootMapId: mapId,
-      });
-      await downloadExcel(model, buildExportFileName("xlsx"));
-      if (model.truncated) showToast(t("export.excelTruncated"));
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.exportExcel"));
-    }
-  }, [versions, versionId, mapName, mapId, buildExportFileName, showToast, t]);
+  // Excel 모달용 모델 빌더 — 저장 경로와 동일 소스(buildGraph)로 미저장 편집분까지 반영.
+  // async로 감싸 buildGraph의 동기 throw까지 promise rejection으로 잡히게 한다(모달 .catch가 error로 수렴).
+  const buildMapExcelModel = useCallback(async () => {
+    const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
+    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+    return buildExcelModel({
+      graph,
+      mapName,
+      versionLabel,
+      exportedAt: formatKst(new Date().toISOString()),
+      fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
+      rootMapId: mapId,
+    });
+  }, [versions, versionId, mapName, mapId]);
+
+  const buildWbsExcelModel = useCallback(async () => {
+    const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
+    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+    return buildWbsModel({
+      graph,
+      mapName,
+      versionLabel,
+      exportedAt: formatKst(new Date().toISOString()),
+      fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
+      rootMapId: mapId,
+    });
+  }, [versions, versionId, mapName, mapId]);
+
+  const excelFileNameFor = useCallback(
+    (format: ExcelExportFormat) =>
+      format === "wbs" ? buildExportFileName("xlsx").replace(/\.xlsx$/, "_WBS.xlsx") : buildExportFileName("xlsx"),
+    [buildExportFileName],
+  );
 
   const handleExportWord = () => {
     const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
@@ -8028,7 +8047,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <button
                         type="button"
                         data-id="export-excel"
-                        onClick={() => void handleExportExcel()}
+                        onClick={() => setExcelExportOpen(true)}
                         className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
                       >
                         <FileSpreadsheet size={16} strokeWidth={1.5} />
@@ -8597,6 +8616,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           </div>
         </ModalBackdrop>
       )}
+      <ExcelExportModal
+        open={excelExportOpen}
+        onClose={() => setExcelExportOpen(false)}
+        buildMap={buildMapExcelModel}
+        buildWbs={buildWbsExcelModel}
+        fileNameFor={excelFileNameFor}
+      />
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
     </NodeActionsContext.Provider>
