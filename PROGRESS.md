@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-07-17 — 편집 모드 개선 5종 구현 완료 (worktree-editor-improvements)
+- 계획 `docs/superpowers/plans/2026-07-17-editor-improvements.md`의 13 TDD 태스크 전부 구현 + 서브에이전트 리뷰 통과. 브랜치 커밋 `c064f89`…`467b82d`(18 코드 커밋). dev 기준, **미머지·미푸시**.
+- **(1) 노드 복사/붙여넣기/Ctrl드래그**: Ctrl+C/V + Ctrl드래그 복제. 복사 대상 process·decision·end(start·subprocess 제외·토스트). `localStorage` 클립보드로 크로스탭/크로스맵. 다중+내부엣지. `makeCopyLabel`(`(n)` 증분). 붙여넣기 누적 오프셋+findFreeSpot(반복 Ctrl+V 겹침 방지). Ctrl드래그=원본 잔상+`+`배지, 사본 드롭. Ctrl+C는 노드 미선택 시 네이티브 복사 통과. 순수 헬퍼 `lib/drag-constrain`·`node-clipboard`·`canvas`(vitest).
+- **(2) 서브프로세스 링크 유일성**: FE picker 이미 링크된 맵 자동 비활성+툴팁·`addLinkNodeFromMap` 차단. 백엔드 graph PUT 422 가드 — **기존 중복링크는 grandfather**(증가분만 차단: `count>1 and count>stored_counts[mid]`)해 운영 맵 브릭 방지.
+- **(3) SP 설명 + 등록 알림**: `ProcessMap.sp_description` 신설(`_ADDED_COLUMNS` 등록=자동 ALTER)·스키마 3읽기경로·FE 3표면(모달/카드/패널)·`get_subprocess_refs` 채움. 최초 지정 시 오너+활성승인자 알림(`subprocess_registered`, actor 제외, 영문 메시지)·inbox `subprocess` 카테고리.
+- **(4) Shift 축 고정**: `constrainToAxis`로 단일·다중선택(overlay 포함)·그룹 이동 축 고정. selectionKeyCode=null.
+- **(5) SP 목록 접근+검색**: pane 우클릭 메뉴 하단 항목 + 전역 `S` 단축키(입력/모달/menu 가드)·검색 자동포커스·공용 `filterByQuery`(이름+부서 초성/로마자/순차).
+- **게이트(최종 467b82d)**: 백엔드 pytest **635 pass**·ruff clean. 프론트 lint 0·tsc 0·vitest **429 pass**·build OK. Playwright 실검증(실서버 기동) 실행: node-copy 14/14·ctrl-drag 31/31·library-search 7/7·library-open 8/8·link-unique 13/13, 콘솔 에러 0.
+- **후속(미해결)**: ①붙여넣기 엣지 핸들측 소실(분기 엣지 시각 뭉침, 위상/라벨은 보존) ②연속 평범 드래그 시 노드 프리즈(**기존 버그**, 이 브랜치 무관) ③인라인 펼침 상태에서 단일 Shift축고정 비활성·Ctrl드래그 사본 좌표 드리프트 가능(좁은 케이스) ④add-node 후 즉시 Ctrl+C 미복사(selectedId≠node.selected).
+
 ## 2026-07-17 — 편집 모드 개선 5종 설계 스펙 (worktree-editor-improvements)
 - dev 기준 신규 브랜치·워크트리. 설계 `docs/superpowers/specs/2026-07-17-editor-improvements-design.md`(구현 대기).
 - 범위: (1) 노드 복사/붙여넣기/Ctrl드래그(process·decision·end 한정, start·subprocess 제외·토스트, localStorage 클립보드로 크로스탭/크로스맵, `(n)` 증분, 다중+내부엣지) (2) 서브프로세스 링크 유일성(FE picker 자동 비활성 + 백엔드 422 가드) (3) SP 설명 필드 `sp_description`(백엔드/DB 자동ALTER) + 최초 지정 시 오너·승인자 알림 (4) Shift 드래그 축 고정(단일·다중·그룹) (5) SP 목록 우클릭 메뉴·`S` 단축키·자동포커스·`filterByQuery` 초성검색.
