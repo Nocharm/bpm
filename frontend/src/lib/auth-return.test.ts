@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearAuthRetry,
   clearAutoLoginSkip,
   consumeAutoLoginSkip,
   consumeReturnTo,
@@ -11,6 +12,7 @@ import {
   saveReturnTo,
   saveSsoLogoutHint,
   setAutoLoginSkip,
+  tryConsumeAuthRetry,
 } from "@/lib/auth-return";
 
 function makeFakeStorage(): Storage {
@@ -77,6 +79,19 @@ describe("autoLoginSkip flag", () => {
     setAutoLoginSkip();
     clearAutoLoginSkip();
     expect(consumeAutoLoginSkip()).toBe(false);
+  });
+});
+
+describe("authRetry counter", () => {
+  it("상한(1)까지 silent 재시도 허용 후 소진되면 false(카드 폴백), 소진 시 예산 리셋", () => {
+    expect(tryConsumeAuthRetry()).toBe(true); // 1회차 — 재시도
+    expect(tryConsumeAuthRetry()).toBe(false); // 소진 — 카드로
+    expect(tryConsumeAuthRetry()).toBe(true); // 소진 시 리셋되어 다음 에러엔 다시 1회
+  });
+  it("clearAuthRetry는 예산을 초기화한다", () => {
+    tryConsumeAuthRetry();
+    clearAuthRetry();
+    expect(tryConsumeAuthRetry()).toBe(true);
   });
 });
 

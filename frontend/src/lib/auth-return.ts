@@ -52,6 +52,28 @@ export function consumeAutoLoginSkip(): boolean {
   return skipped;
 }
 
+const AUTH_RETRY_KEY = "bpm.authRetry";
+// 비-login_required 에러(state 불일치·네트워크 등) 시 silent 자동 재시도 상한.
+// 세션이 살아있으면 재시도로 클릭 없이 로그인되고, 지속성 에러(시계 오차 등)는 상한에서 카드로 폴백해 루프를 막는다.
+const MAX_AUTH_RETRY = 1;
+
+// 재시도 여력이 남았으면 카운트를 올리고 true(=silent 재시도), 소진이면 리셋 후 false(=로그인 카드로).
+export function tryConsumeAuthRetry(): boolean {
+  const storage = getStorage();
+  const count = Number(storage?.getItem(AUTH_RETRY_KEY) ?? "0") || 0;
+  if (count >= MAX_AUTH_RETRY) {
+    storage?.removeItem(AUTH_RETRY_KEY);
+    return false;
+  }
+  storage?.setItem(AUTH_RETRY_KEY, String(count + 1));
+  return true;
+}
+
+// 로그인 성공·세션 없음 확정 등 "깨끗한" 상태 도달 시 재시도 예산을 초기화.
+export function clearAuthRetry(): void {
+  getStorage()?.removeItem(AUTH_RETRY_KEY);
+}
+
 const SSO_LOGOUT_HINT_KEY = "bpm.ssoLogoutHint";
 
 // 로그아웃 직전에 확보한 id_token — /login의 "모든 세션 종료" 패널이 id_token_hint로 1회 사용.

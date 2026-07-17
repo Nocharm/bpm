@@ -105,6 +105,12 @@
 - `docker-compose.yml`에 `CSV_MANUAL_URL: ${CSV_MANUAL_URL:-}` 추가(파이프라인 개통).
 - 재발 방지: `rules/backend/config.md`에 "새 Environment 카테고리 Settings 필드는 backend `environment:` 블록에도 반드시 매핑" 룰 명문화(no `env_file:` 근본 원인·`CSV_MANUAL_URL` 선례 기록). CLAUDE.md `@import` 대상이라 다음 세션 자동 로드.
 
+## 2026-07-18 — 로그인 실패 시 막다른 빨간 화면 제거 + 세션 유효 시 무클릭 자동 복구 (main)
+- 증상: 일부 유저가 Keycloak 로그인 직후 홈("/")에 빨간 "Auth error: …" 한 줄만 뜨는 막다른 화면에 갇히거나, 로그인 카드에 도달하지 못함. 근본 원인: `AuthGate`(`frontend/src/components/providers.tsx`)의 미인증→`/login` 리다이렉트 effect가 `!auth.error`로 가드돼 에러 시 동작 안 함 + 유일한 복구 effect가 `login_required`만 처리 → 그 외 에러(oidc `No matching state`·토큰 교환 실패·`consent_required`·시계 오차 등)는 복구 경로 없는 데드엔드 렌더로 낙하.
+- 수정: 데드엔드 빨간 렌더 삭제(→ 에러는 not-authenticated로 로딩 화면 후 `/login` 복귀). 에러를 종류별 분기 — `login_required`(세션 없음, 정상)는 곧바로 카드+silent 억제, 그 외는 **세션이 살아있을 수 있으니 silent 자동 재시도 1회**(무클릭 로그인) 후 소진 시에만 카드로 폴백. 재시도 상한 1로 지속성 에러(시계 오차·스토리지 차단) 무한 리다이렉트 루프 방지.
+- 파일: `providers.tsx`(effect 분기·데드엔드 제거·미사용 `useI18n`/`t` 정리), `lib/auth-return.ts`(`tryConsumeAuthRetry`/`clearAuthRetry`, 상한 1), `lib/auth-return.test.ts`(카운터 2건). i18n 키 `auth.error`는 미사용이나 데이터라 존치.
+- 게이트: vitest 416 pass(신규 2)·lint clean(기존 무관 경고 1)·build(tsc+React Compiler) OK. **미검증**: 실제 Keycloak 에러 경로는 로컬 재현 불가(`AUTH_ENABLED=false`) — 서버 배포 후 수동 확인 필요(세션 유효 무클릭 로그인·콜백 새로고침 복구·세션 없음 카드 표시).
+
 ## 2026-07-16 — 새 맵 생성 시 Start·End 자동 시드 (worktree-workflow-improvements)
 - 빈 새 맵이 캔버스가 비어 있던 문제 — `create_map`(`backend/app/routers/maps.py`)이 초기 버전에 Start·End 노드 2개를 자동 삽입(엣지 없음, 고정 LR 좌표, id=uuid hex). CSV 임포트 생성과 동일한 UX. 설계 `docs/superpowers/specs/2026-07-16-new-map-start-end-seed-design.md`.
 - 범위: 새 맵의 초기 버전만(빈 새 버전·복사는 대상 아님). CSV 생성 경로 무영향(`PUT /graph` 전체 교체로 시드가 CSV 노드로 대체 — 중복 없음). `validate_process` 통과(start 1·대표 end 1·제목 유니크).
