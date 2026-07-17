@@ -19,9 +19,13 @@ interface ApprovalsCardProps { onSelect: (id: number) => void }
 export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
   const { t } = useI18n();
   const [items, setItems] = useState<InboxApproval[]>([]);
+  // 조회 실패와 진짜 0건을 구분 — 실패 시 "모두 처리됨"으로 오인시키지 않는다
+  const [loadError, setLoadError] = useState(false);
   useEffect(() => {
     let active = true;
-    void listInboxApprovals().then((r) => { if (active) setItems(r); }).catch(() => {});
+    void listInboxApprovals()
+      .then((r) => { if (active) { setItems(r); setLoadError(false); } })
+      .catch(() => { if (active) setLoadError(true); });
     return () => { active = false; };
   }, []);
   const segments = useMemo(() => {
@@ -33,11 +37,13 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
     <section data-id="home-needs-approval" className="flex flex-col gap-3 rounded-sm border border-hairline bg-surface-alt p-3">
       <div className="text-caption-strong text-ink">{t("home.needsApproval")}</div>
       {items.length === 0 ? (
-        <p className="py-4 text-center text-fine text-ink-tertiary">{t("home.allCaughtUp")}</p>
+        <p className="py-4 text-center text-fine text-ink-tertiary">
+          {loadError ? t("home.approvalsLoadError") : t("home.allCaughtUp")}
+        </p>
       ) : (
         <>
           <div className="flex items-center gap-3">
-            <Donut segments={segments} size={104} />
+            <Donut segments={segments} size={104} label={t("home.needsApproval")} />
             <ul className="flex flex-col gap-1 text-fine">
               {segments.map((s) => (
                 <li key={s.key} className="flex items-center gap-1.5">
@@ -58,7 +64,6 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
                 >
                   <span className="min-w-0 flex-1 truncate text-caption text-ink">{a.map_name}</span>
                   {a.version_number != null && <span className="shrink-0 text-fine text-ink-tertiary">v{a.version_number}</span>}
-                  <span className="shrink-0 text-fine text-ink-tertiary">{a.status}</span>
                 </button>
               </li>
             ))}

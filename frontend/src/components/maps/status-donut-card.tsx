@@ -48,7 +48,7 @@ export function StatusDonutCard({ maps, onSelect }: StatusDonutCardProps) {
     <section data-id="home-my-documents" className="flex flex-col gap-3 rounded-sm border border-hairline bg-surface-alt p-3">
       <div className="text-caption-strong text-ink">{t("home.myDocuments")}</div>
       <div className="flex items-center gap-3">
-        <Donut segments={segments} size={104} selectedKey={selected} onSelect={(k) => setSelected(k as VersionStatus)} />
+        <Donut segments={segments} size={104} selectedKey={selected} onSelect={(k) => setSelected(k as VersionStatus)} label={t("home.myDocuments")} />
         <ul className="flex flex-col gap-1 text-fine">
           {segments.map((s) => (
             <li key={s.key}>

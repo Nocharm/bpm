@@ -639,7 +639,9 @@ export default function InboxPage() {
               ) : (
                 <ActivityDigest title={t("inbox.tabApprovals")} stats={[]} hint={t("digest.selectHint")}>
                   <div className="rounded-sm bg-accent-tint px-3 py-2 text-caption text-accent">
-                    {approvals.length === 0 ? t("home.allCaughtUp") : approvals.length}
+                    {approvals.length === 0
+                      ? t("home.allCaughtUp")
+                      : t("inbox.pendingCount", { n: approvals.length })}
                   </div>
                 </ActivityDigest>
               )

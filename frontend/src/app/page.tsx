@@ -342,7 +342,8 @@ export default function MapListPage() {
     () => (me?.org_path ? filterMyDeptMaps(filteredMaps, me.org_path) : []),
     [filteredMaps, me],
   );
-  const myDeptLabel = me?.department ?? me?.org_path?.split("/").pop() ?? "";
+  // department가 ""(빈 문자열)일 수 있어 ??는 폴백을 건너뛴다 — || 로 org_path 리프까지 폴백
+  const myDeptLabel = (me?.department || me?.org_path?.split("/").pop()) ?? "";
 
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋). 검색 모드 전용
   // (브라우즈는 즐겨찾기+아코디언이라 별도 증분 렌더 없음).

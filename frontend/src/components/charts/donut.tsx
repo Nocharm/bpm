@@ -8,9 +8,10 @@ interface DonutProps {
   size?: number; // px, 기본 120
   selectedKey?: string | null;
   onSelect?: (key: string) => void;
+  label?: string; // a11y — svg aria-label
 }
 
-export function Donut({ segments, size = 120, selectedKey, onSelect }: DonutProps) {
+export function Donut({ segments, size = 120, selectedKey, onSelect, label }: DonutProps) {
   const stroke = Math.round(size * 0.16);
   const r = (size - stroke) / 2;
   const C = 2 * Math.PI * r;
@@ -18,7 +19,7 @@ export function Donut({ segments, size = 120, selectedKey, onSelect }: DonutProp
   const total = segments.reduce((s, x) => s + x.value, 0);
   const cx = size / 2;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label}>
       <g transform={`rotate(-90 ${cx} ${cx})`}>
         {arcs.map((a) => (
           <circle

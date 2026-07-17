@@ -54,6 +54,7 @@ const en = {
   "home.myDocuments": "My documents",
   "home.needsApproval": "Needs approval",
   "home.allCaughtUp": "All caught up",
+  "home.approvalsLoadError": "Couldn't load approvals",
   "home.allMapsTitle": "All maps",
   "home.detailEmpty": "Select a map to view details",
   "home.filterClear": "Clear filters",
@@ -871,6 +872,7 @@ const en = {
   "inbox.approvalKind.checkout_transfer": "Checkout transfer",
   "inbox.approvalKind.approval_request": "Permission / visibility",
   "inbox.approvalsEmpty": "No pending approvals.",
+  "inbox.pendingCount": "{n} pending",
   "inbox.approve": "Approve",
   "inbox.reject": "Reject",
   "inbox.rejectReason": "Reason for rejection",
@@ -1416,6 +1418,7 @@ const en = {
   "perm.checkout.toastRejected": "Checkout request rejected.",
   "perm.sysadmin.kindCheckout": "Checkout request",
   "digest.selectHint": "Select an item to view",
+  "digest.unread": "Unread: {n}",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1472,6 +1475,7 @@ const ko: Record<MessageKey, string> = {
   "home.myDocuments": "내 문서",
   "home.needsApproval": "승인 필요",
   "home.allCaughtUp": "모두 처리됨",
+  "home.approvalsLoadError": "승인 목록을 불러오지 못했습니다",
   "home.allMapsTitle": "전체 맵",
   "home.detailEmpty": "맵을 선택하면 상세가 표시됩니다",
   "home.filterClear": "필터 해제",
@@ -2290,6 +2294,7 @@ const ko: Record<MessageKey, string> = {
   "inbox.approvalKind.checkout_transfer": "점유권 이전",
   "inbox.approvalKind.approval_request": "권한·가시성",
   "inbox.approvalsEmpty": "대기 중인 승인이 없습니다.",
+  "inbox.pendingCount": "{n}건 대기",
   "inbox.approve": "승인",
   "inbox.reject": "반려",
   "inbox.rejectReason": "반려 사유",
@@ -2835,6 +2840,7 @@ const ko: Record<MessageKey, string> = {
   "perm.checkout.toastRejected": "체크아웃 요청을 반려했습니다.",
   "perm.sysadmin.kindCheckout": "체크아웃 요청",
   "digest.selectHint": "항목을 선택하세요",
+  "digest.unread": "안 읽음: {n}",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
