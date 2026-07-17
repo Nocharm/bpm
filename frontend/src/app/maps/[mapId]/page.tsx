@@ -939,6 +939,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 미선택 노드 새로 잡음"인지 판별용. RF의 multiSelectionKeyCode(기본 Ctrl/⌘)가 이 기능 트리거 키와 겹쳐,
   // 잡은 노드가 잔여 선택에 딸려 들어가는 걸 막는다(capture-phase pointerdown이 RF 선택 변경보다 먼저 스냅샷).
   const preMousedownSelectedRef = useRef<ReadonlySet<string>>(new Set());
+  // Ctrl+드래그 사본 확정 1회 래치 — RF는 다중선택 드래그에서 onNodeDragStop·onSelectionDragStop을 둘 다
+  // 발화하는데, 둘 다 applyCtrlDragCopy를 부르면 같은 stale nodesRef를 읽어 사본이 2×N개 append된다(백엔드 저장까지).
+  // beginCtrlDrag에서 false로 리셋, applyCtrlDragCopy 진입 시 true로 세워 제스처당 정확히 한 번만 실행.
+  const ctrlDragConsumedRef = useRef(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       shiftHeldRef.current = e.shiftKey;
@@ -3259,6 +3263,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!isCtrl || readOnly) {
         return;
       }
+      ctrlDragConsumedRef.current = false; // 새 제스처 시작 — 사본 확정 래치 해제
       const usePriorSelection =
         grabbedId === null || preMousedownSelectedRef.current.has(grabbedId);
       const intended = usePriorSelection
@@ -3283,6 +3288,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 최신 좌표)에 사본을 생성(id/라벨 dedup). 선택에 섞였던 복사불가 노드는 이미 이동한 위치 그대로 둔다.
   // 사본만 선택 상태로 남긴다(단일=인스펙터 포커스, 다중=null).
   const applyCtrlDragCopy = useCallback(() => {
+    // 제스처당 1회만 — RF가 onNodeDragStop·onSelectionDragStop을 둘 다 발화해도 두 번째 호출은 무시(2×N 방지).
+    if (ctrlDragConsumedRef.current) {
+      return;
+    }
+    ctrlDragConsumedRef.current = true;
     const ghosts = ctrlDragGhosts;
     if (ghosts.length === 0) {
       return;
@@ -3317,22 +3327,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       return [...next, ...copies];
     });
     // 선택 집합 내부 엣지도 함께 복제 — Ctrl+C/V(handleCopy·buildPaste)와 동일 관례.
-    const internalEdges = edgesRef.current.filter(
-      (edge) => plans.has(edge.source) && plans.has(edge.target),
-    );
-    if (internalEdges.length > 0) {
-      setEdges((current) => [
-        ...current,
-        ...internalEdges.map((edge) => ({
-          ...EDGE_DEFAULTS,
-          id: genId(),
-          source: plans.get(edge.source)!.copyId,
-          target: plans.get(edge.target)!.copyId,
-          sourceHandle: sourceHandleId("right"),
-          targetHandle: targetHandleId("left"),
-          label: typeof edge.label === "string" ? edge.label : undefined,
-        })),
-      ]);
+    // 새 엣지 id(genId)는 updater 밖에서 확정 — updater가 이중 호출돼도 id를 재발급하지 않게(순수성).
+    const newEdges = edgesRef.current
+      .filter((edge) => plans.has(edge.source) && plans.has(edge.target))
+      .map((edge) => ({
+        ...EDGE_DEFAULTS,
+        id: genId(),
+        source: plans.get(edge.source)!.copyId,
+        target: plans.get(edge.target)!.copyId,
+        sourceHandle: sourceHandleId("right"),
+        targetHandle: targetHandleId("left"),
+        label: typeof edge.label === "string" ? edge.label : undefined,
+      }));
+    if (newEdges.length > 0) {
+      setEdges((current) => [...current, ...newEdges]);
     }
     const single = ghosts.length === 1 ? plans.get(ghosts[0].id) : undefined;
     setSelectedId(single ? single.copyId : null);
