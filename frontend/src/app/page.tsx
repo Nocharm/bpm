@@ -3,12 +3,13 @@
 // 홈 — 프로세스맵 목록 (공개범위 필터링) + 맵 생성 다이얼로그 /
 // Home: map list filtered by mock visibility + map creation dialog.
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, ChevronDown, ChevronUp, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
-import { copyMap, deleteMap, listMaps, type MapSummary } from "@/lib/api";
+import { copyMap, deleteMap, getDirectory, getMe, listMaps, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
+import { buildOrgTree, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -20,6 +21,8 @@ import { CsvCreateModal } from "@/components/csv-create-modal";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
+import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
+import { OrgAccordion } from "@/components/maps/org-accordion";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { SearchBox } from "@/components/search-box";
@@ -54,14 +57,16 @@ export default function MapListPage() {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
-  // 최근 열람 캐시(마운트 후 로드) + 밴드 노출 개수("더보기" +3, 검색내용 아님 → 미영속) /
-  // recent-opened cache (loaded after mount) + band page size.
+  // 브라우즈 좌측 컬럼 — 내 정보(부서 즐겨찾기)·디렉터리(조직도 트리) + 아코디언 펼침 상태 /
+  // browse-mode left column: my info (dept favorites) + directory (org tree) + accordion expansion.
+  const [directory, setDirectory] = useState<Directory | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [orgOpen, setOrgOpen] = useState<Set<string>>(new Set());
+  const [favOpen, setFavOpen] = useState(true);
+
+  // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
+  // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
   const [recentEntries, setRecentEntries] = useState<RecentMapEntry[]>([]);
-  // 최근 밴드 노출 개수 — 초기 2개, "더보기" +3, "접기"로 2로 리셋(검색내용 아님 → 미영속) /
-  // recent band page size — initial 2, "show more" +3, "collapse" resets to 2.
-  const [recentShown, setRecentShown] = useState(2);
-  // 최근 밴드 접힘 — 접기=전부 닫힘, 펼침=2개부터 다시 / recent band collapsed toggle.
-  const [recentCollapsed, setRecentCollapsed] = useState(false);
   // "/" 단축키로 포커스할 검색 input / search input focused by the "/" hotkey.
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -99,6 +104,26 @@ export default function MapListPage() {
       active = false;
     };
   }, [t]);
+
+  // 내 정보 + 디렉터리(부서 트리) — 브라우즈 좌측 즐겨찾기·아코디언 소스 (getDirectory는 departments 포함,
+  // useDirectory 훅은 유저 Map만 노출해 여기선 직접 fetch).
+  useEffect(() => {
+    let active = true;
+    void getMe().then((m) => { if (active) setMe(m); }).catch(() => {});
+    void getDirectory().then((d) => { if (active) setDirectory(d); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  // 아코디언 초기 펼침 — 내 org_path 조상 경로를 1회 시드(이후는 사용자 토글만 반영) /
+  // seed org accordion expansion from my org_path once when it arrives.
+  const seededOrg = useRef(false);
+  useEffect(() => {
+    if (seededOrg.current || !me?.org_path) return;
+    seededOrg.current = true;
+    const parts = me.org_path.split("/");
+    const paths = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+    setOrgOpen(new Set(paths)); // one-time seed from my org_path
+  }, [me]);
 
   // 최근 열람 로드 — localStorage는 클라 전용이라 마운트 후 복원(초기 render는 빈 배열).
   useEffect(() => {
@@ -280,41 +305,36 @@ export default function MapListPage() {
     [filteredMaps, mapQuery],
   );
 
-  // 최근 접속 파생 — 검색 여부, id 순서·시각 맵, 브라우즈 밴드(최근 ∩ 필터, 최신순) /
-  // recent-opened derivations: search flag, id order, time-by-id, browse band.
+  // 최근 접속 파생 — 검색 여부, id 순서·시각 맵(검색 모드 상단 고정용) /
+  // recent-opened derivations: search flag, id order, time-by-id (used to pin search matches).
   const isSearching = mapQuery.trim() !== "";
   const recentIds = recentEntries.map((e) => e.id);
   const atById = new Map(recentEntries.map((e) => [e.id, e.at]));
-  const recentBand = isSearching
-    ? []
-    : partitionByRecency(filteredMaps, (m) => m.id, recentIds).recent;
   // 검색 모드 정렬 — 최근 접속 매치 상단 고정(최신순) + 나머지 기존 검색 랭킹 /
   // search order: recent-opened matches pinned on top (recency), rest keep search rank.
   const searchPartition = partitionByRecency(mapHits, (h) => h.item.id, recentIds);
   const orderedHits = [...searchPartition.recent, ...searchPartition.rest];
 
-  // 브라우즈 전용 정렬 — 권한(owner→editor→viewer) > 최신 수정순. 검색·최근 밴드는 무변경 (batch2 ③)
-  const browseHits = useMemo(() => {
-    const rank = (r: string | null) => (r === "owner" ? 0 : r === "editor" ? 1 : 2);
-    return [...mapHits].sort((a, b) => {
-      const d = rank(a.item.my_role) - rank(b.item.my_role);
-      if (d !== 0) return d;
-      return b.item.updated_at.localeCompare(a.item.updated_at);
-    });
-  }, [mapHits]);
+  // 브라우즈 좌측 — 나의 부서 즐겨찾기 + 조직도 트리(렌더타임 파생, effect 아님) /
+  // browse-mode left column: my-dept favorites + org tree, derived at render (not in an effect).
+  const orgTree = useMemo(
+    () => buildOrgTree(filteredMaps, directory?.departments ?? []),
+    [filteredMaps, directory],
+  );
+  const myDeptMaps = useMemo(
+    () => (me?.org_path ? filterMyDeptMaps(filteredMaps, me.org_path) : []),
+    [filteredMaps, me],
+  );
+  const myDeptLabel = me?.department ?? me?.org_path?.split("/").pop() ?? "";
 
-  // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋)
+  // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋). 검색 모드 전용
+  // (브라우즈는 즐겨찾기+아코디언이라 별도 증분 렌더 없음).
   const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}`;
   const {
     visible: shownSearchHits,
     hasMore: hasMoreSearch,
     sentinelRef: searchSentinelRef,
   } = useInfiniteSlice(orderedHits, listKey);
-  const {
-    visible: shownBrowseHits,
-    hasMore: hasMoreBrowse,
-    sentinelRef: browseSentinelRef,
-  } = useInfiniteSlice(browseHits, listKey);
 
   // 선택 파생 — 자동 첫-맵 선택 없음(초기 선택 없음). 삭제된 맵이면 해제 / no auto-select; clear if stale.
   const effectiveSelected =
@@ -322,18 +342,8 @@ export default function MapListPage() {
       ? selectedId
       : null;
 
-  // 최근 밴드 토글 — 접힘→펼침 시 2개부터 다시 시작 / toggle: expanding restarts at 2.
-  const toggleRecentCollapse = () => {
-    if (recentCollapsed) {
-      setRecentShown(2);
-      setRecentCollapsed(false);
-    } else {
-      setRecentCollapsed(true);
-    }
-  };
-
-  // 리스트 행 — MapCard + 좁은 폭 인라인 아코디언(기존 블록 그대로). 밴드는 아코디언 없이 별도 렌더. /
-  // A full-list row: MapCard + narrow-screen accordion. The band renders cards without the accordion.
+  // 리스트 행 — MapCard + 좁은 폭 인라인 아코디언. 검색 모드 전용(브라우즈는 즐겨찾기+조직도 아코디언 사용). /
+  // A full-list row: MapCard + narrow-screen accordion. Search mode only (browse uses favorites + org accordion).
   const renderRow = (
     processMap: MapSummary,
     nameRanges: MatchRange[],
@@ -580,100 +590,30 @@ export default function MapListPage() {
                   {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
               ) : (
-                /* 브라우즈 모드 — 상단 최근 밴드 + 하단 전체 목록(중복 허용). 빈 공간 클릭=선택 해제 */
+                /* 브라우즈 — 나의 부서 즐겨찾기 + 조직도 아코디언 */
                 <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto pr-1">
-                  {recentBand.length > 0 && (
-                    <section data-id="home-recent-band" className="flex flex-col gap-2">
-                      {/* 섹션 라벨 행 — 클릭 토글(접힘=전부 닫힘, 펼침=2개부터), 우측끝 쉐브론 */}
-                      <button
-                        type="button"
-                        data-id="home-recent-toggle"
-                        aria-expanded={!recentCollapsed}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleRecentCollapse();
-                        }}
-                        className="group -mx-1.5 flex items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-surface-alt"
-                      >
-                        <span className="text-fine text-ink-tertiary group-hover:text-ink-secondary">{t("home.recentTitle")}</span>
-                        {recentCollapsed ? (
-                          <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary group-hover:text-ink-secondary" />
-                        ) : (
-                          <ChevronUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary group-hover:text-ink-secondary" />
-                        )}
-                      </button>
-                      {!recentCollapsed && (
-                        <>
-                          <ul className="flex flex-col gap-2">
-                            {recentBand.slice(0, recentShown).map((processMap) => (
-                              <li key={processMap.id}>
-                                <MapCard
-                                  map={processMap}
-                                  selected={effectiveSelected === processMap.id}
-                                  highlighted={highlightId === processMap.id}
-                                  onSelect={setSelectedId}
-                                  recentOpenedAt={atById.get(processMap.id)}
-                                />
-                              </li>
-                            ))}
-                          </ul>
-                          {(recentBand.length > recentShown || recentShown > 2) && (
-                            <div className="flex items-center gap-3">
-                              {recentBand.length > recentShown && (
-                                <button
-                                  type="button"
-                                  data-id="home-recent-more"
-                                  className="text-fine text-accent hover:underline"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setRecentShown((n) => n + 3);
-                                  }}
-                                >
-                                  {t("home.recentMore")}
-                                </button>
-                              )}
-                              {recentShown > 2 && (
-                                <button
-                                  type="button"
-                                  data-id="home-recent-collapse"
-                                  className="inline-flex items-center gap-1 text-fine text-ink-tertiary hover:text-ink"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleRecentCollapse();
-                                  }}
-                                >
-                                  <ChevronUp size={14} strokeWidth={1.5} />
-                                  {t("home.recentCollapse")}
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </section>
-                  )}
-                  {recentBand.length > 0 && (
-                    /* 스페이서 + 전체목록 섹션 라벨 */
-                    <div className="border-t border-divider pt-3">
-                      <h2 className="text-fine text-ink-tertiary">{t("home.allMapsTitle")}</h2>
-                    </div>
-                  )}
-                  <ul className="flex flex-col gap-2">
-                    {shownBrowseHits.map(({ item: processMap, matches }, i) => (
-                      <Fragment key={processMap.id}>
-                        {/* 권한 그룹 경계 — 회색 가로선 구분 (batch2 ③) */}
-                        {i > 0 && shownBrowseHits[i - 1].item.my_role !== processMap.my_role && (
-                          <li aria-hidden className="shrink-0 border-t border-hairline" />
-                        )}
-                        {renderRow(
-                          processMap,
-                          matches.find((m) => m.field === "name")?.ranges ?? [],
-                          undefined,
-                        )}
-                      </Fragment>
-                    ))}
-                    {hasMoreBrowse && <li ref={browseSentinelRef} className="h-px shrink-0" />}
-                  </ul>
+                  <MyDeptFavorites
+                    maps={myDeptMaps}
+                    deptLabel={myDeptLabel}
+                    open={favOpen}
+                    onToggle={() => setFavOpen((v) => !v)}
+                    selectedId={effectiveSelected}
+                    onSelect={setSelectedId}
+                  />
+                  <OrgAccordion
+                    roots={orgTree.roots}
+                    unassigned={orgTree.unassigned}
+                    openPaths={orgOpen}
+                    onToggle={(path) => setOrgOpen((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(path)) next.delete(path); else next.add(path);
+                      return next;
+                    })}
+                    onCollapseAll={() => setOrgOpen(new Set())}
+                    selectedId={effectiveSelected}
+                    highlightId={highlightId}
+                    onSelect={setSelectedId}
+                  />
                 </div>
               )}
             </div>
