@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
@@ -66,6 +66,9 @@ export type NodeEditPatch = Partial<{
   fte: string;
   url: string;
   urlLabel: string;
+  // subprocess 연결 버전 — 인스펙터 피커와 동일 즉시 반영(버퍼 아님)
+  followLatest: boolean;
+  linkedVersionId: number | null;
 }>;
 
 const ATTR_FIELDS: { key: "system"; labelKey: "field.system" }[] = [
@@ -133,6 +136,10 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
   spParams: Record<SpParamField, string> | null;
+  // subprocess 설명 베이스(링크 맵 sp_description, 읽기전용) — 이 맵의 추가분(description)과 분리 표시
+  inheritedDescription?: string | null;
+  // subprocess 연결 버전 피커(인스펙터와 동일 컴포넌트) — 호출부가 렌더해 주입
+  versionPickerSlot?: ReactNode;
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
   showAttributes: boolean;
   onPatch: (patch: NodeEditPatch) => void;
@@ -172,6 +179,8 @@ export function NodeSummaryModal({
   urlLabel,
   colorPresets,
   spParams,
+  inheritedDescription,
+  versionPickerSlot,
   showAttributes,
   onPatch,
   onCommitLabel,
@@ -419,14 +428,26 @@ export function NodeSummaryModal({
                   onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
                 />
               </div>
-              {/* 설명 — 노드 부연(NodeData.description, 라이브 반영) */}
+              {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
+                  베이스로 위에 표시하고, textarea는 이 맵의 추가분만 편집(표시는 베이스+줄바꿈+추가분 합성). */}
               <div>
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
+                {(inheritedDescription ?? "").trim() !== "" && (
+                  <div
+                    data-id="summary-desc-inherited"
+                    className="mb-1 whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary"
+                  >
+                    {(inheritedDescription ?? "").trim()}
+                  </div>
+                )}
                 <textarea
                   className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
                   rows={2}
                   value={form.description}
                   aria-label={t("field.description")}
+                  placeholder={
+                    (inheritedDescription ?? "").trim() !== "" ? t("subprocess.descAppend") : undefined
+                  }
                   onChange={(event) => setForm((f) => ({ ...f, description: event.target.value }))}
                 />
               </div>
@@ -645,6 +666,9 @@ export function NodeSummaryModal({
               )}
             </div>
           )}
+
+          {/* subprocess 연결 버전(최신 추종 토글·버전 고정) — 인스펙터와 동일 컴포넌트를 슬롯으로 주입(패리티) */}
+          {versionPickerSlot}
 
           {/* 선행/후행 — 타입 아이콘 칩(세로 나열)·가운데 세로선·양 가장자리 쉐브론(위)+hover 라벨(하단 고정, 높이 통일).
               칩 영역은 min/max 높이 + 내부 스크롤(스크롤바 숨김)이라 모달이 낮아도 항상 보이고 과도하게 늘지 않는다. 클릭=그 노드 편집(변경 있으면 확인) */}

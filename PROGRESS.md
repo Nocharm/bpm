@@ -1,5 +1,16 @@
 # Progress
 
+## 2026-07-18 — 서브프로세스 UX 통일 6종: 딥뷰 봉인·자식 상호작용 통일·읽기전용 메뉴·펼치기 메뉴·모달 피커 패리티·설명 상속 (worktree-inline-expand-drag-fix)
+- 조사(라이브 계측)로 확인된 불일치/고장 일괄 정리. 사용자 지시: ①봉인 ②선택효과 통일 ③읽기전용 안내 ④메뉴 펼치기 ⑤모달 패리티 + 설명 상속.
+- **자식 더블클릭 봉인(깊이 무관)**: 임베드 자식 dblclick 캡처 핸들러가 하던 딥뷰 드릴인(`drillIntoSubprocess`) 제거 — 인라인 펼침과의 이중 렌더(React 중복 key)·오프스크린 스코프 창·빈 캔버스 고장의 유일 진입로였음. 이벤트는 계속 삼켜 RF 줌/모달도 차단. `isDrillableHost`/`drillIntoSubprocess` 삭제(스코프 창 머신은 존치).
+- **자식 클릭 선택효과 통일**: 캔버스 클릭이 `selectedId`도 동기화(아웃라인 행 하이라이트 일치), 아웃라인 다른-스코프 선택이 RF `selected`(테두리+불투명)도 동기화(펼침 반영 다음 틱 setTimeout 안에서 childNodes 싱크). 같은-스코프 아웃라인 선택은 자식 선택 해제 대칭 추가.
+- **자식 우클릭 = "(읽기전용)" 1항목 안내 메뉴**: ContextMenu에 `note` 변형(회색·기울임·비인터랙티브) 신설, 노드 메뉴 빌더가 현재 스코프 밖 대상이면 안내 1개만 반환 — 캔버스(종전 차단)·아웃라인(종전 풀 편집 메뉴 오노출) 공통 경로로 통일.
+- **서브프로세스 우클릭 메뉴에 하위 프로세스 펼치기/접기**: 액션 바 `expandable`과 동일 조건. nodes state엔 subEnds가 없어(displayNodes 파생 주입) `injectSubEnds`를 거쳐 판정해야 함(1차 시도 실패 원인). 구 `hasChildren` "열기" 항목은 레거시 데이터용으로 존치.
+- **모달 연결 버전 패리티**: `SubprocessVersionPicker`(최신 추종 토글·버전 고정·업데이트)를 편집 모달에 슬롯(`versionPickerSlot`)으로 주입 — 인스펙터와 동일 컴포넌트·즉시 반영. IIFE 내 인라인 클로저가 react-hooks/refs 오탐 → 톱레벨 `handleSummaryUpdateSubprocess`로 호이스트.
+- **설명 상속(베이스+추가분)**: 노드 description엔 이 맵의 추가분만 저장, 표시는 링크맵 `sp_description`(SubprocessRef로 이미 클라이언트 도달) + 줄바꿈 + 추가분 합성(`lib/subprocess-description.ts`, vitest 5). 모달은 베이스 읽기전용 블록 + 추가분 textarea(플레이스홀더 안내), 인스펙터는 합성 표시. 등록(지정) 시 설명 입력은 기존 기능 그대로.
+- **게이트**: vitest 474/474·lint 0 err·tsc 0·build OK. 라이브 pw 6검증(메뉴 펼치기/접기 라벨 전환·캔버스↔아웃라인 선택 상호 동기화·봉인(중첩 서브 dblclick에도 스코프 붕괴/중복 key 0)·읽기전용 메뉴 양표면·모달 토글 API 영속·추가분 분리 저장+합성 표시) 전부 그린.
+- **후속(미처리)**: Excel/Word/CSV 내보내기는 subprocess 설명에 추가분만 실림(합성 미반영) · 읽기전용 모달 변형은 설명 자체 미표시(기존) · 아웃라인 자식 행 더블클릭 이름편집 UI는 여전히 뜨고 조용히 무시됨(우클릭만 정리됨).
+
 ## 2026-07-17 — 인라인 펼침 드래그 버그 3종 해소: 팬텀 링 카메라 점프(#2)·Shift 축고정(#3a)·Ctrl복제 드리프트(#3b) (worktree-inline-expand-drag-fix)
 - 핸드오프 `docs/superpowers/specs/2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md`의 ②③ 해소. dev 기준 브랜치.
 - **#2 "프리즈" 근본 원인 반전**: 가설(no-op 커밋)은 라이브 계측으로 **반증** — 제자리 커밋은 무해. 진범은 `screenRectOf`가 `nodesRef`(저장좌표)로 링 rect를 계산 → 펼침 중 footprint-shifted 노드 드래그 시 dwell 링이 실제 노드보다 footprint(예: 868px)만큼 왼쪽(화면 밖)에 잡히고, `ensureRingVisible`이 팬텀 링을 향해 카메라를 200ms 애니메이션 팬(드롭 후에도 지속, d3 줌 플라이트) → 노드가 화면 밖으로 밀려 이전 좌표 클릭이 전부 빗나감 = "하드 프리즈"로 관측. 수정: `reactFlow.getNode`(표시좌표) 사용 + 현재 스코프 멤버십 가드 유지(읽기전용 임베드 자식은 기존대로 링 제외).

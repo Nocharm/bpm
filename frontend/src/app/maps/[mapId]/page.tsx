@@ -194,6 +194,7 @@ import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import { displayToSavedX } from "@/lib/inline-shift";
+import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
@@ -1297,7 +1298,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     childNodesRef.current = childNodes;
   }, [childNodes]);
-  // lockedKeys ref 미러 — canExpand/isDrillableHost(deps []) 콜백이 stale 없이 최신 잠금 집합을 읽도록.
+  // lockedKeys ref 미러 — canExpand(deps []) 콜백이 stale 없이 최신 잠금 집합을 읽도록.
   useEffect(() => {
     lockedKeysRef.current = lockedKeys;
   }, [lockedKeys]);
@@ -2633,27 +2634,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 그대로 보이게(시각적 무이동). 편집·저장은 네이티브(스코프상대 좌표 그대로). 스코프 로드 효과가 이 ref를 읽어 적용.
   const focusCamRef = useRef<{ shift: { x: number; y: number }; vp: { x: number; y: number; zoom: number } } | null>(null);
 
-  // 하위프로세스 드릴인(딥뷰) — 그 호스트의 링크맵을 읽기전용 활성 영역으로 연다. 더블클릭이 호출.
-  // 카메라 보정(focusCamRef 쓰기)은 호출 측(이벤트 핸들러/effect)에서 한다 — 렌더 중/useCallback 내 ref 변경 금지 룰 회피.
-  const isDrillableHost = useCallback((hostNodeId: string): boolean => {
-    const host = fullGraphRef.current?.nodes.find((n) => n.id === hostNodeId);
-    if (!host || host.node_type !== "subprocess" || host.linked_map_id == null) {
-      return false;
-    }
-    // 마스킹: 구조 검사 + 링크맵 권한 검사 — 잠긴 링크맵은 드릴 불가.
-    // Masking: structural check + linked-map permission check — locked linked-maps cannot drill.
-    const k = linkKey(host);
-    return !(k != null && lockedKeysRef.current.has(k));
-  }, []);
-  const drillIntoSubprocess = useCallback(
-    (hostNodeId: string) => {
-      if (!isDrillableHost(hostNodeId)) {
-        return; // 하위프로세스가 아니거나 링크 없음 — 드릴 불가
-      }
-      void navigateTo(buildScopesTo(hostNodeId));
-    },
-    [isDrillableHost, navigateTo, buildScopesTo],
-  );
+  // (하위프로세스 딥뷰 드릴인은 봉인됨 — 인라인 펼침과의 이중 렌더/오프스크린 창 고장으로 임베드 자식
+  // 더블클릭 진입로를 제거. 스코프 창 머신(navigateTo/scopes)은 포커스 모드 등 다른 경로가 계속 사용.)
 
   // 창 포커스 — 현재 활성 스코프를 저장하고 해당 창을 라이브로 전환(스코프 체인은 유지)
   const focusScope = useCallback(
@@ -4466,6 +4448,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     [summaryNodeId, patchNode],
   );
 
+  // 모달 연결 버전 피커의 "업데이트" — IIFE 내 인라인 클로저는 react-hooks/refs 오탐이라 톱레벨로.
+  const handleSummaryUpdateSubprocess = useCallback(() => {
+    if (summaryNodeId !== null) {
+      handleUpdateSubprocess(summaryNodeId);
+    }
+  }, [summaryNodeId, handleUpdateSubprocess]);
+
   // 제목 입력 확정(blur) — 캔버스 내 다른 노드와 이름 중복 시 " (n)" 접미사로 고유화.
   const handleSummaryLabelCommit = useCallback(
     (label: string) => {
@@ -5005,6 +4994,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       ];
     }
     if (menu.kind === "node") {
+      // 임베드 자식(현재 스코프 밖) — 편집 액션 없음. "(읽기전용)" 안내 1항목만(캔버스·아웃라인 공통).
+      if (menu.targetId !== null && !nodes.some((item) => item.id === menu.targetId)) {
+        return [{ note: t("ctx.readonlyChild") }];
+      }
       const deleteItems: ContextMenuItem[] = readOnly
         ? []
         : [
@@ -5039,20 +5032,45 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 하위 있으면 "열기"(창 — 기존 편집), process+하위없으면 "생성"(Start/작업/End 자동 + 인라인 펼침)
       const targetNode = nodes.find((item) => item.id === menu.targetId);
       const hasKids = targetNode?.data.hasChildren ?? false;
-      const openChildItems: ContextMenuItem[] = hasKids
+      // subprocess 펼치기/접기 — 액션 바 expandable과 동일 조건(끝 핸들 존재·미잠금·지정됨). 참조 모델
+      // subprocess는 hasChildren(구 parent_node_id 모델)이 항상 false라 아래 "열기" 항목이 못 잡는다.
+      // nodes state엔 subEnds/locked가 없어(displayNodes에서 파생 주입) 같은 주입을 거쳐 판정한다.
+      const injectedTarget = targetNode ? injectSubEnds(targetNode) : undefined;
+      const expandableSub =
+        injectedTarget?.data.nodeType === "subprocess" &&
+        (injectedTarget.data.subEnds ?? []).length > 0 &&
+        !injectedTarget.data.locked &&
+        !injectedTarget.data.undesignated;
+      const openChildItems: ContextMenuItem[] = expandableSub
         ? [
             {
-              label: t("ctx.openChild"),
+              label: t(
+                menu.targetId !== null && expandedInline.has(menu.targetId)
+                  ? "node.action.collapse"
+                  : "node.action.expand",
+              ),
               icon: Maximize2,
               onSelect: () => {
-                // 드릴인 창 대신 인라인 펼침/접기(toggleInlineExpand) — ref는 정의 순서(TDZ) 회피용
                 if (menu.targetId) {
                   toggleInlineExpandRef.current?.(menu.targetId);
                 }
               },
             },
           ]
-        : [];
+        : hasKids
+          ? [
+              {
+                label: t("ctx.openChild"),
+                icon: Maximize2,
+                onSelect: () => {
+                  // 드릴인 창 대신 인라인 펼침/접기(toggleInlineExpand) — ref는 정의 순서(TDZ) 회피용
+                  if (menu.targetId) {
+                    toggleInlineExpandRef.current?.(menu.targetId);
+                  }
+                },
+              },
+            ]
+          : [];
       // 이름 변경 — 인라인 타이틀 편집 진입(startRename). 편집 전용이라 readOnly에선 숨김(F2 전역키와 동일).
       // subprocess는 타이틀=링크된 맵 이름 고정이라 항목 자체 숨김 (F5)
       const renameItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
@@ -5114,6 +5132,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     readOnly,
     nodes,
     edges,
+    expandedInline,
+    injectSubEnds,
     setEdgeSide,
     startEdgeLabelEdit,
     handleAddNode,
@@ -6140,27 +6160,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         return; // 노드 밖 — React Flow 기본 처리
       }
       // 프레임(현재 스코프) 노드 분기: 루트(편집 가능, scopeId=null) 노드는 RF onNodeDoubleClick가
-      // 드릴/이름편집을 처리하므로 그대로 위임. 딥뷰(읽기전용, scopeId!=null) 프레임 노드는
-      // RF가 더블클릭을 발화하지 않아(측정/읽기전용 차이) 딥드릴(L2→L3)이 죽는다 → 여기서 직접 드릴.
-      // Frame-node split: root (editable, scopeId=null) → defer to RF onNodeDoubleClick (drill + rename).
-      // Deep-view (read-only, scopeId!=null) frame nodes → RF doesn't fire dblclick, so drill here.
+      // 모달/이름편집을 처리하므로 그대로 위임.
       const frameNode = nodesRef.current.find((node) => node.id === id);
       if (frameNode && frameNode.data?.scopeId == null) {
         return; // 루트 편집 프레임 노드 — React Flow 기본(onNodeDoubleClick) 처리
       }
+      // 임베드 자식 더블클릭 봉인(깊이 무관) — 종전의 딥뷰 드릴인은 인라인 펼침과 이중 렌더(중복 key)·
+      // 오프스크린 창으로 깨져 있어 진입로를 막는다. RF 더블클릭 줌/모달도 열지 않는다(읽기전용 안내는 우클릭 메뉴).
       event.preventDefault();
-      event.stopPropagation(); // React Flow 더블클릭 줌 방지
-      // 임베드 자식이 하위프로세스 호스트면 그 링크맵으로 한 단계 드릴인(spec §6 순차 펼침).
-      // 카메라 보정 — host의 표시 위치−저장 위치만큼 옮겨 드릴 후에도 제자리(카메라 점프 없음). effect 내라 ref 쓰기 허용.
-      const host = fullGraphRef.current?.nodes.find((n) => n.id === id);
-      const rendered = reactFlow.getNode(id)?.position;
-      if (host && rendered) {
-        focusCamRef.current = {
-          shift: { x: rendered.x - host.pos_x, y: rendered.y - host.pos_y },
-          vp: reactFlow.getViewport(),
-        };
-      }
-      drillIntoSubprocess(id);
+      event.stopPropagation();
     };
     // Ctrl+드래그 의도 판별 — mousedown 시점의 선택 집합을 RF가 바꾸기 전에 스냅샷(capture phase가 노드의
     // d3-drag pointerdown보다 먼저 발화). beginCtrlDrag이 이 스냅샷으로 잡은 노드의 사전 선택 여부를 본다.
@@ -6175,7 +6183,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       container.removeEventListener("dblclick", handleDblClick, true);
       container.removeEventListener("pointerdown", handlePointerDownCapture, true);
     };
-  }, [drillIntoSubprocess, reactFlow]);
+  }, []);
 
   // 인스펙터 폭 로컬 영속
   useEffect(() => {
@@ -6362,6 +6370,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             node.selected === (node.id === id) ? node : { ...node, selected: node.id === id },
           ),
         );
+        // 이전에 임베드 자식이 선택돼 있었을 수 있음 — 자식 선택도 해제(단일 선택 유지)
+        setChildNodes((current) =>
+          current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+        );
         // 화면에 이미 보이면 이동 없음, 밖일 때만 현재 줌으로 부드럽게 가운데(줌 강제 변경 제거 — 매 클릭 점프 방지)
         revealNodeIfOffscreen(id);
         return;
@@ -6383,6 +6395,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       setSelectedId(id);
       // 합성·재배치가 반영된 다음 틱에 대상 노드로 팬 — 줌은 현재 값 유지(자동 줌 변경 방지)
       window.setTimeout(() => {
+        // 임베드 자식 선택 효과 동기화(캔버스 클릭과 통일) — childNodes는 펼침 반영 다음 틱에 존재.
+        setNodes((current) =>
+          current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+        );
+        setChildNodes((current) =>
+          current.map((node) =>
+            node.selected === (node.id === id) ? node : { ...node, selected: node.id === id },
+          ),
+        );
         const zoom = reactFlow.getZoom();
         void reactFlow.fitView({
           nodes: [{ id }],
@@ -6393,7 +6414,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         });
       }, 160);
     },
-    [fullGraph, currentParentId, reactFlow, setNodes, commitExpanded, revealNodeIfOffscreen],
+    [fullGraph, currentParentId, reactFlow, setNodes, setChildNodes, commitExpanded, revealNodeIfOffscreen],
   );
 
   // 아웃라인 Tab/↓ — 다음(아래) 가시 행으로 이동. 펼치기는 자동으로 하지 않는다(→/F가 담당).
@@ -7205,8 +7226,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onConnect={onConnect}
                       isValidConnection={isValidConnection}
                       onNodeClick={(_, node) => {
-                        // 인라인 자식(읽기전용) — 클릭 시 선택만(React Flow 기본). 탐색 없음.
-                        if (node.data?.scopeId != null) return;
+                        // 인라인 자식(읽기전용) — 선택 효과(테두리·불투명)는 RF가 처리하고, selectedId도
+                        // 동기화해 아웃라인 행 하이라이트와 일치시킨다(깊이 무관 통일). 탐색 없음.
+                        if (node.data?.scopeId != null) {
+                          setSelectedId(node.id);
+                          setSelectedEdgeId(null);
+                          return;
+                        }
                         // 포커스(Path 2) — 다른 스코프 노드 클릭 시 그 스코프를 navigateTo로 진짜 nodes化(네이티브 풀편집).
                         // 카메라 보정: 클릭 노드의 "현재 표시 위치 − 저장(스코프상대) 위치"만큼 카메라를 옮겨
                         // 그 노드(=스코프)가 제자리에 남게 한다. 자식 진입·루트 복귀(exit) 양쪽 모두 제자리.
@@ -7249,11 +7275,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onPaneContextMenu={(event) => openMenu(event, "pane", null)}
                       onNodeContextMenu={(event, node) => {
-                        // 인라인 자식(읽기전용)은 컨텍스트 메뉴 열지 않음.
-                        if (node.data?.scopeId != null) {
-                          event.preventDefault();
-                          return;
-                        }
+                        // 인라인 자식(읽기전용)도 메뉴를 연다 — 빌더가 "(읽기전용)" 안내 1항목을 내려
+                        // 액션 불가를 인지시킴(아웃라인 자식 행 우클릭과 동일 경로·동일 결과).
                         setSelectedId(node.id);
                         setSelectedEdgeId(null);
                         openMenu(event, "node", node.id);
@@ -7814,6 +7837,23 @@ function MapEditor({ mapId }: { mapId: number }) {
                 spParams={
                   node.data.nodeType === "subprocess" ? getInheritedParams(summarySpRef) : null
                 }
+                inheritedDescription={
+                  node.data.nodeType === "subprocess" ? (summarySpRef?.sp_description ?? null) : null
+                }
+                versionPickerSlot={
+                  node.data.nodeType === "subprocess" && node.data.linkedMapId != null ? (
+                    <SubprocessVersionPicker
+                      linkedMapId={node.data.linkedMapId}
+                      linkedVersionId={node.data.linkedVersionId ?? null}
+                      followLatest={node.data.followLatest ?? false}
+                      updateAvailable={node.data.updateAvailable ?? false}
+                      readOnly={readOnly}
+                      onFollowLatest={(value) => handleSummaryPatch({ followLatest: value })}
+                      onPinVersion={(pinId) => handleSummaryPatch({ linkedVersionId: pinId })}
+                      onUpdate={handleSummaryUpdateSubprocess}
+                    />
+                  ) : undefined
+                }
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onNavigate={(id) => setSummaryNodeId(id)}
@@ -8002,11 +8042,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                           onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
                         />
                       </div>
-                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 편집은 편집 모달에서만. */}
+                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 편집은 편집 모달에서만.
+                          subprocess는 링크맵 설명(베이스)+이 맵 추가분을 줄바꿈 합성해 표시. */}
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
                         <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary">
-                          {selectedNode.data.description || t("summary.none")}
+                          {(selectedNode.data.nodeType === "subprocess"
+                            ? mergeSubprocessDescription(
+                                selectedSpRef?.sp_description,
+                                selectedNode.data.description,
+                              )
+                            : selectedNode.data.description) || t("summary.none")}
                         </div>
                       </div>
                       {/* 유형·색 — 라벨 좌·필드 우측정렬·세로중앙·구분선(편집 모달과 동일) */}

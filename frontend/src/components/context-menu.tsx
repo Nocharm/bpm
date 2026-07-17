@@ -12,6 +12,8 @@ export type ContextMenuItem =
   | { divider: true }
   // 섹션 캡션 — 클릭 불가 그룹 라벨(예: 정렬/분배). 엣지 메뉴 "연결 면"과 같은 톤
   | { caption: string }
+  // 안내 전용 — 액션 없는 상태 안내(회색·기울임). 예: 읽기전용 임베드 자식
+  | { note: string }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
   | {
       edgeSides: true;
@@ -168,6 +170,11 @@ function MenuList({
             className="px-3 pb-0.5 pt-1.5 text-fine font-semibold uppercase tracking-wide text-ink-tertiary"
           >
             {item.caption}
+          </div>
+        ) : "note" in item ? (
+          // 안내 전용 항목 — 액션 없음(예: 읽기전용 임베드 자식). 회색·기울임.
+          <div key={`note-${index}`} className="px-3 py-1.5 text-caption italic text-ink-tertiary">
+            {item.note}
           </div>
         ) : "colors" in item ? (
           <ColorRow key={`colors-${index}`} item={item} onClose={onClose} />
