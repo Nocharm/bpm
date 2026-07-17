@@ -4820,6 +4820,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         alignItem(null, selectedCount),
         { divider: true },
         moreItem,
+        { divider: true },
+        { label: t("library.open"), icon: Network, shortcut: "S", onSelect: () => setLibraryOpen(true) },
       ];
     }
     // 그룹/복수선택 정렬 메뉴 — ids 미지정(selection)은 선택 노드, 지정(group)은 그룹 멤버 대상
@@ -6474,6 +6476,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         fire(() => applyAutoLayout(dir));
         return;
       }
+      // S — 전역 서브프로세스 라이브러리 패널 열기. 컨텍스트 메뉴가 떠 있으면 무시
+      // (정렬 서브메뉴의 accel 's'=세로 자동정렬과 충돌 방지).
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.code === "KeyS" && !menu) {
+        fire(() => setLibraryOpen(true));
+        return;
+      }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
       if (event.ctrlKey || event.metaKey) {
         if (event.code === "KeyG" && !event.shiftKey) {
@@ -6532,6 +6540,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     managingApprovers,
     pending,
     previewSource,
+    menu,
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
