@@ -12,10 +12,11 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
+  linkedMapIds: Set<number>;
   onClose: () => void;
 }
 
-export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPanelProps) {
+export function ProcessLibraryPanel({ currentMapId, linkedMapIds, onClose }: ProcessLibraryPanelProps) {
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
   const [query, setQuery] = useState("");
@@ -112,14 +113,18 @@ export function ProcessLibraryPanel({ currentMapId, onClose }: ProcessLibraryPan
           </p>
         ) : (
           visible.map((row) => {
+            const alreadyLinked = linkedMapIds.has(row.map_id);
             const blocked =
-              row.map_id === currentMapId || closesCycle(row.map_id, currentMapId, refsByMap);
+              row.map_id === currentMapId ||
+              alreadyLinked ||
+              closesCycle(row.map_id, currentMapId, refsByMap);
+            const blockedReason = alreadyLinked ? t("library.alreadyLinked") : t("library.cycleBlocked");
             return (
               <div
                 key={row.map_id}
                 draggable={!blocked}
                 onDragStart={blocked ? undefined : (e) => handleDragStart(e, row)}
-                title={blocked ? t("library.cycleBlocked") : row.name}
+                title={blocked ? blockedReason : row.name}
                 className={[
                   "flex cursor-grab items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
                   blocked

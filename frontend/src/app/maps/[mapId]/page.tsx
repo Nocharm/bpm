@@ -3961,11 +3961,26 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, setNodes, scheduleAutoSave],
   );
 
+  // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
+  const linkedMapIds = useMemo(
+    () =>
+      new Set(
+        nodes
+          .filter((n) => n.data.nodeType === "subprocess" && n.data.linkedMapId != null)
+          .map((n) => n.data.linkedMapId as number),
+      ),
+    [nodes],
+  );
+
   // 상단 맵 드롭다운의 '링크노드로 추가' — 다른 맵을 현재 캔버스에 읽기전용 참조(subprocess) 노드로 삽입.
   // handleLibraryDrop과 동일한 노드 형태이되 드롭 좌표 대신 뷰포트 중앙, 최신본 추종(followLatest).
   const addLinkNodeFromMap = useCallback(
     async (linkedMapId: number, name: string) => {
       if (readOnly) return;
+      if (linkedMapIds.has(linkedMapId)) {
+        showToast(t("library.alreadyLinked"));
+        return;
+      }
       const center = reactFlow.screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
@@ -4011,7 +4026,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode(id);
       showToast(t("editor.linkNodeAdded", { name }));
     },
-    [readOnly, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
+    [readOnly, linkedMapIds, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -7032,6 +7047,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         {libraryOpen && (
           <ProcessLibraryPanel
             currentMapId={mapId}
+            linkedMapIds={linkedMapIds}
             onClose={() => setLibraryOpen(false)}
           />
         )}
