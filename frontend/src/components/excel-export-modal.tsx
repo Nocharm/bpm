@@ -1,0 +1,207 @@
+// Excel 내보내기 형식 선택 모달 — 토글 탭(top-nav 한/영 세그먼트 디자인) + 첫 8행 미리보기 + 다운로드.
+// 모델은 탭 활성화 시 lazy 빌드(모달 열려있는 동안 캐시). 설계: 2026-07-17-excel-export-wbs-v2-design.md
+"use client";
+
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+
+import { downloadExcel, type ExcelModel } from "@/lib/excel-export";
+import { downloadWbsExcel, type WbsModel } from "@/lib/excel-wbs";
+import { useI18n } from "@/lib/i18n";
+
+export type ExcelExportFormat = "map" | "wbs";
+
+interface ExcelExportModalProps {
+  open: boolean;
+  onClose: () => void;
+  buildMap: () => Promise<ExcelModel>;
+  buildWbs: () => Promise<WbsModel>;
+  fileNameFor: (format: ExcelExportFormat) => string;
+}
+
+type PreviewState<T> = { status: "idle" } | { status: "ready"; model: T } | { status: "error" };
+
+const PREVIEW_ROWS = 8;
+
+export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFor }: ExcelExportModalProps) {
+  const { t } = useI18n();
+  const [format, setFormat] = useState<ExcelExportFormat>("map");
+  const [mapState, setMapState] = useState<PreviewState<ExcelModel>>({ status: "idle" });
+  const [wbsState, setWbsState] = useState<PreviewState<WbsModel>>({ status: "idle" });
+  const [downloading, setDownloading] = useState(false);
+
+  // 닫힐 때 캐시 초기화 — 다음 오픈 시 캔버스 최신 상태로 재빌드 (setState는 전부 비동기/이벤트 경로)
+  useEffect(() => {
+    if (open) return;
+    const timer = setTimeout(() => {
+      setFormat("map");
+      setMapState({ status: "idle" });
+      setWbsState({ status: "idle" });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [open]);
+
+  // 활성 탭 모델 lazy 빌드 — idle일 때만, 결과는 .then에서 반영(동기 setState 금지 룰 준수)
+  useEffect(() => {
+    if (!open) return;
+    if (format === "map" && mapState.status === "idle") {
+      buildMap()
+        .then((model) => setMapState({ status: "ready", model }))
+        .catch(() => setMapState({ status: "error" }));
+    }
+    if (format === "wbs" && wbsState.status === "idle") {
+      buildWbs()
+        .then((model) => setWbsState({ status: "ready", model }))
+        .catch(() => setWbsState({ status: "error" }));
+    }
+  }, [open, format, mapState.status, wbsState.status, buildMap, buildWbs]);
+
+  if (!open) return null;
+
+  const active = format === "map" ? mapState : wbsState;
+
+  const handleDownload = async () => {
+    if (active.status !== "ready" || downloading) return;
+    setDownloading(true);
+    try {
+      if (format === "map") await downloadExcel((active as { model: ExcelModel }).model, fileNameFor("map"));
+      else await downloadWbsExcel((active as { model: WbsModel }).model, fileNameFor("wbs"));
+      onClose();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div
+      data-id="excel-export-modal"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[80%] w-[560px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
+          <span className="text-body-strong text-ink">{t("export.modalTitle")}</span>
+          <div className="ml-auto inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-fine">
+            {(["map", "wbs"] as const).map((code) => (
+              <button
+                key={code}
+                type="button"
+                data-id={`excel-format-${code}`}
+                aria-pressed={format === code}
+                className={
+                  "rounded-xs px-1.5 py-0.5 " +
+                  (format === code
+                    ? "bg-accent-tint font-semibold text-accent"
+                    : "text-ink-tertiary hover:text-ink-secondary")
+                }
+                onClick={() => setFormat(code)}
+              >
+                {code === "map" ? t("export.formatMap") : t("export.formatWbs")}
+              </button>
+            ))}
+          </div>
+          <button type="button" aria-label="Close" className="rounded-sm p-1 text-ink-muted hover:bg-surface-alt" onClick={onClose}>
+            <X size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        <div className="min-h-40 flex-1 overflow-auto px-4 py-3">
+          <div className="mb-1.5 text-caption text-ink-secondary">{t("export.previewLabel")}</div>
+          {active.status === "idle" && <div className="text-caption text-ink-tertiary">{t("export.previewLoading")}</div>}
+          {active.status === "error" && <div className="text-caption text-error">{t("export.previewError")}</div>}
+          {active.status === "ready" && (
+            <ExportPreviewTable format={format} model={(active as { model: ExcelModel | WbsModel }).model} emptyText={t("export.previewEmpty")} />
+          )}
+          {active.status === "ready" && (active as { model: ExcelModel | WbsModel }).model.truncated && (
+            <div className="mt-1.5 text-fine text-ink-tertiary">{t("export.truncatedNote")}</div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-hairline px-4 py-2">
+          <button
+            type="button"
+            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+            onClick={onClose}
+          >
+            {t("export.cancel")}
+          </button>
+          <button
+            type="button"
+            data-id="excel-export-download"
+            disabled={active.status !== "ready" || downloading}
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-50"
+            onClick={() => void handleDownload()}
+          >
+            {t("export.download")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 미리보기 표 — Process Map: No·Name(들여쓰기)·Type·Next / WBS: No·Level 1..N(회색)·Task. */
+function ExportPreviewTable({ format, model, emptyText }: { format: ExcelExportFormat; model: ExcelModel | WbsModel; emptyText: string }) {
+  const rows = model.rows.slice(0, PREVIEW_ROWS);
+  if (rows.length === 0) return <div className="text-caption text-ink-tertiary">{emptyText}</div>;
+  const cellCls = "border-b border-hairline px-2 py-1 whitespace-nowrap";
+  if (format === "map") {
+    const nodeRows = rows as ExcelModel["rows"];
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-fine text-ink">
+          <thead>
+            <tr className="text-left text-ink-secondary">
+              <th className={cellCls}>No</th><th className={cellCls}>Name</th><th className={cellCls}>Type</th><th className={cellCls}>Next</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nodeRows.map((row, i) => (
+              <tr key={i}>
+                <td className={cellCls}>{row.kind === "node" ? row.no : ""}</td>
+                <td className={cellCls} style={{ paddingLeft: `${8 + row.depth * 14}px` }}>
+                  {row.kind === "node" ? row.title : <span className="italic text-ink-tertiary">({row.kind})</span>}
+                </td>
+                <td className={cellCls}>{row.kind === "node" ? row.type : ""}</td>
+                <td className={cellCls}>{row.kind === "node" ? row.next : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  const wbs = model as WbsModel;
+  const wbsRows = rows as WbsModel["rows"];
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-fine text-ink">
+        <thead>
+          <tr className="text-left text-ink-secondary">
+            <th className={cellCls}>No</th>
+            {Array.from({ length: wbs.maxLevel }, (_, i) => (
+              <th key={i} className={cellCls}>{`Level ${i + 1}`}</th>
+            ))}
+            <th className={cellCls}>Task</th>
+          </tr>
+        </thead>
+        <tbody>
+          {wbsRows.map((row, i) => (
+            <tr key={i}>
+              <td className={cellCls}>{row.kind === "node" ? row.no : ""}</td>
+              {Array.from({ length: wbs.maxLevel }, (_, li) => (
+                <td key={li} className={`${cellCls} text-ink-tertiary`}>{row.levels[li] ?? ""}</td>
+              ))}
+              <td className={cellCls}>
+                {row.kind === "node" ? row.title : <span className="italic text-ink-tertiary">({row.kind})</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
