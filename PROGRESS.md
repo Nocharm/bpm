@@ -2,7 +2,7 @@
 
 ## 2026-07-17 — 메인 탭 UX 개선 설계 (worktree-main-tabs-ux)
 - dev `0b72270` 기준 신규 브랜치. 설계 문서 `docs/superpowers/specs/2026-07-17-main-tabs-ux-design.md`.
-- 스코프 5항목(전부 클라·백엔드 무변경): ①Maps 좌측 오우닝부서 조직도 아코디언(카드 디자인 유지+`[SP]` 배지) ②Maps 우측 홈 대시보드(승인필요+미완성초안+최근열람)+최근 스태거 진입 애니메이션 ③Feedback 작성하단 최근피드백 카드+`?feedback=<id>` 딥링크 ④Inbox 미선택 우측 활동요약 다이제스트 ⑤Notices 동일 다이제스트.
+- 스코프 5항목(전부 클라·백엔드 무변경): ①Maps 좌측 = 나의부서 즐겨찾기 + 오우닝부서 조직도 아코디언(모두접기, 카드 디자인 유지+`[SP]` 배지, 목록/상세 양쪽) ②Maps 우측 홈 대시보드 = 최근열람(최상단·스태거 진입) + 내오너 문서 상태 도넛(세그먼트 클릭→목록, 기본 draft) + 승인필요 단계 그래프(status 파생); 대시보드 맵행 hover→Open·클릭→선택(좌측 자동펼침 포커스) ③Feedback 작성하단 최근피드백 카드+`?feedback=<id>` 딥링크 ④Inbox 미선택 우측 활동요약 다이제스트 ⑤Notices 동일 다이제스트.
 - 사용자 요청 "알림 카테고리 아이콘+필터"는 dev(`lib/notification-categories.ts`+inbox)에 이미 구현되어 스코프 제외.
 
 ## 2026-07-17 — 편집 모드 개선 5종 구현 완료 (worktree-editor-improvements)
