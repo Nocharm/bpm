@@ -41,6 +41,8 @@ interface PrincipalPickerProps {
   deptKoreanKeywords?: Map<string, string[]>;
   /** 브라우즈(빈 검색) 시 내 상위 부서장들을 맨 위로 — 승인자 피커용. 검색 랭킹은 불변. */
   managersFirst?: boolean;
+  /** 브라우즈(빈 검색) 시 내 소속 부서 체인을 맨 위로(작은 단위=깊은 org_path 먼저) — 오우닝 부서 피커용. 검색 랭킹은 불변. */
+  myDeptsFirst?: boolean;
   /** 빈 검색(브라우즈) 시 최상단 고정할 user principalId — 오우닝 부서 리더 노출용. 검색 랭킹은 불변. */
   pinnedIds?: Set<string>;
   onSelect: (option: PrincipalOption) => void;
@@ -91,6 +93,7 @@ export function PrincipalPicker({
   userDepartments,
   deptKoreanKeywords,
   managersFirst,
+  myDeptsFirst,
   pinnedIds,
   onSelect,
 }: PrincipalPickerProps) {
@@ -162,7 +165,18 @@ export function PrincipalPicker({
               (o) => (o.principalType === "user" ? o.principalId : null),
               managerIds,
             )
-          : all;
+          : myDeptsFirst && me?.orgPath
+            ? (() => {
+                // 내 소속 부서 체인을 맨 위로 — 작은 단위(깊은 org_path)부터. 검색 랭킹엔 불개입.
+                const depth = (p: string) => p.split("/").length;
+                const isMine = (o: PrincipalOption) =>
+                  o.principalType === "department" && isMyDept(o.principalId);
+                const mine = all
+                  .filter(isMine)
+                  .sort((a, b) => depth(b.principalId) - depth(a.principalId));
+                return [...mine, ...all.filter((o) => !isMine(o))];
+              })()
+            : all;
         // 핀 고정 — 오우닝 부서 리더 등은 검색 없이도 맨 위 (안정 파티션)
         const pinnedFirst = pinnedIds?.size
           ? [

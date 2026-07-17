@@ -157,6 +157,15 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
   // 자동 추가한 리더 승인자 추적 — 부서 변경 시 자동분만 교체하고 수동 추가는 보존
   const autoLeaderRef = useRef<string | null>(null);
+  // 결재자 섹션 — 오우닝 부서 선택 후 여기로 스크롤 다운(맨 아래 피커를 상단 피커로 착각 방지)
+  const approversRef = useRef<HTMLDivElement>(null);
+
+  // 오우닝 부서를 고르면 결재자 피커로 스크롤 다운 — 작은 뷰포트에서 아래 피커가 안 보여 헷갈리는 문제
+  useEffect(() => {
+    if (owningDept) {
+      approversRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [owningDept]);
 
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
@@ -458,6 +467,7 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
               groups={[]}
               excludeIds={new Set<string>()}
               deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+              myDeptsFirst
               onSelect={applyOwningDept}
             />
           ) : (
@@ -650,12 +660,21 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
                   </button>
                 </li>
               ))}
+              {/* 수동 추가한 협업자가 없을 때 회색 안내문구 — 박스 중앙. 오우닝 부서 잠금 행과 무관 */}
+              {collaborators.length === 0 && (
+                <li
+                  data-id="collaborators-empty-hint"
+                  className="flex flex-1 items-center justify-center px-2 text-center text-fine text-ink-tertiary"
+                >
+                  {t("perm.createDialog.collaboratorsEmpty")}
+                </li>
+              )}
           </ul>
           </div>
         </div>
 
         {/* 결재자 / approvers */}
-        <div className="flex flex-col gap-1.5">
+        <div ref={approversRef} className="flex flex-col gap-1.5">
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}
           </span>
@@ -677,6 +696,15 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
           />
           {/* 결재자 pills — 1.5줄 높이 미리 확보·내부 스크롤(추가해도 모달 안 늘어남) / reserve ~1.5 rows. */}
           <div className="scroll-soft flex h-[2.5rem] flex-wrap content-start gap-1.5">
+            {/* 결재자가 없을 때 회색 안내문구 — 박스 중앙 */}
+            {approvers.length === 0 && (
+              <span
+                data-id="approvers-empty-hint"
+                className="flex h-full w-full items-center justify-center text-center text-fine text-ink-tertiary"
+              >
+                {t("perm.createDialog.approversEmpty")}
+              </span>
+            )}
             {approvers.map((a) => (
               <span
                 key={a.key}

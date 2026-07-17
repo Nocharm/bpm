@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-18 — 새 맵 만들기 모달 UX 3종: 오우닝 부서 정렬·선택 후 스크롤 다운·협업자 빈 안내 (worktree-create-map-picker-ux)
+- **오우닝 부서 피커 정렬**: `PrincipalPicker`에 `myDeptsFirst` prop 추가 — browse(빈 검색) 시 내 소속 부서 체인(`me.orgPath` 기준 `isMyDept`)을 맨 위로, 작은 단위(깊은 org_path=세그먼트 많음)부터 정렬. 검색 랭킹엔 불개입. 오우닝 부서 피커에만 적용(승인자용 `managersFirst`와 배타).
+- **선택 후 결재자로 스크롤 다운**: 오우닝 부서를 고르면 피커가 잠금 행으로 바뀌며 닫히고(기존 동작), `approversRef.scrollIntoView({block:"end"})`로 맨 아래 결재자 피커까지 스크롤 — 작은 뷰포트에서 아래 피커를 상단 피커로 착각하던 문제 해소.
+- **협업자·결재자 빈 안내문구**: 두 목록이 비었을 때(`collaborators.length===0` / `approvers.length===0`) 박스 중앙에 회색 초대 문구 — `collaboratorsEmpty`("Search below to add editors or viewers.")·`approversEmpty`("Search below to add approvers."), 한글 "…추가해보세요" 병기. "아직 없다"식 부정 표현 대신 초대형. 피커가 `flex-col-reverse`로 목록 **아래**에 있어 "search below". 오우닝 부서 잠금 행과 무관.
+- 게이트: lint 0 err·tsc 0. 실앱(admin.sys·백엔드 8901·프론트 3200) 모달 캡처로 EN/KO 빈 안내 2종 확인. 정렬 순서·선택 후 스크롤은 로컬 실행에서 확인 권장.
+
 ## 2026-07-18 — 노드 편집 모달 선행/후행 밴드 잘림 수정
 - 버그: 노드 편집 모달의 선행/후행(이전/이후) 내비가 모달 높이에 따라 안 보이거나 잘림. 근본원인 = 내비가 스크롤 바디 안 flex 자식인데 `shrink-0` 없음 + 내부 칩이 `overflow-y-auto`라 min-height가 0으로 붕괴 → 콘텐츠 넘치면 flex-shrink가 밴드를 테두리(4px)까지 뭉갬. 격리 재현으로 확정(nav 높이 4px).
 - 수정: 내비 블록을 스크롤 바디 밖 `shrink-0` 고정 밴드(푸터 위)로 분리 — 스크롤 위치·모달 높이와 무관하게 항상 노출. 칩 자체 `max-h-[104px]`+내부 스크롤 유지. `node-summary-modal.tsx` 1파일.
