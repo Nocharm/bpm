@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-17 — Ctrl+드래그 복제 엣지 핸들측 보존 (worktree-ctrldrag-handles)
+- 백로그 잔여 해소: `applyCtrlDragCopy`(Ctrl+드래그 노드 복제)가 내부 엣지를 복제할 때 `sourceHandle`/`targetHandle`을 매번 `right`/`left`로 하드코딩 → 디시전 분기 엣지가 한쪽으로 뭉치던 문제(Ctrl+C/V paste는 앞선 백로그에서 해소됨, Ctrl+드래그판만 잔존). `edge.sourceHandle ?? sourceHandleId("right")`/`edge.targetHandle ?? targetHandleId("left")`로 원본 핸들 보존·없을 때만 폴백(handlePaste와 동일 관례). 2줄.
+- 게이트: lint 0·tsc 0·vitest 462/462. 프론트 단독(백엔드 무변경). 리뷰된 동일 패턴 재사용이라 라이브 pw 생략.
+
 ## 2026-07-17 — 에디터 백로그 픽스 2건: 붙여넣기 엣지 핸들측 보존 + add-node 즉시 선택 (worktree-editor-backlog)
 - `worktree-editor-improvements`가 남긴 후속 미해결 ①·④ 해소. **FIX1**: `handleCopy`가 `sourceHandle`/`targetHandle`을 클립보드 엣지에 캡처 안 하고 `handlePaste`가 매 엣지에 `right`/`left`를 하드코딩 — 디시전 Yes/No 분기 엣지가 붙여넣기 후 한쪽으로 뭉치던 버그. `lib/node-clipboard.ts`(`ClipboardEdge`+`buildPaste`)와 `handleCopy`/`handlePaste`(page.tsx)에서 핸들을 캡처·전달하고, 없을 때만 기존 기본값(`right`/`left`)로 폴백. Ctrl드래그 사본(`beginCtrlDrag`)의 동일 하드코딩은 스코프 밖이라 유지.
 - **FIX4**: `handleAddNode`가 새 노드를 `selected:true` 없이 추가(별도 `setSelectedId`만 호출) — `handleCopy`는 RF `node.selected` 필터라 방금 추가한 노드는 재클릭 전까지 Ctrl+C가 안 먹힘. `handlePaste`와 동일 패턴(기존 선택 해제+새 노드 `selected:true`)으로 통일.
