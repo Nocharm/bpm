@@ -1418,6 +1418,7 @@ const en = {
   "perm.checkout.toastApproved": "Checkout request approved.",
   "perm.checkout.toastRejected": "Checkout request rejected.",
   "perm.sysadmin.kindCheckout": "Checkout request",
+  "digest.selectHint": "Select an item to view",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -2839,6 +2840,7 @@ const ko: Record<MessageKey, string> = {
   "perm.checkout.toastApproved": "체크아웃 요청을 승인했습니다.",
   "perm.checkout.toastRejected": "체크아웃 요청을 반려했습니다.",
   "perm.sysadmin.kindCheckout": "체크아웃 요청",
+  "digest.selectHint": "항목을 선택하세요",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
