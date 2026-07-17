@@ -181,21 +181,41 @@ describe("buildWbsModel", () => {
     expect(model.rows).toEqual([{ kind: "circular", levels: ["Root"], title: "SubToRoot" }]);
   });
 
-  it("locked·fetch 실패는 denied 노트 행", async () => {
+  it("locked·fetch 실패 SP는 잎 행(지정정보 상속)이 되고 denied 노트는 레벨 경로에 SP 제목을 단다", async () => {
     const map1: Graph = {
-      nodes: [makeSubNode("sub1", "SubLocked", 0, 2), makeSubNode("sub2", "SubGone", 1, 3)],
-      edges: [],
+      nodes: [
+        makeSubNode("sub1", "SubLocked", 0, 2, { description: "local add", annual_count: "12" }),
+        makeSubNode("sub2", "SubGone", 1, 3),
+      ],
+      edges: [makeEdge("x1", "sub1", "sub2")],
       groups: [],
+      subprocess_refs: {
+        2: {
+          designated: true, department: "Ops", assignee: null, system: null, duration: "72",
+          cost_krw: "2000000", cost_usd: null, headcount: "6", url: null, url_label: null,
+          sp_description: "base desc",
+        },
+      },
     };
     const fetchResolved = async (mapId: number): Promise<Graph> => {
       if (mapId === 2) return { nodes: [], edges: [], groups: [], locked: true };
       throw new Error("403");
     };
     const model = await build(map1, { fetchResolved });
-    expect(model.rows).toEqual([
-      { kind: "denied", levels: ["Root"], title: "SubLocked" },
-      { kind: "denied", levels: ["Root"], title: "SubGone" },
+    expect(
+      model.rows.map((r) => (r.kind === "node" ? [r.no, r.levels, r.title] : [r.kind, r.levels])),
+    ).toEqual([
+      [1, ["Root"], "SubLocked"],
+      ["denied", ["Root", "SubLocked"]],
+      [2, ["Root"], "SubGone"],
+      ["denied", ["Root", "SubGone"]],
     ]);
+    // 잎 행 값 — 1안 SP 행과 동일 소스: 파라미터는 지정정보 상속, 설명은 베이스+추가분 합성
+    expect(model.rows[0]).toMatchObject({
+      type: "subprocess", duration: "72", cost_krw: "2000000", headcount: "6",
+      annual_count: "12", description: "base desc\nlocal add", next: "SubGone",
+    });
+    expect(model.maxLevel).toBe(2); // denied 노트의 레벨 경로가 2단을 차지
   });
 
   it("행 상한 도달 시 rowLimit 1개 + truncated, 이미 출력된 행의 주석은 보존", async () => {
