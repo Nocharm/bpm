@@ -1,7 +1,10 @@
 # Progress
 
-## 2026-07-17 — 메인 탭 UX 개선 설계 (worktree-main-tabs-ux)
+## 2026-07-17 — 메인 탭 UX 개선 구현 완료 (worktree-main-tabs-ux)
 - dev `0b72270` 기준 신규 브랜치. 설계 `docs/superpowers/specs/2026-07-17-main-tabs-ux-design.md`, 구현 계획 `docs/superpowers/plans/2026-07-17-main-tabs-ux.md`(16 TDD 태스크).
+- **구현 완료(Task 1–15)** — subagent-driven(태스크별 구현+2단계 리뷰). 전부 클라이언트, **백엔드 무변경**(git diff 확인). 커밋 `b746c7b`…`28f9077`(구현+리뷰 픽스 포함). 최종 게이트: **tsc 0 · vitest 471/471(신규 org-tree/donut-geometry/recent-order 포함) · lint 0 errors(무관 사전 warning 1) · build 성공(전 라우트)**. Task 10 대시보드는 라이브 Playwright 10/10(auto-expand 포함) 검증.
+  - 리뷰 픽스 5건: T1 테스트 픽스처 타입(tsc), T4 좁은화면 인라인 상세 renderCard, T5 도넛 `-0` offset, T7 recent-top peek/commit 분리(StrictMode), T10 auto-expand deps 축소(refresh clobber).
+  - ⚠️ **미검증(배포 전 권장)**: Inbox/Notices 다이제스트·Feedback 딥링크·조직도 아코디언은 서버/원격 IP 실기동 브라우저 확인 미완(로컬 게이트만 통과).
 - 스코프 5항목(전부 클라·백엔드 무변경): ①Maps 좌측 = 나의부서 즐겨찾기 + 오우닝부서 조직도 아코디언(모두접기, 카드 디자인 유지+`[SP]` 배지, 목록/상세 양쪽) ②Maps 우측 홈 대시보드 = 최근열람(최상단·스태거 진입) + 내오너 문서 상태 도넛(세그먼트 클릭→목록, 기본 draft) + 승인필요 단계 그래프(status 파생); 대시보드 맵행 hover→Open·클릭→선택(좌측 자동펼침 포커스) ③Feedback 작성하단 최근피드백 카드+`?feedback=<id>` 딥링크 ④Inbox 미선택 우측 활동요약 다이제스트 ⑤Notices 동일 다이제스트.
 - 사용자 요청 "알림 카테고리 아이콘+필터"는 dev(`lib/notification-categories.ts`+inbox)에 이미 구현되어 스코프 제외.
 - **Task 1-4 구현**: `lib/org-tree.ts`(순수 헬퍼 `buildOrgTree`/`filterMyDeptMaps`) + `OrgAccordion`/`MyDeptFavorites` 컴포넌트(Task 1-3) → `page.tsx` 좌측 브라우즈 컬럼에 배선(Task 4). 브라우즈 모드는 이제 "나의 부서 즐겨찾기(핀)" + 오우닝부서 조직도 아코디언(모두접기, 롤업 카운트)만 렌더 — 기존 최근열람 밴드는 좌측에서 제거(우측 대시보드로 이동 예정, Task 7). 검색·필터 모드(평면 리스트+최근매치 상단고정)는 무변경. 내 정보(`getMe`)·디렉터리(`getDirectory`)로 초기 펼침을 내 `org_path` 조상 경로로 시드. tsc/lint/build 전부 그린.
