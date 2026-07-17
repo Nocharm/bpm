@@ -10,8 +10,8 @@ function makeMap(id: number, dept: string | null): MapSummary {
     owning_department: dept,
   } as MapSummary;
 }
-function dept(id: string, korean: string | null = null): DirectoryDept {
-  return { id, name: id.split("/").pop() ?? id, korean_name: korean, manager: null } as DirectoryDept;
+function dept(id: string, korean: string = ""): DirectoryDept {
+  return { id, name: id.split("/").pop() ?? id, korean_name: korean, manager: "" } as DirectoryDept;
 }
 
 describe("buildOrgTree", () => {
