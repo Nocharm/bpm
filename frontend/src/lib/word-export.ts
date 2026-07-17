@@ -40,7 +40,8 @@ const NODE_PRESET: Record<ProcessNodeType, string> = {
   start: "flowChartTerminator",
   end: "flowChartTerminator",
   subprocess: "flowChartPredefinedProcess",
-  // 자리표시자 — 섹션 노드는 Task E2 내보내기 게이팅에서 흐름도 도형 자체가 제외될 예정
+  // 섹션 노드는 일반 process 도형으로 내보낸다(값 확정, 변경 예정 없음).
+  // Task E2는 내보내기 버튼 노출 여부·section_anchor 값 threading만 다루고, 이 도형 자체는 제외하지 않는다.
   section: "flowChartProcess",
 };
 

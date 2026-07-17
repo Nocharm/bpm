@@ -13,6 +13,7 @@ import {
   insertNodeAfter,
   isCopyableNodeType,
   makeCopyLabel,
+  normalizeNodeType,
   removeOutgoingEdges,
   terminalDisplayLabel,
   violatesTerminalRule,
@@ -176,6 +177,18 @@ describe("isCopyableNodeType", () => {
   it("blocks start and subprocess", () => {
     expect(isCopyableNodeType("start")).toBe(false);
     expect(isCopyableNodeType("subprocess")).toBe(false);
+  });
+});
+
+describe("normalizeNodeType (persisted node_type → live nodeType)", () => {
+  it("recognizes section like subprocess (no fallback to process)", () => {
+    expect(normalizeNodeType("section")).toBe("section");
+    expect(normalizeNodeType("subprocess")).toBe("subprocess");
+  });
+
+  it("falls back to process for unknown/legacy values", () => {
+    expect(normalizeNodeType("default")).toBe("process");
+    expect(normalizeNodeType("bogus")).toBe("process");
   });
 });
 

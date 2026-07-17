@@ -401,7 +401,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label"] as const) {
+    for (const col of ["name", "system", "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }

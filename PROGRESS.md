@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-07-18 — Word 맵 Task C1 리뷰 픽스: normalizeNodeType/hasBpmAttributes section 누락·CSV 길이검증·주석 정정 (worktree-word-map-sections)
+- Fix1(중요·정합성): `canvas.ts` `normalizeNodeType`가 `"subprocess"`만 인식하고 `"section"`은 미인식 → 저장된 section 노드가 리로드 시 `default→"process"`로 조용히 타입 소실(추후 섹션 하이퍼링크 내보내기 회귀 원인). `subprocess`와 동일 분기로 `case "section":` 추가.
+- Fix2(일관성): `hasBpmAttributes`가 `subprocess`(참조 노드)만 제외하고 `section`(라벨+section_anchor+url의 참조 노드) 미제외 → `nodeType !== "section"` 추가로 동일 취급.
+- Fix3(경미): `csv-import.ts` 행별 길이검증 루프(~404행)에 `MAX_LEN.section_anchor=200`이 선언만 되고 미사용 → `url`/`url_label`과 동일하게 루프 튜플에 `"section_anchor"` 추가, 과길이 값이 백엔드 422 대신 임포트 단계 친절 에러로.
+- Fix4(경미): `word-export.ts` `NODE_PRESET.section` 주석이 "Task E2에서 도형 자체가 제외될 예정"이라 잘못 서술(E2는 버튼 노출·anchor 스레딩만, 도형 제외 없음) → 값은 유지, 주석만 정정.
+- 회귀 테스트: `canvas.test.ts`에 `normalizeNodeType` describe 신설(`"section"`→`"section"`, 미지 문자열→`"process"` 폴백 가드).
+- 검증: `npm run test -- csv-import canvas` 123 pass, `npx tsc --noEmit` 0 errors, `npm run lint` 0 errors(사전 존재 무관 경고 1건). 상세: `.superpowers/sdd/task-C1-report.md`.
+
 ## 2026-07-18 — Word 맵 Task C1: 프론트 `section` 노드 타입 + `section_anchor` 스레딩 (worktree-word-map-sections)
 - 구현 계획 Task C1 완료(lib 레이어 한정): `canvas.ts` `ProcessNodeType`에 `"section"` 추가(`NODE_TYPE_OPTIONS`엔 미포함 — subprocess와 동일 관례), `api.ts` `GraphNode.section_anchor?`·`AiNodeAttributes.section_anchor?` 추가(AI 경로 노드빌드가 `attr?.section_anchor`를 참조하려면 타입에도 필요 — 플랜엔 GraphNode만 명시됐으나 763행 미러 구현의 컴파일 전제).
 - `csv-import.ts` 5개 열거 지점 갱신(NODE_DEFAULTS·mergeNode pick·허용 컬럼 목록 HEADER_COLUMNS·행변환 rows/노드빌드·AI 경로 노드빌드) — url과 동일 위치에 미러, url_label의 연쇄 소거(URL 없으면 라벨 소거)는 section_anchor엔 없음(순수 passthrough). `MAX_LEN.section_anchor=200`(백엔드 `String(200)` 미러)은 Record 타입 완결성상 추가했으나 길이 검증 루프엔 넣지 않음(플랜이 명시한 5지점 밖).

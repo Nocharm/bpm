@@ -94,15 +94,18 @@ export function normalizeNodeType(value: string): ProcessNodeType {
     case "start":
     case "end":
     case "subprocess":
+    case "section":
       return value;
     default:
       return "process";
   }
 }
 
-// process·decision만 BPM 속성(담당자/부서/시스템/소요)을 가진다. start/end/subprocess는 제외.
+// process·decision만 BPM 속성(담당자/부서/시스템/소요)을 가진다. start/end/subprocess/section은 제외.
 export function hasBpmAttributes(nodeType: string): boolean {
-  return nodeType !== "start" && nodeType !== "end" && nodeType !== "subprocess";
+  return (
+    nodeType !== "start" && nodeType !== "end" && nodeType !== "subprocess" && nodeType !== "section"
+  );
 }
 
 // ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정·커서 중앙 배치에 사용
