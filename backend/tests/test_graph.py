@@ -1,9 +1,25 @@
 """Canvas graph read/replace tests."""
 
+import asyncio
+
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
+from app.models import Node
 
 _graph_seq = 0
+
+
+def _seed_nodes(*nodes: Node) -> None:
+    """API 가드를 우회해 노드를 직접 저장 — 가드 도입 이전 상태(기존 중복 링크)를 재현."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            for node in nodes:
+                session.add(node)
+            await session.commit()
+
+    asyncio.run(_run())
 
 
 def _create_version(client: TestClient) -> int:
@@ -589,3 +605,49 @@ def test_graph_allows_distinct_subprocess_links(client: TestClient) -> None:
     }
     response = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert response.status_code == 200
+
+
+def test_graph_grandfathers_preexisting_duplicate_subprocess_link(client: TestClient) -> None:
+    # 가드 도입 전에 이미 저장된 중복 링크는 그대로 재저장 가능해야 한다 — 아니면 그 맵이
+    # 매 autosave마다 422로 막혀 사실상 읽기전용이 된다 (design 2026-07-17).
+    version_id = _create_version(client)
+    # node id는 전역 PK — 테스트 간 충돌 방지로 version_id를 접미사에 섞는다
+    sub1, sub2 = f"sub1-{version_id}", f"sub2-{version_id}"
+    _seed_nodes(
+        Node(id=sub1, version_id=version_id, title="결재1", node_type="subprocess", linked_map_id=999, sort_order=1),
+        Node(id=sub2, version_id=version_id, title="결재2", node_type="subprocess", linked_map_id=999, sort_order=2),
+    )
+
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": sub1, "title": "결재1", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 1},
+            {"id": sub2, "title": "결재2", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 2},
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+        ],
+        "edges": [],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 200
+
+
+def test_graph_blocks_newly_introduced_duplicate_subprocess_link(client: TestClient) -> None:
+    # 대조: 기존엔 링크가 1개뿐이었는데 이번 PUT에서 2번째를 새로 추가하면 여전히 거부된다.
+    version_id = _create_version(client)
+    sub1, sub2 = f"sub1-{version_id}", f"sub2-{version_id}"
+    _seed_nodes(
+        Node(id=sub1, version_id=version_id, title="결재1", node_type="subprocess", linked_map_id=999, sort_order=1),
+    )
+
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": sub1, "title": "결재1", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 1},
+            {"id": sub2, "title": "결재2", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 2},
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+        ],
+        "edges": [],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 422
+    assert "already linked" in response.json()["detail"].lower()

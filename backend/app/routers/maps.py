@@ -591,7 +591,7 @@ async def designate_subprocess(
                 recipients,
                 type="subprocess_registered",
                 map_id=map_id,
-                message=f"'{found_map.name}'이(가) 서브프로세스로 등록되었습니다",
+                message=f"'{found_map.name}' was registered as a subprocess",
             )
     await session.commit()
     await session.refresh(found_map)

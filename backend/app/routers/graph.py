@@ -3,6 +3,8 @@
 그래프는 version 단위 평면 저장. GET/PUT /versions/{id}/graph 가 버전 전체를 다룬다.
 """
 
+from collections import Counter
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -182,12 +184,28 @@ async def replace_graph(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # 링크 유일성 — 같은 대상 맵을 2개 이상 노드가 링크하면 거부 (design 2026-07-16)
-    linked_ids = [
+    # 가드 도입 전 이미 저장된 중복은 grandfather — 매 PUT마다 걸리면 그 맵이 영구히
+    # 저장 불가(사실상 읽기전용)가 된다. 새로 도입되는 중복만 차단한다 (design 2026-07-17).
+    stored_linked_ids = (
+        await session.scalars(
+            select(Node.linked_map_id).where(
+                Node.version_id == version_id,
+                Node.node_type == "subprocess",
+                Node.linked_map_id.is_not(None),
+            )
+        )
+    ).all()
+    stored_counts = Counter(stored_linked_ids)
+    incoming_counts = Counter(
         n.linked_map_id
         for n in payload.nodes
         if n.node_type == "subprocess" and n.linked_map_id is not None
-    ]
-    dupes = sorted({mid for mid in linked_ids if linked_ids.count(mid) > 1})
+    )
+    dupes = sorted(
+        mid
+        for mid, count in incoming_counts.items()
+        if count > 1 and stored_counts[mid] <= 1
+    )
     if dupes:
         raise HTTPException(
             status_code=422,
