@@ -40,6 +40,8 @@ const NODE_PRESET: Record<ProcessNodeType, string> = {
   start: "flowChartTerminator",
   end: "flowChartTerminator",
   subprocess: "flowChartPredefinedProcess",
+  // 자리표시자 — 섹션 노드는 Task E2 내보내기 게이팅에서 흐름도 도형 자체가 제외될 예정
+  section: "flowChartProcess",
 };
 
 // 하이퍼링크 rels Target(xsd:anyURI)용 정규화 — 공백·한글이 든 URL을 raw로 넣으면

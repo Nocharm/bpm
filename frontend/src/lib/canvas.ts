@@ -77,7 +77,7 @@ export type NodeData = {
 
 export type AppNode = Node<NodeData>;
 
-export type ProcessNodeType = "process" | "decision" | "start" | "end" | "subprocess";
+export type ProcessNodeType = "process" | "decision" | "start" | "end" | "subprocess" | "section";
 
 // 노드 타입 선택지 — 값은 백엔드 node_type 컬럼에 그대로 저장 (spec §7 Phase A)
 export const NODE_TYPE_OPTIONS: { value: ProcessNodeType; labelKey: MessageKey }[] = [

@@ -69,7 +69,7 @@ export interface CsvImportContext {
 // 14컬럼 스키마 (design 2026-07-13 §5.1) — 순서는 Cost_KRW/Cost_USD/Headcount/Annual_Count/FTE
 const HEADER_COLUMNS = [
   "name", "description", "assignee", "department", "system", "duration",
-  "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "next",
+  "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
@@ -89,6 +89,7 @@ const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
   fte: 50,
   url: 500,
   url_label: 100,
+  section_anchor: 200, // backend models.py Node.section_anchor String(200) 미러
 };
 
 // 십진 파라미터 컬럼(duration 제외 — 별도 H.MM 검증) — 에러 문구는 컬럼명이 아닌 사람이 읽는 라벨로.
@@ -179,6 +180,7 @@ const NODE_DEFAULTS = {
   fte: "",
   url: "",
   url_label: "",
+  section_anchor: "",
   pos_x: 0,
   pos_y: 0,
   group_ids: [] as string[],
@@ -228,6 +230,7 @@ const mergeNode = (
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
+      section_anchor: pick(next.section_anchor ?? "", existing.section_anchor ?? ""),
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,
@@ -381,6 +384,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     fte: numCellOf(r, "fte"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
+    section_anchor: cellOf(r, "section_anchor"),
     nextRaw: cellOf(r, "next"),
     line: r.line,
   }));
@@ -531,6 +535,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         fte: normalizeNumericParam(row.fte) ?? "",
         url: row.url,
         url_label: row.url_label,
+        section_anchor: row.section_anchor,
         sort_order: i + 1,
       });
       // 서브프로세스 매칭 행 — duration/cost_krw/cost_usd/headcount는 링크 맵 지정값이라 CSV로 못 바꾼다
@@ -762,6 +767,7 @@ export function buildGraphFromAiProposal(
       fte: num(attr?.fte),
       url: attr?.url ?? "",
       url_label: attr?.url_label ?? "",
+      section_anchor: attr?.section_anchor ?? "",
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,

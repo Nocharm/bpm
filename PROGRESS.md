@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-07-18 — Word 맵 Task C1: 프론트 `section` 노드 타입 + `section_anchor` 스레딩 (worktree-word-map-sections)
+- 구현 계획 Task C1 완료(lib 레이어 한정): `canvas.ts` `ProcessNodeType`에 `"section"` 추가(`NODE_TYPE_OPTIONS`엔 미포함 — subprocess와 동일 관례), `api.ts` `GraphNode.section_anchor?`·`AiNodeAttributes.section_anchor?` 추가(AI 경로 노드빌드가 `attr?.section_anchor`를 참조하려면 타입에도 필요 — 플랜엔 GraphNode만 명시됐으나 763행 미러 구현의 컴파일 전제).
+- `csv-import.ts` 5개 열거 지점 갱신(NODE_DEFAULTS·mergeNode pick·허용 컬럼 목록 HEADER_COLUMNS·행변환 rows/노드빌드·AI 경로 노드빌드) — url과 동일 위치에 미러, url_label의 연쇄 소거(URL 없으면 라벨 소거)는 section_anchor엔 없음(순수 passthrough). `MAX_LEN.section_anchor=200`(백엔드 `String(200)` 미러)은 Record 타입 완결성상 추가했으나 길이 검증 루프엔 넣지 않음(플랜이 명시한 5지점 밖).
+- **부수 수정(범위 밖이지만 tsc 그린 전제)**: `ProcessNodeType` 확장으로 `Record<ProcessNodeType,...>` 완전성이 깨진 3개 파일 — `process-node.tsx`(`DEFAULT_COLORS.section="#909098"` stone), `editor-left-sidebar.tsx`(`TYPE_ICONS.section=Square`), `word-export.ts`(`NODE_PRESET.section="flowChartProcess"` 자리표시자, 실제 게이팅은 Task E2). 시각/렌더 완성은 C2~C4·E2 후속.
+- TDD: `csv-import.test.ts`에 `section_anchor column` describe 3건(패스스루·머지 시 빈값 보존·머지 시 값 덮어쓰기) RED(`Unknown column "Section_Anchor"`) → 구현 → GREEN. 전체 vitest 476 pass, tsc --noEmit 0 errors, lint 0 errors(사전 존재 경고 1건은 무관 스크립트 파일).
+- page.tsx의 `url`/`url_label` 스레딩 미러(직렬화·역직렬화·`aiNodeToGraphNode`)는 C3/C4로 이연 — 이번 태스크 스코프 아님.
+
 ## 2026-07-18 — Word 맵 Task A3: 재임포트 엔드포인트 `PUT /maps/{id}/word-doc` (worktree-word-map-sections)
 - 구현 계획 Task A3 완료: 신규 `WordDocIn`(`doc_name`+`sections: list[SectionEntryIn]`) 스키마 + `PUT /api/maps/{map_id}/word-doc`(editor 권한, `MapDetailOut` 응답). `get_map`과 동일한 로드 패턴(`selectinload(ProcessMap.versions).selectinload(MapVersion.events)`)·`create_map`과 동일한 커밋 후 refresh 패턴(`versions` 속성 후 각 version의 `events`)·`my_role`은 `get_effective_role`로 산정.
 - TDD: `test_maps.py::test_reimport_replaces_catalog`(word 맵 생성 → PUT으로 doc_name·sections 교체 → GET detail로 확인) RED(404, 엔드포인트 없음) → 구현 → GREEN. 전체 스위트 640 pass, ruff clean.

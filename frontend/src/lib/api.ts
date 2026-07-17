@@ -94,6 +94,8 @@ export interface GraphNode {
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
+  // Word 맵 섹션 노드(node_type==="section")의 문서 내부 앵커 (design 2026-07-18)
+  section_anchor?: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;
@@ -1593,6 +1595,8 @@ export interface AiNodeAttributes {
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
+  // section_anchor는 단순 passthrough — AI가 비우면 mergeNode(csv-import.ts)의 pick이 기존값을 보존
+  section_anchor?: string | null;
 }
 
 export interface AiNode {
