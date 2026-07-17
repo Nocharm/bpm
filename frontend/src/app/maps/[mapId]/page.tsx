@@ -6194,14 +6194,22 @@ function MapEditor({ mapId }: { mapId: number }) {
   const outline = useMemo(() => {
     // 현재 스코프는 라이브 상태가 권위 — id로 dedup해 fullGraph가 stale일 때 중복 행 방지
     const liveIds = new Set(nodes.map((node) => node.id));
-    const outlineNodes: OutlineNode[] = nodes.map((node) => ({
-      id: node.id,
-      parentId: currentParentId,
-      label: node.data.label,
-      nodeType: node.data.nodeType,
-      // 라이브 노드는 injectSubEnds가 채운 data.locked를 그대로 사용 / live nodes reuse data.locked set by injectSubEnds
-      locked: node.data.locked,
-    }));
+    const outlineNodes: OutlineNode[] = nodes.map((node) => {
+      // nodes state엔 locked가 없다(주입은 displayNodes 렌더 시점 — L5037) → lockedKeys 직접 조회, canExpand와 동일 판정.
+      // nodes state never carries locked (injected at displayNodes render) → look up lockedKeys directly, same as canExpand.
+      const k = linkKey({
+        linked_map_id: node.data.linkedMapId ?? null,
+        follow_latest: node.data.followLatest ?? false,
+        linked_version_id: node.data.linkedVersionId ?? null,
+      });
+      return {
+        id: node.id,
+        parentId: currentParentId,
+        label: node.data.label,
+        nodeType: node.data.nodeType,
+        locked: k != null && lockedKeys.has(k),
+      };
+    });
     const outlineEdges: OutlineEdge[] = edges.map((edge) => ({
       source: edge.source,
       target: edge.target,

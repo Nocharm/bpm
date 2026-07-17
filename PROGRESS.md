@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-18 — 권한 마스킹 표면 정리: 아웃라인 잠금 화살표 억제 + WBS 잠긴 SP 행 살리기 (worktree-inline-expand-drag-fix)
+- 조사(권한 강제 백엔드 + yerin.yoo〈맵1 무권한〉 실측): 캔버스는 봉인 정상, Excel 1안은 SP 행+denied 노트 정상, CSV/Word는 링크맵 데이터 자체가 안 실려 무변경. sp_* 지정 정보는 잠금 사용자에게도 노출(지정 카드=공개 메타데이터, 현행 유지).
+- **아웃라인 버그 픽스**: 현재 스코프의 잠긴 SP 행에 펼침 화살표가 그대로 표시되고 클릭이 무반응이던 문제 — outline memo가 `node.data.locked`를 읽었지만 nodes state엔 locked가 없음(주입은 displayNodes 렌더 시점). `lockedKeys` 직접 조회(canExpand와 동일 판정)로 교체 — 임베드/심층 행은 종전부터 정상. 미지정 SP도 함께 억제(resolved가 locked 반환). 키보드 `→` 펼침도 hasChildren=false로 자동 차단.
+- **WBS(2안) 잠긴 SP 행 살리기**: 종전엔 잠긴/해석실패 SP가 이름조차 없는 익명 "(access denied)" 노트 1줄로 소실 → **번호 달린 잎 행**(Task=SP 제목, 파라미터·설명은 1안 SP 행과 동일 소스: 지정정보 상속+베이스·추가분 합성, next 포함) + 레벨 경로에 SP 제목을 단 denied 노트로 변경. 잎 행이 rowByNodeId에 들어가 규칙4 주석 대상도 유지. TDD(RED→GREEN), 시트 기록은 무변경.
+- 게이트: vitest 475/475·tsc 0·lint 0 err·build OK. pw 실측: 아웃라인 화살표 잠금·미지정 모두 1→0, WBS 미리보기가 잎 행+denied 노트 형태로 출력(맵2, yerin.yoo).
+
 ## 2026-07-18 — 읽기전용 노드 더블클릭 모달 복구 (worktree-inline-expand-drag-fix)
 - 부수 발견 수정: 읽기전용에서 노드 더블클릭이 모달을 안 열던 원인 = `nodesDraggable=false`라 노드에 `nopan` 클래스가 없어 **d3-zoom 더블클릭 줌 필터를 통과 → d3가 `stopImmediatePropagation`으로 이벤트를 소비** → React 합성 `onNodeDoubleClick` 미발화(편집 모드는 nopan이 차단해 정상). 계측으로 확정: DOM dblclick은 노드 도달, 합성만 실종.
 - 수정: `zoomOnDoubleClick={!readOnly}` 1줄 — 읽기전용에서 더블클릭 줌을 꺼 이벤트가 React까지 버블. 편집 모드 동작 무변경.
