@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — 맵 상세 카드·인스펙터에 오우닝 부서 노출 (worktree-create-map-picker-ux)
+- 요청: 맵 상세 화면/인스펙터에 협업 부서처럼 오우닝 부서를 보이게. 진단 = 상세 카드(홈)는 헤더 필로만 노출·`only="members"`(에디터 인스펙터 Map 탭 재사용) 모드에선 헤더가 생략돼 오우닝 부서가 **전혀 안 보임**.
+- 수정: `MapDetailCard` 멤버 컬럼 최상단에 오우닝 부서를 협업 부서 행과 동일 스타일(레벨 아이콘·부서명, 한글명 폴백)로 노출 — `data-id="map-detail-owning-member"`, `Editor · locked/고정` 서브라벨 + editor RoleBadge, accent-tint 강조. `only` 무관 렌더라 상세 카드·인스펙터 양쪽 동시 반영. `detail.owning_department`를 const로 좁혀 클로저 타입 안전.
+- 게이트: lint 0 err·tsc 0. 실앱(map 2 Employee Onboarding·owning=Analytics Part 1) 상세 aside + 인스펙터 Map 탭 EN/KO 4종 캡처 확인.
+
 ## 2026-07-18 — 새 맵 만들기 모달 UX 3종: 오우닝 부서 정렬·선택 후 스크롤 다운·협업자 빈 안내 (worktree-create-map-picker-ux)
 - **오우닝 부서 피커 정렬**: `PrincipalPicker`에 `myDeptsFirst` prop 추가 — browse(빈 검색) 시 내 소속 부서 체인(`me.orgPath` 기준 `isMyDept`)을 맨 위로, 작은 단위(깊은 org_path=세그먼트 많음)부터 정렬. 검색 랭킹엔 불개입. 오우닝 부서 피커에만 적용(승인자용 `managersFirst`와 배타).
 - **선택 후 결재자로 스크롤 다운**: 오우닝 부서를 고르면 피커가 잠금 행으로 바뀌며 닫히고(기존 동작), `approversRef.scrollIntoView({block:"end"})`로 맨 아래 결재자 피커까지 스크롤 — 작은 뷰포트에서 아래 피커를 상단 피커로 착각하던 문제 해소.
