@@ -474,6 +474,39 @@ describe("buildExcelModel", () => {
     });
   });
 
+  it("서브프로세스 행 description은 링크 맵 sp_description(베이스)+줄바꿈+노드 추가분으로 합성된다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeSubNode("sub1", "Sub", 1, 2, { description: "우리 팀 메모" }),
+        makeNode("e1", "End", "end", 2, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("x1", "s1", "sub1"), makeEdge("x2", "sub1", "e1")],
+      groups: [],
+      subprocess_refs: {
+        2: {
+          designated: true, department: null, assignee: null, system: null,
+          duration: null, cost_krw: null, cost_usd: null, headcount: null, url: null, url_label: null,
+          sp_description: "표준 절차 설명",
+        },
+      },
+    };
+    const map2: Graph = { nodes: [makeNode("s2", "Start", "start", 0)], edges: [], groups: [] };
+    const fetchResolved = async (mapId: number): Promise<Graph> => {
+      if (mapId !== 2) throw new Error("not found");
+      return map2;
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-18T00:00:00+09:00",
+      fetchResolved,
+    });
+    const subRow = model.rows.find((r) => r.kind === "node" && r.title === "Sub");
+    expect(subRow).toMatchObject({ description: "표준 절차 설명\n우리 팀 메모" });
+    // 일반 노드는 합성 없음
+    const startRow = model.rows.find((r) => r.kind === "node" && r.title === "Start");
+    expect(startRow).toMatchObject({ description: "" });
+  });
+
   it("서브프로세스가 미지정(subprocess_refs 없음)이면 duration/비용/headcount는 빈 문자열", async () => {
     const map1: Graph = {
       nodes: [

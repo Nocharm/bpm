@@ -1,5 +1,16 @@
 # 다음 세션 핸드오프 — 인라인 펼침 상태 드래그/좌표 버그 (#2 프리즈 + #3 축고정·복제 드리프트)
 
+> ## ✅ RESOLVED 2026-07-17 (worktree-inline-expand-drag-fix)
+>
+> 세 건 모두 해소. **#2의 근본 원인은 아래 가설(no-op 커밋)이 아니었다** — 라이브 계측으로 반증(제자리/소델타 커밋은 무해, 커밋 직후 프로브 정상). 진범:
+>
+> - **#2 = 팬텀 링 카메라 점프.** `screenRectOf`가 `nodesRef`(저장좌표)로 링 rect를 계산 → 펼침 중 footprint-shifted 노드를 드래그해 다른 노드 위에 dwell하면 링이 실제 위치보다 footprint만큼 왼쪽(대개 화면 밖)에 잡히고, `ensureRingVisible`이 그 팬텀을 향해 카메라를 200ms 애니메이션 팬(드롭 후에도 지속) → 캔버스가 통째로 밀려 직전 화면 좌표 기준 클릭/드래그가 전부 빗나감 = "하드 프리즈"로 관측(이전 계측 하네스도 옛 rect 중심을 클릭해 같은 오인). 수정: `reactFlow.getNode`(표시좌표) + 현재 스코프 멤버십 가드(임베드 자식 링 제외 유지). transform 바이트 동일 관측은 노드가 아니라 **뷰포트**가 움직였기 때문.
+> - **sx 언와인드 루프**: 도달 불가 갭(앵커 점프 대역) 표시값에서 감소 사상 진동으로 발산 가능 → `lib/inline-shift.ts` `displayToSavedX`(구간 직해+앵커 클램프, vitest 7)로 대체. `suppressPosIdsRef` 2×rAF 지연 삭제는 실측상 경합 없음(원문 그대로 유지).
+> - **#3a**: 수정 방향대로 — `handleNodeDrag` 라이브 기록 지점에 `constrainToAxis` 적용.
+> - **#3b**: 수정 방향대로 — `applyCtrlDragCopy` 원위치 복귀를 `rootOffsets` 기반 표시→저장 환산(`resetPos`, updater 밖 선계산). 드롭 위치는 finalize의 `displayToSavedX`가 담당.
+>
+> 검증: 라이브 Playwright(시드 맵2 v12 펼침) — 드롭 후 재드래그 ALIVE·Shift y고정·Ctrl복제 원본 저장좌표 무오염+사본 정확 환산·평면 맵 회귀 없음. vitest 469/469·lint·tsc·build 그린. 상세는 PROGRESS.md 2026-07-17 항목.
+
 > 편집 모드 개선(dev 머지 완료) 백로그 중 **#2, #3**은 같은 코드 영역(서브프로세스 인라인 펼침 좌표 변환 머신)의 버그라 다음 세션에서 함께 다룬다. **#1(엣지 핸들)·#4(add-node 선택)는 이 세션에서 처리 완료.** 이 문서는 재조사 비용을 줄이기 위한 근거·위치·수정 방향 기록.
 
 ## 공통 배경 — 인라인 펼침 좌표 머신 (`frontend/src/app/maps/[mapId]/page.tsx`)
