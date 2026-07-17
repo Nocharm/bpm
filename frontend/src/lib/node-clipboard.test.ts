@@ -45,4 +45,22 @@ describe("buildPaste", () => {
     expect(out.edges[0]).toMatchObject({ source: "new0", target: "new1" });
     expect(out.edges[0].id).toBe("new2");
   });
+
+  it("preserves sourceHandle/targetHandle on the remapped edge", () => {
+    const withHandles: NodeClipboard = {
+      ...sample,
+      edges: [{ source: "a", target: "b", sourceHandle: "s-right", targetHandle: "t-left" }],
+    };
+    let n = 0;
+    const out = buildPaste(withHandles, { newId: () => `new${n++}`, existingLabels: [], offset: { x: 0, y: 0 } });
+    expect(out.edges[0].sourceHandle).toBe("s-right");
+    expect(out.edges[0].targetHandle).toBe("t-left");
+  });
+
+  it("leaves sourceHandle/targetHandle undefined when the source edge has none", () => {
+    let n = 0;
+    const out = buildPaste(sample, { newId: () => `new${n++}`, existingLabels: [], offset: { x: 0, y: 0 } });
+    expect(out.edges[0].sourceHandle).toBeUndefined();
+    expect(out.edges[0].targetHandle).toBeUndefined();
+  });
 });

@@ -4,7 +4,8 @@
 //           ②start 노드(비복사 타입) 선택→Ctrl+C: copy.blocked 토스트 노출 + 클립보드 미변경
 //           ③다중선택(2노드+내부 엣지) Ctrl+C→Ctrl+V: 노드 2개 + 엣지 1개 함께 복제(공유 오프셋, 개별 findFreeSpot 없음)
 //           ④크로스탭 — 같은 브라우저 컨텍스트의 다른 탭(같은 origin=localStorage 공유)에서 Ctrl+V → 붙여넣기 성공
-//           ⑤콘솔 에러 0
+//           ⑤＋메뉴로 노드 추가 직후(클릭 없이) Ctrl+C→Ctrl+V — 새 노드가 즉시 selected:true라 재클릭 없이 복사 가능해야 함(FIX4)
+//           ⑥콘솔 에러 0
 //
 // NOTE(FIX1 리뷰 반영): 단일 노드 붙여넣기는 이제 raw {16,16} 오프셋 뒤에 findFreeSpot(handleAddNode와 동일 로직)을
 // 한 번 더 통과한다. NODE_HEIGHT=52(lib/canvas.ts)라 hit 문턱(0.7배)이 y축 36.4px밖에 안 되고, raw {16,16}은 원본과
@@ -268,6 +269,55 @@ try {
     await page2.close();
   } catch (err) {
     check("(d) cross-tab paste ran without throwing", false, err instanceof Error ? err.message : String(err));
+  }
+
+  // ===== (e) FIX4 — ＋메뉴로 노드를 추가한 직후(재클릭 없이) Ctrl+C→Ctrl+V가 그 노드를 복사해야 함 =====
+  // 별도 탭에서 실행 — (a)~(d)가 남긴 클립보드/선택 상태와 격리해, 버그가 있어도 이전 클립보드가 우연히
+  // 붙여넣기 돼 거짓 통과가 나오는 것을 방지한다.
+  try {
+    const page3 = await ctx.newPage();
+    const consoleErrors3 = [];
+    page3.on("console", (m) => {
+      if (m.type() === "error") consoleErrors3.push(m.text());
+    });
+    page3.on("pageerror", (e) => consoleErrors3.push(`pageerror: ${e.message}`));
+    await page3.goto(`${BASE}/maps/${mapId}?version=${versionId}`, { waitUntil: "networkidle" });
+    await page3.waitForSelector(".react-flow__node", { timeout: 20000 });
+    await page3.waitForTimeout(500);
+    await page3.evaluate(() => window.localStorage.removeItem("bpm.nodeClipboard"));
+
+    const beforeCountE = await page3.locator(".react-flow__node").count();
+    await page3.getByRole("button", { name: "Node", exact: true }).click();
+    await page3.getByRole("button", { name: "Process", exact: true }).click();
+    await page3.waitForTimeout(200);
+
+    const afterAddCountE = await page3.locator(".react-flow__node").count();
+    check("(e) + menu adds a new node", afterAddCountE === beforeCountE + 1, `before=${beforeCountE} after=${afterAddCountE}`);
+
+    const selectedAfterAddE = await page3.locator(".react-flow__node.selected").count();
+    check(
+      "(e) FIX4: newly added node is selected immediately (no click needed)",
+      selectedAfterAddE === 1,
+      `selected=${selectedAfterAddE}`,
+    );
+
+    // 클릭 없이 곧바로 복사→붙여넣기
+    await page3.keyboard.press(COPY_KEY);
+    await page3.waitForTimeout(150);
+    await page3.keyboard.press(PASTE_KEY);
+    await page3.waitForTimeout(300);
+
+    const afterPasteCountE = await page3.locator(".react-flow__node").count();
+    check(
+      "(e) FIX4: Ctrl+C→Ctrl+V right after add (no re-click) pastes exactly 1 copy",
+      afterPasteCountE === afterAddCountE + 1,
+      `afterAdd=${afterAddCountE} afterPaste=${afterPasteCountE}`,
+    );
+
+    consoleErrors.push(...consoleErrors3);
+    await page3.close();
+  } catch (err) {
+    check("(e) add-then-copy-paste ran without throwing", false, err instanceof Error ? err.message : String(err));
   }
 } catch (err) {
   results.push({ name: "fatal", ok: false });

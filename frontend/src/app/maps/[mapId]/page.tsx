@@ -3118,11 +3118,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 같은 자리에 겹치지 않도록 빈 자리로 보정
       position = findFreeSpot(position.x, position.y);
       setNodes((current) => [
-        ...current,
+        ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
         {
           id,
           type: "process",
           position,
+          selected: true,
           // 생성 위치를 알 수 있도록 잠깐 페이드 반짝(클래스는 flashNode가 제거)
           className: "bpm-node-flash",
           data: {
@@ -3189,6 +3190,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           source: edge.source,
           target: edge.target,
           label: typeof edge.label === "string" ? edge.label : undefined,
+          sourceHandle: edge.sourceHandle ?? undefined,
+          targetHandle: edge.targetHandle ?? undefined,
         })),
     });
     // 새로 복사하면 다음 붙여넣기는 누적 오프셋 없이 1부터 다시 시작.
@@ -3266,8 +3269,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           id: edge.id,
           source: edge.source,
           target: edge.target,
-          sourceHandle: sourceHandleId("right"),
-          targetHandle: targetHandleId("left"),
+          sourceHandle: edge.sourceHandle ?? sourceHandleId("right"),
+          targetHandle: edge.targetHandle ?? targetHandleId("left"),
           label: edge.label || undefined,
         })),
       ]);
