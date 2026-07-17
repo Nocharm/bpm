@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — 읽기전용 노드 더블클릭 모달 복구 (worktree-inline-expand-drag-fix)
+- 부수 발견 수정: 읽기전용에서 노드 더블클릭이 모달을 안 열던 원인 = `nodesDraggable=false`라 노드에 `nopan` 클래스가 없어 **d3-zoom 더블클릭 줌 필터를 통과 → d3가 `stopImmediatePropagation`으로 이벤트를 소비** → React 합성 `onNodeDoubleClick` 미발화(편집 모드는 nopan이 차단해 정상). 계측으로 확정: DOM dblclick은 노드 도달, 합성만 실종.
+- 수정: `zoomOnDoubleClick={!readOnly}` 1줄 — 읽기전용에서 더블클릭 줌을 꺼 이벤트가 React까지 버블. 편집 모드 동작 무변경.
+- pw: 읽기전용(taeyang.oh) dblclick → 모달+합성 설명 표시·textarea 없음 ✓, 편집(admin.sys) dblclick → 모달+편집 폼 ✓. 게이트: vitest 475/475·lint 0 err·tsc 0·build OK.
+
 ## 2026-07-18 — 읽기전용 모달에 설명 표시 (worktree-inline-expand-drag-fix)
 - 후속②: 읽기전용 모달(축약형)이 타입/그룹만 보여주고 설명을 누락하던 것 → 설명 블록 추가(있을 때만, 인스펙터와 동일 스타일). subprocess는 `mergeSubprocessDescription`(링크맵 베이스+추가분) 합성 표시.
 - pw 검증(taeyang.oh로 읽기전용 재현): 우클릭→정보 수정 경로에서 합성 3줄 표시 ✓, 편집 textarea 없음 ✓. **부수 발견(기존 동작, 미수정)**: 읽기전용에선 노드 더블클릭이 모달을 애초에 안 연다(200ms에도 미오픈) — 읽기전용 모달 진입은 우클릭 정보 수정/E키만. 게이트: vitest 475/475·lint 0 err·tsc 0·build OK.

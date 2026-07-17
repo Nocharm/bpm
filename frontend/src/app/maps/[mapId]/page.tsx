@@ -7402,6 +7402,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       panOnScroll
                       panOnScrollMode={PanOnScrollMode.Free}
                       zoomOnScroll={false}
+                      // 읽기전용은 노드가 draggable이 아니라 nopan 클래스가 없어 d3-zoom 더블클릭 줌이
+                      // 노드 위 이벤트를 소비(stopImmediatePropagation) → onNodeDoubleClick(모달)이 죽는다.
+                      // 읽기전용에서 더블클릭 줌을 꺼서 모달 더블클릭을 편집 모드와 통일.
+                      zoomOnDoubleClick={!readOnly}
                       zoomActivationKeyCode={["Control", "Meta"]}
                       {...(contentExtent
                         ? { nodeExtent: contentExtent.node, translateExtent: contentExtent.pan }
