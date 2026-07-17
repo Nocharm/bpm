@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-18 — Word 맵 Task A2: 맵 `mode`·`doc_name`·`doc_sections` 컬럼 (worktree-word-map-sections)
+- 구현 계획 Task A2 완료: `ProcessMap`에 `mode`(기본 "normal")·`doc_name`·`doc_sections`(JSON 카탈로그) 3컬럼 + 신규 `SectionEntryIn` 스키마. `create_map`이 요청 payload에서 세 필드를 반영, `copy_map`(변수명 `source_map`)이 원본 맵의 mode·문서 카탈로그를 상속. `db.py` `_ADDED_COLUMNS`에 DDL 3종 등록(운영 자동 ALTER).
+- `doc_sections` DDL은 `group_ids` 전례처럼 DEFAULT 없는 JSON — 기존 행이 ALTER 후 NULL이 되는 걸 대비해 `MapOut`에 `_coerce_doc_sections`(None→[]) 검증기 추가(NodeIn._coerce_group_ids와 동일 결정, 플랜 본문엔 없던 방어 추가).
+- TDD: `test_maps.py`에 create(카탈로그 저장)·create(mode 기본값 normal)·copy(mode·카탈로그 상속, `test_copy_inherits_owning_department` 전례 재사용) 3건 RED(`mode` 미인식 KeyError/TypeError) → 구현 → GREEN. 전체 스위트 639 pass, ruff clean.
+- A3(재임포트 엔드포인트)·프론트(B/C 단계)는 후속 태스크. 상세: `.superpowers/sdd/task-A2-report.md`.
+
 ## 2026-07-18 — Word 맵 Task A1: 노드 `section_anchor` 컬럼 (worktree-word-map-sections)
 - 구현 계획(`docs/superpowers/plans/2026-07-18-word-map-section-linking.md`) Task A1 완료: Word 맵 섹션 노드(node_type="section")가 문서 내부 앵커를 저장할 신규 노드 컬럼 `section_anchor`. 열거 지점 전부 갱신: `models.py`(Node)·`schemas.py`(NodeIn)·`routers/graph.py`(update+insert 분기)·`routers/versions.py`(clone_graph)·`db.py`(`_ADDED_COLUMNS`, 운영 자동 ALTER 보강).
 - TDD: `tests/test_graph.py::test_section_anchor_roundtrips` RED(KeyError: section_anchor 미인식) → 구현 → GREEN. 전체 스위트 636 pass, ruff clean.

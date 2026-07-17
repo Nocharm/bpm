@@ -21,6 +21,14 @@ def _assert_single_currency(krw: str, usd: str) -> None:
         raise ValueError("cost_krw and cost_usd are mutually exclusive — fill only one")
 
 
+class SectionEntryIn(BaseModel):
+    # Word 문서 카탈로그 1건 — read-only 파서가 뽑은 북마크 (design 2026-07-18)
+    anchor: str = Field(max_length=200)
+    title: str = Field(default="", max_length=500)
+    number: str = Field(default="", max_length=50)
+    level: int = 0
+
+
 class MapCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
@@ -28,6 +36,10 @@ class MapCreate(BaseModel):
     visibility: Literal["private", "public"] = "private"
     # 오우닝 부서(필수) — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)
+    # Word 맵 모드 & 임포트 카탈로그 — 생성 시 문서 링크를 함께 실을 수 있다 (design 2026-07-18)
+    mode: Literal["normal", "word"] = "normal"
+    doc_name: str = Field(default="", max_length=300)
+    doc_sections: list[SectionEntryIn] = Field(default_factory=list)
 
 
 class MapCopy(BaseModel):
@@ -567,6 +579,10 @@ class MapOut(BaseModel):
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
     owning_department: str | None = None
+    # Word 맵 모드 & 임포트 카탈로그 — mode="word"인 맵만 doc_name·doc_sections 사용 (design 2026-07-18)
+    mode: str = "normal"
+    doc_name: str = ""
+    doc_sections: list[SectionEntryIn] = Field(default_factory=list)
 
     @field_validator("sp_duration", mode="after")
     @classmethod
@@ -575,6 +591,13 @@ class MapOut(BaseModel):
         if value is None or value == "":
             return value
         return normalize_duration(value)
+
+    @field_validator("doc_sections", mode="before")
+    @classmethod
+    def _coerce_doc_sections(cls, value: object) -> object:
+        # doc_sections DDL엔 DEFAULT가 없어(JSON) 기존 행은 ALTER 후 NULL — from_attributes 로드 시
+        # None → [] 보정(NodeIn._coerce_group_ids와 동일 결정, design 2026-07-18)
+        return [] if value is None else value
 
 
 class MapDetailOut(MapOut):

@@ -113,6 +113,10 @@ class ProcessMap(Base):
     sp_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Word 맵 모드 & 임포트 카탈로그 (design 2026-07-18)
+    mode: Mapped[str] = mapped_column(String(20), default="normal")
+    doc_name: Mapped[str] = mapped_column(String(300), default="")
+    doc_sections: Mapped[list] = mapped_column(JSON, default=list)
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"

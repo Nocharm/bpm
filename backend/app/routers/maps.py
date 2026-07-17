@@ -259,6 +259,9 @@ async def create_map(
         owner_id=user,
         visibility=payload.visibility,  # 생성자가 고른 초기 공개 범위(기본 private)
         owning_department=payload.owning_department,
+        mode=payload.mode,
+        doc_name=payload.doc_name,
+        doc_sections=[s.model_dump() for s in payload.doc_sections],
     )
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
@@ -341,6 +344,10 @@ async def copy_map(
         owner_id=user,
         visibility="private",
         owning_department=source_map.owning_department,
+        # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 복사본도 같은 문서 하이퍼링크를 쓴다 (design 2026-07-18)
+        mode=source_map.mode,
+        doc_name=source_map.doc_name,
+        doc_sections=list(source_map.doc_sections),
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
