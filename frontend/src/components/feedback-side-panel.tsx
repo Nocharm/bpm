@@ -3,11 +3,18 @@
 // 피드백 사이드 패널 — 우측 슬라이드인. 유형·본문 + 현재 화면 자동첨부, 제출 후 토스트.
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, List, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { submitFeedback, type FeedbackKind } from "@/lib/api";
+import { listFeedback, submitFeedback, type FeedbackItem, type FeedbackKind } from "@/lib/api";
+import { getCurrentUser } from "@/lib/current-user";
+import {
+  FEEDBACK_KIND_LABEL,
+  FEEDBACK_KIND_STYLE,
+  FEEDBACK_STATUS_LABEL,
+  FEEDBACK_STATUS_STYLE,
+} from "@/lib/feedback-meta";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -38,13 +45,44 @@ export function FeedbackSidePanel({
 }) {
   const { t } = useI18n();
   const pathname = usePathname() ?? "/";
+  const router = useRouter();
   const [kind, setKind] = useState<FeedbackKind>("bug");
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [recent, setRecent] = useState<FeedbackItem[]>([]);
 
   const dismissToast = (id: string) =>
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
+
+  // 패널을 열 때마다 내 최근 피드백을 새로 불러온다 — 방금 제출한 항목도 반영되도록
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const loginId = getCurrentUser()?.loginId;
+    let active = true;
+    void listFeedback()
+      .then((list) => {
+        if (!active) {
+          return;
+        }
+        const mine = list.items
+          .filter((f) => f.author === loginId)
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .slice(0, 5);
+        setRecent(mine);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  const openFeedback = (id: number) => {
+    router.push(`/feedback?feedback=${id}`);
+    onClose();
+  };
 
   const handleSubmit = async () => {
     const text = body.trim();
@@ -147,6 +185,42 @@ export function FeedbackSidePanel({
             />
           </div>
 
+          {/* 내 최근 피드백 — 클릭 시 상세 모달로 이동 + 패널 닫기 */}
+          {recent.length > 0 && (
+            <div className="flex flex-col gap-1.5 border-t border-hairline pt-3">
+              <span className="text-caption-strong text-ink-secondary">
+                {t("feedback.yourRecent")}
+              </span>
+              <ul className="flex flex-col gap-1.5">
+                {recent.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      onClick={() => openFeedback(f.id)}
+                      aria-label={`${t("feedback.viewOnPage")}: ${f.body}`}
+                      className="flex w-full items-center gap-2 rounded-sm border border-hairline bg-surface px-2 py-1.5 text-left hover:bg-surface-alt"
+                    >
+                      <span
+                        className={
+                          "shrink-0 rounded-sm px-1.5 py-0.5 text-fine " + FEEDBACK_KIND_STYLE[f.kind]
+                        }
+                      >
+                        {t(FEEDBACK_KIND_LABEL[f.kind])}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-fine text-ink">{f.body}</span>
+                      <span
+                        className={
+                          "shrink-0 rounded-sm px-1.5 py-0.5 text-fine " + FEEDBACK_STATUS_STYLE[f.status]
+                        }
+                      >
+                        {t(FEEDBACK_STATUS_LABEL[f.status])}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <footer className="flex flex-col gap-2 border-t border-hairline px-4 py-3">
