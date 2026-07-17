@@ -8,7 +8,13 @@ const MAX_NODES = 200; // 과대 payload 방지
 
 export interface Point { x: number; y: number; }
 export interface ClipboardNode { id: string; position: Point; data: NodeData; }
-export interface ClipboardEdge { source: string; target: string; label?: string; }
+export interface ClipboardEdge {
+  source: string;
+  target: string;
+  label?: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+}
 export interface NodeClipboard {
   sourceMapId: number | null;
   nodes: ClipboardNode[];
@@ -56,6 +62,13 @@ export function buildPaste(
   });
   const edges = clip.edges
     .filter((e) => idMap.has(e.source) && idMap.has(e.target))
-    .map((e) => ({ id: opts.newId(), source: idMap.get(e.source)!, target: idMap.get(e.target)!, label: e.label }));
+    .map((e) => ({
+      id: opts.newId(),
+      source: idMap.get(e.source)!,
+      target: idMap.get(e.target)!,
+      label: e.label,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    }));
   return { nodes, edges };
 }
