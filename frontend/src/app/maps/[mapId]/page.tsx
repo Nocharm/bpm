@@ -6557,8 +6557,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           fire(() => void handleExportPng());
         } else if (event.code === "KeyC" && !event.shiftKey) {
           // 선택 노드가 하나도 없으면 preventDefault·토스트 없이 브라우저 기본 텍스트 복사로 흘려보낸다.
-          const hasSelectedNode =
-            nodesRef.current.filter((node) => node.selected).length > 0 || selectedId !== null;
+          // passthrough to native copy when no node is selected — matches handleCopy's .selected filter
+          const hasSelectedNode = nodesRef.current.filter((node) => node.selected).length > 0;
           if (!hasSelectedNode) {
             return;
           }

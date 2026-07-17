@@ -651,3 +651,29 @@ def test_graph_blocks_newly_introduced_duplicate_subprocess_link(client: TestCli
     response = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert response.status_code == 422
     assert "already linked" in response.json()["detail"].lower()
+
+
+def test_graph_blocks_duplicate_increase_on_already_grandfathered_target(client: TestClient) -> None:
+    # 대조: grandfather된 대상(기존 2개 저장)에 새 중복을 하나 더 얹으면(2 -> 3) 여전히 거부된다.
+    # count <= 1 임계값이면 이미 깨진 대상은 한 번 grandfather된 뒤 영원히 통과해버리는 구멍이 있었다.
+    version_id = _create_version(client)
+    sub1, sub2 = f"sub1-{version_id}", f"sub2-{version_id}"
+    _seed_nodes(
+        Node(id=sub1, version_id=version_id, title="결재1", node_type="subprocess", linked_map_id=999, sort_order=1),
+        Node(id=sub2, version_id=version_id, title="결재2", node_type="subprocess", linked_map_id=999, sort_order=2),
+    )
+    sub3 = f"sub3-{version_id}"
+
+    graph = {
+        "nodes": [
+            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": sub1, "title": "결재1", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 1},
+            {"id": sub2, "title": "결재2", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 2},
+            {"id": sub3, "title": "결재3", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 3},
+            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 4},
+        ],
+        "edges": [],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 422
+    assert "already linked" in response.json()["detail"].lower()

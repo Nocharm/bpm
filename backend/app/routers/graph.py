@@ -201,10 +201,12 @@ async def replace_graph(
         for n in payload.nodes
         if n.node_type == "subprocess" and n.linked_map_id is not None
     )
+    # count > stored_counts[mid] (not just <= 1) so a target already grandfathered
+    # at 2+ still gets flagged when a NEW dupe pushes it higher (e.g. 2 -> 3).
     dupes = sorted(
         mid
         for mid, count in incoming_counts.items()
-        if count > 1 and stored_counts[mid] <= 1
+        if count > 1 and count > stored_counts[mid]
     )
     if dupes:
         raise HTTPException(
