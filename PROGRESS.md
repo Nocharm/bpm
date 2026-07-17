@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-18 — Word 맵 섹션 링크(문서 내부 하이퍼링크) 설계 (worktree-word-map-sections)
+- dev `5163615`(main-tabs UX 머지 포함) 기준 신규 브랜치·워크트리. 브레인스토밍으로 축별 확정 → 설계 `docs/superpowers/specs/2026-07-18-word-map-section-linking-design.md`.
+- 핵심: Word 맵 전용 모드에서 순서도 도형이 **문서 내부 앵커(`w:anchor`)**로 링크 — 산출물 복사 → 원본 SOP 붙여넣기 시 섹션 점프 즉시 활성. **섹션 = 서브프로세스 대체**(피커 창·3접근포인트·드롭 미러, `data.nodeType:"section"`). 노드 3필드(신규 `section_anchor` + `label`=번호 + 기존 `url`/`url_label`). read-only `.docx` 파서(`word-import.ts`, 기존 북마크만 선별·문서 0수정). 내보내기 두 링크 확정(앵커 라벨 첫 공백토큰만 + url 라벨 전체).
+- **뒤로 미룸**: 맵 탭 Word 표현(다음 세션 보류, 사용자 지정) · 1.5×3cm 정확 수치/엣지 라우팅/배치 · 북마크 주입 폴백(옵트인). **착수 전 실물 문서 확인**(하위 섹션 북마크 유무·번호 1.2.2 추출 가능).
+- 다음: 사용자 스펙 리뷰 → writing-plans.
+
 ## 2026-07-17 — Ctrl+드래그 복제 엣지 핸들측 보존 (worktree-ctrldrag-handles)
 - 백로그 잔여 해소: `applyCtrlDragCopy`(Ctrl+드래그 노드 복제)가 내부 엣지를 복제할 때 `sourceHandle`/`targetHandle`을 매번 `right`/`left`로 하드코딩 → 디시전 분기 엣지가 한쪽으로 뭉치던 문제(Ctrl+C/V paste는 앞선 백로그에서 해소됨, Ctrl+드래그판만 잔존). `edge.sourceHandle ?? sourceHandleId("right")`/`edge.targetHandle ?? targetHandleId("left")`로 원본 핸들 보존·없을 때만 폴백(handlePaste와 동일 관례). 2줄.
 - 게이트: lint 0·tsc 0·vitest 462/462. 프론트 단독(백엔드 무변경). 리뷰된 동일 패턴 재사용이라 라이브 pw 생략.
