@@ -19,6 +19,7 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
+import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
@@ -276,6 +277,19 @@ export default function MapListPage() {
     () => maps.filter((m) => m.my_role !== null),
     [maps],
   );
+
+  // 맵 선택 시 좌측 아코디언 자동펼침 — 선택 맵의 owning_department 조상 경로를 orgOpen에 합집합 /
+  // auto-expand the left org accordion to reveal the selected map's owning department.
+  useEffect(() => {
+    if (selectedId == null) return;
+    const m = visibleMaps.find((x) => x.id === selectedId);
+    const dept = m?.owning_department;
+    if (!dept) return;
+    const parts = dept.split("/");
+    const paths = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to selectedId (user action), not deriving render state
+    setOrgOpen((prev) => new Set([...prev, ...paths]));
+  }, [selectedId, visibleMaps]);
 
   // 가시성 탭 AND 상태 필 — 각 그룹 내 OR, 그룹 간 AND, 둘 다 비면 전체 (H1) /
   // visibility tab AND status pills — OR within group, AND across; empty = all.
@@ -652,9 +666,7 @@ export default function MapListPage() {
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                 />
               ) : (
-                <div className="flex flex-1 items-center justify-center p-6 text-caption text-ink-tertiary">
-                  {t("home.detailEmpty")}
-                </div>
+                <HomeDashboard maps={visibleMaps} onSelect={setSelectedId} />
               )}
             </aside>
           </>
