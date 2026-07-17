@@ -48,6 +48,7 @@ import {
   type ParamField,
   type SpParamField,
 } from "@/lib/params";
+import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -409,11 +410,28 @@ export function NodeSummaryModal({
           className="scrollbar-hidden flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary"
         >
           {readOnly ? (
-            <div className="flex gap-4">
-              <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
-              {groupLabel && (
-                <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-4">
+                <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
+                {groupLabel && (
+                  <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
+                )}
+              </div>
+              {/* 설명 — 읽기전용에서도 표시(있을 때만). subprocess는 링크맵 베이스+추가분 합성(인스펙터와 동일). */}
+              {(() => {
+                const mergedDesc =
+                  nodeType === "subprocess"
+                    ? mergeSubprocessDescription(inheritedDescription, description)
+                    : description.trim();
+                return mergedDesc !== "" ? (
+                  <div
+                    data-id="summary-desc-readonly"
+                    className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary"
+                  >
+                    {mergedDesc}
+                  </div>
+                ) : null;
+              })()}
             </div>
           ) : (
             <div className="flex flex-col gap-3">

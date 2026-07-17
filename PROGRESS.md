@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-18 — 읽기전용 모달에 설명 표시 (worktree-inline-expand-drag-fix)
+- 후속②: 읽기전용 모달(축약형)이 타입/그룹만 보여주고 설명을 누락하던 것 → 설명 블록 추가(있을 때만, 인스펙터와 동일 스타일). subprocess는 `mergeSubprocessDescription`(링크맵 베이스+추가분) 합성 표시.
+- pw 검증(taeyang.oh로 읽기전용 재현): 우클릭→정보 수정 경로에서 합성 3줄 표시 ✓, 편집 textarea 없음 ✓. **부수 발견(기존 동작, 미수정)**: 읽기전용에선 노드 더블클릭이 모달을 애초에 안 연다(200ms에도 미오픈) — 읽기전용 모달 진입은 우클릭 정보 수정/E키만. 게이트: vitest 475/475·lint 0 err·tsc 0·build OK.
+
 ## 2026-07-18 — UX 통일 후속 2건: Excel 설명 합성 + 아웃라인 자식 이름편집 차단·토스트 (worktree-inline-expand-drag-fix)
 - **Excel(1안)만 설명 합성 반영**: `buildExcelModel` 행 생성에서 subprocess면 `mergeSubprocessDescription(subprocess_refs[sp_description], node.description)` — 그래프에 이미 있는 `subprocess_refs` 재사용, TDD 1건(RED→GREEN). WBS(2안)는 SP가 행을 안 차지해 무변경, Word/CSV는 사용자 지시로 제외(CSV는 왕복 계약상 추가분만이 맞음).
 - **아웃라인 자식 행 이름편집 차단+토스트**: 행 더블클릭·Enter(편집 단축키) 모두 `item.hierarchy`(하위 스코프 행) 게이트 — 편집 input 대신 토스트("링크맵의 읽기전용 노드입니다 — 해당 맵에서 편집하세요", en 병기). 종전엔 편집 UI가 뜨고 저장이 조용히 증발했음. 루트 행 편집은 회귀 없음(pw 확인).
