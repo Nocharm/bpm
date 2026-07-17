@@ -1,11 +1,11 @@
 // 홈 대시보드 최상단 — 최근 열람 맵. top 변경 시 위에서 내려오며 밀리는 스태거 진입.
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import type { MapSummary } from "@/lib/api";
 import { getRecentMaps } from "@/lib/recent-maps";
-import { readTopChanged } from "@/lib/recent-order";
+import { commitTop, peekTopChanged } from "@/lib/recent-order";
 import { useI18n } from "@/lib/i18n";
 import { DashboardMapRow } from "@/components/maps/dashboard-map-row";
 
@@ -21,8 +21,10 @@ export function RecentOpenedList({ maps, onSelect }: RecentOpenedListProps) {
     const byId = new Map(maps.map((m) => [m.id, m]));
     return ids.map((id) => byId.get(id)).filter((m): m is MapSummary => Boolean(m));
   }, [maps]);
-  // top 변화 시 1회 애니메이션(파생 — render 중 sessionStorage 비교, effect 아님)
-  const animate = useMemo(() => readTopChanged(recent[0]?.id ?? null), [recent]);
+  // top 변화 시 1회 애니메이션 — 읽기는 render 중(순수), 기록은 effect에서(StrictMode 안전)
+  const topId = recent[0]?.id ?? null;
+  const animate = useMemo(() => peekTopChanged(topId), [topId]);
+  useEffect(() => { commitTop(topId); }, [topId]);
   if (recent.length === 0) return null;
   return (
     <section data-id="home-recent" className="flex flex-col gap-2">
