@@ -106,6 +106,8 @@ class ProcessMap(Base):
     sp_headcount: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 지정 설명 — 자유 텍스트, 자간 제한 없음(Text) (design 2026-07-17)
+    sp_description: Mapped[str | None] = mapped_column(Text, default=None)
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
     sp_changed_by: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_changed_at: Mapped[datetime | None] = mapped_column(

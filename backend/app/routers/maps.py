@@ -574,6 +574,7 @@ async def designate_subprocess(
     found_map.sp_headcount = payload.headcount
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
+    found_map.sp_description = payload.description or None
     found_map.sp_changed_by = user
     found_map.sp_changed_at = now_kst()
     await session.commit()

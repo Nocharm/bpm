@@ -109,6 +109,18 @@ def test_designate_happy_path(client: TestClient, enforce) -> None:
     assert data["sp_changed_at"] is not None
 
 
+def test_designate_roundtrips_description(client: TestClient, enforce) -> None:
+    map_id = seed_map("desig-description", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "description": "설명 텍스트"},
+    )
+    assert res.status_code == 200
+    assert res.json()["sp_description"] == "설명 텍스트"
+    assert client.get(f"/api/maps/{map_id}").json()["sp_description"] == "설명 텍스트"
+
+
 def test_designate_requires_published_version(client: TestClient, enforce) -> None:
     map_id = seed_map("desig-draft-only", published=False)
     act_as(OWNER)
