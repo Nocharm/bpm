@@ -5,6 +5,7 @@
 - **FIX4**: `handleAddNode`가 새 노드를 `selected:true` 없이 추가(별도 `setSelectedId`만 호출) — `handleCopy`는 RF `node.selected` 필터라 방금 추가한 노드는 재클릭 전까지 Ctrl+C가 안 먹힘. `handlePaste`와 동일 패턴(기존 선택 해제+새 노드 `selected:true`)으로 통일.
 - TDD: `node-clipboard.test.ts`에 `buildPaste` 핸들 보존/미지정 폴백 테스트 2건(RED 확인 후 GREEN). 게이트: lint 0·tsc 0·vitest 462 전부 그린.
 - 실기동: 좀비 백엔드(삭제된 `editor-improvements` 워크트리의 고아 uvicorn, 8000 500) kill 후 이 워크트리 자체 백엔드로 재기동. `pw-verify-node-copy.mjs`에 시나리오 (e) 추가(＋메뉴로 노드 추가 직후 재클릭 없이 Ctrl+C→Ctrl+V → 정확히 1개 복제) — 전체 17/17 PASS, 콘솔 에러 0.
+- **②·③ 보류(다음 세션)**: ②노드 프리즈는 라이브 계측 결과 "서브프로세스 인라인 펼침 상태 + footprint-shifted 노드" 한정 기존 버그(`2a78b6b`, `finalizeRootDrag` no-op 커밋), ③도 같은 펼침 좌표 머신 → 근본 원인·재현·수정 방향을 `docs/superpowers/specs/2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md`에 기록(커밋 `c36c400`). 후속 잔여: Ctrl드래그 사본 엣지 핸들 하드코딩(FIX1의 Ctrl드래그판, 스코프 밖).
 
 ## 2026-07-17 — 편집 모드 개선 5종 구현 완료 (worktree-editor-improvements)
 - 계획 `docs/superpowers/plans/2026-07-17-editor-improvements.md`의 13 TDD 태스크 전부 구현 + 서브에이전트 리뷰 통과. 브랜치 커밋 `c064f89`…`467b82d`(18 코드 커밋). dev 기준, **미머지·미푸시**.
