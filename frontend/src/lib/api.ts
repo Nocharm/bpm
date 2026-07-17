@@ -329,6 +329,31 @@ export function deleteSubprocessDesignation(mapId: number): Promise<MapSummary> 
   });
 }
 
+// SP 역참조 — 지정 메타(버전·시점·행위자) + 이 맵을 링크한 부모 맵 목록 (design 2026-07-18)
+export interface SubprocessUsedBy {
+  map_id: number;
+  name: string;
+  owning_department: string | null;
+  node_count: number;
+}
+
+export interface SubprocessUsage {
+  designated: boolean;
+  designated_at: string | null;
+  changed_by: string | null;
+  changed_at: string | null;
+  // 지정은 최신 게시본 라이브 참조 — 버전을 박제하지 않으므로 응답 시점에 해석된 값
+  designated_version_id: number | null;
+  designated_version_number: number | null;
+  designated_version_label: string | null;
+  used_by: SubprocessUsedBy[];
+  hidden_count: number; // 존재하지만 열람 권한이 없어 이름을 숨긴 부모 맵 수
+}
+
+export function getSubprocessUsage(mapId: number): Promise<SubprocessUsage> {
+  return request<SubprocessUsage>(`/maps/${mapId}/subprocess-usage`);
+}
+
 export interface LibraryProcess {
   map_id: number;
   name: string;

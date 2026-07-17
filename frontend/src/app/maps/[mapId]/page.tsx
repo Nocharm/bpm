@@ -32,6 +32,7 @@ import { recordRecentMap } from "@/lib/recent-maps";
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
+import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
@@ -151,6 +152,7 @@ import {
   getMapEditors,
   getMe,
   getResolvedGraph,
+  getSubprocessUsage,
   getWorkflowState,
   listComments,
   listLibraryProcesses,
@@ -179,6 +181,7 @@ import {
   type GraphNode,
   type LibraryProcess,
   type SubprocessRef,
+  type SubprocessUsage,
   type VersionGraph,
   type VersionSummary,
   type WorkflowState,
@@ -834,6 +837,22 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
+  // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
+  const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
+  const [spUsageReload, setSpUsageReload] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void getSubprocessUsage(mapId)
+      .then((usage) => {
+        if (active) setSpUsage(usage);
+      })
+      .catch(() => {
+        // 조회 실패 시 탭만 미노출(에디터 다른 기능에 영향 없음)
+      });
+    return () => {
+      active = false;
+    };
+  }, [mapId, spUsageReload]);
   // 서버 산정 역할 — 뷰어(my_role) 판정 단일 소스 / server-computed role for viewer gating
   const [myRole, setMyRole] = useState<"viewer" | "editor" | "owner" | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
@@ -8438,7 +8457,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                     canManage={spCanManage}
                     disabledReason={spDisabledReason}
                     onToast={showToast}
+                    onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                   />
+                }
+                subprocessTabSlot={
+                  // 지정된 맵에서만 탭 노출 — 지정 메타(버전·시점·행위자) + 역참조 목록
+                  spUsage?.designated ? <SubprocessUsageTab usage={spUsage} /> : undefined
                 }
                 mapTabSlot={
                   // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
@@ -8520,6 +8544,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
                       onToast={showToast}
+                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                     />
                     <div className="flex gap-1.5">
                       <button
@@ -8708,6 +8733,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
                       onToast={showToast}
+                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                     />
                     <MapDetailCard
                       mapId={mapId}

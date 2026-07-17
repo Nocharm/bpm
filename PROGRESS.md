@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — 인스펙터 Subprocess 탭: 지정 메타 + 역참조(used-by) 목록 (worktree-sp-usage-tab)
+- **백엔드**: `GET /api/maps/{map_id}/subprocess-usage` 신설(viewer+, DDL 없음) — 지정 메타(designated/시점/행위자 `sp_changed_by`) + 지정이 가리키는 버전(최신 게시본 라이브 해석: id·number·label) + 이 맵을 링크한 부모 맵 목록. 사용처 판정은 부모의 **라이브 버전**(게시본 max id, 없으면 최신 — list_maps 노드 수 규칙과 동일) 기준 노드 수. 소프트삭제 부모 제외, 열람 불가 부모는 이름 미노출 `hidden_count` 집계(effective_role). 테스트 6종(test_subprocess_usage.py).
+- **프론트**: 인스펙터에 **Subprocess 탭** 추가 — 지정된 맵에서만 노출(importSlot과 같은 조건부 탭 패턴, Map 탭 뒤). 상단 지정 정보 박스(버전 v{n}·라벨, 지정 시점 KST, 지정자 UserPill, 최신게시본 추종 안내 노트) + "이 맵을 연결한 맵" 목록(행=맵 이동 Link, 오우닝 부서 캡션, 링크 노드 수 ×n 칩, 빈/숨김 상태 문구). 지정/해제 시 `onDesignationChange` 콜백으로 usage 재조회(탭 노출 동기화). 지정 해제로 슬롯이 사라지면 열려있던 탭은 Map 탭으로 렌더 파생 폴백(effect 불요).
+- 게이트: pytest 641(+6)·ruff·vitest 488·tsc 0·lint 0·build OK. pw 실측(ko/en): 맵3에서 탭 노출·지정 메타·연결 맵 3건(×2 칩·부서 캡션) 렌더 확인.
+
 ## 2026-07-18 — 권한 마스킹 표면 정리: 아웃라인 잠금 화살표 억제 + WBS 잠긴 SP 행 살리기 (worktree-inline-expand-drag-fix)
 - 조사(권한 강제 백엔드 + yerin.yoo〈맵1 무권한〉 실측): 캔버스는 봉인 정상, Excel 1안은 SP 행+denied 노트 정상, CSV/Word는 링크맵 데이터 자체가 안 실려 무변경. sp_* 지정 정보는 잠금 사용자에게도 노출(지정 카드=공개 메타데이터, 현행 유지).
 - **아웃라인 버그 픽스**: 현재 스코프의 잠긴 SP 행에 펼침 화살표가 그대로 표시되고 클릭이 무반응이던 문제 — outline memo가 `node.data.locked`를 읽었지만 nodes state엔 locked가 없음(주입은 displayNodes 렌더 시점). `lockedKeys` 직접 조회(canExpand와 동일 판정)로 교체 — 임베드/심층 행은 종전부터 정상. 미지정 SP도 함께 억제(resolved가 locked 반환). 키보드 `→` 펼침도 hasChildren=false로 자동 차단.
