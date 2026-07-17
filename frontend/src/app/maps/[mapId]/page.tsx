@@ -3378,8 +3378,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         id: genId(),
         source: plans.get(edge.source)!.copyId,
         target: plans.get(edge.target)!.copyId,
-        sourceHandle: sourceHandleId("right"),
-        targetHandle: targetHandleId("left"),
+        // 원본 엣지가 붙어 있던 변(핸들)을 보존 — 없을 때만 기본값(우→좌). Ctrl+C/V(handlePaste)와 동일 관례.
+        sourceHandle: edge.sourceHandle ?? sourceHandleId("right"),
+        targetHandle: edge.targetHandle ?? targetHandleId("left"),
         label: typeof edge.label === "string" ? edge.label : undefined,
       }));
     if (newEdges.length > 0) {
