@@ -56,6 +56,8 @@ const en = {
   "home.owningMissingOption": "Missing owning dept",
   "home.owningMissingBadge": "Dept unassigned",
   "home.owningMissingNote": "Owning department not assigned — assign it in map settings.",
+  "home.spBadge": "SP",
+  "home.spBadgeTip": "Designated as a subprocess",
   "home.memberCount": "{count} members",
   "home.groupActive": "Active",
   "home.groupPending": "Pending",
@@ -1466,6 +1468,8 @@ const ko: Record<MessageKey, string> = {
   // 카드 태그 — 역할/상태처럼 언어 무관 영어 고정 (2026-07-11 요청)
   "home.owningMissingBadge": "Dept unassigned",
   "home.owningMissingNote": "오우닝 부서가 지정되지 않은 맵입니다 — 맵 설정에서 지정하세요.",
+  "home.spBadge": "SP",
+  "home.spBadgeTip": "서브프로세스로 지정됨",
   "home.memberCount": "{count}명",
   "home.groupActive": "Active",
   "home.groupPending": "Pending",
