@@ -70,8 +70,13 @@ const idByText = async (text) => {
 };
 
 // 이전 시나리오의 선택 잔존이 새 Ctrl+드래그에 섞이지 않도록 빈 캔버스를 클릭해 선택 해제.
+// 좌표는 .react-flow__pane의 실제 bounding box에서 파생 — 하드코딩 좌표는 이 레이아웃에서 UI 텍스트를
+// 때려 선택 해제에 실패한다(칩·툴바 회피). 노드가 없는 우상단 안쪽 지점(칩은 좌상단)을 클릭.
 async function clearSelection() {
-  await page.mouse.click(1200, 150);
+  const pane = await page.locator(".react-flow__pane").boundingBox();
+  const x = pane.x + pane.width - 60; // 우측 안쪽 — 시드 노드(x≤560+180)와 겹치지 않음
+  const y = pane.y + 60; // 상단 안쪽 — 시드 노드(y≥380)보다 위
+  await page.mouse.click(x, y);
   await page.waitForTimeout(150);
 }
 
@@ -269,6 +274,69 @@ try {
     check("(c) exclusion toast shown for the mixed selection", blockedToastC);
   } catch (err) {
     check("(c) mixed ctrl-drag ran without throwing", false, err instanceof Error ? err.message : String(err));
+  }
+
+  // ===== ④ [리뷰 지적] 잔여 선택이 새 Ctrl+드래그에 딸려 복제되면 안 됨 =====
+  // NO-Ctrl 러버밴드로 두 노드를 미리 선택 → 선택되지 않은 세 번째 노드를 Ctrl+드래그.
+  // RF의 multiSelectionKeyCode(=Ctrl/⌘)가 트리거 키와 겹쳐 잔여 선택이 딸려 오는 버그의 회귀 가드.
+  // 기대: 딱 1개(세 번째 노드만) 복제, 잔여 2개는 복제 안 됨. 독립 try/catch로 최종 집계와 격리.
+  try {
+    // 결정적 레이아웃으로 그래프 재구성 — 잘 벌린 복사 가능 노드 3개(+Start). 이전 시나리오의 사본/이동 잔재 제거.
+    const p1 = rid();
+    const p2 = rid();
+    const p3 = rid();
+    await api(`/versions/${versionId}/graph`, {
+      method: "PUT",
+      body: {
+        nodes: [
+          { id: rid(), title: "Start", node_type: "start", pos_x: 250, pos_y: 380, sort_order: 0 },
+          { id: p1, title: "P One", node_type: "process", pos_x: 560, pos_y: 380, sort_order: 1 },
+          { id: p2, title: "P Two", node_type: "process", pos_x: 560, pos_y: 600, sort_order: 2 },
+          { id: p3, title: "P Three", node_type: "process", pos_x: 980, pos_y: 380, sort_order: 3 },
+        ],
+        edges: [],
+        groups: [],
+      },
+    });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector(".react-flow__node", { timeout: 20000 });
+    await page.waitForTimeout(500);
+
+    // 플레인(NO Ctrl) 러버밴드로 P One·P Two만 선택 — 둘을 완전히 감싸고 P Three(우측)·Start(좌측)는 제외하는
+    // 빈 pane 박스 드래그(selectionOnDrag + selectionMode Full). 시작점은 박스 좌상단(노드 위가 아닌 빈 영역).
+    const b1 = await page.locator(`.react-flow__node[data-id="${p1}"]`).boundingBox();
+    const b2 = await page.locator(`.react-flow__node[data-id="${p2}"]`).boundingBox();
+    const boxLeft = Math.min(b1.x, b2.x) - 24;
+    const boxTop = Math.min(b1.y, b2.y) - 24;
+    const boxRight = Math.max(b1.x + b1.width, b2.x + b2.width) + 24;
+    const boxBottom = Math.max(b1.y + b1.height, b2.y + b2.height) + 24;
+    await page.mouse.move(boxLeft, boxTop);
+    await page.mouse.down();
+    await page.mouse.move((boxLeft + boxRight) / 2, (boxTop + boxBottom) / 2, { steps: 6 });
+    await page.mouse.move(boxRight, boxBottom, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const selCountD = await page.locator(".react-flow__node.selected").count();
+    check("(d) plain rubber-band pre-selects exactly 2 nodes (P One + P Two)", selCountD === 2, `selected=${selCountD}`);
+
+    const beforeCountD = await page.locator(".react-flow__node").count();
+    // 선택되지 않은 P Three를 Ctrl+드래그 — 잔여 선택(P One/P Two)이 딸려 복제되면 회귀.
+    const midD = await ctrlDragBy(p3, 180, 150);
+    check("(d) ghost shown for the fresh grab (only P Three)", midD.ghostVisible);
+
+    const afterCountD = await page.locator(".react-flow__node").count();
+    check(
+      "(d) fresh Ctrl-drag on an unselected node adds exactly 1 node (not 3)",
+      afterCountD === beforeCountD + 1,
+      `before=${beforeCountD} after=${afterCountD}`,
+    );
+    const p3dup = await page.locator(".react-flow__node", { hasText: "P Three (2)" }).count();
+    check('(d) only the grabbed node duplicated ("P Three (2)")', p3dup === 1, `count=${p3dup}`);
+    const p1dup = await page.locator(".react-flow__node", { hasText: "P One (2)" }).count();
+    const p2dup = await page.locator(".react-flow__node", { hasText: "P Two (2)" }).count();
+    check("(d) stale-selected nodes are NOT duplicated", p1dup === 0 && p2dup === 0, `pOne(2)=${p1dup} pTwo(2)=${p2dup}`);
+  } catch (err) {
+    check("(d) stale-selection ctrl-drag ran without throwing", false, err instanceof Error ? err.message : String(err));
   }
 } catch (err) {
   results.push({ name: "fatal", ok: false });

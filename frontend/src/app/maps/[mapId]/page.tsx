@@ -935,6 +935,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [ctrlDragGhosts, setCtrlDragGhosts] = useState<
     { id: string; position: { x: number; y: number }; data: NodeData }[]
   >([]);
+  // mousedown 직전(RF 선택 변경 전)의 선택 노드 id 집합 — Ctrl+드래그가 "의도된 선택 드래그"인지 "엉뚱한
+  // 미선택 노드 새로 잡음"인지 판별용. RF의 multiSelectionKeyCode(기본 Ctrl/⌘)가 이 기능 트리거 키와 겹쳐,
+  // 잡은 노드가 잔여 선택에 딸려 들어가는 걸 막는다(capture-phase pointerdown이 RF 선택 변경보다 먼저 스냅샷).
+  const preMousedownSelectedRef = useRef<ReadonlySet<string>>(new Set());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       shiftHeldRef.current = e.shiftKey;
@@ -3245,15 +3249,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     showToast(t("copy.pasted", { n: pastedNodes.length }));
   }, [readOnly, mapId, reactFlow, setNodes, setEdges, pushHistory, scheduleAutoSave, flashNode, showToast, t]);
 
-  // Ctrl/⌘+드래그 시작 — 드래그(선택) 대상 중 복사 가능 노드(process/decision/end)는 원위치 잔상을 캡처해
-  // 사본 모드를 켠다. 복사 불가 노드가 섞여 있으면 토스트만(그 노드는 그대로 이동, 사본 없음).
+  // Ctrl/⌘+드래그 시작 — 복사 가능 노드(process/decision/end)의 원위치 잔상을 캡처해 사본 모드를 켠다.
+  // 복사 불가 노드가 섞이면 토스트만(그 노드는 그대로 이동, 사본 없음).
+  // grabbedId — 잡은 노드 id(선택박스 오버레이 드래그는 null). RF의 multiSelectionKeyCode(=Ctrl/⌘)가 이 기능
+  // 트리거 키와 겹쳐, 잡은 노드가 잔여 선택에 딸려 들어간다. 잡은 노드가 mousedown 직전에 이미 선택돼 있었으면
+  // "의도된 선택 드래그"(선택 집합 전체 복제), 아니면 잔여 선택을 무시하고 잡은 노드만 복제.
   const beginCtrlDrag = useCallback(
-    (isCtrl: boolean, dragged: AppNode[]) => {
+    (isCtrl: boolean, grabbedId: string | null, dragged: AppNode[]) => {
       if (!isCtrl || readOnly) {
         return;
       }
-      const copyable = dragged.filter((node) => isCopyableNodeType(node.data.nodeType));
-      if (copyable.length < dragged.length) {
+      const usePriorSelection =
+        grabbedId === null || preMousedownSelectedRef.current.has(grabbedId);
+      const intended = usePriorSelection
+        ? dragged
+        : dragged.filter((node) => node.id === grabbedId);
+      const copyable = intended.filter((node) => isCopyableNodeType(node.data.nodeType));
+      if (copyable.length < intended.length) {
         showToast(t("copy.blocked"));
       }
       if (copyable.length === 0) {
@@ -6062,8 +6074,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       drillIntoSubprocess(id);
     };
+    // Ctrl+드래그 의도 판별 — mousedown 시점의 선택 집합을 RF가 바꾸기 전에 스냅샷(capture phase가 노드의
+    // d3-drag pointerdown보다 먼저 발화). beginCtrlDrag이 이 스냅샷으로 잡은 노드의 사전 선택 여부를 본다.
+    const handlePointerDownCapture = () => {
+      preMousedownSelectedRef.current = new Set(
+        nodesRef.current.filter((node) => node.selected).map((node) => node.id),
+      );
+    };
     container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
-    return () => container.removeEventListener("dblclick", handleDblClick, true);
+    container.addEventListener("pointerdown", handlePointerDownCapture, true); // capture — RF 선택 변경보다 먼저
+    return () => {
+      container.removeEventListener("dblclick", handleDblClick, true);
+      container.removeEventListener("pointerdown", handlePointerDownCapture, true);
+    };
   }, [drillIntoSubprocess, reactFlow]);
 
   // 인스펙터 폭 로컬 영속
@@ -7138,7 +7161,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
                         captureRootDragStart([node]);
-                        beginCtrlDrag(event.ctrlKey || event.metaKey, nodes);
+                        beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
@@ -7182,7 +7205,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
                         captureRootDragStart(nodes);
-                        beginCtrlDrag(event.ctrlKey || event.metaKey, nodes);
+                        // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
+                        beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
                       }}
                       onSelectionDrag={(_, nodes) => {
                         // 다중선택 드래그 — onNodeDrag가 안 발화하므로 여기서 라이브 표시좌표를 갱신.
