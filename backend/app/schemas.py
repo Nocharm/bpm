@@ -717,6 +717,30 @@ class SubprocessRefOut(BaseModel):
         return normalize_duration(value)  # 무효면 None
 
 
+class SubprocessUsedByOut(BaseModel):
+    """이 맵을 서브프로세스로 링크한 부모 맵 1건 — 라이브 버전 기준 (design 2026-07-18)."""
+
+    map_id: int
+    name: str
+    owning_department: str | None = None
+    node_count: int  # 부모의 라이브 버전에서 이 맵을 링크한 subprocess 노드 수
+
+
+class SubprocessUsageOut(BaseModel):
+    """SP 지정 메타 + 역참조(used-by) 목록 — 인스펙터 Subprocess 탭 소스 (design 2026-07-18)."""
+
+    designated: bool
+    designated_at: datetime | None = None
+    changed_by: str | None = None
+    changed_at: datetime | None = None
+    # 지정은 최신 게시본 라이브 참조 — 버전을 박제하지 않으므로 응답 시점에 해석해 동봉
+    designated_version_id: int | None = None
+    designated_version_number: int | None = None
+    designated_version_label: str | None = None
+    used_by: list[SubprocessUsedByOut] = []
+    hidden_count: int = 0  # 존재하지만 호출자 권한으로 볼 수 없는 부모 맵 수
+
+
 class GraphOut(BaseModel):
     nodes: list[NodeOut]
     edges: list[EdgeIn]

@@ -31,6 +31,8 @@ from app.schemas import (
     MapUpdate,
     OwningDepartmentIn,
     SubprocessDesignationIn,
+    SubprocessUsageOut,
+    SubprocessUsedByOut,
 )
 from app.version_events import record_version_event
 
@@ -618,6 +620,124 @@ async def undesignate_subprocess(
     await session.commit()
     await session.refresh(found_map)
     return found_map
+
+
+@router.get(
+    "/{map_id}/subprocess-usage",
+    response_model=SubprocessUsageOut,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_subprocess_usage(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> SubprocessUsageOut:
+    """SP 지정 메타 + 이 맵을 링크한 부모 맵 목록 — 인스펙터 Subprocess 탭 소스 (design 2026-07-18).
+
+    사용처 판정은 부모의 라이브 버전(게시본 max id, 없으면 최신) 기준 — list_maps 노드 수 규칙과 동일.
+    호출자가 볼 수 없는 부모 맵은 이름을 노출하지 않고 hidden_count로만 집계한다.
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    # 지정이 가리키는 버전 = 최신 게시본(라이브 참조, resolve_linked_version과 동일 규칙)
+    live_pub = (
+        await session.execute(
+            select(MapVersion.id, MapVersion.version_number, MapVersion.label)
+            .where(MapVersion.map_id == map_id, MapVersion.status == workflow.PUBLISHED)
+            .order_by(MapVersion.id.desc())
+            .limit(1)
+        )
+    ).first()
+    # 후보 부모 맵 — 어떤 버전에서든 이 맵을 링크한 적 있는 맵(순환 클로저와 동일 소스)
+    candidate_ids = set(
+        (
+            await session.scalars(
+                select(MapVersion.map_id)
+                .join(Node, Node.version_id == MapVersion.id)
+                .where(Node.linked_map_id == map_id)
+                .distinct()
+            )
+        ).all()
+    )
+    used_by: list[SubprocessUsedByOut] = []
+    hidden = 0
+    if candidate_ids:
+        parents = (
+            await session.scalars(
+                select(ProcessMap).where(
+                    ProcessMap.id.in_(candidate_ids), ProcessMap.deleted_at.is_(None)
+                )
+            )
+        ).all()
+        pub_vid: dict[int, int] = {
+            mid: vid
+            for mid, vid in (
+                await session.execute(
+                    select(MapVersion.map_id, func.max(MapVersion.id))
+                    .where(
+                        MapVersion.map_id.in_(candidate_ids),
+                        MapVersion.status == workflow.PUBLISHED,
+                    )
+                    .group_by(MapVersion.map_id)
+                )
+            ).all()
+        }
+        latest_vid: dict[int, int] = {
+            mid: vid
+            for mid, vid in (
+                await session.execute(
+                    select(MapVersion.map_id, func.max(MapVersion.id))
+                    .where(MapVersion.map_id.in_(candidate_ids))
+                    .group_by(MapVersion.map_id)
+                )
+            ).all()
+        }
+        live_vid = {p.id: pub_vid.get(p.id, latest_vid.get(p.id)) for p in parents}
+        target_vids = {v for v in live_vid.values() if v is not None}
+        link_count: dict[int, int] = {}
+        if target_vids:
+            link_count = {
+                vid: cnt
+                for vid, cnt in (
+                    await session.execute(
+                        select(Node.version_id, func.count())
+                        .where(
+                            Node.version_id.in_(target_vids),
+                            Node.linked_map_id == map_id,
+                        )
+                        .group_by(Node.version_id)
+                    )
+                ).all()
+            }
+        for parent in sorted(parents, key=lambda p: p.name.lower()):
+            vid = live_vid.get(parent.id)
+            cnt = link_count.get(vid, 0) if vid is not None else 0
+            if cnt == 0:  # 과거 버전에만 링크가 남은 맵 — 현재 사용처 아님
+                continue
+            role = await get_effective_role(session, user, parent.id)
+            if role is None:
+                hidden += 1
+                continue
+            used_by.append(
+                SubprocessUsedByOut(
+                    map_id=parent.id,
+                    name=parent.name,
+                    owning_department=parent.owning_department,
+                    node_count=cnt,
+                )
+            )
+    return SubprocessUsageOut(
+        designated=found_map.sp_designated_at is not None,
+        designated_at=found_map.sp_designated_at,
+        changed_by=found_map.sp_changed_by,
+        changed_at=found_map.sp_changed_at,
+        designated_version_id=live_pub[0] if live_pub else None,
+        designated_version_number=live_pub[1] if live_pub else None,
+        designated_version_label=live_pub[2] if live_pub else None,
+        used_by=used_by,
+        hidden_count=hidden,
+    )
 
 
 @router.delete(
