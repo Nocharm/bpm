@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — Word 맵 Task A3: 재임포트 엔드포인트 `PUT /maps/{id}/word-doc` (worktree-word-map-sections)
+- 구현 계획 Task A3 완료: 신규 `WordDocIn`(`doc_name`+`sections: list[SectionEntryIn]`) 스키마 + `PUT /api/maps/{map_id}/word-doc`(editor 권한, `MapDetailOut` 응답). `get_map`과 동일한 로드 패턴(`selectinload(ProcessMap.versions).selectinload(MapVersion.events)`)·`create_map`과 동일한 커밋 후 refresh 패턴(`versions` 속성 후 각 version의 `events`)·`my_role`은 `get_effective_role`로 산정.
+- TDD: `test_maps.py::test_reimport_replaces_catalog`(word 맵 생성 → PUT으로 doc_name·sections 교체 → GET detail로 확인) RED(404, 엔드포인트 없음) → 구현 → GREEN. 전체 스위트 640 pass, ruff clean.
+- 플랜 예시 코드의 `require_map_role`/`get_effective_role`/`selectinload`/`MapDetailOut`은 실제 코드베이스 동일 이름 그대로였음(별도 매핑 불필요).
+
 ## 2026-07-18 — Word 맵 Task A2: 맵 `mode`·`doc_name`·`doc_sections` 컬럼 (worktree-word-map-sections)
 - 구현 계획 Task A2 완료: `ProcessMap`에 `mode`(기본 "normal")·`doc_name`·`doc_sections`(JSON 카탈로그) 3컬럼 + 신규 `SectionEntryIn` 스키마. `create_map`이 요청 payload에서 세 필드를 반영, `copy_map`(변수명 `source_map`)이 원본 맵의 mode·문서 카탈로그를 상속. `db.py` `_ADDED_COLUMNS`에 DDL 3종 등록(운영 자동 ALTER).
 - `doc_sections` DDL은 `group_ids` 전례처럼 DEFAULT 없는 JSON — 기존 행이 ALTER 후 NULL이 되는 걸 대비해 `MapOut`에 `_coerce_doc_sections`(None→[]) 검증기 추가(NodeIn._coerce_group_ids와 동일 결정, 플랜 본문엔 없던 방어 추가).

@@ -253,3 +253,31 @@ def test_copy_inherits_word_mode_and_catalog(client: TestClient) -> None:
     assert body["mode"] == "word"
     assert body["doc_name"] == "sop.docx"
     assert body["doc_sections"][0]["anchor"] == "_Toc1"
+
+
+def test_reimport_replaces_catalog(client: TestClient) -> None:
+    """PUT /word-doc는 맵의 doc_name·doc_sections을 통째로 교체한다 (재임포트, design 2026-07-18)."""
+    created = client.post(
+        "/api/maps",
+        json={
+            "name": "reimport target",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+            "doc_name": "v1.docx",
+            "doc_sections": [{"anchor": "_Toc1", "title": "Old", "number": "1", "level": 1}],
+        },
+    ).json()
+    map_id = created["id"]
+    r = client.put(
+        f"/api/maps/{map_id}/word-doc",
+        json={
+            "doc_name": "v2.docx",
+            "sections": [{"anchor": "_Toc9", "title": "New", "number": "3", "level": 1}],
+        },
+    )
+    assert r.status_code == 200
+    detail = client.get(f"/api/maps/{map_id}")
+    assert detail.json()["doc_name"] == "v2.docx"
+    assert detail.json()["doc_sections"] == [
+        {"anchor": "_Toc9", "title": "New", "number": "3", "level": 1}
+    ]

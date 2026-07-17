@@ -31,6 +31,7 @@ from app.schemas import (
     MapUpdate,
     OwningDepartmentIn,
     SubprocessDesignationIn,
+    WordDocIn,
 )
 from app.version_events import record_version_event
 
@@ -522,6 +523,35 @@ async def update_map(
         found_map.description = payload.description
     await session.commit()
     await session.refresh(found_map)
+    return found_map
+
+
+@router.put(
+    "/{map_id}/word-doc",
+    response_model=MapDetailOut,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def set_word_doc(
+    map_id: int,
+    payload: WordDocIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """Word 맵 재임포트 — doc_name·doc_sections을 통째로 교체한다 (design 2026-07-18)."""
+    found_map = await session.get(
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
+    )
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.doc_name = payload.doc_name
+    found_map.doc_sections = [s.model_dump() for s in payload.sections]
+    await session.commit()
+    await session.refresh(found_map, attribute_names=["versions"])
+    for version in found_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    found_map.my_role = await get_effective_role(session, user, map_id)
     return found_map
 
 

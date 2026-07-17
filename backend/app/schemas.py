@@ -42,6 +42,12 @@ class MapCreate(BaseModel):
     doc_sections: list[SectionEntryIn] = Field(default_factory=list)
 
 
+class WordDocIn(BaseModel):
+    # 재임포트 페이로드 — 맵의 doc_name·doc_sections을 통째로 교체 (design 2026-07-18)
+    doc_name: str = Field(default="", max_length=300)
+    sections: list[SectionEntryIn] = Field(default_factory=list)
+
+
 class MapCopy(BaseModel):
     # 새 맵 이름 — 비우면 "<원본명> (Copy)" (F12 승인본 복사)
     name: str | None = Field(default=None, min_length=1, max_length=200)
