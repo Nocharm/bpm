@@ -193,6 +193,7 @@ import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
+import { displayToSavedX } from "@/lib/inline-shift";
 import { useI18n } from "@/lib/i18n";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
@@ -573,17 +574,6 @@ function toAppEdges(graph: Graph): Edge[] {
 }
 
 
-
-/** 저장 x에서의 표시 오프셋 = 저장 x보다 왼쪽(저장 x 기준)에 있는 펼침 앵커들의 footprint 합. */
-function offsetAtX(savedX: number, steps: { x: number; footprint: number }[]): number {
-  let sum = 0;
-  for (const s of steps) {
-    if (s.x < savedX) {
-      sum += s.footprint;
-    }
-  }
-  return sum;
-}
 
 // AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
 // 신규 노드라 보호할 기존 SP 지정값이 없다 — SP 게이트는 미적용(csv-import mergeNode의
@@ -3343,11 +3333,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     const ghostById = new Map(ghosts.map((g) => [g.id, g]));
     // id/라벨은 setNodes 밖에서 먼저 확정 — updater는 순수해야 함(StrictMode 이중호출에도 안전).
     const existingLabels = nodesRef.current.map((node) => node.data.label);
-    const plans = new Map<string, { copyId: string; label: string }>();
+    // ghost.position은 RF 보고값(표시좌표) — 인라인 펼침으로 footprint-shift된 노드는 저장좌표로 환산해
+    // 원위치를 복원해야 표시좌표가 저장좌표로 박히는 드리프트가 없다(#3b). 미펼침이면 오프셋 0(동일).
+    const rootOffsets = inlineCompositionRef.current?.rootOffsets;
+    const plans = new Map<string, { copyId: string; label: string; resetPos: { x: number; y: number } }>();
     for (const ghost of ghosts) {
       const label = makeCopyLabel(ghost.data.label, existingLabels);
       existingLabels.push(label);
-      plans.set(ghost.id, { copyId: genId(), label });
+      const offset = rootOffsets?.get(ghost.id);
+      const resetPos = offset
+        ? { x: ghost.position.x - offset.x, y: ghost.position.y - offset.y }
+        : { ...ghost.position };
+      plans.set(ghost.id, { copyId: genId(), label, resetPos });
     }
     setNodes((current) => {
       const copies: AppNode[] = [];
@@ -3365,7 +3362,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           // 사본은 원본 그룹 소속을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
           data: { ...ghost.data, label: plan.label, groupIds: [] },
         });
-        return { ...node, position: { ...ghost.position }, selected: false };
+        return { ...node, position: plan.resetPos, selected: false };
       });
       return [...next, ...copies];
     });
@@ -3428,9 +3425,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── 드래그-오버 드롭 영역 (앞/뒤 흐름 삽입, Phase 1) ─────────
 
   // 노드 id의 캔버스 컨테이너 상대 화면 사각형 — 드롭 영역/팝오버 위치 계산용 (이벤트에서만 호출)
+  // 반드시 reactFlow.getNode(표시 좌표) 사용 — nodes state는 저장 좌표라 인라인 펼침 중 footprint-shift된
+  // 노드에서 화면 밖 팬텀 링을 만들고 ensureRingVisible이 카메라를 그쪽으로 날린다(#2 프리즈 원인).
   const screenRectOf = useCallback(
     (nodeId: string): ScreenRect | null => {
-      const node = nodesRef.current.find((item) => item.id === nodeId);
+      // 현재 스코프(nodes) 멤버만 — 임베드 자식은 읽기전용이라 링/존 대상이 아니다(기존 null 동작 보존).
+      const node = nodesRef.current.some((item) => item.id === nodeId)
+        ? reactFlow.getNode(nodeId)
+        : undefined;
       const container = canvasContainerRef.current;
       if (!node || !container) {
         return null;
@@ -4197,8 +4199,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       draggedNodeIdRef.current = node.id; // 흐름존 규칙 판정용 — 현재 드래그 노드 추적
       // 펼침 중 추적 대상 루트 드래그면 RF가 보고하는 표시좌표를 라이브 맵에 반영 → 커서 1:1 추종.
-      if (dragStartOffsetRef.current.has(node.id)) {
-        const pos = node.position;
+      // Shift 축 고정은 여기서 적용 — 이 경로는 dropDraggingPositions가 position 변경을 버려서(suppress)
+      // 거기의 constrainToAxis를 안 타므로, 라이브 기록 시점에 시작점 기준으로 직접 보정한다(#3a).
+      const tracked = dragStartOffsetRef.current.get(node.id);
+      if (tracked) {
+        const pos = constrainToAxis(tracked.start, node.position, shiftHeldRef.current);
         setDragLiveById((cur) => {
           const next = new Map(cur);
           next.set(node.id, { x: pos.x, y: pos.y });
@@ -4322,16 +4327,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           continue; // 취소 — nodes state는 드래그 내내 동결돼 있어 원위치 유지. 저장 안 함.
         }
         // x는 드롭 위치 오프셋으로 환산(드래그 시작 오프셋 아님) — 펼침 영역 경계를 가로지르면 두 오프셋이 달라
-        // footprint만큼 빗나간다. dropDisplay.x = sx + offsetAtX(sx) 의 고정점을 풀어 저장 x(sx)를 구한다.
-        // 단조 계단함수라 앵커 수 이내로 수렴.
-        let sx = dropDisplay.x;
-        for (let i = 0; i < steps.length + 1; i += 1) {
-          const nsx = dropDisplay.x - offsetAtX(sx, steps);
-          if (nsx === sx) {
-            break;
-          }
-          sx = nsx;
-        }
+        // footprint만큼 빗나간다. 도달 불가 갭(앵커 점프 구간)은 앵커 x로 클램프(lib/inline-shift).
+        const sx = displayToSavedX(dropDisplay.x, steps);
         savedById.set(id, { x: sx, y: dropDisplay.y - offset.y });
         committed = true;
       }

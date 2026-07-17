@@ -1,6 +1,12 @@
 # Progress
 
-## 2026-07-17 — Ctrl+드래그 복제 엣지 핸들측 보존 (worktree-ctrldrag-handles)
+## 2026-07-17 — 인라인 펼침 드래그 버그 3종 해소: 팬텀 링 카메라 점프(#2)·Shift 축고정(#3a)·Ctrl복제 드리프트(#3b) (worktree-inline-expand-drag-fix)
+- 핸드오프 `docs/superpowers/specs/2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md`의 ②③ 해소. dev 기준 브랜치.
+- **#2 "프리즈" 근본 원인 반전**: 가설(no-op 커밋)은 라이브 계측으로 **반증** — 제자리 커밋은 무해. 진범은 `screenRectOf`가 `nodesRef`(저장좌표)로 링 rect를 계산 → 펼침 중 footprint-shifted 노드 드래그 시 dwell 링이 실제 노드보다 footprint(예: 868px)만큼 왼쪽(화면 밖)에 잡히고, `ensureRingVisible`이 팬텀 링을 향해 카메라를 200ms 애니메이션 팬(드롭 후에도 지속, d3 줌 플라이트) → 노드가 화면 밖으로 밀려 이전 좌표 클릭이 전부 빗나감 = "하드 프리즈"로 관측. 수정: `reactFlow.getNode`(표시좌표) 사용 + 현재 스코프 멤버십 가드 유지(읽기전용 임베드 자식은 기존대로 링 제외).
+- **표시↔저장 환산 헬퍼 추출**: `lib/inline-shift.ts` `displayToSavedX`/`offsetAtSavedX` — finalize의 고정점 반복 루프(도달 불가 갭 표시값에서 진동 발산)를 구간 직해+앵커 클램프로 대체. vitest 7건(경계·왕복·갭 클램프·다중 앵커).
+- **#3a**: 펼침 추적 경로는 position 변경이 suppress로 버려져 `dropDraggingPositions`의 축 고정을 안 탐 → `handleNodeDrag` 라이브 기록 시점에 `constrainToAxis` 직접 적용(다중선택 `onSelectionDrag` 경로와 대칭).
+- **#3b**: `applyCtrlDragCopy` 원위치 복귀가 `ghost.position`(RF 보고값=표시좌표)을 저장좌표로 박던 것 → `rootOffsets`로 표시→저장 환산한 `resetPos`를 updater 밖에서 선계산(StrictMode 순수성 유지). 미펼침은 오프셋 없음=기존 동작.
+- **게이트**: 프론트 단독(백엔드 0줄). vitest 469/469(신규 7 포함)·lint 0 err·tsc 0·build OK. 라이브 Playwright(시드 맵2 v12 펼침 상태): 드롭 후 노드 화면 내 유지+재드래그 ALIVE, Shift 드래그 y 고정(RF raw y=224에도 커밋 y=200), Ctrl복제 원본 API 저장좌표 무오염(540,264)+사본 정확 환산(1672→804), 평면 맵 회귀 없음.
 - 백로그 잔여 해소: `applyCtrlDragCopy`(Ctrl+드래그 노드 복제)가 내부 엣지를 복제할 때 `sourceHandle`/`targetHandle`을 매번 `right`/`left`로 하드코딩 → 디시전 분기 엣지가 한쪽으로 뭉치던 문제(Ctrl+C/V paste는 앞선 백로그에서 해소됨, Ctrl+드래그판만 잔존). `edge.sourceHandle ?? sourceHandleId("right")`/`edge.targetHandle ?? targetHandleId("left")`로 원본 핸들 보존·없을 때만 폴백(handlePaste와 동일 관례). 2줄.
 - 게이트: lint 0·tsc 0·vitest 462/462. 프론트 단독(백엔드 무변경). 리뷰된 동일 패턴 재사용이라 라이브 pw 생략.
 
