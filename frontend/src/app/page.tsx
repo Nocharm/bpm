@@ -342,14 +342,14 @@ export default function MapListPage() {
       ? selectedId
       : null;
 
-  // 리스트 행 — MapCard + 좁은 폭 인라인 아코디언. 검색 모드 전용(브라우즈는 즐겨찾기+조직도 아코디언 사용). /
-  // A full-list row: MapCard + narrow-screen accordion. Search mode only (browse uses favorites + org accordion).
-  const renderRow = (
+  // 카드 + 좁은 폭 인라인 상세 아코디언 (li 없이) — 검색 모드(renderRow)와 브라우즈 모드(renderCard) 공유. /
+  // MapCard + narrow-screen detail accordion (no <li> wrapper) — shared by search-mode renderRow and browse-mode renderCard.
+  const renderCardInner = (
     processMap: MapSummary,
     nameRanges: MatchRange[],
     recentAt: number | undefined,
   ) => (
-    <li key={processMap.id} className="flex flex-col">
+    <>
       <MapCard
         map={processMap}
         selected={effectiveSelected === processMap.id}
@@ -378,8 +378,25 @@ export default function MapListPage() {
           )}
         </div>
       </div>
+    </>
+  );
+
+  // 리스트 행 — 검색 모드 전용(li로 감싼 렌더 결과).
+  // A full-list row for search mode (wraps the shared card+detail in <li>).
+  const renderRow = (
+    processMap: MapSummary,
+    nameRanges: MatchRange[],
+    recentAt: number | undefined,
+  ) => (
+    <li key={processMap.id} className="flex flex-col">
+      {renderCardInner(processMap, nameRanges, recentAt)}
     </li>
   );
+
+  // 브라우즈 모드(즐겨찾기·조직도 아코디언)에 전달할 카드 렌더러 — 980px 미만에서도 상세 노출. /
+  // Card renderer passed to browse-mode accordions — keeps detail visible below the split breakpoint.
+  const renderCard = (processMap: MapSummary) =>
+    renderCardInner(processMap, [], atById.get(processMap.id));
 
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
@@ -599,6 +616,7 @@ export default function MapListPage() {
                     onToggle={() => setFavOpen((v) => !v)}
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
+                    renderCard={renderCard}
                   />
                   <OrgAccordion
                     roots={orgTree.roots}
@@ -613,6 +631,7 @@ export default function MapListPage() {
                     selectedId={effectiveSelected}
                     highlightId={highlightId}
                     onSelect={setSelectedId}
+                    renderCard={renderCard}
                   />
                 </div>
               )}

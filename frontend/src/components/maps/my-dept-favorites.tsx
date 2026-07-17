@@ -2,6 +2,7 @@
 "use client";
 
 import { ChevronDown, ChevronRight, Star } from "lucide-react";
+import type { ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -14,9 +15,12 @@ interface MyDeptFavoritesProps {
   onToggle: () => void;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  // 좁은 화면(<split)에서도 상세를 볼 수 있도록 카드 렌더를 페이지에 위임 — 미지정 시 bare MapCard로 폴백.
+  // Delegates card render to the page so narrow screens keep an inline detail accordion — falls back to bare MapCard.
+  renderCard?: (map: MapSummary) => ReactNode;
 }
 
-export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, onSelect }: MyDeptFavoritesProps) {
+export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, onSelect, renderCard }: MyDeptFavoritesProps) {
   const { t } = useI18n();
   if (maps.length === 0) return null;
   return (
@@ -35,7 +39,7 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
         <ul className="flex flex-col gap-2 pl-1">
           {maps.map((m) => (
             <li key={m.id}>
-              <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />
+              {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}
             </li>
           ))}
         </ul>
