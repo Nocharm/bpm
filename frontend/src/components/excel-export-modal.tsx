@@ -2,9 +2,10 @@
 // 모델은 탭 활성화 시 lazy 빌드(모달 열려있는 동안 캐시). 설계: 2026-07-17-excel-export-wbs-v2-design.md
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { downloadExcel, type ExcelModel } from "@/lib/excel-export";
 import { downloadWbsExcel, type WbsModel } from "@/lib/excel-wbs";
 import { useI18n } from "@/lib/i18n";
@@ -19,7 +20,11 @@ interface ExcelExportModalProps {
   fileNameFor: (format: ExcelExportFormat) => string;
 }
 
-type PreviewState<T> = { status: "idle" } | { status: "ready"; model: T } | { status: "error" };
+type PreviewState<T> =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; model: T }
+  | { status: "error" };
 
 const PREVIEW_ROWS = 8;
 
@@ -29,11 +34,17 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
   const [mapState, setMapState] = useState<PreviewState<ExcelModel>>({ status: "idle" });
   const [wbsState, setWbsState] = useState<PreviewState<WbsModel>>({ status: "idle" });
   const [downloading, setDownloading] = useState(false);
+  // 세대 카운터 — 리셋(닫힘)마다 증가. in-flight 중 닫고 재오픈해도 구 promise의 resolve가
+  // 세대 불일치로 무시되어 새 모델을 덮지 못한다.
+  const mapGenRef = useRef(0);
+  const wbsGenRef = useRef(0);
 
   // 닫힐 때 캐시 초기화 — 다음 오픈 시 캔버스 최신 상태로 재빌드 (setState는 전부 비동기/이벤트 경로)
   useEffect(() => {
     if (open) return;
     const timer = setTimeout(() => {
+      mapGenRef.current += 1;
+      wbsGenRef.current += 1;
       setFormat("map");
       setMapState({ status: "idle" });
       setWbsState({ status: "idle" });
@@ -41,20 +52,50 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
     return () => clearTimeout(timer);
   }, [open]);
 
-  // 활성 탭 모델 lazy 빌드 — idle일 때만, 결과는 .then에서 반영(동기 setState 금지 룰 준수)
+  // 활성 탭 모델 lazy 빌드 — idle일 때만 킥. loading 전환은 setTimeout(0) 콜백 안에서 수행해
+  // (동기 setState-in-effect 금지 룰 준수 + 기존 리셋 effect와 동일 경로) 탭 왕복 중 같은
+  // 빌더가 중복 발화하지 않도록 idle→loading 천이를 effect 재실행 전에 반영한다.
   useEffect(() => {
     if (!open) return;
     if (format === "map" && mapState.status === "idle") {
-      buildMap()
-        .then((model) => setMapState({ status: "ready", model }))
-        .catch(() => setMapState({ status: "error" }));
+      const gen = mapGenRef.current;
+      const timer = setTimeout(() => {
+        setMapState({ status: "loading" });
+        buildMap()
+          .then((model) => {
+            if (mapGenRef.current === gen) setMapState({ status: "ready", model });
+          })
+          .catch(() => {
+            if (mapGenRef.current === gen) setMapState({ status: "error" });
+          });
+      }, 0);
+      return () => clearTimeout(timer);
     }
     if (format === "wbs" && wbsState.status === "idle") {
-      buildWbs()
-        .then((model) => setWbsState({ status: "ready", model }))
-        .catch(() => setWbsState({ status: "error" }));
+      const gen = wbsGenRef.current;
+      const timer = setTimeout(() => {
+        setWbsState({ status: "loading" });
+        buildWbs()
+          .then((model) => {
+            if (wbsGenRef.current === gen) setWbsState({ status: "ready", model });
+          })
+          .catch(() => {
+            if (wbsGenRef.current === gen) setWbsState({ status: "error" });
+          });
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [open, format, mapState.status, wbsState.status, buildMap, buildWbs]);
+
+  // Escape로 닫기 — ModalBackdrop의 바깥클릭 닫기와 동일한 종료 경로(onClose)를 공유.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -73,12 +114,12 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
   };
 
   return (
-    <div
-      data-id="excel-export-modal"
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
+        data-id="excel-export-modal"
         className="relative flex max-h-[80%] w-[560px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
@@ -110,7 +151,9 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
 
         <div className="min-h-40 flex-1 overflow-auto px-4 py-3">
           <div className="mb-1.5 text-caption text-ink-secondary">{t("export.previewLabel")}</div>
-          {active.status === "idle" && <div className="text-caption text-ink-tertiary">{t("export.previewLoading")}</div>}
+          {(active.status === "idle" || active.status === "loading") && (
+            <div className="text-caption text-ink-tertiary">{t("export.previewLoading")}</div>
+          )}
           {active.status === "error" && <div className="text-caption text-error">{t("export.previewError")}</div>}
           {active.status === "ready" && (
             <ExportPreviewTable format={format} model={(active as { model: ExcelModel | WbsModel }).model} emptyText={t("export.previewEmpty")} />
@@ -139,7 +182,7 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

@@ -4374,8 +4374,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (warnings.length > 0) showToast(t("export.csvWarnings"));
   }, [buildExportFileName, showToast, t]);
 
-  // Excel 모달용 모델 빌더 — 저장 경로와 동일 소스(buildGraph)로 미저장 편집분까지 반영
-  const buildMapExcelModel = useCallback(() => {
+  // Excel 모달용 모델 빌더 — 저장 경로와 동일 소스(buildGraph)로 미저장 편집분까지 반영.
+  // async로 감싸 buildGraph의 동기 throw까지 promise rejection으로 잡히게 한다(모달 .catch가 error로 수렴).
+  const buildMapExcelModel = useCallback(async () => {
     const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
     const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
     return buildExcelModel({
@@ -4388,7 +4389,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [versions, versionId, mapName, mapId]);
 
-  const buildWbsExcelModel = useCallback(() => {
+  const buildWbsExcelModel = useCallback(async () => {
     const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
     const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
     return buildWbsModel({

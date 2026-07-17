@@ -4,7 +4,7 @@
 - 설계 `docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md`. 신규 `lib/excel-wbs.ts` — 잎 업무 행+레벨 경로(`levels`), SP 무행(레벨 값=SP 노드 타이틀·루트=맵 이름), start/end 전부 삭제(Next 종착 텍스트 유지), 무라벨 디시전 flow-through·`[No:라벨]` 주석(SP 대상 소멸)은 1안과 동일 체계. 시트 "WBS": 동적 Level 1..N 컬럼(회색 `FF9CA3AF`)+1안 속성 꼬리(numFmt 정의 파생).
 - Excel 버튼 → 형식 선택 모달(`components/excel-export-modal.tsx`): 한/영 세그먼트 토글 디자인 탭(Process Map/WBS)+첫 8행 미리보기(lazy 빌드·캐시)+Download. 파일명 WBS는 `_WBS` 접미. 다운로드는 `downloadWorkbookXlsx` 공용화(exceljs 동적 import 유지).
 - 게이트: vitest 전체·tsc·lint·build 그린.
-- 실기동 검증 pw-verify-excel-wbs.mjs 12/12 PASS(모달 플로우·양 형식 다운로드 파싱 — WBS 레벨 컬럼·SP 무행·start/end 0행·주석·1안 회귀·콘솔 0).
+- 실기동 검증 pw-verify-excel-wbs.mjs 시나리오 12종·assertion 19/19 PASS(모달 플로우·양 형식 다운로드 파싱 — WBS 레벨 컬럼·SP 무행·start/end 0행·주석·1안 회귀·콘솔 0).
 
 ## 2026-07-17 — Excel 출력 양식 2안(WBS) 설계 확정 (worktree-excel-export)
 - 레벨 컬럼 WBS 시트+형식 선택 모달(토글 탭·미리보기) 설계 — 사용자 확정 4건(모든 행 반복+회색 톤다운·start/end 전부 삭제·SP Next 이름 유지·모달 토글탭). 설계 docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md, 계획 docs/superpowers/plans/2026-07-17-excel-export-wbs-v2.md.
