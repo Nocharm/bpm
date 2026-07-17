@@ -7137,6 +7137,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             openMenu(event, "node", id);
           }}
           onRenameNode={renameNode}
+          onReadOnlyRowNotice={() => showToast(t("outline.readonlyChild"))}
           onDeleteNode={(id) => void reactFlow.deleteElements({ nodes: [{ id }] })}
           onSelectNext={handleOutlineNext}
           onSelectPrev={handleOutlinePrev}

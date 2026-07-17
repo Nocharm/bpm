@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — UX 통일 후속 2건: Excel 설명 합성 + 아웃라인 자식 이름편집 차단·토스트 (worktree-inline-expand-drag-fix)
+- **Excel(1안)만 설명 합성 반영**: `buildExcelModel` 행 생성에서 subprocess면 `mergeSubprocessDescription(subprocess_refs[sp_description], node.description)` — 그래프에 이미 있는 `subprocess_refs` 재사용, TDD 1건(RED→GREEN). WBS(2안)는 SP가 행을 안 차지해 무변경, Word/CSV는 사용자 지시로 제외(CSV는 왕복 계약상 추가분만이 맞음).
+- **아웃라인 자식 행 이름편집 차단+토스트**: 행 더블클릭·Enter(편집 단축키) 모두 `item.hierarchy`(하위 스코프 행) 게이트 — 편집 input 대신 토스트("링크맵의 읽기전용 노드입니다 — 해당 맵에서 편집하세요", en 병기). 종전엔 편집 UI가 뜨고 저장이 조용히 증발했음. 루트 행 편집은 회귀 없음(pw 확인).
+- 게이트: vitest 475/475(신규 1)·lint 0 err·tsc 0·build OK. pw: 자식 행 dblclick → input null+토스트 표시, 루트 행 정상 편집.
+
 ## 2026-07-18 — 서브프로세스 UX 통일 6종: 딥뷰 봉인·자식 상호작용 통일·읽기전용 메뉴·펼치기 메뉴·모달 피커 패리티·설명 상속 (worktree-inline-expand-drag-fix)
 - 조사(라이브 계측)로 확인된 불일치/고장 일괄 정리. 사용자 지시: ①봉인 ②선택효과 통일 ③읽기전용 안내 ④메뉴 펼치기 ⑤모달 패리티 + 설명 상속.
 - **자식 더블클릭 봉인(깊이 무관)**: 임베드 자식 dblclick 캡처 핸들러가 하던 딥뷰 드릴인(`drillIntoSubprocess`) 제거 — 인라인 펼침과의 이중 렌더(React 중복 key)·오프스크린 스코프 창·빈 캔버스 고장의 유일 진입로였음. 이벤트는 계속 삼켜 RF 줌/모달도 차단. `isDrillableHost`/`drillIntoSubprocess` 삭제(스코프 창 머신은 존치).
