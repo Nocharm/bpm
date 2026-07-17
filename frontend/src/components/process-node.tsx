@@ -13,6 +13,7 @@ import {
   Lock,
   type LucideIcon,
   MessageSquare,
+  Plus,
   Server,
   Tag,
   Target,
@@ -392,6 +393,15 @@ function LockedBadge() {
   );
 }
 
+// Ctrl/⌘+드래그 사본 배지 — 이 노드를 놓으면 원위치에 사본이 남는다는 신호(잔상과 세트, 드래그 중만 표시).
+function CopyDragBadge({ className = "-right-2 -top-2" }: { className?: string }) {
+  return (
+    <span className={`absolute ${className} rounded-full bg-accent p-0.5 text-on-accent shadow-sm`}>
+      <Plus size={14} strokeWidth={1.5} />
+    </span>
+  );
+}
+
 // 하위프로세스 노드의 핸들 — 좌측 단일 입력, 우측 끝 노드별 출력 (끝 없으면 단일 PRIMARY_END_HANDLE)
 // connectable — 노드 레벨 connectable(임베드 읽기전용 자식 false)을 Handle에 전달해야 실제로 끌기가 막힌다 (F3)
 function SubprocessHandles({ ends, connectable }: { ends: SubEnd[]; connectable: boolean }) {
@@ -450,6 +460,8 @@ function nodeStyle(color: string, fill: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   const { t } = useI18n();
+  const { ctrlDragIds } = useNodeActions();
+  const showCopyBadge = ctrlDragIds.has(id);
   // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9)
   const color =
     data.nodeType === "subprocess"
@@ -541,6 +553,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="left-3 top-3" />}
         {data.url && <UrlBadge url={data.url} className="bottom-3 left-3" />}
         {data.assigneeWarning && <AssigneeWarningBadge className="bottom-3 right-3" />}
+        {showCopyBadge && <CopyDragBadge className="right-3 top-3" />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>
     );
@@ -580,6 +593,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {data.url && <UrlBadge url={data.url} />}
       {data.assigneeWarning && <AssigneeWarningBadge />}
+      {showCopyBadge && <CopyDragBadge />}
       <NodeHandles connectable={isConnectable ?? true} />
     </div>
   );

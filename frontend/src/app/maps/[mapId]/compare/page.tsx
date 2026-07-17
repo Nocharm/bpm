@@ -155,6 +155,7 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   onStartRename: null,
   onRename: null,
   onCancelRename: null,
+  ctrlDragIds: new Set<string>(),
 };
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {

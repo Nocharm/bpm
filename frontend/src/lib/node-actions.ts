@@ -30,6 +30,8 @@ export interface NodeActions {
   onStartRename: ((nodeId: string) => void) | null;
   onRename: ((nodeId: string, label: string) => void) | null;
   onCancelRename: (() => void) | null;
+  // Ctrl/⌘+드래그 복제 중인 노드 id 집합 — "+" 배지 표시용(Provider 없으면 항상 빈 집합).
+  ctrlDragIds: ReadonlySet<string>;
 }
 
 const defaultActions: NodeActions = {
@@ -40,6 +42,7 @@ const defaultActions: NodeActions = {
   onStartRename: null,
   onRename: null,
   onCancelRename: null,
+  ctrlDragIds: new Set<string>(),
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);
