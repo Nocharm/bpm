@@ -32,19 +32,19 @@ page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
 
-const api = (path, { method = "GET", body } = {}) =>
+const api = (path, { method = "GET", body, user = "admin.sys" } = {}) =>
   page.evaluate(
-    async ({ path, method, body }) => {
+    async ({ path, method, body, user }) => {
       const res = await fetch(`/api${path}`, {
         method,
-        headers: { "Content-Type": "application/json", "X-Dev-User": "admin.sys" },
+        headers: { "Content-Type": "application/json", "X-Dev-User": user },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const text = await res.text();
       if (!res.ok) throw new Error(`${method} ${path} → ${res.status} ${text.slice(0, 300)}`);
       return text ? JSON.parse(text) : null;
     },
-    { path, method, body },
+    { path, method, body, user },
   );
 
 // 게시 체인 — checkout→graph PUT은 호출부에서, 여기는 승인자 등록→submit→approve→publish
