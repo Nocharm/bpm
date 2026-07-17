@@ -11,6 +11,19 @@
 - 실기동: 좀비 백엔드(삭제된 `editor-improvements` 워크트리의 고아 uvicorn, 8000 500) kill 후 이 워크트리 자체 백엔드로 재기동. `pw-verify-node-copy.mjs`에 시나리오 (e) 추가(＋메뉴로 노드 추가 직후 재클릭 없이 Ctrl+C→Ctrl+V → 정확히 1개 복제) — 전체 17/17 PASS, 콘솔 에러 0.
 - **②·③ 보류(다음 세션)**: ②노드 프리즈는 라이브 계측 결과 "서브프로세스 인라인 펼침 상태 + footprint-shifted 노드" 한정 기존 버그(`2a78b6b`, `finalizeRootDrag` no-op 커밋), ③도 같은 펼침 좌표 머신 → 근본 원인·재현·수정 방향을 `docs/superpowers/specs/2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md`에 기록(커밋 `c36c400`). 후속 잔여: Ctrl드래그 사본 엣지 핸들 하드코딩(FIX1의 Ctrl드래그판, 스코프 밖).
 
+## 2026-07-17 — 메인 탭 UX 개선 구현 완료 (worktree-main-tabs-ux)
+- dev `0b72270` 기준 신규 브랜치. 설계 `docs/superpowers/specs/2026-07-17-main-tabs-ux-design.md`, 구현 계획 `docs/superpowers/plans/2026-07-17-main-tabs-ux.md`(16 TDD 태스크).
+- **구현 완료(Task 1–15)** — subagent-driven(태스크별 구현+2단계 리뷰). 전부 클라이언트, **백엔드 무변경**(git diff 확인). 커밋 `b746c7b`…`28f9077`(구현+리뷰 픽스 포함). 최종 게이트: **tsc 0 · vitest 471/471(신규 org-tree/donut-geometry/recent-order 포함) · lint 0 errors(무관 사전 warning 1) · build 성공(전 라우트)**. Task 10 대시보드는 라이브 Playwright 10/10(auto-expand 포함) 검증.
+  - 리뷰 픽스 5건: T1 테스트 픽스처 타입(tsc), T4 좁은화면 인라인 상세 renderCard, T5 도넛 `-0` offset, T7 recent-top peek/commit 분리(StrictMode), T10 auto-expand deps 축소(refresh clobber).
+  - ⚠️ **미검증(배포 전 권장)**: Inbox/Notices 다이제스트·Feedback 딥링크·조직도 아코디언은 서버/원격 IP 실기동 브라우저 확인 미완(로컬 게이트만 통과).
+- 스코프 5항목(전부 클라·백엔드 무변경): ①Maps 좌측 = 나의부서 즐겨찾기 + 오우닝부서 조직도 아코디언(모두접기, 카드 디자인 유지+`[SP]` 배지, 목록/상세 양쪽) ②Maps 우측 홈 대시보드 = 최근열람(최상단·스태거 진입) + 내오너 문서 상태 도넛(세그먼트 클릭→목록, 기본 draft) + 승인필요 단계 그래프(status 파생); 대시보드 맵행 hover→Open·클릭→선택(좌측 자동펼침 포커스) ③Feedback 작성하단 최근피드백 카드+`?feedback=<id>` 딥링크 ④Inbox 미선택 우측 활동요약 다이제스트 ⑤Notices 동일 다이제스트.
+- 사용자 요청 "알림 카테고리 아이콘+필터"는 dev(`lib/notification-categories.ts`+inbox)에 이미 구현되어 스코프 제외.
+- **Task 1-4 구현**: `lib/org-tree.ts`(순수 헬퍼 `buildOrgTree`/`filterMyDeptMaps`) + `OrgAccordion`/`MyDeptFavorites` 컴포넌트(Task 1-3) → `page.tsx` 좌측 브라우즈 컬럼에 배선(Task 4). 브라우즈 모드는 이제 "나의 부서 즐겨찾기(핀)" + 오우닝부서 조직도 아코디언(모두접기, 롤업 카운트)만 렌더 — 기존 최근열람 밴드는 좌측에서 제거(우측 대시보드로 이동 예정, Task 7). 검색·필터 모드(평면 리스트+최근매치 상단고정)는 무변경. 내 정보(`getMe`)·디렉터리(`getDirectory`)로 초기 펼침을 내 `org_path` 조상 경로로 시드. tsc/lint/build 전부 그린.
+  - `useDirectory()`(`lib/directory.ts`)는 유저 Map만 노출(부서 미포함, 다른 4곳이 그 계약에 의존)이라 브리프 가정과 달라 `getDirectory()`를 page.tsx에서 직접 fetch — 공유 훅은 무변경.
+- **Task 11 구현**: `feedback/page.tsx`에 딥링크 `?feedback=<id>` — 목록 로드 후 해당 id가 있으면 상세 모달 1회 오픈(`useRef` 가드), 모달 close 시 param 제거. `useSearchParams` 대신 `window.location.search` 직접 파싱으로 Next.js Suspense 경계 요구를 회피(빌드 시 `/feedback`이 정적 페이지로 유지됨 확인). tsc/lint/build 전부 그린.
+- **Task 12 구현**: `feedback-side-panel.tsx` 작성폼 아래 "내 최근 피드백" 섹션 — 패널 `open` 시 `listFeedback()` 페치 후 `author === getCurrentUser()?.loginId`(정확한 필드명은 `current-user.ts` 확인) 필터·`created_at` desc 상위 5개. 카드 클릭 → `/feedback?feedback=<id>`(Task 11 딥링크) 이동 + `onClose()`. kind/status 필은 `feedback-meta.ts` 기존 토큰(`FEEDBACK_KIND_STYLE`·`FEEDBACK_STATUS_STYLE`) 재사용, 이모지 미사용. i18n 키 2종(`feedback.yourRecent`, `feedback.viewOnPage`) en+ko 추가. tsc/lint/build 전부 그린.
+- **Task 7 구현**: `lib/recent-order.ts`(TDD, `readTopChanged` — sessionStorage `bpm.home.recentTop`로 최상단 id 변화 감지) + `RecentOpenedList`(최근열람 렌더, top 변경 시 `slideDown` 스태거 진입 — `motion-safe:` 가드, 45ms 딜레이). `globals.css`에 `@keyframes slideDown` 신설(기존 미존재 확인). vitest 4/4·tsc·lint 그린(무관 사전 warning 1건 제외).
+
 ## 2026-07-17 — 편집 모드 개선 5종 구현 완료 (worktree-editor-improvements)
 - 계획 `docs/superpowers/plans/2026-07-17-editor-improvements.md`의 13 TDD 태스크 전부 구현 + 서브에이전트 리뷰 통과. 브랜치 커밋 `c064f89`…`467b82d`(18 코드 커밋). dev 기준, **미머지·미푸시**.
 - **(1) 노드 복사/붙여넣기/Ctrl드래그**: Ctrl+C/V + Ctrl드래그 복제. 복사 대상 process·decision·end(start·subprocess 제외·토스트). `localStorage` 클립보드로 크로스탭/크로스맵. 다중+내부엣지. `makeCopyLabel`(`(n)` 증분). 붙여넣기 누적 오프셋+findFreeSpot(반복 Ctrl+V 겹침 방지). Ctrl드래그=원본 잔상+`+`배지, 사본 드롭. Ctrl+C는 노드 미선택 시 네이티브 복사 통과. 순수 헬퍼 `lib/drag-constrain`·`node-clipboard`·`canvas`(vitest).

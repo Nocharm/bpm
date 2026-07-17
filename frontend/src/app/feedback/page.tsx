@@ -3,7 +3,8 @@
 // 전체 피드백 페이지 — 집계 카드 · 유형 필터 · 목록 · 행 클릭 상세/관리 모달 (design 2026-07-05).
 
 import { Bug, Ellipsis, Lightbulb, List, MessageCircle, Plus } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { listFeedback, type FeedbackItem, type FeedbackKind } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
@@ -42,6 +43,7 @@ function DatePills({ iso }: { iso: string }) {
 
 export default function FeedbackPage() {
   const { t } = useI18n();
+  const router = useRouter();
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   const isSysadmin = user?.isSysadmin ?? false;
   const loginId = user?.loginId ?? "";
@@ -61,6 +63,21 @@ export default function FeedbackPage() {
       alive = false;
     };
   }, []);
+
+  // 딥링크 ?feedback=<id> — 목록 로드 후 해당 id가 있으면 상세 모달을 1회만 오픈.
+  // useSearchParams 대신 window.location을 직접 읽어 Suspense 경계 없이 client-only로 처리.
+  const seededDeepLink = useRef(false);
+  useEffect(() => {
+    if (seededDeepLink.current) return;
+    const raw = new URLSearchParams(window.location.search).get("feedback");
+    if (!raw) return;
+    const id = Number(raw);
+    if (!Number.isFinite(id)) return;
+    if (!items.some((f) => f.id === id)) return; // 목록 로드 후에만 매칭
+    seededDeepLink.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot deep-link seed guarded by ref
+    setSelectedId(id);
+  }, [items]);
 
   // 집계·필터는 파생값 — 렌더 중 계산(React Compiler가 메모이즈)
   const counts = {
@@ -235,7 +252,12 @@ export default function FeedbackPage() {
           feedback={selected}
           currentLoginId={loginId}
           isSysadmin={isSysadmin}
-          onClose={() => setSelectedId(null)}
+          onClose={() => {
+            setSelectedId(null);
+            if (new URLSearchParams(window.location.search).get("feedback")) {
+              router.replace("/feedback");
+            }
+          }}
           onChanged={handleChanged}
         />
       )}

@@ -283,7 +283,18 @@ export function MapDetailCard({
         <>
       {/* 헤더 — 좌: 타이틀 / 우: 공개·역할·오우닝 부서 필 (Open 버튼 제거 — 열기는 카드 타이틀 링크) */}
       <div className="flex items-start justify-between gap-2">
-        <h2 className="text-body-strong text-ink">{detail.name}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="text-body-strong text-ink">{detail.name}</h2>
+          {detail.sp_designated_at && (
+            <span
+              data-id="map-detail-sp"
+              title={t("home.spBadgeTip")}
+              className="shrink-0 rounded-sm border border-hairline bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+            >
+              {t("home.spBadge")}
+            </span>
+          )}
+        </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-fine text-ink-tertiary">
           {/* 공개 범위 — 반투명 필 + 아이콘 (public=green/private=중립, visibilityPillClass 색 의미 유지) */}
           <span

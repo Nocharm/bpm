@@ -52,6 +52,7 @@ import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCate
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
+import { ActivityDigest } from "@/components/activity-digest";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
@@ -636,16 +637,30 @@ export default function InboxPage() {
                   t={t}
                 />
               ) : (
-                <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
-                  {t("inbox.approvalsSelectPrompt")}
-                </div>
+                <ActivityDigest title={t("inbox.tabApprovals")} stats={[]} hint={t("digest.selectHint")}>
+                  <div className="rounded-sm bg-accent-tint px-3 py-2 text-caption text-accent">
+                    {approvals.length === 0
+                      ? t("home.allCaughtUp")
+                      : t("inbox.pendingCount", { n: approvals.length })}
+                  </div>
+                </ActivityDigest>
               )
             ) : selected ? (
               <NotificationDetail notification={selected} nowMs={nowMs} t={t} />
             ) : (
-              <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
-                {t("inbox.selectPrompt")}
-              </div>
+              <ActivityDigest
+                title={t("inbox.tabNotifications")}
+                stats={NOTIFICATION_CATEGORIES.map((c) => ({
+                  icon: (() => {
+                    const Icon = CATEGORY_ICONS[c];
+                    return <Icon size={14} strokeWidth={1.5} />;
+                  })(),
+                  label: t(`inbox.cat.${c}` as MessageKey),
+                  count: items.filter((n) => getNotificationCategory(n.type) === c).length,
+                }))}
+                unreadCount={unread}
+                hint={t("digest.selectHint")}
+              />
             )}
           </div>
         </div>
