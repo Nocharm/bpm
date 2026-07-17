@@ -1,9 +1,19 @@
-// Ctrl+C / Ctrl+V 노드 복사·붙여넣기 — 브라우저 실기동 검증 (Task 1.3).
-// 시나리오: ①단일 노드 선택→Ctrl+C→Ctrl+V: "(2)" 중복라벨 + {16,16} 오프셋으로 붙여넣기, 새 노드가 유일 선택
+// Ctrl+C / Ctrl+V 노드 복사·붙여넣기 — 브라우저 실기동 검증 (Task 1.3, FIX1 누적 오프셋 반영).
+// 시나리오: ①단일 노드 선택→Ctrl+C→Ctrl+V: "(2)" 중복라벨 + findFreeSpot 보정 오프셋으로 붙여넣기, 새 노드가 유일 선택
+//           ①-b 같은 클립보드로 연속 Ctrl+V(새 복사 없음): 직전 붙여넣기와 같은 자리에 쌓이지 않고 더 멀리 대각선 이동(누적 오프셋)
 //           ②start 노드(비복사 타입) 선택→Ctrl+C: copy.blocked 토스트 노출 + 클립보드 미변경
-//           ③다중선택(2노드+내부 엣지) Ctrl+C→Ctrl+V: 노드 2개 + 엣지 1개 함께 복제
+//           ③다중선택(2노드+내부 엣지) Ctrl+C→Ctrl+V: 노드 2개 + 엣지 1개 함께 복제(공유 오프셋, 개별 findFreeSpot 없음)
 //           ④크로스탭 — 같은 브라우저 컨텍스트의 다른 탭(같은 origin=localStorage 공유)에서 Ctrl+V → 붙여넣기 성공
 //           ⑤콘솔 에러 0
+//
+// NOTE(FIX1 리뷰 반영): 단일 노드 붙여넣기는 이제 raw {16,16} 오프셋 뒤에 findFreeSpot(handleAddNode와 동일 로직)을
+// 한 번 더 통과한다. NODE_HEIGHT=52(lib/canvas.ts)라 hit 문턱(0.7배)이 y축 36.4px밖에 안 되고, raw {16,16}은 원본과
+// 여전히 겹침 판정이라 findFreeSpot이 28px씩 밀어낸다 — 이 픽스처(원본 pos_x=470/pos_y=380) 기준 실측값은 아래 참고.
+//   1회 연속 붙여넣기: {16,16} raw → hit(원본과 겹침) → 1회 보정 → 최종 오프셋 {44,44}
+//   2회 연속 붙여넣기(같은 클립보드): {32,32} raw → hit(원본·1차 사본 모두와 겹침) → 2회 보정 → 최종 오프셋 {88,88}
+// 즉 "(a) pasted node is offset by +16/+16" 단정은 findFreeSpot 도입으로 더 이상 성립하지 않음 — 겹침 회피가
+// 의도된 동작이므로, 아래 단정은 실측 좌표(+44/+44, +88/+88)로 갱신하고 "직전 붙여넣기보다 항상 더 멀어진다"는
+// 단조성 체크를 추가해 findFreeSpot 상수(28px 스텝)가 바뀌어도 핵심 회귀(같은 자리에 쌓임)는 계속 잡히게 한다.
 //
 // 실행 (frontend/ 에서): node scripts/pw-verify-node-copy.mjs
 // 전제: backend :8000(reset_db 시드 무관 — API로 맵을 새로 만듦), frontend :3000, playwright-core(--no-save)
@@ -153,14 +163,39 @@ try {
 
   const dupId = await idByText(page, "Step A (2)");
   const dupPos = dupId ? await readNodePos(page, dupId) : null;
+  // raw {16,16}은 원본(52px 높이)과 여전히 겹치므로 findFreeSpot이 한 번 더 밀어내 {44,44}에 안착(위 NOTE 참고).
   check(
-    "(a) pasted node is offset by +16/+16 from the source",
-    !!(dupPos && beforePosA && dupPos.x === beforePosA.x + 16 && dupPos.y === beforePosA.y + 16),
+    "(a) pasted node lands clear of the source via findFreeSpot (+44/+44, not raw +16/+16)",
+    !!(dupPos && beforePosA && dupPos.x === beforePosA.x + 44 && dupPos.y === beforePosA.y + 44),
     `before=${JSON.stringify(beforePosA)} pasted=${JSON.stringify(dupPos)}`,
   );
 
   const selectedAfterPasteA = await page.locator(".react-flow__node.selected").count();
   check("(a) pasted node becomes the sole selection", selectedAfterPasteA === 1, `selected=${selectedAfterPasteA}`);
+
+  // ===== (a2) 같은 클립보드로 연속 Ctrl+V(새 복사 없음) — 누적 오프셋이 직전 붙여넣기 위로 안 쌓이고 더 멀어져야 함 =====
+  const beforeCountA2 = await page.locator(".react-flow__node").count();
+  await page.keyboard.press(PASTE_KEY);
+  await page.waitForTimeout(300);
+  const afterCountA2 = await page.locator(".react-flow__node").count();
+  check(
+    "(a2) consecutive paste (same clipboard) adds another node",
+    afterCountA2 === beforeCountA2 + 1,
+    `before=${beforeCountA2} after=${afterCountA2}`,
+  );
+  const dup2Id = await idByText(page, "Step A (3)");
+  const dup2Pos = dup2Id ? await readNodePos(page, dup2Id) : null;
+  check(
+    "(a2) second consecutive paste is not stacked on the first paste (moves further diagonally)",
+    !!(dup2Pos && dupPos && dup2Pos.x > dupPos.x && dup2Pos.y > dupPos.y),
+    `first=${JSON.stringify(dupPos)} second=${JSON.stringify(dup2Pos)}`,
+  );
+  // 실측값(위 NOTE) — {32,32} raw가 원본·1차 사본 모두와 겹쳐 findFreeSpot이 2회 보정, 누적 오프셋 {88,88}.
+  check(
+    "(a2) second consecutive paste lands at the accumulated +88/+88 offset from the source",
+    !!(dup2Pos && beforePosA && dup2Pos.x === beforePosA.x + 88 && dup2Pos.y === beforePosA.y + 88),
+    `before=${JSON.stringify(beforePosA)} pasted=${JSON.stringify(dup2Pos)}`,
+  );
 
   // ===== (b) start 노드(비복사 타입) 선택→Ctrl+C: copy.blocked 토스트 + 클립보드 미변경 =====
   const clipBefore = await page.evaluate(() => window.localStorage.getItem("bpm.nodeClipboard"));

@@ -147,6 +147,7 @@ export interface SubprocessRef {
   headcount: string | null;
   url: string | null;
   url_label: string | null;
+  // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)
   sp_description: string | null;
 }
 

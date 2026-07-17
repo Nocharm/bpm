@@ -943,6 +943,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 발화하는데, 둘 다 applyCtrlDragCopy를 부르면 같은 stale nodesRef를 읽어 사본이 2×N개 append된다(백엔드 저장까지).
   // beginCtrlDrag에서 false로 리셋, applyCtrlDragCopy 진입 시 true로 세워 제스처당 정확히 한 번만 실행.
   const ctrlDragConsumedRef = useRef(false);
+  // 연속 Ctrl+V 누적 오프셋 — 같은 클립보드 내용(pasteClipSigRef와 서명 일치)이면 seq를 증가시켜
+  // 대각선으로 계속 밀어내고(handlePaste), 새로 복사하거나 다른 클립보드가 들어오면 1로 리셋.
+  const pasteSeqRef = useRef(0);
+  const pasteClipSigRef = useRef<string | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       shiftHeldRef.current = e.shiftKey;
@@ -3183,9 +3187,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           label: typeof edge.label === "string" ? edge.label : undefined,
         })),
     });
+    // 새로 복사하면 다음 붙여넣기는 누적 오프셋 없이 1부터 다시 시작.
+    pasteSeqRef.current = 0;
+    pasteClipSigRef.current = null;
   }, [mapId, showToast, t]);
 
-  // Ctrl+V — 같은 맵이면 {16,16} 오프셋, 다른 맵(다른 탭 포함)이면 현재 뷰포트 중앙 기준으로 배치.
+  // Ctrl+V — 같은 맵이면 {16,16}×연속횟수 누적 오프셋(대각선 이동, 겹침 방지), 다른 맵(다른 탭 포함)이면
+  // 현재 뷰포트 중앙 기준으로 배치. 같은 클립보드 내용을 연속 붙여넣을 때만 누적 — 새로 복사하면 1로 리셋.
   const handlePaste = useCallback(() => {
     if (readOnly) {
       return;
@@ -3195,7 +3203,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       return;
     }
     let offset = { x: 16, y: 16 };
-    if (clip.sourceMapId !== mapId) {
+    if (clip.sourceMapId === mapId) {
+      const sig = JSON.stringify(clip);
+      pasteSeqRef.current = pasteClipSigRef.current === sig ? pasteSeqRef.current + 1 : 1;
+      pasteClipSigRef.current = sig;
+      offset = { x: 16 * pasteSeqRef.current, y: 16 * pasteSeqRef.current };
+    } else {
       const container = canvasContainerRef.current;
       if (container) {
         const rect = container.getBoundingClientRect();
@@ -3210,14 +3223,25 @@ function MapEditor({ mapId }: { mapId: number }) {
         offset = { x: center.x - (minX + maxX) / 2, y: center.y - (minY + maxY) / 2 };
       }
     }
-    const { nodes: pastedNodes, edges: pastedEdges } = buildPaste(clip, {
+    const { nodes: pastedNodesRaw, edges: pastedEdges } = buildPaste(clip, {
       newId: genId,
       existingLabels: nodesRef.current.map((node) => node.data.label),
       offset,
     });
-    if (pastedNodes.length === 0) {
+    if (pastedNodesRaw.length === 0) {
       return;
     }
+    // 단일 노드는 기존 노드와 안 겹치도록 보정(handleAddNode와 동일 로직) — 다중은 그룹 형태 보존을 위해
+    // 공유 오프셋만 적용(개별 findFreeSpot을 걸면 상대 배치가 깨진다).
+    const pastedNodes =
+      pastedNodesRaw.length === 1
+        ? [
+            {
+              ...pastedNodesRaw[0],
+              position: findFreeSpot(pastedNodesRaw[0].position.x, pastedNodesRaw[0].position.y),
+            },
+          ]
+        : pastedNodesRaw;
     pushHistory();
     setNodes((current) => [
       ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
@@ -3251,7 +3275,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     scheduleAutoSave();
     showToast(t("copy.pasted", { n: pastedNodes.length }));
-  }, [readOnly, mapId, reactFlow, setNodes, setEdges, pushHistory, scheduleAutoSave, flashNode, showToast, t]);
+  }, [
+    readOnly,
+    mapId,
+    reactFlow,
+    setNodes,
+    setEdges,
+    pushHistory,
+    scheduleAutoSave,
+    flashNode,
+    showToast,
+    t,
+    findFreeSpot,
+  ]);
 
   // Ctrl/⌘+드래그 시작 — 복사 가능 노드(process/decision/end)의 원위치 잔상을 캡처해 사본 모드를 켠다.
   // 복사 불가 노드가 섞이면 토스트만(그 노드는 그대로 이동, 사본 없음).
@@ -4820,8 +4856,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           },
         ],
       };
+      // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
+      const libraryItem: ContextMenuItem = {
+        label: t("library.open"),
+        icon: Network,
+        shortcut: "S",
+        onSelect: () => setLibraryOpen(true),
+      };
       if (readOnly) {
-        return [moreItem];
+        return [moreItem, { divider: true }, libraryItem];
       }
       return [
         ...NODE_TYPE_OPTIONS.map((option, index) => ({
@@ -4836,7 +4879,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         { divider: true },
         moreItem,
         { divider: true },
-        { label: t("library.open"), icon: Network, shortcut: "S", onSelect: () => setLibraryOpen(true) },
+        libraryItem,
       ];
     }
     // 그룹/복수선택 정렬 메뉴 — ids 미지정(selection)은 선택 노드, 지정(group)은 그룹 멤버 대상
@@ -6453,10 +6496,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      // 입력/편집 중이면 무시 (검색·라벨·AI·아웃라인 rename 등)
+      // 입력/편집 중이면 무시 (검색·라벨·AI·아웃라인 rename 등) — onFlowKey와 동일 가드(contentEditable·아웃라인 포함).
       if (
         event.target instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+        (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) ||
+          event.target.isContentEditable ||
+          event.target.closest("[data-editor-outline]") !== null)
       ) {
         return;
       }
@@ -6492,8 +6537,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // S — 전역 서브프로세스 라이브러리 패널 열기. 컨텍스트 메뉴가 떠 있으면 무시
-      // (정렬 서브메뉴의 accel 's'=세로 자동정렬과 충돌 방지).
-      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.code === "KeyS" && !menu) {
+      // (정렬 서브메뉴의 accel 's'=세로 자동정렬과 충돌 방지). Shift+S는 제외(다른 조합과 충돌 방지 여지).
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.code === "KeyS" &&
+        !menu
+      ) {
         fire(() => setLibraryOpen(true));
         return;
       }
@@ -6504,6 +6556,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         } else if (event.code === "KeyE" && event.shiftKey) {
           fire(() => void handleExportPng());
         } else if (event.code === "KeyC" && !event.shiftKey) {
+          // 선택 노드가 하나도 없으면 preventDefault·토스트 없이 브라우저 기본 텍스트 복사로 흘려보낸다.
+          const hasSelectedNode =
+            nodesRef.current.filter((node) => node.selected).length > 0 || selectedId !== null;
+          if (!hasSelectedNode) {
+            return;
+          }
           fire(() => handleCopy());
         } else if (event.code === "KeyV" && !event.shiftKey) {
           fire(() => handlePaste());
@@ -6556,6 +6614,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     pending,
     previewSource,
     menu,
+    selectedId,
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
