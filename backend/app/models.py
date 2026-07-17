@@ -214,6 +214,8 @@ class Node(Base):
     url: Mapped[str] = mapped_column(String(500), default="")
     # 참조 링크 표시 라벨 — url 있을 때만 의미(스키마 validator가 함께 소거) (url-label design 2026-07-07)
     url_label: Mapped[str] = mapped_column(String(100), default="")
+    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드(node_type="section")의 주 링크 (design 2026-07-18)
+    section_anchor: Mapped[str] = mapped_column(String(200), default="")
     # 복제 계보 루트(원본 노드 ID) — 버전 간 diff 매칭용, 복제 시 서버가 기록 (spec §7 Phase B)
     source_node_id: Mapped[str | None] = mapped_column(String(50), default=None)
     pos_x: Mapped[float] = mapped_column(Float, default=0.0)

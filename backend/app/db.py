@@ -65,6 +65,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
     # 지정 설명 — 자유 텍스트 (design 2026-07-17)
     ("process_maps", "sp_description", "TEXT"),
+    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드의 주 링크 (design 2026-07-18)
+    ("nodes", "section_anchor", "VARCHAR(200) DEFAULT ''"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

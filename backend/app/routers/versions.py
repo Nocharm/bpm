@@ -76,6 +76,7 @@ async def clone_graph(
             fte=node.fte,
             url=node.url,
             url_label=node.url_label,
+            section_anchor=node.section_anchor,
             # 계보 루트 전파 — 복제의 복제도 최초 원본을 가리켜 diff 매칭 유지
             source_node_id=node.source_node_id or node.id,
             pos_x=node.pos_x,

@@ -605,6 +605,8 @@ class NodeIn(BaseModel):
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
     url_label: str = Field(default="", max_length=100)
+    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드 (design 2026-07-18)
+    section_anchor: str = Field(default="", max_length=200)
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0

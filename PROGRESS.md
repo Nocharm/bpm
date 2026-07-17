@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — Word 맵 Task A1: 노드 `section_anchor` 컬럼 (worktree-word-map-sections)
+- 구현 계획(`docs/superpowers/plans/2026-07-18-word-map-section-linking.md`) Task A1 완료: Word 맵 섹션 노드(node_type="section")가 문서 내부 앵커를 저장할 신규 노드 컬럼 `section_anchor`. 열거 지점 전부 갱신: `models.py`(Node)·`schemas.py`(NodeIn)·`routers/graph.py`(update+insert 분기)·`routers/versions.py`(clone_graph)·`db.py`(`_ADDED_COLUMNS`, 운영 자동 ALTER 보강).
+- TDD: `tests/test_graph.py::test_section_anchor_roundtrips` RED(KeyError: section_anchor 미인식) → 구현 → GREEN. 전체 스위트 636 pass, ruff clean.
+- 프론트(C1)·맵 3컬럼(A2)·재임포트(A3)는 후속 태스크 — 이번 커밋은 A1 단독.
+
 ## 2026-07-18 — Word 맵 섹션 링크(문서 내부 하이퍼링크) 설계 (worktree-word-map-sections)
 - dev `5163615`(main-tabs UX 머지 포함) 기준 신규 브랜치·워크트리. 브레인스토밍으로 축별 확정 → 설계 `docs/superpowers/specs/2026-07-18-word-map-section-linking-design.md`.
 - 핵심: Word 맵 전용 모드에서 순서도 도형이 **문서 내부 앵커(`w:anchor`)**로 링크 — 산출물 복사 → 원본 SOP 붙여넣기 시 섹션 점프 즉시 활성. **섹션 = 서브프로세스 대체**(피커 창·3접근포인트·드롭 미러, `data.nodeType:"section"`). 노드 3필드(신규 `section_anchor` + `label`=번호 + 기존 `url`/`url_label`). read-only `.docx` 파서(`word-import.ts`, 기존 북마크만 선별·문서 0수정). 내보내기 두 링크 확정(앵커 라벨 첫 공백토큰만 + url 라벨 전체).
