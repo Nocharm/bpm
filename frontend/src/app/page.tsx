@@ -278,18 +278,21 @@ export default function MapListPage() {
     [maps],
   );
 
+  // selectedDept를 render에서 파생 — visibleMaps는 refresh()마다 새 배열 참조라 effect deps에 직접 넣으면
+  // 배열 identity 변화만으로 재실행되어(값은 동일) 사용자가 방금 접은 아코디언 노드를 재펼침해버린다 /
+  // Derive at render so refresh()'s new visibleMaps reference doesn't re-trigger the effect below.
+  const selectedDept =
+    selectedId != null ? (visibleMaps.find((m) => m.id === selectedId)?.owning_department ?? null) : null;
+
   // 맵 선택 시 좌측 아코디언 자동펼침 — 선택 맵의 owning_department 조상 경로를 orgOpen에 합집합 /
   // auto-expand the left org accordion to reveal the selected map's owning department.
   useEffect(() => {
-    if (selectedId == null) return;
-    const m = visibleMaps.find((x) => x.id === selectedId);
-    const dept = m?.owning_department;
-    if (!dept) return;
-    const parts = dept.split("/");
+    if (selectedId == null || !selectedDept) return;
+    const parts = selectedDept.split("/");
     const paths = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to selectedId (user action), not deriving render state
     setOrgOpen((prev) => new Set([...prev, ...paths]));
-  }, [selectedId, visibleMaps]);
+  }, [selectedId, selectedDept]);
 
   // 가시성 탭 AND 상태 필 — 각 그룹 내 OR, 그룹 간 AND, 둘 다 비면 전체 (H1) /
   // visibility tab AND status pills — OR within group, AND across; empty = all.
