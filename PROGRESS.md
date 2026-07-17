@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-17 — 메인 탭 UX 개선 설계 (worktree-main-tabs-ux)
+- dev `0b72270` 기준 신규 브랜치. 설계 문서 `docs/superpowers/specs/2026-07-17-main-tabs-ux-design.md`.
+- 스코프 5항목(전부 클라·백엔드 무변경): ①Maps 좌측 오우닝부서 조직도 아코디언(카드 디자인 유지+`[SP]` 배지) ②Maps 우측 홈 대시보드(승인필요+미완성초안+최근열람)+최근 스태거 진입 애니메이션 ③Feedback 작성하단 최근피드백 카드+`?feedback=<id>` 딥링크 ④Inbox 미선택 우측 활동요약 다이제스트 ⑤Notices 동일 다이제스트.
+- 사용자 요청 "알림 카테고리 아이콘+필터"는 dev(`lib/notification-categories.ts`+inbox)에 이미 구현되어 스코프 제외.
+
 ## 2026-07-17 — 편집 모드 개선 5종 구현 완료 (worktree-editor-improvements)
 - 계획 `docs/superpowers/plans/2026-07-17-editor-improvements.md`의 13 TDD 태스크 전부 구현 + 서브에이전트 리뷰 통과. 브랜치 커밋 `c064f89`…`467b82d`(18 코드 커밋). dev 기준, **미머지·미푸시**.
 - **(1) 노드 복사/붙여넣기/Ctrl드래그**: Ctrl+C/V + Ctrl드래그 복제. 복사 대상 process·decision·end(start·subprocess 제외·토스트). `localStorage` 클립보드로 크로스탭/크로스맵. 다중+내부엣지. `makeCopyLabel`(`(n)` 증분). 붙여넣기 누적 오프셋+findFreeSpot(반복 Ctrl+V 겹침 방지). Ctrl드래그=원본 잔상+`+`배지, 사본 드롭. Ctrl+C는 노드 미선택 시 네이티브 복사 통과. 순수 헬퍼 `lib/drag-constrain`·`node-clipboard`·`canvas`(vitest).
