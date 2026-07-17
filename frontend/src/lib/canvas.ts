@@ -495,6 +495,18 @@ export function makeUniqueLabel(desired: string, taken: string[]): string {
   }
 }
 
+// 복사 가능 노드 타입 — start(싱글턴)·subprocess(링크 유일성)는 제외.
+const COPYABLE_NODE_TYPES: ReadonlySet<ProcessNodeType> = new Set(["process", "decision", "end"]);
+export function isCopyableNodeType(nodeType: ProcessNodeType): boolean {
+  return COPYABLE_NODE_TYPES.has(nodeType);
+}
+
+// 복사본 라벨 — 말미 " (n)" 접미를 떼어 base를 구한 뒤 다음 빈 번호 부여(중첩 방지).
+export function makeCopyLabel(original: string, taken: string[]): string {
+  const base = original.replace(/\s*\(\d+\)\s*$/, "").trim();
+  return makeUniqueLabel(base || original, taken);
+}
+
 /** B로 들어오는(B가 target) 엣지들. */
 export function getIncomingEdges(edges: Edge[], nodeId: string): Edge[] {
   return edges.filter((edge) => edge.target === nodeId);

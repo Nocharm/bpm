@@ -26,6 +26,7 @@ export interface DesignationForm {
   headcount: string;
   url: string;
   urlLabel: string;
+  description: string;
 }
 
 interface SubprocessDesignationModalProps {
@@ -113,6 +114,7 @@ export function SubprocessDesignationModal({
         headcount: form.headcount,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
+        description: form.description.trim(),
       });
       onSaved(updated);
     } catch (err) {
@@ -202,6 +204,15 @@ export function SubprocessDesignationModal({
               value={form.urlLabel}
               disabled={form.url.trim() === ""}
               onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
+            />
+          </div>
+          <div className="flex flex-col gap-1 border-t border-divider py-1">
+            <span className="text-caption text-ink-secondary">{t("field.description")}</span>
+            <textarea
+              data-id="subprocess-designation-description"
+              className="min-h-[4rem] resize-y rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent"
+              value={form.description}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
             />
           </div>
         </div>

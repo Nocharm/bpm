@@ -111,6 +111,8 @@ import {
   rectWithExclusions,
   branchKindOf,
   canSwapTypes,
+  isCopyableNodeType,
+  makeCopyLabel,
   sideFromHandleId,
   sourceHandleId,
   targetHandleId,
@@ -131,6 +133,7 @@ import {
   type OutlineNode,
   type ProcessNodeType,
 } from "@/lib/canvas";
+import { buildPaste, readClipboard, writeClipboard } from "@/lib/node-clipboard";
 import {
   acquireCheckout,
   ApiError,
@@ -186,6 +189,7 @@ import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
 import { formatKst } from "@/lib/datetime";
+import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
@@ -353,6 +357,8 @@ type RegionBox = {
 
 // 드래그 비활성 시 dragLiveById 기본값 — 매 렌더 새 Map 생성을 막아 displayNodes memo가 불필요 재계산되지 않게.
 const EMPTY_DRAG_LIVE: ReadonlyMap<string, { x: number; y: number }> = new Map();
+// Ctrl+드래그 비활성 시 ctrlDragIds 기본값 — 매 렌더 새 Set 생성을 막아 nodeActions memo가 불필요 재계산되지 않게.
+const EMPTY_CTRL_DRAG_IDS: ReadonlySet<string> = new Set();
 
 // 인라인 펼침 영역 — 세로선 2개 + 반투명 틴트가 보이는 캔버스를 위아래로 가득 채우는 "세로 레인".
 // 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더되고 에디터 본체는 영향 없음.
@@ -922,14 +928,57 @@ function MapEditor({ mapId }: { mapId: number }) {
   const draggedNodeIdRef = useRef<string | null>(null);
   // 드래그 시작 시점의 노드 위치 — 위치 교환(swap) 시 드래그 노드의 원래 자리 복원용
   const dragStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  // Shift 축 고정용 — 현재 제스처로 함께 움직이는 모든 노드의 시작 표시좌표(단일 드래그=1개, 다중선택 드래그
+  // 시 onNodeDragStart 세 번째 인자(nodes)로 전원 채움 — RF는 노드를 직접 잡아 끌 때도 선택된 나머지를 같은
+  // 콜백으로 보고하고 onSelectionDrag는 안 씀). onNodeDragStop에서 비운다.
+  const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // Shift 드래그 축 고정용 — 드래그 중에만 참조하므로 입력창 포커스 중 추적돼도 무방.
+  const shiftHeldRef = useRef(false);
+  // Ctrl/⌘+드래그 복제 모드 — 활성 여부(잔상·+배지 렌더 게이팅)와 복사 가능 노드의 시작 위치·data(잔상 데이터).
+  const [ctrlDragActive, setCtrlDragActive] = useState(false);
+  const [ctrlDragGhosts, setCtrlDragGhosts] = useState<
+    { id: string; position: { x: number; y: number }; data: NodeData }[]
+  >([]);
+  // mousedown 직전(RF 선택 변경 전)의 선택 노드 id 집합 — Ctrl+드래그가 "의도된 선택 드래그"인지 "엉뚱한
+  // 미선택 노드 새로 잡음"인지 판별용. RF의 multiSelectionKeyCode(기본 Ctrl/⌘)가 이 기능 트리거 키와 겹쳐,
+  // 잡은 노드가 잔여 선택에 딸려 들어가는 걸 막는다(capture-phase pointerdown이 RF 선택 변경보다 먼저 스냅샷).
+  const preMousedownSelectedRef = useRef<ReadonlySet<string>>(new Set());
+  // Ctrl+드래그 사본 확정 1회 래치 — RF는 다중선택 드래그에서 onNodeDragStop·onSelectionDragStop을 둘 다
+  // 발화하는데, 둘 다 applyCtrlDragCopy를 부르면 같은 stale nodesRef를 읽어 사본이 2×N개 append된다(백엔드 저장까지).
+  // beginCtrlDrag에서 false로 리셋, applyCtrlDragCopy 진입 시 true로 세워 제스처당 정확히 한 번만 실행.
+  const ctrlDragConsumedRef = useRef(false);
+  // 연속 Ctrl+V 누적 오프셋 — 같은 클립보드 내용(pasteClipSigRef와 서명 일치)이면 seq를 증가시켜
+  // 대각선으로 계속 밀어내고(handlePaste), 새로 복사하거나 다른 클립보드가 들어오면 1로 리셋.
+  const pasteSeqRef = useRef(0);
+  const pasteClipSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      shiftHeldRef.current = e.shiftKey;
+      // 드래그 중 Ctrl/⌘을 놓으면 일반 이동으로 취급 — 잔상·배지 즉시 해제(드롭 시 onNodeDragStop이
+      // ctrlDragActive=false를 보고 사본 생성을 건너뜀).
+      if (!(e.ctrlKey || e.metaKey)) {
+        setCtrlDragActive((cur) => (cur ? false : cur));
+        setCtrlDragGhosts((cur) => (cur.length > 0 ? [] : cur));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, []);
   // 펼침 중 루트 드래그: 드래그 중인 노드별 라이브 표시좌표(커서 1:1 추종). 드래그 중에만 항목 존재.
   // state로 둬야 displayNodes가 매 프레임 재렌더돼 커서를 따라온다(ref면 안 됨).
   const [dragLiveById, setDragLiveById] = useState<ReadonlyMap<string, { x: number; y: number }>>(
     EMPTY_DRAG_LIVE,
   );
   const dragLiveByIdRef = useRef(dragLiveById); // 핸들러에서 stale 없이 최신 라이브 맵 읽기용
-  // 드래그 시작 시 캡처한 노드별 (저장좌표, footprint 오프셋) — 드롭 시 표시→저장 환산에 사용.
-  const dragStartOffsetRef = useRef<Map<string, { offset: { x: number; y: number } }>>(new Map());
+  // 드래그 시작 시 캡처한 노드별 (저장좌표, footprint 오프셋, 시작 표시좌표) — 드롭 시 표시→저장 환산 및
+  // Shift 축 고정(다중선택, start 필드)에 사용.
+  const dragStartOffsetRef = useRef<
+    Map<string, { offset: { x: number; y: number }; start: { x: number; y: number } }>
+  >(new Map());
   // footprint-shift된 루트 노드의 position write를 nodes state에서 차단할 id 집합. 드래그 시작 시 채우고,
   // 드롭 후 몇 프레임까지 유지한다. RF는 표시좌표(=저장+offset)를 controlled nodes로 받아 드롭 직후 마지막
   // position 변경으로 돌려보내는데, 이게 새면 표시좌표가 저장좌표로 기록돼 재파생에서 또 밀린다(이중쉬프트).
@@ -1304,6 +1353,21 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 등 비-position 변경은 그대로 통과.
   const dropDraggingPositions = useCallback(
     (changes: NodeChange<AppNode>[]): NodeChange<AppNode>[] => {
+      // Shift 드래그 축 고정 — 단일·다중선택 드래그 공통 경로(각자 시작점 기준). suppress 필터와 무관하게
+      // (펼침 추적 여부 상관없이) 적용. dragging true/false(드롭 확정) 둘 다 보정 — RF는 드롭 시 자체 내부
+      // 좌표(우리가 보정한 적 없는 원본 대각 이동)로 마지막 position 변경을 한 번 더 흘려보내므로, true만
+      // 잡으면 드롭 순간 원위치로 튄다.
+      const starts = dragStartPositionsRef.current;
+      if (starts.size > 0) {
+        for (const change of changes) {
+          if (change.type === "position" && change.position) {
+            const start = starts.get(change.id);
+            if (start) {
+              change.position = constrainToAxis(start, change.position, shiftHeldRef.current);
+            }
+          }
+        }
+      }
       const suppress = suppressPosIdsRef.current;
       if (suppress.size === 0) {
         return changes;
@@ -3106,6 +3170,224 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
+  // Ctrl+C — 선택 노드 중 복사 가능한 것(process/decision/end)만 + 내부 엣지를 클립보드에 저장(다른 탭·맵 붙여넣기 가능).
+  const handleCopy = useCallback(() => {
+    const selected = nodesRef.current.filter(
+      (node) => node.selected && isCopyableNodeType(node.data.nodeType),
+    );
+    if (selected.length === 0) {
+      showToast(t("copy.blocked"));
+      return;
+    }
+    const ids = new Set(selected.map((node) => node.id));
+    writeClipboard({
+      sourceMapId: mapId,
+      nodes: selected.map((node) => ({ id: node.id, position: node.position, data: node.data })),
+      edges: edgesRef.current
+        .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
+        .map((edge) => ({
+          source: edge.source,
+          target: edge.target,
+          label: typeof edge.label === "string" ? edge.label : undefined,
+        })),
+    });
+    // 새로 복사하면 다음 붙여넣기는 누적 오프셋 없이 1부터 다시 시작.
+    pasteSeqRef.current = 0;
+    pasteClipSigRef.current = null;
+  }, [mapId, showToast, t]);
+
+  // Ctrl+V — 같은 맵이면 {16,16}×연속횟수 누적 오프셋(대각선 이동, 겹침 방지), 다른 맵(다른 탭 포함)이면
+  // 현재 뷰포트 중앙 기준으로 배치. 같은 클립보드 내용을 연속 붙여넣을 때만 누적 — 새로 복사하면 1로 리셋.
+  const handlePaste = useCallback(() => {
+    if (readOnly) {
+      return;
+    }
+    const clip = readClipboard();
+    if (!clip) {
+      return;
+    }
+    let offset = { x: 16, y: 16 };
+    if (clip.sourceMapId === mapId) {
+      const sig = JSON.stringify(clip);
+      pasteSeqRef.current = pasteClipSigRef.current === sig ? pasteSeqRef.current + 1 : 1;
+      pasteClipSigRef.current = sig;
+      offset = { x: 16 * pasteSeqRef.current, y: 16 * pasteSeqRef.current };
+    } else {
+      const container = canvasContainerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const center = reactFlow.screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+        const minX = Math.min(...clip.nodes.map((n) => n.position.x));
+        const maxX = Math.max(...clip.nodes.map((n) => n.position.x)) + NODE_WIDTH;
+        const minY = Math.min(...clip.nodes.map((n) => n.position.y));
+        const maxY = Math.max(...clip.nodes.map((n) => n.position.y)) + NODE_HEIGHT;
+        offset = { x: center.x - (minX + maxX) / 2, y: center.y - (minY + maxY) / 2 };
+      }
+    }
+    const { nodes: pastedNodesRaw, edges: pastedEdges } = buildPaste(clip, {
+      newId: genId,
+      existingLabels: nodesRef.current.map((node) => node.data.label),
+      offset,
+    });
+    if (pastedNodesRaw.length === 0) {
+      return;
+    }
+    // 단일 노드는 기존 노드와 안 겹치도록 보정(handleAddNode와 동일 로직) — 다중은 그룹 형태 보존을 위해
+    // 공유 오프셋만 적용(개별 findFreeSpot을 걸면 상대 배치가 깨진다).
+    const pastedNodes =
+      pastedNodesRaw.length === 1
+        ? [
+            {
+              ...pastedNodesRaw[0],
+              position: findFreeSpot(pastedNodesRaw[0].position.x, pastedNodesRaw[0].position.y),
+            },
+          ]
+        : pastedNodesRaw;
+    pushHistory();
+    setNodes((current) => [
+      ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+      ...pastedNodes.map((node) => ({
+        id: node.id,
+        type: "process" as const,
+        position: node.position,
+        selected: true,
+        className: "bpm-node-flash",
+        data: node.data,
+      })),
+    ]);
+    if (pastedEdges.length > 0) {
+      setEdges((current) => [
+        ...current,
+        ...pastedEdges.map((edge) => ({
+          ...EDGE_DEFAULTS,
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: sourceHandleId("right"),
+          targetHandle: targetHandleId("left"),
+          label: edge.label || undefined,
+        })),
+      ]);
+    }
+    setSelectedId(pastedNodes.length === 1 ? pastedNodes[0].id : null);
+    setSelectedEdgeId(null);
+    for (const node of pastedNodes) {
+      flashNode(node.id);
+    }
+    scheduleAutoSave();
+    showToast(t("copy.pasted", { n: pastedNodes.length }));
+  }, [
+    readOnly,
+    mapId,
+    reactFlow,
+    setNodes,
+    setEdges,
+    pushHistory,
+    scheduleAutoSave,
+    flashNode,
+    showToast,
+    t,
+    findFreeSpot,
+  ]);
+
+  // Ctrl/⌘+드래그 시작 — 복사 가능 노드(process/decision/end)의 원위치 잔상을 캡처해 사본 모드를 켠다.
+  // 복사 불가 노드가 섞이면 토스트만(그 노드는 그대로 이동, 사본 없음).
+  // grabbedId — 잡은 노드 id(선택박스 오버레이 드래그는 null). RF의 multiSelectionKeyCode(=Ctrl/⌘)가 이 기능
+  // 트리거 키와 겹쳐, 잡은 노드가 잔여 선택에 딸려 들어간다. 잡은 노드가 mousedown 직전에 이미 선택돼 있었으면
+  // "의도된 선택 드래그"(선택 집합 전체 복제), 아니면 잔여 선택을 무시하고 잡은 노드만 복제.
+  const beginCtrlDrag = useCallback(
+    (isCtrl: boolean, grabbedId: string | null, dragged: AppNode[]) => {
+      if (!isCtrl || readOnly) {
+        return;
+      }
+      ctrlDragConsumedRef.current = false; // 새 제스처 시작 — 사본 확정 래치 해제
+      const usePriorSelection =
+        grabbedId === null || preMousedownSelectedRef.current.has(grabbedId);
+      const intended = usePriorSelection
+        ? dragged
+        : dragged.filter((node) => node.id === grabbedId);
+      const copyable = intended.filter((node) => isCopyableNodeType(node.data.nodeType));
+      if (copyable.length < intended.length) {
+        showToast(t("copy.blocked"));
+      }
+      if (copyable.length === 0) {
+        return;
+      }
+      setCtrlDragGhosts(
+        copyable.map((node) => ({ id: node.id, position: { ...node.position }, data: node.data })),
+      );
+      setCtrlDragActive(true);
+    },
+    [readOnly, showToast, t],
+  );
+
+  // Ctrl/⌘+드래그 드롭 확정 — 복사 가능 노드(ctrlDragGhosts)는 원위치로 되돌리고 드롭 위치(RF가 이미 반영한
+  // 최신 좌표)에 사본을 생성(id/라벨 dedup). 선택에 섞였던 복사불가 노드는 이미 이동한 위치 그대로 둔다.
+  // 사본만 선택 상태로 남긴다(단일=인스펙터 포커스, 다중=null).
+  const applyCtrlDragCopy = useCallback(() => {
+    // 제스처당 1회만 — RF가 onNodeDragStop·onSelectionDragStop을 둘 다 발화해도 두 번째 호출은 무시(2×N 방지).
+    if (ctrlDragConsumedRef.current) {
+      return;
+    }
+    ctrlDragConsumedRef.current = true;
+    const ghosts = ctrlDragGhosts;
+    if (ghosts.length === 0) {
+      return;
+    }
+    const ghostById = new Map(ghosts.map((g) => [g.id, g]));
+    // id/라벨은 setNodes 밖에서 먼저 확정 — updater는 순수해야 함(StrictMode 이중호출에도 안전).
+    const existingLabels = nodesRef.current.map((node) => node.data.label);
+    const plans = new Map<string, { copyId: string; label: string }>();
+    for (const ghost of ghosts) {
+      const label = makeCopyLabel(ghost.data.label, existingLabels);
+      existingLabels.push(label);
+      plans.set(ghost.id, { copyId: genId(), label });
+    }
+    setNodes((current) => {
+      const copies: AppNode[] = [];
+      const next = current.map((node) => {
+        const ghost = ghostById.get(node.id);
+        const plan = ghost ? plans.get(node.id) : undefined;
+        if (!ghost || !plan) {
+          return node.selected ? { ...node, selected: false } : node;
+        }
+        copies.push({
+          id: plan.copyId,
+          type: "process",
+          position: { ...node.position },
+          selected: true,
+          // 사본은 원본 그룹 소속을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
+          data: { ...ghost.data, label: plan.label, groupIds: [] },
+        });
+        return { ...node, position: { ...ghost.position }, selected: false };
+      });
+      return [...next, ...copies];
+    });
+    // 선택 집합 내부 엣지도 함께 복제 — Ctrl+C/V(handleCopy·buildPaste)와 동일 관례.
+    // 새 엣지 id(genId)는 updater 밖에서 확정 — updater가 이중 호출돼도 id를 재발급하지 않게(순수성).
+    const newEdges = edgesRef.current
+      .filter((edge) => plans.has(edge.source) && plans.has(edge.target))
+      .map((edge) => ({
+        ...EDGE_DEFAULTS,
+        id: genId(),
+        source: plans.get(edge.source)!.copyId,
+        target: plans.get(edge.target)!.copyId,
+        sourceHandle: sourceHandleId("right"),
+        targetHandle: targetHandleId("left"),
+        label: typeof edge.label === "string" ? edge.label : undefined,
+      }));
+    if (newEdges.length > 0) {
+      setEdges((current) => [...current, ...newEdges]);
+    }
+    const single = ghosts.length === 1 ? plans.get(ghosts[0].id) : undefined;
+    setSelectedId(single ? single.copyId : null);
+    setSelectedEdgeId(null);
+    scheduleAutoSave();
+  }, [ctrlDragGhosts, setNodes, setEdges, scheduleAutoSave]);
+
   // 정렬/레이아웃 버튼 공통 래퍼 — 변경 전 스냅샷 기록 + 자동 저장
   const applyNodesTransform = useCallback(
     (transform: (current: AppNode[]) => AppNode[]) => {
@@ -3518,8 +3800,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           .map((node) => [node.id, { ...node.position }]),
       );
       const onMove = (ev: PointerEvent) => {
-        const dx = (ev.clientX - startX) / zoom;
-        const dy = (ev.clientY - startY) / zoom;
+        let dx = (ev.clientX - startX) / zoom;
+        let dy = (ev.clientY - startY) / zoom;
+        if (shiftHeldRef.current) {
+          // Shift = 그룹 전체를 한 축으로만 이동 — (dx,dy)를 원점 기준 점으로 보고 더 작은 변위 축을 0으로
+          // (constrainToAxis와 동일 규칙, 동률=수평 유지). 전 멤버가 같은 델타를 쓰므로 그룹이 통째로 잠긴다.
+          const locked = constrainToAxis({ x: 0, y: 0 }, { x: dx, y: dy }, true);
+          dx = locked.x;
+          dy = locked.y;
+        }
         setNodes((current) =>
           current.map((node) => {
             const start = startPositions.get(node.id);
@@ -3712,11 +4001,26 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, setNodes, scheduleAutoSave],
   );
 
+  // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
+  const linkedMapIds = useMemo(
+    () =>
+      new Set(
+        nodes
+          .filter((n) => n.data.nodeType === "subprocess" && n.data.linkedMapId != null)
+          .map((n) => n.data.linkedMapId as number),
+      ),
+    [nodes],
+  );
+
   // 상단 맵 드롭다운의 '링크노드로 추가' — 다른 맵을 현재 캔버스에 읽기전용 참조(subprocess) 노드로 삽입.
   // handleLibraryDrop과 동일한 노드 형태이되 드롭 좌표 대신 뷰포트 중앙, 최신본 추종(followLatest).
   const addLinkNodeFromMap = useCallback(
     async (linkedMapId: number, name: string) => {
       if (readOnly) return;
+      if (linkedMapIds.has(linkedMapId)) {
+        showToast(t("library.alreadyLinked"));
+        return;
+      }
       const center = reactFlow.screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
@@ -3762,7 +4066,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode(id);
       showToast(t("editor.linkNodeAdded", { name }));
     },
-    [readOnly, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
+    [readOnly, linkedMapIds, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -3960,16 +4264,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (!rootOffsets || rootOffsets.size === 0) {
       return;
     }
-    const offsets = new Map<string, { offset: { x: number; y: number } }>();
+    const offsets = new Map<
+      string,
+      { offset: { x: number; y: number }; start: { x: number; y: number } }
+    >();
     const live = new Map<string, { x: number; y: number }>();
     for (const node of dragged) {
       const offset = rootOffsets.get(node.id);
       if (!offset) {
         continue; // 펼침에 안 밀린 노드(offset 0 미등록 포함은 아래에서 0 처리)
       }
-      offsets.set(node.id, { offset });
-      // RF가 보고하는 node.position은 이미 표시좌표(=저장+offset). 그대로 라이브 시드.
-      live.set(node.id, { x: node.position.x, y: node.position.y });
+      // RF가 보고하는 node.position은 이미 표시좌표(=저장+offset). 그대로 라이브 시드 겸 축 고정 기준점.
+      const start = { x: node.position.x, y: node.position.y };
+      offsets.set(node.id, { offset, start });
+      live.set(node.id, start);
     }
     if (offsets.size === 0) {
       return;
@@ -4567,8 +4875,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           },
         ],
       };
+      // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
+      const libraryItem: ContextMenuItem = {
+        label: t("library.open"),
+        icon: Network,
+        shortcut: "S",
+        onSelect: () => setLibraryOpen(true),
+      };
       if (readOnly) {
-        return [moreItem];
+        return [moreItem, { divider: true }, libraryItem];
       }
       return [
         ...NODE_TYPE_OPTIONS.map((option, index) => ({
@@ -4582,6 +4897,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         alignItem(null, selectedCount),
         { divider: true },
         moreItem,
+        { divider: true },
+        libraryItem,
       ];
     }
     // 그룹/복수선택 정렬 메뉴 — ids 미지정(selection)은 선택 노드, 지정(group)은 그룹 멤버 대상
@@ -5339,8 +5656,35 @@ function MapEditor({ mapId }: { mapId: number }) {
       return injectSubEnds(withWarning);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
-    return [...mapped, ...ancestorContextNodes];
-  }, [nodes, childNodes, inlineComposition, unresolvedCounts, eligible, ancestorContextNodes, currentScopeIsReadOnly, dragLiveById, injectSubEnds]);
+    // Ctrl+드래그 잔상 — 원본이 끌려가는 동안 시작 위치에 반투명 사본을 겹쳐 "사본이 남는다"를 미리 보여준다.
+    // id를 원본과 다르게 접두(ctrl-ghost:)해야 RF 노드 배열에서 key 충돌이 안 난다.
+    const ghostNodes: AppNode[] = ctrlDragActive
+      ? ctrlDragGhosts.map((ghost) => ({
+          id: `ctrl-ghost:${ghost.id}`,
+          type: "process",
+          position: ghost.position,
+          draggable: false,
+          selectable: false,
+          connectable: false,
+          deletable: false,
+          className: "bpm-node-ghost",
+          data: ghost.data,
+        }))
+      : [];
+    return [...mapped, ...ancestorContextNodes, ...ghostNodes];
+  }, [
+    nodes,
+    childNodes,
+    inlineComposition,
+    unresolvedCounts,
+    eligible,
+    ancestorContextNodes,
+    currentScopeIsReadOnly,
+    dragLiveById,
+    injectSubEnds,
+    ctrlDragActive,
+    ctrlDragGhosts,
+  ]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
   const styledEdges = useMemo(() => {
@@ -5763,6 +6107,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       onStartRename: startRename,
       onRename: renameNode,
       onCancelRename: cancelRename,
+      ctrlDragIds: ctrlDragActive
+        ? new Set(ctrlDragGhosts.map((ghost) => ghost.id))
+        : EMPTY_CTRL_DRAG_IDS,
     }),
     [
       toggleInlineExpand,
@@ -5772,6 +6119,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       startRename,
       renameNode,
       cancelRename,
+      ctrlDragActive,
+      ctrlDragGhosts,
     ],
   );
 
@@ -5812,8 +6161,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       drillIntoSubprocess(id);
     };
+    // Ctrl+드래그 의도 판별 — mousedown 시점의 선택 집합을 RF가 바꾸기 전에 스냅샷(capture phase가 노드의
+    // d3-drag pointerdown보다 먼저 발화). beginCtrlDrag이 이 스냅샷으로 잡은 노드의 사전 선택 여부를 본다.
+    const handlePointerDownCapture = () => {
+      preMousedownSelectedRef.current = new Set(
+        nodesRef.current.filter((node) => node.selected).map((node) => node.id),
+      );
+    };
     container.addEventListener("dblclick", handleDblClick, true); // capture — RF zoom보다 먼저
-    return () => container.removeEventListener("dblclick", handleDblClick, true);
+    container.addEventListener("pointerdown", handlePointerDownCapture, true); // capture — RF 선택 변경보다 먼저
+    return () => {
+      container.removeEventListener("dblclick", handleDblClick, true);
+      container.removeEventListener("pointerdown", handlePointerDownCapture, true);
+    };
   }, [drillIntoSubprocess, reactFlow]);
 
   // 인스펙터 폭 로컬 영속
@@ -6155,10 +6515,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 전역 단축키(조합키) — 메뉴 없이도 동작. 단일 키(1-4·E·정렬 L/C/T/M/H/V)는 우클릭 메뉴 가속기(ContextMenu) 담당.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      // 입력/편집 중이면 무시 (검색·라벨·AI·아웃라인 rename 등)
+      // 입력/편집 중이면 무시 (검색·라벨·AI·아웃라인 rename 등) — onFlowKey와 동일 가드(contentEditable·아웃라인 포함).
       if (
         event.target instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+        (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) ||
+          event.target.isContentEditable ||
+          event.target.closest("[data-editor-outline]") !== null)
       ) {
         return;
       }
@@ -6193,12 +6555,35 @@ function MapEditor({ mapId }: { mapId: number }) {
         fire(() => applyAutoLayout(dir));
         return;
       }
-      // Ctrl 조합 — 그룹 생성 / PNG 내보내기 (undo/redo·검색은 별도 핸들러)
+      // S — 전역 서브프로세스 라이브러리 패널 열기. 컨텍스트 메뉴가 떠 있으면 무시
+      // (정렬 서브메뉴의 accel 's'=세로 자동정렬과 충돌 방지). Shift+S는 제외(다른 조합과 충돌 방지 여지).
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.code === "KeyS" &&
+        !menu
+      ) {
+        fire(() => setLibraryOpen(true));
+        return;
+      }
+      // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
       if (event.ctrlKey || event.metaKey) {
         if (event.code === "KeyG" && !event.shiftKey) {
           fire(() => createGroupFromSelection());
         } else if (event.code === "KeyE" && event.shiftKey) {
           fire(() => void handleExportPng());
+        } else if (event.code === "KeyC" && !event.shiftKey) {
+          // 선택 노드가 하나도 없으면 preventDefault·토스트 없이 브라우저 기본 텍스트 복사로 흘려보낸다.
+          // passthrough to native copy when no node is selected — matches handleCopy's .selected filter
+          const hasSelectedNode = nodesRef.current.filter((node) => node.selected).length > 0;
+          if (!hasSelectedNode) {
+            return;
+          }
+          fire(() => handleCopy());
+        } else if (event.code === "KeyV" && !event.shiftKey) {
+          fire(() => handlePaste());
         }
         return;
       }
@@ -6247,10 +6632,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     managingApprovers,
     pending,
     previewSource,
+    menu,
+    selectedId,
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
     handleExportPng,
+    handleCopy,
+    handlePaste,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
@@ -6478,7 +6867,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ghost{opacity:.4;pointer-events:none;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
@@ -6736,6 +7125,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         {libraryOpen && (
           <ProcessLibraryPanel
             currentMapId={mapId}
+            linkedMapIds={linkedMapIds}
             onClose={() => setLibraryOpen(false)}
           />
         )}
@@ -6874,17 +7264,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                         openMenu(event, "edge", edge.id);
                       }}
                       onSelectionContextMenu={(event) => openMenu(event, "selection", null)}
-                      onNodeDragStart={(_, node) => {
+                      onNodeDragStart={(event, node, nodes) => {
                         pushHistory();
                         dragStartPosRef.current = { id: node.id, x: node.position.x, y: node.position.y };
+                        // RF는 다중선택을 노드 하나로 잡아 끌 때도 이 콜백에 전체 목록을 세 번째 인자로 준다.
+                        dragStartPositionsRef.current = new Map(
+                          nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+                        );
                         captureRootDragStart([node]);
+                        beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
                       onNodeDrag={handleNodeDrag}
                       onNodeDragStop={(_, node) => {
                         // 펼침 중 추적 드래그면 표시→저장 환산/무효취소를 먼저 확정.
                         const { tracked, committed } = finalizeRootDrag();
-                        // 추적 드래그인데 무효(취소)면 zone/group/collision/save 모두 생략 — 원위치 복귀만.
-                        if (!tracked || committed) {
+                        // Ctrl+드래그 사본 모드 — zone/group/collision 대신 원위치 복귀+사본 생성으로 대체.
+                        if (ctrlDragActive) {
+                          applyCtrlDragCopy();
+                        } else if (!tracked || committed) {
+                          // 추적 드래그인데 무효(취소)면 zone/group/collision/save 모두 생략 — 원위치 복귀만.
                           const drop = dropTargetRef.current;
                           if (
                             !readOnly &&
@@ -6900,26 +7298,47 @@ function MapEditor({ mapId }: { mapId: number }) {
                             scheduleAutoSave();
                           }
                         }
+                        setCtrlDragActive(false);
+                        setCtrlDragGhosts((cur) => (cur.length > 0 ? [] : cur));
                         clearDwell();
                         setDropTarget(null);
                         setGroupDropTarget(null);
                         draggedNodeIdRef.current = null;
+                        // 제스처 종료 — 다음 무관한 position 변경(화살표 이동 등)이 축 고정에 새지 않게 해제.
+                        dragStartPosRef.current = null;
+                        dragStartPositionsRef.current = new Map();
                       }}
-                      onSelectionDragStart={(_, nodes) => {
+                      onSelectionDragStart={(event, nodes) => {
                         pushHistory();
+                        // 선택박스 오버레이(빈 공간)를 잡아 끄는 평범한 다중선택 드래그는 onNodeDragStart가 아니라
+                        // 여기로 온다 — Shift 축 고정 기준점을 노드별로 시드해야 dropDraggingPositions가 각 노드를 보정한다.
+                        dragStartPositionsRef.current = new Map(
+                          nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+                        );
                         captureRootDragStart(nodes);
+                        // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
+                        beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
                       }}
                       onSelectionDrag={(_, nodes) => {
                         // 다중선택 드래그 — onNodeDrag가 안 발화하므로 여기서 라이브 표시좌표를 갱신.
+                        // 인라인 펼침(dragLiveById 렌더) 경로 전용. 평범한 다중선택은 nodes state로 렌더되고
+                        // dropDraggingPositions가 dragStartPositionsRef 기준으로 이미 축 고정하므로 여긴 건너뛴다
+                        // (여기서 dragLiveById를 써도 inlineComposition이 없으면 렌더에 안 쓰이고 잔여 항목만 남긴다).
                         const tracked = dragStartOffsetRef.current;
                         if (tracked.size === 0) {
                           return;
                         }
+                        const shiftHeld = shiftHeldRef.current;
                         setDragLiveById((cur) => {
                           const next = new Map(cur);
                           for (const node of nodes) {
-                            if (tracked.has(node.id)) {
-                              next.set(node.id, { x: node.position.x, y: node.position.y });
+                            const entry = tracked.get(node.id);
+                            if (entry) {
+                              // 다중선택은 노드별 시작점이 달라 개별 보정(entry.start 기준).
+                              next.set(
+                                node.id,
+                                constrainToAxis(entry.start, node.position, shiftHeld),
+                              );
                             }
                           }
                           return next;
@@ -6927,10 +7346,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onSelectionDragStop={() => {
                         const { tracked, committed } = finalizeRootDrag();
-                        // 추적 드래그인데 전부 무효(취소)면 저장 생략. 그 외엔 기존대로 autosave.
-                        if (!tracked || committed) {
+                        if (ctrlDragActive) {
+                          applyCtrlDragCopy();
+                        } else if (!tracked || committed) {
+                          // 추적 드래그인데 전부 무효(취소)면 저장 생략. 그 외엔 기존대로 autosave.
                           scheduleAutoSave();
                         }
+                        setCtrlDragActive(false);
+                        setCtrlDragGhosts((cur) => (cur.length > 0 ? [] : cur));
+                        // 제스처 종료 — 다음 무관한 position 변경이 축 고정에 새지 않게 해제(onNodeDragStop과 동일).
+                        dragStartPositionsRef.current = new Map();
                       }}
                       onBeforeDelete={async () => {
                         if (readOnly) {
@@ -6943,6 +7368,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onEdgesDelete={() => scheduleAutoSave()}
                       onMoveStart={() => setMenu(null)}
                       selectionOnDrag
+                      // 기본값 Shift가 축 고정 키와 충돌 — pane 빈 영역 드래그 선택은 selectionOnDrag로 이미 가능하므로 비활성화.
+                      selectionKeyCode={null}
                       panOnDrag={[1]}
                       panActivationKeyCode="Space"
                       deleteKeyCode={["Delete"]}

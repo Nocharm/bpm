@@ -58,6 +58,8 @@ class SubprocessDesignationIn(BaseModel):
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
+    # 지정 설명 — 자유 텍스트, 선택 (design 2026-07-17)
+    description: str = Field(default="")
 
     @field_validator("department")
     @classmethod
@@ -78,6 +80,11 @@ class SubprocessDesignationIn(BaseModel):
     def _normalize_numeric_params(cls, value: str) -> str:
         text = value.strip()
         return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
+
+    @field_validator("description", mode="after")
+    @classmethod
+    def _trim_description(cls, value: str) -> str:
+        return value.strip()
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "SubprocessDesignationIn":
@@ -555,6 +562,7 @@ class MapOut(BaseModel):
     sp_headcount: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
+    sp_description: str | None = None
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
@@ -698,6 +706,7 @@ class SubprocessRefOut(BaseModel):
     headcount: str | None = None
     url: str | None = None
     url_label: str | None = None
+    sp_description: str | None = None
 
     @field_validator("duration", mode="after")
     @classmethod

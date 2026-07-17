@@ -563,7 +563,8 @@ async def designate_subprocess(
         raise HTTPException(
             status_code=409, detail="map has no published version to designate"
         )
-    if found_map.sp_designated_at is None:  # 미지정→지정 전환만 시각 갱신 (지정 중 수정은 유지)
+    was_new = found_map.sp_designated_at is None  # 최초 지정 전이 여부 — 등록 알림은 이때만
+    if was_new:  # 미지정→지정 전환만 시각 갱신 (지정 중 수정은 유지)
         found_map.sp_designated_at = now_kst()
     found_map.sp_department = payload.department
     found_map.sp_assignee = payload.assignee
@@ -574,8 +575,24 @@ async def designate_subprocess(
     found_map.sp_headcount = payload.headcount
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
+    found_map.sp_description = payload.description or None
     found_map.sp_changed_by = user
     found_map.sp_changed_at = now_kst()
+    if was_new:
+        approvers = await workflow.load_active_approvers(session, map_id)
+        recipients = [
+            r
+            for r in dict.fromkeys([found_map.owner_id, *approvers])
+            if r and r != user
+        ]
+        if recipients:
+            await workflow.create_notifications(
+                session,
+                recipients,
+                type="subprocess_registered",
+                map_id=map_id,
+                message=f"'{found_map.name}' was registered as a subprocess",
+            )
     await session.commit()
     await session.refresh(found_map)
     return found_map

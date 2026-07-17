@@ -63,6 +63,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_cost_krw", "VARCHAR(50)"),
     ("process_maps", "sp_cost_usd", "VARCHAR(50)"),
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
+    # 지정 설명 — 자유 텍스트 (design 2026-07-17)
+    ("process_maps", "sp_description", "TEXT"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

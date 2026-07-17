@@ -8,10 +8,11 @@ describe("getNotificationCategory", () => {
       expect(getNotificationCategory(t)).toBe("version");
     }
   });
-  it("maps checkout_/permission_ prefixes and notice", () => {
+  it("maps checkout_/permission_ prefixes, subprocess_registered, and notice", () => {
     expect(getNotificationCategory("checkout_requested")).toBe("checkout");
     expect(getNotificationCategory("checkout_rejected")).toBe("checkout");
     expect(getNotificationCategory("permission_approved")).toBe("permission");
+    expect(getNotificationCategory("subprocess_registered")).toBe("subprocess");
     expect(getNotificationCategory("notice")).toBe("notice");
   });
   it("returns null for unknown types (All에서만 노출)", () => {

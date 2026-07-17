@@ -42,6 +42,7 @@ export function SubprocessInspectorCard({
     headcount: "",
     url: "",
     urlLabel: "",
+    description: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -78,6 +79,7 @@ export function SubprocessInspectorCard({
       headcount: detail.sp_headcount ?? "",
       url: detail.sp_url ?? "",
       urlLabel: detail.sp_url_label ?? "",
+      description: detail.sp_description ?? "",
     });
     setShowModal(true);
   };
@@ -110,6 +112,7 @@ export function SubprocessInspectorCard({
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
     { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },
     { label: t("field.headcount"), value: detail.sp_headcount },
+    ...(detail.sp_description ? [{ label: t("field.description"), value: detail.sp_description }] : []),
   ];
 
   return (

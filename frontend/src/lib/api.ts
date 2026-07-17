@@ -64,6 +64,7 @@ export interface MapSummary {
   sp_cost_usd?: string | null;
   sp_url?: string | null;
   sp_url_label?: string | null;
+  sp_description?: string | null;
   sp_changed_by?: string | null;
   sp_changed_at?: string | null;
   // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
@@ -146,6 +147,8 @@ export interface SubprocessRef {
   headcount: string | null;
   url: string | null;
   url_label: string | null;
+  // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)
+  sp_description: string | null;
 }
 
 export interface Graph {
@@ -297,6 +300,7 @@ export interface SubprocessDesignationBody {
   headcount?: string;
   url?: string;
   url_label?: string;
+  description?: string;
 }
 
 // 임베드 체크 — 미리보기 iframe이 열 수 있는 URL인지 서버가 대상 헤더로 판정 (embed-check design 2026-07-08)

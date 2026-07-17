@@ -12,6 +12,7 @@ import {
   List,
   Mail,
   Megaphone,
+  Network,
   ShieldCheck,
   Square,
   Trash2,
@@ -94,6 +95,7 @@ function typeIcon(type: string): LucideIcon {
   if (type === "review_requested") return FileCheck;
   if (type.startsWith("checkout_")) return ArrowLeftRight;
   if (type.startsWith("permission_")) return ShieldCheck;
+  if (type === "subprocess_registered") return Network;
   return Bell;
 }
 
@@ -285,6 +287,7 @@ export default function InboxPage() {
     version: FileCheck,
     checkout: ArrowLeftRight,
     permission: ShieldCheck,
+    subprocess: Network,
     notice: Megaphone,
   };
   const categoryOptions: IconPillOption<"all" | NotificationCategory>[] = [

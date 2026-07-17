@@ -80,6 +80,7 @@ async def get_subprocess_refs(
                 ProcessMap.sp_headcount,
                 ProcessMap.sp_url,
                 ProcessMap.sp_url_label,
+                ProcessMap.sp_description,
             ).where(ProcessMap.id.in_(targets))
         )
     ).all()
@@ -95,6 +96,7 @@ async def get_subprocess_refs(
             headcount=headcount,
             url=url,
             url_label=url_label,
+            sp_description=sp_description,
         )
         for (
             mid,
@@ -109,6 +111,7 @@ async def get_subprocess_refs(
             headcount,
             url,
             url_label,
+            sp_description,
         ) in rows
     }
     for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우

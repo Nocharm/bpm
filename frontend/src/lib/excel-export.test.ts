@@ -452,6 +452,7 @@ describe("buildExcelModel", () => {
         2: {
           designated: true, department: null, assignee: null, system: null,
           duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", url: null, url_label: null,
+          sp_description: null,
         },
       },
     };

@@ -20,6 +20,7 @@ const makeGraph = (
 const SP_REF_DEFAULTS: SubprocessRef = {
   designated: true, department: null, assignee: null, system: null, duration: null,
   cost_krw: null, cost_usd: null, headcount: null, url: null, url_label: null,
+  sp_description: null,
 };
 const spRef = (over: Partial<SubprocessRef> = {}): SubprocessRef => ({ ...SP_REF_DEFAULTS, ...over });
 
