@@ -2,7 +2,7 @@
 // 모델은 탭 활성화 시 lazy 빌드(모달 열려있는 동안 캐시). 설계: 2026-07-17-excel-export-wbs-v2-design.md
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -186,6 +186,11 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
   );
 }
 
+/** 행별 스태거 딜레이 — CSS 커스텀 프로퍼티는 React 타입에 없어 헬퍼 한 곳에서만 캐스팅. */
+function getRowDelayStyle(index: number): CSSProperties {
+  return { "--row-delay": `${index * 45}ms` } as CSSProperties;
+}
+
 /** 미리보기 표 — Process Map: No·Name(들여쓰기)·Type·Next / WBS: No·Level 1..N(회색)·Task. */
 function ExportPreviewTable({ format, model, emptyText }: { format: ExcelExportFormat; model: ExcelModel | WbsModel; emptyText: string }) {
   const rows = model.rows.slice(0, PREVIEW_ROWS);
@@ -203,7 +208,7 @@ function ExportPreviewTable({ format, model, emptyText }: { format: ExcelExportF
           </thead>
           <tbody>
             {nodeRows.map((row, i) => (
-              <tr key={i}>
+              <tr key={i} className="preview-row-in" style={getRowDelayStyle(i)}>
                 <td className={cellCls}>{row.kind === "node" ? row.no : ""}</td>
                 <td className={cellCls} style={{ paddingLeft: `${8 + row.depth * 14}px` }}>
                   {row.kind === "node" ? row.title : <span className="italic text-ink-tertiary">({row.kind})</span>}
@@ -233,7 +238,7 @@ function ExportPreviewTable({ format, model, emptyText }: { format: ExcelExportF
         </thead>
         <tbody>
           {wbsRows.map((row, i) => (
-            <tr key={i}>
+            <tr key={i} className="preview-row-in" style={getRowDelayStyle(i)}>
               <td className={cellCls}>{row.kind === "node" ? row.no : ""}</td>
               {Array.from({ length: wbs.maxLevel }, (_, li) => (
                 <td key={li} className={`${cellCls} text-ink-tertiary`}>{row.levels[li] ?? ""}</td>

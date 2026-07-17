@@ -1,6 +1,7 @@
 # Progress
 
 ## 2026-07-17 — Excel 출력 양식 2안(WBS) + 형식 선택 모달 (worktree-excel-export)
+- 미리보기 행 스태거 등장 애니메이션 — 기존 `item-fade-in` 키프레임 재사용(`globals.css` `.preview-row-in`, 350ms ease-smooth both + 행별 45ms 딜레이, reduced-motion 가드), 양 형식 테이블 공통. 실측: computed style로 클래스·딜레이 확인 + pw 19/19 회귀 그린.
 - 설계 `docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md`. 신규 `lib/excel-wbs.ts` — 잎 업무 행+레벨 경로(`levels`), SP 무행(레벨 값=SP 노드 타이틀·루트=맵 이름), start/end 전부 삭제(Next 종착 텍스트 유지), 무라벨 디시전 flow-through·`[No:라벨]` 주석(SP 대상 소멸)은 1안과 동일 체계. 시트 "WBS": 동적 Level 1..N 컬럼(회색 `FF9CA3AF`)+1안 속성 꼬리(numFmt 정의 파생).
 - Excel 버튼 → 형식 선택 모달(`components/excel-export-modal.tsx`): 한/영 세그먼트 토글 디자인 탭(Process Map/WBS)+첫 8행 미리보기(lazy 빌드·캐시)+Download. 파일명 WBS는 `_WBS` 접미. 다운로드는 `downloadWorkbookXlsx` 공용화(exceljs 동적 import 유지).
 - 게이트: vitest 전체·tsc·lint·build 그린.
