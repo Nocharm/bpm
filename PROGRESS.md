@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-18 — 셀프 게시 팝오버를 설정 페이지 Versions 탭에도 적용 (worktree-self-publish-settings)
+- `VersionsPublishPanel`(맵 설정 Versions 탭)의 승인요청 버튼도 에디터와 같은 플로우 — 승인자가 본인 1인이면 클릭 지점에 `SelfPublishPopover`, Yes=`runSelfPublishChain`(submit→approve→publish, 기존 `runAction` 경유), No=기존 즉시 제출, Escape/바깥클릭=취소. 승인자 2인 이상은 종전대로 즉시 제출. 백엔드·i18n 무변경(기존 컴포넌트·키 재사용).
+- 검증: tsc 0·lint 0 err·vitest 504/504·build OK. 브라우저 실기동 `pw-verify-self-publish-settings.mjs` 11/11 — 2인 즉시 제출 보존, 1인 클릭 지점 팝오버, Escape/No/Yes 3분기, Yes로 published·approvals 기록, 콘솔 에러 0. (스크립트 함정: 화면 밖 버튼은 클릭 자동 스크롤로 사전 측정 좌표가 틀어짐 → `scrollIntoViewIfNeeded` 후 측정)
+
 ## 2026-07-18 — 셀프 게시: 승인자가 본인 1인이면 승인요청→승인→게시 원클릭 (worktree-self-approve-publish)
 - 에디터 승인 탭에서 승인요청 클릭 시 승인자가 정확히 본인 1명이면 클릭 지점(마우스 근처)에 소형 Yes/No 팝오버(`SelfPublishPopover`) — Yes는 submit→approve→publish 체인(`lib/self-publish.ts`, 기존 `runTransition` 재사용), No는 기존 승인요청 확인 모달, Escape/바깥클릭은 취소. 백엔드 무변경(기존 3개 엔드포인트 순차 호출).
 - `WorkflowActions`/`ApprovalPanel` `onSubmit`에 클릭 좌표 전달, i18n `approval.selfPublish*` 4키 EN/KO.

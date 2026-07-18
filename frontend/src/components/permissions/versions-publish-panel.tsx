@@ -19,8 +19,10 @@ import {
   withdrawVersion,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { StatusBadge } from "@/components/status-badge";
 import { PromptDialog } from "@/components/prompt-dialog";
+import { SelfPublishPopover } from "@/components/self-publish-popover";
 
 // ── 타입 / Types ─────────────────────────────────────────────
 
@@ -166,6 +168,8 @@ function VersionRow({
 
   // 반려 모달 표시 — 훅이라 조기 반환 위에 둔다(rules-of-hooks)
   const [rejecting, setRejecting] = useState(false);
+  // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 (에디터 승인 탭과 동일 플로우)
+  const [selfPublishAt, setSelfPublishAt] = useState<{ x: number; y: number } | null>(null);
 
   if (wf === null) {
     return (
@@ -212,7 +216,14 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => void runAction(() => submitVersion(versionId))}
+            onClick={(event) => {
+              // 승인자가 본인 1인이면 클릭 지점에 셀프 게시 제안 — No/닫기는 기존 제출 플로우.
+              if (isSoleSelfApprover(wf.approvers, currentUserId)) {
+                setSelfPublishAt({ x: event.clientX, y: event.clientY });
+                return;
+              }
+              void runAction(() => submitVersion(versionId));
+            }}
           >
             <Send size={16} strokeWidth={1.5} />
             {t("perm.version.request")}
@@ -286,6 +297,20 @@ function VersionRow({
 
         {/* published: 별도 액션 없음 / published: no actions */}
       </div>
+      {selfPublishAt && (
+        <SelfPublishPopover
+          position={selfPublishAt}
+          onYes={() => {
+            setSelfPublishAt(null);
+            void runAction(() => runSelfPublishChain(versionId));
+          }}
+          onNo={() => {
+            setSelfPublishAt(null);
+            void runAction(() => submitVersion(versionId));
+          }}
+          onClose={() => setSelfPublishAt(null)}
+        />
+      )}
       {rejecting && (
         <PromptDialog
           title={t("perm.version.reject")}
