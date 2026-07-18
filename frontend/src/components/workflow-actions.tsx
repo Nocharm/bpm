@@ -15,7 +15,8 @@ interface WorkflowActionsProps {
   // 회수 가능 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치). 게시는 제출자 전용이라 별도.
   canWithdraw: boolean;
   hasApproved: boolean;
-  onSubmit: () => void;
+  // 클릭 지점 전달 — 셀프 게시 팝오버를 마우스 근처에 띄우기 위함.
+  onSubmit: (at: { x: number; y: number }) => void;
   onApprove: () => void;
   onReject: () => void;
   onPublish: () => void;
@@ -69,7 +70,7 @@ export function WorkflowActions({
         <button
           type="button"
           className={actionBtn}
-          onClick={onSubmit}
+          onClick={(event) => onSubmit({ x: event.clientX, y: event.clientY })}
           disabled={noApprovers}
           title={noApprovers ? t("wf.submitNeedsApprovers") : undefined}
         >

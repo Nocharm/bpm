@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-18 — 셀프 게시: 승인자가 본인 1인이면 승인요청→승인→게시 원클릭 (worktree-self-approve-publish)
+- 에디터 승인 탭에서 승인요청 클릭 시 승인자가 정확히 본인 1명이면 클릭 지점(마우스 근처)에 소형 Yes/No 팝오버(`SelfPublishPopover`) — Yes는 submit→approve→publish 체인(`lib/self-publish.ts`, 기존 `runTransition` 재사용), No는 기존 승인요청 확인 모달, Escape/바깥클릭은 취소. 백엔드 무변경(기존 3개 엔드포인트 순차 호출).
+- `WorkflowActions`/`ApprovalPanel` `onSubmit`에 클릭 좌표 전달, i18n `approval.selfPublish*` 4키 EN/KO.
+- 검증: vitest 신규 4(TDD RED→GREEN, 체인 순서·중간 실패 전파)·전체 504/504, tsc 0, lint 0 err, build OK. 브라우저 실기동 `pw-verify-self-publish.mjs` 15/15 — 승인자 2인은 팝오버 없이 기존 모달 직행, 1인은 클릭 지점 근처 팝오버, Escape/No/Yes 3분기, Yes로 status published·approvals 기록, 콘솔 에러 0.
+
 ## 2026-07-18 — persist-effect StrictMode 리셋 잔존 2건 픽스: edgeStyle·inspectorWidth (dev 직접 커밋)
 - params-ui-sync에서 적발된 진범 패턴(상태-의존 effect 영속 → StrictMode 이중 마운트가 hydration 전 기본값으로 저장값 덮어씀)의 잔존 전수 스캔: 실버그 2건(`bpm.edgeStyle`·`bpm.inspectorWidth`, dev 한정 증상) + 자체 완화 2건(`bpm.home.filters` skip-guard, `bpm.windows.*` 디바운스+cleanup — 존치) + 나머지 9곳은 핸들러/lazy-init로 안전.
 - 수정: persist effect 2개 제거 — edgeStyle은 스타일 버튼 onClick에서, inspectorWidth는 리사이저 드래그 종료(pointerup)에서 최종값(`lastW`) 1회 영속.

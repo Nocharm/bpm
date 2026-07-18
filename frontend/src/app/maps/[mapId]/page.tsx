@@ -61,8 +61,10 @@ import { SubprocessVersionPicker } from "@/components/subprocess-version-picker"
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
+import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { Tooltip } from "@/components/tooltip";
 import { formatVersionMarker } from "@/lib/version-name";
+import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { GroupBox } from "@/components/group-box";
@@ -867,6 +869,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
   // 승인 요청 확인 다이얼로그 — 승인자 목록 확인 후 제출 / Submit confirm listing approvers.
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 / Self-publish prompt at click point.
+  const [selfPublishPrompt, setSelfPublishPrompt] = useState<{ x: number; y: number } | null>(null);
   // 승인/게시/회수/거절 확인 다이얼로그 — 전이 액션 통일 모달 / transition confirm modals.
   const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -2533,20 +2537,28 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 승인 요청(승인 시작) 전 현재 화면을 먼저 저장 — 저장된 구버전이 아니라 "지금 보는 내용"이
   // 승인 대상이 되도록. 저장 조건 미충족이거나 저장 실패면 승인 요청 다이얼로그를 열지 않는다.
-  const handleSubmitForApproval = useCallback(async () => {
-    const blockers = getSaveBlockers();
-    if (blockers.length > 0) {
-      showToast(`${t("save.blockedTitle")}: ${blockers.join(", ")}`);
-      return;
-    }
-    try {
-      await saveCurrentScope();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : t("err.save"));
-      return;
-    }
-    setSubmitConfirmOpen(true);
-  }, [getSaveBlockers, saveCurrentScope, showToast, t]);
+  const handleSubmitForApproval = useCallback(
+    async (at?: { x: number; y: number }) => {
+      const blockers = getSaveBlockers();
+      if (blockers.length > 0) {
+        showToast(`${t("save.blockedTitle")}: ${blockers.join(", ")}`);
+        return;
+      }
+      try {
+        await saveCurrentScope();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : t("err.save"));
+        return;
+      }
+      // 승인자가 본인 1인이면 클릭 지점에 셀프 게시(승인요청→승인→게시) 제안 — No/닫기는 기존 플로우.
+      if (at && username !== null && isSoleSelfApprover(workflow?.approvers ?? [], username)) {
+        setSelfPublishPrompt(at);
+        return;
+      }
+      setSubmitConfirmOpen(true);
+    },
+    [getSaveBlockers, saveCurrentScope, showToast, t, username, workflow],
+  );
 
   // 저장(그래프 검증) 조건 — 현재 스코프 노드 기준 라이브 계산(좌상단 체크리스트). 백엔드 validate_process와 정합:
   // 시작 정확히 1개 / 끝 이름(빈 제목 포함) 중복 없음 / 대표 끝 1개(끝 노드 최소 1개면 저장 시 자동 1개 지정).
@@ -8727,7 +8739,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       canWithdraw={canWithdraw}
                       hasApproved={hasApproved}
                       canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
-                      onSubmit={() => void handleSubmitForApproval()}
+                      onSubmit={(at) => void handleSubmitForApproval(at)}
                       onApprove={() => setApproveConfirmOpen(true)}
                       onReject={() => setRejectOpen(true)}
                       onPublish={() => setPublishConfirmOpen(true)}
@@ -8907,6 +8919,21 @@ function MapEditor({ mapId }: { mapId: number }) {
           cancelLabel={t("common.cancel")}
           onConfirm={() => void handleConfirmRepublish()}
           onClose={() => setRepublishConfirmOpen(false)}
+        />
+      )}
+      {/* 셀프 게시 팝오버 — 승인자가 본인 1인일 때 클릭 지점에 Yes/No (Yes=승인요청→승인→게시 일괄) */}
+      {selfPublishPrompt && (
+        <SelfPublishPopover
+          position={selfPublishPrompt}
+          onYes={() => {
+            setSelfPublishPrompt(null);
+            void runTransition(runSelfPublishChain);
+          }}
+          onNo={() => {
+            setSelfPublishPrompt(null);
+            setSubmitConfirmOpen(true);
+          }}
+          onClose={() => setSelfPublishPrompt(null)}
         />
       )}
       {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}
