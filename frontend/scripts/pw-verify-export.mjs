@@ -1,4 +1,4 @@
-// 숫자 파라미터 5종 + Excel/CSV 내보내기 — 브라우저 실기동 통합 검증 (Task 8).
+// 숫자 파라미터 6필드(duration·cost_krw·cost_usd·headcount·annual_count·fte) + Excel/CSV 내보내기 — 브라우저 실기동 통합 검증.
 // 6시나리오: ①파라미터 입력·정규화·노드칩 ②새로고침 저장왕복 ③CSV 내보내기→재임포트 diff 0
 // ④Excel 내보내기(서브프로세스 재귀·outlineLevel·하이퍼링크·숫자셀) ⑤콘솔에러 0
 // ⑥[Task3 이월] 디시전 노드 파라미터 칩의 마름모 밖 overflow 여부(boundingBox 판정, 스크린샷 증거)
@@ -79,13 +79,18 @@ const openEditor = async (mapId, versionId) => {
   await page.waitForTimeout(500);
 };
 
-// 인스펙터가 Properties 탭이 아니면 전환 — 노드 클릭 직후에도 다른 탭이 남아있을 수 있음
+// 인스펙터가 Properties 탭이 아니면 전환 — 노드 클릭 직후에도 다른 탭이 남아있을 수 있음.
+// 파라미터 입력란은 Parameters 그룹이 펼쳐졌을 때만 DOM에 존재(기본 접힘, bpm.paramsCollapsed) →
+// 항상 존재하는 토글 버튼을 탭 신호로 쓰고, 접혀 있으면 펼친다 (pw-verify-sp-params.mjs 미러).
 async function ensurePropertiesTab() {
-  const paramVisible = await page.locator('[data-id="inspector-param-duration"]').isVisible().catch(() => false);
-  if (!paramVisible) {
+  const toggleVisible = await page.locator('[data-id="inspector-params-toggle"]').isVisible().catch(() => false);
+  if (!toggleVisible) {
     await page.locator('button[aria-label="Properties"]').first().click();
-    await page.waitForSelector('[data-id="inspector-param-duration"]', { timeout: 5000 });
+    await page.waitForSelector('[data-id="inspector-params-toggle"]', { timeout: 5000 });
   }
+  const toggle = page.locator('[data-id="inspector-params-toggle"]');
+  if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  await page.waitForSelector('[data-id="inspector-param-duration"]', { timeout: 5000 });
 }
 
 // 내보내기 3버튼(PNG/Excel/CSV)은 인스펙터 "Map" 탭 안에 있다 (Task 7)
@@ -162,17 +167,18 @@ try {
   await openEditor(mapAId, v1);
   check("editor loads scratch map (3 nodes on canvas)", (await page.locator(".react-flow__node").count()) === 3);
 
-  // ── ① 파라미터 5입력 → blur → duration H.MM 정규화 + 노드칩 5개 ──────────────
+  // ── ① 파라미터 입력(통화는 KRW만 — cost_krw/cost_usd 배타) → blur → 정규화 + 노드칩 5개 ──
   const pSel = `.react-flow__node[data-id="${pId}"]`;
   await page.locator(pSel).click();
   await ensurePropertiesTab();
 
+  // [key, raw 입력, 저장값(정규화), 비포커스 입력란 표시형(duration은 1h30m 계약)]
   const inputs = [
-    ["duration", "0.75", "1.15"],
-    ["headcount", "2", "2"],
-    ["etf", "1.5", "1.5"],
-    ["cost", "300", "300"],
-    ["extra", "7", "7"],
+    ["duration", "0.75", "1.15", "1h15m"],
+    ["cost_krw", "300", "300", "300"],
+    ["headcount", "2", "2", "2"],
+    ["annual_count", "7", "7", "7"],
+    ["fte", "1.5", "1.5", "1.5"],
   ];
   for (const [key, raw] of inputs) {
     const loc = page.locator(`[data-id="inspector-param-${key}"]`);
@@ -186,17 +192,17 @@ try {
   });
   check("PUT saved: duration normalizes 0.75 → 1.15 (60분 이월)", savedDuration);
 
-  for (const [key, , expected] of inputs) {
+  for (const [key, , , displayed] of inputs) {
     const val = await page.locator(`[data-id="inspector-param-${key}"]`).inputValue();
-    check(`inspector shows normalized ${key} = "${expected}"`, val === expected, `got "${val}"`);
+    check(`inspector shows ${key} display form "${displayed}"`, val === displayed, `got "${val}"`);
   }
 
   const chips1 = paramChipsLocator(pSel);
   const chipCount1 = await chips1.locator("span").count();
   const chipText1 = await chips1.innerText().catch(() => "");
   check(
-    "node card shows 5 param chips (icon+value)",
-    chipCount1 === 5 && ["1.15", "2", "1.5", "300", "7"].every((v) => chipText1.includes(v)),
+    "node card shows 5 param chips (display form: 1h15m·₩300)",
+    chipCount1 === 5 && ["1h15m", "₩300", "2", "7", "1.5"].every((v) => chipText1.includes(v)),
     `count=${chipCount1} text="${chipText1.replace(/\n/g, " ")}"`,
   );
   await page.screenshot({ path: `${SHOTS}/01-params-filled.png` });
@@ -208,16 +214,16 @@ try {
   await page.locator(pSel).click();
   await ensurePropertiesTab();
   let persistedOk = true;
-  for (const [key, , expected] of inputs) {
+  for (const [key, , , displayed] of inputs) {
     const val = await page.locator(`[data-id="inspector-param-${key}"]`).inputValue();
-    if (val !== expected) persistedOk = false;
+    if (val !== displayed) persistedOk = false;
   }
   check("reload: inspector params persisted", persistedOk);
   const chips2 = paramChipsLocator(pSel);
   const chipCount2 = await chips2.locator("span").count();
   check("reload: node card still shows 5 param chips", chipCount2 === 5, `count=${chipCount2}`);
 
-  // ── ③ CSV 다운로드 → 13컬럼·숫자값 확인 → 재임포트 → 머지 프리뷰 변경 0 ────────
+  // ── ③ CSV 다운로드 → 14컬럼·숫자값 확인 → 재임포트 → 머지 프리뷰 변경 0 ────────
   await ensureMapTab();
   const csvDlPromise = page.waitForEvent("download");
   await page.locator('[data-id="export-csv"]').click();
@@ -229,23 +235,24 @@ try {
   const header = csvLines[0]?.split(",") ?? [];
   const expectedHeader = [
     "Name", "Description", "Assignee", "Department", "System", "Duration",
-    "Headcount", "ETF", "Cost", "Extra", "URL", "URL_Label", "Next",
+    "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE", "URL", "URL_Label", "Next",
   ];
   check(
-    "CSV header has 13 columns in expected order",
-    header.length === 13 && expectedHeader.every((h, i) => header[i] === h),
+    "CSV header has 14 columns in expected order",
+    header.length === 14 && expectedHeader.every((h, i) => header[i] === h),
     header.join(","),
   );
   const colIdx = Object.fromEntries(header.map((h, i) => [h, i]));
   const widgetRow = csvLines.slice(1).find((l) => l.startsWith("Widget Step,"))?.split(",");
   check(
-    "CSV row carries the 5 normalized numeric values",
+    "CSV row carries the normalized numeric values (raw H.MM — round-trip exception)",
     widgetRow !== undefined &&
       widgetRow[colIdx.Duration] === "1.15" &&
+      widgetRow[colIdx.Cost_KRW] === "300" &&
+      widgetRow[colIdx.Cost_USD] === "" &&
       widgetRow[colIdx.Headcount] === "2" &&
-      widgetRow[colIdx.ETF] === "1.5" &&
-      widgetRow[colIdx.Cost] === "300" &&
-      widgetRow[colIdx.Extra] === "7",
+      widgetRow[colIdx.Annual_Count] === "7" &&
+      widgetRow[colIdx.FTE] === "1.5",
     widgetRow?.join(","),
   );
 
@@ -271,19 +278,19 @@ try {
   const pAfter = gAfterReimport.nodes.find((n) => n.title === "Widget Step");
   check(
     "graph unchanged after CSV round-trip apply",
-    pAfter?.duration === "1.15" && pAfter?.headcount === "2" && pAfter?.etf === "1.5" &&
-      pAfter?.cost === "300" && pAfter?.extra === "7" && gAfterReimport.nodes.length === 3,
+    pAfter?.duration === "1.15" && pAfter?.cost_krw === "300" && pAfter?.headcount === "2" &&
+      pAfter?.annual_count === "7" && pAfter?.fte === "1.5" && gAfterReimport.nodes.length === 3,
     `nodes=${gAfterReimport.nodes.length} duration=${pAfter?.duration}`,
   );
 
-  // ── URL + 디시전 노드 추가(파라미터 5종) — Map A는 스크래치라 자유롭게 변형 ────
+  // ── URL + 디시전 노드 추가(USD 통화 경로 커버) — Map A는 스크래치라 자유롭게 변형 ────
   const gForD = await api(`/versions/${v1}/graph`);
   const pNode = gForD.nodes.find((n) => n.title === "Widget Step");
   pNode.url = "https://example.com/doc";
   pNode.url_label = "Doc";
   gForD.nodes.push({
     id: dId, title: "Approve?", node_type: "decision", pos_x: 260, pos_y: 420, sort_order: 3,
-    duration: "2.30", headcount: "5", etf: "3.75", cost: "1200", extra: "9",
+    duration: "2.30", cost_usd: "1200", headcount: "5", annual_count: "9", fte: "3.75",
   });
   await api(`/versions/${v1}/graph`, {
     method: "PUT",
@@ -296,8 +303,12 @@ try {
   await page.waitForTimeout(500);
 
   await ensureMapTab();
-  const xlsxDlPromiseA = page.waitForEvent("download");
+  // Excel은 형식 선택 모달(1안 map / 2안 WBS) 경유 — 1안 선택 후 다운로드(빌드 완료까지 auto-wait)
   await page.locator('[data-id="export-excel"]').click();
+  await page.waitForSelector('[data-id="excel-export-modal"]', { timeout: 5000 });
+  await page.locator('[data-id="excel-format-map"]').click();
+  const xlsxDlPromiseA = page.waitForEvent("download");
+  await page.locator('[data-id="excel-export-download"]').click();
   const xlsxDlA = await xlsxDlPromiseA;
   const xlsxPathA = `${SHOTS}/export-mapA.xlsx`;
   await xlsxDlA.saveAs(xlsxPathA);
@@ -307,10 +318,10 @@ try {
   const headerRowA = sheetA.getRow(4).values.slice(1).map(String);
   const expectedXlsxHeader = [
     "No", "Name", "Type", "Description", "Assignee", "Department", "System", "Duration (h)",
-    "Headcount", "ETF", "Cost", "Extra", "URL", "Groups", "Next",
+    "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE", "URL", "Groups", "Next",
   ];
   check(
-    "Excel header row (row 4) has 15 expected columns",
+    "Excel header row (row 4) has 16 expected columns",
     expectedXlsxHeader.every((h, i) => headerRowA[i] === h),
     headerRowA.join(","),
   );
@@ -319,18 +330,19 @@ try {
     if (row.getCell(2).value === "Widget Step") widgetXlsxRow = row;
   });
   check(
-    "Excel numeric cells (duration/headcount/etf/cost/extra) are real numbers",
+    "Excel numeric cells (duration/cost_krw/headcount/annual_count/fte) are real numbers, cost_usd empty",
     widgetXlsxRow !== null &&
       typeof widgetXlsxRow.getCell(8).value === "number" && widgetXlsxRow.getCell(8).value === 1.15 &&
-      typeof widgetXlsxRow.getCell(9).value === "number" && widgetXlsxRow.getCell(9).value === 2 &&
-      typeof widgetXlsxRow.getCell(10).value === "number" && widgetXlsxRow.getCell(10).value === 1.5 &&
-      typeof widgetXlsxRow.getCell(11).value === "number" && widgetXlsxRow.getCell(11).value === 300 &&
-      typeof widgetXlsxRow.getCell(12).value === "number" && widgetXlsxRow.getCell(12).value === 7,
+      typeof widgetXlsxRow.getCell(9).value === "number" && widgetXlsxRow.getCell(9).value === 300 &&
+      (widgetXlsxRow.getCell(10).value ?? "") === "" &&
+      typeof widgetXlsxRow.getCell(11).value === "number" && widgetXlsxRow.getCell(11).value === 2 &&
+      typeof widgetXlsxRow.getCell(12).value === "number" && widgetXlsxRow.getCell(12).value === 7 &&
+      typeof widgetXlsxRow.getCell(13).value === "number" && widgetXlsxRow.getCell(13).value === 1.5,
     widgetXlsxRow
-      ? [8, 9, 10, 11, 12].map((c) => `${c}:${widgetXlsxRow.getCell(c).value}(${typeof widgetXlsxRow.getCell(c).value})`).join(" ")
+      ? [8, 9, 10, 11, 12, 13].map((c) => `${c}:${widgetXlsxRow.getCell(c).value}(${typeof widgetXlsxRow.getCell(c).value})`).join(" ")
       : "row not found",
   );
-  const urlCell = widgetXlsxRow?.getCell(13);
+  const urlCell = widgetXlsxRow?.getCell(14);
   check(
     "Excel hyperlink cell carries {text, hyperlink}",
     urlCell?.value?.hyperlink === "https://example.com/doc" && urlCell?.value?.text === "Doc",
@@ -377,8 +389,11 @@ try {
     } else {
       await openEditor(map2.id, draftV.id);
       await ensureMapTab();
-      const xlsxDlPromise2 = page.waitForEvent("download");
       await page.locator('[data-id="export-excel"]').click();
+      await page.waitForSelector('[data-id="excel-export-modal"]', { timeout: 5000 });
+      await page.locator('[data-id="excel-format-map"]').click();
+      const xlsxDlPromise2 = page.waitForEvent("download");
+      await page.locator('[data-id="excel-export-download"]').click();
       const xlsxDl2 = await xlsxDlPromise2;
       const xlsxPath2 = `${SHOTS}/export-map2.xlsx`;
       await xlsxDl2.saveAs(xlsxPath2);
