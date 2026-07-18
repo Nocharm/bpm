@@ -203,11 +203,13 @@ import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
-  NODE_DISPLAY_FIELDS,
+  NODE_DISPLAY_TOGGLES,
   NodeActionsContext,
-  type NodeDisplayField,
+  type NodeDisplayToggle,
+  parseDisplayToggles,
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
+import { buildBulkAttrPatch } from "@/lib/bulk-params";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
 import {
@@ -3743,7 +3745,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pushHistory, setNodes, scheduleAutoSave],
   );
 
-  // 그룹 멤버 속성 일괄 적용 — 모달이 정책(교체/추가/건너뛰기/개별)을 멤버별 값으로 해석해 넘김
+  // 그룹 멤버 속성 일괄 적용 — 모달이 정책(교체/추가/건너뛰기/개별)을 멤버별 값으로 해석해 넘김.
+  // 패치는 buildBulkAttrPatch 경유 — 비용 설정 시 반대 통화 소거(배타 불변식), 비용 비우기는 양쪽 소거.
   const applyGroupAttribute = useCallback(
     (field: BulkAttrField, updates: { id: string; value: string }[]) => {
       if (updates.length === 0) {
@@ -3754,7 +3757,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       setNodes((current) =>
         current.map((node) =>
           valueById.has(node.id)
-            ? { ...node, data: { ...node.data, [field]: valueById.get(node.id) ?? "" } }
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  ...buildBulkAttrPatch(field, valueById.get(node.id) ?? ""),
+                },
+              }
             : node,
         ),
       );
@@ -6076,29 +6085,22 @@ function MapEditor({ mapId }: { mapId: number }) {
     [comments, selectedId],
   );
 
-  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속
-  const [displayFields, setDisplayFields] = useState<NodeDisplayField[]>(["assignee"]);
+  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속(v2 키).
+  // params(칩 일괄) 토글은 기본 ON — 레거시 키 저장값은 parseDisplayToggles가 ON으로 이관.
+  const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(["assignee", "params"]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("bpm.nodeDisplayFields");
-    if (saved) {
-      try {
-        // 저장된 값에 폐기된 필드(예: "duration")가 남아 있을 수 있어 현재 유효 필드로 걸러낸다
-        const parsed = JSON.parse(saved) as string[];
-        const valid = parsed.filter(
-          (f): f is NodeDisplayField => (NODE_DISPLAY_FIELDS as readonly string[]).includes(f),
-        );
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
-        setDisplayFields(valid);
-      } catch {
-        // 무시 — 기본값 유지
-      }
+    const saved = parseDisplayToggles(
+      window.localStorage.getItem("bpm.nodeDisplayFields.v2"),
+      window.localStorage.getItem("bpm.nodeDisplayFields"),
+    );
+    if (saved !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setDisplayFields(saved);
     }
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("bpm.nodeDisplayFields", JSON.stringify(displayFields));
-  }, [displayFields]);
+  // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
+  // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
 
   // 엣지 스타일 1회 hydration + 변경 영속
   useEffect(() => {
@@ -6112,11 +6114,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.edgeStyle", edgeStyle);
   }, [edgeStyle]);
 
-  const toggleDisplayField = useCallback((field: NodeDisplayField) => {
-    setDisplayFields((prev) =>
-      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
-    );
-  }, []);
+  const toggleDisplayField = useCallback(
+    (field: NodeDisplayToggle) => {
+      const next = displayFields.includes(field)
+        ? displayFields.filter((f) => f !== field)
+        : [...displayFields, field];
+      window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(next));
+      setDisplayFields(next);
+    },
+    [displayFields],
+  );
 
   const cancelRename = useCallback(() => setEditingNodeId(null), []);
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
@@ -7907,6 +7914,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
+                  cost_krw: n.data.cost_krw ?? "",
+                  cost_usd: n.data.cost_usd ?? "",
+                  headcount: n.data.headcount ?? "",
+                  annual_count: n.data.annual_count ?? "",
+                  fte: n.data.fte ?? "",
                   nodeType: n.data.nodeType,
                 }))}
               colorPresets={COLOR_PRESETS}
@@ -8473,7 +8485,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
                         <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
                       </div>
-                      {NODE_DISPLAY_FIELDS.map((field) => {
+                      {NODE_DISPLAY_TOGGLES.map((field) => {
                         const on = displayFields.includes(field);
                         const labelKey =
                           field === "assignee"
@@ -8482,7 +8494,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                               ? "field.department"
                               : field === "system"
                                 ? "field.system"
-                                : "field.url";
+                                : field === "url"
+                                  ? "field.url"
+                                  : "field.params";
                         return (
                           <div
                             key={field}
