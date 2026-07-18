@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-18 — 맵 이름 변경 승인 워크플로우 설계 스펙 (worktree-map-rename-workflow)
+- 브레인스토밍으로 요구 확정(요청=editor 이상, 승인=오너/sysadmin 1인, 오너/sysadmin은 즉시 적용+pending supersede, 맵당 pending 1건, Settings 진입, 알림 5종) 후 설계 스펙 작성 — `docs/superpowers/specs/2026-07-18-map-rename-workflow-design.md`. 접근: 기존 `ApprovalRequest`에 `kind='map_rename'` 확장(DDL 불요), decide·Inbox는 kind별 오너/sysadmin 게이트 분기, `PATCH /maps` name은 오너/sysadmin 전용으로 조임(에디터 403), 신설 2엔드포인트(요청 생성·본인 취소).
+
 ## 2026-07-18 — persist-effect StrictMode 리셋 잔존 2건 픽스: edgeStyle·inspectorWidth (dev 직접 커밋)
 - params-ui-sync에서 적발된 진범 패턴(상태-의존 effect 영속 → StrictMode 이중 마운트가 hydration 전 기본값으로 저장값 덮어씀)의 잔존 전수 스캔: 실버그 2건(`bpm.edgeStyle`·`bpm.inspectorWidth`, dev 한정 증상) + 자체 완화 2건(`bpm.home.filters` skip-guard, `bpm.windows.*` 디바운스+cleanup — 존치) + 나머지 9곳은 핸들러/lazy-init로 안전.
 - 수정: persist effect 2개 제거 — edgeStyle은 스타일 버튼 onClick에서, inspectorWidth는 리사이저 드래그 종료(pointerup)에서 최종값(`lastW`) 1회 영속.
