@@ -326,3 +326,39 @@ class TestDecideRename:
         assert r.status_code == 409
         req = _pending_request(map_id)
         assert req is not None and req.status == "pending"
+
+
+class TestInboxRename:
+    def _titles(self, client) -> list[str]:
+        r = client.get("/api/inbox/approvals")
+        assert r.status_code == 200
+        return [a["title"] for a in r.json() if a["kind"] == "approval_request"]
+
+    def test_owner_sees_rename_with_before_after(self, client, enforce):
+        map_id = seed_rename_map("Chi")
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "Chi2"})
+        act_as(OWNER)
+        items = [
+            a for a in client.get("/api/inbox/approvals").json()
+            if a["kind"] == "approval_request" and a["title"] == "map_rename" and a["map_id"] == map_id
+        ]
+        assert len(items) == 1
+        assert items[0]["before"] == "Chi"
+        assert items[0]["after"] == "Chi2"
+        assert items[0]["map_id"] == map_id
+
+    def test_nonowner_approver_does_not_see_rename(self, client, enforce):
+        map_id = seed_rename_map("Psi")
+        seed_approver(map_id)
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "Psi2"})
+        act_as(APPROVER)
+        assert "map_rename" not in self._titles(client)
+
+    def test_sysadmin_sees_rename(self, client, enforce):
+        map_id = seed_rename_map("Omega")
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "Omega2"})
+        act_as(SYSADMIN)
+        assert "map_rename" in self._titles(client)
