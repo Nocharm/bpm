@@ -206,6 +206,7 @@ import {
   parseDisplayToggles,
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
+import { buildBulkAttrPatch } from "@/lib/bulk-params";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
 import {
@@ -3725,7 +3726,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     [pushHistory, setNodes, scheduleAutoSave],
   );
 
-  // 그룹 멤버 속성 일괄 적용 — 모달이 정책(교체/추가/건너뛰기/개별)을 멤버별 값으로 해석해 넘김
+  // 그룹 멤버 속성 일괄 적용 — 모달이 정책(교체/추가/건너뛰기/개별)을 멤버별 값으로 해석해 넘김.
+  // 패치는 buildBulkAttrPatch 경유 — 비용 설정 시 반대 통화 소거(배타 불변식), 비용 비우기는 양쪽 소거.
   const applyGroupAttribute = useCallback(
     (field: BulkAttrField, updates: { id: string; value: string }[]) => {
       if (updates.length === 0) {
@@ -3736,7 +3738,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       setNodes((current) =>
         current.map((node) =>
           valueById.has(node.id)
-            ? { ...node, data: { ...node.data, [field]: valueById.get(node.id) ?? "" } }
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  ...buildBulkAttrPatch(field, valueById.get(node.id) ?? ""),
+                },
+              }
             : node,
         ),
       );
@@ -7884,6 +7892,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
+                  cost_krw: n.data.cost_krw ?? "",
+                  cost_usd: n.data.cost_usd ?? "",
+                  headcount: n.data.headcount ?? "",
+                  annual_count: n.data.annual_count ?? "",
+                  fte: n.data.fte ?? "",
                   nodeType: n.data.nodeType,
                 }))}
               colorPresets={COLOR_PRESETS}

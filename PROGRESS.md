@@ -5,6 +5,7 @@
 - **Task 1**: `lib/bulk-params.ts` 신설 — `canBulkEditField`(모드별 대상: people/system=hasBpmAttributes, 파라미터=getEditableParamFields), `buildBulkAttrPatch`(비용 설정 시 반대 통화 소거·비우기는 양쪽 소거), `isBulkParamField`. vitest 7/7 (TDD RED→GREEN).
 - **Task 2+3**: `NodeDisplayToggle`("params" 추가)·`NODE_DISPLAY_TOGGLES`·`parseDisplayToggles`(v2 키 우선, 레거시 저장값은 params ON 이관 — 기존 사용자 칩이 꺼지는 회귀 방지) + `NodeParams`를 토글로 게이팅·`NodeFields`는 params 제외. compare 뷰는 `["params"]` 주입으로 칩 종전 표시 보존, Provider 없는 임베드는 defaultActions에 params 포함으로 보존. vitest 5/5 신규, 전체 500/500·tsc 0.
 - **Task 4**: 에디터 토글 state를 `NodeDisplayToggle[]`(기본 `["assignee","params"]`)·localStorage `bpm.nodeDisplayFields.v2`(레거시 키는 이관 소스로만 읽고 유지)로 전환, 맵 탭 "노드 표시 정보" 카드에 Parameters 스위치 행 추가(`field.params` EN/KO). lint 0 err·tsc 0.
+- **Task 5**: 그룹 일괄 편집을 6필드 전체로 확장 — `BulkAttrField = "system" | ParamField`, 모드 탭을 PARAM_FIELDS 순회로 생성(라벨=PARAM_LABEL_KEY, 아이콘=캔버스 칩과 동일). 모드별 멤버십 `canBulkEditField`(SP는 annual_count·fte 모드에 포함, people/system/나머지 4필드는 종전대로 제외). 비용 모드는 반대 통화 보유도 충돌로 취급(`getExistingAttrRaw`)·표시는 실보유 통화 기호(`displayExistingAttr`)·적용은 `buildBulkAttrPatch`로 반대 통화 소거. 파라미터 모드는 append 정책 봉인(숫자 콤마 append→백엔드 소거 유실, 기존 duration append 잠복 버그 해소), 입력은 ParamInput 공용. tsc 0·lint 0 err·vitest 500/500.
 
 ## 2026-07-18 — 권한 마스킹 표면 정리: 아웃라인 잠금 화살표 억제 + WBS 잠긴 SP 행 살리기 (worktree-inline-expand-drag-fix)
 - 조사(권한 강제 백엔드 + yerin.yoo〈맵1 무권한〉 실측): 캔버스는 봉인 정상, Excel 1안은 SP 행+denied 노트 정상, CSV/Word는 링크맵 데이터 자체가 안 실려 무변경. sp_* 지정 정보는 잠금 사용자에게도 노출(지정 카드=공개 메타데이터, 현행 유지).

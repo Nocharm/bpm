@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ChevronRight,
   Clock,
+  Coins,
   Eraser,
   ListChecks,
   MousePointerClick,
@@ -14,6 +15,8 @@ import {
   Replace,
   Server,
   SkipForward,
+  Tag,
+  Target,
   Users,
   X,
   type LucideIcon,
@@ -26,14 +29,14 @@ import { ParamInput } from "@/components/param-input";
 import { SearchSelect } from "@/components/search-select";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
-import { hasBpmAttributes } from "@/lib/canvas";
-import { formatDurationHm } from "@/lib/duration";
+import { canBulkEditField, isBulkParamField } from "@/lib/bulk-params";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
+import { formatParamValue, PARAM_FIELDS, PARAM_LABEL_KEY, type ParamField } from "@/lib/params";
 import type { MessageKey } from "@/lib/i18n-messages";
 
-// "people" = combined assignee+department mode; "system"/"duration" = single-field modes
-export type BulkAttrField = "system" | "duration";
+// "people" = combined assignee+department mode; 나머지는 단일 필드 모드(system + 파라미터 6종)
+export type BulkAttrField = "system" | ParamField;
 export type BulkMode = "people" | BulkAttrField;
 export type BulkAction = "set" | "clear";
 // 충돌 처리: 교체/추가(콤마)/건너뛰기/개별 선택. null=미선택(필수)
@@ -41,11 +44,15 @@ export type BulkPolicy = "replace" | "append" | "skip" | "individual";
 // Combined people update written by onApplyPeople
 export type PeopleUpdate = { id: string; department: string; assignee: string };
 
-// 속성 탭 — 3분할(아이콘 + 라벨)
+// 캔버스 칩(process-node PARAM_ICON)과 동일한 아이콘 매핑 — 탭에서 같은 시각 언어 유지
+const PARAM_MODE_ICON: Record<ParamField, LucideIcon> = {
+  duration: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
+};
+// 속성 탭 — people/system + 파라미터 6종(PARAM_FIELDS 순서·라벨 단일 소스)
 const MODE_META: { key: BulkMode; icon: LucideIcon; labelKey: MessageKey }[] = [
   { key: "people", icon: Users, labelKey: "bulk.modePeople" },
   { key: "system", icon: Server, labelKey: "field.system" },
-  { key: "duration", icon: Clock, labelKey: "field.duration" },
+  ...PARAM_FIELDS.map((f) => ({ key: f, icon: PARAM_MODE_ICON[f], labelKey: PARAM_LABEL_KEY[f] })),
 ];
 // 값 설정 / 비우기 — 선택 필(아이콘 + 라벨)
 const ACTION_META: { key: BulkAction; icon: LucideIcon; labelKey: MessageKey }[] = [
@@ -61,9 +68,10 @@ const POLICY_META: { key: BulkPolicy; icon: LucideIcon }[] = [
   { key: "individual", icon: MousePointerClick }, // 개별 — 하나씩 선택
 ];
 
-// duration 값 표시 전용 — 1h30m 포맷, 무효/빈값은 원문 폴백(compare의 displayFieldValue 패턴). 편집 입력은 ParamInput이 담당.
+// 파라미터 값 표시 전용 — 표시형(1h30m·통화기호), 무효/빈값은 원문 폴백(compare의 displayFieldValue 패턴).
+// system은 원문 그대로. 편집 입력은 ParamInput이 담당.
 const displayAttrValue = (field: BulkAttrField, raw: string): string =>
-  field === "duration" ? formatDurationHm(raw) || raw : raw;
+  isBulkParamField(field) ? formatParamValue(field, raw) || raw : raw;
 
 export interface BulkMember {
   id: string;
@@ -72,8 +80,30 @@ export interface BulkMember {
   department: string;
   system: string;
   duration: string;
-  nodeType: string; // start/end/subprocess는 BPM 속성 대상에서 제외
+  cost_krw: string;
+  cost_usd: string;
+  headcount: string;
+  annual_count: string;
+  fte: string;
+  nodeType: string; // 모드별 편집 대상 판정에 사용 (canBulkEditField)
 }
+
+// 비용 모드는 어느 통화든 기존 값으로 취급(배타 불변식상 노드의 비용은 하나) — 통화 전환도 충돌로 노출
+const getExistingAttrRaw = (m: BulkMember, field: BulkAttrField): string =>
+  field === "cost_krw" || field === "cost_usd"
+    ? m.cost_krw.trim() !== ""
+      ? m.cost_krw
+      : m.cost_usd
+    : m[field];
+
+// 기존 값 표시 — 비용은 실제 보유 통화의 기호로 포맷(₩/$), 나머지는 displayAttrValue
+const displayExistingAttr = (m: BulkMember, field: BulkAttrField): string => {
+  if (field === "cost_krw" || field === "cost_usd") {
+    const holder = m.cost_krw.trim() !== "" ? "cost_krw" : "cost_usd";
+    return formatParamValue(holder, m[holder]) || m[holder];
+  }
+  return displayAttrValue(field, m[field]);
+};
 
 type Update = { id: string; value: string };
 
@@ -101,11 +131,6 @@ export function GroupBulkModal({
   onClose,
 }: GroupBulkModalProps) {
   const { t, lang } = useI18n();
-
-  // BPM 속성 대상 = process·decision만. start/end/subprocess는 일괄 속성(부서/담당자/시스템/소요)에서 제외.
-  // 아래 속성 로직은 전부 editable(=members)만 순회하고, 헤더 카운트·제외 안내만 allMembers 사용.
-  const members = allMembers.filter((m) => hasBpmAttributes(m.nodeType));
-  const excludedMembers = allMembers.filter((m) => !hasBpmAttributes(m.nodeType));
 
   // Shared UI state
   const [mode, setMode] = useState<BulkMode>("people");
@@ -175,6 +200,18 @@ export function GroupBulkModal({
     lang,
   );
 
+  // ---- Mode-dependent membership ----
+
+  // People mode가 아니면 단일 필드 모드
+  const attrField = mode !== "people" ? (mode as BulkAttrField) : null;
+  // 모드별 대상 — people/system은 BPM 속성 노드(process·decision)만, 파라미터는 노드 타입별
+  // 편집 가능 집합(subprocess는 annual_count·fte만 포함). 속성 로직은 전부 members만 순회하고,
+  // 헤더 카운트·제외 안내만 allMembers 사용.
+  const members = allMembers.filter((m) => canBulkEditField(m.nodeType, attrField ?? "people"));
+  const excludedMembers = allMembers.filter(
+    (m) => !canBulkEditField(m.nodeType, attrField ?? "people"),
+  );
+
   // ---- Conflict detection ----
 
   // People mode conflict: member has existing dept or assignee that differs from target
@@ -190,10 +227,12 @@ export function GroupBulkModal({
 
   const peopleConflicts = members.filter(isPeopleConflict);
 
-  // System/duration conflict
-  const attrField = mode !== "people" ? (mode as BulkAttrField) : null;
+  // 단일 필드 모드 충돌 — 비용은 반대 통화 보유(통화 전환)도 충돌로 취급
   const attrConflicts = attrField
-    ? members.filter((m) => m[attrField].trim() !== "" && m[attrField].trim() !== value.trim())
+    ? members.filter(
+        (m) =>
+          getExistingAttrRaw(m, attrField).trim() !== "" && m[attrField].trim() !== value.trim(),
+      )
     : [];
 
   const hasConflict =
@@ -201,9 +240,10 @@ export function GroupBulkModal({
       ? action === "set" && peopleConflicts.length > 0
       : action === "set" && attrConflicts.length > 0;
 
-  // Available policies — people+dept-only omits append (department is single-valued)
-  const availablePolicies: Set<BulkPolicy> = new Set(
-    mode === "people" && !hasAssignees
+  // Available policies — people+dept-only omits append (department is single-valued).
+  // 파라미터 모드도 append 제외 — 숫자에 콤마 append는 무효값이 되어 백엔드 소거로 기존값 유실.
+  const availablePolicies: Set<BulkPolicy> = new Set<BulkPolicy>(
+    (mode === "people" && !hasAssignees) || (attrField !== null && isBulkParamField(attrField))
       ? ["replace", "individual", "skip"]
       : ["replace", "append", "skip", "individual"],
   );
@@ -354,7 +394,7 @@ export function GroupBulkModal({
         return {
           id: u.id,
           label: labelOf(u.id),
-          before: (m ? displayAttrValue(attrField, m[attrField]) : "") || "—",
+          before: (m ? displayExistingAttr(m, attrField) : "") || "—",
           after: displayAttrValue(attrField, u.value) || t("bulk.cleared"),
         };
       }),
@@ -377,15 +417,15 @@ export function GroupBulkModal({
     if (effectivePolicy === null) return;
     if (effectivePolicy === "individual") {
       const base = members
-        .filter((m) => m[attrField].trim() === "")
+        .filter((m) => getExistingAttrRaw(m, attrField).trim() === "")
         .map((m) => ({ id: m.id, value }));
       setWizard({ step: 0, resolved: base });
       return;
     }
     const updates = members.flatMap<Update>((m) => {
-      const existing = m[attrField].trim();
+      const existing = getExistingAttrRaw(m, attrField).trim();
       if (existing === "") return [{ id: m.id, value }];
-      if (existing === value.trim()) return []; // 동일 값 — 자동 스킵
+      if (m[attrField].trim() === value.trim()) return []; // 동일 값(비용은 같은 통화) — 자동 스킵
       if (effectivePolicy === "replace") return [{ id: m.id, value }];
       if (effectivePolicy === "append") return [{ id: m.id, value: `${m[attrField]}, ${value}` }];
       return []; // skip
@@ -637,7 +677,7 @@ export function GroupBulkModal({
             </p>
             <p className="mb-1 text-fine text-ink-tertiary">
               {t("bulk.existing")}:{" "}
-              {attrField ? displayAttrValue(attrField, attrConflicts[wizard.step][attrField]) : ""}
+              {attrField ? displayExistingAttr(attrConflicts[wizard.step], attrField) : ""}
             </p>
             <p className="mb-3 text-fine text-ink-tertiary">
               {t("bulk.value")}: {attrField ? displayAttrValue(attrField, value) : value}
@@ -651,14 +691,16 @@ export function GroupBulkModal({
                 <Replace size={13} strokeWidth={1.5} className="shrink-0" />
                 {t("bulk.replace")}
               </button>
-              <button
-                type="button"
-                className={`${btn} flex items-center gap-1`}
-                onClick={() => resolveStep("append")}
-              >
-                <Plus size={13} strokeWidth={1.5} className="shrink-0" />
-                {t("bulk.append")}
-              </button>
+              {!(attrField !== null && isBulkParamField(attrField)) && (
+                <button
+                  type="button"
+                  className={`${btn} flex items-center gap-1`}
+                  onClick={() => resolveStep("append")}
+                >
+                  <Plus size={13} strokeWidth={1.5} className="shrink-0" />
+                  {t("bulk.append")}
+                </button>
+              )}
               <button
                 type="button"
                 className={`${btn} flex items-center gap-1`}
@@ -829,11 +871,12 @@ export function GroupBulkModal({
                 </div>
               )}
 
-              {/* System/duration value input — duration은 숫자 강제+blur 정규화+비포커스 1h30m(ParamInput), system은 자유텍스트 */}
+              {/* 값 입력 — 파라미터 6종은 ParamInput(숫자 강제+blur 정규화+비포커스 표시형), system은 자유텍스트 */}
               {mode !== "people" && action === "set" &&
-                (mode === "duration" ? (
+                (attrField !== null && isBulkParamField(attrField) ? (
                   <ParamInput
-                    field="duration"
+                    key={attrField} // 모드 전환 시 내부 focused 상태 초기화
+                    field={attrField}
                     className="rounded-sm border border-hairline px-2 py-1 text-caption"
                     placeholder={t("bulk.value")}
                     ariaLabel={t("bulk.value")}
@@ -875,7 +918,7 @@ export function GroupBulkModal({
                                 {mode === "people"
                                   ? [m.department, m.assignee].filter(Boolean).join(" / ")
                                   : attrField
-                                    ? displayAttrValue(attrField, m[attrField])
+                                    ? displayExistingAttr(m, attrField)
                                     : ""}
                               </span>
                             </li>
@@ -909,7 +952,7 @@ export function GroupBulkModal({
                 </div>
               )}
 
-              {/* 제외 안내 — start/end/subprocess는 속성 대상 아님. 호버 시 타입별 개수 */}
+              {/* 제외 안내 — 모드별 편집 불가 타입(canBulkEditField). 호버 시 타입별 개수 */}
               {excludedMembers.length > 0 && (
                 <div
                   className="relative inline-block self-start"
