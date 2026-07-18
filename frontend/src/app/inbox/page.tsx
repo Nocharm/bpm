@@ -48,6 +48,7 @@ import {
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { genId } from "@/lib/id";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -58,6 +59,7 @@ import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filt
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
 
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -67,6 +69,7 @@ function approvalTitle(a: InboxApproval, t: Translate): string {
   if (a.kind === "approval_request") {
     if (a.title === "visibility_change") return t("inbox.reqKind.visibility_change");
     if (a.title === "permission_downgrade") return t("inbox.reqKind.permission_downgrade");
+    if (a.title === "map_rename") return t("inbox.reqKind.map_rename");
   }
   return a.title;
 }
@@ -79,6 +82,8 @@ function approvalSummary(a: InboxApproval, t: Translate): string {
     return t("inbox.summary.checkout_transfer", { label: a.version_label ?? a.title });
   if (a.title === "permission_downgrade")
     return t("inbox.summary.permission_downgrade", { before: a.before ?? "?", after: a.after ?? "?" });
+  if (a.kind === "approval_request" && a.title === "map_rename")
+    return t("inbox.summary.map_rename", { from: a.before ?? "", to: a.after ?? "" });
   return t("inbox.summary.visibility_change", { before: a.before ?? "?", after: a.after ?? "?" });
 }
 
@@ -138,6 +143,9 @@ export default function InboxPage() {
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const pushToast = (message: string) => setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id));
   const dir = useDirectory(); // 요청자 login_id → 이름 해석(검색·표시)
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
@@ -269,7 +277,14 @@ export default function InboxPage() {
       } else if (a.kind === "checkout_transfer") {
         await decideCheckoutRequest(a.id, approve);
       } else {
-        await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+        try {
+          await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+          if (a.title === "map_rename")
+            pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
+        } catch (err) {
+          // 승인 시점 이름 선점 409 등 — 백엔드 detail 노출
+          pushToast(err instanceof Error ? err.message : String(err));
+        }
       }
       const next = await listInboxApprovals();
       setApprovals(next);
@@ -688,6 +703,7 @@ export default function InboxPage() {
           />
         )}
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

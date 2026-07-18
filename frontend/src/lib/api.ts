@@ -273,6 +273,22 @@ export function updateMap(
   });
 }
 
+// 이름 변경 요청 — editor는 즉시 적용 대신 pending ApprovalRequest(owner 승인 필요). owner/sysadmin은 updateMap 직접 사용.
+export function createRenameRequest(mapId: number, toName: string): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/rename-requests`, {
+    method: "POST",
+    body: JSON.stringify({ to_name: toName }),
+  });
+}
+
+export function getPendingRenameRequest(mapId: number): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/rename-requests/pending`);
+}
+
+export function withdrawRenameRequest(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/rename-requests/pending`, { method: "DELETE" });
+}
+
 // 오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 새 부서를 따라간다 (spec 2026-07-10)
 export function setOwningDepartment(
   mapId: number,

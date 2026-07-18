@@ -12,7 +12,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember
+from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember, _now
 from app.permissions import logic
 from app.permissions.access import (
     get_effective_role,
@@ -22,6 +22,7 @@ from app.permissions.access import (
 from app.permissions.deps import require_map_role
 from app.routers.versions import clone_graph
 from app.schemas import (
+    ApprovalRequestOut,
     DirectoryUserOut,
     EligibleApproverOut,
     MapCopy,
@@ -30,6 +31,7 @@ from app.schemas import (
     MapOut,
     MapUpdate,
     OwningDepartmentIn,
+    RenameRequestIn,
     SubprocessDesignationIn,
     SubprocessUsageOut,
     SubprocessUsedByOut,
@@ -505,19 +507,170 @@ async def get_map(
     dependencies=[Depends(require_map_role("editor"))],
 )
 async def update_map(
-    map_id: int, payload: MapUpdate, session: AsyncSession = Depends(get_session)
+    map_id: int,
+    payload: MapUpdate,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> ProcessMap:
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     if payload.name is not None:
-        await _assert_unique_name(session, payload.name, exclude_map_id=map_id)
-        found_map.name = payload.name
+        new_name = payload.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=422, detail="name must not be blank")
+        if new_name != found_map.name:
+            # 이름 변경은 오너/sysadmin 전용 — 에디터는 rename-requests 승인 경로 (spec 2026-07-18)
+            role = await get_effective_role(session, user, map_id)
+            if role != "owner":
+                raise HTTPException(
+                    status_code=403,
+                    detail="renaming requires owner — submit a rename request instead",
+                )
+            await _assert_unique_name(session, new_name, exclude_map_id=map_id)
+            old_name = found_map.name
+            found_map.name = new_name
+            await _supersede_pending_rename(session, map_id, actor=user, new_name=new_name)
+            await workflow.notify_map_renamed(
+                session, map_id, old_name=old_name, new_name=new_name, actor=user
+            )
     if payload.description is not None:
         found_map.description = payload.description
     await session.commit()
     await session.refresh(found_map)
     return found_map
+
+
+async def _supersede_pending_rename(
+    session: AsyncSession, map_id: int, *, actor: str, new_name: str
+) -> None:
+    """오너 직접 변경 시 pending rename 요청 무효화 + 요청자 알림 (spec 2026-07-18)."""
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "map_rename",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        return
+    req.status = "superseded"
+    req.decided_by = actor
+    req.decided_at = _now()
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type="rename_superseded",
+        map_id=map_id,
+        message=f"Your rename request was superseded — the map is now '{new_name}'",
+    )
+
+
+@router.post(
+    "/{map_id}/rename-requests",
+    response_model=ApprovalRequestOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def create_rename_request(
+    map_id: int,
+    payload: RenameRequestIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ApprovalRequest:
+    """이름 변경 승인 요청 — 오너/sysadmin 1인이 decide로 적용 (spec 2026-07-18)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    to_name = payload.to_name.strip()
+    if not to_name:
+        raise HTTPException(status_code=422, detail="name must not be blank")
+    if to_name == found_map.name:
+        raise HTTPException(status_code=422, detail="new name equals current name")
+    await _assert_unique_name(session, to_name, exclude_map_id=map_id)
+    pending = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "map_rename",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending is not None:
+        raise HTTPException(status_code=409, detail="a rename request is already pending")
+    req = ApprovalRequest(
+        map_id=map_id,
+        kind="map_rename",
+        payload={"from_name": found_map.name, "to_name": to_name},
+        requested_by=user,
+        status="pending",
+    )
+    session.add(req)
+    requester_name = await workflow.get_display_name(session, user)
+    recipients = [
+        o
+        for o in await workflow.load_map_user_collaborators(session, map_id, role="owner")
+        if o != user
+    ]
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="rename_requested",
+        map_id=map_id,
+        message=f"{requester_name} requested to rename '{found_map.name}' to '{to_name}'",
+    )
+    await session.commit()
+    await session.refresh(req)
+    return req
+
+
+@router.get(
+    "/{map_id}/rename-requests/pending",
+    response_model=ApprovalRequestOut | None,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_pending_rename_request(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> ApprovalRequest | None:
+    """pending rename 요청 조회 — Settings 배지·중복요청 안내용 (없으면 null)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    return await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "map_rename",
+            ApprovalRequest.status == "pending",
+        )
+    )
+
+
+@router.delete(
+    "/{map_id}/rename-requests/pending",
+    status_code=204,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def withdraw_rename_request(
+    map_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """본인 pending rename 요청 취소 → withdrawn (행 보존 — 이력)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "map_rename",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        raise HTTPException(status_code=404, detail="no pending rename request")
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    req.status = "withdrawn"
+    await session.commit()
 
 
 @router.put(

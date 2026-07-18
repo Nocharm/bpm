@@ -463,18 +463,18 @@ class MapPermission(Base):
 
 
 class ApprovalRequest(Base):
-    """권한 다운그레이드·가시성 변경 승인 요청 — 버전 게시 승인은 version_approvals 사용 (§2.1)."""
+    """권한 다운그레이드·가시성 변경·맵 이름변경 승인 요청 — 버전 게시 승인은 version_approvals 사용 (§2.1)."""
 
     __tablename__ = "approval_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
-    # 'permission_downgrade' | 'visibility_change'
+    # 'permission_downgrade' | 'visibility_change' | 'map_rename'
     kind: Mapped[str] = mapped_column(String(30))
-    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility}
+    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility} 또는 {from_name, to_name}
     payload: Mapped[dict] = mapped_column(JSON)
     requested_by: Mapped[str] = mapped_column(String(100))
-    # 'pending' | 'approved' | 'rejected' | 'applied'
+    # 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'withdrawn'
     status: Mapped[str] = mapped_column(String(20), default="pending")
     decided_by: Mapped[str | None] = mapped_column(String(100), default=None)
     decided_at: Mapped[datetime | None] = mapped_column(

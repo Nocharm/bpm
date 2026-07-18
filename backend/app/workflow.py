@@ -7,6 +7,7 @@ from app.clock import now as now_kst
 from app.models import (
     Employee,
     MapApprover,
+    MapPermission,
     MapVersion,
     Notification,
     ProcessMap,
@@ -182,3 +183,34 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                     version_id=version.id,
                     message=f"'{version.label}' is fully approved — ready to publish",
                 )
+
+
+async def load_map_user_collaborators(
+    session: AsyncSession, map_id: int, *, role: str | None = None
+) -> list[str]:
+    """맵의 user principal 협업자 login_id — role 지정 시 해당 역할만 (rename 알림 대상)."""
+    q = select(MapPermission.principal_id).where(
+        MapPermission.map_id == map_id,
+        MapPermission.principal_type == "user",
+    )
+    if role is not None:
+        q = q.where(MapPermission.role == role)
+    rows = await session.scalars(q)
+    return list(rows.all())
+
+
+async def notify_map_renamed(
+    session: AsyncSession, map_id: int, *, old_name: str, new_name: str, actor: str
+) -> None:
+    """이름 변경 확정(직접·승인 공통) → 협업자 전원 알림 (행위자 제외, spec 2026-07-18)."""
+    actor_name = await get_display_name(session, actor)
+    recipients = [
+        c for c in await load_map_user_collaborators(session, map_id) if c != actor
+    ]
+    await create_notifications(
+        session,
+        recipients,
+        type="map_renamed",
+        map_id=map_id,
+        message=f"{actor_name} renamed '{old_name}' to '{new_name}'",
+    )

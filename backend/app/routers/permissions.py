@@ -14,12 +14,13 @@ from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
 from app.permissions import logic
-from app.permissions.access import get_effective_role
+from app.permissions.access import assert_map_role, get_effective_role
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
     require_approver_or_sysadmin,
     require_map_role,
 )
+from app.routers.maps import _assert_unique_name
 from app.schemas import (
     ApprovalRequestOut,
     DecisionIn,
@@ -384,7 +385,11 @@ async def decide_approval_request(
     req = await session.get(ApprovalRequest, request_id)
     if req is None:
         raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
-    await assert_approver_or_sysadmin(session, user, req.map_id)
+    if req.kind == "map_rename":
+        # rename 결정권자는 오너/sysadmin — 승인자 게이트와 다름 (spec 2026-07-18)
+        await assert_map_role(session, user, req.map_id, "owner")
+    else:
+        await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
         raise HTTPException(status_code=409, detail=f"request already {req.status}")
 
@@ -435,6 +440,18 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
                 ).all()
                 for grant in viewer_grants:
                     await session.delete(grant)
+    elif req.kind == "map_rename":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 이름 변경 없이 applied
+        to_name = req.payload.get("to_name") or ""
+        # 요청~승인 사이 이름 선점 경합 — 409로 중단하면 decide가 커밋 전이라 pending 유지
+        await _assert_unique_name(session, to_name, exclude_map_id=req.map_id)
+        old_name = found_map.name
+        found_map.name = to_name
+        await workflow.notify_map_renamed(
+            session, req.map_id, old_name=old_name, new_name=to_name, actor=req.decided_by
+        )
 
 
 async def _notify_permission_request(
@@ -459,6 +476,17 @@ async def _notify_permission_decision(
     session: AsyncSession, req: ApprovalRequest, *, outcome: str
 ) -> None:
     """승인/반려 결과 → 요청자에게 벨 알림 (design 2026-07-16)."""
+    if req.kind == "map_rename":
+        from_name = req.payload.get("from_name", "")
+        to_name = req.payload.get("to_name", "")
+        await workflow.create_notifications(
+            session,
+            [req.requested_by],
+            type=f"rename_{outcome}",
+            map_id=req.map_id,
+            message=f"Your request to rename '{from_name}' to '{to_name}' was {outcome}",
+        )
+        return
     found_map = await session.get(ProcessMap, req.map_id)
     map_name = found_map.name if found_map is not None else f"map {req.map_id}"
     await workflow.create_notifications(
