@@ -164,3 +164,68 @@ class TestPendingAndWithdraw:
         map_id = seed_rename_map("Iota Stranger")
         act_as("stranger.user")
         assert client.delete(f"/api/maps/{map_id}/rename-requests/pending").status_code == 403
+
+
+class TestDirectRename:
+    def test_editor_patch_name_403(self, client, enforce):
+        map_id = seed_rename_map("Kappa")
+        act_as(EDITOR)
+        r = client.patch(f"/api/maps/{map_id}", json={"name": "Kappa2"})
+        assert r.status_code == 403
+
+    def test_editor_patch_description_still_ok(self, client, enforce):
+        map_id = seed_rename_map("Lambda")
+        act_as(EDITOR)
+        r = client.patch(f"/api/maps/{map_id}", json={"description": "updated"})
+        assert r.status_code == 200
+        assert r.json()["description"] == "updated"
+
+    def test_owner_patch_name_applies_and_notifies(self, client, enforce):
+        map_id = seed_rename_map("Mu")
+        act_as(OWNER)
+        r = client.patch(f"/api/maps/{map_id}", json={"name": "Mu Renamed"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "Mu Renamed"
+
+        async def _notes(session):
+            rows = await session.scalars(
+                select(Notification).where(Notification.type == "map_renamed")
+            )
+            return [n.recipient for n in rows.all()]
+
+        recipients = _seed(_notes)
+        assert EDITOR in recipients and VIEWER in recipients
+        assert OWNER not in recipients
+
+    def test_owner_patch_name_supersedes_pending(self, client, enforce):
+        map_id = seed_rename_map("Nu")
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "Nu Editor"})
+        act_as(OWNER)
+        client.patch(f"/api/maps/{map_id}", json={"name": "Nu Owner"})
+        assert _pending_request(map_id) is None
+
+        async def _req(session):
+            return await session.scalar(
+                select(ApprovalRequest).where(
+                    ApprovalRequest.map_id == map_id,
+                    ApprovalRequest.kind == "map_rename",
+                )
+            )
+
+        req = _seed(_req)
+        assert req.status == "superseded"
+
+        async def _notes(session):
+            rows = await session.scalars(
+                select(Notification).where(Notification.type == "rename_superseded")
+            )
+            return [n.recipient for n in rows.all()]
+
+        assert EDITOR in _seed(_notes)
+
+    def test_sysadmin_patch_name_ok(self, client, enforce):
+        map_id = seed_rename_map("Xi")
+        act_as(SYSADMIN)
+        r = client.patch(f"/api/maps/{map_id}", json={"name": "Xi Renamed"})
+        assert r.status_code == 200

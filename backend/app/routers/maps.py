@@ -12,7 +12,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember
+from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember, _now
 from app.permissions import logic
 from app.permissions.access import (
     get_effective_role,
@@ -507,19 +507,59 @@ async def get_map(
     dependencies=[Depends(require_map_role("editor"))],
 )
 async def update_map(
-    map_id: int, payload: MapUpdate, session: AsyncSession = Depends(get_session)
+    map_id: int,
+    payload: MapUpdate,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> ProcessMap:
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    if payload.name is not None:
+    if payload.name is not None and payload.name != found_map.name:
+        # 이름 변경은 오너/sysadmin 전용 — 에디터는 rename-requests 승인 경로 (spec 2026-07-18)
+        role = await get_effective_role(session, user, map_id)
+        if role != "owner":
+            raise HTTPException(
+                status_code=403,
+                detail="renaming requires owner — submit a rename request instead",
+            )
         await _assert_unique_name(session, payload.name, exclude_map_id=map_id)
+        old_name = found_map.name
         found_map.name = payload.name
+        await _supersede_pending_rename(session, map_id, actor=user, new_name=payload.name)
+        await workflow.notify_map_renamed(
+            session, map_id, old_name=old_name, new_name=payload.name, actor=user
+        )
     if payload.description is not None:
         found_map.description = payload.description
     await session.commit()
     await session.refresh(found_map)
     return found_map
+
+
+async def _supersede_pending_rename(
+    session: AsyncSession, map_id: int, *, actor: str, new_name: str
+) -> None:
+    """오너 직접 변경 시 pending rename 요청 무효화 + 요청자 알림 (spec 2026-07-18)."""
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "map_rename",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        return
+    req.status = "superseded"
+    req.decided_by = actor
+    req.decided_at = _now()
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type="rename_superseded",
+        map_id=map_id,
+        message=f"Your rename request was superseded — the map is now '{new_name}'",
+    )
 
 
 @router.post(
