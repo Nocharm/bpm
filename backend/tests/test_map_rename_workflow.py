@@ -229,3 +229,100 @@ class TestDirectRename:
         act_as(SYSADMIN)
         r = client.patch(f"/api/maps/{map_id}", json={"name": "Xi Renamed"})
         assert r.status_code == 200
+
+
+APPROVER = "approver.user"
+
+
+def seed_approver(map_id: int, login: str = APPROVER) -> None:
+    async def _factory(session):
+        from app.models import MapApprover
+
+        session.add(MapApprover(map_id=map_id, user_id=login))
+
+    _seed(_factory)
+
+
+def _request_id(map_id: int) -> int:
+    req = _pending_request(map_id)
+    assert req is not None
+    return req.id
+
+
+class TestDecideRename:
+    def _make_request(self, client, map_id: int, to_name: str) -> int:
+        act_as(EDITOR)
+        r = client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": to_name})
+        assert r.status_code == 201
+        return r.json()["id"]
+
+    def test_owner_approve_applies_name(self, client, enforce):
+        map_id = seed_rename_map("Omicron")
+        rid = self._make_request(client, map_id, "Omicron2")
+        act_as(OWNER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "applied"
+        act_as(VIEWER)
+        assert client.get(f"/api/maps/{map_id}").json()["name"] == "Omicron2"
+
+        async def _notes(session):
+            # map_id로 스코프 — 세션 전역 Notification 테이블은 다른 테스트(예: sysadmin
+            # 개명이 남기는 map_renamed→OWNER)와 공유돼 필터 없인 오염된다.
+            rows = await session.scalars(
+                select(Notification).where(Notification.map_id == map_id)
+            )
+            return [(n.type, n.recipient) for n in rows.all()]
+
+        notes = _seed(_notes)
+        assert ("rename_approved", EDITOR) in notes
+        assert ("map_renamed", VIEWER) in notes  # 협업자 통지 — 행위자(OWNER) 제외
+        assert ("map_renamed", OWNER) not in notes
+
+    def test_nonowner_approver_403(self, client, enforce):
+        map_id = seed_rename_map("Pi")
+        seed_approver(map_id)
+        rid = self._make_request(client, map_id, "Pi2")
+        act_as(APPROVER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 403
+
+    def test_editor_decide_403(self, client, enforce):
+        map_id = seed_rename_map("Rho")
+        rid = self._make_request(client, map_id, "Rho2")
+        act_as(EDITOR)
+        assert client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"}).status_code == 403
+
+    def test_sysadmin_approve_ok(self, client, enforce):
+        map_id = seed_rename_map("Sigma")
+        rid = self._make_request(client, map_id, "Sigma2")
+        act_as(SYSADMIN)
+        assert client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"}).status_code == 200
+
+    def test_reject_keeps_name(self, client, enforce):
+        map_id = seed_rename_map("Tau")
+        rid = self._make_request(client, map_id, "Tau2")
+        act_as(OWNER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "reject"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "rejected"
+        act_as(VIEWER)
+        assert client.get(f"/api/maps/{map_id}").json()["name"] == "Tau"
+
+        async def _notes(session):
+            rows = await session.scalars(
+                select(Notification).where(Notification.type == "rename_rejected")
+            )
+            return [n.recipient for n in rows.all()]
+
+        assert EDITOR in _seed(_notes)
+
+    def test_approve_name_conflict_409_stays_pending(self, client, enforce):
+        map_id = seed_rename_map("Upsilon")
+        rid = self._make_request(client, map_id, "Phi Target")
+        seed_rename_map("Phi Target")  # 요청 후 다른 맵이 이름 선점
+        act_as(OWNER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 409
+        req = _pending_request(map_id)
+        assert req is not None and req.status == "pending"
