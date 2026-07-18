@@ -8855,8 +8855,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
           defaultValue={
             versionDialog.mode === "create"
-              ? "To-Be"
+              ? "" // 신규 버전 이름은 자동입력 없이 사용자가 직접 입력 (빈 값은 PromptDialog가 제출 비활성)
               : (versions.find((version) => version.id === versionId)?.label ?? "")
+          }
+          placeholder={
+            // 이름은 사용자가 직접 입력 — 버전 번호는 게시 시 자동 채번(안내용 힌트)
+            versionDialog.mode === "create" ? t("prompt.newVersionNumberAuto") : undefined
           }
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
