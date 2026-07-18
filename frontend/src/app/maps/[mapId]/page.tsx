@@ -6080,10 +6080,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       setDisplayFields(saved);
     }
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(displayFields));
-  }, [displayFields]);
+  // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
+  // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
 
   // 엣지 스타일 1회 hydration + 변경 영속
   useEffect(() => {
@@ -6097,11 +6095,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.edgeStyle", edgeStyle);
   }, [edgeStyle]);
 
-  const toggleDisplayField = useCallback((field: NodeDisplayToggle) => {
-    setDisplayFields((prev) =>
-      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
-    );
-  }, []);
+  const toggleDisplayField = useCallback(
+    (field: NodeDisplayToggle) => {
+      const next = displayFields.includes(field)
+        ? displayFields.filter((f) => f !== field)
+        : [...displayFields, field];
+      window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(next));
+      setDisplayFields(next);
+    },
+    [displayFields],
+  );
 
   const cancelRename = useCallback(() => setEditingNodeId(null), []);
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)

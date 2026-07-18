@@ -483,6 +483,7 @@ export function GroupBulkModal({
       onClose={onClose}
     >
       <div
+        data-id="group-bulk-modal"
         className="w-96 rounded-md bg-surface p-4 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
