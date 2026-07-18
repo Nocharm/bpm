@@ -200,9 +200,10 @@ import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
-  NODE_DISPLAY_FIELDS,
+  NODE_DISPLAY_TOGGLES,
   NodeActionsContext,
-  type NodeDisplayField,
+  type NodeDisplayToggle,
+  parseDisplayToggles,
 } from "@/lib/node-actions";
 import { driftedAssignees, parseAssignees } from "@/lib/assignee";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
@@ -6057,28 +6058,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     [comments, selectedId],
   );
 
-  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속
-  const [displayFields, setDisplayFields] = useState<NodeDisplayField[]>(["assignee"]);
+  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속(v2 키).
+  // params(칩 일괄) 토글은 기본 ON — 레거시 키 저장값은 parseDisplayToggles가 ON으로 이관.
+  const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(["assignee", "params"]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("bpm.nodeDisplayFields");
-    if (saved) {
-      try {
-        // 저장된 값에 폐기된 필드(예: "duration")가 남아 있을 수 있어 현재 유효 필드로 걸러낸다
-        const parsed = JSON.parse(saved) as string[];
-        const valid = parsed.filter(
-          (f): f is NodeDisplayField => (NODE_DISPLAY_FIELDS as readonly string[]).includes(f),
-        );
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
-        setDisplayFields(valid);
-      } catch {
-        // 무시 — 기본값 유지
-      }
+    const saved = parseDisplayToggles(
+      window.localStorage.getItem("bpm.nodeDisplayFields.v2"),
+      window.localStorage.getItem("bpm.nodeDisplayFields"),
+    );
+    if (saved !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setDisplayFields(saved);
     }
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("bpm.nodeDisplayFields", JSON.stringify(displayFields));
+    window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(displayFields));
   }, [displayFields]);
 
   // 엣지 스타일 1회 hydration + 변경 영속
@@ -6093,7 +6089,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.edgeStyle", edgeStyle);
   }, [edgeStyle]);
 
-  const toggleDisplayField = useCallback((field: NodeDisplayField) => {
+  const toggleDisplayField = useCallback((field: NodeDisplayToggle) => {
     setDisplayFields((prev) =>
       prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
     );
@@ -8449,7 +8445,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
                         <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
                       </div>
-                      {NODE_DISPLAY_FIELDS.map((field) => {
+                      {NODE_DISPLAY_TOGGLES.map((field) => {
                         const on = displayFields.includes(field);
                         const labelKey =
                           field === "assignee"
@@ -8458,7 +8454,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                               ? "field.department"
                               : field === "system"
                                 ? "field.system"
-                                : "field.url";
+                                : field === "url"
+                                  ? "field.url"
+                                  : "field.params";
                         return (
                           <div
                             key={field}

@@ -4,6 +4,7 @@
 - 조사(에이전트 3병렬): 그룹 일괄 편집은 people/system/duration만 지원(5필드 누락·PARAM_FIELDS 미사용·SP 전면 배제), 캔버스 파라미터 칩은 토글 불가(항상 표시), 그 외 제품 표면은 전부 6필드 반영 확인 — 잔존은 pw-verify-export/sp-params 스크립트 2개뿐. 방향 확정: 일괄 편집 6필드 전부(SP는 annual_count·fte 허용) + "Parameters" 통합 토글 1개(기본 ON). 계획 `docs/superpowers/plans/2026-07-18-params-ui-sync.md`.
 - **Task 1**: `lib/bulk-params.ts` 신설 — `canBulkEditField`(모드별 대상: people/system=hasBpmAttributes, 파라미터=getEditableParamFields), `buildBulkAttrPatch`(비용 설정 시 반대 통화 소거·비우기는 양쪽 소거), `isBulkParamField`. vitest 7/7 (TDD RED→GREEN).
 - **Task 2+3**: `NodeDisplayToggle`("params" 추가)·`NODE_DISPLAY_TOGGLES`·`parseDisplayToggles`(v2 키 우선, 레거시 저장값은 params ON 이관 — 기존 사용자 칩이 꺼지는 회귀 방지) + `NodeParams`를 토글로 게이팅·`NodeFields`는 params 제외. compare 뷰는 `["params"]` 주입으로 칩 종전 표시 보존, Provider 없는 임베드는 defaultActions에 params 포함으로 보존. vitest 5/5 신규, 전체 500/500·tsc 0.
+- **Task 4**: 에디터 토글 state를 `NodeDisplayToggle[]`(기본 `["assignee","params"]`)·localStorage `bpm.nodeDisplayFields.v2`(레거시 키는 이관 소스로만 읽고 유지)로 전환, 맵 탭 "노드 표시 정보" 카드에 Parameters 스위치 행 추가(`field.params` EN/KO). lint 0 err·tsc 0.
 
 ## 2026-07-18 — 권한 마스킹 표면 정리: 아웃라인 잠금 화살표 억제 + WBS 잠긴 SP 행 살리기 (worktree-inline-expand-drag-fix)
 - 조사(권한 강제 백엔드 + yerin.yoo〈맵1 무권한〉 실측): 캔버스는 봉인 정상, Excel 1안은 SP 행+denied 노트 정상, CSV/Word는 링크맵 데이터 자체가 안 실려 무변경. sp_* 지정 정보는 잠금 사용자에게도 노출(지정 카드=공개 메타데이터, 현행 유지).
