@@ -40,6 +40,11 @@ class MapUpdate(BaseModel):
     description: str | None = None
 
 
+class RenameRequestIn(BaseModel):
+    # 이름 변경 승인 요청 — 오너/sysadmin 1인 decide로 적용 (spec 2026-07-18)
+    to_name: str = Field(min_length=1, max_length=200)
+
+
 class OwningDepartmentIn(BaseModel):
     # 오우닝 부서 지정/변경 — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)
