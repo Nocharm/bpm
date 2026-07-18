@@ -597,7 +597,11 @@ async def get_pending_rename_request(
     )
 
 
-@router.delete("/{map_id}/rename-requests/pending", status_code=204)
+@router.delete(
+    "/{map_id}/rename-requests/pending",
+    status_code=204,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
 async def withdraw_rename_request(
     map_id: int,
     user: str = Depends(get_current_user),

@@ -469,12 +469,12 @@ class ApprovalRequest(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
-    # 'permission_downgrade' | 'visibility_change'
+    # 'permission_downgrade' | 'visibility_change' | 'map_rename'
     kind: Mapped[str] = mapped_column(String(30))
     # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility}
     payload: Mapped[dict] = mapped_column(JSON)
     requested_by: Mapped[str] = mapped_column(String(100))
-    # 'pending' | 'approved' | 'rejected' | 'applied'
+    # 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'withdrawn'
     status: Mapped[str] = mapped_column(String(20), default="pending")
     decided_by: Mapped[str | None] = mapped_column(String(100), default=None)
     decided_at: Mapped[datetime | None] = mapped_column(

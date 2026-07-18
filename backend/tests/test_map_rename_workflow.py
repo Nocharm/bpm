@@ -159,3 +159,8 @@ class TestPendingAndWithdraw:
         map_id = seed_rename_map("Iota")
         act_as(EDITOR)
         assert client.delete(f"/api/maps/{map_id}/rename-requests/pending").status_code == 404
+
+    def test_withdraw_by_stranger_403_even_without_pending(self, client, enforce):
+        map_id = seed_rename_map("Iota Stranger")
+        act_as("stranger.user")
+        assert client.delete(f"/api/maps/{map_id}/rename-requests/pending").status_code == 403
