@@ -1,8 +1,9 @@
 # Progress
 
-## 2026-07-18 — 버전 드래프트 생성 다이얼로그: 이름 "To-Be" 자동입력 제거 (worktree-version-draft-no-tobe)
+## 2026-07-18 — 버전 드래프트 생성 다이얼로그: 이름 "To-Be" 자동입력 제거 + 번호 자동부여 힌트 (worktree-version-draft-no-tobe)
 - 에디터 새 버전(드래프트) 생성 모달의 이름 입력 `defaultValue`가 create 모드에서 `"To-Be"`로 하드코딩돼 있던 것을 빈 값으로 변경 — 사용자가 버전 이름을 직접 입력하도록. rename 모드(기존 라벨 프리필)는 그대로. 빈 값 처리는 `PromptDialog`가 이미 담당(빈 값이면 확인 버튼 비활성).
-- 검증: tsc 0(무오류). 순수 문자열 리터럴 스왑이라 타입/동작 위험 없음. 브라우저 실기동 검증은 미실행(요청 시 수행).
+- create 모드에 placeholder 힌트 추가 — `prompt.newVersionNumberAuto`("버전 번호는 자동으로 부여됩니다" / "Version number is assigned automatically", EN/KO). 이름(label)은 사용자 입력 필수, 버전 번호(`version_number`)는 게시 시 자동 채번(versions.py 최댓값+1)이라 사실과 일치. rename 모드는 placeholder 없음.
+- 검증: tsc 0(무오류). 문자열 리터럴 스왑 + i18n 키 + placeholder prop이라 타입/동작 위험 없음. 브라우저 실기동 검증은 미실행(요청 시 수행).
 
 ## 2026-07-18 — 셀프 게시 팝오버를 설정 페이지 Versions 탭에도 적용 (worktree-self-publish-settings)
 - `VersionsPublishPanel`(맵 설정 Versions 탭)의 승인요청 버튼도 에디터와 같은 플로우 — 승인자가 본인 1인이면 클릭 지점에 `SelfPublishPopover`, Yes=`runSelfPublishChain`(submit→approve→publish, 기존 `runAction` 경유), No=기존 즉시 제출, Escape/바깥클릭=취소. 승인자 2인 이상은 종전대로 즉시 제출. 백엔드·i18n 무변경(기존 컴포넌트·키 재사용).
