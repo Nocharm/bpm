@@ -6102,7 +6102,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
   // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
 
-  // 엣지 스타일 1회 hydration + 변경 영속
+  // 엣지 스타일 1회 hydration — 영속은 변경 버튼 핸들러에서(상태-의존 effect 영속은
+  // StrictMode 이중 마운트가 hydration 전 기본값을 저장소에 덮어써 저장값이 리셋됨, displayFields와 동일 진범)
   useEffect(() => {
     const saved = window.localStorage.getItem("bpm.edgeStyle");
     if (saved === "default" || saved === "smoothstep" || saved === "straight") {
@@ -6110,9 +6111,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       setEdgeStyle(saved);
     }
   }, []);
-  useEffect(() => {
-    window.localStorage.setItem("bpm.edgeStyle", edgeStyle);
-  }, [edgeStyle]);
 
   const toggleDisplayField = useCallback(
     (field: NodeDisplayToggle) => {
@@ -6210,11 +6208,6 @@ function MapEditor({ mapId }: { mapId: number }) {
       container.removeEventListener("pointerdown", handlePointerDownCapture, true);
     };
   }, []);
-
-  // 인스펙터 폭 로컬 영속
-  useEffect(() => {
-    window.localStorage.setItem("bpm.inspectorWidth", String(inspectorWidth));
-  }, [inspectorWidth]);
 
   // 좌측 아웃라인 — 현재 스코프는 라이브 상태, 하위 스코프는 전체 그래프에서 병합
   const outline = useMemo(() => {
@@ -6898,10 +6891,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       event.preventDefault();
       const startX = event.clientX;
       const startW = inspectorWidth;
+      let lastW = startW;
       const onMove = (ev: PointerEvent) => {
-        setInspectorWidth(Math.min(520, Math.max(300, startW + (startX - ev.clientX))));
+        lastW = Math.min(520, Math.max(300, startW + (startX - ev.clientX)));
+        setInspectorWidth(lastW);
       };
       const onUp = () => {
+        // 영속은 드래그 종료 1회 — 상태-의존 effect 영속은 StrictMode 마운트가 저장값을 기본값으로 덮어씀
+        window.localStorage.setItem("bpm.inspectorWidth", String(lastW));
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
       };
@@ -8540,7 +8537,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                             disabled={readOnly}
                             title={t(labelKey)}
                             aria-label={t(labelKey)}
-                            onClick={() => setEdgeStyle(value)}
+                            onClick={() => {
+                              setEdgeStyle(value);
+                              window.localStorage.setItem("bpm.edgeStyle", value);
+                            }}
                             className={`flex items-center justify-center rounded-sm border py-2 ${
                               edgeStyle === value
                                 ? "border-accent bg-accent-tint text-accent"
