@@ -125,6 +125,23 @@ approval_request 블록에서 kind별 노출 대상 분리:
 
 `createRenameRequest`, `withdrawRenameRequest` 추가. `updateMap`은 기존 그대로.
 
+#### 5.4 토스트 — 알림 시점과 대칭 (기존 toast 인프라·`onToast` 재사용)
+
+행위자 본인 화면에는 즉시 토스트, 상대방에게는 §4의 알림 — 같은 사건을 양쪽에서
+일관되게 표현한다. 문구는 UI 영어, i18n 키(EN/KO) 추가.
+
+| 상황 (행위자) | 토스트 |
+|---|---|
+| 오너/sysadmin 직접 변경 성공 | "Map renamed" — pending 요청이 supersede된 경우 그 사실 포함 |
+| 에디터 요청 생성 성공 | "Rename request sent for approval" |
+| 요청자 본인 취소 | "Rename request withdrawn" |
+| Inbox approve 성공 | "Rename approved — new name applied" |
+| Inbox reject 성공 | "Rename request rejected" |
+| 실패: 중복 이름 409 · pending 중복 409 · 승인 시 이름 선점 409 · 권한 403 | 에러 토스트로 사유 표시 (백엔드 detail 기반) |
+
+수신 측(오너에게 요청 도착, 요청자에게 결정 통지 등)은 토스트가 아니라 §4 알림으로
+전달한다 — 세션에 없는 사용자에게 토스트는 불가능하므로 경계를 명확히 유지.
+
 ### 6. 엣지 케이스
 
 - 요청 시점과 승인 시점 사이 이름 선점 → decide approve가 409, pending 유지 (§2.2).
@@ -150,6 +167,7 @@ approval_request 블록에서 kind별 노출 대상 분리:
 
 - tsc `--noEmit`, vitest, `npm run build`, ruff.
 - Playwright 검증 스크립트: 오너 즉시 변경 왕복 / 에디터 요청 → 오너 Inbox 승인 → 이름 반영.
+  각 단계에서 §5.4 토스트 노출 확인 포함.
 - 전체 그린 기준: `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" pytest`.
 
 ## 구현 시 확인 포인트
