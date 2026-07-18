@@ -442,15 +442,15 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
                     await session.delete(grant)
     elif req.kind == "map_rename":
         found_map = await session.get(ProcessMap, req.map_id)
-        if found_map is None:
-            return  # 멱등 — 맵이 사라졌으면 그대로 applied
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 이름 변경 없이 applied
         to_name = req.payload.get("to_name") or ""
         # 요청~승인 사이 이름 선점 경합 — 409로 중단하면 decide가 커밋 전이라 pending 유지
         await _assert_unique_name(session, to_name, exclude_map_id=req.map_id)
         old_name = found_map.name
         found_map.name = to_name
         await workflow.notify_map_renamed(
-            session, req.map_id, old_name=old_name, new_name=to_name, actor=req.decided_by or ""
+            session, req.map_id, old_name=old_name, new_name=to_name, actor=req.decided_by
         )
 
 

@@ -515,21 +515,25 @@ async def update_map(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    if payload.name is not None and payload.name != found_map.name:
-        # 이름 변경은 오너/sysadmin 전용 — 에디터는 rename-requests 승인 경로 (spec 2026-07-18)
-        role = await get_effective_role(session, user, map_id)
-        if role != "owner":
-            raise HTTPException(
-                status_code=403,
-                detail="renaming requires owner — submit a rename request instead",
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=422, detail="name must not be blank")
+        if new_name != found_map.name:
+            # 이름 변경은 오너/sysadmin 전용 — 에디터는 rename-requests 승인 경로 (spec 2026-07-18)
+            role = await get_effective_role(session, user, map_id)
+            if role != "owner":
+                raise HTTPException(
+                    status_code=403,
+                    detail="renaming requires owner — submit a rename request instead",
+                )
+            await _assert_unique_name(session, new_name, exclude_map_id=map_id)
+            old_name = found_map.name
+            found_map.name = new_name
+            await _supersede_pending_rename(session, map_id, actor=user, new_name=new_name)
+            await workflow.notify_map_renamed(
+                session, map_id, old_name=old_name, new_name=new_name, actor=user
             )
-        await _assert_unique_name(session, payload.name, exclude_map_id=map_id)
-        old_name = found_map.name
-        found_map.name = payload.name
-        await _supersede_pending_rename(session, map_id, actor=user, new_name=payload.name)
-        await workflow.notify_map_renamed(
-            session, map_id, old_name=old_name, new_name=payload.name, actor=user
-        )
     if payload.description is not None:
         found_map.description = payload.description
     await session.commit()
@@ -628,6 +632,9 @@ async def get_pending_rename_request(
     map_id: int, session: AsyncSession = Depends(get_session)
 ) -> ApprovalRequest | None:
     """pending rename 요청 조회 — Settings 배지·중복요청 안내용 (없으면 null)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     return await session.scalar(
         select(ApprovalRequest).where(
             ApprovalRequest.map_id == map_id,
@@ -648,6 +655,9 @@ async def withdraw_rename_request(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """본인 pending rename 요청 취소 → withdrawn (행 보존 — 이력)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     req = await session.scalar(
         select(ApprovalRequest).where(
             ApprovalRequest.map_id == map_id,

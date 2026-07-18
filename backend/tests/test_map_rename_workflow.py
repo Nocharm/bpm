@@ -197,6 +197,18 @@ class TestDirectRename:
         assert EDITOR in recipients and VIEWER in recipients
         assert OWNER not in recipients
 
+    def test_owner_patch_name_strips_whitespace(self, client, enforce):
+        map_id = seed_rename_map("Strip Me")
+        act_as(OWNER)
+        r = client.patch(f"/api/maps/{map_id}", json={"name": "  Strip Me2  "})
+        assert r.status_code == 200
+        assert r.json()["name"] == "Strip Me2"
+
+    def test_owner_patch_blank_name_422(self, client, enforce):
+        map_id = seed_rename_map("Blank Guard")
+        act_as(OWNER)
+        assert client.patch(f"/api/maps/{map_id}", json={"name": "   "}).status_code == 422
+
     def test_owner_patch_name_supersedes_pending(self, client, enforce):
         map_id = seed_rename_map("Nu")
         act_as(EDITOR)
@@ -241,12 +253,6 @@ def seed_approver(map_id: int, login: str = APPROVER) -> None:
         session.add(MapApprover(map_id=map_id, user_id=login))
 
     _seed(_factory)
-
-
-def _request_id(map_id: int) -> int:
-    req = _pending_request(map_id)
-    assert req is not None
-    return req.id
 
 
 class TestDecideRename:
@@ -362,3 +368,56 @@ class TestInboxRename:
         client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "Omega2"})
         act_as(SYSADMIN)
         assert "map_rename" in self._titles(client)
+
+
+class TestSoftDeletedMap:
+    def _soft_delete(self, map_id: int) -> None:
+        async def _factory(session):
+            from app.models import _now
+
+            m = await session.get(ProcessMap, map_id)
+            m.deleted_at = _now()
+
+        _seed(_factory)
+
+    def test_get_pending_404_on_soft_deleted_map(self, client, enforce):
+        map_id = seed_rename_map("SoftDel A")
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "SoftDel A2"})
+        self._soft_delete(map_id)
+        assert client.get(f"/api/maps/{map_id}/rename-requests/pending").status_code == 404
+
+    def test_withdraw_404_on_soft_deleted_map(self, client, enforce):
+        map_id = seed_rename_map("SoftDel B")
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "SoftDel B2"})
+        self._soft_delete(map_id)
+        assert client.delete(f"/api/maps/{map_id}/rename-requests/pending").status_code == 404
+
+    def test_approve_on_soft_deleted_map_applies_without_rename(self, client, enforce):
+        map_id = seed_rename_map("SoftDel C")
+        act_as(EDITOR)
+        rid = client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "SoftDel C2"}).json()["id"]
+        self._soft_delete(map_id)
+        act_as(OWNER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "applied"
+
+        async def _name(session):
+            m = await session.get(ProcessMap, map_id)
+            return m.name
+
+        assert _seed(_name) == "SoftDel C"
+
+    def test_inbox_hides_rename_for_soft_deleted_map(self, client, enforce):
+        map_id = seed_rename_map("SoftDel D")
+        act_as(EDITOR)
+        client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "SoftDel D2"})
+        self._soft_delete(map_id)
+        act_as(OWNER)
+        titles = [
+            a["title"] for a in client.get("/api/inbox/approvals").json()
+            if a["kind"] == "approval_request" and a["map_id"] == map_id
+        ]
+        assert "map_rename" not in titles

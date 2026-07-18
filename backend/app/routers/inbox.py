@@ -157,6 +157,7 @@ async def list_inbox_approvals(
         .where(
             ApprovalRequest.status == "pending",
             ApprovalRequest.kind == "map_rename",
+            ProcessMap.deleted_at.is_(None),
         )
     )
     if not sysadmin:
