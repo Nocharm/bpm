@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-07-20 — 펼침 영역 틴트 상하 경계(바운드 박스) + wrap 높이 함정 해결 (dev)
+- **틴트 바운드**: `InlineRegionBands`가 화면 전체 높이 무한 레인(좌우선만)에서 **콘텐츠 Y범위 박스**로 전환 — `box.y/height`(ViewportPortal flow 좌표) 사용, 상하좌우 테두리 + 라운드(12). 뷰포트 구독(`useViewport`/`useStore`) 제거(box 좌표가 flow라 불필요, FocusScopeBands는 유지).
+- **바깥이 안을 덮음(중첩)**: `buildScope`가 모든 영역의 `y/height`를 **전체 콘텐츠(모든 깊이) 공통 범위**로 산정 → 중첩 시 바깥·안 박스의 상하가 동일해 바깥이 안을 항상 덮음(추가 로직 불필요).
+- **wrap 높이 함정**: 세로 경계가 `nodeSizeOf.h`(고정 52) 기준이라 wrap으로 커진 노드가 박스 아래로 삐져나올 수 있었음. `estimateNodeHeight()`(타이틀 wrap 줄 수 기반)로 펼침 자식 주입 높이를 실측화 + 두 Y-bbox 루프가 `measured.height` 우선 사용. 필드/파라미터 줄은 REGION_MARGIN(48)이 흡수(근사).
+- 파일: `lib/canvas.ts`(estimateNodeHeight·공용 상수), `app/maps/[mapId]/page.tsx`(InlineRegionBands 박스 렌더·자식 주입 높이·Y-bbox measured).
+- 검증: lint 0·build OK·유닛 35/35. 브라우저 실기동(3200/8901, 맵1에 map3 링크 중첩 서브프로세스 임시 삽입·map3 자식 하향 후 원복): 박스 바운드(h 유한·둥근 모서리), 바깥/안 박스 상하 동일(t=471·b=877, A⊃B), 최하단 깊은 중첩 노드(b=862)를 박스 하단(877)이 덮음, wrap-tall 자식 포함 — DOM 좌표로 확인.
+
 ## 2026-07-20 — 작업/터미널 노드 라벨 wrap + 서브프로세스 펼침 우측 경계 포함 (dev)
 - **wrap**: process·start·end 노드에 `max-w-[240px] break-words` — 긴 라벨이 240px에서 여러 줄로 줄바꿈(짧은 라벨은 기존 `min-w` 컴팩트 유지, 무공백 토큰은 break-words로 분절). decision(`max-w-20`)·subprocess(`w-[180px]`)는 이미 wrap이라 무변경.
 - **펼침 경계**: 인라인 펼침 자식은 React Flow가 측정 못 해 `measured`를 직접 주입하는데, 폭을 고정 근사(`nodeSizeOf`, process=170)로 넣어 긴 라벨(실폭≤240)이 region 우측 border를 빠져나갔다. `estimateNodeWidth()`(offscreen `measureText`로 타이틀 실폭 추정, `[nodeSizeOf, NODE_MAX_WIDTH]` 클램프)로 자식 주입 폭을 실폭화하고, buildScope bbox가 `measured.width` 우선 사용 → 경계가 자식을 감쌈. 실폭 추정이라 짧은 노드엔 빈 레인이 안 생기고, 긴 노드는 상한(240)에서 포함.

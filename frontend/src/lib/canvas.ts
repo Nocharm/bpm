@@ -146,6 +146,22 @@ function measureLabelWidth(text: string, font: string): number {
   return _measureCtx.measureText(text).width;
 }
 
+// 노드 타이틀 measureText 추정 상수 — text-sm/font-medium 근사, px-3 좌우 패딩, text-sm 줄높이.
+const NODE_TITLE_FONT = "500 14px Pretendard, sans-serif";
+const NODE_HPAD = 24;
+const NODE_LINE_HEIGHT = 20;
+
+// 펼침 자식은 title 외 필드/파라미터 줄도 표시할 수 있으나, measure 못 하는 이 추정은 타이틀만 반영하고
+// 나머지 줄은 REGION_MARGIN 여백으로 흡수한다(근사). 타이틀 텍스트를 지정 폭 안에서 몇 줄로 접는지만 계산.
+function countTitleLines(text: string, width: number): number {
+  const contentW = Math.max(1, width - NODE_HPAD);
+  return Math.max(1, Math.ceil(measureLabelWidth(text, NODE_TITLE_FONT) / contentW));
+}
+
+function titleForEstimate(label: string, nodeType: ProcessNodeType): string {
+  return nodeType === "start" || nodeType === "end" ? terminalDisplayLabel(nodeType, label) : label;
+}
+
 /**
  * 노드 렌더 폭 추정 — 타이틀 기준, `[nodeSizeOf.w, NODE_MAX_WIDTH]`로 클램프.
  * 인라인 펼침 자식(측정 불가)의 영역 경계 폭 계산용 — 긴 라벨은 상한에서 wrap되므로 상한을 넘지 않는다.
@@ -154,11 +170,20 @@ function measureLabelWidth(text: string, font: string): number {
 export function estimateNodeWidth(label: string, nodeType: ProcessNodeType): number {
   const base = nodeSizeOf(nodeType).w;
   if (nodeType === "decision" || nodeType === "subprocess") return base;
-  const isTerminal = nodeType === "start" || nodeType === "end";
-  const text = isTerminal ? terminalDisplayLabel(nodeType, label) : label;
-  const HPAD = 24; // px-3 좌우 패딩
-  const raw = measureLabelWidth(text, "500 14px Pretendard, sans-serif") + HPAD + 4;
+  const raw = measureLabelWidth(titleForEstimate(label, nodeType), NODE_TITLE_FONT) + NODE_HPAD + 4;
   return Math.max(base, Math.min(NODE_MAX_WIDTH, raw));
+}
+
+/**
+ * 노드 렌더 높이 추정 — 타이틀 wrap 줄 수 기반(폭 추정값 안에서 몇 줄로 접히는지).
+ * 인라인 펼침 자식의 영역 세로 경계 계산용 — wrap으로 커진 노드가 영역 아래로 삐져나오지 않게.
+ * decision/subprocess는 고정 근사 그대로. 필드/파라미터 줄은 REGION_MARGIN이 흡수(근사).
+ */
+export function estimateNodeHeight(label: string, nodeType: ProcessNodeType, width: number): number {
+  const base = nodeSizeOf(nodeType).h;
+  if (nodeType === "decision" || nodeType === "subprocess") return base;
+  const lines = countTitleLines(titleForEstimate(label, nodeType), width);
+  return base + (lines - 1) * NODE_LINE_HEIGHT;
 }
 
 /** 드롭된 노드가 다른 노드와 겹치면 최소 분리 벡터로 밀어내 가장 가까운 빈 자리로 보낸다 (onNodeDragStop). */

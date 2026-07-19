@@ -124,6 +124,7 @@ import {
   BRANCH_YES_LABEL,
   BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
+  estimateNodeHeight,
   estimateNodeWidth,
   hasBpmAttributes,
   NODE_HEIGHT,
@@ -373,8 +374,9 @@ const EMPTY_DRAG_LIVE: ReadonlyMap<string, { x: number; y: number }> = new Map()
 // Ctrl+드래그 비활성 시 ctrlDragIds 기본값 — 매 렌더 새 Set 생성을 막아 nodeActions memo가 불필요 재계산되지 않게.
 const EMPTY_CTRL_DRAG_IDS: ReadonlySet<string> = new Set();
 
-// 인라인 펼침 영역 — 세로선 2개 + 반투명 틴트가 보이는 캔버스를 위아래로 가득 채우는 "세로 레인".
-// 별도 컴포넌트(useViewport 구독)라 줌/팬 시 이 부분만 리렌더되고 에디터 본체는 영향 없음.
+// 인라인 펼침 영역 — 콘텐츠 Y범위로 상하좌우 경계를 잡은 반투명 틴트 박스. 모든 영역이 동일 y/height라
+// 중첩 시 바깥이 안을 항상 덮는다(box.y/height는 buildScope가 전체 콘텐츠 기준으로 산정).
+// ViewportPortal(flow 좌표계) 안이라 box.x/y/width/height를 그대로 사용 — 별도 뷰포트 구독 불필요.
 function InlineRegionBands({
   regions,
   baseDepth,
@@ -388,29 +390,24 @@ function InlineRegionBands({
   onOpenMap: (hostId: string) => void;
 }) {
   const { t } = useI18n();
-  const { y, zoom } = useViewport();
-  const paneHeight = useStore((state) => state.height);
-  // ViewportPortal은 flow 좌표계 — 화면(0..paneHeight px)을 덮도록 flow 좌표로 변환
-  const topFlow = -y / zoom;
-  const bandHeight = paneHeight / zoom;
   return (
     <>
       {regions.map((box) => (
         <Fragment key={`region:${box.id}`}>
-          {/* 세로선 2개 + 반투명 틴트 — 화면 전체 높이. 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
+          {/* 상하좌우 경계 박스 + 반투명 틴트 — 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
           <div
             style={{
               position: "absolute",
               left: 0,
               top: 0,
-              transform: `translate(${box.x}px, ${topFlow}px)`,
+              transform: `translate(${box.x}px, ${box.y}px)`,
               width: box.width,
-              height: bandHeight,
+              height: box.height,
               zIndex: -1,
               pointerEvents: "none",
+              borderRadius: 12,
               background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
-              borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
-              borderRight: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+              border: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
             }}
           />
           {/* 깊이 표시(›×depth) + 이름 — 콘텐츠 상단 근처, 클릭 시 접기 */}
@@ -5404,9 +5401,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           // 자식은 선택 허용. 위치는 파생이라 드래그/삭제는 불가.
           // 자식은 `nodes` state에 없어 React Flow가 측정 못 함 → 미측정 노드는 visibility:hidden으로 숨겨진다.
           // 타입별 근사 크기를 measured로 직접 넣어 즉시 보이게 한다(레이아웃도 이 크기로 일관).
-          // 폭은 라벨 실폭 추정 — 긴 라벨은 wrap으로 넓어져(최대 NODE_MAX_WIDTH) 영역 경계가 감싸야 하므로.
-          const size = nodeSizeOf(app.data.nodeType);
+          // 폭·높이는 라벨 실측 추정 — 긴 라벨은 wrap으로 넓고(≤NODE_MAX_WIDTH)·세로로 커져 영역 경계가 감싸야 하므로.
           const width = estimateNodeWidth(app.data.label, app.data.nodeType);
+          const height = estimateNodeHeight(app.data.label, app.data.nodeType, width);
           // 중첩 하위프로세스 자식도 펼침 가능하게 subEnds 주입(캐시 있으면)
           return injectSubEnds({
             ...app,
@@ -5414,8 +5411,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             selectable: true,
             deletable: false,
             width,
-            height: size.h,
-            measured: { width, height: size.h },
+            height,
+            measured: { width, height },
             data: app.data,
           });
         });
@@ -5488,12 +5485,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       let maxY = -Infinity;
       for (const node of all) {
         const size = nodeSizeOf(node.data.nodeType);
-        // 폭은 실측 우선(자식은 라벨 실폭 추정을 measured로 주입) — 긴 라벨로 넓어진 노드를 영역 경계가 감싸도록.
+        // 폭·높이 실측 우선(자식은 라벨 실측 추정을 measured로 주입) — 긴 라벨로 넓/커진 노드를 영역 경계가 감싸도록.
         const nodeW = node.measured?.width ?? size.w;
+        const nodeH = node.measured?.height ?? size.h;
         minX = Math.min(minX, node.position.x);
         minY = Math.min(minY, node.position.y);
         maxX = Math.max(maxX, node.position.x + nodeW);
-        maxY = Math.max(maxY, node.position.y + size.h);
+        maxY = Math.max(maxY, node.position.y + nodeH);
       }
       for (const region of regions) {
         minX = Math.min(minX, region.x);
@@ -5522,13 +5520,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     const childNodes = allNodes.filter((node) => !rootIds.has(node.id));
     const { regions, childEdges } = root;
 
-    // 영역 배경은 캔버스를 상하로 가득 채우는 세로 레인 — 전체 콘텐츠 Y 범위 + 여백
+    // 영역 박스 세로 범위 — 전체 콘텐츠(모든 깊이) Y 범위 + 여백. 모든 영역이 동일 y/height라 바깥이 안을 항상 덮음.
+    // 높이는 실측 우선(자식은 wrap 반영 추정을 measured로 주입) — 긴 라벨 노드가 박스 아래로 삐져나오지 않게.
     let minY = Infinity;
     let maxY = -Infinity;
     for (const node of allNodes) {
       const size = nodeSizeOf(node.data.nodeType);
       minY = Math.min(minY, node.position.y);
-      maxY = Math.max(maxY, node.position.y + size.h);
+      maxY = Math.max(maxY, node.position.y + (node.measured?.height ?? size.h));
     }
     for (const region of regions) {
       region.y = minY - REGION_MARGIN;
