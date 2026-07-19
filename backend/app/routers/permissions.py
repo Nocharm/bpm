@@ -385,8 +385,8 @@ async def decide_approval_request(
     req = await session.get(ApprovalRequest, request_id)
     if req is None:
         raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
-    if req.kind == "map_rename":
-        # rename 결정권자는 오너/sysadmin — 승인자 게이트와 다름 (spec 2026-07-18)
+    if req.kind in ("map_rename", "sp_designation"):
+        # rename·SP 등록 결정권자는 오너/sysadmin — 승인자 게이트와 다름 (spec 2026-07-18/19)
         await assert_map_role(session, user, req.map_id, "owner")
     else:
         await assert_approver_or_sysadmin(session, user, req.map_id)
@@ -452,6 +452,18 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
         await workflow.notify_map_renamed(
             session, req.map_id, old_name=old_name, new_name=to_name, actor=req.decided_by
         )
+    elif req.kind == "sp_designation":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 적용 없이 applied
+        if found_map.sp_designated_at is None:
+            # 정상 수락은 지정 모달 저장(PUT)이 pending을 자동 applied 처리 — 이 분기는
+            # 지정 없이 approve 를 직접 호출한 경우 방어. 409 중단 → 커밋 전이라 pending 유지.
+            raise HTTPException(
+                status_code=409,
+                detail="map is not designated yet — save the designation first",
+            )
+        # 이미 지정됨(요청~승인 사이 직접 지정 경합) → 적용할 것 없음, applied 마킹만
 
 
 async def _notify_permission_request(
@@ -485,6 +497,16 @@ async def _notify_permission_decision(
             type=f"rename_{outcome}",
             map_id=req.map_id,
             message=f"Your request to rename '{from_name}' to '{to_name}' was {outcome}",
+        )
+        return
+    if req.kind == "sp_designation":
+        map_name = req.payload.get("map_name", "")
+        await workflow.create_notifications(
+            session,
+            [req.requested_by],
+            type=f"sp_designation_{outcome}",
+            map_id=req.map_id,
+            message=f"Your subprocess registration request for '{map_name}' was {outcome}",
         )
         return
     found_map = await session.get(ProcessMap, req.map_id)

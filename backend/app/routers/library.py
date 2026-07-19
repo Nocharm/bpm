@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db import get_session
 from app.duration import normalize_duration
-from app.models import MapVersion, Node, ProcessMap
-from app.permissions.access import get_effective_role
+from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap
+from app.permissions import logic
+from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.logic import role_rank
 from app.routers.graph import _load_graph
 from app.schemas import GraphOut
@@ -19,10 +20,73 @@ router = APIRouter(
 )
 
 
+async def _filter_visible_map_ids(
+    session: AsyncSession, user: str, candidates: list[tuple[int, str, str | None]]
+) -> set[int]:
+    """(map_id, visibility, owning_department) 후보 중 user 가시(role≥viewer) 맵 id.
+
+    maps.list_maps 의 배치 패턴 미러 — 권한/승인자/그룹을 한 번씩만 로드해 N+1 회피.
+    """
+    if not candidates:
+        return set()
+    if logic.is_sysadmin(user):
+        return {mid for mid, _, _ in candidates}
+    emp = await session.get(Employee, user)
+    emp_org_path = (
+        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
+        if emp is not None
+        else ""
+    )
+    perm_rows = (
+        await session.execute(
+            select(
+                MapPermission.map_id,
+                MapPermission.principal_type,
+                MapPermission.principal_id,
+                MapPermission.role,
+            ).where(MapPermission.map_id.in_([mid for mid, _, _ in candidates]))
+        )
+    ).all()
+    perms_by_map: dict[int, list[logic.Permission]] = {}
+    for mid, ptype, pid, role in perm_rows:
+        perms_by_map.setdefault(mid, []).append((ptype, pid, role))
+    approver_map_ids = set(
+        (
+            await session.scalars(
+                select(MapApprover.map_id).where(MapApprover.user_id == user)
+            )
+        ).all()
+    )
+    user_group_ids = await get_user_active_group_ids(session, user, emp_org_path)
+    visible: set[int] = set()
+    for mid, visibility, owning_department in candidates:
+        role = logic.effective_role(
+            user,
+            False,  # sysadmin은 위에서 조기 반환
+            emp_org_path,
+            visibility,
+            perms_by_map.get(mid, []),
+            mid in approver_map_ids,
+            user_group_ids,
+            owning_department=owning_department,
+        )
+        if role is not None:
+            visible.add(mid)
+    return visible
+
+
 @router.get("/processes")
-async def list_processes(session: AsyncSession = Depends(get_session)) -> list[dict]:
+async def list_processes(
+    include_undesignated: bool = Query(False),
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
     # 맵별 최신/최신발행 버전 — 단일 그룹 쿼리(N+1 회피).
-    # 지정(designated)된 맵만 피커 노출 + 휴지통 제외 — 어트리뷰트는 행 칩 표시용 (spec 2026-07-06)
+    # 기본은 지정(designated)된 맵만 피커 노출 + 휴지통 제외 — 어트리뷰트는 행 칩 표시용 (spec 2026-07-06).
+    # include_undesignated=true 는 미지정 맵도 포함하되 가시성(role≥viewer) 필터 (spec 2026-07-19).
+    where_clauses = [ProcessMap.deleted_at.is_(None)]
+    if not include_undesignated:
+        where_clauses.append(ProcessMap.sp_designated_at.is_not(None))
     latest_rows = (
         await session.execute(
             select(
@@ -33,12 +97,12 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
                 ProcessMap.sp_assignee,
                 ProcessMap.sp_system,
                 ProcessMap.sp_duration,
+                ProcessMap.sp_designated_at,
+                ProcessMap.visibility,
+                ProcessMap.owning_department,
             )
             .outerjoin(MapVersion, MapVersion.map_id == ProcessMap.id)
-            .where(
-                ProcessMap.sp_designated_at.is_not(None),
-                ProcessMap.deleted_at.is_(None),
-            )
+            .where(*where_clauses)
             .group_by(
                 ProcessMap.id,
                 ProcessMap.name,
@@ -46,10 +110,25 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
                 ProcessMap.sp_assignee,
                 ProcessMap.sp_system,
                 ProcessMap.sp_duration,
+                ProcessMap.sp_designated_at,
+                ProcessMap.visibility,
+                ProcessMap.owning_department,
             )
             .order_by(ProcessMap.name)
         )
     ).all()
+    # 미지정 맵은 비공개 이름 유출 방지를 위해 가시성 판정 후 남긴다 (지정 맵은 기존대로 전체 공개 라이브러리)
+    undesignated_candidates = [
+        (mid, visibility, owning_department)
+        for (mid, _, _, _, _, _, _, designated_at, visibility, owning_department) in latest_rows
+        if designated_at is None
+    ]
+    visible_undesignated = await _filter_visible_map_ids(session, user, undesignated_candidates)
+    latest_rows = [
+        row
+        for row in latest_rows
+        if row[7] is not None or row[0] in visible_undesignated
+    ]
     pub_rows = (
         await session.execute(
             select(MapVersion.map_id, func.max(MapVersion.id))
@@ -77,14 +156,18 @@ async def list_processes(session: AsyncSession = Depends(get_session)) -> list[d
             "latest_version_id": latest,
             "latest_published_version_id": published.get(mid),
             "refs": sorted(refs.get(mid, [])),
-            "department": department,
-            "assignee": assignee,
-            "system": system,
+            "designated": designated_at is not None,
+            # 미지정 행은 직전 지정 잔존값 유출 방지 — sp 어트리뷰트 마스킹 (spec 2026-07-19)
+            "department": department if designated_at is not None else None,
+            "assignee": assignee if designated_at is not None else None,
+            "system": system if designated_at is not None else None,
             # raw dict 직렬화는 MapOut/SubprocessRefOut validator를 안 탄다 —
             # 레거시 자유텍스트("2일")를 여기서도 소거(무효→None) (design 2026-07-11 SP)
-            "duration": normalize_duration(duration) if duration else duration,
+            "duration": (normalize_duration(duration) if duration else duration)
+            if designated_at is not None
+            else None,
         }
-        for mid, name, latest, department, assignee, system, duration in latest_rows
+        for mid, name, latest, department, assignee, system, duration, designated_at, _, _ in latest_rows
     ]
 
 

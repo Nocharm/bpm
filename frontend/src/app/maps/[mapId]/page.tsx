@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Hourglass, Info, LayoutGrid, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Hourglass, Info, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -57,6 +57,7 @@ import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
 import { InspectorPanel } from "@/components/inspector-panel";
+import { SubprocessRegistrationCta } from "@/components/subprocess-registration-cta";
 import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
@@ -142,10 +143,12 @@ import {
   ApiError,
   approveVersion,
   createComment,
+  createSpDesignationRequest,
   createVersion,
   decideCheckoutRequest,
   deleteComment,
   deleteVersion,
+  getApiErrorDetail,
   getDirectory,
   getEligibleAssignees,
   getFullGraph,
@@ -3978,21 +3981,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
-  // 라이브러리 패널에서 드래그한 맵을 캔버스에 드롭 → 하위프로세스 노드 생성
-  const handleLibraryDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      if (readOnly) return;
-      const raw = e.dataTransfer.getData("application/bpm-process");
-      if (!raw) return;
-      const linkedMapId = Number(raw);
-      const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
-      const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
-      const pinned = pinnedRaw ? Number(pinnedRaw) : null;
-      const position = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+  // 드롭 위치에 하위프로세스 노드 생성 — 일반 드롭·미등록 확인 체인 공용
+  const createLinkNodeAt = useCallback(
+    async (linkedMapId: number, mapName: string, pinned: number | null, position: { x: number; y: number }) => {
       let subEnds: SubEnd[] = [];
       try {
-        const resolved = await getResolvedGraph(linkedMapId, false, pinned);
+        const resolved = await getResolvedGraph(linkedMapId, pinned === null, pinned);
         subEnds = deriveSubEnds(resolved);
       } catch {
         // subEnds 파생 실패 시 빈 채로 생성 — 백엔드가 핸들 없어도 저장 허용
@@ -4026,7 +4020,54 @@ function MapEditor({ mapId }: { mapId: number }) {
       setNodes((cur) => [...cur, node]);
       scheduleAutoSave();
     },
-    [readOnly, reactFlow, setNodes, scheduleAutoSave],
+    [setNodes, scheduleAutoSave],
+  );
+
+  // 미등록 맵 드롭 확인 체인 — confirm(잠금 경고) → 노드 생성 → request(등록 요청 여부) (spec 2026-07-19)
+  const [unregDrop, setUnregDrop] = useState<{
+    stage: "confirm" | "request";
+    linkedMapId: number;
+    name: string;
+    position: { x: number; y: number };
+  } | null>(null);
+
+  // 등록 요청 발송 — 409(중복 pending)는 안내 토스트로 완화
+  const sendSpDesignationRequest = useCallback(
+    async (targetMapId: number) => {
+      try {
+        await createSpDesignationRequest(targetMapId, mapId);
+        showToast(t("library.requestSent"));
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          showToast(t("library.requestAlreadyPending"));
+        } else {
+          showToast(getApiErrorDetail(err));
+        }
+      }
+    },
+    [mapId, showToast, t],
+  );
+
+  // 라이브러리 패널에서 드래그한 맵을 캔버스에 드롭 → 하위프로세스 노드 생성.
+  // 미등록 맵은 즉시 생성하지 않고 확인 체인을 연다(드롭 위치 보존).
+  const handleLibraryDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      if (readOnly) return;
+      const raw = e.dataTransfer.getData("application/bpm-process");
+      if (!raw) return;
+      const linkedMapId = Number(raw);
+      const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
+      const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
+      const pinned = pinnedRaw ? Number(pinnedRaw) : null;
+      const position = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      if (e.dataTransfer.getData("application/bpm-process-unregistered") === "1") {
+        setUnregDrop({ stage: "confirm", linkedMapId, name: mapName, position });
+        return;
+      }
+      void createLinkNodeAt(linkedMapId, mapName, pinned, position);
+    },
+    [readOnly, reactFlow, createLinkNodeAt],
   );
 
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
@@ -6483,6 +6524,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     [outline, handleOutlineSelect],
   );
 
+  // 맵 드롭다운의 사용중 행 클릭 → 해당 subprocess 노드 선택+포커싱 (spec 2026-07-19)
+  const focusLinkedMap = useCallback(
+    (linkedMapId: number) => {
+      const target = nodesRef.current.find(
+        (node) => node.data.nodeType === "subprocess" && node.data.linkedMapId === linkedMapId,
+      );
+      if (target) handleOutlineSelect(target.id);
+    },
+    [handleOutlineSelect],
+  );
+
   // → 펼치기 — 자식 있고 접혀있을 때만(이동 없음). 하위프로세스는 inline-embed 토글로 자식 로드.
   const handleOutlineExpand = useCallback(
     (id: string) => {
@@ -6951,7 +7003,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           canToRoot={scopes.length > 1}
           isEditing={!readOnly}
           onToRoot={() => void navigateTo(scopes.slice(0, 1))}
+          linkedMapIds={linkedMapIds}
           onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+          onFocusLinkedMap={focusLinkedMap}
         />
         <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         <VersionPill
@@ -7193,6 +7247,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
             onClose={() => setLibraryOpen(false)}
+            onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
           />
         )}
         <div
@@ -8365,6 +8420,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                             onUpdate={() => handleUpdateSubprocess(selectedNode.id)}
                           />
                         )}
+                      {/* 미지정 링크 — 등록 요청 CTA/Requested 배지 (spec 2026-07-19). key로 링크 전환 시 리셋 */}
+                      {selectedNode.data.nodeType === "subprocess" &&
+                        selectedNode.data.linkedMapId != null &&
+                        selectedSpRef != null &&
+                        !selectedSpRef.designated && (
+                          <SubprocessRegistrationCta
+                            key={selectedNode.data.linkedMapId}
+                            linkedMapId={selectedNode.data.linkedMapId}
+                            fromMapId={mapId}
+                            onToast={showToast}
+                          />
+                        )}
                       {/* 코멘트 — 노드별, 하단 배치(읽기전용에서도 작성 가능). 활동 탭 통합은 R5d */}
                       <details open className="rounded-md border border-hairline px-3 py-2">
                         <summary className="cursor-pointer text-fine font-semibold text-ink">
@@ -8900,6 +8967,43 @@ function MapEditor({ mapId }: { mapId: number }) {
           cancelLabel={t("common.cancel")}
           onConfirm={() => router.push(`/maps/${openMapPrompt.mapId}`)}
           onClose={() => setOpenMapPrompt(null)}
+        />
+      )}
+      {/* 미등록 맵 드롭 — 잠금 경고 동봉 확인 후 드롭 위치에 생성, 이어서 등록 요청 여부 (spec 2026-07-19) */}
+      {unregDrop?.stage === "confirm" && (
+        <ConfirmDialog
+          icon={<Link2 size={28} strokeWidth={1.5} />}
+          title={t("editor.confirmAddLinkTitle")}
+          lines={[
+            { icon: <Link2 size={14} strokeWidth={1.5} />, text: t("editor.confirmAddLinkBody", { name: unregDrop.name }) },
+            { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("library.linkUnregNotice"), tone: "error" },
+          ]}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const drop = unregDrop;
+            void createLinkNodeAt(drop.linkedMapId, drop.name, null, drop.position);
+            setUnregDrop({ ...drop, stage: "request" });
+          }}
+          onClose={() => setUnregDrop(null)}
+        />
+      )}
+      {/* 링크는 이미 완료 — 등록 요청만 결정(No/닫기 = 링크만 유지) */}
+      {unregDrop?.stage === "request" && (
+        <ConfirmDialog
+          icon={<Network size={28} strokeWidth={1.5} />}
+          title={t("library.requestTitle")}
+          lines={[
+            { icon: <Network size={14} strokeWidth={1.5} />, text: t("library.requestMessage", { name: unregDrop.name }) },
+          ]}
+          confirmLabel={t("library.requestSend")}
+          cancelLabel={t("library.requestSkip")}
+          onConfirm={() => {
+            const drop = unregDrop;
+            setUnregDrop(null);
+            void sendSpDesignationRequest(drop.linkedMapId);
+          }}
+          onClose={() => setUnregDrop(null)}
         />
       )}
       {/* 점유권 이전 다이얼로그 — searchable editor picker (T7); conditional render resets query state on close */}

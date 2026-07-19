@@ -92,6 +92,8 @@ Group creation is request-based: any user can file a group request, but it only 
 
 Each entry shows the requester and context; decide with Approve / Reject (rejection takes a reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view.
 
+> Separately, **map renames** and **subprocess registration requests** are decided by the **map owner** — since sysadmins hold owner rights on every map, you can handle those cards for any map from the Inbox (Approvals). For subprocess registration, **saving the designation form is the approval**, and a map with no published version cannot be designated yet.
+
 ---
 
 ## 7. Directory and Employees
@@ -218,4 +220,4 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-07-13*
+*Business Process Map — Administrator Manual · updated 2026-07-19*

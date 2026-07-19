@@ -307,6 +307,25 @@ export function withdrawRenameRequest(mapId: number): Promise<void> {
   return request<void>(`/maps/${mapId}/rename-requests/pending`, { method: "DELETE" });
 }
 
+// SP 등록(지정) 요청 — 미지정 맵을 플레이스홀더로 링크한 뒤 오너에게 지정을 요청 (spec 2026-07-19)
+export function createSpDesignationRequest(
+  mapId: number,
+  fromMapId: number,
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/sp-designation-requests`, {
+    method: "POST",
+    body: JSON.stringify({ from_map_id: fromMapId }),
+  });
+}
+
+export function getPendingSpDesignationRequest(mapId: number): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/sp-designation-requests/pending`);
+}
+
+export function withdrawSpDesignationRequest(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/sp-designation-requests/pending`, { method: "DELETE" });
+}
+
 // 오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 새 부서를 따라간다 (spec 2026-07-10)
 export function setOwningDepartment(
   mapId: number,
@@ -394,15 +413,20 @@ export interface LibraryProcess {
   latest_version_id: number | null;
   latest_published_version_id: number | null;
   refs: number[];
-  // 지정 어트리뷰트 — 목록은 지정된 맵만 반환하므로 항상 동봉(부서 칩 표시용) (spec 2026-07-06)
+  // 미지정 맵 옵트인(include_undesignated) 도입으로 행별 지정 여부 동봉 (spec 2026-07-19)
+  designated: boolean;
+  // 지정 어트리뷰트 — 미지정 행은 항상 null(잔존값 마스킹) (spec 2026-07-06/19)
   department: string | null;
   assignee: string | null;
   system: string | null;
   duration: string | null;
 }
 
-export function listLibraryProcesses(): Promise<LibraryProcess[]> {
-  return request<LibraryProcess[]>("/library/processes");
+// includeUndesignated: 미지정 맵도 포함(가시성 필터는 서버) — 피커 "Show unregistered maps" 토글용
+export function listLibraryProcesses(includeUndesignated = false): Promise<LibraryProcess[]> {
+  return request<LibraryProcess[]>(
+    includeUndesignated ? "/library/processes?include_undesignated=true" : "/library/processes",
+  );
 }
 
 export function getResolvedGraph(

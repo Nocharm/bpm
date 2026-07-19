@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-07-20 — 리뷰 2차 반영: 드롭다운 마커 재설계·미등록 드래그 링크·New map 조건부 (worktree-sp-placeholder)
+- 드롭다운: SP 배지 → **타일 아이콘 교체**(지정 맵=Workflow 아이콘 보라, 사용중 맵=보라 배경 타일+행 배경 하이라이트), 현재 맵 목록 제외, 사용중 행 클릭 시 아코디언과 함께 **캔버스 해당 노드 자동 포커싱**(handleOutlineSelect 재사용), 백드롭 제거하고 **document capture-phase mousedown**으로 바깥 클릭 닫힘(React Flow d3가 mousedown 전파를 끊어 버블 리스너 불가 — 실측).
+- 라이브러리: 미등록 맵도 **다른 맵과 같은 드래그**로 — 드롭 시 page.tsx가 unregistered 플래그를 읽어 확인 체인(경고→드롭 위치 생성→등록 요청, createLinkNodeAt로 드롭 생성 로직 공용화). 클릭 링크·패널 내 다이얼로그 제거. **New map은 검색어 입력 시에만** 노출, 라벨 = "검색어" 필(말줄임)+언어별 prefix/suffix(newMapNamedPrefix/Suffix — 빈 값 생략 조립).
+- pw 41/41 PASS(드래그·마커·바깥닫힘·조건부 버튼 검사로 갱신, footer 필이 getByText에 걸리는 함정은 data-map-id 행 검사로 회피). tsc 0·lint 에러 0·vitest 510. 매뉴얼·공지·검증 플랜 서술 동기화.
+
+## 2026-07-19 — 리뷰 반영: 미등록 토글·즉시생성을 프로세스 라이브러리로 이동 (worktree-sp-placeholder)
+- 사용자 로컬 확인 피드백 반영. 맵 이름 드롭다운은 원래 역할(맵 검색·최근 목록)로 원복하고 표시만 보강 — 지정 맵 **SP 배지**(홈 카드 배지 재사용)·이미 링크된 맵 **체크**(기존 체크 디자인), 링크된 맵은 링크 추가 숨김. "Show unregistered maps" 토글·미등록 클릭 링크(2단 확인+등록 요청)·검색어 프리필 **New map**(생성 즉시 링크)은 좌측 **프로세스 라이브러리 패널**로 이동(미등록 행은 드래그 대신 클릭 — 드롭 경로가 확인 모달을 우회하지 못하게). CreateMapDialog `initialName`/`onCreatedMap`은 라이브러리가 소비. pw 스크립트 신 플로우로 갱신 — 실기동 **37/37 PASS**(드롭다운 마커 2건 추가), tsc 0·lint 에러 0·vitest 510. 매뉴얼(편집 ko/en·번들)·공지 초안·검증 플랜 F1/F3 진입점 서술 정정.
+
+## 2026-07-19 — 7월 2차 업데이트 공지 초안 (worktree-sp-placeholder)
+- docs/notices/2026-07-release-2.md — 운영(ed15440) 이후 사용자 체감 변경(홈 개편·셀프 게시·이름변경 요청·플레이스홀더·노드 복사·엑셀 2형식·알림 정리)을 1차(2026-07-13-release.md) 형식으로 정리. 배포 시 sysadmin이 설정→공지에 붙여넣어 게시(전체 알림 권장).
+
+## 2026-07-19 — 매뉴얼 최신화: ed15440 이후 dev 전체 델타 + 플레이스홀더 (worktree-sp-placeholder)
+- docs/manual 6종(ko/en × 편집/사용안내/관리자) + 인앱 번들 backend/app/manual.md 갱신. 편집: 노드 복사/복제/Shift 축고정·S단축키/링크유일성/SP설명/플레이스홀더 신설 절/Subprocess 탭/엑셀 형식 2종/일괄편집 6필드/단축키 표. 사용안내: 홈 대시보드·조직도 즐겨찾기/새 맵(부서 우선·Start/End 시드)/버전 이름 직접입력·번호 자동부여/셀프 게시/이름변경 워크플로/Inbox sp 등록 수락 절차/FAQ 2건. 관리자: 오너 결정형 요청(rename·sp_designation) 노트. 갱신일 2026-07-19. 백엔드 695 그린(번들 변경 무회귀).
+
+## 2026-07-19 — 릴리스 준비 문서: 검증 플랜 F섹션 + 9910 검증 스택 절차 (worktree-sp-placeholder)
+- DEV-SERVER-TEST-PLAN.md: 대상=sp-placeholder 머지 후 dev·접속 9910으로 갱신, 운영(ed15440) 기준 델타 표 확장(sp_description·알림 인덱스 2·kind 값 2·follow_latest 기본), 작업단위 18로 확장(#17 플레이스홀더 + main 미배포분), 시나리오 F1~F4(플레이스홀더·main 델타) 신설.
+- docs/db-migration-9910.md 신설 — 운영 9900(ed15440) DB 복사 → 9910 검증 스택(dev) 절차. 9800 선례 실측값(PROD_DB 컨테이너명·compose 병합 누적 함정·-t TTY 금지) 승계, 서브넷 172.43·`-p bpm-9910`·`.env.9910`, 승격은 main 머지 후(§7).
+
+## 2026-07-19 — 서브프로세스 플레이스홀더 구현 (worktree-sp-placeholder)
+- T7(검증): `pw-verify-sp-placeholder.mjs` 신설 — 실기동(백엔드 8933 enforcement ON·프론트 3233) **36/36 PASS·콘솔 에러 0**. ①피커 토글→미등록 배지→2단 확인 링크+요청 ②인스펙터 CTA 철회→재요청 ③미게시 카드 지정 비활성+안내 ④게시 카드 지정 모달 저장=수락 완결(카드 소멸·auto-applied·요청자 알림) ⑤반려+알림 ⑥New map 프리필→생성→에디터 잔류+자동 링크+미등록 상태 확인. 랜드마인: /inbox 기본 탭=알림(Approvals 클릭 필수, 뱃지 카운트로 exact 불가)·아코디언은 토글 후 재클릭 금지·SearchSelect 첫 옵션=None 제외·checkout POST는 {force} body 필수·상세 조작은 inbox-detail-aside 스코프. 최종 게이트: BE 695+ruff / FE tsc 0·lint 에러 0·vitest 510·build OK.
+- T6(FE): Inbox sp_designation 카드 — 라벨/요약(from_map 컨텍스트, 빈 값 폴백), ApprovalDetail sp 브랜치(getMap으로 게시본·프리필 로드, 게시본 없으면 "지정하고 승인" 비활성+안내, "게시된 버전으로 가기" 링크), 수락=SubprocessDesignationModal 저장(PUT 자동 applied — decide 호출 없음), Reject=기존 decide+토스트. tsc 0·lint 에러 0·vitest 510.
+- T5(FE): 인스펙터 `SubprocessRegistrationCta` 신설 — 미지정 링크 선택 시 등록 요청 버튼/Requested 배지(본인 요청은 철회), pending 409 자기치유 재조회, key=linkedMapId로 전환 리셋(StrictMode set-state-in-effect 회피). page.tsx SubprocessVersionPicker 아래 마운트. tsc 0·lint 에러 0·vitest 510.
+- T4(FE): 피커(map-name-dropdown) "Show unregistered maps" 체크박스 토글(켜면 include_undesignated 재조회, 토글 시 library null 리셋→lazy 재로드)·미등록 배지·미지정 링크 2단 확인(경고 동봉 링크 확인→등록 요청 여부, 요청 409는 안내 토스트)·`onToast` prop. CreateMapDialog `initialName` 프리필+`onCreatedMap`(지정 시 router.push 생략→에디터 잔류·자동 링크). api.ts에 designated 필드·includeUndesignated 파라미터·sp 요청 3함수. tsc 0·vitest 510·lint 에러 0.
+- T2 보안 후속: 요청 payload의 from_map_name은 요청자가 viewer 이상인 맵만 해석(무권한·미존재 모두 "" — 존재 오라클 차단). 임의 from_map_id로 비공개 맵 이름을 알아내는 IDOR 노출을 커밋 직후 보안 리뷰 지적으로 봉합. 회귀 695 그린.
+- T3: 수락 체인 — 범용 decide에 sp_designation 오너/sysadmin 게이트 추가, `_apply_request` 분기(삭제 맵 멱등 applied·미지정 approve 409로 pending 유지·기지정 no-op), reject/approve 알림 `sp_designation_{outcome}`. Inbox block 3에서 제외 + 오너 게이트 block 5 신설(detail=payload). **PUT 지정 최초 전이 시 pending 자동 applied**(`_apply_pending_sp_designation`) — Inbox 수락은 지정 모달 저장만으로 완결. pytest 11신규 포함 694 그린·ruff 클린.
+- T2: `POST/GET/DELETE /api/maps/{id}/sp-designation-requests(/pending)` — SP 등록 요청 생성(viewer 게이트=피커 가시성 조건 일치, 이미 지정 409·중복 pending 409·삭제 404, payload는 서버 박제 {from_map_id, from_map_name, map_name})·pending 조회·본인 철회(withdrawn). 오너 알림 `sp_designation_requested`. rename 선례 미러. pytest 8신규 포함 683 그린.
+- T1: `GET /api/library/processes?include_undesignated=true` — 미지정 맵 옵트인 노출. 각 행에 `designated` bool 추가, 미지정 행은 sp 어트리뷰트 4종 None 마스킹(직전 지정 잔존값 유출 방지) + 가시성(role≥viewer) 배치 필터(`_filter_visible_map_ids`, maps.list_maps 패턴 미러 — 비공개 맵 이름 유출 방지). 기본 호출은 기존과 동일(지정 맵만). pytest 4신규(RED→GREEN) 포함 675 그린·ruff 클린.
+
+## 2026-07-19 — 서브프로세스 플레이스홀더 설계 스펙 확정 (worktree-sp-placeholder)
+- 미등록(SP 미지정) 맵을 subprocess 노드로 먼저 링크(즉시 연결형 플레이스홀더)하고 등록 요청(ApprovalRequest kind='sp_designation', rename 선례 미러)하거나 새 맵을 즉시 생성(CreateMapDialog 프리필→자동 링크→지정 모달)하는 기능 설계. DDL 없음. 스펙: `docs/superpowers/specs/2026-07-19-subprocess-placeholder-design.md`.
+
 ## 2026-07-19 — 개발서버 배포·브라우저 검증 시나리오 문서 추가 (DEV-SERVER-TEST-PLAN.md, dev 직접 커밋)
 - 월요일 개발서버(3333) 배포 테스트용 체크리스트 문서 신설. 분기점 `31a9ea8`(main HEAD) 이후 dev 17 작업단위 정리 + 배포 델타 실측(신규 스키마 `sp_description` 1개=자동 ALTER 등록됨·신규 env `CSV_MANUAL_URL` 1개=선택) + 기능별 브라우저 검증 시나리오(A 승인/버전·B 에디터·C 메인/생성·D 인스펙터/파라미터·E 내보내기/알림/매뉴얼) + 서버 전용 함정 체크(평문 HTTP·Keycloak 자동로그인·KST). 코드 변경 없음.
 
