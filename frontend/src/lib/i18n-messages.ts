@@ -1116,6 +1116,10 @@ const en = {
   "library.requestSkip": "Link only",
   "library.requestSent": "Registration request sent",
   "library.requestAlreadyPending": "A registration request is already pending",
+  "sp.request.cta": "Request registration",
+  "sp.request.pending": "Registration requested",
+  "sp.request.withdraw": "Withdraw",
+  "sp.request.withdrawn": "Registration request withdrawn",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "Map Settings",
   "perm.tabCollaborators": "Collaborators",
@@ -2583,6 +2587,10 @@ const ko: Record<MessageKey, string> = {
   "library.requestSkip": "링크만 추가",
   "library.requestSent": "등록 요청을 보냈습니다",
   "library.requestAlreadyPending": "이미 등록 요청이 대기 중입니다",
+  "sp.request.cta": "등록 요청",
+  "sp.request.pending": "등록 요청됨",
+  "sp.request.withdraw": "철회",
+  "sp.request.withdrawn": "등록 요청을 철회했습니다",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "맵 설정",
   "perm.tabCollaborators": "협업자",

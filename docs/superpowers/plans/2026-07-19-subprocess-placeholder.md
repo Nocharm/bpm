@@ -127,10 +127,10 @@ class TestLibraryUndesignated:
 - Consumes: Task 4의 요청 3함수, `useCurrentMockUser`.
 - Produces: `<SubprocessRegistrationCta linkedMapId fromMapId onToast? />` — pending 조회 후 CTA/Requested 배지/본인 철회 렌더.
 
-- [ ] **Step 1: 컴포넌트** — 마운트 시 `getPendingSpDesignationRequest(linkedMapId)`(실패는 조용히 null). 상태: 미pending → "Request registration" 버튼(`sp.request.cta`) → 생성 성공 시 pending 갱신+토스트 `sp.request.sent`, 409 → 재조회+`library.requestAlreadyPending`. pending && 본인 → "Requested" 배지 + Withdraw(`sp.request.withdraw`) → 철회 시 토스트 `sp.request.withdrawn`. pending && 타인 → 배지만. 스타일: 인스펙터 카드 관례(`rounded-md border border-hairline px-3 py-2 text-caption`).
-- [ ] **Step 2: page.tsx 마운트 + i18n(EN/KO)** — `sp.request.cta/pending/withdraw/sent/withdrawn`.
-- [ ] **Step 3: 게이트** — tsc 0, lint 신규 0, vitest 그린
-- [ ] **Step 4: Commit** — `feat(inspector): request-registration CTA on undesignated links — 미등록 링크 등록요청 CTA`
+- [x] **Step 1: 컴포넌트** — 마운트 시 `getPendingSpDesignationRequest(linkedMapId)`(실패는 조용히 null). 상태: 미pending → "Request registration" 버튼(`sp.request.cta`) → 생성 성공 시 pending 갱신+토스트 `sp.request.sent`, 409 → 재조회+`library.requestAlreadyPending`. pending && 본인 → "Requested" 배지 + Withdraw(`sp.request.withdraw`) → 철회 시 토스트 `sp.request.withdrawn`. pending && 타인 → 배지만. 스타일: 인스펙터 카드 관례(`rounded-md border border-hairline px-3 py-2 text-caption`).
+- [x] **Step 2: page.tsx 마운트 + i18n(EN/KO)** — `sp.request.cta/pending/withdraw/sent/withdrawn`.
+- [x] **Step 3: 게이트** — tsc 0, lint 신규 0, vitest 그린
+- [x] **Step 4: Commit** — `feat(inspector): request-registration CTA on undesignated links — 미등록 링크 등록요청 CTA`
 
 ### Task 6: FE — Inbox sp_designation 카드
 

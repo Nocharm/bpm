@@ -57,6 +57,7 @@ import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
 import { InspectorPanel } from "@/components/inspector-panel";
+import { SubprocessRegistrationCta } from "@/components/subprocess-registration-cta";
 import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
@@ -8364,6 +8365,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                             onFollowLatest={(value) => updateSelectedData({ followLatest: value }, false)}
                             onPinVersion={(versionId) => updateSelectedData({ linkedVersionId: versionId }, false)}
                             onUpdate={() => handleUpdateSubprocess(selectedNode.id)}
+                          />
+                        )}
+                      {/* 미지정 링크 — 등록 요청 CTA/Requested 배지 (spec 2026-07-19). key로 링크 전환 시 리셋 */}
+                      {selectedNode.data.nodeType === "subprocess" &&
+                        selectedNode.data.linkedMapId != null &&
+                        selectedSpRef != null &&
+                        !selectedSpRef.designated && (
+                          <SubprocessRegistrationCta
+                            key={selectedNode.data.linkedMapId}
+                            linkedMapId={selectedNode.data.linkedMapId}
+                            fromMapId={mapId}
+                            onToast={showToast}
                           />
                         )}
                       {/* 코멘트 — 노드별, 하단 배치(읽기전용에서도 작성 가능). 활동 탭 통합은 R5d */}
