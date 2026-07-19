@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-19 — 매뉴얼 최신화: ed15440 이후 dev 전체 델타 + 플레이스홀더 (worktree-sp-placeholder)
+- docs/manual 6종(ko/en × 편집/사용안내/관리자) + 인앱 번들 backend/app/manual.md 갱신. 편집: 노드 복사/복제/Shift 축고정·S단축키/링크유일성/SP설명/플레이스홀더 신설 절/Subprocess 탭/엑셀 형식 2종/일괄편집 6필드/단축키 표. 사용안내: 홈 대시보드·조직도 즐겨찾기/새 맵(부서 우선·Start/End 시드)/버전 이름 직접입력·번호 자동부여/셀프 게시/이름변경 워크플로/Inbox sp 등록 수락 절차/FAQ 2건. 관리자: 오너 결정형 요청(rename·sp_designation) 노트. 갱신일 2026-07-19. 백엔드 695 그린(번들 변경 무회귀).
+
 ## 2026-07-19 — 릴리스 준비 문서: 검증 플랜 F섹션 + 9910 검증 스택 절차 (worktree-sp-placeholder)
 - DEV-SERVER-TEST-PLAN.md: 대상=sp-placeholder 머지 후 dev·접속 9910으로 갱신, 운영(ed15440) 기준 델타 표 확장(sp_description·알림 인덱스 2·kind 값 2·follow_latest 기본), 작업단위 18로 확장(#17 플레이스홀더 + main 미배포분), 시나리오 F1~F4(플레이스홀더·main 델타) 신설.
 - docs/db-migration-9910.md 신설 — 운영 9900(ed15440) DB 복사 → 9910 검증 스택(dev) 절차. 9800 선례 실측값(PROD_DB 컨테이너명·compose 병합 누적 함정·-t TTY 금지) 승계, 서브넷 172.43·`-p bpm-9910`·`.env.9910`, 승격은 main 머지 후(§7).
