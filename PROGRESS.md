@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-19 — 개발서버 배포·브라우저 검증 시나리오 문서 추가 (DEV-SERVER-TEST-PLAN.md, dev 직접 커밋)
+- 월요일 개발서버(3333) 배포 테스트용 체크리스트 문서 신설. 분기점 `31a9ea8`(main HEAD) 이후 dev 17 작업단위 정리 + 배포 델타 실측(신규 스키마 `sp_description` 1개=자동 ALTER 등록됨·신규 env `CSV_MANUAL_URL` 1개=선택) + 기능별 브라우저 검증 시나리오(A 승인/버전·B 에디터·C 메인/생성·D 인스펙터/파라미터·E 내보내기/알림/매뉴얼) + 서버 전용 함정 체크(평문 HTTP·Keycloak 자동로그인·KST). 코드 변경 없음.
+
 ## 2026-07-19 — rename 후속 ②④: 에러 토스트 detail 추출 + pending 배지 크로스탭 self-heal (dev 직접 커밋)
 - ② `getApiErrorDetail`(api.ts) — `ApiError`에 `body` 보관(request 실패 시 응답 원문), JSON 본문의 `detail` 문자열만 추출해 사용자 표시(비JSON·422 배열·비ApiError는 메시지 폴백). TDD vitest 5신규(RED→GREEN, fetch 스텁 왕복 포함). 적용: map-details-panel 5개 catch + inbox decide 토스트 — `API POST … 409 — {"detail":…}` 원문 노출 해소.
 - ④ `refreshRenameState`(map-details-panel) — rename 생성/취소 실패 시 맵·pending 재조회로 재동기화(다른 탭에서 승인·반려된 stale 배지 해소). 입력값 리셋은 pending 존재 또는 서버 이름 변경 시만(사용자 시도 텍스트 보존).
