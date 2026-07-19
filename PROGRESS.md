@@ -1,6 +1,7 @@
 # Progress
 
 ## 2026-07-19 — 서브프로세스 플레이스홀더 구현 (worktree-sp-placeholder)
+- T2 보안 후속: 요청 payload의 from_map_name은 요청자가 viewer 이상인 맵만 해석(무권한·미존재 모두 "" — 존재 오라클 차단). 임의 from_map_id로 비공개 맵 이름을 알아내는 IDOR 노출을 커밋 직후 보안 리뷰 지적으로 봉합. 회귀 695 그린.
 - T3: 수락 체인 — 범용 decide에 sp_designation 오너/sysadmin 게이트 추가, `_apply_request` 분기(삭제 맵 멱등 applied·미지정 approve 409로 pending 유지·기지정 no-op), reject/approve 알림 `sp_designation_{outcome}`. Inbox block 3에서 제외 + 오너 게이트 block 5 신설(detail=payload). **PUT 지정 최초 전이 시 pending 자동 applied**(`_apply_pending_sp_designation`) — Inbox 수락은 지정 모달 저장만으로 완결. pytest 11신규 포함 694 그린·ruff 클린.
 - T2: `POST/GET/DELETE /api/maps/{id}/sp-designation-requests(/pending)` — SP 등록 요청 생성(viewer 게이트=피커 가시성 조건 일치, 이미 지정 409·중복 pending 409·삭제 404, payload는 서버 박제 {from_map_id, from_map_name, map_name})·pending 조회·본인 철회(withdrawn). 오너 알림 `sp_designation_requested`. rename 선례 미러. pytest 8신규 포함 683 그린.
 - T1: `GET /api/library/processes?include_undesignated=true` — 미지정 맵 옵트인 노출. 각 행에 `designated` bool 추가, 미지정 행은 sp 어트리뷰트 4종 None 마스킹(직전 지정 잔존값 유출 방지) + 가시성(role≥viewer) 배치 필터(`_filter_visible_map_ids`, maps.list_maps 패턴 미러 — 비공개 맵 이름 유출 방지). 기본 호출은 기존과 동일(지정 맵만). pytest 4신규(RED→GREEN) 포함 675 그린·ruff 클린.

@@ -254,6 +254,18 @@ class TestCreateSpRequest:
         )
         assert r.status_code == 409
 
+    def test_private_from_map_name_not_leaked(self, client, enforce):
+        # from_map_id는 요청자 임의 입력 — 접근 불가 맵 이름이 payload로 박제되면 IDOR 노출
+        host_id = seed_sp_map("Secret Host", visibility="private")
+        target_id = seed_sp_map("Leak Target")
+        act_as(STRANGER)  # 공개 target엔 viewer, 비공개 host엔 무권한
+        r = client.post(
+            f"/api/maps/{target_id}/sp-designation-requests",
+            json={"from_map_id": host_id},
+        )
+        assert r.status_code == 201
+        assert r.json()["payload"]["from_map_name"] == ""
+
     def test_deleted_map_404(self, client, enforce):
         target_id = seed_sp_map("SP Target Deleted")
         soft_delete_map(target_id)

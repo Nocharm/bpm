@@ -706,14 +706,20 @@ async def create_sp_designation_request(
         raise HTTPException(
             status_code=409, detail="a designation request is already pending"
         )
-    # from_map 이름은 서버에서 박제 — 클라이언트 값 신뢰하지 않음
+    # from_map 이름은 서버에서 박제 — 클라이언트 값 신뢰하지 않음.
+    # 요청자가 볼 수 없는 맵이면 이름을 싣지 않는다(임의 from_map_id로 비공개 맵 이름을
+    # 알아내는 IDOR 차단). 미존재와 무권한 모두 "" — 존재 여부 오라클도 남기지 않음.
     from_map = await session.get(ProcessMap, payload.from_map_id)
+    from_map_name = ""
+    if from_map is not None and from_map.deleted_at is None:
+        if await get_effective_role(session, user, payload.from_map_id) is not None:
+            from_map_name = from_map.name
     req = ApprovalRequest(
         map_id=map_id,
         kind="sp_designation",
         payload={
             "from_map_id": payload.from_map_id,
-            "from_map_name": from_map.name if from_map is not None else "",
+            "from_map_name": from_map_name,
             "map_name": found_map.name,
         },
         requested_by=user,
