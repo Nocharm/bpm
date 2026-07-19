@@ -32,6 +32,7 @@ from app.schemas import (
     MapUpdate,
     OwningDepartmentIn,
     RenameRequestIn,
+    SpDesignationRequestIn,
     SubprocessDesignationIn,
     SubprocessUsageOut,
     SubprocessUsedByOut,
@@ -667,6 +668,120 @@ async def withdraw_rename_request(
     )
     if req is None:
         raise HTTPException(status_code=404, detail="no pending rename request")
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    req.status = "withdrawn"
+    await session.commit()
+
+
+@router.post(
+    "/{map_id}/sp-designation-requests",
+    response_model=ApprovalRequestOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def create_sp_designation_request(
+    map_id: int,
+    payload: SpDesignationRequestIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ApprovalRequest:
+    """SP 등록(지정) 요청 — 오너/sysadmin이 지정 모달 저장(PUT)으로 수락 (spec 2026-07-19).
+
+    게이트는 viewer — 피커에 노출되는(가시성 있는) 맵만 요청 가능 조건과 일치.
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.sp_designated_at is not None:
+        raise HTTPException(status_code=409, detail="map is already designated")
+    pending = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "sp_designation",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending is not None:
+        raise HTTPException(
+            status_code=409, detail="a designation request is already pending"
+        )
+    # from_map 이름은 서버에서 박제 — 클라이언트 값 신뢰하지 않음
+    from_map = await session.get(ProcessMap, payload.from_map_id)
+    req = ApprovalRequest(
+        map_id=map_id,
+        kind="sp_designation",
+        payload={
+            "from_map_id": payload.from_map_id,
+            "from_map_name": from_map.name if from_map is not None else "",
+            "map_name": found_map.name,
+        },
+        requested_by=user,
+        status="pending",
+    )
+    session.add(req)
+    requester_name = await workflow.get_display_name(session, user)
+    recipients = [
+        o
+        for o in await workflow.load_map_user_collaborators(session, map_id, role="owner")
+        if o != user
+    ]
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="sp_designation_requested",
+        map_id=map_id,
+        message=f"{requester_name} requested to register '{found_map.name}' as a subprocess",
+    )
+    await session.commit()
+    await session.refresh(req)
+    return req
+
+
+@router.get(
+    "/{map_id}/sp-designation-requests/pending",
+    response_model=ApprovalRequestOut | None,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_pending_sp_designation_request(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> ApprovalRequest | None:
+    """pending SP 등록 요청 조회 — 인스펙터 배지·중복요청 안내용 (없으면 null)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    return await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "sp_designation",
+            ApprovalRequest.status == "pending",
+        )
+    )
+
+
+@router.delete(
+    "/{map_id}/sp-designation-requests/pending",
+    status_code=204,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def withdraw_sp_designation_request(
+    map_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """본인 pending SP 등록 요청 취소 → withdrawn (행 보존 — 이력)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "sp_designation",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        raise HTTPException(status_code=404, detail="no pending designation request")
     if req.requested_by != user:
         raise HTTPException(status_code=403, detail="only the requester can withdraw")
     req.status = "withdrawn"

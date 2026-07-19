@@ -45,6 +45,11 @@ class RenameRequestIn(BaseModel):
     to_name: str = Field(min_length=1, max_length=200)
 
 
+class SpDesignationRequestIn(BaseModel):
+    # SP 등록(지정) 요청 — from_map은 요청자가 작업하던 호스트 맵(Inbox 카드 컨텍스트용) (spec 2026-07-19)
+    from_map_id: int
+
+
 class OwningDepartmentIn(BaseModel):
     # 오우닝 부서 지정/변경 — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)

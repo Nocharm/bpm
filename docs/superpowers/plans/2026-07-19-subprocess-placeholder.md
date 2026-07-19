@@ -60,11 +60,11 @@ class TestLibraryUndesignated:
 **Interfaces:**
 - Produces: `POST /api/maps/{map_id}/sp-designation-requests` (body `{from_map_id: int}`, 201, viewer 게이트) / `GET .../pending` (row|null, viewer) / `DELETE .../pending` (204, 요청자만). payload 서버 구성 `{from_map_id, from_map_name, map_name}`. 알림 `sp_designation_requested` → owner 롤 협업자(요청자 제외).
 
-- [ ] **Step 1: 실패 테스트** — `TestCreateSpRequest`(201·payload 박제·오너 알림 map_id 필터 단언, 이미 지정 409, 중복 pending 409, 삭제 맵 404), `TestPendingWithdraw`(null→row, 타인 철회 403, 무 pending 404). rename 테스트 261행식 `client.post(f"/api/maps/{map_id}/sp-designation-requests", json={"from_map_id": host_id})`.
-- [ ] **Step 2: RED 확인** (404 Not Found)
-- [ ] **Step 3: 구현** — `create_rename_request`(569-623행) 미러: 게이트 `require_map_role("viewer")`, 404(삭제)·409(`sp_designated_at is not None` → "map is already designated")·409(dup pending). from_map은 `session.get(ProcessMap, payload.from_map_id)`로 이름 해석(없으면 ""). 알림 message: `f"{requester_name} requested to register '{found_map.name}' as a subprocess"`.
-- [ ] **Step 4: GREEN + 전체 회귀**
-- [ ] **Step 5: Commit** — `feat(subprocess): sp designation request endpoints — SP 등록 요청 생성·조회·철회`
+- [x] **Step 1: 실패 테스트** — `TestCreateSpRequest`(201·payload 박제·오너 알림 map_id 필터 단언, 이미 지정 409, 중복 pending 409, 삭제 맵 404), `TestPendingWithdraw`(null→row, 타인 철회 403, 무 pending 404). rename 테스트 261행식 `client.post(f"/api/maps/{map_id}/sp-designation-requests", json={"from_map_id": host_id})`.
+- [x] **Step 2: RED 확인** (404 Not Found)
+- [x] **Step 3: 구현** — `create_rename_request`(569-623행) 미러: 게이트 `require_map_role("viewer")`, 404(삭제)·409(`sp_designated_at is not None` → "map is already designated")·409(dup pending). from_map은 `session.get(ProcessMap, payload.from_map_id)`로 이름 해석(없으면 ""). 알림 message: `f"{requester_name} requested to register '{found_map.name}' as a subprocess"`.
+- [x] **Step 4: GREEN + 전체 회귀**
+- [x] **Step 5: Commit** — `feat(subprocess): sp designation request endpoints — SP 등록 요청 생성·조회·철회`
 
 ### Task 3: BE — decide 통합 + Inbox 블록 + PUT 자동 적용
 
