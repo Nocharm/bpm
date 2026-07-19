@@ -31,6 +31,7 @@ import {
   decideApprovalRequest,
   decideCheckoutRequest,
   deleteNotification,
+  getApiErrorDetail,
   getWorkflowState,
   listInboxApprovals,
   listMapPermissions,
@@ -283,7 +284,7 @@ export default function InboxPage() {
             pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
         } catch (err) {
           // 승인 시점 이름 선점 409 등 — 백엔드 detail 노출
-          pushToast(err instanceof Error ? err.message : String(err));
+          pushToast(getApiErrorDetail(err));
         }
       }
       const next = await listInboxApprovals();

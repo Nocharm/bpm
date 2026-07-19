@@ -8,6 +8,7 @@ import { Building2, LockKeyhole, TriangleAlert } from "lucide-react";
 
 import {
   createRenameRequest,
+  getApiErrorDetail,
   getDirectory,
   getMap,
   getMe,
@@ -72,7 +73,7 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
         }
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(getApiErrorDetail(err));
       });
     return () => {
       active = false;
@@ -86,9 +87,26 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
       await updateMap(Number(mapId), { description });
       onToast(t("perm.details.saved"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getApiErrorDetail(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  // 크로스탭 self-heal — rename 실패 시 서버 기준으로 이름/pending 재동기화
+  // (다른 탭에서 승인·반려·취소돼 stale해진 배지·404를 화면에 반영).
+  async function refreshRenameState() {
+    try {
+      const [d, pending] = await Promise.all([
+        getMap(Number(mapId)),
+        getPendingRenameRequest(Number(mapId)),
+      ]);
+      setPendingRename(pending);
+      // 입력값 리셋은 pending이 생겼거나(입력 disabled) 서버 이름이 바뀐 경우만 — 사용자의 시도 텍스트 보존
+      if (pending !== null || d.name !== savedName) setName(d.name);
+      setSavedName(d.name);
+    } catch {
+      // 재동기화 실패는 무시 — 원 에러 표시가 이미 떠 있음
     }
   }
 
@@ -112,7 +130,8 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
         onToast(t("perm.rename.requested"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getApiErrorDetail(err));
+      void refreshRenameState();
     } finally {
       setSaving(false);
     }
@@ -124,7 +143,8 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
       setPendingRename(null);
       onToast(t("perm.rename.withdrawn"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getApiErrorDetail(err));
+      void refreshRenameState();
     }
   }
 
@@ -136,7 +156,7 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
       onToast(t("perm.owningDept.saved"));
       onChanged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getApiErrorDetail(err));
     }
   }
 

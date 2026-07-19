@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-19 — rename 후속 ②④: 에러 토스트 detail 추출 + pending 배지 크로스탭 self-heal (dev 직접 커밋)
+- ② `getApiErrorDetail`(api.ts) — `ApiError`에 `body` 보관(request 실패 시 응답 원문), JSON 본문의 `detail` 문자열만 추출해 사용자 표시(비JSON·422 배열·비ApiError는 메시지 폴백). TDD vitest 5신규(RED→GREEN, fetch 스텁 왕복 포함). 적용: map-details-panel 5개 catch + inbox decide 토스트 — `API POST … 409 — {"detail":…}` 원문 노출 해소.
+- ④ `refreshRenameState`(map-details-panel) — rename 생성/취소 실패 시 맵·pending 재조회로 재동기화(다른 탭에서 승인·반려된 stale 배지 해소). 입력값 리셋은 pending 존재 또는 서버 이름 변경 시만(사용자 시도 텍스트 보존).
+- 검증: pw-verify-map-rename.mjs에 ⑥ self-heal 시나리오 추가(오너가 API로 뒤에서 승인 → stale Withdraw 클릭 → 깨끗한 detail "no pending rename request"·배지 소멸·입력 재동기화, 의도적 404는 콘솔 필터 허용) — 실기동 **25/25 PASS·콘솔 에러 0**(8912/3212, enforcement ON). 게이트: tsc 0·lint 0 err·vitest 510/510·build OK.
+
 ## 2026-07-18 — 버전 드래프트 생성 다이얼로그: 이름 "To-Be" 자동입력 제거 + 번호 자동부여 힌트 (worktree-version-draft-no-tobe)
 - 에디터 새 버전(드래프트) 생성 모달의 이름 입력 `defaultValue`가 create 모드에서 `"To-Be"`로 하드코딩돼 있던 것을 빈 값으로 변경 — 사용자가 버전 이름을 직접 입력하도록. rename 모드(기존 라벨 프리필)는 그대로. 빈 값 처리는 `PromptDialog`가 이미 담당(빈 값이면 확인 버튼 비활성).
 - create 모드에 placeholder 힌트 추가 — `prompt.newVersionNumberAuto`("버전 번호는 자동으로 부여됩니다" / "Version number is assigned automatically", EN/KO). 이름(label)은 사용자 입력 필수, 버전 번호(`version_number`)는 게시 시 자동 채번(versions.py 최댓값+1)이라 사실과 일치. rename 모드는 placeholder 없음.

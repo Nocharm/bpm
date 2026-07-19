@@ -28,7 +28,14 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 const page = await ctx.newPage();
 const consoleErrors = [];
 page.on("console", (m) => {
-  if (m.type() === "error") consoleErrors.push(m.text());
+  if (m.type() !== "error") return;
+  // ⑥ self-heal 단계가 의도적으로 404를 유발 — 해당 리소스 로드 에러만 허용
+  if (
+    m.text().startsWith("Failed to load resource") &&
+    (m.location()?.url ?? "").includes("/rename-requests/pending")
+  )
+    return;
+  consoleErrors.push(m.text());
 });
 
 // ── 헬퍼 (pw-verify-params-ui-sync.mjs 미러) ────────────────────────
@@ -223,6 +230,46 @@ try {
     .catch(() => false);
   check("editor's Notifications tab contains the rename-approved message", notifVisible, expectedMsg);
   await page.screenshot({ path: `${SHOTS}/04-editor-notifications.png` });
+
+  // ── ⑥ self-heal: 다른 곳(오너 API)에서 승인된 pending을 취소 시도 → 깨끗한 detail + 배지 재동기화 ──
+  const requestedName3 = `${requestedName2} SelfHeal`;
+  await switchUserAndGoto(editorLogin, `/maps/${mapId}/settings`);
+  await page.waitForSelector('[data-id="settings-map-name"]', { timeout: 8000 });
+  await page.locator('[data-id="settings-map-name"]').fill(requestedName3);
+  await page.locator('[data-id="settings-map-name-save"]').click();
+  await page.waitForSelector('[data-id="settings-rename-pending"]', { timeout: 6000 });
+
+  // 오너가 화면 밖(API)에서 승인 — 에디터 탭의 배지는 stale이 된다
+  const inboxItems = await api("/inbox/approvals", { user: ownerLogin });
+  const renameItem = inboxItems.find(
+    (i) => i.kind === "approval_request" && i.title === "map_rename" && i.map_id === mapId,
+  );
+  await api(`/approval-requests/${renameItem.id}/decide`, {
+    method: "POST",
+    body: { decision: "approve" },
+    user: ownerLogin,
+  });
+
+  await page.locator('[data-id="settings-rename-withdraw"]').click();
+  const errorText = await page
+    .locator('[data-id="settings-details"] .text-error')
+    .first()
+    .textContent({ timeout: 6000 })
+    .catch(() => "");
+  check(
+    "stale withdraw shows clean backend detail (no raw API prefix)",
+    errorText === "no pending rename request",
+    errorText ?? "",
+  );
+  const staleBadgeGone = await waitForCondition(
+    async () => (await page.locator('[data-id="settings-rename-pending"]').count()) === 0,
+  );
+  check("pending badge self-heals away after refetch", staleBadgeGone);
+  const inputSynced = await waitForCondition(
+    async () => (await page.locator('[data-id="settings-map-name"]').inputValue()) === requestedName3,
+  );
+  check("name input re-syncs to the approved server name", inputSynced);
+  await page.screenshot({ path: `${SHOTS}/05-self-heal.png` });
 } catch (err) {
   results.push({ name: "fatal", ok: false });
   console.error(`FATAL ${err instanceof Error ? err.message : String(err)}`);

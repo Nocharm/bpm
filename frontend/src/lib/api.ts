@@ -186,10 +186,27 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly body?: string, // 응답 원문 — getApiErrorDetail이 detail 추출에 사용
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+// 사용자 표시용 에러 문구 — ApiError JSON 본문의 detail 문자열만 추출, 그 외는 메시지 폴백.
+export function getApiErrorDetail(err: unknown): string {
+  if (err instanceof ApiError && err.body) {
+    try {
+      const parsed: unknown = JSON.parse(err.body);
+      if (parsed && typeof parsed === "object" && "detail" in parsed) {
+        const detail = (parsed as { detail: unknown }).detail;
+        if (typeof detail === "string" && detail) return detail;
+      }
+    } catch {
+      // JSON 아님(프록시 오류 등) — 전체 메시지 폴백
+    }
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -209,6 +226,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
       response.status,
+      detail,
     );
   }
   if (response.status === 204) {
