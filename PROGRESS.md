@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-19 — 서브프로세스 플레이스홀더 설계 스펙 확정 (worktree-sp-placeholder)
+- 미등록(SP 미지정) 맵을 subprocess 노드로 먼저 링크(즉시 연결형 플레이스홀더)하고 등록 요청(ApprovalRequest kind='sp_designation', rename 선례 미러)하거나 새 맵을 즉시 생성(CreateMapDialog 프리필→자동 링크→지정 모달)하는 기능 설계. DDL 없음. 스펙: `docs/superpowers/specs/2026-07-19-subprocess-placeholder-design.md`.
+
 ## 2026-07-19 — 개발서버 배포·브라우저 검증 시나리오 문서 추가 (DEV-SERVER-TEST-PLAN.md, dev 직접 커밋)
 - 월요일 개발서버(3333) 배포 테스트용 체크리스트 문서 신설. 분기점 `31a9ea8`(main HEAD) 이후 dev 17 작업단위 정리 + 배포 델타 실측(신규 스키마 `sp_description` 1개=자동 ALTER 등록됨·신규 env `CSV_MANUAL_URL` 1개=선택) + 기능별 브라우저 검증 시나리오(A 승인/버전·B 에디터·C 메인/생성·D 인스펙터/파라미터·E 내보내기/알림/매뉴얼) + 서버 전용 함정 체크(평문 HTTP·Keycloak 자동로그인·KST). 코드 변경 없음.
 
