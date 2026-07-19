@@ -30,7 +30,7 @@
 **Interfaces:**
 - Produces: `GET /api/library/processes?include_undesignated=true` — 각 행에 `"designated": bool` 추가(항상). 미지정 행은 role≥viewer 가시성 필터, `department/assignee/system/duration=None` 마스킹(직전 지정 잔존값 유출 방지).
 
-- [ ] **Step 1: 실패 테스트 작성** — 신규 파일에 rename 테스트의 `enforce`/`act_as`/`_seed` 패턴 복제(`test_map_rename_workflow.py` 25-48행 참조). 시드 헬퍼는 `sp_designated_at` 유무·visibility 인자화:
+- [x] **Step 1: 실패 테스트 작성** — 신규 파일에 rename 테스트의 `enforce`/`act_as`/`_seed` 패턴 복제(`test_map_rename_workflow.py` 25-48행 참조). 시드 헬퍼는 `sp_designated_at` 유무·visibility 인자화:
 
 ```python
 """sp_designation 워크플로 테스트 — 플레이스홀더 링크·등록 요청·수락 (spec 2026-07-19)."""
@@ -46,10 +46,10 @@ class TestLibraryUndesignated:
     def test_designated_rows_have_designated_true(self, client, enforce): ...
 ```
 
-- [ ] **Step 2: RED 확인** — `pytest tests/test_sp_designation_workflow.py -q` → FAIL (designated 키 없음/미지정 미포함)
-- [ ] **Step 3: 구현** — `list_processes`에 `include_undesignated: bool = Query(False)`, `user: str = Depends(get_current_user)` 추가. 기본 쿼리 where에서 `sp_designated_at.is_not(None)`을 조건부로: 플래그 시 전체 로드 후 미지정 맵만 가시성 판정. 가시성은 `maps.py list_maps` 194-247행의 배치 패턴 재사용(sysadmin 조기 전체 허용 → Employee org_path → 대상 맵 MapPermission 일괄 → MapApprover set → group ids → `logic.effective_role(...) is not None`). 행 dict에 `"designated": designated_at is not None` 추가, 미지정 행은 sp 어트리뷰트 4종 None.
-- [ ] **Step 4: GREEN + 전체 회귀** — 신규 테스트 + `pytest tests/ -q` 전체 그린
-- [ ] **Step 5: Commit** — `feat(library): opt-in undesignated maps with visibility filter — 미지정 맵 옵트인 노출`
+- [x] **Step 2: RED 확인** — `pytest tests/test_sp_designation_workflow.py -q` → FAIL (designated 키 없음/미지정 미포함)
+- [x] **Step 3: 구현** — `list_processes`에 `include_undesignated: bool = Query(False)`, `user: str = Depends(get_current_user)` 추가. 기본 쿼리 where에서 `sp_designated_at.is_not(None)`을 조건부로: 플래그 시 전체 로드 후 미지정 맵만 가시성 판정. 가시성은 `maps.py list_maps` 194-247행의 배치 패턴 재사용(sysadmin 조기 전체 허용 → Employee org_path → 대상 맵 MapPermission 일괄 → MapApprover set → group ids → `logic.effective_role(...) is not None`). 행 dict에 `"designated": designated_at is not None` 추가, 미지정 행은 sp 어트리뷰트 4종 None.
+- [x] **Step 4: GREEN + 전체 회귀** — 신규 테스트 + `pytest tests/ -q` 전체 그린
+- [x] **Step 5: Commit** — `feat(library): opt-in undesignated maps with visibility filter — 미지정 맵 옵트인 노출`
 
 ### Task 2: BE — sp-designation-requests 생성/조회/철회 + 알림
 
