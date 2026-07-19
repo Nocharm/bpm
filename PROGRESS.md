@@ -1,5 +1,8 @@
 # Progress
 
+## 2026-07-19 — 7월 2차 업데이트 공지 초안 (worktree-sp-placeholder)
+- docs/notices/2026-07-release-2.md — 운영(ed15440) 이후 사용자 체감 변경(홈 개편·셀프 게시·이름변경 요청·플레이스홀더·노드 복사·엑셀 2형식·알림 정리)을 1차(2026-07-13-release.md) 형식으로 정리. 배포 시 sysadmin이 설정→공지에 붙여넣어 게시(전체 알림 권장).
+
 ## 2026-07-19 — 매뉴얼 최신화: ed15440 이후 dev 전체 델타 + 플레이스홀더 (worktree-sp-placeholder)
 - docs/manual 6종(ko/en × 편집/사용안내/관리자) + 인앱 번들 backend/app/manual.md 갱신. 편집: 노드 복사/복제/Shift 축고정·S단축키/링크유일성/SP설명/플레이스홀더 신설 절/Subprocess 탭/엑셀 형식 2종/일괄편집 6필드/단축키 표. 사용안내: 홈 대시보드·조직도 즐겨찾기/새 맵(부서 우선·Start/End 시드)/버전 이름 직접입력·번호 자동부여/셀프 게시/이름변경 워크플로/Inbox sp 등록 수락 절차/FAQ 2건. 관리자: 오너 결정형 요청(rename·sp_designation) 노트. 갱신일 2026-07-19. 백엔드 695 그린(번들 변경 무회귀).
 
