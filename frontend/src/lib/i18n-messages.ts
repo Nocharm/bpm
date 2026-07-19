@@ -1124,6 +1124,9 @@ const en = {
   "library.requestSkip": "Link only",
   "library.requestSent": "Registration request sent",
   "library.requestAlreadyPending": "A registration request is already pending",
+  // 새 맵 버튼 라벨 — [prefix] "검색어" [suffix] 순서로 조립(언어별 어순, 빈 값은 생략)
+  "library.newMapNamedPrefix": "Create map",
+  "library.newMapNamedSuffix": "",
   "sp.request.cta": "Request registration",
   "sp.request.pending": "Registration requested",
   "sp.request.withdraw": "Withdraw",
@@ -2603,6 +2606,8 @@ const ko: Record<MessageKey, string> = {
   "library.requestSkip": "링크만 추가",
   "library.requestSent": "등록 요청을 보냈습니다",
   "library.requestAlreadyPending": "이미 등록 요청이 대기 중입니다",
+  "library.newMapNamedPrefix": "",
+  "library.newMapNamedSuffix": "으로 맵 만들기",
   "sp.request.cta": "등록 요청",
   "sp.request.pending": "등록 요청됨",
   "sp.request.withdraw": "철회",

@@ -137,11 +137,11 @@ try {
   const panel = page.locator('[data-id="process-library-panel"]');
   await panel.locator("input").first().fill(`SPPH TargetA ${stamp}`);
 
-  // 토글 OFF — 미지정 맵은 서버가 반환하지 않아 행 자체가 없다
+  // 토글 OFF — 미지정 맵은 서버가 반환하지 않아 행 자체가 없다 (footer의 New map 필과 혼동 금지 — 행은 data-map-id)
   await page.waitForTimeout(400);
   check(
     "toggle OFF: unregistered map absent from the library list",
-    (await panel.getByText(`SPPH TargetA ${stamp}`).count()) === 0,
+    (await panel.locator(`[data-map-id="${targetA.id}"]`).count()) === 0,
   );
 
   // 토글 ON — 미등록 행 + 배지 등장
@@ -151,7 +151,9 @@ try {
   );
   check("toggle ON: 'Not registered' badge appears in the panel", badgeShown);
   await page.screenshot({ path: `${SHOTS}/01-library-toggle.png` });
-  await panel.getByText(`SPPH TargetA ${stamp}`, { exact: true }).first().click();
+
+  // 미등록 맵도 다른 맵과 같은 드래그로 캔버스에 놓아야 확인 체인이 열린다
+  await page.dragAndDrop(`[data-map-id="${targetA.id}"]`, ".react-flow");
 
   // 확인 1 — 잠금 경고 동봉
   await page.getByText("Add link node?").waitFor({ timeout: 6000 });
@@ -306,31 +308,46 @@ try {
   const createdName = `SPPH Created ${stamp}`;
   await switchUserAndGoto(hostOwner, `/maps/${host.id}`);
 
-  // 드롭다운 마커 확인 — 지정된 targetB는 SP 배지, 링크된 targetA는 체크
+  // 드롭다운 마커 확인 — 지정 맵 SP 아이콘(data-sp), 사용중 맵 배경 하이라이트(data-linked), 현재 맵 제외
   await page.waitForSelector('button[title="Map menu"]', { timeout: 20000 });
   await page.locator('button[title="Map menu"]').click();
-  const ddSearch = page.locator('input[placeholder^="Load"]').first();
+  const ddList = page.locator('[data-id="map-dropdown-list"]');
+  const ddSearch = ddList.locator("input").first();
   await ddSearch.fill(`SPPH TargetB ${stamp}`);
-  const spPill = await waitForCondition(
-    async () => (await page.locator("button", { hasText: `SPPH TargetB ${stamp}` }).getByText("SP", { exact: true }).count()) > 0,
+  const spIcon = await waitForCondition(
+    async () => (await ddList.locator('button[data-sp="true"]', { hasText: `SPPH TargetB ${stamp}` }).count()) > 0,
   );
-  check("dropdown: designated map shows SP badge", spPill);
+  check("dropdown: designated map row carries subprocess icon (data-sp)", spIcon);
   await ddSearch.fill(`SPPH TargetA ${stamp}`);
-  const linkedCheck = await waitForCondition(
-    async () =>
-      (await page
-        .locator("button", { hasText: `SPPH TargetA ${stamp}` })
-        .locator('svg[aria-label="Already linked in this map"]')
-        .count()) > 0,
+  const linkedRow = await waitForCondition(
+    async () => (await ddList.locator('button[data-linked="true"]', { hasText: `SPPH TargetA ${stamp}` }).count()) > 0,
   );
-  check("dropdown: already-linked map shows check mark", linkedCheck);
-  await page.keyboard.press("Escape");
+  check("dropdown: in-use map row highlighted (data-linked)", linkedRow);
+  await ddSearch.fill(`SPPH Host ${stamp}`);
+  await page.waitForTimeout(300);
+  check(
+    "dropdown: current map excluded from the list",
+    (await ddList.locator("button", { hasText: `SPPH Host ${stamp}` }).count()) === 0,
+  );
+  // 바깥 클릭 → 자동 닫힘
+  await page.mouse.click(700, 500);
+  const ddClosed = await waitForCondition(async () => (await ddList.count()) === 0);
+  check("dropdown: closes on outside click", ddClosed);
 
-  // 라이브러리 패널에서 새 맵 생성
+  // 라이브러리 패널에서 새 맵 생성 — New map 버튼은 검색어가 있을 때만 노출
   await page.locator('button[title="Process library"]').click();
   await page.waitForSelector('[data-id="process-library-panel"]', { timeout: 8000 });
   const panel2 = page.locator('[data-id="process-library-panel"]');
+  check(
+    "library: New map button hidden without a query",
+    (await panel2.locator('[data-id="library-new-map"]').count()) === 0,
+  );
   await panel2.locator("input").first().fill(createdName);
+  await panel2.locator('[data-id="library-new-map"]').waitFor({ state: "visible", timeout: 6000 });
+  check(
+    "library: New map label carries the quoted query pill",
+    (await panel2.locator('[data-id="library-new-map"]').getByText(`"${createdName}"`).count()) > 0,
+  );
   await panel2.locator('[data-id="library-new-map"]').click();
   await page.waitForSelector('input[placeholder="Map name"]', { timeout: 8000 });
   check(

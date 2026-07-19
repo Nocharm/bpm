@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-20 — 리뷰 2차 반영: 드롭다운 마커 재설계·미등록 드래그 링크·New map 조건부 (worktree-sp-placeholder)
+- 드롭다운: SP 배지 → **타일 아이콘 교체**(지정 맵=Workflow 아이콘 보라, 사용중 맵=보라 배경 타일+행 배경 하이라이트), 현재 맵 목록 제외, 사용중 행 클릭 시 아코디언과 함께 **캔버스 해당 노드 자동 포커싱**(handleOutlineSelect 재사용), 백드롭 제거하고 **document capture-phase mousedown**으로 바깥 클릭 닫힘(React Flow d3가 mousedown 전파를 끊어 버블 리스너 불가 — 실측).
+- 라이브러리: 미등록 맵도 **다른 맵과 같은 드래그**로 — 드롭 시 page.tsx가 unregistered 플래그를 읽어 확인 체인(경고→드롭 위치 생성→등록 요청, createLinkNodeAt로 드롭 생성 로직 공용화). 클릭 링크·패널 내 다이얼로그 제거. **New map은 검색어 입력 시에만** 노출, 라벨 = "검색어" 필(말줄임)+언어별 prefix/suffix(newMapNamedPrefix/Suffix — 빈 값 생략 조립).
+- pw 41/41 PASS(드래그·마커·바깥닫힘·조건부 버튼 검사로 갱신, footer 필이 getByText에 걸리는 함정은 data-map-id 행 검사로 회피). tsc 0·lint 에러 0·vitest 510. 매뉴얼·공지·검증 플랜 서술 동기화.
+
 ## 2026-07-19 — 리뷰 반영: 미등록 토글·즉시생성을 프로세스 라이브러리로 이동 (worktree-sp-placeholder)
 - 사용자 로컬 확인 피드백 반영. 맵 이름 드롭다운은 원래 역할(맵 검색·최근 목록)로 원복하고 표시만 보강 — 지정 맵 **SP 배지**(홈 카드 배지 재사용)·이미 링크된 맵 **체크**(기존 체크 디자인), 링크된 맵은 링크 추가 숨김. "Show unregistered maps" 토글·미등록 클릭 링크(2단 확인+등록 요청)·검색어 프리필 **New map**(생성 즉시 링크)은 좌측 **프로세스 라이브러리 패널**로 이동(미등록 행은 드래그 대신 클릭 — 드롭 경로가 확인 모달을 우회하지 못하게). CreateMapDialog `initialName`/`onCreatedMap`은 라이브러리가 소비. pw 스크립트 신 플로우로 갱신 — 실기동 **37/37 PASS**(드롭다운 마커 2건 추가), tsc 0·lint 에러 0·vitest 510. 매뉴얼(편집 ko/en·번들)·공지 초안·검증 플랜 F1/F3 진입점 서술 정정.
 
