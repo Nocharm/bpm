@@ -124,6 +124,7 @@ import {
   BRANCH_YES_LABEL,
   BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
+  estimateNodeWidth,
   hasBpmAttributes,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
@@ -5403,16 +5404,18 @@ function MapEditor({ mapId }: { mapId: number }) {
           // 자식은 선택 허용. 위치는 파생이라 드래그/삭제는 불가.
           // 자식은 `nodes` state에 없어 React Flow가 측정 못 함 → 미측정 노드는 visibility:hidden으로 숨겨진다.
           // 타입별 근사 크기를 measured로 직접 넣어 즉시 보이게 한다(레이아웃도 이 크기로 일관).
+          // 폭은 라벨 실폭 추정 — 긴 라벨은 wrap으로 넓어져(최대 NODE_MAX_WIDTH) 영역 경계가 감싸야 하므로.
           const size = nodeSizeOf(app.data.nodeType);
+          const width = estimateNodeWidth(app.data.label, app.data.nodeType);
           // 중첩 하위프로세스 자식도 펼침 가능하게 subEnds 주입(캐시 있으면)
           return injectSubEnds({
             ...app,
             draggable: false,
             selectable: true,
             deletable: false,
-            width: size.w,
+            width,
             height: size.h,
-            measured: { width: size.w, height: size.h },
+            measured: { width, height: size.h },
             data: app.data,
           });
         });
@@ -5485,9 +5488,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       let maxY = -Infinity;
       for (const node of all) {
         const size = nodeSizeOf(node.data.nodeType);
+        // 폭은 실측 우선(자식은 라벨 실폭 추정을 measured로 주입) — 긴 라벨로 넓어진 노드를 영역 경계가 감싸도록.
+        const nodeW = node.measured?.width ?? size.w;
         minX = Math.min(minX, node.position.x);
         minY = Math.min(minY, node.position.y);
-        maxX = Math.max(maxX, node.position.x + size.w);
+        maxX = Math.max(maxX, node.position.x + nodeW);
         maxY = Math.max(maxY, node.position.y + size.h);
       }
       for (const region of regions) {

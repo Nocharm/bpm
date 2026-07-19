@@ -565,12 +565,13 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   }
 
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
+  // 긴 라벨은 max-w-[240px](canvas.ts NODE_MAX_WIDTH 동기화)에서 wrap — break-words로 무공백 토큰도 분절
   return (
     <div
-      className={`group bpm-node-emph relative px-3 py-2 text-sm transition-all duration-150 ${
+      className={`group bpm-node-emph relative break-words px-3 py-2 text-sm transition-all duration-150 ${
         isTerminal
-          ? "min-w-[90px] rounded-full text-center"
-          : "min-w-[150px] rounded-sm"
+          ? "min-w-[90px] max-w-[240px] rounded-full text-center"
+          : "min-w-[150px] max-w-[240px] rounded-sm"
       }`}
       style={style}
       title={data.diffNote}

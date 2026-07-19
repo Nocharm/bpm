@@ -108,6 +108,8 @@ export function hasBpmAttributes(nodeType: string): boolean {
 // ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정·커서 중앙 배치에 사용
 export const NODE_WIDTH = 170;
 export const NODE_HEIGHT = 52;
+// 라벨 wrap 상한 — process·start/end 노드는 이 폭에서 여러 줄로 줄바꿈(process-node.tsx `max-w-[240px]`와 동기화 필수).
+export const NODE_MAX_WIDTH = 240;
 
 // 노드 사이 최소 간격(8px 그리드 정렬과 일치)
 const COLLISION_GAP = 8;
@@ -129,6 +131,34 @@ export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } 
 
 function getNodeSize(node: AppNode): { w: number; h: number } {
   return nodeSizeOf(node.data.nodeType);
+}
+
+// 오프스크린 캔버스로 라벨 픽셀폭 측정 — 인라인 펼침 자식은 React Flow가 측정 못 해(측정 전 hidden)
+// measured를 직접 주입하므로, 실제 렌더 폭을 추정하려면 텍스트 폭이 필요하다. ctx는 1회 생성 후 재사용.
+let _measureCtx: CanvasRenderingContext2D | null | undefined;
+function measureLabelWidth(text: string, font: string): number {
+  if (typeof document === "undefined") return 0; // SSR 가드
+  if (_measureCtx === undefined) {
+    _measureCtx = document.createElement("canvas").getContext("2d");
+  }
+  if (!_measureCtx) return 0;
+  _measureCtx.font = font;
+  return _measureCtx.measureText(text).width;
+}
+
+/**
+ * 노드 렌더 폭 추정 — 타이틀 기준, `[nodeSizeOf.w, NODE_MAX_WIDTH]`로 클램프.
+ * 인라인 펼침 자식(측정 불가)의 영역 경계 폭 계산용 — 긴 라벨은 상한에서 wrap되므로 상한을 넘지 않는다.
+ * decision/subprocess는 고정폭이라 근사값 그대로. 폰트는 노드 타이틀(text-sm/font-medium) 근사.
+ */
+export function estimateNodeWidth(label: string, nodeType: ProcessNodeType): number {
+  const base = nodeSizeOf(nodeType).w;
+  if (nodeType === "decision" || nodeType === "subprocess") return base;
+  const isTerminal = nodeType === "start" || nodeType === "end";
+  const text = isTerminal ? terminalDisplayLabel(nodeType, label) : label;
+  const HPAD = 24; // px-3 좌우 패딩
+  const raw = measureLabelWidth(text, "500 14px Pretendard, sans-serif") + HPAD + 4;
+  return Math.max(base, Math.min(NODE_MAX_WIDTH, raw));
 }
 
 /** 드롭된 노드가 다른 노드와 겹치면 최소 분리 벡터로 밀어내 가장 가까운 빈 자리로 보낸다 (onNodeDragStop). */

@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-20 — 작업/터미널 노드 라벨 wrap + 서브프로세스 펼침 우측 경계 포함 (dev)
+- **wrap**: process·start·end 노드에 `max-w-[240px] break-words` — 긴 라벨이 240px에서 여러 줄로 줄바꿈(짧은 라벨은 기존 `min-w` 컴팩트 유지, 무공백 토큰은 break-words로 분절). decision(`max-w-20`)·subprocess(`w-[180px]`)는 이미 wrap이라 무변경.
+- **펼침 경계**: 인라인 펼침 자식은 React Flow가 측정 못 해 `measured`를 직접 주입하는데, 폭을 고정 근사(`nodeSizeOf`, process=170)로 넣어 긴 라벨(실폭≤240)이 region 우측 border를 빠져나갔다. `estimateNodeWidth()`(offscreen `measureText`로 타이틀 실폭 추정, `[nodeSizeOf, NODE_MAX_WIDTH]` 클램프)로 자식 주입 폭을 실폭화하고, buildScope bbox가 `measured.width` 우선 사용 → 경계가 자식을 감쌈. 실폭 추정이라 짧은 노드엔 빈 레인이 안 생기고, 긴 노드는 상한(240)에서 포함.
+- 파일: `lib/canvas.ts`(NODE_MAX_WIDTH·estimateNodeWidth), `components/process-node.tsx`(wrap 클래스), `app/maps/[mapId]/page.tsx`(자식 주입 폭·bbox measured 우선).
+- 검증: lint 0 err·`next build` OK(TS·React Compiler)·유닛 35/35. 브라우저 실기동(3200/8901, 맵2 서브프로세스 펼침, 맵1 자식 라벨 임시 장문화 후 원복): 긴 process·End 자식 240px·다줄 wrap 확인, region 우측 border가 최우측 자식보다 REGION_PAD(28px)만 바깥으로 포함 확인. 세로(높이) 경계는 이번 범위 밖.
+
 ## 2026-07-20 — 복사(Ctrl) 관련 마이너 버그 3건 (worktree-copy-paste-fix)
 - ① **Ctrl+클릭 시 컨텍스트 메뉴가 열리던 문제** — macOS는 Ctrl+클릭=네이티브 우클릭이라 `contextmenu`가 발화. 모든 메뉴의 단일 초크포인트 `openMenu`에 `event.ctrlKey` 가드 추가(`preventDefault`는 유지→네이티브 메뉴도 억제). Ctrl은 복사 modifier이므로 Ctrl+드래그 복사와의 충돌 제거. node/pane/edge/selection/group 전 표면 커버.
 - ② **End 노드 복사 시 대표끝(`isPrimaryEnd`)이 중복되던 문제** — 복사 두 경로(`node-clipboard.ts buildPaste`=Ctrl+C/V, `applyCtrlDragCopy`=Ctrl+드래그)에서 사본 data에 `isPrimaryEnd:false` 강제(groupIds 리셋과 동일 관례). "대표끝은 맵당 1개" 불변식 유지.
