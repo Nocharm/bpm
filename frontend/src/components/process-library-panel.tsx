@@ -1,10 +1,19 @@
 // 프로세스 라이브러리 패널 — 등록된 맵 목록을 검색하고 캔버스로 드래그해 하위프로세스 노드를 생성.
+// 미등록(미지정) 맵은 토글로 노출 — 클릭 링크(경고 확인)+등록 요청, 하단 New map은 생성 즉시 링크 (spec 2026-07-19).
 "use client";
 
-import { Network, Search, X } from "lucide-react";
+import { AlertTriangle, Link2, Network, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
+import {
+  ApiError,
+  createSpDesignationRequest,
+  getApiErrorDetail,
+  listLibraryProcesses,
+  type LibraryProcess,
+} from "@/lib/api";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { filterByQuery } from "@/lib/search";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
@@ -14,23 +23,53 @@ export interface ProcessLibraryPanelProps {
   currentMapId: number;
   linkedMapIds: Set<number>;
   onClose: () => void;
+  // 미등록 맵 클릭 링크·새 맵 생성 즉시 링크 — 에디터의 addLinkNodeFromMap 스레딩
+  onAddLinkNode: (linkedMapId: number, name: string) => void;
+  onToast?: (message: string) => void;
 }
 
-export function ProcessLibraryPanel({ currentMapId, linkedMapIds, onClose }: ProcessLibraryPanelProps) {
+// link-unreg: 미지정 맵 링크 확인 → request: 링크 후 등록 요청 여부
+type Pending = { kind: "link-unreg" | "request"; row: LibraryProcess };
+
+export function ProcessLibraryPanel({
+  currentMapId,
+  linkedMapIds,
+  onClose,
+  onAddLinkNode,
+  onToast,
+}: ProcessLibraryPanelProps) {
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
+  // 미등록(미지정) 맵 노출 토글 — 켜면 include_undesignated로 재조회(가시성 필터는 서버)
+  const [showUnregistered, setShowUnregistered] = useState(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void listLibraryProcesses().then((data) => {
+    void listLibraryProcesses(showUnregistered).then((data) => {
       if (!cancelled) setRows(data);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showUnregistered]);
+
+  // 미지정 맵 링크 직후 등록 요청 발송 — 409(중복 pending)는 안내 토스트로 완화
+  async function sendDesignationRequest(row: LibraryProcess) {
+    try {
+      await createSpDesignationRequest(row.map_id, currentMapId);
+      onToast?.(t("library.requestSent"));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        onToast?.(t("library.requestAlreadyPending"));
+      } else {
+        onToast?.(getApiErrorDetail(err));
+      }
+    }
+  }
 
   // 패널은 열릴 때마다 새로 마운트되므로 모든 오픈 경로에서 검색창에 포커스된다.
   useEffect(() => {
@@ -102,6 +141,17 @@ export function ProcessLibraryPanel({ currentMapId, linkedMapIds, onClose }: Pro
             className="min-w-0 flex-1 bg-transparent text-fine text-ink outline-none placeholder:text-ink/40"
           />
         </div>
+        <label
+          data-id="library-unregistered-toggle"
+          className="mt-1.5 flex cursor-pointer items-center gap-1.5 px-0.5 text-fine text-ink-tertiary"
+        >
+          <input
+            type="checkbox"
+            checked={showUnregistered}
+            onChange={() => setShowUnregistered((v) => !v)}
+          />
+          {t("library.showUnregistered")}
+        </label>
       </div>
 
       {/* list */}
@@ -119,17 +169,26 @@ export function ProcessLibraryPanel({ currentMapId, linkedMapIds, onClose }: Pro
               alreadyLinked ||
               closesCycle(row.map_id, currentMapId, refsByMap);
             const blockedReason = alreadyLinked ? t("library.alreadyLinked") : t("library.cycleBlocked");
+            const unregistered = !row.designated;
+            // 미등록 맵은 드래그 대신 클릭 링크 — 경고 확인(+등록 요청)을 거쳐야 해서 드롭 경로를 막는다
             return (
               <div
                 key={row.map_id}
-                draggable={!blocked}
-                onDragStart={blocked ? undefined : (e) => handleDragStart(e, row)}
+                draggable={!blocked && !unregistered}
+                onDragStart={blocked || unregistered ? undefined : (e) => handleDragStart(e, row)}
+                onClick={
+                  !blocked && unregistered
+                    ? () => setPending({ kind: "link-unreg", row })
+                    : undefined
+                }
                 title={blocked ? blockedReason : row.name}
                 className={[
-                  "flex cursor-grab items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
+                  "flex items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
                   blocked
                     ? "cursor-not-allowed opacity-40"
-                    : "hover:bg-surface-alt active:cursor-grabbing",
+                    : unregistered
+                      ? "cursor-pointer hover:bg-surface-alt"
+                      : "cursor-grab hover:bg-surface-alt active:cursor-grabbing",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -137,14 +196,23 @@ export function ProcessLibraryPanel({ currentMapId, linkedMapIds, onClose }: Pro
                 <Network size={12} strokeWidth={1.5} className="shrink-0 text-ink/50" />
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="min-w-0 truncate">{row.name}</span>
-                  {row.department && (
-                    // 지정 부서 칩 — 지정 어트리뷰트의 대표값 (spec 2026-07-06)
+                  {unregistered ? (
                     <span
-                      data-id="library-department-chip"
-                      className="self-start rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent"
+                      data-id="library-unregistered-badge"
+                      className="self-start rounded-xs border border-hairline px-1 py-px text-fine text-ink-tertiary"
                     >
-                      {row.department}
+                      {t("library.notRegistered")}
                     </span>
+                  ) : (
+                    row.department && (
+                      // 지정 부서 칩 — 지정 어트리뷰트의 대표값 (spec 2026-07-06)
+                      <span
+                        data-id="library-department-chip"
+                        className="self-start rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent"
+                      >
+                        {row.department}
+                      </span>
+                    )
                   )}
                 </span>
               </div>
@@ -153,6 +221,68 @@ export function ProcessLibraryPanel({ currentMapId, linkedMapIds, onClose }: Pro
         )}
         {hasMore && <div ref={sentinelRef} className="h-px" />}
       </div>
+
+      {/* footer — 검색어 이름으로 새 맵 생성, 생성 즉시 현재 맵에 링크 */}
+      <div className="border-t border-divider p-1">
+        <button
+          type="button"
+          data-id="library-new-map"
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-caption font-medium text-accent hover:bg-surface-alt"
+          onClick={() => setShowCreate(true)}
+        >
+          <Plus size={16} strokeWidth={1.5} />
+          {t("editor.newMap")}
+        </button>
+      </div>
+
+      {/* 미지정 맵 링크 — 잠금 경고 동봉 확인 후 링크, 이어서 등록 요청 여부를 묻는다 */}
+      {pending?.kind === "link-unreg" && (
+        <ConfirmDialog
+          icon={<Link2 size={28} strokeWidth={1.5} />}
+          title={t("editor.confirmAddLinkTitle")}
+          lines={[
+            { icon: <Link2 size={14} strokeWidth={1.5} />, text: t("editor.confirmAddLinkBody", { name: pending.row.name }) },
+            { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("library.linkUnregNotice"), tone: "error" },
+          ]}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const target = pending.row;
+            onAddLinkNode(target.map_id, target.name);
+            setPending({ kind: "request", row: target });
+          }}
+          onClose={() => setPending(null)}
+        />
+      )}
+      {/* 링크는 이미 완료 — 등록 요청만 결정(No/닫기 = 링크만 유지) */}
+      {pending?.kind === "request" && (
+        <ConfirmDialog
+          icon={<Network size={28} strokeWidth={1.5} />}
+          title={t("library.requestTitle")}
+          lines={[
+            { icon: <Network size={14} strokeWidth={1.5} />, text: t("library.requestMessage", { name: pending.row.name }) },
+          ]}
+          confirmLabel={t("library.requestSend")}
+          cancelLabel={t("library.requestSkip")}
+          onConfirm={() => {
+            const target = pending.row;
+            setPending(null);
+            void sendDesignationRequest(target);
+          }}
+          onClose={() => setPending(null)}
+        />
+      )}
+      {showCreate && (
+        <CreateMapDialog
+          onClose={() => setShowCreate(false)}
+          onCreated={() => setShowCreate(false)}
+          initialName={query.trim() || undefined}
+          onCreatedMap={(createdMapId, createdName) => {
+            setShowCreate(false);
+            onAddLinkNode(createdMapId, createdName);
+          }}
+        />
+      )}
     </div>
   );
 }

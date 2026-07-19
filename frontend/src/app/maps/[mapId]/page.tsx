@@ -6952,8 +6952,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           canToRoot={scopes.length > 1}
           isEditing={!readOnly}
           onToRoot={() => void navigateTo(scopes.slice(0, 1))}
+          linkedMapIds={linkedMapIds}
           onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
-          onToast={showToast}
         />
         <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         <VersionPill
@@ -7195,6 +7195,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
             onClose={() => setLibraryOpen(false)}
+            onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+            onToast={showToast}
           />
         )}
         <div

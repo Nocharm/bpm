@@ -130,11 +130,12 @@ A **Subprocess** node embeds another process as a single step — a reference, n
 
 You can link a map that is **not yet designated** as a placeholder first, and sort out registration later.
 
-- In the map-name dropdown (top bar), turn on **"Show unregistered maps"** below the search box — unregistered maps then appear with a **"Not registered"** badge.
-- Linking an unregistered map shows a lock warning, then asks whether to **send a registration request** — **Send request** links and asks the owner; **Link only** just links.
+- In the **process library panel** (library button in the top bar), turn on **"Show unregistered maps"** below the search box — unregistered maps then appear with a **"Not registered"** badge.
+- Unregistered maps are linked by **clicking** (instead of dragging) — a lock warning shows, then it asks whether to **send a registration request**: **Send request** links and asks the owner; **Link only** just links.
 - The request lands in the target map **owner's Inbox (Approvals)**. Once the owner completes the designation, the link's warning clears and the requester is notified (see the Getting Around manual for the owner-side flow).
 - To request later or check status — select the unregistered link node: the inspector shows a **Request registration** button (after requesting, a **Registration requested** badge with a **Withdraw** button for your own request).
-- **Create a new map and link it immediately** — type a name in the dropdown search and press **New map** at the bottom; the creation dialog opens with the name prefilled (owning department, approvers, and other requirements are unchanged). After creation you **stay in the current map and the new map is linked automatically**. The new map clears its warning once it is published and designated.
+- **Create a new map and link it immediately** — type a name in the library panel search and press **New map** at the bottom; the creation dialog opens with the name prefilled (owning department, approvers, and other requirements are unchanged). After creation you **stay in the current map and the new map is linked automatically**. The new map clears its warning once it is published and designated.
+- In the top-bar **map-name dropdown**, maps designated as subprocesses carry an **SP badge**, and maps already linked in this map show a **check mark** — status at a glance.
 
 ---
 

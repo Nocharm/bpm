@@ -129,35 +129,29 @@ try {
   const published = await api(`/versions/${vB}/publish`, { method: "POST", user: targetOwner });
   check("targetB published for the accept chain", published.status === "published", `status=${published.status}`);
 
-  // ── ① 피커 토글 → 미등록 링크 + 등록 요청 ─────────────────────────
+  // ── ① 라이브러리 패널 토글 → 미등록 링크 + 등록 요청 ─────────────────
   await switchUserAndGoto(hostOwner, `/maps/${host.id}`);
-  await page.waitForSelector('button[title="Map menu"]', { timeout: 20000 });
-  await page.locator('button[title="Map menu"]').click();
-  await page.locator('input[placeholder="Load another map"], input[placeholder^="Load"]').first().fill(`SPPH TargetA ${stamp}`);
+  await page.waitForSelector('button[title="Process library"]', { timeout: 20000 });
+  await page.locator('button[title="Process library"]').click();
+  await page.waitForSelector('[data-id="process-library-panel"]', { timeout: 8000 });
+  const panel = page.locator('[data-id="process-library-panel"]');
+  await panel.locator("input").first().fill(`SPPH TargetA ${stamp}`);
 
-  // 토글 OFF — 미지정 맵 행은 있으나 링크 버튼 없음
-  const rowA = page.locator("button", { hasText: `SPPH TargetA ${stamp}` }).first();
-  await rowA.waitFor({ state: "visible", timeout: 8000 });
-  await rowA.click();
-  await page.waitForTimeout(300);
+  // 토글 OFF — 미지정 맵은 서버가 반환하지 않아 행 자체가 없다
+  await page.waitForTimeout(400);
   check(
-    "toggle OFF: unregistered map has no add-link action",
-    (await page.getByText("Add as link node").count()) === 0,
+    "toggle OFF: unregistered map absent from the library list",
+    (await panel.getByText(`SPPH TargetA ${stamp}`).count()) === 0,
   );
 
-  // 토글 ON — 배지 + 링크 버튼 등장
-  await page.getByText("Show unregistered maps").click();
+  // 토글 ON — 미등록 행 + 배지 등장
+  await panel.locator('[data-id="library-unregistered-toggle"] input').click();
   const badgeShown = await waitForCondition(
-    async () => (await page.getByText("Not registered", { exact: true }).count()) > 0,
+    async () => (await panel.locator('[data-id="library-unregistered-badge"]').count()) > 0,
   );
-  check("toggle ON: 'Not registered' badge appears", badgeShown);
-  await page.screenshot({ path: `${SHOTS}/01-picker-toggle.png` });
-  // 아코디언은 토글 전 클릭으로 이미 펼쳐져 있다(activeId는 토글과 무관) — 재클릭하면 닫힌다
-  const addLink = page.getByText("Add as link node").first();
-  const addLinkShown = await addLink.waitFor({ state: "visible", timeout: 6000 }).then(() => true).catch(() => false);
-  check("toggle ON: add-link action available for unregistered map", addLinkShown);
-  if (!addLinkShown) throw new Error("cannot continue — add-link action missing");
-  await addLink.click();
+  check("toggle ON: 'Not registered' badge appears in the panel", badgeShown);
+  await page.screenshot({ path: `${SHOTS}/01-library-toggle.png` });
+  await panel.getByText(`SPPH TargetA ${stamp}`, { exact: true }).first().click();
 
   // 확인 1 — 잠금 경고 동봉
   await page.getByText("Add link node?").waitFor({ timeout: 6000 });
@@ -308,13 +302,36 @@ try {
   const pendingCGone = await api(`/maps/${targetC.id}/sp-designation-requests/pending`, { user: targetOwner });
   check("targetC pending resolved after reject (API)", pendingCGone === null);
 
-  // ── ⑥ 피커 "New map" — 프리필 → 생성 → 에디터 잔류 + 자동 링크 ─────────
+  // ── ⑥ 라이브러리 "New map" — 프리필 → 생성 → 에디터 잔류 + 자동 링크 ─────
   const createdName = `SPPH Created ${stamp}`;
   await switchUserAndGoto(hostOwner, `/maps/${host.id}`);
+
+  // 드롭다운 마커 확인 — 지정된 targetB는 SP 배지, 링크된 targetA는 체크
   await page.waitForSelector('button[title="Map menu"]', { timeout: 20000 });
   await page.locator('button[title="Map menu"]').click();
-  await page.locator('input[placeholder="Load another map"], input[placeholder^="Load"]').first().fill(createdName);
-  await page.getByRole("button", { name: "New map", exact: true }).click();
+  const ddSearch = page.locator('input[placeholder^="Load"]').first();
+  await ddSearch.fill(`SPPH TargetB ${stamp}`);
+  const spPill = await waitForCondition(
+    async () => (await page.locator("button", { hasText: `SPPH TargetB ${stamp}` }).getByText("SP", { exact: true }).count()) > 0,
+  );
+  check("dropdown: designated map shows SP badge", spPill);
+  await ddSearch.fill(`SPPH TargetA ${stamp}`);
+  const linkedCheck = await waitForCondition(
+    async () =>
+      (await page
+        .locator("button", { hasText: `SPPH TargetA ${stamp}` })
+        .locator('svg[aria-label="Already linked in this map"]')
+        .count()) > 0,
+  );
+  check("dropdown: already-linked map shows check mark", linkedCheck);
+  await page.keyboard.press("Escape");
+
+  // 라이브러리 패널에서 새 맵 생성
+  await page.locator('button[title="Process library"]').click();
+  await page.waitForSelector('[data-id="process-library-panel"]', { timeout: 8000 });
+  const panel2 = page.locator('[data-id="process-library-panel"]');
+  await panel2.locator("input").first().fill(createdName);
+  await panel2.locator('[data-id="library-new-map"]').click();
   await page.waitForSelector('input[placeholder="Map name"]', { timeout: 8000 });
   check(
     "create dialog prefilled with the search query",
