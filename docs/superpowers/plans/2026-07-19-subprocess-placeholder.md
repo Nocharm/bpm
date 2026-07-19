@@ -78,16 +78,16 @@ class TestLibraryUndesignated:
 - Consumes: Task 2의 요청 행(kind='sp_designation').
 - Produces: 범용 decide가 sp_designation 처리(오너 게이트, reject→`sp_designation_rejected`, approve는 미지정 시 409 pending 유지·삭제 맵 멱등 applied). PUT 최초 지정 시 pending 자동 applied + `sp_designation_approved`. Inbox에 오너 게이트 카드(detail=payload).
 
-- [ ] **Step 1: 실패 테스트** — `TestDecideSp`(오너 reject→rejected+알림, editor decide 403, approver(비오너) 403, sysadmin ok, **approve 미지정 409 & pending 유지**, 삭제 맵 approve 멱등 applied), `TestAutoApplyOnDesignate`(pending 중 오너 PUT 지정 → 요청 applied + 요청자 `sp_designation_approved` 알림 — 게시본 있는 시드 필수), `TestInboxSp`(오너에게 노출·approver에겐 미노출·삭제 맵 숨김·detail.from_map_name).
-- [ ] **Step 2: RED 확인**
-- [ ] **Step 3: 구현** —
+- [x] **Step 1: 실패 테스트** — `TestDecideSp`(오너 reject→rejected+알림, editor decide 403, approver(비오너) 403, sysadmin ok, **approve 미지정 409 & pending 유지**, 삭제 맵 approve 멱등 applied), `TestAutoApplyOnDesignate`(pending 중 오너 PUT 지정 → 요청 applied + 요청자 `sp_designation_approved` 알림 — 게시본 있는 시드 필수), `TestInboxSp`(오너에게 노출·approver에겐 미노출·삭제 맵 숨김·detail.from_map_name).
+- [x] **Step 2: RED 확인**
+- [x] **Step 3: 구현** —
   - permissions.py 388행: `if req.kind in ("map_rename", "sp_designation"):` → owner 게이트.
   - `_apply_request`에 분기: 맵 없음/삭제 → return(멱등), `sp_designated_at is None` → `raise HTTPException(409, "map is not designated yet — save the designation first")` (커밋 전 중단 → pending 유지), 지정돼 있으면 no-op(PUT이 이미 적용).
   - `_notify_permission_decision`에 분기: `type=f"sp_designation_{outcome}"`, message `f"Your subprocess registration request for '{req.payload.get('map_name','')}' was {outcome}"`.
   - inbox.py block 3: `ApprovalRequest.kind.not_in(["map_rename", "sp_designation"])`. block 5: block 4(153-191행) 미러, kind만 교체, `detail: req.payload`, before/after None.
   - maps.py: `_supersede_pending_rename`(544-566행) 미러 헬퍼 `_apply_pending_sp_designation(session, map_id, *, actor, map_name)` — status="applied", decided_by/at, 알림 `sp_designation_approved`. `designate_subprocess`의 `if was_new:` 블록 끝에서 호출.
-- [ ] **Step 4: GREEN + 전체 회귀 + ruff** — `ruff check app/ tests/`
-- [ ] **Step 5: Commit** — `feat(subprocess): decide integration + inbox card + auto-apply on designation — 수락 체인·자동 적용`
+- [x] **Step 4: GREEN + 전체 회귀 + ruff** — `ruff check app/ tests/`
+- [x] **Step 5: Commit** — `feat(subprocess): decide integration + inbox card + auto-apply on designation — 수락 체인·자동 적용`
 
 ### Task 4: FE — api/피커 토글/새 맵 프리필 자동링크
 

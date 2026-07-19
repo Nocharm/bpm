@@ -16,6 +16,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import (
     ApprovalRequest,
+    MapApprover,
     MapPermission,
     MapVersion,
     Notification,
@@ -28,6 +29,7 @@ OWNER = "sp.owner"
 EDITOR = "sp.editor"
 VIEWER = "sp.viewer"
 STRANGER = "sp.stranger"
+APPROVER = "sp.approver"
 
 
 @pytest.fixture
@@ -112,6 +114,24 @@ def soft_delete_map(map_id: int) -> None:
         m.deleted_at = now_kst()
 
     _seed(_del)
+
+
+def seed_approver(map_id: int, login: str = APPROVER) -> None:
+    async def _add(session):
+        session.add(MapApprover(map_id=map_id, user_id=login, assigned_by=SYSADMIN))
+
+    _seed(_add)
+
+
+def designate_directly(map_id: int) -> None:
+    """PUT 경로를 우회한 직접 지정 재현 — decide-approve 경합 케이스용."""
+
+    async def _set(session):
+        m = await session.get(ProcessMap, map_id)
+        m.sp_designated_at = now_kst()
+        m.sp_department = "Race Dept"
+
+    _seed(_set)
 
 
 def _pending_sp_request(map_id: int) -> ApprovalRequest | None:
@@ -292,3 +312,130 @@ class TestPendingWithdraw:
         act_as(VIEWER)
         r = client.delete(f"/api/maps/{target_id}/sp-designation-requests/pending")
         assert r.status_code == 404
+
+
+def _make_sp_request(client, target_id: int, host_id: int, requester: str = VIEWER) -> int:
+    act_as(requester)
+    r = client.post(
+        f"/api/maps/{target_id}/sp-designation-requests", json={"from_map_id": host_id}
+    )
+    assert r.status_code == 201
+    return r.json()["id"]
+
+
+class TestDecideSp:
+    def test_owner_reject_notifies_requester(self, client, enforce):
+        host_id = seed_sp_map("Decide Host A")
+        target_id = seed_sp_map("Decide Target A")
+        rid = _make_sp_request(client, target_id, host_id)
+        act_as(OWNER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "reject"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "rejected"
+        assert ("sp_designation_rejected", VIEWER) in _notes_for_map(target_id)
+
+    def test_editor_decide_403(self, client, enforce):
+        host_id = seed_sp_map("Decide Host B")
+        target_id = seed_sp_map("Decide Target B")
+        rid = _make_sp_request(client, target_id, host_id)
+        act_as(EDITOR)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "reject"})
+        assert r.status_code == 403
+
+    def test_approver_non_owner_403(self, client, enforce):
+        host_id = seed_sp_map("Decide Host C")
+        target_id = seed_sp_map("Decide Target C")
+        seed_approver(target_id)
+        rid = _make_sp_request(client, target_id, host_id)
+        act_as(APPROVER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "reject"})
+        assert r.status_code == 403
+
+    def test_approve_undesignated_409_stays_pending(self, client, enforce):
+        host_id = seed_sp_map("Decide Host D")
+        target_id = seed_sp_map("Decide Target D")
+        rid = _make_sp_request(client, target_id, host_id)
+        act_as(OWNER)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 409
+        assert _pending_sp_request(target_id) is not None  # 커밋 전 중단 — pending 유지
+
+    def test_approve_after_direct_designation_applied(self, client, enforce):
+        host_id = seed_sp_map("Decide Host E")
+        target_id = seed_sp_map("Decide Target E")
+        rid = _make_sp_request(client, target_id, host_id)
+        designate_directly(target_id)
+        act_as(SYSADMIN)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "applied"
+        assert ("sp_designation_approved", VIEWER) in _notes_for_map(target_id)
+
+    def test_approve_deleted_map_idempotent_applied(self, client, enforce):
+        host_id = seed_sp_map("Decide Host F")
+        target_id = seed_sp_map("Decide Target F")
+        rid = _make_sp_request(client, target_id, host_id)
+        soft_delete_map(target_id)
+        act_as(SYSADMIN)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "applied"
+
+
+class TestAutoApplyOnDesignate:
+    def test_put_designation_auto_applies_pending(self, client, enforce):
+        host_id = seed_sp_map("AutoApply Host")
+        target_id = seed_sp_map("AutoApply Target", published=True)
+        _make_sp_request(client, target_id, host_id)
+        act_as(OWNER)
+        r = client.put(
+            f"/api/maps/{target_id}/subprocess-designation",
+            json={"department": "Ops Division"},
+        )
+        assert r.status_code == 200
+        assert _pending_sp_request(target_id) is None
+        assert ("sp_designation_approved", VIEWER) in _notes_for_map(target_id)
+
+    def test_put_without_pending_still_works(self, client, enforce):
+        target_id = seed_sp_map("AutoApply Solo", published=True)
+        act_as(OWNER)
+        r = client.put(
+            f"/api/maps/{target_id}/subprocess-designation",
+            json={"department": "Ops Division"},
+        )
+        assert r.status_code == 200
+
+
+class TestInboxSp:
+    def _titles_for(self, client, user: str) -> list[dict]:
+        act_as(user)
+        return [
+            a
+            for a in client.get("/api/inbox/approvals").json()
+            if a["kind"] == "approval_request" and a["title"] == "sp_designation"
+        ]
+
+    def test_owner_sees_card_with_context(self, client, enforce):
+        host_id = seed_sp_map("Inbox Host A")
+        target_id = seed_sp_map("Inbox Target A")
+        _make_sp_request(client, target_id, host_id)
+        cards = [a for a in self._titles_for(client, OWNER) if a["map_id"] == target_id]
+        assert len(cards) == 1
+        assert cards[0]["detail"]["from_map_name"] == "Inbox Host A"
+        assert cards[0]["requester"] == VIEWER
+
+    def test_approver_non_owner_does_not_see(self, client, enforce):
+        host_id = seed_sp_map("Inbox Host B")
+        target_id = seed_sp_map("Inbox Target B")
+        seed_approver(target_id)
+        _make_sp_request(client, target_id, host_id)
+        cards = [a for a in self._titles_for(client, APPROVER) if a["map_id"] == target_id]
+        assert cards == []
+
+    def test_deleted_map_hidden(self, client, enforce):
+        host_id = seed_sp_map("Inbox Host C")
+        target_id = seed_sp_map("Inbox Target C")
+        _make_sp_request(client, target_id, host_id)
+        soft_delete_map(target_id)
+        cards = [a for a in self._titles_for(client, OWNER) if a["map_id"] == target_id]
+        assert cards == []

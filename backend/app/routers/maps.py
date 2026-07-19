@@ -863,9 +863,38 @@ async def designate_subprocess(
                 map_id=map_id,
                 message=f"'{found_map.name}' was registered as a subprocess",
             )
+        # pending SP 등록 요청은 지정 저장으로 수락 완결 — Inbox 수락 체인·직접 지정 모두 이 경로 (spec 2026-07-19)
+        await _apply_pending_sp_designation(
+            session, map_id, actor=user, map_name=found_map.name
+        )
     await session.commit()
     await session.refresh(found_map)
     return found_map
+
+
+async def _apply_pending_sp_designation(
+    session: AsyncSession, map_id: int, *, actor: str, map_name: str
+) -> None:
+    """지정 완료 시 pending sp_designation 요청 자동 applied + 요청자 알림 (spec 2026-07-19)."""
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "sp_designation",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        return
+    req.status = "applied"
+    req.decided_by = actor
+    req.decided_at = _now()
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type="sp_designation_approved",
+        map_id=map_id,
+        message=f"Your subprocess registration request for '{map_name}' was approved",
+    )
 
 
 @router.delete(
