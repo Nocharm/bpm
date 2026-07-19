@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-19 — 릴리스 준비 문서: 검증 플랜 F섹션 + 9910 검증 스택 절차 (worktree-sp-placeholder)
+- DEV-SERVER-TEST-PLAN.md: 대상=sp-placeholder 머지 후 dev·접속 9910으로 갱신, 운영(ed15440) 기준 델타 표 확장(sp_description·알림 인덱스 2·kind 값 2·follow_latest 기본), 작업단위 18로 확장(#17 플레이스홀더 + main 미배포분), 시나리오 F1~F4(플레이스홀더·main 델타) 신설.
+- docs/db-migration-9910.md 신설 — 운영 9900(ed15440) DB 복사 → 9910 검증 스택(dev) 절차. 9800 선례 실측값(PROD_DB 컨테이너명·compose 병합 누적 함정·-t TTY 금지) 승계, 서브넷 172.43·`-p bpm-9910`·`.env.9910`, 승격은 main 머지 후(§7).
+
 ## 2026-07-19 — 서브프로세스 플레이스홀더 구현 (worktree-sp-placeholder)
 - T7(검증): `pw-verify-sp-placeholder.mjs` 신설 — 실기동(백엔드 8933 enforcement ON·프론트 3233) **36/36 PASS·콘솔 에러 0**. ①피커 토글→미등록 배지→2단 확인 링크+요청 ②인스펙터 CTA 철회→재요청 ③미게시 카드 지정 비활성+안내 ④게시 카드 지정 모달 저장=수락 완결(카드 소멸·auto-applied·요청자 알림) ⑤반려+알림 ⑥New map 프리필→생성→에디터 잔류+자동 링크+미등록 상태 확인. 랜드마인: /inbox 기본 탭=알림(Approvals 클릭 필수, 뱃지 카운트로 exact 불가)·아코디언은 토글 후 재클릭 금지·SearchSelect 첫 옵션=None 제외·checkout POST는 {force} body 필수·상세 조작은 inbox-detail-aside 스코프. 최종 게이트: BE 695+ruff / FE tsc 0·lint 에러 0·vitest 510·build OK.
 - T6(FE): Inbox sp_designation 카드 — 라벨/요약(from_map 컨텍스트, 빈 값 폴백), ApprovalDetail sp 브랜치(getMap으로 게시본·프리필 로드, 게시본 없으면 "지정하고 승인" 비활성+안내, "게시된 버전으로 가기" 링크), 수락=SubprocessDesignationModal 저장(PUT 자동 applied — decide 호출 없음), Reject=기존 decide+토스트. tsc 0·lint 에러 0·vitest 510.

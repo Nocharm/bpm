@@ -1,30 +1,36 @@
 # dev → 개발서버 배포 & 브라우저 검증 시나리오
 
-> **대상 브랜치:** `dev` (origin/dev == dev, 최신 `69ed468`)
-> **분기점:** `31a9ea8`(현재 main HEAD) — dev는 여기서 **153커밋 / 17 작업단위** 앞섬. main은 이 시점 이후 미변경이라 dev가 main을 완전 포함.
-> **접속:** `http://<서버IP>:3333` (앱 compose nginx). **평문 HTTP = insecure context** → 자동로그인·클립보드·Web Crypto 관련은 **localhost에서 재현 안 되고 서버에서만 검증됨**.
+> **대상 브랜치:** `dev` (**worktree-sp-placeholder 머지 후** — 서브프로세스 플레이스홀더 포함)
+> **분기점:** `31a9ea8`(현재 main HEAD) — dev는 여기서 **17 작업단위 + 플레이스홀더** 앞섬. main은 이 시점 이후 미변경이라 dev가 main을 완전 포함.
+> **운영 기준:** 운영(9900)은 `ed15440` 시점 — main `ed15440..31a9ea8` 9커밋(follow_latest 기본 ON·승인 탭 지정 카드·새 맵 Start/End 시드·로그인 복구)도 이번 배포 델타에 포함된다.
+> **접속:** 검증 스택 `http://<서버IP>:9910` (운영 9900의 DB 복사본 — 절차: `docs/db-migration-9910.md`). **평문 HTTP = insecure context** → 자동로그인·클립보드·Web Crypto 관련은 **localhost에서 재현 안 되고 서버에서만 검증됨**.
 
 ---
 
-## 0. 배포 델타 (실측 확인 완료)
+## 0. 배포 델타 (실측 확인 완료 — 운영 `ed15440` 기준)
 
 | 항목 | 내용 | 조치 |
 |------|------|------|
 | **DB 스키마** | 신규 컬럼 `process_maps.sp_description`(TEXT) 1개 | `db.py` `_ADDED_COLUMNS` 등록됨 → **기동 시 자동 ALTER**. 수동 불필요 |
-| **map_rename** | 기존 `approval_requests.kind` 컬럼의 새 값(`'map_rename'`) | 스키마 변경 없음 |
+| **DB 인덱스** | `notifications` 인덱스 2종(recipient+read / recipient+created_at) | `db.py` `_ADDED_INDEXES` → **기동 시 자동 CREATE INDEX IF NOT EXISTS** |
+| **approval_requests** | 기존 `kind` 컬럼의 새 값 2종(`'map_rename'`, `'sp_designation'`) | 스키마 변경 없음 |
+| **follow_latest 기본값** | 신규 생성 링크 노드의 기본이 최신 추종 ON(백엔드 스키마·프론트 생성 경로) | 기존 노드 무영향 — 값 변화 없음 |
 | **신규 env** | `CSV_MANUAL_URL`(선택) — CSV 임포트 안내 버튼 URL | 미설정 시 버튼만 숨김. 기동엔 지장 없음 |
 | **compose** | backend `environment:`에 `CSV_MANUAL_URL: ${CSV_MANUAL_URL:-}` 1줄 추가 | `.env`에 값 넣으려면 서버 `.env`에 `CSV_MANUAL_URL=...` 추가(선택) |
 | **노드 클립보드** | `localStorage` 기반(평문 HTTP OK) | 없음 |
 
 ### 배포 절차
+
+**검증 스택(9910) 기동·DB 복사·승격 절차는 `docs/db-migration-9910.md`가 단일 소스다.** 요약:
+
 ```bash
-# 서버(리눅스)에서
-git pull origin dev          # 또는 scp/gitlab 경유 — 운영 파이프라인대로
-docker compose up -d --build # 접속: http://<서버IP>:3333
+# 서버(리눅스) — 검증 스택 디렉터리에서 (자세한 사전 준비·DB 복사는 9910 문서 §2·§3)
+git fetch && git checkout origin/dev   # sp-placeholder 머지 후의 dev
+dc910 up -d --build                    # 접속: http://<서버IP>:9910 (alias는 9910 문서 §2)
 ```
 - **기동 후 backend 로그에서 `ALTER TABLE process_maps ADD COLUMN sp_description` 실행 확인**(기존 DB에 컬럼 없을 때만 1회). 안 뜨면 이미 있는 것.
 - ⚠️ **운영 DB 리셋 절대 금지**(`reset_db`=drop_all). 스키마는 자동보강만.
-- 배포 전 DB 덤프 백업 권장(자동 ALTER는 안전하지만 관례).
+- 운영(9900) 승격은 9910 검증 통과 + main 머지 후 — 9910 문서 §8.
 
 ---
 
@@ -38,7 +44,7 @@ docker compose up -d --build # 접속: http://<서버IP>:3333
 
 ---
 
-## 2. 변경내용 정리 (17 작업단위)
+## 2. 변경내용 정리 (18 작업단위)
 
 | # | 영역 | 작업 | 머지 |
 |---|------|------|------|
@@ -58,7 +64,9 @@ docker compose up -d --build # 접속: http://<서버IP>:3333
 | 14 | 승인 | 셀프 게시 설정 Versions 탭 적용 | `6ce7f30` |
 | 15 | 버전 | 새 버전 드래프트 To-Be 자동입력 제거 + 번호 자동부여 힌트 | `ec57c05` |
 | 16 | 승인 | 맵 이름변경 승인 워크플로(요청·1인승인·Inbox·토스트·알림) | `69ed468` |
+| 17 | 서브프로세스 | **플레이스홀더** — 미등록 맵 링크(피커 토글)·등록 요청(ApprovalRequest)·Inbox 수락(지정 모달)·새 맵 즉시 생성+자동 링크 | (sp-placeholder 머지) |
 | — | (main) | 로그인 실패 자동 복구 반영(dev 신규 아님) | `4c7ab6e` |
+| — | (main) | follow_latest 기본 ON·승인 탭 지정 카드·새 맵 Start/End 시드 — **운영(ed15440)엔 미배포**라 이번 델타 | `65a5618` |
 
 ---
 
@@ -162,6 +170,36 @@ docker compose up -d --build # 접속: http://<서버IP>:3333
 - [ ] `MANUAL_URL` 설정 시 에디터 매뉴얼 버튼 노출, 미설정 시 숨김
 - [ ] `CSV_MANUAL_URL` 설정 시 CSV 액션에 안내 버튼 노출(선택)
 
+### F. 서브프로세스 플레이스홀더 — #17
+
+> 로컬 Playwright 실기동 36/36 통과분(`frontend/scripts/pw-verify-sp-placeholder.mjs`) — 서버에선 실계정 2개(요청자/대상 맵 오너)로 핵심 왕복만 재확인.
+
+**F1. 미등록 맵 링크 + 등록 요청 (요청자)**
+- [ ] 에디터 맵 이름 드롭다운 검색 아래 **"Show unregistered maps" 토글**(기본 OFF — 켰을 때만 미등록 맵에 링크 버튼)
+- [ ] 미등록 맵 행에 **"Not registered" 배지**, "Add as link node" → 잠금 경고 동봉 확인 모달
+- [ ] 이어서 "등록 요청 보낼까요?" — **Send request**=링크+요청, **Link only**=링크만
+- [ ] 링크된 노드에 미지정 경고 배지(⚠), 임베드 잠금 표시
+- [ ] 인스펙터: 미등록 링크 선택 시 **Request registration** CTA / 요청 후 **Registration requested** 배지 + 본인 요청 **Withdraw**
+- [ ] 중복 요청 시 409 → "already pending" 토스트(콘솔 에러 없이)
+
+**F2. Inbox 수락/반려 (대상 맵 오너)**
+- [ ] Inbox → Approvals에 **"Subprocess registration" 카드**(요청자·대상 맵·출처 맵 표시)
+- [ ] **게시본 없는 맵**: "No published version yet" 안내 + **Designate & approve 비활성**
+- [ ] **게시본 있는 맵**: **Go to published version** 링크 동작 → Designate & approve → **지정 모달**(부서 필수) 저장 → 카드 소멸 + "request approved" 토스트
+- [ ] 수락 즉시 요청자 노드의 경고 배지 해제(재조회 후), 요청자에게 승인 알림
+- [ ] **Reject** → 반려 토스트 + 요청자에게 반려 알림
+- [ ] 오너가 요청과 무관하게 설정에서 직접 지정해도 pending 요청 자동 승인 처리
+
+**F3. 새 맵 즉시 생성 + 자동 링크 (요청자)**
+- [ ] 피커 검색어 입력 → 최하단 **New map** → 생성 모달에 **이름 프리필**(오우닝 부서·결재자 요건은 기존 그대로)
+- [ ] 생성 완료 시 **홈으로 이동하지 않고** 현재 에디터에 남아 **자동 링크** + "Link node added" 토스트
+- [ ] 새 맵 링크는 미지정 경고 상태로 시작(게시→지정 후 해제되는 흐름 안내 툴팁)
+
+**F4. main 델타 (운영 미배포분)** — `65a5618`
+- [ ] 새 맵 생성 시 **Start/End 노드 자동 시드**
+- [ ] SP 링크 신규 생성 기본값 **최신 추종(follow latest) ON**
+- [ ] 승인 탭에 **서브프로세스 지정 카드** 노출
+
 ---
 
 ## 4. 서버 전용 함정 체크리스트 (localhost에서 재현 안 됨)
@@ -182,4 +220,5 @@ docker compose up -d --build # 접속: http://<서버IP>:3333
 | C1~C2 메인/생성 | | |
 | D1~D2 인스펙터/파라미터 | | |
 | E1~E3 내보내기/알림/매뉴얼 | | |
+| F1~F4 서브프로세스 플레이스홀더 | | |
 | §4 서버 전용 | | |
