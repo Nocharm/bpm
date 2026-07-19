@@ -1106,6 +1106,16 @@ const en = {
   "library.emptyDesignated": "No designated subprocesses yet — a map owner can designate one in map settings.",
   "library.toggle": "Process library",
   "library.open": "Open subprocess library",
+  // ── 미등록 맵 플레이스홀더 / Unregistered-map placeholder (spec 2026-07-19) ──
+  "library.showUnregistered": "Show unregistered maps",
+  "library.notRegistered": "Not registered",
+  "library.linkUnregNotice": "This map is not registered as a subprocess — the link stays locked until its owner designates it.",
+  "library.requestTitle": "Request subprocess registration?",
+  "library.requestMessage": "Ask the owner of '{name}' to register it as a subprocess. The link is added either way.",
+  "library.requestSend": "Send request",
+  "library.requestSkip": "Link only",
+  "library.requestSent": "Registration request sent",
+  "library.requestAlreadyPending": "A registration request is already pending",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "Map Settings",
   "perm.tabCollaborators": "Collaborators",
@@ -2563,6 +2573,16 @@ const ko: Record<MessageKey, string> = {
   "library.emptyDesignated": "지정된 서브프로세스가 없습니다 — 맵 오너가 맵 설정에서 지정할 수 있습니다.",
   "library.toggle": "프로세스 라이브러리",
   "library.open": "서브프로세스 목록 열기",
+  // ── 미등록 맵 플레이스홀더 (spec 2026-07-19) ──
+  "library.showUnregistered": "미등록 맵 표시",
+  "library.notRegistered": "미등록",
+  "library.linkUnregNotice": "서브프로세스로 등록되지 않은 맵입니다 — 오너가 지정하기 전까지 링크는 잠금 상태로 표시됩니다.",
+  "library.requestTitle": "서브프로세스 등록을 요청할까요?",
+  "library.requestMessage": "'{name}' 맵의 오너에게 서브프로세스 등록을 요청합니다. 링크는 요청과 무관하게 추가됩니다.",
+  "library.requestSend": "요청 보내기",
+  "library.requestSkip": "링크만 추가",
+  "library.requestSent": "등록 요청을 보냈습니다",
+  "library.requestAlreadyPending": "이미 등록 요청이 대기 중입니다",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "맵 설정",
   "perm.tabCollaborators": "협업자",

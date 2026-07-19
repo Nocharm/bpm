@@ -7,7 +7,15 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Link2, Network, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { listLibraryProcesses, listMaps, type LibraryProcess, type MapSummary } from "@/lib/api";
+import {
+  createSpDesignationRequest,
+  getApiErrorDetail,
+  listLibraryProcesses,
+  listMaps,
+  ApiError,
+  type LibraryProcess,
+  type MapSummary,
+} from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { formatKstShort } from "@/lib/datetime";
@@ -23,9 +31,11 @@ interface MapNameDropdownProps {
   isEditing: boolean;
   onToRoot: () => void;
   onAddLinkNode: (linkedMapId: number, name: string) => void;
+  onToast?: (message: string) => void;
 }
 
-type Pending = { kind: "open" | "link"; map: MapSummary };
+// link-unreg: 미지정 맵 링크 확인 → request: 링크 후 등록 요청 여부 (spec 2026-07-19)
+type Pending = { kind: "open" | "link" | "link-unreg" | "request"; map: MapSummary };
 
 export function MapNameDropdown({
   mapId,
@@ -34,6 +44,7 @@ export function MapNameDropdown({
   isEditing,
   onToRoot,
   onAddLinkNode,
+  onToast,
 }: MapNameDropdownProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -42,6 +53,8 @@ export function MapNameDropdown({
   const [maps, setMaps] = useState<MapSummary[] | null>(null);
   // 링크 노드 추가 게이트 — 라이브러리 피커와 동일 소스(서버가 지정 맵만 반환). 실패 시 []=버튼 숨김.
   const [library, setLibrary] = useState<LibraryProcess[] | null>(null);
+  // 미등록(미지정) 맵도 검색 확장 — 켜면 라이브러리를 include_undesignated로 재조회
+  const [showUnregistered, setShowUnregistered] = useState(false);
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -51,21 +64,38 @@ export function MapNameDropdown({
   useEffect(() => {
     if (!open) return;
     if (maps === null) void listMaps().then(setMaps).catch(() => setMaps([]));
-    // 편집 중일 때만 필요(링크 추가 버튼 게이트) — 지정 맵 목록 lazy 로드
+    // 편집 중일 때만 필요(링크 추가 버튼 게이트) — 지정 맵 목록 lazy 로드.
+    // 토글이 라이브러리를 null로 리셋하면 새 모드로 재조회된다.
     if (isEditing && library === null)
-      void listLibraryProcesses().then(setLibrary).catch(() => setLibrary([]));
+      void listLibraryProcesses(showUnregistered).then(setLibrary).catch(() => setLibrary([]));
     searchRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, maps, library, isEditing]);
+  }, [open, maps, library, isEditing, showUnregistered]);
 
-  // 링크 노드 추가 가능 판정 — 지정된 맵(라이브러리 노출분)만 + 순환 참조 차단(라이브러리 피커와 동일 규칙)
+  // 링크 노드 추가 가능 판정 — 라이브러리 노출분(기본 지정맵, 토글 시 미지정 포함)만 + 순환 참조 차단
+  const libRowByMap = new Map((library ?? []).map((row) => [row.map_id, row]));
   const refsByMap = new Map((library ?? []).map((row) => [row.map_id, row.refs]));
   const canAddLink = (id: number): boolean =>
-    (library ?? []).some((row) => row.map_id === id) && !closesCycle(id, mapId, refsByMap);
+    libRowByMap.has(id) && !closesCycle(id, mapId, refsByMap);
+  const isUnregistered = (id: number): boolean => libRowByMap.get(id)?.designated === false;
+
+  // 미지정 맵 링크 직후 등록 요청 발송 — 409(중복 pending)는 안내 토스트로 완화
+  async function sendDesignationRequest(map: MapSummary) {
+    try {
+      await createSpDesignationRequest(map.id, mapId);
+      onToast?.(t("library.requestSent"));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        onToast?.(t("library.requestAlreadyPending"));
+      } else {
+        onToast?.(getApiErrorDetail(err));
+      }
+    }
+  }
 
   const q = query.trim().toLowerCase();
   // 비공개 맵 제외 + 검색어 필터
@@ -104,6 +134,19 @@ export function MapNameDropdown({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
+            {isEditing && (
+              <label className="flex cursor-pointer items-center gap-1.5 px-3 pb-1 text-fine text-ink-tertiary">
+                <input
+                  type="checkbox"
+                  checked={showUnregistered}
+                  onChange={() => {
+                    setShowUnregistered((v) => !v);
+                    setLibrary(null); // 새 모드(include_undesignated)로 재조회
+                  }}
+                />
+                {t("library.showUnregistered")}
+              </label>
+            )}
 
             {canToRoot && (
               <div className="border-b border-divider pb-1">
@@ -141,7 +184,14 @@ export function MapNameDropdown({
                 );
                 const text = (
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-caption font-medium text-ink">{m.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-caption font-medium text-ink">{m.name}</span>
+                      {isUnregistered(m.id) && (
+                        <span className="shrink-0 rounded-xs border border-hairline px-1 py-px text-fine text-ink-tertiary">
+                          {t("library.notRegistered")}
+                        </span>
+                      )}
+                    </span>
                     <span className="block truncate text-fine text-ink-tertiary">{subtitle}</span>
                   </span>
                 );
@@ -196,14 +246,14 @@ export function MapNameDropdown({
                           <ArrowRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
                           {t("editor.mapGo")}
                         </button>
-                        {/* 링크 추가는 지정(designated) 맵만 — 라이브러리 피커와 같은 필터(미지정·순환은 숨김) */}
+                        {/* 링크 추가 — 기본은 지정 맵만, 토글 시 미지정도(경고 확인 경유). 순환은 항상 숨김 */}
                         {isEditing && canAddLink(m.id) && (
                           <button
                             type="button"
                             className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
                             onClick={() => {
                               setOpen(false);
-                              setPending({ kind: "link", map: m });
+                              setPending({ kind: isUnregistered(m.id) ? "link-unreg" : "link", map: m });
                             }}
                           >
                             <Link2 size={14} strokeWidth={1.5} className="text-ink-tertiary" />
@@ -276,10 +326,57 @@ export function MapNameDropdown({
           onClose={() => setPending(null)}
         />
       )}
+      {/* 미지정 맵 링크 — 잠금 경고 동봉 확인 후 링크, 이어서 등록 요청 여부를 묻는다 (spec 2026-07-19) */}
+      {pending?.kind === "link-unreg" && (
+        <ConfirmDialog
+          icon={<Link2 size={28} strokeWidth={1.5} />}
+          title={t("editor.confirmAddLinkTitle")}
+          lines={[
+            { icon: <Link2 size={14} strokeWidth={1.5} />, text: t("editor.confirmAddLinkBody", { name: pending.map.name }) },
+            { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("library.linkUnregNotice"), tone: "error" },
+          ]}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const target = pending.map;
+            closeAll();
+            onAddLinkNode(target.id, target.name);
+            setPending({ kind: "request", map: target });
+          }}
+          onClose={() => setPending(null)}
+        />
+      )}
+      {/* 링크는 이미 완료 — 등록 요청만 결정(No/닫기 = 링크만 유지) */}
+      {pending?.kind === "request" && (
+        <ConfirmDialog
+          icon={<Network size={28} strokeWidth={1.5} />}
+          title={t("library.requestTitle")}
+          lines={[
+            { icon: <Network size={14} strokeWidth={1.5} />, text: t("library.requestMessage", { name: pending.map.name }) },
+          ]}
+          confirmLabel={t("library.requestSend")}
+          cancelLabel={t("library.requestSkip")}
+          onConfirm={() => {
+            const target = pending.map;
+            setPending(null);
+            void sendDesignationRequest(target);
+          }}
+          onClose={() => setPending(null)}
+        />
+      )}
       {showCreate && (
         <CreateMapDialog
           onClose={() => setShowCreate(false)}
           onCreated={() => setShowCreate(false)}
+          initialName={query.trim() || undefined}
+          onCreatedMap={
+            isEditing
+              ? (createdMapId, createdName) => {
+                  setShowCreate(false);
+                  onAddLinkNode(createdMapId, createdName);
+                }
+              : undefined
+          }
         />
       )}
     </div>

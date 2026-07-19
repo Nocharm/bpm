@@ -103,18 +103,18 @@ class TestLibraryUndesignated:
 - Consumes: Task 1·2의 API.
 - Produces: `createSpDesignationRequest(mapId, fromMapId): Promise<ApprovalRequest>` / `getPendingSpDesignationRequest(mapId)` / `withdrawSpDesignationRequest(mapId)` (Task 5·6이 사용). CreateMapDialog `onCreatedMap?: (mapId: number, name: string) => void`(지정 시 router.push 생략).
 
-- [ ] **Step 1: api.ts** — `listLibraryProcesses(includeUndesignated = false)`: 플래그 시 `"/library/processes?include_undesignated=true"`. 요청 3함수는 rename 3함수(295-308행) 미러(`/maps/${mapId}/sp-designation-requests`).
-- [ ] **Step 2: map-name-dropdown** —
+- [x] **Step 1: api.ts** — `listLibraryProcesses(includeUndesignated = false)`: 플래그 시 `"/library/processes?include_undesignated=true"`. 요청 3함수는 rename 3함수(295-308행) 미러(`/maps/${mapId}/sp-designation-requests`).
+- [x] **Step 2: map-name-dropdown** —
   - state `showUnregistered`(기본 false). 라이브러리 fetch(51-63행)를 `showUnregistered` 의존으로 확장(켜면 재조회). 토글 UI는 검색 인풋 아래 체크박스 행(`text-fine`, `library.showUnregistered`).
   - 행 배지: 라이브러리 행 존재 && `!row.designated` → "Not registered" 필(`text-fine text-ink-tertiary border-hairline`).
   - 링크 버튼 게이트 `canAddLink`는 불변(미지정 행은 플래그 켰을 때만 서버가 반환하므로 자동 확장).
   - `Pending` kind에 `"link-unreg"` 추가: 미지정 맵의 링크 버튼은 이 kind. 확인 1(링크 확인, 기존 문구 재사용) onConfirm → `onAddLinkNode(id, name)` 후 `setPending({kind:"request", map})` 전환 → 확인 2(`library.requestTitle/Message`, confirmLabel "Send request", cancelLabel "Link only") onConfirm → `createSpDesignationRequest(map.id, mapId)` → 성공 토스트 `library.requestSent`, 409 → `library.requestAlreadyPending`; onClose → 링크만.
   - 신규 prop `onToast?: (msg: string) => void`.
   - footer newMap(224-237행): `isEditing`이면 `<CreateMapDialog initialName={query.trim() || undefined} onCreatedMap={(id, name) => { setShowCreate(false); closeAll(); onAddLinkNode(id, name); }}>`.
-- [ ] **Step 3: create-map-dialog** — Props에 `initialName?: string; onCreatedMap?: (mapId: number, name: string) => void;`. `useState(csvBaseName)` → `useState(initialName ?? csvBaseName)`. `handleCreate` 성공 말미(313-315행): `onCreatedMap` 있으면 `onCreated(); onClose(); onCreatedMap(created.mapId, trimmed); return;` (router.push 생략).
-- [ ] **Step 4: i18n 키 추가(EN/KO)** — `library.showUnregistered`, `library.notRegistered`, `library.requestTitle`, `library.requestMessage`, `library.requestSent`, `library.requestAlreadyPending`.
-- [ ] **Step 5: 게이트** — `npx tsc --noEmit` 0, `npm run lint` 신규 에러 0, `npx vitest run` 전체 그린
-- [ ] **Step 6: Commit** — `feat(editor): picker unregistered-map toggle + create-and-link flow — 피커 미등록 토글·생성 즉시 링크`
+- [x] **Step 3: create-map-dialog** — Props에 `initialName?: string; onCreatedMap?: (mapId: number, name: string) => void;`. `useState(csvBaseName)` → `useState(initialName ?? csvBaseName)`. `handleCreate` 성공 말미(313-315행): `onCreatedMap` 있으면 `onCreated(); onClose(); onCreatedMap(created.mapId, trimmed); return;` (router.push 생략).
+- [x] **Step 4: i18n 키 추가(EN/KO)** — `library.showUnregistered`, `library.notRegistered`, `library.requestTitle`, `library.requestMessage`, `library.requestSent`, `library.requestAlreadyPending`.
+- [x] **Step 5: 게이트** — `npx tsc --noEmit` 0, `npm run lint` 신규 에러 0, `npx vitest run` 전체 그린
+- [x] **Step 6: Commit** — `feat(editor): picker unregistered-map toggle + create-and-link flow — 피커 미등록 토글·생성 즉시 링크`
 
 ### Task 5: FE — 인스펙터 등록 요청 CTA
 

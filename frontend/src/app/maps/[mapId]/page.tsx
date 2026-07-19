@@ -6952,6 +6952,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           isEditing={!readOnly}
           onToRoot={() => void navigateTo(scopes.slice(0, 1))}
           onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+          onToast={showToast}
         />
         <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
         <VersionPill
