@@ -156,9 +156,9 @@ class TestLibraryUndesignated:
 
 **Interfaces:** 없음(검증 전용).
 
-- [ ] **Step 1: 전체 게이트** — backend `pytest tests/ -q` + `ruff check app/ tests/` / frontend `npx tsc --noEmit` + `npm run lint` + `npx vitest run` + `npm run build`
-- [ ] **Step 2: pw 시나리오** — 백엔드(포트 89xx, DEV_ENFORCE_PERMISSIONS=true·BPM_SYSADMINS=admin.sys)+프론트(32xx) 실기동: ① 에디터 피커 토글 → 미등록 맵 배지 확인 → 링크+요청 발송(토스트) → 노드 미지정 경고 배지 확인, ② 인스펙터 CTA Requested 배지·철회, ③ 오너 전환 → Inbox 카드 확인 → 게시본 없는 맵 Accept 비활성 안내, 게시본 있는 맵 Accept → 지정 모달 저장 → 카드 소멸 + 요청자 알림, ④ Reject 경로, ⑤ 피커 "Create new map" 프리필 → 생성 → 자동 링크 확인. 콘솔 에러 0 필수(의도적 4xx 필터 허용).
-- [ ] **Step 3: PROGRESS.md 갱신 + Commit** — `test(sp-placeholder): pw end-to-end verification — 실기동 검증`
+- [x] **Step 1: 전체 게이트** — backend `pytest tests/ -q` + `ruff check app/ tests/` / frontend `npx tsc --noEmit` + `npm run lint` + `npx vitest run` + `npm run build`
+- [x] **Step 2: pw 시나리오** — 백엔드(포트 89xx, DEV_ENFORCE_PERMISSIONS=true·BPM_SYSADMINS=admin.sys)+프론트(32xx) 실기동: ① 에디터 피커 토글 → 미등록 맵 배지 확인 → 링크+요청 발송(토스트) → 노드 미지정 경고 배지 확인, ② 인스펙터 CTA Requested 배지·철회, ③ 오너 전환 → Inbox 카드 확인 → 게시본 없는 맵 Accept 비활성 안내, 게시본 있는 맵 Accept → 지정 모달 저장 → 카드 소멸 + 요청자 알림, ④ Reject 경로, ⑤ 피커 "Create new map" 프리필 → 생성 → 자동 링크 확인. 콘솔 에러 0 필수(의도적 4xx 필터 허용).
+- [x] **Step 3: PROGRESS.md 갱신 + Commit** — `test(sp-placeholder): pw end-to-end verification — 실기동 검증`
 
 ## Self-Review 결과
 

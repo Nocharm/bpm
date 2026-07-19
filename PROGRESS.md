@@ -1,6 +1,7 @@
 # Progress
 
 ## 2026-07-19 — 서브프로세스 플레이스홀더 구현 (worktree-sp-placeholder)
+- T7(검증): `pw-verify-sp-placeholder.mjs` 신설 — 실기동(백엔드 8933 enforcement ON·프론트 3233) **36/36 PASS·콘솔 에러 0**. ①피커 토글→미등록 배지→2단 확인 링크+요청 ②인스펙터 CTA 철회→재요청 ③미게시 카드 지정 비활성+안내 ④게시 카드 지정 모달 저장=수락 완결(카드 소멸·auto-applied·요청자 알림) ⑤반려+알림 ⑥New map 프리필→생성→에디터 잔류+자동 링크+미등록 상태 확인. 랜드마인: /inbox 기본 탭=알림(Approvals 클릭 필수, 뱃지 카운트로 exact 불가)·아코디언은 토글 후 재클릭 금지·SearchSelect 첫 옵션=None 제외·checkout POST는 {force} body 필수·상세 조작은 inbox-detail-aside 스코프. 최종 게이트: BE 695+ruff / FE tsc 0·lint 에러 0·vitest 510·build OK.
 - T6(FE): Inbox sp_designation 카드 — 라벨/요약(from_map 컨텍스트, 빈 값 폴백), ApprovalDetail sp 브랜치(getMap으로 게시본·프리필 로드, 게시본 없으면 "지정하고 승인" 비활성+안내, "게시된 버전으로 가기" 링크), 수락=SubprocessDesignationModal 저장(PUT 자동 applied — decide 호출 없음), Reject=기존 decide+토스트. tsc 0·lint 에러 0·vitest 510.
 - T5(FE): 인스펙터 `SubprocessRegistrationCta` 신설 — 미지정 링크 선택 시 등록 요청 버튼/Requested 배지(본인 요청은 철회), pending 409 자기치유 재조회, key=linkedMapId로 전환 리셋(StrictMode set-state-in-effect 회피). page.tsx SubprocessVersionPicker 아래 마운트. tsc 0·lint 에러 0·vitest 510.
 - T4(FE): 피커(map-name-dropdown) "Show unregistered maps" 체크박스 토글(켜면 include_undesignated 재조회, 토글 시 library null 리셋→lazy 재로드)·미등록 배지·미지정 링크 2단 확인(경고 동봉 링크 확인→등록 요청 여부, 요청 409는 안내 토스트)·`onToast` prop. CreateMapDialog `initialName` 프리필+`onCreatedMap`(지정 시 router.push 생략→에디터 잔류·자동 링크). api.ts에 designated 필드·includeUndesignated 파라미터·sp 요청 3함수. tsc 0·vitest 510·lint 에러 0.
