@@ -3377,8 +3377,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           type: "process",
           position: { ...node.position },
           selected: true,
-          // 사본은 원본 그룹 소속을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
-          data: { ...ghost.data, label: plan.label, groupIds: [] },
+          // 사본은 원본 그룹 소속·대표끝 지정을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
+          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false },
         });
         return { ...node, position: plan.resetPos, selected: false };
       });
@@ -4831,6 +4831,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const openMenu = useCallback(
     (event: React.MouseEvent | MouseEvent, kind: MenuState["kind"], targetId: string | null) => {
       event.preventDefault();
+      // Ctrl은 복사(Ctrl+드래그) modifier — macOS는 Ctrl+클릭=네이티브 우클릭이라 contextmenu가 발화한다.
+      // Ctrl이 눌린 채면 메뉴를 열지 않아 Ctrl+드래그 복사와 충돌하지 않게 한다(우클릭/투핑거는 그대로 동작).
+      if (event.ctrlKey) {
+        return;
+      }
       // 읽기 전용에서는 노드 메뉴(드릴다운)만 의미가 있다
       if (readOnly && kind !== "node") {
         return;
@@ -5704,6 +5709,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
+    // Ctrl+드래그 중인 원본 id — 끌리는 실제 노드는 반투명 사본으로 표시(커서를 따라오는 건 사본).
+    // 진짜 원본 그래픽은 아래 ghostNodes가 원위치에 솔리드로 렌더하고, 엣지도 그 고스트로 앵커된다(styledEdges).
+    const ctrlGhostIdSet = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
     // 파생 자식(prop-only) 대신 childNodes의 state 객체를 buildScope 파생 위치로 표시해야 RF가 측정·이벤트를 라우팅한다.
     const childById = inlineComposition
       ? new Map(childNodes.map((node) => [node.id, node] as const))
@@ -5756,11 +5764,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         hasWarning === (withCount.data.assigneeWarning ?? false)
           ? withCount
           : { ...withCount, data: { ...withCount.data, assigneeWarning: hasWarning } };
+      // Ctrl+드래그로 끌리는 원본은 반투명 사본 스타일 — 원위치엔 ghostNodes(솔리드)가 남아 원본을 대신한다.
+      const withCopyStyle = ctrlGhostIdSet?.has(node.id)
+        ? { ...withWarning, className: [withWarning.className, "bpm-node-ctrl-copy"].filter(Boolean).join(" ") }
+        : withWarning;
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
-      return injectSubEnds(withWarning);
+      return injectSubEnds(withCopyStyle);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
-    // Ctrl+드래그 잔상 — 원본이 끌려가는 동안 시작 위치에 반투명 사본을 겹쳐 "사본이 남는다"를 미리 보여준다.
+    // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
+    // 보인다(위 bpm-node-ctrl-copy). 엣지는 styledEdges가 이 원위치 고스트로 앵커해 원본 자리에 남는다.
     // id를 원본과 다르게 접두(ctrl-ghost:)해야 RF 노드 배열에서 key 충돌이 안 난다.
     const ghostNodes: AppNode[] = ctrlDragActive
       ? ctrlDragGhosts.map((ghost) => ({
@@ -5771,7 +5784,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           selectable: false,
           connectable: false,
           deletable: false,
-          className: "bpm-node-ghost",
           data: ghost.data,
         }))
       : [];
@@ -5803,6 +5815,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     const backwardIds = selectedId
       ? new Set(getFlowPathBackward(edges, selectedId, bwdHops))
       : new Set<string>();
+    // Ctrl+드래그 중엔 끌리는 노드의 엣지를 원위치 고스트(ctrl-ghost:id)로 앵커 — 엣지가 원본 자리에 남고
+    // 반투명 사본만 커서를 따라간다(원본은 제자리 유지). ghostIds가 없으면 항등 변환.
+    const ctrlGhostIds = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    const anchorEdgesToGhosts = (list: Edge[]): Edge[] =>
+      ctrlGhostIds
+        ? list.map((edge) => {
+            const remapSource = ctrlGhostIds.has(edge.source);
+            const remapTarget = ctrlGhostIds.has(edge.target);
+            return remapSource || remapTarget
+              ? {
+                  ...edge,
+                  source: remapSource ? `ctrl-ghost:${edge.source}` : edge.source,
+                  target: remapTarget ? `ctrl-ghost:${edge.target}` : edge.target,
+                }
+              : edge;
+          })
+        : list;
     const currentStyled = edges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
@@ -5911,7 +5940,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     }
     if (!inlineComposition) {
-      return [...currentStyled, ...syntheticEndEdges];
+      return anchorEdgesToGhosts([...currentStyled, ...syntheticEndEdges]);
     }
     // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김, 아니면 맵 전역 type만 맞춤. 게이트웨이는 합성 시 스타일 완료.
     // 포커스 모드 Step 1: 비활성 스코프라 dim + 비선택(읽기전용).
@@ -5929,8 +5958,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     const gatewayStyled = inlineComposition.gateways.map((edge) =>
       edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
     );
-    return [...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticEndEdges];
-  }, [edges, nodes, resolvedCache, expandedInline, selectedId, edgeStyle, inlineComposition, flowReach, hoveredEdgeId]);
+    return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticEndEdges]);
+  }, [edges, nodes, resolvedCache, expandedInline, selectedId, edgeStyle, inlineComposition, flowReach, hoveredEdgeId, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -6986,7 +7015,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ghost{opacity:.4;pointer-events:none;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}

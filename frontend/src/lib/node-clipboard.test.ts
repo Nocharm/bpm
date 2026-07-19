@@ -63,4 +63,17 @@ describe("buildPaste", () => {
     expect(out.edges[0].sourceHandle).toBeUndefined();
     expect(out.edges[0].targetHandle).toBeUndefined();
   });
+
+  it("clears isPrimaryEnd on copies so pasting the representative end doesn't duplicate it", () => {
+    const endClip: NodeClipboard = {
+      sourceMapId: 1,
+      nodes: [
+        { id: "e", position: { x: 0, y: 0 }, data: { ...mkData("End"), nodeType: "end", isPrimaryEnd: true } },
+      ],
+      edges: [],
+    };
+    let n = 0;
+    const out = buildPaste(endClip, { newId: () => `new${n++}`, existingLabels: [], offset: { x: 0, y: 0 } });
+    expect(out.nodes[0].data.isPrimaryEnd).toBe(false);
+  });
 });

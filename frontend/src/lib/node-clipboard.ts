@@ -57,7 +57,8 @@ export function buildPaste(
     return {
       id,
       position: { x: n.position.x + opts.offset.x, y: n.position.y + opts.offset.y },
-      data: { ...n.data, label, groupIds: [] as string[] },
+      // 대표 끝(isPrimaryEnd)은 맵당 1개 — 사본이 상속하면 대표끝이 중복된다. 사본은 항상 해제.
+      data: { ...n.data, label, groupIds: [] as string[], isPrimaryEnd: false },
     };
   });
   const edges = clip.edges

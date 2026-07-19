@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-20 — 복사(Ctrl) 관련 마이너 버그 3건 (worktree-copy-paste-fix)
+- ① **Ctrl+클릭 시 컨텍스트 메뉴가 열리던 문제** — macOS는 Ctrl+클릭=네이티브 우클릭이라 `contextmenu`가 발화. 모든 메뉴의 단일 초크포인트 `openMenu`에 `event.ctrlKey` 가드 추가(`preventDefault`는 유지→네이티브 메뉴도 억제). Ctrl은 복사 modifier이므로 Ctrl+드래그 복사와의 충돌 제거. node/pane/edge/selection/group 전 표면 커버.
+- ② **End 노드 복사 시 대표끝(`isPrimaryEnd`)이 중복되던 문제** — 복사 두 경로(`node-clipboard.ts buildPaste`=Ctrl+C/V, `applyCtrlDragCopy`=Ctrl+드래그)에서 사본 data에 `isPrimaryEnd:false` 강제(groupIds 리셋과 동일 관례). "대표끝은 맵당 1개" 불변식 유지.
+- ③ **Ctrl+드래그 복사 시각 반전** — 원본은 원위치에 솔리드로 남기고(엣지도 원위치 고스트로 재라우팅), 커서 따라 끌리는 실제 노드를 반투명 사본(`bpm-node-ctrl-copy` opacity .5)으로 표시. `displayNodes`(사본 클래스)·`ghostNodes`(원위치 솔리드)·`styledEdges`(드래그 중 엣지→`ctrl-ghost` 앵커) 3표면 수정. RF 드래그는 그대로 두고 렌더만 반전(노드 pin 안 함→충돌 없음).
+- 검증: node-clipboard 신규 TDD 1건(RED→GREEN, buildPaste `isPrimaryEnd` 소거) 포함 vitest 511/511·lint 0 err·build OK. 브라우저 실기동(3300/8800, map1 v6): ① `contextmenu` 이벤트 디스패치로 Ctrl=메뉴 억제·일반=열림 확인, ② 실 UI Ctrl+C/V→오토세이브 PUT→DB 대표끝 정확히 1개(원본 1·사본 "End (2)" 0). ③ **Ctrl+드래그 시각은 CDP 합성 드래그가 Ctrl modifier 미전달로 자동검증 불가 → 육안 검증 대기**.
+
 ## 2026-07-20 — 리뷰 3차 반영: 라이브러리 현재 맵 제외·+노드 메뉴 바깥닫힘·우클릭 후 S (worktree-sp-placeholder)
 - 프로세스 라이브러리 목록에서 **현재 맵 제외**(refsByMap은 순환 판별용이라 전체 rows 유지).
 - **+노드 드롭다운**: 백드롭 제거 → capture-phase 문서 mousedown 바깥닫힘(맵 드롭다운과 동일 패턴 — React Flow d3 전파 차단 대응).
