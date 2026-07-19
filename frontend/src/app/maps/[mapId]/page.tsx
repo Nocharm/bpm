@@ -4950,6 +4950,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       const libraryItem: ContextMenuItem = {
         label: t("library.open"),
         icon: Network,
+        // accel 필수 — 전역 S 핸들러는 메뉴 열림 중 무시(!menu)라, 우클릭 후 S는 메뉴 가속기가 처리
+        accel: "s",
         shortcut: "S",
         onSelect: () => setLibraryOpen(true),
       };

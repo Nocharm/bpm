@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-20 — 리뷰 3차 반영: 라이브러리 현재 맵 제외·+노드 메뉴 바깥닫힘·우클릭 후 S (worktree-sp-placeholder)
+- 프로세스 라이브러리 목록에서 **현재 맵 제외**(refsByMap은 순환 판별용이라 전체 rows 유지).
+- **+노드 드롭다운**: 백드롭 제거 → capture-phase 문서 mousedown 바깥닫힘(맵 드롭다운과 동일 패턴 — React Flow d3 전파 차단 대응).
+- **우클릭 후 S 미동작 원인**: 전역 S 핸들러가 메뉴 열림 중 무시(`!menu`, 정렬 서브메뉴 accel 충돌 방지)인데 컨텍스트 메뉴 라이브러리 항목엔 shortcut 표기("S")만 있고 **accel이 없었음** → `accel: "s"` 추가(가속기 매칭은 열린 서브메뉴 스코프라 정렬 서브메뉴의 s와 충돌 없음). 맥 여부 무관 — 전 환경 동일 버그.
+- pw 44/44 PASS(현재 맵 제외·S 가속기·+노드 바깥닫힘 검사 3건 추가). tsc 0·lint 에러 0·vitest 510.
+
 ## 2026-07-20 — 리뷰 2차 반영: 드롭다운 마커 재설계·미등록 드래그 링크·New map 조건부 (worktree-sp-placeholder)
 - 드롭다운: SP 배지 → **타일 아이콘 교체**(지정 맵=Workflow 아이콘 보라, 사용중 맵=보라 배경 타일+행 배경 하이라이트), 현재 맵 목록 제외, 사용중 행 클릭 시 아코디언과 함께 **캔버스 해당 노드 자동 포커싱**(handleOutlineSelect 재사용), 백드롭 제거하고 **document capture-phase mousedown**으로 바깥 클릭 닫힘(React Flow d3가 mousedown 전파를 끊어 버블 리스너 불가 — 실측).
 - 라이브러리: 미등록 맵도 **다른 맵과 같은 드래그**로 — 드롭 시 page.tsx가 unregistered 플래그를 읽어 확인 체인(경고→드롭 위치 생성→등록 요청, createLinkNodeAt로 드롭 생성 로직 공용화). 클릭 링크·패널 내 다이얼로그 제거. **New map은 검색어 입력 시에만** 노출, 라벨 = "검색어" 필(말줄임)+언어별 prefix/suffix(newMapNamedPrefix/Suffix — 빈 값 생략 조립).

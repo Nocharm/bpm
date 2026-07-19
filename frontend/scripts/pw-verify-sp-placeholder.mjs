@@ -342,6 +342,10 @@ try {
     "library: New map button hidden without a query",
     (await panel2.locator('[data-id="library-new-map"]').count()) === 0,
   );
+  check(
+    "library: current map excluded from the list",
+    (await panel2.locator(`[data-map-id="${host.id}"]`).count()) === 0,
+  );
   await panel2.locator("input").first().fill(createdName);
   await panel2.locator('[data-id="library-new-map"]').waitFor({ state: "visible", timeout: 6000 });
   check(
@@ -388,6 +392,31 @@ try {
     (r) => r.name === createdName,
   );
   check("created map present as unregistered in library (API)", createdRow != null && createdRow.designated === false);
+
+  // ── ⑦ 우클릭 → S 가속기 + "+노드" 메뉴 바깥닫힘 ─────────────────────
+  // 남은 라이브러리 패널 닫기(⑥에서 열림) — S 검사의 트리비얼 통과 방지
+  await page.locator('[data-id="process-library-panel"] button[aria-label="Close"]').click().catch(() => {});
+  await page
+    .locator('[data-id="process-library-panel"]')
+    .waitFor({ state: "detached", timeout: 5000 })
+    .catch(() => {});
+  await page.locator(".react-flow").click({ button: "right", position: { x: 180, y: 620 } });
+  await page.waitForTimeout(300);
+  await page.keyboard.press("s");
+  const panelViaAccel = await page
+    .locator('[data-id="process-library-panel"]')
+    .waitFor({ state: "visible", timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  check("right-click then S opens the library (menu accelerator)", panelViaAccel);
+
+  await page.getByRole("button", { name: "Node" }).first().click();
+  await page.getByText("Choose shape").waitFor({ state: "visible", timeout: 5000 });
+  await page.mouse.click(700, 500); // 캔버스 클릭 = 바깥 mousedown
+  const addMenuClosed = await waitForCondition(
+    async () => (await page.getByText("Choose shape").count()) === 0,
+  );
+  check("+Node menu closes on outside mousedown", addMenuClosed);
 } catch (err) {
   check("scenario crashed", false, String(err).slice(0, 300));
   await page.screenshot({ path: `${SHOTS}/99-crash.png` }).catch(() => {});

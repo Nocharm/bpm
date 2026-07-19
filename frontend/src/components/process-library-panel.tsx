@@ -56,15 +56,17 @@ export function ProcessLibraryPanel({
     [rows],
   );
 
-  // 부분일치+초성+로마자+시퀀스 매칭(filterByQuery) — 이름·부서 대상, 랭크순 정렬
+  // 부분일치+초성+로마자+시퀀스 매칭(filterByQuery) — 이름·부서 대상, 랭크순 정렬.
+  // 현재 맵은 목록에서 제외(자기 자신 링크 불가) — refsByMap은 순환 판별용이라 전체 rows 유지.
   const filtered = useMemo(() => {
+    const listRows = rows.filter((r) => r.map_id !== currentMapId);
     const q = query.trim();
-    if (!q) return rows;
-    return filterByQuery(rows, q, (r) => [
+    if (!q) return listRows;
+    return filterByQuery(listRows, q, (r) => [
       { field: "name", text: r.name },
       { field: "department", text: r.department ?? "" },
     ]).map((h) => h.item);
-  }, [rows, query]);
+  }, [rows, query, currentMapId]);
   // 25개씩 증분 렌더 — 라이브러리 맵이 수백 개여도 패널 오픈 부하 없음
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
 
