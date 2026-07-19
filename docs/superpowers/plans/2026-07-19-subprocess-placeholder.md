@@ -142,11 +142,11 @@ class TestLibraryUndesignated:
 - Consumes: InboxApproval(title="sp_designation", detail={from_map_name,...}), `SubprocessDesignationModal`(mapId, publishedVersionId, initial, onSaved, onClose), `getMap`.
 - Produces: 수락=모달 저장만으로 완결(decide 호출 없음), Reject=기존 경로.
 
-- [ ] **Step 1: 라벨/요약** — `inbox.reqKind.sp_designation`("Subprocess registration"), `inbox.summary.sp_designation`("Register `{map}` as a subprocess — requested from `{from}`.", from=detail.from_map_name).
-- [ ] **Step 2: ApprovalDetail sp 브랜치** — `approval.title === "sp_designation"`일 때 useEffect로 `getMap(approval.map_id)` 로드(실패 무시) → 게시본 = versions 중 status published 최대 id. 게시본 있으면 "Go to published version" 링크(`/maps/{id}?version={pubId}`, 새 탭), 없으면 `inbox.sp.noPublished` 안내 + Approve 버튼 비활성. Approve 클릭 → `onSpAccept(approval, detail)` 콜백(신규 prop) — decide 호출하지 않음. Reject은 기존 onAct(false).
-- [ ] **Step 3: 페이지 모달 체인** — `spModal: {approval, detail, publishedVersionId} | null` state. onSpAccept에서 세팅. `SubprocessDesignationModal` 마운트(initial은 detail.sp_* → DesignationForm 매핑, subprocess-inspector-card 74-88행 프리필 미러). onSaved → 토스트 `inbox.toast.spDesignated` + `listInboxApprovals()` 재조회 + 모달 닫기. actApproval의 reject 분기에 `sp_designation` 토스트(`inbox.toast.spRejected`) 추가.
-- [ ] **Step 4: i18n(EN/KO)** — `inbox.reqKind.sp_designation`, `inbox.summary.sp_designation`, `inbox.sp.goPublished`, `inbox.sp.noPublished`, `inbox.toast.spDesignated`, `inbox.toast.spRejected`.
-- [ ] **Step 5: 게이트 + Commit** — tsc·lint·vitest → `feat(inbox): sp designation card with designation-modal accept — 등록요청 수락 카드`
+- [x] **Step 1: 라벨/요약** — `inbox.reqKind.sp_designation`("Subprocess registration"), `inbox.summary.sp_designation`("Register `{map}` as a subprocess — requested from `{from}`.", from=detail.from_map_name).
+- [x] **Step 2: ApprovalDetail sp 브랜치** — `approval.title === "sp_designation"`일 때 useEffect로 `getMap(approval.map_id)` 로드(실패 무시) → 게시본 = versions 중 status published 최대 id. 게시본 있으면 "Go to published version" 링크(`/maps/{id}?version={pubId}`, 새 탭), 없으면 `inbox.sp.noPublished` 안내 + Approve 버튼 비활성. Approve 클릭 → `onSpAccept(approval, detail)` 콜백(신규 prop) — decide 호출하지 않음. Reject은 기존 onAct(false).
+- [x] **Step 3: 페이지 모달 체인** — `spModal: {approval, detail, publishedVersionId} | null` state. onSpAccept에서 세팅. `SubprocessDesignationModal` 마운트(initial은 detail.sp_* → DesignationForm 매핑, subprocess-inspector-card 74-88행 프리필 미러). onSaved → 토스트 `inbox.toast.spDesignated` + `listInboxApprovals()` 재조회 + 모달 닫기. actApproval의 reject 분기에 `sp_designation` 토스트(`inbox.toast.spRejected`) 추가.
+- [x] **Step 4: i18n(EN/KO)** — `inbox.reqKind.sp_designation`, `inbox.summary.sp_designation`, `inbox.sp.goPublished`, `inbox.sp.noPublished`, `inbox.toast.spDesignated`, `inbox.toast.spRejected`.
+- [x] **Step 5: 게이트 + Commit** — tsc·lint·vitest → `feat(inbox): sp designation card with designation-modal accept — 등록요청 수락 카드`
 
 ### Task 7: 통합 게이트 + Playwright 검증 + 문서
 
