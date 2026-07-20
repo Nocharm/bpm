@@ -1,5 +1,11 @@
 # Progress
 
+## 2026-07-20 — 그룹 일괄편집 모달 폭 확대(속성 버튼 오버플로 해소) (dev)
+- **증상**: 일괄편집 모달의 속성 선택(`grid-cols-3`, MODE_META 8개) 버튼에서 긴 영어 라벨("Duration / run (h)" 등)이 `whitespace-nowrap`+`justify-center`라 버튼 폭을 넘어 아이콘이 버튼 밖으로 삐짐.
+- **수정**: 모달 폭 `w-96`(384px) → `w-[29rem]`(464px). 실측(Pretendard 14px): 최장 버튼 135px, 3열 최소 445px 필요 → 464px는 여유. 한국어(최장 418px)도 커버. 영어 기준 산정.
+- 파일: `frontend/src/components/group-bulk-modal.tsx`.
+- 검증: build·lint OK. 실제 버튼 클래스 격리 렌더 실측 — 384px에서 4개 버튼 오버플로(내용>버튼) → 464px에서 전부 fit(오버플로 0). (dev.db에 데모 그룹 없어 실모달 트리거 불가 → 동일 클래스 렌더로 검증.)
+
 ## 2026-07-20 — 서브프로세스 노드 이름이 링크맵 개명을 안 따르던 버그 픽스 (dev)
 - **증상**: 맵 이름을 바꿔도 그 맵을 서브프로세스로 링크한 다른 맵의 노드 라벨이 예전 이름 그대로.
 - **근본 원인**: subprocess 노드 라벨은 링크맵 이름 고정(비편집, `process-node.tsx` F5)인데, 값이 링크 시점의 `node.title` **저장 스냅샷**이었다. dept/assignee 등 다른 SP 어트리뷰트는 `subprocess_refs`로 라이브 해석하는데 **이름만 라이브 소스에 없었음**.
