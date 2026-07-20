@@ -163,6 +163,8 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
   const autoLeaderRef = useRef<string | null>(null);
   // 결재자 섹션 — 오우닝 부서 선택 후 여기로 스크롤 다운(맨 아래 피커를 상단 피커로 착각 방지)
   const approversRef = useRef<HTMLDivElement>(null);
+  // 스크롤과 동시에 결재자 섹션을 1회 반짝여 시선 유도(오우닝 선택 핸들러에서 켜고 타이머로 해제 — 모션 설정 무관하게 리셋).
+  const [flashApprovers, setFlashApprovers] = useState(false);
 
   // 오우닝 부서를 고르면 결재자 피커로 스크롤 다운 — 작은 뷰포트에서 아래 피커가 안 보여 헷갈리는 문제
   useEffect(() => {
@@ -231,6 +233,8 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
     );
     autoLeaderRef.current = shouldAdd ? leader.id : null;
     setOwningDept(dept);
+    setFlashApprovers(true);
+    window.setTimeout(() => setFlashApprovers(false), 850); // 애니메이션 후 리셋(재선택 시 재발화)
   };
 
   const clearOwningDept = () => {
@@ -683,7 +687,10 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
         </div>
 
         {/* 결재자 / approvers */}
-        <div ref={approversRef} className="flex flex-col gap-1.5">
+        <div
+          ref={approversRef}
+          className={`flex flex-col gap-1.5 rounded-sm ${flashApprovers ? "motion-safe:animate-[picker-flash_800ms_var(--ease-smooth)]" : ""}`}
+        >
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}
           </span>

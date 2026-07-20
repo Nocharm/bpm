@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-07-20 — 홈/새맵 UX 후속 3종 (dev)
+- **부서 미지정 접기**: `OrgAccordion`의 "부서 미지정" 섹션을 부서 노드와 동일한 chevron 토글로 — `unassignedOpen`(page.tsx, 기본 열림) + `onToggleUnassigned` props. Collapse all이 부서 트리와 함께 미지정도 접도록 `setUnassignedOpen(false)` 동시 호출.
+- **승인자 피커 반짝**: 새 맵 다이얼로그에서 오우닝 부서 선택 시 결재자 피커로 스크롤될 때 accent 링이 1회 반짝(`picker-flash` keyframe). `applyOwningDept`(이벤트 핸들러)에서 `setFlashApprovers(true)` + 850ms 타이머 리셋(모션 설정 무관 리셋, set-state-in-effect 린트 회피). 결재자 섹션 래퍼에 `motion-safe:animate-[picker-flash...]`.
+- **최근 목록 전체 밀림**: top 변경 시 첫 행만 강조하던 걸 확장 — 새 최상단(i0)은 `recent-insert`, 나머지 기존 행은 `recent-shift`(`translateY(calc(-100% - 0.5rem))→0`, 자기높이+gap 한 슬롯, 픽셀 상수 없는 FLIP)로 한 칸 아래로 밀림.
+- 파일: `components/maps/org-accordion.tsx`·`app/page.tsx`·`components/permissions/create-map-dialog.tsx`·`components/maps/recent-opened-list.tsx`·`app/globals.css`(picker-flash·recent-shift).
+- 검증: lint 0 err·`next build`(TS) OK·vitest(org-tree 5/5). 브라우저 실기동(3200/8901, admin.sys): ①미지정 토글 접힘/펼침·Collapse all이 함께 접음 확인, ②오우닝 선택 시 결재자 섹션에 `picker-flash` 클래스 적용됨을 MutationObserver로 확인(automation 탭 백그라운드라 CSS 애니 tick은 스로틀·클래스 적용=로직은 확정, 포커스 사용자에겐 재생), ③top 변경 시 i0=`recent-insert`·i1~3=`recent-shift` 확인.
+
 ## 2026-07-20 — 홈(Maps 탭) UX 4종 + 인스펙터 Subprocess 탭 위치 (dev)
 - **빈 부서 숨김(내 부서 유지)**: `buildOrgTree`에 `keepEmptyPaths` 인자 추가 — `mapCount===0` 부서 가지치기, 단 내 `org_path`의 모든 접두 경로는 앵커로 유지(맵 없어도 표시). `page.tsx`가 `me.org_path` 접두 집합을 전달. 유닛 테스트 1건 추가.
 - **도넛 재디자인 + 호버 잘림 방지**: `charts/donut.tsx` — 옅은 트랙 링 + 세그먼트 얇은 gap(다중만) + 중앙 합계에 `total` 캡션 + 선택 시 나머지 dim(0.3). **잘림 진범**: 선택 세그먼트가 `stroke+3`으로 굵어지는데 반지름이 여유 없이 잡혀 viewBox 밖으로 삐짐 → `r`을 `SELECT_GROW+EDGE_PAD`만큼 축소(최대 외곽 102 ≤ 104 검증). `donut-geometry.ts`에 `gap` 인자(기본 0=기존 계약). 승인 카드도 공용 Donut이라 동시 개선.

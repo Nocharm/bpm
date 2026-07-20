@@ -64,6 +64,7 @@ export default function MapListPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [orgOpen, setOrgOpen] = useState<Set<string>>(new Set());
   const [favOpen, setFavOpen] = useState(true);
+  const [unassignedOpen, setUnassignedOpen] = useState(true);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -672,10 +673,12 @@ export default function MapListPage() {
                       if (next.has(path)) next.delete(path); else next.add(path);
                       return next;
                     })}
-                    onCollapseAll={() => setOrgOpen(new Set())}
+                    onCollapseAll={() => { setOrgOpen(new Set()); setUnassignedOpen(false); }}
                     selectedId={effectiveSelected}
                     highlightId={highlightId}
                     onSelect={setSelectedId}
+                    unassignedOpen={unassignedOpen}
+                    onToggleUnassigned={() => setUnassignedOpen((v) => !v)}
                     renderCard={renderCard}
                   />
                 </div>
