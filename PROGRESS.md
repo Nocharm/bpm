@@ -1,5 +1,10 @@
 # Progress
 
+## 2026-07-20 — 문서 카테고리 인덱스 신설 (main, 문서 검토)
+- `docs/README.md` 신설 — 전체 문서를 카테고리별(핵심 참조·배포/DB·QA·매뉴얼·교훈·설계 기록·공지·샘플)로 묶은 목차.
+- `docs/superpowers/specs/README.md` 신설 — 25개 설계 스냅샷을 분야별(에디터·서브프로세스·파라미터/내보내기·CSV·AI·권한/워크플로·대시보드·UI)로 1줄 요약·링크.
+- 파일 이동은 하지 않음 — specs는 코드 주석 13곳이 정확한 경로로 참조하고, deploy/db-seed 등도 참조 다수라 이동 시 링크가 깨진다. 인덱스로 탐색성만 개선. `CLAUDE.md` 디렉터리 설명에 인덱스 포인터 추가. 링크 유효성 전수 확인(끊김 0).
+
 ## 2026-07-20 — 완료 기능 문서 정리 (main, 검증 종료 후)
 - 삭제: `docs/superpowers/plans/`(24개 구현 플랜) + 루트 `DEV-SERVER-TEST-PLAN.md`. 전부 git history 보존. `docs/superpowers/specs/`(설계 provenance)는 코드 주석·`docs/spec.md`가 참조하므로 유지.
 - 끊긴 참조 정리: `docs/db-migration-9910.md`(테스트플랜 포인터 3곳→스모크 문구), `docs/lessons/scope-save-and-coordinates.md`(삭제 플랜 링크 제거), `docs/lessons/README.md`·`CLAUDE.md`(디렉터리 언급 `plans·specs/`→`specs/`). 워크트리(dev·word-map-sections)는 유지.
