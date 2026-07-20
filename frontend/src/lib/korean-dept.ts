@@ -1,7 +1,7 @@
 // 부서원 추출·이름 포맷·유저 추출·옵션 빌더 순수 함수 — 부서 탭·한글이름 모달·피커용(DOM/fetch 없음).
 // 부서 확정 한글명·부서장은 dept_info 임포트로 이관(2026-07-09) — 여기 남은 korean_dept 파생은 피커 검색 키워드용.
-// 설계: docs/superpowers/specs/2026-07-09-member-card-korean-names-design.md
-//      docs/superpowers/specs/2026-07-09-picker-korean-search-design.md
+// 설계: docs/design/2026-07-09-member-card-korean-names-design.md
+//      docs/design/2026-07-09-picker-korean-search-design.md
 
 import type { SelectOption } from "@/components/search-select";
 import type { AdminUser, EmployeeRow } from "./api";

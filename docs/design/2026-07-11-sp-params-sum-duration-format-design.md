@@ -2,7 +2,7 @@
 
 날짜: 2026-07-11
 상태: 승인 대기
-선행: `docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md` (노드 숫자 파라미터 5종·H.MM — main 머지됨). 그 설계에서 "SP 속성 무변경"으로 남겼던 부분을 이번에 잇는다.
+선행: `2026-07-11-numeric-params-excel-csv-export-design.md` (노드 숫자 파라미터 5종·H.MM — main 머지됨). 그 설계에서 "SP 속성 무변경"으로 남겼던 부분을 이번에 잇는다.
 
 ## 1. 배경·목표
 

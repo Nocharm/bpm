@@ -1,5 +1,5 @@
 // CSV 내보내기 단위 테스트 — 왕복 불변(export→re-import 무변경) 위주.
-// 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §3
+// 설계: docs/design/2026-07-11-numeric-params-excel-csv-export-design.md §3
 import { describe, expect, it } from "vitest";
 
 import type { Graph, GraphEdge, GraphNode } from "./api";

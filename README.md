@@ -75,7 +75,7 @@ npm run dev
 
 ## 데이터 초기화 / 데모 시드
 
-**로컬·데모 전용** — 운영 서버는 런칭되어 현업 데이터가 있으므로 `reset_db`를 실행하면 안 된다(`drop_all`). 서버 스키마는 배포 시 자동 보강된다(`docs/db-seed.md`). 로컬에서 DB를 비우고 종합 데모 데이터를 채우려면 backend/ 에서:
+**로컬·데모 전용** — 운영 서버는 런칭되어 현업 데이터가 있으므로 `reset_db`를 실행하면 안 된다(`drop_all`). 서버 스키마는 배포 시 자동 보강된다(`docs/deploy/db-seed.md`). 로컬에서 DB를 비우고 종합 데모 데이터를 채우려면 backend/ 에서:
 
 ```bash
 .venv/bin/python -m scripts.reset_db        # drop+create + 종합 데모(조직도·직원401·맵12·그룹6)
@@ -86,7 +86,7 @@ npm run dev
 
 시드 내용: 센터/담당/팀/파트 조직도 + 직원 ~400명(sysadmin `admin.sys`) + 맵 12개(공개6/비공개6, 버전 v1~v5 승인 워크플로 + 작업본) + 그룹 6. `/login`의 임시 로그인 피커에서 검색해 아무나 접속. 실제 역할(owner/editor/viewer)로 화면을 검증하려면 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`(또는 `backend/.env`)로 백엔드를 띄운다.
 
-> 시드 상세·부분 시드·권한 강제 검증은 **[`docs/db-seed.md`](docs/db-seed.md)** 참고.
+> 시드 상세·부분 시드·권한 강제 검증은 **[`docs/deploy/db-seed.md`](docs/deploy/db-seed.md)** 참고.
 
 ## 서버 배포 (docker-compose)
 
@@ -96,5 +96,5 @@ docker compose up -d --build
 # 접속: http://<서버>:3333
 ```
 
-> 전체 절차(Keycloak 클라이언트 등록·헬스체크·롤백)는 **[`docs/deploy.md`](docs/deploy.md)** 참고.
+> 전체 절차(Keycloak 클라이언트 등록·헬스체크·롤백)는 **[`docs/deploy/deploy.md`](docs/deploy/deploy.md)** 참고.
 > 서버의 엣지 nginx(443/80)와 충돌하지 않도록 앱은 3333에 노출한다. 줄바꿈은 `.gitattributes`로 LF 고정 — Windows PC를 경유해도 안전. 자세한 운영 제약은 `CLAUDE.md`의 Operations 섹션 참고.

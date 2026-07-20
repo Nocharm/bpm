@@ -1,7 +1,7 @@
 "use client";
 
 // CSV 임포트 공용 섹션 — 템플릿 다운로드 + AI 프롬프트 복사 + 파일 선택/텍스트 붙여넣기 + 파싱 요약/행 에러.
-// 에디터 임포트 모달만 쓴다 — 새 맵 다이얼로그는 CsvTemplateActions만 사용 (docs/superpowers/specs/2026-07-10-csv-import-merge-design.md).
+// 에디터 임포트 모달만 쓴다 — 새 맵 다이얼로그는 CsvTemplateActions만 사용 (docs/design/2026-07-10-csv-import-merge-design.md).
 // 외부 AI 왕복: [AI 프롬프트 복사]→외부 AI에 문서와 함께 붙여넣기→받은 CSV를 [붙여넣기]로 입력.
 import { useRef, useState } from "react";
 

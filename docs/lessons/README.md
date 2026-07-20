@@ -12,4 +12,4 @@
 | [react-ts-patterns.md](react-ts-patterns.md) | useCallback deps/TDZ, ref 미러, 큰 상태 모델 변경 시 |
 | [settings-and-forms.md](settings-and-forms.md) | 설정/관리자 화면·모달/피커/카드 헤더·소프트삭제 백엔드를 건드릴 때 (비캔버스) |
 
-> 설계 기록은 `docs/superpowers/specs/`(날짜별 스냅샷), 진행 현황은 `PROGRESS.md` 참조.
+> 설계 기록은 `docs/design/`(날짜별 스냅샷, 분야별 인덱스 `docs/design/README.md`), 진행 현황은 `PROGRESS.md` 참조.

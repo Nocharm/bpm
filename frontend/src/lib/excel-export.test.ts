@@ -1,7 +1,7 @@
 // Excel 모델 빌더 단위 테스트 — 재귀 인라인·순환·다이아몬드 메모이즈·locked·행 상한·next End 표기·
 // 회당 파라미터 6종(서브프로세스 sp_* 소스 포함)·컬럼 헤더/서식(Task 9).
-// 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §4,
-//       docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md §5.2
+// 설계: docs/design/2026-07-11-numeric-params-excel-csv-export-design.md §4,
+//       docs/design/2026-07-13-node-params-redefinition-design.md §5.2
 import { Workbook } from "exceljs";
 import { describe, expect, it } from "vitest";
 

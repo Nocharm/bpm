@@ -2,11 +2,11 @@
 
 지금까지의 AI 기능 검증(그래프 병합·담당자 금지·start/end 폴백·사용량 계측·매뉴얼 선별)은 전부 **mock 기반**이었다. 이 절차는 실제 모델을 붙여 "모델이 우리 프롬프트 계약을 따르는가"를 확인한다. **vLLM 서버에 닿는 위치(사내망 Windows PC 또는 71번 서버)에서 실행**한다.
 
-> 로컬(사내망 밖)에서는 공개 **OpenAI 호환 API 키로 대체 가능** — OpenAI(`https://api.openai.com/v1`, `gpt-4o-mini` 등) 또는 Groq(`https://api.groq.com/openai/v1`). 같은 `AI_*` 변수에 값만 교체하면 된다(`docs/ai-connectivity-test.md` §1 참고). **Claude(Anthropic) API 키는 네이티브 API가 OpenAI 호환이 아니라 그대로는 사용 불가** — 붙이려면 `app/ai_client.py`(교체 가능 경계) 어댑터 작업이 필요하므로 스모크에는 OpenAI 계열을 권장.
+> 로컬(사내망 밖)에서는 공개 **OpenAI 호환 API 키로 대체 가능** — OpenAI(`https://api.openai.com/v1`, `gpt-4o-mini` 등) 또는 Groq(`https://api.groq.com/openai/v1`). 같은 `AI_*` 변수에 값만 교체하면 된다(`ai-connectivity-test.md` §1 참고). **Claude(Anthropic) API 키는 네이티브 API가 OpenAI 호환이 아니라 그대로는 사용 불가** — 붙이려면 `app/ai_client.py`(교체 가능 경계) 어댑터 작업이 필요하므로 스모크에는 OpenAI 계열을 권장.
 
 ## 0. 사전 연결 확인 (1분)
 
-`docs/ai-connectivity-test.md`의 3종 curl — 도달성·모델 목록·completion(`response_format: json_object` 수용 여부)이 전부 OK인지. 여기서 실패하면 아래는 의미 없다.
+`ai-connectivity-test.md`의 3종 curl — 도달성·모델 목록·completion(`response_format: json_object` 수용 여부)이 전부 OK인지. 여기서 실패하면 아래는 의미 없다.
 
 ## 1. 환경 설정 + 기동
 

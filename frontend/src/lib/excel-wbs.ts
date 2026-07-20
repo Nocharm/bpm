@@ -1,6 +1,6 @@
 // WBS(레벨 컬럼) Excel 모델 — 잎 업무 행 + 조상 경로(levels). 규칙 엔진은 1안(excel-export.ts)과
 // 동형이되 start/end 전부 삭제·SP 무행이 다르다. 시트 기록은 Task 2에서 추가.
-// 설계: docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md
+// 설계: docs/design/2026-07-17-excel-export-wbs-v2-design.md
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
 import { COLUMNS, EXCEL_MAX_ROWS, HEADER_FILL, NOTE_TEXT, downloadWorkbookXlsx, getNodeRunParams } from "./excel-export";

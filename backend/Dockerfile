@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY app/ app/
 # 시드/리셋 스크립트 — 서버(compose)에서 `docker compose exec backend python -m scripts.reset_db`로
-# 데모 데이터를 넣기 위해 이미지에 포함 (docs/db-seed.md). reset_db는 drop_all 포함 — 운영 데이터엔 주의.
+# 데모 데이터를 넣기 위해 이미지에 포함 (docs/deploy/db-seed.md). reset_db는 drop_all 포함 — 운영 데이터엔 주의.
 COPY scripts/ scripts/
 
 # 비루트 사용자로 실행

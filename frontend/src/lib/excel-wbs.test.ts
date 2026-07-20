@@ -1,5 +1,5 @@
 // WBS 모델 빌더 단위 테스트 — 레벨 경로·SP 무행·start/end 전부 삭제·주석·상한.
-// 설계: docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md
+// 설계: docs/design/2026-07-17-excel-export-wbs-v2-design.md
 import { describe, expect, it } from "vitest";
 import { Workbook } from "exceljs";
 

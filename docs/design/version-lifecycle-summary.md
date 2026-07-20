@@ -1,7 +1,7 @@
 # Version Lifecycle & Approval — 구현 요약 (fix 참고용)
 
 `feat/version-lifecycle` 브랜치에서 한 작업 정리. **나중에 픽스할 때 "어디를 봐야 하는지"** 빠르게 찾기 위한 레퍼런스.
-분기점 `291f6d9`(R5 컷오버) 이후 53커밋. 설계 원본은 `docs/superpowers/specs·plans/2026-06-29-version-lifecycle-*`.
+분기점 `291f6d9`(R5 컷오버) 이후 53커밋. 설계 원본(2026-06-29 version-lifecycle 계열)은 git history 참고.
 
 > 관련 규칙: 캔버스/에디터 함정은 `docs/lessons/`, 프론트 `grep`은 ugrep이라 `[mapId]` 대괄호 디렉터리 건너뜀 → `git grep`/`find` 사용. 타임스탬프는 KST(`backend/app/clock.now`, `frontend/src/lib/datetime`). id는 `genId()`(crypto.randomUUID 금지, 서버 평문 HTTP).
 

@@ -1,6 +1,6 @@
 # 알림 통합·삭제(퍼지)·100개 한도 — 설계 스펙
 
-2026-07-16 · 브랜치 `worktree-alarm-audit` · 선행 감사: `docs/alarm-audit.md` (main ed15440 기준)
+2026-07-16 · 브랜치 `worktree-alarm-audit` · 선행 감사: `../qa/alarm-audit.md` (main ed15440 기준)
 
 ## 0. 목표와 확정 결정
 
