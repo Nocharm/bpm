@@ -69,6 +69,7 @@ async def get_subprocess_refs(
         await session.execute(
             select(
                 ProcessMap.id,
+                ProcessMap.name,
                 ProcessMap.sp_designated_at,
                 ProcessMap.deleted_at,
                 ProcessMap.sp_department,
@@ -87,6 +88,7 @@ async def get_subprocess_refs(
     refs = {
         mid: SubprocessRefOut(
             designated=designated_at is not None and deleted_at is None,
+            name=name,
             department=department,
             assignee=assignee,
             system=system,
@@ -100,6 +102,7 @@ async def get_subprocess_refs(
         )
         for (
             mid,
+            name,
             designated_at,
             deleted_at,
             department,

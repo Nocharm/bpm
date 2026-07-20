@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-07-20 — 서브프로세스 노드 이름이 링크맵 개명을 안 따르던 버그 픽스 (dev)
+- **증상**: 맵 이름을 바꿔도 그 맵을 서브프로세스로 링크한 다른 맵의 노드 라벨이 예전 이름 그대로.
+- **근본 원인**: subprocess 노드 라벨은 링크맵 이름 고정(비편집, `process-node.tsx` F5)인데, 값이 링크 시점의 `node.title` **저장 스냅샷**이었다. dept/assignee 등 다른 SP 어트리뷰트는 `subprocess_refs`로 라이브 해석하는데 **이름만 라이브 소스에 없었음**.
+- **수정(아키텍처 정합·라이브 해석)**: `SubprocessRefOut`에 `name`(링크맵 현재 이름) 추가 → 캔버스(`injectSubEnds`)·아웃라인이 `ref.name`을 라이브 라벨로 렌더(저장 스냅샷은 폴백). **저장 노드 title·게시본은 불변**(display 전용 주입) — 불변 버전 변형 없이 표시만 갱신.
+- 파일: `backend/app/schemas.py`(SubprocessRefOut.name)·`backend/app/subprocess.py`(ProcessMap.name select)·`backend/tests/test_subprocess_designation.py`(개명 라이브 반영 테스트)·`frontend/src/lib/api.ts`(SubprocessRef.name)·`frontend/src/app/maps/[mapId]/page.tsx`(injectSubEnds liveLabel·outline liveName).
+- 검증: ruff·pytest 696(신규 1 포함)·frontend lint 0·build OK. API 실검증(v12): 맵1 개명 전 refs.name="Order Fulfillment"→개명 후 "Order Fulfillment RENAMED". 브라우저(맵2 v12): 캔버스 노드·아웃라인 모두 새 이름 렌더 확인. (후속 검토: WBS/Excel/Word export는 저장 title을 읽어 여전히 스냅샷 — 별도 표면.)
+
 ## 2026-07-20 — 홈/새맵 UX 후속 3종 (dev)
 - **부서 미지정 접기**: `OrgAccordion`의 "부서 미지정" 섹션을 부서 노드와 동일한 chevron 토글로 — `unassignedOpen`(page.tsx, 기본 열림) + `onToggleUnassigned` props. Collapse all이 부서 트리와 함께 미지정도 접도록 `setUnassignedOpen(false)` 동시 호출.
 - **승인자 피커 반짝**: 새 맵 다이얼로그에서 오우닝 부서 선택 시 결재자 피커로 스크롤될 때 accent 링이 1회 반짝(`picker-flash` keyframe). `applyOwningDept`(이벤트 핸들러)에서 `setFlashApprovers(true)` + 850ms 타이머 리셋(모션 설정 무관 리셋, set-state-in-effect 린트 회피). 결재자 섹션 래퍼에 `motion-safe:animate-[picker-flash...]`.

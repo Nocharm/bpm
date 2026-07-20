@@ -706,6 +706,8 @@ class GraphIn(BaseModel):
 class SubprocessRefOut(BaseModel):
     # 링크 대상 맵의 지정 상태·어트리뷰트 — 노드에 복사하지 않는 라이브 참조 렌더 소스 (spec 2026-07-06)
     designated: bool
+    # 링크맵의 현재 이름 — subprocess 노드 라벨은 이 이름을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 None.
+    name: str | None = None
     department: str | None = None
     assignee: str | None = None
     system: str | None = None

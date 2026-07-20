@@ -137,6 +137,8 @@ export interface GraphGroup {
 // 링크 대상 맵의 서브프로세스 지정 정보 — 노드에 복사하지 않는 라이브 참조 (spec 2026-07-06)
 export interface SubprocessRef {
   designated: boolean;
+  // 링크맵의 현재 이름 — subprocess 노드 라벨을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 null.
+  name: string | null;
   department: string | null;
   assignee: string | null;
   system: string | null;

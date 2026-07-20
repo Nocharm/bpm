@@ -1273,6 +1273,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 미지정/해제 링크맵 — 경고 뱃지 + 잠금(권한 무관). refs 미수신(undefined) 동안은 미판정 유지 (spec 2026-07-06).
       const ref = node.data.linkedMapId != null ? subprocessRefs.get(node.data.linkedMapId) : undefined;
       const undesignated = ref != null && !ref.designated;
+      // 링크맵 현재 이름을 라이브로 표시 — subprocess 라벨은 링크맵 이름 고정(F5)이라 개명이 즉시 반영돼야 한다.
+      // display 전용 주입(저장 스냅샷 data.label·게시본 노드는 불변). 삭제 맵(name null)은 저장 라벨로 폴백.
+      const liveLabel = ref?.name ? { label: ref.name } : {};
       // 지정 어트리뷰트 라이브 주입 — 지정된 링크맵만. 노드에 저장하지 않고 렌더 시 파생.
       const spAttrs = ref?.designated
         ? {
@@ -1299,11 +1302,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, ...liveLabel, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, undesignated, ...spAttrs, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, ...spAttrs, ...liveLabel, updateAvailable } };
       }
       return {
         ...node,
@@ -1312,6 +1315,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           subEnds: deriveSubEnds(resolved),
           undesignated,
           ...spAttrs,
+          ...liveLabel,
           updateAvailable,
         },
       };
@@ -6301,6 +6305,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const outline = useMemo(() => {
     // 현재 스코프는 라이브 상태가 권위 — id로 dedup해 fullGraph가 stale일 때 중복 행 방지
     const liveIds = new Set(nodes.map((node) => node.id));
+    // subprocess 노드 라벨은 링크맵 현재 이름을 라이브로 따른다(캔버스 injectSubEnds와 동일 규칙) — 저장 스냅샷은 폴백.
+    const liveName = (nodeType: string, linkedMapId: number | null, fallback: string): string =>
+      nodeType === "subprocess" && linkedMapId != null
+        ? (subprocessRefs.get(linkedMapId)?.name ?? fallback)
+        : fallback;
     const outlineNodes: OutlineNode[] = nodes.map((node) => {
       // nodes state엔 locked가 없다(주입은 displayNodes 렌더 시점 — L5037) → lockedKeys 직접 조회, canExpand와 동일 판정.
       // nodes state never carries locked (injected at displayNodes render) → look up lockedKeys directly, same as canExpand.
@@ -6312,7 +6321,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       return {
         id: node.id,
         parentId: currentParentId,
-        label: node.data.label,
+        label: liveName(node.data.nodeType, node.data.linkedMapId ?? null, node.data.label),
         nodeType: node.data.nodeType,
         locked: k != null && lockedKeys.has(k),
       };
@@ -6334,11 +6343,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         seenNodes.add(flat.id);
         const flatKey = linkKey(flat);
+        const flatType = normalizeNodeType(flat.node_type);
         outlineNodes.push({
           id: flat.id,
           parentId: flat.parent_node_id,
-          label: flat.title,
-          nodeType: normalizeNodeType(flat.node_type),
+          label: liveName(flatType, flat.linked_map_id ?? null, flat.title),
+          nodeType: flatType,
           // 임베드/심층 노드는 라이브 data가 없으므로 linkKey를 lockedKeys로 직접 조회 / embedded/deep nodes: look up linkKey in lockedKeys directly
           locked: flatKey != null && lockedKeys.has(flatKey),
         });
@@ -6370,7 +6380,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       effectiveExpanded.add(host);
     }
     return buildOutline(outlineNodes, outlineEdges, null, effectiveExpanded);
-  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, expandedInline, scopes, lockedKeys]);
+  }, [nodes, edges, fullGraph, currentParentId, expandedOutline, expandedInline, scopes, lockedKeys, subprocessRefs]);
 
   // 스코프 전환 중 라이브 nodes 공백 구간엔 직전 비어있지 않은 outline을 고스트로 유지(깜빡임 방지).
   // 비어있지 않을 때만 갱신 → 공백 구간엔 마지막 good 값을 그대로 렌더해 "사라졌다 뜨는" 현상 제거.
