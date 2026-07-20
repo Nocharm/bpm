@@ -37,6 +37,20 @@ describe("buildOrgTree", () => {
     expect(unassigned.map((m) => m.id)).toEqual([9]);
   });
 
+  it("prunes departments with zero maps but keeps kept paths", () => {
+    const depts = [dept("Div"), dept("Div/Empty"), dept("Div/HasMap"), dept("Other")];
+    const maps = [makeMap(1, "Div/HasMap")];
+    // 기본(keep 없음) — 빈 부서(Div/Empty·Other)는 사라지고 맵 있는 가지만 남는다
+    const pruned = buildOrgTree(maps, depts);
+    expect(pruned.roots.map((r) => r.path)).toEqual(["Div"]);
+    expect(pruned.roots[0].children.map((c) => c.path)).toEqual(["Div/HasMap"]);
+    // keepEmptyPaths — 내 부서(Div/Empty)와 조상(Div)은 맵이 없어도 유지
+    const kept = buildOrgTree(maps, depts, new Set(["Div", "Div/Empty"]));
+    const divChildren = kept.roots.find((r) => r.path === "Div")!.children.map((c) => c.path).sort();
+    expect(divChildren).toEqual(["Div/Empty", "Div/HasMap"]);
+    expect(kept.roots.map((r) => r.path)).toEqual(["Div"]); // Other(빈·keep 아님)는 여전히 제거
+  });
+
   it("creates missing intermediate nodes when a dept row is absent", () => {
     // dept 목록에 'Div'만 있고 리프가 없어도 맵의 org_path로 노드를 만든다
     const { roots } = buildOrgTree([makeMap(1, "Div/Sub/Team")], [dept("Div")]);

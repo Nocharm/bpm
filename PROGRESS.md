@@ -1,5 +1,14 @@
 # Progress
 
+## 2026-07-20 — 홈(Maps 탭) UX 4종 + 인스펙터 Subprocess 탭 위치 (dev)
+- **빈 부서 숨김(내 부서 유지)**: `buildOrgTree`에 `keepEmptyPaths` 인자 추가 — `mapCount===0` 부서 가지치기, 단 내 `org_path`의 모든 접두 경로는 앵커로 유지(맵 없어도 표시). `page.tsx`가 `me.org_path` 접두 집합을 전달. 유닛 테스트 1건 추가.
+- **도넛 재디자인 + 호버 잘림 방지**: `charts/donut.tsx` — 옅은 트랙 링 + 세그먼트 얇은 gap(다중만) + 중앙 합계에 `total` 캡션 + 선택 시 나머지 dim(0.3). **잘림 진범**: 선택 세그먼트가 `stroke+3`으로 굵어지는데 반지름이 여유 없이 잡혀 viewBox 밖으로 삐짐 → `r`을 `SELECT_GROW+EDGE_PAD`만큼 축소(최대 외곽 102 ≤ 104 검증). `donut-geometry.ts`에 `gap` 인자(기본 0=기존 계약). 승인 카드도 공용 Donut이라 동시 개선.
+- **최근 맵 "위에 추가됨" 인지**: top 변경 시 전 행 스태거(자기상쇄로 밋밋)를 폐기 → **새 최상단 행만** `recent-insert`(750ms, translateY + accent 링이 번졌다 사라짐), 나머지는 정지 → 하나가 위에 끼워진 느낌. `slideDown` keyframe 제거(미사용).
+- **뒤로가기 → 선택 해제**: 대시보드에서 맵 클릭해 상세로 "이동"한 걸 브라우저 Back으로 되돌림 — `null→선택` 전이에만 `pushState`, `popstate`에서 `setSelectedId(null)`, UI 해제 시 `history.back()`으로 항목 소비(정합). 선택 간 전환은 항목 1개 유지.
+- **인스펙터 Subprocess 탭 → 맨 끝(5번째)**: `inspector-panel.tsx` 탭 조립을 `[...TABS, subprocess?, import?]`로 변경 → Properties·Map·Approval·Activity·**Subprocess** 순(활동/코멘트 탭 뒤).
+- 파일: `lib/org-tree.ts`·`org-tree.test.ts`·`app/page.tsx`·`lib/donut-geometry.ts`·`charts/donut.tsx`·`maps/status-donut-card.tsx`·`maps/approvals-card.tsx`·`lib/i18n-messages.ts`(home.donutTotal EN/KO)·`maps/recent-opened-list.tsx`·`app/globals.css`·`components/inspector-panel.tsx`.
+- 검증: lint 0 err·`next build`(TS·React Compiler) OK·vitest 512/512. 브라우저 실기동(3200/8901, admin.sys=System Team 소속·맵0): ①조직도 루트+중첩 모두 빈 부서 제거·Management Center 체인만 앵커 유지 확인, ②도넛 외곽 102≤104(선택 세그먼트 코너 육안 무잘림)·트랙/gap/캡션 확인, ③top 변경 시 li[0]만 `recent-insert` 나머지 `none`, ④선택→Back=홈 유지+대시보드 복귀·UI 해제도 정합, ⑤/maps/1 인스펙터 탭 순서 Properties·Map·Approval·Activity·Subprocess 확인.
+
 ## 2026-07-20 — 펼침 영역 틴트 상하 경계(바운드 박스) + wrap 높이 함정 해결 (dev)
 - **틴트 바운드**: `InlineRegionBands`가 화면 전체 높이 무한 레인(좌우선만)에서 **콘텐츠 Y범위 박스**로 전환 — `box.y/height`(ViewportPortal flow 좌표) 사용, 상하좌우 테두리 + 라운드(12). 뷰포트 구독(`useViewport`/`useStore`) 제거(box 좌표가 flow라 불필요, FocusScopeBands는 유지).
 - **바깥이 안을 덮음(중첩)**: `buildScope`가 모든 영역의 `y/height`를 **전체 콘텐츠(모든 깊이) 공통 범위**로 산정 → 중첩 시 바깥·안 박스의 상하가 동일해 바깥이 안을 항상 덮음(추가 로직 불필요).

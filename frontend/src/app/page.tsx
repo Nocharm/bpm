@@ -215,6 +215,27 @@ export default function MapListPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // 맵 선택 = 히스토리 항목 1개 — 대시보드에서 클릭해 상세로 "이동"한 걸 브라우저 뒤로가기로 되돌린다.
+  // null→선택 전이에만 pushState(선택 간 전환은 항목 유지), UI로 해제하면 그 항목을 back()으로 소비해 정합 유지.
+  const selPushed = useRef(false);
+  useEffect(() => {
+    if (selectedId !== null && !selPushed.current) {
+      selPushed.current = true;
+      window.history.pushState(null, "", window.location.href);
+    } else if (selectedId === null && selPushed.current) {
+      selPushed.current = false;
+      window.history.back(); // 우리가 쌓은 선택 항목만 제거(있음이 보장됨) — 홈에 머무름
+    }
+  }, [selectedId]);
+  useEffect(() => {
+    const onPop = () => {
+      selPushed.current = false; // 우리 항목이 pop됨
+      setSelectedId(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // 생성 메뉴 — 바깥 클릭·Escape로 닫기 (setState는 리스너 안에서만; 이펙트 본문 직접 호출 금지)
   useEffect(() => {
     if (!createMenuOpen) return;
@@ -334,9 +355,15 @@ export default function MapListPage() {
 
   // 브라우즈 좌측 — 나의 부서 즐겨찾기 + 조직도 트리(렌더타임 파생, effect 아님) /
   // browse-mode left column: my-dept favorites + org tree, derived at render (not in an effect).
+  // 내 org_path의 모든 접두 경로 — 빈 부서 가지치기에서 내 부서(및 조상)는 앵커로 유지한다.
+  const myDeptKeepPaths = useMemo(() => {
+    if (!me?.org_path) return new Set<string>();
+    const parts = me.org_path.split("/");
+    return new Set(parts.map((_, i) => parts.slice(0, i + 1).join("/")));
+  }, [me]);
   const orgTree = useMemo(
-    () => buildOrgTree(filteredMaps, directory?.departments ?? []),
-    [filteredMaps, directory],
+    () => buildOrgTree(filteredMaps, directory?.departments ?? [], myDeptKeepPaths),
+    [filteredMaps, directory, myDeptKeepPaths],
   );
   const myDeptMaps = useMemo(
     () => (me?.org_path ? filterMyDeptMaps(filteredMaps, me.org_path) : []),

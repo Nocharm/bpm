@@ -37,7 +37,7 @@ const IMPORT_TAB: { key: InspectorTab; labelKey: MessageKey; icon: IconType } = 
   key: "import", labelKey: "csvImport.tabTitle", icon: FileUp,
 };
 
-// SP 지정된 맵에서만 나타나는 탭 — subprocessTabSlot이 있을 때 Map 탭 뒤에 끼운다
+// SP 지정된 맵에서만 나타나는 탭 — subprocessTabSlot이 있을 때 기본 탭들 뒤(활동 탭 다음, 5번째)에 붙는다
 const SUBPROCESS_TAB: { key: InspectorTab; labelKey: MessageKey; icon: IconType } = {
   key: "subprocess", labelKey: "inspector.tabSubprocess", icon: Workflow,
 };
@@ -112,9 +112,8 @@ export function InspectorPanel({
   const rawTab = forcedTab ?? internalTab;
   const tab = rawTab === "subprocess" && !subprocessTabSlot ? "map" : rawTab;
   const tabs = [
-    ...TABS.slice(0, 2),
+    ...TABS,
     ...(subprocessTabSlot ? [SUBPROCESS_TAB] : []),
-    ...TABS.slice(2),
     ...(importSlot ? [IMPORT_TAB] : []),
   ];
 

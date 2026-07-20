@@ -15,6 +15,7 @@ export interface OrgNode {
 export function buildOrgTree(
   maps: MapSummary[],
   depts: DirectoryDept[],
+  keepEmptyPaths: Set<string> = new Set(),
 ): { roots: OrgNode[]; unassigned: MapSummary[] } {
   const koreanByPath = new Map(depts.map((d) => [d.id, d.korean_name ?? null]));
   const byPath = new Map<string, OrgNode>();
@@ -59,7 +60,15 @@ export function buildOrgTree(
     return node.mapCount;
   };
   for (const r of roots) rollup(r);
-  return { roots, unassigned };
+
+  // 빈 부서(자신+자손에 맵 0개) 가지치기 — 조직도 노이즈 제거. 단, keepEmptyPaths(내 부서 및 그 조상)
+  // 는 맵이 없어도 앵커로 유지한다. keepEmptyPaths엔 내 org_path의 모든 접두 경로가 들어와야 체인이 산다.
+  const prune = (nodes: OrgNode[]): OrgNode[] =>
+    nodes
+      .filter((n) => n.mapCount > 0 || keepEmptyPaths.has(n.path))
+      .map((n) => ({ ...n, children: prune(n.children) }));
+
+  return { roots: prune(roots), unassigned };
 }
 
 export function filterMyDeptMaps(maps: MapSummary[], myOrgPath: string): MapSummary[] {
