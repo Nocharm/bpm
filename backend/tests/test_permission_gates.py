@@ -193,17 +193,18 @@ def test_delete_missing_map_404(client: TestClient, enforce: None) -> None:
 
 
 def test_patch_editor_200(client: TestClient, enforce: None) -> None:
+    # name은 오너 전용(spec 2026-07-18) — 역할 게이트 자체는 description으로 검증
     map_id = seed_map(grants=[("user", "editor.u", "editor")])
     act_as("editor.u")
-    r = client.patch(f"/api/maps/{map_id}", json={"name": "renamed"})
+    r = client.patch(f"/api/maps/{map_id}", json={"description": "renamed"})
     assert r.status_code == 200
-    assert r.json()["name"] == "renamed"
+    assert r.json()["description"] == "renamed"
 
 
 def test_patch_viewer_403(client: TestClient, enforce: None) -> None:
     map_id = seed_map(grants=[("user", "viewer.u", "viewer")])
     act_as("viewer.u")
-    assert client.patch(f"/api/maps/{map_id}", json={"name": "x"}).status_code == 403
+    assert client.patch(f"/api/maps/{map_id}", json={"description": "x"}).status_code == 403
 
 
 # ── PUT /graph — editor + checkout holder ─────────────────────
@@ -256,7 +257,10 @@ def test_graph_sysadmin_still_needs_checkout(
 
 
 def test_department_grant_editor(client: TestClient, enforce: None) -> None:
-    """Procurement Office editor 부여 → lee/park/choi/jung은 PATCH 가능, kim은 403."""
+    """Procurement Office editor 부여 → lee/park/choi/jung은 PATCH 가능, kim은 403.
+
+    name은 오너 전용(spec 2026-07-18)이라 description으로 editor 티어를 검증한다.
+    """
     div = "Management Support Division"
     proc = f"{div}/Procurement Office"
     map_id = seed_map(grants=[("department", proc, "editor")])
@@ -269,12 +273,12 @@ def test_department_grant_editor(client: TestClient, enforce: None) -> None:
     for u in ("lee", "park", "choi", "jung"):
         act_as(u)
         assert (
-            client.patch(f"/api/maps/{map_id}", json={"name": f"by-{u}"}).status_code
+            client.patch(f"/api/maps/{map_id}", json={"description": f"by-{u}"}).status_code
             == 200
         ), f"{u} should be editor"
 
     act_as("kim")
-    assert client.patch(f"/api/maps/{map_id}", json={"name": "kim"}).status_code == 403
+    assert client.patch(f"/api/maps/{map_id}", json={"description": "kim"}).status_code == 403
 
 
 # ── 댓글 create/resolve — viewer+ ─────────────────────────────

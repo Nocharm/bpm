@@ -64,6 +64,7 @@ export interface MapSummary {
   sp_cost_usd?: string | null;
   sp_url?: string | null;
   sp_url_label?: string | null;
+  sp_description?: string | null;
   sp_changed_by?: string | null;
   sp_changed_at?: string | null;
   // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
@@ -136,6 +137,8 @@ export interface GraphGroup {
 // 링크 대상 맵의 서브프로세스 지정 정보 — 노드에 복사하지 않는 라이브 참조 (spec 2026-07-06)
 export interface SubprocessRef {
   designated: boolean;
+  // 링크맵의 현재 이름 — subprocess 노드 라벨을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 null.
+  name: string | null;
   department: string | null;
   assignee: string | null;
   system: string | null;
@@ -146,6 +149,8 @@ export interface SubprocessRef {
   headcount: string | null;
   url: string | null;
   url_label: string | null;
+  // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)
+  sp_description: string | null;
 }
 
 export interface Graph {
@@ -183,10 +188,27 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly body?: string, // 응답 원문 — getApiErrorDetail이 detail 추출에 사용
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+// 사용자 표시용 에러 문구 — ApiError JSON 본문의 detail 문자열만 추출, 그 외는 메시지 폴백.
+export function getApiErrorDetail(err: unknown): string {
+  if (err instanceof ApiError && err.body) {
+    try {
+      const parsed: unknown = JSON.parse(err.body);
+      if (parsed && typeof parsed === "object" && "detail" in parsed) {
+        const detail = (parsed as { detail: unknown }).detail;
+        if (typeof detail === "string" && detail) return detail;
+      }
+    } catch {
+      // JSON 아님(프록시 오류 등) — 전체 메시지 폴백
+    }
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -206,6 +228,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
       response.status,
+      detail,
     );
   }
   if (response.status === 204) {
@@ -270,6 +293,41 @@ export function updateMap(
   });
 }
 
+// 이름 변경 요청 — editor는 즉시 적용 대신 pending ApprovalRequest(owner 승인 필요). owner/sysadmin은 updateMap 직접 사용.
+export function createRenameRequest(mapId: number, toName: string): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/rename-requests`, {
+    method: "POST",
+    body: JSON.stringify({ to_name: toName }),
+  });
+}
+
+export function getPendingRenameRequest(mapId: number): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/rename-requests/pending`);
+}
+
+export function withdrawRenameRequest(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/rename-requests/pending`, { method: "DELETE" });
+}
+
+// SP 등록(지정) 요청 — 미지정 맵을 플레이스홀더로 링크한 뒤 오너에게 지정을 요청 (spec 2026-07-19)
+export function createSpDesignationRequest(
+  mapId: number,
+  fromMapId: number,
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/sp-designation-requests`, {
+    method: "POST",
+    body: JSON.stringify({ from_map_id: fromMapId }),
+  });
+}
+
+export function getPendingSpDesignationRequest(mapId: number): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/sp-designation-requests/pending`);
+}
+
+export function withdrawSpDesignationRequest(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/sp-designation-requests/pending`, { method: "DELETE" });
+}
+
 // 오우닝 부서 지정/변경 — owner/sysadmin 전용. 파생 editor가 새 부서를 따라간다 (spec 2026-07-10)
 export function setOwningDepartment(
   mapId: number,
@@ -297,6 +355,7 @@ export interface SubprocessDesignationBody {
   headcount?: string;
   url?: string;
   url_label?: string;
+  description?: string;
 }
 
 // 임베드 체크 — 미리보기 iframe이 열 수 있는 URL인지 서버가 대상 헤더로 판정 (embed-check design 2026-07-08)
@@ -325,21 +384,51 @@ export function deleteSubprocessDesignation(mapId: number): Promise<MapSummary> 
   });
 }
 
+// SP 역참조 — 지정 메타(버전·시점·행위자) + 이 맵을 링크한 부모 맵 목록 (design 2026-07-18)
+export interface SubprocessUsedBy {
+  map_id: number;
+  name: string;
+  owning_department: string | null;
+  node_count: number;
+}
+
+export interface SubprocessUsage {
+  designated: boolean;
+  designated_at: string | null;
+  changed_by: string | null;
+  changed_at: string | null;
+  // 지정은 최신 게시본 라이브 참조 — 버전을 박제하지 않으므로 응답 시점에 해석된 값
+  designated_version_id: number | null;
+  designated_version_number: number | null;
+  designated_version_label: string | null;
+  used_by: SubprocessUsedBy[];
+  hidden_count: number; // 존재하지만 열람 권한이 없어 이름을 숨긴 부모 맵 수
+}
+
+export function getSubprocessUsage(mapId: number): Promise<SubprocessUsage> {
+  return request<SubprocessUsage>(`/maps/${mapId}/subprocess-usage`);
+}
+
 export interface LibraryProcess {
   map_id: number;
   name: string;
   latest_version_id: number | null;
   latest_published_version_id: number | null;
   refs: number[];
-  // 지정 어트리뷰트 — 목록은 지정된 맵만 반환하므로 항상 동봉(부서 칩 표시용) (spec 2026-07-06)
+  // 미지정 맵 옵트인(include_undesignated) 도입으로 행별 지정 여부 동봉 (spec 2026-07-19)
+  designated: boolean;
+  // 지정 어트리뷰트 — 미지정 행은 항상 null(잔존값 마스킹) (spec 2026-07-06/19)
   department: string | null;
   assignee: string | null;
   system: string | null;
   duration: string | null;
 }
 
-export function listLibraryProcesses(): Promise<LibraryProcess[]> {
-  return request<LibraryProcess[]>("/library/processes");
+// includeUndesignated: 미지정 맵도 포함(가시성 필터는 서버) — 피커 "Show unregistered maps" 토글용
+export function listLibraryProcesses(includeUndesignated = false): Promise<LibraryProcess[]> {
+  return request<LibraryProcess[]>(
+    includeUndesignated ? "/library/processes?include_undesignated=true" : "/library/processes",
+  );
 }
 
 export function getResolvedGraph(
@@ -1385,6 +1474,60 @@ export function markNotificationRead(id: number): Promise<NotificationItem> {
 
 export function markAllNotificationsRead(): Promise<void> {
   return request<void>("/notifications/read-all", { method: "POST" });
+}
+
+export function deleteNotification(id: number): Promise<void> {
+  return request<void>(`/notifications/${id}`, { method: "DELETE" });
+}
+
+// bulk-delete — ids/read_only/before 중 정확히 1개 (백엔드 422 검증)
+export interface NotificationBulkDelete {
+  ids?: number[];
+  read_only?: true; // 백엔드가 false를 422로 거부 — 컴파일 타임에 차단
+  before?: string; // YYYY-MM-DD — 해당 날짜 00:00 KST 미만 삭제
+}
+
+export interface NotificationBulkDeleteResult {
+  deleted: number;
+}
+
+export function bulkDeleteNotifications(
+  body: NotificationBulkDelete,
+): Promise<NotificationBulkDeleteResult> {
+  return request<NotificationBulkDeleteResult>("/notifications/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// ── 관리자 알림 퍼지 (sysadmin, design 2026-07-16) ──────────────
+
+export interface NotificationPurgeGroup {
+  type: string;
+  message: string;
+  count: number;
+  first_at: string;
+  last_at: string;
+}
+
+export function previewNotificationPurge(
+  from: string,
+  to: string,
+): Promise<NotificationPurgeGroup[]> {
+  return request<NotificationPurgeGroup[]>(
+    `/admin/notifications/purge-preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  );
+}
+
+export function purgeNotifications(
+  from: string,
+  to: string,
+  groups: { type: string; message: string }[],
+): Promise<NotificationBulkDeleteResult> {
+  return request<NotificationBulkDeleteResult>("/admin/notifications/purge", {
+    method: "POST",
+    body: JSON.stringify({ from, to, groups }),
+  });
 }
 
 // ── 피드백 (design 2026-07-05) ──────────────

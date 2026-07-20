@@ -106,6 +106,8 @@ class ProcessMap(Base):
     sp_headcount: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 지정 설명 — 자유 텍스트, 자간 제한 없음(Text) (design 2026-07-17)
+    sp_description: Mapped[str | None] = mapped_column(Text, default=None)
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
     sp_changed_by: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_changed_at: Mapped[datetime | None] = mapped_column(
@@ -329,6 +331,12 @@ class Notification(Base):
     read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
+    __table_args__ = (
+        # recipient 축 인덱스 — 5초 폴링 목록/미읽음 카운트, 정렬·캡 트리밍·날짜 삭제 (design 2026-07-16)
+        Index("ix_notifications_recipient_read", "recipient", "read"),
+        Index("ix_notifications_recipient_created", "recipient", "created_at"),
+    )
+
 
 class Feedback(Base):
     """사용자 피드백 — 유형·본문·컨텍스트·상태·관리자 답글 (design 2026-07-05)."""
@@ -455,18 +463,18 @@ class MapPermission(Base):
 
 
 class ApprovalRequest(Base):
-    """권한 다운그레이드·가시성 변경 승인 요청 — 버전 게시 승인은 version_approvals 사용 (§2.1)."""
+    """권한 다운그레이드·가시성 변경·맵 이름변경 승인 요청 — 버전 게시 승인은 version_approvals 사용 (§2.1)."""
 
     __tablename__ = "approval_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
-    # 'permission_downgrade' | 'visibility_change'
+    # 'permission_downgrade' | 'visibility_change' | 'map_rename'
     kind: Mapped[str] = mapped_column(String(30))
-    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility}
+    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility} 또는 {from_name, to_name}
     payload: Mapped[dict] = mapped_column(JSON)
     requested_by: Mapped[str] = mapped_column(String(100))
-    # 'pending' | 'approved' | 'rejected' | 'applied'
+    # 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'withdrawn'
     status: Mapped[str] = mapped_column(String(20), default="pending")
     decided_by: Mapped[str | None] = mapped_column(String(100), default=None)
     decided_at: Mapped[datetime | None] = mapped_column(

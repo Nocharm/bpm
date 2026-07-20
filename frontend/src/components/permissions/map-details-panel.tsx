@@ -6,8 +6,18 @@
 import { useEffect, useState } from "react";
 import { Building2, LockKeyhole, TriangleAlert } from "lucide-react";
 
-import { getDirectory, getMap, setOwningDepartment, updateMap } from "@/lib/api";
-import type { DirectoryDept, DirectoryUser } from "@/lib/api";
+import {
+  createRenameRequest,
+  getApiErrorDetail,
+  getDirectory,
+  getMap,
+  getMe,
+  getPendingRenameRequest,
+  setOwningDepartment,
+  updateMap,
+  withdrawRenameRequest,
+} from "@/lib/api";
+import type { ApprovalRequest, DirectoryDept, DirectoryUser } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { buildKoreanDeptByPath, deriveDeptKoreanKeywords, formatDeptName } from "@/lib/korean-dept";
 import type { Department } from "@/lib/mock/permissions-types";
@@ -30,6 +40,12 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 이름 변경 — owner는 즉시 적용(updateMap), editor는 승인 요청(pending ApprovalRequest).
+  const [name, setName] = useState("");
+  const [savedName, setSavedName] = useState("");
+  const [pendingRename, setPendingRename] = useState<ApprovalRequest | null>(null);
+  const [me, setMe] = useState("");
+
   // 오우닝 부서 표시/지정 — description과 같은 effect에서 병렬 로드.
   const [owningDept, setOwningDept] = useState<string | null>(null);
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
@@ -38,17 +54,26 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getMap(Number(mapId)), getDirectory()])
-      .then(([d, dir]) => {
+    void Promise.all([
+      getMap(Number(mapId)),
+      getDirectory(),
+      getPendingRenameRequest(Number(mapId)),
+      getMe(),
+    ])
+      .then(([d, dir, pending, meRes]) => {
         if (active) {
           setDescription(d.description);
+          setName(d.name);
+          setSavedName(d.name);
           setOwningDept(d.owning_department ?? null);
           setDirUsers(dir.users);
           setDirDepts(dir.departments);
+          setPendingRename(pending);
+          setMe(meRes.username);
         }
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(getApiErrorDetail(err));
       });
     return () => {
       active = false;
@@ -62,9 +87,64 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
       await updateMap(Number(mapId), { description });
       onToast(t("perm.details.saved"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getApiErrorDetail(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  // 크로스탭 self-heal — rename 실패 시 서버 기준으로 이름/pending 재동기화
+  // (다른 탭에서 승인·반려·취소돼 stale해진 배지·404를 화면에 반영).
+  async function refreshRenameState() {
+    try {
+      const [d, pending] = await Promise.all([
+        getMap(Number(mapId)),
+        getPendingRenameRequest(Number(mapId)),
+      ]);
+      setPendingRename(pending);
+      // 입력값 리셋은 pending이 생겼거나(입력 disabled) 서버 이름이 바뀐 경우만 — 사용자의 시도 텍스트 보존
+      if (pending !== null || d.name !== savedName) setName(d.name);
+      setSavedName(d.name);
+    } catch {
+      // 재동기화 실패는 무시 — 원 에러 표시가 이미 떠 있음
+    }
+  }
+
+  async function handleSaveName() {
+    const next = name.trim();
+    if (!next || next === savedName) return;
+    setSaving(true);
+    setError(null);
+    try {
+      if (isOwner) {
+        const hadPending = pendingRename !== null;
+        await updateMap(Number(mapId), { name: next });
+        setSavedName(next);
+        setPendingRename(null);
+        onToast(t(hadPending ? "perm.rename.appliedSuperseded" : "perm.rename.applied"));
+        onChanged?.();
+      } else {
+        const req = await createRenameRequest(Number(mapId), next);
+        setPendingRename(req);
+        setName(savedName); // 이름 자체는 미변경 — 입력은 저장명으로 복원
+        onToast(t("perm.rename.requested"));
+      }
+    } catch (err) {
+      setError(getApiErrorDetail(err));
+      void refreshRenameState();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleWithdraw() {
+    try {
+      await withdrawRenameRequest(Number(mapId));
+      setPendingRename(null);
+      onToast(t("perm.rename.withdrawn"));
+    } catch (err) {
+      setError(getApiErrorDetail(err));
+      void refreshRenameState();
     }
   }
 
@@ -76,7 +156,7 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
       onToast(t("perm.owningDept.saved"));
       onChanged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getApiErrorDetail(err));
     }
   }
 
@@ -100,6 +180,46 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
 
   return (
     <div data-id="settings-details" className="flex max-w-xl flex-col gap-3">
+      <label className="text-caption text-ink-secondary">{t("perm.rename.label")}</label>
+      <div className="flex items-center gap-2">
+        <input
+          data-id="settings-map-name"
+          className="min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-3 py-2 text-body text-ink outline-none focus:border-accent disabled:opacity-60"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={!canEdit || saving || (!isOwner && pendingRename !== null)}
+        />
+        {canEdit && (
+          <button
+            type="button"
+            data-id="settings-map-name-save"
+            className="shrink-0 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-60"
+            onClick={() => void handleSaveName()}
+            disabled={saving || name.trim() === "" || name.trim() === savedName || (!isOwner && pendingRename !== null)}
+          >
+            {t("perm.rename.save")}
+          </button>
+        )}
+      </div>
+      {pendingRename && (
+        <div
+          data-id="settings-rename-pending"
+          className="flex flex-wrap items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-3 py-2 text-caption text-ink-secondary"
+        >
+          <span>{t("perm.rename.pendingBadge", { name: String(pendingRename.payload?.to_name ?? "") })}</span>
+          <span className="text-ink-tertiary">{t("perm.rename.requestedBy", { user: pendingRename.requested_by })}</span>
+          {pendingRename.requested_by === me && (
+            <button
+              type="button"
+              data-id="settings-rename-withdraw"
+              className="ml-auto rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface"
+              onClick={() => void handleWithdraw()}
+            >
+              {t("perm.rename.withdraw")}
+            </button>
+          )}
+        </div>
+      )}
       <label className="text-caption text-ink-secondary">
         {t("perm.details.descriptionLabel")}
       </label>

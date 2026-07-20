@@ -63,6 +63,15 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_cost_krw", "VARCHAR(50)"),
     ("process_maps", "sp_cost_usd", "VARCHAR(50)"),
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
+    # 지정 설명 — 자유 텍스트 (design 2026-07-17)
+    ("process_maps", "sp_description", "TEXT"),
+]
+
+# 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
+# (table, index_name, "(col, ...)") — CREATE INDEX IF NOT EXISTS는 sqlite/postgres 공통 지원 (2026-07-16)
+_ADDED_INDEXES: list[tuple[str, str, str]] = [
+    ("notifications", "ix_notifications_recipient_read", "(recipient, read)"),
+    ("notifications", "ix_notifications_recipient_created", "(recipient, created_at)"),
 ]
 
 
@@ -78,11 +87,21 @@ def _add_missing_columns(conn: Connection) -> None:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
+def _add_missing_indexes(conn: Connection) -> None:
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    for table, index_name, cols in _ADDED_INDEXES:
+        if table not in tables:
+            continue  # 신규 테이블은 create_all이 __table_args__ 인덱스 포함해 생성
+        conn.execute(text(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table} {cols}"))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_missing_columns)
+        await conn.run_sync(_add_missing_indexes)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

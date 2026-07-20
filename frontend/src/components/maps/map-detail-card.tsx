@@ -267,6 +267,8 @@ export function MapDetailCard({
   }
 
   const isOwner = detail.my_role === "owner";
+  // 오우닝 부서 org_path — 멤버 컬럼에 협업 부서 행처럼 노출(인스펙터/상세 공용). const라 클로저 내 narrowing 유지.
+  const owningDeptPath = detail.owning_department;
 
   // 나의 소속(직접 user / 내 그룹 / 내 부서) 여부 — 하이라이트 / is this grant "mine"?
   // 부서: org_path 정확일치 또는 prefix("…/") 경계 (belongs_to_department 규약, HM-2).
@@ -283,7 +285,18 @@ export function MapDetailCard({
         <>
       {/* 헤더 — 좌: 타이틀 / 우: 공개·역할·오우닝 부서 필 (Open 버튼 제거 — 열기는 카드 타이틀 링크) */}
       <div className="flex items-start justify-between gap-2">
-        <h2 className="text-body-strong text-ink">{detail.name}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="text-body-strong text-ink">{detail.name}</h2>
+          {detail.sp_designated_at && (
+            <span
+              data-id="map-detail-sp"
+              title={t("home.spBadgeTip")}
+              className="shrink-0 rounded-sm border border-hairline bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+            >
+              {t("home.spBadge")}
+            </span>
+          )}
+        </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 text-fine text-ink-tertiary">
           {/* 공개 범위 — 반투명 필 + 아이콘 (public=green/private=중립, visibilityPillClass 색 의미 유지) */}
           <span
@@ -403,6 +416,31 @@ export function MapDetailCard({
               only === "members" ? "" : "sm:border-l sm:border-hairline sm:pl-4"
             }`}
           >
+            {/* 오우닝 부서 — 협업 부서 행과 같은 스타일(레벨 아이콘·부서명)로 멤버 최상단 노출. 항상 editor·고정.
+                인스펙터(members-only)엔 헤더 필이 없어 여기서만 보이고, 상세 카드엔 헤더 필과 함께 상세 행으로 노출. */}
+            {owningDeptPath && (
+              <div data-id="map-detail-owning-member" className="flex flex-col gap-1">
+                <p className="text-fine text-ink-tertiary">{t("perm.owningDept.title")}</p>
+                <div className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5">
+                  <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
+                      {(() => {
+                        const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(owningDeptPath))] ?? Building2;
+                        return <Icon size={22} strokeWidth={1.5} />;
+                      })()}
+                    </span>
+                    <span className="flex min-w-0 flex-col leading-tight">
+                      <span className="truncate">{formatDeptName(owningDeptPath, lang, koreanDeptByPath)}</span>
+                      <span className="flex items-center gap-1 text-fine text-ink-tertiary">
+                        <Lock size={11} strokeWidth={1.5} className="shrink-0" />
+                        {t("perm.owningDept.lockedEditor")}
+                      </span>
+                    </span>
+                  </span>
+                  <RoleBadge role="editor" />
+                </div>
+              </div>
+            )}
             {only !== "members" && (
               <div className="flex items-center justify-between gap-2">
                 <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.members")}</p>

@@ -1,12 +1,13 @@
 """승인 워크플로우 — 상태 상수, 편집가능 판정, 승인자 로딩, 알림, 퇴사자 정리 (design 2026-06-14)."""
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
 from app.models import (
     Employee,
     MapApprover,
+    MapPermission,
     MapVersion,
     Notification,
     ProcessMap,
@@ -39,7 +40,10 @@ async def get_display_name(session: AsyncSession, login_id: str) -> str:
     return emp.name if emp is not None and emp.name else login_id
 
 
-def create_notifications(
+NOTIFICATION_CAP = 100  # 인당 알림 보존 상한 — 초과분은 읽음 여부 무관 오래된 순 삭제 (design 2026-07-16)
+
+
+async def create_notifications(
     session: AsyncSession,
     recipients: list[str],
     *,
@@ -48,9 +52,10 @@ def create_notifications(
     version_id: int | None = None,
     message: str,
 ) -> None:
-    """수신자별 알림 행을 세션에 추가한다 — commit은 호출자 책임.
+    """수신자별 알림 행 추가 + 인당 NOTIFICATION_CAP 초과분 트리밍 — commit은 호출자 책임.
 
     map_id/version_id는 선택 — 맵/버전과 무관한 알림(공지 등)은 생략.
+    트리밍의 select가 autoflush로 pending add를 먼저 flush한다.
     """
     for recipient in recipients:
         session.add(
@@ -62,6 +67,19 @@ def create_notifications(
                 message=message,
             )
         )
+    for recipient in dict.fromkeys(recipients):  # 중복 수신자 1회만 트리밍
+        stale_ids = (
+            await session.scalars(
+                select(Notification.id)
+                .where(Notification.recipient == recipient)
+                .order_by(Notification.created_at.desc(), Notification.id.desc())
+                .offset(NOTIFICATION_CAP)
+            )
+        ).all()
+        if stale_ids:
+            await session.execute(
+                delete(Notification).where(Notification.id.in_(stale_ids))
+            )
 
 
 async def load_active_approvers(session: AsyncSession, map_id: int) -> list[str]:
@@ -145,7 +163,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                 for r in dict.fromkeys([found_map.owner_id if found_map else None, submitter])
                 if r
             ]
-            create_notifications(
+            await create_notifications(
                 session,
                 recipients,
                 type="approval_cancelled",
@@ -157,7 +175,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
             # 퇴사자가 마지막 미승인자였음 — 남은 전원 기승인이므로 즉시 전이
             version.status = APPROVED
             if submitter:
-                create_notifications(
+                await create_notifications(
                     session,
                     [submitter],
                     type="approved",
@@ -165,3 +183,34 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                     version_id=version.id,
                     message=f"'{version.label}' is fully approved — ready to publish",
                 )
+
+
+async def load_map_user_collaborators(
+    session: AsyncSession, map_id: int, *, role: str | None = None
+) -> list[str]:
+    """맵의 user principal 협업자 login_id — role 지정 시 해당 역할만 (rename 알림 대상)."""
+    q = select(MapPermission.principal_id).where(
+        MapPermission.map_id == map_id,
+        MapPermission.principal_type == "user",
+    )
+    if role is not None:
+        q = q.where(MapPermission.role == role)
+    rows = await session.scalars(q)
+    return list(rows.all())
+
+
+async def notify_map_renamed(
+    session: AsyncSession, map_id: int, *, old_name: str, new_name: str, actor: str
+) -> None:
+    """이름 변경 확정(직접·승인 공통) → 협업자 전원 알림 (행위자 제외, spec 2026-07-18)."""
+    actor_name = await get_display_name(session, actor)
+    recipients = [
+        c for c in await load_map_user_collaborators(session, map_id) if c != actor
+    ]
+    await create_notifications(
+        session,
+        recipients,
+        type="map_renamed",
+        map_id=map_id,
+        message=f"{actor_name} renamed '{old_name}' to '{new_name}'",
+    )

@@ -1,10 +1,11 @@
 """스키마 보강 스톱갭 테스트 — 기존 테이블에 누락 컬럼 추가 (app/db.py)."""
 
+import asyncio
 import pathlib
 
 from sqlalchemy import create_engine, inspect, text
 
-from app.db import _add_missing_columns
+from app.db import _add_missing_columns, engine
 
 
 def test_stopgap_adds_workflow_columns(tmp_path: pathlib.Path) -> None:
@@ -52,3 +53,22 @@ def test_stopgap_is_idempotent(tmp_path: pathlib.Path) -> None:
     with engine.connect() as conn:
         columns = {col["name"] for col in inspect(conn).get_columns("map_versions")}
         assert "status" in columns
+
+
+def test_added_indexes_bootstrap_idempotent(client) -> None:  # noqa: ARG001
+    """기존 DB에 인덱스가 없어도 startup 보강이 만들고, 재실행은 no-op(멱등)."""
+    from app.db import _add_missing_indexes
+
+    async def _run() -> list[str]:
+        async with engine.begin() as conn:
+            # 기존-DB 시뮬레이션: 하나 지우고 보강 2회(멱등) 후 인덱스 목록
+            await conn.execute(text("DROP INDEX IF EXISTS ix_notifications_recipient_read"))
+            await conn.run_sync(_add_missing_indexes)
+            await conn.run_sync(_add_missing_indexes)
+            return await conn.run_sync(
+                lambda c: [ix["name"] for ix in inspect(c).get_indexes("notifications")]
+            )
+
+    names = asyncio.run(_run())
+    assert "ix_notifications_recipient_read" in names
+    assert "ix_notifications_recipient_created" in names

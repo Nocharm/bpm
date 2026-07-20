@@ -9,16 +9,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import workflow
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
 from app.permissions import logic
-from app.permissions.access import get_effective_role
+from app.permissions.access import assert_map_role, get_effective_role
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
     require_approver_or_sysadmin,
     require_map_role,
 )
+from app.routers.maps import _assert_unique_name
 from app.schemas import (
     ApprovalRequestOut,
     DecisionIn,
@@ -165,6 +167,13 @@ async def update_permission(
             status="pending",
         )
         session.add(req)
+        await _notify_permission_request(
+            session,
+            map_id=map_id,
+            map_name=found_map.name,
+            requested_by=user,
+            kind="permission_downgrade",
+        )
         await session.commit()
         await session.refresh(req)
         # 지연 — 아직 적용 안 됨. pending 마커로 응답
@@ -194,6 +203,7 @@ async def delete_permission(
     # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
+        found_map = await _get_map_or_404(session, map_id)
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -208,6 +218,13 @@ async def delete_permission(
             status="pending",
         )
         session.add(req)
+        await _notify_permission_request(
+            session,
+            map_id=map_id,
+            map_name=found_map.name,
+            requested_by=user,
+            kind="permission_downgrade",
+        )
         await session.commit()
         await session.refresh(req)
         return {"pending": True, "approval_request": _serialize_request(req)}
@@ -302,6 +319,13 @@ async def request_visibility_change(
         status="pending",
     )
     session.add(req)
+    await _notify_permission_request(
+        session,
+        map_id=map_id,
+        map_name=found_map.name,
+        requested_by=user,
+        kind="visibility_change",
+    )
     await session.commit()
     await session.refresh(req)
     return req
@@ -361,7 +385,11 @@ async def decide_approval_request(
     req = await session.get(ApprovalRequest, request_id)
     if req is None:
         raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
-    await assert_approver_or_sysadmin(session, user, req.map_id)
+    if req.kind in ("map_rename", "sp_designation"):
+        # rename·SP 등록 결정권자는 오너/sysadmin — 승인자 게이트와 다름 (spec 2026-07-18/19)
+        await assert_map_role(session, user, req.map_id, "owner")
+    else:
+        await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
         raise HTTPException(status_code=409, detail=f"request already {req.status}")
 
@@ -369,6 +397,7 @@ async def decide_approval_request(
     req.decided_at = _now()
     if payload.decision == "reject":
         req.status = "rejected"
+        await _notify_permission_decision(session, req, outcome="rejected")
         await session.commit()
         await session.refresh(req)
         return req
@@ -376,6 +405,7 @@ async def decide_approval_request(
     # approve → payload 적용
     await _apply_request(session, req)
     req.status = "applied"
+    await _notify_permission_decision(session, req, outcome="approved")
     await session.commit()
     await session.refresh(req)
     return req
@@ -410,6 +440,84 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
                 ).all()
                 for grant in viewer_grants:
                     await session.delete(grant)
+    elif req.kind == "map_rename":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 이름 변경 없이 applied
+        to_name = req.payload.get("to_name") or ""
+        # 요청~승인 사이 이름 선점 경합 — 409로 중단하면 decide가 커밋 전이라 pending 유지
+        await _assert_unique_name(session, to_name, exclude_map_id=req.map_id)
+        old_name = found_map.name
+        found_map.name = to_name
+        await workflow.notify_map_renamed(
+            session, req.map_id, old_name=old_name, new_name=to_name, actor=req.decided_by
+        )
+    elif req.kind == "sp_designation":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 적용 없이 applied
+        if found_map.sp_designated_at is None:
+            # 정상 수락은 지정 모달 저장(PUT)이 pending을 자동 applied 처리 — 이 분기는
+            # 지정 없이 approve 를 직접 호출한 경우 방어. 409 중단 → 커밋 전이라 pending 유지.
+            raise HTTPException(
+                status_code=409,
+                detail="map is not designated yet — save the designation first",
+            )
+        # 이미 지정됨(요청~승인 사이 직접 지정 경합) → 적용할 것 없음, applied 마킹만
+
+
+async def _notify_permission_request(
+    session: AsyncSession, *, map_id: int, map_name: str, requested_by: str, kind: str
+) -> None:
+    """승인 지연 요청 발생 → 활성 승인자에게 벨 알림 (요청자 제외, design 2026-07-16)."""
+    requester_name = await workflow.get_display_name(session, requested_by)
+    what = "a visibility change" if kind == "visibility_change" else "a permission change"
+    recipients = [
+        a for a in await workflow.load_active_approvers(session, map_id) if a != requested_by
+    ]
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="permission_requested",
+        map_id=map_id,
+        message=f"{requester_name} requested {what} on '{map_name}'",
+    )
+
+
+async def _notify_permission_decision(
+    session: AsyncSession, req: ApprovalRequest, *, outcome: str
+) -> None:
+    """승인/반려 결과 → 요청자에게 벨 알림 (design 2026-07-16)."""
+    if req.kind == "map_rename":
+        from_name = req.payload.get("from_name", "")
+        to_name = req.payload.get("to_name", "")
+        await workflow.create_notifications(
+            session,
+            [req.requested_by],
+            type=f"rename_{outcome}",
+            map_id=req.map_id,
+            message=f"Your request to rename '{from_name}' to '{to_name}' was {outcome}",
+        )
+        return
+    if req.kind == "sp_designation":
+        map_name = req.payload.get("map_name", "")
+        await workflow.create_notifications(
+            session,
+            [req.requested_by],
+            type=f"sp_designation_{outcome}",
+            map_id=req.map_id,
+            message=f"Your subprocess registration request for '{map_name}' was {outcome}",
+        )
+        return
+    found_map = await session.get(ProcessMap, req.map_id)
+    map_name = found_map.name if found_map is not None else f"map {req.map_id}"
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type=f"permission_{outcome}",
+        map_id=req.map_id,
+        message=f"Your request on '{map_name}' was {outcome}",
+    )
 
 
 def _serialize_request(req: ApprovalRequest) -> dict:

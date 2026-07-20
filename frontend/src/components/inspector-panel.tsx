@@ -22,7 +22,7 @@ import { type ComponentType, type ReactNode, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
 
-type InspectorTab = "properties" | "map" | "approval" | "activity" | "import";
+type InspectorTab = "properties" | "map" | "subprocess" | "approval" | "activity" | "import";
 type IconType = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 
 const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
@@ -35,6 +35,11 @@ const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
 // CSV 프리뷰 중에만 나타나는 탭 — importSlot이 있을 때 TABS 뒤에 붙는다
 const IMPORT_TAB: { key: InspectorTab; labelKey: MessageKey; icon: IconType } = {
   key: "import", labelKey: "csvImport.tabTitle", icon: FileUp,
+};
+
+// SP 지정된 맵에서만 나타나는 탭 — subprocessTabSlot이 있을 때 기본 탭들 뒤(활동 탭 다음, 5번째)에 붙는다
+const SUBPROCESS_TAB: { key: InspectorTab; labelKey: MessageKey; icon: IconType } = {
+  key: "subprocess", labelKey: "inspector.tabSubprocess", icon: Workflow,
 };
 
 interface InspectorPanelProps {
@@ -58,6 +63,8 @@ interface InspectorPanelProps {
   lockTabs?: boolean;
   // 서브프로세스 지정 카드 — 속성 빈상태·맵 탭 공용. page.tsx 주입.
   subprocessSlot?: ReactNode;
+  // Subprocess 탭(지정 메타+역참조 목록) — 지정된 맵에서만 슬롯이 오고, 있을 때만 탭이 나타난다
+  subprocessTabSlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
   mapName?: string;
   // 맵 이름 위 작은 버전 표시("version {n}" / 드래프트 "(Draft)v.{n}"). page.tsx 주입.
@@ -86,6 +93,7 @@ export function InspectorPanel({
   forcedTab,
   lockTabs,
   subprocessSlot,
+  subprocessTabSlot,
   mapName,
   mapVersionMarker,
   versionControl,
@@ -100,8 +108,14 @@ export function InspectorPanel({
 }: InspectorPanelProps) {
   const { t } = useI18n();
   const [internalTab, setInternalTab] = useState<InspectorTab>("properties");
-  const tab = forcedTab ?? internalTab;
-  const tabs = importSlot ? [...TABS, IMPORT_TAB] : TABS;
+  // 지정 해제로 슬롯이 사라지면 열려 있던 subprocess 탭을 Map 탭으로 폴백(렌더 파생 — effect 불요)
+  const rawTab = forcedTab ?? internalTab;
+  const tab = rawTab === "subprocess" && !subprocessTabSlot ? "map" : rawTab;
+  const tabs = [
+    ...TABS,
+    ...(subprocessTabSlot ? [SUBPROCESS_TAB] : []),
+    ...(importSlot ? [IMPORT_TAB] : []),
+  ];
 
   return (
     // @container — 패널 폭 기준 컨테이너 쿼리(탭 라벨 전체 펼침 판정용, ≥430px면 전 탭 라벨)
@@ -170,6 +184,7 @@ export function InspectorPanel({
           ))}
         {tab === "map" &&
           (mapTabSlot ?? <Placeholder text={`${t("inspector.tabMap")} · ${t("inspector.wip")}`} />)}
+        {tab === "subprocess" && subprocessTabSlot}
         {tab === "approval" &&
           (approvalSlot ?? <Placeholder text={`${t("editor.tabApproval")} · ${t("inspector.wip")}`} />)}
         {tab === "activity" &&

@@ -21,6 +21,8 @@ interface SubprocessInspectorCardProps {
   canManage: boolean; // 게시 버전 열림 && (오너 || sysadmin)
   disabledReason: string | null; // canManage=false일 때 비활성 사유(i18n 처리된 문자열)
   onToast?: (message: string) => void;
+  // 지정/해제 성공 후 — page.tsx가 usage를 재조회해 Subprocess 탭 노출을 동기화
+  onDesignationChange?: () => void;
 }
 
 export function SubprocessInspectorCard({
@@ -28,6 +30,7 @@ export function SubprocessInspectorCard({
   canManage,
   disabledReason,
   onToast,
+  onDesignationChange,
 }: SubprocessInspectorCardProps) {
   const { t } = useI18n();
   const [detail, setDetail] = useState<MapDetail | null>(null);
@@ -42,6 +45,7 @@ export function SubprocessInspectorCard({
     headcount: "",
     url: "",
     urlLabel: "",
+    description: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -78,6 +82,7 @@ export function SubprocessInspectorCard({
       headcount: detail.sp_headcount ?? "",
       url: detail.sp_url ?? "",
       urlLabel: detail.sp_url_label ?? "",
+      description: detail.sp_description ?? "",
     });
     setShowModal(true);
   };
@@ -88,6 +93,7 @@ export function SubprocessInspectorCard({
       const updated = await deleteSubprocessDesignation(mapId);
       setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
       onToast?.(t("perm.sp.removed"));
+      onDesignationChange?.();
     } catch (err) {
       onToast?.(err instanceof Error ? err.message : String(err));
     } finally {
@@ -110,6 +116,7 @@ export function SubprocessInspectorCard({
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
     { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },
     { label: t("field.headcount"), value: detail.sp_headcount },
+    ...(detail.sp_description ? [{ label: t("field.description"), value: detail.sp_description }] : []),
   ];
 
   return (
@@ -201,6 +208,7 @@ export function SubprocessInspectorCard({
           onSaved={(updated) => {
             setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
             onToast?.(t("perm.sp.saved"));
+            onDesignationChange?.();
             setShowModal(false);
           }}
           onClose={() => setShowModal(false)}

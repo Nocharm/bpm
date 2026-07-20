@@ -3,6 +3,8 @@
 그래프는 version 단위 평면 저장. GET/PUT /versions/{id}/graph 가 버전 전체를 다룬다.
 """
 
+from collections import Counter
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -180,6 +182,37 @@ async def replace_graph(
         await assert_no_cycle(session, version_id, payload.nodes)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # 링크 유일성 — 같은 대상 맵을 2개 이상 노드가 링크하면 거부 (design 2026-07-16)
+    # 가드 도입 전 이미 저장된 중복은 grandfather — 매 PUT마다 걸리면 그 맵이 영구히
+    # 저장 불가(사실상 읽기전용)가 된다. 새로 도입되는 중복만 차단한다 (design 2026-07-17).
+    stored_linked_ids = (
+        await session.scalars(
+            select(Node.linked_map_id).where(
+                Node.version_id == version_id,
+                Node.node_type == "subprocess",
+                Node.linked_map_id.is_not(None),
+            )
+        )
+    ).all()
+    stored_counts = Counter(stored_linked_ids)
+    incoming_counts = Counter(
+        n.linked_map_id
+        for n in payload.nodes
+        if n.node_type == "subprocess" and n.linked_map_id is not None
+    )
+    # count > stored_counts[mid] (not just <= 1) so a target already grandfathered
+    # at 2+ still gets flagged when a NEW dupe pushes it higher (e.g. 2 -> 3).
+    dupes = sorted(
+        mid
+        for mid, count in incoming_counts.items()
+        if count > 1 and count > stored_counts[mid]
+    )
+    if dupes:
+        raise HTTPException(
+            status_code=422,
+            detail=f"subprocess map already linked in this map: {dupes}",
+        )
 
     # 버전 전체 노드를 payload로 교체 — 사라진 노드의 엣지·코멘트도 정리
     existing_ids = set(

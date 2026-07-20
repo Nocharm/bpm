@@ -23,7 +23,8 @@ interface ApprovalPanelProps {
   hasApproved: boolean;
   // 승인자 목록 관리 가능 여부 — 오너이면서 승인 진행 중이 아닐 때(draft/rejected 등). / can edit approver list.
   canManageApprovers: boolean;
-  onSubmit: () => void;
+  // 클릭 지점 전달 — 셀프 게시 팝오버를 마우스 근처에 띄우기 위함 (WorkflowActions에서 발원).
+  onSubmit: (at: { x: number; y: number }) => void;
   onApprove: () => void;
   onReject: () => void;
   onPublish: () => void;

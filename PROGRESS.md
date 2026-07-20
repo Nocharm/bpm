@@ -1,5 +1,263 @@
 # Progress
 
+## 2026-07-20 — 그룹 일괄편집 모달 폭 확대(속성 버튼 오버플로 해소) (dev)
+- **증상**: 일괄편집 모달의 속성 선택(`grid-cols-3`, MODE_META 8개) 버튼에서 긴 영어 라벨("Duration / run (h)" 등)이 `whitespace-nowrap`+`justify-center`라 버튼 폭을 넘어 아이콘이 버튼 밖으로 삐짐.
+- **수정**: 모달 폭 `w-96`(384px) → `w-[29rem]`(464px). 실측(Pretendard 14px): 최장 버튼 135px, 3열 최소 445px 필요 → 464px는 여유. 한국어(최장 418px)도 커버. 영어 기준 산정.
+- 파일: `frontend/src/components/group-bulk-modal.tsx`.
+- 검증: build·lint OK. 실제 버튼 클래스 격리 렌더 실측 — 384px에서 4개 버튼 오버플로(내용>버튼) → 464px에서 전부 fit(오버플로 0). (dev.db에 데모 그룹 없어 실모달 트리거 불가 → 동일 클래스 렌더로 검증.)
+
+## 2026-07-20 — 서브프로세스 노드 이름이 링크맵 개명을 안 따르던 버그 픽스 (dev)
+- **증상**: 맵 이름을 바꿔도 그 맵을 서브프로세스로 링크한 다른 맵의 노드 라벨이 예전 이름 그대로.
+- **근본 원인**: subprocess 노드 라벨은 링크맵 이름 고정(비편집, `process-node.tsx` F5)인데, 값이 링크 시점의 `node.title` **저장 스냅샷**이었다. dept/assignee 등 다른 SP 어트리뷰트는 `subprocess_refs`로 라이브 해석하는데 **이름만 라이브 소스에 없었음**.
+- **수정(아키텍처 정합·라이브 해석)**: `SubprocessRefOut`에 `name`(링크맵 현재 이름) 추가 → 캔버스(`injectSubEnds`)·아웃라인이 `ref.name`을 라이브 라벨로 렌더(저장 스냅샷은 폴백). **저장 노드 title·게시본은 불변**(display 전용 주입) — 불변 버전 변형 없이 표시만 갱신.
+- 파일: `backend/app/schemas.py`(SubprocessRefOut.name)·`backend/app/subprocess.py`(ProcessMap.name select)·`backend/tests/test_subprocess_designation.py`(개명 라이브 반영 테스트)·`frontend/src/lib/api.ts`(SubprocessRef.name)·`frontend/src/app/maps/[mapId]/page.tsx`(injectSubEnds liveLabel·outline liveName).
+- 검증: ruff·pytest 696(신규 1 포함)·frontend lint 0·build OK. API 실검증(v12): 맵1 개명 전 refs.name="Order Fulfillment"→개명 후 "Order Fulfillment RENAMED". 브라우저(맵2 v12): 캔버스 노드·아웃라인 모두 새 이름 렌더 확인. (후속 검토: WBS/Excel/Word export는 저장 title을 읽어 여전히 스냅샷 — 별도 표면.)
+
+## 2026-07-20 — 홈/새맵 UX 후속 3종 (dev)
+- **부서 미지정 접기**: `OrgAccordion`의 "부서 미지정" 섹션을 부서 노드와 동일한 chevron 토글로 — `unassignedOpen`(page.tsx, 기본 열림) + `onToggleUnassigned` props. Collapse all이 부서 트리와 함께 미지정도 접도록 `setUnassignedOpen(false)` 동시 호출.
+- **승인자 피커 반짝**: 새 맵 다이얼로그에서 오우닝 부서 선택 시 결재자 피커로 스크롤될 때 accent 링이 1회 반짝(`picker-flash` keyframe). `applyOwningDept`(이벤트 핸들러)에서 `setFlashApprovers(true)` + 850ms 타이머 리셋(모션 설정 무관 리셋, set-state-in-effect 린트 회피). 결재자 섹션 래퍼에 `motion-safe:animate-[picker-flash...]`.
+- **최근 목록 전체 밀림**: top 변경 시 첫 행만 강조하던 걸 확장 — 새 최상단(i0)은 `recent-insert`, 나머지 기존 행은 `recent-shift`(`translateY(calc(-100% - 0.5rem))→0`, 자기높이+gap 한 슬롯, 픽셀 상수 없는 FLIP)로 한 칸 아래로 밀림.
+- 파일: `components/maps/org-accordion.tsx`·`app/page.tsx`·`components/permissions/create-map-dialog.tsx`·`components/maps/recent-opened-list.tsx`·`app/globals.css`(picker-flash·recent-shift).
+- 검증: lint 0 err·`next build`(TS) OK·vitest(org-tree 5/5). 브라우저 실기동(3200/8901, admin.sys): ①미지정 토글 접힘/펼침·Collapse all이 함께 접음 확인, ②오우닝 선택 시 결재자 섹션에 `picker-flash` 클래스 적용됨을 MutationObserver로 확인(automation 탭 백그라운드라 CSS 애니 tick은 스로틀·클래스 적용=로직은 확정, 포커스 사용자에겐 재생), ③top 변경 시 i0=`recent-insert`·i1~3=`recent-shift` 확인.
+
+## 2026-07-20 — 홈(Maps 탭) UX 4종 + 인스펙터 Subprocess 탭 위치 (dev)
+- **빈 부서 숨김(내 부서 유지)**: `buildOrgTree`에 `keepEmptyPaths` 인자 추가 — `mapCount===0` 부서 가지치기, 단 내 `org_path`의 모든 접두 경로는 앵커로 유지(맵 없어도 표시). `page.tsx`가 `me.org_path` 접두 집합을 전달. 유닛 테스트 1건 추가.
+- **도넛 재디자인 + 호버 잘림 방지**: `charts/donut.tsx` — 옅은 트랙 링 + 세그먼트 얇은 gap(다중만) + 중앙 합계에 `total` 캡션 + 선택 시 나머지 dim(0.3). **잘림 진범**: 선택 세그먼트가 `stroke+3`으로 굵어지는데 반지름이 여유 없이 잡혀 viewBox 밖으로 삐짐 → `r`을 `SELECT_GROW+EDGE_PAD`만큼 축소(최대 외곽 102 ≤ 104 검증). `donut-geometry.ts`에 `gap` 인자(기본 0=기존 계약). 승인 카드도 공용 Donut이라 동시 개선.
+- **최근 맵 "위에 추가됨" 인지**: top 변경 시 전 행 스태거(자기상쇄로 밋밋)를 폐기 → **새 최상단 행만** `recent-insert`(750ms, translateY + accent 링이 번졌다 사라짐), 나머지는 정지 → 하나가 위에 끼워진 느낌. `slideDown` keyframe 제거(미사용).
+- **뒤로가기 → 선택 해제**: 대시보드에서 맵 클릭해 상세로 "이동"한 걸 브라우저 Back으로 되돌림 — `null→선택` 전이에만 `pushState`, `popstate`에서 `setSelectedId(null)`, UI 해제 시 `history.back()`으로 항목 소비(정합). 선택 간 전환은 항목 1개 유지.
+- **인스펙터 Subprocess 탭 → 맨 끝(5번째)**: `inspector-panel.tsx` 탭 조립을 `[...TABS, subprocess?, import?]`로 변경 → Properties·Map·Approval·Activity·**Subprocess** 순(활동/코멘트 탭 뒤).
+- 파일: `lib/org-tree.ts`·`org-tree.test.ts`·`app/page.tsx`·`lib/donut-geometry.ts`·`charts/donut.tsx`·`maps/status-donut-card.tsx`·`maps/approvals-card.tsx`·`lib/i18n-messages.ts`(home.donutTotal EN/KO)·`maps/recent-opened-list.tsx`·`app/globals.css`·`components/inspector-panel.tsx`.
+- 검증: lint 0 err·`next build`(TS·React Compiler) OK·vitest 512/512. 브라우저 실기동(3200/8901, admin.sys=System Team 소속·맵0): ①조직도 루트+중첩 모두 빈 부서 제거·Management Center 체인만 앵커 유지 확인, ②도넛 외곽 102≤104(선택 세그먼트 코너 육안 무잘림)·트랙/gap/캡션 확인, ③top 변경 시 li[0]만 `recent-insert` 나머지 `none`, ④선택→Back=홈 유지+대시보드 복귀·UI 해제도 정합, ⑤/maps/1 인스펙터 탭 순서 Properties·Map·Approval·Activity·Subprocess 확인.
+
+## 2026-07-20 — 펼침 영역 틴트 상하 경계(바운드 박스) + wrap 높이 함정 해결 (dev)
+- **틴트 바운드**: `InlineRegionBands`가 화면 전체 높이 무한 레인(좌우선만)에서 **콘텐츠 Y범위 박스**로 전환 — `box.y/height`(ViewportPortal flow 좌표) 사용, 상하좌우 테두리 + 라운드(12). 뷰포트 구독(`useViewport`/`useStore`) 제거(box 좌표가 flow라 불필요, FocusScopeBands는 유지).
+- **바깥이 안을 덮음(중첩)**: `buildScope`가 모든 영역의 `y/height`를 **전체 콘텐츠(모든 깊이) 공통 범위**로 산정 → 중첩 시 바깥·안 박스의 상하가 동일해 바깥이 안을 항상 덮음(추가 로직 불필요).
+- **wrap 높이 함정**: 세로 경계가 `nodeSizeOf.h`(고정 52) 기준이라 wrap으로 커진 노드가 박스 아래로 삐져나올 수 있었음. `estimateNodeHeight()`(타이틀 wrap 줄 수 기반)로 펼침 자식 주입 높이를 실측화 + 두 Y-bbox 루프가 `measured.height` 우선 사용. 필드/파라미터 줄은 REGION_MARGIN(48)이 흡수(근사).
+- 파일: `lib/canvas.ts`(estimateNodeHeight·공용 상수), `app/maps/[mapId]/page.tsx`(InlineRegionBands 박스 렌더·자식 주입 높이·Y-bbox measured).
+- 검증: lint 0·build OK·유닛 35/35. 브라우저 실기동(3200/8901, 맵1에 map3 링크 중첩 서브프로세스 임시 삽입·map3 자식 하향 후 원복): 박스 바운드(h 유한·둥근 모서리), 바깥/안 박스 상하 동일(t=471·b=877, A⊃B), 최하단 깊은 중첩 노드(b=862)를 박스 하단(877)이 덮음, wrap-tall 자식 포함 — DOM 좌표로 확인.
+
+## 2026-07-20 — 작업/터미널 노드 라벨 wrap + 서브프로세스 펼침 우측 경계 포함 (dev)
+- **wrap**: process·start·end 노드에 `max-w-[240px] break-words` — 긴 라벨이 240px에서 여러 줄로 줄바꿈(짧은 라벨은 기존 `min-w` 컴팩트 유지, 무공백 토큰은 break-words로 분절). decision(`max-w-20`)·subprocess(`w-[180px]`)는 이미 wrap이라 무변경.
+- **펼침 경계**: 인라인 펼침 자식은 React Flow가 측정 못 해 `measured`를 직접 주입하는데, 폭을 고정 근사(`nodeSizeOf`, process=170)로 넣어 긴 라벨(실폭≤240)이 region 우측 border를 빠져나갔다. `estimateNodeWidth()`(offscreen `measureText`로 타이틀 실폭 추정, `[nodeSizeOf, NODE_MAX_WIDTH]` 클램프)로 자식 주입 폭을 실폭화하고, buildScope bbox가 `measured.width` 우선 사용 → 경계가 자식을 감쌈. 실폭 추정이라 짧은 노드엔 빈 레인이 안 생기고, 긴 노드는 상한(240)에서 포함.
+- 파일: `lib/canvas.ts`(NODE_MAX_WIDTH·estimateNodeWidth), `components/process-node.tsx`(wrap 클래스), `app/maps/[mapId]/page.tsx`(자식 주입 폭·bbox measured 우선).
+- 검증: lint 0 err·`next build` OK(TS·React Compiler)·유닛 35/35. 브라우저 실기동(3200/8901, 맵2 서브프로세스 펼침, 맵1 자식 라벨 임시 장문화 후 원복): 긴 process·End 자식 240px·다줄 wrap 확인, region 우측 border가 최우측 자식보다 REGION_PAD(28px)만 바깥으로 포함 확인. 세로(높이) 경계는 이번 범위 밖.
+
+## 2026-07-20 — 복사(Ctrl) 관련 마이너 버그 3건 (worktree-copy-paste-fix)
+- ① **Ctrl+클릭 시 컨텍스트 메뉴가 열리던 문제** — macOS는 Ctrl+클릭=네이티브 우클릭이라 `contextmenu`가 발화. 모든 메뉴의 단일 초크포인트 `openMenu`에 `event.ctrlKey` 가드 추가(`preventDefault`는 유지→네이티브 메뉴도 억제). Ctrl은 복사 modifier이므로 Ctrl+드래그 복사와의 충돌 제거. node/pane/edge/selection/group 전 표면 커버.
+- ② **End 노드 복사 시 대표끝(`isPrimaryEnd`)이 중복되던 문제** — 복사 두 경로(`node-clipboard.ts buildPaste`=Ctrl+C/V, `applyCtrlDragCopy`=Ctrl+드래그)에서 사본 data에 `isPrimaryEnd:false` 강제(groupIds 리셋과 동일 관례). "대표끝은 맵당 1개" 불변식 유지.
+- ③ **Ctrl+드래그 복사 시각 반전** — 원본은 원위치에 솔리드로 남기고(엣지도 원위치 고스트로 재라우팅), 커서 따라 끌리는 실제 노드를 반투명 사본(`bpm-node-ctrl-copy` opacity .5)으로 표시. `displayNodes`(사본 클래스)·`ghostNodes`(원위치 솔리드)·`styledEdges`(드래그 중 엣지→`ctrl-ghost` 앵커) 3표면 수정. RF 드래그는 그대로 두고 렌더만 반전(노드 pin 안 함→충돌 없음).
+- 검증: node-clipboard 신규 TDD 1건(RED→GREEN, buildPaste `isPrimaryEnd` 소거) 포함 vitest 511/511·lint 0 err·build OK. 브라우저 실기동(3300/8800, map1 v6): ① `contextmenu` 이벤트 디스패치로 Ctrl=메뉴 억제·일반=열림 확인, ② 실 UI Ctrl+C/V→오토세이브 PUT→DB 대표끝 정확히 1개(원본 1·사본 "End (2)" 0). ③ **Ctrl+드래그 시각은 CDP 합성 드래그가 Ctrl modifier 미전달로 자동검증 불가 → 육안 검증 대기**.
+
+## 2026-07-20 — 리뷰 3차 반영: 라이브러리 현재 맵 제외·+노드 메뉴 바깥닫힘·우클릭 후 S (worktree-sp-placeholder)
+- 프로세스 라이브러리 목록에서 **현재 맵 제외**(refsByMap은 순환 판별용이라 전체 rows 유지).
+- **+노드 드롭다운**: 백드롭 제거 → capture-phase 문서 mousedown 바깥닫힘(맵 드롭다운과 동일 패턴 — React Flow d3 전파 차단 대응).
+- **우클릭 후 S 미동작 원인**: 전역 S 핸들러가 메뉴 열림 중 무시(`!menu`, 정렬 서브메뉴 accel 충돌 방지)인데 컨텍스트 메뉴 라이브러리 항목엔 shortcut 표기("S")만 있고 **accel이 없었음** → `accel: "s"` 추가(가속기 매칭은 열린 서브메뉴 스코프라 정렬 서브메뉴의 s와 충돌 없음). 맥 여부 무관 — 전 환경 동일 버그.
+- pw 44/44 PASS(현재 맵 제외·S 가속기·+노드 바깥닫힘 검사 3건 추가). tsc 0·lint 에러 0·vitest 510.
+
+## 2026-07-20 — 리뷰 2차 반영: 드롭다운 마커 재설계·미등록 드래그 링크·New map 조건부 (worktree-sp-placeholder)
+- 드롭다운: SP 배지 → **타일 아이콘 교체**(지정 맵=Workflow 아이콘 보라, 사용중 맵=보라 배경 타일+행 배경 하이라이트), 현재 맵 목록 제외, 사용중 행 클릭 시 아코디언과 함께 **캔버스 해당 노드 자동 포커싱**(handleOutlineSelect 재사용), 백드롭 제거하고 **document capture-phase mousedown**으로 바깥 클릭 닫힘(React Flow d3가 mousedown 전파를 끊어 버블 리스너 불가 — 실측).
+- 라이브러리: 미등록 맵도 **다른 맵과 같은 드래그**로 — 드롭 시 page.tsx가 unregistered 플래그를 읽어 확인 체인(경고→드롭 위치 생성→등록 요청, createLinkNodeAt로 드롭 생성 로직 공용화). 클릭 링크·패널 내 다이얼로그 제거. **New map은 검색어 입력 시에만** 노출, 라벨 = "검색어" 필(말줄임)+언어별 prefix/suffix(newMapNamedPrefix/Suffix — 빈 값 생략 조립).
+- pw 41/41 PASS(드래그·마커·바깥닫힘·조건부 버튼 검사로 갱신, footer 필이 getByText에 걸리는 함정은 data-map-id 행 검사로 회피). tsc 0·lint 에러 0·vitest 510. 매뉴얼·공지·검증 플랜 서술 동기화.
+
+## 2026-07-19 — 리뷰 반영: 미등록 토글·즉시생성을 프로세스 라이브러리로 이동 (worktree-sp-placeholder)
+- 사용자 로컬 확인 피드백 반영. 맵 이름 드롭다운은 원래 역할(맵 검색·최근 목록)로 원복하고 표시만 보강 — 지정 맵 **SP 배지**(홈 카드 배지 재사용)·이미 링크된 맵 **체크**(기존 체크 디자인), 링크된 맵은 링크 추가 숨김. "Show unregistered maps" 토글·미등록 클릭 링크(2단 확인+등록 요청)·검색어 프리필 **New map**(생성 즉시 링크)은 좌측 **프로세스 라이브러리 패널**로 이동(미등록 행은 드래그 대신 클릭 — 드롭 경로가 확인 모달을 우회하지 못하게). CreateMapDialog `initialName`/`onCreatedMap`은 라이브러리가 소비. pw 스크립트 신 플로우로 갱신 — 실기동 **37/37 PASS**(드롭다운 마커 2건 추가), tsc 0·lint 에러 0·vitest 510. 매뉴얼(편집 ko/en·번들)·공지 초안·검증 플랜 F1/F3 진입점 서술 정정.
+
+## 2026-07-19 — 7월 2차 업데이트 공지 초안 (worktree-sp-placeholder)
+- docs/notices/2026-07-release-2.md — 운영(ed15440) 이후 사용자 체감 변경(홈 개편·셀프 게시·이름변경 요청·플레이스홀더·노드 복사·엑셀 2형식·알림 정리)을 1차(2026-07-13-release.md) 형식으로 정리. 배포 시 sysadmin이 설정→공지에 붙여넣어 게시(전체 알림 권장).
+
+## 2026-07-19 — 매뉴얼 최신화: ed15440 이후 dev 전체 델타 + 플레이스홀더 (worktree-sp-placeholder)
+- docs/manual 6종(ko/en × 편집/사용안내/관리자) + 인앱 번들 backend/app/manual.md 갱신. 편집: 노드 복사/복제/Shift 축고정·S단축키/링크유일성/SP설명/플레이스홀더 신설 절/Subprocess 탭/엑셀 형식 2종/일괄편집 6필드/단축키 표. 사용안내: 홈 대시보드·조직도 즐겨찾기/새 맵(부서 우선·Start/End 시드)/버전 이름 직접입력·번호 자동부여/셀프 게시/이름변경 워크플로/Inbox sp 등록 수락 절차/FAQ 2건. 관리자: 오너 결정형 요청(rename·sp_designation) 노트. 갱신일 2026-07-19. 백엔드 695 그린(번들 변경 무회귀).
+
+## 2026-07-19 — 릴리스 준비 문서: 검증 플랜 F섹션 + 9910 검증 스택 절차 (worktree-sp-placeholder)
+- DEV-SERVER-TEST-PLAN.md: 대상=sp-placeholder 머지 후 dev·접속 9910으로 갱신, 운영(ed15440) 기준 델타 표 확장(sp_description·알림 인덱스 2·kind 값 2·follow_latest 기본), 작업단위 18로 확장(#17 플레이스홀더 + main 미배포분), 시나리오 F1~F4(플레이스홀더·main 델타) 신설.
+- docs/db-migration-9910.md 신설 — 운영 9900(ed15440) DB 복사 → 9910 검증 스택(dev) 절차. 9800 선례 실측값(PROD_DB 컨테이너명·compose 병합 누적 함정·-t TTY 금지) 승계, 서브넷 172.43·`-p bpm-9910`·`.env.9910`, 승격은 main 머지 후(§7).
+
+## 2026-07-19 — 서브프로세스 플레이스홀더 구현 (worktree-sp-placeholder)
+- T7(검증): `pw-verify-sp-placeholder.mjs` 신설 — 실기동(백엔드 8933 enforcement ON·프론트 3233) **36/36 PASS·콘솔 에러 0**. ①피커 토글→미등록 배지→2단 확인 링크+요청 ②인스펙터 CTA 철회→재요청 ③미게시 카드 지정 비활성+안내 ④게시 카드 지정 모달 저장=수락 완결(카드 소멸·auto-applied·요청자 알림) ⑤반려+알림 ⑥New map 프리필→생성→에디터 잔류+자동 링크+미등록 상태 확인. 랜드마인: /inbox 기본 탭=알림(Approvals 클릭 필수, 뱃지 카운트로 exact 불가)·아코디언은 토글 후 재클릭 금지·SearchSelect 첫 옵션=None 제외·checkout POST는 {force} body 필수·상세 조작은 inbox-detail-aside 스코프. 최종 게이트: BE 695+ruff / FE tsc 0·lint 에러 0·vitest 510·build OK.
+- T6(FE): Inbox sp_designation 카드 — 라벨/요약(from_map 컨텍스트, 빈 값 폴백), ApprovalDetail sp 브랜치(getMap으로 게시본·프리필 로드, 게시본 없으면 "지정하고 승인" 비활성+안내, "게시된 버전으로 가기" 링크), 수락=SubprocessDesignationModal 저장(PUT 자동 applied — decide 호출 없음), Reject=기존 decide+토스트. tsc 0·lint 에러 0·vitest 510.
+- T5(FE): 인스펙터 `SubprocessRegistrationCta` 신설 — 미지정 링크 선택 시 등록 요청 버튼/Requested 배지(본인 요청은 철회), pending 409 자기치유 재조회, key=linkedMapId로 전환 리셋(StrictMode set-state-in-effect 회피). page.tsx SubprocessVersionPicker 아래 마운트. tsc 0·lint 에러 0·vitest 510.
+- T4(FE): 피커(map-name-dropdown) "Show unregistered maps" 체크박스 토글(켜면 include_undesignated 재조회, 토글 시 library null 리셋→lazy 재로드)·미등록 배지·미지정 링크 2단 확인(경고 동봉 링크 확인→등록 요청 여부, 요청 409는 안내 토스트)·`onToast` prop. CreateMapDialog `initialName` 프리필+`onCreatedMap`(지정 시 router.push 생략→에디터 잔류·자동 링크). api.ts에 designated 필드·includeUndesignated 파라미터·sp 요청 3함수. tsc 0·vitest 510·lint 에러 0.
+- T2 보안 후속: 요청 payload의 from_map_name은 요청자가 viewer 이상인 맵만 해석(무권한·미존재 모두 "" — 존재 오라클 차단). 임의 from_map_id로 비공개 맵 이름을 알아내는 IDOR 노출을 커밋 직후 보안 리뷰 지적으로 봉합. 회귀 695 그린.
+- T3: 수락 체인 — 범용 decide에 sp_designation 오너/sysadmin 게이트 추가, `_apply_request` 분기(삭제 맵 멱등 applied·미지정 approve 409로 pending 유지·기지정 no-op), reject/approve 알림 `sp_designation_{outcome}`. Inbox block 3에서 제외 + 오너 게이트 block 5 신설(detail=payload). **PUT 지정 최초 전이 시 pending 자동 applied**(`_apply_pending_sp_designation`) — Inbox 수락은 지정 모달 저장만으로 완결. pytest 11신규 포함 694 그린·ruff 클린.
+- T2: `POST/GET/DELETE /api/maps/{id}/sp-designation-requests(/pending)` — SP 등록 요청 생성(viewer 게이트=피커 가시성 조건 일치, 이미 지정 409·중복 pending 409·삭제 404, payload는 서버 박제 {from_map_id, from_map_name, map_name})·pending 조회·본인 철회(withdrawn). 오너 알림 `sp_designation_requested`. rename 선례 미러. pytest 8신규 포함 683 그린.
+- T1: `GET /api/library/processes?include_undesignated=true` — 미지정 맵 옵트인 노출. 각 행에 `designated` bool 추가, 미지정 행은 sp 어트리뷰트 4종 None 마스킹(직전 지정 잔존값 유출 방지) + 가시성(role≥viewer) 배치 필터(`_filter_visible_map_ids`, maps.list_maps 패턴 미러 — 비공개 맵 이름 유출 방지). 기본 호출은 기존과 동일(지정 맵만). pytest 4신규(RED→GREEN) 포함 675 그린·ruff 클린.
+
+## 2026-07-19 — 서브프로세스 플레이스홀더 설계 스펙 확정 (worktree-sp-placeholder)
+- 미등록(SP 미지정) 맵을 subprocess 노드로 먼저 링크(즉시 연결형 플레이스홀더)하고 등록 요청(ApprovalRequest kind='sp_designation', rename 선례 미러)하거나 새 맵을 즉시 생성(CreateMapDialog 프리필→자동 링크→지정 모달)하는 기능 설계. DDL 없음. 스펙: `docs/superpowers/specs/2026-07-19-subprocess-placeholder-design.md`.
+
+## 2026-07-19 — 개발서버 배포·브라우저 검증 시나리오 문서 추가 (DEV-SERVER-TEST-PLAN.md, dev 직접 커밋)
+- 월요일 개발서버(3333) 배포 테스트용 체크리스트 문서 신설. 분기점 `31a9ea8`(main HEAD) 이후 dev 17 작업단위 정리 + 배포 델타 실측(신규 스키마 `sp_description` 1개=자동 ALTER 등록됨·신규 env `CSV_MANUAL_URL` 1개=선택) + 기능별 브라우저 검증 시나리오(A 승인/버전·B 에디터·C 메인/생성·D 인스펙터/파라미터·E 내보내기/알림/매뉴얼) + 서버 전용 함정 체크(평문 HTTP·Keycloak 자동로그인·KST). 코드 변경 없음.
+
+## 2026-07-19 — rename 후속 ②④: 에러 토스트 detail 추출 + pending 배지 크로스탭 self-heal (dev 직접 커밋)
+- ② `getApiErrorDetail`(api.ts) — `ApiError`에 `body` 보관(request 실패 시 응답 원문), JSON 본문의 `detail` 문자열만 추출해 사용자 표시(비JSON·422 배열·비ApiError는 메시지 폴백). TDD vitest 5신규(RED→GREEN, fetch 스텁 왕복 포함). 적용: map-details-panel 5개 catch + inbox decide 토스트 — `API POST … 409 — {"detail":…}` 원문 노출 해소.
+- ④ `refreshRenameState`(map-details-panel) — rename 생성/취소 실패 시 맵·pending 재조회로 재동기화(다른 탭에서 승인·반려된 stale 배지 해소). 입력값 리셋은 pending 존재 또는 서버 이름 변경 시만(사용자 시도 텍스트 보존).
+- 검증: pw-verify-map-rename.mjs에 ⑥ self-heal 시나리오 추가(오너가 API로 뒤에서 승인 → stale Withdraw 클릭 → 깨끗한 detail "no pending rename request"·배지 소멸·입력 재동기화, 의도적 404는 콘솔 필터 허용) — 실기동 **25/25 PASS·콘솔 에러 0**(8912/3212, enforcement ON). 게이트: tsc 0·lint 0 err·vitest 510/510·build OK.
+
+## 2026-07-18 — 버전 드래프트 생성 다이얼로그: 이름 "To-Be" 자동입력 제거 + 번호 자동부여 힌트 (worktree-version-draft-no-tobe)
+- 에디터 새 버전(드래프트) 생성 모달의 이름 입력 `defaultValue`가 create 모드에서 `"To-Be"`로 하드코딩돼 있던 것을 빈 값으로 변경 — 사용자가 버전 이름을 직접 입력하도록. rename 모드(기존 라벨 프리필)는 그대로. 빈 값 처리는 `PromptDialog`가 이미 담당(빈 값이면 확인 버튼 비활성).
+- create 모드에 placeholder 힌트 추가 — `prompt.newVersionNumberAuto`("버전 번호는 자동으로 부여됩니다" / "Version number is assigned automatically", EN/KO). 이름(label)은 사용자 입력 필수, 버전 번호(`version_number`)는 게시 시 자동 채번(versions.py 최댓값+1)이라 사실과 일치. rename 모드는 placeholder 없음.
+- 검증: tsc 0(무오류). 문자열 리터럴 스왑 + i18n 키 + placeholder prop이라 타입/동작 위험 없음. 브라우저 실기동 검증은 미실행(요청 시 수행).
+
+## 2026-07-18 — 셀프 게시 팝오버를 설정 페이지 Versions 탭에도 적용 (worktree-self-publish-settings)
+- `VersionsPublishPanel`(맵 설정 Versions 탭)의 승인요청 버튼도 에디터와 같은 플로우 — 승인자가 본인 1인이면 클릭 지점에 `SelfPublishPopover`, Yes=`runSelfPublishChain`(submit→approve→publish, 기존 `runAction` 경유), No=기존 즉시 제출, Escape/바깥클릭=취소. 승인자 2인 이상은 종전대로 즉시 제출. 백엔드·i18n 무변경(기존 컴포넌트·키 재사용).
+- 검증: tsc 0·lint 0 err·vitest 504/504·build OK. 브라우저 실기동 `pw-verify-self-publish-settings.mjs` 11/11 — 2인 즉시 제출 보존, 1인 클릭 지점 팝오버, Escape/No/Yes 3분기, Yes로 published·approvals 기록, 콘솔 에러 0. (스크립트 함정: 화면 밖 버튼은 클릭 자동 스크롤로 사전 측정 좌표가 틀어짐 → `scrollIntoViewIfNeeded` 후 측정)
+
+## 2026-07-18 — 셀프 게시: 승인자가 본인 1인이면 승인요청→승인→게시 원클릭 (worktree-self-approve-publish)
+- 에디터 승인 탭에서 승인요청 클릭 시 승인자가 정확히 본인 1명이면 클릭 지점(마우스 근처)에 소형 Yes/No 팝오버(`SelfPublishPopover`) — Yes는 submit→approve→publish 체인(`lib/self-publish.ts`, 기존 `runTransition` 재사용), No는 기존 승인요청 확인 모달, Escape/바깥클릭은 취소. 백엔드 무변경(기존 3개 엔드포인트 순차 호출).
+- `WorkflowActions`/`ApprovalPanel` `onSubmit`에 클릭 좌표 전달, i18n `approval.selfPublish*` 4키 EN/KO.
+- 검증: vitest 신규 4(TDD RED→GREEN, 체인 순서·중간 실패 전파)·전체 504/504, tsc 0, lint 0 err, build OK. 브라우저 실기동 `pw-verify-self-publish.mjs` 15/15 — 승인자 2인은 팝오버 없이 기존 모달 직행, 1인은 클릭 지점 근처 팝오버, Escape/No/Yes 3분기, Yes로 status published·approvals 기록, 콘솔 에러 0.
+## 2026-07-18 — 맵 이름 변경 승인 워크플로우 설계 스펙 (worktree-map-rename-workflow)
+- 브레인스토밍으로 요구 확정(요청=editor 이상, 승인=오너/sysadmin 1인, 오너/sysadmin은 즉시 적용+pending supersede, 맵당 pending 1건, Settings 진입, 알림 5종) 후 설계 스펙 작성 — `docs/superpowers/specs/2026-07-18-map-rename-workflow-design.md`. 접근: 기존 `ApprovalRequest`에 `kind='map_rename'` 확장(DDL 불요), decide·Inbox는 kind별 오너/sysadmin 게이트 분기, `PATCH /maps` name은 오너/sysadmin 전용으로 조임(에디터 403), 신설 2엔드포인트(요청 생성·본인 취소). 리뷰 반영: 행위자 토스트를 알림 시점과 대칭으로 추가(§5.4 — 수신 측은 알림, 행위자는 토스트로 경계 유지). 구현 계획 작성 — `docs/superpowers/plans/2026-07-18-map-rename-workflow.md`(7태스크 TDD: BE 요청/조임/decide/Inbox 4 + FE Settings/Inbox 2 + pw 왕복 1, 실코드·게이트 명시).
+- **Task 1**: 백엔드 요청 생성·pending 조회·취소 엔드포인트 + 공용 알림 헬퍼 — `RenameRequestIn` 스키마·`load_map_user_collaborators`·`notify_map_renamed` workflow 함수·3개 POST/GET/DELETE 엔드포인트. TDD: test_map_rename_workflow.py 9/9 green(editor 요청 생성 + 오너 알림·중복 409·미승인 422·권한 403, pending 조회·본인 취소 204·타인 취소 403·미존재 404). 게이트: pytest 650/650·ruff clean. **코드리뷰 픽스**: DELETE 엔드포인트에 `require_map_role("viewer")` 게이트 추가(Finding 1: permission 누락) + ApprovalRequest enum-doc 주석 갱신(Finding 2: stale) — test_map_rename_workflow.py 10/10 green(신규 test_withdraw_by_stranger_403_even_without_pending).
+- **Task 2**: `PATCH /maps/{map_id}` name 변경을 오너/sysadmin 전용으로 조임(에디터 403) — pending rename 요청은 `superseded` 전이 + 요청자 `rename_superseded` 알림, 적용 시 협업자 전원 `map_renamed` 알림(`_supersede_pending_rename` 헬퍼). TDD: TestDirectRename 5개 신규(editor 403·description은 계속 가능·오너 적용+알림·pending supersede·sysadmin 가능) — test_map_rename_workflow.py 15/15 green. 기존 `test_permission_gates.py`의 role-gate 테스트 2건이 name 필드로 editor PATCH 200을 기대해 깨짐 — rename과 무관한 역할 게이트 검증이 목적이라 payload를 `description`으로 교체(actor는 그대로, 새 규칙 완화 아님). 게이트: pytest 656/656·ruff clean.
+- **Task 3**: `POST /approval-requests/{id}/decide`를 kind별 게이트로 분기 — `map_rename`은 `assert_map_role(..., "owner")`(오너/sysadmin), 그 외는 기존 `assert_approver_or_sysadmin` 유지. `_apply_request`에 `map_rename` 분기 추가(승인 시 재중복검사 409로 커밋 전 중단해 pending 유지 + 이름 적용 + `notify_map_renamed` 협업자 알림), `_notify_permission_decision`에 rename 분기 추가(`rename_approved`/`rename_rejected` 요청자 알림). TDD: TestDecideRename 7개 신규(오너 승인 적용+3종 알림·비오너 승인자 403·에디터 403·sysadmin 가능·반려 시 이름 유지+알림·승인 중 이름 선점 409+pending 유지) — test_map_rename_workflow.py 21/21 green. 브리프의 전역 `select(Notification)` 단언은 세션-스코프 DB 공유로 이전 테스트(sysadmin 개명→OWNER 수신)에 오염돼 `map_id` 필터 추가로 보정. 게이트: pytest 662/662·ruff clean.
+- **Task 4**: `GET /api/inbox/approvals`에 rename 요청 노출 — ar_q 블록에 `ApprovalRequest.kind != "map_rename"` 조건 추가로 분리, 신규 4번 블록 rn_q(pending map_rename, 오너 소유맵 또는 sysadmin만 조회). dict 키는 기존 approval_request 블록과 동일(`kind`·`id`·`title`·`map_id`·`map_name`·`requester`·`status`·`created_at`·`version_id`·`detail`·`updated_at`·`before`·`after`·`principal`). TDD: TestInboxRename 3개 신규(오너 보임+before/after·비오너 승인자 미노출·sysadmin 보임) — test_map_rename_workflow.py 24/24 green, 공용 _seed helpers 재사용. 게이트: pytest 665/665·ruff clean.
+- **Task 5**: 프론트 Settings Details 탭에 이름 필드 추가 — `api.ts`에 `createRenameRequest`/`getPendingRenameRequest`/`withdrawRenameRequest` 3함수(`ApprovalRequest`는 이미 `payload` 보유, 타입 확장 불요), i18n 키 9종(`perm.rename.*`, EN+KO). `MapDetailsPanel`: 이름 입력+저장 버튼(owner는 `updateMap` 즉시 적용+supersede 토스트 분기, editor는 `createRenameRequest`로 pending 생성+입력 롤백), pending 배지(`to_name`·요청자·본인 요청 시 취소 버튼 `withdrawRenameRequest`). 로드 effect의 `Promise.all`에 `getPendingRenameRequest`·`getMe` 추가(active-cleanup 패턴 유지). 게이트: tsc 0·lint 0 err(사전 존재 경고 1건 무관)·vitest 500/500.
+- **Task 6**: 프론트 Inbox — map_rename 카드 표시 + decide 토스트 + 알림 카테고리. `notification-categories.ts`에 `rename_*`/`map_renamed` → permission 분기(TDD: 실패 테스트 먼저 추가 확인 후 구현). `inbox/page.tsx`: `approvalTitle`/`approvalSummary`에 map_rename 분기(before→after 마크다운 요약), settings/page.tsx와 동일한 `ToastStack`/`genId` 패턴으로 토스트 상태 도입, decide 핸들러의 approval_request 분기를 try/catch로 감싸 승인 시점 이름 선점 409 등을 에러 토스트로 노출(성공 시 승인/반려 토스트, 기존 큐 재조회·선택 해제 흐름은 유지). i18n 키 4종(`inbox.reqKind.map_rename`·`inbox.summary.map_rename`·`inbox.toast.renameApproved`·`inbox.toast.renameRejected`) EN+KO. 게이트: tsc 0·lint 0 err(사전 존재 경고 1건 무관)·vitest 501/501·build OK.
+- **Task 7**: Playwright 왕복 검증 `frontend/scripts/pw-verify-map-rename.mjs` 신설(백엔드 8911·프론트 3211, `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`로 기동 — 오너/에디터 역할 차등 실측 필수). 시드는 스크래치 맵 1개를 API로 생성(디렉터리 실직원 2명을 owner/editor로 배정, admin.sys 우회 배제)해 자기완결. 시나리오 22체크 전부 PASS(2회 연속, console errors 0): 오너 즉시 변경(토스트 "Map renamed")→에디터 요청(pending 배지+입력 disable)→취소·재요청→오너 Inbox Approvals "Map rename" 카드(before→after)에서 승인(토스트 "Rename approved — new name applied")→에디터 Notifications에 승인 메시지 수신. `providers.tsx` DevGate가 렌더 단계에서 localStorage devUser를 동기 반영하는 점에 착안해 유저 전환마다 `page.goto` 풀 네비게이션으로 재마운트(SPA 라우팅으론 안 먹힘). 최종 게이트: 전 항목 그린 — pytest 665/665·ruff clean·tsc 0·lint 0 err(무관 사전 경고 1건)·vitest 501/501·build OK.
+- **최종 리뷰 픽스**(backend only): 소프트삭제 맵 404 스윕 — `get_pending_rename_request`·`withdraw_rename_request`에 POST와 동일한 `deleted_at` 404 가드 추가, `_apply_request` map_rename 분기는 삭제된 맵이면 이름 변경 없이 멱등 applied, Inbox `rn_q`에 `ProcessMap.deleted_at.is_(None)` 조건 추가. `PATCH /maps` name을 `.strip()` 정규화 후 비교/적용(공백만이면 422, 동일값은 역할 검사 없이 200 no-op 유지). `ApprovalRequest` 클래스독스트링·payload 주석에 rename 반영, 테스트 dead code(`_request_id`) 제거 + `_apply_request`의 `actor=req.decided_by or ""` → `actor=req.decided_by`(decide가 항상 먼저 설정). TDD: 신규 6테스트 우선 RED 확인 후 구현 → GREEN. 게이트: test_map_rename_workflow.py 30/30·전체 pytest 671/671·ruff clean.
+
+## 2026-07-18 — persist-effect StrictMode 리셋 잔존 2건 픽스: edgeStyle·inspectorWidth (dev 직접 커밋)
+- params-ui-sync에서 적발된 진범 패턴(상태-의존 effect 영속 → StrictMode 이중 마운트가 hydration 전 기본값으로 저장값 덮어씀)의 잔존 전수 스캔: 실버그 2건(`bpm.edgeStyle`·`bpm.inspectorWidth`, dev 한정 증상) + 자체 완화 2건(`bpm.home.filters` skip-guard, `bpm.windows.*` 디바운스+cleanup — 존치) + 나머지 9곳은 핸들러/lazy-init로 안전.
+- 수정: persist effect 2개 제거 — edgeStyle은 스타일 버튼 onClick에서, inspectorWidth는 리사이저 드래그 종료(pointerup)에서 최종값(`lastW`) 1회 영속.
+- 검증: pw 프로브(일회용, 미커밋) 6/6 — 저장값 선주입 후 마운트 유지(straight/480 리셋 없음)·폭 480 레이아웃 적용·버튼 클릭 즉시 영속·드래그 종료 영속(500)·재로드 왕복. 게이트: tsc 0·lint 0 err.
+
+## 2026-07-18 — 6필드 파라미터 미반영 표면 동기화: 그룹 일괄 편집·파라미터 표시 토글·stale 스크립트 (worktree-params-ui-sync)
+- 조사(에이전트 3병렬): 그룹 일괄 편집은 people/system/duration만 지원(5필드 누락·PARAM_FIELDS 미사용·SP 전면 배제), 캔버스 파라미터 칩은 토글 불가(항상 표시), 그 외 제품 표면은 전부 6필드 반영 확인 — 잔존은 pw-verify-export/sp-params 스크립트 2개뿐. 방향 확정: 일괄 편집 6필드 전부(SP는 annual_count·fte 허용) + "Parameters" 통합 토글 1개(기본 ON). 계획 `docs/superpowers/plans/2026-07-18-params-ui-sync.md`.
+- **Task 1**: `lib/bulk-params.ts` 신설 — `canBulkEditField`(모드별 대상: people/system=hasBpmAttributes, 파라미터=getEditableParamFields), `buildBulkAttrPatch`(비용 설정 시 반대 통화 소거·비우기는 양쪽 소거), `isBulkParamField`. vitest 7/7 (TDD RED→GREEN).
+- **Task 2+3**: `NodeDisplayToggle`("params" 추가)·`NODE_DISPLAY_TOGGLES`·`parseDisplayToggles`(v2 키 우선, 레거시 저장값은 params ON 이관 — 기존 사용자 칩이 꺼지는 회귀 방지) + `NodeParams`를 토글로 게이팅·`NodeFields`는 params 제외. compare 뷰는 `["params"]` 주입으로 칩 종전 표시 보존, Provider 없는 임베드는 defaultActions에 params 포함으로 보존. vitest 5/5 신규, 전체 500/500·tsc 0.
+- **Task 4**: 에디터 토글 state를 `NodeDisplayToggle[]`(기본 `["assignee","params"]`)·localStorage `bpm.nodeDisplayFields.v2`(레거시 키는 이관 소스로만 읽고 유지)로 전환, 맵 탭 "노드 표시 정보" 카드에 Parameters 스위치 행 추가(`field.params` EN/KO). lint 0 err·tsc 0.
+- **Task 5**: 그룹 일괄 편집을 6필드 전체로 확장 — `BulkAttrField = "system" | ParamField`, 모드 탭을 PARAM_FIELDS 순회로 생성(라벨=PARAM_LABEL_KEY, 아이콘=캔버스 칩과 동일). 모드별 멤버십 `canBulkEditField`(SP는 annual_count·fte 모드에 포함, people/system/나머지 4필드는 종전대로 제외). 비용 모드는 반대 통화 보유도 충돌로 취급(`getExistingAttrRaw`)·표시는 실보유 통화 기호(`displayExistingAttr`)·적용은 `buildBulkAttrPatch`로 반대 통화 소거. 파라미터 모드는 append 정책 봉인(숫자 콤마 append→백엔드 소거 유실, 기존 duration append 잠복 버그 해소), 입력은 ParamInput 공용. tsc 0·lint 0 err·vitest 500/500.
+- **Task 6**: stale 검증 스크립트 2개를 6필드 모델로 이행 — pw-verify-export.mjs(입력 6필드·CSV 14컬럼 Cost_KRW/Cost_USD/Annual_Count/FTE·Excel 16컬럼·USD 경로 디시전 노드·표시형 1h15m/₩300 계약 + **추가 stale 2건 발견·수정**: Parameters 그룹 기본접힘 미대응, Excel 형식 선택 모달 미대응), pw-verify-sp-params.mjs(시드 cost_krw·지정 PUT 4필드·Σ 4개=headcount 평균 포함·sp_cost_krw·칩 ₩0.3). 실기동 green: export 22/22, sp-params 24/24 (백엔드 8907·프론트 3207, reset_db 시드).
+- **Task 7**: 신규 브라우저 검증 `pw-verify-params-ui-sync.mjs` 14/14 green — 8모드 탭·cost_krw 일괄(통화 전환 충돌→Replace·Bravo USD 소거·SP 제외)·fte 일괄(SP 포함 4멤버)·칩 ₩500·토글 OFF/새로고침 유지/ON 복귀·레거시 이관. 검증이 **StrictMode 리셋 잠복 버그 적발·수정**: displayFields persist effect가 이중 마운트에서 hydration 전 기본값을 저장소에 덮어써 OFF 상태가 리셋(ui-improvement-5 때 알려진 잠복 이슈) → 영속을 토글 핸들러로 이동. 모달 루트에 `data-id="group-bulk-modal"` 부여(컨벤션). 최종 게이트: lint 0 err·tsc 0·vitest 500/500·build OK.
+
+## 2026-07-18 — 인스펙터 Subprocess 탭: 지정 메타 + 역참조(used-by) 목록 (worktree-sp-usage-tab)
+- **백엔드**: `GET /api/maps/{map_id}/subprocess-usage` 신설(viewer+, DDL 없음) — 지정 메타(designated/시점/행위자 `sp_changed_by`) + 지정이 가리키는 버전(최신 게시본 라이브 해석: id·number·label) + 이 맵을 링크한 부모 맵 목록. 사용처 판정은 부모의 **라이브 버전**(게시본 max id, 없으면 최신 — list_maps 노드 수 규칙과 동일) 기준 노드 수. 소프트삭제 부모 제외, 열람 불가 부모는 이름 미노출 `hidden_count` 집계(effective_role). 테스트 6종(test_subprocess_usage.py).
+- **프론트**: 인스펙터에 **Subprocess 탭** 추가 — 지정된 맵에서만 노출(importSlot과 같은 조건부 탭 패턴, Map 탭 뒤). 상단 지정 정보 박스(버전 v{n}·라벨, 지정 시점 KST, 지정자 UserPill, 최신게시본 추종 안내 노트) + "이 맵을 연결한 맵" 목록(행=맵 이동 Link, 오우닝 부서 캡션, 링크 노드 수 ×n 칩, 빈/숨김 상태 문구). 지정/해제 시 `onDesignationChange` 콜백으로 usage 재조회(탭 노출 동기화). 지정 해제로 슬롯이 사라지면 열려있던 탭은 Map 탭으로 렌더 파생 폴백(effect 불요).
+- 게이트: pytest 641(+6)·ruff·vitest 488·tsc 0·lint 0·build OK. pw 실측(ko/en): 맵3에서 탭 노출·지정 메타·연결 맵 3건(×2 칩·부서 캡션) 렌더 확인.
+
+## 2026-07-18 — 권한 마스킹 표면 정리: 아웃라인 잠금 화살표 억제 + WBS 잠긴 SP 행 살리기 (worktree-inline-expand-drag-fix)
+- 조사(권한 강제 백엔드 + yerin.yoo〈맵1 무권한〉 실측): 캔버스는 봉인 정상, Excel 1안은 SP 행+denied 노트 정상, CSV/Word는 링크맵 데이터 자체가 안 실려 무변경. sp_* 지정 정보는 잠금 사용자에게도 노출(지정 카드=공개 메타데이터, 현행 유지).
+- **아웃라인 버그 픽스**: 현재 스코프의 잠긴 SP 행에 펼침 화살표가 그대로 표시되고 클릭이 무반응이던 문제 — outline memo가 `node.data.locked`를 읽었지만 nodes state엔 locked가 없음(주입은 displayNodes 렌더 시점). `lockedKeys` 직접 조회(canExpand와 동일 판정)로 교체 — 임베드/심층 행은 종전부터 정상. 미지정 SP도 함께 억제(resolved가 locked 반환). 키보드 `→` 펼침도 hasChildren=false로 자동 차단.
+- **WBS(2안) 잠긴 SP 행 살리기**: 종전엔 잠긴/해석실패 SP가 이름조차 없는 익명 "(access denied)" 노트 1줄로 소실 → **번호 달린 잎 행**(Task=SP 제목, 파라미터·설명은 1안 SP 행과 동일 소스: 지정정보 상속+베이스·추가분 합성, next 포함) + 레벨 경로에 SP 제목을 단 denied 노트로 변경. 잎 행이 rowByNodeId에 들어가 규칙4 주석 대상도 유지. TDD(RED→GREEN), 시트 기록은 무변경.
+- 게이트: vitest 475/475·tsc 0·lint 0 err·build OK. pw 실측: 아웃라인 화살표 잠금·미지정 모두 1→0, WBS 미리보기가 잎 행+denied 노트 형태로 출력(맵2, yerin.yoo).
+
+## 2026-07-18 — 맵 상세 카드·인스펙터에 오우닝 부서 노출 (worktree-create-map-picker-ux)
+- 요청: 맵 상세 화면/인스펙터에 협업 부서처럼 오우닝 부서를 보이게. 진단 = 상세 카드(홈)는 헤더 필로만 노출·`only="members"`(에디터 인스펙터 Map 탭 재사용) 모드에선 헤더가 생략돼 오우닝 부서가 **전혀 안 보임**.
+- 수정: `MapDetailCard` 멤버 컬럼 최상단에 오우닝 부서를 협업 부서 행과 동일 스타일(레벨 아이콘·부서명, 한글명 폴백)로 노출 — `data-id="map-detail-owning-member"`, `Editor · locked/고정` 서브라벨 + editor RoleBadge, accent-tint 강조. `only` 무관 렌더라 상세 카드·인스펙터 양쪽 동시 반영. `detail.owning_department`를 const로 좁혀 클로저 타입 안전.
+- 게이트: lint 0 err·tsc 0. 실앱(map 2 Employee Onboarding·owning=Analytics Part 1) 상세 aside + 인스펙터 Map 탭 EN/KO 4종 캡처 확인.
+
+## 2026-07-18 — 새 맵 만들기 모달 UX 3종: 오우닝 부서 정렬·선택 후 스크롤 다운·협업자 빈 안내 (worktree-create-map-picker-ux)
+- **오우닝 부서 피커 정렬**: `PrincipalPicker`에 `myDeptsFirst` prop 추가 — browse(빈 검색) 시 내 소속 부서 체인(`me.orgPath` 기준 `isMyDept`)을 맨 위로, 작은 단위(깊은 org_path=세그먼트 많음)부터 정렬. 검색 랭킹엔 불개입. 오우닝 부서 피커에만 적용(승인자용 `managersFirst`와 배타).
+- **선택 후 결재자로 스크롤 다운**: 오우닝 부서를 고르면 피커가 잠금 행으로 바뀌며 닫히고(기존 동작), `approversRef.scrollIntoView({block:"end"})`로 맨 아래 결재자 피커까지 스크롤 — 작은 뷰포트에서 아래 피커를 상단 피커로 착각하던 문제 해소.
+- **협업자·결재자 빈 안내문구**: 두 목록이 비었을 때(`collaborators.length===0` / `approvers.length===0`) 박스 중앙에 회색 초대 문구 — `collaboratorsEmpty`("Search below to add editors or viewers.")·`approversEmpty`("Search below to add approvers."), 한글 "…추가해보세요" 병기. "아직 없다"식 부정 표현 대신 초대형. 피커가 `flex-col-reverse`로 목록 **아래**에 있어 "search below". 오우닝 부서 잠금 행과 무관.
+- 게이트: lint 0 err·tsc 0. 실앱(admin.sys·백엔드 8901·프론트 3200) 모달 캡처로 EN/KO 빈 안내 2종 확인. 정렬 순서·선택 후 스크롤은 로컬 실행에서 확인 권장.
+
+## 2026-07-18 — 노드 편집 모달 선행/후행 밴드 잘림 수정
+- 버그: 노드 편집 모달의 선행/후행(이전/이후) 내비가 모달 높이에 따라 안 보이거나 잘림. 근본원인 = 내비가 스크롤 바디 안 flex 자식인데 `shrink-0` 없음 + 내부 칩이 `overflow-y-auto`라 min-height가 0으로 붕괴 → 콘텐츠 넘치면 flex-shrink가 밴드를 테두리(4px)까지 뭉갬. 격리 재현으로 확정(nav 높이 4px).
+- 수정: 내비 블록을 스크롤 바디 밖 `shrink-0` 고정 밴드(푸터 위)로 분리 — 스크롤 위치·모달 높이와 무관하게 항상 노출. 칩 자체 `max-h-[104px]`+내부 스크롤 유지. `node-summary-modal.tsx` 1파일.
+- 검증: 실앱(admin 로그인·코멘트 6건 주입해 오버플로 강제)에서 바디 끝까지 스크롤해도 밴드 `fullyInViewport` 유지·칩 35px(붕괴 없음), 읽기전용 모달 포함. 게이트: lint 0 err·build OK.
+
+## 2026-07-18 — 읽기전용 노드 더블클릭 모달 복구 (worktree-inline-expand-drag-fix)
+- 부수 발견 수정: 읽기전용에서 노드 더블클릭이 모달을 안 열던 원인 = `nodesDraggable=false`라 노드에 `nopan` 클래스가 없어 **d3-zoom 더블클릭 줌 필터를 통과 → d3가 `stopImmediatePropagation`으로 이벤트를 소비** → React 합성 `onNodeDoubleClick` 미발화(편집 모드는 nopan이 차단해 정상). 계측으로 확정: DOM dblclick은 노드 도달, 합성만 실종.
+- 수정: `zoomOnDoubleClick={!readOnly}` 1줄 — 읽기전용에서 더블클릭 줌을 꺼 이벤트가 React까지 버블. 편집 모드 동작 무변경.
+- pw: 읽기전용(taeyang.oh) dblclick → 모달+합성 설명 표시·textarea 없음 ✓, 편집(admin.sys) dblclick → 모달+편집 폼 ✓. 게이트: vitest 475/475·lint 0 err·tsc 0·build OK.
+
+## 2026-07-18 — 읽기전용 모달에 설명 표시 (worktree-inline-expand-drag-fix)
+- 후속②: 읽기전용 모달(축약형)이 타입/그룹만 보여주고 설명을 누락하던 것 → 설명 블록 추가(있을 때만, 인스펙터와 동일 스타일). subprocess는 `mergeSubprocessDescription`(링크맵 베이스+추가분) 합성 표시.
+- pw 검증(taeyang.oh로 읽기전용 재현): 우클릭→정보 수정 경로에서 합성 3줄 표시 ✓, 편집 textarea 없음 ✓. **부수 발견(기존 동작, 미수정)**: 읽기전용에선 노드 더블클릭이 모달을 애초에 안 연다(200ms에도 미오픈) — 읽기전용 모달 진입은 우클릭 정보 수정/E키만. 게이트: vitest 475/475·lint 0 err·tsc 0·build OK.
+
+## 2026-07-18 — UX 통일 후속 2건: Excel 설명 합성 + 아웃라인 자식 이름편집 차단·토스트 (worktree-inline-expand-drag-fix)
+- **Excel(1안)만 설명 합성 반영**: `buildExcelModel` 행 생성에서 subprocess면 `mergeSubprocessDescription(subprocess_refs[sp_description], node.description)` — 그래프에 이미 있는 `subprocess_refs` 재사용, TDD 1건(RED→GREEN). WBS(2안)는 SP가 행을 안 차지해 무변경, Word/CSV는 사용자 지시로 제외(CSV는 왕복 계약상 추가분만이 맞음).
+- **아웃라인 자식 행 이름편집 차단+토스트**: 행 더블클릭·Enter(편집 단축키) 모두 `item.hierarchy`(하위 스코프 행) 게이트 — 편집 input 대신 토스트("링크맵의 읽기전용 노드입니다 — 해당 맵에서 편집하세요", en 병기). 종전엔 편집 UI가 뜨고 저장이 조용히 증발했음. 루트 행 편집은 회귀 없음(pw 확인).
+- 게이트: vitest 475/475(신규 1)·lint 0 err·tsc 0·build OK. pw: 자식 행 dblclick → input null+토스트 표시, 루트 행 정상 편집.
+
+## 2026-07-18 — 서브프로세스 UX 통일 6종: 딥뷰 봉인·자식 상호작용 통일·읽기전용 메뉴·펼치기 메뉴·모달 피커 패리티·설명 상속 (worktree-inline-expand-drag-fix)
+- 조사(라이브 계측)로 확인된 불일치/고장 일괄 정리. 사용자 지시: ①봉인 ②선택효과 통일 ③읽기전용 안내 ④메뉴 펼치기 ⑤모달 패리티 + 설명 상속.
+- **자식 더블클릭 봉인(깊이 무관)**: 임베드 자식 dblclick 캡처 핸들러가 하던 딥뷰 드릴인(`drillIntoSubprocess`) 제거 — 인라인 펼침과의 이중 렌더(React 중복 key)·오프스크린 스코프 창·빈 캔버스 고장의 유일 진입로였음. 이벤트는 계속 삼켜 RF 줌/모달도 차단. `isDrillableHost`/`drillIntoSubprocess` 삭제(스코프 창 머신은 존치).
+- **자식 클릭 선택효과 통일**: 캔버스 클릭이 `selectedId`도 동기화(아웃라인 행 하이라이트 일치), 아웃라인 다른-스코프 선택이 RF `selected`(테두리+불투명)도 동기화(펼침 반영 다음 틱 setTimeout 안에서 childNodes 싱크). 같은-스코프 아웃라인 선택은 자식 선택 해제 대칭 추가.
+- **자식 우클릭 = "(읽기전용)" 1항목 안내 메뉴**: ContextMenu에 `note` 변형(회색·기울임·비인터랙티브) 신설, 노드 메뉴 빌더가 현재 스코프 밖 대상이면 안내 1개만 반환 — 캔버스(종전 차단)·아웃라인(종전 풀 편집 메뉴 오노출) 공통 경로로 통일.
+- **서브프로세스 우클릭 메뉴에 하위 프로세스 펼치기/접기**: 액션 바 `expandable`과 동일 조건. nodes state엔 subEnds가 없어(displayNodes 파생 주입) `injectSubEnds`를 거쳐 판정해야 함(1차 시도 실패 원인). 구 `hasChildren` "열기" 항목은 레거시 데이터용으로 존치.
+- **모달 연결 버전 패리티**: `SubprocessVersionPicker`(최신 추종 토글·버전 고정·업데이트)를 편집 모달에 슬롯(`versionPickerSlot`)으로 주입 — 인스펙터와 동일 컴포넌트·즉시 반영. IIFE 내 인라인 클로저가 react-hooks/refs 오탐 → 톱레벨 `handleSummaryUpdateSubprocess`로 호이스트.
+- **설명 상속(베이스+추가분)**: 노드 description엔 이 맵의 추가분만 저장, 표시는 링크맵 `sp_description`(SubprocessRef로 이미 클라이언트 도달) + 줄바꿈 + 추가분 합성(`lib/subprocess-description.ts`, vitest 5). 모달은 베이스 읽기전용 블록 + 추가분 textarea(플레이스홀더 안내), 인스펙터는 합성 표시. 등록(지정) 시 설명 입력은 기존 기능 그대로.
+- **게이트**: vitest 474/474·lint 0 err·tsc 0·build OK. 라이브 pw 6검증(메뉴 펼치기/접기 라벨 전환·캔버스↔아웃라인 선택 상호 동기화·봉인(중첩 서브 dblclick에도 스코프 붕괴/중복 key 0)·읽기전용 메뉴 양표면·모달 토글 API 영속·추가분 분리 저장+합성 표시) 전부 그린.
+- **후속(미처리)**: Excel/Word/CSV 내보내기는 subprocess 설명에 추가분만 실림(합성 미반영) · 읽기전용 모달 변형은 설명 자체 미표시(기존) · 아웃라인 자식 행 더블클릭 이름편집 UI는 여전히 뜨고 조용히 무시됨(우클릭만 정리됨).
+
+## 2026-07-17 — 인라인 펼침 드래그 버그 3종 해소: 팬텀 링 카메라 점프(#2)·Shift 축고정(#3a)·Ctrl복제 드리프트(#3b) (worktree-inline-expand-drag-fix)
+- 핸드오프 `docs/superpowers/specs/2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md`의 ②③ 해소. dev 기준 브랜치.
+- **#2 "프리즈" 근본 원인 반전**: 가설(no-op 커밋)은 라이브 계측으로 **반증** — 제자리 커밋은 무해. 진범은 `screenRectOf`가 `nodesRef`(저장좌표)로 링 rect를 계산 → 펼침 중 footprint-shifted 노드 드래그 시 dwell 링이 실제 노드보다 footprint(예: 868px)만큼 왼쪽(화면 밖)에 잡히고, `ensureRingVisible`이 팬텀 링을 향해 카메라를 200ms 애니메이션 팬(드롭 후에도 지속, d3 줌 플라이트) → 노드가 화면 밖으로 밀려 이전 좌표 클릭이 전부 빗나감 = "하드 프리즈"로 관측. 수정: `reactFlow.getNode`(표시좌표) 사용 + 현재 스코프 멤버십 가드 유지(읽기전용 임베드 자식은 기존대로 링 제외).
+- **표시↔저장 환산 헬퍼 추출**: `lib/inline-shift.ts` `displayToSavedX`/`offsetAtSavedX` — finalize의 고정점 반복 루프(도달 불가 갭 표시값에서 진동 발산)를 구간 직해+앵커 클램프로 대체. vitest 7건(경계·왕복·갭 클램프·다중 앵커).
+- **#3a**: 펼침 추적 경로는 position 변경이 suppress로 버려져 `dropDraggingPositions`의 축 고정을 안 탐 → `handleNodeDrag` 라이브 기록 시점에 `constrainToAxis` 직접 적용(다중선택 `onSelectionDrag` 경로와 대칭).
+- **#3b**: `applyCtrlDragCopy` 원위치 복귀가 `ghost.position`(RF 보고값=표시좌표)을 저장좌표로 박던 것 → `rootOffsets`로 표시→저장 환산한 `resetPos`를 updater 밖에서 선계산(StrictMode 순수성 유지). 미펼침은 오프셋 없음=기존 동작.
+- **게이트**: 프론트 단독(백엔드 0줄). vitest 469/469(신규 7 포함)·lint 0 err·tsc 0·build OK. 라이브 Playwright(시드 맵2 v12 펼침 상태): 드롭 후 노드 화면 내 유지+재드래그 ALIVE, Shift 드래그 y 고정(RF raw y=224에도 커밋 y=200), Ctrl복제 원본 API 저장좌표 무오염(540,264)+사본 정확 환산(1672→804), 평면 맵 회귀 없음.
+- 백로그 잔여 해소: `applyCtrlDragCopy`(Ctrl+드래그 노드 복제)가 내부 엣지를 복제할 때 `sourceHandle`/`targetHandle`을 매번 `right`/`left`로 하드코딩 → 디시전 분기 엣지가 한쪽으로 뭉치던 문제(Ctrl+C/V paste는 앞선 백로그에서 해소됨, Ctrl+드래그판만 잔존). `edge.sourceHandle ?? sourceHandleId("right")`/`edge.targetHandle ?? targetHandleId("left")`로 원본 핸들 보존·없을 때만 폴백(handlePaste와 동일 관례). 2줄.
+- 게이트: lint 0·tsc 0·vitest 462/462. 프론트 단독(백엔드 무변경). 리뷰된 동일 패턴 재사용이라 라이브 pw 생략.
+
+## 2026-07-17 — 에디터 백로그 픽스 2건: 붙여넣기 엣지 핸들측 보존 + add-node 즉시 선택 (worktree-editor-backlog)
+- `worktree-editor-improvements`가 남긴 후속 미해결 ①·④ 해소. **FIX1**: `handleCopy`가 `sourceHandle`/`targetHandle`을 클립보드 엣지에 캡처 안 하고 `handlePaste`가 매 엣지에 `right`/`left`를 하드코딩 — 디시전 Yes/No 분기 엣지가 붙여넣기 후 한쪽으로 뭉치던 버그. `lib/node-clipboard.ts`(`ClipboardEdge`+`buildPaste`)와 `handleCopy`/`handlePaste`(page.tsx)에서 핸들을 캡처·전달하고, 없을 때만 기존 기본값(`right`/`left`)로 폴백. Ctrl드래그 사본(`beginCtrlDrag`)의 동일 하드코딩은 스코프 밖이라 유지.
+- **FIX4**: `handleAddNode`가 새 노드를 `selected:true` 없이 추가(별도 `setSelectedId`만 호출) — `handleCopy`는 RF `node.selected` 필터라 방금 추가한 노드는 재클릭 전까지 Ctrl+C가 안 먹힘. `handlePaste`와 동일 패턴(기존 선택 해제+새 노드 `selected:true`)으로 통일.
+- TDD: `node-clipboard.test.ts`에 `buildPaste` 핸들 보존/미지정 폴백 테스트 2건(RED 확인 후 GREEN). 게이트: lint 0·tsc 0·vitest 462 전부 그린.
+- 실기동: 좀비 백엔드(삭제된 `editor-improvements` 워크트리의 고아 uvicorn, 8000 500) kill 후 이 워크트리 자체 백엔드로 재기동. `pw-verify-node-copy.mjs`에 시나리오 (e) 추가(＋메뉴로 노드 추가 직후 재클릭 없이 Ctrl+C→Ctrl+V → 정확히 1개 복제) — 전체 17/17 PASS, 콘솔 에러 0.
+- **②·③ 보류(다음 세션)**: ②노드 프리즈는 라이브 계측 결과 "서브프로세스 인라인 펼침 상태 + footprint-shifted 노드" 한정 기존 버그(`2a78b6b`, `finalizeRootDrag` no-op 커밋), ③도 같은 펼침 좌표 머신 → 근본 원인·재현·수정 방향을 `docs/superpowers/specs/2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md`에 기록(커밋 `c36c400`). 후속 잔여: Ctrl드래그 사본 엣지 핸들 하드코딩(FIX1의 Ctrl드래그판, 스코프 밖).
+
+## 2026-07-17 — 메인 탭 UX 개선 구현 완료 (worktree-main-tabs-ux)
+- dev `0b72270` 기준 신규 브랜치. 설계 `docs/superpowers/specs/2026-07-17-main-tabs-ux-design.md`, 구현 계획 `docs/superpowers/plans/2026-07-17-main-tabs-ux.md`(16 TDD 태스크).
+- **구현 완료(Task 1–15)** — subagent-driven(태스크별 구현+2단계 리뷰). 전부 클라이언트, **백엔드 무변경**(git diff 확인). 커밋 `b746c7b`…`28f9077`(구현+리뷰 픽스 포함). 최종 게이트: **tsc 0 · vitest 471/471(신규 org-tree/donut-geometry/recent-order 포함) · lint 0 errors(무관 사전 warning 1) · build 성공(전 라우트)**. Task 10 대시보드는 라이브 Playwright 10/10(auto-expand 포함) 검증.
+  - 리뷰 픽스 5건: T1 테스트 픽스처 타입(tsc), T4 좁은화면 인라인 상세 renderCard, T5 도넛 `-0` offset, T7 recent-top peek/commit 분리(StrictMode), T10 auto-expand deps 축소(refresh clobber).
+  - ⚠️ **미검증(배포 전 권장)**: Inbox/Notices 다이제스트·Feedback 딥링크·조직도 아코디언은 서버/원격 IP 실기동 브라우저 확인 미완(로컬 게이트만 통과).
+- 스코프 5항목(전부 클라·백엔드 무변경): ①Maps 좌측 = 나의부서 즐겨찾기 + 오우닝부서 조직도 아코디언(모두접기, 카드 디자인 유지+`[SP]` 배지, 목록/상세 양쪽) ②Maps 우측 홈 대시보드 = 최근열람(최상단·스태거 진입) + 내오너 문서 상태 도넛(세그먼트 클릭→목록, 기본 draft) + 승인필요 단계 그래프(status 파생); 대시보드 맵행 hover→Open·클릭→선택(좌측 자동펼침 포커스) ③Feedback 작성하단 최근피드백 카드+`?feedback=<id>` 딥링크 ④Inbox 미선택 우측 활동요약 다이제스트 ⑤Notices 동일 다이제스트.
+- 사용자 요청 "알림 카테고리 아이콘+필터"는 dev(`lib/notification-categories.ts`+inbox)에 이미 구현되어 스코프 제외.
+- **Task 1-4 구현**: `lib/org-tree.ts`(순수 헬퍼 `buildOrgTree`/`filterMyDeptMaps`) + `OrgAccordion`/`MyDeptFavorites` 컴포넌트(Task 1-3) → `page.tsx` 좌측 브라우즈 컬럼에 배선(Task 4). 브라우즈 모드는 이제 "나의 부서 즐겨찾기(핀)" + 오우닝부서 조직도 아코디언(모두접기, 롤업 카운트)만 렌더 — 기존 최근열람 밴드는 좌측에서 제거(우측 대시보드로 이동 예정, Task 7). 검색·필터 모드(평면 리스트+최근매치 상단고정)는 무변경. 내 정보(`getMe`)·디렉터리(`getDirectory`)로 초기 펼침을 내 `org_path` 조상 경로로 시드. tsc/lint/build 전부 그린.
+  - `useDirectory()`(`lib/directory.ts`)는 유저 Map만 노출(부서 미포함, 다른 4곳이 그 계약에 의존)이라 브리프 가정과 달라 `getDirectory()`를 page.tsx에서 직접 fetch — 공유 훅은 무변경.
+- **Task 11 구현**: `feedback/page.tsx`에 딥링크 `?feedback=<id>` — 목록 로드 후 해당 id가 있으면 상세 모달 1회 오픈(`useRef` 가드), 모달 close 시 param 제거. `useSearchParams` 대신 `window.location.search` 직접 파싱으로 Next.js Suspense 경계 요구를 회피(빌드 시 `/feedback`이 정적 페이지로 유지됨 확인). tsc/lint/build 전부 그린.
+- **Task 12 구현**: `feedback-side-panel.tsx` 작성폼 아래 "내 최근 피드백" 섹션 — 패널 `open` 시 `listFeedback()` 페치 후 `author === getCurrentUser()?.loginId`(정확한 필드명은 `current-user.ts` 확인) 필터·`created_at` desc 상위 5개. 카드 클릭 → `/feedback?feedback=<id>`(Task 11 딥링크) 이동 + `onClose()`. kind/status 필은 `feedback-meta.ts` 기존 토큰(`FEEDBACK_KIND_STYLE`·`FEEDBACK_STATUS_STYLE`) 재사용, 이모지 미사용. i18n 키 2종(`feedback.yourRecent`, `feedback.viewOnPage`) en+ko 추가. tsc/lint/build 전부 그린.
+- **Task 7 구현**: `lib/recent-order.ts`(TDD, `readTopChanged` — sessionStorage `bpm.home.recentTop`로 최상단 id 변화 감지) + `RecentOpenedList`(최근열람 렌더, top 변경 시 `slideDown` 스태거 진입 — `motion-safe:` 가드, 45ms 딜레이). `globals.css`에 `@keyframes slideDown` 신설(기존 미존재 확인). vitest 4/4·tsc·lint 그린(무관 사전 warning 1건 제외).
+
+## 2026-07-17 — 편집 모드 개선 5종 구현 완료 (worktree-editor-improvements)
+- 계획 `docs/superpowers/plans/2026-07-17-editor-improvements.md`의 13 TDD 태스크 전부 구현 + 서브에이전트 리뷰 통과. 브랜치 커밋 `c064f89`…`467b82d`(18 코드 커밋). dev 기준, **미머지·미푸시**.
+- **(1) 노드 복사/붙여넣기/Ctrl드래그**: Ctrl+C/V + Ctrl드래그 복제. 복사 대상 process·decision·end(start·subprocess 제외·토스트). `localStorage` 클립보드로 크로스탭/크로스맵. 다중+내부엣지. `makeCopyLabel`(`(n)` 증분). 붙여넣기 누적 오프셋+findFreeSpot(반복 Ctrl+V 겹침 방지). Ctrl드래그=원본 잔상+`+`배지, 사본 드롭. Ctrl+C는 노드 미선택 시 네이티브 복사 통과. 순수 헬퍼 `lib/drag-constrain`·`node-clipboard`·`canvas`(vitest).
+- **(2) 서브프로세스 링크 유일성**: FE picker 이미 링크된 맵 자동 비활성+툴팁·`addLinkNodeFromMap` 차단. 백엔드 graph PUT 422 가드 — **기존 중복링크는 grandfather**(증가분만 차단: `count>1 and count>stored_counts[mid]`)해 운영 맵 브릭 방지.
+- **(3) SP 설명 + 등록 알림**: `ProcessMap.sp_description` 신설(`_ADDED_COLUMNS` 등록=자동 ALTER)·스키마 3읽기경로·FE 3표면(모달/카드/패널)·`get_subprocess_refs` 채움. 최초 지정 시 오너+활성승인자 알림(`subprocess_registered`, actor 제외, 영문 메시지)·inbox `subprocess` 카테고리.
+- **(4) Shift 축 고정**: `constrainToAxis`로 단일·다중선택(overlay 포함)·그룹 이동 축 고정. selectionKeyCode=null.
+- **(5) SP 목록 접근+검색**: pane 우클릭 메뉴 하단 항목 + 전역 `S` 단축키(입력/모달/menu 가드)·검색 자동포커스·공용 `filterByQuery`(이름+부서 초성/로마자/순차).
+- **게이트(최종 467b82d)**: 백엔드 pytest **635 pass**·ruff clean. 프론트 lint 0·tsc 0·vitest **429 pass**·build OK. Playwright 실검증(실서버 기동) 실행: node-copy 14/14·ctrl-drag 31/31·library-search 7/7·library-open 8/8·link-unique 13/13, 콘솔 에러 0.
+- **후속(미해결)**: ①붙여넣기 엣지 핸들측 소실(분기 엣지 시각 뭉침, 위상/라벨은 보존) ②연속 평범 드래그 시 노드 프리즈(**기존 버그**, 이 브랜치 무관) ③인라인 펼침 상태에서 단일 Shift축고정 비활성·Ctrl드래그 사본 좌표 드리프트 가능(좁은 케이스) ④add-node 후 즉시 Ctrl+C 미복사(selectedId≠node.selected).
+
+## 2026-07-17 — 편집 모드 개선 5종 설계 스펙 (worktree-editor-improvements)
+- dev 기준 신규 브랜치·워크트리. 설계 `docs/superpowers/specs/2026-07-17-editor-improvements-design.md`(구현 대기).
+- 범위: (1) 노드 복사/붙여넣기/Ctrl드래그(process·decision·end 한정, start·subprocess 제외·토스트, localStorage 클립보드로 크로스탭/크로스맵, `(n)` 증분, 다중+내부엣지) (2) 서브프로세스 링크 유일성(FE picker 자동 비활성 + 백엔드 422 가드) (3) SP 설명 필드 `sp_description`(백엔드/DB 자동ALTER) + 최초 지정 시 오너·승인자 알림 (4) Shift 드래그 축 고정(단일·다중·그룹) (5) SP 목록 우클릭 메뉴·`S` 단축키·자동포커스·`filterByQuery` 초성검색.
+- 조사: 노드 모델/드래그·서브프로세스 지정·알림·SP패널/검색 4개 read-only 탐색 완료. 결정: subprocess 복사 제외(기능2 충돌 회피), 다중+엣지 복사, 붙여넣기 오프셋, 백엔드 가드 추가, DB 변경 승인, Ctrl드래그 잔상+`+`배지.
+- 구현 계획 `docs/superpowers/plans/2026-07-17-editor-improvements.md`(TDD 13태스크, 순서 4→1→5→2→3). 순수 헬퍼는 vitest·백엔드는 pytest·page.tsx 배선은 Playwright 검증.
+
+## 2026-07-17 — Excel 출력 양식 2안(WBS) + 형식 선택 모달 (worktree-excel-export)
+- 미리보기 행 스태거 등장 애니메이션 — 기존 `item-fade-in` 키프레임 재사용(`globals.css` `.preview-row-in`, 350ms ease-smooth both + 행별 45ms 딜레이, reduced-motion 가드), 양 형식 테이블 공통. 실측: computed style로 클래스·딜레이 확인 + pw 19/19 회귀 그린.
+- 설계 `docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md`. 신규 `lib/excel-wbs.ts` — 잎 업무 행+레벨 경로(`levels`), SP 무행(레벨 값=SP 노드 타이틀·루트=맵 이름), start/end 전부 삭제(Next 종착 텍스트 유지), 무라벨 디시전 flow-through·`[No:라벨]` 주석(SP 대상 소멸)은 1안과 동일 체계. 시트 "WBS": 동적 Level 1..N 컬럼(회색 `FF9CA3AF`)+1안 속성 꼬리(numFmt 정의 파생).
+- Excel 버튼 → 형식 선택 모달(`components/excel-export-modal.tsx`): 한/영 세그먼트 토글 디자인 탭(Process Map/WBS)+첫 8행 미리보기(lazy 빌드·캐시)+Download. 파일명 WBS는 `_WBS` 접미. 다운로드는 `downloadWorkbookXlsx` 공용화(exceljs 동적 import 유지).
+- 게이트: vitest 전체·tsc·lint·build 그린.
+- 실기동 검증 pw-verify-excel-wbs.mjs 시나리오 12종·assertion 19/19 PASS(모달 플로우·양 형식 다운로드 파싱 — WBS 레벨 컬럼·SP 무행·start/end 0행·주석·1안 회귀·콘솔 0).
+
+## 2026-07-17 — Excel 출력 양식 2안(WBS) 설계 확정 (worktree-excel-export)
+- 레벨 컬럼 WBS 시트+형식 선택 모달(토글 탭·미리보기) 설계 — 사용자 확정 4건(모든 행 반복+회색 톤다운·start/end 전부 삭제·SP Next 이름 유지·모달 토글탭). 설계 docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md, 계획 docs/superpowers/plans/2026-07-17-excel-export-wbs-v2.md.
+
+## 2026-07-17 — Excel 출력 양식 개선 1안 구현 (worktree-excel-export)
+- 설계 `docs/superpowers/specs/2026-07-17-excel-export-format-v1-design.md` 4규칙 구현: ①무라벨 병렬 디시전 행 제거+Next flow-through(라벨은 최종 대상까지 전파) ②첫 start 외 start 행 제거 ③기본 제목("end", trim·대소문자 무시) end 행 제거(Next의 End 표기는 유지) ④라벨 분기 대상 Name에 `[디시전No:라벨]` 주석(행 객체 참조로 역방향·다이아몬드 안전). No는 모델에서 확정(`ExcelNodeRow.no`).
+- CSV 내보내기는 왕복 계약이라 미적용. 게이트: vitest 전체·tsc·lint·build 그린.
+- 실기동 검증 pw-verify-excel-format-v1.mjs 10/10 PASS(스크래치 맵 픽스처 → xlsx 파싱 — 행 제거·flow-through·주석·No 연속·콘솔 0).
+- 최종 리뷰 백로그 해소: ①재수렴 시 Next·주석 중복 제거(같은 (대상,라벨) 쌍 1회 — 사용자 확정 정책) ②행 상한 도달 시 `return`→`break`로 이미 출력된 행의 주석 보존 ③혼합 디시전 무라벨 분기→삭제 디시전 flow-through 회귀 테스트 추가, pw 규칙2 체크를 Type 컬럼 기반으로 강화(미도달 start 픽스처는 PUT /graph의 start=1 검증 때문에 불가 — 모델 vitest가 판별 담당). 게이트 vitest 433·tsc·lint·build 그린, pw 재실행 10/10. 잔여: Windows 실물 Excel 눈검증 1회(배포 전 수동).
+
+## 2026-07-17 — Excel 출력 양식 개선 1안 설계 확정 (worktree-excel-export)
+- 엑셀 산출물 2종 분리 작업의 1단계 설계 — 구조 노드 행 정리(무라벨 디시전·첫 start 외·기본 제목 end)+분기 주석(`Name [디시전No:라벨]`)·Next flow-through 규칙 확정. 설계 `docs/superpowers/specs/2026-07-17-excel-export-format-v1-design.md`. CSV는 왕복 계약이라 미적용. Groups 반영 검토 — 정상(무명 그룹만 제외됨).
+
+## 2026-07-16 — 매뉴얼 버튼 일관화 + /manual 외부 매뉴얼 드롭다운 (worktree-manual-buttons)
+- 분산 유지 구조에서 표기 통일: 에디터 툴바 매뉴얼(D2)을 네이티브 title→스타일드 `<Tooltip>`으로 통일, 외부 새 탭 버튼(D2 툴바·D3 CSV 액션)에 `ExternalLink` 큐 추가(내부 /manual 라우팅과 구분 — 에디터 우상단 BookOpen 2개 혼동 해소).
+- `/manual` 뷰어에 "한눈에 보기"(At a glance) 드롭다운 신규 — `getMe()`의 `manual_url`(편집사이트)·`csv_manual_url`(CSV안내)을 앵커로. 둘 다 미설정이면 트리거 숨김. i18n 키 `manual.externalMenu`·`manual.editSite` 추가.
+- 설계 `docs/superpowers/specs/2026-07-16-manual-buttons-rearrange-design.md`. 게이트: lint/tsc/build 그린 · 브라우저 실검증 `pw-verify-manual-dropdown.mjs` 8/8 통과(API 모킹, 콘솔 에러 0 — 트리거 노출/드롭다운 2항목/external 큐/window.open 대상 URL, 둘 다 미설정 시 트리거 숨김). 백엔드 무변경.
+
+## 2026-07-16 — CSV 매뉴얼 버튼 배포 파이프라인 개통 + compose 누락 방지 룰 (worktree-manual-buttons)
+- CSV 임포트 안내 버튼(`csv-manual-link`, 홈 CSV 생성 모달·에디터 임포트 모달)이 프로덕션에서 절대 안 뜨던 문제 — `settings.csv_manual_url`(env `CSV_MANUAL_URL`)이 `.env.example`·`settings.py`·`schemas.py`·`main.py`엔 있었으나 **`docker-compose.yml` backend `environment:`에만 누락**. backend 서비스엔 `env_file:`가 없어 `.env` 값이 컨테이너에 도달 못 함 → `/me`가 빈 값 반환 → 버튼 영구 숨김(로컬 네이티브에선 정상이라 미발견). `MANUAL_URL`(편집 매뉴얼, 툴바 F9)은 이미 전달됨.
+- `docker-compose.yml`에 `CSV_MANUAL_URL: ${CSV_MANUAL_URL:-}` 추가(파이프라인 개통).
+- 재발 방지: `rules/backend/config.md`에 "새 Environment 카테고리 Settings 필드는 backend `environment:` 블록에도 반드시 매핑" 룰 명문화(no `env_file:` 근본 원인·`CSV_MANUAL_URL` 선례 기록). CLAUDE.md `@import` 대상이라 다음 세션 자동 로드.
+
 ## 2026-07-18 — 로그인 실패 시 막다른 빨간 화면 제거 + 세션 유효 시 무클릭 자동 복구 (main)
 - 증상: 일부 유저가 Keycloak 로그인 직후 홈("/")에 빨간 "Auth error: …" 한 줄만 뜨는 막다른 화면에 갇히거나, 로그인 카드에 도달하지 못함. 근본 원인: `AuthGate`(`frontend/src/components/providers.tsx`)의 미인증→`/login` 리다이렉트 effect가 `!auth.error`로 가드돼 에러 시 동작 안 함 + 유일한 복구 effect가 `login_required`만 처리 → 그 외 에러(oidc `No matching state`·토큰 교환 실패·`consent_required`·시계 오차 등)는 복구 경로 없는 데드엔드 렌더로 낙하.
 - 수정: 데드엔드 빨간 렌더 삭제(→ 에러는 not-authenticated로 로딩 화면 후 `/login` 복귀). 에러를 종류별 분기 — `login_required`(세션 없음, 정상)는 곧바로 카드+silent 억제, 그 외는 **세션이 살아있을 수 있으니 silent 자동 재시도 1회**(무클릭 로그인) 후 소진 시에만 카드로 폴백. 재시도 상한 1로 지속성 에러(시계 오차·스토리지 차단) 무한 리다이렉트 루프 방지.
@@ -17,6 +275,58 @@
 - **(2) 게시본 승인 탭에 서브프로세스 지정 카드 노출**: 기존 `SubprocessInspectorCard`를 승인 탭(`approvalSlot`)의 `ApprovalPanel` 아래·버전 목록 위에 재사용(백엔드 무변경, `spCanManage`/`spDisabledReason` 게이팅 재사용).
 - **게이트**: 백엔드 pytest 608 pass·ruff clean. 프론트 vitest 414 pass·tsc 0·lint 0 err(pre-existing 경고 1)·build OK. 브라우저 실검증 `pw-verify-approval-sp-card.mjs` 9/9 pass(게시본 카드 활성+지정 모달 진입, 미게시본 비활성+사유 노트, 콘솔 에러 0).
 
+## 2026-07-16 — whole-branch 최종 리뷰 픽스: 퍼지 후 재조회 + 벨 인박스 내 이동
+- **Finding 1(Critical) 픽스** — `table-viewer.tsx`: 퍼지 확정 시 `setPage(1)`이 이미 page=1이라 no-op되어 fetch effect가 재실행되지 않고 `isFetching`이 영구 true(무한 "Loading…")로 굳는 버그. `refreshTick` state 추가 + fetch effect deps에 포함 + `onPurged`에서 tick 증가로 강제 재트리거.
+- **Finding 2(Important) 픽스** — `notification-bell.tsx` `handleOpen`: `/inbox` 체류 중 클릭 시 `router.push`가 같은 라우트라 리마운트 없어 딥링크 소비 무동작 → 현재 경로가 `/inbox`면 `window.location.assign`으로 하드 네비게이션 강제.
+- **검증 보강** — `pw-verify-notifications.mjs` 시나리오 6에 회귀 가드 신설(check "6b"): 퍼지 후 테이블 재조회 GET 대기 + "Loading…" 스피너 미잔존·"No rows"/실제 행 렌더 확인.
+- 게이트: tsc/lint/build 그린. E2E 클린 재시드 후 재실행 10/10 PASS(신설 6b 포함). 상세: `.superpowers/sdd/final-review-fixes.md`.
+
+## 2026-07-16 — Task 12 완료: 전체 게이트 + Playwright 실검증 (알림 퍼지 브랜치 최종)
+- **Task 12 리뷰 픽스** — pw 스크립트 단언 강화 3건: 콘솔 에러 총량 게이트 신설(check 8 `consoleErrors.length === 0` — validateDOMNesting 외 임의 런타임 에러도 FAIL, 실측 0건이라 allowlist 불요) · 퍼지 정확 감소 단언(확정 버튼 라벨에서 N 파싱 → `after === before - N`, 부분 삭제 버그 감지) · 시나리오 ① 알림 탭 활성 직접 단언(탭 세그먼트 스코프 `text-accent` + Approvals 비활성). 클린 DB 전체 재실행 9/9 PASS, 서버 종료·dev.db 재시드 정리 완료.
+- **Task 12 완료** — 전체 게이트 그린: backend pytest 624 passed·ruff clean, frontend vitest 416 passed·tsc 0 errors·lint 0 errors(무관 사전 경고 1건)·next build 성공. `frontend/scripts/pw-verify-notifications.mjs` 신규(`pw-verify-dashboard.mjs` 하네스 재사용 — playwright-core+시스템 Chrome, devUser `admin.sys`) — 벨 딥링크/개별삭제, 알림탭 카테고리 필·선택삭제·읽음삭제·날짜이전삭제, 관리자 기간 퍼지(미리보기→확정→행수 감소) 6개 시나리오 + 콘솔 에러(validateDOMNesting) 수집, 클린 DB(reset_db+seed_org_demo)에서 8/8 PASS. 잔여 리스크: `worktree-workflow-improvements`(미머지, `inbox/page.tsx` 승인 탭 수정)와 향후 머지 시 충돌 가능성 — 상세: `.superpowers/sdd/task-12-report.md`.
+
+## 2026-07-16 — Task 11 완료: 매뉴얼 알림 삭제·보존·퍼지 반영 + 감사 불일치 4건 교정
+- **Task 11 완료** — `user-manual-general-{ko,en}.md` 알림·승인 절 재작성: 벨 5초 폴링·클릭 시 알림 탭 이동+자동읽음·항목별 삭제(X), 알림 탭은 페이지 진입 시 1회 로드(자동 갱신 없음), 카테고리 필터 5종(전체/버전/점유권/권한/공지)+선택모드 일괄삭제+읽은 알림 삭제+날짜지정 삭제(확인 모달, 복구불가), 1인당 최근 100건 보존, checkout·permission 벨 알림 반영 · 공지 읽음이 브라우저(기기)별 localStorage임을 명시. `admin-manual-{ko,en}.md` — 공지 삭제는 하드 삭제·휴지통 없음·복구불가(단 기 발송 벨 알림은 잔존)로 교정 + "알림 기간 삭제(퍼지)" 절 신설(§8, `notifications` 테이블 선택 시 기간 지정→preview 모달 기본 전체선택→체크 해제 확정→하드삭제) + 100건 보존 항목 추가. `backend/app/manual.md` 벨 서술 1문장 확장(클릭 이동·삭제·100건). `docs/alarm-audit.md` §8 불일치 4건(①인박스 갱신주기 ②보존정책 공백 ③공지 하드삭제 ④공지 읽음 기기별) 전부 교정 완료.
+
+## 2026-07-16 — Task 10 완료: 관리자 퍼지 UI (테이블 뷰어 + 모달)
+- **Task 10 재리뷰 픽스** — aliveRef effect setup에서 `aliveRef.current = true;` 복원 1줄(StrictMode dev의 mount→cleanup→re-mount에서 useRef(true) 초기값이 재설정되지 않아 영구 false → purge 실패 시 catch 즉시 return으로 에러 무표시+busy 데드락 방지). tsc/lint 그린.
+- **Task 10 리뷰 픽스** — 퍼지 모달 3건(`notification-purge-modal.tsx`만): busy 중 닫힘 차단(백드롭 onClick `if (!busy)` 가드 + Cancel `disabled={busy}` — in-flight 중 닫혀 onPurged가 다른 테이블 상태를 오염시키는 경로 차단) · runPurge catch에 `aliveRef` 언마운트 가드(preview effect의 alive와 일관) · 로딩/에러 배타(preview 실패 시 스피너 숨김 — `groups === null` 분기 안에서 `!error &&`로 처리해 TS null-narrowing 유지, 리뷰 제안의 `groups === null && !error ?` 삼항 조건 변경은 else 분기 `groups.length` null 타입 에러라 조정) + runPurge 시작 시 `setError(null)`. tsc/lint/build 그린.
+- **Task 10 완료** — `notification-purge-modal.tsx` 신규(preview `(type,message)` 묶음을 체크박스로 확정 후 하드 삭제, 기본 전체 선택, `bg-error`/`text-on-accent`는 `confirm-dialog.tsx` 등에서 이미 쓰이는 기존 theme 토큰이라 그대로 사용) · `table-viewer.tsx` 훅업 — 헤더 바 우측에 `selected === "notifications"`일 때만 기간 입력 2개+삭제 버튼(날짜 역전 시 disabled) 노출, 퍼지 완료 시 `setPage(1)`/`setLoadedPage(0)`/`setRows([])`+`listDbTables()` 재조회로 표·pill 카운트 동기화 · i18n 8키 EN·KO 양쪽. tsc 0 errors, lint 0 errors(무관 사전 경고 1건), next build 통과.
+
+## 2026-07-16 — Task 9 완료: 알림 탭 딥링크·카테고리 필·선택/읽음/날짜 삭제
+- **Task 9 완료** — `inbox/page.tsx`: 벨 딥링크(`?notification=<id>`) 마운트 effect fetch `.then` 안에서 소비(탭 전환·선택·읽음 처리·`router.replace("/inbox")`로 파라미터 소거) · 카테고리 필 필터(`getNotificationCategory` 체인, `useInfiniteSlice` resetKey에 `categoryFilter` 포함) · 선택모드(체크박스 토글, 카드 클릭이 selectMode에서 toggle로만 동작)+읽음 삭제+날짜 이전 삭제 툴바 · 개별 삭제 버튼(카드 시간 필 옆) · `ConfirmDialog`는 같은 파일 `ApprovalDetail` 승인/반려 모달 시그니처 그대로 재사용(danger+icon+message 1줄) · `typeIcon`에 `checkout_`/`permission_` prefix 매핑 추가 · i18n 14키 EN·KO 양쪽 추가. tsc 0 errors, lint 0 errors(무관 사전 경고 1건), vitest 416/416 passed.
+- **Task 9 리뷰 픽스** — 알림 카드 외곽 `<button>`→`<div role="button" tabIndex={0}>`(내부 삭제 버튼과의 button-in-button `validateDOMNesting` 콘솔 에러 해소 — 클라이언트 마운트 시 renderer가 검사하므로 SSR 무관하게 실측 발생하던 문제, onKeyDown Enter/Space+`cursor-pointer` 부착, 승인 탭 카드는 내부 버튼 없어 미접촉) · 체크박스 input→Lucide `CheckSquare`/`Square` 시각 표현(토글은 카드 클릭 유지) · `performBulkDelete` 성공 후 `setBeforeDate("")` 리셋 · `deleteOne`이 selectedIds에서도 해당 id 제거. tsc/lint/vitest 재실행 전부 그린(416/416).
+- **Task 9 재리뷰 픽스** — 카드 `onKeyDown`에 `e.target !== e.currentTarget` 가드 1줄(내부 삭제 버튼 포커스에서 Enter/Space 시 keydown 버블링으로 카드의 preventDefault가 버튼 활성화를 취소하고 열람이 대신 실행되는 "삭제 대신 열람" 회귀 방지). tsc/lint 그린.
+
+## 2026-07-16 — Task 8 완료: 벨 드롭다운 삭제 버튼 + 클릭 네비게이션
+- **Task 8 완료** — FE 벨 드롭다운: import 추가(lucide-react `X`, next/navigation `useRouter`, api `deleteNotification`) · 핸들러 2개(plain function, async catch 주석) · `handleDelete` — API 호출 후 UI 필터 제거 · `handleOpen` — 드롭다운 닫고 `/inbox?notification=${id}` 라우트 · `<li>` 교체 — `cursor-pointer` + `hover:bg-surface-alt` + onClick 핸들러 + 기존 mark-read 버튼 stopPropagation + 신규 delete 버튼(`X` icon 12px strokeWidth 1.5, text-error hover) · i18n 2개 키 추가(EN `"notif.delete": "Delete"` 615행, KO `"notif.delete": "삭제"` 1986행) · tsc 0 errors, npm run lint 0 errors (unrelated test warning). `git diff --stat`: notification-bell.tsx 39줄 추가/4줄 제거, i18n-messages.ts 2줄 추가.
+
+## 2026-07-16 — Task 7 완료: FE API 클라이언트 + 카테고리 lib
+- **Task 7 완료** — FE notification delete/purge API 클라이언트 + 카테고리 매핑: `notification-categories.ts` 신설(type → category 매핑 함수 `getNotificationCategory`, 상수 `NOTIFICATION_CATEGORIES` 4종: version/checkout/permission/notice) · `api.ts` 신규 5함수·3인터페이스 추가(`deleteNotification`·`bulkDeleteNotifications`/`NotificationBulkDelete`/`NotificationBulkDeleteResult`·`previewNotificationPurge`·`purgeNotifications`/`NotificationPurgeGroup` — 백엔드 T5/T6 머지됨 계약 구현) · 신규 테스트 3건(TDD RED→GREEN) · vitest 3/3 passed, tsc 0 errors. 회귀 무변화(기존 모듈만 신규 export 추가).
+- **Task 7 리뷰 픽스** — `previewNotificationPurge` 쿼리스트링 `encodeURIComponent` 부착(getDashboardTimeseries 관례 일치) · `NotificationBulkDelete.read_only`를 `boolean`→`true`로 협소화(백엔드가 false를 422로 거부 — 컴파일 타임 차단). vitest 3/3 passed, tsc 0 errors.
+
+## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 구현 계획 (worktree-alarm-audit)
+- 산출물: `docs/superpowers/plans/2026-07-16-notification-purge.md` — 12태스크 TDD 체크리스트(백엔드 6·프론트 4·매뉴얼 1·게이트/pw 1). 실제 코드·테스트 코드 포함, 수정 지점 file:line 명시.
+- 주요 결정: `create_notifications` async화(호출 7지점 await), permission 알림은 공용 헬퍼 `_notify_permission_request`로 3지점 공유, purge 응답은 `NotificationBulkDeleteOut` 재사용, 딥링크는 useSearchParams 대신 window.location 파싱(Suspense 회피).
+- **Task 1 완료** — 인덱스 2종 + `_ADDED_INDEXES` 부트스트랩: `models.py` Notification `__table_args__` 추가 · `db.py` `_ADDED_INDEXES` + `_add_missing_indexes` 함수 + init_models 호출 · 테스트 3/3 passed.
+- **Task 2 완료** — `create_notifications` async화 + 인당 `NOTIFICATION_CAP=100` 트리밍(오래된 순 삭제, 읽음 무관): `workflow.py` 시그니처 async 전환 + 호출 7지점 전부 `await` 부착(`workflow.py` 내부 2·`versions.py` 4·`notices.py` 1) · 신규 테스트 1건(TDD RED→GREEN) · 회귀 5개 파일 86 passed, 전체 스위트 609 passed, ruff clean.
+- **Task 3 완료** — checkout 벨 알림 3종(`checkout_requested/approved/rejected`, inbox 전용이던 비대칭 해소): `checkout.py` `request_checkout`에 요청 통지(현 점유자+오너, 요청자 제외, 중복 제거) · `decide_checkout_request`에 결과 통지(요청자 본인 + 벌크 자동거절 전 캡처한 다른 미결 요청자) · 신규 테스트 2건(TDD RED→GREEN) · 회귀 3개 파일 18 passed, 전체 스위트 611 passed, ruff clean.
+- **Task 4 완료** — permission 벨 알림 3종(`permission_requested/approved/rejected`): `permissions.py` 생성 3지점(update/delete_permission 다운그레이드, request_visibility_change)에 공용 헬퍼 `_notify_permission_request`(활성 승인자, 요청자 제외) 훅업 · `decide_approval_request`는 reject/approve 양 분기에 `_notify_permission_decision`(요청자에게 결과) 훅업 · 신규 테스트 1건(TDD RED→GREEN) · 회귀 3개 파일 80 passed, 전체 스위트 613 passed, ruff clean.
+- **Task 4 리뷰 픽스** — 테스트 공백 2건 보강(production 무변경): approve 경로 `permission_approved` 내용 단언(test_notifications.py) · 다운그레이드 생성 지점 kind("a permission change")·map_name·요청자 제외 단언(test_permission_endpoints.py, enforce 필요라 해당 파일 — auth off는 전원 owner라 지연 분기 미도달) · 전체 스위트 615 passed, ruff clean.
+- **Task 5 완료** — 사용자 삭제 API 2개(개별 DELETE + 범용 bulk-delete): `schemas.py` `NotificationBulkDeleteIn`(ids/read_only/before 택1 검증)·`NotificationBulkDeleteOut` · `notifications.py` `DELETE /{id}` 본인 수신분만(타인 404) · `POST /bulk-delete` 조건 3종(ids 교집합, read=true 필터, before 날짜 00:00 미만) · `test_notifications.py` 신규 테스트 4건 TDD RED→GREEN · 전체 스위트 615→615 passed(15개 알림 테스트), ruff clean.
+- **Task 6 완료** — 관리자 퍼지 API 2개(`GET /admin/notifications/purge-preview` + `POST /admin/notifications/purge`, sysadmin 전용): `schemas.py` `NotificationPurgeGroupOut`/`NotificationPurgeGroupIn`/`NotificationPurgeIn`(`from`/`to`는 Python 예약어라 `Field(alias=...)`) · `admin.py` `_build_kst_range`([from 00:00, to+1일 00:00) KST) + preview(type·message 묶음 집계, last_at desc)·purge(확정 묶음 하드삭제, `Task 5`의 `NotificationBulkDeleteOut` 재사용, `deleted=max(result.rowcount, 0)` — `rowcount or 0`은 -1 미방어라 교정) · `test_admin_notifications.py` 신규 테스트 3건 TDD RED(404)→GREEN · 전체 스위트 619→622 passed, ruff clean.
+- **Task 6 리뷰 픽스** — 테스트 공백 3건 보강(production 무변경, test_admin_notifications.py만): POST purge도 non-sysadmin 403 단언(유효 body — 빈 groups면 422가 게이트 선행) · to 경계일 포함 검증(to일 23:00 KST 포함·to+1일 00:30 제외, `_seed`에 hour/minute 확장) + groups 2개로 or_ 다중 분기 커버 · preview last_at DESC 정렬을 격리 범위(6/25~30)에서 순서로 단언 · 파일 5 passed, 전체 스위트 624 passed, ruff clean.
+
+## 2026-07-16 — 알림 통합·삭제(퍼지)·100개 한도 설계 스펙 (worktree-alarm-audit)
+- 감사 결과 기반 설계 확정 — 산출물: `docs/superpowers/specs/2026-07-16-notification-purge-design.md`.
+- 사용자 확정 4건: 승인 알림은 요청+처리결과 양쪽 / 100캡은 읽음 무관 오래된 순 / 관리자 퍼지 미리보기는 type+message 묶음(수신자 수 표시) / 후속 중 인덱스+매뉴얼 보정 포함(페이지네이션·자동 retention 제외).
+- 골자: 신규 알림 type 6종(checkout·permission 요청/결과, 수신자=inbox 노출 대상과 일치) · 사용자 삭제 API 2개(개별 DELETE + 범용 bulk-delete: ids/read_only/before 택1) · 관리자 purge-preview/purge(기간+묶음 확정, sysadmin) · `create_notifications` 내 인당 100캡 트리밍 · 인덱스 2종 + db.py `_ADDED_INDEXES` 자동 보강 · 벨 클릭→`/inbox?notification=<id>` 딥링크 · 알림 탭 카테고리 필 5종+선택/조건 삭제 · 테이블 뷰어 notifications 한정 퍼지 UI. DB 신규 컬럼 없음.
+
+## 2026-07-16 — 알람(알림) 기능 전수 조사·퍼지(삭제) 경로 분류 (worktree-alarm-audit)
+- 읽기 전용 감사 — 코드 변경 없음. 산출물: `docs/alarm-audit.md`.
+- **명확화**: "알람" = 3개 서브시스템(벨 notifications / 수신함 inbox / 공지 notices). inbox는 테이블 없는 실시간 집계 뷰. 생성 경로는 단일 헬퍼 `create_notifications` 호출 7지점·type 6종. checkout(점유권 이전)은 inbox 전용 — 벨 알림 미생성(비대칭).
+- **퍼지 분류**: 프로덕션 삭제 경로는 공지 sysadmin 하드 삭제(D1) 단 1개. 벨 알림(`Notification`)은 삭제 API·프론트 UI·retention·cascade 전부 없음(FK 의도적 미설정, `models.py:325`) — 읽음 UPDATE만 가능, 무한 누적. 스크립트 경로는 reset_db(D2)·seed_inbox_demo(D3)뿐.
+- 부수 발견: `notifications` 테이블 인덱스 전무 + GET 전건 반환 + 전 사용자 5초 폴링 → 장기 성능 리스크. 매뉴얼 불일치 4건(인박스 갱신 주기·보존 정책 공백·공지 하드삭제·공지 읽음 localStorage). 후속 후보는 docs/alarm-audit.md §9.
 ## 2026-07-13 — 매뉴얼 커버리지 감사 후속 픽스: 번들 스테일·오우닝 부서·회수 규칙 (main)
 - fable 에이전트 커버리지 감사(READ-ONLY, i18n·라우터 대조) 결과 중 "핵심" 갭을 반영. 지적 4건은 코드로 직접 재검증(swap 드롭존은 초기 grep이 `[mapId]` 대괄호 디렉터리에서 누락되는 ugrep 함정이라 Python으로 재확인).
 - **번들 `backend/app/manual.md` 스테일 교정(AI 사용법 근거 — 적극적 오답 제거)**: 게시 시 직전 게시본은 "Approved로 강등"이 아니라 **Expired(만료·최종)** + 순차 버전번호 채번(`versions.py:641–659`); 폐기된 인라인 드릴다운 서술 삭제→하위프로세스 참조/딥뷰(⑦)로 교정; 드롭존 "하위"→swap; 강제 점유는 **sysadmin 전용**·체크아웃 요청/이전 추가(`versions.py:289`); 회수 규칙(Pending/Approved=제출자만, Rejected=+오너/sysadmin, 회수자 체크아웃 재부여, `versions.py:744–763`); 맵 생성 필수(오우닝 부서·결재자·공개범위); 코멘트 진입은 더블클릭이 아니라 컨텍스트 메뉴.

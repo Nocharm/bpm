@@ -1,6 +1,6 @@
 """Pydantic request/response models — API boundary validation."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -40,6 +40,16 @@ class MapUpdate(BaseModel):
     description: str | None = None
 
 
+class RenameRequestIn(BaseModel):
+    # 이름 변경 승인 요청 — 오너/sysadmin 1인 decide로 적용 (spec 2026-07-18)
+    to_name: str = Field(min_length=1, max_length=200)
+
+
+class SpDesignationRequestIn(BaseModel):
+    # SP 등록(지정) 요청 — from_map은 요청자가 작업하던 호스트 맵(Inbox 카드 컨텍스트용) (spec 2026-07-19)
+    from_map_id: int
+
+
 class OwningDepartmentIn(BaseModel):
     # 오우닝 부서 지정/변경 — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)
@@ -58,6 +68,8 @@ class SubprocessDesignationIn(BaseModel):
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
+    # 지정 설명 — 자유 텍스트, 선택 (design 2026-07-17)
+    description: str = Field(default="")
 
     @field_validator("department")
     @classmethod
@@ -78,6 +90,11 @@ class SubprocessDesignationIn(BaseModel):
     def _normalize_numeric_params(cls, value: str) -> str:
         text = value.strip()
         return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
+
+    @field_validator("description", mode="after")
+    @classmethod
+    def _trim_description(cls, value: str) -> str:
+        return value.strip()
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "SubprocessDesignationIn":
@@ -555,6 +572,7 @@ class MapOut(BaseModel):
     sp_headcount: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
+    sp_description: str | None = None
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
@@ -688,6 +706,8 @@ class GraphIn(BaseModel):
 class SubprocessRefOut(BaseModel):
     # 링크 대상 맵의 지정 상태·어트리뷰트 — 노드에 복사하지 않는 라이브 참조 렌더 소스 (spec 2026-07-06)
     designated: bool
+    # 링크맵의 현재 이름 — subprocess 노드 라벨은 이 이름을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 None.
+    name: str | None = None
     department: str | None = None
     assignee: str | None = None
     system: str | None = None
@@ -698,6 +718,7 @@ class SubprocessRefOut(BaseModel):
     headcount: str | None = None
     url: str | None = None
     url_label: str | None = None
+    sp_description: str | None = None
 
     @field_validator("duration", mode="after")
     @classmethod
@@ -706,6 +727,30 @@ class SubprocessRefOut(BaseModel):
         if value is None or value == "":
             return value
         return normalize_duration(value)  # 무효면 None
+
+
+class SubprocessUsedByOut(BaseModel):
+    """이 맵을 서브프로세스로 링크한 부모 맵 1건 — 라이브 버전 기준 (design 2026-07-18)."""
+
+    map_id: int
+    name: str
+    owning_department: str | None = None
+    node_count: int  # 부모의 라이브 버전에서 이 맵을 링크한 subprocess 노드 수
+
+
+class SubprocessUsageOut(BaseModel):
+    """SP 지정 메타 + 역참조(used-by) 목록 — 인스펙터 Subprocess 탭 소스 (design 2026-07-18)."""
+
+    designated: bool
+    designated_at: datetime | None = None
+    changed_by: str | None = None
+    changed_at: datetime | None = None
+    # 지정은 최신 게시본 라이브 참조 — 버전을 박제하지 않으므로 응답 시점에 해석해 동봉
+    designated_version_id: int | None = None
+    designated_version_number: int | None = None
+    designated_version_label: str | None = None
+    used_by: list[SubprocessUsedByOut] = []
+    hidden_count: int = 0  # 존재하지만 호출자 권한으로 볼 수 없는 부모 맵 수
 
 
 class GraphOut(BaseModel):
@@ -771,6 +816,55 @@ class NotificationOut(BaseModel):
     message: str
     read: bool
     created_at: datetime
+
+
+class NotificationBulkDeleteIn(BaseModel):
+    """알림 일괄 삭제 — ids/read_only/before 중 정확히 1개 (design 2026-07-16).
+
+    before는 해당 날짜 00:00 KST 미만(그 이전 날들) 삭제.
+    """
+
+    ids: list[int] | None = None
+    read_only: bool | None = None
+    before: date | None = None
+
+    @model_validator(mode="after")
+    def validate_exactly_one_criterion(self) -> "NotificationBulkDeleteIn":
+        provided = [self.ids is not None, self.read_only is not None, self.before is not None]
+        if sum(provided) != 1:
+            raise ValueError("provide exactly one of: ids, read_only, before")
+        if self.read_only is False:
+            raise ValueError("read_only must be true when provided")
+        return self
+
+
+class NotificationBulkDeleteOut(BaseModel):
+    deleted: int
+
+
+class NotificationPurgeGroupOut(BaseModel):
+    """purge-preview 1묶음 — type+message 동일 행 집계 (design 2026-07-16)."""
+
+    type: str
+    message: str
+    count: int
+    first_at: datetime
+    last_at: datetime
+
+
+class NotificationPurgeGroupIn(BaseModel):
+    type: str
+    message: str
+
+
+class NotificationPurgeIn(BaseModel):
+    """확정 퍼지 — [from 00:00, to+1일 00:00) KST 내 선택 묶음 전 수신자 행 삭제."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_date: date = Field(alias="from")
+    to_date: date = Field(alias="to")
+    groups: list[NotificationPurgeGroupIn] = Field(min_length=1)
 
 
 class FeedbackCreate(BaseModel):

@@ -145,16 +145,18 @@ function LabeledSmoothEdge({
 
 const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge, labeled: LabeledSmoothEdge };
 
-// 비교뷰 노드 컨텍스트 — 변경은 diff 필로 보여주므로 박스의 BPM 필드 줄을 숨긴다(displayFields: []).
+// 비교뷰 노드 컨텍스트 — 변경은 diff 필로 보여주므로 박스의 BPM 필드 줄을 숨긴다(속성 4종 제외).
 // 노드 높이가 내용과 무관하게 균일해져 백본 정렬(alignBackbone)이 정확해지고 중복 표시도 제거.
+// 파라미터 칩("params")은 종전처럼 항상 표시 — 에디터 토글과 무관.
 const COMPARE_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
-  displayFields: [],
+  displayFields: ["params"],
   editingNodeId: null,
   onStartRename: null,
   onRename: null,
   onCancelRename: null,
+  ctrlDragIds: new Set<string>(),
 };
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {
@@ -229,7 +231,7 @@ function buildAppNodes(
 // dagre 배치 후처리 — 유지(unchanged/changed) 노드를 공통 backbone 중심Y에 맞춰 열(rank)별로 세로 이동.
 // ①백본이 완전 직선(중심Y 일치 → smoothstep 직각 계단 제거) ②병렬 곁가지의 유지/변경 노드(예: 관리자 승인)를
 // 라인 위로. 추가 노드는 같은 열 내 상대 오프셋을 유지해 위/아래 곁가지로 남는다. 열=중심X로 그룹.
-// 비교뷰 실측 렌더 높이(displayFields:[]로 BPM 줄 숨겨 균일). dagre는 nodeSizeOf로 배치하지만
+// 비교뷰 실측 렌더 높이(BPM 속성 줄은 숨겨 균일 — COMPARE_NODE_ACTIONS). dagre는 nodeSizeOf로 배치하지만
 // 렌더 중심은 실제 높이 기준이라, 정렬은 이 값으로 계산해야 handle Y가 정확히 일치(직선).
 const COMPARE_RENDER_H: Record<string, number> = {
   process: 38,

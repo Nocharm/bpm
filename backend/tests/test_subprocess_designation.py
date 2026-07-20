@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import MapPermission, MapVersion, Node, ProcessMap
+from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap
 from app.settings import settings
 
 SYSADMIN = "desig.sysadmin"
@@ -94,6 +94,25 @@ def seed_host_with_subprocess_node(target_map_id: int, node_id: str) -> tuple[in
     return _seed(_make)
 
 
+def seed_active_employee(login_id: str) -> None:
+    """알림 수신자 조회(load_active_approvers)가 요구하는 active=True 직원 행."""
+
+    async def _make(session) -> None:
+        if await session.get(Employee, login_id) is None:
+            session.add(Employee(login_id=login_id, name=login_id, source="local", active=True))
+
+    _seed(_make)
+
+
+def seed_approver(map_id: int, user_id: str) -> None:
+    """MapApprover 직접 시드 — set_approvers API의 오너 권한 체크를 우회."""
+
+    async def _make(session) -> None:
+        session.add(MapApprover(map_id=map_id, user_id=user_id, assigned_by=SYSADMIN))
+
+    _seed(_make)
+
+
 BODY = {"department": "Sales", "assignee": "Kim", "system": "SAP", "duration": "2d"}
 
 
@@ -107,6 +126,18 @@ def test_designate_happy_path(client: TestClient, enforce) -> None:
     assert data["sp_department"] == "Sales"
     assert data["sp_changed_by"] == OWNER
     assert data["sp_changed_at"] is not None
+
+
+def test_designate_roundtrips_description(client: TestClient, enforce) -> None:
+    map_id = seed_map("desig-description", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "description": "설명 텍스트"},
+    )
+    assert res.status_code == 200
+    assert res.json()["sp_description"] == "설명 텍스트"
+    assert client.get(f"/api/maps/{map_id}").json()["sp_description"] == "설명 텍스트"
 
 
 def test_designate_requires_published_version(client: TestClient, enforce) -> None:
@@ -175,11 +206,29 @@ def test_graph_includes_subprocess_refs(client: TestClient, enforce) -> None:
     g = client.get(f"/api/versions/{host_version}/graph").json()
     ref = g["subprocess_refs"][str(target)]
     assert ref["designated"] is True
+    assert ref["name"] == "refs-target"  # 링크맵 현재 이름을 라이브로 동봉
     assert ref["department"] == "Sales"
     assert ref["assignee"] == "Kim"
     # 에디터 루트 로드 경로(/graph/all)에도 동일 동봉
     full = client.get(f"/api/versions/{host_version}/graph/all").json()
     assert full["subprocess_refs"][str(target)]["designated"] is True
+
+
+def test_subprocess_ref_name_follows_map_rename(client: TestClient, enforce) -> None:
+    # subprocess 노드 라벨은 링크맵 현재 이름을 라이브로 따른다 — 맵 개명이 참조에 즉시 반영(노드 title 스냅샷은 불변).
+    target = seed_map("ref-name-before", published=True)
+    act_as(OWNER)
+    client.put(f"/api/maps/{target}/subprocess-designation", json=BODY)
+    _host, host_version = seed_host_with_subprocess_node(target, "name-sp1")
+    act_as(SYSADMIN)
+    g = client.get(f"/api/versions/{host_version}/graph").json()
+    assert g["subprocess_refs"][str(target)]["name"] == "ref-name-before"
+    # 링크맵 개명 → 참조 name 라이브 갱신
+    act_as(OWNER)
+    assert client.patch(f"/api/maps/{target}", json={"name": "ref-name-after"}).status_code == 200
+    act_as(SYSADMIN)
+    g2 = client.get(f"/api/versions/{host_version}/graph").json()
+    assert g2["subprocess_refs"][str(target)]["name"] == "ref-name-after"
 
 
 def test_refs_undesignated_and_resolved_locked(client: TestClient, enforce) -> None:
@@ -245,3 +294,79 @@ def test_refs_include_url_and_label(client: TestClient, enforce) -> None:
     ref = g["subprocess_refs"][str(target)]
     assert ref["url"] == "https://wms.example.com/x"
     assert ref["url_label"] == "WMS"
+
+
+def test_refs_include_description(client: TestClient, enforce) -> None:
+    # Task 3.1에서 추가된 sp_description이 라이브 참조 경로에도 동봉되는지 (get_subprocess_refs)
+    target = seed_map("refs-description", published=True)
+    act_as(OWNER)
+    client.put(
+        f"/api/maps/{target}/subprocess-designation",
+        json={**BODY, "description": "설명 텍스트"},
+    )
+    _host_map, host_version = seed_host_with_subprocess_node(target, "desig-sp-desc")
+    act_as(SYSADMIN)
+    g = client.get(f"/api/versions/{host_version}/graph").json()
+    assert g["subprocess_refs"][str(target)]["sp_description"] == "설명 텍스트"
+
+
+def test_first_designation_notifies_owner_and_approvers(client: TestClient, enforce) -> None:
+    map_id = seed_map("desig-notify", published=True, owner="desig.notify.owner")
+    seed_active_employee("desig.notify.appr")
+    seed_approver(map_id, "desig.notify.appr")
+    act_as(SYSADMIN)  # actor는 오너·승인자가 아님 — 제외 대상 없음
+    res = client.put(f"/api/maps/{map_id}/subprocess-designation", json=BODY)
+    assert res.status_code == 200
+
+    act_as("desig.notify.owner")
+    owner_notifs = [
+        n
+        for n in client.get("/api/notifications?unread_only=true").json()
+        if n["type"] == "subprocess_registered" and n["map_id"] == map_id
+    ]
+    assert len(owner_notifs) == 1
+
+    act_as("desig.notify.appr")
+    appr_notifs = [
+        n
+        for n in client.get("/api/notifications?unread_only=true").json()
+        if n["type"] == "subprocess_registered" and n["map_id"] == map_id
+    ]
+    assert len(appr_notifs) == 1
+
+    # 재지정(속성 편집) — 추가 알림 없음
+    act_as(SYSADMIN)
+    client.put(f"/api/maps/{map_id}/subprocess-designation", json={**BODY, "system": "ERP"})
+
+    act_as("desig.notify.owner")
+    owner_notifs_after = [
+        n
+        for n in client.get("/api/notifications?unread_only=true").json()
+        if n["type"] == "subprocess_registered" and n["map_id"] == map_id
+    ]
+    assert len(owner_notifs_after) == 1
+
+
+def test_first_designation_excludes_acting_owner(client: TestClient, enforce) -> None:
+    # actor == owner면 오너 본인은 알림에서 제외되고, 승인자만 받는다.
+    map_id = seed_map("desig-notify-self", published=True, owner="desig.notify.owner2")
+    seed_active_employee("desig.notify.appr2")
+    seed_approver(map_id, "desig.notify.appr2")
+    act_as("desig.notify.owner2")
+    res = client.put(f"/api/maps/{map_id}/subprocess-designation", json=BODY)
+    assert res.status_code == 200
+
+    owner_notifs = [
+        n
+        for n in client.get("/api/notifications?unread_only=true").json()
+        if n["type"] == "subprocess_registered" and n["map_id"] == map_id
+    ]
+    assert len(owner_notifs) == 0  # 본인이 지정한 경우 본인은 수신 대상에서 제외
+
+    act_as("desig.notify.appr2")
+    appr_notifs = [
+        n
+        for n in client.get("/api/notifications?unread_only=true").json()
+        if n["type"] == "subprocess_registered" and n["map_id"] == map_id
+    ]
+    assert len(appr_notifs) == 1

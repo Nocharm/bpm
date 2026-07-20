@@ -17,6 +17,7 @@ import { countUnreadNotices, getReadNoticeIds, markNoticeRead } from "@/lib/noti
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
+import { ActivityDigest } from "@/components/activity-digest";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
@@ -99,6 +100,8 @@ export default function NoticesPage() {
   );
   const readSet = new Set(readIds);
   const selected = notices.find((n) => n.id === selectedId) ?? null;
+  // notices는 서버에서 starts_at desc로 정렬돼 도착 — find가 곧 최신 중요 공지
+  const latestImportant = notices.find((n) => n.importance === "important") ?? null;
 
   const openNotice = (id: number) => {
     setSelectedId(id);
@@ -226,9 +229,30 @@ export default function NoticesPage() {
           {selected ? (
             <NoticeDetail notice={selected} nowMs={nowMs} dir={dir} t={t} onCopy={notifyCopied} />
           ) : (
-            <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
-              {t("notices.selectPrompt")}
-            </div>
+            <ActivityDigest
+              title={t("nav.tab.notices")}
+              stats={[
+                { icon: <List size={14} strokeWidth={1.5} />, label: t("notices.filterAll"), count: notices.length },
+                {
+                  icon: <CircleAlert size={14} strokeWidth={1.5} />,
+                  label: t("notices.filterImportant"),
+                  count: notices.filter((n) => n.importance === "important").length,
+                },
+              ]}
+              unreadCount={unread}
+              hint={t("digest.selectHint")}
+            >
+              {latestImportant && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(latestImportant.id)}
+                  className="rounded-sm border border-hairline bg-surface px-3 py-2 text-left hover:bg-surface-alt"
+                >
+                  <div className="text-fine text-error">{t("notices.filterImportant")}</div>
+                  <div className="truncate text-caption text-ink">{latestImportant.title}</div>
+                </button>
+              )}
+            </ActivityDigest>
           )}
         </div>
       </div>

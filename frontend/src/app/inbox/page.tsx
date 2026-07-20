@@ -5,24 +5,34 @@
 import {
   ArrowLeftRight,
   Bell,
+  CalendarClock,
   Check,
+  CheckSquare,
   FileCheck,
   List,
   Mail,
   Megaphone,
+  Network,
   ShieldCheck,
+  Square,
+  Trash2,
   User,
   Users,
   X,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   approveVersion,
+  bulkDeleteNotifications,
   decideApprovalRequest,
   decideCheckoutRequest,
+  deleteNotification,
+  getApiErrorDetail,
+  getMap,
   getWorkflowState,
   listInboxApprovals,
   listMapPermissions,
@@ -33,21 +43,30 @@ import {
   type DirectoryUser,
   type InboxApproval,
   type InboxApprovalKind,
+  type MapDetail,
   type MapPermission,
   type NotificationItem,
   type WorkflowState,
 } from "@/lib/api";
+import {
+  SubprocessDesignationModal,
+  type DesignationForm,
+} from "@/components/permissions/subprocess-designation-modal";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { genId } from "@/lib/id";
+import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
+import { ActivityDigest } from "@/components/activity-digest";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
 
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -57,8 +76,16 @@ function approvalTitle(a: InboxApproval, t: Translate): string {
   if (a.kind === "approval_request") {
     if (a.title === "visibility_change") return t("inbox.reqKind.visibility_change");
     if (a.title === "permission_downgrade") return t("inbox.reqKind.permission_downgrade");
+    if (a.title === "map_rename") return t("inbox.reqKind.map_rename");
+    if (a.title === "sp_designation") return t("inbox.reqKind.sp_designation");
   }
   return a.title;
+}
+
+// sp_designation payload에서 출처 맵 이름 — 요청자가 볼 수 없는 맵이면 서버가 빈 값으로 박제
+function spFromMapName(a: InboxApproval): string {
+  const raw = a.detail?.from_map_name;
+  return typeof raw === "string" ? raw : "";
 }
 
 // 요청 내용 요약 — inline code(`값`) + 변경 후 값 강조. MarkdownView로 렌더.
@@ -69,6 +96,14 @@ function approvalSummary(a: InboxApproval, t: Translate): string {
     return t("inbox.summary.checkout_transfer", { label: a.version_label ?? a.title });
   if (a.title === "permission_downgrade")
     return t("inbox.summary.permission_downgrade", { before: a.before ?? "?", after: a.after ?? "?" });
+  if (a.kind === "approval_request" && a.title === "map_rename")
+    return t("inbox.summary.map_rename", { from: a.before ?? "", to: a.after ?? "" });
+  if (a.kind === "approval_request" && a.title === "sp_designation") {
+    const from = spFromMapName(a);
+    return from
+      ? t("inbox.summary.sp_designation", { map: a.map_name, from })
+      : t("inbox.summary.sp_designation_nofrom", { map: a.map_name });
+  }
   return t("inbox.summary.visibility_change", { before: a.before ?? "?", after: a.after ?? "?" });
 }
 
@@ -84,6 +119,9 @@ const TABS: { id: Tab; labelKey: MessageKey }[] = [
 function typeIcon(type: string): LucideIcon {
   if (type === "notice") return Megaphone;
   if (type === "review_requested") return FileCheck;
+  if (type.startsWith("checkout_")) return ArrowLeftRight;
+  if (type.startsWith("permission_")) return ShieldCheck;
+  if (type === "subprocess_registered") return Network;
   return Bell;
 }
 
@@ -110,15 +148,24 @@ function approvalKindLabel(kind: InboxApprovalKind): MessageKey {
 
 export default function InboxPage() {
   const { t } = useI18n();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("notifications");
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | NotificationCategory>("all");
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [beforeDate, setBeforeDate] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<null | "ids" | "read" | "before">(null);
   const [approvals, setApprovals] = useState<InboxApproval[]>([]);
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const pushToast = (message: string) => setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id));
   const dir = useDirectory(); // 요청자 login_id → 이름 해석(검색·표시)
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
@@ -126,7 +173,23 @@ export default function InboxPage() {
   useEffect(() => {
     let alive = true;
     listNotifications().then((data) => {
-      if (alive) setItems(data);
+      if (!alive) return;
+      setItems(data);
+      // 벨의 딥링크(`?notification=<id>`) 소비 — 탭 전환·선택·읽음 처리 후 URL 파라미터 소거(재트리거 방지)
+      const target = Number(new URLSearchParams(window.location.search).get("notification"));
+      if (target) {
+        setTab("notifications");
+        const hit = data.find((n) => n.id === target);
+        if (hit) {
+          setSelectedId(hit.id);
+          if (!hit.read) {
+            void markNotificationRead(hit.id).then((updated) => {
+              setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+            });
+          }
+        }
+        router.replace("/inbox");
+      }
     });
     listInboxApprovals().then((data) => {
       if (alive) setApprovals(data);
@@ -134,19 +197,23 @@ export default function InboxPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [router]);
 
   const unread = items.filter((n) => !n.read).length;
   const byRead = readFilter === "unread" ? items.filter((n) => !n.read) : items;
-  const filtered = filterByQuery(byRead, search, (n) => [
+  const byCategory =
+    categoryFilter === "all"
+      ? byRead
+      : byRead.filter((n) => getNotificationCategory(n.type) === categoryFilter);
+  const filtered = filterByQuery(byCategory, search, (n) => [
     { field: "message", text: n.message },
   ]).map((hit) => hit.item);
-  // 25개씩 증분 렌더 — 알림·승인 두 목록 각각(읽음 필터·검색 변경 시 리셋)
+  // 25개씩 증분 렌더 — 알림·승인 두 목록 각각(읽음/카테고리 필터·검색 변경 시 리셋)
   const {
     visible: shownItems,
     hasMore: hasMoreItems,
     sentinelRef: itemsSentinelRef,
-  } = useInfiniteSlice(filtered, `${readFilter}:${search}`);
+  } = useInfiniteSlice(filtered, `${readFilter}:${categoryFilter}:${search}`);
   const selected = items.find((n) => n.id === selectedId) ?? null;
 
   // 승인 큐도 검색 — 제목·맵·요청자(id+이름) 대상
@@ -179,6 +246,46 @@ export default function InboxPage() {
     setItems((prev) => prev.map((x) => ({ ...x, read: true })));
   };
 
+  // 선택/읽음/날짜 삭제 3종 — 서버 삭제 후 재조회(unread 배지·목록 서버 진실 반영)
+  const performBulkDelete = async () => {
+    if (!confirmDelete) return;
+    const body =
+      confirmDelete === "ids"
+        ? { ids: [...selectedIds] }
+        : confirmDelete === "read"
+          ? { read_only: true as const }
+          : { before: beforeDate };
+    await bulkDeleteNotifications(body);
+    const next = await listNotifications();
+    setItems(next);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    setBeforeDate("");
+    setConfirmDelete(null);
+    if (selectedId !== null && !next.some((n) => n.id === selectedId)) setSelectedId(null);
+  };
+
+  const deleteOne = async (id: number) => {
+    await deleteNotification(id);
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // 승인/반려 — kind별 기존 엔드포인트 호출 후 큐 재조회(서버 진실, 낙관적 갱신 금지)
   const actApproval = async (a: InboxApproval, approve: boolean, reason: string) => {
     if (approvalBusy) return;
@@ -190,7 +297,16 @@ export default function InboxPage() {
       } else if (a.kind === "checkout_transfer") {
         await decideCheckoutRequest(a.id, approve);
       } else {
-        await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+        try {
+          await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+          if (a.title === "map_rename")
+            pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
+          if (a.title === "sp_designation" && !approve)
+            pushToast(t("inbox.toast.spRejected"));
+        } catch (err) {
+          // 승인 시점 이름 선점 409 등 — 백엔드 detail 노출
+          pushToast(getApiErrorDetail(err));
+        }
       }
       const next = await listInboxApprovals();
       setApprovals(next);
@@ -200,9 +316,51 @@ export default function InboxPage() {
     }
   };
 
+  // sp_designation 수락 — decide 대신 지정 모달 저장(PUT이 pending 자동 applied) (spec 2026-07-19)
+  const [spModal, setSpModal] = useState<{ approval: InboxApproval; detail: MapDetail } | null>(null);
+  const openSpDesignationModal = (approval: InboxApproval, detail: MapDetail) => {
+    setSpModal({ approval, detail });
+  };
+  const spModalPublishedId = spModal
+    ? spModal.detail.versions.reduce<number | null>(
+        (acc, v) => (v.status === "published" && (acc === null || v.id > acc) ? v.id : acc),
+        null,
+      )
+    : null;
+  const spModalInitial: DesignationForm | null = spModal
+    ? {
+        department: spModal.detail.sp_department ?? "",
+        assignee: spModal.detail.sp_assignee ?? "",
+        system: spModal.detail.sp_system ?? "",
+        duration: spModal.detail.sp_duration ?? "",
+        cost_krw: spModal.detail.sp_cost_krw ?? "",
+        cost_usd: spModal.detail.sp_cost_usd ?? "",
+        headcount: spModal.detail.sp_headcount ?? "",
+        url: spModal.detail.sp_url ?? "",
+        urlLabel: spModal.detail.sp_url_label ?? "",
+        description: spModal.detail.sp_description ?? "",
+      }
+    : null;
+
   const filterOptions: IconPillOption<ReadFilter>[] = [
     { value: "all", label: t("inbox.filterAll"), Icon: List },
     { value: "unread", label: t("inbox.filterUnread"), Icon: Mail },
+  ];
+
+  const CATEGORY_ICONS: Record<NotificationCategory, LucideIcon> = {
+    version: FileCheck,
+    checkout: ArrowLeftRight,
+    permission: ShieldCheck,
+    subprocess: Network,
+    notice: Megaphone,
+  };
+  const categoryOptions: IconPillOption<"all" | NotificationCategory>[] = [
+    { value: "all", label: t("inbox.catAll"), Icon: List },
+    ...NOTIFICATION_CATEGORIES.map((c) => ({
+      value: c,
+      label: t(`inbox.cat.${c}` as MessageKey),
+      Icon: CATEGORY_ICONS[c],
+    })),
   ];
 
   return (
@@ -279,6 +437,71 @@ export default function InboxPage() {
                   })}
                 </div>
               </div>
+              {/* 카테고리 필 필터 — 알림 전용(버전/점유권/권한/공지) */}
+              {tab === "notifications" && (
+                <IconPillFilter
+                  options={categoryOptions}
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                />
+              )}
+              {/* 선택/읽음/날짜 삭제 3종 툴바 — 알림 전용 */}
+              {tab === "notifications" && (
+                <div className="flex flex-wrap items-center gap-2 pb-2 pr-3 text-fine">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectMode((v) => !v);
+                      setSelectedIds(new Set());
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 ${
+                      selectMode
+                        ? "border-accent-tint-border bg-accent-tint text-accent"
+                        : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                    }`}
+                  >
+                    <CheckSquare size={14} strokeWidth={1.5} />
+                    {t("inbox.selectMode")}
+                  </button>
+                  {selectMode && (
+                    <button
+                      type="button"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => setConfirmDelete("ids")}
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-error disabled:opacity-40"
+                    >
+                      <Trash2 size={14} strokeWidth={1.5} />
+                      {t("inbox.deleteSelected", { count: selectedIds.size })}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!items.some((n) => n.read)}
+                    onClick={() => setConfirmDelete("read")}
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                  >
+                    <Trash2 size={14} strokeWidth={1.5} />
+                    {t("inbox.deleteRead")}
+                  </button>
+                  <span className="ml-auto inline-flex items-center gap-1.5">
+                    <CalendarClock size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                    <input
+                      type="date"
+                      value={beforeDate}
+                      onChange={(e) => setBeforeDate(e.target.value)}
+                      className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
+                    />
+                    <button
+                      type="button"
+                      disabled={!beforeDate}
+                      onClick={() => setConfirmDelete("before")}
+                      className="rounded-sm border border-hairline px-2 py-1 text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                    >
+                      {t("inbox.deleteBefore")}
+                    </button>
+                  </span>
+                </div>
+              )}
             </div>
 
             {tab === "approvals" ? (
@@ -350,6 +573,7 @@ export default function InboxPage() {
                                   nowMs={nowMs}
                                   dir={dir}
                                   onAct={(approve, reason) => void actApproval(a, approve, reason)}
+                                  onSpAccept={openSpDesignationModal}
                                   t={t}
                                 />
                               </div>
@@ -372,22 +596,40 @@ export default function InboxPage() {
                   const TypeIcon = typeIcon(n.type);
                   return (
                     <li key={n.id} className="flex flex-col">
-                      <button
-                        type="button"
+                      {/* div role=button — 내부 삭제 버튼과의 button-in-button 중첩(validateDOMNesting) 회피 */}
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={(e) => {
                           e.stopPropagation(); // 카드 선택이 배경(선택 해제)으로 버블링 방지
-                          void openNotification(n);
+                          if (selectMode) toggleSelected(n.id);
+                          else void openNotification(n);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return; // 내부 삭제 버튼의 Enter/Space 버블링이 카드 동작으로 새는 것 방지
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          if (selectMode) toggleSelected(n.id);
+                          else void openNotification(n);
                         }}
                         className={
-                          "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
+                          "flex w-full cursor-pointer flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
                           (n.id === selectedId
                             ? "border-l-2 border-l-accent bg-accent-tint"
                             : "bg-surface hover:bg-surface-alt")
                         }
                       >
-                        {/* 유형 아이콘(좌) · 읽음(우) */}
+                        {/* 선택 표시(선택모드, 시각 전용 — 토글은 카드 클릭) · 유형 아이콘(좌) · 읽음(우) */}
                         <div className="flex items-center justify-between">
-                          <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                          <span className="flex items-center gap-1.5">
+                            {selectMode &&
+                              (selectedIds.has(n.id) ? (
+                                <CheckSquare size={14} strokeWidth={1.5} className="text-accent" />
+                              ) : (
+                                <Square size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                              ))}
+                            <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                          </span>
                           {n.read ? (
                             <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
                           ) : (
@@ -402,10 +644,21 @@ export default function InboxPage() {
                         >
                           {n.message}
                         </span>
-                        <div className="flex justify-end gap-1">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            aria-label={t("notif.delete")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteOne(n.id);
+                            }}
+                            className="text-ink-tertiary hover:text-error"
+                          >
+                            <Trash2 size={13} strokeWidth={1.5} />
+                          </button>
                           <TimePills iso={n.created_at} nowMs={nowMs} />
                         </div>
-                      </button>
+                      </div>
                       {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
                       <div
                         data-id="notification-detail-accordion"
@@ -445,23 +698,77 @@ export default function InboxPage() {
                   nowMs={nowMs}
                   dir={dir}
                   onAct={(approve, reason) => void actApproval(selectedApproval, approve, reason)}
+                  onSpAccept={openSpDesignationModal}
                   t={t}
                 />
               ) : (
-                <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
-                  {t("inbox.approvalsSelectPrompt")}
-                </div>
+                <ActivityDigest title={t("inbox.tabApprovals")} stats={[]} hint={t("digest.selectHint")}>
+                  <div className="rounded-sm bg-accent-tint px-3 py-2 text-caption text-accent">
+                    {approvals.length === 0
+                      ? t("home.allCaughtUp")
+                      : t("inbox.pendingCount", { n: approvals.length })}
+                  </div>
+                </ActivityDigest>
               )
             ) : selected ? (
               <NotificationDetail notification={selected} nowMs={nowMs} t={t} />
             ) : (
-              <div className="flex h-full items-center justify-center text-caption text-ink-tertiary">
-                {t("inbox.selectPrompt")}
-              </div>
+              <ActivityDigest
+                title={t("inbox.tabNotifications")}
+                stats={NOTIFICATION_CATEGORIES.map((c) => ({
+                  icon: (() => {
+                    const Icon = CATEGORY_ICONS[c];
+                    return <Icon size={14} strokeWidth={1.5} />;
+                  })(),
+                  label: t(`inbox.cat.${c}` as MessageKey),
+                  count: items.filter((n) => getNotificationCategory(n.type) === c).length,
+                }))}
+                unreadCount={unread}
+                hint={t("digest.selectHint")}
+              />
             )}
           </div>
         </div>
+
+        {/* 삭제 확인 모달 — 선택/읽음/날짜 3종 공용, 요약 1줄만 다르게 */}
+        {confirmDelete && (
+          <ConfirmDialog
+            icon={<Trash2 size={28} strokeWidth={1.5} />}
+            danger
+            title={t("inbox.deleteConfirmTitle")}
+            message={
+              confirmDelete === "ids"
+                ? t("inbox.deleteConfirmIds", { count: selectedIds.size })
+                : confirmDelete === "read"
+                  ? t("inbox.deleteConfirmRead", { count: items.filter((n) => n.read).length })
+                  : t("inbox.deleteConfirmBefore", {
+                      date: beforeDate,
+                      count: items.filter((n) => n.created_at.slice(0, 10) < beforeDate).length,
+                    })
+            }
+            confirmLabel={t("inbox.deleteConfirmAction")}
+            cancelLabel={t("common.cancel")}
+            onConfirm={() => void performBulkDelete()}
+            onClose={() => setConfirmDelete(null)}
+          />
+        )}
       </div>
+      {/* sp_designation 수락 — 지정 모달 저장이 곧 수락(PUT이 pending 자동 applied) */}
+      {spModal && spModalInitial && (
+        <SubprocessDesignationModal
+          mapId={spModal.approval.map_id}
+          publishedVersionId={spModalPublishedId}
+          initial={spModalInitial}
+          onSaved={() => {
+            setSpModal(null);
+            pushToast(t("inbox.toast.spDesignated"));
+            void listInboxApprovals().then(setApprovals).catch(() => undefined);
+            setSelectedApprovalKey(null);
+          }}
+          onClose={() => setSpModal(null)}
+        />
+      )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -501,6 +808,7 @@ function ApprovalDetail({
   nowMs,
   dir,
   onAct,
+  onSpAccept,
   t,
 }: {
   approval: InboxApproval;
@@ -508,15 +816,20 @@ function ApprovalDetail({
   nowMs: number;
   dir: Map<string, DirectoryUser>;
   onAct: (approve: boolean, reason: string) => void;
+  // sp_designation 수락 — decide 대신 지정 모달 체인 (spec 2026-07-19)
+  onSpAccept?: (approval: InboxApproval, detail: MapDetail) => void;
   t: Translate;
 }) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
+  // sp_designation — 지정 모달 프리필·게시본 유무 판정용 맵 상세
+  const [spDetail, setSpDetail] = useState<MapDetail | null>(null);
 
   const isVersion = approval.kind === "version_approval";
   const versionId = approval.version_id;
+  const isSpDesignation = approval.kind === "approval_request" && approval.title === "sp_designation";
 
   // 버전 승인 — 승인자 현황(누가 승인/대기/반려) 조회
   useEffect(() => {
@@ -531,6 +844,28 @@ function ApprovalDetail({
       alive = false;
     };
   }, [isVersion, versionId]);
+
+  // sp_designation — 대상 맵 상세(게시본·sp_* 프리필). 실패는 조용히(버튼 비활성 유지)
+  useEffect(() => {
+    if (!isSpDesignation) return;
+    let alive = true;
+    getMap(approval.map_id)
+      .then((data) => {
+        if (alive) setSpDetail(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isSpDesignation, approval.map_id]);
+
+  // 지정은 게시본 필수(백엔드 409) — 없으면 수락 자체를 막고 안내
+  const spPublishedId = spDetail
+    ? spDetail.versions.reduce<number | null>(
+        (acc, v) => (v.status === "published" && (acc === null || v.id > acc) ? v.id : acc),
+        null,
+      )
+    : null;
 
   const resolveName = (id: string) => dir.get(id)?.name ?? id;
   const approvers = workflow?.approvers ?? [];
@@ -661,16 +996,30 @@ function ApprovalDetail({
       {/* 멤버 보기 — 맵 허용 인원. key로 맵 변경 시 상태 리셋 */}
       <MapMembers key={approval.map_id} mapId={approval.map_id} t={t} />
 
-      {/* 액션 — 클릭 시 에디터와 동일한 확인 모달 */}
+      {/* sp_designation — 게시본 없으면 지정(수락) 불가 안내 */}
+      {isSpDesignation && spDetail !== null && spPublishedId === null && (
+        <p className="mt-4 rounded-sm border border-error/40 bg-error/10 px-3 py-2 text-caption text-error">
+          {t("inbox.sp.noPublished")}
+        </p>
+      )}
+
+      {/* 액션 — 클릭 시 에디터와 동일한 확인 모달. sp_designation 수락은 지정 모달 체인 */}
       <div className="mt-4 flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setApproveOpen(true)}
-          disabled={busy}
+          data-id={isSpDesignation ? "inbox-sp-designate" : undefined}
+          onClick={() => {
+            if (isSpDesignation) {
+              if (spDetail !== null) onSpAccept?.(approval, spDetail);
+              return;
+            }
+            setApproveOpen(true);
+          }}
+          disabled={busy || (isSpDesignation && (spDetail === null || spPublishedId === null))}
           className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
         >
           <Check size={14} strokeWidth={1.5} />
-          {t("inbox.approve")}
+          {isSpDesignation ? t("inbox.sp.designate") : t("inbox.approve")}
         </button>
         <button
           type="button"
@@ -681,6 +1030,14 @@ function ApprovalDetail({
           <X size={14} strokeWidth={1.5} />
           {t("inbox.reject")}
         </button>
+        {isSpDesignation && spPublishedId !== null && (
+          <Link
+            href={`/maps/${approval.map_id}?version=${spPublishedId}`}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface"
+          >
+            {t("inbox.sp.goPublished")}
+          </Link>
+        )}
         <Link
           href={`/maps/${approval.map_id}`}
           className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface"
