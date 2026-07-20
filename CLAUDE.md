@@ -77,7 +77,7 @@ docker compose up -d --build   # 접속: http://<서버>:3333
 frontend/   # Next.js 앱 (에디터: src/app/maps/[mapId]/page.tsx — ~6700줄 단일 컴포넌트)
 backend/    # Python API 서버 + requirements.txt / requirements-dev.txt
 nginx/      # 리버스 프록시 설정
-docs/       # spec.md, lessons/(시행착오 방지), superpowers/plans·specs/
+docs/       # spec.md, lessons/(시행착오 방지), superpowers/specs/
 docker-compose.yml
 ```
 

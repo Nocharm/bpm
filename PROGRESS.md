@@ -1,5 +1,9 @@
 # Progress
 
+## 2026-07-20 — 완료 기능 문서 정리 (main, 검증 종료 후)
+- 삭제: `docs/superpowers/plans/`(24개 구현 플랜) + 루트 `DEV-SERVER-TEST-PLAN.md`. 전부 git history 보존. `docs/superpowers/specs/`(설계 provenance)는 코드 주석·`docs/spec.md`가 참조하므로 유지.
+- 끊긴 참조 정리: `docs/db-migration-9910.md`(테스트플랜 포인터 3곳→스모크 문구), `docs/lessons/scope-save-and-coordinates.md`(삭제 플랜 링크 제거), `docs/lessons/README.md`·`CLAUDE.md`(디렉터리 언급 `plans·specs/`→`specs/`). 워크트리(dev·word-map-sections)는 유지.
+
 ## 2026-07-20 — 그룹 일괄편집 모달 폭 확대(속성 버튼 오버플로 해소) (dev)
 - **증상**: 일괄편집 모달의 속성 선택(`grid-cols-3`, MODE_META 8개) 버튼에서 긴 영어 라벨("Duration / run (h)" 등)이 `whitespace-nowrap`+`justify-center`라 버튼 폭을 넘어 아이콘이 버튼 밖으로 삐짐.
 - **수정**: 모달 폭 `w-96`(384px) → `w-[29rem]`(464px). 실측(Pretendard 14px): 최장 버튼 135px, 3열 최소 445px 필요 → 464px는 여유. 한국어(최장 418px)도 커버. 영어 기준 산정.

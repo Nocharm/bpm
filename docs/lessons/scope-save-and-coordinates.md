@@ -20,5 +20,3 @@
 
 ## 4. ⚠️ 검증 중 dev.db readonly 함정
 - **백엔드 실행 중에 `git checkout backend/dev.db`를 하면 DB가 readonly가 된다**(SQLite 파일 핸들이 깨짐) → 이후 모든 저장이 `attempt to write a readonly database`로 실패. 반드시 **백엔드 재시작**. 자세히는 `browser-verification.md`.
-
-관련 계획: `docs/superpowers/plans/2026-06-19-editable-inline-subprocess.md`.
