@@ -1,9 +1,10 @@
 // WBS(레벨 컬럼) Excel 모델 — 잎 업무 행 + 조상 경로(levels). 규칙 엔진은 1안(excel-export.ts)과
 // 동형이되 start/end 전부 삭제·SP 무행이 다르다. 시트 기록은 Task 2에서 추가.
-// 설계: docs/superpowers/specs/2026-07-17-excel-export-wbs-v2-design.md
+// 설계: docs/design/2026-07-17-excel-export-wbs-v2-design.md
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
 import { COLUMNS, EXCEL_MAX_ROWS, HEADER_FILL, NOTE_TEXT, downloadWorkbookXlsx, getNodeRunParams } from "./excel-export";
+import { mergeSubprocessDescription } from "./subprocess-description";
 
 export interface WbsNodeRow {
   kind: "node";
@@ -111,6 +112,14 @@ export async function buildWbsModel({
 
     const rowByNodeId = new Map<string, WbsNodeRow>(); // 스코프(맵 인스턴스) 한정
 
+    // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨) 2회 도달 방지(1안과 동일)
+    const nextOf = (node: GraphNode): string =>
+      Array.from(new Set(
+        (outgoing.get(node.id) ?? [])
+          .flatMap((e) => resolveTargets(e, e.label, new Set()))
+          .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`)),
+      )).join(";");
+
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 노드는 상한(maxRows)을 소비하지 않는다
       if (rows.length >= maxRows) {
@@ -125,26 +134,45 @@ export async function buildWbsModel({
           rows.push({ kind: "circular", levels, title: node.title });
           continue;
         }
-        let resolved: Graph;
+        let resolved: Graph | undefined;
         try {
           resolved = await fetchMemo(node.linked_map_id, node.follow_latest, node.linked_version_id);
         } catch {
-          rows.push({ kind: "denied", levels, title: node.title });
+          resolved = undefined;
+        }
+        if (resolved && !resolved.locked) {
+          await emit(resolved, [...levels, node.title], new Set([...ancestry, node.linked_map_id]));
           continue;
         }
-        if (resolved.locked) {
-          rows.push({ kind: "denied", levels, title: node.title });
-          continue;
-        }
-        await emit(resolved, [...levels, node.title], new Set([...ancestry, node.linked_map_id]));
+        // 잠김(권한 마스킹)·해석 실패 SP는 전개 불가 — 자신이 잎 행이 되어 흐름을 보존하고(1안 SP 행과
+        // 동일 소스: 파라미터 지정정보 상속·설명 베이스+추가분 합성) 아래 denied 노트로 하위 가림을 표시
+        const spRow: WbsNodeRow = {
+          kind: "node",
+          no: 0, // finalize에서 부여
+          levels,
+          title: node.title,
+          type: node.node_type,
+          description: mergeSubprocessDescription(
+            g.subprocess_refs?.[node.linked_map_id]?.sp_description,
+            node.description,
+          ),
+          assignee: node.assignee,
+          department: node.department,
+          system: node.system,
+          ...getNodeRunParams(g, node),
+          annual_count: node.annual_count ?? "",
+          fte: node.fte ?? "",
+          url: node.url ?? "",
+          urlLabel: node.url_label ?? "",
+          groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
+          next: nextOf(node),
+        };
+        rows.push(spRow);
+        rowByNodeId.set(node.id, spRow);
+        rows.push({ kind: "denied", levels: [...levels, node.title], title: node.title });
         continue;
       }
-      // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨) 2회 도달 방지(1안과 동일)
-      const next = Array.from(new Set(
-        (outgoing.get(node.id) ?? [])
-          .flatMap((e) => resolveTargets(e, e.label, new Set()))
-          .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`)),
-      )).join(";");
+      const next = nextOf(node);
       const row: WbsNodeRow = {
         kind: "node",
         no: 0, // finalize에서 부여
@@ -167,7 +195,8 @@ export async function buildWbsModel({
       rowByNodeId.set(node.id, row);
     }
 
-    // 규칙4 주석 수집 — SP는 rowByNodeId에 없어 주석 자동 소멸. 재수렴 중복 방지 포함(1안과 동일)
+    // 규칙4 주석 수집 — 전개된 SP는 rowByNodeId에 없어 주석 자동 소멸(잠긴 SP 잎 행은 대상 유지).
+    // 재수렴 중복 방지 포함(1안과 동일)
     for (const node of ordered) {
       if (node.node_type !== "decision") continue;
       const decisionRow = rowByNodeId.get(node.id);

@@ -206,11 +206,29 @@ def test_graph_includes_subprocess_refs(client: TestClient, enforce) -> None:
     g = client.get(f"/api/versions/{host_version}/graph").json()
     ref = g["subprocess_refs"][str(target)]
     assert ref["designated"] is True
+    assert ref["name"] == "refs-target"  # 링크맵 현재 이름을 라이브로 동봉
     assert ref["department"] == "Sales"
     assert ref["assignee"] == "Kim"
     # 에디터 루트 로드 경로(/graph/all)에도 동일 동봉
     full = client.get(f"/api/versions/{host_version}/graph/all").json()
     assert full["subprocess_refs"][str(target)]["designated"] is True
+
+
+def test_subprocess_ref_name_follows_map_rename(client: TestClient, enforce) -> None:
+    # subprocess 노드 라벨은 링크맵 현재 이름을 라이브로 따른다 — 맵 개명이 참조에 즉시 반영(노드 title 스냅샷은 불변).
+    target = seed_map("ref-name-before", published=True)
+    act_as(OWNER)
+    client.put(f"/api/maps/{target}/subprocess-designation", json=BODY)
+    _host, host_version = seed_host_with_subprocess_node(target, "name-sp1")
+    act_as(SYSADMIN)
+    g = client.get(f"/api/versions/{host_version}/graph").json()
+    assert g["subprocess_refs"][str(target)]["name"] == "ref-name-before"
+    # 링크맵 개명 → 참조 name 라이브 갱신
+    act_as(OWNER)
+    assert client.patch(f"/api/maps/{target}", json={"name": "ref-name-after"}).status_code == 200
+    act_as(SYSADMIN)
+    g2 = client.get(f"/api/versions/{host_version}/graph").json()
+    assert g2["subprocess_refs"][str(target)]["name"] == "ref-name-after"
 
 
 def test_refs_undesignated_and_resolved_locked(client: TestClient, enforce) -> None:

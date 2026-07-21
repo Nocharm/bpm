@@ -58,6 +58,16 @@ class MapUpdate(BaseModel):
     description: str | None = None
 
 
+class RenameRequestIn(BaseModel):
+    # 이름 변경 승인 요청 — 오너/sysadmin 1인 decide로 적용 (spec 2026-07-18)
+    to_name: str = Field(min_length=1, max_length=200)
+
+
+class SpDesignationRequestIn(BaseModel):
+    # SP 등록(지정) 요청 — from_map은 요청자가 작업하던 호스트 맵(Inbox 카드 컨텍스트용) (spec 2026-07-19)
+    from_map_id: int
+
+
 class OwningDepartmentIn(BaseModel):
     # 오우닝 부서 지정/변경 — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)
@@ -727,6 +737,8 @@ class GraphIn(BaseModel):
 class SubprocessRefOut(BaseModel):
     # 링크 대상 맵의 지정 상태·어트리뷰트 — 노드에 복사하지 않는 라이브 참조 렌더 소스 (spec 2026-07-06)
     designated: bool
+    # 링크맵의 현재 이름 — subprocess 노드 라벨은 이 이름을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 None.
+    name: str | None = None
     department: str | None = None
     assignee: str | None = None
     system: str | None = None
@@ -746,6 +758,30 @@ class SubprocessRefOut(BaseModel):
         if value is None or value == "":
             return value
         return normalize_duration(value)  # 무효면 None
+
+
+class SubprocessUsedByOut(BaseModel):
+    """이 맵을 서브프로세스로 링크한 부모 맵 1건 — 라이브 버전 기준 (design 2026-07-18)."""
+
+    map_id: int
+    name: str
+    owning_department: str | None = None
+    node_count: int  # 부모의 라이브 버전에서 이 맵을 링크한 subprocess 노드 수
+
+
+class SubprocessUsageOut(BaseModel):
+    """SP 지정 메타 + 역참조(used-by) 목록 — 인스펙터 Subprocess 탭 소스 (design 2026-07-18)."""
+
+    designated: bool
+    designated_at: datetime | None = None
+    changed_by: str | None = None
+    changed_at: datetime | None = None
+    # 지정은 최신 게시본 라이브 참조 — 버전을 박제하지 않으므로 응답 시점에 해석해 동봉
+    designated_version_id: int | None = None
+    designated_version_number: int | None = None
+    designated_version_label: str | None = None
+    used_by: list[SubprocessUsedByOut] = []
+    hidden_count: int = 0  # 존재하지만 호출자 권한으로 볼 수 없는 부모 맵 수
 
 
 class GraphOut(BaseModel):

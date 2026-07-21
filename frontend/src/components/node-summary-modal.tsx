@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
@@ -48,6 +48,7 @@ import {
   type ParamField,
   type SpParamField,
 } from "@/lib/params";
+import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -66,6 +67,9 @@ export type NodeEditPatch = Partial<{
   fte: string;
   url: string;
   urlLabel: string;
+  // subprocess 연결 버전 — 인스펙터 피커와 동일 즉시 반영(버퍼 아님)
+  followLatest: boolean;
+  linkedVersionId: number | null;
 }>;
 
 const ATTR_FIELDS: { key: "system"; labelKey: "field.system" }[] = [
@@ -133,6 +137,10 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
   spParams: Record<SpParamField, string> | null;
+  // subprocess 설명 베이스(링크 맵 sp_description, 읽기전용) — 이 맵의 추가분(description)과 분리 표시
+  inheritedDescription?: string | null;
+  // subprocess 연결 버전 피커(인스펙터와 동일 컴포넌트) — 호출부가 렌더해 주입
+  versionPickerSlot?: ReactNode;
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
   showAttributes: boolean;
   onPatch: (patch: NodeEditPatch) => void;
@@ -172,6 +180,8 @@ export function NodeSummaryModal({
   urlLabel,
   colorPresets,
   spParams,
+  inheritedDescription,
+  versionPickerSlot,
   showAttributes,
   onPatch,
   onCommitLabel,
@@ -400,11 +410,28 @@ export function NodeSummaryModal({
           className="scrollbar-hidden flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary"
         >
           {readOnly ? (
-            <div className="flex gap-4">
-              <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
-              {groupLabel && (
-                <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-4">
+                <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
+                {groupLabel && (
+                  <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
+                )}
+              </div>
+              {/* 설명 — 읽기전용에서도 표시(있을 때만). subprocess는 링크맵 베이스+추가분 합성(인스펙터와 동일). */}
+              {(() => {
+                const mergedDesc =
+                  nodeType === "subprocess"
+                    ? mergeSubprocessDescription(inheritedDescription, description)
+                    : description.trim();
+                return mergedDesc !== "" ? (
+                  <div
+                    data-id="summary-desc-readonly"
+                    className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary"
+                  >
+                    {mergedDesc}
+                  </div>
+                ) : null;
+              })()}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -419,14 +446,26 @@ export function NodeSummaryModal({
                   onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
                 />
               </div>
-              {/* 설명 — 노드 부연(NodeData.description, 라이브 반영) */}
+              {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
+                  베이스로 위에 표시하고, textarea는 이 맵의 추가분만 편집(표시는 베이스+줄바꿈+추가분 합성). */}
               <div>
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
+                {(inheritedDescription ?? "").trim() !== "" && (
+                  <div
+                    data-id="summary-desc-inherited"
+                    className="mb-1 whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary"
+                  >
+                    {(inheritedDescription ?? "").trim()}
+                  </div>
+                )}
                 <textarea
                   className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
                   rows={2}
                   value={form.description}
                   aria-label={t("field.description")}
+                  placeholder={
+                    (inheritedDescription ?? "").trim() !== "" ? t("subprocess.descAppend") : undefined
+                  }
                   onChange={(event) => setForm((f) => ({ ...f, description: event.target.value }))}
                 />
               </div>
@@ -646,50 +685,8 @@ export function NodeSummaryModal({
             </div>
           )}
 
-          {/* 선행/후행 — 타입 아이콘 칩(세로 나열)·가운데 세로선·양 가장자리 쉐브론(위)+hover 라벨(하단 고정, 높이 통일).
-              칩 영역은 min/max 높이 + 내부 스크롤(스크롤바 숨김)이라 모달이 낮아도 항상 보이고 과도하게 늘지 않는다. 클릭=그 노드 편집(변경 있으면 확인) */}
-          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-hairline">
-            {/* 선행(좌) — 좌측 가장자리 쉐브론(위)+라벨(아래) */}
-            <div className="group/prev flex min-w-0 items-stretch border-r border-hairline">
-              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
-                <ChevronLeft size={14} strokeWidth={1.5} />
-                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/prev:opacity-100">
-                  {t("summary.prev")}
-                </span>
-              </div>
-              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pr-1.5">
-                {predecessors.length ? (
-                  predecessors.map((n) => (
-                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
-                  ))
-                ) : (
-                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
-                    {t("summary.none")}
-                  </span>
-                )}
-              </div>
-            </div>
-            {/* 후행(우) — 우측 가장자리 쉐브론(위)+라벨(아래) */}
-            <div className="group/next flex min-w-0 items-stretch">
-              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pl-1.5">
-                {successors.length ? (
-                  successors.map((n) => (
-                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
-                  ))
-                ) : (
-                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
-                    {t("summary.none")}
-                  </span>
-                )}
-              </div>
-              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
-                <ChevronRight size={14} strokeWidth={1.5} />
-                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/next:opacity-100">
-                  {t("summary.next")}
-                </span>
-              </div>
-            </div>
-          </div>
+          {/* subprocess 연결 버전(최신 추종 토글·버전 고정) — 인스펙터와 동일 컴포넌트를 슬롯으로 주입(패리티) */}
+          {versionPickerSlot}
 
           {hasChildren && (
             <div>
@@ -767,6 +764,54 @@ export function NodeSummaryModal({
                 {error && <span className="text-fine text-error">{error}</span>}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* 선행/후행(이전/이후) — 스크롤 바디 밖 고정 밴드. 바디 안에 두면 flex-shrink가
+            내부 스크롤 칩 영역의 min-height를 0까지 뭉개 (모달이 높든 낮든) 통째로 사라진다.
+            shrink-0 밴드로 분리해 항상 보이게. 칩 영역은 자체 max-h+내부 스크롤. 클릭=그 노드 편집(변경 있으면 확인) */}
+        <div className="shrink-0 border-t border-hairline px-4 py-3">
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-hairline">
+            {/* 선행(좌) — 좌측 가장자리 쉐브론(위)+라벨(아래) */}
+            <div className="group/prev flex min-w-0 items-stretch border-r border-hairline">
+              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
+                <ChevronLeft size={14} strokeWidth={1.5} />
+                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/prev:opacity-100">
+                  {t("summary.prev")}
+                </span>
+              </div>
+              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pr-1.5">
+                {predecessors.length ? (
+                  predecessors.map((n) => (
+                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
+                  ))
+                ) : (
+                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
+                    {t("summary.none")}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* 후행(우) — 우측 가장자리 쉐브론(위)+라벨(아래) */}
+            <div className="group/next flex min-w-0 items-stretch">
+              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pl-1.5">
+                {successors.length ? (
+                  successors.map((n) => (
+                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
+                  ))
+                ) : (
+                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
+                    {t("summary.none")}
+                  </span>
+                )}
+              </div>
+              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
+                <ChevronRight size={14} strokeWidth={1.5} />
+                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/next:opacity-100">
+                  {t("summary.next")}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

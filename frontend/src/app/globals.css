@@ -351,8 +351,27 @@ button:not(:disabled):active {
 @keyframes edge-row-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
 .edge-row-in { animation: edge-row-in 260ms var(--ease-smooth) backwards; }
 
-/* 홈 최근 열람 목록 — top 변경 시 스태거 진입(위에서 내려오며 밀림). */
-@keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+/* 홈 최근 열람 목록 — top이 바뀔 때 새 최상단 행은 위에서 내려오며 accent 링이 번졌다 사라져 "새로 추가됨"을 인지시키고, */
+@keyframes recent-insert {
+  0%   { opacity: 0; transform: translateY(-14px); box-shadow: 0 0 0 2px var(--color-accent); }
+  55%  { opacity: 1; transform: translateY(0);     box-shadow: 0 0 0 2px var(--color-accent); }
+  100% { opacity: 1; transform: translateY(0);     box-shadow: 0 0 0 2px transparent; }
+}
+/* 기존 행들은 새 행에 밀려 정확히 한 슬롯(자기 높이 100% + gap 0.5rem)씩 아래로 내려온다 — 픽셀 상수 없이 FLIP 밀림. */
+@keyframes recent-shift {
+  from { transform: translateY(calc(-100% - 0.5rem)); }
+  to   { transform: none; }
+}
+
+/* 홈 대시보드 도넛 — 마운트 시 1회 살짝 커지며 페이드 인(선택 변경 재렌더에는 재생 안 됨). */
+@keyframes donut-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+
+/* 새 맵 다이얼로그 — 오우닝 부서 선택 후 결재자 피커로 스크롤될 때 accent 링이 한 번 반짝여 시선을 유도. */
+@keyframes picker-flash {
+  0%   { box-shadow: 0 0 0 3px transparent; }
+  30%  { box-shadow: 0 0 0 3px var(--color-accent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
 
 /* 링크 미리보기 패널 로딩 — 진행 바/링 회전/글로브 펄스/점 페이드 (목업 Node Focus Actions 이식) */
 @keyframes lp-bar { 0% { width: 4%; } 22% { width: 38%; } 55% { width: 66%; } 100% { width: 88%; } }

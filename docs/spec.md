@@ -13,7 +13,7 @@
 
 **관계 두 축:**
 - **선후 (sequence)** — Edge로 표현. 같은 버전 캔버스 안에서 화살표 연결
-- **상하 (hierarchy)** — **하위프로세스 참조 모델(Call Activity)**. 옛 인라인 계층(`parent_node_id`)은 폐기 — subprocess 노드가 `linked_map_id`로 다른 맵을 링크하고, 그 맵을 읽기전용으로 인라인 임베드/드릴인한다. 편집은 루트 맵에서만, 임베드 자식은 읽기전용. 설계: `docs/superpowers/specs/2026-06-20-subprocess-reference-model-design.md`
+- **상하 (hierarchy)** — **하위프로세스 참조 모델(Call Activity)**. 옛 인라인 계층(`parent_node_id`)은 폐기 — subprocess 노드가 `linked_map_id`로 다른 맵을 링크하고, 그 맵을 읽기전용으로 인라인 임베드/드릴인한다. 편집은 루트 맵에서만, 임베드 자식은 읽기전용. 설계: git history `2026-06-20-subprocess-reference-model-design.md`
 
 ## 2. 데이터 모델 (초안)
 
@@ -35,7 +35,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 ```
 
 - 노드는 평면(버전 스코프) — 계층은 subprocess 노드의 `linked_map_id` 참조로 표현(§1).
-- 버전 생성: 기존 버전(예: As-Is)의 노드/엣지 전체를 깊은 복사해 새 라벨(To-Be)로 생성. 권한·버전 워크플로 데이터 모델은 권한 설계 문서 참조(`docs/superpowers/specs/2026-06-20-permission-management-design.md`).
+- 버전 생성: 기존 버전(예: As-Is)의 노드/엣지 전체를 깊은 복사해 새 라벨(To-Be)로 생성. 권한·버전 워크플로 데이터 모델은 권한 설계 문서 참조(git history `2026-06-20-permission-management-design.md`).
 
 ## 3. 화면 / UX
 
@@ -92,7 +92,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 4. ~~**버전 관리 + 비교 화면**~~ ✅ — 버전 복제(깊은 복사, ID 재발급)/이름변경/삭제, 두 버전 나란히 읽기 전용 비교
 5. ~~**Keycloak 인증 연동**~~ ✅ — OIDC 로그인 + JWT 검증, AUTH_ENABLED 플래그로 로컬 우회
 6. ~~**기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업~~ ✅
-7. ~~**서버 docker-compose 배포 (3333)**~~ ✅ — 런북 `docs/deploy.md`(Keycloak 로그인 + 사내 AD 동기화 포함). compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+7. ~~**서버 docker-compose 배포 (3333)**~~ ✅ — 런북 `docs/deploy/deploy.md`(Keycloak 로그인 + 사내 AD 동기화 포함). compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
 8. ~~**하위프로세스 참조 모델(Call Activity)**~~ ✅ — 인라인 계층 편집(`parent_node_id`) 폐기 → 평면 노드 + 다른 맵 링크(읽기전용 임베드·드릴인). 설계 `…/2026-06-20-subprocess-reference-model-design.md`
 9. ~~**권한 관리(RBAC) 백엔드**~~ ✅ — 맵 가시성/소유자/협업자(user·dept·group 3종 principal)·승인자·버전 게시 워크플로·유저그룹. 게이트는 `DEV_ENFORCE_PERMISSIONS`로 로컬 검증. 설계 `…/2026-06-20-permission-management-design.md`
 

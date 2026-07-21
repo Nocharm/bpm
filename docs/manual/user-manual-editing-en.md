@@ -52,6 +52,13 @@ Select a node and edit in the right inspector:
 - Dragging a node close to another reveals **drop zones** — **Before** / **After** / **Swap** / **Group** — to insert it into the flow in one motion, or swap the two nodes' places.
 - Dropping an edge onto a node that already has connections asks whether to **Insert between** or **Keep** the existing link; dropping onto a **Decision** node offers **Branch** or **Insert** into an existing output.
 
+### Copying and duplicating nodes
+
+- **Copy/paste** — select nodes and press `Ctrl+C` / `Ctrl+V`. Edges inside the selection come along, and duplicate names get a `(2)`-style suffix.
+- You can paste into **another tab or another map** — the copied content is kept in the browser across tabs.
+- **`Ctrl`+drag to duplicate** — drag a node while holding `Ctrl`; a ghost with a `+` badge follows, and a duplicate lands where you drop.
+- Both paste and duplicate **preserve edge handle directions** (connection points), and the added nodes are selected right away so you can keep editing.
+
 ---
 
 ## 3. Per-run Parameters
@@ -95,11 +102,12 @@ When you designate a map as a subprocess (see Map Settings in the Getting Around
 
 - Select **two or more nodes** and press `Ctrl+G` (or right-click → **Create group**) to bundle them.
 - Double-click the group title to rename it; drag the title bar to move the whole group; **Ungroup** disbands it.
-- **Group bulk edit** sets or clears an attribute (assignee, department, …) across all members at once, with Append / Replace / Skip conflict handling and a before/after summary.
+- **Group bulk edit** sets or clears assignee, department, system — and all **six per-run parameters** — across all members at once, with Append / Replace / Skip conflict handling and a before/after summary. The one-currency rule and subprocess-node restrictions (annual volume · FTE only) apply here too.
 
 ### Alignment and layout
 
 - **Auto layout** arranges the whole flow automatically — horizontal (`Shift+L`, left→right) or vertical (`Shift+K`, top→bottom). The Start→primary-end path snaps to one straight line, branches sit beside it, and edge connection points follow the direction.
+- **`Shift`+drag — axis-locked move**: drag a node (single, multi, or group) while holding `Shift` to move it along one axis only (horizontal or vertical) for easy line-ups.
 - With 2+ nodes selected: **Align left** `Alt+W`, **Center** `Alt+C`, **Align top** `Alt+T`, **Middle** `Alt+X`.
 - With 3+ nodes selected: **Distribute horizontally** `Alt+R`, **Distribute vertically** `Alt+V`.
 
@@ -110,11 +118,24 @@ When you designate a map as a subprocess (see Map Settings in the Getting Around
 A **Subprocess** node embeds another process as a single step — a reference, not a copy.
 
 - **Create subprocess** (right-click a Process node) spins up a child map with Start / Task / End ready to edit.
-- **Add as link node** links an existing map from the process library. Choose **Follow latest published** to always show the newest published version, or pin a specific version. When a newer published version appears, the node offers **Update to latest**.
-- Only maps **designated as subprocesses** appear in the library picker. The map's owner designates it in **Map Settings → Subprocess designation** with representative attributes (department required; assignee, system, duration, cost, and headcount optional) — these show live on every node linking the map.
+- **Add as link node** links an existing map from the process library. New links **follow the latest published version by default**; you can pin a specific version instead. When a newer published version appears, the node offers **Update to latest**.
+- The subprocess list also opens from the right-click menu or the **`S` shortcut**, and search supports Korean chosung matching. **A map already linked in this map cannot be added twice.**
+- By default only maps **designated as subprocesses** appear in the library picker. The map's owner designates it in **Map Settings → Subprocess designation** with representative attributes (department required; assignee, system, duration, cost, headcount, and a **description** optional) — these show live on every node linking the map.
 - A link node pointing to an **undesignated** map shows a warning badge and is locked until the map is designated.
 - **Deep view:** double-click a subprocess node to drill into the child map in a stacked overlay with breadcrumbs — the embedded content is **read-only**. `Esc` goes up one level.
 - If you lack permission on the linked map, the node shows **No access**.
+- **Inspector Subprocess tab** — selecting a subprocess node shows the linked map's designation meta (department, assignee, system, …) and a **used-by list** of maps that link it.
+
+### Linking maps that are not registered yet (placeholders)
+
+You can link a map that is **not yet designated** as a placeholder first, and sort out registration later.
+
+- In the **process library panel** (library button in the top bar), turn on **"Show unregistered maps"** below the search box — unregistered maps then appear with a **"Not registered"** badge.
+- Unregistered maps are **dragged onto the canvas just like any other map** — a lock warning confirms on drop, then it asks whether to **send a registration request**: **Send request** links and asks the owner; **Link only** just links.
+- The request lands in the target map **owner's Inbox (Approvals)**. Once the owner completes the designation, the link's warning clears and the requester is notified (see the Getting Around manual for the owner-side flow).
+- To request later or check status — select the unregistered link node: the inspector shows a **Request registration** button (after requesting, a **Registration requested** badge with a **Withdraw** button for your own request).
+- **Create a new map and link it immediately** — typing in the library panel search reveals a **Create map "query"** button at the bottom; it opens the creation dialog with the name prefilled (owning department, approvers, and other requirements are unchanged). After creation you **stay in the current map and the new map is linked automatically**. The new map clears its warning once it is published and designated.
+- In the top-bar **map-name dropdown**, subprocess-designated maps show a **purple subprocess icon**, and maps **in use (linked) in this map are highlighted with a purple row background** — clicking an in-use map expands its menu and **auto-focuses the canvas** on that node. The current map is excluded from the list, and the dropdown closes when you click outside it.
 
 ---
 
@@ -172,7 +193,7 @@ Save the current map to a file from the export button in the right inspector (or
 | Format | Contents |
 | --- | --- |
 | **PNG** | The current canvas as a 2× resolution image — every connector renders as a solid black line. `Ctrl+Shift+E`. |
-| **Excel** | A node table (with assignee, department, system, and the per-run parameters). Costs are saved in per-currency columns with number formatting, so you can compute in the spreadsheet. |
+| **Excel** | **Choose one of two formats** — ① Structured: a node table (assignee, department, system, per-run parameters) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
 | **CSV** | The same 14-column table as import — you can round-trip by editing an exported CSV and importing it again. |
 | **Word** | A `.docx` document with a shape-based flowchart — node links (URL) are included as hyperlinks. Use **Download Word**. |
 
@@ -202,6 +223,10 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 | Shortcut | Action |
 | --- | --- |
 | `/` | Node search (chosung supported) |
+| `S` | Open subprocess list (chosung search) |
+| `Ctrl+C` / `Ctrl+V` | Copy / paste nodes (works across tabs and maps) |
+| `Ctrl`+drag | Duplicate node |
+| `Shift`+drag | Axis-locked move (horizontal/vertical) |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / Redo |
 | `F2` | Rename node / edit edge label |
 | `Delete` | Delete selection |
@@ -222,4 +247,4 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 ---
 
-*Business Process Map — Editing Maps · Updated 2026-07-13*
+*Business Process Map — Editing Maps · Updated 2026-07-19*

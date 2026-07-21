@@ -6,10 +6,17 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import { AuthLoadingScreen } from "@/components/auth-loading";
 import { getMe, setAuthToken, setDevUser } from "@/lib/api";
-import { clearAutoLoginSkip, consumeReturnTo, peekReturnTo, saveReturnTo, setAutoLoginSkip } from "@/lib/auth-return";
+import {
+  clearAuthRetry,
+  clearAutoLoginSkip,
+  consumeReturnTo,
+  peekReturnTo,
+  saveReturnTo,
+  setAutoLoginSkip,
+  tryConsumeAuthRetry,
+} from "@/lib/auth-return";
 import { setCurrentUser } from "@/lib/current-user";
 import { getStoredDevUser } from "@/lib/dev-auth";
-import { useI18n } from "@/lib/i18n";
 
 const subscribe = () => () => {};
 function useMounted(): boolean {
@@ -62,7 +69,6 @@ async function publishMe(): Promise<void> {
 
 function AuthGate({ children }: { children: ReactNode }) {
   const auth = useAuth();
-  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -87,18 +93,30 @@ function AuthGate({ children }: { children: ReactNode }) {
     }
   }, [auth.isLoading, auth.isAuthenticated, auth.activeNavigator, auth.error, pathname, router]);
 
-  // prompt=none 복귀(error=login_required): 자동 재시도 억제 후 로그인 카드로
+  // 인증 에러는 막다른 빨간 화면 대신 /login으로 복귀. 에러 종류로 분기:
+  //  - login_required/interaction_required(세션 없음, 정상) → 카드로, silent 재시도 억제(무의미한 루프 방지).
+  //  - 그 외(state 불일치·토큰 교환 실패·consent_required 등) → 세션이 살아있을 수 있으니 silent 재시도 1회.
+  //    재시도가 소진되면(tryConsumeAuthRetry=false) 그때 카드로 폴백. (성공 시 아래 effect가 예산/억제 해제)
   useEffect(() => {
-    if (auth.error && isLoginRequiredError(auth.error) && pathname !== "/login") {
-      setAutoLoginSkip();
+    if (auth.error && !auth.isAuthenticated && pathname !== "/login") {
+      if (isLoginRequiredError(auth.error)) {
+        setAutoLoginSkip();
+        clearAuthRetry();
+      } else {
+        console.error("auth error, retrying via login", auth.error);
+        if (!tryConsumeAuthRetry()) {
+          setAutoLoginSkip();
+        }
+      }
       router.replace("/login");
     }
-  }, [auth.error, pathname, router]);
+  }, [auth.error, auth.isAuthenticated, pathname, router]);
 
-  // 로그인 성공: skip 플래그 해제 + 저장된 딥링크 복원
+  // 로그인 성공: skip 플래그·재시도 예산 해제 + 저장된 딥링크 복원
   useEffect(() => {
     if (auth.isAuthenticated) {
       clearAutoLoginSkip();
+      clearAuthRetry();
       const returnTo = consumeReturnTo();
       if (returnTo && returnTo !== pathname) {
         router.replace(returnTo);
@@ -109,9 +127,8 @@ function AuthGate({ children }: { children: ReactNode }) {
   if (pathname === "/login") {
     return <>{children}</>;
   }
-  if (auth.error && !isLoginRequiredError(auth.error)) {
-    return <div className="p-8 text-caption text-error">{t("auth.error", { msg: auth.error.message })}</div>;
-  }
+  // 에러 상태(위 effect가 /login으로 복귀 처리 중)도 not-authenticated로 여기 걸림 —
+  // 막다른 빨간 화면 대신 로딩 화면을 잠깐 보인 뒤 로그인 카드로 넘어간다.
   if (auth.isLoading || !auth.isAuthenticated) {
     return <AuthLoadingScreen />;
   }

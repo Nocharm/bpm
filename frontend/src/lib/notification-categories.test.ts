@@ -18,4 +18,11 @@ describe("getNotificationCategory", () => {
   it("returns null for unknown types (All에서만 노출)", () => {
     expect(getNotificationCategory("mystery")).toBeNull();
   });
+  it("classifies rename types as permission", () => {
+    expect(getNotificationCategory("rename_requested")).toBe("permission");
+    expect(getNotificationCategory("rename_approved")).toBe("permission");
+    expect(getNotificationCategory("rename_rejected")).toBe("permission");
+    expect(getNotificationCategory("rename_superseded")).toBe("permission");
+    expect(getNotificationCategory("map_renamed")).toBe("permission");
+  });
 });

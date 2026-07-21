@@ -35,6 +35,8 @@ interface EditorLeftSidebarProps {
   searchSlot: ReactNode;
   onRowContextMenu: (event: MouseEvent, id: string) => void;
   onRenameNode: (id: string, label: string) => void;
+  // 하위 스코프(임베드) 행 이름편집 시도 — 편집 UI 대신 읽기전용 안내 토스트
+  onReadOnlyRowNotice: () => void;
   // Del/Backspace(아웃라인 포커스) — 선택 노드 삭제
   onDeleteNode: (id: string) => void;
   // Tab 네비게이션 — 다음 노드 선택(하위 프로세스 있으면 하위로 진입). 페이지가 트리로 계산.
@@ -71,6 +73,7 @@ export function EditorLeftSidebar({
   searchSlot,
   onRowContextMenu,
   onRenameNode,
+  onReadOnlyRowNotice,
   onDeleteNode,
   onSelectNext,
   onSelectPrev,
@@ -164,6 +167,11 @@ export function EditorLeftSidebar({
     if (event.key === "Enter") {
       event.preventDefault();
       if (!readOnly) {
+        // 하위 스코프(임베드) 행은 읽기전용 — 편집 UI 대신 안내(더블클릭과 동일 게이트)
+        if (outline.find((row) => row.id === selectedId)?.hierarchy) {
+          onReadOnlyRowNotice();
+          return;
+        }
         setEditingId(selectedId);
       }
     } else if ((event.key === "Delete" || event.key === "Backspace") && !readOnly) {
@@ -471,7 +479,15 @@ export function EditorLeftSidebar({
                     <button
                       type="button"
                       onClick={() => onSelectNode(item.id)}
-                      onDoubleClick={() => !readOnly && setEditingId(item.id)}
+                      onDoubleClick={() => {
+                        if (readOnly) return;
+                        // 하위 스코프(임베드) 행 — 이름편집 대신 읽기전용 안내(조용한 무시 방지)
+                        if (item.hierarchy) {
+                          onReadOnlyRowNotice();
+                          return;
+                        }
+                        setEditingId(item.id);
+                      }}
                       onContextMenu={(event) => onRowContextMenu(event, item.id)}
                       className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-caption hover:bg-surface-alt ${
                         item.id === selectedId

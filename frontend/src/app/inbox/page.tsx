@@ -31,6 +31,8 @@ import {
   decideApprovalRequest,
   decideCheckoutRequest,
   deleteNotification,
+  getApiErrorDetail,
+  getMap,
   getWorkflowState,
   listInboxApprovals,
   listMapPermissions,
@@ -41,13 +43,19 @@ import {
   type DirectoryUser,
   type InboxApproval,
   type InboxApprovalKind,
+  type MapDetail,
   type MapPermission,
   type NotificationItem,
   type WorkflowState,
 } from "@/lib/api";
+import {
+  SubprocessDesignationModal,
+  type DesignationForm,
+} from "@/components/permissions/subprocess-designation-modal";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { genId } from "@/lib/id";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -58,6 +66,7 @@ import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filt
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
 
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -67,8 +76,16 @@ function approvalTitle(a: InboxApproval, t: Translate): string {
   if (a.kind === "approval_request") {
     if (a.title === "visibility_change") return t("inbox.reqKind.visibility_change");
     if (a.title === "permission_downgrade") return t("inbox.reqKind.permission_downgrade");
+    if (a.title === "map_rename") return t("inbox.reqKind.map_rename");
+    if (a.title === "sp_designation") return t("inbox.reqKind.sp_designation");
   }
   return a.title;
+}
+
+// sp_designation payload에서 출처 맵 이름 — 요청자가 볼 수 없는 맵이면 서버가 빈 값으로 박제
+function spFromMapName(a: InboxApproval): string {
+  const raw = a.detail?.from_map_name;
+  return typeof raw === "string" ? raw : "";
 }
 
 // 요청 내용 요약 — inline code(`값`) + 변경 후 값 강조. MarkdownView로 렌더.
@@ -79,6 +96,14 @@ function approvalSummary(a: InboxApproval, t: Translate): string {
     return t("inbox.summary.checkout_transfer", { label: a.version_label ?? a.title });
   if (a.title === "permission_downgrade")
     return t("inbox.summary.permission_downgrade", { before: a.before ?? "?", after: a.after ?? "?" });
+  if (a.kind === "approval_request" && a.title === "map_rename")
+    return t("inbox.summary.map_rename", { from: a.before ?? "", to: a.after ?? "" });
+  if (a.kind === "approval_request" && a.title === "sp_designation") {
+    const from = spFromMapName(a);
+    return from
+      ? t("inbox.summary.sp_designation", { map: a.map_name, from })
+      : t("inbox.summary.sp_designation_nofrom", { map: a.map_name });
+  }
   return t("inbox.summary.visibility_change", { before: a.before ?? "?", after: a.after ?? "?" });
 }
 
@@ -138,6 +163,9 @@ export default function InboxPage() {
   const [selectedApprovalKey, setSelectedApprovalKey] = useState<string | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [nowMs] = useState(() => Date.now());
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const pushToast = (message: string) => setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id));
   const dir = useDirectory(); // 요청자 login_id → 이름 해석(검색·표시)
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
@@ -269,7 +297,16 @@ export default function InboxPage() {
       } else if (a.kind === "checkout_transfer") {
         await decideCheckoutRequest(a.id, approve);
       } else {
-        await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+        try {
+          await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+          if (a.title === "map_rename")
+            pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
+          if (a.title === "sp_designation" && !approve)
+            pushToast(t("inbox.toast.spRejected"));
+        } catch (err) {
+          // 승인 시점 이름 선점 409 등 — 백엔드 detail 노출
+          pushToast(getApiErrorDetail(err));
+        }
       }
       const next = await listInboxApprovals();
       setApprovals(next);
@@ -278,6 +315,32 @@ export default function InboxPage() {
       setApprovalBusy(false);
     }
   };
+
+  // sp_designation 수락 — decide 대신 지정 모달 저장(PUT이 pending 자동 applied) (spec 2026-07-19)
+  const [spModal, setSpModal] = useState<{ approval: InboxApproval; detail: MapDetail } | null>(null);
+  const openSpDesignationModal = (approval: InboxApproval, detail: MapDetail) => {
+    setSpModal({ approval, detail });
+  };
+  const spModalPublishedId = spModal
+    ? spModal.detail.versions.reduce<number | null>(
+        (acc, v) => (v.status === "published" && (acc === null || v.id > acc) ? v.id : acc),
+        null,
+      )
+    : null;
+  const spModalInitial: DesignationForm | null = spModal
+    ? {
+        department: spModal.detail.sp_department ?? "",
+        assignee: spModal.detail.sp_assignee ?? "",
+        system: spModal.detail.sp_system ?? "",
+        duration: spModal.detail.sp_duration ?? "",
+        cost_krw: spModal.detail.sp_cost_krw ?? "",
+        cost_usd: spModal.detail.sp_cost_usd ?? "",
+        headcount: spModal.detail.sp_headcount ?? "",
+        url: spModal.detail.sp_url ?? "",
+        urlLabel: spModal.detail.sp_url_label ?? "",
+        description: spModal.detail.sp_description ?? "",
+      }
+    : null;
 
   const filterOptions: IconPillOption<ReadFilter>[] = [
     { value: "all", label: t("inbox.filterAll"), Icon: List },
@@ -510,6 +573,7 @@ export default function InboxPage() {
                                   nowMs={nowMs}
                                   dir={dir}
                                   onAct={(approve, reason) => void actApproval(a, approve, reason)}
+                                  onSpAccept={openSpDesignationModal}
                                   t={t}
                                 />
                               </div>
@@ -634,6 +698,7 @@ export default function InboxPage() {
                   nowMs={nowMs}
                   dir={dir}
                   onAct={(approve, reason) => void actApproval(selectedApproval, approve, reason)}
+                  onSpAccept={openSpDesignationModal}
                   t={t}
                 />
               ) : (
@@ -688,6 +753,22 @@ export default function InboxPage() {
           />
         )}
       </div>
+      {/* sp_designation 수락 — 지정 모달 저장이 곧 수락(PUT이 pending 자동 applied) */}
+      {spModal && spModalInitial && (
+        <SubprocessDesignationModal
+          mapId={spModal.approval.map_id}
+          publishedVersionId={spModalPublishedId}
+          initial={spModalInitial}
+          onSaved={() => {
+            setSpModal(null);
+            pushToast(t("inbox.toast.spDesignated"));
+            void listInboxApprovals().then(setApprovals).catch(() => undefined);
+            setSelectedApprovalKey(null);
+          }}
+          onClose={() => setSpModal(null)}
+        />
+      )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -727,6 +808,7 @@ function ApprovalDetail({
   nowMs,
   dir,
   onAct,
+  onSpAccept,
   t,
 }: {
   approval: InboxApproval;
@@ -734,15 +816,20 @@ function ApprovalDetail({
   nowMs: number;
   dir: Map<string, DirectoryUser>;
   onAct: (approve: boolean, reason: string) => void;
+  // sp_designation 수락 — decide 대신 지정 모달 체인 (spec 2026-07-19)
+  onSpAccept?: (approval: InboxApproval, detail: MapDetail) => void;
   t: Translate;
 }) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
+  // sp_designation — 지정 모달 프리필·게시본 유무 판정용 맵 상세
+  const [spDetail, setSpDetail] = useState<MapDetail | null>(null);
 
   const isVersion = approval.kind === "version_approval";
   const versionId = approval.version_id;
+  const isSpDesignation = approval.kind === "approval_request" && approval.title === "sp_designation";
 
   // 버전 승인 — 승인자 현황(누가 승인/대기/반려) 조회
   useEffect(() => {
@@ -757,6 +844,28 @@ function ApprovalDetail({
       alive = false;
     };
   }, [isVersion, versionId]);
+
+  // sp_designation — 대상 맵 상세(게시본·sp_* 프리필). 실패는 조용히(버튼 비활성 유지)
+  useEffect(() => {
+    if (!isSpDesignation) return;
+    let alive = true;
+    getMap(approval.map_id)
+      .then((data) => {
+        if (alive) setSpDetail(data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isSpDesignation, approval.map_id]);
+
+  // 지정은 게시본 필수(백엔드 409) — 없으면 수락 자체를 막고 안내
+  const spPublishedId = spDetail
+    ? spDetail.versions.reduce<number | null>(
+        (acc, v) => (v.status === "published" && (acc === null || v.id > acc) ? v.id : acc),
+        null,
+      )
+    : null;
 
   const resolveName = (id: string) => dir.get(id)?.name ?? id;
   const approvers = workflow?.approvers ?? [];
@@ -887,16 +996,30 @@ function ApprovalDetail({
       {/* 멤버 보기 — 맵 허용 인원. key로 맵 변경 시 상태 리셋 */}
       <MapMembers key={approval.map_id} mapId={approval.map_id} t={t} />
 
-      {/* 액션 — 클릭 시 에디터와 동일한 확인 모달 */}
+      {/* sp_designation — 게시본 없으면 지정(수락) 불가 안내 */}
+      {isSpDesignation && spDetail !== null && spPublishedId === null && (
+        <p className="mt-4 rounded-sm border border-error/40 bg-error/10 px-3 py-2 text-caption text-error">
+          {t("inbox.sp.noPublished")}
+        </p>
+      )}
+
+      {/* 액션 — 클릭 시 에디터와 동일한 확인 모달. sp_designation 수락은 지정 모달 체인 */}
       <div className="mt-4 flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setApproveOpen(true)}
-          disabled={busy}
+          data-id={isSpDesignation ? "inbox-sp-designate" : undefined}
+          onClick={() => {
+            if (isSpDesignation) {
+              if (spDetail !== null) onSpAccept?.(approval, spDetail);
+              return;
+            }
+            setApproveOpen(true);
+          }}
+          disabled={busy || (isSpDesignation && (spDetail === null || spPublishedId === null))}
           className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
         >
           <Check size={14} strokeWidth={1.5} />
-          {t("inbox.approve")}
+          {isSpDesignation ? t("inbox.sp.designate") : t("inbox.approve")}
         </button>
         <button
           type="button"
@@ -907,6 +1030,14 @@ function ApprovalDetail({
           <X size={14} strokeWidth={1.5} />
           {t("inbox.reject")}
         </button>
+        {isSpDesignation && spPublishedId !== null && (
+          <Link
+            href={`/maps/${approval.map_id}?version=${spPublishedId}`}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface"
+          >
+            {t("inbox.sp.goPublished")}
+          </Link>
+        )}
         <Link
           href={`/maps/${approval.map_id}`}
           className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface"

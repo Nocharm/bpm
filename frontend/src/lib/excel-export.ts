@@ -1,11 +1,12 @@
 // Excel 내보내기 모델 — 서브프로세스 전체 재귀 인라인(조상 검사·행 상한·locked) 순수 로직.
 // exceljs 기록(다운로드)은 별도 모듈(Task 7) — 모델과 분리해 vitest로 검증한다.
-// 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §4,
-//       docs/superpowers/specs/2026-07-13-node-params-redefinition-design.md §5.2,
-//       docs/superpowers/specs/2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석)
+// 설계: docs/design/2026-07-11-numeric-params-excel-csv-export-design.md §4,
+//       docs/design/2026-07-13-node-params-redefinition-design.md §5.2,
+//       docs/design/2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석)
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
 import { getInheritedParams } from "./params";
+import { mergeSubprocessDescription } from "./subprocess-description";
 
 export interface ExcelNodeRow {
   kind: "node";
@@ -160,7 +161,14 @@ export async function buildExcelModel({
         depth,
         title: node.title,
         type: node.node_type,
-        description: node.description,
+        // subprocess는 노드에 이 맵의 추가분만 저장됨 — 링크 맵 sp_description(베이스)과 줄바꿈 합성해 출력
+        description:
+          node.node_type === "subprocess" && node.linked_map_id !== null
+            ? mergeSubprocessDescription(
+                g.subprocess_refs?.[node.linked_map_id]?.sp_description,
+                node.description,
+              )
+            : node.description,
         assignee: node.assignee,
         department: node.department,
         system: node.system,

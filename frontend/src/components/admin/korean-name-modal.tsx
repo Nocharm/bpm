@@ -1,7 +1,7 @@
 "use client";
 
 // 한글이름 일괄 등록 모달 — 미보유 목록 다운로드 + JSON 임포트(충돌 시 skip/overwrite 확인).
-// 설계: docs/superpowers/specs/2026-07-09-user-korean-name-import-design.md
+// 설계: docs/design/2026-07-09-user-korean-name-import-design.md
 
 import { ChevronDown, FileDown, FileUp, Languages, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";

@@ -1,7 +1,7 @@
 // 한글이름 JSON 임포트 파서·분류 — 어드민 일괄 등록 모달용(순수 함수, DOM/fetch 없음).
 // 두 포맷 자동 판별: 루트가 배열이면 사내 조회 도구 응답([{userId, status, name, dept, ...}],
 // status!=="found" 무시), 객체면 수동 맵({"login_id": "이름"}).
-// 설계: docs/superpowers/specs/2026-07-09-user-korean-name-import-design.md
+// 설계: docs/design/2026-07-09-user-korean-name-import-design.md
 
 import type { EmployeeRow } from "./api";
 

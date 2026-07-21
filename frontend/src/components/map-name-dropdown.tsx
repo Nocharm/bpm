@@ -4,7 +4,7 @@
 // 맵 행은 바로 이동하지 않고 호버/클릭 → 하위메뉴(맵 열기 · 링크노드로 추가) → 확인 모달 순.
 // 편집 화면(isEditing)이면 이동 확인 모달에 미저장 손실 안내. 비공개(private) 맵은 목록에서 제외.
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Link2, Network, Plus } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronDown, ChevronRight, Link2, Network, Plus, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { listLibraryProcesses, listMaps, type LibraryProcess, type MapSummary } from "@/lib/api";
@@ -21,8 +21,12 @@ interface MapNameDropdownProps {
   mapName: string;
   canToRoot: boolean;
   isEditing: boolean;
+  // 이 맵에 이미 링크된(사용중) 맵 — 배경 하이라이트 + 링크 추가 숨김 (미등록 링크 흐름은 프로세스 라이브러리 담당)
+  linkedMapIds: Set<number>;
   onToRoot: () => void;
   onAddLinkNode: (linkedMapId: number, name: string) => void;
+  // 사용중인 맵 행 클릭 → 캔버스의 해당 subprocess 노드 선택·포커싱
+  onFocusLinkedMap?: (linkedMapId: number) => void;
 }
 
 type Pending = { kind: "open" | "link"; map: MapSummary };
@@ -32,8 +36,10 @@ export function MapNameDropdown({
   mapName,
   canToRoot,
   isEditing,
+  linkedMapIds,
   onToRoot,
   onAddLinkNode,
+  onFocusLinkedMap,
 }: MapNameDropdownProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -46,6 +52,21 @@ export function MapNameDropdown({
   const [activeId, setActiveId] = useState<number | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 바깥 클릭 시 자동 닫힘 — 백드롭 대신 문서 레벨 리스너(클릭이 아래 UI로 그대로 전달됨).
+  // capture 필수: React Flow 캔버스(d3)가 mousedown 전파를 끊어 버블 단계 리스너엔 안 닿는다.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setActiveId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [open]);
 
   // 열 때 1회 지연 로드 + 검색 포커스. Esc로 닫기.
   useEffect(() => {
@@ -68,9 +89,9 @@ export function MapNameDropdown({
     (library ?? []).some((row) => row.map_id === id) && !closesCycle(id, mapId, refsByMap);
 
   const q = query.trim().toLowerCase();
-  // 비공개 맵 제외 + 검색어 필터
+  // 비공개 맵·현재 맵 제외 + 검색어 필터
   const filtered = (maps ?? []).filter(
-    (m) => m.visibility !== "private" && (!q || m.name.toLowerCase().includes(q)),
+    (m) => m.id !== mapId && m.visibility !== "private" && (!q || m.name.toLowerCase().includes(q)),
   );
   // 25개씩 증분 렌더 — 맵이 수백 개여도 드롭다운 오픈 부하 없음
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, q);
@@ -81,7 +102,7 @@ export function MapNameDropdown({
   }
 
   return (
-    <div className="relative shrink-0">
+    <div ref={containerRef} className="relative shrink-0">
       <button
         type="button"
         className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
@@ -92,9 +113,10 @@ export function MapNameDropdown({
         <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-[1001] mt-1 w-80 rounded-md border border-hairline bg-surface py-2 shadow-lg">
+        <div
+          data-id="map-dropdown-list"
+          className="absolute left-0 z-[1001] mt-1 w-80 rounded-md border border-hairline bg-surface py-2 shadow-lg"
+        >
             <div className="px-2 pb-2">
               <input
                 ref={searchRef}
@@ -123,20 +145,29 @@ export function MapNameDropdown({
             <div className="px-3 pb-1 pt-2 text-fine text-ink-tertiary">{t("editor.recentMaps")}</div>
             <div className="max-h-72 overflow-auto">
               {visible.map((m) => {
-                const isCurrent = m.id === mapId;
+                // 사용중(이 맵에 링크됨) — 행 배경 하이라이트 + 클릭 시 캔버스 노드 포커싱
+                const alreadyLinked = linkedMapIds.has(m.id);
+                const designated = Boolean(m.sp_designated_at);
                 const subtitle = [
                   m.latest_version_status ? t(VERSION_STATUS_LABEL[m.latest_version_status]) : null,
                   formatKstShort(m.updated_at),
                 ]
                   .filter(Boolean)
                   .join(" · ");
+                // 타일 — SP 지정 맵은 서브프로세스 탭 아이콘(Workflow)·보라, 사용중이면 배경까지 보라
+                const TileIcon = designated ? Workflow : Network;
                 const tile = (
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm ${
-                      isCurrent ? "bg-accent-tint text-accent" : "bg-surface-alt text-ink-secondary"
+                      alreadyLinked
+                        ? "bg-accent-tint text-accent"
+                        : designated
+                          ? "bg-surface-alt text-accent"
+                          : "bg-surface-alt text-ink-secondary"
                     }`}
+                    title={designated ? t("home.spBadgeTip") : undefined}
                   >
-                    <Network size={16} strokeWidth={1.5} />
+                    <TileIcon size={16} strokeWidth={1.5} />
                   </span>
                 );
                 const text = (
@@ -146,28 +177,29 @@ export function MapNameDropdown({
                   </span>
                 );
 
-                // 현재 맵 — 액션 없이 체크만
-                if (isCurrent) {
-                  return (
-                    <div key={m.id} className="flex items-center gap-2.5 bg-accent-tint/40 px-3 py-2">
-                      {tile}
-                      {text}
-                      <Check size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
-                    </div>
-                  );
-                }
-
-                // 다른 맵 — 클릭으로만 하위메뉴(맵 열기 · 링크노드 추가) 인라인 펼침(호버 열림 폐기, 한 번에 1개).
+                // 클릭으로만 하위메뉴(맵 열기 · 링크노드 추가) 인라인 펼침(호버 열림 폐기, 한 번에 1개).
                 // 우측 flyout은 스크롤 컨테이너 overflow에 잘려 인라인 아코디언으로 처리.
                 const active = activeId === m.id;
                 return (
                   <div key={m.id}>
                     <button
                       type="button"
+                      data-sp={designated ? "true" : undefined}
+                      data-linked={alreadyLinked ? "true" : undefined}
                       className={`flex w-full items-center gap-2.5 px-3 py-2 text-left ${
-                        active ? "bg-surface-alt" : "hover:bg-surface-alt"
+                        alreadyLinked
+                          ? active
+                            ? "bg-accent-tint/60"
+                            : "bg-accent-tint/40 hover:bg-accent-tint/60"
+                          : active
+                            ? "bg-surface-alt"
+                            : "hover:bg-surface-alt"
                       }`}
-                      onClick={() => setActiveId((id) => (id === m.id ? null : m.id))}
+                      onClick={() => {
+                        setActiveId((id) => (id === m.id ? null : m.id));
+                        // 사용중인 맵 — 메뉴 펼침과 함께 캔버스의 해당 노드로 자동 포커싱
+                        if (alreadyLinked) onFocusLinkedMap?.(m.id);
+                      }}
                     >
                       {tile}
                       {text}
@@ -196,8 +228,8 @@ export function MapNameDropdown({
                           <ArrowRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
                           {t("editor.mapGo")}
                         </button>
-                        {/* 링크 추가는 지정(designated) 맵만 — 라이브러리 피커와 같은 필터(미지정·순환은 숨김) */}
-                        {isEditing && canAddLink(m.id) && (
+                        {/* 링크 추가는 지정(designated) 맵만 — 라이브러리 피커와 같은 필터(미지정·순환·이미 링크됨은 숨김) */}
+                        {isEditing && !alreadyLinked && canAddLink(m.id) && (
                           <button
                             type="button"
                             className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
@@ -235,8 +267,7 @@ export function MapNameDropdown({
                 {t("editor.newMap")}
               </button>
             </div>
-          </div>
-        </>
+        </div>
       )}
 
       {pending?.kind === "open" && (

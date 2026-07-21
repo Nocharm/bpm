@@ -31,10 +31,16 @@ export function RecentOpenedList({ maps, onSelect }: RecentOpenedListProps) {
       <div className="px-1 text-fine text-ink-tertiary">{t("home.recentTitle")}</div>
       <ul className="flex flex-col gap-2">
         {recent.slice(0, 6).map((m, i) => (
+          // top 변경 시 새 최상단(i===0)은 강조 진입, 나머지 기존 행은 한 슬롯 아래로 밀려 내려온다 → "하나가 위에 추가되며 전부 밀림".
           <li
             key={m.id}
-            className={animate ? "motion-safe:animate-[slideDown_350ms_ease-out_both]" : ""}
-            style={animate ? { animationDelay: `${i * 45}ms` } : undefined}
+            className={
+              !animate
+                ? ""
+                : i === 0
+                  ? "rounded-sm motion-safe:animate-[recent-insert_750ms_var(--ease-smooth)_both]"
+                  : "motion-safe:animate-[recent-shift_600ms_var(--ease-smooth)_both]"
+            }
           >
             <DashboardMapRow map={m} onSelect={onSelect} />
           </li>

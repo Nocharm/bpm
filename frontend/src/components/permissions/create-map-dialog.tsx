@@ -72,9 +72,13 @@ interface Props {
   onCreated: (silent?: boolean) => void; // 생성 후 목록 갱신 콜백 — silent=true면 성공 토스트 억제(임포트 실패 시) / refresh list; silent suppresses the success toast
   // CSV로 만들기 — 홈의 CSV 모달이 넘긴다. **optional 필수**: map-name-dropdown.tsx도 이 컴포넌트를 마운트한다.
   csv?: { outcome: CsvImportOutcome; fileName: string };
+  // 이름 프리필 — 에디터 피커의 "새 맵" 검색어 이어받기 (spec 2026-07-19)
+  initialName?: string;
+  // 지정 시 생성 후 이동(router.push) 대신 호출측이 후속 처리(플레이스홀더 자동 링크)
+  onCreatedMap?: (mapId: number, name: string) => void;
 }
 
-export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreatedMap }: Props) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -134,7 +138,7 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   // ── 폼 상태 / form state ──
   // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
   const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
-  const [name, setName] = useState(csvBaseName);
+  const [name, setName] = useState(initialName ?? csvBaseName);
   const [description, setDescription] = useState(csvBaseName);
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
@@ -157,6 +161,17 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
   const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
   // 자동 추가한 리더 승인자 추적 — 부서 변경 시 자동분만 교체하고 수동 추가는 보존
   const autoLeaderRef = useRef<string | null>(null);
+  // 결재자 섹션 — 오우닝 부서 선택 후 여기로 스크롤 다운(맨 아래 피커를 상단 피커로 착각 방지)
+  const approversRef = useRef<HTMLDivElement>(null);
+  // 스크롤과 동시에 결재자 섹션을 1회 반짝여 시선 유도(오우닝 선택 핸들러에서 켜고 타이머로 해제 — 모션 설정 무관하게 리셋).
+  const [flashApprovers, setFlashApprovers] = useState(false);
+
+  // 오우닝 부서를 고르면 결재자 피커로 스크롤 다운 — 작은 뷰포트에서 아래 피커가 안 보여 헷갈리는 문제
+  useEffect(() => {
+    if (owningDept) {
+      approversRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [owningDept]);
 
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
@@ -218,6 +233,8 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
     );
     autoLeaderRef.current = shouldAdd ? leader.id : null;
     setOwningDept(dept);
+    setFlashApprovers(true);
+    window.setTimeout(() => setFlashApprovers(false), 850); // 애니메이션 후 리셋(재선택 시 재발화)
   };
 
   const clearOwningDept = () => {
@@ -303,7 +320,12 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
 
       onCreated();
       onClose();
-      router.push(`/maps/${created.mapId}`);
+      if (onCreatedMap) {
+        // 에디터 피커발 생성 — 현재 에디터에 남아 자동 링크 등 후속을 호출측이 잇는다
+        onCreatedMap(created.mapId, trimmed);
+      } else {
+        router.push(`/maps/${created.mapId}`);
+      }
     } catch (err) {
       if (createdRef.current !== null) {
         // 맵은 이미 생성됐다 — 목록을 갱신해 고아 맵을 보이게 하고(성공 토스트 없이),
@@ -319,7 +341,7 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, onCreated, onClose, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, onCreated, onClose, onCreatedMap, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -458,6 +480,7 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
               groups={[]}
               excludeIds={new Set<string>()}
               deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+              myDeptsFirst
               onSelect={applyOwningDept}
             />
           ) : (
@@ -650,12 +673,24 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
                   </button>
                 </li>
               ))}
+              {/* 수동 추가한 협업자가 없을 때 회색 안내문구 — 박스 중앙. 오우닝 부서 잠금 행과 무관 */}
+              {collaborators.length === 0 && (
+                <li
+                  data-id="collaborators-empty-hint"
+                  className="flex flex-1 items-center justify-center px-2 text-center text-fine text-ink-tertiary"
+                >
+                  {t("perm.createDialog.collaboratorsEmpty")}
+                </li>
+              )}
           </ul>
           </div>
         </div>
 
         {/* 결재자 / approvers */}
-        <div className="flex flex-col gap-1.5">
+        <div
+          ref={approversRef}
+          className={`flex flex-col gap-1.5 rounded-sm ${flashApprovers ? "motion-safe:animate-[picker-flash_800ms_var(--ease-smooth)]" : ""}`}
+        >
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}
           </span>
@@ -677,6 +712,15 @@ export function CreateMapDialog({ onClose, onCreated, csv }: Props) {
           />
           {/* 결재자 pills — 1.5줄 높이 미리 확보·내부 스크롤(추가해도 모달 안 늘어남) / reserve ~1.5 rows. */}
           <div className="scroll-soft flex h-[2.5rem] flex-wrap content-start gap-1.5">
+            {/* 결재자가 없을 때 회색 안내문구 — 박스 중앙 */}
+            {approvers.length === 0 && (
+              <span
+                data-id="approvers-empty-hint"
+                className="flex h-full w-full items-center justify-center text-center text-fine text-ink-tertiary"
+              >
+                {t("perm.createDialog.approversEmpty")}
+              </span>
+            )}
             {approvers.map((a) => (
               <span
                 key={a.key}

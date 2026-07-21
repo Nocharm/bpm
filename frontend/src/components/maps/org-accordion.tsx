@@ -18,6 +18,9 @@ interface OrgAccordionProps {
   selectedId: number | null;
   highlightId: number | null;
   onSelect: (id: number) => void;
+  // 부서 미지정 섹션 접기 — 부서 노드와 동일한 토글 UX. 상태는 page.tsx가 보유(Collapse all에 함께 반응).
+  unassignedOpen: boolean;
+  onToggleUnassigned: () => void;
   // 좁은 화면(<split)에서도 상세를 볼 수 있도록 카드 렌더를 페이지에 위임 — 미지정 시 bare MapCard로 폴백.
   // Delegates card render to the page so narrow screens keep an inline detail accordion — falls back to bare MapCard.
   renderCard?: (map: MapSummary) => ReactNode;
@@ -25,7 +28,7 @@ interface OrgAccordionProps {
 
 export function OrgAccordion(props: OrgAccordionProps) {
   const { t } = useI18n();
-  const { roots, unassigned, openPaths, onToggle, onCollapseAll, selectedId, highlightId, onSelect, renderCard } = props;
+  const { roots, unassigned, openPaths, onToggle, onCollapseAll, selectedId, highlightId, onSelect, unassignedOpen, onToggleUnassigned, renderCard } = props;
 
   const renderNode = (node: OrgNode, depth: number) => {
     const open = openPaths.has(node.path);
@@ -81,16 +84,27 @@ export function OrgAccordion(props: OrgAccordionProps) {
       <ul className="flex flex-col">{roots.map((r) => renderNode(r, 0))}</ul>
       {unassigned.length > 0 && (
         <div className="flex flex-col gap-2 pt-2">
-          <span className="px-1 text-fine text-ink-tertiary">{t("home.unassignedDept")} ({unassigned.length})</span>
-          <ul className="flex flex-col gap-2 pl-1">
-            {unassigned.map((m) => (
-              <li key={m.id}>
-                {renderCard
-                  ? renderCard(m)
-                  : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
-              </li>
-            ))}
-          </ul>
+          <button
+            type="button"
+            data-id="org-unassigned-toggle"
+            onClick={(e) => { e.stopPropagation(); onToggleUnassigned(); }}
+            className="group flex items-center gap-1.5 rounded-sm py-1 pl-1 text-left hover:bg-surface-alt"
+          >
+            {unassignedOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
+            <span className="truncate text-fine text-ink-tertiary group-hover:text-ink">{t("home.unassignedDept")}</span>
+            <span className="ml-auto shrink-0 text-fine text-ink-tertiary">({unassigned.length})</span>
+          </button>
+          {unassignedOpen && (
+            <ul className="flex flex-col gap-2 pl-1">
+              {unassigned.map((m) => (
+                <li key={m.id}>
+                  {renderCard
+                    ? renderCard(m)
+                    : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

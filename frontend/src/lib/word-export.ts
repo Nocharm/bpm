@@ -1,7 +1,7 @@
 // Word 도형 순서도 내보내기 — 노드/엣지를 Word 순정 도형(DrawingML)으로 담은 .docx 생성.
 // OOXML 4파트를 직접 조립한다(docx 라이브러리는 도형 프리셋·연결선 미지원). zip은 fflate.
 // 스타일: 흑백톤 + Arial/바탕체 11pt, 하이퍼링크만 Word 표준 파랑.
-// spec: docs/superpowers/specs/2026-07-11-word-export-design.md
+// spec: docs/design/2026-07-11-word-export-design.md
 
 import { strToU8, zipSync } from "fflate";
 

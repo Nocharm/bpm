@@ -1,5 +1,5 @@
 // CSV 임포트 — 템플릿·RFC4180 파싱·그래프 변환(자동 Start/End·decision 추론).
-// 설계: docs/superpowers/specs/2026-07-10-csv-import-merge-design.md
+// 설계: docs/design/2026-07-10-csv-import-merge-design.md
 import type { AiEdge, AiGroup, AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";

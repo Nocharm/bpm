@@ -62,7 +62,9 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
   };
   return (
     <>
-      {displayFields.map((field) => {
+      {displayFields
+        .filter((f): f is NodeDisplayField => f !== "params")
+        .map((field) => {
         // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
         if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
           return null;
@@ -96,7 +98,10 @@ const PARAM_ICON: Record<ParamField, LucideIcon> = {
 // subprocess는 회당 4필드를 지정 어트리뷰트(sp*, 라이브 참조)로, 연간 건수·FTE는 노드 자체 값으로 표시.
 // duration은 1h30m, 비용 2필드는 통화기호+천단위 콤마, 나머지는 원문 숫자.
 function NodeParams({ data, className }: { data: AppNode["data"]; className?: string }) {
+  const { displayFields } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
+  // "params" 토글 OFF면 칩 전체 숨김 (맵 탭 노드 표시 정보 — 6필드 일괄 스위치)
+  if (!displayFields.includes("params")) return null;
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
   const values: Partial<Record<ParamField, string | null | undefined>> = {
     annual_count: data.annual_count,
@@ -561,12 +566,13 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   }
 
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
+  // 긴 라벨은 max-w-[240px](canvas.ts NODE_MAX_WIDTH 동기화)에서 wrap — break-words로 무공백 토큰도 분절
   return (
     <div
-      className={`group bpm-node-emph relative px-3 py-2 text-sm transition-all duration-150 ${
+      className={`group bpm-node-emph relative break-words px-3 py-2 text-sm transition-all duration-150 ${
         isTerminal
-          ? "min-w-[90px] rounded-full text-center"
-          : "min-w-[150px] rounded-sm"
+          ? "min-w-[90px] max-w-[240px] rounded-full text-center"
+          : "min-w-[150px] max-w-[240px] rounded-sm"
       }`}
       style={style}
       title={data.diffNote}

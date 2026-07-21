@@ -43,7 +43,7 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
       ) : (
         <>
           <div className="flex items-center gap-3">
-            <Donut segments={segments} size={104} label={t("home.needsApproval")} />
+            <Donut segments={segments} size={104} label={t("home.needsApproval")} centerCaption={t("home.donutTotal")} />
             <ul className="flex flex-col gap-1 text-fine">
               {segments.map((s) => (
                 <li key={s.key} className="flex items-center gap-1.5">

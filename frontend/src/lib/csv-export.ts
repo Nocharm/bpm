@@ -1,5 +1,5 @@
 // CSV 내보내기 — csv-import 포맷 미러(왕복). 표현 불가 구조는 warnings로 명시.
-// 설계: docs/superpowers/specs/2026-07-11-numeric-params-excel-csv-export-design.md §3
+// 설계: docs/design/2026-07-11-numeric-params-excel-csv-export-design.md §3
 import type { Graph, GraphEdge, GraphNode } from "./api";
 
 const HEADER = "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next";

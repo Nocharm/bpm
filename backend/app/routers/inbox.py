@@ -111,7 +111,11 @@ async def list_inbox_approvals(
     ar_q = (
         select(ApprovalRequest, ProcessMap)
         .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
-        .where(ApprovalRequest.status == "pending")
+        .where(
+            ApprovalRequest.status == "pending",
+            # map_rename·sp_designation은 오너 게이트 — 4·5번 블록에서 처리
+            ApprovalRequest.kind.not_in(["map_rename", "sp_designation"]),
+        )
     )
     if not sysadmin:
         my_maps = select(MapApprover.map_id).where(MapApprover.user_id == user)
@@ -144,6 +148,86 @@ async def list_inbox_approvals(
                 "before": before,
                 "after": after,
                 "principal": principal,
+            }
+        )
+
+    # 4) 이름 변경 승인 요청 — 내가 오너인 맵, 또는 sysadmin (결정권자 관점)
+    rn_q = (
+        select(ApprovalRequest, ProcessMap)
+        .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+        .where(
+            ApprovalRequest.status == "pending",
+            ApprovalRequest.kind == "map_rename",
+            ProcessMap.deleted_at.is_(None),
+        )
+    )
+    if not sysadmin:
+        rename_owner_map_ids = select(MapPermission.map_id).where(
+            MapPermission.principal_type == "user",
+            MapPermission.principal_id == user,
+            MapPermission.role == "owner",
+        )
+        rn_q = rn_q.where(ApprovalRequest.map_id.in_(rename_owner_map_ids))
+    for req, pm in (await session.execute(rn_q)).all():
+        items.append(
+            {
+                "kind": "approval_request",
+                "id": req.id,  # decide 엔드포인트가 받는 request id
+                "title": req.kind,
+                "map_id": pm.id,
+                "map_name": pm.name,
+                "requester": req.requested_by,
+                "status": req.status,
+                "created_at": req.created_at,
+                "version_id": None,
+                "detail": None,
+                "version_label": None,
+                "version_number": None,
+                "updated_at": None,
+                "holder": None,
+                "before": pm.name,
+                "after": req.payload.get("to_name"),
+                "principal": None,
+            }
+        )
+
+    # 5) SP 등록(지정) 승인 요청 — 내가 오너인 맵, 또는 sysadmin (결정권자 관점, 4번 블록 미러)
+    sp_q = (
+        select(ApprovalRequest, ProcessMap)
+        .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+        .where(
+            ApprovalRequest.status == "pending",
+            ApprovalRequest.kind == "sp_designation",
+            ProcessMap.deleted_at.is_(None),
+        )
+    )
+    if not sysadmin:
+        sp_owner_map_ids = select(MapPermission.map_id).where(
+            MapPermission.principal_type == "user",
+            MapPermission.principal_id == user,
+            MapPermission.role == "owner",
+        )
+        sp_q = sp_q.where(ApprovalRequest.map_id.in_(sp_owner_map_ids))
+    for req, pm in (await session.execute(sp_q)).all():
+        items.append(
+            {
+                "kind": "approval_request",
+                "id": req.id,  # decide 엔드포인트가 받는 request id
+                "title": req.kind,
+                "map_id": pm.id,
+                "map_name": pm.name,
+                "requester": req.requested_by,
+                "status": req.status,
+                "created_at": req.created_at,
+                "version_id": None,
+                "detail": req.payload,  # from_map_name — 카드 컨텍스트 표시
+                "version_label": None,
+                "version_number": None,
+                "updated_at": None,
+                "holder": None,
+                "before": None,
+                "after": None,
+                "principal": None,
             }
         )
 

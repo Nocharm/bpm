@@ -1,7 +1,7 @@
-// SP 숫자 파라미터 5종 + 지정 모달 Σ 합산 + duration 1h30m 표시형 — 브라우저 실기동 검증 (Task 6).
-// 7시나리오: ①맵 A 게시+지정 모달 5입력·Σ 4개(headcount 없음)·Σ(duration)=1.15·Σ(cost)=0.3·저장200
+// SP 지정 파라미터 4종(duration·cost_krw·cost_usd·headcount) + 지정 모달 Σ + duration 1h30m 표시형 — 브라우저 실기동 검증.
+// 시나리오: ①맵 A 게시+지정 모달 4입력·Σ 4개(headcount는 평균)·Σ(duration)=1.15·Σ(cost_krw)=0.3·저장200
 // ②미게시 맵 B: Designate 진입점 disabled(+게이트 동치인 Σ 내부 disabled를 강제오픈으로 실측)
-// ③맵 C에 맵 A 링크: subprocess 노드 칩 duration `1h15m`+cost `0.3` 표기
+// ③맵 C에 맵 A 링크: subprocess 노드 칩 duration `1h15m`+cost `₩0.3` 표기
 // ④에디터 인스펙터 Parameters 그룹 기본접힘→펼침→duration `1.30`입력·blur `1h30m`·포커스 `1.30`→새로고침 펼침유지(localStorage)
 // ⑤콘솔 에러 0
 //
@@ -134,7 +134,7 @@ try {
   const approver = (dir0.users.find((u) => u.id === "admin.sys") ?? dir0.users[0])?.id;
   if (!approver) throw new Error("directory has no employees — approval quorum impossible");
 
-  // ═══ 시나리오 ① — 맵 A: duration 0.45/0.30, cost 0.1/0.2 → 게시 → SP 지정 모달 Σ ═══
+  // ═══ 시나리오 ① — 맵 A: duration 0.45/0.30, cost_krw 0.1/0.2 → 게시 → SP 지정 모달 Σ ═══
   const mapA = await api("/maps", {
     method: "POST",
     body: { name: `SP-Params A ${stamp}`, description: "", visibility: "public", owning_department: owningDept },
@@ -152,8 +152,8 @@ try {
     body: {
       nodes: [
         { id: aStart, title: "Start", node_type: "start", pos_x: 0, pos_y: 200, sort_order: 0 },
-        { id: aP1, title: "Step 1", node_type: "process", pos_x: 260, pos_y: 200, sort_order: 1, duration: "0.45", cost: "0.1" },
-        { id: aP2, title: "Step 2", node_type: "process", pos_x: 520, pos_y: 200, sort_order: 2, duration: "0.30", cost: "0.2" },
+        { id: aP1, title: "Step 1", node_type: "process", pos_x: 260, pos_y: 200, sort_order: 1, duration: "0.45", cost_krw: "0.1" },
+        { id: aP2, title: "Step 2", node_type: "process", pos_x: 520, pos_y: 200, sort_order: 2, duration: "0.30", cost_krw: "0.2" },
         { id: aEnd, title: "End", node_type: "end", pos_x: 780, pos_y: 200, sort_order: 3, is_primary_end: true },
       ],
       edges: [
@@ -172,7 +172,7 @@ try {
   );
 
   // 지정 사전조건(department)만 API로 심어 둔다 — Save 버튼 게이트(department 필수)는
-  // BpmAttributePicker(포털 SearchSelect) 상호작용이라 이 태스크의 검증 범위(숫자 5종+Σ) 밖.
+  // BpmAttributePicker(포털 SearchSelect) 상호작용이라 이 태스크의 검증 범위(숫자 4종+Σ) 밖.
   await api(`/maps/${mapAId}/subprocess-designation`, {
     method: "PUT",
     body: {
@@ -180,10 +180,9 @@ try {
       assignee: "",
       system: "",
       duration: "",
+      cost_krw: "",
+      cost_usd: "",
       headcount: "",
-      etf: "",
-      cost: "",
-      extra: "",
       url: "",
       url_label: "",
     },
@@ -201,19 +200,19 @@ try {
   check("SP designation modal opens (map A)", true);
   await page.screenshot({ path: `${SHOTS}/01-modal-open.png` });
 
-  const PARAM_KEYS = ["duration", "headcount", "etf", "cost", "extra"];
+  const PARAM_KEYS = ["duration", "cost_krw", "cost_usd", "headcount"];
   let allInputsPresent = true;
   for (const key of PARAM_KEYS) {
     const n = await page.locator(`[data-id="subprocess-designation-${key}"]`).count();
     if (n !== 1) allInputsPresent = false;
   }
-  check("modal has 5 numeric param inputs", allInputsPresent);
+  check("modal has 4 numeric param inputs (SP_PARAM_FIELDS)", allInputsPresent);
 
   const sumButtonCount = await page.locator('[data-id^="subprocess-designation-sum-"]').count();
   const headcountSumCount = await page.locator('[data-id="subprocess-designation-sum-headcount"]').count();
   check(
-    "modal has exactly 4 sigma buttons (no headcount sum)",
-    sumButtonCount === 4 && headcountSumCount === 0,
+    "modal has exactly 4 sigma buttons (headcount Σ = average)",
+    sumButtonCount === 4 && headcountSumCount === 1,
     `sumButtons=${sumButtonCount} headcountSum=${headcountSumCount}`,
   );
 
@@ -231,15 +230,15 @@ try {
   const durationRaw = await page.locator('[data-id="subprocess-designation-duration"]').inputValue();
   check('Σ(duration): focus reveals raw normalized value "1.15"', durationRaw === "1.15", `got "${durationRaw}"`);
 
-  await page.locator('[data-id="subprocess-designation-sum-cost"]').click();
+  await page.locator('[data-id="subprocess-designation-sum-cost_krw"]').click();
   const costSummed = await waitForCondition(async () => {
-    const v = await page.locator('[data-id="subprocess-designation-cost"]').inputValue();
+    const v = await page.locator('[data-id="subprocess-designation-cost_krw"]').inputValue();
     return v === "0.3";
   });
   check(
-    'Σ(cost): input filled "0.3" (0.1+0.2)',
+    'Σ(cost_krw): input filled "0.3" (0.1+0.2)',
     costSummed,
-    `got "${await page.locator('[data-id="subprocess-designation-cost"]').inputValue()}"`,
+    `got "${await page.locator('[data-id="subprocess-designation-cost_krw"]').inputValue()}"`,
   );
   await page.screenshot({ path: `${SHOTS}/02-modal-summed.png` });
 
@@ -260,9 +259,9 @@ try {
 
   const mapADetail = await api(`/maps/${mapAId}`);
   check(
-    "persisted: sp_duration=1.15, sp_cost=0.3",
-    mapADetail.sp_duration === "1.15" && mapADetail.sp_cost === "0.3",
-    `sp_duration=${mapADetail.sp_duration} sp_cost=${mapADetail.sp_cost}`,
+    "persisted: sp_duration=1.15, sp_cost_krw=0.3",
+    mapADetail.sp_duration === "1.15" && mapADetail.sp_cost_krw === "0.3",
+    `sp_duration=${mapADetail.sp_duration} sp_cost_krw=${mapADetail.sp_cost_krw}`,
   );
 
   // ═══ 시나리오 ② — 맵 B: 미게시 → Σ 진입 불가(게이트) + 강제오픈으로 내부 disabled 실측 ═══
@@ -299,7 +298,7 @@ try {
   });
   await page.waitForSelector('[data-id="subprocess-designation-modal"]', { timeout: 5000 });
   let allSumDisabled = true;
-  for (const key of ["duration", "etf", "cost", "extra"]) {
+  for (const key of PARAM_KEYS) {
     const disabled = await page.locator(`[data-id="subprocess-designation-sum-${key}"]`).isDisabled();
     if (!disabled) allSumDisabled = false;
   }
@@ -351,8 +350,8 @@ try {
   await page.locator(subSel).scrollIntoViewIfNeeded();
   const subChipsText = await paramChipsLocator(subSel).innerText().catch(() => "");
   check(
-    "subprocess node chip shows sp duration formatted 1h15m + cost 0.3 (live ref to map A)",
-    subChipsText.includes("1h15m") && subChipsText.includes("0.3"),
+    "subprocess node chip shows sp duration formatted 1h15m + cost ₩0.3 (live ref to map A)",
+    subChipsText.includes("1h15m") && subChipsText.includes("₩0.3"),
     `chips="${subChipsText.replace(/\n/g, " ")}"`,
   );
   await page.locator(subSel).screenshot({ path: `${SHOTS}/04-subprocess-chip.png` });
