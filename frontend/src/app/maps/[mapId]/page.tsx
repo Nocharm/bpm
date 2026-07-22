@@ -68,6 +68,7 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
+import { SectionPanel } from "@/components/section-panel";
 import { GroupBox } from "@/components/group-box";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { WithdrawHandoff } from "@/components/withdraw-handoff";
@@ -195,6 +196,7 @@ import {
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
+import type { SectionEntry } from "@/lib/word-import";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
@@ -745,6 +747,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // Word 맵 전용 — 섹션 패널 열림 + 맵의 문서 모드/카탈로그(임포트 시 채워짐, design 2026-07-18)
+  const [sectionsOpen, setSectionsOpen] = useState(false);
+  const [mapMode, setMapMode] = useState<string>("normal");
+  const [docName, setDocName] = useState<string>("");
+  const [docSections, setDocSections] = useState<SectionEntry[]>([]);
+  const isWordMap = mapMode === "word";
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
@@ -2021,6 +2029,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapName(detail.name);
         setMapOwner(detail.created_by);
         setMyRole(detail.my_role);
+        setMapMode(detail.mode ?? "normal");
+        setDocName(detail.doc_name ?? "");
+        setDocSections(detail.doc_sections ?? []);
         setVersions(detail.versions);
         setUsername(me.username);
         setAiEnabled(me.ai_enabled);
@@ -4955,12 +4966,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
       const libraryItem: ContextMenuItem = {
-        label: t("library.open"),
+        label: isWordMap ? "Add section" : t("library.open"),
         icon: Network,
         // accel 필수 — 전역 S 핸들러는 메뉴 열림 중 무시(!menu)라, 우클릭 후 S는 메뉴 가속기가 처리
         accel: "s",
         shortcut: "S",
-        onSelect: () => setLibraryOpen(true),
+        onSelect: () => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)),
       };
       if (readOnly) {
         return [moreItem, { divider: true }, libraryItem];
@@ -5236,6 +5247,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     recolorGroup,
     applyAutoLayout,
     reactFlow,
+    isWordMap,
     t,
   ]);
 
@@ -6723,7 +6735,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         event.code === "KeyS" &&
         !menu
       ) {
-        fire(() => setLibraryOpen(true));
+        fire(() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)));
         return;
       }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
@@ -6798,6 +6810,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPng,
     handleCopy,
     handlePaste,
+    isWordMap,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
@@ -7150,7 +7163,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
             className={topIconBtn}
-            onClick={() => setLibraryOpen((open) => !open)}
+            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : setLibraryOpen((open) => !open))}
             title={t("library.toggle")}
             aria-label={t("library.toggle")}
           >
@@ -7228,7 +7241,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       {!readOnly && (
         <EditorToolbar
           onAddNode={(type) => handleAddNode(null, type)}
-          onOpenLibrary={() => setLibraryOpen(true)}
+          onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true))}
           onAutoLayout={(dir) => {
             // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
             const ids = new Set(
@@ -7293,6 +7306,14 @@ function MapEditor({ mapId }: { mapId: number }) {
             linkedMapIds={linkedMapIds}
             onClose={() => setLibraryOpen(false)}
             onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+          />
+        )}
+        {sectionsOpen && (
+          <SectionPanel
+            sections={docSections}
+            docName={docName}
+            onReimport={() => {}} // D3에서 재임포트 모달로 연결
+            onClose={() => setSectionsOpen(false)}
           />
         )}
         <div
@@ -8922,7 +8943,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
-                onOpenLibrary={() => setLibraryOpen(true)}
+                onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true))}
                 onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
                 nodeCount={nodes.length}
                 edgeCount={edges.length}

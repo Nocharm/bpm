@@ -1,5 +1,7 @@
 // 백엔드 REST 클라이언트. /api는 nginx(운영) 또는 next.config rewrites(로컬)가 backend로 프록시.
 
+import type { SectionEntry } from "./word-import";
+
 export type VersionStatus =
   | "draft"
   | "pending"
@@ -73,6 +75,10 @@ export interface MapSummary {
 
 export interface MapDetail extends MapSummary {
   versions: VersionDetail[];
+  // Word 맵 모드 & 임포트 카탈로그 (design 2026-07-18)
+  mode?: string;
+  doc_name?: string;
+  doc_sections?: SectionEntry[];
 }
 
 export interface GraphNode {
