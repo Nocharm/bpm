@@ -69,6 +69,7 @@ import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { SectionPanel } from "@/components/section-panel";
+import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { WithdrawHandoff } from "@/components/withdraw-handoff";
@@ -172,6 +173,7 @@ import {
   requestCheckout,
   withdrawCheckoutRequest,
   saveGraph,
+  setWordDoc,
   submitVersion,
   transferCheckout,
   updateComment,
@@ -752,6 +754,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   // Word 맵 전용 — 섹션 패널 열림 + 맵의 문서 모드/카탈로그(임포트 시 채워짐, design 2026-07-18)
   const [sectionsOpen, setSectionsOpen] = useState(false);
+  const [wordReimportOpen, setWordReimportOpen] = useState(false);
   const [mapMode, setMapMode] = useState<string>("normal");
   const [docName, setDocName] = useState<string>("");
   const [docSections, setDocSections] = useState<SectionEntry[]>([]);
@@ -7332,8 +7335,29 @@ function MapEditor({ mapId }: { mapId: number }) {
           <SectionPanel
             sections={docSections}
             docName={docName}
-            onReimport={() => {}} // D3에서 재임포트 모달로 연결
+            onReimport={() => setWordReimportOpen(true)}
             onClose={() => setSectionsOpen(false)}
+          />
+        )}
+        {wordReimportOpen && (
+          <WordCreateModal
+            onClose={() => setWordReimportOpen(false)}
+            onContinue={(outcome) => {
+              setWordReimportOpen(false);
+              void (async () => {
+                try {
+                  const updated = await setWordDoc(mapId, {
+                    doc_name: outcome.docName,
+                    sections: outcome.sections,
+                  });
+                  setDocName(updated.doc_name ?? "");
+                  setDocSections(updated.doc_sections ?? []);
+                  showToast("Sections re-imported");
+                } catch {
+                  showToast("Re-import failed");
+                }
+              })();
+            }}
           />
         )}
         <div

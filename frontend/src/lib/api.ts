@@ -303,6 +303,17 @@ export function updateMap(
   });
 }
 
+// Word 맵 문서 재임포트 — 카탈로그(doc_name + 섹션 목록) 교체. (design 2026-07-18, 엔드포인트 A3)
+export function setWordDoc(
+  mapId: number,
+  body: { doc_name: string; sections: SectionEntry[] },
+): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/word-doc`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 // 이름 변경 요청 — editor는 즉시 적용 대신 pending ApprovalRequest(owner 승인 필요). owner/sysadmin은 updateMap 직접 사용.
 export function createRenameRequest(mapId: number, toName: string): Promise<ApprovalRequest> {
   return request<ApprovalRequest>(`/maps/${mapId}/rename-requests`, {
