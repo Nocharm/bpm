@@ -139,7 +139,14 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
       for (let i = counters.length; i < level; i++) counters[i] = 0;
       counters[level - 1] = (counters[level - 1] || 0) + 1;
       counters.length = level;
-      const parent = level > 1 ? stack[level - 2] ?? "" : "";
+      // 부모 = 바로 위 레벨. 레벨을 건너뛰어 비었으면(스택 구멍) 아래로 내려가며 가장 가까운 채워진 조상.
+      let parent = "";
+      for (let i = level - 2; i >= 0; i--) {
+        if (stack[i]) {
+          parent = stack[i];
+          break;
+        }
+      }
       number = parent ? `${parent}.${counters[level - 1]}` : String(counters[level - 1]);
       stack[level - 1] = number;
       stack.length = level;

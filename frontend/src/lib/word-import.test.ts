@@ -79,4 +79,15 @@ describe("parseWordSections", () => {
     expect(out.map((s) => s.anchor)).toEqual(["_TocE1", "_TocK1"]);
     expect(out.map((s) => s.title)).toEqual(["Purpose", "목적"]);
   });
+
+  it("레벨을 건너뛰면 새 최상위로 리셋하지 않고 가장 가까운 조상 아래로 중첩한다", async () => {
+    // 레벨1 "6"(TOC) 바로 뒤 레벨2 없이 TOC 없는 레벨3 → "6" 아래로 붙어야("6.1"), 바 "1"(새 최상위) 아님.
+    const xml = doc(
+      tocEntry("_Toc1", "6.", "Procedure") +
+      heading("H1", ["_Toc1"], "Procedure") + heading("H3", ["_Toc3"], "Detail"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["6", "6.1"]);
+    expect(out[1]).toMatchObject({ anchor: "_Toc3", level: 3 });
+  });
 });
