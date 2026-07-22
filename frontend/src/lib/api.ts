@@ -254,6 +254,7 @@ export function createMap(
   description: string,
   visibility: MapSummary["visibility"],
   owningDepartment: string,
+  word?: { docName: string; sections: SectionEntry[] },
 ): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
@@ -262,6 +263,7 @@ export function createMap(
       description,
       visibility,
       owning_department: owningDepartment,
+      ...(word ? { mode: "word", doc_name: word.docName, doc_sections: word.sections } : {}),
     }),
   });
 }
