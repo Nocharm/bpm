@@ -92,6 +92,7 @@ import { CsvImportTab } from "@/components/csv-import-tab";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   alignSelected,
+  buildNodeData,
   buildOutline,
   distributeSelected,
   layoutWithDagre,
@@ -551,6 +552,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       fte: node.fte ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
+      section_anchor: node.section_anchor ?? "",
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
@@ -656,6 +658,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       fte: node.data.fte ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
+      section_anchor: node.data.section_anchor ?? "",
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -3147,30 +3150,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           selected: true,
           // 생성 위치를 알 수 있도록 잠깐 페이드 반짝(클래스는 flashNode가 제거)
           className: "bpm-node-flash",
-          data: {
-            // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
-            label:
-              nodeType === "start" || nodeType === "end"
-                ? ""
-                : makeUniqueLabel(
-                    t("editor.newStep"),
-                    current.map((node) => node.data.label),
-                  ),
-            description: "",
+          // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
+          data: buildNodeData(
             nodeType,
-            color: "",
-            assignee: "",
-            department: "",
-            system: "",
-            duration: "",
-            cost_krw: "",
-            cost_usd: "",
-            headcount: "",
-            annual_count: "",
-            fte: "",
-            groupIds: [],
-            hasChildren: false,
-          },
+            nodeType === "start" || nodeType === "end"
+              ? ""
+              : makeUniqueLabel(
+                  t("editor.newStep"),
+                  current.map((node) => node.data.label),
+                ),
+          ),
         },
       ]);
       setSelectedId(id);
@@ -4081,6 +4070,37 @@ function MapEditor({ mapId }: { mapId: number }) {
       void createLinkNodeAt(linkedMapId, mapName, pinned, position);
     },
     [readOnly, reactFlow, createLinkNodeAt],
+  );
+
+  // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
+  const handleSectionDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      if (readOnly) return;
+      const anchor = e.dataTransfer.getData("application/bpm-section");
+      if (!anchor) return;
+      const number = e.dataTransfer.getData("application/bpm-section-number");
+      pushHistory();
+      const id = genId();
+      const point = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const position = findFreeSpot(point.x - NODE_WIDTH / 2, point.y - NODE_HEIGHT / 2);
+      setNodes((current) => [
+        ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+        {
+          id,
+          type: "process",
+          position,
+          selected: true,
+          className: "bpm-node-flash",
+          data: buildNodeData("section", number, { section_anchor: anchor }),
+        },
+      ]);
+      setSelectedId(id);
+      setSelectedEdgeId(null);
+      scheduleAutoSave();
+      flashNode(id);
+    },
+    [readOnly, reactFlow, findFreeSpot, pushHistory, setNodes, scheduleAutoSave, flashNode],
   );
 
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
@@ -7321,7 +7341,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
           className="relative flex-1 select-none overflow-hidden bg-canvas"
           onDragOver={(e) => {
-            if (e.dataTransfer.types.includes("application/bpm-process")) {
+            if (
+              e.dataTransfer.types.includes("application/bpm-process") ||
+              e.dataTransfer.types.includes("application/bpm-section")
+            ) {
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
             }
@@ -7329,6 +7352,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           onDrop={(e) => {
             if (e.dataTransfer.types.includes("application/bpm-process")) {
               void handleLibraryDrop(e);
+            } else if (e.dataTransfer.types.includes("application/bpm-section")) {
+              void handleSectionDrop(e);
             }
           }}
         >

@@ -30,6 +30,7 @@ export type NodeData = {
   url?: string;
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
   urlLabel?: string;
+  section_anchor?: string; // Word 맵 섹션 노드의 문서 내부 앵커 (design 2026-07-18)
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   groupIds: string[];
   hasChildren: boolean;
@@ -106,6 +107,32 @@ export function hasBpmAttributes(nodeType: string): boolean {
   return (
     nodeType !== "start" && nodeType !== "end" && nodeType !== "subprocess" && nodeType !== "section"
   );
+}
+
+// 신규 노드의 기본 data — handleAddNode/handleSectionDrop 공용(열거점 단일화). label·nodeType은 호출자가 정하고 extra로 특화 필드 덮어씀.
+export function buildNodeData(
+  nodeType: ProcessNodeType,
+  label: string,
+  extra: Partial<NodeData> = {},
+): NodeData {
+  return {
+    label,
+    description: "",
+    nodeType,
+    color: "",
+    assignee: "",
+    department: "",
+    system: "",
+    duration: "",
+    cost_krw: "",
+    cost_usd: "",
+    headcount: "",
+    annual_count: "",
+    fte: "",
+    groupIds: [],
+    hasChildren: false,
+    ...extra,
+  };
 }
 
 // ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정·커서 중앙 배치에 사용

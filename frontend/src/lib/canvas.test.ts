@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Edge } from "@xyflow/react";
 
 import {
+  buildNodeData,
   canSwapTypes,
   getFlowPathBackward,
   getFlowPathForward,
@@ -201,5 +202,24 @@ describe("makeCopyLabel", () => {
   });
   it("skips occupied numbers", () => {
     expect(makeCopyLabel("A", ["A", "A (2)", "A (3)"])).toBe("A (4)");
+  });
+});
+
+describe("buildNodeData", () => {
+  it("섹션 노드는 label=번호·nodeType=section·section_anchor를 갖고 기본필드가 모두 채워진다", () => {
+    const d = buildNodeData("section", "6.1", { section_anchor: "_Toc9" });
+    expect(d).toMatchObject({ label: "6.1", nodeType: "section", section_anchor: "_Toc9" });
+    // 기본 파라미터 필드가 빠지지 않았는지(노드-속성 체크리스트) — 백엔드 소거 방지
+    expect(d).toMatchObject({
+      description: "", color: "", assignee: "", department: "", system: "",
+      duration: "", cost_krw: "", cost_usd: "", headcount: "", annual_count: "", fte: "",
+      groupIds: [], hasChildren: false,
+    });
+  });
+  it("일반 노드는 section_anchor 없이 생성된다", () => {
+    const d = buildNodeData("process", "Step");
+    expect(d.nodeType).toBe("process");
+    expect(d.label).toBe("Step");
+    expect(d.section_anchor).toBeUndefined();
   });
 });
