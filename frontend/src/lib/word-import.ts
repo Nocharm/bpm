@@ -153,5 +153,42 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
     }
     out.push({ anchor, title: title || toc?.title || "", number, level });
   }
+
+  // TODO(임시 진단, 2026-07-23): 실물 문서 구조 파악용 — 스타일별 감지 레벨·책갈피 보유율 집계.
+  // 깊은 레벨(3+) 링크 누락 원인(책갈피 부재 vs 파서) 확정 후 이 블록 제거.
+  {
+    const byStyle = new Map<string, { count: number; level: number; withBm: number; sample: string }>();
+    let totalBm = 0;
+    for (const p of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
+      const pPr = p.getElementsByTagNameNS(W, "pPr")[0];
+      const styleEl = pPr?.getElementsByTagNameNS(W, "pStyle")[0];
+      const sid = styleEl ? attr(styleEl, "val") : "";
+      const names = Array.from(p.getElementsByTagNameNS(W, "bookmarkStart"))
+        .map((b) => attr(b, "name"))
+        .filter((n) => n && n !== "_GoBack");
+      totalBm += names.length;
+      if (!sid) continue;
+      const directLvl = pPr?.getElementsByTagNameNS(W, "outlineLvl")[0];
+      const level = directLvl
+        ? Number(attr(directLvl, "val")) + 1
+        : styleLevels.has(sid)
+          ? styleLevels.get(sid)! + 1
+          : 0;
+      const text = Array.from(p.getElementsByTagNameNS(W, "t"))
+        .map((t) => t.textContent ?? "")
+        .join("")
+        .trim();
+      const e = byStyle.get(sid) ?? { count: 0, level, withBm: 0, sample: text.slice(0, 30) };
+      e.count += 1;
+      if (names.length) e.withBm += 1;
+      byStyle.set(sid, e);
+    }
+    console.log(`[word-import] emitted=${out.length} totalBookmarks=${totalBm} tocMapSize=${tocMap.size}`);
+    for (const [sid, e] of byStyle) {
+      console.log(
+        `[word-import] style="${sid}" level=${e.level} count=${e.count} withBookmark=${e.withBm} eg="${e.sample}"`,
+      );
+    }
+  }
   return out;
 }
