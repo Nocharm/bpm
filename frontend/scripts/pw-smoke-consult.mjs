@@ -67,6 +67,12 @@ const run = async () => {
   if (!(await page.textContent('[data-id="interview-panel"]')).includes("컨설턴트")) throw new Error("greeting missing");
   // 스테이지 스킵 버튼 — review 이전 스테이지에선 항상 노출 (2026-07-24 반복 루프 탈출구)
   await page.waitForSelector('[data-id="iv-skip-stage"]');
+  // 글자 크기 컨트롤 + 첨부 안내 모달 (2026-07-24 5차 UX)
+  await page.waitForSelector('[data-id="iv-font-dec"]');
+  await page.click('[data-id="iv-attach"]');
+  await page.waitForSelector('[data-id="confirm-dialog"]');
+  await page.click('[data-id="confirm-dialog-cancel"]');
+  await page.waitForSelector('[data-id="confirm-dialog"]', { state: "detached" });
 
   await page.fill('[data-id="iv-input"]', "구매 프로세스");
   await page.click('[data-id="iv-send"]');
