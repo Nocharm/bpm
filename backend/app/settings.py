@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # 비우면 위 단일 설정(AI_BASE_URL 등) 사용. 토큰은 시크릿이라 .env 전용(app_settings 아님).
     ai_endpoints: str = ""
 
+    # AI 부하 가드 — 백엔드 전체 동시 AI 호출 상한(인터뷰·챗 공용)
+    ai_max_concurrency: int = 4
+    # 인터뷰 선택지 병렬 생성 개수(구조 결정 지점에서만)
+    interview_choice_count: int = 2
+    # 인터뷰 컨텍스트 주입 문자 예산(첨부 발췌 등)
+    interview_context_budget: int = 12000
+
     # 사내 AD(LDAP) 동기화 — 비우면 비활성(로컬). 시크릿은 .env만 (design 2026-06-16)
     ldap_url: str = ""  # 예: ldaps://ad.example.com:636
     ldap_bind_dn: str = ""  # 서비스 계정 DN

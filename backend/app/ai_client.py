@@ -1,5 +1,6 @@
 """온프레미스 AI(OpenAI 호환) 호출 어댑터 — 교체 가능 경계. 비OpenAI 서버면 이 파일만 수정 (design 2026-06-15)."""
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -11,6 +12,16 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 MODEL_SEP = "::"  # 다중 엔드포인트 모델 id 구분자 — "<엔드포인트명>::<모델id>"
+
+# 전역 동시성 가드 — 이벤트 루프 안에서 지연 생성(모듈 import 시점엔 루프 없음)
+_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _semaphore
+    if _semaphore is None:
+        _semaphore = asyncio.Semaphore(max(1, settings.ai_max_concurrency))
+    return _semaphore
 
 
 @dataclass(frozen=True)
@@ -103,10 +114,11 @@ async def call_ai(messages: list[dict], model: str | None = None) -> AiReply:
         "temperature": 0.2,
         "response_format": {"type": "json_object"},
     }
-    async with httpx2.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
-        response = await client.post(url, json=payload, headers=_headers(endpoint))
-        response.raise_for_status()
-        data = response.json()
+    async with _get_semaphore():
+        async with httpx2.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
+            response = await client.post(url, json=payload, headers=_headers(endpoint))
+            response.raise_for_status()
+            data = response.json()
     usage = data.get("usage") or {}
     return AiReply(
         content=data["choices"][0]["message"]["content"],
