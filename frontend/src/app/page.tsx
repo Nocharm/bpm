@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileText, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { copyMap, deleteMap, getDirectory, getMe, listMaps, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
@@ -13,6 +13,7 @@ import { buildOrgTree, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
+import { splitMapsByMode } from "@/lib/word-map-home";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -26,6 +27,7 @@ import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
 import { OrgAccordion } from "@/components/maps/org-accordion";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
+import { WordDocsSection } from "@/components/maps/word-docs-section";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { SearchBox } from "@/components/search-box";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -69,6 +71,7 @@ export default function MapListPage() {
   const [orgOpen, setOrgOpen] = useState<Set<string>>(new Set());
   const [favOpen, setFavOpen] = useState(true);
   const [unassignedOpen, setUnassignedOpen] = useState(true);
+  const [wordOpen, setWordOpen] = useState(true);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -304,6 +307,9 @@ export default function MapListPage() {
     [maps],
   );
 
+  // word 맵은 문서 부속 산출물 — 조직도/집계는 processMaps만, Word documents 섹션은 wordMaps (design 2026-07-24 §2)
+  const { processMaps, wordMaps } = useMemo(() => splitMapsByMode(visibleMaps), [visibleMaps]);
+
   // selectedDept를 render에서 파생 — visibleMaps는 refresh()마다 새 배열 참조라 effect deps에 직접 넣으면
   // 배열 identity 변화만으로 재실행되어(값은 동일) 사용자가 방금 접은 아코디언 노드를 재펼침해버린다 /
   // Derive at render so refresh()'s new visibleMaps reference doesn't re-trigger the effect below.
@@ -366,12 +372,13 @@ export default function MapListPage() {
     const parts = me.org_path.split("/");
     return new Set(parts.map((_, i) => parts.slice(0, i + 1).join("/")));
   }, [me]);
+  // 조직도·나의 부서 즐겨찾기는 word 맵 제외(splitMapsByMode) — 검색(filteredMaps 자체)은 word 맵 포함 유지 (design 2026-07-24 §2)
   const orgTree = useMemo(
-    () => buildOrgTree(filteredMaps, directory?.departments ?? [], myDeptKeepPaths),
+    () => buildOrgTree(splitMapsByMode(filteredMaps).processMaps, directory?.departments ?? [], myDeptKeepPaths),
     [filteredMaps, directory, myDeptKeepPaths],
   );
   const myDeptMaps = useMemo(
-    () => (me?.org_path ? filterMyDeptMaps(filteredMaps, me.org_path) : []),
+    () => (me?.org_path ? filterMyDeptMaps(splitMapsByMode(filteredMaps).processMaps, me.org_path) : []),
     [filteredMaps, me],
   );
   // department가 ""(빈 문자열)일 수 있어 ??는 폴백을 건너뛴다 — || 로 org_path 리프까지 폴백
@@ -508,17 +515,6 @@ export default function MapListPage() {
                 >
                   <FileUp size={16} strokeWidth={1.5} />
                   {t("csvImport.createFromCsv")}
-                </button>
-                <button
-                  data-id="home-create-from-word"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setWordModalOpen(true);
-                  }}
-                >
-                  <FileText size={16} strokeWidth={1.5} />
-                  Create from Word document
                 </button>
               </div>
             )}
@@ -696,6 +692,16 @@ export default function MapListPage() {
                     onToggleUnassigned={() => setUnassignedOpen((v) => !v)}
                     renderCard={renderCard}
                   />
+                  <WordDocsSection
+                    maps={wordMaps}
+                    open={wordOpen}
+                    onToggle={() => setWordOpen((v) => !v)}
+                    selectedId={effectiveSelected}
+                    onSelect={setSelectedId}
+                    onCreate={() => setWordModalOpen(true)}
+                    onReimport={() => undefined}
+                    onPromote={() => undefined}
+                  />
                 </div>
               )}
             </div>
@@ -715,7 +721,7 @@ export default function MapListPage() {
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                 />
               ) : (
-                <HomeDashboard maps={visibleMaps} onSelect={setSelectedId} />
+                <HomeDashboard maps={processMaps} onSelect={setSelectedId} />
               )}
             </aside>
           </>

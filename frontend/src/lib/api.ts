@@ -71,6 +71,10 @@ export interface MapSummary {
   sp_changed_at?: string | null;
   // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
   owning_department?: string | null;
+  // Word 맵 모드 & 임포트 카탈로그 — 목록 응답(MapOut)에도 포함되어 홈 분리(processMaps/wordMaps)에 필요 (design 2026-07-24 §2)
+  mode?: string;
+  doc_name?: string;
+  doc_sections?: SectionEntry[];
   // 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
   doc_imported_at?: string | null;
   doc_generated_at?: string | null;
@@ -78,10 +82,6 @@ export interface MapSummary {
 
 export interface MapDetail extends MapSummary {
   versions: VersionDetail[];
-  // Word 맵 모드 & 임포트 카탈로그 (design 2026-07-18)
-  mode?: string;
-  doc_name?: string;
-  doc_sections?: SectionEntry[];
 }
 
 export interface GraphNode {
