@@ -1,6 +1,6 @@
 "use client";
 
-// AI 컨설턴트 인터뷰 모드 — 풀스크린(TopNav 아래): 좌 대화 + 우 읽기전용 프리뷰 (design 2026-07-23 §6)
+// AI 컨설턴트 인터뷰 모드 — 풀스크린(TopNav 아래): 좌 프리뷰(메인) + 우 대화(폭 조절) (design 2026-07-23 §6)
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ import { ArrowLeft, Headset } from "lucide-react";
 import {
   ApiError,
   createOrResumeInterview,
+  deleteInterviewAttachment,
   getApiErrorDetail,
   getMe,
   getMap,
@@ -17,11 +18,22 @@ import {
   uploadInterviewAttachment,
   type InterviewState,
 } from "@/lib/api";
-import { INTERVIEW_STAGES, stageIndex } from "@/lib/interview";
+import { INTERVIEW_STAGES, choiceOptionsOf, stageIndex } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InterviewPanel } from "@/components/interview/interview-panel";
 import { InterviewPreview } from "@/components/interview/interview-preview";
+
+// 우측 채팅 폭 — 드래그 조절, localStorage 유지 (min/max는 요구사항 2026-07-23)
+const CHAT_WIDTH_KEY = "bpm.consultChatWidth";
+const CHAT_MIN = 320;
+const CHAT_MAX = 640;
+
+function readChatWidth(): number {
+  if (typeof window === "undefined") return 420;
+  const stored = Number(window.localStorage.getItem(CHAT_WIDTH_KEY));
+  return Number.isFinite(stored) && stored >= CHAT_MIN && stored <= CHAT_MAX ? stored : 420;
+}
 
 export default function ConsultPage() {
   const params = useParams<{ mapId: string }>();
@@ -34,7 +46,24 @@ export default function ConsultPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null); // 403/503 등 진입 불가
+  const [chatWidth, setChatWidth] = useState(readChatWidth);
   const lastTurnRef = useRef<{ type: "answer" | "choice"; content?: string; choice_id?: string } | null>(null);
+
+  function handleDividerDown(e: React.PointerEvent) {
+    e.preventDefault();
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.min(CHAT_MAX, Math.max(CHAT_MIN, window.innerWidth - ev.clientX));
+      setChatWidth(next);
+    };
+    const onUp = (ev: PointerEvent) => {
+      const finalWidth = Math.min(CHAT_MAX, Math.max(CHAT_MIN, window.innerWidth - ev.clientX));
+      window.localStorage.setItem(CHAT_WIDTH_KEY, String(finalWidth));
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +131,20 @@ export default function ConsultPage() {
     }
   }
 
+  async function handleDeleteAttachment(attachmentId: number) {
+    if (!interview) return;
+    try {
+      await deleteInterviewAttachment(interview.id, attachmentId);
+      setInterview((prev) =>
+        prev
+          ? { ...prev, attachments: prev.attachments.filter((a) => a.id !== attachmentId) }
+          : prev,
+      );
+    } catch (err) {
+      setError(getApiErrorDetail(err) || "Failed to delete the file.");
+    }
+  }
+
   if (fatal) {
     return (
       <ConfirmDialog
@@ -115,6 +158,8 @@ export default function ConsultPage() {
   }
 
   const stageIdx = interview ? stageIndex(interview.current_stage) : 0;
+  const live = interview ? interview.messages.filter((m) => !m.superseded) : [];
+  const choices = interview?.status === "active" ? choiceOptionsOf(live) : null;
 
   return (
     <div className="flex h-full flex-col" data-id="consult-page">
@@ -144,16 +189,34 @@ export default function ConsultPage() {
         </ol>
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[440px] shrink-0 flex-col border-r border-hairline bg-surface">
+        <InterviewPreview
+          interview={interview}
+          onUpdated={setInterview}
+          mapId={mapId}
+          choices={choices}
+          busy={busy}
+          onChoose={(choiceId) => runTurn({ type: "choice", choice_id: choiceId })}
+        />
+        <div
+          className="w-1 shrink-0 cursor-col-resize bg-hairline transition-colors duration-150 hover:bg-accent/40"
+          onPointerDown={handleDividerDown}
+          data-id="consult-divider"
+        />
+        <aside
+          className="flex shrink-0 flex-col bg-surface"
+          style={{ width: chatWidth }}
+          data-id="consult-chat"
+        >
           {interview ? (
             <InterviewPanel
               interview={interview}
               busy={busy}
               error={error}
+              hasChoices={choices !== null}
               onSend={(content) => runTurn({ type: "answer", content })}
-              onChoose={(choiceId) => runTurn({ type: "choice", choice_id: choiceId })}
               onRetry={() => lastTurnRef.current && runTurn(lastTurnRef.current)}
               onAttach={handleAttach}
+              onDeleteAttachment={handleDeleteAttachment}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center text-caption text-ink-muted">
@@ -161,7 +224,6 @@ export default function ConsultPage() {
             </div>
           )}
         </aside>
-        <InterviewPreview interview={interview} onUpdated={setInterview} mapId={mapId} />
       </div>
     </div>
   );

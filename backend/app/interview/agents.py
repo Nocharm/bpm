@@ -21,12 +21,14 @@ def extract_json(text: str) -> str:
 
 
 class InterviewerOut(BaseModel):
-    """인터뷰어 응답 — 다음 질문/확인과 facts 갱신."""
+    """인터뷰어 응답 — 다음 질문/확인과 facts 갱신 + 명확화 보기(quick reply)."""
 
     message: str
     facts_patch: dict[str, Any] = Field(default_factory=dict)
     stage_complete: bool = False
     needs_choices: bool = False
+    # 명확화 질문의 보기 2~4개 — 프론트가 클릭형 칩으로 노출. 서술형 질문이면 빈 배열
+    options: list[str] = Field(default_factory=list)
 
 
 class ToneRename(BaseModel):
@@ -67,7 +69,8 @@ _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 
 {"message": <사용자에게 보일 제안 또는 질문>,
  "facts_patch": {<이번 답변에서 확정된 현재 스테이지 facts 키:값>},
  "stage_complete": <현재 스테이지 필수 항목이 모두 확정되면 true>,
- "needs_choices": <구조 대안을 시각적으로 제시하는 게 나으면 true — 활동/분기 스테이지에서만>}
+ "needs_choices": <구조 대안을 시각적으로 제시하는 게 나으면 true — 활동/분기 스테이지에서만>,
+ "options": [<질문에 대한 예상 답 보기 2~4개 — 사용자가 클릭으로 답할 수 있게. 서술형 질문이면 빈 배열>]}
 
 행동 원칙 — 컨설턴트는 리드한다:
 1. **제안 우선**: [참고 문서]가 있으면 백지 질문을 던지지 말고, 문서에서 답을 먼저 추론해 "~로 이해했습니다. 맞나요?" 형태의 구체 제안으로 확인만 받으세요.
@@ -76,7 +79,9 @@ _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 
 4. **반복 금지**: 직전 컨설턴트 메시지와 같은 문장을 다시 보내지 마세요. 사용자가 답을 미루면 관점을 바꿔 제안하세요.
 5. stage_complete=true일 때 message에는 다음 주제로 넘어가는 첫 제안/질문을 포함하세요.
 6. facts_patch 값은 문자열 또는 문자열 배열만. 사용자가 당신의 제안에 동의하면 그 내용을 facts_patch로 확정하세요.
-7. message는 마크다운을 활용하세요 — 항목 나열은 불릿(-), 핵심어는 **굵게**."""
+7. message는 반드시 마크다운으로 구조화하세요 — 형식: 도입 한 문장 → 제안 내용은 `- ` 불릿 목록(핵심어 **굵게**) → 마지막 줄에 확인 질문 하나. 예:
+   "문서에서 다음 활동들을 확인했습니다.\\n- **요청서 작성** — 구매 요청 접수\\n- **견적 비교** — 3사 견적 취합\\n\\n이대로 진행할까요?"
+8. 확인형·선택형 질문에는 options에 보기 2~4개를 함께 주세요(예: ["네, 맞습니다", "수정이 필요합니다"] 또는 후보 값들). 서술형 답이 필요한 질문이면 빈 배열."""
 
 _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정된 facts로 순서도 그래프를 생성합니다.
 반드시 아래 JSON 하나만 반환 (kind는 항상 "graph"):

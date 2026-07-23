@@ -227,8 +227,10 @@ async def run_turn(
     is_complete = out.stage_complete or engine.is_stage_complete(
         interview.current_stage, interview.facts
     )
+    question_payload = {"options": out.options} if out.options else None
     if is_complete and next_key is not None:
-        consultant_msg = _append(db, interview, seq + 1, "consultant", "question", out.message)
+        consultant_msg = _append(db, interview, seq + 1, "consultant", "question", out.message,
+                                 payload=question_payload)
         applied = await _tone_review(interview, model)
         if applied:
             _append(db, interview, consultant_msg.seq + 1, "consultant", "notice",
@@ -241,4 +243,5 @@ async def run_turn(
         interview.current_stage = next_key
         return
 
-    _append(db, interview, seq + 1, "consultant", "question", out.message)
+    _append(db, interview, seq + 1, "consultant", "question", out.message,
+            payload=question_payload)

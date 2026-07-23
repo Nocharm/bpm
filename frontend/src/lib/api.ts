@@ -1882,6 +1882,15 @@ export function abandonInterview(id: number): Promise<void> {
   return request<void>(`/interviews/${id}`, { method: "DELETE" });
 }
 
+export function deleteInterviewAttachment(
+  interviewId: number,
+  attachmentId: number,
+): Promise<void> {
+  return request<void>(`/interviews/${interviewId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function uploadInterviewAttachment(
   id: number,
   file: File,

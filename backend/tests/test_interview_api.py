@@ -169,6 +169,25 @@ def test_interview_attachment_upload_and_reject(client: TestClient, monkeypatch)
     assert bad.status_code == 422
 
 
+def test_interview_attachment_delete(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    created = _iv_map(client)
+    version_id = created["versions"][0]["id"]
+    session_id = client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": version_id}
+    ).json()["id"]
+    uploaded = client.post(
+        f"/api/interviews/{session_id}/attachments",
+        files={"file": ("temp.md", "# note".encode(), "text/markdown")},
+    ).json()
+    gone = client.delete(f"/api/interviews/{session_id}/attachments/{uploaded['id']}")
+    assert gone.status_code == 204
+    state = client.get(f"/api/interviews/{session_id}").json()
+    assert all(a["id"] != uploaded["id"] for a in state["attachments"])
+    missing = client.delete(f"/api/interviews/{session_id}/attachments/{uploaded['id']}")
+    assert missing.status_code == 404
+
+
 def test_interview_revert_restores_checkpoint(client: TestClient, monkeypatch) -> None:
     _enable_ai(monkeypatch)
     created = _iv_map(client)

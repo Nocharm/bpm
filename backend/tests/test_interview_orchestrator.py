@@ -170,6 +170,16 @@ def test_review_stage_completion_does_not_spam_checkpoint_or_tone() -> None:
     assert kinds == ["answer", "question"]
 
 
+def test_question_options_stored_in_payload() -> None:
+    """명확화 보기(options)가 질문 메시지 payload로 프론트에 전달된다 (2026-07-23 UX)."""
+    db, interview = _FakeDb(), _session()
+    reply = json.dumps({"message": "목적이 뭔가요?", "facts_patch": {},
+                        "options": ["표준화", "비용 절감"]})
+    _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"), [reply])
+    question = next(m for m in db.added if m.kind == "question")
+    assert question.payload == {"options": ["표준화", "비용 절감"]}
+
+
 def test_invalid_ai_json_retries_then_turn_error() -> None:
     db, interview = _FakeDb(), _session()
     with pytest.raises(orchestrator.TurnError):

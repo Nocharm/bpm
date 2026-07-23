@@ -1,38 +1,61 @@
 "use client";
 
-// 인터뷰 좌측 패널 — 메시지 스트림(질문·선택지·알림) + 입력 + 첨부 (design 2026-07-23 §6)
+// 인터뷰 우측 대화 패널 — 메시지 스트림(마크다운)·퀵리플라이 보기·첨부 관리 (design 2026-07-23 §6)
+// 선택지(맵 안) 비교는 캔버스 플로팅 창에서 — 여기서는 안내만. 노드 멘션은 window 이벤트로 수신.
 
 import { useEffect, useRef, useState } from "react";
-import { Headset, Info, Loader2, Paperclip, RotateCcw, Send } from "lucide-react";
+import { Headset, Info, Layers, Loader2, Paperclip, RotateCcw, Send, X } from "lucide-react";
 
 import type { InterviewState } from "@/lib/api";
 import { choiceOptionsOf } from "@/lib/interview";
-import { ChoiceCard } from "@/components/interview/choice-card";
 import { MarkdownView } from "@/components/markdown-view";
+
+// 프리뷰 노드 "Ask about this node" 버튼 → 입력창 멘션 삽입용 커스텀 이벤트 이름
+export const MENTION_EVENT = "iv-mention";
 
 interface InterviewPanelProps {
   interview: InterviewState;
   busy: boolean;
   error: string | null;
+  hasChoices: boolean;
   onSend: (content: string) => void;
-  onChoose: (choiceId: string) => void;
   onRetry: () => void;
   onAttach: (file: File) => void;
+  onDeleteAttachment: (attachmentId: number) => void;
 }
 
 export function InterviewPanel({
-  interview, busy, error, onSend, onChoose, onRetry, onAttach,
+  interview, busy, error, hasChoices, onSend, onRetry, onAttach, onDeleteAttachment,
 }: InterviewPanelProps) {
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const live = interview.messages.filter((m) => !m.superseded);
-  const choices = interview.status === "active" ? choiceOptionsOf(live) : null;
+  const last = live[live.length - 1];
+  // 퀵리플라이 보기 — 마지막 메시지가 컨설턴트 질문 + options payload일 때만
+  const quickReplies =
+    interview.status === "active" && !busy && last?.role === "consultant" && last.kind === "question"
+      ? ((last.payload as { options?: string[] } | null)?.options ?? [])
+      : [];
+  const activeChoices = interview.status === "active" ? choiceOptionsOf(live) : null;
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [live.length, busy]);
+
+  // 프리뷰 노드 멘션 수신 — setState는 이벤트 핸들러 안에서만 (react-hooks/set-state-in-effect 준수)
+  useEffect(() => {
+    const handleMention = (event: Event) => {
+      const label = (event as CustomEvent<string>).detail;
+      if (!label) return;
+      setInput((prev) => (prev ? `${prev} [노드: ${label}] ` : `[노드: ${label}] `));
+      inputRef.current?.focus();
+    };
+    window.addEventListener(MENTION_EVENT, handleMention);
+    return () => window.removeEventListener(MENTION_EVENT, handleMention);
+  }, []);
 
   function submit() {
     const content = input.trim();
@@ -67,13 +90,27 @@ export function InterviewPanel({
             )}
           </li>
         ))}
-        {choices ? (
-          <li data-id="iv-choices" className="ml-7">
-            <div className="grid gap-2">
-              {choices.map((option) => (
-                <ChoiceCard key={option.id} option={option} disabled={busy} onChoose={onChoose} />
-              ))}
-            </div>
+        {activeChoices && hasChoices ? (
+          <li
+            className="ml-7 flex items-center gap-2 rounded-md border border-accent-tint-border bg-accent-tint/50 px-3 py-2 text-caption text-ink-secondary"
+            data-id="iv-choices-hint"
+          >
+            <Layers size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+            Compare the proposed maps on the canvas and pick one.
+          </li>
+        ) : null}
+        {quickReplies.length > 0 ? (
+          <li className="ml-7 flex flex-wrap gap-1.5" data-id="iv-quickreplies">
+            {quickReplies.map((option) => (
+              <button
+                key={option}
+                className="rounded-lg border border-accent-tint-border bg-surface px-2.5 py-1 text-caption text-accent hover:bg-accent-tint"
+                onClick={() => onSend(option)}
+                data-id="iv-quickreply"
+              >
+                {option}
+              </button>
+            ))}
           </li>
         ) : null}
         {busy ? (
@@ -98,12 +135,21 @@ export function InterviewPanel({
               <span
                 key={a.id}
                 className={
-                  "rounded-xs px-1.5 py-0.5 text-fine " +
+                  "inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine " +
                   (a.status === "parsed" ? "bg-surface-alt text-ink-secondary" : "bg-error/10 text-error")
                 }
                 title={a.error || a.filename}
+                data-id="iv-attachment-chip"
               >
                 {a.filename}
+                <button
+                  className="rounded-xs text-ink-muted hover:text-error"
+                  title="Remove document"
+                  onClick={() => onDeleteAttachment(a.id)}
+                  data-id="iv-attachment-delete"
+                >
+                  <X size={12} strokeWidth={1.5} />
+                </button>
               </span>
             ))}
           </div>
@@ -129,6 +175,7 @@ export function InterviewPanel({
             }}
           />
           <textarea
+            ref={inputRef}
             className="max-h-32 flex-1 resize-none rounded-sm border border-hairline bg-surface px-2 py-1.5 text-body outline-none focus:border-accent"
             rows={2}
             placeholder={interview.status === "active" ? "Type your answer…" : "Interview finished"}

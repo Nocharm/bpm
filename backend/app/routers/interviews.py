@@ -287,6 +287,22 @@ async def upload_attachment(
     return InterviewAttachmentOut.model_validate(row)
 
 
+@router.delete("/interviews/{interview_id}/attachments/{attachment_id}", status_code=204)
+async def delete_attachment(
+    interview_id: int,
+    attachment_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """첨부 삭제 — 이후 턴의 컨텍스트 주입에서 즉시 제외된다."""
+    interview = await _get_owned_interview(session, interview_id, user)
+    row = next((a for a in interview.attachments if a.id == attachment_id), None)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"attachment {attachment_id} not found")
+    await session.delete(row)
+    await session.commit()
+
+
 @router.post("/interviews/{interview_id}/revert", response_model=InterviewStateOut)
 async def revert_to_checkpoint(
     interview_id: int,
