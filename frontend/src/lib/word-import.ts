@@ -82,6 +82,11 @@ function levelFromStyleName(styleId: string): number {
   return 0;
 }
 
+// 본문 제목 ↔ TOC 항목 제목 매칭 키 — 앞뒤 공백·중복 공백 정규화.
+function normalizeTitle(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
 export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionEntry[]> {
   const { unzipSync, strFromU8 } = await import("fflate");
   const files = unzipSync(docxBytes);
@@ -95,10 +100,19 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
 
   // (1) TOC 항목 — 내부 하이퍼링크(w:anchor)에서 활성 앵커→번호 수집.
   const tocMap = new Map<string, { number: string; title: string }>();
+  // 제목 → {번호, 레벨} — 책갈피 없는 제목이 앵커 대신 제목으로 TOC 권위 번호를 찾게 한다.
+  const tocByTitle = new Map<string, { number: string; level: number }>();
   for (const link of Array.from(doc.getElementsByTagNameNS(W, "hyperlink"))) {
     const anchor = attr(link, "anchor");
     if (!anchor || anchor === "_GoBack" || tocMap.has(anchor)) continue;
-    tocMap.set(anchor, parseTocText(collectText(link)));
+    const parsed = parseTocText(collectText(link));
+    tocMap.set(anchor, parsed);
+    if (parsed.number && parsed.title) {
+      const key = normalizeTitle(parsed.title);
+      if (!tocByTitle.has(key)) {
+        tocByTitle.set(key, { number: parsed.number, level: parsed.number.split(".").length });
+      }
+    }
   }
 
   // (2) 본문 제목 순회 — 레벨은 outlineLvl, 번호는 TOC 씨앗 + 로컬 카운터.
@@ -118,6 +132,12 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
     else level = levelFromStyleName(sid); // outlineLvl 없는 커스텀 제목 → 스타일 이름 숫자
     if (level === 0) continue; // 제목 아님
 
+    const text = Array.from(p.getElementsByTagNameNS(W, "t"))
+      .map((t) => t.textContent ?? "")
+      .join("")
+      .trim();
+    if (!text) continue; // 빈 제목 문단(블랭크 라인) 제외 — 유령 항목·번호 오염 방지
+
     const names = Array.from(p.getElementsByTagNameNS(W, "bookmarkStart"))
       .map((b) => attr(b, "name"))
       .filter((n) => n && n !== "_GoBack");
@@ -130,16 +150,19 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
     if (seen.has(anchor)) continue;
     seen.add(anchor);
 
-    const title = Array.from(p.getElementsByTagNameNS(W, "t"))
-      .map((t) => t.textContent ?? "")
-      .join("")
-      .trim();
-
-    const toc = tocMap.get(anchor);
+    // 번호: 어펜딕스=무번호 / TOC(앵커 or 제목 매칭)=권위 / 그 외=재구성.
+    // 제목 매칭은 책갈피 없는 1~2단계 제목(다른 언어 트리 등)이 TOC 번호를 받아 카운터를 리셋하게 한다.
+    let tocNumber = tocMap.get(anchor)?.number ?? "";
+    if (!tocNumber) {
+      const byTitle = tocByTitle.get(normalizeTitle(text));
+      if (byTitle && byTitle.level === level) tocNumber = byTitle.number;
+    }
     let number: string;
-    if (toc && toc.number) {
+    if (/appendix/i.test(sid)) {
+      number = ""; // 어펜딕스는 문서상 무번호 — 카운터도 안 건드림
+    } else if (tocNumber) {
       // 1~2단계: TOC 번호 권위 + 자식 계산 위해 카운터/스택 동기화.
-      number = toc.number;
+      number = tocNumber;
       const segs = number.split(".");
       for (let i = 0; i < level; i++) counters[i] = Number(segs[i]) || 0;
       counters.length = level;
@@ -162,7 +185,7 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
       stack[level - 1] = number;
       stack.length = level;
     }
-    out.push({ anchor, title: title || toc?.title || "", number, level });
+    out.push({ anchor, title: text, number, level });
   }
 
   // TODO(임시 진단, 2026-07-23): 실물 문서 구조 파악용 — 스타일별 감지 레벨·책갈피 보유율 집계.

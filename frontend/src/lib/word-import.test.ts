@@ -107,4 +107,28 @@ describe("parseWordSections", () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ anchor: "_bpmsec1", title: "No bookmark section", level: 1 });
   });
+
+  it("빈 제목 문단(블랭크)은 제외한다 — 유령 항목·번호 오염 방지", async () => {
+    const xml = doc(heading("H1", ["_Toc1"], "Real") + heading("H1", [], ""));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe("Real");
+  });
+
+  it("어펜딕스 제목은 번호 없이(무번호) 낸다", async () => {
+    const xml = doc(heading("SBLAppendixTitleKor", ["_Toc1"], "Annex"));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out[0]).toMatchObject({ title: "Annex", number: "", level: 1 });
+  });
+
+  it("책갈피 없는 레벨1 제목은 TOC 제목 매칭으로 권위 번호를 받아 카운터를 리셋한다", async () => {
+    // "First"(TOC 1, 책갈피) 다음 "목적"(책갈피 없음) — 제목 매칭으로 TOC "1"을 받아 2가 아닌 1.
+    const xml = doc(
+      tocEntry("_TocE", "1.", "First") + tocEntry("_TocK", "1.", "목적") +
+      heading("H1", ["_TocE"], "First") + heading("H1", [], "목적"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1"]);
+    expect(out[1].anchor).toBe("_bpmsec1");
+  });
 });
