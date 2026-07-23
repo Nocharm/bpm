@@ -17,6 +17,8 @@ export interface WordExportNode {
   h: number;
   url?: string;
   urlLabel?: string;
+  // 문서 내부 섹션 앵커 — section 노드의 첫 라벨 토큰을 w:anchor 링크로 만든다 (design 2026-07-18 §8)
+  sectionAnchor?: string;
 }
 
 export interface WordExportEdge {
@@ -40,6 +42,9 @@ const NODE_PRESET: Record<ProcessNodeType, string> = {
   start: "flowChartTerminator",
   end: "flowChartTerminator",
   subprocess: "flowChartPredefinedProcess",
+  // 섹션 노드는 일반 process 도형으로 내보낸다(값 확정, 변경 예정 없음).
+  // Task E2는 내보내기 버튼 노출 여부·section_anchor 값 threading만 다루고, 이 도형 자체는 제외하지 않는다.
+  section: "flowChartProcess",
 };
 
 // 하이퍼링크 rels Target(xsd:anyURI)용 정규화 — 공백·한글이 든 URL을 raw로 넣으면
@@ -120,6 +125,21 @@ function buildHyperlinkParagraph(text: string, relId: string): string {
   );
 }
 
+// 앵커 라벨 — 첫 공백 토큰만 내부 하이퍼링크(w:anchor), 나머지는 plain run. (design 2026-07-18 §8)
+function buildAnchorLabelParagraph(label: string, anchor: string): string {
+  const sp = label.search(/\s/);
+  const linked = sp === -1 ? label : label.slice(0, sp);
+  const rest = sp === -1 ? "" : label.slice(sp); // 선행 공백 포함, plain
+  const linkedRun =
+    `<w:hyperlink w:anchor="${escapeXml(anchor)}">` +
+    `<w:r>${buildRunProps({ bold: true, hyperlink: true })}` +
+    `<w:t xml:space="preserve">${escapeXml(linked)}</w:t></w:r></w:hyperlink>`;
+  const restRun = rest
+    ? `<w:r>${buildRunProps({ bold: true })}<w:t xml:space="preserve">${escapeXml(rest)}</w:t></w:r>`
+    : "";
+  return `<w:p>${CENTERED_P_PROPS}${linkedRun}${restRun}</w:p>`;
+}
+
 // 노드 1개 → wps 도형. hyperlinkRelId가 있으면 2행째에 URL 라벨 하이퍼링크.
 function buildNodeShape(
   node: WordExportNode,
@@ -132,7 +152,11 @@ function buildNodeShape(
       ? buildHyperlinkParagraph(node.urlLabel || node.url, hyperlinkRelId)
       : buildCenteredParagraph(node.urlLabel || node.url, {}) // 정규화 실패 URL — 링크 없이 일반 텍스트
     : "";
-  const paragraphs = buildCenteredParagraph(node.title, { bold: true }) + urlLine;
+  const titleLine =
+    node.nodeType === "section" && node.sectionAnchor
+      ? buildAnchorLabelParagraph(node.title, node.sectionAnchor)
+      : buildCenteredParagraph(node.title, { bold: true });
+  const paragraphs = titleLine + urlLine;
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="${escapeXml(node.title)}"/>` +

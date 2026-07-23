@@ -1,5 +1,7 @@
 // 백엔드 REST 클라이언트. /api는 nginx(운영) 또는 next.config rewrites(로컬)가 backend로 프록시.
 
+import type { SectionEntry } from "./word-import";
+
 export type VersionStatus =
   | "draft"
   | "pending"
@@ -73,6 +75,10 @@ export interface MapSummary {
 
 export interface MapDetail extends MapSummary {
   versions: VersionDetail[];
+  // Word 맵 모드 & 임포트 카탈로그 (design 2026-07-18)
+  mode?: string;
+  doc_name?: string;
+  doc_sections?: SectionEntry[];
 }
 
 export interface GraphNode {
@@ -94,6 +100,8 @@ export interface GraphNode {
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
+  // Word 맵 섹션 노드(node_type==="section")의 문서 내부 앵커 (design 2026-07-18)
+  section_anchor?: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;
@@ -246,6 +254,7 @@ export function createMap(
   description: string,
   visibility: MapSummary["visibility"],
   owningDepartment: string,
+  word?: { docName: string; sections: SectionEntry[] },
 ): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
@@ -254,6 +263,7 @@ export function createMap(
       description,
       visibility,
       owning_department: owningDepartment,
+      ...(word ? { mode: "word", doc_name: word.docName, doc_sections: word.sections } : {}),
     }),
   });
 }
@@ -290,6 +300,17 @@ export function updateMap(
   return request<MapSummary>(`/maps/${mapId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+}
+
+// Word 맵 문서 재임포트 — 카탈로그(doc_name + 섹션 목록) 교체. (design 2026-07-18, 엔드포인트 A3)
+export function setWordDoc(
+  mapId: number,
+  body: { doc_name: string; sections: SectionEntry[] },
+): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/word-doc`, {
+    method: "PUT",
+    body: JSON.stringify(body),
   });
 }
 
@@ -1678,6 +1699,8 @@ export interface AiNodeAttributes {
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
+  // section_anchor는 단순 passthrough — AI가 비우면 mergeNode(csv-import.ts)의 pick이 기존값을 보존
+  section_anchor?: string | null;
 }
 
 export interface AiNode {

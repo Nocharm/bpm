@@ -18,7 +18,7 @@ const makeGraph = (
 ): Graph => ({ nodes: specs.map((spec) => node(spec.id, spec)), edges: [], groups: [], subprocess_refs: refs });
 
 const SP_REF_DEFAULTS: SubprocessRef = {
-  designated: true, department: null, assignee: null, system: null, duration: null,
+  name: null, designated: true, department: null, assignee: null, system: null, duration: null,
   cost_krw: null, cost_usd: null, headcount: null, url: null, url_label: null,
   sp_description: null,
 };

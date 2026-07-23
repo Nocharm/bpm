@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileText, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { copyMap, deleteMap, getDirectory, getMe, listMaps, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
@@ -18,6 +18,7 @@ import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
+import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { MapCard } from "@/components/maps/map-card";
@@ -43,6 +44,9 @@ export default function MapListPage() {
   const [csvModalOpen, setCsvModalOpen] = useState(false);
   // CSV 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 파일명)
   const [csvHandoff, setCsvHandoff] = useState<{ outcome: CsvImportOutcome; fileName: string } | null>(null);
+  const [wordModalOpen, setWordModalOpen] = useState(false);
+  // Word 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 문서명)
+  const [wordHandoff, setWordHandoff] = useState<WordCreateOutcome | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -505,6 +509,17 @@ export default function MapListPage() {
                   <FileUp size={16} strokeWidth={1.5} />
                   {t("csvImport.createFromCsv")}
                 </button>
+                <button
+                  data-id="home-create-from-word"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setWordModalOpen(true);
+                  }}
+                >
+                  <FileText size={16} strokeWidth={1.5} />
+                  Create from Word document
+                </button>
               </div>
             )}
           </div>
@@ -718,12 +733,25 @@ export default function MapListPage() {
         />
       )}
 
+      {wordModalOpen && (
+        <WordCreateModal
+          onClose={() => setWordModalOpen(false)}
+          onContinue={(outcome) => {
+            setWordModalOpen(false);
+            setWordHandoff(outcome);
+            setDialogOpen(true);
+          }}
+        />
+      )}
+
       {dialogOpen && (
         <CreateMapDialog
           csv={csvHandoff ?? undefined}
+          word={wordHandoff ?? undefined}
           onClose={() => {
             setDialogOpen(false);
             setCsvHandoff(null);
+            setWordHandoff(null);
           }}
           onCreated={(silent) => {
             void refresh();

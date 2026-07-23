@@ -181,6 +181,33 @@ describe("buildDocx — 하이퍼링크 URL 정규화", () => {
   });
 });
 
+describe("buildDocx — 섹션 노드 내부 앵커 링크", () => {
+  it("첫 토큰만 내부 앵커 링크, 나머지는 plain 텍스트", async () => {
+    const section: WordExportNode = {
+      id: "n1", title: "1.22스탭 참고", nodeType: "section",
+      x: 0, y: 0, w: 113, h: 57, sectionAnchor: "_Toc9001",
+    };
+    const parts = await unzipDocx(buildDocx([section], noEdges));
+    const doc = parts["word/document.xml"];
+    expect(doc).toContain('<w:hyperlink w:anchor="_Toc9001">');
+    expect(doc).toContain("1.22스탭"); // 링크된 첫 토큰
+    expect(doc).toContain("참고"); // plain 잔여 텍스트도 여전히 존재
+  });
+
+  it("url까지 있으면 내부 앵커 링크·외부 url 링크가 공존한다", async () => {
+    const section: WordExportNode = {
+      id: "n1", title: "1.2 절차", nodeType: "section",
+      x: 0, y: 0, w: 113, h: 57, sectionAnchor: "_Toc1",
+      url: "https://x.test", urlLabel: "SOP",
+    };
+    const parts = await unzipDocx(buildDocx([section], noEdges));
+    const doc = parts["word/document.xml"];
+    const rels = parts["word/_rels/document.xml.rels"];
+    expect(doc).toContain('<w:hyperlink w:anchor="_Toc1">'); // 내부
+    expect(rels).toContain('TargetMode="External"'); // 외부(url 라인, 현행 유지)
+  });
+});
+
 describe("buildDocx — 빈 노드 계약", () => {
   it("노드 0개면 명확한 메시지로 throw한다", () => {
     expect(() => buildDocx([], [])).toThrow(/node/i);

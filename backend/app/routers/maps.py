@@ -36,6 +36,7 @@ from app.schemas import (
     SubprocessDesignationIn,
     SubprocessUsageOut,
     SubprocessUsedByOut,
+    WordDocIn,
 )
 from app.version_events import record_version_event
 
@@ -264,6 +265,9 @@ async def create_map(
         owner_id=user,
         visibility=payload.visibility,  # 생성자가 고른 초기 공개 범위(기본 private)
         owning_department=payload.owning_department,
+        mode=payload.mode,
+        doc_name=payload.doc_name,
+        doc_sections=[s.model_dump() for s in payload.doc_sections],
     )
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
@@ -346,6 +350,10 @@ async def copy_map(
         owner_id=user,
         visibility="private",
         owning_department=source_map.owning_department,
+        # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 복사본도 같은 문서 하이퍼링크를 쓴다 (design 2026-07-18)
+        mode=source_map.mode,
+        doc_name=source_map.doc_name,
+        doc_sections=list(source_map.doc_sections),
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
@@ -792,6 +800,35 @@ async def withdraw_sp_designation_request(
         raise HTTPException(status_code=403, detail="only the requester can withdraw")
     req.status = "withdrawn"
     await session.commit()
+
+
+@router.put(
+    "/{map_id}/word-doc",
+    response_model=MapDetailOut,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def set_word_doc(
+    map_id: int,
+    payload: WordDocIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """Word 맵 재임포트 — doc_name·doc_sections을 통째로 교체한다 (design 2026-07-18)."""
+    found_map = await session.get(
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
+    )
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.doc_name = payload.doc_name
+    found_map.doc_sections = [s.model_dump() for s in payload.sections]
+    await session.commit()
+    await session.refresh(found_map, attribute_names=["versions"])
+    for version in found_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    found_map.my_role = await get_effective_role(session, user, map_id)
+    return found_map
 
 
 @router.put(

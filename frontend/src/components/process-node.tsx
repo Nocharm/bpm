@@ -216,6 +216,7 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   start: "#84a07c", // sage
   end: "#c2849a", // rose
   subprocess: "#7c6adc", // violet
+  section: "#909098", // stone
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.

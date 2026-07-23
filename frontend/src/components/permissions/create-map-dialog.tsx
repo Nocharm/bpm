@@ -35,6 +35,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
+import type { WordCreateOutcome } from "@/components/word-create-modal";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
 // Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
@@ -72,13 +73,15 @@ interface Props {
   onCreated: (silent?: boolean) => void; // 생성 후 목록 갱신 콜백 — silent=true면 성공 토스트 억제(임포트 실패 시) / refresh list; silent suppresses the success toast
   // CSV로 만들기 — 홈의 CSV 모달이 넘긴다. **optional 필수**: map-name-dropdown.tsx도 이 컴포넌트를 마운트한다.
   csv?: { outcome: CsvImportOutcome; fileName: string };
+  // Word 문서로 만들기 — 홈의 Word 모달이 넘긴다(csv와 동형).
+  word?: WordCreateOutcome;
   // 이름 프리필 — 에디터 피커의 "새 맵" 검색어 이어받기 (spec 2026-07-19)
   initialName?: string;
   // 지정 시 생성 후 이동(router.push) 대신 호출측이 후속 처리(플레이스홀더 자동 링크)
   onCreatedMap?: (mapId: number, name: string) => void;
 }
 
-export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreatedMap }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap }: Props) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -138,10 +141,13 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
   // ── 폼 상태 / form state ──
   // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
   const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
-  const [name, setName] = useState(initialName ?? csvBaseName);
+  // Word 문서로 만들 때는 문서명(확장자 제외)을 이름 기본값으로 — csvBaseName과 동일한 우선순위로 합류
+  const wordBaseName = word ? word.docName.replace(/\.docx$/i, "") : "";
+  const [name, setName] = useState(initialName ?? (csvBaseName || wordBaseName));
   const [description, setDescription] = useState(csvBaseName);
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
+  const [wordOpen, setWordOpen] = useState(false);
   // 생성 완료 표시 — createMap 직후 즉시 기록해야 한다. 부분 실패 후 Create 재클릭 시
   // 맵을 다시 만들면 이름 중복 409로 영영 막힌다(백엔드 _assert_unique_name).
   const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
@@ -285,7 +291,13 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
       // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
       // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
       if (createdRef.current === null) {
-        const detail = await createMap(trimmed, description.trim(), visibility, owningDept.id);
+        const detail = await createMap(
+          trimmed,
+          description.trim(),
+          visibility,
+          owningDept.id,
+          word ? { docName: word.docName, sections: word.sections } : undefined,
+        );
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
@@ -341,7 +353,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, onCreated, onClose, onCreatedMap, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, onCreated, onClose, onCreatedMap, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -577,6 +589,30 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
                     {t("csvImport.rowWarning", { line: warn.line, message: warn.message })}
                   </p>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Word 문서로 만들기 — 파일명 아코디언. 누르면 섹션 카탈로그 개수를 펼친다. */}
+        {word && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              data-id="word-file-accordion"
+              aria-expanded={wordOpen}
+              onClick={() => setWordOpen((open) => !open)}
+              className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-caption text-ink hover:bg-surface"
+            >
+              {wordOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
+              <FileUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="truncate">{word.docName}</span>
+            </button>
+            {wordOpen && (
+              <div data-id="word-file-summary" className="flex flex-col gap-1 rounded-sm border border-hairline px-3 py-2">
+                <p className="text-caption text-ink-secondary">
+                  {word.sections.length} linkable section{word.sections.length === 1 ? "" : "s"} found.
+                </p>
               </div>
             )}
           </div>
