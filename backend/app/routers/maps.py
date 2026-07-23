@@ -343,6 +343,8 @@ async def copy_map(
 
     copy_name = payload.name or f"{source_map.name} (Copy)"
     await _assert_unique_name(session, copy_name)
+    if payload.owning_department:
+        await _assert_known_department(session, payload.owning_department)
     convert = payload.convert_to_normal
     new_map = ProcessMap(
         name=copy_name,

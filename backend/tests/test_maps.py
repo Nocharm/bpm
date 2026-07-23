@@ -369,3 +369,31 @@ def test_copy_convert_to_normal_promotes_sections(client: TestClient) -> None:
     assert node["node_type"] == "process"
     assert node["section_anchor"] == ""
     assert node["url"] == "http://docs.example/sop"
+
+
+def test_copy_rejects_unknown_owning_department(client: TestClient) -> None:
+    """복사 시 owning_department override도 create_map과 동일하게 실제 조직 경로만 허용 (422)."""
+    name = f"word-promote-badd-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(
+                name=name,
+                visibility="public",
+                mode="word",
+                doc_name="sop.docx",
+                doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+            )
+            v = MapVersion(label="As-Is", status="approved")
+            m.versions.append(v)
+            session.add(m)
+            await session.flush()
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(
+        f"/api/maps/{map_id}/copy",
+        json={"convert_to_normal": True, "owning_department": "No Such Division"},
+    )
+    assert res.status_code == 422

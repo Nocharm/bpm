@@ -57,6 +57,8 @@ export default function MapListPage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // 재임포트 후 열린 상세 카드 강제 리마운트(키에 포함) — refresh()는 리스트만 갱신, 상세는 재조회 안 함.
+  const [detailReloadKey, setDetailReloadKey] = useState(0);
   const [mapQuery, setMapQuery] = useState("");
   // 가시성 필터 탭 — ALL/Public/Private
   const [visFilter, setVisFilter] = useState<"all" | "public" | "private">("all");
@@ -433,6 +435,7 @@ export default function MapListPage() {
           {effectiveSelected === processMap.id && (
             <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
               <MapDetailCard
+                key={`${processMap.id}-${detailReloadKey}`}
                 mapId={processMap.id}
                 onDelete={(id) => void handleDelete(id)}
                 onCopy={handleCopyOpen}
@@ -722,7 +725,7 @@ export default function MapListPage() {
             >
               {effectiveSelected !== null ? (
                 <MapDetailCard
-                  key={effectiveSelected}
+                  key={`${effectiveSelected}-${detailReloadKey}`}
                   mapId={effectiveSelected}
                   onDelete={(id) => void handleDelete(id)}
                   onCopy={handleCopyOpen}
@@ -787,6 +790,7 @@ export default function MapListPage() {
             void setWordDoc(target.id, { doc_name: outcome.docName, sections: outcome.sections })
               .then(() => {
                 void refresh();
+                setDetailReloadKey((k) => k + 1);
                 showToast("Document re-imported.");
               })
               .catch((err) => {
