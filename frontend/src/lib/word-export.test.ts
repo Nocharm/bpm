@@ -55,7 +55,7 @@ describe("buildDocx — 노드 도형", () => {
     const doc = parts["word/document.xml"];
     expect(doc).toContain('w:ascii="Arial"');
     expect(doc).toContain('w:eastAsia="바탕체"');
-    expect(doc).toContain('<w:sz w:val="22"/>');
+    expect(doc).toContain('<w:sz w:val="16"/>'); // 8pt 통일
     expect(doc).toContain('<w:jc w:val="center"/>');
     expect(doc).toContain("<w:b/>");
   });
@@ -117,14 +117,23 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
     sourceId: "a", targetId: "b", label: "적합", sourceSide: "right", targetSide: "left",
   };
 
-  it("bentConnector3 + 화살촉 + 도형 접점(stCxn/endCxn)으로 연결한다", async () => {
+  it("bentConnector3 + 화살촉으로 변 중점 사이를 직결한다(접점 스냅 제거)", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [edgeAB]));
     const doc = parts["word/document.xml"];
     expect(doc).toContain('prst="bentConnector3"');
     expect(doc).toContain('<a:tailEnd type="triangle"/>');
-    // 노드 도형 id: a=2, b=3. right=3, left=1 (top0/left1/bottom2/right3)
-    expect(doc).toContain('<a:stCxn id="2" idx="3"/>');
-    expect(doc).toContain('<a:endCxn id="3" idx="1"/>');
+    // 접점 스냅 제거 — 빈 cNvCnPr, off/ext(getSideAnchor 변 중점 사이)가 선 끝점이라 꼭지점에 붙는다.
+    expect(doc).toContain("<wps:cNvCnPr/>");
+    expect(doc).not.toContain("<a:stCxn");
+    expect(doc).not.toContain("<a:endCxn");
+  });
+
+  it("fitToPage=false는 축소 없이 px×9525로 도형 크기를 그대로 낸다 (1.5×3cm 정확)", async () => {
+    const big = { id: "n", title: "T", nodeType: "process" as const, x: 0, y: 0, w: 2000, h: 1000 };
+    const exact = (await unzipDocx(buildDocx([big], [], false)))["word/document.xml"];
+    const fit = (await unzipDocx(buildDocx([big], [])))["word/document.xml"];
+    expect(exact).toContain('<a:ext cx="19050000" cy="9525000"/>'); // 2000·1000 px×9525, 미축소
+    expect(fit).not.toContain('<a:ext cx="19050000"'); // fit=기본 → 페이지에 맞춰 축소
   });
 
   it("라벨 있는 엣지만 중점에 라벨 텍스트박스를 만든다", async () => {

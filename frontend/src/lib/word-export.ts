@@ -33,7 +33,7 @@ const EMU_PER_PX = 9525;
 const PAGE_W_EMU = 5_760_720; // A4 세로, 여백 2.5cm 제외 가용 폭 16.0cm
 const PAGE_H_EMU = 8_892_540; // 가용 높이 24.7cm
 const PADDING_PX = 20; // 노드 bounds 바깥 여백
-const FONT_HALF_PT = "22"; // 11pt (half-point 단위)
+const FONT_HALF_PT = "16"; // 8pt (half-point 단위 — 도형 내부 텍스트 통일)
 const HYPERLINK_BLUE = "0563C1"; // Word 표준 하이퍼링크 색 — 흑백톤의 유일한 예외
 
 const NODE_PRESET: Record<ProcessNodeType, string> = {
@@ -77,16 +77,19 @@ interface Layout {
   extH: number;
 }
 
-function computeLayout(nodes: WordExportNode[]): Layout {
+function computeLayout(nodes: WordExportNode[], fitToPage = true): Layout {
   const minX = Math.min(...nodes.map((n) => n.x)) - PADDING_PX;
   const minY = Math.min(...nodes.map((n) => n.y)) - PADDING_PX;
   const maxX = Math.max(...nodes.map((n) => n.x + n.w)) + PADDING_PX;
   const maxY = Math.max(...nodes.map((n) => n.y + n.h)) + PADDING_PX;
-  const scale = Math.min(
-    1,
-    PAGE_W_EMU / ((maxX - minX) * EMU_PER_PX),
-    PAGE_H_EMU / ((maxY - minY) * EMU_PER_PX),
-  );
+  // fitToPage=false면 px→EMU 1:1(축소 안 함) — Word 맵은 도형을 정확히 1.5×3cm로 유지(넓게 배치 시 페이지 초과 가능).
+  const scale = fitToPage
+    ? Math.min(
+        1,
+        PAGE_W_EMU / ((maxX - minX) * EMU_PER_PX),
+        PAGE_H_EMU / ((maxY - minY) * EMU_PER_PX),
+      )
+    : 1;
   const toEmu = (px: number) => Math.round(px * EMU_PER_PX * scale);
   return {
     toX: (px) => toEmu(px - minX),
@@ -175,10 +178,6 @@ function buildNodeShape(
   );
 }
 
-// 프리셋 4접점(cxnLst) 인덱스 — flowChart류 프리셋은 top/left/bottom/right 순.
-// ⚠️ 실제 Word에서 접점 위치는 Task 4 수동 검증으로 확인한다(스펙 §4 — 구현 시 실측 확정).
-const SIDE_TO_CXN_IDX: Record<HandleSide, number> = { top: 0, left: 1, bottom: 2, right: 3 };
-
 // 노드 변의 중앙점 (캔버스 px)
 function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: number } {
   switch (side) {
@@ -199,8 +198,6 @@ function buildConnectorShape(
   shapeId: number,
   sourceNode: WordExportNode,
   targetNode: WordExportNode,
-  sourceShapeId: number,
-  targetShapeId: number,
   layout: Layout,
 ): string {
   const start = getSideAnchor(sourceNode, edge.sourceSide);
@@ -212,10 +209,9 @@ function buildConnectorShape(
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="edge-${shapeId}"/>` +
-    "<wps:cNvCnPr>" +
-    `<a:stCxn id="${sourceShapeId}" idx="${SIDE_TO_CXN_IDX[edge.sourceSide]}"/>` +
-    `<a:endCxn id="${targetShapeId}" idx="${SIDE_TO_CXN_IDX[edge.targetSide]}"/>` +
-    "</wps:cNvCnPr>" +
+    // 접점 스냅(stCxn/endCxn) 제거 — 프리셋 cxn 인덱스가 변 중점과 어긋나 선이 꼭지점에 안 붙던 문제 해결.
+    // 아래 off/ext(getSideAnchor 변 중점 사이)가 선 끝점 → 정적 선이지만 항상 도형 변에 붙는다.
+    "<wps:cNvCnPr/>" +
     "<wps:spPr>" +
     `<a:xfrm${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}>` +
     `<a:off x="${layout.toX(off.x)}" y="${layout.toY(off.y)}"/>` +
@@ -331,11 +327,12 @@ function buildDocumentXml(flowchartParagraphXml: string): string {
 export function buildFlowchartDrawing(
   nodes: WordExportNode[],
   edges: WordExportEdge[],
+  fitToPage = true,
 ): { paragraphXml: string; hyperlinks: { relId: string; url: string }[] } {
   if (nodes.length === 0) {
     throw new Error("buildFlowchartDrawing: nodes must not be empty");
   }
-  const layout = computeLayout(nodes);
+  const layout = computeLayout(nodes, fitToPage);
   // 도형 id: 1은 docPr, 노드는 2부터
   const shapeIdOf = new Map(nodes.map((node, i) => [node.id, i + 2]));
   const hyperlinks: { relId: string; url: string }[] = [];
@@ -363,7 +360,7 @@ export function buildFlowchartDrawing(
       continue;
     }
     shapes.push(
-      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, sourceShapeId, targetShapeId, layout),
+      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, layout),
     );
     if (edge.label) {
       shapes.push(buildEdgeLabelShape(edge.label, nextShapeId++, sourceNode, targetNode, edge, layout));
@@ -387,8 +384,8 @@ export function buildFlowchartDrawing(
 }
 
 /** 노드/엣지를 Word 도형 순서도 docx Blob으로 만든다 (순수 — DOM 불의존). */
-export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blob {
-  const { paragraphXml, hyperlinks } = buildFlowchartDrawing(nodes, edges);
+export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[], fitToPage = true): Blob {
+  const { paragraphXml, hyperlinks } = buildFlowchartDrawing(nodes, edges, fitToPage);
   const documentXml = buildDocumentXml(paragraphXml);
   const zipped = zipSync({
     "[Content_Types].xml": strToU8(CONTENT_TYPES_XML),
@@ -406,11 +403,12 @@ export function exportCanvasWord(
   nodes: WordExportNode[],
   edges: WordExportEdge[],
   fileName: string,
+  fitToPage = true,
 ): void {
   if (nodes.length === 0) {
     return;
   }
-  const blob = buildDocx(nodes, edges);
+  const blob = buildDocx(nodes, edges, fitToPage);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

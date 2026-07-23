@@ -174,7 +174,8 @@ export async function generateCompleteWordDoc(
   // 합성 앵커 순번이 어긋나지 않는다.
   injectSyntheticBookmarks(doc, styleLevels, nodes);
 
-  const { paragraphXml: rawParagraphXml, hyperlinks } = buildFlowchartDrawing(nodes, edges);
+  // fitToPage=false — Word 맵 완결문서는 도형을 정확히 1.5×3cm로(축소 없음).
+  const { paragraphXml: rawParagraphXml, hyperlinks } = buildFlowchartDrawing(nodes, edges, false);
   const originalRelsText = files[RELS_PATH] ? strFromU8(files[RELS_PATH]) : EMPTY_RELS_XML;
   const merged = mergeHyperlinkRels(originalRelsText, rawParagraphXml, hyperlinks);
   const paragraphXml = remapDocPrId(merged.paragraphXml, documentXmlText);

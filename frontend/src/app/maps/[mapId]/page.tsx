@@ -252,8 +252,8 @@ const EXTENT_TOPLEFT_MARGIN = 120; // 좌/상단 여백 — 작게(좌상단 고
 const MIN_ZOOM = 0.2; // 최소 줌 — translateExtent 우하단 확장(pane/MIN_ZOOM)이 이 값과 일치해야 줌아웃 centering 방지
 // Word 산출물 도형 크기 — 전 노드·분기 통일(사용자 요구: 1.5cm×3cm). 캔버스 px 기준(word-export layout이 ×9525로 EMU 변환).
 // 3cm≈113.4px(가로) · 1.5cm≈56.7px(세로). 정확 수치·엣지 라우팅은 시각 검토로 튜닝 예정(design §7, F1 수동 확인).
-const WORD_SHAPE_W = 113.4;
-const WORD_SHAPE_H = 56.7;
+const WORD_SHAPE_W = 1080000 / 9525; // 3cm(너비) 정확값 — ×9525(EMU_PER_PX)=1,080,000 EMU
+const WORD_SHAPE_H = 540000 / 9525; // 1.5cm(높이) — 540,000 EMU
 // 엣지 라벨(분기 Yes/No/기타 등) — 디자인 토큰으로 알약 스타일(서피스 배경 + hairline 테두리 + ink 텍스트)
 const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
@@ -4870,7 +4870,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleExportWord = () => {
     try {
       const { exportNodes, exportEdges } = buildWordExportModel();
-      exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""));
+      // word 맵은 fit-to-page 끔 → 도형 정확히 1.5×3cm(스프레드 시 페이지 초과 가능).
+      exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""), !isWordMap);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.exportWord"));
     }
