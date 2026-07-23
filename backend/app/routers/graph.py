@@ -313,5 +313,6 @@ async def replace_graph(
     for edge in payload.edges:
         session.add(Edge(version_id=version_id, **edge.model_dump()))
 
+    version.updated_at = now  # 그래프 내용 갱신도 버전 갱신 시각에 반영 — 인터뷰 충돌 경고의 신호원 (final review C1)
     await session.commit()
     return await _load_graph(session, version_id)

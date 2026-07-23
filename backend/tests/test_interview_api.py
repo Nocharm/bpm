@@ -203,3 +203,73 @@ def test_interview_complete_and_delete(client: TestClient, monkeypatch) -> None:
     assert resp.status_code == 409
     gone = client.delete(f"/api/interviews/{session_id}")
     assert gone.status_code == 204
+
+
+def test_graph_put_bumps_version_updated_at_for_conflict_signal(client: TestClient, monkeypatch) -> None:
+    """graph PUT이 version.updated_at을 올려야 인터뷰 충돌 경고가 실편집을 감지한다 (final review C1)."""
+    _enable_ai(monkeypatch)
+    created = _iv_map(client)
+    version_id = created["versions"][0]["id"]
+    session_id = client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": version_id}
+    ).json()["id"]
+    # 체크아웃 자체도 version 행을 건드려 onupdate로 updated_at을 올린다 — 그 부수효과와
+    # 섞이지 않도록 체크아웃 "이후"를 기준선으로 잡아 PUT 그래프만의 효과를 격리한다.
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    before = client.get(f"/api/interviews/{session_id}").json()["version_updated_at"]
+    graph = {
+        "nodes": [
+            {"id": "n-start", "title": "Start", "node_type": "start"},
+            {"id": "n-conflict-1", "title": "edited", "node_type": "process"},
+        ],
+        "edges": [],
+    }
+    assert client.put(f"/api/versions/{version_id}/graph", json=graph).status_code == 200
+    after = client.get(f"/api/interviews/{session_id}").json()["version_updated_at"]
+    assert after != before
+
+
+def test_interview_requires_live_editor_role(client: TestClient, monkeypatch) -> None:
+    """세션 소유자라도 editor 권한이 회수되면 이후 접근이 차단된다 (final review I3)."""
+    _enable_ai(monkeypatch)
+    global _iv_seq
+    _iv_seq += 1
+    actor_a, actor_b = "iv-role-a", "iv-role-b"
+    headers_a = {"X-Dev-User": actor_a}
+    created = client.post(
+        "/api/maps",
+        json={
+            "owning_department": "Owning Anchor Division",
+            "name": f"interview role map {_iv_seq}",
+        },
+        headers=headers_a,
+    ).json()
+    map_id, version_id = created["id"], created["versions"][0]["id"]
+    session_id = client.post(
+        f"/api/maps/{map_id}/interviews", json={"version_id": version_id}, headers=headers_a
+    ).json()["id"]
+
+    # A의 owner 권한을 B로 이전하고 A를 viewer로 강등 — enforcement가 켜지면
+    # 세션은 여전히 A 소유(IDOR 통과)이지만 맵에 대한 editor+ 권한은 더 이상 없다.
+    perms = client.get(f"/api/maps/{map_id}/permissions", headers=headers_a).json()
+    a_grant_id = next(
+        p["id"] for p in perms if p["principal_id"] == actor_a and p["role"] == "owner"
+    )
+    assert client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={"principal_type": "user", "principal_id": actor_b, "role": "editor"},
+        headers=headers_a,
+    ).status_code == 201
+    assert client.post(
+        f"/api/maps/{map_id}/transfer-owner", json={"new_owner": actor_b}, headers=headers_a
+    ).status_code == 200
+    downgrade = client.patch(
+        f"/api/maps/{map_id}/permissions/{a_grant_id}",
+        json={"role": "viewer"},
+        headers=headers_a,
+    )
+    assert downgrade.status_code == 200 and downgrade.json()["pending"] is False
+
+    monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+    resp = client.get(f"/api/interviews/{session_id}", headers=headers_a)
+    assert resp.status_code == 403

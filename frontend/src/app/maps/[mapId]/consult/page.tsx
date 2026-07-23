@@ -18,6 +18,7 @@ import {
   type InterviewState,
 } from "@/lib/api";
 import { INTERVIEW_STAGES, stageIndex } from "@/lib/interview";
+import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InterviewPanel } from "@/components/interview/interview-panel";
 import { InterviewPreview } from "@/components/interview/interview-preview";
@@ -26,6 +27,7 @@ export default function ConsultPage() {
   const params = useParams<{ mapId: string }>();
   const mapId = Number(params.mapId);
   const router = useRouter();
+  const { lang } = useI18n();
 
   const [interview, setInterview] = useState<InterviewState | null>(null);
   const [mapName, setMapName] = useState("");
@@ -54,7 +56,7 @@ export default function ConsultPage() {
           setFatal("No editable draft version.");
           return;
         }
-        const state = await createOrResumeInterview(mapId, draft.id, "ko");
+        const state = await createOrResumeInterview(mapId, draft.id, lang);
         if (!cancelled) setInterview(state);
       } catch (err) {
         if (cancelled) return;
@@ -70,7 +72,8 @@ export default function ConsultPage() {
     return () => {
       cancelled = true;
     };
-  }, [mapId]);
+    // lang 변경 시 재부트스트랩은 무해 — 서버는 기존 active 세션을 그대로 반환한다
+  }, [mapId, lang]);
 
   async function runTurn(turn: { type: "answer" | "choice"; content?: string; choice_id?: string }) {
     if (!interview || busy) return;
@@ -79,6 +82,7 @@ export default function ConsultPage() {
     setError(null);
     try {
       setInterview(await postInterviewTurn(interview.id, turn));
+      lastTurnRef.current = null; // 성공한 턴은 Retry 재생 대상에서 제외 — 첨부 업로드 실패 시 중복 제출 방지
     } catch (err) {
       setError(getApiErrorDetail(err) || "AI request failed.");
     } finally {

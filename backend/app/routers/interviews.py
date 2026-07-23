@@ -26,6 +26,7 @@ from app.models import (
     InterviewSession,
     MapVersion,
 )
+from app.permissions.access import assert_map_role
 from app.permissions.deps import require_map_role
 from app.routers.graph import _load_graph
 from app.schemas import (
@@ -62,6 +63,8 @@ async def _get_owned_interview(
     row = await session.get(InterviewSession, interview_id)
     if row is None or row.login_id != user:
         raise HTTPException(status_code=404, detail=f"interview {interview_id} not found")
+    # 세션 생성 이후 editor 권한이 회수됐을 수 있어 매 접근마다 재검증 (final review I3)
+    await assert_map_role(session, user, row.map_id, "editor")
     await session.refresh(row, ["messages", "checkpoints", "attachments"])
     return row
 
