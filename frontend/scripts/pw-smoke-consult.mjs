@@ -58,6 +58,9 @@ const run = async () => {
     turnCount += 1;
     r.fulfill({ json: turnCount === 1 ? afterAnswer : afterChoice });
   });
+  await page.route("**/api/notifications*", (r) =>
+    r.fulfill({ json: [] }),
+  );
 
   await page.goto(`${BASE}/maps/${MAP_ID}/consult`);
   await page.waitForSelector('[data-id="interview-panel"]');
