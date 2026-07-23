@@ -105,8 +105,8 @@ FastAPI backend
 | `POST /api/interviews/{id}/turns` | 턴 진행 `{type: answer/choice/confirm/skip, content?, choice_id?}` → 컨설턴트 응답(질문/선택지/확인 카드 + 작업본 그래프) |
 | `POST /api/interviews/{id}/attachments` | 멀티파트 업로드 → 파싱(백그라운드) → 상태 반환. 확장자·MIME·사이즈(≤20MB) 검증 |
 | `POST /api/interviews/{id}/revert` | `{stage}` 체크포인트로 복원 |
-| `POST /api/interviews/{id}/apply` | 작업본을 대상 draft에 적용(graph PUT 경로·checkout 준수·충돌 경고) |
-| `POST /api/interviews/{id}/complete` | 적용 + status=completed + (P3) 기록 인덱싱 훅 |
+| ~~`POST /api/interviews/{id}/apply`~~ | **P1 단순화**: 별도 백엔드 엔드포인트 없음 — 프론트가 `getGraph`+`buildGraphFromAiProposal`(CSV/AI 병합 로직 재사용)+`saveGraph`(graph PUT)로 작업본을 draft에 직접 병합 |
+| `POST /api/interviews/{id}/complete` | **P1**: 적용(위 프론트 병합) 이후 호출 — 백엔드는 상태 전이만(status=completed). (P3) 기록 인덱싱 훅은 향후 |
 | `DELETE /api/interviews/{id}` | 세션 포기(abandoned) — 데이터는 보존 |
 
 ## 6. 프론트 UX
@@ -116,13 +116,13 @@ FastAPI backend
 **레이아웃**
 - 헤더: 맵 이름 · 7스테이지 진행 인디케이터(현재 단계 하이라이트) · Exit(세션은 자동 보존)
 - 좌 패널(~440px): 대화 스트림 + 입력창. 메시지 종류별 카드 렌더
-- 우 영역: 읽기전용 React Flow 프리뷰(비교 화면 read-only 선례 재사용) — 작업본 그래프, 이번 턴 변경 노드는 `ring-added` 토큰 하이라이트, fitView
+- 우 영역: 읽기전용 React Flow 프리뷰(비교 화면 read-only 선례 재사용) — 작업본 그래프, 이번 턴 변경 노드는 `diffStatus("added")` → `border-added`(비교화면 `diffNodeStyle` 재사용, 테두리 `--color-added`) 하이라이트, fitView
 - 하단: 체크포인트 칩(완료 스테이지 뱃지) — 클릭 → 복원 확인 모달(ConfirmDialog 컨벤션)
 
 **카드 종류**
 - 질문 카드: 일반 서술 질문 + 텍스트 입력
 - **선택지 카드**: N안 각각 미니 읽기전용 React Flow 프리뷰(정적·인터랙션 없음) + 제목/설명 + "이 안으로" 버튼. "직접 설명할게요" 텍스트 폴백 항상 제공
-- 확인 카드(적응 스킵): 문서/기존 맵에서 추출한 facts 요약 + "맞아요 / 수정할래요"
+- 확인 카드(적응 스킵): **P1은 전용 카드 없이 질문 문구로 대체**(facts 요약을 질문 content에 녹여 "맞아요/수정할래요" 자유 응답 유도) — 전용 확인 카드 UI는 P2
 - (P2) 유사 SP 카드: "유사한 게시 맵이 있습니다 — 서브프로세스 링크로 대체할까요?" + 미니 프리뷰. 수락 시 링크 유일성 규칙(중복 가드) 준수
 - 알림 카드: 파싱 실패·지식기반 참조 불가 등 비차단 공지
 
