@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, NodeTypes } from "@xyflow/react";
 import { CheckCheck, MessageSquarePlus, Undo2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
@@ -14,7 +14,7 @@ import {
   completeInterview, getApiErrorDetail, getGraph, postInterviewRevert, saveGraph,
   type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
-import { addedNodeKeys, layoutWorkingGraph, INTERVIEW_STAGES } from "@/lib/interview";
+import { addedNodeKeys, distinctiveNodeKeys, layoutWorkingGraph, INTERVIEW_STAGES } from "@/lib/interview";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
 import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
@@ -120,9 +120,8 @@ function PreviewCanvas({
         onNodeMouseEnter={handleNodeEnter}
         onNodeMouseLeave={handleNodeLeave}
         onMoveStart={() => setHovered(null)}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1.5} color="var(--color-canvas-dot)" />
-      </ReactFlow>
+      />
+      {/* 점 격자 미사용 — 프리뷰는 민무늬 캔버스(실사용 피드백 2026-07-24) */}
       {hovered ? (
         <button
           className="absolute z-30 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary shadow-md hover:bg-accent-tint hover:text-accent"
@@ -262,9 +261,19 @@ export function InterviewPreview({
                 className="absolute inset-0 z-20 flex items-center justify-center gap-4 overflow-auto bg-ink/10 p-6"
                 data-id="iv-choice-overlay"
               >
-                {choices.map((option) => (
-                  <ChoiceWindow key={option.id} option={option} disabled={busy} onChoose={onChoose} />
-                ))}
+                {(() => {
+                  // 복수 안일 때 안 간 차이 노드(모든 안에 공통이 아닌 제목)를 하이라이트
+                  const highlight = distinctiveNodeKeys(choices);
+                  return choices.map((option) => (
+                    <ChoiceWindow
+                      key={option.id}
+                      option={option}
+                      disabled={busy}
+                      onChoose={onChoose}
+                      highlight={highlight.get(option.id) ?? new Set()}
+                    />
+                  ));
+                })()}
               </div>
             ) : null}
           </div>

@@ -45,6 +45,8 @@ export default function ConsultPage() {
   const [mapName, setMapName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 낙관적 사용자 메시지 — 서버 응답 전에 먼저 표시(실패 시 유지 → Retry로 재전송)
+  const [pending, setPending] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null); // 403/503 등 진입 불가
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const lastTurnRef = useRef<{ type: "answer" | "choice"; content?: string; choice_id?: string } | null>(null);
@@ -109,8 +111,14 @@ export default function ConsultPage() {
     lastTurnRef.current = turn;
     setBusy(true);
     setError(null);
+    setPending(
+      turn.type === "choice"
+        ? (choices?.find((o) => o.id === turn.choice_id)?.title ?? "Selected an option")
+        : (turn.content ?? ""),
+    );
     try {
       setInterview(await postInterviewTurn(interview.id, turn));
+      setPending(null); // 서버 상태에 실제 메시지가 포함됨 — 낙관적 표시 제거
       lastTurnRef.current = null; // 성공한 턴은 Retry 재생 대상에서 제외 — 첨부 업로드 실패 시 중복 제출 방지
     } catch (err) {
       setError(getApiErrorDetail(err) || "AI request failed.");
@@ -212,6 +220,7 @@ export default function ConsultPage() {
               interview={interview}
               busy={busy}
               error={error}
+              pending={pending}
               hasChoices={choices !== null}
               onSend={(content) => runTurn({ type: "answer", content })}
               onRetry={() => lastTurnRef.current && runTurn(lastTurnRef.current)}

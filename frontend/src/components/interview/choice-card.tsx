@@ -4,7 +4,7 @@
 // 부모(InterviewPreview)의 NodeActionsContext 안에서 렌더 — ProcessNode 요구 context 충족.
 
 import { useEffect, useMemo } from "react";
-import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { NodeTypes } from "@xyflow/react";
 import { Check } from "lucide-react";
 
@@ -19,13 +19,15 @@ interface ChoiceWindowProps {
   option: ChoiceOption;
   disabled: boolean;
   onChoose: (id: string) => void;
+  // 다른 안에는 없는 이 안만의 노드 키 — diffStatus 하이라이트(복수 안 비교용)
+  highlight: Set<string>;
 }
 
-function ChoiceCanvas({ option }: { option: ChoiceOption }) {
+function ChoiceCanvas({ option, highlight }: { option: ChoiceOption; highlight: Set<string> }) {
   const { nodes, edges } = useMemo(() => {
-    const laid = layoutWorkingGraph(option.graph, new Set());
+    const laid = layoutWorkingGraph(option.graph, highlight);
     return { nodes: laid.nodes, edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })) };
-  }, [option.graph]);
+  }, [option.graph, highlight]);
   const { fitView } = useReactFlow();
   useEffect(() => {
     if (nodes.length > 0) fitView({ duration: 300, padding: 0.15 });
@@ -47,13 +49,11 @@ function ChoiceCanvas({ option }: { option: ChoiceOption }) {
       zoomOnScroll={false}
       zoomOnPinch
       zoomActivationKeyCode={["Control", "Meta"]}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={16} size={1.5} color="var(--color-canvas-dot)" />
-    </ReactFlow>
+    />
   );
 }
 
-export function ChoiceWindow({ option, disabled, onChoose }: ChoiceWindowProps) {
+export function ChoiceWindow({ option, disabled, onChoose, highlight }: ChoiceWindowProps) {
   return (
     <div
       className="flex h-[min(420px,70%)] w-[min(440px,42%)] min-w-72 shrink-0 flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
@@ -67,7 +67,7 @@ export function ChoiceWindow({ option, disabled, onChoose }: ChoiceWindowProps) 
       </div>
       <div className="min-h-0 flex-1 bg-canvas">
         <ReactFlowProvider>
-          <ChoiceCanvas option={option} />
+          <ChoiceCanvas option={option} highlight={highlight} />
         </ReactFlowProvider>
       </div>
       <div className="border-t border-hairline p-2">

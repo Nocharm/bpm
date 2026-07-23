@@ -18,6 +18,8 @@ interface InterviewPanelProps {
   interview: InterviewState;
   busy: boolean;
   error: string | null;
+  // 서버 반영 전의 낙관적 사용자 메시지 — 실패 시에도 유지되어 Retry 재전송 대상을 보여준다
+  pending: string | null;
   hasChoices: boolean;
   onSend: (content: string) => void;
   onRetry: () => void;
@@ -26,7 +28,7 @@ interface InterviewPanelProps {
 }
 
 export function InterviewPanel({
-  interview, busy, error, hasChoices, onSend, onRetry, onAttach, onDeleteAttachment,
+  interview, busy, error, pending, hasChoices, onSend, onRetry, onAttach, onDeleteAttachment,
 }: InterviewPanelProps) {
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
@@ -44,7 +46,7 @@ export function InterviewPanel({
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [live.length, busy]);
+  }, [live.length, busy, pending]);
 
   // 프리뷰 노드 멘션 수신 — setState는 이벤트 핸들러 안에서만 (react-hooks/set-state-in-effect 준수)
   useEffect(() => {
@@ -91,6 +93,15 @@ export function InterviewPanel({
             )}
           </li>
         ))}
+        {pending !== null ? (
+          <li data-id="iv-pending">
+            <div className="flex justify-end">
+              <div className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-xs bg-accent-tint px-3 py-2 text-caption text-ink opacity-70">
+                {pending}
+              </div>
+            </div>
+          </li>
+        ) : null}
         {activeChoices && hasChoices ? (
           <li
             className="ml-7 flex items-center gap-2 rounded-md border border-accent-tint-border bg-accent-tint/50 px-3 py-2 text-caption text-ink-secondary"

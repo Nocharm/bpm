@@ -75,3 +75,31 @@ export function layoutWorkingGraph(
   }));
   return autoLayoutFlow(nodes, edges, "LR");
 }
+
+
+// 복수 제안 간 차이 노드 — 모든 안에 공통으로 등장하지 않는 제목의 노드 키(안별) → 프리뷰 하이라이트.
+// 안마다 드래프터가 독립 생성이라 키는 비교 불가 — 제목(트림)으로 동질성 판단.
+export function distinctiveNodeKeys(options: ChoiceOption[]): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>();
+  if (options.length < 2) {
+    for (const option of options) result.set(option.id, new Set());
+    return result;
+  }
+  const titleCount = new Map<string, number>();
+  for (const option of options) {
+    for (const title of new Set(option.graph.nodes.map((n) => n.title.trim()))) {
+      titleCount.set(title, (titleCount.get(title) ?? 0) + 1);
+    }
+  }
+  for (const option of options) {
+    result.set(
+      option.id,
+      new Set(
+        option.graph.nodes
+          .filter((n) => (titleCount.get(n.title.trim()) ?? 0) < options.length)
+          .map((n) => n.key),
+      ),
+    );
+  }
+  return result;
+}

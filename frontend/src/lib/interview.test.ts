@@ -5,6 +5,7 @@ import {
   INTERVIEW_STAGES,
   addedNodeKeys,
   choiceOptionsOf,
+  distinctiveNodeKeys,
   layoutWorkingGraph,
   stageIndex,
 } from "./interview";
@@ -62,5 +63,31 @@ describe("layoutWorkingGraph", () => {
     expect(a?.data.diffStatus).toBe("added");
     expect(typeof a?.position.x).toBe("number");
     expect(layoutWorkingGraph(null, new Set()).nodes).toHaveLength(0);
+  });
+});
+
+describe("distinctiveNodeKeys", () => {
+  const opt = (id: string, titles: string[]) => ({
+    id, title: id, summary: "",
+    graph: {
+      nodes: titles.map((t, i) => ({
+        key: `${id}-n${i}`, title: t, node_type: "process",
+        description: "", attributes: null, group_key: null,
+      })),
+      edges: [], groups: [],
+    },
+  });
+
+  it("모든 안에 공통인 제목은 제외, 다른 부분만 안별로 하이라이트", () => {
+    const a = opt("opt-1", ["시작", "요청서 작성", "끝"]);
+    const b = opt("opt-2", ["시작", "요청서 작성", "검토 승인", "끝"]);
+    const keys = distinctiveNodeKeys([a, b]);
+    expect(keys.get("opt-1")).toEqual(new Set());
+    expect(keys.get("opt-2")).toEqual(new Set(["opt-2-n2"]));
+  });
+
+  it("단일 안이면 하이라이트 없음", () => {
+    const a = opt("opt-1", ["시작", "끝"]);
+    expect(distinctiveNodeKeys([a]).get("opt-1")).toEqual(new Set());
   });
 });
