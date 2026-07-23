@@ -21,7 +21,7 @@ export interface SectionPanelProps {
 function handleDragStart(e: React.DragEvent<HTMLDivElement>, s: SectionEntry) {
   e.dataTransfer.effectAllowed = "copy";
   e.dataTransfer.setData("application/bpm-section", s.anchor);
-  e.dataTransfer.setData("application/bpm-section-number", s.number || s.title);
+  e.dataTransfer.setData("application/bpm-section-number", s.number);
   e.dataTransfer.setData("application/bpm-section-title", s.title);
 }
 

@@ -4087,6 +4087,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       const anchor = e.dataTransfer.getData("application/bpm-section");
       if (!anchor) return;
       const number = e.dataTransfer.getData("application/bpm-section-number");
+      const title = e.dataTransfer.getData("application/bpm-section-title");
+      // 라벨 = "번호 제목" — 내보내기 시 첫 공백토큰(번호)만 앵커 링크, 제목은 plain (design §8)
+      const label = [number, title].filter(Boolean).join(" ");
       pushHistory();
       const id = genId();
       const point = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
@@ -4099,7 +4102,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           position,
           selected: true,
           className: "bpm-node-flash",
-          data: buildNodeData("section", number, { section_anchor: anchor }),
+          data: buildNodeData("section", label, { section_anchor: anchor }),
         },
       ]);
       setSelectedId(id);
