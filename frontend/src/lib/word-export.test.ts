@@ -117,14 +117,14 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
     sourceId: "a", targetId: "b", label: "적합", sourceSide: "right", targetSide: "left",
   };
 
-  it("어긋난 노드는 bentConnector3 + 화살촉 + stCxn/endCxn(도형 연결)으로 낸다", async () => {
+  it("어긋난 노드는 bentConnector3 + 화살촉, cxn 스냅 없이 explicit 좌표로 낸다", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [edgeAB]));
     const doc = parts["word/document.xml"];
     expect(doc).toContain('prst="bentConnector3"'); // A·B 어긋남 → 꺾은선
     expect(doc).toContain('<a:tailEnd type="triangle"/>');
-    // 도형 연결(Word에서 이동 시 선 따라옴) — right=idx2, left=idx0 (left0/top1/right2/bottom3)
-    expect(doc).toContain('<a:stCxn id="2" idx="2"/>');
-    expect(doc).toContain('<a:endCxn id="3" idx="0"/>');
+    // cxn 스냅 없음 — 빈 cNvCnPr, off/ext(변 중점 사이)가 선 끝점(화면 위치 그대로)
+    expect(doc).toContain("<wps:cNvCnPr/>");
+    expect(doc).not.toContain("<a:stCxn");
   });
 
   it("정렬된 노드(같은 x)는 straightConnector1로 낸다", async () => {
@@ -167,7 +167,7 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
       sourceId: "a", targetId: "ghost", sourceSide: "right", targetSide: "left",
     };
     const parts = await unzipDocx(buildDocx([nodeWithUrl], [dangling]));
-    expect(parts["word/document.xml"]).not.toContain("<a:stCxn"); // 커넥터 자체가 안 생김
+    expect(parts["word/document.xml"]).not.toContain('name="edge-'); // 커넥터 도형 자체가 안 생김
   });
 });
 
