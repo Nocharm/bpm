@@ -178,6 +178,10 @@ function buildNodeShape(
   );
 }
 
+// 프리셋 cxnLst 연결점 인덱스 — ECMA flowChartProcess 기준 left0/top1/right2/bottom3.
+// stCxn/endCxn에 쓰여 Word에서 노드를 옮겨도 선이 따라온다. 특정 프리셋이 다르게 붙으면 이 매핑만 조정.
+const SIDE_TO_CXN_IDX: Record<HandleSide, number> = { left: 0, top: 1, right: 2, bottom: 3 };
+
 // 노드 변의 중앙점 (캔버스 px)
 function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: number } {
   switch (side) {
@@ -198,6 +202,8 @@ function buildConnectorShape(
   shapeId: number,
   sourceNode: WordExportNode,
   targetNode: WordExportNode,
+  sourceShapeId: number,
+  targetShapeId: number,
   layout: Layout,
 ): string {
   const start = getSideAnchor(sourceNode, edge.sourceSide);
@@ -206,19 +212,21 @@ function buildConnectorShape(
   const flipV = end.y < start.y;
   const off = { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y) };
   const ext = { w: Math.abs(end.x - start.x), h: Math.abs(end.y - start.y) };
+  // 두 접점이 같은 x/y(정렬)면 직선, 어긋나면 꺾은선(elbow). 직선은 폭 0 박스에서도 안 무너진다.
+  const preset = start.x === end.x || start.y === end.y ? "straightConnector1" : "bentConnector3";
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="edge-${shapeId}"/>` +
-    // 접점 스냅(stCxn/endCxn) 제거 — 프리셋 cxn 인덱스가 변 중점과 어긋나 선이 꼭지점에 안 붙던 문제 해결.
-    // 아래 off/ext(getSideAnchor 변 중점 사이)가 선 끝점 → 정적 선이지만 항상 도형 변에 붙는다.
-    "<wps:cNvCnPr/>" +
+    // stCxn/endCxn — 도형에 실제 연결(Word에서 노드 이동 시 선이 따라옴). idx=SIDE_TO_CXN_IDX.
+    "<wps:cNvCnPr>" +
+    `<a:stCxn id="${sourceShapeId}" idx="${SIDE_TO_CXN_IDX[edge.sourceSide]}"/>` +
+    `<a:endCxn id="${targetShapeId}" idx="${SIDE_TO_CXN_IDX[edge.targetSide]}"/>` +
+    "</wps:cNvCnPr>" +
     "<wps:spPr>" +
     `<a:xfrm${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}>` +
     `<a:off x="${layout.toX(off.x)}" y="${layout.toY(off.y)}"/>` +
     `<a:ext cx="${layout.toLen(ext.w)}" cy="${layout.toLen(ext.h)}"/></a:xfrm>` +
-    // straightConnector1 — 끝점이 off/ext 박스 두 대각 꼭지점(=변 중점)에 정확히 놓여 노드에 붙는다.
-    // (bentConnector3는 정렬 노드에서 폭 0 박스로 꺾임이 붕괴해 선이 떨어져 보였음)
-    '<a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>' +
+    `<a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>` +
     "<a:noFill/>" +
     '<a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>' +
     '<a:tailEnd type="triangle"/></a:ln>' +
@@ -362,7 +370,7 @@ export function buildFlowchartDrawing(
       continue;
     }
     shapes.push(
-      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, layout),
+      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, sourceShapeId, targetShapeId, layout),
     );
     if (edge.label) {
       shapes.push(buildEdgeLabelShape(edge.label, nextShapeId++, sourceNode, targetNode, edge, layout));
