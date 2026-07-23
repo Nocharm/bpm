@@ -117,10 +117,10 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
     sourceId: "a", targetId: "b", label: "적합", sourceSide: "right", targetSide: "left",
   };
 
-  it("bentConnector3 + 화살촉으로 변 중점 사이를 직결한다(접점 스냅 제거)", async () => {
+  it("straightConnector1 + 화살촉으로 변 중점 사이를 직결한다(접점 스냅 제거)", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [edgeAB]));
     const doc = parts["word/document.xml"];
-    expect(doc).toContain('prst="bentConnector3"');
+    expect(doc).toContain('prst="straightConnector1"');
     expect(doc).toContain('<a:tailEnd type="triangle"/>');
     // 접점 스냅 제거 — 빈 cNvCnPr, off/ext(getSideAnchor 변 중점 사이)가 선 끝점이라 꼭지점에 붙는다.
     expect(doc).toContain("<wps:cNvCnPr/>");
@@ -159,7 +159,7 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
       sourceId: "a", targetId: "ghost", sourceSide: "right", targetSide: "left",
     };
     const parts = await unzipDocx(buildDocx([nodeWithUrl], [dangling]));
-    expect(parts["word/document.xml"]).not.toContain("bentConnector3");
+    expect(parts["word/document.xml"]).not.toContain("straightConnector1");
   });
 });
 

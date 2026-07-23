@@ -254,6 +254,10 @@ const MIN_ZOOM = 0.2; // 최소 줌 — translateExtent 우하단 확장(pane/MI
 // 3cm≈113.4px(가로) · 1.5cm≈56.7px(세로). 정확 수치·엣지 라우팅은 시각 검토로 튜닝 예정(design §7, F1 수동 확인).
 const WORD_SHAPE_W = 1080000 / 9525; // 3cm(너비) 정확값 — ×9525(EMU_PER_PX)=1,080,000 EMU
 const WORD_SHAPE_H = 540000 / 9525; // 1.5cm(높이) — 540,000 EMU
+// Word 산출물 1페이지 가용영역(A4·여백 2.5cm 제외 = word-export PAGE_*_EMU) − 내보내기 패딩(2×20px).
+// 캔버스에 이 크기의 경계를 그려, 노드가 이 안이면 산출물이 1페이지에 들어감을 알린다(크기 감각).
+const WORD_PAGE_W_PX = 5760720 / 9525 - 40; // ≈ 565px
+const WORD_PAGE_H_PX = 8892540 / 9525 - 40; // ≈ 894px
 // 엣지 라벨(분기 Yes/No/기타 등) — 디자인 토큰으로 알약 스타일(서피스 배경 + hairline 테두리 + ink 텍스트)
 const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
@@ -7750,6 +7754,37 @@ function MapEditor({ mapId }: { mapId: number }) {
                           size={1.8}
                           color="var(--color-canvas-dot)"
                         />
+                      )}
+                      {/* Word 맵 1페이지 경계 — 크기 감각용(노드가 이 안이면 산출물 1페이지). ViewportPortal=flow 좌표(팬/줌 정합). */}
+                      {isWordMap && (
+                        <ViewportPortal>
+                          <div
+                            data-id="word-page-boundary"
+                            style={{
+                              position: "absolute",
+                              left: 0,
+                              top: 0,
+                              width: WORD_PAGE_W_PX,
+                              height: WORD_PAGE_H_PX,
+                              border: "1.5px dashed var(--color-accent)",
+                              borderRadius: 2,
+                              pointerEvents: "none",
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: "absolute",
+                                top: 3,
+                                left: 5,
+                                fontSize: 11,
+                                color: "var(--color-accent)",
+                                opacity: 0.65,
+                              }}
+                            >
+                              1 page
+                            </span>
+                          </div>
+                        </ViewportPortal>
                       )}
                       {/* 미니맵 — 줌아웃으로 통째로 채워지면 페이드 아웃(줌인 복귀). 패널 자체에 opacity를 줘
                           z-index(패널 레이어)를 보존 → 노드/캔버스 위·클릭(시점 이동) 유효. 뷰포트 채움 오버레이 포함. */}

@@ -216,7 +216,9 @@ function buildConnectorShape(
     `<a:xfrm${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}>` +
     `<a:off x="${layout.toX(off.x)}" y="${layout.toY(off.y)}"/>` +
     `<a:ext cx="${layout.toLen(ext.w)}" cy="${layout.toLen(ext.h)}"/></a:xfrm>` +
-    '<a:prstGeom prst="bentConnector3"><a:avLst/></a:prstGeom>' +
+    // straightConnector1 — 끝점이 off/ext 박스 두 대각 꼭지점(=변 중점)에 정확히 놓여 노드에 붙는다.
+    // (bentConnector3는 정렬 노드에서 폭 0 박스로 꺾임이 붕괴해 선이 떨어져 보였음)
+    '<a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>' +
     "<a:noFill/>" +
     '<a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>' +
     '<a:tailEnd type="triangle"/></a:ln>' +
