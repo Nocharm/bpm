@@ -59,4 +59,9 @@ describe("formatDocStamp", () => {
     expect(formatDocStamp(null)).toBeNull();
     expect(formatDocStamp(undefined)).toBeNull();
   });
+
+  it("uses KST timezone regardless of browser locale", () => {
+    // UTC 2026-07-23T15:30:00Z = KST 2026-07-24T00:30:00 (next day after midnight)
+    expect(formatDocStamp("2026-07-23T15:30:00Z")).toBe("2026-07-24");
+  });
 });

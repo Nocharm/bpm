@@ -35,11 +35,14 @@ export function getStaleSectionNodeIds(
   return stale;
 }
 
-// 타임스탬프 표시 — 홈 행/상세 카드는 날짜(YYYY-MM-DD)면 충분하다.
+// 타임스탬프 표시 — 홈 행/상세 카드는 날짜(YYYY-MM-DD)면 충분. KST 고정(lib/datetime.ts 규칙 — 브라우저 tz 무관).
 export function formatDocStamp(value: string | null | undefined): string | null {
   if (!value) return null;
-  const d = new Date(value);
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  // en-CA locale renders YYYY-MM-DD directly
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
 }
