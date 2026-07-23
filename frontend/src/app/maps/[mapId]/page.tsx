@@ -762,6 +762,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [mapMode, setMapMode] = useState<string>("normal");
   const [docName, setDocName] = useState<string>("");
   const [docSections, setDocSections] = useState<SectionEntry[]>([]);
+  const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
   const isWordMap = mapMode === "word";
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
@@ -4830,45 +4831,69 @@ function MapEditor({ mapId }: { mapId: number }) {
     [buildExportFileName],
   );
 
-  const handleExportWord = () => {
+  // Word 내보내기/완결문서 생성 공용 — 캔버스 노드·엣지를 export 모델로(word맵은 고정크기+섹션앵커).
+  const buildWordExportModel = () => {
+    const exportNodes = nodesRef.current.map((node) => {
+      const size = isWordMap
+        ? { w: WORD_SHAPE_W, h: WORD_SHAPE_H }
+        : nodeSizeOf(node.data.nodeType);
+      return {
+        id: node.id,
+        title: node.data.label,
+        nodeType: node.data.nodeType,
+        x: node.position.x,
+        y: node.position.y,
+        w: size.w,
+        h: size.h,
+        url: node.data.url,
+        urlLabel: node.data.urlLabel,
+        sectionAnchor: node.data.section_anchor,
+      };
+    });
+    const exportEdges = edgesRef.current.map((edge) => ({
+      sourceId: edge.source,
+      targetId: edge.target,
+      label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
+      sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
+      targetSide: sideFromHandleId(edge.targetHandle, "left"),
+    }));
+    return { exportNodes, exportEdges };
+  };
+
+  const wordDocFileName = (suffix: string) => {
     const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
     const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[-:T]/g, "")
-      .slice(0, 14);
+    const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+    return `${sanitize(mapName)}_${sanitize(versionLabel)}${suffix}_${stamp}.docx`;
+  };
+
+  const handleExportWord = () => {
     try {
-      const exportNodes = nodesRef.current.map((node) => {
-        const size = isWordMap
-          ? { w: WORD_SHAPE_W, h: WORD_SHAPE_H }
-          : nodeSizeOf(node.data.nodeType);
-        return {
-          id: node.id,
-          title: node.data.label,
-          nodeType: node.data.nodeType,
-          x: node.position.x,
-          y: node.position.y,
-          w: size.w,
-          h: size.h,
-          url: node.data.url,
-          urlLabel: node.data.urlLabel,
-          sectionAnchor: node.data.section_anchor,
-        };
-      });
-      const exportEdges = edgesRef.current.map((edge) => ({
-        sourceId: edge.source,
-        targetId: edge.target,
-        label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
-        sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
-        targetSide: sideFromHandleId(edge.targetHandle, "left"),
-      }));
-      exportCanvasWord(
-        exportNodes,
-        exportEdges,
-        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.docx`,
-      );
+      const { exportNodes, exportEdges } = buildWordExportModel();
+      exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.exportWord"));
+    }
+  };
+
+  // 완결 문서 생성 — 사용자가 원본 .docx 선택 → 사본에 합성 책갈피 주입 + 끝에 순서도 페이지 → 다운로드.
+  const handleCompleteDocPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 재선택 허용
+    if (!file) return;
+    try {
+      const originalDocx = new Uint8Array(await file.arrayBuffer());
+      const { exportNodes, exportEdges } = buildWordExportModel();
+      const { generateCompleteWordDoc } = await import("@/lib/word-doc-generator");
+      const blob = await generateCompleteWordDoc(originalDocx, exportNodes, exportEdges);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = wordDocFileName("_complete");
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Complete document generation failed");
     }
   };
 
@@ -8794,15 +8819,34 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </button>
                     </div>
                     {isWordMap && (
-                      <button
-                        type="button"
-                        data-id="inspector-export-word"
-                        onClick={handleExportWord}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
-                      >
-                        <FileText size={16} strokeWidth={1.5} />
-                        {t("inspector.exportWord")}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          data-id="inspector-generate-complete-doc"
+                          onClick={() => completeDocPickerRef.current?.click()}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          Generate complete document
+                        </button>
+                        <button
+                          type="button"
+                          data-id="inspector-export-word"
+                          onClick={handleExportWord}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          {t("inspector.exportWord")}
+                        </button>
+                        <input
+                          ref={completeDocPickerRef}
+                          type="file"
+                          accept=".docx"
+                          className="hidden"
+                          onChange={handleCompleteDocPicked}
+                        />
+                      </>
                     )}
                   </div>
                 }
