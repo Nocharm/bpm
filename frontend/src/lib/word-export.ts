@@ -178,6 +178,10 @@ function buildNodeShape(
   );
 }
 
+// 프리셋 cxnLst 연결점 인덱스 — ECMA flowChartProcess 기준 left0/top1/right2/bottom3.
+// stCxn/endCxn에 쓰여 Word에서 노드를 옮겨도 선이 따라온다. 특정 프리셋이 다르게 붙으면 이 매핑만 조정.
+const SIDE_TO_CXN_IDX: Record<HandleSide, number> = { left: 0, top: 1, right: 2, bottom: 3 };
+
 // 노드 변의 중앙점 (캔버스 px)
 function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: number } {
   switch (side) {
@@ -192,13 +196,15 @@ function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: 
   }
 }
 
-// 엣지 1개 → 연결선. 화면 엣지의 변 중점(getSideAnchor) 사이를 explicit off/ext로 직접 잇는다 —
-// 화면 위치를 그대로 옮긴다. cxn 스냅은 안 씀(프리셋별 접점 idx가 제각각이라 오히려 어긋남). 도형 이동 시엔 안 따라옴.
+// 엣지 1개 → 연결선. stCxn/endCxn으로 도형에 실제 연결 → Word에서 노드를 옮기면 선이 따라온다(cxn 최우선).
+// 접점 idx는 SIDE_TO_CXN_IDX(프리셋 cxnLst 순서). 변(위/아래·좌/우)은 호출부에서 노드 위치로 유도됨.
 function buildConnectorShape(
   edge: WordExportEdge,
   shapeId: number,
   sourceNode: WordExportNode,
   targetNode: WordExportNode,
+  sourceShapeId: number,
+  targetShapeId: number,
   layout: Layout,
 ): string {
   const start = getSideAnchor(sourceNode, edge.sourceSide);
@@ -212,7 +218,10 @@ function buildConnectorShape(
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="edge-${shapeId}"/>` +
-    "<wps:cNvCnPr/>" +
+    "<wps:cNvCnPr>" +
+    `<a:stCxn id="${sourceShapeId}" idx="${SIDE_TO_CXN_IDX[edge.sourceSide]}"/>` +
+    `<a:endCxn id="${targetShapeId}" idx="${SIDE_TO_CXN_IDX[edge.targetSide]}"/>` +
+    "</wps:cNvCnPr>" +
     "<wps:spPr>" +
     `<a:xfrm${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}>` +
     `<a:off x="${layout.toX(off.x)}" y="${layout.toY(off.y)}"/>` +
@@ -361,7 +370,7 @@ export function buildFlowchartDrawing(
       continue;
     }
     shapes.push(
-      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, layout),
+      buildConnectorShape(edge, nextShapeId++, sourceNode, targetNode, sourceShapeId, targetShapeId, layout),
     );
     if (edge.label) {
       shapes.push(buildEdgeLabelShape(edge.label, nextShapeId++, sourceNode, targetNode, edge, layout));
