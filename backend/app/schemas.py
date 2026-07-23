@@ -27,6 +27,7 @@ class SectionEntryIn(BaseModel):
     title: str = Field(default="", max_length=500)
     number: str = Field(default="", max_length=50)
     level: int = 0
+    language: str = Field(default="", max_length=8)  # 이중언어 문서 필터용 "ko"|"en"|""
 
 
 class MapCreate(BaseModel):

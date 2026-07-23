@@ -18,6 +18,8 @@ export interface SectionPanelProps {
   onClose: () => void;
 }
 
+const LANG_LABEL: Record<string, string> = { ko: "KO", en: "EN" };
+
 function handleDragStart(e: React.DragEvent<HTMLDivElement>, s: SectionEntry) {
   e.dataTransfer.effectAllowed = "copy";
   e.dataTransfer.setData("application/bpm-section", s.anchor);
@@ -27,6 +29,7 @@ function handleDragStart(e: React.DragEvent<HTMLDivElement>, s: SectionEntry) {
 
 export function SectionPanel({ sections, docName, onReimport, onClose }: SectionPanelProps) {
   const [query, setQuery] = useState("");
+  const [langFilter, setLangFilter] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   // 패널은 열릴 때마다 새로 마운트되므로 모든 오픈 경로에서 검색창에 포커스된다.
@@ -34,17 +37,27 @@ export function SectionPanel({ sections, docName, onReimport, onClose }: Section
     searchRef.current?.focus();
   }, []);
 
+  // 문서에 존재하는 언어(스타일명 유래) — 2개 이상일 때만 토글 노출(이중언어 SOP).
+  const langs = useMemo(
+    () => Array.from(new Set(sections.map((s) => s.language).filter(Boolean))),
+    [sections],
+  );
+  const byLang = useMemo(
+    () => (langFilter ? sections.filter((s) => s.language === langFilter) : sections),
+    [sections, langFilter],
+  );
+
   // 부분일치+초성+로마자+시퀀스 매칭(filterByQuery) — 번호·제목 대상, 랭크순 정렬.
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q) return sections;
-    return filterByQuery(sections, q, (s) => [
+    if (!q) return byLang;
+    return filterByQuery(byLang, q, (s) => [
       { field: "number", text: s.number },
       { field: "title", text: s.title },
     ]).map((h) => h.item);
-  }, [sections, query]);
+  }, [byLang, query]);
   // 25개씩 증분 렌더 — 카탈로그가 커도 패널 오픈 부하 없음
-  const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
+  const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query + langFilter);
 
   return (
     <div
@@ -93,6 +106,33 @@ export function SectionPanel({ sections, docName, onReimport, onClose }: Section
           />
         </div>
       </div>
+
+      {/* language filter — 이중언어 문서(스타일명 Kor/Eng)에서만 노출 */}
+      {langs.length > 1 && (
+        <div className="flex items-center gap-0.5 border-b border-hairline px-2 py-1">
+          <button
+            type="button"
+            onClick={() => setLangFilter("")}
+            className={`flex-1 rounded-xs px-1 py-0.5 text-fine ${
+              langFilter === "" ? "bg-accent-tint text-accent" : "text-ink/50 hover:bg-surface-alt"
+            }`}
+          >
+            All
+          </button>
+          {langs.map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setLangFilter(l)}
+              className={`flex-1 rounded-xs px-1 py-0.5 text-fine ${
+                langFilter === l ? "bg-accent-tint text-accent" : "text-ink/50 hover:bg-surface-alt"
+              }`}
+            >
+              {LANG_LABEL[l] ?? l.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* list */}
       <div className="min-h-0 flex-1 overflow-y-auto">

@@ -13,6 +13,7 @@ export interface SectionEntry {
   title: string; // 제목 텍스트(번호는 자동넘버라 런에 없음)
   number: string; // "6.1.1" 등 재구성 번호, 불가 시 ""
   level: number; // 1-based(outlineLvl+1), 미상 0
+  language: string; // 스타일명 접미사에서 유추: "ko" | "en" | "" — 이중언어 문서 필터용
 }
 
 // w 네임스페이스 속성 — 파서가 NS 처리를 안 해도(prefix 유지) 동작하도록 폴백.
@@ -185,7 +186,8 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
       stack[level - 1] = number;
       stack.length = level;
     }
-    out.push({ anchor, title: text, number, level });
+    const language = /kor/i.test(sid) ? "ko" : /eng/i.test(sid) ? "en" : "";
+    out.push({ anchor, title: text, number, level, language });
   }
 
   // TODO(임시 진단, 2026-07-23): 실물 문서 구조 파악용 — 스타일별 감지 레벨·책갈피 보유율 집계.

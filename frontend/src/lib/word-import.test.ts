@@ -131,4 +131,13 @@ describe("parseWordSections", () => {
     expect(out.map((s) => s.number)).toEqual(["1", "1"]);
     expect(out[1].anchor).toBe("_bpmsec1");
   });
+
+  it("스타일명 접미사로 언어를 태그한다 (Kor→ko / Eng→en)", async () => {
+    const xml = doc(
+      heading("SBLText1Kor", ["_Toc1"], "목적") + heading("SBLText1Eng", ["_Toc2"], "Purpose"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.find((s) => s.anchor === "_Toc1")?.language).toBe("ko");
+    expect(out.find((s) => s.anchor === "_Toc2")?.language).toBe("en");
+  });
 });

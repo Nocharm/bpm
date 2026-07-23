@@ -279,5 +279,5 @@ def test_reimport_replaces_catalog(client: TestClient) -> None:
     detail = client.get(f"/api/maps/{map_id}")
     assert detail.json()["doc_name"] == "v2.docx"
     assert detail.json()["doc_sections"] == [
-        {"anchor": "_Toc9", "title": "New", "number": "3", "level": 1}
+        {"anchor": "_Toc9", "title": "New", "number": "3", "level": 1, "language": ""}
     ]
