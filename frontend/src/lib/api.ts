@@ -71,6 +71,9 @@ export interface MapSummary {
   sp_changed_at?: string | null;
   // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
   owning_department?: string | null;
+  // 개정 라이프사이클 타임스탐프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
+  doc_imported_at?: string | null;
+  doc_generated_at?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -79,6 +82,9 @@ export interface MapDetail extends MapSummary {
   mode?: string;
   doc_name?: string;
   doc_sections?: SectionEntry[];
+  // 개정 라이프사이클 타임스탐프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
+  doc_imported_at?: string | null;
+  doc_generated_at?: string | null;
 }
 
 export interface GraphNode {
@@ -269,10 +275,19 @@ export function createMap(
 }
 
 // 승인본(approved/published) 기준 맵 복사 — 새 private 맵의 초기 draft에 그래프 복제 (F12)
-export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
+// convertToNormal: word 맵 승격 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
+export function copyMap(
+  mapId: number,
+  name?: string,
+  opts?: { convertToNormal?: boolean; owningDepartment?: string },
+): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}/copy`, {
     method: "POST",
-    body: JSON.stringify(name ? { name } : {}),
+    body: JSON.stringify({
+      ...(name ? { name } : {}),
+      ...(opts?.convertToNormal ? { convert_to_normal: true } : {}),
+      ...(opts?.owningDepartment ? { owning_department: opts.owningDepartment } : {}),
+    }),
   });
 }
 
@@ -312,6 +327,11 @@ export function setWordDoc(
     method: "PUT",
     body: JSON.stringify(body),
   });
+}
+
+// 완결 문서 생성 성공 기록 — 서버는 doc_generated_at만 스탬프 (design 2026-07-24 §5)
+export function markWordDocGenerated(mapId: number): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/word-doc/generated`, { method: "POST" });
 }
 
 // 이름 변경 요청 — editor는 즉시 적용 대신 pending ApprovalRequest(owner 승인 필요). owner/sysadmin은 updateMap 직접 사용.
