@@ -1,6 +1,6 @@
 // Word 도형 순서도 내보내기 — 노드/엣지를 Word 순정 도형(DrawingML)으로 담은 .docx 생성.
 // OOXML 4파트를 직접 조립한다(docx 라이브러리는 도형 프리셋·연결선 미지원). zip은 fflate.
-// 스타일: 흑백톤 + Arial/바탕체 11pt, 하이퍼링크만 Word 표준 파랑.
+// 스타일: 흑백톤 + Arial/돋움 8pt, 하이퍼링크만 Word 표준 파랑.
 // spec: docs/design/2026-07-11-word-export-design.md
 
 import { strToU8, zipSync } from "fflate";
@@ -103,7 +103,7 @@ function computeLayout(nodes: WordExportNode[], fitToPage = true): Layout {
 function buildRunProps(opts: { bold?: boolean; hyperlink?: boolean }): string {
   return (
     "<w:rPr>" +
-    '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="바탕체" w:cs="Arial"/>' +
+    '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="돋움" w:cs="Arial"/>' +
     (opts.bold ? "<w:b/>" : "") +
     (opts.hyperlink ? `<w:color w:val="${HYPERLINK_BLUE}"/><w:u w:val="single"/>` : "") +
     `<w:sz w:val="${FONT_HALF_PT}"/><w:szCs w:val="${FONT_HALF_PT}"/>` +

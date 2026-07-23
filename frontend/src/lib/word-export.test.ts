@@ -50,11 +50,11 @@ describe("buildDocx — 노드 도형", () => {
     expect(doc).toContain('<a:srgbClr val="000000"/>');
   });
 
-  it("Arial + 바탕체 11pt, 제목 굵게 가운데 정렬", async () => {
+  it("Arial + 돋움 8pt, 가운데 정렬(비볼드)", async () => {
     const parts = await unzipDocx(buildDocx([nodeDecision], noEdges));
     const doc = parts["word/document.xml"];
     expect(doc).toContain('w:ascii="Arial"');
-    expect(doc).toContain('w:eastAsia="바탕체"');
+    expect(doc).toContain('w:eastAsia="돋움"');
     expect(doc).toContain('<w:sz w:val="16"/>'); // 8pt 통일
     expect(doc).toContain('<w:jc w:val="center"/>');
     expect(doc).not.toContain("<w:b/>"); // 볼드 제거(사용자 요청) — 도형 텍스트 비볼드
