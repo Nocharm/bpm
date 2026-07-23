@@ -302,3 +302,21 @@ def test_reimport_stamps_imported_at(client: TestClient) -> None:
     )
     assert r.status_code == 200
     assert r.json()["doc_imported_at"] is not None
+
+
+def test_mark_generated_stamps_timestamp(client: TestClient) -> None:
+    """완결 문서 생성 기록 — 서버는 doc_generated_at만 스탬프 (design 2026-07-24 §5)."""
+    created = client.post(
+        "/api/maps",
+        json={
+            "name": f"gen-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+        },
+    ).json()
+    r = client.post(f"/api/maps/{created['id']}/word-doc/generated")
+    assert r.status_code == 200
+    assert r.json()["doc_generated_at"] is not None
+
+    missing = client.post("/api/maps/999999/word-doc/generated")
+    assert missing.status_code in (403, 404)

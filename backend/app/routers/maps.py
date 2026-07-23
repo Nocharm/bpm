@@ -832,6 +832,26 @@ async def set_word_doc(
     return found_map
 
 
+@router.post(
+    "/{map_id}/word-doc/generated",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def mark_word_doc_generated(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """완결 문서 생성 성공 기록 — 생성은 클라이언트 전용이라 서버는 시각만 스탬프 (design 2026-07-24 §5)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.doc_generated_at = _now()
+    await session.commit()
+    found_map.my_role = await get_effective_role(session, user, map_id)
+    return found_map
+
+
 @router.put(
     "/{map_id}/owning-department",
     response_model=MapOut,
