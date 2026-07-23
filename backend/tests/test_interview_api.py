@@ -1,12 +1,16 @@
 """인터뷰 API — 스키마·세션·턴·체크포인트·권한."""
 
+import asyncio
 import json
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from app import ai_client
+from app.db import SessionLocal
+from app.models import AiUsageEvent
 from app.schemas import InterviewCreateIn, InterviewStateOut, InterviewTurnIn
 from app.settings import settings
 
@@ -121,6 +125,14 @@ def test_interview_turn_ai_failure_is_atomic(client: TestClient, monkeypatch) ->
     assert resp.status_code == 502
     after = len(client.get(f"/api/interviews/{session_id}").json()["messages"])
     assert after == before  # 롤백 — 사용자 메시지도 남지 않음
+
+    # 실패도 계량 — ok=False 이벤트가 남는다 (rollback 후 만료 접근 회귀 방지)
+    async def _count_failed() -> int:
+        async with SessionLocal() as s:
+            rows = (await s.scalars(select(AiUsageEvent).where(AiUsageEvent.ok.is_(False)))).all()
+            return len(rows)
+
+    assert asyncio.run(_count_failed()) >= 1
 
 
 def test_interview_idor_other_user_404(client: TestClient, monkeypatch) -> None:

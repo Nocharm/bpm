@@ -198,6 +198,9 @@ async def post_turn(
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
 
+    # rollback 후 만료 대비 스칼라 선캡처
+    map_id, version_id = interview.map_id, interview.version_id
+
     current = await _load_graph(session, interview.version_id)
     context_text = await _context_text(interview)
     try:
@@ -209,16 +212,17 @@ async def post_turn(
         # 실패도 계량 — 별도 커밋, 실패해도 502 전파 유지
         try:
             session.add(AiUsageEvent(
-                login_id=user, map_id=interview.map_id, version_id=interview.version_id,
+                login_id=user, map_id=map_id, version_id=version_id,
                 model="", kind=None, ok=False,
             ))
             await session.commit()
         except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답을 바꾸지 않는다
+            logger.warning("interview usage event insert failed (failure path)")
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     session.add(AiUsageEvent(
-        login_id=user, map_id=interview.map_id, version_id=interview.version_id,
+        login_id=user, map_id=map_id, version_id=version_id,
         model="", kind="interview", ok=True,
     ))
     interview.updated_at = now_kst()
