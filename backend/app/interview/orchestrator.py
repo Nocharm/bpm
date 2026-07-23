@@ -127,20 +127,43 @@ async def _generate_choices(
     return {"options": options}
 
 
-async def _tone_review(interview: InterviewSession, model: str | None) -> ToneReviewOut | None:
+async def _tone_review(
+    interview: InterviewSession, model: str | None
+) -> list[tuple[str, str]]:
+    """톤 검수 실행 + 개명 적용 — 적용된 (기존 제목, 새 제목) 쌍을 반환(노티스 문구 재료)."""
     if not interview.working_graph or not interview.working_graph.get("nodes"):
-        return None
+        return []
     review = await _ask_json(
         build_tone_messages(interview.lang, interview.working_graph), model, ToneReviewOut
     )
-    if review.renames:
-        by_key = {r.key: r.title for r in review.renames}
-        nodes = [
-            {**n, "title": by_key.get(n["key"], n["title"])}
-            for n in interview.working_graph["nodes"]
-        ]
-        interview.working_graph = {**interview.working_graph, "nodes": nodes}
-    return review
+    if not review.renames:
+        return []
+    # 실존 키만 + 실제로 제목이 바뀌는 것만 적용 — 모델이 지어낸 키/무의미 개명은 무시
+    titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
+    by_key = {
+        r.key: r.title
+        for r in review.renames
+        if r.key in titles and r.title and r.title != titles[r.key]
+    }
+    if not by_key:
+        return []
+    nodes = [
+        {**n, "title": by_key.get(n["key"], n["title"])}
+        for n in interview.working_graph["nodes"]
+    ]
+    interview.working_graph = {**interview.working_graph, "nodes": nodes}
+    return [(titles[key], title) for key, title in by_key.items()]
+
+
+_TONE_NOTICE = {
+    "ko": "노드 제목을 조직 표준('명사+동사')에 맞게 정리했습니다: {items}",
+    "en": "Standardized node titles: {items}",
+}
+
+
+def _tone_notice_text(lang: str, applied: list[tuple[str, str]]) -> str:
+    items = " · ".join(f"'{old}' → '{new}'" for old, new in applied)
+    return _TONE_NOTICE.get(lang, _TONE_NOTICE["ko"]).format(items=items)
 
 
 async def run_turn(
@@ -151,12 +174,8 @@ async def run_turn(
     context_text: str,
     model: str | None = None,
 ) -> None:
-    seq = next_seq(interview)
-    user_content = turn.content or (turn.choice_id or "")
-    _append(db, interview, seq, "user", turn.type, user_content,
-            payload={"choice_id": turn.choice_id} if turn.choice_id else None)
-
-    # 선택 턴 — pending에서 그래프 채택 후 인터뷰어 이어가기
+    # 선택 턴 — 대상 옵션을 먼저 확정(사용자 메시지에 제목을 남기기 위해 append보다 선행)
+    chosen: dict | None = None
     if turn.type == "choice":
         pending = interview.pending_choices or {}
         chosen = next(
@@ -164,6 +183,14 @@ async def run_turn(
         )
         if chosen is None:
             raise TurnError("unknown choice id")
+
+    seq = next_seq(interview)
+    # 대화 이력엔 옵션 id가 아닌 사람이 읽는 제목을 남긴다 (P3 RAG 원재료 겸용)
+    user_content = chosen["title"] if chosen else (turn.content or "")
+    _append(db, interview, seq, "user", turn.type, user_content,
+            payload={"choice_id": turn.choice_id} if turn.choice_id else None)
+
+    if chosen is not None:
         interview.working_graph = chosen["graph"]
         interview.pending_choices = None
         user_input = f"[{chosen['title']}] 안을 선택했습니다. 이어서 진행하세요."
@@ -193,21 +220,25 @@ async def run_turn(
         _append(db, interview, seq + 1, "consultant", "choices", out.message, payload=choices)
         return
 
-    # 스테이지 완료 — 체크포인트 + 톤 검수 + 전이
-    if out.stage_complete or engine.is_stage_complete(interview.current_stage, interview.facts):
+    # 스테이지 완료 — 다음 단계가 있을 때만 체크포인트+톤 검수+전이.
+    # review(마지막)에서는 반복 실행하지 않는다 — 매 턴 stage_complete를 주는 모델이
+    # 같은 자리에서 체크포인트·톤 노티스를 스팸하는 것을 차단 (실사용 회귀 2026-07-23).
+    next_key = engine.next_stage_key(interview.current_stage)
+    is_complete = out.stage_complete or engine.is_stage_complete(
+        interview.current_stage, interview.facts
+    )
+    if is_complete and next_key is not None:
         consultant_msg = _append(db, interview, seq + 1, "consultant", "question", out.message)
-        review = await _tone_review(interview, model)
-        if review and review.renames:
+        applied = await _tone_review(interview, model)
+        if applied:
             _append(db, interview, consultant_msg.seq + 1, "consultant", "notice",
-                    review.message or "노드 명명을 표준에 맞게 정리했습니다.")
+                    _tone_notice_text(interview.lang, applied))
         db.add(InterviewCheckpoint(
             session_id=interview.id, stage=interview.current_stage,
             facts=interview.facts, working_graph=interview.working_graph,
             message_seq=next_seq(interview) - 1,
         ))
-        next_key = engine.next_stage_key(interview.current_stage)
-        if next_key is not None:
-            interview.current_stage = next_key
+        interview.current_stage = next_key
         return
 
     _append(db, interview, seq + 1, "consultant", "question", out.message)

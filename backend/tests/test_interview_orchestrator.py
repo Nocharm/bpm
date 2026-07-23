@@ -131,6 +131,9 @@ def test_choice_turn_applies_graph_and_clears_pending() -> None:
     assert interview.pending_choices is None
     assert interview.working_graph is not None
     assert any(n["key"] == "a" for n in interview.working_graph["nodes"])
+    # 대화 이력엔 옵션 id가 아닌 제목이 남는다 (실사용 회귀 2026-07-23)
+    user_msg = next(m for m in db.added if m.role == "user")
+    assert user_msg.content == "표준안"
 
 
 def test_stage_complete_runs_tone_review_renames() -> None:
@@ -145,6 +148,26 @@ def test_stage_complete_runs_tone_review_renames() -> None:
                       "stage_complete": True}), TONE])
     titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
     assert titles["a"] == "요청서 접수"  # 톤 검수 개명 반영
+    # 노티스는 무슨 개명이 적용됐는지 구체적으로 알린다 (실사용 회귀 2026-07-23)
+    notice = next(m for m in db.added if getattr(m, "kind", "") == "notice")
+    assert "'요청서 작성' → '요청서 접수'" in notice.content
+
+
+def test_review_stage_completion_does_not_spam_checkpoint_or_tone() -> None:
+    """review(마지막)에서 stage_complete여도 체크포인트·톤 검수 반복 금지 (실사용 회귀 2026-07-23)."""
+    db = _FakeDb()
+    graph = json.loads(DRAFT)
+    graph.pop("kind", None)
+    interview = _session(current_stage="review", working_graph=graph, facts={})
+    # 스크립트 응답이 1개뿐 — 톤 검수가 호출되면 queue 고갈로 실패했을 것
+    _run(db, interview,
+         InterviewTurnIn(type="answer", content="좋아요 이대로 확정"),
+         [json.dumps({"message": "검토 완료입니다. 우측 하단 Apply로 적용하세요.",
+                      "stage_complete": True})])
+    assert interview.current_stage == "review"
+    assert [type(o).__name__ for o in db.added if type(o).__name__ == "InterviewCheckpoint"] == []
+    kinds = [m.kind for m in db.added]
+    assert kinds == ["answer", "question"]
 
 
 def test_invalid_ai_json_retries_then_turn_error() -> None:

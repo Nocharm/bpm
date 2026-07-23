@@ -45,6 +45,17 @@ logger = logging.getLogger(__name__)
 # 파싱 직렬화 — 무거운 파싱이 동시에 몰리지 않게 1개씩 (스펙 §4 백그라운드 직렬화의 단순화)
 _parse_lock = asyncio.Lock()
 
+_ATTACH_NOTICE = {
+    "parsed": {
+        "ko": "'{filename}' 문서를 읽었습니다. 내용을 참고해 제안하며 진행하겠습니다.",
+        "en": "I've read '{filename}'. I'll use it to propose answers as we go.",
+    },
+    "failed": {
+        "ko": "'{filename}' 문서를 읽지 못했습니다(파싱 실패). 텍스트 기반 파일로 다시 올려주시면 참고하겠습니다.",
+        "en": "I couldn't read '{filename}' (parse failed). Please re-upload a text-based file.",
+    },
+}
+
 _GREETING = {
     "ko": "안녕하세요, 프로세스 컨설턴트입니다. 지금부터 몇 가지 질문으로 프로세스 맵을 함께 만들어보겠습니다. 먼저, 이 프로세스의 이름과 목적을 알려주세요. 참고할 문서가 있다면 지금 첨부하셔도 좋습니다.",
     "en": "Hello, I'm your process consultant. I'll ask a few questions to build the process map together. First, what is this process called and what is its purpose? Feel free to attach reference documents.",
@@ -262,6 +273,15 @@ async def upload_attachment(
             row.status = "failed"
             row.error = str(exc)
     session.add(row)
+    # 읽음 확인 노티스 — "파일이 반영됐나?" 불신 방지 + 인터뷰어 히스토리에도 문서 도착 신호가 남는다
+    notice = _ATTACH_NOTICE[row.status].get(
+        interview.lang, _ATTACH_NOTICE[row.status]["ko"]
+    ).format(filename=filename)
+    session.add(InterviewMessage(
+        session_id=interview.id,
+        seq=max((m.seq for m in interview.messages), default=0) + 1,
+        role="consultant", kind="notice", content=notice, stage=interview.current_stage,
+    ))
     await session.commit()
     await session.refresh(row)
     return InterviewAttachmentOut.model_validate(row)

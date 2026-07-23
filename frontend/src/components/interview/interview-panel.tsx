@@ -3,11 +3,12 @@
 // 인터뷰 좌측 패널 — 메시지 스트림(질문·선택지·알림) + 입력 + 첨부 (design 2026-07-23 §6)
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Paperclip, RotateCcw, Send } from "lucide-react";
+import { Headset, Info, Loader2, Paperclip, RotateCcw, Send } from "lucide-react";
 
 import type { InterviewState } from "@/lib/api";
 import { choiceOptionsOf } from "@/lib/interview";
 import { ChoiceCard } from "@/components/interview/choice-card";
+import { MarkdownView } from "@/components/markdown-view";
 
 interface InterviewPanelProps {
   interview: InterviewState;
@@ -42,26 +43,32 @@ export function InterviewPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-id="interview-panel">
-      <ul ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+      <ul ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {live.map((message) => (
           <li key={message.id} data-id={`iv-msg-${message.kind}`}>
             {message.role === "user" ? (
-              <div className="ml-8 rounded-md bg-accent-tint px-3 py-2 text-body">
-                {message.content}
+              <div className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-xs bg-accent-tint px-3 py-2 text-caption text-ink">
+                  {message.content}
+                </div>
               </div>
             ) : message.kind === "notice" ? (
-              <div className="rounded-md border border-hairline bg-surface-alt px-3 py-2 text-caption text-ink-secondary">
-                {message.content}
+              <div className="flex items-start gap-2 rounded-md bg-surface-alt px-3 py-2">
+                <Info size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-tertiary" />
+                <span className="text-fine text-ink-secondary">{message.content}</span>
               </div>
             ) : (
-              <div className="mr-8 rounded-md border border-hairline bg-surface px-3 py-2 text-body shadow-sm">
-                {message.content}
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+                  <Headset size={12} strokeWidth={1.5} />
+                </span>
+                <MarkdownView source={message.content} className="min-w-0 max-w-[90%] flex-1" />
               </div>
             )}
           </li>
         ))}
         {choices ? (
-          <li data-id="iv-choices">
+          <li data-id="iv-choices" className="ml-7">
             <div className="grid gap-2">
               {choices.map((option) => (
                 <ChoiceCard key={option.id} option={option} disabled={busy} onChoose={onChoose} />
@@ -70,7 +77,7 @@ export function InterviewPanel({
           </li>
         ) : null}
         {busy ? (
-          <li className="flex items-center gap-2 text-caption text-ink-muted" data-id="iv-thinking">
+          <li className="ml-7 flex items-center gap-2 text-caption text-ink-muted" data-id="iv-thinking">
             <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
             Consultant is thinking…
           </li>

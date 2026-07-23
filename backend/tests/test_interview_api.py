@@ -158,6 +158,10 @@ def test_interview_attachment_upload_and_reject(client: TestClient, monkeypatch)
         files={"file": ("memo.txt", "구매 절차 메모".encode(), "text/plain")},
     )
     assert ok.status_code == 200 and ok.json()["status"] == "parsed"
+    # 읽음 확인 노티스가 대화에 남는다 (실사용 회귀 2026-07-23)
+    state = client.get(f"/api/interviews/{session_id}").json()
+    notices = [m for m in state["messages"] if m["kind"] == "notice"]
+    assert notices and "memo.txt" in notices[-1]["content"]
     bad = client.post(
         f"/api/interviews/{session_id}/attachments",
         files={"file": ("virus.exe", b"MZ", "application/octet-stream")},
