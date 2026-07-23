@@ -281,3 +281,24 @@ def test_reimport_replaces_catalog(client: TestClient) -> None:
     assert detail.json()["doc_sections"] == [
         {"anchor": "_Toc9", "title": "New", "number": "3", "level": 1, "language": ""}
     ]
+
+
+def test_reimport_stamps_imported_at(client: TestClient) -> None:
+    """재임포트 성공 시 doc_imported_at이 찍힌다 (design 2026-07-24 §5)."""
+    created = client.post(
+        "/api/maps",
+        json={
+            "name": f"stamp-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+            "doc_name": "v1.docx",
+            "doc_sections": [],
+        },
+    ).json()
+    assert created["doc_imported_at"] is None
+    r = client.put(
+        f"/api/maps/{created['id']}/word-doc",
+        json={"doc_name": "v2.docx", "sections": []},
+    )
+    assert r.status_code == 200
+    assert r.json()["doc_imported_at"] is not None

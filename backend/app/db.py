@@ -71,6 +71,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "mode", "VARCHAR(20) DEFAULT 'normal'"),
     ("process_maps", "doc_name", "VARCHAR(300) DEFAULT ''"),
     ("process_maps", "doc_sections", "JSON"),
+    # Word 맵 개정 타임스탬프 — 재임포트·완결 문서 생성 시각 (design 2026-07-24 §5)
+    ("process_maps", "doc_imported_at", "TIMESTAMP"),
+    ("process_maps", "doc_generated_at", "TIMESTAMP"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

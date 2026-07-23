@@ -823,6 +823,7 @@ async def set_word_doc(
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     found_map.doc_name = payload.doc_name
     found_map.doc_sections = [s.model_dump() for s in payload.sections]
+    found_map.doc_imported_at = _now()
     await session.commit()
     await session.refresh(found_map, attribute_names=["versions"])
     for version in found_map.versions:

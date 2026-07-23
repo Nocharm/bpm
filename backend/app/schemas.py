@@ -600,6 +600,9 @@ class MapOut(BaseModel):
     mode: str = "normal"
     doc_name: str = ""
     doc_sections: list[SectionEntryIn] = Field(default_factory=list)
+    # 개정 라이프사이클 타임스탬프 — 홈 word 행·상세 카드 표시용 (design 2026-07-24 §5)
+    doc_imported_at: datetime | None = None
+    doc_generated_at: datetime | None = None
 
     @field_validator("sp_duration", mode="after")
     @classmethod

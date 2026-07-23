@@ -117,6 +117,13 @@ class ProcessMap(Base):
     mode: Mapped[str] = mapped_column(String(20), default="normal")
     doc_name: Mapped[str] = mapped_column(String(300), default="")
     doc_sections: Mapped[list] = mapped_column(JSON, default=list)
+    # 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 시각 (design 2026-07-24 §5)
+    doc_imported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    doc_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"
