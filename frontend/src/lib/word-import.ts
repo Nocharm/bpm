@@ -72,6 +72,16 @@ function buildStyleLevels(stylesXml: string): Map<string, number> {
   return resolved;
 }
 
+// outlineLvl이 안 읽히는 커스텀 제목 스타일의 레벨을 스타일 이름 숫자에서 유추 — 사내 SOP는
+// "SBL_Text N_Kor/Eng"(styleId "SBLTextNKor") 형태로 outlineLvl이 감지 안 되는 경우가 있어 폴백.
+// "SBLText3Kor" → 3, "…Appendix…" → 1(최상위 취급), 그 외 → 0(제목 아님).
+function levelFromStyleName(styleId: string): number {
+  const m = styleId.match(/text[\s_]*(\d+)/i);
+  if (m) return Number(m[1]);
+  if (/appendix/i.test(styleId)) return 1;
+  return 0;
+}
+
 export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionEntry[]> {
   const { unzipSync, strFromU8 } = await import("fflate");
   const files = unzipSync(docxBytes);
@@ -96,26 +106,27 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
   const seen = new Set<string>();
   const counters: number[] = []; // counters[i] = 레벨 i+1 카운트
   const stack: string[] = []; // stack[i] = 레벨 i+1 현재 번호 문자열
+  let synthSeq = 0; // 책갈피 없는 제목에 부여하는 합성 앵커 번호 — 출력 시 사본에 이 이름으로 주입
   for (const p of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
     const pPr = p.getElementsByTagNameNS(W, "pPr")[0];
+    const styleEl = pPr?.getElementsByTagNameNS(W, "pStyle")[0];
+    const sid = styleEl ? attr(styleEl, "val") : "";
     let level = 0;
     const directLvl = pPr?.getElementsByTagNameNS(W, "outlineLvl")[0];
     if (directLvl) level = Number(attr(directLvl, "val")) + 1;
-    else {
-      const styleEl = pPr?.getElementsByTagNameNS(W, "pStyle")[0];
-      const sid = styleEl ? attr(styleEl, "val") : "";
-      if (sid && styleLevels.has(sid)) level = styleLevels.get(sid)! + 1;
-    }
+    else if (sid && styleLevels.has(sid)) level = styleLevels.get(sid)! + 1;
+    else level = levelFromStyleName(sid); // outlineLvl 없는 커스텀 제목 → 스타일 이름 숫자
     if (level === 0) continue; // 제목 아님
 
     const names = Array.from(p.getElementsByTagNameNS(W, "bookmarkStart"))
       .map((b) => attr(b, "name"))
       .filter((n) => n && n !== "_GoBack");
-    if (names.length === 0) continue; // 앵커 없음 → 링크 불가
+    // 책갈피 있으면 활성 우선, 없으면 합성 앵커(주입 대상) — 책갈피 없는 제목도 목록에 노출.
     const anchor =
-      names.find((n) => tocMap.has(n)) ?? // TOC 참조 활성 우선
-      names.find((n) => /^_Toc/i.test(n)) ?? // 아니면 _Toc(잔재 co-locate라 아무거나 도달)
-      names[0];
+      names.find((n) => tocMap.has(n)) ??
+      names.find((n) => /^_Toc/i.test(n)) ??
+      names[0] ??
+      `_bpmsec${++synthSeq}`;
     if (seen.has(anchor)) continue;
     seen.add(anchor);
 

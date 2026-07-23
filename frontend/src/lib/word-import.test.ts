@@ -90,4 +90,21 @@ describe("parseWordSections", () => {
     expect(out.map((s) => s.number)).toEqual(["6", "6.1"]);
     expect(out[1]).toMatchObject({ anchor: "_Toc3", level: 3 });
   });
+
+  it("outlineLvl 없는 커스텀 제목 스타일은 이름의 숫자로 레벨을 잡는다", async () => {
+    // SBLText3Kor는 STYLES에 정의 없음(outlineLvl 미보유) → 이름 "Text3"에서 레벨 3 유추.
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Purpose") +
+      heading("H1", ["_Toc1"], "Purpose") + heading("SBLText3Kor", ["_Toc3"], "Detail"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.find((s) => s.anchor === "_Toc3")?.level).toBe(3);
+  });
+
+  it("책갈피 없는 제목도 합성 앵커(_bpmsec)로 목록에 낸다 — 주입 대상", async () => {
+    const xml = doc(heading("H1", [], "No bookmark section"));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ anchor: "_bpmsec1", title: "No bookmark section", level: 1 });
+  });
 });
