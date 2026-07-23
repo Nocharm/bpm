@@ -4854,13 +4854,33 @@ function MapEditor({ mapId }: { mapId: number }) {
         sectionAnchor: node.data.section_anchor,
       };
     });
-    const exportEdges = edgesRef.current.map((edge) => ({
-      sourceId: edge.source,
-      targetId: edge.target,
-      label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
-      sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
-      targetSide: sideFromHandleId(edge.targetHandle, "left"),
-    }));
+    const nodeById = new Map(exportNodes.map((n) => [n.id, n]));
+    const exportEdges = edgesRef.current.map((edge) => {
+      let sourceSide = sideFromHandleId(edge.sourceHandle, "right");
+      let targetSide = sideFromHandleId(edge.targetHandle, "left");
+      // Word 맵: 캔버스 핸들이 폴백(right/left)으로 어긋나는 문제 회피 — 노드 상대 위치로 변을 유도해
+      // 실제 레이아웃(위/아래·좌/우)과 연결 변을 일치시킨다. 일반 맵은 기존 핸들 기반 유지.
+      const s = nodeById.get(edge.source);
+      const t = nodeById.get(edge.target);
+      if (isWordMap && s && t) {
+        const dx = t.x + t.w / 2 - (s.x + s.w / 2);
+        const dy = t.y + t.h / 2 - (s.y + s.h / 2);
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          sourceSide = dx >= 0 ? "right" : "left";
+          targetSide = dx >= 0 ? "left" : "right";
+        } else {
+          sourceSide = dy >= 0 ? "bottom" : "top";
+          targetSide = dy >= 0 ? "top" : "bottom";
+        }
+      }
+      return {
+        sourceId: edge.source,
+        targetId: edge.target,
+        label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
+        sourceSide,
+        targetSide,
+      };
+    });
     return { exportNodes, exportEdges };
   };
 
