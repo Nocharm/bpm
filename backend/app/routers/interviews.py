@@ -11,6 +11,7 @@ from app import workflow
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
+from app.interview.engine import next_stage_key
 from app.interview.orchestrator import TurnError, run_turn
 from app.interview.parsing import (
     ALLOWED_EXTENSIONS,
@@ -211,6 +212,8 @@ async def post_turn(
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
+    if payload.type == "skip" and next_stage_key(interview.current_stage) is None:
+        raise HTTPException(status_code=400, detail="cannot skip the final stage")
 
     # rollback 후 만료 대비 스칼라 선캡처
     map_id, version_id = interview.map_id, interview.version_id

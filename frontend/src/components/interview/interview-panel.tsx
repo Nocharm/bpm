@@ -4,7 +4,7 @@
 // 선택지(맵 안) 비교는 캔버스 플로팅 창에서 — 여기서는 안내만. 노드 멘션은 window 이벤트로 수신.
 
 import { useEffect, useRef, useState } from "react";
-import { Headset, Info, Layers, Loader2, Paperclip, RotateCcw, Send, X } from "lucide-react";
+import { Headset, Info, Layers, Loader2, Paperclip, RotateCcw, Send, SkipForward, X } from "lucide-react";
 
 import type { InterviewState } from "@/lib/api";
 import { choiceOptionsOf } from "@/lib/interview";
@@ -22,13 +22,14 @@ interface InterviewPanelProps {
   pending: string | null;
   hasChoices: boolean;
   onSend: (content: string) => void;
+  onSkip: () => void;
   onRetry: () => void;
   onAttach: (file: File) => void;
   onDeleteAttachment: (attachmentId: number) => void;
 }
 
 export function InterviewPanel({
-  interview, busy, error, pending, hasChoices, onSend, onRetry, onAttach, onDeleteAttachment,
+  interview, busy, error, pending, hasChoices, onSend, onSkip, onRetry, onAttach, onDeleteAttachment,
 }: InterviewPanelProps) {
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
@@ -137,6 +138,20 @@ export function InterviewPanel({
         ) : null}
       </ul>
       <div className="border-t border-hairline p-2">
+        {interview.status === "active" && interview.current_stage !== "review" ? (
+          <div className="mb-1 flex justify-end">
+            <button
+              className="inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-40"
+              title="Mark unanswered items as TBD and move on"
+              disabled={busy}
+              onClick={onSkip}
+              data-id="iv-skip-stage"
+            >
+              <SkipForward size={12} strokeWidth={1.5} />
+              Skip to next stage
+            </button>
+          </div>
+        ) : null}
         {interview.attachments.length > 0 ? (
           <div className="mb-1 flex flex-wrap gap-1">
             {interview.attachments.map((a) => (

@@ -49,7 +49,7 @@ export default function ConsultPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null); // 403/503 등 진입 불가
   const [chatWidth, setChatWidth] = useState(readChatWidth);
-  const lastTurnRef = useRef<{ type: "answer" | "choice"; content?: string; choice_id?: string } | null>(null);
+  const lastTurnRef = useRef<{ type: "answer" | "choice" | "skip"; content?: string; choice_id?: string } | null>(null);
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -106,7 +106,7 @@ export default function ConsultPage() {
     // lang 변경 시 재부트스트랩은 무해 — 서버는 기존 active 세션을 그대로 반환한다
   }, [mapId, lang]);
 
-  async function runTurn(turn: { type: "answer" | "choice"; content?: string; choice_id?: string }) {
+  async function runTurn(turn: { type: "answer" | "choice" | "skip"; content?: string; choice_id?: string }) {
     if (!interview || busy) return;
     lastTurnRef.current = turn;
     setBusy(true);
@@ -114,7 +114,12 @@ export default function ConsultPage() {
     setPending(
       turn.type === "choice"
         ? (choices?.find((o) => o.id === turn.choice_id)?.title ?? "Selected an option")
-        : (turn.content ?? ""),
+        : turn.type === "skip"
+          // 백엔드 _SKIP_USER_TEXT와 동일 문구 — 서버 반영 시 낙관적 표시가 그대로 치환되도록
+          ? (interview.lang === "en"
+              ? "Let's move on to the next stage."
+              : "이 단계는 여기까지 하고 다음 단계로 넘어갈게요.")
+          : (turn.content ?? ""),
     );
     try {
       setInterview(await postInterviewTurn(interview.id, turn));
@@ -223,6 +228,7 @@ export default function ConsultPage() {
               pending={pending}
               hasChoices={choices !== null}
               onSend={(content) => runTurn({ type: "answer", content })}
+              onSkip={() => runTurn({ type: "skip" })}
               onRetry={() => lastTurnRef.current && runTurn(lastTurnRef.current)}
               onAttach={handleAttach}
               onDeleteAttachment={handleDeleteAttachment}

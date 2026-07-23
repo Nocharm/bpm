@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import difflib
 import logging
 from typing import TypeVar
 
@@ -166,6 +167,98 @@ def _tone_notice_text(lang: str, applied: list[tuple[str, str]]) -> str:
     return _TONE_NOTICE.get(lang, _TONE_NOTICE["ko"]).format(items=items)
 
 
+_REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기"
+
+
+async def _redraft(interview: InterviewSession, context_text: str, model: str | None) -> bool:
+    """드래프터로 작업본 재생성 — 실패는 턴을 죽이지 않는다. 갱신 여부 반환."""
+    try:
+        proposal = await _ask_json(
+            build_drafter_messages(
+                interview.current_stage, interview.lang, interview.facts,
+                interview.working_graph, context_text, _REDRAFT_HINT,
+            ),
+            model, AiProposal,
+        )
+        if proposal.kind == "graph" and proposal.nodes:
+            interview.working_graph = _graph_from_proposal(proposal)
+            return True
+    except TurnError:
+        logger.warning("interview redraft skipped (drafter failed) — turn continues")
+    return False
+
+
+# 반복 판정 임계 — 직전 컨설턴트 메시지와 거의 동일한 재출력만 잡는다(0~1, 보수적)
+_REPEAT_RATIO = 0.9
+
+_ANTI_REPEAT_NUDGE = (
+    "방금 답변이 직전 컨설턴트 메시지와 동일한 반복입니다. 같은 요약을 다시 쓰지 말고, "
+    "이미 확인된 내용의 재나열 없이 새로운 제안 또는 다음 질문 하나로만 다시 답하세요."
+)
+
+
+def _is_repeat(new: str, prev: str) -> bool:
+    if not new or not prev:
+        return False
+    return difflib.SequenceMatcher(None, new.strip(), prev.strip()).ratio() >= _REPEAT_RATIO
+
+
+_SKIP_USER_TEXT = {
+    "ko": "이 단계는 여기까지 하고 다음 단계로 넘어갈게요.",
+    "en": "Let's move on to the next stage.",
+}
+
+_UNKNOWN_VALUE = {"ko": "미정", "en": "TBD"}
+
+
+async def _run_skip_turn(
+    db, interview: InterviewSession, graph_summary: str, context_text: str, model: str | None
+) -> None:
+    """결정적 스테이지 전진 — 미확정 필수 facts를 '미정'으로 채우고 체크포인트 후 다음 단계 개시.
+
+    모델이 미정 항목을 놓지 못해 같은 질문을 반복하는 루프의 탈출구 (실사용 회귀 2026-07-24).
+    """
+    next_key = engine.next_stage_key(interview.current_stage)
+    if next_key is None:
+        raise TurnError("cannot skip the final stage")
+
+    stage = engine.get_stage(interview.current_stage)
+    unknown = _UNKNOWN_VALUE.get(interview.lang, _UNKNOWN_VALUE["ko"])
+    stage_facts = dict(interview.facts.get(interview.current_stage) or {})
+    for name in stage.required_facts:
+        if not stage_facts.get(name):
+            stage_facts[name] = unknown
+    interview.facts = {**interview.facts, interview.current_stage: stage_facts}
+
+    seq = next_seq(interview)
+    _append(db, interview, seq, "user", "skip",
+            _SKIP_USER_TEXT.get(interview.lang, _SKIP_USER_TEXT["ko"]))
+    db.add(InterviewCheckpoint(
+        session_id=interview.id, stage=interview.current_stage,
+        facts=interview.facts, working_graph=interview.working_graph,
+        message_seq=seq,
+    ))
+    interview.current_stage = next_key
+    interview.pending_choices = None
+
+    out = await _ask_json(
+        build_interviewer_messages(
+            interview.current_stage, interview.lang, interview.facts,
+            graph_summary, context_text, _history_tail(interview)[:-1],
+            "[사용자가 다음 단계로 넘어가기를 선택했습니다. 새 단계의 첫 제안이나 질문을 하세요.]",
+        ),
+        model, InterviewerOut,
+    )
+    if out.facts_patch:
+        new_facts = dict(interview.facts.get(interview.current_stage) or {})
+        new_facts.update(out.facts_patch)
+        interview.facts = {**interview.facts, interview.current_stage: new_facts}
+    # 미정 채움으로 facts가 바뀌었으니 작업본도 따라간다 — 실패해도 전진은 유지
+    await _redraft(interview, context_text, model)
+    _append(db, interview, seq + 1, "consultant", "question", out.message,
+            payload={"options": out.options} if out.options else None)
+
+
 async def run_turn(
     db,
     interview: InterviewSession,
@@ -174,6 +267,10 @@ async def run_turn(
     context_text: str,
     model: str | None = None,
 ) -> None:
+    if turn.type == "skip":
+        await _run_skip_turn(db, interview, graph_summary, context_text, model)
+        return
+
     # 선택 턴 — 대상 옵션을 먼저 확정(사용자 메시지에 제목을 남기기 위해 append보다 선행)
     chosen: dict | None = None
     if turn.type == "choice":
@@ -197,13 +294,27 @@ async def run_turn(
     else:
         user_input = user_content
 
-    out = await _ask_json(
-        build_interviewer_messages(
-            interview.current_stage, interview.lang, interview.facts,
-            graph_summary, context_text, _history_tail(interview)[:-1], user_input,
-        ),
-        model, InterviewerOut,
+    # 직전 컨설턴트 발화 — 거의 동일한 재출력이면 1회 교정 재질의 (실사용 회귀 2026-07-24 반복 루프)
+    prev_consultant = next(
+        (m.content for m in reversed(interview.messages)
+         if not m.superseded and m.role == "consultant" and m.kind != "notice"),
+        "",
     )
+    interviewer_messages = build_interviewer_messages(
+        interview.current_stage, interview.lang, interview.facts,
+        graph_summary, context_text, _history_tail(interview)[:-1], user_input,
+    )
+    out = await _ask_json(interviewer_messages, model, InterviewerOut)
+    if _is_repeat(out.message, prev_consultant):
+        try:
+            out = await _ask_json(
+                [*interviewer_messages,
+                 {"role": "assistant", "content": out.message},
+                 {"role": "user", "content": _ANTI_REPEAT_NUDGE}],
+                model, InterviewerOut,
+            )
+        except TurnError:
+            logger.warning("interview anti-repeat retry failed — keeping original reply")
 
     # facts 병합 — 현재 스테이지 네임스페이스에만
     if out.facts_patch:
@@ -220,24 +331,11 @@ async def run_turn(
         _append(db, interview, seq + 1, "consultant", "choices", out.message, payload=choices)
         return
 
-    # 연속 드래프트 — facts가 갱신된 일반 턴이면 작업본을 재생성해 맵을 라이브로 갱신
+    # 연속 드래프트 — facts가 갱신됐거나 사용자가 맵 갱신을 요청(redraw)한 일반 턴이면 재생성
     # (실사용 회귀 2026-07-24: 선택지 시점에만 그리면 대화 내내 맵이 정지). 실패는 턴을 죽이지 않는다.
     graph_changed = chosen is not None
-    if turn.type != "choice" and out.facts_patch:
-        try:
-            proposal = await _ask_json(
-                build_drafter_messages(
-                    interview.current_stage, interview.lang, interview.facts,
-                    interview.working_graph, context_text,
-                    "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기",
-                ),
-                model, AiProposal,
-            )
-            if proposal.kind == "graph" and proposal.nodes:
-                interview.working_graph = _graph_from_proposal(proposal)
-                graph_changed = True
-        except TurnError:
-            logger.warning("interview redraft skipped (drafter failed) — turn continues")
+    if turn.type != "choice" and (out.facts_patch or out.redraw):
+        graph_changed = await _redraft(interview, context_text, model) or graph_changed
 
     # 스테이지 완료 — 다음 단계가 있을 때만 체크포인트+톤 검수+전이.
     # review(마지막)에서는 반복 실행하지 않는다 — 매 턴 stage_complete를 주는 모델이

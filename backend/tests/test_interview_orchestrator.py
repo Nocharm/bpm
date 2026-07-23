@@ -205,3 +205,61 @@ def test_invalid_ai_json_retries_then_turn_error() -> None:
     with pytest.raises(orchestrator.TurnError):
         _run(db, interview, InterviewTurnIn(type="answer", content="x"),
              ["깨진 응답", "여전히 깨짐"])
+
+
+def test_skip_turn_fills_unknowns_checkpoints_and_advances() -> None:
+    """skip 턴은 미확정 필수 facts를 '미정'으로 채우고 결정적으로 다음 단계로 전진한다.
+
+    미정 항목을 모델이 놓지 못해 같은 질문을 반복하는 루프의 탈출구 (실사용 회귀 2026-07-24).
+    """
+    db = _FakeDb()
+    interview = _session(
+        current_stage="io",
+        facts={"scope": {"process_name": "다이어트", "purpose": "p", "boundaries": "b"},
+               "io": {"trigger": "몸무게 88 도달", "inputs": "운동 계획"}},
+    )
+    # 스크립트: 새 스테이지 인터뷰어 → 재드래프트
+    _run(db, interview, InterviewTurnIn(type="skip"), [INTERVIEWER_Q, DRAFT])
+    assert interview.facts["io"]["outputs"] == "미정"
+    assert interview.facts["io"]["trigger"] == "몸무게 88 도달"  # 기확정 값은 보존
+    assert interview.current_stage == "activities"
+    checkpoints = [o for o in db.added if type(o).__name__ == "InterviewCheckpoint"]
+    assert len(checkpoints) == 1 and checkpoints[0].stage == "io"
+    user_msg = next(m for m in db.added if getattr(m, "role", "") == "user")
+    assert user_msg.kind == "skip"
+    consultant = next(m for m in db.added if getattr(m, "role", "") == "consultant")
+    assert consultant.stage == "activities"  # 개시 질문은 새 스테이지 소속
+    assert interview.working_graph is not None  # 미정 채움 후 재드래프트 수행
+
+
+def test_skip_on_final_stage_raises() -> None:
+    db, interview = _FakeDb(), _session(current_stage="review")
+    with pytest.raises(orchestrator.TurnError):
+        _run(db, interview, InterviewTurnIn(type="skip"), [])
+
+
+def test_repeated_reply_gets_one_corrective_retry() -> None:
+    """직전 컨설턴트 메시지를 거의 그대로 재출력하면 1회 교정 재질의한다 (실사용 회귀 2026-07-24)."""
+    from app.models import InterviewMessage
+
+    db, interview = _FakeDb(), _session()
+    prev = "정리했습니다.\n- 트리거: 몸무게 88 도달\n- 산출물: 미정\n\n이대로 진행할까요?"
+    interview.messages.append(InterviewMessage(
+        session_id=1, seq=1, role="consultant", kind="question", content=prev, stage="scope",
+    ))
+    repeat = json.dumps({"message": prev, "facts_patch": {}})
+    fresh = json.dumps({"message": "산출물은 비워 두고 활동 정리로 넘어가시죠.", "facts_patch": {}})
+    _run(db, interview, InterviewTurnIn(type="answer", content="네, 맞습니다"), [repeat, fresh])
+    question = next(m for m in db.added if getattr(m, "kind", "") == "question")
+    assert question.content == "산출물은 비워 두고 활동 정리로 넘어가시죠."
+
+
+def test_redraw_request_triggers_redraft_without_facts() -> None:
+    """facts 변화가 없어도 redraw=true면 드래프터가 돌아 맵이 갱신된다 (실사용 회귀 2026-07-24)."""
+    db, interview = _FakeDb(), _session(
+        facts={"scope": {"process_name": "다이어트"}},
+    )
+    reply = json.dumps({"message": "맵을 갱신했습니다.", "facts_patch": {}, "redraw": True})
+    _run(db, interview, InterviewTurnIn(type="answer", content="그림 그리라고 그림"), [reply, DRAFT])
+    assert interview.working_graph is not None
+    assert any(n["title"] == "요청서 작성" for n in interview.working_graph["nodes"])
