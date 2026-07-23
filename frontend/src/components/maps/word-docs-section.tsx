@@ -70,7 +70,10 @@ export function WordDocsSection({
                   data-id={`word-doc-row-${m.id}`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => onSelect(m.id)}
+                  onClick={(e) => {
+                    e.stopPropagation(); // 행 선택은 배경(선택 해제)으로 버블링 방지 — map-card.tsx와 동일 패턴
+                    onSelect(m.id);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") onSelect(m.id);
                   }}
