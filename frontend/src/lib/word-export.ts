@@ -288,51 +288,52 @@ const ROOT_RELS_XML =
   '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
   "</Relationships>";
 
+/** 외부 하이퍼링크 Relationship 요소 1개 — buildDocx rels와 완결문서 생성기의 rels 병합이 공유. */
+export function buildHyperlinkRelXml(relId: string, url: string): string {
+  return `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXml(url)}" TargetMode="External"/>`;
+}
+
 function buildDocumentRelsXml(hyperlinks: { relId: string; url: string }[]): string {
-  const rels = hyperlinks
-    .map(
-      ({ relId, url }) =>
-        `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXml(url)}" TargetMode="External"/>`,
-    )
-    .join("");
+  const rels = hyperlinks.map(({ relId, url }) => buildHyperlinkRelXml(relId, url)).join("");
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`
   );
 }
 
-function buildDocumentXml(shapesXml: string, extW: number, extH: number): string {
+// 순서도 DrawingML이 요구하는 네임스페이스(w 제외) — 완결문서 생성기가 원본 루트에 보강할 때도 사용.
+export const DRAWING_NAMESPACES: readonly (readonly [string, string])[] = [
+  ["r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships"],
+  ["wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
+  ["a", "http://schemas.openxmlformats.org/drawingml/2006/main"],
+  ["wps", "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"],
+  ["wpg", "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"],
+];
+
+function buildDocumentXml(flowchartParagraphXml: string): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
-    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
-    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
-    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
-    ' xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"' +
-    ' xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">' +
-    "<w:body><w:p><w:r><w:drawing>" +
-    '<wp:inline distT="0" distB="0" distL="0" distR="0">' +
-    `<wp:extent cx="${extW}" cy="${extH}"/>` +
-    '<wp:docPr id="1" name="ProcessMap"/>' +
-    "<a:graphic>" +
-    '<a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">' +
-    "<wpg:wgp><wpg:cNvGrpSpPr/><wpg:grpSpPr>" +
-    `<a:xfrm><a:off x="0" y="0"/><a:ext cx="${extW}" cy="${extH}"/>` +
-    `<a:chOff x="0" y="0"/><a:chExt cx="${extW}" cy="${extH}"/></a:xfrm>` +
-    "<a:noFill/></wpg:grpSpPr>" +
-    shapesXml +
-    "</wpg:wgp></a:graphicData></a:graphic></wp:inline>" +
-    "</w:drawing></w:r></w:p>" +
+    DRAWING_NAMESPACES.map(([prefix, uri]) => ` xmlns:${prefix}="${uri}"`).join("") +
+    ">" +
+    "<w:body>" +
+    flowchartParagraphXml +
     '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
     '<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>' +
     "</w:sectPr></w:body></w:document>"
   );
 }
 
-/** 노드/엣지를 Word 도형 순서도 docx Blob으로 만든다 (순수 — DOM 불의존). */
-export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blob {
+/**
+ * 순서도 그리기 문단 1개(<w:p><w:r><w:drawing>…)와 외부 하이퍼링크 rels 목록을 만든다 —
+ * buildDocx(단독 문서)와 완결문서 생성기(원본에 삽입)가 공유하는 단일 소스.
+ */
+export function buildFlowchartDrawing(
+  nodes: WordExportNode[],
+  edges: WordExportEdge[],
+): { paragraphXml: string; hyperlinks: { relId: string; url: string }[] } {
   if (nodes.length === 0) {
-    throw new Error("buildDocx: nodes must not be empty");
+    throw new Error("buildFlowchartDrawing: nodes must not be empty");
   }
   const layout = computeLayout(nodes);
   // 도형 id: 1은 docPr, 노드는 2부터
@@ -368,7 +369,27 @@ export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blo
       shapes.push(buildEdgeLabelShape(edge.label, nextShapeId++, sourceNode, targetNode, edge, layout));
     }
   }
-  const documentXml = buildDocumentXml(shapes.join(""), layout.extW, layout.extH);
+  const paragraphXml =
+    "<w:p><w:r><w:drawing>" +
+    '<wp:inline distT="0" distB="0" distL="0" distR="0">' +
+    `<wp:extent cx="${layout.extW}" cy="${layout.extH}"/>` +
+    '<wp:docPr id="1" name="ProcessMap"/>' +
+    "<a:graphic>" +
+    '<a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">' +
+    "<wpg:wgp><wpg:cNvGrpSpPr/><wpg:grpSpPr>" +
+    `<a:xfrm><a:off x="0" y="0"/><a:ext cx="${layout.extW}" cy="${layout.extH}"/>` +
+    `<a:chOff x="0" y="0"/><a:chExt cx="${layout.extW}" cy="${layout.extH}"/></a:xfrm>` +
+    "<a:noFill/></wpg:grpSpPr>" +
+    shapes.join("") +
+    "</wpg:wgp></a:graphicData></a:graphic></wp:inline>" +
+    "</w:drawing></w:r></w:p>";
+  return { paragraphXml, hyperlinks };
+}
+
+/** 노드/엣지를 Word 도형 순서도 docx Blob으로 만든다 (순수 — DOM 불의존). */
+export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blob {
+  const { paragraphXml, hyperlinks } = buildFlowchartDrawing(nodes, edges);
+  const documentXml = buildDocumentXml(paragraphXml);
   const zipped = zipSync({
     "[Content_Types].xml": strToU8(CONTENT_TYPES_XML),
     "_rels/.rels": strToU8(ROOT_RELS_XML),

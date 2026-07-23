@@ -6,7 +6,10 @@
 //  · _Toc 책갈피는 과거 재생성 잔재로 한 제목에 중복 → 활성 세트 = TOC 하이퍼링크가 참조하는 것.
 // 전략: (1) 내부 하이퍼링크에서 {활성앵커→번호}(1~2단계, 권위) 수집. (2) 본문 제목을 순서대로
 //  걸으며 1~2단계는 TOC 번호, 3단계+는 부모(TOC 확정) 번호에 로컬 카운터를 이어 재구성.
-const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+// 제목 걷기(collectHeadings)는 완결문서 생성기(word-doc-generator)와 공유 — 합성 앵커 순번의 단일 소스.
+
+// WordprocessingML 메인 네임스페이스 — 생성기의 책갈피 주입/문단 탐색도 이 상수를 쓴다.
+export const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 export interface SectionEntry {
   anchor: string; // w:bookmarkStart w:name(활성 _Toc 우선) — 내부 하이퍼링크 앵커
@@ -16,8 +19,18 @@ export interface SectionEntry {
   language: string; // 스타일명 접미사에서 유추: "ko" | "en" | "" — 이중언어 문서 필터용
 }
 
+// 본문 제목 1개 — SectionEntry + 제목 <w:p> 요소(생성기가 합성 책갈피를 주입할 위치).
+export interface HeadingHit {
+  element: Element;
+  anchor: string;
+  number: string;
+  title: string;
+  level: number;
+  language: string;
+}
+
 // w 네임스페이스 속성 — 파서가 NS 처리를 안 해도(prefix 유지) 동작하도록 폴백.
-function attr(el: Element, name: string): string {
+export function attr(el: Element, name: string): string {
   return el.getAttributeNS(W, name) ?? el.getAttribute(`w:${name}`) ?? "";
 }
 
@@ -48,7 +61,7 @@ function parseTocText(text: string): { number: string; title: string } {
 }
 
 // styles.xml: styleId → outlineLvl(0-based). basedOn 상속 따라감. 헤딩 스타일만 포함.
-function buildStyleLevels(stylesXml: string): Map<string, number> {
+export function buildStyleLevels(stylesXml: string): Map<string, number> {
   const doc = new DOMParser().parseFromString(stylesXml, "application/xml");
   const own = new Map<string, number>();
   const basedOn = new Map<string, string>();
@@ -88,17 +101,9 @@ function normalizeTitle(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
-export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionEntry[]> {
-  const { unzipSync, strFromU8 } = await import("fflate");
-  const files = unzipSync(docxBytes);
-  const docPart = files["word/document.xml"];
-  if (!docPart) return [];
-  const doc = new DOMParser().parseFromString(strFromU8(docPart), "application/xml");
-  const stylesPart = files["word/styles.xml"];
-  const styleLevels = stylesPart
-    ? buildStyleLevels(strFromU8(stylesPart))
-    : new Map<string, number>();
-
+// 본문 제목 걷기 — 파서(parseWordSections)와 생성기(word-doc-generator)가 같은 제목 집합·
+// 같은 합성 앵커(_bpmsecN) 순번을 공유하는 단일 소스. 순서·카운터를 바꾸면 저장된 노드 앵커가 깨진다.
+export function collectHeadings(doc: Document, styleLevels: Map<string, number>): HeadingHit[] {
   // (1) TOC 항목 — 내부 하이퍼링크(w:anchor)에서 활성 앵커→번호 수집.
   const tocMap = new Map<string, { number: string; title: string }>();
   // 제목 → {번호, 레벨} — 책갈피 없는 제목이 앵커 대신 제목으로 TOC 권위 번호를 찾게 한다.
@@ -117,7 +122,7 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
   }
 
   // (2) 본문 제목 순회 — 레벨은 outlineLvl, 번호는 TOC 씨앗 + 로컬 카운터.
-  const out: SectionEntry[] = [];
+  const out: HeadingHit[] = [];
   const seen = new Set<string>();
   const counters: number[] = []; // counters[i] = 레벨 i+1 카운트
   const stack: string[] = []; // stack[i] = 레벨 i+1 현재 번호 문자열
@@ -187,7 +192,7 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
       stack.length = level;
     }
     const language = /kor/i.test(sid) ? "ko" : /eng/i.test(sid) ? "en" : "";
-    out.push({ anchor, title: text, number, level, language });
+    out.push({ element: p, anchor, title: text, number, level, language });
   }
 
   // TODO(임시 진단, 2026-07-23): 실물 문서 구조 파악용 — 스타일별 감지 레벨·책갈피 보유율 집계.
@@ -227,4 +232,23 @@ export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionE
     }
   }
   return out;
+}
+
+export async function parseWordSections(docxBytes: Uint8Array): Promise<SectionEntry[]> {
+  const { unzipSync, strFromU8 } = await import("fflate");
+  const files = unzipSync(docxBytes);
+  const docPart = files["word/document.xml"];
+  if (!docPart) return [];
+  const doc = new DOMParser().parseFromString(strFromU8(docPart), "application/xml");
+  const stylesPart = files["word/styles.xml"];
+  const styleLevels = stylesPart
+    ? buildStyleLevels(strFromU8(stylesPart))
+    : new Map<string, number>();
+  return collectHeadings(doc, styleLevels).map(({ anchor, title, number, level, language }) => ({
+    anchor,
+    title,
+    number,
+    level,
+    language,
+  }));
 }
