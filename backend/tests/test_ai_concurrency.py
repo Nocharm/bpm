@@ -12,7 +12,7 @@ def test_call_ai_respects_concurrency_cap(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "ai_base_url", "http://fake")
     monkeypatch.setattr(settings, "ai_max_concurrency", 2)
-    monkeypatch.setattr(ai_client, "_semaphore", None)  # 설정 반영 위해 재생성 유도
+    monkeypatch.setattr(ai_client, "_semaphores", {})  # 설정 반영 위해 재생성 유도
 
     active = 0
     peak = 0

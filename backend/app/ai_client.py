@@ -13,15 +13,20 @@ logger = logging.getLogger(__name__)
 
 MODEL_SEP = "::"  # 다중 엔드포인트 모델 id 구분자 — "<엔드포인트명>::<모델id>"
 
-# 전역 동시성 가드 — 이벤트 루프 안에서 지연 생성(모듈 import 시점엔 루프 없음)
-_semaphore: asyncio.Semaphore | None = None
+# 전역 동시성 가드 — 루프별 캐시(세마포어는 첫 경합 루프에 바인딩되므로 루프 간 공유 금지).
+# 운영은 uvicorn 단일 루프라 전역 상한과 동치. 닫힌 루프 엔트리는 접근 시 정리.
+_semaphores: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
 
 
 def _get_semaphore() -> asyncio.Semaphore:
-    global _semaphore
-    if _semaphore is None:
-        _semaphore = asyncio.Semaphore(max(1, settings.ai_max_concurrency))
-    return _semaphore
+    loop = asyncio.get_running_loop()
+    semaphore = _semaphores.get(loop)
+    if semaphore is None:
+        for stale in [known for known in _semaphores if known.is_closed()]:
+            del _semaphores[stale]
+        semaphore = asyncio.Semaphore(max(1, settings.ai_max_concurrency))
+        _semaphores[loop] = semaphore
+    return semaphore
 
 
 @dataclass(frozen=True)
