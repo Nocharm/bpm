@@ -166,6 +166,7 @@ import {
   getWorkflowState,
   listComments,
   listLibraryProcesses,
+  markWordDocGenerated,
   publishVersion,
   rejectVersion,
   renameVersion,
@@ -199,6 +200,7 @@ import {
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
+import { getStaleSectionNodeIds } from "@/lib/word-map-home";
 import type { SectionEntry } from "@/lib/word-import";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
@@ -768,6 +770,18 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [docSections, setDocSections] = useState<SectionEntry[]>([]);
   const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
   const isWordMap = mapMode === "word";
+  // stale 앵커 — 재임포트 후 카탈로그에서 사라진 앵커를 참조하는 섹션 노드 (design 2026-07-24 §5)
+  const staleAnchorIds = useMemo(() => {
+    if (!isWordMap) return new Set<string>();
+    return getStaleSectionNodeIds(
+      nodes.map((n) => ({
+        id: n.id,
+        nodeType: n.data.nodeType,
+        sectionAnchor: n.data.section_anchor,
+      })),
+      docSections,
+    );
+  }, [isWordMap, nodes, docSections]);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
@@ -4917,6 +4931,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       link.download = wordDocFileName("_complete");
       link.click();
       URL.revokeObjectURL(url);
+      // 생성 성공 기록 — 실패해도 다운로드는 이미 완료라 흐름을 막지 않는다 (design 2026-07-24 §5)
+      void markWordDocGenerated(mapId).catch((err) =>
+        console.warn("word-doc generated stamp failed", err),
+      );
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Complete document generation failed");
     }
@@ -5890,7 +5908,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           data: ghost.data,
         }))
       : [];
-    return [...mapped, ...ancestorContextNodes, ...ghostNodes];
+    let result: AppNode[] = [...mapped, ...ancestorContextNodes, ...ghostNodes];
+    // stale 앵커 배지 — 재임포트로 사라진 앵커를 참조하는 섹션 노드에 표시 플래그 주입 (design 2026-07-24 §5)
+    if (staleAnchorIds.size > 0) {
+      result = result.map((n) =>
+        staleAnchorIds.has(n.id) ? { ...n, data: { ...n.data, staleAnchor: true } } : n,
+      );
+    }
+    return result;
   }, [
     nodes,
     childNodes,
@@ -5903,6 +5928,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     injectSubEnds,
     ctrlDragActive,
     ctrlDragGhosts,
+    staleAnchorIds,
   ]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
@@ -7397,6 +7423,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             docName={docName}
             onReimport={() => setWordReimportOpen(true)}
             onClose={() => setSectionsOpen(false)}
+            staleCount={staleAnchorIds.size}
           />
         )}
         {wordReimportOpen && (

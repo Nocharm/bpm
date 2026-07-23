@@ -31,6 +31,7 @@ export type NodeData = {
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
   urlLabel?: string;
   section_anchor?: string; // Word 맵 섹션 노드의 문서 내부 앵커 (design 2026-07-18)
+  staleAnchor?: boolean; // 카탈로그에서 사라진 앵커 참조 — 표시 전용, 저장 안 함 (design 2026-07-24 §5)
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   groupIds: string[];
   hasChildren: boolean;

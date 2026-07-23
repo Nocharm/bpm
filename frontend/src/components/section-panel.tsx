@@ -16,6 +16,7 @@ export interface SectionPanelProps {
   docName: string;
   onReimport: () => void;
   onClose: () => void;
+  staleCount?: number;
 }
 
 const LANG_LABEL: Record<string, string> = { ko: "KO", en: "EN" };
@@ -27,7 +28,7 @@ function handleDragStart(e: React.DragEvent<HTMLDivElement>, s: SectionEntry) {
   e.dataTransfer.setData("application/bpm-section-title", s.title);
 }
 
-export function SectionPanel({ sections, docName, onReimport, onClose }: SectionPanelProps) {
+export function SectionPanel({ sections, docName, onReimport, onClose, staleCount }: SectionPanelProps) {
   const [query, setQuery] = useState("");
   const [langFilter, setLangFilter] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -91,6 +92,12 @@ export function SectionPanel({ sections, docName, onReimport, onClose }: Section
           </button>
         </div>
       </div>
+
+      {typeof staleCount === "number" && staleCount > 0 && (
+        <p data-id="section-panel-stale" className="px-3 py-1.5 text-fine text-changed">
+          {staleCount} node link{staleCount === 1 ? "" : "s"} no longer match the document.
+        </p>
+      )}
 
       {/* search */}
       <div className="border-b border-hairline px-2 py-1.5">

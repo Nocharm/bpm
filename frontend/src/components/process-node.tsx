@@ -600,6 +600,15 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {data.url && <UrlBadge url={data.url} />}
       {data.assigneeWarning && <AssigneeWarningBadge />}
+      {data.staleAnchor && (
+        <span
+          title="Section no longer exists in the imported document"
+          className="absolute -right-1.5 -top-1.5 rounded-full bg-surface text-changed"
+          data-id="node-stale-anchor-badge"
+        >
+          <AlertTriangle size={16} strokeWidth={1.5} />
+        </span>
+      )}
       {showCopyBadge && <CopyDragBadge />}
       <NodeHandles connectable={isConnectable ?? true} />
     </div>
