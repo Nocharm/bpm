@@ -1780,6 +1780,137 @@ export function aiChat(
   });
 }
 
+// ---------- AI 컨설턴트 인터뷰 (design 2026-07-23) ----------
+
+export interface WorkingGraph {
+  nodes: AiNode[];
+  edges: AiEdge[];
+  groups: AiGroup[];
+}
+
+export interface ChoiceOption {
+  id: string;
+  title: string;
+  summary: string;
+  graph: WorkingGraph;
+}
+
+export interface InterviewMessage {
+  id: number;
+  seq: number;
+  role: string; // consultant | user
+  kind: string; // question | choices | notice | answer | choice | confirm | skip
+  content: string;
+  payload: Record<string, unknown> | null;
+  stage: string;
+  superseded: boolean;
+  created_at: string;
+}
+
+export interface InterviewCheckpoint {
+  stage: string;
+  message_seq: number;
+  created_at: string;
+}
+
+export interface InterviewAttachment {
+  id: number;
+  filename: string;
+  mime: string;
+  size: number;
+  status: string; // parsed | failed
+  error: string;
+  created_at: string;
+}
+
+export interface InterviewState {
+  id: number;
+  map_id: number;
+  version_id: number;
+  status: string; // active | completed | abandoned
+  current_stage: string;
+  lang: string;
+  working_graph: WorkingGraph | null;
+  messages: InterviewMessage[];
+  checkpoints: InterviewCheckpoint[];
+  attachments: InterviewAttachment[];
+  version_updated_at: string | null;
+  base_graph_updated_at: string | null;
+}
+
+export function createOrResumeInterview(
+  mapId: number,
+  versionId: number,
+  lang: "ko" | "en",
+): Promise<InterviewState> {
+  return request<InterviewState>(`/maps/${mapId}/interviews`, {
+    method: "POST",
+    body: JSON.stringify({ version_id: versionId, lang }),
+  });
+}
+
+export function getInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}`);
+}
+
+export function getActiveInterview(mapId: number): Promise<InterviewState> {
+  return request<InterviewState>(`/maps/${mapId}/interviews/active`);
+}
+
+export function postInterviewTurn(
+  id: number,
+  turn: { type: "answer" | "choice" | "confirm" | "skip"; content?: string; choice_id?: string },
+): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/turns`, {
+    method: "POST",
+    body: JSON.stringify({ content: "", ...turn }),
+  });
+}
+
+export function postInterviewRevert(id: number, stage: string): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/revert`, {
+    method: "POST",
+    body: JSON.stringify({ stage }),
+  });
+}
+
+export function completeInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/complete`, { method: "POST" });
+}
+
+export function abandonInterview(id: number): Promise<void> {
+  return request<void>(`/interviews/${id}`, { method: "DELETE" });
+}
+
+export async function uploadInterviewAttachment(
+  id: number,
+  file: File,
+): Promise<InterviewAttachment> {
+  // multipart — request()의 JSON Content-Type을 쓰면 boundary가 깨져 별도 경로
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch(`/api/interviews/${id}/attachments`, {
+    method: "POST",
+    body: form,
+    headers,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(
+      `API POST /interviews/${id}/attachments failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return (await response.json()) as InterviewAttachment;
+}
+
 // ── AI 챗 서버 저장 히스토리 (design 2026-07-08) ──────────────
 
 export interface AiChatSessionSummary {
