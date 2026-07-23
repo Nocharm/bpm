@@ -192,7 +192,15 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
       stack.length = level;
     }
     const language = /kor/i.test(sid) ? "ko" : /eng/i.test(sid) ? "en" : "";
-    out.push({ element: p, anchor, title: text, number, level, language });
+    // 백엔드 SectionEntryIn 한도로 클램프(초과 시 422) — 과도한 title은 대개 제목 오검지.
+    out.push({
+      element: p,
+      anchor: anchor.slice(0, 200),
+      title: text.slice(0, 500),
+      number: number.slice(0, 50),
+      level,
+      language,
+    });
   }
   return out;
 }

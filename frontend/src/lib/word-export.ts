@@ -135,10 +135,10 @@ function buildAnchorLabelParagraph(label: string, anchor: string): string {
   const rest = sp === -1 ? "" : label.slice(sp); // 선행 공백 포함, plain
   const linkedRun =
     `<w:hyperlink w:anchor="${escapeXml(anchor)}">` +
-    `<w:r>${buildRunProps({ bold: true, hyperlink: true })}` +
+    `<w:r>${buildRunProps({ hyperlink: true })}` +
     `<w:t xml:space="preserve">${escapeXml(linked)}</w:t></w:r></w:hyperlink>`;
   const restRun = rest
-    ? `<w:r>${buildRunProps({ bold: true })}<w:t xml:space="preserve">${escapeXml(rest)}</w:t></w:r>`
+    ? `<w:r>${buildRunProps({})}<w:t xml:space="preserve">${escapeXml(rest)}</w:t></w:r>`
     : "";
   return `<w:p>${CENTERED_P_PROPS}${linkedRun}${restRun}</w:p>`;
 }
@@ -158,7 +158,7 @@ function buildNodeShape(
   const titleLine =
     node.nodeType === "section" && node.sectionAnchor
       ? buildAnchorLabelParagraph(node.title, node.sectionAnchor)
-      : buildCenteredParagraph(node.title, { bold: true });
+      : buildCenteredParagraph(node.title, {});
   const paragraphs = titleLine + urlLine;
   return (
     "<wps:wsp>" +

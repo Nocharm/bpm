@@ -57,7 +57,7 @@ describe("buildDocx — 노드 도형", () => {
     expect(doc).toContain('w:eastAsia="바탕체"');
     expect(doc).toContain('<w:sz w:val="16"/>'); // 8pt 통일
     expect(doc).toContain('<w:jc w:val="center"/>');
-    expect(doc).toContain("<w:b/>");
+    expect(doc).not.toContain("<w:b/>"); // 볼드 제거(사용자 요청) — 도형 텍스트 비볼드
   });
 
   it("url 있는 노드만 하이퍼링크 — rels TargetMode=External + 파랑 밑줄 라벨", async () => {

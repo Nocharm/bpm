@@ -140,4 +140,10 @@ describe("parseWordSections", () => {
     expect(out.find((s) => s.anchor === "_Toc1")?.language).toBe("ko");
     expect(out.find((s) => s.anchor === "_Toc2")?.language).toBe("en");
   });
+
+  it("백엔드 한도 초과 title은 500자로 클램프한다 (422 방지)", async () => {
+    const xml = doc(heading("H1", ["_Toc1"], "가".repeat(600)));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out[0].title.length).toBe(500);
+  });
 });
