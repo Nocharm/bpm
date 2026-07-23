@@ -6,7 +6,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
-from app.models import MapVersion, ProcessMap
+from app.models import MapVersion, Node, ProcessMap
 
 
 def test_create_map_returns_default_version(client: TestClient) -> None:
@@ -320,3 +320,52 @@ def test_mark_generated_stamps_timestamp(client: TestClient) -> None:
 
     missing = client.post("/api/maps/999999/word-doc/generated")
     assert missing.status_code in (403, 404)
+
+
+def test_copy_convert_to_normal_promotes_sections(client: TestClient) -> None:
+    """승격 복사 — mode/doc 소거, 섹션 노드는 process 변환(앵커 소거·url 유지) (design 2026-07-24 §6)."""
+    name = f"word-promote-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(
+                name=name,
+                visibility="public",
+                mode="word",
+                doc_name="sop.docx",
+                doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+            )
+            v = MapVersion(label="As-Is", status="approved")
+            m.versions.append(v)
+            session.add(m)
+            await session.flush()
+            session.add(
+                Node(
+                    id="sec-1",
+                    version_id=v.id,
+                    title="1 재고",
+                    node_type="section",
+                    section_anchor="_Toc1",
+                    url="http://docs.example/sop",
+                    url_label="SOP",
+                )
+            )
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(
+        f"/api/maps/{map_id}/copy",
+        json={"convert_to_normal": True, "owning_department": "Owning Anchor Division"},
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["mode"] == "normal"
+    assert body["doc_name"] == ""
+    assert body["doc_sections"] == []
+    assert body["owning_department"] == "Owning Anchor Division"
+    graph = client.get(f"/api/versions/{body['versions'][0]['id']}/graph").json()
+    node = next(n for n in graph["nodes"] if n["title"] == "1 재고")
+    assert node["node_type"] == "process"
+    assert node["section_anchor"] == ""
+    assert node["url"] == "http://docs.example/sop"

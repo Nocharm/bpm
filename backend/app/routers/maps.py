@@ -343,23 +343,31 @@ async def copy_map(
 
     copy_name = payload.name or f"{source_map.name} (Copy)"
     await _assert_unique_name(session, copy_name)
+    convert = payload.convert_to_normal
     new_map = ProcessMap(
         name=copy_name,
         description=source_map.description,
         created_by=user,
         owner_id=user,
         visibility="private",
-        owning_department=source_map.owning_department,
-        # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 복사본도 같은 문서 하이퍼링크를 쓴다 (design 2026-07-18)
-        mode=source_map.mode,
-        doc_name=source_map.doc_name,
-        doc_sections=list(source_map.doc_sections),
+        owning_department=payload.owning_department or source_map.owning_department,
+        # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 승격(convert)은 일반 맵으로 소거 (design 2026-07-24 §6)
+        mode="normal" if convert else source_map.mode,
+        doc_name="" if convert else source_map.doc_name,
+        doc_sections=[] if convert else list(source_map.doc_sections),
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
     session.add(new_map)
     await session.flush()
     await clone_graph(session, source_version, new_version.id)
+    if convert:
+        # 승격: 섹션 노드 → 일반 process 노드 일괄 변환(앵커 소거·url은 유지) (design 2026-07-24 §6)
+        for node in await session.scalars(
+            select(Node).where(Node.version_id == new_version.id, Node.node_type == "section")
+        ):
+            node.node_type = "process"
+            node.section_anchor = ""
     record_version_event(session, new_version.id, "created", user)
     session.add(
         MapPermission(

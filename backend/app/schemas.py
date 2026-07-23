@@ -52,6 +52,10 @@ class WordDocIn(BaseModel):
 class MapCopy(BaseModel):
     # 새 맵 이름 — 비우면 "<원본명> (Copy)" (F12 승인본 복사)
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    # Word 맵 → 일반 맵 승격 복사 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
+    convert_to_normal: bool = False
+    # 승격 관문에서 지정한 오우닝 부서 — 없으면 원본 상속
+    owning_department: str | None = None
 
 
 class MapUpdate(BaseModel):
