@@ -9,6 +9,7 @@ import { Headset, Info, Layers, Loader2, Paperclip, RotateCcw, Send, X } from "l
 import type { InterviewState } from "@/lib/api";
 import { choiceOptionsOf } from "@/lib/interview";
 import { MarkdownView } from "@/components/markdown-view";
+import { QuestionOptions } from "@/components/interview/question-options";
 
 // 프리뷰 노드 "Ask about this node" 버튼 → 입력창 멘션 삽입용 커스텀 이벤트 이름
 export const MENTION_EVENT = "iv-mention";
@@ -100,17 +101,13 @@ export function InterviewPanel({
           </li>
         ) : null}
         {quickReplies.length > 0 ? (
-          <li className="ml-7 flex flex-wrap gap-1.5" data-id="iv-quickreplies">
-            {quickReplies.map((option) => (
-              <button
-                key={option}
-                className="rounded-lg border border-accent-tint-border bg-surface px-2.5 py-1 text-caption text-accent hover:bg-accent-tint"
-                onClick={() => onSend(option)}
-                data-id="iv-quickreply"
-              >
-                {option}
-              </button>
-            ))}
+          <li className="ml-7" data-id="iv-quickreplies">
+            <QuestionOptions
+              options={quickReplies}
+              disabled={busy}
+              onSelect={onSend}
+              onFreeType={() => inputRef.current?.focus()}
+            />
           </li>
         ) : null}
         {busy ? (
