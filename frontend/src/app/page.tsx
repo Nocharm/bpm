@@ -20,6 +20,7 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
 import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
+import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { MapCard } from "@/components/maps/map-card";
@@ -49,6 +50,8 @@ export default function MapListPage() {
   const [wordModalOpen, setWordModalOpen] = useState(false);
   // Word 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 문서명)
   const [wordHandoff, setWordHandoff] = useState<WordCreateOutcome | null>(null);
+  // org_path 보유 유저 전용 빠른 생성(자동값 축소) — design 2026-07-24 §3
+  const [wordQuick, setWordQuick] = useState<WordCreateOutcome | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -744,8 +747,26 @@ export default function MapListPage() {
           onClose={() => setWordModalOpen(false)}
           onContinue={(outcome) => {
             setWordModalOpen(false);
-            setWordHandoff(outcome);
-            setDialogOpen(true);
+            if (me?.org_path) {
+              setWordQuick(outcome); // 빠른 생성 — 부서/승인자 자동 (design 2026-07-24 §3)
+            } else {
+              setWordHandoff(outcome); // 폴백: org_path 없는 유저는 기존 전체 다이얼로그
+              setDialogOpen(true);
+            }
+          }}
+        />
+      )}
+      {wordQuick && me?.org_path && (
+        <WordQuickCreateDialog
+          outcome={wordQuick}
+          owningDepartment={me.org_path}
+          approverId={me.username}
+          onClose={() => setWordQuick(null)}
+          onCreated={(detail) => {
+            setWordQuick(null);
+            void refresh();
+            showToast(t("perm.createDialog.toastSuccess"));
+            router.push(`/maps/${detail.id}`);
           }}
         />
       )}
