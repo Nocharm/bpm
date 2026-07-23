@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
-import { copyMap, deleteMap, getDirectory, getMe, listMaps, type Directory, type MapSummary, type Me } from "@/lib/api";
+import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
 import { buildOrgTree, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
@@ -50,6 +50,8 @@ export default function MapListPage() {
   const [wordModalOpen, setWordModalOpen] = useState(false);
   // Word 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 문서명)
   const [wordHandoff, setWordHandoff] = useState<WordCreateOutcome | null>(null);
+  // 재임포트 타겟 맵 — onReimport 핸들러 시작
+  const [reimportTarget, setReimportTarget] = useState<MapSummary | null>(null);
   // org_path 보유 유저 전용 빠른 생성(자동값 축소) — design 2026-07-24 §3
   const [wordQuick, setWordQuick] = useState<WordCreateOutcome | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -702,7 +704,7 @@ export default function MapListPage() {
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
                     onCreate={() => setWordModalOpen(true)}
-                    onReimport={() => undefined}
+                    onReimport={(m) => setReimportTarget(m)}
                     onPromote={() => undefined}
                   />
                 </div>
@@ -769,6 +771,24 @@ export default function MapListPage() {
             router.push(`/maps/${detail.id}`);
           }}
           onPartialCreate={() => void refresh()}
+        />
+      )}
+
+      {reimportTarget && (
+        <WordCreateModal
+          onClose={() => setReimportTarget(null)}
+          onContinue={(outcome) => {
+            const target = reimportTarget;
+            setReimportTarget(null);
+            void setWordDoc(target.id, { doc_name: outcome.docName, sections: outcome.sections })
+              .then(() => {
+                void refresh();
+                showToast("Document re-imported.");
+              })
+              .catch((err) => {
+                showToast(err instanceof Error ? err.message : "Re-import failed.");
+              });
+          }}
         />
       )}
 
