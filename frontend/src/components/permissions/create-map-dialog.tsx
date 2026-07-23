@@ -15,6 +15,7 @@ import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp, LockKeyhole } from "
 import {
   acquireCheckout,
   addMapPermission,
+  copyMap,
   createMap,
   getDirectory,
   listGroups,
@@ -79,9 +80,11 @@ interface Props {
   initialName?: string;
   // 지정 시 생성 후 이동(router.push) 대신 호출측이 후속 처리(플레이스홀더 자동 링크)
   onCreatedMap?: (mapId: number, name: string) => void;
+  /** Word 맵 승격 복사 — 지정 시 createMap 대신 copyMap(convertToNormal)으로 생성 (design 2026-07-24 §6). */
+  promote?: { mapId: number; defaultName: string };
 }
 
-export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote }: Props) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -143,7 +146,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
   // Word 문서로 만들 때는 문서명(확장자 제외)을 이름 기본값으로 — csvBaseName과 동일한 우선순위로 합류
   const wordBaseName = word ? word.docName.replace(/\.docx$/i, "") : "";
-  const [name, setName] = useState(initialName ?? (csvBaseName || wordBaseName));
+  const [name, setName] = useState(initialName ?? promote?.defaultName ?? (csvBaseName || wordBaseName));
   const [description, setDescription] = useState(csvBaseName);
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
@@ -291,13 +294,18 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
       // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
       if (createdRef.current === null) {
-        const detail = await createMap(
-          trimmed,
-          description.trim(),
-          visibility,
-          owningDept.id,
-          word ? { docName: word.docName, sections: word.sections } : undefined,
-        );
+        const detail = promote
+          ? await copyMap(promote.mapId, trimmed, {
+              convertToNormal: true,
+              owningDepartment: owningDept.id,
+            })
+          : await createMap(
+              trimmed,
+              description.trim(),
+              visibility,
+              owningDept.id,
+              word ? { docName: word.docName, sections: word.sections } : undefined,
+            );
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
@@ -353,7 +361,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, onCreated, onClose, onCreatedMap, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, promote, onCreated, onClose, onCreatedMap, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -428,7 +436,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-body-strong text-ink">{t("perm.createDialog.title")}</h2>
+          <h2 className="text-body-strong text-ink">
+            {promote ? "Convert to process map" : t("perm.createDialog.title")}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -525,45 +535,47 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           )}
         </div>
 
-        {/* 공개 범위 / visibility */}
-        <div className="flex flex-col gap-1">
-          <span className="text-caption text-ink-secondary">
-            {t("perm.createDialog.visibilityLabel")}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => handleVisibilityChange("public")}
-              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
-                visibility === "public"
-                  ? "border-accent bg-accent-tint text-accent"
-                  : "border-hairline text-ink hover:bg-surface-alt"
-              }`}
-              disabled={submitting}
-            >
-              <Globe size={16} strokeWidth={1.5} />
-              {t("perm.createDialog.visibilityPublic")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleVisibilityChange("private")}
-              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
-                visibility === "private"
-                  ? "border-accent bg-accent-tint text-accent"
-                  : "border-hairline text-ink hover:bg-surface-alt"
-              }`}
-              disabled={submitting}
-            >
-              <Lock size={16} strokeWidth={1.5} />
-              {t("perm.createDialog.visibilityPrivate")}
-            </button>
+        {/* 공개 범위 / visibility — copy는 항상 private로 생성되므로 promote 모드에선 무의미해 통째로 숨김 */}
+        {!promote && (
+          <div className="flex flex-col gap-1">
+            <span className="text-caption text-ink-secondary">
+              {t("perm.createDialog.visibilityLabel")}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleVisibilityChange("public")}
+                className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                  visibility === "public"
+                    ? "border-accent bg-accent-tint text-accent"
+                    : "border-hairline text-ink hover:bg-surface-alt"
+                }`}
+                disabled={submitting}
+              >
+                <Globe size={16} strokeWidth={1.5} />
+                {t("perm.createDialog.visibilityPublic")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVisibilityChange("private")}
+                className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                  visibility === "private"
+                    ? "border-accent bg-accent-tint text-accent"
+                    : "border-hairline text-ink hover:bg-surface-alt"
+                }`}
+                disabled={submitting}
+              >
+                <Lock size={16} strokeWidth={1.5} />
+                {t("perm.createDialog.visibilityPrivate")}
+              </button>
+            </div>
+            {visibility === "public" && (
+              <p className="text-fine text-ink-tertiary">
+                {t("perm.createDialog.visibilityViewerNote")}
+              </p>
+            )}
           </div>
-          {visibility === "public" && (
-            <p className="text-fine text-ink-tertiary">
-              {t("perm.createDialog.visibilityViewerNote")}
-            </p>
-          )}
-        </div>
+        )}
 
         {/* CSV로 만들기 — 파일명 아코디언. 누르면 요약·경고를 펼친다. */}
         {csv && (

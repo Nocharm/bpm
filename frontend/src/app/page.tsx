@@ -67,6 +67,8 @@ export default function MapListPage() {
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // word 맵 승격 대상 — 지정 시 승격 관문 다이얼로그(CreateMapDialog promote 모드)를 연다 (design 2026-07-24 §6).
+  const [promoteTarget, setPromoteTarget] = useState<{ id: number; name: string } | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
   // 브라우즈 좌측 컬럼 — 내 정보(부서 즐겨찾기)·디렉터리(조직도 트리) + 아코디언 펼침 상태 /
@@ -434,6 +436,7 @@ export default function MapListPage() {
                 mapId={processMap.id}
                 onDelete={(id) => void handleDelete(id)}
                 onCopy={handleCopyOpen}
+                onPromote={(id, name) => setPromoteTarget({ id, name })}
                 onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
               />
             </div>
@@ -705,7 +708,7 @@ export default function MapListPage() {
                     onSelect={setSelectedId}
                     onCreate={() => setWordModalOpen(true)}
                     onReimport={(m) => setReimportTarget(m)}
-                    onPromote={() => undefined}
+                    onPromote={(m) => setPromoteTarget({ id: m.id, name: m.name })}
                   />
                 </div>
               )}
@@ -723,6 +726,7 @@ export default function MapListPage() {
                   mapId={effectiveSelected}
                   onDelete={(id) => void handleDelete(id)}
                   onCopy={handleCopyOpen}
+                  onPromote={(id, name) => setPromoteTarget({ id, name })}
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                 />
               ) : (
@@ -805,6 +809,17 @@ export default function MapListPage() {
             void refresh();
             // silent — 임포트 실패 경로: 맵은 생겼지만 성공 토스트는 띄우지 않는다
             if (!silent) showToast(t("perm.createDialog.toastSuccess"));
+          }}
+        />
+      )}
+
+      {promoteTarget && (
+        <CreateMapDialog
+          promote={{ mapId: promoteTarget.id, defaultName: `${promoteTarget.name} (Copy)` }}
+          onClose={() => setPromoteTarget(null)}
+          onCreated={(silent) => {
+            void refresh();
+            if (!silent) showToast("Converted to process map.");
           }}
         />
       )}
