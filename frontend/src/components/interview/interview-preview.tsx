@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, NodeTypes } from "@xyflow/react";
-import { CheckCheck, MessageSquarePlus, Undo2 } from "lucide-react";
+import { CheckCheck, MessageSquarePlus, Undo2, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -15,6 +15,7 @@ import {
   type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
 import { addedNodeKeys, distinctiveNodeKeys, layoutWorkingGraph, INTERVIEW_STAGES } from "@/lib/interview";
+import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
 import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
@@ -52,12 +53,23 @@ interface HoveredNode {
   y: number;
 }
 
+// 인스펙터 카드의 파라미터 행 라벨 — PARAM_FIELDS 순서와 동기
+const PARAM_LABELS: Record<(typeof PARAM_FIELDS)[number], string> = {
+  duration: "Duration",
+  cost_krw: "Cost (KRW)",
+  cost_usd: "Cost (USD)",
+  headcount: "Headcount",
+  annual_count: "Annual count",
+  fte: "FTE",
+};
+
 function PreviewCanvas({
-  graph, added, wrapperRef,
+  graph, added, wrapperRef, onNodeClick,
 }: {
   graph: WorkingGraph | null;
   added: Set<string>;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
+  onNodeClick: (key: string) => void;
 }) {
   const { nodes, edges } = useMemo(() => {
     const laid = layoutWorkingGraph(graph, added);
@@ -119,6 +131,7 @@ function PreviewCanvas({
         zoomActivationKeyCode={["Control", "Meta"]}
         onNodeMouseEnter={handleNodeEnter}
         onNodeMouseLeave={handleNodeLeave}
+        onNodeClick={(_, node) => onNodeClick(node.id)}
         onMoveStart={() => setHovered(null)}
       />
       {/* 점 격자 미사용 — 프리뷰는 민무늬 캔버스(실사용 피드백 2026-07-24) */}
@@ -149,6 +162,8 @@ export function InterviewPreview({
   const router = useRouter();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [revertStage, setRevertStage] = useState<string | null>(null);
+  // 노드 클릭 인스펙터 — 파라미터·담당 정보를 컨설턴트 모드 안에서 확인 (실사용 피드백 2026-07-24)
+  const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyBusy, setApplyBusy] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -220,7 +235,12 @@ export function InterviewPreview({
         <NodeActionsContext.Provider value={PREVIEW_NODE_ACTIONS}>
           <div ref={wrapperRef} className="iv-preview-flow relative min-h-0 flex-1">
             {graph && graph.nodes.length > 0 ? (
-              <PreviewCanvas graph={graph} added={added} wrapperRef={wrapperRef} />
+              <PreviewCanvas
+                graph={graph}
+                added={added}
+                wrapperRef={wrapperRef}
+                onNodeClick={setInspectedKey}
+              />
             ) : (
               <div className="flex h-full items-center justify-center text-caption text-ink-muted">
                 The map will appear here as the interview progresses.
@@ -255,6 +275,59 @@ export function InterviewPreview({
                 })}
               </div>
             ) : null}
+            {/* 노드 인스펙터 — 클릭한 노드의 담당·시스템·회당 파라미터 확인 (읽기전용) */}
+            {(() => {
+              const node = inspectedKey
+                ? graph?.nodes.find((n) => n.key === inspectedKey)
+                : undefined;
+              if (!node) return null;
+              const attrs = node.attributes;
+              const rows: [string, string][] = [
+                ["Assignee", attrs?.assignee || "—"],
+                ["Department", attrs?.department || "—"],
+                ["System", attrs?.system || "—"],
+                ...PARAM_FIELDS.map((field): [string, string] => [
+                  PARAM_LABELS[field],
+                  attrs?.[field] ? formatParamValue(field, attrs[field] ?? "") : "—",
+                ]),
+              ];
+              return (
+                <div
+                  className="absolute right-3 top-3 z-10 w-64 rounded-md border border-hairline bg-surface shadow-md"
+                  data-id="iv-node-inspector"
+                >
+                  <div className="flex items-start justify-between gap-2 border-b border-hairline px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-caption-strong text-ink">{node.title}</div>
+                      <div className="text-fine text-ink-muted">{node.node_type}</div>
+                    </div>
+                    <button
+                      className="shrink-0 rounded-xs p-0.5 text-ink-muted hover:text-ink"
+                      onClick={() => setInspectedKey(null)}
+                      title="Close"
+                      data-id="iv-node-inspector-close"
+                    >
+                      <X size={16} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                  {node.description ? (
+                    <div className="border-b border-hairline px-3 py-2 text-fine text-ink-secondary">
+                      {node.description}
+                    </div>
+                  ) : null}
+                  <dl className="px-3 py-2">
+                    {rows.map(([label, value]) => (
+                      <div key={label} className="flex items-baseline justify-between gap-2 py-0.5">
+                        <dt className="shrink-0 text-fine text-ink-muted">{label}</dt>
+                        <dd className={"truncate text-fine " + (value === "—" ? "text-ink-muted" : "text-ink-secondary")}>
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              );
+            })()}
             {/* 선택지 플로팅 창 — 복수 안을 캔버스 위에 나란히, 선택하면 모두 닫힘 (요구 2) */}
             {choices && choices.length > 0 ? (
               <div

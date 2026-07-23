@@ -50,8 +50,8 @@ STAGES: tuple[StageDef, ...] = (
     ),
     StageDef(
         "params", "Parameters",
-        "회당 파라미터(소요시간·비용·인원·연간횟수·FTE)를 아는 범위에서 채운다",
-        "Fill in per-run parameters (duration, cost, headcount, annual count, FTE)",
+        "파라미터 체계를 설명한 뒤 활동별 회당 파라미터(소요시간 H.MM·비용 단일통화·인원·연간횟수·FTE)를 하나씩 확인해 확정한다 — 모르는 값은 비워 둔다",
+        "Explain the parameter system, then confirm per-activity values (duration H.MM, single-currency cost, headcount, annual count, FTE) one by one — leave unknowns empty",
         ("params_done",),
     ),
     StageDef(

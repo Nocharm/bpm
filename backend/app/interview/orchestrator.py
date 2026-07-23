@@ -220,6 +220,25 @@ async def run_turn(
         _append(db, interview, seq + 1, "consultant", "choices", out.message, payload=choices)
         return
 
+    # 연속 드래프트 — facts가 갱신된 일반 턴이면 작업본을 재생성해 맵을 라이브로 갱신
+    # (실사용 회귀 2026-07-24: 선택지 시점에만 그리면 대화 내내 맵이 정지). 실패는 턴을 죽이지 않는다.
+    graph_changed = chosen is not None
+    if turn.type != "choice" and out.facts_patch:
+        try:
+            proposal = await _ask_json(
+                build_drafter_messages(
+                    interview.current_stage, interview.lang, interview.facts,
+                    interview.working_graph, context_text,
+                    "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기",
+                ),
+                model, AiProposal,
+            )
+            if proposal.kind == "graph" and proposal.nodes:
+                interview.working_graph = _graph_from_proposal(proposal)
+                graph_changed = True
+        except TurnError:
+            logger.warning("interview redraft skipped (drafter failed) — turn continues")
+
     # 스테이지 완료 — 다음 단계가 있을 때만 체크포인트+톤 검수+전이.
     # review(마지막)에서는 반복 실행하지 않는다 — 매 턴 stage_complete를 주는 모델이
     # 같은 자리에서 체크포인트·톤 노티스를 스팸하는 것을 차단 (실사용 회귀 2026-07-23).
@@ -231,7 +250,9 @@ async def run_turn(
     if is_complete and next_key is not None:
         consultant_msg = _append(db, interview, seq + 1, "consultant", "question", out.message,
                                  payload=question_payload)
-        applied = await _tone_review(interview, model)
+        # 톤 검수는 이번 턴에 그래프가 실제로 바뀐 경우만 — 같은 그래프 재검수가
+        # '설정→설정하기→설정' 플립플롭 노이즈를 만든다 (실사용 회귀 2026-07-24)
+        applied = await _tone_review(interview, model) if graph_changed else []
         if applied:
             _append(db, interview, consultant_msg.seq + 1, "consultant", "notice",
                     _tone_notice_text(interview.lang, applied))

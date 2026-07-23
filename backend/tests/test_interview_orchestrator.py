@@ -142,10 +142,11 @@ def test_stage_complete_runs_tone_review_renames() -> None:
     graph.pop("kind", None)
     interview = _session(current_stage="activities", working_graph=graph,
                          facts={"activities": {}})
+    # 연속 드래프트가 먼저 실행(facts_patch 존재)되므로 인터뷰어→드래프터→톤 순으로 스크립트
     _run(db, interview,
          InterviewTurnIn(type="answer", content="이대로 좋아요"),
          [json.dumps({"message": "확정", "facts_patch": {"activities": "요청서 작성"},
-                      "stage_complete": True}), TONE])
+                      "stage_complete": True}), DRAFT, TONE])
     titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
     assert titles["a"] == "요청서 접수"  # 톤 검수 개명 반영
     # 노티스는 무슨 개명이 적용됐는지 구체적으로 알린다 (실사용 회귀 2026-07-23)
@@ -166,6 +167,25 @@ def test_review_stage_completion_does_not_spam_checkpoint_or_tone() -> None:
                       "stage_complete": True})])
     assert interview.current_stage == "review"
     assert [type(o).__name__ for o in db.added if type(o).__name__ == "InterviewCheckpoint"] == []
+    kinds = [m.kind for m in db.added]
+    assert kinds == ["answer", "question"]
+
+
+def test_facts_update_triggers_live_redraft() -> None:
+    """facts가 갱신된 일반 턴은 드래프터를 돌려 맵을 라이브 갱신한다 (실사용 회귀 2026-07-24)."""
+    db, interview = _FakeDb(), _session()
+    _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"),
+         [INTERVIEWER_Q, DRAFT])
+    assert interview.working_graph is not None
+    assert any(n["title"] == "요청서 작성" for n in interview.working_graph["nodes"])
+
+
+def test_redraft_failure_does_not_kill_turn() -> None:
+    """드래프터 실패는 턴을 죽이지 않는다 — 인터뷰어 응답은 그대로 전달."""
+    db, interview = _FakeDb(), _session()
+    _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"),
+         [INTERVIEWER_Q, "깨진 드래프트", "여전히 깨짐"])
+    assert interview.working_graph is None
     kinds = [m.kind for m in db.added]
     assert kinds == ["answer", "question"]
 
