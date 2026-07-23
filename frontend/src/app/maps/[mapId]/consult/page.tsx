@@ -90,7 +90,9 @@ export default function ConsultPage() {
     if (!interview) return;
     try {
       const uploaded = await uploadInterviewAttachment(interview.id, file);
-      setInterview({ ...interview, attachments: [...interview.attachments, uploaded] });
+      setInterview((prev) =>
+        prev ? { ...prev, attachments: [...prev.attachments, uploaded] } : prev,
+      );
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to upload the file.");
     }
