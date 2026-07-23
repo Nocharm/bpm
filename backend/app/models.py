@@ -617,3 +617,94 @@ class DashboardCoverageDept(Base):
     org_path: Mapped[str] = mapped_column(String(200), primary_key=True)
     added_by: Mapped[str] = mapped_column(String(100))
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class InterviewSession(Base):
+    """AI 컨설턴트 인터뷰 세션 — 작업본·facts의 단일 소스. 맵×사용자당 active 1개 (design 2026-07-23)."""
+
+    __tablename__ = "interview_sessions"
+    __table_args__ = (Index("ix_interview_sessions_login_map", "login_id", "map_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
+    # FK 아님 — 버전이 삭제돼도 세션 기록 보존(ai_chat_messages.version_id 관례)
+    version_id: Mapped[int] = mapped_column(Integer)
+    login_id: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active|completed|abandoned
+    current_stage: Mapped[str] = mapped_column(String(20), default="scope")
+    lang: Mapped[str] = mapped_column(String(5), default="ko")  # ko|en — 생성 시 고정
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)  # 스테이지 키별 수집 항목
+    # 작업본 그래프 — AiProposal graph 서브셋 {nodes,edges,groups} (키 기반, 좌표 없음)
+    working_graph: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # 마지막 choices 카드 원자료 — 선택 턴에서 조회 후 소거
+    pending_choices: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # 세션 시작 시점의 대상 draft updated_at — 적용 전 충돌 경고 판정용
+    base_graph_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    messages: Mapped[list["InterviewMessage"]] = relationship(cascade="all, delete-orphan")
+    checkpoints: Mapped[list["InterviewCheckpoint"]] = relationship(cascade="all, delete-orphan")
+    attachments: Mapped[list["InterviewAttachment"]] = relationship(cascade="all, delete-orphan")
+
+
+class InterviewMessage(Base):
+    """인터뷰 대화 1건 — P3 RAG 축적의 원재료. 되돌리기는 삭제 대신 superseded 접기."""
+
+    __tablename__ = "interview_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    role: Mapped[str] = mapped_column(String(12))  # consultant|user
+    # consultant: question|choices|confirm|notice / user: answer|choice|confirm|skip
+    kind: Mapped[str] = mapped_column(String(12))
+    content: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict | None] = mapped_column(JSON, default=None)  # 선택지·선택결과 등
+    stage: Mapped[str] = mapped_column(String(20))
+    superseded: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class InterviewCheckpoint(Base):
+    """스테이지 완료 시점 스냅샷 — '이전 단계로'의 복원 지점."""
+
+    __tablename__ = "interview_checkpoints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True
+    )
+    stage: Mapped[str] = mapped_column(String(20))
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)
+    working_graph: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # 이 시점까지의 메시지 seq — 복원 시 이후 메시지를 superseded 처리하는 경계
+    message_seq: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class InterviewAttachment(Base):
+    """세션 첨부 문서 — 원본 미보존, parsed_text만 저장 (design 2026-07-23 §13)."""
+
+    __tablename__ = "interview_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(300))
+    mime: Mapped[str] = mapped_column(String(100), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    parsed_text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="parsed")  # parsed|failed
+    error: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

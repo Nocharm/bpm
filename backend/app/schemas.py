@@ -1392,3 +1392,73 @@ class EmbedCheckOut(BaseModel):
     """임베드 체크 — True/False=판정, None=대상 도달 실패(판정 불가) (embed-check design 2026-07-08)."""
 
     embeddable: bool | None
+
+
+# ---------- AI 컨설턴트 인터뷰 (design 2026-07-23) ----------
+
+InterviewUserTurnType = Literal["answer", "choice", "confirm", "skip"]
+
+
+class InterviewCreateIn(BaseModel):
+    version_id: int
+    lang: Literal["ko", "en"] = "ko"
+
+
+class InterviewTurnIn(BaseModel):
+    type: InterviewUserTurnType
+    content: str = Field(default="", max_length=4000)
+    choice_id: str | None = Field(default=None, max_length=20)
+
+
+class InterviewRevertIn(BaseModel):
+    stage: str = Field(min_length=1, max_length=20)
+
+
+class InterviewMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    seq: int
+    role: str
+    kind: str
+    content: str
+    payload: dict | None = None
+    stage: str
+    superseded: bool
+    created_at: datetime
+
+
+class InterviewCheckpointOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    stage: str
+    message_seq: int
+    created_at: datetime
+
+
+class InterviewAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    mime: str
+    size: int
+    status: str
+    error: str
+    created_at: datetime
+
+
+class InterviewStateOut(BaseModel):
+    id: int
+    map_id: int
+    version_id: int
+    status: str
+    current_stage: str
+    lang: str
+    working_graph: dict | None = None
+    messages: list[InterviewMessageOut] = Field(default_factory=list)
+    checkpoints: list[InterviewCheckpointOut] = Field(default_factory=list)
+    attachments: list[InterviewAttachmentOut] = Field(default_factory=list)
+    # 충돌 경고 판정용 — 현재 draft updated_at vs 세션 시작 시점
+    version_updated_at: datetime | None = None
+    base_graph_updated_at: datetime | None = None
