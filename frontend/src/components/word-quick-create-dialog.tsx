@@ -17,6 +17,8 @@ interface WordQuickCreateDialogProps {
   approverId: string;
   onClose: () => void;
   onCreated: (detail: MapDetail) => void;
+  /** 부분 실패(맵은 생성됨) 시 목록 갱신 — create-map-dialog onCreated(true) 선례 */
+  onPartialCreate?: () => void;
 }
 
 export function WordQuickCreateDialog({
@@ -25,6 +27,7 @@ export function WordQuickCreateDialog({
   approverId,
   onClose,
   onCreated,
+  onPartialCreate,
 }: WordQuickCreateDialogProps) {
   const [name, setName] = useState(outcome.docName.replace(/\.docx$/i, ""));
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +50,10 @@ export function WordQuickCreateDialog({
       await setApprovers(createdRef.current.id, [approverId]); // 멱등 PUT — 재시도 안전
       onCreated(createdRef.current);
     } catch (err) {
+      // Partial failure: map created but approvers step failed. Refresh parent list silently.
+      if (createdRef.current !== null) {
+        onPartialCreate?.();
+      }
       setError(err instanceof Error ? err.message : "Failed to create map.");
       setSubmitting(false);
     }
@@ -68,6 +75,7 @@ export function WordQuickCreateDialog({
           <button
             type="button"
             data-id="word-quick-create-close"
+            aria-label="Close"
             onClick={onClose}
             className="rounded-sm p-1 text-ink-muted hover:bg-surface-alt"
           >

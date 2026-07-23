@@ -768,6 +768,7 @@ export default function MapListPage() {
             showToast(t("perm.createDialog.toastSuccess"));
             router.push(`/maps/${detail.id}`);
           }}
+          onPartialCreate={() => void refresh()}
         />
       )}
 
