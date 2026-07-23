@@ -18,6 +18,7 @@
 - [Excel 출력 2안 — WBS 레벨 컬럼·형식 선택 모달](2026-07-17-excel-export-wbs-v2-design.md)
 - [Word 도형 순서도 내보내기](2026-07-11-word-export-design.md)
 - [Word 맵 섹션 링크 — 문서 내부 하이퍼링크 순서도](2026-07-18-word-map-section-linking-design.md) — 섹션=서브프로세스 대체·read-only 북마크 파서·앵커 링크(진행 중)
+- [Word 맵 — 맵 탭 분리 표현·생성 분기·라이프사이클](2026-07-24-word-map-lifecycle-design.md) — 문서 부속 산출물 정체성·홈 섹션 분리·자동값 생성·개정 타임스탬프·승격 복사
 
 ## CSV
 - [CSV로 새 맵 만들기 + 클립보드 복사 수정](2026-07-10-csv-create-flow-design.md)
