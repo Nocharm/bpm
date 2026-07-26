@@ -213,11 +213,20 @@ const mergeNode = (
   // 통화 전환은 편도 pick이 아니라 반대쪽을 함께 비우는 병합 — resolveCostFields(finding: 한쪽만
   // pick하면 기존 반대쪽 통화값이 안 지워져 두 통화가 동시에 채워진 채로 저장 시도돼 422 루프에 빠진다)
   const cost = resolveCostFields(allowed.cost_krw ?? "", allowed.cost_usd ?? "", existing.cost_krw ?? "", existing.cost_usd ?? "");
+  const mergedSectionAnchor = pick(next.section_anchor ?? "", existing.section_anchor ?? "");
   return {
     node: {
       ...existing,
       title: next.title,
-      node_type: existing.linked_map_id !== null ? existing.node_type : next.node_type,
+      node_type:
+        existing.linked_map_id !== null
+          ? existing.node_type
+          : next.node_type === "start" || next.node_type === "end"
+            ? next.node_type
+            // 앵커가 살아남으면 섹션 유지 — 서버 _sanitize_word_graph 승격 규칙의 FE 미러(AI가 타입을 process로 에코해도 링크 보존)
+            : mergedSectionAnchor !== ""
+              ? "section"
+              : next.node_type,
       description: pick(next.description, existing.description),
       assignee: pick(next.assignee, existing.assignee),
       department: pick(next.department, existing.department),
@@ -230,7 +239,7 @@ const mergeNode = (
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
-      section_anchor: pick(next.section_anchor ?? "", existing.section_anchor ?? ""),
+      section_anchor: mergedSectionAnchor,
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,

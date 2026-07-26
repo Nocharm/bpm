@@ -998,4 +998,18 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(section?.node_type).toBe("section");
     expect(section?.section_anchor).toBe("_Toc1");
   });
+
+  // finding 1(important) — 기존 section 노드를 AI가 process로 에코해도(속성 없이) 앵커가
+  // 살아남는 한 섹션을 유지해야 한다. 안 그러면 word-export.ts의 "section && anchor" 조건이
+  // 깨져 문서 링크가 조용히 사라진다.
+  it("제목 매칭된 기존 section 노드는 AI가 process로 에코해도 앵커가 살아있으면 섹션을 유지한다 (finding 1)", () => {
+    const existing = baseNode("n1", "1 재고", { node_type: "section", section_anchor: "_Toc1" });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "1 재고", "process")], edges: [], groups: [] },
+      { base: base([existing]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(node?.node_type).toBe("section");
+    expect(node?.section_anchor).toBe("_Toc1");
+  });
 });

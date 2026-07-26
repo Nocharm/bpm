@@ -169,10 +169,11 @@ def build_interviewer_messages(
     stage = get_stage(stage_key, mode)
     goal = stage.goal_ko if lang == "ko" else stage.goal_en
     contract = _INTERVIEWER_CONTRACT + (_INTERVIEWER_WORD_ADDENDUM if mode == "word" else "")
-    catalog_block = f"\n[문서 섹션 카탈로그]\n{section_catalog}\n" if section_catalog else ""
+    catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
-        f"[참고 문서]\n{context_text or '(없음)'}{catalog_block}\n"
+        f"[참고 문서]\n{context_text or '(없음)'}\n\n"
+        f"{catalog_block}"
         f"[현재 스테이지] {stage.key} — {goal}\n"
         f"[누적 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본 요약]\n{graph_summary or '(빈 캔버스)'}"
@@ -196,10 +197,11 @@ def build_drafter_messages(
 ) -> list[dict]:
     current = json.dumps(working_graph, ensure_ascii=False) if working_graph else "(없음)"
     contract = _DRAFTER_CONTRACT + (_DRAFTER_WORD_ADDENDUM if mode == "word" else "")
-    catalog_block = f"\n[문서 섹션 카탈로그]\n{section_catalog}\n" if section_catalog else ""
+    catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
-        f"[참고 문서]\n{context_text or '(없음)'}{catalog_block}\n"
+        f"[참고 문서]\n{context_text or '(없음)'}\n\n"
+        f"{catalog_block}"
         f"[확정 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본]\n{current}\n\n"
         f"[이 안의 방향] {variant_hint}"

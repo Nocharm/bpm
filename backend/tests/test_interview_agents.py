@@ -103,10 +103,18 @@ def test_word_mode_prompts_carry_catalog_and_contract() -> None:
 
 
 def test_normal_mode_prompts_unchanged() -> None:
-    from app.interview.agents import build_drafter_messages
+    from app.interview.agents import build_drafter_messages, build_interviewer_messages
 
     dr = build_drafter_messages("activities", "ko", {}, None, "", "힌트")
     assert "section_anchor" not in dr[0]["content"]
+    # 카탈로그 삽입이 일반 모드의 블록 사이 개행을 갉아먹지 않는지 고정
+    assert "[참고 문서]\n(없음)\n\n[확정 facts]" in dr[0]["content"]
+
+    iv = build_interviewer_messages(
+        stage_key="scope", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="안녕",
+    )
+    assert "[참고 문서]\n(없음)\n\n[현재 스테이지]" in iv[0]["content"]
 
 
 def test_ai_node_attributes_accepts_section_anchor() -> None:

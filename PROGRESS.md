@@ -14,6 +14,7 @@
 - 구현: FE `mode` 노출 + word 3단계 칩(`WORD_INTERVIEW_STAGES`·`stagesForMode`·`stageIndex(key, mode?)`) — consult 페이지 진행 닷·인터뷰 패널 스테이지 칩/디바이더 라벨·프리뷰 체크포인트 라벨 전부 mode 인지(Task 5). `InterviewState.mode` 노출(api.ts). 560개 vitest 통과, tsc 0, lint 0.
 - 수정: FE `aiNodeToGraphNode` `section_anchor` 스레딩(Task 6 — AI 변환 2곳 대칭 완성: csv-import buildGraphFromAiProposal 기존·page.tsx aiNodeToGraphNode 신규). 회귀 테스트 추가(buildGraphFromAiProposal 기존 코드로 통과), 561개 vitest·tsc 0·lint 0.
 - 검증: word 모드 pw 스모크(`pw-smoke-consult-word.mjs` — 3단계 닷/칩·섹션 노드 프리뷰 렌더) + 원본 `pw-smoke-consult.mjs` 회귀 둘 다 통과, 전체 게이트 실행(Task 7 — 최종). backend pytest 774 passed·ruff 0. frontend vitest 561 passed·tsc 0·lint 0(무관 기존 경고 1)·build OK.
+- 리뷰 픽스(최종): `mergeNode`(csv-import.ts)가 제목 매칭된 section 노드를 AI가 process로 에코해도 병합 후 section_anchor가 살아있으면 node_type을 section으로 승격(서버 `_sanitize_word_graph` 규칙의 FE 미러) — 안 그러면 word-export.ts의 "section && anchor" 조건이 깨져 문서 링크가 조용히 사라짐. `agents.py` 카탈로그 삽입이 없앤 일반 모드 프롬프트 개행 1줄 복원 + 개행 스펙 고정 테스트 추가. frontend vitest 562 passed·tsc 0. backend pytest 774 passed·ruff 0.
 
 ## 2026-07-26 — 첨부 칩 접기 + 복수/폴더 첨부 리뷰·업로드 진행 (worktree-ai-consultant)
 - **칩 목록 접기**: 첨부 칩 5개(약 두 줄)까지만 노출, 초과분은 `+N more` 토글로 펼침/접힘.
