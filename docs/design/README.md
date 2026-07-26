@@ -29,6 +29,7 @@
 - [AI graph 제안 CSV 병합 파이프라인](2026-07-11-ai-graph-merge-design.md)
 - [AI 사용량 계측·집계 + 매뉴얼 섹션 선별](2026-07-11-ai-usage-manual-select-design.md)
 - [AI 컨설턴트 인터뷰 모드](2026-07-23-ai-consultant-interview-design.md) — 풀스크린 인터뷰·스테이지 엔진·선택지 병렬 생성·지식기반/RAG(P1~P3)
+- [Word 맵 AI 컨설턴트 — 문서→순서도 변환 모드](2026-07-26-word-map-ai-consultant-design.md) — word 전용 3스테이지·섹션 매핑 계약(앵커 검증·라벨 재구성)·카탈로그+원본 업로드
 
 ## 권한 · 워크플로 · 맵
 - [맵 필수 필드 '오우닝 부서'](2026-07-10-owning-department-design.md)
