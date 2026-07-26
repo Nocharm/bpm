@@ -29,6 +29,7 @@ from app.routers import (
     graph,
     groups,
     inbox,
+    interviews,
     library,
     manual,
     maps,
@@ -72,6 +73,7 @@ app.include_router(notifications.router)
 app.include_router(feedback.router)
 app.include_router(notices.router)
 app.include_router(inbox.router)
+app.include_router(interviews.router)
 app.include_router(manual.router)
 app.include_router(dashboard.router)
 app.include_router(library.router)

@@ -39,6 +39,12 @@ services:
       AI_API_TOKEN: ${AI_API_TOKEN:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      # AI 호출 동시성 상한 (인터뷰 등 백그라운드 호출 포함)
+      AI_MAX_CONCURRENCY: ${AI_MAX_CONCURRENCY:-4}
+      # 인터뷰 턴당 AI 제시 선택지 개수
+      INTERVIEW_CHOICE_COUNT: ${INTERVIEW_CHOICE_COUNT:-2}
+      # 인터뷰 첨부파일 컨텍스트 예산(문자 수)
+      INTERVIEW_CONTEXT_BUDGET: ${INTERVIEW_CONTEXT_BUDGET:-12000}
       # 다중 엔드포인트+모델(JSON 배열) — 비우면 위 단일 AI_* 사용 (.env.example 참고)
       AI_ENDPOINTS: ${AI_ENDPOINTS:-}
       # 사내 AD(LDAP) 동기화 (design 2026-06-16) — 비우면 동기화 비활성(.env로 주입, 시크릿 포함)
