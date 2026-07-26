@@ -71,7 +71,7 @@ DRAFT = json.dumps({
 TONE = json.dumps({"message": "표준 부합", "renames": [{"key": "a", "title": "요청서 접수"}]})
 
 
-def _run(db, interview, turn, replies):
+def _run(db, interview, turn, replies, doc_sections=None):
     fake, state = _scripted_ai(replies)
 
     async def _go(monkey_target=fake):
@@ -79,7 +79,9 @@ def _run(db, interview, turn, replies):
         orig = ai_client.call_ai
         ai_client.call_ai = monkey_target
         try:
-            await orchestrator_call.run_turn(db, interview, turn, "(빈 캔버스)", "")
+            await orchestrator_call.run_turn(
+                db, interview, turn, "(빈 캔버스)", "", doc_sections=doc_sections
+            )
         finally:
             ai_client.call_ai = orig
 
@@ -263,3 +265,58 @@ def test_redraw_request_triggers_redraft_without_facts() -> None:
     _run(db, interview, InterviewTurnIn(type="answer", content="그림 그리라고 그림"), [reply, DRAFT])
     assert interview.working_graph is not None
     assert any(n["title"] == "요청서 작성" for n in interview.working_graph["nodes"])
+
+
+_WORD_SECTIONS = [
+    {"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1, "language": "ko"},
+    {"anchor": "_Toc2", "title": "출고", "number": "2", "level": 1, "language": "ko"},
+]
+
+WORD_DRAFT = json.dumps({
+    "kind": "graph", "message": "문서 기반 초안",
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start"},
+        {"key": "a", "title": "아무거나", "node_type": "section",
+         "attributes": {"section_anchor": "_Toc1"}},
+        {"key": "b", "title": "유령 섹션", "node_type": "section",
+         "attributes": {"section_anchor": "_TocGhost"}},
+        {"key": "e", "title": "끝", "node_type": "end"},
+    ],
+    "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "b"},
+              {"source": "b", "target": "e"}],
+    "groups": [],
+})
+
+
+def test_sanitize_word_graph_demotes_and_rebuilds_labels() -> None:
+    graph = json.loads(WORD_DRAFT)
+    cleaned, demoted = orchestrator._sanitize_word_graph(
+        {"nodes": graph["nodes"], "edges": graph["edges"], "groups": []}, _WORD_SECTIONS
+    )
+    by_key = {n["key"]: n for n in cleaned["nodes"]}
+    assert demoted == 1
+    assert by_key["a"]["node_type"] == "section"
+    assert by_key["a"]["title"] == "1 재고"  # 카탈로그 기준 라벨 재구성 (§4)
+    assert by_key["b"]["node_type"] == "process"  # 무효 앵커 강등
+    assert (by_key["b"].get("attributes") or {}).get("section_anchor", "") == ""
+    assert by_key["s"]["node_type"] == "start"  # 비섹션 무변경
+
+
+def test_word_turn_sanitizes_redraft_and_appends_demote_notice() -> None:
+    db = _FakeDb()
+    interview = _session(mode="word", current_stage="draft")
+    reply = json.dumps({"message": "초안입니다", "facts_patch": {"seen": "y"}})
+    _run(db, interview, InterviewTurnIn(type="answer", content="그려줘"),
+         [reply, WORD_DRAFT], doc_sections=_WORD_SECTIONS)
+    titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
+    assert titles["a"] == "1 재고"
+    notices = [m for m in db.added if getattr(m, "kind", "") == "notice"]
+    assert any("1" in (m.content or "") for m in notices)  # 강등 1건 노티스
+
+
+def test_normal_turn_unaffected_by_missing_doc_sections() -> None:
+    db = _FakeDb()
+    interview = _session()
+    _run(db, interview, InterviewTurnIn(type="answer", content="네"),
+         [INTERVIEWER_Q, DRAFT])
+    assert interview.working_graph is not None

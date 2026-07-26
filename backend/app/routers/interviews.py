@@ -232,9 +232,14 @@ async def post_turn(
 
     current = await _load_graph(session, interview.version_id)
     context_text = await _context_text(interview)
+    doc_sections: list[dict] | None = None
+    if interview.mode == "word":
+        found_map = await session.get(ProcessMap, interview.map_id)
+        doc_sections = list(found_map.doc_sections) if found_map else []
     try:
         await run_turn(
-            session, interview, payload, _graph_summary(current), context_text
+            session, interview, payload, _graph_summary(current), context_text,
+            doc_sections=doc_sections,
         )
     except TurnError as exc:
         await session.rollback()
