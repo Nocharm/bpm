@@ -70,8 +70,11 @@ const run = async () => {
   // 리디자인(2026-07-26): 스테이지 칩 + 컴포저 카드
   await page.waitForSelector('[data-id="iv-stage-chip"]');
   await page.waitForSelector('[data-id="iv-composer"]');
-  // 글자 크기 컨트롤 + 첨부 안내 모달 (2026-07-24 5차 UX)
-  await page.waitForSelector('[data-id="iv-font-dec"]');
+  // 글자 크기 Aa 팝오버 (2026-07-26) + 첨부 안내 모달 (2026-07-24 5차 UX)
+  await page.click('[data-id="iv-font"]');
+  await page.waitForSelector('[data-id="iv-font-pop"]');
+  await page.click('[data-id="iv-font-opt-12"]');
+  await page.waitForSelector('[data-id="iv-font-pop"]', { state: "detached" });
   await page.click('[data-id="iv-attach"]');
   await page.waitForSelector('[data-id="confirm-dialog"]');
   await page.click('[data-id="confirm-dialog-cancel"]');

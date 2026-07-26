@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown, FileText, HardDrive, Headset, Info, Layers, Lightbulb, Paperclip,
-  RotateCcw, Send, SkipForward, Type, X,
+  RotateCcw, Send, SkipForward, X,
 } from "lucide-react";
 
 import { getAiTips, type InterviewState } from "@/lib/api";
@@ -62,9 +62,11 @@ export function InterviewPanel({
   const [tips, setTips] = useState<string[]>([]);
   const [showAttachInfo, setShowAttachInfo] = useState(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [fontOpen, setFontOpen] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fontRef = useRef<HTMLDivElement>(null);
 
   const live = interview.messages.filter((m) => !m.superseded);
   const last = live[live.length - 1];
@@ -143,12 +145,29 @@ export function InterviewPanel({
     onSend(content);
   }
 
-  function changeFont(step: number) {
-    const idx = (FONT_STEPS as readonly number[]).indexOf(fontPx);
-    const next = FONT_STEPS[Math.min(FONT_STEPS.length - 1, Math.max(0, idx + step))];
-    setFontPx(next);
-    window.localStorage.setItem(FONT_KEY, String(next)); // 영속은 핸들러에서 (StrictMode effect 리셋 함정)
+  function selectFont(px: number) {
+    setFontPx(px);
+    setFontOpen(false);
+    window.localStorage.setItem(FONT_KEY, String(px)); // 영속은 핸들러에서 (StrictMode effect 리셋 함정)
+    inputRef.current?.focus();
   }
+
+  // 글자 크기 팝오버 — 바깥 클릭(capture)·Escape 닫힘
+  useEffect(() => {
+    if (!fontOpen) return;
+    const handleDown = (event: PointerEvent) => {
+      if (fontRef.current && !fontRef.current.contains(event.target as Node)) setFontOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFontOpen(false);
+    };
+    window.addEventListener("pointerdown", handleDown, true);
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("pointerdown", handleDown, true);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [fontOpen]);
 
   // 스크롤 다운 버튼 — 바닥에서 일정 이상 올라갔을 때만 (setState는 스크롤 이벤트 핸들러에서)
   function handleScroll() {
@@ -391,26 +410,44 @@ export function InterviewPanel({
               <Paperclip size={15} strokeWidth={1.5} />
             </button>
             <span className="mx-0.5 h-4 w-px bg-hairline" />
-            {/* 채팅 글자 크기 — 브라우저별 저장(localStorage) */}
-            <Type size={12} strokeWidth={1.5} />
-            <button
-              className="rounded-xs px-1 py-0.5 text-fine hover:bg-surface-alt hover:text-ink disabled:opacity-40"
-              title="Smaller text"
-              disabled={fontPx === FONT_STEPS[0]}
-              onClick={() => changeFont(-1)}
-              data-id="iv-font-dec"
-            >
-              A−
-            </button>
-            <button
-              className="rounded-xs px-1 py-0.5 text-fine hover:bg-surface-alt hover:text-ink disabled:opacity-40"
-              title="Larger text"
-              disabled={fontPx === FONT_STEPS[FONT_STEPS.length - 1]}
-              onClick={() => changeFont(1)}
-              data-id="iv-font-inc"
-            >
-              A+
-            </button>
+            {/* 채팅 글자 크기 — Aa 팝오버에서 4단계 직접 선택, 브라우저별 저장(localStorage) */}
+            <div className="relative" ref={fontRef}>
+              <button
+                className={
+                  "rounded-sm px-1.5 py-1 text-fine hover:bg-surface-alt hover:text-ink " +
+                  (fontOpen ? "bg-surface-alt text-ink" : "")
+                }
+                title="Text size"
+                onClick={() => setFontOpen((v) => !v)}
+                data-id="iv-font"
+              >
+                Aa
+              </button>
+              {fontOpen ? (
+                <div
+                  className="absolute bottom-full left-0 z-20 mb-1.5 flex items-end gap-0.5 rounded-md border border-hairline bg-surface p-1 shadow-lg"
+                  data-id="iv-font-pop"
+                >
+                  {FONT_STEPS.map((px) => (
+                    <button
+                      key={px}
+                      className={
+                        "flex w-8 flex-col items-center rounded-sm px-1 pb-0.5 pt-1 leading-none " +
+                        (px === fontPx
+                          ? "bg-accent-tint text-accent"
+                          : "text-ink-secondary hover:bg-surface-alt")
+                      }
+                      title={`${px}px`}
+                      onClick={() => selectFont(px)}
+                      data-id={`iv-font-opt-${px}`}
+                    >
+                      <span style={{ fontSize: px }}>A</span>
+                      <span className="mt-0.5 text-fine">{px}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             {interview.status === "active" && interview.current_stage !== "review" ? (
               <>
                 <span className="mx-0.5 h-4 w-px bg-hairline" />
