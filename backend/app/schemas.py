@@ -1161,7 +1161,8 @@ class EligibleAssigneesOut(BaseModel):
     dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
-AI_NODE_TYPES = {"start", "process", "decision", "end"}
+# "section"은 word 맵 변환 모드 드래프터 출력 — 앵커 실존 검증은 orchestrator._sanitize_word_graph (design 2026-07-26 §4)
+AI_NODE_TYPES = {"start", "process", "decision", "end", "section"}
 
 
 class AppSettingsOut(BaseModel):

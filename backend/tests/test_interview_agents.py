@@ -114,3 +114,22 @@ def test_ai_node_attributes_accepts_section_anchor() -> None:
 
     attr = AiNodeAttributes(section_anchor="_Toc1")
     assert attr.section_anchor == "_Toc1"
+
+
+def test_ai_proposal_accepts_section_node_type() -> None:
+    """word 드래프터의 section 노드가 파싱을 통과한다 — AI_NODE_TYPES 게이트 (design 2026-07-26 §4)."""
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate({
+        "kind": "graph",
+        "message": "",
+        "nodes": [
+            {"key": "s", "title": "시작", "node_type": "start"},
+            {"key": "a", "title": "1 재고", "node_type": "section",
+             "attributes": {"section_anchor": "_Toc1"}},
+            {"key": "e", "title": "끝", "node_type": "end"},
+        ],
+        "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
+        "groups": [],
+    })
+    assert proposal.nodes[1].node_type == "section"
