@@ -77,3 +77,22 @@ export function filterMyDeptMaps(maps: MapSummary[], myOrgPath: string): MapSumm
     (m) => m.owning_department === myOrgPath || (m.owning_department?.startsWith(myOrgPath + "/") ?? false),
   );
 }
+
+// 단일 하위 체인 수집 — path 노드를 펼칠 때 하위 부서가 정확히 1개뿐인 구간을 이어서 반환(반복).
+// 수동 펼침 UX용: 선택지 없는 중간 단계 클릭 반복을 없앤다. 하위 2개 이상·말단이면 멈춤.
+export function collectSingleChildChain(roots: OrgNode[], path: string): string[] {
+  const find = (nodes: OrgNode[]): OrgNode | null => {
+    for (const n of nodes) {
+      if (n.path === path) return n;
+      if (path.startsWith(`${n.path}/`)) return find(n.children);
+    }
+    return null;
+  };
+  const chain: string[] = [];
+  let node = find(roots);
+  while (node && node.children.length === 1) {
+    node = node.children[0];
+    chain.push(node.path);
+  }
+  return chain;
+}

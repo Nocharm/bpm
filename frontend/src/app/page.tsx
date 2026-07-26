@@ -9,7 +9,7 @@ import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, Pencil
 
 import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
-import { buildOrgTree, filterMyDeptMaps } from "@/lib/org-tree";
+import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -170,6 +170,10 @@ export default function MapListPage() {
         status?: unknown;
         perm?: unknown;
         owning?: unknown;
+        orgOpen?: unknown;
+        fav?: unknown;
+        word?: unknown;
+        unassigned?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -187,6 +191,14 @@ export default function MapListPage() {
       if (Array.isArray(s.owning)) {
         setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
       }
+      // 좌측 접힘 상태 복원 — 조직도·즐겨찾기·Word 섹션·미지정 (검색·필터와 동일한 SPA 복귀 정책)
+      if (Array.isArray(s.orgOpen)) {
+        setOrgOpen(new Set(s.orgOpen.filter((x): x is string => typeof x === "string")));
+        seededOrg.current = true; // 복원값이 내 부서 시드보다 우선 — 시드가 덮어쓰지 않게
+      }
+      if (typeof s.fav === "boolean") setFavOpen(s.fav);
+      if (typeof s.word === "boolean") setWordOpen(s.word);
+      if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
     } catch {
       /* 손상된 저장값 무시 */
     }
@@ -207,9 +219,13 @@ export default function MapListPage() {
         status: [...statusFilter],
         perm: [...permFilter],
         owning: [...owningFilter],
+        orgOpen: [...orgOpen],
+        fav: favOpen,
+        word: wordOpen,
+        unassigned: unassignedOpen,
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, orgOpen, favOpen, wordOpen, unassignedOpen]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -675,7 +691,8 @@ export default function MapListPage() {
                   {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
               ) : (
-                /* 브라우즈 — 나의 부서 즐겨찾기 + 조직도 아코디언 */
+                /* 브라우즈 — 나의 부서 즐겨찾기 + Word 문서 섹션 + 조직도 아코디언.
+                   Word 섹션은 조직도 위 고정 — 트리 아래에 두면 스크롤 밖으로 묻혀 발견 불가(사용자 피드백). */
                 <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto pr-1">
                   <MyDeptFavorites
                     maps={myDeptMaps}
@@ -684,23 +701,6 @@ export default function MapListPage() {
                     onToggle={() => setFavOpen((v) => !v)}
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
-                    renderCard={renderCard}
-                  />
-                  <OrgAccordion
-                    roots={orgTree.roots}
-                    unassigned={orgTree.unassigned}
-                    openPaths={orgOpen}
-                    onToggle={(path) => setOrgOpen((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(path)) next.delete(path); else next.add(path);
-                      return next;
-                    })}
-                    onCollapseAll={() => { setOrgOpen(new Set()); setUnassignedOpen(false); }}
-                    selectedId={effectiveSelected}
-                    highlightId={highlightId}
-                    onSelect={setSelectedId}
-                    unassignedOpen={unassignedOpen}
-                    onToggleUnassigned={() => setUnassignedOpen((v) => !v)}
                     renderCard={renderCard}
                   />
                   <WordDocsSection
@@ -712,6 +712,29 @@ export default function MapListPage() {
                     onCreate={() => setWordModalOpen(true)}
                     onReimport={(m) => setReimportTarget(m)}
                     onPromote={(m) => setPromoteTarget({ id: m.id, name: m.name })}
+                  />
+                  <OrgAccordion
+                    roots={orgTree.roots}
+                    unassigned={orgTree.unassigned}
+                    openPaths={orgOpen}
+                    onToggle={(path) => setOrgOpen((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(path)) {
+                        next.delete(path);
+                      } else {
+                        next.add(path);
+                        // 하위 부서가 1개뿐인 구간은 이어서 자동 펼침 — 선택지 없는 클릭 반복 제거
+                        for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
+                      }
+                      return next;
+                    })}
+                    onCollapseAll={() => { setOrgOpen(new Set()); setUnassignedOpen(false); }}
+                    selectedId={effectiveSelected}
+                    highlightId={highlightId}
+                    onSelect={setSelectedId}
+                    unassignedOpen={unassignedOpen}
+                    onToggleUnassigned={() => setUnassignedOpen((v) => !v)}
+                    renderCard={renderCard}
                   />
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildOrgTree, filterMyDeptMaps, type OrgNode } from "@/lib/org-tree";
+import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps, type OrgNode } from "@/lib/org-tree";
 import type { DirectoryDept, MapSummary } from "@/lib/api";
 
 function makeMap(id: number, dept: string | null): MapSummary {
@@ -65,5 +65,29 @@ describe("filterMyDeptMaps", () => {
   it("matches my org_path and its descendants only", () => {
     const maps = [makeMap(1, "Div/OfficeA"), makeMap(2, "Div/OfficeA/Team"), makeMap(3, "Div/OfficeB"), makeMap(4, null)];
     expect(filterMyDeptMaps(maps, "Div/OfficeA").map((m) => m.id).sort()).toEqual([1, 2]);
+  });
+});
+
+describe("collectSingleChildChain", () => {
+  it("follows single-child segments until a branch or leaf", () => {
+    // Div → Sub(유일) → Team(유일) → {A, B} 분기: Div 펼침이 Sub·Team까지 이어짐
+    const maps = [makeMap(1, "Div/Sub/Team/A"), makeMap(2, "Div/Sub/Team/B")];
+    const { roots } = buildOrgTree(maps, []);
+    expect(collectSingleChildChain(roots, "Div")).toEqual(["Div/Sub", "Div/Sub/Team"]);
+  });
+
+  it("continues through nodes that hold their own maps (unconditional chaining)", () => {
+    // 중간 노드에 직속 맵이 있어도 하위가 1개면 계속
+    const maps = [makeMap(1, "Div/Sub"), makeMap(2, "Div/Sub/Team/Leaf")];
+    const { roots } = buildOrgTree(maps, []);
+    expect(collectSingleChildChain(roots, "Div")).toEqual(["Div/Sub", "Div/Sub/Team", "Div/Sub/Team/Leaf"]);
+  });
+
+  it("returns empty for branching, leaf, or unknown paths", () => {
+    const maps = [makeMap(1, "Div/OfficeA"), makeMap(2, "Div/OfficeB")];
+    const { roots } = buildOrgTree(maps, []);
+    expect(collectSingleChildChain(roots, "Div")).toEqual([]); // 하위 2개 — 분기
+    expect(collectSingleChildChain(roots, "Div/OfficeA")).toEqual([]); // 말단
+    expect(collectSingleChildChain(roots, "Nope")).toEqual([]); // 미존재 경로
   });
 });
