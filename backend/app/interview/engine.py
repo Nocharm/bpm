@@ -62,34 +62,66 @@ STAGES: tuple[StageDef, ...] = (
     ),
 )
 
+# word 맵 전용 — 문서→순서도 변환 모드 3스테이지 (design 2026-07-26 §3). 시작/끝 키는
+# 일반 세트와 동일("scope"/"review")라 InterviewSession.current_stage 기본값·체크포인트가 공용.
+WORD_STAGES: tuple[StageDef, ...] = (
+    StageDef(
+        "scope", "Scope",
+        "문서에서 그릴 범위(전체/특정 섹션 서브트리)와 언어 트리를 확정하고 원본 .docx 업로드를 권한다",
+        "Confirm what to draw (whole document or a section subtree), the language tree, and suggest uploading the original .docx",
+        ("draw_scope",),
+    ),
+    StageDef(
+        "draft", "Draft",
+        "섹션 카탈로그(와 본문 발췌)를 근거로 순서도 초안을 제안하고 사용자 교정을 반영한다",
+        "Propose a flowchart draft grounded in the section catalog (and body excerpts), refine with the user",
+        ("draft_confirmed",),
+    ),
+    StageDef(
+        "review", "Review",
+        "라벨 톤과 문서 링크 커버리지(노드 N개 중 M개 링크)를 요약하고 승인 여부를 확인한다",
+        "Summarize label tone and document-link coverage (M of N nodes linked), confirm approval",
+        ("approved",),
+    ),
+)
+
 _BY_KEY = {stage.key: stage for stage in STAGES}
+_WORD_BY_KEY = {stage.key: stage for stage in WORD_STAGES}
 
 
-def get_stage(key: str) -> StageDef:
-    stage = _BY_KEY.get(key)
+def _stage_set(mode: str) -> tuple[tuple[StageDef, ...], dict[str, StageDef]]:
+    return (WORD_STAGES, _WORD_BY_KEY) if mode == "word" else (STAGES, _BY_KEY)
+
+
+def get_stage(key: str, mode: str = "normal") -> StageDef:
+    stages, by_key = _stage_set(mode)
+    stage = by_key.get(key)
     if stage is None:
         raise ValueError(f"unknown stage: {key}")
     return stage
 
 
-def stage_index(key: str) -> int:
-    return [s.key for s in STAGES].index(get_stage(key).key)
+def stage_index(key: str, mode: str = "normal") -> int:
+    stages, _ = _stage_set(mode)
+    return [s.key for s in stages].index(get_stage(key, mode).key)
 
 
-def next_stage_key(key: str) -> str | None:
-    idx = stage_index(key)
-    return STAGES[idx + 1].key if idx + 1 < len(STAGES) else None
+def next_stage_key(key: str, mode: str = "normal") -> str | None:
+    stages, _ = _stage_set(mode)
+    idx = stage_index(key, mode)
+    return stages[idx + 1].key if idx + 1 < len(stages) else None
 
 
-def is_stage_complete(key: str, facts: dict) -> bool:
-    stage = get_stage(key)
+def is_stage_complete(key: str, facts: dict, mode: str = "normal") -> bool:
+    stage = get_stage(key, mode)
     stage_facts = facts.get(key) or {}
     return all(stage_facts.get(name) for name in stage.required_facts)
 
 
-def first_incomplete_stage(facts: dict) -> str:
+def first_incomplete_stage(facts: dict, mode: str = "normal") -> str:
     """문서/기존 맵이 미리 채운 스테이지는 건너뛴 시작점 — 전부 완료면 review."""
-    for stage in STAGES:
-        if not is_stage_complete(stage.key, facts):
+    stages, _ = _stage_set(mode)
+    for stage in stages:
+        if not is_stage_complete(stage.key, facts, mode):
             return stage.key
     return "review"

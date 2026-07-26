@@ -41,3 +41,33 @@ def test_choice_stages() -> None:
     assert engine.get_stage("activities").choice_stage is True
     assert engine.get_stage("branches").choice_stage is True
     assert engine.get_stage("scope").choice_stage is False
+
+
+def test_word_stage_set_transitions() -> None:
+    """word 모드 3스테이지 — scope→draft→review, review가 마지막 (design 2026-07-26 §3)."""
+    from app.interview.engine import WORD_STAGES, get_stage, next_stage_key, stage_index
+
+    assert [s.key for s in WORD_STAGES] == ["scope", "draft", "review"]
+    assert next_stage_key("scope", "word") == "draft"
+    assert next_stage_key("draft", "word") == "review"
+    assert next_stage_key("review", "word") is None
+    assert stage_index("draft", "word") == 1
+    assert get_stage("draft", "word").title == "Draft"
+
+
+def test_word_stage_completion_and_first_incomplete() -> None:
+    from app.interview.engine import first_incomplete_stage, is_stage_complete
+
+    facts = {"scope": {"draw_scope": "전체"}}
+    assert is_stage_complete("scope", facts, "word") is True
+    assert is_stage_complete("draft", facts, "word") is False
+    assert first_incomplete_stage(facts, "word") == "draft"
+    assert first_incomplete_stage({}, "word") == "scope"
+
+
+def test_normal_mode_unchanged() -> None:
+    """mode 기본값 — 기존 7스테이지 동작 그대로."""
+    from app.interview.engine import STAGES, next_stage_key
+
+    assert len(STAGES) == 7
+    assert next_stage_key("scope") == "io"
