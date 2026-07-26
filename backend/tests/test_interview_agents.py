@@ -71,3 +71,46 @@ def test_tone_messages_embed_graph() -> None:
 def test_choice_variant_hints_cover_choice_stages() -> None:
     assert set(CHOICE_VARIANT_HINTS) == {"activities", "branches"}
     assert all(len(v) >= 3 for v in CHOICE_VARIANT_HINTS.values())
+
+
+def test_format_section_catalog_filters_language() -> None:
+    from app.interview.agents import format_section_catalog
+
+    sections = [
+        {"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1, "language": "ko"},
+        {"anchor": "_Toc9", "title": "Inventory", "number": "1", "level": 1, "language": "en"},
+    ]
+    ko = format_section_catalog(sections, "ko")
+    assert "_Toc1" in ko and "_Toc9" not in ko
+    # 언어 미확정이면 전체 노출
+    both = format_section_catalog(sections, None)
+    assert "_Toc1" in both and "_Toc9" in both
+
+
+def test_word_mode_prompts_carry_catalog_and_contract() -> None:
+    from app.interview.agents import build_drafter_messages, build_interviewer_messages
+
+    catalog = "- _Toc1 | 1 재고 (level 1)"
+    iv = build_interviewer_messages(
+        "scope", "ko", {}, "", "", [], "안녕", mode="word", section_catalog=catalog,
+    )
+    assert "_Toc1" in iv[0]["content"]
+    assert "변환" in iv[0]["content"]  # word 인터뷰어 애든덤
+
+    dr = build_drafter_messages("draft", "ko", {}, None, "", "힌트", mode="word", section_catalog=catalog)
+    assert "_Toc1" in dr[0]["content"]
+    assert "section_anchor" in dr[0]["content"]  # word 드래프터 계약
+
+
+def test_normal_mode_prompts_unchanged() -> None:
+    from app.interview.agents import build_drafter_messages
+
+    dr = build_drafter_messages("activities", "ko", {}, None, "", "힌트")
+    assert "section_anchor" not in dr[0]["content"]
+
+
+def test_ai_node_attributes_accepts_section_anchor() -> None:
+    from app.schemas import AiNodeAttributes
+
+    attr = AiNodeAttributes(section_anchor="_Toc1")
+    assert attr.section_anchor == "_Toc1"

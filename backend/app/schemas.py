@@ -1272,6 +1272,9 @@ class AiNodeAttributes(BaseModel):
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
     url_label: str | None = Field(default=None, max_length=100)
+    # 문서 섹션 앵커 — word 맵 드래프터/제안 passthrough. 실존 검증은 orchestrator
+    # _sanitize_word_graph에서 (design 2026-07-26 §4)
+    section_anchor: str | None = Field(default=None, max_length=200)
 
     @field_validator("duration", mode="after")
     @classmethod

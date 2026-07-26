@@ -64,6 +64,23 @@ _LANG_LINE = {
     "en": "Write all messages and questions in English.",
 }
 
+# 카탈로그 프롬프트 상한 — 초대형 SOP도 프롬프트를 깨지 않게 (300줄 ≈ 대형 문서 전체 수준)
+_CATALOG_MAX_LINES = 300
+
+
+def format_section_catalog(doc_sections: list[dict], language: str | None) -> str:
+    """word 맵 섹션 카탈로그 → 프롬프트 블록. language 확정 시 그 트리만(양쪽 있을 때)."""
+    rows = doc_sections
+    if language:
+        filtered = [s for s in rows if (s.get("language") or "") == language]
+        if filtered:
+            rows = filtered
+    lines = [
+        f"- {s['anchor']} | {s.get('number', '')} {s.get('title', '')} (level {s.get('level', 1)})".strip()
+        for s in rows[:_CATALOG_MAX_LINES]
+    ]
+    return "\n".join(lines)
+
 _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 담당자를 인터뷰해 프로세스 맵을 함께 만듭니다.
 조직 표준: 노드 제목은 '명사+동사'(예: '요청서 작성'), 활동 6±3개 세분도, 한 질문에 한 주제만.
 
@@ -111,6 +128,28 @@ _TONE_CONTRACT = """당신은 프로세스 맵 톤 검수자입니다. 노드 �
 규칙: key는 [검수 대상 그래프]에 실제로 존재하는 노드 키만. 실제 표준 위반만 개명하고, 이미 표준에 맞으면 renames는 빈 배열. start/end 노드 제목은 검수 대상이 아님.
 '요청서 작성'처럼 명사구로 끝나는 제목이 표준입니다 — '~하기' 같은 동명사형으로 바꾸는 것은 개악이니 금지. 이미 표준인 제목을 다른 표준 표현으로 바꾸지도 마세요."""
 
+_INTERVIEWER_WORD_ADDENDUM = """
+[Word 맵 변환 모드]
+당신은 이 SOP 문서를 순서도로 변환하는 컨설턴트입니다. 문서가 사실의 원천입니다 — 백지 질문 대신
+[문서 섹션 카탈로그]에서 추론한 구체 제안으로 확인만 받으세요.
+- scope: 그릴 범위(전체/특정 섹션 서브트리)를 확정해 facts_patch {"draw_scope": <범위>}로 저장.
+  카탈로그에 두 언어(ko/en)가 섞여 있으면 어느 트리로 그릴지 확인해 {"language": "ko"|"en"}도 저장
+  (한 언어뿐이면 묻지 말고 그 언어로 저장). 원본 .docx 첨부를 한 번 권유하되 강요하지 마세요.
+  범위가 매우 크면 1페이지에 들어가도록 상위 섹션 수준 요약이나 서브트리 분할을 제안하세요.
+- draft: 초안을 제안하고 교정을 반영하세요. 사용자가 초안에 동의하면 {"draft_confirmed": "yes"}.
+- review: 문서 링크 커버리지("노드 N개 중 M개가 문서 섹션 링크 보유")를 요약하고 승인을 확인,
+  승인 시 {"approved": "yes"}.
+- [문서 섹션 카탈로그]가 비어 있으면 맵의 문서 재임포트(에디터 섹션 패널)를 한 번 안내하고,
+  일반 노드만으로 진행 가능함을 알리세요."""
+
+_DRAFTER_WORD_ADDENDUM = """
+[Word 맵 변환 모드 — 추가 규칙]
+5. 문서 섹션에 대응하는 활동은 node_type="section"으로 만들고 attributes.section_anchor에
+   [문서 섹션 카탈로그]의 앵커 값을 그대로 넣으세요. 카탈로그에 없는 앵커는 금지.
+6. 문서에 없는 중간 단계·분기는 일반 process/decision으로 두세요(section 아님).
+7. 섹션 노드 제목은 시스템이 카탈로그 기준 "번호 제목"으로 재구성합니다 — 제목은 대략만.
+8. 1페이지에 들어가도록 노드 수 약 12개 이내 — 범위가 크면 상위 섹션 수준으로 요약."""
+
 
 def _facts_block(facts: dict) -> str:
     return json.dumps(facts, ensure_ascii=False)
@@ -124,12 +163,16 @@ def build_interviewer_messages(
     context_text: str,
     history: list[dict],
     user_input: str,
+    mode: str = "normal",
+    section_catalog: str = "",
 ) -> list[dict]:
-    stage = get_stage(stage_key)
+    stage = get_stage(stage_key, mode)
     goal = stage.goal_ko if lang == "ko" else stage.goal_en
+    contract = _INTERVIEWER_CONTRACT + (_INTERVIEWER_WORD_ADDENDUM if mode == "word" else "")
+    catalog_block = f"\n[문서 섹션 카탈로그]\n{section_catalog}\n" if section_catalog else ""
     system = (
-        f"{_INTERVIEWER_CONTRACT}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
-        f"[참고 문서]\n{context_text or '(없음)'}\n\n"
+        f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
+        f"[참고 문서]\n{context_text or '(없음)'}{catalog_block}\n"
         f"[현재 스테이지] {stage.key} — {goal}\n"
         f"[누적 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본 요약]\n{graph_summary or '(빈 캔버스)'}"
@@ -148,11 +191,15 @@ def build_drafter_messages(
     working_graph: dict | None,
     context_text: str,
     variant_hint: str,
+    mode: str = "normal",
+    section_catalog: str = "",
 ) -> list[dict]:
     current = json.dumps(working_graph, ensure_ascii=False) if working_graph else "(없음)"
+    contract = _DRAFTER_CONTRACT + (_DRAFTER_WORD_ADDENDUM if mode == "word" else "")
+    catalog_block = f"\n[문서 섹션 카탈로그]\n{section_catalog}\n" if section_catalog else ""
     system = (
-        f"{_DRAFTER_CONTRACT}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
-        f"[참고 문서]\n{context_text or '(없음)'}\n\n"
+        f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
+        f"[참고 문서]\n{context_text or '(없음)'}{catalog_block}\n"
         f"[확정 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본]\n{current}\n\n"
         f"[이 안의 방향] {variant_hint}"
