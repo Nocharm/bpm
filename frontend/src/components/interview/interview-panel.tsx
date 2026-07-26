@@ -6,8 +6,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowDown, FileText, HardDrive, Headset, Info, Layers, Lightbulb, Paperclip,
-  RotateCcw, Send, SkipForward, X,
+  ArrowDown, File, FileChartPie, FileCode, FileSpreadsheet, FileText, FileType, HardDrive,
+  Headset, Info, Layers, Lightbulb, Paperclip, RotateCcw, Send, SkipForward, X,
+  type LucideIcon,
 } from "lucide-react";
 
 import { getAiTips, type InterviewState } from "@/lib/api";
@@ -32,6 +33,23 @@ const SCROLL_DOWN_AT = 160; // 바닥에서 이만큼(px) 이상 올라가면 �
 
 // 답변 대기 팁 — 서버 관리 팁(getAiTips) 우선, 미설정 시 i18n 폴백 (AI 챗과 동일 소스)
 const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
+
+// 첨부 칩 확장자 아이콘 — 색은 토큰만(브랜드색 대응: 시트=added, 프레젠테이션=changed, 문서=accent, PDF=error).
+// 현재 업로드 가능 포맷(pdf/docx/xlsx/txt/md) 외 확장자도 표시용으로 미리 매핑.
+const ATTACH_ICONS: Array<{ exts: string[]; icon: LucideIcon; cls: string }> = [
+  { exts: ["xlsx", "xlsm", "xls", "csv"], icon: FileSpreadsheet, cls: "text-added" },
+  { exts: ["ppt", "pptx"], icon: FileChartPie, cls: "text-changed" },
+  { exts: ["doc", "docx"], icon: FileText, cls: "text-accent" },
+  { exts: ["pdf"], icon: FileType, cls: "text-error" },
+  { exts: ["md", "markdown"], icon: FileCode, cls: "text-ink-tertiary" },
+  { exts: ["txt"], icon: FileText, cls: "text-ink-tertiary" },
+];
+
+function getAttachmentIcon(filename: string): { icon: LucideIcon; cls: string } {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const found = ATTACH_ICONS.find((entry) => entry.exts.includes(ext));
+  return found ?? { icon: File, cls: "text-ink-tertiary" };
+}
 
 function readFontPx(): number {
   if (typeof window === "undefined") return FONT_DEFAULT;
@@ -358,7 +376,10 @@ export function InterviewPanel({
         >
           {interview.attachments.length > 0 ? (
             <div className="flex flex-wrap gap-1 px-2.5 pt-2">
-              {interview.attachments.map((a) => (
+              {interview.attachments.map((a) => {
+                const fileIcon = getAttachmentIcon(a.filename);
+                const FileIcon = fileIcon.icon;
+                return (
                 <span
                   key={a.id}
                   className={
@@ -368,6 +389,11 @@ export function InterviewPanel({
                   title={a.error || a.filename}
                   data-id="iv-attachment-chip"
                 >
+                  <FileIcon
+                    size={13}
+                    strokeWidth={1.5}
+                    className={"shrink-0 " + (a.status === "parsed" ? fileIcon.cls : "text-error")}
+                  />
                   {a.filename}
                   <button
                     className="rounded-xs text-ink-muted hover:text-error"
@@ -378,7 +404,8 @@ export function InterviewPanel({
                     <X size={12} strokeWidth={1.5} />
                   </button>
                 </span>
-              ))}
+                );
+              })}
             </div>
           ) : null}
           <textarea
