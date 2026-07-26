@@ -628,6 +628,8 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
+    // 문서 섹션 앵커 — word 맵 제안 스레딩(AI 변환 2곳 대칭 — csv-import buildGraphFromAiProposal과 동일)
+    section_anchor: attr?.section_anchor ?? "",
     pos_x: 0,
     pos_y: 0,
     sort_order: 0,

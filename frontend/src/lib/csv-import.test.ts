@@ -980,4 +980,22 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(node?.node_type).toBe("subprocess");
     expect(node?.linked_map_id).toBe(7);
   });
+
+  it("threads attributes.section_anchor into generated nodes (word map drafter)", () => {
+    const outcome = buildGraphFromAiProposal({
+      nodes: [
+        aiNode("s", "Start", "start"),
+        aiNode("a", "1 재고", "section", { section_anchor: "_Toc1" }),
+        aiNode("e", "End", "end"),
+      ],
+      edges: [
+        { source: "s", target: "a", label: "" },
+        { source: "a", target: "e", label: "" },
+      ],
+      groups: [],
+    });
+    const section = outcome.graph?.nodes.find((n) => n.title === "1 재고");
+    expect(section?.node_type).toBe("section");
+    expect(section?.section_anchor).toBe("_Toc1");
+  });
 });
