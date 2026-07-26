@@ -5,17 +5,20 @@
 // 2026-07-26 리디자인: 스테이지 칩·전환 디바이더·메시지 그룹핑·typing dots·컴포저 카드·픽커 핀·스크롤 다운.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
-  ArrowDown, File, FileChartPie, FileCode, FileSpreadsheet, FileText, FileType, HardDrive,
-  Headset, Info, Layers, Lightbulb, Paperclip, RotateCcw, Send, SkipForward, X,
+  ArrowDown, Check, File, FileChartPie, FileCode, FileSpreadsheet, FileText, FileType,
+  FolderOpen, HardDrive, Headset, Info, Layers, Lightbulb, Loader2, Paperclip, RotateCcw,
+  Send, SkipForward, X,
   type LucideIcon,
 } from "lucide-react";
 
 import { getAiTips, type InterviewState } from "@/lib/api";
 import { INTERVIEW_STAGES, choiceOptionsOf, stageIndex } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { QuestionOptions } from "@/components/interview/question-options";
 
 // 프리뷰 노드 "Ask about this node" 버튼 → 입력창 멘션 삽입용 커스텀 이벤트 이름
@@ -51,6 +54,31 @@ function getAttachmentIcon(filename: string): { icon: LucideIcon; cls: string } 
   return found ?? { icon: File, cls: "text-ink-tertiary" };
 }
 
+// 업로드 가능 판정 — 백엔드 계약과 동일(parsing.ALLOWED_EXTENSIONS / MAX_ATTACHMENT_BYTES)
+const ALLOWED_EXTS = new Set(["pdf", "docx", "xlsx", "txt", "md"]);
+const MAX_ATTACH_BYTES = 20 * 1024 * 1024;
+const COLLAPSED_CHIPS = 5; // 접힘 시 노출 첨부 칩 수(대략 두 줄)
+const REVIEW_LIST_CAP = 8; // 리뷰 모달 섹션당 표시 상한 — 초과분은 "+N more" 요약 행
+
+interface ReviewFile {
+  file: File;
+  reason: string | null; // null=업로드 가능, 그 외 불가 사유(영문 UI)
+}
+
+function reviewSelectedFiles(files: File[]): ReviewFile[] {
+  return files.map((file) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!ALLOWED_EXTS.has(ext)) return { file, reason: "Unsupported format" };
+    if (file.size > MAX_ATTACH_BYTES) return { file, reason: "Over 20 MB" };
+    return { file, reason: null };
+  });
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 function readFontPx(): number {
   if (typeof window === "undefined") return FONT_DEFAULT;
   const stored = Number(window.localStorage.getItem(FONT_KEY));
@@ -67,7 +95,8 @@ interface InterviewPanelProps {
   onSend: (content: string) => void;
   onSkip: () => void;
   onRetry: () => void;
-  onAttach: (file: File) => void;
+  // 파일 1개 업로드 — 성공 여부 반환(복수 업로드 진행/실패 표시용). 실패 시 에러 표시는 호출자(page)가 담당.
+  onAttach: (file: File) => Promise<boolean>;
   onDeleteAttachment: (attachmentId: number) => void;
 }
 
@@ -81,8 +110,17 @@ export function InterviewPanel({
   const [showAttachInfo, setShowAttachInfo] = useState(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
+  // 복수/폴더 첨부 — 선택 파일 리뷰 목록(가능/불가+사유) 및 순차 업로드 진행 상태
+  const [reviewFiles, setReviewFiles] = useState<ReviewFile[] | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+    failed: string[];
+  } | null>(null);
+  const [chipsExpanded, setChipsExpanded] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fontRef = useRef<HTMLDivElement>(null);
 
@@ -187,6 +225,34 @@ export function InterviewPanel({
     };
   }, [fontOpen]);
 
+  // 파일/폴더 선택 결과 — 숨김 파일(.DS_Store 등) 제외 후 리뷰. 유효 단일 파일은 모달 없이 즉시 업로드.
+  function handleFilesPicked(list: FileList | null) {
+    const files = Array.from(list ?? []).filter((f) => !f.name.startsWith("."));
+    setShowAttachInfo(false);
+    if (files.length === 0) return;
+    const reviewed = reviewSelectedFiles(files);
+    if (reviewed.length === 1 && reviewed[0].reason === null) {
+      void runUpload([reviewed[0].file], false);
+    } else {
+      setReviewFiles(reviewed);
+    }
+  }
+
+  // 순차 업로드 — 진행/실패를 uploadProgress로 노출. 모달 경유(viaModal)면 실패 시 모달을 유지해 실패 행을 보여준다.
+  async function runUpload(files: File[], viaModal: boolean) {
+    setUploadProgress({ done: 0, total: files.length, failed: [] });
+    const failed: string[] = [];
+    for (let i = 0; i < files.length; i += 1) {
+      const ok = await onAttach(files[i]);
+      if (!ok) failed.push(files[i].name);
+      setUploadProgress({ done: i + 1, total: files.length, failed: [...failed] });
+    }
+    if (failed.length === 0 || !viaModal) {
+      setReviewFiles(null);
+      setUploadProgress(null);
+    }
+  }
+
   // 스크롤 다운 버튼 — 바닥에서 일정 이상 올라갔을 때만 (setState는 스크롤 이벤트 핸들러에서)
   function handleScroll() {
     const el = listRef.current;
@@ -208,6 +274,54 @@ export function InterviewPanel({
       <Headset size={12} strokeWidth={1.5} />
     </span>
   );
+
+  // 리뷰 모달 파생 — 가능/불가 섹션 분리, 업로드 진행(체크/스피너/실패)을 행 아이콘·뱃지로 오버레이
+  const eligibleReviews = reviewFiles?.filter((r) => r.reason === null) ?? [];
+  const ineligibleReviews = reviewFiles?.filter((r) => r.reason !== null) ?? [];
+  const uploadFinished = uploadProgress !== null && uploadProgress.done >= uploadProgress.total;
+  const reviewSections: ConfirmLine[][] = [];
+  if (reviewFiles !== null) {
+    const eligibleLines: ConfirmLine[] = eligibleReviews.slice(0, REVIEW_LIST_CAP).map((r, i) => {
+      const meta = getAttachmentIcon(r.file.name);
+      const MetaIcon = meta.icon;
+      let icon = <MetaIcon size={16} strokeWidth={1.5} className={meta.cls} />;
+      let badge: ConfirmLine["badge"];
+      if (uploadProgress !== null) {
+        if (uploadProgress.failed.includes(r.file.name)) {
+          icon = <X size={16} strokeWidth={1.5} className="text-error" />;
+          badge = { text: "Failed", tone: "warn" };
+        } else if (i < uploadProgress.done) {
+          icon = <Check size={16} strokeWidth={1.5} className="text-added" />;
+          badge = { text: "Done", tone: "approved" };
+        } else if (i === uploadProgress.done) {
+          icon = <Loader2 size={16} strokeWidth={1.5} className="animate-spin text-accent" />;
+        }
+      }
+      return { icon, text: `${r.file.name} · ${formatSize(r.file.size)}`, badge };
+    });
+    if (eligibleReviews.length > REVIEW_LIST_CAP)
+      eligibleLines.push({
+        icon: <File size={16} strokeWidth={1.5} />,
+        text: `+${eligibleReviews.length - REVIEW_LIST_CAP} more files`,
+        tone: "muted",
+      });
+    if (eligibleLines.length > 0) reviewSections.push(eligibleLines);
+    const ineligibleLines: ConfirmLine[] = ineligibleReviews
+      .slice(0, REVIEW_LIST_CAP)
+      .map((r) => ({
+        icon: <X size={16} strokeWidth={1.5} />,
+        text: `${r.file.name} · ${formatSize(r.file.size)}`,
+        tone: "muted" as const,
+        badge: { text: r.reason ?? "", tone: "warn" as const },
+      }));
+    if (ineligibleReviews.length > REVIEW_LIST_CAP)
+      ineligibleLines.push({
+        icon: <File size={16} strokeWidth={1.5} />,
+        text: `+${ineligibleReviews.length - REVIEW_LIST_CAP} more files`,
+        tone: "muted",
+      });
+    if (ineligibleLines.length > 0) reviewSections.push(ineligibleLines);
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-id="interview-panel">
@@ -374,9 +488,12 @@ export function InterviewPanel({
           className="rounded-lg border border-hairline bg-surface shadow-md transition-colors duration-150 focus-within:border-accent"
           data-id="iv-composer"
         >
-          {interview.attachments.length > 0 ? (
-            <div className="flex flex-wrap gap-1 px-2.5 pt-2">
-              {interview.attachments.map((a) => {
+          {interview.attachments.length > 0 || (uploadProgress !== null && reviewFiles === null) ? (
+            <div className="flex flex-wrap items-center gap-1 px-2.5 pt-2">
+              {(chipsExpanded
+                ? interview.attachments
+                : interview.attachments.slice(0, COLLAPSED_CHIPS)
+              ).map((a) => {
                 const fileIcon = getAttachmentIcon(a.filename);
                 const FileIcon = fileIcon.icon;
                 return (
@@ -406,6 +523,26 @@ export function InterviewPanel({
                 </span>
                 );
               })}
+              {interview.attachments.length > COLLAPSED_CHIPS ? (
+                <button
+                  className="inline-flex items-center rounded-xs bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary hover:text-ink"
+                  onClick={() => setChipsExpanded((v) => !v)}
+                  data-id="iv-attach-more"
+                >
+                  {chipsExpanded
+                    ? "Show less"
+                    : `+${interview.attachments.length - COLLAPSED_CHIPS} more`}
+                </button>
+              ) : null}
+              {uploadProgress !== null && reviewFiles === null ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-xs bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+                  data-id="iv-uploading-chip"
+                >
+                  <Loader2 size={12} strokeWidth={1.5} className="animate-spin" />
+                  Uploading…
+                </span>
+              ) : null}
             </div>
           ) : null}
           <textarea
@@ -508,34 +645,130 @@ export function InterviewPanel({
           </div>
         </div>
       </div>
-      {showAttachInfo ? (
+      {showAttachInfo
+        ? createPortal(
+            <ModalBackdrop
+              onClose={() => setShowAttachInfo(false)}
+              className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+            >
+              <div
+                data-id="iv-attach-info"
+                className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md bg-surface p-6 text-center shadow-lg"
+              >
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">
+                  <Paperclip size={22} strokeWidth={1.5} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-body-strong text-ink">Attach documents</h2>
+                  <p className="text-caption text-ink-tertiary">
+                    The consultant reads the documents and uses them as interview context.
+                  </p>
+                </div>
+                <ul className="flex w-full flex-col gap-1 rounded-sm bg-surface-alt p-2 text-left">
+                  {[
+                    { icon: FileText, text: "Formats: PDF, DOCX, XLSX, TXT, MD" },
+                    { icon: HardDrive, text: "Max size: 20MB per file" },
+                    { icon: FolderOpen, text: "Multiple files or a whole folder at once" },
+                  ].map((line) => (
+                    <li
+                      key={line.text}
+                      className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-caption text-ink"
+                    >
+                      <line.icon size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="min-w-0 flex-1 break-keep">{line.text}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex w-full items-center gap-2">
+                  <button
+                    className="mr-auto rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                    onClick={() => setShowAttachInfo(false)}
+                    data-id="iv-attach-info-cancel"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                    onClick={() => folderRef.current?.click()}
+                    data-id="iv-attach-folder"
+                  >
+                    <FolderOpen size={16} strokeWidth={1.5} />
+                    Choose folder
+                  </button>
+                  <button
+                    className="rounded-sm bg-accent px-2.5 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+                    onClick={() => fileRef.current?.click()}
+                    data-id="iv-attach-files"
+                  >
+                    Choose files
+                  </button>
+                </div>
+              </div>
+            </ModalBackdrop>,
+            document.body,
+          )
+        : null}
+      {reviewFiles !== null ? (
         <ConfirmDialog
-          title="Attach a document"
-          message="The consultant reads the document and uses it as interview context."
-          confirmLabel="Choose file"
-          cancelLabel="Cancel"
+          title="Review selected files"
+          message={`${eligibleReviews.length} of ${reviewFiles.length} files can be uploaded.`}
+          confirmLabel={
+            uploadProgress !== null
+              ? uploadFinished
+                ? "Close"
+                : `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
+              : eligibleReviews.length > 0
+                ? `Upload ${eligibleReviews.length} ${eligibleReviews.length === 1 ? "file" : "files"}`
+                : "Nothing to upload"
+          }
+          cancelLabel={uploadProgress === null ? "Cancel" : undefined}
           icon={<Paperclip size={22} strokeWidth={1.5} />}
-          lines={[
-            { icon: <FileText size={16} strokeWidth={1.5} />, text: "Formats: PDF, DOCX, XLSX, TXT, MD" },
-            { icon: <HardDrive size={16} strokeWidth={1.5} />, text: "Max size: 20MB per file" },
-          ]}
+          sections={reviewSections}
+          confirmDisabled={
+            (uploadProgress !== null && !uploadFinished) ||
+            (uploadProgress === null && eligibleReviews.length === 0)
+          }
           onConfirm={() => {
-            setShowAttachInfo(false);
-            fileRef.current?.click();
+            if (uploadFinished) {
+              setReviewFiles(null);
+              setUploadProgress(null);
+            } else if (uploadProgress === null && eligibleReviews.length > 0) {
+              void runUpload(eligibleReviews.map((r) => r.file), true);
+            }
           }}
-          onClose={() => setShowAttachInfo(false)}
+          onClose={() => {
+            if (uploadProgress !== null && !uploadFinished) return; // 업로드 중 닫힘 방지
+            setReviewFiles(null);
+            setUploadProgress(null);
+          }}
         />
       ) : null}
       <input
         ref={fileRef}
         type="file"
         accept=".pdf,.docx,.xlsx,.txt,.md"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onAttach(file);
+          handleFilesPicked(e.target.files);
           e.target.value = "";
         }}
+        data-id="iv-file-input"
+      />
+      {/* 폴더 선택 — webkitdirectory는 @types/react 타이핑에 없어 ref 콜백으로 부여 */}
+      <input
+        ref={(el) => {
+          folderRef.current = el;
+          el?.setAttribute("webkitdirectory", "");
+        }}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          handleFilesPicked(e.target.files);
+          e.target.value = "";
+        }}
+        data-id="iv-folder-input"
       />
     </div>
   );

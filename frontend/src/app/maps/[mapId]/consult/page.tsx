@@ -132,15 +132,18 @@ export default function ConsultPage() {
     }
   }
 
-  async function handleAttach(file: File) {
-    if (!interview) return;
+  // 성공 여부 반환 — 패널의 복수 업로드 진행/실패 표시용
+  async function handleAttach(file: File): Promise<boolean> {
+    if (!interview) return false;
     try {
       const uploaded = await uploadInterviewAttachment(interview.id, file);
       setInterview((prev) =>
         prev ? { ...prev, attachments: [...prev.attachments, uploaded] } : prev,
       );
+      return true;
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to upload the file.");
+      return false;
     }
   }
 

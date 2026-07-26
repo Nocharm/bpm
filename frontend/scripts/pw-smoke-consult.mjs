@@ -76,7 +76,16 @@ const run = async () => {
   await page.click('[data-id="iv-font-opt-12"]');
   await page.waitForSelector('[data-id="iv-font-pop"]', { state: "detached" });
   await page.click('[data-id="iv-attach"]');
+  await page.waitForSelector('[data-id="iv-attach-info"]');
+  // 복수 파일 주입 → 리뷰 모달(가능 1 + 불가 1 사유) 확인 후 취소 (2026-07-26 복수/폴더 첨부)
+  await page.setInputFiles('[data-id="iv-file-input"]', [
+    { name: "spec.txt", mimeType: "text/plain", buffer: Buffer.from("hello") },
+    { name: "bad.zip", mimeType: "application/zip", buffer: Buffer.from("zip") },
+  ]);
   await page.waitForSelector('[data-id="confirm-dialog"]');
+  const review = await page.textContent('[data-id="confirm-dialog"]');
+  if (!review.includes("1 of 2")) throw new Error("review summary missing");
+  if (!review.includes("Unsupported format")) throw new Error("skip reason missing");
   await page.click('[data-id="confirm-dialog-cancel"]');
   await page.waitForSelector('[data-id="confirm-dialog"]', { state: "detached" });
 
