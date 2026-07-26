@@ -11,6 +11,7 @@
 - 수정(Task 3): AI_NODE_TYPES에 section 추가(word 드래프터 파싱 게이트) — AI_NODE_TYPES 검증 + 회귀 테스트 추가. 768개 테스트 통과, ruff 0.
 - 구현: 오케스트레이터 word 앵커 검증(`_sanitize_word_graph` — 무효 앵커 강등·카탈로그 라벨 재구성) + 강등 노티스 + `doc_sections` 라우터→턴 파이프라인 스레딩(`_redraft`/`_generate_choices`/`run_turn`/`_run_skip_turn`, engine 호출 전부 mode 인자) (Task 4). 3개 신규 테스트, 771개 테스트 통과, ruff 0.
 - 수정(Task 4): skip-turn 재드래프트 강등 노티스(`_run_skip_turn`·`_redraft` 반환 unpacking) + 정합 로킹 테스트 3개(`test_sanitize_promotes_valid_anchor_on_plain_node`, `test_skip_turn_word_redraft_demote_notice`, `test_stage_complete_with_word_redraft_demote_notice`). 774개 테스트 통과, ruff 0.
+- 구현: FE `mode` 노출 + word 3단계 칩(`WORD_INTERVIEW_STAGES`·`stagesForMode`·`stageIndex(key, mode?)`) — consult 페이지 진행 닷·인터뷰 패널 스테이지 칩/디바이더 라벨·프리뷰 체크포인트 라벨 전부 mode 인지(Task 5). `InterviewState.mode` 노출(api.ts). 560개 vitest 통과, tsc 0, lint 0.
 
 ## 2026-07-26 — 첨부 칩 접기 + 복수/폴더 첨부 리뷰·업로드 진행 (worktree-ai-consultant)
 - **칩 목록 접기**: 첨부 칩 5개(약 두 줄)까지만 노출, 초과분은 `+N more` 토글로 펼침/접힘.

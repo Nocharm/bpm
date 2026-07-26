@@ -18,8 +18,21 @@ export const INTERVIEW_STAGES = [
   { key: "review", label: "Review" },
 ] as const;
 
-export function stageIndex(key: string): number {
-  return INTERVIEW_STAGES.findIndex((s) => s.key === key);
+// 백엔드 engine.WORD_STAGES와 키·순서 동기 — word 변환 모드 3단계 (design 2026-07-26 §3)
+export const WORD_INTERVIEW_STAGES = [
+  { key: "scope", label: "Scope" },
+  { key: "draft", label: "Draft" },
+  { key: "review", label: "Review" },
+] as const;
+
+export function stagesForMode(
+  mode: string | undefined,
+): readonly { readonly key: string; readonly label: string }[] {
+  return mode === "word" ? WORD_INTERVIEW_STAGES : INTERVIEW_STAGES;
+}
+
+export function stageIndex(key: string, mode?: string): number {
+  return stagesForMode(mode).findIndex((s) => s.key === key);
 }
 
 export function choiceOptionsOf(messages: InterviewMessage[]): ChoiceOption[] | null {

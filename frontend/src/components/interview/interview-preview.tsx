@@ -14,7 +14,7 @@ import {
   completeInterview, getApiErrorDetail, getGraph, postInterviewRevert, saveGraph,
   type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
-import { addedNodeKeys, distinctiveNodeKeys, layoutWorkingGraph, INTERVIEW_STAGES } from "@/lib/interview";
+import { addedNodeKeys, distinctiveNodeKeys, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
@@ -256,7 +256,8 @@ export function InterviewPreview({
             {checkpointsNewestFirst.length > 0 ? (
               <div className="absolute left-3 top-3 z-10 flex w-44 flex-col gap-1.5" data-id="iv-checkpoints">
                 {checkpointsNewestFirst.map((cp, i) => {
-                  const label = INTERVIEW_STAGES.find((s) => s.key === cp.stage)?.label ?? cp.stage;
+                  const label =
+                    stagesForMode(interview?.mode).find((s) => s.key === cp.stage)?.label ?? cp.stage;
                   return (
                     <button
                       key={`${cp.stage}-${cp.message_seq}`}

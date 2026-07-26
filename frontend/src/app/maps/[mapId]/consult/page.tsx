@@ -18,7 +18,7 @@ import {
   uploadInterviewAttachment,
   type InterviewState,
 } from "@/lib/api";
-import { INTERVIEW_STAGES, choiceOptionsOf, stageIndex } from "@/lib/interview";
+import { choiceOptionsOf, stageIndex, stagesForMode } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InterviewPanel } from "@/components/interview/interview-panel";
@@ -173,7 +173,7 @@ export default function ConsultPage() {
     );
   }
 
-  const stageIdx = interview ? stageIndex(interview.current_stage) : 0;
+  const stageIdx = interview ? stageIndex(interview.current_stage, interview.mode) : 0;
   const live = interview ? interview.messages.filter((m) => !m.superseded) : [];
   const choices = interview?.status === "active" ? choiceOptionsOf(live) : null;
 
@@ -192,7 +192,7 @@ export default function ConsultPage() {
         <span className="text-body-strong">{mapName || "…"}</span>
         <span className="text-caption text-ink-muted">— Consultant</span>
         <ol className="ml-auto flex items-center gap-1" data-id="consult-progress">
-          {INTERVIEW_STAGES.map((stage, i) => (
+          {stagesForMode(interview?.mode).map((stage, i) => (
             <li
               key={stage.key}
               title={stage.label}

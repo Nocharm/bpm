@@ -1869,6 +1869,8 @@ export interface InterviewState {
   version_id: number;
   status: string; // active | completed | abandoned
   current_stage: string;
+  // 인터뷰 모드 — normal | word (design 2026-07-26 §2)
+  mode?: string;
   lang: string;
   working_graph: WorkingGraph | null;
   messages: InterviewMessage[];

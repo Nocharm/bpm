@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { getAiTips, type InterviewState } from "@/lib/api";
-import { INTERVIEW_STAGES, choiceOptionsOf, stageIndex } from "@/lib/interview";
+import { choiceOptionsOf, stageIndex, stagesForMode } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
@@ -265,8 +265,9 @@ export function InterviewPanel({
   const tipText =
     tips.length > 0 ? tips[live.length % tipCount] : t(TIP_KEYS[live.length % tipCount]);
 
-  const stageIdx = stageIndex(interview.current_stage);
-  const stageLabel = INTERVIEW_STAGES[stageIdx]?.label ?? interview.current_stage;
+  const stages = stagesForMode(interview.mode);
+  const stageIdx = stageIndex(interview.current_stage, interview.mode);
+  const stageLabel = stages[stageIdx]?.label ?? interview.current_stage;
 
   // 컨설턴트 아바타 — 메시지 런 헤더·typing dots 공용
   const consultantBadge = (
@@ -345,7 +346,7 @@ export function InterviewPanel({
           }
         >
           {interview.status === "active"
-            ? `Stage ${stageIdx + 1} of ${INTERVIEW_STAGES.length}`
+            ? `Stage ${stageIdx + 1} of ${stages.length}`
             : interview.status}
         </span>
       </div>
@@ -359,7 +360,7 @@ export function InterviewPanel({
           {live.map((message, i) => {
             const prev = live[i - 1];
             const stageChanged = message.stage !== prev?.stage;
-            const dividerLabel = INTERVIEW_STAGES.find((s) => s.key === message.stage)?.label;
+            const dividerLabel = stages.find((s) => s.key === message.stage)?.label;
             const isConsultantBody = message.role === "consultant" && message.kind !== "notice";
             // 같은 스테이지에서 컨설턴트 메시지가 이어지면 헤더 생략 + 간격 축소 (메시지 그룹핑)
             const continuesRun =

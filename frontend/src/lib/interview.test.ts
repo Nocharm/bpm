@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { InterviewMessage, WorkingGraph } from "./api";
 import {
   INTERVIEW_STAGES,
+  WORD_INTERVIEW_STAGES,
   addedNodeKeys,
   choiceOptionsOf,
   distinctiveNodeKeys,
   layoutWorkingGraph,
   stageIndex,
+  stagesForMode,
 } from "./interview";
 
 const GRAPH: WorkingGraph = {
@@ -33,6 +35,19 @@ describe("INTERVIEW_STAGES", () => {
       ["scope", "io", "activities", "branches", "roles", "params", "review"],
     );
     expect(stageIndex("activities")).toBe(2);
+  });
+});
+
+describe("stagesForMode", () => {
+  it("returns the word 3-stage set for word mode, 7-stage otherwise", () => {
+    expect(stagesForMode("word").map((s) => s.key)).toEqual(["scope", "draft", "review"]);
+    expect(stagesForMode(undefined)).toBe(INTERVIEW_STAGES);
+    expect(WORD_INTERVIEW_STAGES).toHaveLength(3);
+  });
+
+  it("stageIndex is mode-aware", () => {
+    expect(stageIndex("review", "word")).toBe(2);
+    expect(stageIndex("review")).toBe(6);
   });
 });
 
