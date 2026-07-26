@@ -320,3 +320,50 @@ def test_normal_turn_unaffected_by_missing_doc_sections() -> None:
     _run(db, interview, InterviewTurnIn(type="answer", content="네"),
          [INTERVIEWER_Q, DRAFT])
     assert interview.working_graph is not None
+
+
+def test_sanitize_promotes_valid_anchor_on_plain_node() -> None:
+    """유효 앵커를 단 일반 노드는 섹션으로 승격 — '섹션 우선' 계약 잠금 (design 2026-07-26 §4)."""
+    graph = {"nodes": [{"key": "p", "title": "아무거나", "node_type": "process",
+                        "attributes": {"section_anchor": "_Toc2"}}], "edges": [], "groups": []}
+    cleaned, demoted = orchestrator._sanitize_word_graph(graph, _WORD_SECTIONS)
+    assert demoted == 0
+    assert cleaned["nodes"][0]["node_type"] == "section"
+    assert cleaned["nodes"][0]["title"] == "2 출고"
+
+
+def test_skip_turn_word_redraft_demote_notice() -> None:
+    """skip 턴 재드래프트에서 word 강등이 노티스로 나타난다 (design 2026-07-26 §4)."""
+    db = _FakeDb()
+    interview = _session(mode="word", current_stage="draft",
+                         facts={"scope": {"process_name": "재고관리"}})
+    # 스크립트: 스킵 → 새 스테이지 인터뷰어 → 재드래프트(WORD_DRAFT, 강등 1)
+    _run(db, interview, InterviewTurnIn(type="skip"),
+         [INTERVIEWER_Q, WORD_DRAFT], doc_sections=_WORD_SECTIONS)
+    # 강등 노티스 확인 — "1개 활동" 텍스트 포함
+    notices = [m for m in db.added if getattr(m, "kind", "") == "notice"]
+    assert any("1개 활동" in (m.content or "") for m in notices), \
+        "Skip turn should append demote notice when redraft demotes nodes"
+    # 다음 단계로 진행 확인
+    assert interview.current_stage != "draft"
+
+
+def test_stage_complete_with_word_redraft_demote_notice() -> None:
+    """stage_complete 시 word 강등이 노티스로 나타난다 (design 2026-07-26 §4)."""
+    db = _FakeDb()
+    graph = json.loads(WORD_DRAFT)
+    graph.pop("kind", None)
+    interview = _session(mode="word", current_stage="draft", working_graph=graph,
+                         facts={"draft": {"draft_confirmed": "yes"}})
+    # 스크립트: 인터뷰어(stage_complete) → 재드래프트(WORD_DRAFT, 강등 1) → 톤 검수
+    _run(db, interview,
+         InterviewTurnIn(type="answer", content="이렇게 하면 되나요"),
+         [json.dumps({"message": "초안 확정. 다음 단계로 넘어가겠습니다.",
+                      "facts_patch": {"finalized": "true"}, "stage_complete": True}),
+          WORD_DRAFT, TONE], doc_sections=_WORD_SECTIONS)
+    # 강등 노티스 확인 — "1개 활동" 텍스트 포함
+    notices = [m for m in db.added if getattr(m, "kind", "") == "notice"]
+    assert any("1개 활동" in (m.content or "") for m in notices), \
+        "Stage complete should append demote notice when redraft demotes nodes"
+    # 다음 단계로 진행 확인
+    assert interview.current_stage != "draft"

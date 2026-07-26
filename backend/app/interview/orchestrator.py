@@ -308,9 +308,12 @@ async def _run_skip_turn(
         new_facts.update(out.facts_patch)
         interview.facts = {**interview.facts, interview.current_stage: new_facts}
     # 미정 채움으로 facts가 바뀌었으니 작업본도 따라간다 — 실패해도 전진은 유지
-    await _redraft(interview, context_text, model, doc_sections)
+    changed, demoted = await _redraft(interview, context_text, model, doc_sections)
     _append(db, interview, seq + 1, "consultant", "question", out.message,
             payload={"options": out.options} if out.options else None)
+    if demoted:
+        _append(db, interview, next_seq(interview), "consultant", "notice",
+                _DEMOTE_NOTICE.get(interview.lang, _DEMOTE_NOTICE["ko"]).format(n=demoted))
 
 
 async def run_turn(
