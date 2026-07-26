@@ -1494,6 +1494,7 @@ class InterviewStateOut(BaseModel):
     status: str
     current_stage: str
     lang: str
+    mode: str = "normal"
     working_graph: dict | None = None
     messages: list[InterviewMessageOut] = Field(default_factory=list)
     checkpoints: list[InterviewCheckpointOut] = Field(default_factory=list)

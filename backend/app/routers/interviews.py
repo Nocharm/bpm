@@ -26,6 +26,7 @@ from app.models import (
     InterviewMessage,
     InterviewSession,
     MapVersion,
+    ProcessMap,
 )
 from app.permissions.access import assert_map_role
 from app.permissions.deps import require_map_role
@@ -62,6 +63,11 @@ _GREETING = {
     "en": "Hello, I'm your process consultant. I'll ask a few questions to build the process map together. First, what is this process called and what is its purpose? Feel free to attach reference documents.",
 }
 
+_GREETING_WORD = {
+    "ko": "안녕하세요! 이 Word 맵의 SOP 문서를 순서도로 옮겨 드릴게요. 문서 전체를 그릴까요, 특정 섹션 범위만 그릴까요? 원본 .docx를 첨부해 주시면 본문까지 반영해 더 정확하게 제안할 수 있습니다.",
+    "en": "Hi! I'll turn this Word map's SOP document into a flowchart. Should I draw the whole document or one section subtree? Attach the original .docx and I can ground the draft in the body text.",
+}
+
 
 def _require_ai_enabled() -> None:
     if not settings.ai_enabled:
@@ -90,6 +96,7 @@ async def _state_out(session: AsyncSession, interview: InterviewSession) -> Inte
         status=interview.status,
         current_stage=interview.current_stage,
         lang=interview.lang,
+        mode=interview.mode,
         working_graph=interview.working_graph,
         messages=sorted(interview.messages, key=lambda m: m.seq),
         checkpoints=sorted(interview.checkpoints, key=lambda c: c.id),
@@ -145,20 +152,25 @@ async def create_or_resume_interview(
     if not workflow.is_editable_status(version.status):
         raise HTTPException(status_code=409, detail="version is not editable")
 
+    found_map = await session.get(ProcessMap, map_id)
+    interview_mode = "word" if found_map is not None and found_map.mode == "word" else "normal"
+
     interview = InterviewSession(
         map_id=map_id,
         version_id=payload.version_id,
         login_id=user,
         lang=payload.lang,
+        mode=interview_mode,
         facts={},
         base_graph_updated_at=version.updated_at,
     )
     session.add(interview)
     await session.flush()  # id 채번 — 메시지 FK
+    greeting_src = _GREETING_WORD if interview_mode == "word" else _GREETING
     session.add(
         InterviewMessage(
             session_id=interview.id, seq=1, role="consultant", kind="question",
-            content=_GREETING.get(payload.lang, _GREETING["ko"]), stage="scope",
+            content=greeting_src.get(payload.lang, greeting_src["ko"]), stage="scope",
         )
     )
     await session.commit()
@@ -212,7 +224,7 @@ async def post_turn(
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
-    if payload.type == "skip" and next_stage_key(interview.current_stage) is None:
+    if payload.type == "skip" and next_stage_key(interview.current_stage, interview.mode) is None:
         raise HTTPException(status_code=400, detail="cannot skip the final stage")
 
     # rollback 후 만료 대비 스칼라 선캡처

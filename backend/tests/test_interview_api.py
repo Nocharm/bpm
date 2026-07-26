@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,6 +37,40 @@ def test_state_out_smoke() -> None:
         version_updated_at=None, base_graph_updated_at=None,
     )
     assert state.current_stage == "scope"
+
+
+def test_create_on_word_map_sets_word_mode(client: TestClient, monkeypatch) -> None:
+    """word 맵에서 세션 생성 시 mode='word' + word 인사말 (design 2026-07-26 §2)."""
+    _enable_ai(monkeypatch)
+    m = client.post(
+        "/api/maps",
+        json={
+            "name": f"iv-word-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+            "doc_name": "sop.docx",
+            "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+        },
+    ).json()
+    version_id = m["versions"][0]["id"]
+    state = client.post(
+        f"/api/maps/{m['id']}/interviews", json={"version_id": version_id}
+    ).json()
+    assert state["mode"] == "word"
+    assert state["current_stage"] == "scope"
+    assert "순서도" in state["messages"][0]["content"]
+
+
+def test_create_on_normal_map_keeps_normal_mode(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    m = client.post(
+        "/api/maps",
+        json={"name": f"iv-n-{uuid4().hex[:8]}", "owning_department": "Owning Anchor Division"},
+    ).json()
+    state = client.post(
+        f"/api/maps/{m['id']}/interviews", json={"version_id": m["versions"][0]["id"]}
+    ).json()
+    assert state["mode"] == "normal"
 
 
 # === API Tests ===

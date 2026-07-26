@@ -646,6 +646,8 @@ class InterviewSession(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")  # active|completed|abandoned
     current_stage: Mapped[str] = mapped_column(String(20), default="scope")
     lang: Mapped[str] = mapped_column(String(5), default="ko")  # ko|en — 생성 시 고정
+    # 인터뷰 모드 — normal(7스테이지) | word(문서→순서도 변환 3스테이지) (design 2026-07-26 §2)
+    mode: Mapped[str] = mapped_column(String(20), default="normal")
     facts: Mapped[dict] = mapped_column(JSON, default=dict)  # 스테이지 키별 수집 항목
     # 작업본 그래프 — AiProposal graph 서브셋 {nodes,edges,groups} (키 기반, 좌표 없음)
     working_graph: Mapped[dict | None] = mapped_column(JSON, default=None)
