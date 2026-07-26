@@ -67,6 +67,9 @@ const run = async () => {
   if (!(await page.textContent('[data-id="interview-panel"]')).includes("컨설턴트")) throw new Error("greeting missing");
   // 스테이지 스킵 버튼 — review 이전 스테이지에선 항상 노출 (2026-07-24 반복 루프 탈출구)
   await page.waitForSelector('[data-id="iv-skip-stage"]');
+  // 리디자인(2026-07-26): 스테이지 칩 + 컴포저 카드
+  await page.waitForSelector('[data-id="iv-stage-chip"]');
+  await page.waitForSelector('[data-id="iv-composer"]');
   // 글자 크기 컨트롤 + 첨부 안내 모달 (2026-07-24 5차 UX)
   await page.waitForSelector('[data-id="iv-font-dec"]');
   await page.click('[data-id="iv-attach"]');

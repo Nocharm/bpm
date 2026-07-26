@@ -57,7 +57,7 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
       role="listbox"
       aria-label="Answer options"
       onKeyDown={handleKeyDown}
-      className="rounded-md border border-accent-tint-border bg-surface shadow-sm outline-none focus:border-accent"
+      className="rounded-md border border-accent-tint-border bg-surface shadow-md outline-none focus:border-accent"
       data-id="iv-question-options"
     >
       <ul className="py-1">

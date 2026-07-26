@@ -2,15 +2,16 @@
 
 // 인터뷰 우측 대화 패널 — 메시지 스트림(마크다운)·퀵리플라이 보기·첨부 관리 (design 2026-07-23 §6)
 // 선택지(맵 안) 비교는 캔버스 플로팅 창에서 — 여기서는 안내만. 노드 멘션은 window 이벤트로 수신.
+// 2026-07-26 리디자인: 스테이지 칩·전환 디바이더·메시지 그룹핑·typing dots·컴포저 카드·픽커 핀·스크롤 다운.
 
 import { useEffect, useRef, useState } from "react";
 import {
-  FileText, HardDrive, Headset, Info, Layers, Lightbulb, Loader2, Paperclip,
+  ArrowDown, FileText, HardDrive, Headset, Info, Layers, Lightbulb, Paperclip,
   RotateCcw, Send, SkipForward, Type, X,
 } from "lucide-react";
 
 import { getAiTips, type InterviewState } from "@/lib/api";
-import { choiceOptionsOf } from "@/lib/interview";
+import { INTERVIEW_STAGES, choiceOptionsOf, stageIndex } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
@@ -27,6 +28,7 @@ const FONT_DEFAULT = 13;
 const INPUT_MAX_LEN = 4000; // 백엔드 InterviewTurnIn.content max_length와 동일
 const INPUT_MAX_PX = 128; // 입력창 자동 확장 상한 — max-h-32와 동기
 const CHARCOUNT_SHOW_AT = INPUT_MAX_LEN - 400; // 상한 근접 시에만 카운터 노출
+const SCROLL_DOWN_AT = 160; // 바닥에서 이만큼(px) 이상 올라가면 스크롤 다운 버튼 노출
 
 // 답변 대기 팁 — 서버 관리 팁(getAiTips) 우선, 미설정 시 i18n 폴백 (AI 챗과 동일 소스)
 const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
@@ -59,6 +61,7 @@ export function InterviewPanel({
   const [fontPx, setFontPx] = useState(readFontPx);
   const [tips, setTips] = useState<string[]>([]);
   const [showAttachInfo, setShowAttachInfo] = useState(false);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -147,99 +150,248 @@ export function InterviewPanel({
     window.localStorage.setItem(FONT_KEY, String(next)); // 영속은 핸들러에서 (StrictMode effect 리셋 함정)
   }
 
+  // 스크롤 다운 버튼 — 바닥에서 일정 이상 올라갔을 때만 (setState는 스크롤 이벤트 핸들러에서)
+  function handleScroll() {
+    const el = listRef.current;
+    if (!el) return;
+    setShowScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > SCROLL_DOWN_AT);
+  }
+
   // 팁 로테이션 — 턴이 쌓일 때마다 다음 팁 (별도 상태 없이 렌더 파생)
   const tipCount = tips.length > 0 ? tips.length : TIP_KEYS.length;
   const tipText =
     tips.length > 0 ? tips[live.length % tipCount] : t(TIP_KEYS[live.length % tipCount]);
 
+  const stageIdx = stageIndex(interview.current_stage);
+  const stageLabel = INTERVIEW_STAGES[stageIdx]?.label ?? interview.current_stage;
+
+  // 컨설턴트 아바타 — 메시지 런 헤더·typing dots 공용
+  const consultantBadge = (
+    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+      <Headset size={12} strokeWidth={1.5} />
+    </span>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-id="interview-panel">
       {/* 채팅 글자 크기 — .md는 자체 font-size(caption)가 있어 상속 개방 오버라이드 필요 */}
       <style>{`[data-id="interview-panel"] .md{font-size:inherit;}`}</style>
-      <ul
-        ref={listRef}
-        className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
-        style={{ fontSize: fontPx }}
+      {/* 현재 스테이지 칩 — 스트림 위 고정 */}
+      <div
+        className="flex items-center gap-2 border-b border-hairline bg-surface px-4 py-1.5"
+        data-id="iv-stage-chip"
       >
-        {live.map((message) => (
-          <li key={message.id} data-id={`iv-msg-${message.kind}`}>
-            {message.role === "user" ? (
+        <span
+          className={
+            "h-1.5 w-1.5 rounded-full " +
+            (interview.status === "active" ? "bg-accent" : "bg-ink-muted")
+          }
+        />
+        <span className="text-caption-strong">{stageLabel}</span>
+        <span
+          className={
+            "text-fine text-ink-muted" + (interview.status === "active" ? "" : " capitalize")
+          }
+        >
+          {interview.status === "active"
+            ? `Stage ${stageIdx + 1} of ${INTERVIEW_STAGES.length}`
+            : interview.status}
+        </span>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <ul
+          ref={listRef}
+          onScroll={handleScroll}
+          className="h-full overflow-y-auto px-4 py-3"
+          style={{ fontSize: fontPx }}
+        >
+          {live.map((message, i) => {
+            const prev = live[i - 1];
+            const stageChanged = message.stage !== prev?.stage;
+            const dividerLabel = INTERVIEW_STAGES.find((s) => s.key === message.stage)?.label;
+            const isConsultantBody = message.role === "consultant" && message.kind !== "notice";
+            // 같은 스테이지에서 컨설턴트 메시지가 이어지면 헤더 생략 + 간격 축소 (메시지 그룹핑)
+            const continuesRun =
+              !stageChanged &&
+              isConsultantBody &&
+              prev?.role === "consultant" &&
+              prev.kind !== "notice";
+            return (
+              <li
+                key={message.id}
+                className={continuesRun ? "mt-1.5" : "mt-4 first:mt-1"}
+                data-id={`iv-msg-${message.kind}`}
+              >
+                {stageChanged && dividerLabel ? (
+                  <div className="mb-3 flex items-center gap-2 pt-1" data-id="iv-stage-divider">
+                    <span className="h-px flex-1 bg-hairline" />
+                    <span className="text-fine text-ink-muted">{dividerLabel}</span>
+                    <span className="h-px flex-1 bg-hairline" />
+                  </div>
+                ) : null}
+                {message.role === "user" ? (
+                  <div className="flex justify-end">
+                    <div className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-xs bg-accent-tint px-3.5 py-2 text-ink">
+                      {message.content}
+                    </div>
+                  </div>
+                ) : message.kind === "notice" ? (
+                  <div className="flex items-start gap-2 rounded-md bg-surface-alt px-3 py-2">
+                    <Info size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-tertiary" />
+                    <span className="text-fine text-ink-secondary">{message.content}</span>
+                  </div>
+                ) : (
+                  <>
+                    {!continuesRun ? (
+                      <div className="mb-1 flex items-center gap-1.5">
+                        {consultantBadge}
+                        <span className="text-fine font-semibold text-ink-secondary">Consultant</span>
+                      </div>
+                    ) : null}
+                    <MarkdownView source={message.content} className="min-w-0 max-w-[92%]" />
+                  </>
+                )}
+              </li>
+            );
+          })}
+          {pending !== null ? (
+            <li className="mt-4" data-id="iv-pending">
               <div className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-xs bg-accent-tint px-3 py-2 text-ink">
-                  {message.content}
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-xs bg-accent-tint px-3.5 py-2 text-ink opacity-70">
+                  {pending}
                 </div>
               </div>
-            ) : message.kind === "notice" ? (
-              <div className="flex items-start gap-2 rounded-md bg-surface-alt px-3 py-2">
-                <Info size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-tertiary" />
-                <span className="text-fine text-ink-secondary">{message.content}</span>
-              </div>
-            ) : (
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
-                  <Headset size={12} strokeWidth={1.5} />
+            </li>
+          ) : null}
+          {activeChoices && hasChoices ? (
+            <li
+              className="mt-4 flex items-center gap-2 rounded-md border border-accent-tint-border bg-accent-tint/50 px-3 py-2 text-caption text-ink-secondary"
+              data-id="iv-choices-hint"
+            >
+              <Layers size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+              Compare the proposed maps on the canvas and pick one.
+            </li>
+          ) : null}
+          {busy ? (
+            <li className="mt-4" data-id="iv-thinking">
+              <div className="flex items-center gap-1.5">
+                {consultantBadge}
+                <span className="inline-flex items-center gap-1 px-1">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="h-1.5 w-1.5 rounded-full bg-ink-muted"
+                      style={{ animation: `lp-dot 1.1s ease-in-out ${i * 0.2}s infinite` }}
+                    />
+                  ))}
                 </span>
-                <MarkdownView source={message.content} className="min-w-0 max-w-[90%] flex-1" />
               </div>
-            )}
-          </li>
-        ))}
-        {pending !== null ? (
-          <li data-id="iv-pending">
-            <div className="flex justify-end">
-              <div className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-xs bg-accent-tint px-3 py-2 text-ink opacity-70">
-                {pending}
+              <div
+                className="mt-1.5 flex items-start gap-1.5 pl-6.5 text-fine text-ink-muted"
+                data-id="iv-tip"
+              >
+                <Lightbulb size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                {tipText}
               </div>
-            </div>
-          </li>
-        ) : null}
-        {activeChoices && hasChoices ? (
-          <li
-            className="ml-7 flex items-center gap-2 rounded-md border border-accent-tint-border bg-accent-tint/50 px-3 py-2 text-caption text-ink-secondary"
-            data-id="iv-choices-hint"
+            </li>
+          ) : null}
+          {error ? (
+            <li
+              className="mt-4 rounded-md border border-error/40 bg-error/5 px-3 py-2 text-caption text-error"
+              data-id="iv-error"
+            >
+              {error}
+              <button className="ml-2 inline-flex items-center gap-1 text-caption-strong" onClick={onRetry}>
+                <RotateCcw size={16} strokeWidth={1.5} /> Retry
+              </button>
+            </li>
+          ) : null}
+        </ul>
+        {showScrollDown ? (
+          <button
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-hairline bg-surface p-1.5 text-ink-secondary shadow-lg hover:bg-surface-alt"
+            title="Scroll to latest"
+            onClick={() =>
+              listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })
+            }
+            data-id="iv-scroll-down"
           >
-            <Layers size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
-            Compare the proposed maps on the canvas and pick one.
-          </li>
+            <ArrowDown size={14} strokeWidth={1.5} />
+          </button>
         ) : null}
+      </div>
+      <div className="px-2 pb-2 pt-1.5">
+        {/* 보기 픽커 — 스크롤에 밀리지 않게 컴포저 위 핀 고정 */}
         {quickReplies.length > 0 ? (
-          <li className="ml-7" data-id="iv-quickreplies">
+          <div className="mb-1.5" data-id="iv-quickreplies">
             <QuestionOptions
               options={quickReplies}
               disabled={busy}
               onSelect={onSend}
               onFreeType={() => inputRef.current?.focus()}
             />
-          </li>
+          </div>
         ) : null}
-        {busy ? (
-          <li className="ml-7 flex flex-col items-start gap-1.5" data-id="iv-thinking">
-            <span className="flex items-center gap-2 text-caption text-ink-muted">
-              <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
-              Consultant is thinking…
-            </span>
-            <span
-              className="flex items-center gap-1.5 rounded-sm bg-accent-tint px-2 py-1 text-fine text-accent"
-              data-id="iv-tip"
+        {/* 컴포저 카드 — 첨부·입력·액션을 한 카드로 통합, 포커스는 카드 테두리로 표시 */}
+        <div
+          className="rounded-lg border border-hairline bg-surface shadow-md transition-colors duration-150 focus-within:border-accent"
+          data-id="iv-composer"
+        >
+          {interview.attachments.length > 0 ? (
+            <div className="flex flex-wrap gap-1 px-2.5 pt-2">
+              {interview.attachments.map((a) => (
+                <span
+                  key={a.id}
+                  className={
+                    "inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine " +
+                    (a.status === "parsed" ? "bg-surface-alt text-ink-secondary" : "bg-error/10 text-error")
+                  }
+                  title={a.error || a.filename}
+                  data-id="iv-attachment-chip"
+                >
+                  {a.filename}
+                  <button
+                    className="rounded-xs text-ink-muted hover:text-error"
+                    title="Remove document"
+                    onClick={() => onDeleteAttachment(a.id)}
+                    data-id="iv-attachment-delete"
+                  >
+                    <X size={12} strokeWidth={1.5} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <textarea
+            ref={inputRef}
+            className="max-h-32 min-h-9 w-full resize-none bg-transparent px-3 py-2 text-body outline-none"
+            rows={1}
+            maxLength={INPUT_MAX_LEN}
+            placeholder={
+              interview.status === "active" ? "Type your answer…  ( / to focus)" : "Interview finished"
+            }
+            disabled={interview.status !== "active" || busy}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            data-id="iv-input"
+          />
+          <div className="flex items-center gap-0.5 px-1.5 pb-1.5 text-ink-tertiary">
+            <button
+              className="rounded-sm p-1.5 hover:bg-surface-alt hover:text-ink"
+              title="Attach document"
+              onClick={() => setShowAttachInfo(true)}
+              data-id="iv-attach"
             >
-              <Lightbulb size={12} strokeWidth={1.6} className="shrink-0" />
-              {tipText}
-            </span>
-          </li>
-        ) : null}
-        {error ? (
-          <li className="rounded-md border border-error/40 bg-error/5 px-3 py-2 text-caption text-error" data-id="iv-error">
-            {error}
-            <button className="ml-2 inline-flex items-center gap-1 text-caption-strong" onClick={onRetry}>
-              <RotateCcw size={16} strokeWidth={1.5} /> Retry
+              <Paperclip size={15} strokeWidth={1.5} />
             </button>
-          </li>
-        ) : null}
-      </ul>
-      <div className="border-t border-hairline p-2">
-        <div className="mb-1 flex items-center justify-between">
-          {/* 채팅 글자 크기 — 브라우저별 저장(localStorage) */}
-          <div className="flex items-center gap-0.5 text-ink-tertiary">
+            <span className="mx-0.5 h-4 w-px bg-hairline" />
+            {/* 채팅 글자 크기 — 브라우저별 저장(localStorage) */}
             <Type size={12} strokeWidth={1.5} />
             <button
               className="rounded-xs px-1 py-0.5 text-fine hover:bg-surface-alt hover:text-ink disabled:opacity-40"
@@ -259,98 +411,38 @@ export function InterviewPanel({
             >
               A+
             </button>
-          </div>
-          {interview.status === "active" && interview.current_stage !== "review" ? (
-            <button
-              className="inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-40"
-              title="Mark unanswered items as TBD and move on"
-              disabled={busy}
-              onClick={onSkip}
-              data-id="iv-skip-stage"
-            >
-              <SkipForward size={12} strokeWidth={1.5} />
-              Skip to next stage
-            </button>
-          ) : null}
-        </div>
-        {interview.attachments.length > 0 ? (
-          <div className="mb-1 flex flex-wrap gap-1">
-            {interview.attachments.map((a) => (
-              <span
-                key={a.id}
-                className={
-                  "inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine " +
-                  (a.status === "parsed" ? "bg-surface-alt text-ink-secondary" : "bg-error/10 text-error")
-                }
-                title={a.error || a.filename}
-                data-id="iv-attachment-chip"
-              >
-                {a.filename}
+            {interview.status === "active" && interview.current_stage !== "review" ? (
+              <>
+                <span className="mx-0.5 h-4 w-px bg-hairline" />
                 <button
-                  className="rounded-xs text-ink-muted hover:text-error"
-                  title="Remove document"
-                  onClick={() => onDeleteAttachment(a.id)}
-                  data-id="iv-attachment-delete"
+                  className="inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine hover:bg-surface-alt hover:text-accent disabled:opacity-40"
+                  title="Mark unanswered items as TBD and move on"
+                  disabled={busy}
+                  onClick={onSkip}
+                  data-id="iv-skip-stage"
                 >
-                  <X size={12} strokeWidth={1.5} />
+                  <SkipForward size={12} strokeWidth={1.5} />
+                  Skip stage
                 </button>
-              </span>
-            ))}
+              </>
+            ) : null}
+            <div className="ml-auto flex items-center gap-1.5">
+              {input.length >= CHARCOUNT_SHOW_AT ? (
+                <span className="text-fine text-ink-muted" data-id="iv-charcount">
+                  {input.length.toLocaleString()} / {INPUT_MAX_LEN.toLocaleString()}
+                </span>
+              ) : null}
+              <button
+                className="rounded-md bg-accent p-1.5 text-on-accent disabled:opacity-40"
+                disabled={interview.status !== "active" || busy || !input.trim()}
+                onClick={submit}
+                data-id="iv-send"
+              >
+                <Send size={15} strokeWidth={1.5} />
+              </button>
+            </div>
           </div>
-        ) : null}
-        <div className="flex items-end gap-1.5">
-          <button
-            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt"
-            title="Attach document"
-            onClick={() => setShowAttachInfo(true)}
-            data-id="iv-attach"
-          >
-            <Paperclip size={16} strokeWidth={1.5} />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.docx,.xlsx,.txt,.md"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onAttach(file);
-              e.target.value = "";
-            }}
-          />
-          <textarea
-            ref={inputRef}
-            className="max-h-32 min-h-9 flex-1 resize-none rounded-sm border border-hairline bg-surface px-2 py-1.5 text-body outline-none focus:border-accent"
-            rows={1}
-            maxLength={INPUT_MAX_LEN}
-            placeholder={
-              interview.status === "active" ? "Type your answer…  ( / to focus)" : "Interview finished"
-            }
-            disabled={interview.status !== "active" || busy}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            data-id="iv-input"
-          />
-          <button
-            className="rounded-sm bg-accent p-1.5 text-on-accent disabled:opacity-40"
-            disabled={interview.status !== "active" || busy || !input.trim()}
-            onClick={submit}
-            data-id="iv-send"
-          >
-            <Send size={16} strokeWidth={1.5} />
-          </button>
         </div>
-        {input.length >= CHARCOUNT_SHOW_AT ? (
-          <div className="mt-0.5 pr-9 text-right text-fine text-ink-muted" data-id="iv-charcount">
-            {input.length.toLocaleString()} / {INPUT_MAX_LEN.toLocaleString()}
-          </div>
-        ) : null}
       </div>
       {showAttachInfo ? (
         <ConfirmDialog
@@ -370,6 +462,17 @@ export function InterviewPanel({
           onClose={() => setShowAttachInfo(false)}
         />
       ) : null}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf,.docx,.xlsx,.txt,.md"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onAttach(file);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
