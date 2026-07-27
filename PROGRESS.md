@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-27 — 인터뷰 속도·타이밍 재설계 설계 확정 (worktree-ai-consultant)
+- GPU 실검증 피드백(턴 1~4분·진행 표시 부재·채팅-맵 어긋남) 브레인스토밍 → 설계 확정: **일반 턴=인터뷰어 1콜**(재드래프트·톤 검수 폐지·프롬프트 다이어트) · **그리기=`POST /draw` 이벤트**(구조 스테이지 완료/review 진입/수동 버튼, 동기+진행 오버레이, 맵은 수락 시점에만 변경) · **델타 드래프팅**(기존 노드 키 에코·exclude_unset 복원) · **facts 아웃라인 패널**(AI 0콜)+맵 기준 배지. `docs/design/2026-07-27-interview-speed-redesign-design.md`.
+
 ## 2026-07-27 — P2 지식기반 Tasks 7~9 완료: 유사 SP 제안·프론트·문서 (worktree-ai-consultant)
 - **Task 7 유사 SP 제안(백엔드)**: `kb/sp_suggest.py` — 분기 없는 연속 process 체인(3+) 추출 → map 코퍼스 top-1(임계 0.65, 자기 맵·기링크 맵·비가시 맵 제외) → activities/review 턴에 `sp_suggestion` 메시지(맵당 1회). 수락은 `POST /interviews/{id}/sp-accept`가 결정적 치환(subprocess 링크 노드+엣지 재배선+노티스, 제안 메시지 superseded).
 - **AI 계약 확장**: AI_NODE_TYPES에 subprocess 추가 + orchestrator `_sanitize_subprocess`(이전 작업본에 실존하는 링크만 제목 매칭 유지, 환각은 process 강등 — word 앵커 사니타이즈와 동형). 세션 시드도 링크 있는 subprocess 유지.
