@@ -22,7 +22,7 @@ from app.interview.agents import (
     format_section_catalog,
 )
 from app.models import InterviewCheckpoint, InterviewMessage, InterviewSession
-from app.schemas import AiProposal, InterviewTurnIn
+from app.schemas import AiNode, AiProposal, InterviewTurnIn
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -204,6 +204,28 @@ def _graph_signature(graph: dict | None) -> tuple:
 _REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기"
 
 
+def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
+    """델타 복원 — 기존 노드 키 에코({"key":k})를 이전 작업본으로 완성 (speed redesign §5).
+
+    노드별 exclude_unset 덤프를 prev(키 조인) 위에 병합 — 미제공 필드는 이전 값 유지,
+    명시 필드는 오버라이드. prev에 없고 제목도 없는 노드는 해석 불가라 드롭(참조 엣지 포함).
+    """
+    prev_by_key = {n.get("key"): n for n in (prev or {}).get("nodes", [])}
+    nodes: list[AiNode] = []
+    kept: set[str] = set()
+    for node in proposal.nodes:
+        data = node.model_dump(exclude_unset=True)
+        base = prev_by_key.get(node.key)
+        if base is None and not data.get("title"):
+            logger.warning("interview delta node dropped (unknown key, no title): %s", node.key)
+            continue
+        merged = {**(base or {}), **{k: v for k, v in data.items() if k != "key"}, "key": node.key}
+        nodes.append(AiNode.model_validate(merged))
+        kept.add(node.key)
+    edges = [e for e in proposal.edges if e.source in kept and e.target in kept]
+    return proposal.model_copy(update={"nodes": nodes, "edges": edges})
+
+
 def demote_notice_text(lang: str, n: int) -> str:
     """word 앵커 강등 노티스 문구 — draw 라우트가 사용."""
     return _DEMOTE_NOTICE.get(lang, _DEMOTE_NOTICE["ko"]).format(n=n)
@@ -250,7 +272,11 @@ async def generate_proposals(
         if isinstance(result, BaseException) or result.kind != "graph":
             logger.warning("interview proposal %d failed: %s", i, result)
             continue
-        graph = _sanitize_subprocess(_graph_from_proposal(result), interview.working_graph)
+        expanded = _expand_delta(result, interview.working_graph)
+        if not expanded.nodes:
+            logger.warning("interview proposal %d empty after delta expansion", i)
+            continue
+        graph = _sanitize_subprocess(_graph_from_proposal(expanded), interview.working_graph)
         if interview.mode == "word" and doc_sections:
             graph, demoted = _sanitize_word_graph(graph, doc_sections)
             demoted_total += demoted

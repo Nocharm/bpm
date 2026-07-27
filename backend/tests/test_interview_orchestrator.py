@@ -305,3 +305,80 @@ def test_sanitize_promotes_valid_anchor_on_plain_node() -> None:
     assert demoted == 0
     assert cleaned["nodes"][0]["node_type"] == "section"
     assert cleaned["nodes"][0]["title"] == "2 출고"
+
+
+# ---------- 델타 드래프팅 (_expand_delta, speed redesign §5) ----------
+
+_PREV = {
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start", "description": "", "attributes": None, "group_key": None},
+        {"key": "a", "title": "요청서 작성", "node_type": "process", "description": "설명",
+         "attributes": {"assignee": "김담당"}, "group_key": None},
+        {"key": "e", "title": "끝", "node_type": "end", "description": "", "attributes": None, "group_key": None},
+    ],
+    "edges": [{"source": "s", "target": "a", "label": ""}, {"source": "a", "target": "e", "label": ""}],
+    "groups": [],
+}
+
+
+def _proposal(nodes_json: list[dict], edges_json: list[dict]):
+    from app.schemas import AiProposal
+
+    return AiProposal.model_validate({
+        "kind": "graph", "message": "", "nodes": nodes_json, "edges": edges_json, "groups": [],
+    })
+
+
+def test_expand_delta_restores_echoed_nodes() -> None:
+    """{"key":"a"}만 에코해도 이전 작업본의 제목·타입·attributes가 복원된다."""
+    proposal = _proposal(
+        [{"key": "s"}, {"key": "a"},
+         {"key": "n1", "title": "견적 비교", "node_type": "process"}, {"key": "e"}],
+        [{"source": "s", "target": "a"}, {"source": "a", "target": "n1"},
+         {"source": "n1", "target": "e"}],
+    )
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    by_key = {n.key: n for n in expanded.nodes}
+    assert by_key["a"].title == "요청서 작성"
+    assert by_key["a"].description == "설명"
+    assert by_key["a"].attributes is not None and by_key["a"].attributes.assignee == "김담당"
+    assert by_key["s"].node_type == "start" and by_key["e"].node_type == "end"
+    assert by_key["n1"].title == "견적 비교"  # 신규 노드는 풀 스펙 그대로
+
+
+def test_expand_delta_field_override_wins() -> None:
+    """에코에 title만 실으면 title만 갱신되고 나머지는 복원된다."""
+    proposal = _proposal([{"key": "a", "title": "요청서 접수"}], [])
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    node = expanded.nodes[0]
+    assert node.title == "요청서 접수"
+    assert node.description == "설명"  # 미제공 필드는 이전 값
+
+
+def test_expand_delta_missing_key_means_delete() -> None:
+    """목록에서 빠진 키(a)는 결과에 없다 — 델타의 삭제 표현."""
+    proposal = _proposal(
+        [{"key": "s"}, {"key": "e"}],
+        [{"source": "s", "target": "e"}],
+    )
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    assert {n.key for n in expanded.nodes} == {"s", "e"}
+    assert [(e.source, e.target) for e in expanded.edges] == [("s", "e")]
+
+
+def test_expand_delta_unknown_key_without_title_dropped() -> None:
+    proposal = _proposal([{"key": "ghost"}, {"key": "a"}], [{"source": "ghost", "target": "a"}])
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    assert {n.key for n in expanded.nodes} == {"a"}
+    assert expanded.edges == []
+
+
+def test_expand_delta_full_spec_on_empty_prev() -> None:
+    """빈 캔버스 첫 생성 — prev 없음이면 풀 스펙 노드만 통과한다."""
+    proposal = _proposal(
+        [{"key": "s", "title": "시작", "node_type": "start"},
+         {"key": "x", "title": "활동", "node_type": "process"}],
+        [{"source": "s", "target": "x"}],
+    )
+    expanded = orchestrator._expand_delta(proposal, None)
+    assert {n.key for n in expanded.nodes} == {"s", "x"}

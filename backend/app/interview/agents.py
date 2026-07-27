@@ -120,7 +120,10 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
    '~하기' 동명사형·존댓말 금지, start/end 제목은 자유. (톤 검수는 별도 단계 없이 여기서 완결)
 3. 분기는 node_type="decision" + 나가는 엣지에 라벨.
 4. **attributes에는 [확정 facts]에서 사용자가 확인해준 값만 채우세요** — 확인되지 않은 담당자·소요시간·비용 등을 임의로 지어내지 마세요. 모르면 attributes를 생략합니다.
-5. **기존 작업본 보존**: [현재 작업본]에 이미 노드가 있으면 백지 재생성 금지 — 확정 facts와 모순되지 않는 노드·흐름·attributes는 그대로 유지하고 필요한 부분만 추가·수정하세요."""
+5. **기존 작업본 보존**: [현재 작업본]에 이미 노드가 있으면 백지 재생성 금지 — 확정 facts와 모순되지 않는 노드·흐름·attributes는 그대로 유지하고 필요한 부분만 추가·수정하세요.
+6. **델타 출력**: 최종 그래프에 포함할 노드 전체 목록을 쓰되, [현재 작업본]에 이미 있고 그대로
+   유지할 노드는 {"key":"<키>"}만 쓰세요(다른 필드 생략 — 시스템이 기존 내용을 복원합니다).
+   수정하거나 새로 만드는 노드만 전체 필드를 작성하고, 목록에서 뺀 키는 삭제로 처리됩니다."""
 
 _INTERVIEWER_WORD_ADDENDUM = """
 [Word 맵 변환 모드]
@@ -138,15 +141,32 @@ _INTERVIEWER_WORD_ADDENDUM = """
 
 _DRAFTER_WORD_ADDENDUM = """
 [Word 맵 변환 모드 — 추가 규칙]
-6. 문서 섹션에 대응하는 활동은 node_type="section"으로 만들고 attributes.section_anchor에
+7. 문서 섹션에 대응하는 활동은 node_type="section"으로 만들고 attributes.section_anchor에
    [문서 섹션 카탈로그]의 앵커 값을 그대로 넣으세요. 카탈로그에 없는 앵커는 금지.
-7. 문서에 없는 중간 단계·분기는 일반 process/decision으로 두세요(section 아님).
-8. 섹션 노드 제목은 시스템이 카탈로그 기준 "번호 제목"으로 재구성합니다 — 제목은 대략만.
-9. 1페이지에 들어가도록 노드 수 약 12개 이내 — 범위가 크면 상위 섹션 수준으로 요약."""
+8. 문서에 없는 중간 단계·분기는 일반 process/decision으로 두세요(section 아님).
+9. 섹션 노드 제목은 시스템이 카탈로그 기준 "번호 제목"으로 재구성합니다 — 제목은 대략만.
+10. 1페이지에 들어가도록 노드 수 약 12개 이내 — 범위가 크면 상위 섹션 수준으로 요약."""
 
 
 def _facts_block(facts: dict) -> str:
     return json.dumps(facts, ensure_ascii=False)
+
+
+def format_graph_compact(graph: dict | None) -> str:
+    """작업본 컴팩트 목록('키 | 타입 | 제목') — 드래프터 입력 토큰 다이어트 + 델타 키 참조용."""
+    if not graph or not graph.get("nodes"):
+        return "(없음)"
+    lines = [
+        f"{n.get('key')} | {n.get('node_type')} | {n.get('title')}"
+        for n in graph["nodes"]
+    ]
+    edges = graph.get("edges") or []
+    if edges:
+        lines.append("edges: " + ", ".join(
+            f"{e.get('source')}→{e.get('target')}" + (f"({e.get('label')})" if e.get("label") else "")
+            for e in edges
+        ))
+    return "\n".join(lines)
 
 
 def build_interviewer_messages(
@@ -189,7 +209,7 @@ def build_drafter_messages(
     mode: str = "normal",
     section_catalog: str = "",
 ) -> list[dict]:
-    current = json.dumps(working_graph, ensure_ascii=False) if working_graph else "(없음)"
+    current = format_graph_compact(working_graph)
     contract = _DRAFTER_CONTRACT + (_DRAFTER_WORD_ADDENDUM if mode == "word" else "")
     catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
     system = (

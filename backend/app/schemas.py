@@ -1296,7 +1296,8 @@ class AiNodeAttributes(BaseModel):
 
 class AiNode(BaseModel):
     key: str = Field(min_length=1, max_length=50)
-    title: str = Field(min_length=1, max_length=200)
+    # 빈 제목 허용 — 인터뷰 델타 계약의 키 에코 {"key": ...}용 (orchestrator._expand_delta가 복원)
+    title: str = Field(default="", max_length=200)
     node_type: str = "process"
     description: str = ""
     # 선택 메타 — 미제공이면 None (apply가 빈값/기존값으로 처리, D1)
