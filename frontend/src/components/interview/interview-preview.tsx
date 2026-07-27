@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, NodeTypes } from "@xyflow/react";
-import { CheckCheck, MessageSquarePlus, Undo2, Workflow, X } from "lucide-react";
+import { CheckCheck, MessageSquarePlus, PenLine, Undo2, Workflow, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -48,6 +48,25 @@ interface InterviewPreviewProps {
   choices: ChoiceOption[] | null;
   busy: boolean;
   onChoose: (choiceId: string) => void;
+  // 그리기 이벤트(speed redesign §4) — 진행 오버레이·Draw map 버튼·에러 Retry
+  drawBusy: false | "multi" | "single";
+  drawError: string | null;
+  onDraw: (variants: "multi" | "single") => void;
+  onDrawRetry: () => void;
+  onDrawClearError: () => void;
+}
+
+// 오버레이 경과초 — 마운트 시점부터 카운트(드로잉 중에만 마운트되므로 리셋 자연 처리)
+function DrawTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const timer = window.setInterval(
+      () => setElapsed(Math.floor((Date.now() - started) / 1000)), 500,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
+  return <span data-id="iv-draw-elapsed">{elapsed}s</span>;
 }
 
 interface HoveredNode {
@@ -161,6 +180,7 @@ function PreviewCanvas({
 
 export function InterviewPreview({
   interview, onUpdated, mapId, choices, busy, onChoose,
+  drawBusy, drawError, onDraw, onDrawRetry, onDrawClearError,
 }: InterviewPreviewProps) {
   const router = useRouter();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -444,14 +464,69 @@ export function InterviewPreview({
                 </button>
               </div>
             ) : null}
+            {/* draw 진행 오버레이 — 동기 대기의 가시화(스켈레톤+경과초), 실패 시 Retry (speed redesign §4) */}
+            {drawBusy || drawError ? (
+              <div
+                className="absolute inset-0 z-20 flex items-center justify-center bg-ink/10"
+                data-id="iv-draw-overlay"
+              >
+                <div className="flex w-96 max-w-[calc(100%-2rem)] flex-col items-center gap-3 rounded-md border border-hairline bg-surface p-6 shadow-lg">
+                  {drawError ? (
+                    <>
+                      <span className="text-center text-caption text-error">{drawError}</span>
+                      <div className="flex gap-2">
+                        <button
+                          className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                          onClick={onDrawClearError}
+                          data-id="iv-draw-close"
+                        >
+                          Close
+                        </button>
+                        <button
+                          className="rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent"
+                          onClick={onDrawRetry}
+                          data-id="iv-draw-retry"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex w-full gap-2">
+                        {(drawBusy === "multi" ? [0, 1] : [0]).map((i) => (
+                          <div key={i} className="h-24 flex-1 animate-pulse rounded-sm bg-surface-alt" />
+                        ))}
+                      </div>
+                      <span className="flex items-center gap-2 text-caption text-ink-secondary">
+                        {drawBusy === "multi" ? "Drawing proposals…" : "Drawing the map…"}
+                        <DrawTimer />
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : null}
             {/* 선택지 플로팅 창 — 복수 안을 캔버스 위에, 3안은 큰 창 1+작은 창 2(탭 전환), 선택하면 모두 닫힘 */}
-            {choices && choices.length > 0 ? (
+            {choices && choices.length > 0 && !drawBusy ? (
               <ChoiceOverlay choices={choices} busy={busy} onChoose={onChoose} />
             ) : null}
           </div>
         </NodeActionsContext.Provider>
       </ReactFlowProvider>
       <div className="flex items-center gap-1.5 border-t border-hairline bg-surface px-3 py-1.5" data-id="iv-actionbar">
+        {interview?.status === "active" ? (
+          <button
+            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+            disabled={busy || !!drawBusy}
+            onClick={() => onDraw("single")}
+            title="Draw the map from what we've discussed so far"
+            data-id="iv-draw"
+          >
+            <PenLine size={16} strokeWidth={1.5} />
+            Draw map
+          </button>
+        ) : null}
         {interview?.current_stage === "review" && interview.status === "active" ? (
           <button
             className="ml-auto flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent disabled:opacity-40"

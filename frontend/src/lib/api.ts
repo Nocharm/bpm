@@ -1882,6 +1882,8 @@ export interface InterviewState {
   attachments: InterviewAttachment[];
   version_updated_at: string | null;
   base_graph_updated_at: string | null;
+  // 턴 응답 전용 그리기 신호(비영속) — 프론트가 draw 이벤트로 이어받는다 (speed redesign)
+  draw_due?: "multi" | "single" | null;
 }
 
 export function createOrResumeInterview(
@@ -1917,6 +1919,17 @@ export function postInterviewRevert(id: number, stage: string): Promise<Intervie
   return request<InterviewState>(`/interviews/${id}/revert`, {
     method: "POST",
     body: JSON.stringify({ stage }),
+  });
+}
+
+// 그리기 이벤트(동기) — 제안 생성만, 작업본은 수락 시점에 변경 (speed redesign)
+export function drawProposals(
+  id: number,
+  variants: "multi" | "single",
+): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/draw`, {
+    method: "POST",
+    body: JSON.stringify({ variants }),
   });
 }
 

@@ -11,6 +11,7 @@ import {
   ApiError,
   createOrResumeInterview,
   deleteInterviewAttachment,
+  drawProposals,
   getApiErrorDetail,
   getMe,
   getMap,
@@ -50,6 +51,10 @@ export default function ConsultPage() {
   const [fatal, setFatal] = useState<string | null>(null); // 403/503 등 진입 불가
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const lastTurnRef = useRef<{ type: "answer" | "choice" | "skip"; content?: string; choice_id?: string } | null>(null);
+  // 그리기 이벤트(동기) — 진행 중엔 캔버스 오버레이 + 채팅 잠금 (speed redesign §4)
+  const [drawBusy, setDrawBusy] = useState<false | "multi" | "single">(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
+  const lastDrawRef = useRef<"multi" | "single">("single");
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -122,13 +127,29 @@ export default function ConsultPage() {
           : (turn.content ?? ""),
     );
     try {
-      setInterview(await postInterviewTurn(interview.id, turn));
+      const state = await postInterviewTurn(interview.id, turn);
+      setInterview(state);
       setPending(null); // 서버 상태에 실제 메시지가 포함됨 — 낙관적 표시 제거
       lastTurnRef.current = null; // 성공한 턴은 Retry 재생 대상에서 제외 — 첨부 업로드 실패 시 중복 제출 방지
+      if (state.draw_due) void startDraw(state.draw_due); // 그리기 신호 — 자동으로 draw 이벤트 개시
     } catch (err) {
       setError(getApiErrorDetail(err) || "AI request failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function startDraw(variants: "multi" | "single") {
+    if (!interview || drawBusy) return;
+    lastDrawRef.current = variants;
+    setDrawBusy(variants);
+    setDrawError(null);
+    try {
+      setInterview(await drawProposals(interview.id, variants));
+    } catch (err) {
+      setDrawError(getApiErrorDetail(err) || "Failed to draw proposals.");
+    } finally {
+      setDrawBusy(false);
     }
   }
 
@@ -212,6 +233,11 @@ export default function ConsultPage() {
           choices={choices}
           busy={busy}
           onChoose={(choiceId) => runTurn({ type: "choice", choice_id: choiceId })}
+          drawBusy={drawBusy}
+          drawError={drawError}
+          onDraw={(variants) => void startDraw(variants)}
+          onDrawRetry={() => void startDraw(lastDrawRef.current)}
+          onDrawClearError={() => setDrawError(null)}
         />
         <div
           className="w-1 shrink-0 cursor-col-resize bg-hairline transition-colors duration-150 hover:bg-accent/40"
@@ -226,7 +252,7 @@ export default function ConsultPage() {
           {interview ? (
             <InterviewPanel
               interview={interview}
-              busy={busy}
+              busy={busy || !!drawBusy}
               error={error}
               pending={pending}
               hasChoices={choices !== null}
