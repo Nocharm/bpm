@@ -64,8 +64,9 @@ def test_drafter_messages_contain_variant_hint() -> None:
 
 
 def test_choice_variant_hints_cover_choice_stages() -> None:
-    assert set(CHOICE_VARIANT_HINTS) == {"activities", "branches"}
-    assert all(len(v) >= 3 for v in CHOICE_VARIANT_HINTS.values())
+    # draft는 word 모드 구조 스테이지 — draw(multi)가 word에서도 동작 (speed redesign)
+    assert set(CHOICE_VARIANT_HINTS) == {"activities", "branches", "draft"}
+    assert all(len(v) >= 2 for v in CHOICE_VARIANT_HINTS.values())
 
 
 def test_format_section_catalog_filters_language() -> None:

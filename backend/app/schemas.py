@@ -1497,6 +1497,12 @@ class InterviewAttachmentOut(BaseModel):
     created_at: datetime
 
 
+class InterviewDrawIn(BaseModel):
+    """그리기 이벤트 입력 — multi(구조 스테이지 완료 복수안) / single(수동·redraw·최종안)."""
+
+    variants: Literal["multi", "single"] = "single"
+
+
 class InterviewSpAcceptIn(BaseModel):
     """유사 SP 제안 수락 — 제안 메시지 id로 대상 구간·맵을 특정 (design 2026-07-23 §7 P2)."""
 

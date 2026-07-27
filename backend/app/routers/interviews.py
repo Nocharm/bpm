@@ -13,7 +13,12 @@ from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
 from app.interview.engine import get_stage, next_stage_key
-from app.interview.orchestrator import TurnError, run_turn
+from app.interview.orchestrator import (
+    TurnError,
+    demote_notice_text,
+    generate_proposals,
+    run_turn,
+)
 from app.kb import embed_client, indexing, retrieval, sp_suggest
 from app.interview.parsing import (
     ALLOWED_EXTENSIONS,
@@ -37,6 +42,7 @@ from app.routers.graph import _load_graph
 from app.schemas import (
     InterviewAttachmentOut,
     InterviewCreateIn,
+    InterviewDrawIn,
     InterviewRevertIn,
     InterviewSpAcceptIn,
     InterviewStateOut,
@@ -515,6 +521,85 @@ async def post_turn(
     state = await _state_out(session, loaded)
     state.draw_due = result.draw_due  # 그리기 신호 — 프론트가 draw 이벤트로 이어받는다
     return state
+
+
+# draw 이벤트 안내 문구 — 인터뷰어 호출 없이 고정 (speed redesign §4)
+_DRAW_CHOICES_TEXT = {
+    "ko": "안을 준비했습니다 — 캔버스에서 골라주세요.",
+    "en": "Proposals are ready — pick one on the canvas.",
+}
+_DRAW_EMPTY_TEXT = {
+    "ko": "현재 맵과 사실상 같은 안뿐이라 새로 제시할 게 없습니다 — 대화를 더 진행한 뒤 다시 그려보세요.",
+    "en": "All drafts matched the current map — continue the interview and draw again later.",
+}
+
+
+@router.post("/interviews/{interview_id}/draw", response_model=InterviewStateOut)
+async def draw_interview_proposals(
+    interview_id: int,
+    payload: InterviewDrawIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """그리기 이벤트(동기) — 제안 생성만 담당, 작업본은 수락(choice 턴) 시점에만 변경 (speed redesign §4)."""
+    _require_ai_enabled()
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    map_id, version_id = interview.map_id, interview.version_id
+
+    found_map = await session.get(ProcessMap, interview.map_id)
+    kb_block, _ = await _kb_reference_block(
+        session, interview, found_map.name if found_map else "", ""
+    )
+    context_text = await _context_text(interview) + kb_block
+    doc_sections: list[dict] | None = None
+    if interview.mode == "word":
+        doc_sections = list(found_map.doc_sections) if found_map else []
+    try:
+        choices, demoted = await generate_proposals(
+            interview, context_text, doc_sections=doc_sections, variants=payload.variants,
+        )
+    except TurnError as exc:
+        await session.rollback()
+        try:
+            session.add(AiUsageEvent(
+                login_id=user, map_id=map_id, version_id=version_id,
+                model="", kind=None, ok=False,
+            ))
+            await session.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답을 바꾸지 않는다
+            logger.warning("interview usage event insert failed (draw failure path)")
+            await session.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    seq = max((m.seq for m in interview.messages), default=0) + 1
+    if choices is None:
+        session.add(InterviewMessage(
+            session_id=interview.id, seq=seq, role="consultant", kind="notice",
+            content=_DRAW_EMPTY_TEXT.get(interview.lang, _DRAW_EMPTY_TEXT["ko"]),
+            stage=interview.current_stage,
+        ))
+    else:
+        interview.pending_choices = choices
+        session.add(InterviewMessage(
+            session_id=interview.id, seq=seq, role="consultant", kind="choices",
+            content=_DRAW_CHOICES_TEXT.get(interview.lang, _DRAW_CHOICES_TEXT["ko"]),
+            payload=choices, stage=interview.current_stage,
+        ))
+    if demoted:
+        session.add(InterviewMessage(
+            session_id=interview.id, seq=seq + 1, role="consultant", kind="notice",
+            content=demote_notice_text(interview.lang, demoted), stage=interview.current_stage,
+        ))
+    session.add(AiUsageEvent(
+        login_id=user, map_id=map_id, version_id=version_id,
+        model="", kind="interview", ok=True,
+    ))
+    interview.updated_at = now_kst()
+    await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    return await _state_out(session, loaded)
 
 
 @router.post("/interviews/{interview_id}/attachments", response_model=InterviewAttachmentOut)

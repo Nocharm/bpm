@@ -201,17 +201,42 @@ def _graph_signature(graph: dict | None) -> tuple:
     return (tuple(nodes), tuple(edges), tuple(sorted(group_labels.values())))
 
 
-async def _generate_choices(
-    interview: InterviewSession, context_text: str, model: str | None,
-    doc_sections: list[dict] | None = None,
-) -> dict | None:
-    hints = CHOICE_VARIANT_HINTS.get(interview.current_stage, [])
-    count = max(1, min(settings.interview_choice_count, 3, len(hints) or 1))
+_REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기"
+
+
+def demote_notice_text(lang: str, n: int) -> str:
+    """word 앵커 강등 노티스 문구 — draw 라우트가 사용."""
+    return _DEMOTE_NOTICE.get(lang, _DEMOTE_NOTICE["ko"]).format(n=n)
+
+
+def _recent_choice_stage(interview: InterviewSession) -> str:
+    """가장 최근 완료(체크포인트)된 구조 스테이지 — multi 변형 힌트 선택 기준."""
+    for cp in sorted(interview.checkpoints, key=lambda c: c.id or 0, reverse=True):
+        if engine.get_stage(cp.stage, interview.mode).choice_stage:
+            return cp.stage
+    return "draft" if interview.mode == "word" else "activities"
+
+
+async def generate_proposals(
+    interview: InterviewSession, context_text: str, model: str | None = None,
+    doc_sections: list[dict] | None = None, variants: str = "single",
+) -> tuple[dict | None, int]:
+    """draw 이벤트용 제안 생성 — multi=변형 힌트 병렬, single=표준 1안 (speed redesign §4).
+
+    반환 (pending_choices 형태 dict 또는 전멸 필터 시 None, word 강등 수 합).
+    작업본은 건드리지 않는다 — 반영은 수락(choice 턴) 시점.
+    """
+    if variants == "multi":
+        hints = list(CHOICE_VARIANT_HINTS.get(_recent_choice_stage(interview)) or [_REDRAFT_HINT])
+        count = max(1, min(settings.interview_choice_count, 3, len(hints)))
+    else:
+        hints = [_REDRAFT_HINT]
+        count = 1
     tasks = [
         _ask_json(
             build_drafter_messages(
                 interview.current_stage, interview.lang, interview.facts,
-                interview.working_graph, context_text, hints[i % max(len(hints), 1)],
+                interview.working_graph, context_text, hints[i % len(hints)],
                 mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
             ),
             model, AiProposal,
@@ -219,22 +244,24 @@ async def _generate_choices(
         for i in range(count)
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    options = []
+    options: list[dict] = []
+    demoted_total = 0
     for i, result in enumerate(results):
         if isinstance(result, BaseException) or result.kind != "graph":
-            logger.warning("interview choice %d failed: %s", i, result)
+            logger.warning("interview proposal %d failed: %s", i, result)
             continue
         graph = _sanitize_subprocess(_graph_from_proposal(result), interview.working_graph)
         if interview.mode == "word" and doc_sections:
-            graph, _ = _sanitize_word_graph(graph, doc_sections)
+            graph, demoted = _sanitize_word_graph(graph, doc_sections)
+            demoted_total += demoted
         options.append({
             "id": f"opt-{i + 1}",
-            "title": hints[i % max(len(hints), 1)].split("—")[0].strip(),
+            "title": hints[i % len(hints)].split("—")[0].strip(),
             "summary": result.message,
             "graph": graph,
         })
     if not options:
-        raise TurnError("AI failed to generate choices")
+        raise TurnError("AI failed to generate proposals")
     # 무변화·중복 안 필터 — 현재 작업본과 같은 안, 서로 같은 안은 제시 의미가 없다 (실사용 피드백 2026-07-27)
     current_sig = _graph_signature(interview.working_graph)
     seen: set[tuple] = set()
@@ -246,11 +273,8 @@ async def _generate_choices(
         seen.add(sig)
         distinct.append(option)
     if not distinct:
-        return None  # 전부 현재 작업본과 동일 — 선택지 없이 일반 턴으로 계속
-    return {"options": distinct}
-
-
-_REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기"
+        return None, demoted_total  # 전부 현재 작업본과 동일 — 라우터가 노티스로 안내
+    return {"options": distinct}, demoted_total
 
 
 # 반복 판정 임계 — 직전 컨설턴트 메시지와 거의 동일한 재출력만 잡는다(0~1, 보수적)

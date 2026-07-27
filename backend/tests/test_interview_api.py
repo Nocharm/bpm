@@ -384,3 +384,134 @@ def test_create_on_start_end_only_map_keeps_generic_greeting(client: TestClient,
     assert greeting["content"].startswith("안녕하세요, 프로세스 컨설턴트입니다. 지금부터")
     assert greeting["payload"] is None
     client.delete(f"/api/interviews/{state['id']}")
+
+
+# ---------- draw 이벤트 (speed redesign §4) ----------
+
+_DRAW_A = json.dumps({
+    "kind": "graph", "message": "표준안",
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start"},
+        {"key": "a", "title": "요청서 작성", "node_type": "process"},
+        {"key": "e", "title": "끝", "node_type": "end"},
+    ],
+    "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
+    "groups": [],
+})
+_DRAW_B = json.dumps({
+    "kind": "graph", "message": "세밀안",
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start"},
+        {"key": "a", "title": "요청서 작성", "node_type": "process"},
+        {"key": "b", "title": "견적 비교", "node_type": "process"},
+        {"key": "e", "title": "끝", "node_type": "end"},
+    ],
+    "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "b"},
+              {"source": "b", "target": "e"}],
+    "groups": [],
+})
+
+
+def _iv_session(client: TestClient) -> dict:
+    created = _iv_map(client)
+    return client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": created["versions"][0]["id"]}
+    ).json()
+
+
+def _scripted(monkeypatch, replies: list[str]) -> dict:
+    queue = list(replies)
+    state = {"calls": 0}
+
+    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        state["calls"] += 1
+        return ai_client.AiReply(content=queue.pop(0))
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    return state
+
+
+def test_draw_multi_generates_proposals(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(settings, "interview_choice_count", 2)
+    state = _iv_session(client)
+    _scripted(monkeypatch, [_DRAW_A, _DRAW_B])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "multi"}).json()
+    last = body["messages"][-1]
+    assert last["kind"] == "choices"
+    assert len(last["payload"]["options"]) == 2
+    assert body["working_graph"] == state["working_graph"]  # 작업본은 수락 전까지 불변
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_single_uses_one_draft(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    calls = _scripted(monkeypatch, [_DRAW_A])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    assert calls["calls"] == 1
+    options = body["messages"][-1]["payload"]["options"]
+    assert len(options) == 1
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_all_filtered_appends_notice(client: TestClient, monkeypatch) -> None:
+    """전 안이 현재 작업본과 동일하면 choices 대신 notice — 작업본·pending 불변."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    # 현재 작업본을 _DRAW_A 구조로 세팅
+    graph = json.loads(_DRAW_A)
+    graph.pop("kind", None)
+    graph.pop("message", None)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = graph
+            await session.commit()
+
+    asyncio.run(_seed())
+    _scripted(monkeypatch, [_DRAW_A])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    last = body["messages"][-1]
+    assert last["kind"] == "notice"
+    assert "같은 안" in last["content"]
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_failure_rolls_back(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    _scripted(monkeypatch, ["깨진 응답", "여전히 깨짐"])
+    resp = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"})
+    assert resp.status_code == 502
+    after = client.get(f"/api/interviews/{state['id']}").json()
+    assert after["working_graph"] == state["working_graph"]  # 실패 시 작업본 불변
+    assert all(m["kind"] != "choices" for m in after["messages"])
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_turn_signals_draw_due_on_structure_completion(client: TestClient, monkeypatch) -> None:
+    """구조 스테이지 완료 턴 응답에 draw_due='multi' — 프론트 자동 draw 신호."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+
+    async def _to_activities() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.current_stage = "activities"
+            await session.commit()
+
+    asyncio.run(_to_activities())
+    _scripted(monkeypatch, [json.dumps({
+        "message": "활동 확정", "facts_patch": {"activities": "요청·비교"}, "stage_complete": True,
+    })])
+    body = client.post(f"/api/interviews/{state['id']}/turns",
+                       json={"type": "answer", "content": "이대로"}).json()
+    assert body["draw_due"] == "multi"
+    assert body["current_stage"] == "branches"
+    client.delete(f"/api/interviews/{state['id']}")
