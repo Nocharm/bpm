@@ -14,7 +14,7 @@ export const INTERVIEW_STAGES = [
   { key: "activities", label: "Activities" },
   { key: "branches", label: "Branches" },
   { key: "roles", label: "Roles & Systems" },
-  { key: "params", label: "Parameters" },
+  // params는 고정 스테이지에서 제외(2026-07-28) — 수시 수집 + 표 확정으로 대체
   { key: "review", label: "Review" },
 ] as const;
 

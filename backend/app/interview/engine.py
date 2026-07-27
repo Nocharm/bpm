@@ -49,15 +49,9 @@ STAGES: tuple[StageDef, ...] = (
         ("roles",),
     ),
     StageDef(
-        "params", "Parameters",
-        "파라미터 체계를 설명한 뒤 활동별 회당 파라미터(소요시간 H.MM·비용 단일통화·인원·연간횟수·FTE)를 하나씩 확인해 확정한다 — 모르는 값은 비워 둔다",
-        "Explain the parameter system, then confirm per-activity values (duration H.MM, single-currency cost, headcount, annual count, FTE) one by one — leave unknowns empty",
-        ("params_done",),
-    ),
-    StageDef(
         "review", "Review",
-        "완성된 맵을 함께 검토하고 승인 여부를 확인한다",
-        "Review the finished map together and confirm approval",
+        "완성된 맵을 함께 검토하고 승인 여부를 확인한다 — 파라미터 정리는 Params 버튼/요청으로 가능함을 처음에 한 번 안내한다",
+        "Review the finished map together and confirm approval — mention once that parameters can be organized anytime via the Params button or on request",
         ("approved",),
     ),
 )
@@ -93,9 +87,21 @@ def _stage_set(mode: str) -> tuple[tuple[StageDef, ...], dict[str, StageDef]]:
     return (WORD_STAGES, _WORD_BY_KEY) if mode == "word" else (STAGES, _BY_KEY)
 
 
+# params는 2026-07-28부터 고정 스테이지가 아니다(대화 중 수집 + 표 확정으로 대체) —
+# 진행 중이던 레거시 세션이 안전히 review로 빠져나가도록 정의만 유지한다.
+_LEGACY_PARAMS_STAGE = StageDef(
+    "params", "Parameters",
+    "파라미터 체계를 설명한 뒤 활동별 회당 파라미터를 확인해 확정한다 (레거시 — 다음 단계는 review)",
+    "Confirm per-activity parameters (legacy — the next stage is review)",
+    ("params_done",),
+)
+
+
 def get_stage(key: str, mode: str = "normal") -> StageDef:
     stages, by_key = _stage_set(mode)
     stage = by_key.get(key)
+    if stage is None and key == "params":
+        return _LEGACY_PARAMS_STAGE
     if stage is None:
         raise ValueError(f"unknown stage: {key}")
     return stage
@@ -107,6 +113,8 @@ def stage_index(key: str, mode: str = "normal") -> int:
 
 
 def next_stage_key(key: str, mode: str = "normal") -> str | None:
+    if key == "params":
+        return "review"  # 레거시 세션 탈출로 — params는 더 이상 시퀀스에 없다
     stages, _ = _stage_set(mode)
     idx = stage_index(key, mode)
     return stages[idx + 1].key if idx + 1 < len(stages) else None

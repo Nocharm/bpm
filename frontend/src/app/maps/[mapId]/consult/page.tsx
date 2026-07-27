@@ -14,6 +14,7 @@ import {
   deleteInterviewAttachment,
   drawProposals,
   getApiErrorDetail,
+  getInterview,
   getMe,
   getMap,
   postInterviewTurn,
@@ -183,6 +184,24 @@ export default function ConsultPage() {
     }
   }
 
+  // 첨부 추출(백그라운드 AI 1콜) 결과 픽업 — 오래된 상태로 덮지 않게 seq 가드
+  function scheduleExtractionRefresh(interviewId: number) {
+    for (const delay of [9000, 22000]) {
+      window.setTimeout(() => {
+        void getInterview(interviewId)
+          .then((latest) =>
+            setInterview((prev) => {
+              if (!prev || prev.id !== latest.id) return prev;
+              const seqOf = (s: InterviewState) =>
+                s.messages.reduce((max, m) => Math.max(max, m.seq), 0);
+              return seqOf(latest) >= seqOf(prev) ? latest : prev;
+            }),
+          )
+          .catch(() => undefined); // 실패해도 다음 턴에서 어차피 동기화
+      }, delay);
+    }
+  }
+
   // 성공 여부 반환 — 패널의 복수 업로드 진행/실패 표시용
   async function handleAttach(file: File): Promise<boolean> {
     if (!interview) return false;
@@ -191,6 +210,7 @@ export default function ConsultPage() {
       setInterview((prev) =>
         prev ? { ...prev, attachments: [...prev.attachments, uploaded] } : prev,
       );
+      scheduleExtractionRefresh(interview.id);
       return true;
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to upload the file.");

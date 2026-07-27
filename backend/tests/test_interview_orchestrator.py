@@ -421,3 +421,29 @@ def test_expand_delta_survives_invalid_previous_node() -> None:
     expanded = orchestrator._expand_delta(proposal, prev)
     assert {n.key for n in expanded.nodes} == {"ok"}  # 위반 노드는 조용히 드롭
     assert expanded.edges == []
+
+
+def test_roles_completion_with_table_signals_params() -> None:
+    """roles→review 전이(새 시퀀스)에서 수집 표가 있으면 draw_due == 'params'."""
+    db = _FakeDb()
+    interview = _session(current_stage="roles",
+                         facts={"params": {"params_table": {"A": {"duration": "0.30"}}}})
+    reply = json.dumps({"message": "역할 확정", "facts_patch": {"roles": "구매팀"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="answer", content="확정"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due == "params"
+
+
+def test_params_table_routes_to_params_namespace_from_any_stage() -> None:
+    """params_table은 어느 스테이지에서 수집돼도 'params' 네임스페이스로 — 표/반영 경로 단일화."""
+    db = _FakeDb()
+    interview = _session(current_stage="activities")
+    reply = json.dumps({"message": "확인", "facts_patch": {
+        "activities": "요청서 작성",
+        "params_table": {"요청서 작성": {"duration": "1.00"}},
+    }})
+    _run(db, interview, InterviewTurnIn(type="answer", content="1시간 걸려"), [reply])
+    assert interview.facts["params"]["params_table"]["요청서 작성"]["duration"] == "1.00"
+    assert "params_table" not in interview.facts["activities"]
+    assert interview.facts["activities"]["activities"] == "요청서 작성"

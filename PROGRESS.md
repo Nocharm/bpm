@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-28 — 인터뷰 간소화 3종: params 단계 폐지·첨부 추출·첨부 배지·온보딩 (worktree-ai-consultant)
+- **params 고정 스테이지 폐지(7→6단계)**: engine STAGES에서 제외(레거시 세션은 get_stage/next_stage_key 폴백으로 review 탈출) — 파라미터는 어느 스테이지에서든 언급 시 `params_table`로 수집(`_merge_facts_namespace`가 스테이지 무관 'params' 네임스페이스로 라우팅), review 진입 시 표 확정 신호(draw_due="params")·Params 버튼 안내는 review goal에 통합. FE INTERVIEW_STAGES 동기(6단계).
+- **첨부 시점 정보 추출**: 업로드 파싱 성공 시 백그라운드 AI 1콜 `extract_attachment_facts`(스테이지별 facts+params_table 추출·허용 네임스페이스만 병합·노티스) — 인터뷰 진행 전에 문서에서 최대한 수집. 프론트는 9s/22s 지연 재조회(seq 가드로 구상태 덮음 방지).
+- **첨부 칩 잔류 정리**: 컴포저 칩은 "이번 메시지에 보낼" 최근 첨부만(전송·퀵리플라이 시 워터마크로 봉인, 재개 세션은 즉시 접힘) → 툴바 배지(Files 아이콘+개수)·클릭 시 플라이아웃(파일별 아이콘·상태·삭제, 바깥클릭/Esc 닫힘). data-id: iv-attach-badge/iv-attach-flyout(-row/-delete).
+- **새 맵 온보딩**: 에디터가 시드 상태(Start/End 2노드 이하·편집 가능)면 컨설턴트 버튼에 accent 링 + "Try the AI consultant" 말풍선(Start=이동, Dismiss, localStorage `bpm.consultOnboardSeen` 1회). 게이트: BE 821·ruff 0 / vitest 576·tsc 0·lint 0에러·build·스모크 3종.
+
 ## 2026-07-27 — 인터뷰 속도 재설계 구현 (worktree-ai-consultant, dev 미머지 — AI 독립 라인)
 - **Task 1 턴 경량화**: run_turn/skip = 인터뷰어 1콜(재드래프트·선택지·톤 검수 제거), `TurnResult.draw_due`("multi"=구조 스테이지 완료/"single"=review 진입·redraw) 신호 반환 → 라우터가 `InterviewStateOut.draw_due`(비영속)로 전달. 톤 검수 계약·`ToneReviewOut`·`build_tone_messages` 삭제(명명 표준은 드래프터 규칙 2에 통합), `_HISTORY_TAIL` 12→8. 오케스트레이터 테스트 전면 개정(1콜 단언 포함 17종).
 

@@ -21,7 +21,12 @@ from app.interview.agents import (
     extract_json,
     format_section_catalog,
 )
-from app.models import InterviewCheckpoint, InterviewMessage, InterviewSession
+from app.models import (
+    InterviewAttachment,
+    InterviewCheckpoint,
+    InterviewMessage,
+    InterviewSession,
+)
 from app.schemas import AiNode, AiProposal, InterviewTurnIn
 from app.settings import settings
 
@@ -50,33 +55,41 @@ class TurnResult:
 
 def _draw_due(pre_stage: str, interview: InterviewSession, out: InterviewerOut) -> str | None:
     transitioned = interview.current_stage != pre_stage
-    if transitioned and pre_stage == "params":
-        # params 완료는 그리지 않는다 — 수집된 표 확정 후 결정적 반영 (실사용 피드백 2026-07-27)
-        table = (interview.facts.get("params") or {}).get("params_table") or {}
-        return "params" if table else None
     if transitioned and engine.get_stage(pre_stage, interview.mode).choice_stage:
         return "multi"
+    if transitioned and interview.current_stage == "review":
+        # review 진입은 그리지 않는다 — 수집된 params 표가 있으면 확정 모달 신호만 (2026-07-28)
+        table = (interview.facts.get("params") or {}).get("params_table") or {}
+        return "params" if table else None
     if out.redraw or out.needs_choices:
         return "single"
     return None
 
 
-def _merge_stage_facts(interview: InterviewSession, patch: dict) -> None:
-    """현재 스테이지 네임스페이스에 patch 병합 — params_table은 활동별 딥머지(통짜 교체 유실 방지)."""
-    stage_facts = dict(interview.facts.get(interview.current_stage) or {})
+def _merge_facts_namespace(interview: InterviewSession, stage_key: str, patch: dict) -> None:
+    """지정 네임스페이스에 patch 병합. params_table은 스테이지와 무관하게 'params' 네임스페이스로
+    라우팅하고 활동별 딥머지한다(통짜 교체 유실 방지) — params는 고정 스테이지가 아니라 수시 수집."""
     merged_patch = dict(patch)
-    incoming = merged_patch.get("params_table")
-    existing = stage_facts.get("params_table")
-    if isinstance(incoming, dict) and isinstance(existing, dict):
-        table = {**existing}
+    incoming = merged_patch.pop("params_table", None)
+    if isinstance(incoming, dict) and incoming:
+        params_ns = dict(interview.facts.get("params") or {})
+        existing = params_ns.get("params_table")
+        table = {**existing} if isinstance(existing, dict) else {}
         for title, values in incoming.items():
             base = table.get(title)
             table[title] = (
                 {**base, **values} if isinstance(base, dict) and isinstance(values, dict) else values
             )
-        merged_patch["params_table"] = table
-    stage_facts.update(merged_patch)
-    interview.facts = {**interview.facts, interview.current_stage: stage_facts}
+        params_ns["params_table"] = table
+        interview.facts = {**interview.facts, "params": params_ns}
+    if merged_patch:
+        namespace = dict(interview.facts.get(stage_key) or {})
+        namespace.update(merged_patch)
+        interview.facts = {**interview.facts, stage_key: namespace}
+
+
+def _merge_stage_facts(interview: InterviewSession, patch: dict) -> None:
+    _merge_facts_namespace(interview, interview.current_stage, patch)
 
 
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
@@ -339,6 +352,68 @@ async def generate_proposals(
     if not distinct:
         return None, demoted_total  # 전부 현재 작업본과 동일 — 라우터가 노티스로 안내
     return {"options": distinct}, demoted_total
+
+
+# ---------- 첨부 정보 추출 (백그라운드 1콜 — 업로드 시점에 최대한 수집, 2026-07-28) ----------
+
+
+class AttachmentFactsOut(BaseModel):
+    """첨부 추출기 응답 — 스테이지 네임스페이스별 facts(+params_table)."""
+
+    message: str = ""
+    facts: dict[str, dict] = {}
+
+
+_EXTRACT_CONTRACT = """당신은 프로세스 문서 분석가입니다. 첨부 문서에서 프로세스 맵 인터뷰에 쓸 정보를 추출합니다.
+반드시 아래 JSON 하나만 반환:
+{"message": <추출 요약 한 줄>,
+ "facts": {"scope": {"process_name": …, "purpose": …, "boundaries": …},
+           "io": {"trigger": …, "inputs": …, "outputs": …},
+           "activities": {"activities": [<활동 제목 배열>]},
+           "branches": {"branches": …}, "roles": {"roles": …},
+           "params": {"params_table": {"<활동>": {"duration": …, "cost_krw": …, "cost_usd": …, "headcount": …, "annual_count": …, "fte": …}}}}
+문서에서 실제로 확인되는 항목만 넣으세요 — 추측 금지. 값은 문자열 또는 문자열 배열(params_table 제외)."""
+
+_EXTRACT_NOTICE = {
+    "ko": "'{filename}'에서 정보를 추출해 수집 목록에 반영했습니다.",
+    "en": "Extracted details from '{filename}' into the collected outline.",
+}
+
+
+async def extract_attachment_facts(interview_id: int, attachment_id: int) -> None:
+    """첨부 파싱 직후 fire-and-forget 추출 — facts 병합 + 노티스. 실패는 무해(로그만)."""
+    from app.db import SessionLocal  # 상단 import 시 라우터-오케스트레이터 순환 위험 회피
+
+    try:
+        async with SessionLocal() as session:
+            interview = await session.get(InterviewSession, interview_id)
+            row = await session.get(InterviewAttachment, attachment_id)
+            if (interview is None or row is None or interview.status != "active"
+                    or row.status != "parsed" or not (row.parsed_text or "").strip()):
+                return
+            out = await _ask_json(
+                [{"role": "system", "content": _EXTRACT_CONTRACT},
+                 {"role": "user", "content": (row.parsed_text or "")[:8000]}],
+                None, AttachmentFactsOut,
+            )
+            allowed = {s.key for s in engine.STAGES} | {"params"}
+            merged_any = False
+            for stage_key, patch in out.facts.items():
+                if stage_key not in allowed or not isinstance(patch, dict) or not patch:
+                    continue
+                _merge_facts_namespace(interview, stage_key, patch)
+                merged_any = True
+            if not merged_any:
+                return
+            await session.refresh(interview, ["messages"])
+            _append(session, interview, next_seq(interview), "consultant", "notice",
+                    _EXTRACT_NOTICE.get(interview.lang, _EXTRACT_NOTICE["ko"]).format(
+                        filename=row.filename))
+            await session.commit()
+    except TurnError as exc:
+        logger.warning("attachment facts extraction skipped: %s", exc)
+    except Exception:  # noqa: BLE001 -- 백그라운드 실패는 서비스에 무해해야 한다
+        logger.exception("attachment facts extraction failed (attachment %d)", attachment_id)
 
 
 # 반복 판정 임계 — 직전 컨설턴트 메시지와 거의 동일한 재출력만 잡는다(0~1, 보수적)

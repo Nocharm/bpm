@@ -16,6 +16,7 @@ from app.interview.engine import get_stage, next_stage_key
 from app.interview.orchestrator import (
     TurnError,
     demote_notice_text,
+    extract_attachment_facts,
     generate_proposals,
     run_turn,
 )
@@ -710,6 +711,9 @@ async def upload_attachment(
     # 세션 스코프 지식기반 인덱싱 — fire-and-forget, 파싱 성공분만 (design 2026-07-23 §7)
     if row.status == "parsed" and embed_client.is_embed_enabled():
         indexing.spawn(indexing.index_attachment(row.id))
+    # 첨부 시점 정보 추출 — 백그라운드 1콜로 facts를 최대한 미리 수집 (2026-07-28)
+    if row.status == "parsed" and settings.ai_enabled:
+        indexing.spawn(extract_attachment_facts(interview.id, row.id))
     return InterviewAttachmentOut.model_validate(row)
 
 

@@ -596,3 +596,60 @@ def test_apply_params_currency_exclusive(client: TestClient, monkeypatch) -> Non
     assert node["attributes"]["cost_krw"] == "50000"
     assert "cost_usd" not in node["attributes"]  # 기존 usd도 제거 — 배타 유지
     client.delete(f"/api/interviews/{state['id']}")
+
+
+# ---------- 첨부 시점 정보 추출 (2026-07-28) ----------
+
+
+def test_attachment_upload_spawns_extraction(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    from app.kb import indexing
+
+    spawned: list[str] = []
+
+    def fake_spawn(coro) -> None:
+        spawned.append(coro.__name__)
+        coro.close()
+
+    monkeypatch.setattr(indexing, "spawn", fake_spawn)
+    state = _iv_session(client)
+    ok = client.post(
+        f"/api/interviews/{state['id']}/attachments",
+        files={"file": ("sop.txt", "구매 절차 문서".encode(), "text/plain")},
+    )
+    assert ok.status_code == 200
+    assert "extract_attachment_facts" in spawned  # 임베딩 OFF라 인덱싱은 없고 추출만
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_extract_attachment_facts_merges_and_notices(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    from app.interview import orchestrator
+    from app.kb import indexing
+
+    monkeypatch.setattr(indexing, "spawn", lambda coro: coro.close())  # 업로드 훅은 봉인
+    state = _iv_session(client)
+    uploaded = client.post(
+        f"/api/interviews/{state['id']}/attachments",
+        files={"file": ("sop.txt", "구매 절차: 요청서 작성 30분".encode(), "text/plain")},
+    ).json()
+
+    extract = json.dumps({
+        "message": "요약",
+        "facts": {
+            "scope": {"process_name": "구매"},
+            "activities": {"activities": ["요청서 작성"]},
+            "params": {"params_table": {"요청서 작성": {"duration": "0.30"}}},
+            "banana": {"ignored": "yes"},
+        },
+    })
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(extract))
+    asyncio.run(orchestrator.extract_attachment_facts(state["id"], uploaded["id"]))
+
+    after = client.get(f"/api/interviews/{state['id']}").json()
+    assert after["facts"]["scope"]["process_name"] == "구매"
+    assert after["facts"]["params"]["params_table"]["요청서 작성"]["duration"] == "0.30"
+    assert "banana" not in after["facts"]  # 허용 밖 네임스페이스는 무시
+    notices = [m for m in after["messages"] if m["kind"] == "notice"]
+    assert any("sop.txt" in m["content"] and "추출" in m["content"] for m in notices)
+    client.delete(f"/api/interviews/{state['id']}")

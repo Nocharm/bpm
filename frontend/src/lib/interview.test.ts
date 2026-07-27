@@ -35,7 +35,7 @@ function msg(over: Partial<InterviewMessage>): InterviewMessage {
 describe("INTERVIEW_STAGES", () => {
   it("고정 7단계 순서", () => {
     expect(INTERVIEW_STAGES.map((s) => s.key)).toEqual(
-      ["scope", "io", "activities", "branches", "roles", "params", "review"],
+      ["scope", "io", "activities", "branches", "roles", "review"],
     );
     expect(stageIndex("activities")).toBe(2);
   });
@@ -50,7 +50,7 @@ describe("stagesForMode", () => {
 
   it("stageIndex is mode-aware", () => {
     expect(stageIndex("review", "word")).toBe(2);
-    expect(stageIndex("review")).toBe(6);
+    expect(stageIndex("review")).toBe(5); // params 제외(2026-07-28) — 일반 6단계
   });
 });
 
