@@ -161,6 +161,30 @@ describe("parseWordSections", () => {
     expect(out.map((s) => s.title)).toEqual(["Purpose", "Scope", "Boundary", "Records"]);
   });
 
+  // 실물 2차 리포트(2026-07-27): TOC가 있는 문서에선 영어 제목이 텍스트가 아닌 TOC로 번호를 받아
+  // fromText 가드에 걸려 한글 짝이 여전히 카운터를 밀었다(목적=2, 1.1→2.1). 기준은 "명시적 번호
+  // (텍스트 or TOC)를 가진 헤더" — 그 직후 같은 레벨 무번호 제목이 번호를 상속한다.
+  it("TOC 번호 제목 바로 다음의 무번호 언어 짝도 번호를 상속한다", async () => {
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Purpose") + tocEntry("_Toc2", "1.1", "Boundary") +
+      heading("H1", ["_Toc1"], "Purpose") + heading("H1", [], "목적") +
+      heading("H2", ["_Toc2"], "Boundary") + heading("H2", [], "경계"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "1.1", "1.1"]);
+  });
+
+  it("짝 사이의 빈 문단은 상속을 끊지 않지만, 본문 텍스트가 끼면 새 섹션으로 센다", async () => {
+    const xml = doc(
+      heading("H1", [], "1. Purpose") + `<w:p></w:p>` + heading("H1", [], "목적") +
+      heading("H1", [], "2. Scope") +
+      `<w:p><w:r><w:t>본문 내용</w:t></w:r></w:p>` + heading("H1", [], "별개 제목"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    // 목적=1 상속(빈 문단 무시), "별개 제목"은 본문이 끼어 짝이 아님 → 카운터 3
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "2", "3"]);
+  });
+
   it("번호 제목 바로 다음의 무번호 같은 레벨 제목(언어 짝)은 번호를 상속하고 카운터를 밀지 않는다", async () => {
     const xml = doc(
       heading("H1", [], "1. Purpose") + heading("H1", [], "목적") +

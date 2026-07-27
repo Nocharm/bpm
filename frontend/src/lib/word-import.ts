@@ -128,9 +128,22 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
   const stack: string[] = []; // stack[i] = 레벨 i+1 현재 번호 문자열
   let synthSeq = 0; // 책갈피 없는 제목에 부여하는 합성 앵커 번호 — 출력 시 사본에 이 이름으로 주입
   // 직전 제목 — 무번호 언어 짝(같은 섹션의 영어/한글이 별도 문단으로 이어지는 문서) 판정용.
-  // fromText가 참일 때만 짝 상속 발동 — 자동넘버 문서의 무번호 연속 형제(1.1.1→1.1.2)를 오인하지 않게.
-  let prevHeading: { pIdx: number; level: number; number: string; fromText: boolean } | null = null;
+  // explicit(텍스트 리터럴 or TOC 권위)일 때만 짝 상속 발동 — 카운터로 추측된 번호는 기준점이 아니라서
+  // 자동넘버 문서의 무번호 연속 형제(1.1.1→1.1.2)를 오인하지 않는다. (2차 리포트: TOC 권위도 기준점)
+  let prevHeading: { pIdx: number; level: number; number: string; explicit: boolean } | null = null;
   const paragraphs = Array.from(doc.getElementsByTagNameNS(W, "p"));
+  const textOf = (el: Element): string =>
+    Array.from(el.getElementsByTagNameNS(W, "t"))
+      .map((t) => t.textContent ?? "")
+      .join("")
+      .trim();
+  // 짝 판정의 인접성 — 사이에 빈 문단만 허용(스페이서 관용), 본문 텍스트가 끼면 새 섹션.
+  const isBlankBetween = (from: number, to: number): boolean => {
+    for (let i = from + 1; i < to; i++) {
+      if (textOf(paragraphs[i])) return false;
+    }
+    return true;
+  };
   for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
     const p = paragraphs[pIdx];
     const pPr = p.getElementsByTagNameNS(W, "pPr")[0];
@@ -198,13 +211,14 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
       stack.length = level;
     } else if (
       prevHeading !== null &&
-      prevHeading.fromText &&
-      pIdx === prevHeading.pIdx + 1 &&
+      prevHeading.explicit &&
       level === prevHeading.level &&
-      prevHeading.number !== ""
+      prevHeading.number !== "" &&
+      isBlankBetween(prevHeading.pIdx, pIdx)
     ) {
-      // 무번호 언어 짝 — 번호 있는 제목 바로 다음 문단의 같은 레벨 무번호 제목("2. Scope" 아래 "범위")은
-      // 같은 섹션의 다른 언어 표기다. 번호를 상속하고 카운터는 밀지 않는다(밀면 이후 전부 어긋남 — 실물 이슈).
+      // 무번호 언어 짝 — 명시적 번호(텍스트 or TOC) 제목 바로 아래의 같은 레벨 무번호 제목
+      // ("2. Scope" 아래 "범위")은 같은 섹션의 다른 언어 표기다. 번호를 상속하고 카운터는
+      // 밀지 않는다(밀면 이후 전부 어긋남 — 실물 이슈 1·2차).
       number = prevHeading.number;
     } else {
       // 3단계+: 부모 번호에 로컬 카운터 이어붙임(레벨 상승 시 하위 리셋).
@@ -233,7 +247,12 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
       level,
       language,
     });
-    prevHeading = { pIdx, level, number, fromText: textNumMatch !== null };
+    prevHeading = {
+      pIdx,
+      level,
+      number,
+      explicit: !/appendix/i.test(sid) && (textNumMatch !== null || tocNumber !== ""),
+    };
   }
   return out;
 }
