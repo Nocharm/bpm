@@ -1,4 +1,5 @@
-// consult 라우트 스모크 — API 모킹으로 인사→답변→선택지→선택→프리뷰 갱신 검증
+// consult 라우트 스모크 — API 모킹으로 인사→답변→draw 오버레이→제안 모달→수락→프리뷰 검증
+// (speed redesign: 그리기는 /draw 이벤트, 턴 응답 draw_due가 자동 트리거)
 // 전제: frontend dev(:3000) 기동. 사용: node scripts/pw-smoke-consult.mjs
 import { chromium } from "playwright-core";
 
@@ -17,37 +18,48 @@ const graph = (keys) => ({
 
 const state = {
   id: 1, map_id: MAP_ID, version_id: 501, status: "active", current_stage: "scope", lang: "ko",
-  working_graph: null, checkpoints: [], attachments: [],
+  facts: {}, working_graph: null, checkpoints: [], attachments: [],
   version_updated_at: "2026-07-23T10:00:00+09:00", base_graph_updated_at: "2026-07-23T10:00:00+09:00",
   messages: [{ id: 1, seq: 1, role: "consultant", kind: "question", content: "안녕하세요, 컨설턴트입니다.", payload: null, stage: "scope", superseded: false, created_at: "2026-07-23T10:00:00+09:00" }],
 };
 
+// 턴 1 — 빠른 Q&A 응답: 질문 + draw_due 신호(프론트가 자동으로 /draw 호출)
 const afterAnswer = {
   ...state,
+  facts: { scope: { process_name: "구매" } },
+  draw_due: "multi",
   messages: [...state.messages,
     { id: 2, seq: 2, role: "user", kind: "answer", content: "구매 프로세스", payload: null, stage: "scope", superseded: false, created_at: "2026-07-23T10:01:00+09:00" },
-    { id: 3, seq: 3, role: "consultant", kind: "choices", content: "안을 골라주세요.", stage: "activities",
+    { id: 3, seq: 3, role: "consultant", kind: "question", content: "활동 골격을 그려볼게요.", payload: null, stage: "activities", superseded: false, created_at: "2026-07-23T10:01:05+09:00" }],
+};
+
+// draw 응답 — 제안 3안(choices 메시지 + pending)
+const afterDraw = {
+  ...afterAnswer,
+  draw_due: null,
+  messages: [...afterAnswer.messages,
+    { id: 4, seq: 4, role: "consultant", kind: "choices", content: "안을 준비했습니다 — 캔버스에서 골라주세요.", stage: "activities",
       payload: { options: [
         { id: "opt-1", title: "Standard", summary: "6 steps", graph: graph(["s", "a", "e"]) },
         { id: "opt-2", title: "Detailed", summary: "9 steps", graph: graph(["s", "a", "b", "e"]) },
         { id: "opt-3", title: "Compact", summary: "2 steps", graph: graph(["s", "e"]) },
-      ] }, superseded: false, created_at: "2026-07-23T10:01:05+09:00" }],
+      ] }, superseded: false, created_at: "2026-07-23T10:01:20+09:00" }],
 };
 
 const afterChoice = {
-  ...afterAnswer, working_graph: graph(["s", "a", "b", "e"]),
-  checkpoints: [{ stage: "activities", message_seq: 5, working_graph: graph(["s", "e"]), created_at: "2026-07-23T10:02:00+09:00" }],
-  messages: [...afterAnswer.messages,
-    { id: 4, seq: 4, role: "user", kind: "choice", content: "opt-2", payload: { choice_id: "opt-2" }, stage: "activities", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
-    { id: 5, seq: 5, role: "consultant", kind: "question", content: "역할을 알려주세요.", payload: null, stage: "roles", superseded: false, created_at: "2026-07-23T10:02:05+09:00" },
+  ...afterDraw, working_graph: graph(["s", "a", "b", "e"]), draw_due: null,
+  facts: { scope: { process_name: "구매" }, activities: { activities: ["요청", "비교", "발주"] } },
+  checkpoints: [{ stage: "activities", message_seq: 6, working_graph: graph(["s", "e"]), created_at: "2026-07-23T10:02:00+09:00" }],
+  messages: [...afterDraw.messages,
+    { id: 5, seq: 5, role: "user", kind: "choice", content: "opt-2", payload: { choice_id: "opt-2" }, stage: "activities", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
+    { id: 6, seq: 6, role: "consultant", kind: "question", content: "역할을 알려주세요.", payload: null, stage: "roles", superseded: false, created_at: "2026-07-23T10:02:05+09:00" },
     // 유사 SP 제안(P2) — 캔버스 카드 노출·Dismiss 로컬 숨김 검증용
-    { id: 6, seq: 6, role: "consultant", kind: "sp_suggestion", content: "유사 맵을 찾았습니다.",
+    { id: 7, seq: 7, role: "consultant", kind: "sp_suggestion", content: "유사 맵을 찾았습니다.",
       payload: { map_id: 777, map_name: "Standard Purchase", node_keys: ["a", "b"], score: 0.8 },
-      stage: "activities", superseded: false, created_at: "2026-07-23T10:02:06+09:00" }],
+      stage: "roles", superseded: false, created_at: "2026-07-23T10:02:06+09:00" }],
 };
 
-// 체크포인트 확정(revert) 후 상태 — 작업본이 스냅샷으로 복원, 해당 체크포인트는 제거.
-// message_seq(5) 이후 메시지가 없으므로 superseded 변화는 없음(실 백엔드와 동일 규칙).
+// 체크포인트 확정(revert) 후 상태 — 작업본이 스냅샷으로 복원, 해당 체크포인트는 제거
 const afterRevert = { ...afterChoice, working_graph: graph(["s", "e"]), checkpoints: [] };
 
 const run = async () => {
@@ -67,6 +79,11 @@ const run = async () => {
     turnCount += 1;
     r.fulfill({ json: turnCount === 1 ? afterAnswer : afterChoice });
   });
+  // draw는 의도적으로 지연 — 진행 오버레이 노출 검증
+  await page.route("**/api/interviews/1/draw", async (r) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    r.fulfill({ json: afterDraw });
+  });
   await page.route("**/api/interviews/1/revert", (r) => r.fulfill({ json: afterRevert }));
   await page.route("**/api/notifications*", (r) =>
     r.fulfill({ json: [] }),
@@ -80,6 +97,10 @@ const run = async () => {
   // 리디자인(2026-07-26): 스테이지 칩 + 컴포저 카드
   await page.waitForSelector('[data-id="iv-stage-chip"]');
   await page.waitForSelector('[data-id="iv-composer"]');
+  // 맵 기준 배지 — 초기(맵 없음)
+  const initialBadge = await page.textContent('[data-id="iv-map-baseline"]');
+  if (!initialBadge.includes("not drawn")) throw new Error(`unexpected initial baseline: ${initialBadge}`);
+  await page.waitForSelector('[data-id="iv-draw"]'); // 수동 Draw map 버튼
   // 글자 크기 Aa 팝오버 (2026-07-26) + 첨부 안내 모달 (2026-07-24 5차 UX)
   await page.click('[data-id="iv-font"]');
   await page.waitForSelector('[data-id="iv-font-pop"]');
@@ -99,8 +120,14 @@ const run = async () => {
   await page.click('[data-id="confirm-dialog-cancel"]');
   await page.waitForSelector('[data-id="confirm-dialog"]', { state: "detached" });
 
+  // 턴 전송 → draw_due 자동 트리거 → 진행 오버레이 → 제안 모달 (speed redesign)
   await page.fill('[data-id="iv-input"]', "구매 프로세스");
   await page.click('[data-id="iv-send"]');
+  await page.waitForSelector('[data-id="iv-draw-overlay"]');
+  await page.waitForSelector('[data-id="iv-draw-overlay"]', { state: "detached", timeout: 15000 });
+  // 아웃라인 패널 — facts 수집 즉시 표시
+  const outline = await page.textContent('[data-id="iv-outline"]');
+  if (!outline.includes("구매")) throw new Error("outline should show collected facts");
   await page.waitForSelector('[data-id="iv-choice-card"]');
   const cards = await page.$$('[data-id="iv-choice-card"]');
   if (cards.length !== 3) throw new Error(`expected 3 choice cards, got ${cards.length}`);
@@ -118,6 +145,9 @@ const run = async () => {
   await page.waitForSelector(".react-flow__node");
   let nodes = await page.$$(".react-flow__node");
   if (nodes.length !== 4) throw new Error(`expected 4 preview nodes, got ${nodes.length}`);
+  // 수락 직후 맵 기준 배지 — up to date
+  const badge = await page.textContent('[data-id="iv-map-baseline"]');
+  if (!badge.includes("up to date")) throw new Error(`unexpected baseline after accept: ${badge}`);
 
   // 유사 SP 제안 카드(P2) — 노출 확인 후 Dismiss로 로컬 숨김
   await page.waitForSelector('[data-id="iv-sp-card"]');

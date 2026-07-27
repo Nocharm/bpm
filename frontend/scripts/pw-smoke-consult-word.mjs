@@ -25,23 +25,32 @@ const state = {
   messages: [{ id: 1, seq: 1, role: "consultant", kind: "question", content: "안녕하세요, 컨설턴트입니다.", payload: null, stage: "draft", superseded: false, created_at: "2026-07-23T10:00:00+09:00" }],
 };
 
+// 턴 응답 — 질문 + draw_due 신호(프론트가 자동으로 /draw 호출, speed redesign)
 const afterAnswer = {
   ...state,
+  draw_due: "multi",
   messages: [...state.messages,
     { id: 2, seq: 2, role: "user", kind: "answer", content: "구매 프로세스", payload: null, stage: "draft", superseded: false, created_at: "2026-07-23T10:01:00+09:00" },
-    { id: 3, seq: 3, role: "consultant", kind: "choices", content: "안을 골라주세요.", stage: "draft",
+    { id: 3, seq: 3, role: "consultant", kind: "question", content: "초안을 그려볼게요.", payload: null, stage: "draft", superseded: false, created_at: "2026-07-23T10:01:05+09:00" }],
+};
+
+const afterDraw = {
+  ...afterAnswer,
+  draw_due: null,
+  messages: [...afterAnswer.messages,
+    { id: 30, seq: 4, role: "consultant", kind: "choices", content: "안을 준비했습니다.", stage: "draft",
       payload: { options: [
         { id: "opt-1", title: "Standard", summary: "6 steps", graph: sectionGraph },
         { id: "opt-2", title: "Detailed", summary: "9 steps", graph: sectionGraph },
-      ] }, superseded: false, created_at: "2026-07-23T10:01:05+09:00" }],
+      ] }, superseded: false, created_at: "2026-07-23T10:01:10+09:00" }],
 };
 
 const afterChoice = {
-  ...afterAnswer, working_graph: sectionGraph,
-  checkpoints: [{ stage: "draft", message_seq: 5, created_at: "2026-07-23T10:02:00+09:00" }],
-  messages: [...afterAnswer.messages,
-    { id: 4, seq: 4, role: "user", kind: "choice", content: "opt-1", payload: { choice_id: "opt-1" }, stage: "draft", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
-    { id: 5, seq: 5, role: "consultant", kind: "question", content: "다음 섹션을 확인해 주세요.", payload: null, stage: "review", superseded: false, created_at: "2026-07-23T10:02:05+09:00" }],
+  ...afterDraw, working_graph: sectionGraph, draw_due: null,
+  checkpoints: [{ stage: "draft", message_seq: 6, working_graph: null, created_at: "2026-07-23T10:02:00+09:00" }],
+  messages: [...afterDraw.messages,
+    { id: 4, seq: 5, role: "user", kind: "choice", content: "opt-1", payload: { choice_id: "opt-1" }, stage: "draft", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
+    { id: 5, seq: 6, role: "consultant", kind: "question", content: "다음 섹션을 확인해 주세요.", payload: null, stage: "review", superseded: false, created_at: "2026-07-23T10:02:05+09:00" }],
 };
 
 const run = async () => {
@@ -66,6 +75,7 @@ const run = async () => {
     turnCount += 1;
     r.fulfill({ json: turnCount === 1 ? afterAnswer : afterChoice });
   });
+  await page.route("**/api/interviews/1/draw", (r) => r.fulfill({ json: afterDraw }));
   await page.route("**/api/notifications*", (r) =>
     r.fulfill({ json: [] }),
   );

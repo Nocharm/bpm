@@ -1,6 +1,6 @@
 # Interview Speed & Timing Redesign — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 일반 턴을 인터뷰어 1콜로 경량화하고, 그리기를 명시적 `/draw` 이벤트(진행 오버레이)로 응축하며, 델타 드래프팅·facts 아웃라인·맵 기준 배지로 체감 속도와 채팅-맵 동기성을 회복한다.
 
@@ -50,7 +50,7 @@ frontend/scripts/pw-smoke-consult-word.mjs [수정] 동일
 - Produces: `InterviewStateOut.draw_due: str | None = None` (비영속 — 라우터가 턴 응답에만 세팅).
 - 삭제: `_tone_review`·`build_tone_messages`·`ToneReviewOut`·`_TONE_NOTICE`·`_tone_notice_text`·`_redraft`·턴 내 `_generate_choices` 분기·`_DEMOTE_NOTICE`의 턴 경로(강등 노티스는 Task 2의 draw로 이동).
 
-- [ ] **Step 1: 실패 테스트 작성** — test_interview_orchestrator.py 전면 개정:
+- [x] **Step 1: 실패 테스트 작성** — test_interview_orchestrator.py 전면 개정:
 
 ```python
 def test_answer_turn_is_single_interviewer_call() -> None:
@@ -74,9 +74,9 @@ def test_plain_turn_has_no_draw_due() -> None:
 
 기존 테스트 정리: `test_choices_generated_in_parallel_and_pending_set`·중복 필터 2종은 Task 2의 draw 테스트로 이관, `test_stage_complete_runs_tone_review_renames`·`test_review_stage_completion_does_not_spam...`(톤 부분)·`test_facts_update_triggers_live_redraft`·`test_redraft_failure...`·word 재드래프트 노티스 2종 삭제/이관. `test_choice_turn_applies_graph_and_clears_pending`·skip·반복 교정·오프닝 시드는 유지(호출 수만 조정).
 
-- [ ] **Step 2: 실행 — 실패 확인** `pytest tests/test_interview_orchestrator.py -q` → FAIL (TurnResult 미존재)
+- [x] **Step 2: 실행 — 실패 확인** `pytest tests/test_interview_orchestrator.py -q` → FAIL (TurnResult 미존재)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 orchestrator.py — run_turn 말미를 다음 골격으로 교체(체크포인트·전이·facts 병합·반복 교정 유지):
 
@@ -105,9 +105,9 @@ schemas.py: `InterviewStateOut.draw_due: str | None = None`.
 
 routers/interviews.py post_turn: `result = await run_turn(...)` → 성공 커밋 후 `state = await _state_out(...)` 반환 직전 `state.draw_due = result.draw_due`. (word 모드 강등 노티스는 draw로 이동하므로 demoted 처리 제거.)
 
-- [ ] **Step 4: 실행 — 통과 확인** `pytest tests/test_interview_orchestrator.py tests/test_interview_api.py -q` → PASS (draw 관련 기존 api 테스트는 Task 2에서 복원)
+- [x] **Step 4: 실행 — 통과 확인** `pytest tests/test_interview_orchestrator.py tests/test_interview_api.py -q` → PASS (draw 관련 기존 api 테스트는 Task 2에서 복원)
 
-- [ ] **Step 5: 커밋** `feat(interview): single-call turns with draw_due signal — 턴 경량화(톤 검수 폐지·draw 신호)`
+- [x] **Step 5: 커밋** `feat(interview): single-call turns with draw_due signal — 턴 경량화(톤 검수 폐지·draw 신호)`
 
 ---
 
@@ -122,7 +122,7 @@ routers/interviews.py post_turn: `result = await run_turn(...)` → 성공 커�
 - Produces: `InterviewDrawIn(variants: Literal["multi","single"] = "single")` schema, `POST /api/interviews/{id}/draw` → `InterviewStateOut`.
 - 최근 완료 choice 스테이지: `next((c.stage for c in sorted(interview.checkpoints, key=lambda c: c.id, reverse=True) if engine.get_stage(c.stage, interview.mode).choice_stage), "activities" if interview.mode == "normal" else "draft")`.
 
-- [ ] **Step 1: 실패 테스트** — test_interview_api.py에 추가(기존 choices 오케스트레이터 테스트 3종도 draw 경유로 이관):
+- [x] **Step 1: 실패 테스트** — test_interview_api.py에 추가(기존 choices 오케스트레이터 테스트 3종도 draw 경유로 이관):
 
 ```python
 def test_draw_multi_generates_proposals(client, monkeypatch):
@@ -142,9 +142,9 @@ def test_draw_word_demote_notice(client, monkeypatch):
     """word 모드 draw에서 무효 앵커 강등 시 노티스 동반 (기존 word 재드래프트 노티스의 대체)."""
 ```
 
-- [ ] **Step 2: 실행 — 실패 확인** → FAIL (404 draw)
+- [x] **Step 2: 실행 — 실패 확인** → FAIL (404 draw)
 
-- [ ] **Step 3: 구현** — routers/interviews.py:
+- [x] **Step 3: 구현** — routers/interviews.py:
 
 ```python
 @router.post("/interviews/{interview_id}/draw", response_model=InterviewStateOut)
@@ -177,9 +177,9 @@ async def draw_proposals(
     AiUsageEvent(kind="interview") 기록 후 commit → _state_out
 ```
 
-- [ ] **Step 4: 전체 인터뷰 테스트 통과 확인** `pytest tests/test_interview_*.py tests/test_kb_pipeline.py -q`
+- [x] **Step 4: 전체 인터뷰 테스트 통과 확인** `pytest tests/test_interview_*.py tests/test_kb_pipeline.py -q`
 
-- [ ] **Step 5: 커밋** `feat(interview): synchronous draw endpoint — 그리기 이벤트 분리`
+- [x] **Step 5: 커밋** `feat(interview): synchronous draw endpoint — 그리기 이벤트 분리`
 
 ---
 
@@ -194,7 +194,7 @@ async def draw_proposals(
 - `agents.format_graph_compact(graph: dict | None) -> str` — `"<key> | <node_type> | <title>"` 줄 목록, 없으면 "(없음)".
 - `orchestrator._expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal` — 노드별 `model_dump(exclude_unset=True)`를 prev(키 조인) 위에 병합해 완전한 노드로 복원. prev에 없고 title 빈 노드는 드롭(참조 엣지도 드롭). generate_proposals가 `_graph_from_proposal` 전에 적용.
 
-- [ ] **Step 1: 실패 테스트**
+- [x] **Step 1: 실패 테스트**
 
 ```python
 def test_expand_delta_restores_echoed_nodes() -> None:
@@ -209,9 +209,9 @@ def test_expand_delta_missing_key_means_delete() -> None:
 def test_expand_delta_unknown_key_without_title_dropped() -> None:
 ```
 
-- [ ] **Step 2: 실행 — 실패 확인**
+- [x] **Step 2: 실행 — 실패 확인**
 
-- [ ] **Step 3: 구현** — `_expand_delta` 핵심:
+- [x] **Step 3: 구현** — `_expand_delta` 핵심:
 
 ```python
 def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
@@ -239,9 +239,9 @@ def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
 ```
 (word 애든덤 번호는 7~10으로 재조정.)
 
-- [ ] **Step 4: 통과 확인 + 전체 백엔드** `pytest tests/ -q`
+- [x] **Step 4: 통과 확인 + 전체 백엔드** `pytest tests/ -q`
 
-- [ ] **Step 5: 커밋** `feat(interview): delta drafting contract — 델타 드래프팅(키 에코 복원)`
+- [x] **Step 5: 커밋** `feat(interview): delta drafting contract — 델타 드래프팅(키 에코 복원)`
 
 ---
 
@@ -254,9 +254,9 @@ def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
 **Interfaces:**
 - post_turn의 `_maybe_sp_suggestion` 호출 조건을 `interview.mode == "normal" and payload.type == "choice"`로 교체(스테이지 조건 삭제 — 수락 직후가 작업본 갱신 유일 시점).
 
-- [ ] **Step 1: 기존 테스트 수정** — `test_turn_appends_sp_suggestion_once`를 choice 턴 시나리오로(사전에 pending_choices 시드 → choice 턴 → sp_suggestion 1건, 중복 재제안 없음). answer 턴은 제안 없음 단언 추가.
-- [ ] **Step 2: 실패 확인 → 구현 → 통과** `pytest tests/test_kb_pipeline.py -q`
-- [ ] **Step 3: 커밋** `refactor(interview): move SP suggestion to accept turn — SP 제안 훅 이동`
+- [x] **Step 1: 기존 테스트 수정** — `test_turn_appends_sp_suggestion_once`를 choice 턴 시나리오로(사전에 pending_choices 시드 → choice 턴 → sp_suggestion 1건, 중복 재제안 없음). answer 턴은 제안 없음 단언 추가.
+- [x] **Step 2: 실패 확인 → 구현 → 통과** `pytest tests/test_kb_pipeline.py -q`
+- [x] **Step 3: 커밋** `refactor(interview): move SP suggestion to accept turn — SP 제안 훅 이동`
 
 ---
 
@@ -271,9 +271,9 @@ def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
 - page.tsx: `const [drawBusy, setDrawBusy] = useState<false | "multi" | "single">(false)` — runTurn 성공 시 `state.draw_due`면 `void startDraw(state.draw_due)`; `startDraw`는 실패 시 `drawError` 세팅(오버레이 Retry). `InterviewPanel busy={busy || !!drawBusy}`(채팅 잠금), `InterviewPreview`에 `drawBusy`/`drawError`/`onDraw(variants)` 전달.
 - interview-preview.tsx: 액션바에 "Draw map" 버튼(`data-id="iv-draw"`, review 아닌 active 상태에서 노출, `onDraw("single")`) · `drawBusy`면 캔버스 중앙 오버레이(`data-id="iv-draw-overlay"`): 스켈레톤 카드 + "Drawing proposals…" + 경과초(1s interval state) + `drawError`면 에러 문구+Retry 버튼(`data-id="iv-draw-retry"`).
 
-- [ ] **Step 1: 구현** (위 인터페이스 그대로 — 오버레이는 ChoiceOverlay와 같은 z-20 절대 배치, 경과초는 `useEffect` interval + start timestamp state)
-- [ ] **Step 2: 게이트** `npx tsc --noEmit && npx vitest run && npm run lint` → PASS
-- [ ] **Step 3: 커밋** `feat(interview): draw wiring with progress overlay — draw 배선·오버레이·버튼`
+- [x] **Step 1: 구현** (위 인터페이스 그대로 — 오버레이는 ChoiceOverlay와 같은 z-20 절대 배치, 경과초는 `useEffect` interval + start timestamp state)
+- [x] **Step 2: 게이트** `npx tsc --noEmit && npx vitest run && npm run lint` → PASS
+- [x] **Step 3: 커밋** `feat(interview): draw wiring with progress overlay — draw 배선·오버레이·버튼`
 
 ---
 
@@ -299,10 +299,10 @@ export function deriveSequencePreview(facts: Record<string, Record<string, unkno
 - interview-outline.tsx: 좌하단 접기 카드(`data-id="iv-outline"`) — 헤더 "Collected so far" + 스테이지별 체크리스트 + 시퀀스 미리보기(`Start → A → B`), 항목 0이면 미렌더.
 - 배지: 액션바 좌측 문구 교체 — 마지막 라이브 `kind==="choice"` user 메시지 이후 라이브 user 메시지 수 N: N===0 → "Map up to date", 없으면 "Map not drawn yet", 그 외 "Map from N turns ago"(`data-id="iv-map-baseline"`).
 
-- [ ] **Step 1: vitest 작성**(deriveOutline 평탄화·배열 조인·시퀀스 추출·빈 facts) → 실패 확인
-- [ ] **Step 2: 구현 → vitest 통과**
-- [ ] **Step 3: 패널·배지 장착 + tsc/lint** → PASS
-- [ ] **Step 4: 커밋** `feat(interview): facts outline panel and map baseline badge — 아웃라인 패널·맵 기준 배지`
+- [x] **Step 1: vitest 작성**(deriveOutline 평탄화·배열 조인·시퀀스 추출·빈 facts) → 실패 확인
+- [x] **Step 2: 구현 → vitest 통과**
+- [x] **Step 3: 패널·배지 장착 + tsc/lint** → PASS
+- [x] **Step 4: 커밋** `feat(interview): facts outline panel and map baseline badge — 아웃라인 패널·맵 기준 배지`
 
 ---
 
@@ -311,10 +311,10 @@ export function deriveSequencePreview(facts: Record<string, Record<string, unkno
 **Files:**
 - Modify: `frontend/scripts/pw-smoke-consult.mjs`, `frontend/scripts/pw-smoke-consult-word.mjs`, `PROGRESS.md`
 
-- [ ] **Step 1: 스모크 갱신** — 새 흐름: 인사 → answer 턴(응답 `draw_due:"multi"` 목) → `**/api/interviews/1/draw` 목 대기 중 `iv-draw-overlay` 확인 → 완료 응답(choices 3안) → ChoiceOverlay 탭 → 수락(choice 턴) → 체크포인트·프리뷰·SP 카드·아웃라인(`iv-outline`)·배지(`iv-map-baseline`) 단언. draw 목은 `route.fulfill` 지연(`setTimeout` 300ms)으로 오버레이 노출 검증. word 스모크도 draft 완료 → draw(single) 흐름으로 갱신.
-- [ ] **Step 2: 전체 게이트** — BE pytest+ruff / FE vitest+tsc+lint+build+스모크 3종(word-home 포함) 전부 그린.
-- [ ] **Step 3: PROGRESS·플랜 체크박스·메모리 갱신 후 커밋** `test(interview): smoke for draw flow + gates — 스모크 재작성·게이트`
-- [ ] **Step 4: dev 머지 전 사용자 확인** — 게이트 결과 보고 후 승인 시 dev --no-ff/ff 머지+푸시.
+- [x] **Step 1: 스모크 갱신** — 새 흐름: 인사 → answer 턴(응답 `draw_due:"multi"` 목) → `**/api/interviews/1/draw` 목 대기 중 `iv-draw-overlay` 확인 → 완료 응답(choices 3안) → ChoiceOverlay 탭 → 수락(choice 턴) → 체크포인트·프리뷰·SP 카드·아웃라인(`iv-outline`)·배지(`iv-map-baseline`) 단언. draw 목은 `route.fulfill` 지연(`setTimeout` 300ms)으로 오버레이 노출 검증. word 스모크도 draft 완료 → draw(single) 흐름으로 갱신.
+- [x] **Step 2: 전체 게이트** — BE pytest+ruff / FE vitest+tsc+lint+build+스모크 3종(word-home 포함) 전부 그린.
+- [x] **Step 3: PROGRESS·플랜 체크박스·메모리 갱신 후 커밋** `test(interview): smoke for draw flow + gates — 스모크 재작성·게이트`
+- [x] **Step 4: dev 머지 전 사용자 확인** — 게이트 결과 보고 후 승인 시 dev --no-ff/ff 머지+푸시.
 
 ## Self-Review 결과
 

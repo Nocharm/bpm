@@ -11,6 +11,7 @@
 - **Task 4 SP 훅 이동**: 유사 SP 제안을 매 턴 스테이지 훅 → 수락(choice) 턴 직후(작업본 갱신 유일 시점)로 이동. kb_pipeline 테스트 choice 시나리오로 갱신.
 - **Task 5 프론트 draw 배선**: `drawProposals` API·`draw_due` 자동 트리거(턴 응답)·수동 Draw map 버튼(액션바) · 진행 오버레이(스켈레톤+경과초 `DrawTimer`, 실패 시 Close/Retry) · draw 중 채팅 잠금(busy OR). data-id: iv-draw/iv-draw-overlay/iv-draw-retry.
 - **Task 6 아웃라인·배지**: `InterviewStateOut.facts` 노출 + `deriveOutline`/`deriveSequencePreview`(스테이지 순서 평탄화·배열/구분자 시퀀스 추출, vitest 6종) + 좌하단 접기 패널 `interview-outline.tsx`(iv-outline) + 액션바 맵 기준 배지(iv-map-baseline — not drawn/existing draft/up to date/N turns ago).
+- **Task 7 스모크·게이트**: pw-smoke-consult 재작성(턴→draw_due 자동 draw→지연 오버레이 검증→3안 모달→수락→아웃라인·배지·SP·체크포인트) + word 스모크 draw 흐름 갱신. 최종 게이트: BE 809·ruff 0 / vitest 574·tsc 0·lint 0에러·build·스모크 3종 그린. **속도 재설계 Tasks 1~7 전체 완료 — dev 미머지(AI 독립 라인 유지)**.
 
 ## 2026-07-27 — 인터뷰 속도·타이밍 재설계 설계 확정 (worktree-ai-consultant)
 - GPU 실검증 피드백(턴 1~4분·진행 표시 부재·채팅-맵 어긋남) 브레인스토밍 → 설계 확정: **일반 턴=인터뷰어 1콜**(재드래프트·톤 검수 폐지·프롬프트 다이어트) · **그리기=`POST /draw` 이벤트**(구조 스테이지 완료/review 진입/수동 버튼, 동기+진행 오버레이, 맵은 수락 시점에만 변경) · **델타 드래프팅**(기존 노드 키 에코·exclude_unset 복원) · **facts 아웃라인 패널**(AI 0콜)+맵 기준 배지. `docs/design/2026-07-27-interview-speed-redesign-design.md`.
