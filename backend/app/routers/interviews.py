@@ -277,9 +277,7 @@ def _has_kb_degrade_notice(interview: InterviewSession) -> bool:
     return any(m.kind == "notice" and m.content in texts for m in interview.messages)
 
 
-# 유사 SP 제안 (design §7 P2) — activities/review 스테이지에서 기회주의적으로 1회씩
-_SP_STAGES = ("activities", "review")
-
+# 유사 SP 제안 (design §7 P2) — 수락(choice) 턴 직후, 맵당 1회
 _SP_SUGGEST_TEXT = {
     "ko": "'{map_name}' 게시 맵과 유사한 구간(활동 {n}개)을 발견했습니다 — 캔버스의 제안 카드에서 서브프로세스 링크로 대체할 수 있어요.",
     "en": "Found a segment ({n} steps) similar to the published map '{map_name}' — you can replace it with a subprocess link from the card on the canvas.",
@@ -467,7 +465,6 @@ async def post_turn(
 
     # rollback 후 만료 대비 스칼라 선캡처
     map_id, version_id = interview.map_id, interview.version_id
-    pre_stage = interview.current_stage  # SP 제안 스테이지 판정 — 턴 중 전이 전 기준도 인정
 
     current = await _load_graph(session, interview.version_id)
     found_map = await session.get(ProcessMap, interview.map_id)
@@ -497,10 +494,8 @@ async def post_turn(
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    # 유사 SP 제안 — 구조 결정/검토 스테이지의 일반 모드 턴에서만, 맵당 1회 (design §7 P2)
-    if interview.mode == "normal" and (
-        pre_stage in _SP_STAGES or interview.current_stage in _SP_STAGES
-    ):
+    # 유사 SP 제안 — 작업본이 갱신되는 유일 시점(수락 턴)에서만 (speed redesign 이동)
+    if interview.mode == "normal" and payload.type == "choice":
         await _maybe_sp_suggestion(session, interview, user)
     # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
     if kb_failed and not _has_kb_degrade_notice(interview):

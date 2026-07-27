@@ -8,6 +8,7 @@
 
 - **Task 2 draw 이벤트**: `POST /interviews/{id}/draw`(variants multi/single) — `generate_proposals`(최근 완료 구조 스테이지 힌트·word draft 힌트 신설·무변화 필터 전멸 시 노티스·KB 참조 주입·word 강등 노티스). 작업본은 수락 전 불변, 실패 롤백. API 테스트 5종.
 - **Task 3 델타 드래프팅**: `AiNode.title` 필수 해제(키 에코 `{"key":k}` 허용) + `_expand_delta`(exclude_unset 병합 복원·미지 키 무제목 드롭·빠진 키=삭제) + 드래프터 규칙 6(델타 출력)·[현재 작업본] 컴팩트 목록(`format_graph_compact`). 단위 테스트 5종.
+- **Task 4 SP 훅 이동**: 유사 SP 제안을 매 턴 스테이지 훅 → 수락(choice) 턴 직후(작업본 갱신 유일 시점)로 이동. kb_pipeline 테스트 choice 시나리오로 갱신.
 
 ## 2026-07-27 — 인터뷰 속도·타이밍 재설계 설계 확정 (worktree-ai-consultant)
 - GPU 실검증 피드백(턴 1~4분·진행 표시 부재·채팅-맵 어긋남) 브레인스토밍 → 설계 확정: **일반 턴=인터뷰어 1콜**(재드래프트·톤 검수 폐지·프롬프트 다이어트) · **그리기=`POST /draw` 이벤트**(구조 스테이지 완료/review 진입/수동 버튼, 동기+진행 오버레이, 맵은 수락 시점에만 변경) · **델타 드래프팅**(기존 노드 키 에코·exclude_unset 복원) · **facts 아웃라인 패널**(AI 0콜)+맵 기준 배지. `docs/design/2026-07-27-interview-speed-redesign-design.md`.

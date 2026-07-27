@@ -367,22 +367,31 @@ def test_sanitize_subprocess_keeps_real_link_and_demotes_hallucination() -> None
     assert by_key["x2"]["node_type"] == "process" and "linked_map_id" not in by_key["x2"]
 
 
-def _set_interview_state(interview_id: int, stage: str, graph: dict) -> None:
+def _set_interview_state(
+    interview_id: int, stage: str, graph: dict | None, pending: dict | None = None
+) -> None:
     async def _run() -> None:
         async with SessionLocal() as session:
             row = await session.get(InterviewSession, interview_id)
             row.current_stage = stage
             row.working_graph = graph
+            row.pending_choices = pending
             await session.commit()
 
     asyncio.run(_run())
 
 
-def test_turn_appends_sp_suggestion_once(client: TestClient, monkeypatch) -> None:
+def _chain_option() -> dict:
+    return {"id": "opt-1", "title": "표준안", "summary": "", "graph": _chain_graph()}
+
+
+def test_choice_turn_appends_sp_suggestion_once(client: TestClient, monkeypatch) -> None:
+    """SP 제안은 작업본이 갱신되는 수락(choice) 턴에서만 — 일반 턴은 무제안 (speed redesign)."""
     _enable_kb(monkeypatch)
     target = _make_map(client)  # 제안 대상 맵(실존 — 권한 가드 통과)
     state = _start_interview(client, monkeypatch)
-    _set_interview_state(state["id"], "activities", _chain_graph())
+    _set_interview_state(state["id"], "activities", None,
+                         pending={"options": [_chain_option()]})
 
     async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=_Q)
@@ -396,12 +405,12 @@ def test_turn_appends_sp_suggestion_once(client: TestClient, monkeypatch) -> Non
 
     monkeypatch.setattr(retrieval, "search", fake_search)
     first = client.post(f"/api/interviews/{state['id']}/turns",
-                        json={"type": "answer", "content": "이 흐름 맞아"}).json()
+                        json={"type": "choice", "choice_id": "opt-1"}).json()
     suggestions = [m for m in first["messages"] if m["kind"] == "sp_suggestion"]
     assert len(suggestions) == 1
     assert suggestions[0]["payload"]["map_id"] == target["id"]
     assert suggestions[0]["payload"]["node_keys"] == ["c-1", "c-2", "c-3"]
-    # 같은 맵은 재제안하지 않는다
+    # 일반(answer) 턴은 제안하지 않고, 같은 맵 재제안도 없다
     second = client.post(f"/api/interviews/{state['id']}/turns",
                          json={"type": "answer", "content": "응"}).json()
     assert len([m for m in second["messages"] if m["kind"] == "sp_suggestion"]) == 1
@@ -412,7 +421,8 @@ def test_sp_accept_replaces_segment_with_link_node(client: TestClient, monkeypat
     _enable_kb(monkeypatch)
     target = _make_map(client)
     state = _start_interview(client, monkeypatch)
-    _set_interview_state(state["id"], "activities", _chain_graph())
+    _set_interview_state(state["id"], "activities", None,
+                         pending={"options": [_chain_option()]})
 
     async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=_Q)
@@ -426,7 +436,7 @@ def test_sp_accept_replaces_segment_with_link_node(client: TestClient, monkeypat
 
     monkeypatch.setattr(retrieval, "search", fake_search)
     turned = client.post(f"/api/interviews/{state['id']}/turns",
-                         json={"type": "answer", "content": "맞아"}).json()
+                         json={"type": "choice", "choice_id": "opt-1"}).json()
     suggestion = next(m for m in turned["messages"] if m["kind"] == "sp_suggestion")
 
     accepted = client.post(f"/api/interviews/{state['id']}/sp-accept",
