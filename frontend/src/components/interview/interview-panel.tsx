@@ -8,8 +8,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowDown, Check, File, FileChartPie, FileCode, FileSpreadsheet, FileText, FileType,
-  FolderOpen, HardDrive, Headset, Info, Layers, Lightbulb, Loader2, Paperclip, RotateCcw,
-  Send, SkipForward, X,
+  Files, FolderOpen, HardDrive, Headset, Info, Layers, Lightbulb, Loader2, Paperclip,
+  RotateCcw, Send, SkipForward, X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -118,6 +118,13 @@ export function InterviewPanel({
     failed: string[];
   } | null>(null);
   const [chipsExpanded, setChipsExpanded] = useState(false);
+  // 첨부 잔류 정리(2026-07-28) — 워터마크 이하 id는 컴포저 칩 대신 배지+플라이아웃으로.
+  // 마운트 시점 기존 첨부는 즉시 배지로 접힌다(재개 세션 잔류 방지).
+  const [attachWatermark, setAttachWatermark] = useState(() =>
+    interview.attachments.reduce((max, a) => Math.max(max, a.id), 0),
+  );
+  const [attachListOpen, setAttachListOpen] = useState(false);
+  const attachListRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -194,10 +201,16 @@ export function InterviewPanel({
     el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_PX)}px`;
   }, [input]);
 
+  // 전송 시 최근 첨부 칩을 배지로 접는다 — 컴포저 잔류 방지
+  function sealAttachments() {
+    setAttachWatermark(interview.attachments.reduce((max, a) => Math.max(max, a.id), 0));
+  }
+
   function submit() {
     const content = input.trim();
     if (!content || busy) return;
     setInput("");
+    sealAttachments();
     onSend(content);
   }
 
@@ -224,6 +237,25 @@ export function InterviewPanel({
       window.removeEventListener("keydown", handleKey);
     };
   }, [fontOpen]);
+
+  // 첨부 플라이아웃 — 바깥 클릭(capture)·Escape 닫힘 (Aa 팝오버와 동일 패턴)
+  useEffect(() => {
+    if (!attachListOpen) return;
+    const handleDown = (event: PointerEvent) => {
+      if (attachListRef.current && !attachListRef.current.contains(event.target as Node)) {
+        setAttachListOpen(false);
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAttachListOpen(false);
+    };
+    window.addEventListener("pointerdown", handleDown, true);
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("pointerdown", handleDown, true);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [attachListOpen]);
 
   // 파일/폴더 선택 결과 — 숨김 파일(.DS_Store 등) 제외 후 리뷰. 유효 단일 파일은 모달 없이 즉시 업로드.
   function handleFilesPicked(list: FileList | null) {
@@ -479,7 +511,10 @@ export function InterviewPanel({
             <QuestionOptions
               options={quickReplies}
               disabled={busy}
-              onSelect={onSend}
+              onSelect={(value) => {
+                sealAttachments();
+                onSend(value);
+              }}
               onFreeType={() => inputRef.current?.focus()}
             />
           </div>
@@ -489,12 +524,15 @@ export function InterviewPanel({
           className="rounded-lg border border-hairline bg-surface shadow-md transition-colors duration-150 focus-within:border-accent"
           data-id="iv-composer"
         >
-          {interview.attachments.length > 0 || (uploadProgress !== null && reviewFiles === null) ? (
+          {(() => {
+            // 컴포저 칩은 "이번 메시지에 보낼" 최근 첨부만 — 전송하면 배지+플라이아웃으로 접힌다
+            const recent = interview.attachments.filter((a) => a.id > attachWatermark);
+            if (recent.length === 0 && !(uploadProgress !== null && reviewFiles === null)) {
+              return null;
+            }
+            return (
             <div className="flex flex-wrap items-center gap-1 px-2.5 pt-2">
-              {(chipsExpanded
-                ? interview.attachments
-                : interview.attachments.slice(0, COLLAPSED_CHIPS)
-              ).map((a) => {
+              {(chipsExpanded ? recent : recent.slice(0, COLLAPSED_CHIPS)).map((a) => {
                 const fileIcon = getAttachmentIcon(a.filename);
                 const FileIcon = fileIcon.icon;
                 return (
@@ -524,7 +562,7 @@ export function InterviewPanel({
                 </span>
                 );
               })}
-              {interview.attachments.length > COLLAPSED_CHIPS ? (
+              {recent.length > COLLAPSED_CHIPS ? (
                 <button
                   className="inline-flex items-center rounded-xs bg-surface-alt px-1.5 py-0.5 text-fine text-ink-tertiary hover:text-ink"
                   onClick={() => setChipsExpanded((v) => !v)}
@@ -532,7 +570,7 @@ export function InterviewPanel({
                 >
                   {chipsExpanded
                     ? "Show less"
-                    : `+${interview.attachments.length - COLLAPSED_CHIPS} more`}
+                    : `+${recent.length - COLLAPSED_CHIPS} more`}
                 </button>
               ) : null}
               {uploadProgress !== null && reviewFiles === null ? (
@@ -545,7 +583,8 @@ export function InterviewPanel({
                 </span>
               ) : null}
             </div>
-          ) : null}
+            );
+          })()}
           <textarea
             ref={inputRef}
             className="max-h-32 min-h-9 w-full resize-none bg-transparent px-3 py-2 text-body outline-none"
@@ -574,6 +613,68 @@ export function InterviewPanel({
             >
               <Paperclip size={15} strokeWidth={1.5} />
             </button>
+            {interview.attachments.length > 0 ? (
+              <div className="relative" ref={attachListRef}>
+                <button
+                  className={
+                    "relative rounded-sm p-1.5 hover:bg-surface-alt hover:text-ink " +
+                    (attachListOpen ? "bg-surface-alt text-ink" : "")
+                  }
+                  title="Attached documents"
+                  onClick={() => setAttachListOpen((v) => !v)}
+                  data-id="iv-attach-badge"
+                >
+                  <Files size={15} strokeWidth={1.5} />
+                  <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-on-accent">
+                    {interview.attachments.length}
+                  </span>
+                </button>
+                {attachListOpen ? (
+                  <div
+                    className="absolute bottom-full left-0 z-30 mb-1.5 w-72 rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+                    data-id="iv-attach-flyout"
+                  >
+                    <div className="px-1.5 pb-1 text-fine text-ink-muted">Attached documents</div>
+                    <ul className="max-h-48 overflow-y-auto">
+                      {interview.attachments.map((a) => {
+                        const fileIcon = getAttachmentIcon(a.filename);
+                        const FlyIcon = fileIcon.icon;
+                        return (
+                          <li
+                            key={a.id}
+                            className="flex items-center gap-1.5 rounded-sm px-1.5 py-1 hover:bg-surface-alt"
+                            data-id="iv-attach-flyout-row"
+                          >
+                            <FlyIcon
+                              size={14}
+                              strokeWidth={1.5}
+                              className={"shrink-0 " + (a.status === "parsed" ? fileIcon.cls : "text-error")}
+                            />
+                            <span
+                              className={
+                                "min-w-0 flex-1 truncate text-fine " +
+                                (a.status === "parsed" ? "text-ink-secondary" : "text-error")
+                              }
+                              title={a.error || a.filename}
+                            >
+                              {a.filename}
+                            </span>
+                            <button
+                              className="shrink-0 rounded-xs p-0.5 text-ink-muted hover:text-error"
+                              title="Remove document"
+                              onClick={() => onDeleteAttachment(a.id)}
+                              data-id="iv-attach-flyout-delete"
+                            >
+                              <X size={13} strokeWidth={1.5} />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <span className="mx-0.5 h-4 w-px bg-hairline" />
             {/* 채팅 글자 크기 — Aa 팝오버에서 4단계 직접 선택, 브라우저별 저장(localStorage) */}
             <div className="relative" ref={fontRef}>
