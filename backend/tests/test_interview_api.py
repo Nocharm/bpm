@@ -331,3 +331,56 @@ def test_interview_requires_live_editor_role(client: TestClient, monkeypatch) ->
     monkeypatch.setattr(settings, "dev_enforce_permissions", True)
     resp = client.get(f"/api/interviews/{session_id}", headers=headers_a)
     assert resp.status_code == 403
+
+
+def test_create_seeds_working_graph_and_data_aware_greeting(client: TestClient, monkeypatch) -> None:
+    """기존 데이터가 있는 맵은 작업본을 시드하고 파악한 내용 기반 오프닝을 낸다 (실사용 피드백 2026-07-27)."""
+    _enable_ai(monkeypatch)
+    created = _iv_map(client)
+    version_id = created["versions"][0]["id"]
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    graph = {
+        "nodes": [
+            {"id": "n-s", "title": "Start", "node_type": "start"},
+            {"id": "n-1", "title": "요청서 작성", "node_type": "process", "assignee": "김담당"},
+            {"id": "n-2", "title": "승인 여부", "node_type": "decision"},
+            {"id": "n-e", "title": "End", "node_type": "end"},
+        ],
+        "edges": [
+            {"id": "e-1", "source_node_id": "n-s", "target_node_id": "n-1"},
+            {"id": "e-2", "source_node_id": "n-1", "target_node_id": "n-2"},
+            {"id": "e-3", "source_node_id": "n-2", "target_node_id": "n-e", "label": "승인"},
+        ],
+    }
+    assert client.put(f"/api/versions/{version_id}/graph", json=graph).status_code == 200
+
+    state = client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": version_id}
+    ).json()
+    seeded = state["working_graph"]
+    assert seeded is not None
+    assert {n["key"] for n in seeded["nodes"]} == {"n-s", "n-1", "n-2", "n-e"}
+    by_key = {n["key"]: n for n in seeded["nodes"]}
+    assert by_key["n-1"]["attributes"]["assignee"] == "김담당"
+    assert {(e["source"], e["target"]) for e in seeded["edges"]} == {
+        ("n-s", "n-1"), ("n-1", "n-2"), ("n-2", "n-e")
+    }
+    greeting = state["messages"][0]
+    assert "요청서 작성" in greeting["content"]  # 파악한 활동을 오프닝에 제시
+    assert "이미 작성된 내용" in greeting["content"]
+    assert len(greeting["payload"]["options"]) == 2  # 보완/재정리 quick reply
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_create_on_start_end_only_map_keeps_generic_greeting(client: TestClient, monkeypatch) -> None:
+    """새 맵의 자동 Start/End만 있으면 기존 데이터로 치지 않는다 — 오프닝은 기본 인사."""
+    _enable_ai(monkeypatch)
+    created = _iv_map(client)
+    version_id = created["versions"][0]["id"]
+    state = client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": version_id}
+    ).json()
+    greeting = state["messages"][0]
+    assert greeting["content"].startswith("안녕하세요, 프로세스 컨설턴트입니다. 지금부터")
+    assert greeting["payload"] is None
+    client.delete(f"/api/interviews/{state['id']}")

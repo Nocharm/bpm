@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-27 — 인터뷰 시작 시 기존 맵 데이터 파악 오프닝 (worktree-ai-consultant)
+- **매번 같은 백지 인사 개선**: 세션 생성 시 draft 그래프를 작업본으로 시드(`_seed_working_graph` — note 제외·AI 계약 밖 타입 process 강등·엣지/그룹/attributes 동반) → 프리뷰가 처음부터 현재 맵을 표시, 드래프터도 기존 구조 위에서 시작.
+- start/end 자동 시드 외 실제 내용이 있으면 **데이터 인지형 오프닝**: 파악한 활동 요약(마크다운, 6개 캡) + "기존 맵 보완/처음부터 재정리" quick reply 2개(question payload — 프론트 픽커 자동 렌더). word 모드는 기존 인사에 노드 파악 한 줄 추가.
+- 에이전트 계약 보강: 인터뷰어 룰12(기존 맵 우선 — 백지 질문 금지)·드래프터 룰5(기존 작업본 보존 — 백지 재생성 금지, word 애든덤 6~9 재번호). 테스트 2종 추가, BE 791·ruff 0.
+
 ## 2026-07-27 — 임베딩 env를 사내 표준 변수명으로 정렬 (worktree-ai-consultant)
 - `AI_EMBED_*` 4종 → **`EMBED_URL`/`EMBED_MODEL`/`EMBED_DIM`/`EMBED_TIMEOUT_SECONDS`** 개명(사내 타 임베딩 사용 서비스와 동일 — 그쪽 .env 값 그대로 복사 가능). 인증 없음 확인 → 토큰 필드·Bearer 헤더 제거.
 - `EMBED_URL`은 /v1 루트·/embeddings 전체 경로 모두 수용(끝이 /embeddings면 그대로, 아니면 부착). `EMBED_DIM` 설정화(기본 1024). Settings+.env.example+compose 3곳 동시 갱신. BE 789·ruff 0.

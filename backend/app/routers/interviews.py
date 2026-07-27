@@ -68,6 +68,108 @@ _GREETING_WORD = {
     "en": "Hi! I'll turn this Word map's SOP document into a flowchart. Should I draw the whole document or one section subtree? Attach the original .docx and I can ground the draft in the body text.",
 }
 
+# 기존 데이터가 있는 맵의 오프닝 — 매번 같은 백지 인사 대신 파악한 내용을 먼저 제시 (실사용 피드백 2026-07-27)
+_EXISTING_GREETING = {
+    "ko": (
+        "안녕하세요, 프로세스 컨설턴트입니다. '{map_name}' 맵에 이미 작성된 내용이 있어 먼저 파악했습니다.\n"
+        "{summary}\n\n"
+        "이 내용을 출발점으로 부족한 부분을 채워가겠습니다. 기존 맵을 보완할까요, 처음부터 다시 정리할까요? 참고할 문서가 있다면 지금 첨부하셔도 좋습니다."
+    ),
+    "en": (
+        "Hello, I'm your process consultant. The map '{map_name}' already has content — here's what I found.\n"
+        "{summary}\n\n"
+        "I'll use this as our starting point and fill in what's missing. Should we refine the current map, or start over from scratch? Feel free to attach reference documents."
+    ),
+}
+
+_EXISTING_GREETING_OPTIONS = {
+    "ko": ["기존 맵을 보완할래요", "처음부터 다시 정리할래요"],
+    "en": ["Refine the current map", "Start over from scratch"],
+}
+
+_EXISTING_NOTE_WORD = {
+    "ko": "\n\n기존에 그려진 노드 {n}개도 파악해 두었습니다 — 문서 기준으로 이어서 다듬을 수 있어요.",
+    "en": "\n\nI've also reviewed the {n} existing nodes — we can refine them against the document.",
+}
+
+# 시드 시 작업본에 싣는 노드 속성 — AiNode.attributes 계약과 동일 키
+_SEED_ATTRS = (
+    "assignee", "department", "system",
+    "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+)
+
+# AI 계약(AI_NODE_TYPES) 밖 타입은 process로 강등 — subprocess도 제목이 유지되므로
+# apply 병합(제목 매칭 id·타입 보존)이 원본을 지킨다. note는 흐름이 아니라 시드 제외.
+_SEED_TYPES = {"start", "process", "decision", "end", "section"}
+
+
+def _seed_working_graph(graph) -> dict | None:
+    """기존 draft 그래프 → 인터뷰 작업본 시드 — 시작부터 프리뷰·드래프터가 기존 내용 위에서 동작."""
+    nodes = []
+    for n in graph.nodes:
+        if n.node_type == "note":
+            continue
+        attributes = {k: v for k in _SEED_ATTRS if (v := getattr(n, k))}
+        if n.section_anchor:
+            attributes["section_anchor"] = n.section_anchor
+        nodes.append({
+            "key": n.id,
+            "title": n.title,
+            "node_type": n.node_type if n.node_type in _SEED_TYPES else "process",
+            "description": n.description,
+            "attributes": attributes or None,
+            "group_key": n.group_ids[0] if n.group_ids else None,
+        })
+    if not nodes:
+        return None
+    kept = {n["key"] for n in nodes}
+    edges = [
+        {"source": e.source_node_id, "target": e.target_node_id, "label": e.label or ""}
+        for e in graph.edges
+        if e.source_node_id in kept and e.target_node_id in kept
+    ]
+    groups = [{"key": g.id, "label": g.label} for g in graph.groups]
+    return {"nodes": nodes, "edges": edges, "groups": groups}
+
+
+def _has_user_content(seed: dict | None) -> bool:
+    """start/end 자동 시드만 있는 새 맵은 '기존 데이터 있음'으로 치지 않는다."""
+    if not seed:
+        return False
+    return any(n.get("node_type") not in ("start", "end") for n in seed["nodes"])
+
+
+def _existing_summary(seed: dict, lang: str) -> str:
+    """시드 그래프의 마크다운 요약 — 오프닝 메시지에 '파악한 내용'으로 제시."""
+    nodes = seed.get("nodes", [])
+    activities = [
+        n["title"] for n in nodes
+        if n.get("node_type") not in ("start", "end") and n.get("title")
+    ]
+    decisions = sum(1 for n in nodes if n.get("node_type") == "decision")
+    groups = len(seed.get("groups", []))
+    shown = " · ".join(f"**{t}**" for t in activities[:6])
+    more = len(activities) - 6
+    if lang == "en":
+        lines = [f"- Activities ({len(activities)}): {shown}" + (f" and {more} more" if more > 0 else "")]
+        extras = []
+        if decisions:
+            extras.append(f"{decisions} decisions")
+        if groups:
+            extras.append(f"{groups} groups")
+        if extras:
+            lines.append("- " + " · ".join(extras))
+    else:
+        lines = [f"- 활동 {len(activities)}개: {shown}" + (f" 외 {more}개" if more > 0 else "")]
+        extras = []
+        if decisions:
+            extras.append(f"분기 {decisions}개")
+        if groups:
+            extras.append(f"그룹 {groups}개")
+        if extras:
+            lines.append("- " + " · ".join(extras))
+    return "\n".join(lines)
+
 
 def _require_ai_enabled() -> None:
     if not settings.ai_enabled:
@@ -155,6 +257,11 @@ async def create_or_resume_interview(
     found_map = await session.get(ProcessMap, map_id)
     interview_mode = "word" if found_map is not None and found_map.mode == "word" else "normal"
 
+    # 기존 draft 내용을 작업본으로 시드 — 프리뷰가 처음부터 현재 맵을 보여주고,
+    # 드래프터도 백지가 아닌 기존 구조 위에서 시작한다 (실사용 피드백 2026-07-27)
+    seed = _seed_working_graph(await _load_graph(session, payload.version_id))
+    has_existing = _has_user_content(seed)
+
     interview = InterviewSession(
         map_id=map_id,
         version_id=payload.version_id,
@@ -162,15 +269,34 @@ async def create_or_resume_interview(
         lang=payload.lang,
         mode=interview_mode,
         facts={},
+        working_graph=seed,
         base_graph_updated_at=version.updated_at,
     )
     session.add(interview)
     await session.flush()  # id 채번 — 메시지 FK
     greeting_src = _GREETING_WORD if interview_mode == "word" else _GREETING
+    content = greeting_src.get(payload.lang, greeting_src["ko"])
+    greeting_payload: dict | None = None
+    if has_existing and seed is not None and interview_mode == "normal":
+        # 기존 데이터 인지형 오프닝 — 파악한 내용 요약 + 보완/재정리 선택지
+        template = _EXISTING_GREETING.get(payload.lang, _EXISTING_GREETING["ko"])
+        content = template.format(
+            map_name=found_map.name if found_map else "",
+            summary=_existing_summary(seed, payload.lang),
+        )
+        greeting_payload = {
+            "options": _EXISTING_GREETING_OPTIONS.get(payload.lang, _EXISTING_GREETING_OPTIONS["ko"])
+        }
+    elif has_existing and seed is not None and interview_mode == "word":
+        note = _EXISTING_NOTE_WORD.get(payload.lang, _EXISTING_NOTE_WORD["ko"])
+        existing_count = sum(
+            1 for n in seed["nodes"] if n.get("node_type") not in ("start", "end")
+        )
+        content += note.format(n=existing_count)
     session.add(
         InterviewMessage(
             session_id=interview.id, seq=1, role="consultant", kind="question",
-            content=greeting_src.get(payload.lang, greeting_src["ko"]), stage="scope",
+            content=content, payload=greeting_payload, stage="scope",
         )
     )
     await session.commit()
