@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # 비우면 위 단일 설정(AI_BASE_URL 등) 사용. 토큰은 시크릿이라 .env 전용(app_settings 아님).
     ai_endpoints: str = ""
 
+    # P2 지식기반 — bge-m3 임베딩 서버(OpenAI 호환 /embeddings). base_url 비우면 KB 기능 전체 no-op (design 2026-07-23 §7)
+    ai_embed_base_url: str = ""  # 예: http://<embed>:8000/v1
+    ai_embed_model: str = "bge-m3"
+    ai_embed_api_token: str = ""  # Bearer 토큰 (시크릿 — .env만, git 금지)
+    ai_embed_timeout_seconds: int = 30
+
     # AI 부하 가드 — 백엔드 전체 동시 AI 호출 상한(인터뷰·챗 공용)
     ai_max_concurrency: int = 4
     # 인터뷰 선택지 병렬 생성 개수(구조 결정 지점에서만)

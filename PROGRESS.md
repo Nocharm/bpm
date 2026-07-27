@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-27 — AI 컨설턴트 P2 지식기반 착수: 플랜 + KB 코어 Tasks 1~3 (worktree-ai-consultant)
+- 플랜 신설 `docs/superpowers/plans/2026-07-27-ai-consultant-p2-kb.md`(Tasks 1~9, 설계 §7 구체화).
+- Task 1: `AI_EMBED_*` 설정 4종(Settings+.env.example+compose environment 3곳 동시) + `app/kb/embed_client.py`(OpenAI 호환 /embeddings, 배치 ≤32, 재시도 1회, EmbedError 정규화).
+- Task 2: `kb_documents`/`kb_chunks` 테이블(create_all 자동) + `kb/chunking.py`(500자/오버랩 80/문단 경계 우선).
+- Task 3: `kb/retrieval.py` — float32 패킹, numpy 코사인 top-5+임계 0.5, attachment는 세션 스코프, 인메모리 캐시+무효화. numpy==2.3.1 프로덕션 의존성 추가.
+- 테스트 12종 신규(`test_kb_core.py`, 임베딩·httpx2 모킹). 게이트: BE 788·ruff 0. 남은 작업 Tasks 4~9(인덱싱 워커·라이브러리 API·검색 주입·유사 SP·프론트).
+
 ## 2026-07-27 — 인터뷰 GPU 실검증 2차 피드백 4종 (worktree-ai-consultant)
 - **체크포인트 클릭 = 맵 프리뷰 먼저**: 좌상단 체크포인트를 누르면 즉시 revert하지 않고 캔버스만 스냅샷으로 되돌려 보여줌(신규 하이라이트 억제·인스펙터도 스냅샷 기준) + 상단 프리뷰 바(Keep current/Go back here)로 확정 시에만 실제 revert. `InterviewCheckpointOut.working_graph` 노출 추가(백엔드).
 - **언어 미러링**: 세션 언어가 영어라도 사용자가 한글로 답하면 한글로 응답하도록 `_LANG_LINE` 계약 확장(ko/en 대칭).

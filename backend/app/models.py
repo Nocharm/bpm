@@ -2,7 +2,18 @@
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.clock import now as _now_kst
@@ -722,4 +733,37 @@ class InterviewAttachment(Base):
     parsed_text: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(10), default="parsed")  # parsed|failed
     error: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class KbDocument(Base):
+    """지식기반 라이브러리 문서 — sysadmin 업로드 원장, 원문(parsed_text)만 보존 (design 2026-07-23 §5)."""
+
+    __tablename__ = "kb_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(300))
+    filename: Mapped[str] = mapped_column(String(300))
+    mime: Mapped[str] = mapped_column(String(100), default="")
+    parsed_text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="parsed")  # parsed|failed
+    uploaded_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class KbChunk(Base):
+    """통합 지식 청크 — 소스(library/map/interview/attachment)를 한 테이블로, 인메모리 코사인 검색 (§5).
+
+    embedding은 float32 1024차원(bge-m3) 리틀엔디언 바이트 — 패킹은 kb/retrieval.py.
+    """
+
+    __tablename__ = "kb_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_type: Mapped[str] = mapped_column(String(20), index=True)
+    source_id: Mapped[int] = mapped_column(Integer, index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, default=0)
+    chunk_text: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary)
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

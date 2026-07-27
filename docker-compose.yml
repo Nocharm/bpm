@@ -39,6 +39,10 @@ services:
       AI_API_TOKEN: ${AI_API_TOKEN:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      AI_EMBED_BASE_URL: ${AI_EMBED_BASE_URL:-}
+      AI_EMBED_MODEL: ${AI_EMBED_MODEL:-bge-m3}
+      AI_EMBED_API_TOKEN: ${AI_EMBED_API_TOKEN:-}
+      AI_EMBED_TIMEOUT_SECONDS: ${AI_EMBED_TIMEOUT_SECONDS:-30}
       # AI 호출 동시성 상한 (인터뷰 등 백그라운드 호출 포함)
       AI_MAX_CONCURRENCY: ${AI_MAX_CONCURRENCY:-4}
       # 인터뷰 턴당 AI 제시 선택지 개수
