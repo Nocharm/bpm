@@ -631,11 +631,19 @@ async def apply_interview_params(
         values = by_title.get((node.get("title") or "").strip())
         if values:
             attributes = dict(node.get("attributes") or {})
+            row_krw = str(values.get("cost_krw") or "").strip()
+            has_krw = bool(row_krw) and row_krw not in _PARAM_UNKNOWN_TOKENS
             touched = False
             for field in _PARAM_FIELDS:
+                if field == "cost_usd" and has_krw:
+                    continue  # 통화 배타 — 행에 둘 다 있으면 krw 우선(두 통화 공존은 저장 시 422)
                 value = values.get(field)
                 text = str(value).strip() if value is not None else ""
                 if text and text not in _PARAM_UNKNOWN_TOKENS:
+                    if field == "cost_krw":
+                        attributes.pop("cost_usd", None)
+                    if field == "cost_usd":
+                        attributes.pop("cost_krw", None)
                     attributes[field] = text
                     touched = True
             if touched:

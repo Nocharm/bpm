@@ -407,3 +407,17 @@ def test_expand_delta_full_spec_on_empty_prev() -> None:
     )
     expanded = orchestrator._expand_delta(proposal, None)
     assert {n.key for n in expanded.nodes} == {"s", "x"}
+
+
+def test_expand_delta_survives_invalid_previous_node() -> None:
+    """이전 작업본 노드가 계약 위반(두 통화 공존)이어도 예외 없이 드롭 — draw 500 방지."""
+    prev = {
+        "nodes": [{"key": "bad", "title": "위반 노드", "node_type": "process",
+                   "attributes": {"cost_krw": "1000", "cost_usd": "5"}, "group_key": None}],
+        "edges": [], "groups": [],
+    }
+    proposal = _proposal([{"key": "bad"}, {"key": "ok", "title": "정상", "node_type": "process"}],
+                         [{"source": "bad", "target": "ok"}])
+    expanded = orchestrator._expand_delta(proposal, prev)
+    assert {n.key for n in expanded.nodes} == {"ok"}  # 위반 노드는 조용히 드롭
+    assert expanded.edges == []

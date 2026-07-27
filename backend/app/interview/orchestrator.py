@@ -240,7 +240,21 @@ def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
             logger.warning("interview delta node dropped (unknown key, no title): %s", node.key)
             continue
         merged = {**(base or {}), **{k: v for k, v in data.items() if k != "key"}, "key": node.key}
-        nodes.append(AiNode.model_validate(merged))
+        # 병합 결과가 계약을 어길 수 있다(예: 이전 작업본에 두 통화가 공존) — 예외를 밖으로
+        # 흘리면 draw가 500으로 죽는다. 병합 실패 → 원본 복원 → 그래도 실패면 드롭.
+        restored: AiNode | None = None
+        for candidate in (merged, base):
+            if candidate is None:
+                continue
+            try:
+                restored = AiNode.model_validate({**candidate, "key": node.key})
+                break
+            except ValueError:
+                continue
+        if restored is None:
+            logger.warning("interview delta node dropped (invalid merge): %s", node.key)
+            continue
+        nodes.append(restored)
         kept.add(node.key)
     edges = [e for e in proposal.edges if e.source in kept and e.target in kept]
     return proposal.model_copy(update={"nodes": nodes, "edges": edges})
@@ -292,7 +306,11 @@ async def generate_proposals(
         if isinstance(result, BaseException) or result.kind != "graph":
             logger.warning("interview proposal %d failed: %s", i, result)
             continue
-        expanded = _expand_delta(result, interview.working_graph)
+        try:
+            expanded = _expand_delta(result, interview.working_graph)
+        except Exception:  # noqa: BLE001 -- 개별 안 실패는 전체 draw를 죽이지 않는다(500 방지)
+            logger.exception("interview proposal %d delta expansion failed", i)
+            continue
         if not expanded.nodes:
             logger.warning("interview proposal %d empty after delta expansion", i)
             continue

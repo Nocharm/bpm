@@ -15,6 +15,7 @@
 - **후속: 수락 낙관적 반영** — Use this option 클릭이 인터뷰어 1콜(다음 질문)까지 기다려 모달이 얼던 문제: 클릭 즉시 모달 닫고 선택 안을 캔버스에 표시(`optimisticChoice`→`optimisticGraph`), 서버 턴은 typing 상태로 백그라운드 대기·실패 시 모달 자동 복귀. 스모크에 지연 턴(600ms) 목으로 응답 전 렌더 검증.
 - **후속: 워드 기능 프론트 가리기** — `lib/features.ts` `WORD_FEATURES_ENABLED=false`(AI 독립 라인 혼선 방지, dev 워드 후속 머지 시 true 복원). 홈 WordDocsSection 미렌더, word-home 스모크는 플래그 인지형(OFF면 섹션 부재 검증 후 종료).
 - **후속: 파라미터 표 확정 흐름(AI 0콜 반영)** — params 스테이지는 그리지 않고 `params_table` 구조로 수집(인터뷰어 규칙 9 확장·`_merge_stage_facts` 활동별 딥머지) → 완료 전이 시 `draw_due="params"` → 표 확정 모달(`params-table-dialog`, 액션바 Params 버튼 재오픈) → `POST /apply-params`가 제목 매칭으로 attributes에 즉시 반영(미정/무매칭 스킵·노티스). review 진입 자동 draw 제거(표 반영으로 대체). BE 테스트 6종·vitest 2종.
+- **후속: 500 방어** — `_expand_delta`의 노드 검증 예외(예: 이전 작업본 두 통화 공존)가 draw를 500으로 죽이던 경로 차단(병합 실패→원본 복원→드롭, 안 단위 격리) + apply-params 통화 배타 강제(행에 둘 다면 krw 우선·기존 반대 통화 제거). 테스트 2종.
 
 ## 2026-07-27 — 인터뷰 속도·타이밍 재설계 설계 확정 (worktree-ai-consultant)
 - GPU 실검증 피드백(턴 1~4분·진행 표시 부재·채팅-맵 어긋남) 브레인스토밍 → 설계 확정: **일반 턴=인터뷰어 1콜**(재드래프트·톤 검수 폐지·프롬프트 다이어트) · **그리기=`POST /draw` 이벤트**(구조 스테이지 완료/review 진입/수동 버튼, 동기+진행 오버레이, 맵은 수락 시점에만 변경) · **델타 드래프팅**(기존 노드 키 에코·exclude_unset 복원) · **facts 아웃라인 패널**(AI 0콜)+맵 기준 배지. `docs/design/2026-07-27-interview-speed-redesign-design.md`.

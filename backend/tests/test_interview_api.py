@@ -577,3 +577,22 @@ def test_apply_params_no_match_409(client: TestClient, monkeypatch) -> None:
     resp = client.post(f"/api/interviews/{state['id']}/apply-params")
     assert resp.status_code == 409
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_apply_params_currency_exclusive(client: TestClient, monkeypatch) -> None:
+    """행에 두 통화가 다 있으면 krw만 반영 — 기존 반대 통화도 제거(공존이면 이후 draw·저장이 깨진다)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = {
+        "nodes": [{"key": "a", "title": "요청서 작성", "node_type": "process",
+                   "attributes": {"cost_usd": "9"}}],
+        "edges": [], "groups": [],
+    }
+    _seed_interview_params(state["id"], {
+        "요청서 작성": {"cost_krw": "50000", "cost_usd": "5"},
+    }, graph)
+    data = client.post(f"/api/interviews/{state['id']}/apply-params").json()
+    node = next(n for n in data["working_graph"]["nodes"] if n["title"] == "요청서 작성")
+    assert node["attributes"]["cost_krw"] == "50000"
+    assert "cost_usd" not in node["attributes"]  # 기존 usd도 제거 — 배타 유지
+    client.delete(f"/api/interviews/{state['id']}")
