@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, NodeTypes } from "@xyflow/react";
-import { CheckCheck, MessageSquarePlus, PenLine, Undo2, Workflow, X } from "lucide-react";
+import { CheckCheck, MessageSquarePlus, PenLine, Table2, Undo2, Workflow, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
 import {
@@ -57,6 +57,9 @@ interface InterviewPreviewProps {
   onDraw: (variants: "multi" | "single") => void;
   onDrawRetry: () => void;
   onDrawClearError: () => void;
+  // params 표 확정 — 수집분이 있으면 액션바에서 언제든 재오픈 (speed redesign 후속)
+  paramsAvailable: boolean;
+  onOpenParams: () => void;
 }
 
 // 오버레이 경과초 — 마운트 시점부터 카운트(드로잉 중에만 마운트되므로 리셋 자연 처리)
@@ -184,6 +187,7 @@ function PreviewCanvas({
 export function InterviewPreview({
   interview, onUpdated, mapId, choices, optimisticGraph = null, busy, onChoose,
   drawBusy, drawError, onDraw, onDrawRetry, onDrawClearError,
+  paramsAvailable, onOpenParams,
 }: InterviewPreviewProps) {
   const router = useRouter();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -551,6 +555,18 @@ export function InterviewPreview({
           >
             <PenLine size={16} strokeWidth={1.5} />
             Draw map
+          </button>
+        ) : null}
+        {interview?.status === "active" && paramsAvailable ? (
+          <button
+            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+            disabled={busy || !!drawBusy}
+            onClick={onOpenParams}
+            title="Review and apply collected parameters"
+            data-id="iv-params-open"
+          >
+            <Table2 size={16} strokeWidth={1.5} />
+            Params
           </button>
         ) : null}
         <span className="text-fine text-ink-muted" data-id="iv-map-baseline">{baselineText}</span>

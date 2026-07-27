@@ -95,6 +95,38 @@ export function deriveSequencePreview(
   return [];
 }
 
+// ---------- params 표 (수집 → 확정 → 결정적 반영, speed redesign 후속) ----------
+
+export const PARAM_TABLE_KEYS = [
+  "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+] as const;
+
+export interface ParamsTableRow {
+  activity: string;
+  values: Record<string, string>;
+}
+
+// facts.params.params_table → 표 행 — 확인된 필드만, 빈 행 제거
+export function deriveParamsTable(
+  facts: Record<string, Record<string, unknown>> | null | undefined,
+): ParamsTableRow[] {
+  const table = facts?.["params"]?.["params_table"];
+  if (!table || typeof table !== "object" || Array.isArray(table)) return [];
+  return Object.entries(table as Record<string, unknown>)
+    .filter(([, values]) => values && typeof values === "object" && !Array.isArray(values))
+    .map(([activity, values]) => ({
+      activity,
+      values: Object.fromEntries(
+        Object.entries(values as Record<string, unknown>)
+          .filter(([key, value]) =>
+            (PARAM_TABLE_KEYS as readonly string[]).includes(key) &&
+            String(value ?? "").trim() !== "")
+          .map(([key, value]): [string, string] => [key, String(value)]),
+      ),
+    }))
+    .filter((row) => Object.keys(row.values).length > 0);
+}
+
 export function choiceOptionsOf(messages: InterviewMessage[]): ChoiceOption[] | null {
   const last = messages[messages.length - 1];
   if (!last || last.role !== "consultant" || last.kind !== "choices") return null;

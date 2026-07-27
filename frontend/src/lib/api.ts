@@ -1884,8 +1884,8 @@ export interface InterviewState {
   attachments: InterviewAttachment[];
   version_updated_at: string | null;
   base_graph_updated_at: string | null;
-  // 턴 응답 전용 그리기 신호(비영속) — 프론트가 draw 이벤트로 이어받는다 (speed redesign)
-  draw_due?: "multi" | "single" | null;
+  // 턴 응답 전용 그리기 신호(비영속) — multi/single은 draw 이벤트, params는 표 확정 모달 (speed redesign)
+  draw_due?: "multi" | "single" | "params" | null;
 }
 
 export function createOrResumeInterview(
@@ -1933,6 +1933,11 @@ export function drawProposals(
     method: "POST",
     body: JSON.stringify({ variants }),
   });
+}
+
+// params 표 확정 반영 — 수집된 파라미터를 작업본에 결정적 적용(AI 0콜, 즉시)
+export function applyInterviewParams(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/apply-params`, { method: "POST" });
 }
 
 // 유사 SP 제안 수락 — 제안 구간을 subprocess 링크 노드로 치환한 갱신 상태 반환 (P2)

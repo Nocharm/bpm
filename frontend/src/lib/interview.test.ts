@@ -7,6 +7,7 @@ import {
   addedNodeKeys,
   choiceOptionsOf,
   deriveOutline,
+  deriveParamsTable,
   deriveSequencePreview,
   distinctiveNodeKeys,
   layoutWorkingGraph,
@@ -151,5 +152,24 @@ describe("deriveSequencePreview", () => {
 
   it("returns empty without activities facts", () => {
     expect(deriveSequencePreview({ scope: { process_name: "구매" } })).toEqual([]);
+  });
+});
+
+describe("deriveParamsTable (params 표 확정 흐름)", () => {
+  it("keeps only known param fields with non-empty values", () => {
+    const rows = deriveParamsTable({
+      params: { params_table: {
+        "요청서 작성": { duration: "0.30", headcount: 2, note: "무시", cost_krw: "" },
+        "빈 활동": { duration: "" },
+      } },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].activity).toBe("요청서 작성");
+    expect(rows[0].values).toEqual({ duration: "0.30", headcount: "2" });
+  });
+
+  it("returns empty without params_table", () => {
+    expect(deriveParamsTable({ params: { params_done: "yes" } })).toEqual([]);
+    expect(deriveParamsTable(null)).toEqual([]);
   });
 });

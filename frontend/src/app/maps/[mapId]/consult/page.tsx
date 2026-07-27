@@ -9,6 +9,7 @@ import { ArrowLeft, Headset } from "lucide-react";
 
 import {
   ApiError,
+  applyInterviewParams,
   createOrResumeInterview,
   deleteInterviewAttachment,
   drawProposals,
@@ -20,11 +21,12 @@ import {
   type InterviewState,
   type WorkingGraph,
 } from "@/lib/api";
-import { choiceOptionsOf, stageIndex, stagesForMode } from "@/lib/interview";
+import { choiceOptionsOf, deriveParamsTable, stageIndex, stagesForMode } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InterviewPanel } from "@/components/interview/interview-panel";
 import { InterviewPreview } from "@/components/interview/interview-preview";
+import { ParamsTableDialog } from "@/components/interview/params-table-dialog";
 
 // 우측 채팅 폭 — 드래그 조절, localStorage 유지 (min/max는 요구사항 2026-07-23)
 const CHAT_WIDTH_KEY = "bpm.consultChatWidth";
@@ -59,6 +61,9 @@ export default function ConsultPage() {
   // 낙관적 수락 — 선택한 안을 즉시 캔버스에 반영·모달 닫기. 서버(그래프 반영+다음 질문 1콜)는
   // 백그라운드로 기다린다 — 실패하면 해제돼 모달이 복귀(choices 메시지가 여전히 마지막이라서).
   const [optimisticChoice, setOptimisticChoice] = useState<{ graph: WorkingGraph } | null>(null);
+  // params 표 확정 모달 — 수집된 파라미터를 표로 확인 후 결정적 반영(AI 0콜)
+  const [paramsOpen, setParamsOpen] = useState(false);
+  const [paramsBusy, setParamsBusy] = useState(false);
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -139,12 +144,28 @@ export default function ConsultPage() {
       setInterview(state);
       setPending(null); // 서버 상태에 실제 메시지가 포함됨 — 낙관적 표시 제거
       lastTurnRef.current = null; // 성공한 턴은 Retry 재생 대상에서 제외 — 첨부 업로드 실패 시 중복 제출 방지
-      if (state.draw_due) void startDraw(state.draw_due); // 그리기 신호 — 자동으로 draw 이벤트 개시
+      // 그리기/표 신호 — params는 표 확정 모달(AI 0콜), 나머지는 draw 이벤트
+      if (state.draw_due === "params") setParamsOpen(true);
+      else if (state.draw_due) void startDraw(state.draw_due);
     } catch (err) {
       setError(getApiErrorDetail(err) || "AI request failed.");
     } finally {
       setBusy(false);
       setOptimisticChoice(null); // 성공=서버 상태가 동일 그래프 보유, 실패=모달 복귀
+    }
+  }
+
+  async function handleApplyParams() {
+    if (!interview || paramsBusy) return;
+    setParamsBusy(true);
+    try {
+      setInterview(await applyInterviewParams(interview.id));
+      setParamsOpen(false);
+    } catch (err) {
+      setError(getApiErrorDetail(err) || "Failed to apply parameters.");
+      setParamsOpen(false);
+    } finally {
+      setParamsBusy(false);
     }
   }
 
@@ -206,6 +227,7 @@ export default function ConsultPage() {
   const stageIdx = interview ? stageIndex(interview.current_stage, interview.mode) : 0;
   const live = interview ? interview.messages.filter((m) => !m.superseded) : [];
   const choices = interview?.status === "active" ? choiceOptionsOf(live) : null;
+  const paramsRows = deriveParamsTable(interview?.facts);
 
   return (
     <div className="flex h-full flex-col" data-id="consult-page">
@@ -248,6 +270,8 @@ export default function ConsultPage() {
           onDraw={(variants) => void startDraw(variants)}
           onDrawRetry={() => void startDraw(lastDrawRef.current)}
           onDrawClearError={() => setDrawError(null)}
+          paramsAvailable={paramsRows.length > 0}
+          onOpenParams={() => setParamsOpen(true)}
         />
         <div
           className="w-1 shrink-0 cursor-col-resize bg-hairline transition-colors duration-150 hover:bg-accent/40"
@@ -279,6 +303,14 @@ export default function ConsultPage() {
           )}
         </aside>
       </div>
+      {paramsOpen && paramsRows.length > 0 ? (
+        <ParamsTableDialog
+          rows={paramsRows}
+          busy={paramsBusy}
+          onApply={() => void handleApplyParams()}
+          onClose={() => setParamsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

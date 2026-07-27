@@ -515,3 +515,65 @@ def test_turn_signals_draw_due_on_structure_completion(client: TestClient, monke
     assert body["draw_due"] == "multi"
     assert body["current_stage"] == "branches"
     client.delete(f"/api/interviews/{state['id']}")
+
+
+# ---------- params 표 반영 (speed redesign 후속) ----------
+
+
+def _seed_interview_params(interview_id: int, table: dict, graph: dict | None) -> None:
+    async def _run() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, interview_id)
+            row.facts = {"params": {"params_table": table}}
+            if graph is not None:
+                row.working_graph = graph
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def test_apply_params_merges_into_working_graph(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = {
+        "nodes": [
+            {"key": "s", "title": "시작", "node_type": "start", "attributes": None},
+            {"key": "a", "title": "요청서 작성", "node_type": "process",
+             "attributes": {"assignee": "김담당"}},
+        ],
+        "edges": [], "groups": [],
+    }
+    _seed_interview_params(state["id"], {
+        "요청서 작성": {"duration": "0.30", "headcount": 2, "cost_krw": "미정"},
+        "없는 활동": {"duration": "1.00"},
+    }, graph)
+    body = client.post(f"/api/interviews/{state['id']}/apply-params")
+    assert body.status_code == 200
+    data = body.json()
+    node = next(n for n in data["working_graph"]["nodes"] if n["title"] == "요청서 작성")
+    assert node["attributes"]["duration"] == "0.30"
+    assert node["attributes"]["headcount"] == "2"  # 숫자 입력도 문자열로 정규화
+    assert node["attributes"]["assignee"] == "김담당"  # 기존 attributes 보존
+    assert "cost_krw" not in node["attributes"]  # '미정'은 스킵
+    notice = [m for m in data["messages"] if m["kind"] == "notice"]
+    assert any("1" in m["content"] for m in notice)  # 활동 1개 반영
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_apply_params_without_table_400(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    resp = client.post(f"/api/interviews/{state['id']}/apply-params")
+    assert resp.status_code == 400
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_apply_params_no_match_409(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    _seed_interview_params(state["id"], {"유령 활동": {"duration": "1.00"}}, None)
+    resp = client.post(f"/api/interviews/{state['id']}/apply-params")
+    assert resp.status_code == 409
+    client.delete(f"/api/interviews/{state['id']}")

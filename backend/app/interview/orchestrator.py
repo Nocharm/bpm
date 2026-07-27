@@ -50,13 +50,33 @@ class TurnResult:
 
 def _draw_due(pre_stage: str, interview: InterviewSession, out: InterviewerOut) -> str | None:
     transitioned = interview.current_stage != pre_stage
+    if transitioned and pre_stage == "params":
+        # params 완료는 그리지 않는다 — 수집된 표 확정 후 결정적 반영 (실사용 피드백 2026-07-27)
+        table = (interview.facts.get("params") or {}).get("params_table") or {}
+        return "params" if table else None
     if transitioned and engine.get_stage(pre_stage, interview.mode).choice_stage:
         return "multi"
-    if transitioned and interview.current_stage == "review":
-        return "single"
     if out.redraw or out.needs_choices:
         return "single"
     return None
+
+
+def _merge_stage_facts(interview: InterviewSession, patch: dict) -> None:
+    """현재 스테이지 네임스페이스에 patch 병합 — params_table은 활동별 딥머지(통짜 교체 유실 방지)."""
+    stage_facts = dict(interview.facts.get(interview.current_stage) or {})
+    merged_patch = dict(patch)
+    incoming = merged_patch.get("params_table")
+    existing = stage_facts.get("params_table")
+    if isinstance(incoming, dict) and isinstance(existing, dict):
+        table = {**existing}
+        for title, values in incoming.items():
+            base = table.get(title)
+            table[title] = (
+                {**base, **values} if isinstance(base, dict) and isinstance(values, dict) else values
+            )
+        merged_patch["params_table"] = table
+    stage_facts.update(merged_patch)
+    interview.facts = {**interview.facts, interview.current_stage: stage_facts}
 
 
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
@@ -369,9 +389,7 @@ async def _run_skip_turn(
         model, InterviewerOut,
     )
     if out.facts_patch:
-        new_facts = dict(interview.facts.get(interview.current_stage) or {})
-        new_facts.update(out.facts_patch)
-        interview.facts = {**interview.facts, interview.current_stage: new_facts}
+        _merge_stage_facts(interview, out.facts_patch)
     _append(db, interview, seq + 1, "consultant", "question", out.message,
             payload={"options": out.options} if out.options else None)
     return TurnResult(draw_due=_draw_due(pre_stage, interview, out))
@@ -439,9 +457,7 @@ async def run_turn(
 
     # facts 병합 — 현재 스테이지 네임스페이스에만
     if out.facts_patch:
-        stage_facts = dict(interview.facts.get(interview.current_stage) or {})
-        stage_facts.update(out.facts_patch)
-        interview.facts = {**interview.facts, interview.current_stage: stage_facts}
+        _merge_stage_facts(interview, out.facts_patch)
 
     _append(db, interview, seq + 1, "consultant", "question", out.message,
             payload={"options": out.options} if out.options else None)

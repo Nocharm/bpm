@@ -598,6 +598,68 @@ async def draw_interview_proposals(
     return await _state_out(session, loaded)
 
 
+# params 표 반영 — AI 0콜 결정적 적용 (speed redesign 후속, 실사용 피드백 2026-07-27)
+_PARAM_FIELDS = ("duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte")
+_PARAM_UNKNOWN_TOKENS = {"미정", "TBD", "tbd", "-"}
+_PARAMS_APPLIED_NOTICE = {
+    "ko": "확정된 파라미터를 활동 {n}개에 반영했습니다.",
+    "en": "Applied the confirmed parameters to {n} activities.",
+}
+
+
+@router.post("/interviews/{interview_id}/apply-params", response_model=InterviewStateOut)
+async def apply_interview_params(
+    interview_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """수집된 params_table을 작업본 attributes에 결정적으로 반영 — 제목 매칭, AI 무관(즉시)."""
+    _require_ai_enabled()
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    table = (interview.facts.get("params") or {}).get("params_table") or {}
+    if not isinstance(table, dict) or not table:
+        raise HTTPException(status_code=400, detail="no collected parameters")
+
+    graph = interview.working_graph or {"nodes": [], "edges": [], "groups": []}
+    by_title = {str(k).strip(): v for k, v in table.items() if isinstance(v, dict)}
+    applied = 0
+    nodes = []
+    for raw in graph.get("nodes", []):
+        node = dict(raw)
+        values = by_title.get((node.get("title") or "").strip())
+        if values:
+            attributes = dict(node.get("attributes") or {})
+            touched = False
+            for field in _PARAM_FIELDS:
+                value = values.get(field)
+                text = str(value).strip() if value is not None else ""
+                if text and text not in _PARAM_UNKNOWN_TOKENS:
+                    attributes[field] = text
+                    touched = True
+            if touched:
+                node["attributes"] = attributes
+                applied += 1
+        nodes.append(node)
+    if applied == 0:
+        raise HTTPException(
+            status_code=409, detail="no matching activities for the collected parameters"
+        )
+    interview.working_graph = {**graph, "nodes": nodes}
+    session.add(InterviewMessage(
+        session_id=interview.id,
+        seq=max((m.seq for m in interview.messages), default=0) + 1,
+        role="consultant", kind="notice",
+        content=_PARAMS_APPLIED_NOTICE.get(interview.lang, _PARAMS_APPLIED_NOTICE["ko"]).format(n=applied),
+        stage=interview.current_stage,
+    ))
+    interview.updated_at = now_kst()
+    await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    return await _state_out(session, loaded)
+
+
 @router.post("/interviews/{interview_id}/attachments", response_model=InterviewAttachmentOut)
 async def upload_attachment(
     interview_id: int,

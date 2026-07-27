@@ -128,15 +128,40 @@ def test_structure_stage_completion_signals_multi_draw() -> None:
     assert result.draw_due == "multi"
 
 
-def test_review_entry_signals_single_draw() -> None:
-    """review로 전이한 턴은 draw_due == 'single'."""
+def test_params_completion_signals_params_table() -> None:
+    """params 완료 전이는 그리지 않는다 — 수집 표가 있으면 draw_due == 'params' (표 확정 흐름)."""
     db = _FakeDb()
-    interview = _session(current_stage="params")
+    interview = _session(current_stage="params",
+                         facts={"params": {"params_table": {"요청서 작성": {"duration": "0.30"}}}})
     reply = json.dumps({"message": "파라미터 끝", "facts_patch": {"params_done": "yes"},
                         "stage_complete": True})
     _, result = _run(db, interview, InterviewTurnIn(type="answer", content="확정"), [reply])
     assert interview.current_stage == "review"
-    assert result.draw_due == "single"
+    assert result.draw_due == "params"
+
+
+def test_params_completion_without_table_no_autodraw() -> None:
+    db = _FakeDb()
+    interview = _session(current_stage="params")
+    reply = json.dumps({"message": "파라미터 없음", "facts_patch": {"params_done": "yes"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="answer", content="넘어가"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due is None
+
+
+def test_params_table_deep_merges_across_turns() -> None:
+    """params_table은 활동별 딥머지 — 통짜 교체로 이전 턴 확정분이 유실되지 않는다."""
+    db = _FakeDb()
+    interview = _session(current_stage="params",
+                         facts={"params": {"params_table": {"A": {"duration": "0.30"}}}})
+    reply = json.dumps({"message": "확인", "facts_patch": {
+        "params_table": {"A": {"cost_krw": "1000"}, "B": {"headcount": "2"}},
+    }})
+    _run(db, interview, InterviewTurnIn(type="answer", content="B는 2명"), [reply])
+    table = interview.facts["params"]["params_table"]
+    assert table["A"] == {"duration": "0.30", "cost_krw": "1000"}
+    assert table["B"] == {"headcount": "2"}
 
 
 def test_redraw_request_signals_single_draw_without_drafter_call() -> None:
