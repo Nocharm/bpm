@@ -611,9 +611,12 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     id,
     title: node.title,
     description: node.description,
-    // 링크 없는 subprocess는 process로 강등 — linked_map_id는 바로 아래서 null 고정이라
-    // node_type만 subprocess면 칩/인스펙터에 값이 렌더되지 않는 죽은 상태가 된다(finding)
-    node_type: coerceAiNewNodeType(node.node_type),
+    // 링크 없는 subprocess는 process로 강등 — 링크가 실린 subprocess(P2 유사 SP 수락)만
+    // 실제 Call Activity로 생성 (csv-import buildGraphFromAiProposal과 대칭)
+    node_type:
+      node.node_type === "subprocess" && node.linked_map_id
+        ? "subprocess"
+        : coerceAiNewNodeType(node.node_type),
     color: attr?.color ?? "",
     assignee: attr?.assignee ?? "",
     department: attr?.department ?? "",
@@ -634,7 +637,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     pos_y: 0,
     sort_order: 0,
     group_ids: groupId ? [groupId] : [],
-    linked_map_id: null,
+    linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : null,
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,

@@ -128,6 +128,30 @@ def _sanitize_word_graph(graph: dict, doc_sections: list[dict]) -> tuple[dict, i
     return {**graph, "nodes": nodes}, demoted
 
 
+def _sanitize_subprocess(graph: dict, prev: dict | None) -> dict:
+    """AI 출력의 subprocess는 이전 작업본에 실존하는 링크(제목 매칭)만 유지 — 환각은 process 강등.
+
+    링크 대상(linked_map_id)은 AI 응답이 아닌 이전 작업본이 단일 진실원 (word 앵커 사니타이즈와 동형).
+    """
+    prev_links = {
+        n.get("title"): n.get("linked_map_id")
+        for n in (prev or {}).get("nodes", [])
+        if n.get("node_type") == "subprocess" and n.get("linked_map_id")
+    }
+    nodes = []
+    for raw in graph.get("nodes", []):
+        node = dict(raw)
+        if node.get("node_type") == "subprocess":
+            linked = prev_links.get(node.get("title"))
+            if linked:
+                node["linked_map_id"] = linked
+            else:
+                node["node_type"] = "process"
+                node.pop("linked_map_id", None)
+        nodes.append(node)
+    return {**graph, "nodes": nodes}
+
+
 def _word_catalog_text(interview: InterviewSession, doc_sections: list[dict] | None) -> str:
     if interview.mode != "word" or not doc_sections:
         return ""
@@ -180,7 +204,7 @@ async def _generate_choices(
         if isinstance(result, BaseException) or result.kind != "graph":
             logger.warning("interview choice %d failed: %s", i, result)
             continue
-        graph = _graph_from_proposal(result)
+        graph = _sanitize_subprocess(_graph_from_proposal(result), interview.working_graph)
         if interview.mode == "word" and doc_sections:
             graph, _ = _sanitize_word_graph(graph, doc_sections)
         options.append({
@@ -263,7 +287,7 @@ async def _redraft(
             model, AiProposal,
         )
         if proposal.kind == "graph" and proposal.nodes:
-            graph = _graph_from_proposal(proposal)
+            graph = _sanitize_subprocess(_graph_from_proposal(proposal), interview.working_graph)
             demoted = 0
             if interview.mode == "word" and doc_sections:
                 graph, demoted = _sanitize_word_graph(graph, doc_sections)

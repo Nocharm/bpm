@@ -1162,7 +1162,8 @@ class EligibleAssigneesOut(BaseModel):
 
 
 # "section"은 word 맵 변환 모드 드래프터 출력 — 앵커 실존 검증은 orchestrator._sanitize_word_graph (design 2026-07-26 §4)
-AI_NODE_TYPES = {"start", "process", "decision", "end", "section"}
+# subprocess는 P2 유사 SP 수락으로 작업본에 존재할 수 있어 에코 허용 — 환각은 orchestrator가 강등
+AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
 class AppSettingsOut(BaseModel):
@@ -1302,6 +1303,9 @@ class AiNode(BaseModel):
     attributes: AiNodeAttributes | None = None
     # 소속 그룹 — AiProposal.groups[].key 참조 (단일 태그). null=무소속
     group_key: str | None = Field(default=None, max_length=50)
+    # 서브프로세스 링크 대상 — 진실원은 서버(orchestrator._sanitize_subprocess가 이전 작업본
+    # 기준으로 강제). AI 에코가 값을 실어 보낼 수 있게만 열어둔다 (design 2026-07-23 §7 P2)
+    linked_map_id: int | None = None
 
 
 class AiEdge(BaseModel):
@@ -1491,6 +1495,12 @@ class InterviewAttachmentOut(BaseModel):
     status: str
     error: str
     created_at: datetime
+
+
+class InterviewSpAcceptIn(BaseModel):
+    """유사 SP 제안 수락 — 제안 메시지 id로 대상 구간·맵을 특정 (design 2026-07-23 §7 P2)."""
+
+    message_id: int
 
 
 class KbDocumentOut(BaseModel):

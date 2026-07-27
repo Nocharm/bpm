@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-27 — P2 지식기반 Tasks 7~9 완료: 유사 SP 제안·프론트·문서 (worktree-ai-consultant)
+- **Task 7 유사 SP 제안(백엔드)**: `kb/sp_suggest.py` — 분기 없는 연속 process 체인(3+) 추출 → map 코퍼스 top-1(임계 0.65, 자기 맵·기링크 맵·비가시 맵 제외) → activities/review 턴에 `sp_suggestion` 메시지(맵당 1회). 수락은 `POST /interviews/{id}/sp-accept`가 결정적 치환(subprocess 링크 노드+엣지 재배선+노티스, 제안 메시지 superseded).
+- **AI 계약 확장**: AI_NODE_TYPES에 subprocess 추가 + orchestrator `_sanitize_subprocess`(이전 작업본에 실존하는 링크만 제목 매칭 유지, 환각은 process 강등 — word 앵커 사니타이즈와 동형). 세션 시드도 링크 있는 subprocess 유지.
+- **Task 8 프론트**: AiNode.linked_map_id 스레딩(AI 변환 2곳 — buildGraphFromAiProposal candidate/mergeNode·page aiNodeToGraphNode: 링크 있는 subprocess만 실제 Call Activity로, 무링크는 기존 강등 유지) · 캔버스 SP 제안 카드(iv-sp-card, Replace/Dismiss/새 탭 링크) · 설정 Knowledge base 탭(`kb-manage-panel` — 업로드/목록/Indexed 뱃지/삭제, sysadmin) + i18n 2키.
+- **Task 9**: `docs/deploy/kb-embedding.md`(EMBED_* 설정·백필·그레이스풀) + docs 인덱스. 게이트: BE 805·ruff 0 / vitest 566·tsc 0·lint 0에러·build·스모크 3종(consult SP 카드 단언 포함) 그린. **P2 전체 Tasks 1~9 완료 — 실서버 검증 시나리오는 플랜 문서 하단.**
+
 ## 2026-07-27 — P2 지식기반 Tasks 4~6: 인덱싱 워커·라이브러리 API·검색 주입 (worktree-ai-consultant)
 - **Task 4 인덱싱**: `kb/indexing.py` — 루프별 Semaphore(1) 직렬 워커 + `spawn()`(fire-and-forget), 소스별 인덱서 3종(library 문서·map 게시본 직렬화(이름/설명/활동/흐름, 맵 단위 교체)·attachment 세션 스코프), publish 훅(versions.py 커밋 후)·첨부 업로드 훅·첨부 삭제 시 청크 동반 삭제, `scripts/backfill_kb_maps.py`(기존 게시본 1회 백필).
 - **Task 5 라이브러리 API**: `routers/kb.py` — sysadmin 전용 GET/POST/DELETE `/api/kb/documents`(인터뷰 파싱 계약 재사용·chunk_count 동봉·삭제 시 청크+캐시 정리), `KbDocumentOut` 스키마, main 등록.

@@ -1729,6 +1729,8 @@ export interface AiNode {
   attributes: AiNodeAttributes | null;
   // 소속 그룹 — AiProposal.groups[].key 참조. null=무소속
   group_key: string | null;
+  // 서브프로세스 링크 대상 (P2 유사 SP 수락) — 있으면 apply 시 실제 Call Activity 링크로 변환
+  linked_map_id?: number | null;
 }
 
 export interface AiEdge {
@@ -1918,8 +1920,59 @@ export function postInterviewRevert(id: number, stage: string): Promise<Intervie
   });
 }
 
+// 유사 SP 제안 수락 — 제안 구간을 subprocess 링크 노드로 치환한 갱신 상태 반환 (P2)
+export function acceptSpSuggestion(id: number, messageId: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/sp-accept`, {
+    method: "POST",
+    body: JSON.stringify({ message_id: messageId }),
+  });
+}
+
 export function completeInterview(id: number): Promise<InterviewState> {
   return request<InterviewState>(`/interviews/${id}/complete`, { method: "POST" });
+}
+
+// ---------- 지식기반 라이브러리 (P2, sysadmin) ----------
+
+export interface KbDocument {
+  id: number;
+  title: string;
+  filename: string;
+  mime: string;
+  status: string; // parsed | failed
+  uploaded_by: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+export function listKbDocuments(): Promise<KbDocument[]> {
+  return request<KbDocument[]>("/kb/documents");
+}
+
+export async function uploadKbDocument(file: File): Promise<KbDocument> {
+  // multipart — request()의 JSON Content-Type을 쓰면 boundary가 깨져 별도 경로 (첨부 업로드와 동일)
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch("/api/kb/documents", { method: "POST", body: form, headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(
+      `API POST /kb/documents failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return (await response.json()) as KbDocument;
+}
+
+export function deleteKbDocument(id: number): Promise<void> {
+  return request<void>(`/kb/documents/${id}`, { method: "DELETE" });
 }
 
 export function abandonInterview(id: number): Promise<void> {

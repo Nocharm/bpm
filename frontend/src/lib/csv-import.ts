@@ -227,6 +227,8 @@ const mergeNode = (
             : mergedSectionAnchor !== ""
               ? "section"
               : next.node_type,
+      // 기존 링크 우선, 없으면 후보의 링크 채택(P2 유사 SP 수락 스레딩)
+      linked_map_id: existing.linked_map_id ?? next.linked_map_id ?? null,
       description: pick(next.description, existing.description),
       assignee: pick(next.assignee, existing.assignee),
       department: pick(next.department, existing.department),
@@ -763,7 +765,12 @@ export function buildGraphFromAiProposal(
       title,
       // 링크 없는 subprocess는 process로 강등(coerceAiNewNodeType) — 신규 노드도, 아직 링크가 없는
       // 매칭 노드도 이 candidate.node_type을 그대로 쓰므로 한 곳에서 막으면 두 경로가 대칭 유지된다.
-      node_type: coerceAiNewNodeType(node.node_type),
+      // 링크가 실린 subprocess(P2 유사 SP 수락)는 실제 Call Activity로 생성.
+      node_type:
+        node.node_type === "subprocess" && node.linked_map_id
+          ? "subprocess"
+          : coerceAiNewNodeType(node.node_type),
+      linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : NODE_DEFAULTS.linked_map_id,
       description: node.description,
       assignee: attr?.assignee ?? "",
       department: attr?.department ?? "",

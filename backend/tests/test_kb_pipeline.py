@@ -319,3 +319,133 @@ def test_turn_skips_search_when_disabled(client: TestClient, monkeypatch) -> Non
                        json={"type": "answer", "content": "안녕"})
     assert resp.status_code == 200
     client.delete(f"/api/interviews/{state['id']}")
+
+
+# ---------- 유사 SP 제안 (Task 7) ----------
+
+
+def _chain_graph() -> dict:
+    keys = ["c-s", "c-1", "c-2", "c-3", "c-e"]
+    types = {"c-s": "start", "c-e": "end"}
+    return {
+        "nodes": [
+            {"key": k, "title": f"활동 {k}", "node_type": types.get(k, "process"),
+             "description": "", "attributes": None, "group_key": None}
+            for k in keys
+        ],
+        "edges": [{"source": keys[i], "target": keys[i + 1], "label": ""} for i in range(len(keys) - 1)],
+        "groups": [],
+    }
+
+
+def test_find_process_chains_linear_and_branch() -> None:
+    from app.kb import sp_suggest
+
+    chains = sp_suggest.find_process_chains(_chain_graph())
+    assert [[n["key"] for n in c] for c in chains] == [["c-1", "c-2", "c-3"]]
+    # 분기(디시전) 개입 시 체인이 끊긴다
+    branched = _chain_graph()
+    branched["nodes"][2]["node_type"] = "decision"  # c-2
+    assert sp_suggest.find_process_chains(branched) == []
+
+
+def test_sanitize_subprocess_keeps_real_link_and_demotes_hallucination() -> None:
+    from app.interview import orchestrator
+
+    prev = {"nodes": [{"key": "sp-9", "title": "발주 처리", "node_type": "subprocess",
+                       "linked_map_id": 9}], "edges": [], "groups": []}
+    echoed = {
+        "nodes": [
+            {"key": "x1", "title": "발주 처리", "node_type": "subprocess", "linked_map_id": None},
+            {"key": "x2", "title": "없는 링크", "node_type": "subprocess"},
+        ],
+        "edges": [], "groups": [],
+    }
+    cleaned = orchestrator._sanitize_subprocess(echoed, prev)
+    by_key = {n["key"]: n for n in cleaned["nodes"]}
+    assert by_key["x1"]["node_type"] == "subprocess" and by_key["x1"]["linked_map_id"] == 9
+    assert by_key["x2"]["node_type"] == "process" and "linked_map_id" not in by_key["x2"]
+
+
+def _set_interview_state(interview_id: int, stage: str, graph: dict) -> None:
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            row = await session.get(InterviewSession, interview_id)
+            row.current_stage = stage
+            row.working_graph = graph
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def test_turn_appends_sp_suggestion_once(client: TestClient, monkeypatch) -> None:
+    _enable_kb(monkeypatch)
+    target = _make_map(client)  # 제안 대상 맵(실존 — 권한 가드 통과)
+    state = _start_interview(client, monkeypatch)
+    _set_interview_state(state["id"], "activities", _chain_graph())
+
+    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        return ai_client.AiReply(content=_Q)
+
+    monkeypatch.setattr(ai_client, "call_ai", fake_ai)
+
+    async def fake_search(session, query, top_k=5, session_id=None):
+        return [retrieval.KbHit(source_type="map", source_id=target["id"],
+                                chunk_text="유사 맵", score=0.8,
+                                meta={"map_id": target["id"], "map_name": target["name"]})]
+
+    monkeypatch.setattr(retrieval, "search", fake_search)
+    first = client.post(f"/api/interviews/{state['id']}/turns",
+                        json={"type": "answer", "content": "이 흐름 맞아"}).json()
+    suggestions = [m for m in first["messages"] if m["kind"] == "sp_suggestion"]
+    assert len(suggestions) == 1
+    assert suggestions[0]["payload"]["map_id"] == target["id"]
+    assert suggestions[0]["payload"]["node_keys"] == ["c-1", "c-2", "c-3"]
+    # 같은 맵은 재제안하지 않는다
+    second = client.post(f"/api/interviews/{state['id']}/turns",
+                         json={"type": "answer", "content": "응"}).json()
+    assert len([m for m in second["messages"] if m["kind"] == "sp_suggestion"]) == 1
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_sp_accept_replaces_segment_with_link_node(client: TestClient, monkeypatch) -> None:
+    _enable_kb(monkeypatch)
+    target = _make_map(client)
+    state = _start_interview(client, monkeypatch)
+    _set_interview_state(state["id"], "activities", _chain_graph())
+
+    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        return ai_client.AiReply(content=_Q)
+
+    monkeypatch.setattr(ai_client, "call_ai", fake_ai)
+
+    async def fake_search(session, query, top_k=5, session_id=None):
+        return [retrieval.KbHit(source_type="map", source_id=target["id"],
+                                chunk_text="유사 맵", score=0.8,
+                                meta={"map_id": target["id"], "map_name": target["name"]})]
+
+    monkeypatch.setattr(retrieval, "search", fake_search)
+    turned = client.post(f"/api/interviews/{state['id']}/turns",
+                         json={"type": "answer", "content": "맞아"}).json()
+    suggestion = next(m for m in turned["messages"] if m["kind"] == "sp_suggestion")
+
+    accepted = client.post(f"/api/interviews/{state['id']}/sp-accept",
+                           json={"message_id": suggestion["id"]})
+    assert accepted.status_code == 200
+    body = accepted.json()
+    nodes = {n["key"]: n for n in body["working_graph"]["nodes"]}
+    assert f"sp-{target['id']}" in nodes
+    sp = nodes[f"sp-{target['id']}"]
+    assert sp["node_type"] == "subprocess" and sp["linked_map_id"] == target["id"]
+    assert not {"c-1", "c-2", "c-3"} & set(nodes)  # 구간 제거
+    edge_pairs = {(e["source"], e["target"]) for e in body["working_graph"]["edges"]}
+    assert ("c-s", f"sp-{target['id']}") in edge_pairs
+    assert (f"sp-{target['id']}", "c-e") in edge_pairs
+    # 제안 메시지는 superseded, 수락 노티스 추가
+    live = [m for m in body["messages"] if not m["superseded"]]
+    assert all(m["kind"] != "sp_suggestion" for m in live)
+    assert any(m["kind"] == "notice" and "대체" in m["content"] for m in live)
+    # 재수락은 404 (superseded)
+    assert client.post(f"/api/interviews/{state['id']}/sp-accept",
+                       json={"message_id": suggestion["id"]}).status_code == 404
+    client.delete(f"/api/interviews/{state['id']}")
