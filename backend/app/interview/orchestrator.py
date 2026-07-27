@@ -135,10 +135,32 @@ def _word_catalog_text(interview: InterviewSession, doc_sections: list[dict] | N
     return format_section_catalog(doc_sections, language)
 
 
+def _graph_signature(graph: dict | None) -> tuple:
+    """구조 시그니처 — 임시키가 아닌 제목 기준으로 노드·엣지·그룹을 정규화해 안 간 동일성을 판정.
+
+    설명·attributes 차이는 무시한다 — 화면(순서도)에서 같아 보이는 안은 같은 안이다.
+    """
+    if not graph:
+        return ()
+    titles = {n.get("key"): (n.get("title") or "").strip() for n in graph.get("nodes", [])}
+    group_labels = {g.get("key"): (g.get("label") or "").strip() for g in graph.get("groups", [])}
+    nodes = sorted(
+        (n.get("node_type") or "", (n.get("title") or "").strip(),
+         group_labels.get(n.get("group_key") or "", ""))
+        for n in graph.get("nodes", [])
+    )
+    edges = sorted(
+        (titles.get(e.get("source"), ""), titles.get(e.get("target"), ""),
+         (e.get("label") or "").strip())
+        for e in graph.get("edges", [])
+    )
+    return (tuple(nodes), tuple(edges), tuple(sorted(group_labels.values())))
+
+
 async def _generate_choices(
     interview: InterviewSession, context_text: str, model: str | None,
     doc_sections: list[dict] | None = None,
-) -> dict:
+) -> dict | None:
     hints = CHOICE_VARIANT_HINTS.get(interview.current_stage, [])
     count = max(1, min(settings.interview_choice_count, 3, len(hints) or 1))
     tasks = [
@@ -169,7 +191,19 @@ async def _generate_choices(
         })
     if not options:
         raise TurnError("AI failed to generate choices")
-    return {"options": options}
+    # 무변화·중복 안 필터 — 현재 작업본과 같은 안, 서로 같은 안은 제시 의미가 없다 (실사용 피드백 2026-07-27)
+    current_sig = _graph_signature(interview.working_graph)
+    seen: set[tuple] = set()
+    distinct = []
+    for option in options:
+        sig = _graph_signature(option["graph"])
+        if sig == current_sig or sig in seen:
+            continue
+        seen.add(sig)
+        distinct.append(option)
+    if not distinct:
+        return None  # 전부 현재 작업본과 동일 — 선택지 없이 일반 턴으로 계속
+    return {"options": distinct}
 
 
 async def _tone_review(
@@ -386,9 +420,11 @@ async def run_turn(
     # 선택지 병렬 생성 — 구조 결정 스테이지에서만, 선택 턴 직후는 제외
     if out.needs_choices and stage.choice_stage and turn.type != "choice":
         choices = await _generate_choices(interview, context_text, model, doc_sections)
-        interview.pending_choices = choices
-        _append(db, interview, seq + 1, "consultant", "choices", out.message, payload=choices)
-        return
+        if choices is not None:
+            interview.pending_choices = choices
+            _append(db, interview, seq + 1, "consultant", "choices", out.message, payload=choices)
+            return
+        # 유효한 새 안이 없음(전부 무변화/중복 필터) — 선택지 없이 일반 턴으로 이어간다
 
     # 연속 드래프트 — facts가 갱신됐거나 사용자가 맵 갱신을 요청(redraw)한 일반 턴이면 재생성
     # (실사용 회귀 2026-07-24: 선택지 시점에만 그리면 대화 내내 맵이 정지). 실패는 턴을 죽이지 않는다.

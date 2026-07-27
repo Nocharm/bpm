@@ -1850,6 +1850,8 @@ export interface InterviewMessage {
 export interface InterviewCheckpoint {
   stage: string;
   message_seq: number;
+  // 클릭 프리뷰용 스냅샷 — 확정 전 캔버스만 이 그래프로 되돌려 보여준다
+  working_graph: WorkingGraph | null;
   created_at: string;
 }
 

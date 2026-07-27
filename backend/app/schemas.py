@@ -1476,6 +1476,8 @@ class InterviewCheckpointOut(BaseModel):
 
     stage: str
     message_seq: int
+    # 프론트 체크포인트 클릭 프리뷰용 — 확정 전 맵만 먼저 되돌려 보여준다 (실사용 피드백 2026-07-27)
+    working_graph: dict | None = None
     created_at: datetime
 
 

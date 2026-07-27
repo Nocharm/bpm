@@ -59,9 +59,13 @@ CHOICE_VARIANT_HINTS: dict[str, list[str]] = {
     ],
 }
 
+# 세션 언어가 기본값이되, 사용자가 다른 언어로 말하면 그 언어를 따른다 (실사용 피드백 2026-07-27)
 _LANG_LINE = {
-    "ko": "모든 message와 질문은 한국어로 작성하세요.",
-    "en": "Write all messages and questions in English.",
+    "ko": "모든 message와 질문은 한국어로 작성하세요. 단, 사용자의 최근 메시지가 다른 언어면 그 언어로 답하세요.",
+    "en": (
+        "Write all messages and questions in English. However, if the user's latest message is in "
+        "another language (e.g. Korean), mirror it and reply in that language instead."
+    ),
 }
 
 # 카탈로그 프롬프트 상한 — 초대형 SOP도 프롬프트를 깨지 않게 (300줄 ≈ 대형 문서 전체 수준)
@@ -108,7 +112,7 @@ _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 
 
 _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정된 facts로 순서도 그래프를 생성합니다.
 반드시 아래 JSON 하나만 반환 (kind는 항상 "graph"):
-{"kind": "graph", "message": <이 안의 특징 한 줄>,
+{"kind": "graph", "message": <이 안만의 차별점 한 줄 — 어떤 안에나 해당할 일반 설명은 금지, [이 안의 방향]이 그래프에 어떻게 반영됐는지만 간결히>,
  "nodes": [{"key": <임시키>, "title": <제목>, "node_type": "start|process|decision|end",
             "description": <설명>, "attributes": {"assignee": …, "department": …, "system": …,
             "duration": …, "cost_krw": …, "headcount": …, "annual_count": …, "fte": …} 또는 생략,

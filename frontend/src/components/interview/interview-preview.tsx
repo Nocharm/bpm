@@ -14,17 +14,20 @@ import {
   completeInterview, getApiErrorDetail, getGraph, postInterviewRevert, saveGraph,
   type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
-import { addedNodeKeys, distinctiveNodeKeys, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
+import { addedNodeKeys, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
 import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
 import { ProcessNode } from "@/components/process-node";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ChoiceWindow } from "@/components/interview/choice-card";
+import { ChoiceOverlay } from "@/components/interview/choice-card";
 import { MENTION_EVENT } from "@/components/interview/interview-panel";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
+
+// 체크포인트 프리뷰 중 신규 하이라이트 억제용 — 렌더마다 새 Set이면 재레이아웃이 돈다
+const NO_ADDED = new Set<string>();
 
 // compare의 COMPARE_NODE_ACTIONS와 동일 — ProcessNode가 요구하는 읽기전용 context
 const PREVIEW_NODE_ACTIONS: NodeActions = {
@@ -161,7 +164,9 @@ export function InterviewPreview({
 }: InterviewPreviewProps) {
   const router = useRouter();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [revertStage, setRevertStage] = useState<string | null>(null);
+  // 체크포인트 클릭 = 맵만 먼저 프리뷰, 확정 버튼으로 실제 revert (실사용 피드백 2026-07-27)
+  const [previewStage, setPreviewStage] = useState<string | null>(null);
+  const [revertBusy, setRevertBusy] = useState(false);
   // 노드 클릭 인스펙터 — 파라미터·담당 정보를 컨설턴트 모드 안에서 확인 (실사용 피드백 2026-07-24)
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -212,14 +217,28 @@ export function InterviewPreview({
   }
 
   async function handleRevert() {
-    if (!interview || !revertStage) return;
-    const state = await postInterviewRevert(interview.id, revertStage);
-    onUpdated(state);
-    setRevertStage(null);
+    if (!interview || !previewStage || revertBusy) return;
+    setRevertBusy(true);
+    try {
+      const state = await postInterviewRevert(interview.id, previewStage);
+      onUpdated(state);
+      setPreviewStage(null);
+    } finally {
+      setRevertBusy(false);
+    }
   }
 
   // 최근 체크포인트가 맨 위 — 새 항목이 위로 들어오며 아래로 밀리는 스택 (요구 6)
   const checkpointsNewestFirst = [...(interview?.checkpoints ?? [])].reverse();
+  // 프리뷰 대상 — 같은 스테이지가 여럿이면 최신(백엔드 revert 대상 선택과 동일 규칙)
+  const previewCp = previewStage
+    ? checkpointsNewestFirst.find((c) => c.stage === previewStage) ?? null
+    : null;
+  const previewLabel = previewCp
+    ? stagesForMode(interview?.mode).find((s) => s.key === previewCp.stage)?.label ?? previewCp.stage
+    : "";
+  // 프리뷰 중엔 체크포인트 스냅샷을 캔버스에 — 신규 하이라이트는 끈다
+  const displayGraph = previewCp ? previewCp.working_graph : graph;
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col bg-canvas" data-id="interview-preview">
@@ -234,16 +253,18 @@ export function InterviewPreview({
       <ReactFlowProvider>
         <NodeActionsContext.Provider value={PREVIEW_NODE_ACTIONS}>
           <div ref={wrapperRef} className="iv-preview-flow relative min-h-0 flex-1">
-            {graph && graph.nodes.length > 0 ? (
+            {displayGraph && displayGraph.nodes.length > 0 ? (
               <PreviewCanvas
-                graph={graph}
-                added={added}
+                graph={displayGraph}
+                added={previewCp ? NO_ADDED : added}
                 wrapperRef={wrapperRef}
                 onNodeClick={setInspectedKey}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-caption text-ink-muted">
-                The map will appear here as the interview progresses.
+                {previewCp
+                  ? "This checkpoint has no map yet."
+                  : "The map will appear here as the interview progresses."}
               </div>
             )}
             {/* 워터마크 — 비교화면 read-only 워터마크 재활용(z-4, 노드 위 투과) */}
@@ -258,15 +279,19 @@ export function InterviewPreview({
                 {checkpointsNewestFirst.map((cp, i) => {
                   const label =
                     stagesForMode(interview?.mode).find((s) => s.key === cp.stage)?.label ?? cp.stage;
+                  const active = cp.stage === previewStage;
                   return (
                     <button
                       key={`${cp.stage}-${cp.message_seq}`}
                       className={
-                        "iv-cp-chip flex items-center gap-1.5 rounded-sm border border-hairline bg-surface px-2 py-1 text-fine shadow-sm hover:bg-surface-alt " +
-                        (i === 0 ? "text-ink" : "text-ink-tertiary")
+                        "iv-cp-chip flex items-center gap-1.5 rounded-sm border px-2 py-1 text-fine shadow-sm " +
+                        (active
+                          ? "border-accent bg-accent-tint text-accent"
+                          : "border-hairline bg-surface hover:bg-surface-alt " +
+                            (i === 0 ? "text-ink" : "text-ink-tertiary"))
                       }
-                      onClick={() => setRevertStage(cp.stage)}
-                      title={`Go back to ${label}`}
+                      onClick={() => setPreviewStage(active ? null : cp.stage)}
+                      title={`Preview the map at ${label}`}
                       data-id={`iv-checkpoint-${cp.stage}`}
                     >
                       <Undo2 size={16} strokeWidth={1.5} className="shrink-0" />
@@ -276,10 +301,39 @@ export function InterviewPreview({
                 })}
               </div>
             ) : null}
+            {/* 체크포인트 프리뷰 바 — 맵만 먼저 되돌려 보여주고, 확정해야 실제 revert */}
+            {previewCp ? (
+              <div
+                className="absolute left-1/2 top-3 z-10 flex max-w-[calc(100%-14rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-1.5 shadow-md"
+                data-id="iv-cp-preview"
+              >
+                <Undo2 size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                <span className="truncate text-caption text-ink-secondary">
+                  Previewing “{previewLabel}” — going back sets aside later messages and map changes.
+                </span>
+                <button
+                  className="shrink-0 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setPreviewStage(null)}
+                  data-id="iv-cp-cancel"
+                >
+                  Keep current
+                </button>
+                <button
+                  className="shrink-0 rounded-sm bg-accent px-2.5 py-0.5 text-caption-strong text-on-accent disabled:opacity-40"
+                  disabled={revertBusy}
+                  onClick={() => {
+                    void handleRevert();
+                  }}
+                  data-id="iv-cp-confirm"
+                >
+                  Go back here
+                </button>
+              </div>
+            ) : null}
             {/* 노드 인스펙터 — 클릭한 노드의 담당·시스템·회당 파라미터 확인 (읽기전용) */}
             {(() => {
               const node = inspectedKey
-                ? graph?.nodes.find((n) => n.key === inspectedKey)
+                ? displayGraph?.nodes.find((n) => n.key === inspectedKey)
                 : undefined;
               if (!node) return null;
               const attrs = node.attributes;
@@ -329,26 +383,9 @@ export function InterviewPreview({
                 </div>
               );
             })()}
-            {/* 선택지 플로팅 창 — 복수 안을 캔버스 위에 나란히, 선택하면 모두 닫힘 (요구 2) */}
+            {/* 선택지 플로팅 창 — 복수 안을 캔버스 위에, 3안은 큰 창 1+작은 창 2(탭 전환), 선택하면 모두 닫힘 */}
             {choices && choices.length > 0 ? (
-              <div
-                className="absolute inset-0 z-20 flex items-center justify-center gap-4 overflow-auto bg-ink/10 p-6"
-                data-id="iv-choice-overlay"
-              >
-                {(() => {
-                  // 복수 안일 때 안 간 차이 노드(모든 안에 공통이 아닌 제목)를 하이라이트
-                  const highlight = distinctiveNodeKeys(choices);
-                  return choices.map((option) => (
-                    <ChoiceWindow
-                      key={option.id}
-                      option={option}
-                      disabled={busy}
-                      onChoose={onChoose}
-                      highlight={highlight.get(option.id) ?? new Set()}
-                    />
-                  ));
-                })()}
-              </div>
+              <ChoiceOverlay choices={choices} busy={busy} onChoose={onChoose} />
             ) : null}
           </div>
         </NodeActionsContext.Provider>
@@ -371,19 +408,6 @@ export function InterviewPreview({
           <span className="ml-auto text-fine text-error" data-id="iv-apply-error">{applyError}</span>
         ) : null}
       </div>
-      {revertStage ? (
-        <ConfirmDialog
-          title="Go back to a previous stage?"
-          message="Messages and map changes after this checkpoint will be set aside."
-          confirmLabel="Go back"
-          cancelLabel="Cancel"
-          danger
-          onConfirm={() => {
-            void handleRevert();
-          }}
-          onClose={() => setRevertStage(null)}
-        />
-      ) : null}
       {applyOpen ? (
         <ConfirmDialog
           title="Apply the interview result to the draft?"

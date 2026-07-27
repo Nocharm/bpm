@@ -68,6 +68,19 @@ DRAFT = json.dumps({
     "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
     "groups": [],
 })
+# DRAFT와 구조가 다른 두 번째 안 — 선택지 중복 필터를 통과해야 하는 케이스
+DRAFT_B = json.dumps({
+    "kind": "graph", "message": "세밀안",
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start"},
+        {"key": "a", "title": "요청서 작성", "node_type": "process"},
+        {"key": "b", "title": "견적 비교", "node_type": "process"},
+        {"key": "e", "title": "끝", "node_type": "end"},
+    ],
+    "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "b"},
+              {"source": "b", "target": "e"}],
+    "groups": [],
+})
 TONE = json.dumps({"message": "표준 부합", "renames": [{"key": "a", "title": "요청서 접수"}]})
 
 
@@ -114,12 +127,45 @@ def test_choices_generated_in_parallel_and_pending_set(monkeypatch: pytest.Monke
                          facts={"scope": {"process_name": "구매", "purpose": "p", "boundaries": "b"},
                                 "io": {"trigger": "t", "inputs": "i", "outputs": "o"}})
     state = _run(db, interview, InterviewTurnIn(type="answer", content="활동 보여줘"),
-                 [INTERVIEWER_CHOICES, DRAFT, DRAFT])
+                 [INTERVIEWER_CHOICES, DRAFT, DRAFT_B])
     assert state["peak"] == 2  # 드래프터 2안 병렬
     assert interview.pending_choices is not None
     assert len(interview.pending_choices["options"]) == 2
     consultant = [m for m in db.added if m.role == "consultant"][-1]
     assert consultant.kind == "choices"
+
+
+def test_duplicate_choice_options_are_deduped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """구조가 같은 안은 하나만 남는다 — 임시키가 달라도 제목 기준으로 판정 (실사용 피드백 2026-07-27)."""
+    monkeypatch.setattr(settings, "interview_choice_count", 2)
+    db = _FakeDb()
+    # DRAFT와 노드 키만 다른 동일 구조 안
+    dup = json.loads(DRAFT)
+    dup["nodes"] = [{**n, "key": f"x-{n['key']}"} for n in dup["nodes"]]
+    dup["edges"] = [{**e, "source": f"x-{e['source']}", "target": f"x-{e['target']}"} for e in dup["edges"]]
+    interview = _session(current_stage="activities", facts={"activities": {}})
+    _run(db, interview, InterviewTurnIn(type="answer", content="안 보여줘"),
+         [INTERVIEWER_CHOICES, DRAFT, json.dumps(dup)])
+    assert interview.pending_choices is not None
+    assert len(interview.pending_choices["options"]) == 1
+
+
+def test_all_choices_identical_to_working_graph_falls_back_to_plain_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """전 안이 현재 작업본과 동일하면 선택지 없이 일반 턴으로 이어간다 (실사용 피드백 2026-07-27)."""
+    monkeypatch.setattr(settings, "interview_choice_count", 1)
+    db = _FakeDb()
+    current = json.loads(DRAFT)
+    current.pop("kind", None)
+    current.pop("message", None)
+    interview = _session(current_stage="activities", working_graph=current,
+                         facts={"activities": {}})
+    _run(db, interview, InterviewTurnIn(type="answer", content="다른 안 있어?"),
+         [INTERVIEWER_CHOICES, DRAFT])
+    assert interview.pending_choices is None
+    consultant = [m for m in db.added if m.role == "consultant"][-1]
+    assert consultant.kind == "question"  # choices 메시지가 아닌 일반 질문으로 폴백
 
 
 def test_choice_turn_applies_graph_and_clears_pending() -> None:

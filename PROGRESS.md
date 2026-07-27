@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-27 — 인터뷰 GPU 실검증 2차 피드백 4종 (worktree-ai-consultant)
+- **체크포인트 클릭 = 맵 프리뷰 먼저**: 좌상단 체크포인트를 누르면 즉시 revert하지 않고 캔버스만 스냅샷으로 되돌려 보여줌(신규 하이라이트 억제·인스펙터도 스냅샷 기준) + 상단 프리뷰 바(Keep current/Go back here)로 확정 시에만 실제 revert. `InterviewCheckpointOut.working_graph` 노출 추가(백엔드).
+- **언어 미러링**: 세션 언어가 영어라도 사용자가 한글로 답하면 한글로 응답하도록 `_LANG_LINE` 계약 확장(ko/en 대칭).
+- **선택지 무변화·중복 필터**: `_graph_signature`(제목 기준 구조 정규화 — 임시키·설명·attributes 무시)로 현재 작업본과 동일한 안·서로 중복인 안 제거, 전부 걸러지면 선택지 없이 일반 턴 폴백(TurnError 아님). 테스트 2종 추가.
+- **선택지 레이아웃 재설계**: 3안=좌측 큰 창 1+우측 작은 창 2(탭·작은 창 헤더 클릭으로 큰 창 교체), 2안=1:1, 1안=큰 창 하나 — `ChoiceOverlay` 신설(`iv-choice-tab`·`data-focused`). 드래프터 summary는 "이 안만의 차별점 한 줄"로 유도(공통 설명 금지).
+- 게이트: BE 776(+2)·ruff 0 / vitest 562·tsc 0·lint 0에러·build·pw-smoke-consult(+word) 그린.
+
 ## 2026-07-27 — 개발(dev) 스택 브리지 서브넷 172.42→172.44 (worktree-ai-consultant)
 - 서버 지정값 반영: `docker-compose.dev.yml` subnet/gateway를 172.44.0.0/16·172.44.0.1로 변경(172.42는 기존 스택 점유).
 

@@ -30,16 +30,21 @@ const afterAnswer = {
       payload: { options: [
         { id: "opt-1", title: "Standard", summary: "6 steps", graph: graph(["s", "a", "e"]) },
         { id: "opt-2", title: "Detailed", summary: "9 steps", graph: graph(["s", "a", "b", "e"]) },
+        { id: "opt-3", title: "Compact", summary: "2 steps", graph: graph(["s", "e"]) },
       ] }, superseded: false, created_at: "2026-07-23T10:01:05+09:00" }],
 };
 
 const afterChoice = {
-  ...afterAnswer, working_graph: graph(["s", "a", "e"]),
-  checkpoints: [{ stage: "activities", message_seq: 5, created_at: "2026-07-23T10:02:00+09:00" }],
+  ...afterAnswer, working_graph: graph(["s", "a", "b", "e"]),
+  checkpoints: [{ stage: "activities", message_seq: 5, working_graph: graph(["s", "e"]), created_at: "2026-07-23T10:02:00+09:00" }],
   messages: [...afterAnswer.messages,
-    { id: 4, seq: 4, role: "user", kind: "choice", content: "opt-1", payload: { choice_id: "opt-1" }, stage: "activities", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
+    { id: 4, seq: 4, role: "user", kind: "choice", content: "opt-2", payload: { choice_id: "opt-2" }, stage: "activities", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
     { id: 5, seq: 5, role: "consultant", kind: "question", content: "역할을 알려주세요.", payload: null, stage: "roles", superseded: false, created_at: "2026-07-23T10:02:05+09:00" }],
 };
+
+// 체크포인트 확정(revert) 후 상태 — 작업본이 스냅샷으로 복원, 해당 체크포인트는 제거.
+// message_seq(5) 이후 메시지가 없으므로 superseded 변화는 없음(실 백엔드와 동일 규칙).
+const afterRevert = { ...afterChoice, working_graph: graph(["s", "e"]), checkpoints: [] };
 
 const run = async () => {
   const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -58,6 +63,7 @@ const run = async () => {
     turnCount += 1;
     r.fulfill({ json: turnCount === 1 ? afterAnswer : afterChoice });
   });
+  await page.route("**/api/interviews/1/revert", (r) => r.fulfill({ json: afterRevert }));
   await page.route("**/api/notifications*", (r) =>
     r.fulfill({ json: [] }),
   );
@@ -93,13 +99,36 @@ const run = async () => {
   await page.click('[data-id="iv-send"]');
   await page.waitForSelector('[data-id="iv-choice-card"]');
   const cards = await page.$$('[data-id="iv-choice-card"]');
-  if (cards.length !== 2) throw new Error(`expected 2 choice cards, got ${cards.length}`);
+  if (cards.length !== 3) throw new Error(`expected 3 choice cards, got ${cards.length}`);
+  // 3안 레이아웃(2026-07-27): 큰 창 1 + 작은 창 2 + 탭 — 탭 클릭으로 큰 창 교체
+  const tabs = await page.$$('[data-id="iv-choice-tab"]');
+  if (tabs.length !== 3) throw new Error(`expected 3 choice tabs, got ${tabs.length}`);
+  let focusedText = await page.textContent('[data-id="iv-choice-card"][data-focused="true"]');
+  if (!focusedText.includes("Standard")) throw new Error("first option should be focused initially");
+  await tabs[1].click();
+  focusedText = await page.textContent('[data-id="iv-choice-card"][data-focused="true"]');
+  if (!focusedText.includes("Detailed")) throw new Error("tab click should focus the second option");
 
-  await page.click('[data-id="iv-choice-pick"]');
+  await page.click('[data-id="iv-choice-card"][data-focused="true"] [data-id="iv-choice-pick"]');
   await page.waitForSelector('[data-id="iv-checkpoint-activities"]');
   await page.waitForSelector(".react-flow__node");
-  const nodes = await page.$$(".react-flow__node");
-  if (nodes.length !== 3) throw new Error(`expected 3 preview nodes, got ${nodes.length}`);
+  let nodes = await page.$$(".react-flow__node");
+  if (nodes.length !== 4) throw new Error(`expected 4 preview nodes, got ${nodes.length}`);
+
+  // 체크포인트 클릭 = 맵만 프리뷰 → 취소 복귀 → 확정 시 실제 revert (2026-07-27)
+  await page.click('[data-id="iv-checkpoint-activities"]');
+  await page.waitForSelector('[data-id="iv-cp-preview"]');
+  await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 2);
+  await page.click('[data-id="iv-cp-cancel"]');
+  await page.waitForSelector('[data-id="iv-cp-preview"]', { state: "detached" });
+  await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 4);
+  await page.click('[data-id="iv-checkpoint-activities"]');
+  await page.waitForSelector('[data-id="iv-cp-preview"]');
+  await page.click('[data-id="iv-cp-confirm"]');
+  await page.waitForSelector('[data-id="iv-cp-preview"]', { state: "detached" });
+  await page.waitForSelector('[data-id="iv-checkpoint-activities"]', { state: "detached" });
+  nodes = await page.$$(".react-flow__node");
+  if (nodes.length !== 2) throw new Error(`expected 2 nodes after revert, got ${nodes.length}`);
 
   console.log("PW consult smoke: OK");
   await browser.close();
