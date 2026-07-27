@@ -473,7 +473,7 @@ async def post_turn(
     if interview.mode == "word":
         doc_sections = list(found_map.doc_sections) if found_map else []
     try:
-        await run_turn(
+        result = await run_turn(
             session, interview, payload, _graph_summary(current), context_text,
             doc_sections=doc_sections,
         )
@@ -512,7 +512,9 @@ async def post_turn(
     interview.updated_at = now_kst()
     await session.commit()
     loaded = await _get_owned_interview(session, interview_id, user)
-    return await _state_out(session, loaded)
+    state = await _state_out(session, loaded)
+    state.draw_due = result.draw_due  # 그리기 신호 — 프론트가 draw 이벤트로 이어받는다
+    return state
 
 
 @router.post("/interviews/{interview_id}/attachments", response_model=InterviewAttachmentOut)

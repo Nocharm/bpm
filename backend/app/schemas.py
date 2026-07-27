@@ -1533,3 +1533,5 @@ class InterviewStateOut(BaseModel):
     # 충돌 경고 판정용 — 현재 draft updated_at vs 세션 시작 시점
     version_updated_at: datetime | None = None
     base_graph_updated_at: datetime | None = None
+    # 턴 응답 전용 그리기 신호(비영속) — "multi" | "single" | None (speed redesign §4)
+    draw_due: str | None = None

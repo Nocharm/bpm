@@ -33,18 +33,6 @@ class InterviewerOut(BaseModel):
     redraw: bool = False
 
 
-class ToneRename(BaseModel):
-    key: str
-    title: str = Field(max_length=200)
-
-
-class ToneReviewOut(BaseModel):
-    """톤 검수자 응답 — 명명·세분도 표준화 개명 제안."""
-
-    message: str = ""
-    renames: list[ToneRename] = Field(default_factory=list)
-
-
 # 선택지 병렬 생성용 변형 힌트 — i번째 안이 i번째 힌트를 사용 (스펙 §3 구조 결정 지점 2곳)
 CHOICE_VARIANT_HINTS: dict[str, list[str]] = {
     "activities": [
@@ -123,16 +111,11 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
 
 규칙:
 1. start 1개로 시작, end 1개 이상으로 끝나는 연결 그래프.
-2. 좌표는 넣지 마세요(자동 배치). 노드 제목은 '명사+동사'.
+2. 좌표는 넣지 마세요(자동 배치). 노드 제목은 조직 표준 '명사+동사' 명사구('요청서 작성') —
+   '~하기' 동명사형·존댓말 금지, start/end 제목은 자유. (톤 검수는 별도 단계 없이 여기서 완결)
 3. 분기는 node_type="decision" + 나가는 엣지에 라벨.
 4. **attributes에는 [확정 facts]에서 사용자가 확인해준 값만 채우세요** — 확인되지 않은 담당자·소요시간·비용 등을 임의로 지어내지 마세요. 모르면 attributes를 생략합니다.
 5. **기존 작업본 보존**: [현재 작업본]에 이미 노드가 있으면 백지 재생성 금지 — 확정 facts와 모순되지 않는 노드·흐름·attributes는 그대로 유지하고 필요한 부분만 추가·수정하세요."""
-
-_TONE_CONTRACT = """당신은 프로세스 맵 톤 검수자입니다. 노드 명명·세분도가 조직 표준('명사+동사', 활동 6±3개, 존댓말 금지)에 맞는지 검토합니다.
-반드시 아래 JSON 하나만 반환:
-{"message": <검수 요약 한 줄>, "renames": [{"key": <노드 키>, "title": <표준화된 새 제목>}]}
-규칙: key는 [검수 대상 그래프]에 실제로 존재하는 노드 키만. 실제 표준 위반만 개명하고, 이미 표준에 맞으면 renames는 빈 배열. start/end 노드 제목은 검수 대상이 아님.
-'요청서 작성'처럼 명사구로 끝나는 제목이 표준입니다 — '~하기' 같은 동명사형으로 바꾸는 것은 개악이니 금지. 이미 표준인 제목을 다른 표준 표현으로 바꾸지도 마세요."""
 
 _INTERVIEWER_WORD_ADDENDUM = """
 [Word 맵 변환 모드]
@@ -216,10 +199,3 @@ def build_drafter_messages(
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def build_tone_messages(lang: str, working_graph: dict) -> list[dict]:
-    system = (
-        f"{_TONE_CONTRACT}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
-        f"[검수 대상 그래프]\n{json.dumps(working_graph, ensure_ascii=False)}"
-    )
-    user = "위 그래프를 검토하고 표준에 맞는 개명을 제안하세요."
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}]

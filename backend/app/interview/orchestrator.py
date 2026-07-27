@@ -6,6 +6,7 @@
 import asyncio
 import difflib
 import logging
+from dataclasses import dataclass
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -15,10 +16,8 @@ from app.interview import engine
 from app.interview.agents import (
     CHOICE_VARIANT_HINTS,
     InterviewerOut,
-    ToneReviewOut,
     build_drafter_messages,
     build_interviewer_messages,
-    build_tone_messages,
     extract_json,
     format_section_catalog,
 )
@@ -28,7 +27,7 @@ from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
-_HISTORY_TAIL = 12  # 인터뷰어에 싣는 최근 대화 수 — 컨텍스트 예산 가드
+_HISTORY_TAIL = 8  # 인터뷰어에 싣는 최근 대화 수 — 컨텍스트 예산 가드(프롬프트 다이어트, speed redesign §3)
 
 
 class TurnError(Exception):
@@ -37,6 +36,27 @@ class TurnError(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.status_code = 502
+
+
+@dataclass(frozen=True)
+class TurnResult:
+    """턴 결과 신호 — 라우터가 응답 플래그로 전달 (speed redesign §4).
+
+    draw_due: "multi"(구조 스테이지 완료) | "single"(review 진입·redraw 요청) | None.
+    """
+
+    draw_due: str | None = None
+
+
+def _draw_due(pre_stage: str, interview: InterviewSession, out: InterviewerOut) -> str | None:
+    transitioned = interview.current_stage != pre_stage
+    if transitioned and engine.get_stage(pre_stage, interview.mode).choice_stage:
+        return "multi"
+    if transitioned and interview.current_stage == "review":
+        return "single"
+    if out.redraw or out.needs_choices:
+        return "single"
+    return None
 
 
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
@@ -230,72 +250,7 @@ async def _generate_choices(
     return {"options": distinct}
 
 
-async def _tone_review(
-    interview: InterviewSession, model: str | None
-) -> list[tuple[str, str]]:
-    """톤 검수 실행 + 개명 적용 — 적용된 (기존 제목, 새 제목) 쌍을 반환(노티스 문구 재료)."""
-    if not interview.working_graph or not interview.working_graph.get("nodes"):
-        return []
-    review = await _ask_json(
-        build_tone_messages(interview.lang, interview.working_graph), model, ToneReviewOut
-    )
-    if not review.renames:
-        return []
-    # 실존 키만 + 실제로 제목이 바뀌는 것만 적용 — 모델이 지어낸 키/무의미 개명은 무시
-    titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
-    by_key = {
-        r.key: r.title
-        for r in review.renames
-        if r.key in titles and r.title and r.title != titles[r.key]
-    }
-    if not by_key:
-        return []
-    nodes = [
-        {**n, "title": by_key.get(n["key"], n["title"])}
-        for n in interview.working_graph["nodes"]
-    ]
-    interview.working_graph = {**interview.working_graph, "nodes": nodes}
-    return [(titles[key], title) for key, title in by_key.items()]
-
-
-_TONE_NOTICE = {
-    "ko": "노드 제목을 조직 표준('명사+동사')에 맞게 정리했습니다: {items}",
-    "en": "Standardized node titles: {items}",
-}
-
-
-def _tone_notice_text(lang: str, applied: list[tuple[str, str]]) -> str:
-    items = " · ".join(f"'{old}' → '{new}'" for old, new in applied)
-    return _TONE_NOTICE.get(lang, _TONE_NOTICE["ko"]).format(items=items)
-
-
 _REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기"
-
-
-async def _redraft(
-    interview: InterviewSession, context_text: str, model: str | None,
-    doc_sections: list[dict] | None = None,
-) -> tuple[bool, int]:
-    """드래프터로 작업본 재생성 — 실패는 턴을 죽이지 않는다. (갱신 여부, word 강등 수) 반환."""
-    try:
-        proposal = await _ask_json(
-            build_drafter_messages(
-                interview.current_stage, interview.lang, interview.facts,
-                interview.working_graph, context_text, _REDRAFT_HINT,
-                mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
-            ),
-            model, AiProposal,
-        )
-        if proposal.kind == "graph" and proposal.nodes:
-            graph = _sanitize_subprocess(_graph_from_proposal(proposal), interview.working_graph)
-            demoted = 0
-            if interview.mode == "word" and doc_sections:
-                graph, demoted = _sanitize_word_graph(graph, doc_sections)
-            interview.working_graph = graph
-            return True, demoted
-    except TurnError:
-        logger.warning("interview redraft skipped (drafter failed) — turn continues")
-    return False, 0
 
 
 # 반복 판정 임계 — 직전 컨설턴트 메시지와 거의 동일한 재출력만 잡는다(0~1, 보수적)
@@ -324,11 +279,13 @@ _UNKNOWN_VALUE = {"ko": "미정", "en": "TBD"}
 async def _run_skip_turn(
     db, interview: InterviewSession, graph_summary: str, context_text: str, model: str | None,
     doc_sections: list[dict] | None = None,
-) -> None:
+) -> TurnResult:
     """결정적 스테이지 전진 — 미확정 필수 facts를 '미정'으로 채우고 체크포인트 후 다음 단계 개시.
 
     모델이 미정 항목을 놓지 못해 같은 질문을 반복하는 루프의 탈출구 (실사용 회귀 2026-07-24).
+    인터뷰어 1콜만 — 그리기는 draw 이벤트로 분리 (speed redesign §3).
     """
+    pre_stage = interview.current_stage
     next_key = engine.next_stage_key(interview.current_stage, interview.mode)
     if next_key is None:
         raise TurnError("cannot skip the final stage")
@@ -365,13 +322,9 @@ async def _run_skip_turn(
         new_facts = dict(interview.facts.get(interview.current_stage) or {})
         new_facts.update(out.facts_patch)
         interview.facts = {**interview.facts, interview.current_stage: new_facts}
-    # 미정 채움으로 facts가 바뀌었으니 작업본도 따라간다 — 실패해도 전진은 유지
-    changed, demoted = await _redraft(interview, context_text, model, doc_sections)
     _append(db, interview, seq + 1, "consultant", "question", out.message,
             payload={"options": out.options} if out.options else None)
-    if demoted:
-        _append(db, interview, next_seq(interview), "consultant", "notice",
-                _DEMOTE_NOTICE.get(interview.lang, _DEMOTE_NOTICE["ko"]).format(n=demoted))
+    return TurnResult(draw_due=_draw_due(pre_stage, interview, out))
 
 
 async def run_turn(
@@ -382,11 +335,12 @@ async def run_turn(
     context_text: str,
     model: str | None = None,
     doc_sections: list[dict] | None = None,
-) -> None:
+) -> TurnResult:
+    """일반 턴 = 인터뷰어 1콜 — 그리기·선택지·톤 검수는 draw 이벤트로 분리 (speed redesign §3)."""
     if turn.type == "skip":
-        await _run_skip_turn(db, interview, graph_summary, context_text, model, doc_sections)
-        return
+        return await _run_skip_turn(db, interview, graph_summary, context_text, model, doc_sections)
 
+    pre_stage = interview.current_stage
     # 선택 턴 — 대상 옵션을 먼저 확정(사용자 메시지에 제목을 남기기 위해 append보다 선행)
     chosen: dict | None = None
     if turn.type == "choice":
@@ -439,55 +393,21 @@ async def run_turn(
         stage_facts.update(out.facts_patch)
         interview.facts = {**interview.facts, interview.current_stage: stage_facts}
 
-    stage = engine.get_stage(interview.current_stage, interview.mode)
+    _append(db, interview, seq + 1, "consultant", "question", out.message,
+            payload={"options": out.options} if out.options else None)
 
-    # 선택지 병렬 생성 — 구조 결정 스테이지에서만, 선택 턴 직후는 제외
-    if out.needs_choices and stage.choice_stage and turn.type != "choice":
-        choices = await _generate_choices(interview, context_text, model, doc_sections)
-        if choices is not None:
-            interview.pending_choices = choices
-            _append(db, interview, seq + 1, "consultant", "choices", out.message, payload=choices)
-            return
-        # 유효한 새 안이 없음(전부 무변화/중복 필터) — 선택지 없이 일반 턴으로 이어간다
-
-    # 연속 드래프트 — facts가 갱신됐거나 사용자가 맵 갱신을 요청(redraw)한 일반 턴이면 재생성
-    # (실사용 회귀 2026-07-24: 선택지 시점에만 그리면 대화 내내 맵이 정지). 실패는 턴을 죽이지 않는다.
-    graph_changed = chosen is not None
-    demoted = 0
-    if turn.type != "choice" and (out.facts_patch or out.redraw):
-        changed, demoted = await _redraft(interview, context_text, model, doc_sections)
-        graph_changed = changed or graph_changed
-
-    # 스테이지 완료 — 다음 단계가 있을 때만 체크포인트+톤 검수+전이.
+    # 스테이지 완료 — 다음 단계가 있을 때만 체크포인트+전이.
     # review(마지막)에서는 반복 실행하지 않는다 — 매 턴 stage_complete를 주는 모델이
-    # 같은 자리에서 체크포인트·톤 노티스를 스팸하는 것을 차단 (실사용 회귀 2026-07-23).
+    # 같은 자리에서 체크포인트를 스팸하는 것을 차단 (실사용 회귀 2026-07-23).
     next_key = engine.next_stage_key(interview.current_stage, interview.mode)
     is_complete = out.stage_complete or engine.is_stage_complete(
         interview.current_stage, interview.facts, interview.mode
     )
-    question_payload = {"options": out.options} if out.options else None
     if is_complete and next_key is not None:
-        consultant_msg = _append(db, interview, seq + 1, "consultant", "question", out.message,
-                                 payload=question_payload)
-        # 톤 검수는 이번 턴에 그래프가 실제로 바뀐 경우만 — 같은 그래프 재검수가
-        # '설정→설정하기→설정' 플립플롭 노이즈를 만든다 (실사용 회귀 2026-07-24)
-        applied = await _tone_review(interview, model) if graph_changed else []
-        if applied:
-            _append(db, interview, consultant_msg.seq + 1, "consultant", "notice",
-                    _tone_notice_text(interview.lang, applied))
-        if demoted:
-            _append(db, interview, next_seq(interview), "consultant", "notice",
-                    _DEMOTE_NOTICE.get(interview.lang, _DEMOTE_NOTICE["ko"]).format(n=demoted))
         db.add(InterviewCheckpoint(
             session_id=interview.id, stage=interview.current_stage,
             facts=interview.facts, working_graph=interview.working_graph,
             message_seq=next_seq(interview) - 1,
         ))
         interview.current_stage = next_key
-        return
-
-    _append(db, interview, seq + 1, "consultant", "question", out.message,
-            payload=question_payload)
-    if demoted:
-        _append(db, interview, next_seq(interview), "consultant", "notice",
-                _DEMOTE_NOTICE.get(interview.lang, _DEMOTE_NOTICE["ko"]).format(n=demoted))
+    return TurnResult(draw_due=_draw_due(pre_stage, interview, out))

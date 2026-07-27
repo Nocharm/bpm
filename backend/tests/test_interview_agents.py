@@ -5,10 +5,8 @@ import json
 from app.interview.agents import (
     CHOICE_VARIANT_HINTS,
     InterviewerOut,
-    ToneReviewOut,
     build_drafter_messages,
     build_interviewer_messages,
-    build_tone_messages,
     extract_json,
 )
 
@@ -25,11 +23,14 @@ def test_interviewer_out_defaults() -> None:
     assert out.needs_choices is False
 
 
-def test_tone_review_out_parses_renames() -> None:
-    out = ToneReviewOut.model_validate_json(
-        '{"message": "정리", "renames": [{"key": "n1", "title": "요청 접수"}]}'
+def test_drafter_contract_owns_naming_standard() -> None:
+    """톤 검수 폐지 — 명명 표준이 드래프터 계약에 통합돼 있다 (speed redesign §3)."""
+    messages = build_drafter_messages(
+        stage_key="activities", lang="ko", facts={}, working_graph=None,
+        context_text="", variant_hint="표준",
     )
-    assert out.renames[0].key == "n1"
+    assert "명사+동사" in messages[0]["content"]
+    assert "'~하기' 동명사형" in messages[0]["content"]
 
 
 def test_interviewer_messages_structure() -> None:
@@ -60,12 +61,6 @@ def test_drafter_messages_contain_variant_hint() -> None:
     assert CHOICE_VARIANT_HINTS["activities"][0] in messages[0]["content"]
     # 드래프터는 AiProposal graph JSON을 요구
     assert '"kind"' in messages[0]["content"]
-
-
-def test_tone_messages_embed_graph() -> None:
-    graph = {"nodes": [{"key": "a", "title": "start", "node_type": "start"}], "edges": [], "groups": []}
-    messages = build_tone_messages("ko", graph)
-    assert "start" in messages[0]["content"]
 
 
 def test_choice_variant_hints_cover_choice_stages() -> None:
