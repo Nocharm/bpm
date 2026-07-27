@@ -75,9 +75,15 @@ const run = async () => {
   await page.route("**/api/me", (r) => r.fulfill({ json: { login_id: "admin.sys", name: "Admin", ai_enabled: true, manual_url: "", csv_manual_url: "", role: "admin", is_sysadmin: true, can_view_dashboard: true } }));
   await page.route(`**/api/maps/${MAP_ID}`, (r) => r.fulfill({ json: { id: MAP_ID, name: "Consult Smoke", description: "", created_by: null, created_at: "", updated_at: "", my_role: "owner", visibility: "public", owning_department: "X", versions: [{ id: 501, label: "As-Is", status: "draft", events: [] }] } }));
   await page.route(`**/api/maps/${MAP_ID}/interviews`, (r) => r.fulfill({ json: state }));
-  await page.route("**/api/interviews/1/turns", (r) => {
+  await page.route("**/api/interviews/1/turns", async (r) => {
     turnCount += 1;
-    r.fulfill({ json: turnCount === 1 ? afterAnswer : afterChoice });
+    if (turnCount === 1) {
+      r.fulfill({ json: afterAnswer });
+      return;
+    }
+    // 수락 턴은 지연 — 낙관적 반영(응답 전 모달 닫힘·즉시 렌더) 검증용
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    r.fulfill({ json: afterChoice });
   });
   // draw는 의도적으로 지연 — 진행 오버레이 노출 검증
   await page.route("**/api/interviews/1/draw", async (r) => {
@@ -141,8 +147,12 @@ const run = async () => {
   if (!focusedText.includes("Detailed")) throw new Error("tab click should focus the second option");
 
   await page.click('[data-id="iv-choice-card"][data-focused="true"] [data-id="iv-choice-pick"]');
+  // 낙관적 수락 — 서버 응답(600ms 지연) 전에 모달이 닫히고 선택 안이 즉시 캔버스에 렌더
+  await page.waitForSelector('[data-id="iv-choice-overlay"]', { state: "detached", timeout: 500 });
+  await page.waitForFunction(
+    () => document.querySelectorAll(".react-flow__node").length === 4, { timeout: 500 },
+  );
   await page.waitForSelector('[data-id="iv-checkpoint-activities"]');
-  await page.waitForSelector(".react-flow__node");
   let nodes = await page.$$(".react-flow__node");
   if (nodes.length !== 4) throw new Error(`expected 4 preview nodes, got ${nodes.length}`);
   // 수락 직후 맵 기준 배지 — up to date

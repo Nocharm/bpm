@@ -18,6 +18,7 @@ import {
   postInterviewTurn,
   uploadInterviewAttachment,
   type InterviewState,
+  type WorkingGraph,
 } from "@/lib/api";
 import { choiceOptionsOf, stageIndex, stagesForMode } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
@@ -55,6 +56,9 @@ export default function ConsultPage() {
   const [drawBusy, setDrawBusy] = useState<false | "multi" | "single">(false);
   const [drawError, setDrawError] = useState<string | null>(null);
   const lastDrawRef = useRef<"multi" | "single">("single");
+  // 낙관적 수락 — 선택한 안을 즉시 캔버스에 반영·모달 닫기. 서버(그래프 반영+다음 질문 1콜)는
+  // 백그라운드로 기다린다 — 실패하면 해제돼 모달이 복귀(choices 메시지가 여전히 마지막이라서).
+  const [optimisticChoice, setOptimisticChoice] = useState<{ graph: WorkingGraph } | null>(null);
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -116,6 +120,10 @@ export default function ConsultPage() {
     lastTurnRef.current = turn;
     setBusy(true);
     setError(null);
+    if (turn.type === "choice") {
+      const picked = choices?.find((o) => o.id === turn.choice_id) ?? null;
+      if (picked) setOptimisticChoice({ graph: picked.graph });
+    }
     setPending(
       turn.type === "choice"
         ? (choices?.find((o) => o.id === turn.choice_id)?.title ?? "Selected an option")
@@ -136,6 +144,7 @@ export default function ConsultPage() {
       setError(getApiErrorDetail(err) || "AI request failed.");
     } finally {
       setBusy(false);
+      setOptimisticChoice(null); // 성공=서버 상태가 동일 그래프 보유, 실패=모달 복귀
     }
   }
 
@@ -230,7 +239,8 @@ export default function ConsultPage() {
           interview={interview}
           onUpdated={setInterview}
           mapId={mapId}
-          choices={choices}
+          choices={optimisticChoice ? null : choices}
+          optimisticGraph={optimisticChoice?.graph ?? null}
           busy={busy}
           onChoose={(choiceId) => runTurn({ type: "choice", choice_id: choiceId })}
           drawBusy={drawBusy}

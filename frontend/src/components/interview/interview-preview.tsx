@@ -47,6 +47,8 @@ interface InterviewPreviewProps {
   onUpdated: (state: InterviewState) => void;
   mapId: number;
   choices: ChoiceOption[] | null;
+  // 낙관적 수락 그래프 — 서버 응답 전에 선택한 안을 즉시 표시 (수락 지연 체감 제거)
+  optimisticGraph?: WorkingGraph | null;
   busy: boolean;
   onChoose: (choiceId: string) => void;
   // 그리기 이벤트(speed redesign §4) — 진행 오버레이·Draw map 버튼·에러 Retry
@@ -180,7 +182,7 @@ function PreviewCanvas({
 }
 
 export function InterviewPreview({
-  interview, onUpdated, mapId, choices, busy, onChoose,
+  interview, onUpdated, mapId, choices, optimisticGraph = null, busy, onChoose,
   drawBusy, drawError, onDraw, onDrawRetry, onDrawClearError,
 }: InterviewPreviewProps) {
   const router = useRouter();
@@ -301,8 +303,8 @@ export function InterviewPreview({
   const previewLabel = previewCp
     ? stagesForMode(interview?.mode).find((s) => s.key === previewCp.stage)?.label ?? previewCp.stage
     : "";
-  // 프리뷰 중엔 체크포인트 스냅샷을 캔버스에 — 신규 하이라이트는 끈다
-  const displayGraph = previewCp ? previewCp.working_graph : graph;
+  // 프리뷰 중엔 체크포인트 스냅샷 > 낙관적 수락 그래프 > 서버 작업본 순
+  const displayGraph = previewCp ? previewCp.working_graph : optimisticGraph ?? graph;
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col bg-canvas" data-id="interview-preview">
