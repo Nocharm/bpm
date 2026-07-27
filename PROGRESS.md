@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-27 — 개발(dev) 스택 브리지 서브넷 172.42→172.44 (worktree-ai-consultant)
+- 서버 지정값 반영: `docker-compose.dev.yml` subnet/gateway를 172.44.0.0/16·172.44.0.1로 변경(172.42는 기존 스택 점유).
+
 ## 2026-07-27 — 인터뷰 턴 504 픽스: nginx 프록시 타임아웃·업로드 한도 (worktree-ai-consultant)
 - **GPU 실검증 1차 피드백**: 서버 경유(:3333) 인터뷰 턴이 자주 504 — 턴 1회가 순차 AI 호출 3~4회(인터뷰어→선택지→드래프터→톤 검수)로 nginx 기본 `proxy_read_timeout` 60s를 초과, 프록시가 먼저 끊음(백엔드는 계속 처리해 턴은 커밋됨 — 새로고침 시 답변 존재).
 - `nginx/default.conf` `/api/`에 `proxy_read_timeout/send_timeout 600s` + `client_max_body_size 25m`(첨부 20MB — 기본 1MB면 413 잠복) 추가. `.env.example`에 느린 GPU는 `AI_TIMEOUT_SECONDS` 120~180 권장 주석.
