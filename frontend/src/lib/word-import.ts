@@ -121,13 +121,18 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
     }
   }
 
-  // (2) 본문 제목 순회 — 레벨은 outlineLvl, 번호는 TOC 씨앗 + 로컬 카운터.
+  // (2) 본문 제목 순회 — 레벨은 outlineLvl, 번호는 텍스트 리터럴 > TOC 씨앗 > 로컬 카운터.
   const out: HeadingHit[] = [];
   const seen = new Set<string>();
   const counters: number[] = []; // counters[i] = 레벨 i+1 카운트
   const stack: string[] = []; // stack[i] = 레벨 i+1 현재 번호 문자열
   let synthSeq = 0; // 책갈피 없는 제목에 부여하는 합성 앵커 번호 — 출력 시 사본에 이 이름으로 주입
-  for (const p of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
+  // 직전 제목 — 무번호 언어 짝(같은 섹션의 영어/한글이 별도 문단으로 이어지는 문서) 판정용.
+  // fromText가 참일 때만 짝 상속 발동 — 자동넘버 문서의 무번호 연속 형제(1.1.1→1.1.2)를 오인하지 않게.
+  let prevHeading: { pIdx: number; level: number; number: string; fromText: boolean } | null = null;
+  const paragraphs = Array.from(doc.getElementsByTagNameNS(W, "p"));
+  for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
+    const p = paragraphs[pIdx];
     const pPr = p.getElementsByTagNameNS(W, "pPr")[0];
     const styleEl = pPr?.getElementsByTagNameNS(W, "pStyle")[0];
     const sid = styleEl ? attr(styleEl, "val") : "";
@@ -156,7 +161,13 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
     if (seen.has(anchor)) continue;
     seen.add(anchor);
 
-    // 번호: 어펜딕스=무번호 / TOC(앵커 or 제목 매칭)=권위 / 그 외=재구성.
+    // 제목 텍스트 선두의 리터럴 번호 — 번호를 자동넘버가 아니라 본문에 직접 타이핑한 문서 유형
+    // (실물 이슈 2026-07-27: 카운터 재구성이 문서 실번호와 어긋남). 정답이 텍스트에 있으면 그걸 쓴다.
+    // 숫자 뒤에 실제 제목이 남아야 번호로 인정("3." 단독 문단 배제).
+    const textNumMatch = /^(\d+(?:\.\d+)*)[.)]?\s+(\S.*)$/.exec(text);
+
+    // 번호: 어펜딕스=무번호 / 텍스트 리터럴=최우선 권위 / TOC(앵커 or 제목 매칭)=권위 /
+    // 무번호 언어 짝=직전 번호 상속 / 그 외=재구성.
     // 제목 매칭은 책갈피 없는 1~2단계 제목(다른 언어 트리 등)이 TOC 번호를 받아 카운터를 리셋하게 한다.
     let tocNumber = tocMap.get(anchor)?.number ?? "";
     if (!tocNumber) {
@@ -164,8 +175,19 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
       if (byTitle && byTitle.level === level) tocNumber = byTitle.number;
     }
     let number: string;
+    let title = text;
     if (/appendix/i.test(sid)) {
       number = ""; // 어펜딕스는 문서상 무번호 — 카운터도 안 건드림
+    } else if (textNumMatch) {
+      // 텍스트 번호 권위 — 번호는 분리하고 제목만 남긴다(섹션 노드 라벨 "번호 제목" 중복 방지).
+      // 제목마다 자가 교정되므로 카운터 드리프트가 누적될 수 없다.
+      number = textNumMatch[1];
+      title = textNumMatch[2];
+      const segs = number.split(".");
+      for (let i = 0; i < level; i++) counters[i] = Number(segs[i]) || 0;
+      counters.length = level;
+      stack[level - 1] = number;
+      stack.length = level;
     } else if (tocNumber) {
       // 1~2단계: TOC 번호 권위 + 자식 계산 위해 카운터/스택 동기화.
       number = tocNumber;
@@ -174,6 +196,16 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
       counters.length = level;
       stack[level - 1] = number;
       stack.length = level;
+    } else if (
+      prevHeading !== null &&
+      prevHeading.fromText &&
+      pIdx === prevHeading.pIdx + 1 &&
+      level === prevHeading.level &&
+      prevHeading.number !== ""
+    ) {
+      // 무번호 언어 짝 — 번호 있는 제목 바로 다음 문단의 같은 레벨 무번호 제목("2. Scope" 아래 "범위")은
+      // 같은 섹션의 다른 언어 표기다. 번호를 상속하고 카운터는 밀지 않는다(밀면 이후 전부 어긋남 — 실물 이슈).
+      number = prevHeading.number;
     } else {
       // 3단계+: 부모 번호에 로컬 카운터 이어붙임(레벨 상승 시 하위 리셋).
       for (let i = counters.length; i < level; i++) counters[i] = 0;
@@ -196,11 +228,12 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
     out.push({
       element: p,
       anchor: anchor.slice(0, 200),
-      title: text.slice(0, 500),
+      title: title.slice(0, 500),
       number: number.slice(0, 50),
       level,
       language,
     });
+    prevHeading = { pIdx, level, number, fromText: textNumMatch !== null };
   }
   return out;
 }

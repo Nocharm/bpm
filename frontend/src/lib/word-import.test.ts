@@ -146,4 +146,29 @@ describe("parseWordSections", () => {
     const out = await parseWordSections(makeDocx(xml));
     expect(out[0].title.length).toBe(500);
   });
+
+  // 실물 이슈(2026-07-27): 번호가 자동넘버가 아니라 본문 제목 텍스트에 직접 타이핑된 문서 +
+  // 영어/한글 짝이 별도 문단(Enter)으로 이어지는 구조 — 한글 줄이 카운터를 밀어 이후 번호 전부 어긋남.
+  it("제목 텍스트 선두의 리터럴 번호를 권위로 쓰고 제목에서 분리한다", async () => {
+    const xml = doc(
+      heading("H1", [], "1. Purpose") +
+      heading("H1", [], "2. Scope") +
+      heading("H2", [], "2.1 Boundary") +
+      heading("H1", [], "4. Records"), // 문서가 3을 건너뛰어도 텍스트 번호를 그대로 따른다
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "2", "2.1", "4"]);
+    expect(out.map((s) => s.title)).toEqual(["Purpose", "Scope", "Boundary", "Records"]);
+  });
+
+  it("번호 제목 바로 다음의 무번호 같은 레벨 제목(언어 짝)은 번호를 상속하고 카운터를 밀지 않는다", async () => {
+    const xml = doc(
+      heading("H1", [], "1. Purpose") + heading("H1", [], "목적") +
+      heading("H1", [], "2. Scope") + heading("H1", [], "범위") +
+      heading("H1", [], "3. Responsibility") + heading("H1", [], "책임"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "2", "2", "3", "3"]);
+    expect(out.map((s) => s.title)).toEqual(["Purpose", "목적", "Scope", "범위", "Responsibility", "책임"]);
+  });
 });
