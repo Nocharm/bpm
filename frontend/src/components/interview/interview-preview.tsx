@@ -22,6 +22,7 @@ import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
 import { ProcessNode } from "@/components/process-node";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ChoiceOverlay } from "@/components/interview/choice-card";
+import { InterviewOutline } from "@/components/interview/interview-outline";
 import { MENTION_EVENT } from "@/components/interview/interview-panel";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -270,6 +271,27 @@ export function InterviewPreview({
     }
   }
 
+  // 맵 기준 배지 — "맵 = 마지막으로 수락한 안" 규칙의 가시화 (speed redesign §6)
+  const liveMessages = interview ? interview.messages.filter((m) => !m.superseded) : [];
+  let lastChoiceIdx = -1;
+  for (let i = liveMessages.length - 1; i >= 0; i -= 1) {
+    if (liveMessages[i].role === "user" && liveMessages[i].kind === "choice") {
+      lastChoiceIdx = i;
+      break;
+    }
+  }
+  const userTurnsSinceMap = liveMessages.filter(
+    (m, i) => i > lastChoiceIdx && m.role === "user",
+  ).length;
+  const hasMap = !!graph && graph.nodes.length > 0;
+  const baselineText = !hasMap
+    ? "Map not drawn yet"
+    : lastChoiceIdx === -1
+      ? "Map from the existing draft"
+      : userTurnsSinceMap === 0
+        ? "Map up to date"
+        : `Map from ${userTurnsSinceMap} turn${userTurnsSinceMap > 1 ? "s" : ""} ago`;
+
   // 최근 체크포인트가 맨 위 — 새 항목이 위로 들어오며 아래로 밀리는 스택 (요구 6)
   const checkpointsNewestFirst = [...(interview?.checkpoints ?? [])].reverse();
   // 프리뷰 대상 — 같은 스테이지가 여럿이면 최신(백엔드 revert 대상 선택과 동일 규칙)
@@ -425,6 +447,8 @@ export function InterviewPreview({
                 </div>
               );
             })()}
+            {/* facts 아웃라인 — 매 턴 즉시 갱신되는 수집 정보(AI 0콜, speed redesign §6) */}
+            <InterviewOutline facts={interview?.facts} mode={interview?.mode} />
             {/* 유사 SP 제안 카드 — 수락 시 구간을 서브프로세스 링크로 치환 (design §7 P2) */}
             {spMessage && spData?.map_id && !spDismissed.has(spMessage.id) &&
             interview?.status === "active" ? (
@@ -527,6 +551,7 @@ export function InterviewPreview({
             Draw map
           </button>
         ) : null}
+        <span className="text-fine text-ink-muted" data-id="iv-map-baseline">{baselineText}</span>
         {interview?.current_stage === "review" && interview.status === "active" ? (
           <button
             className="ml-auto flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent disabled:opacity-40"
@@ -537,9 +562,7 @@ export function InterviewPreview({
             <CheckCheck size={16} strokeWidth={1.5} />
             Apply to draft
           </button>
-        ) : (
-          <span className="text-fine text-ink-muted">Read-only preview — the map updates as you talk.</span>
-        )}
+        ) : null}
         {applyError ? (
           <span className="ml-auto text-fine text-error" data-id="iv-apply-error">{applyError}</span>
         ) : null}

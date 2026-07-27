@@ -6,6 +6,8 @@ import {
   WORD_INTERVIEW_STAGES,
   addedNodeKeys,
   choiceOptionsOf,
+  deriveOutline,
+  deriveSequencePreview,
   distinctiveNodeKeys,
   layoutWorkingGraph,
   stageIndex,
@@ -104,5 +106,50 @@ describe("distinctiveNodeKeys", () => {
   it("단일 안이면 하이라이트 없음", () => {
     const a = opt("opt-1", ["시작", "끝"]);
     expect(distinctiveNodeKeys([a]).get("opt-1")).toEqual(new Set());
+  });
+});
+
+describe("deriveOutline (speed redesign — facts 수집 패널)", () => {
+  it("flattens facts in stage order with clamped one-line values", () => {
+    const outline = deriveOutline({
+      io: { trigger: "요청 접수", inputs: "" },
+      scope: { process_name: "구매", purpose: "표준화" },
+    });
+    expect(outline.map((e) => e.stage)).toEqual(["scope", "io"]); // 스테이지 순서 우선
+    expect(outline[0].items).toEqual([
+      ["process_name", "구매"],
+      ["purpose", "표준화"],
+    ]);
+    expect(outline[1].items).toEqual([["trigger", "요청 접수"]]); // 빈 값 제외
+  });
+
+  it("joins array values and clamps long ones", () => {
+    const outline = deriveOutline({ activities: { activities: ["요청", "비교", "발주"] } });
+    expect(outline[0].items[0][1]).toBe("요청 · 비교 · 발주");
+    const long = deriveOutline({ scope: { purpose: "가".repeat(80) } });
+    expect(long[0].items[0][1].length).toBeLessThanOrEqual(60);
+    expect(long[0].items[0][1].endsWith("…")).toBe(true);
+  });
+
+  it("returns empty for null facts", () => {
+    expect(deriveOutline(null)).toEqual([]);
+  });
+});
+
+describe("deriveSequencePreview", () => {
+  it("prefers array values from activities facts", () => {
+    expect(deriveSequencePreview({ activities: { activities: ["A", "B", "C"] } }))
+      .toEqual(["A", "B", "C"]);
+  });
+
+  it("falls back to separator strings and caps at 8", () => {
+    expect(deriveSequencePreview({ activities: { activities: "요청 → 비교 → 발주" } }))
+      .toEqual(["요청", "비교", "발주"]);
+    const many = Array.from({ length: 12 }, (_, i) => `단계${i}`).join(", ");
+    expect(deriveSequencePreview({ activities: { activities: many } })).toHaveLength(8);
+  });
+
+  it("returns empty without activities facts", () => {
+    expect(deriveSequencePreview({ scope: { process_name: "구매" } })).toEqual([]);
   });
 });

@@ -35,6 +35,66 @@ export function stageIndex(key: string, mode?: string): number {
   return stagesForMode(mode).findIndex((s) => s.key === key);
 }
 
+// ---------- facts 아웃라인 (speed redesign §6 — AI 0콜, 매 턴 즉시 반응) ----------
+
+export interface OutlineEntry {
+  stage: string;
+  label: string;
+  items: [string, string][];
+}
+
+const OUTLINE_VALUE_MAX = 60; // 항목 값 1줄 요약 — 패널 폭 안에서 잘리지 않게
+
+function clampOutlineValue(value: string): string {
+  return value.length > OUTLINE_VALUE_MAX ? value.slice(0, OUTLINE_VALUE_MAX - 1) + "…" : value;
+}
+
+function outlineValueText(value: unknown): string {
+  if (Array.isArray(value)) return value.map(String).join(" · ");
+  return String(value ?? "");
+}
+
+// facts를 스테이지 순서로 평탄화 — 확정 항목만, 값은 1줄 요약
+export function deriveOutline(
+  facts: Record<string, Record<string, unknown>> | null | undefined,
+  mode?: string,
+): OutlineEntry[] {
+  if (!facts) return [];
+  const entries: OutlineEntry[] = [];
+  for (const stage of stagesForMode(mode)) {
+    const stageFacts = facts[stage.key];
+    if (!stageFacts) continue;
+    const items = Object.entries(stageFacts)
+      .filter(([, value]) => outlineValueText(value).trim() !== "")
+      .map(([key, value]): [string, string] => [key, clampOutlineValue(outlineValueText(value))]);
+    if (items.length > 0) entries.push({ stage: stage.key, label: stage.label, items });
+  }
+  return entries;
+}
+
+// activities facts에서 열거형 값을 찾아 시퀀스 미리보기(최대 8) — 배열 우선, 구분자 문자열 폴백
+export function deriveSequencePreview(
+  facts: Record<string, Record<string, unknown>> | null | undefined,
+): string[] {
+  const activityFacts = facts?.["activities"];
+  if (!activityFacts) return [];
+  for (const value of Object.values(activityFacts)) {
+    if (Array.isArray(value) && value.length >= 2) {
+      return value.map(String).slice(0, 8);
+    }
+  }
+  for (const value of Object.values(activityFacts)) {
+    if (typeof value !== "string") continue;
+    for (const sep of ["→", "·", ","]) {
+      const parts = value.split(sep).map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 2 && parts.every((p) => p.length <= 40)) {
+        return parts.slice(0, 8);
+      }
+    }
+  }
+  return [];
+}
+
 export function choiceOptionsOf(messages: InterviewMessage[]): ChoiceOption[] | null {
   const last = messages[messages.length - 1];
   if (!last || last.role !== "consultant" || last.kind !== "choices") return null;

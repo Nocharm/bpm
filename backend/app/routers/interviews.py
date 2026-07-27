@@ -216,6 +216,7 @@ async def _state_out(session: AsyncSession, interview: InterviewSession) -> Inte
         current_stage=interview.current_stage,
         lang=interview.lang,
         mode=interview.mode,
+        facts=interview.facts or {},
         working_graph=interview.working_graph,
         messages=sorted(interview.messages, key=lambda m: m.seq),
         checkpoints=sorted(interview.checkpoints, key=lambda c: c.id),

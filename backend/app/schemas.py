@@ -1533,6 +1533,8 @@ class InterviewStateOut(BaseModel):
     current_stage: str
     lang: str
     mode: str = "normal"
+    # 확정 facts — 프론트 아웃라인 패널(수집된 정보) 렌더용 (speed redesign §6)
+    facts: dict = Field(default_factory=dict)
     working_graph: dict | None = None
     messages: list[InterviewMessageOut] = Field(default_factory=list)
     checkpoints: list[InterviewCheckpointOut] = Field(default_factory=list)

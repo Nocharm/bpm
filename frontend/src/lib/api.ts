@@ -1875,6 +1875,8 @@ export interface InterviewState {
   current_stage: string;
   // 인터뷰 모드 — normal | word (design 2026-07-26 §2)
   mode?: string;
+  // 확정 facts — 아웃라인 패널(수집된 정보) 렌더용 (speed redesign)
+  facts?: Record<string, Record<string, unknown>>;
   lang: string;
   working_graph: WorkingGraph | null;
   messages: InterviewMessage[];
