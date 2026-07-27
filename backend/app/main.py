@@ -30,6 +30,7 @@ from app.routers import (
     groups,
     inbox,
     interviews,
+    kb,
     library,
     manual,
     maps,
@@ -74,6 +75,7 @@ app.include_router(feedback.router)
 app.include_router(notices.router)
 app.include_router(inbox.router)
 app.include_router(interviews.router)
+app.include_router(kb.router)
 app.include_router(manual.router)
 app.include_router(dashboard.router)
 app.include_router(library.router)

@@ -1493,6 +1493,21 @@ class InterviewAttachmentOut(BaseModel):
     created_at: datetime
 
 
+class KbDocumentOut(BaseModel):
+    """지식기반 라이브러리 문서 — sysadmin 관리 목록용 (design 2026-07-23 §7 P2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    filename: str
+    mime: str
+    status: str
+    uploaded_by: str
+    chunk_count: int = 0  # 인덱싱 완료 여부 표식 — 0이면 대기/실패
+    created_at: datetime
+
+
 class InterviewStateOut(BaseModel):
     id: int
     map_id: int

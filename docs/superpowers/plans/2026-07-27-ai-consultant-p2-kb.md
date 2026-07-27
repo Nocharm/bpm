@@ -34,20 +34,20 @@
 - [x] 인메모리 캐시(모듈 전역: 행렬+행 메타) + `invalidate_cache()` — 인덱싱 삽입/삭제 시 호출.
 - [x] tests: 코사인 순위·임계값 컷·세션 스코프 격리·캐시 무효화.
 
-### Task 4 — 인덱싱 파이프라인(직렬 워커)
-- [ ] `app/kb/indexing.py`: 전역 `asyncio.Semaphore(1)` 직렬화 — `index_library_doc(doc_id)` · `index_map_version(version_id)`(게시본 직렬화: 맵 이름·노드 라벨·설명·구조 요약, 기존 `map` 청크 교체) · `index_attachment(attachment_id, session_id)`(세션 스코프 meta). 임베딩 배치 ≤32, 실패는 로깅 후 무해(그레이스풀).
-- [ ] 훅 2곳: `routers/versions.py` publish 성공 후 fire-and-forget + `routers/interviews.py` 첨부 파싱 성공 후.
-- [ ] `scripts/backfill_kb_maps.py`: 기존 게시본 1회 백필(서버에서 수동 실행).
-- [ ] tests: 소스별 인덱싱 청크 생성·map 재게시 시 구청크 교체·비활성 시 no-op·훅 발화(모킹).
+### Task 4 — 인덱싱 파이프라인(직렬 워커) ✅
+- [x] `app/kb/indexing.py`: 전역 `asyncio.Semaphore(1)` 직렬화 — `index_library_doc(doc_id)` · `index_map_version(version_id)`(게시본 직렬화: 맵 이름·노드 라벨·설명·구조 요약, 기존 `map` 청크 교체) · `index_attachment(attachment_id, session_id)`(세션 스코프 meta). 임베딩 배치 ≤32, 실패는 로깅 후 무해(그레이스풀).
+- [x] 훅 2곳: `routers/versions.py` publish 성공 후 fire-and-forget + `routers/interviews.py` 첨부 파싱 성공 후.
+- [x] `scripts/backfill_kb_maps.py`: 기존 게시본 1회 백필(서버에서 수동 실행).
+- [x] tests: 소스별 인덱싱 청크 생성·map 재게시 시 구청크 교체·비활성 시 no-op·훅 발화(모킹).
 
-### Task 5 — 라이브러리 관리 API (sysadmin)
-- [ ] `routers/kb.py`: `GET /api/kb/documents`(목록) · `POST /api/kb/documents`(업로드 — interview parsing 재사용, 파싱→인덱싱 큐) · `DELETE /api/kb/documents/{id}`(문서+청크 삭제, 캐시 무효화). 전부 sysadmin 가드.
-- [ ] tests: 권한(403)·업로드→파싱→청크·삭제 연쇄.
+### Task 5 — 라이브러리 관리 API (sysadmin) ✅ (FE UI는 Task 8)
+- [x] `routers/kb.py`: `GET /api/kb/documents`(목록) · `POST /api/kb/documents`(업로드 — interview parsing 재사용, 파싱→인덱싱 큐) · `DELETE /api/kb/documents/{id}`(문서+청크 삭제, 캐시 무효화). 전부 sysadmin 가드.
+- [x] tests: 권한(403)·업로드→파싱→청크·삭제 연쇄.
 
-### Task 6 — 인터뷰 검색 주입 + 디그레이드 노티스
-- [ ] `routers/interviews.py` 턴 경로: KB 활성 시 `search(맵 이름+스테이지 목표+최근 사용자 입력)` top-k → `[지식기반 참조]` 블록(출처: 문서 제목/맵 이름 표기)을 context_text에 예산 내 추가. agents 프롬프트에 "참조는 근거로만, 사실 날조 금지" 1줄.
-- [ ] 임베딩 호출 실패 시: 검색 스킵 + 세션당 1회 notice 메시지("지식기반 참조를 사용할 수 없습니다 — 인터뷰는 계속 진행됩니다").
-- [ ] tests: 주입 블록 포함·실패 시 스킵+노티스 1회·비활성 시 무주입(P1 회귀 가드).
+### Task 6 — 인터뷰 검색 주입 + 디그레이드 노티스 ✅
+- [x] `routers/interviews.py` 턴 경로: KB 활성 시 `search(맵 이름+스테이지 목표+최근 사용자 입력)` top-k → `[지식기반 참조]` 블록(출처: 문서 제목/맵 이름 표기)을 context_text에 예산 내 추가. 날조 금지 문구는 agents 계약 대신 주입 블록 헤더에 포함(프롬프트 표면 최소 변경).
+- [x] 임베딩 호출 실패 시: 검색 스킵 + 세션당 1회 notice 메시지("지식기반 참조를 사용할 수 없습니다 — 인터뷰는 계속 진행됩니다").
+- [x] tests: 주입 블록 포함·실패 시 스킵+노티스 1회·비활성 시 무주입(P1 회귀 가드).
 
 ### Task 7 — 유사 서브프로세스 제안 (백엔드)
 - [ ] activities/review 스테이지 턴에서 작업본 조각(연속 process 3+개 시퀀스) 임베딩 → `source_type=map` 코퍼스 top-1(임계값 상향 0.65) → 턴 응답에 `sp_suggestion` payload(대상 맵 id/이름/구간 노드 키). 수락은 프론트가 기존 서브프로세스 링크 규칙(중복 가드·grandfather)으로 처리.

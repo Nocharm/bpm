@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,8 +12,9 @@ from app import workflow
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
-from app.interview.engine import next_stage_key
+from app.interview.engine import get_stage, next_stage_key
 from app.interview.orchestrator import TurnError, run_turn
+from app.kb import embed_client, indexing, retrieval
 from app.interview.parsing import (
     ALLOWED_EXTENSIONS,
     MAX_ATTACHMENT_BYTES,
@@ -25,6 +27,7 @@ from app.models import (
     InterviewAttachment,
     InterviewMessage,
     InterviewSession,
+    KbChunk,
     MapVersion,
     ProcessMap,
 )
@@ -214,6 +217,52 @@ def _graph_summary(graph) -> str:
     return ", ".join(titles) if titles else ""
 
 
+# 지식기반 검색 주입 (design 2026-07-23 §7 P2) — 실패는 턴을 죽이지 않는다(그레이스풀 디그레이드)
+_KB_CONTEXT_BUDGET = 4000  # 참조 블록 문자 예산 — 첨부 예산과 별도(작게)
+
+_KB_DEGRADE_NOTICE = {
+    "ko": "지식기반 참조를 지금 사용할 수 없어 참조 없이 진행합니다 — 인터뷰는 계속됩니다.",
+    "en": "The knowledge base is unavailable right now — continuing without references.",
+}
+
+
+async def _kb_reference_block(
+    session: AsyncSession, interview: InterviewSession, map_name: str, user_text: str
+) -> tuple[str, bool]:
+    """top-k 검색 → [지식기반 참조] 블록(출처 표기). 반환 (블록, 임베딩 실패 여부)."""
+    if not embed_client.is_embed_enabled():
+        return "", False
+    stage = get_stage(interview.current_stage, interview.mode)
+    goal = stage.goal_ko if interview.lang == "ko" else stage.goal_en
+    query = " ".join(part for part in (map_name, goal, user_text) if part).strip()
+    try:
+        hits = await retrieval.search(session, query, session_id=interview.id)
+    except embed_client.EmbedError as exc:
+        logger.warning("kb search failed — turn continues without references: %s", exc)
+        return "", True
+    lines: list[str] = []
+    total = 0
+    for hit in hits:
+        source = (
+            hit.meta.get("title") or hit.meta.get("map_name")
+            or hit.meta.get("filename") or hit.source_type
+        )
+        line = f"- ({source}) {hit.chunk_text}"
+        if total + len(line) > _KB_CONTEXT_BUDGET:
+            break
+        lines.append(line)
+        total += len(line)
+    if not lines:
+        return "", False
+    header = "\n\n[지식기반 참조 — 근거로만 활용하고, 아래 출처에 없는 사실을 지어내지 마세요]\n"
+    return header + "\n".join(lines), False
+
+
+def _has_kb_degrade_notice(interview: InterviewSession) -> bool:
+    texts = set(_KB_DEGRADE_NOTICE.values())
+    return any(m.kind == "notice" and m.content in texts for m in interview.messages)
+
+
 async def _context_text(interview: InterviewSession) -> str:
     sections = [
         (a.filename, a.parsed_text)
@@ -357,10 +406,13 @@ async def post_turn(
     map_id, version_id = interview.map_id, interview.version_id
 
     current = await _load_graph(session, interview.version_id)
-    context_text = await _context_text(interview)
+    found_map = await session.get(ProcessMap, interview.map_id)
+    kb_block, kb_failed = await _kb_reference_block(
+        session, interview, found_map.name if found_map else "", payload.content or ""
+    )
+    context_text = await _context_text(interview) + kb_block
     doc_sections: list[dict] | None = None
     if interview.mode == "word":
-        found_map = await session.get(ProcessMap, interview.map_id)
         doc_sections = list(found_map.doc_sections) if found_map else []
     try:
         await run_turn(
@@ -381,6 +433,15 @@ async def post_turn(
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
+    # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
+    if kb_failed and not _has_kb_degrade_notice(interview):
+        session.add(InterviewMessage(
+            session_id=interview.id,
+            seq=max((m.seq for m in interview.messages), default=0) + 1,
+            role="consultant", kind="notice",
+            content=_KB_DEGRADE_NOTICE.get(interview.lang, _KB_DEGRADE_NOTICE["ko"]),
+            stage=interview.current_stage,
+        ))
     session.add(AiUsageEvent(
         login_id=user, map_id=map_id, version_id=version_id,
         model="", kind="interview", ok=True,
@@ -430,6 +491,9 @@ async def upload_attachment(
     ))
     await session.commit()
     await session.refresh(row)
+    # 세션 스코프 지식기반 인덱싱 — fire-and-forget, 파싱 성공분만 (design 2026-07-23 §7)
+    if row.status == "parsed" and embed_client.is_embed_enabled():
+        indexing.spawn(indexing.index_attachment(row.id))
     return InterviewAttachmentOut.model_validate(row)
 
 
@@ -446,7 +510,12 @@ async def delete_attachment(
     if row is None:
         raise HTTPException(status_code=404, detail=f"attachment {attachment_id} not found")
     await session.delete(row)
+    # 첨부 청크도 함께 제거 — 이후 검색에서 즉시 제외
+    await session.execute(sa_delete(KbChunk).where(
+        KbChunk.source_type == "attachment", KbChunk.source_id == attachment_id
+    ))
     await session.commit()
+    retrieval.invalidate_cache()
 
 
 @router.post("/interviews/{interview_id}/revert", response_model=InterviewStateOut)
