@@ -181,8 +181,36 @@ describe("parseWordSections", () => {
       `<w:p><w:r><w:t>본문 내용</w:t></w:r></w:p>` + heading("H1", [], "별개 제목"),
     );
     const out = await parseWordSections(makeDocx(xml));
-    // 목적=1 상속(빈 문단 무시), "별개 제목"은 본문이 끼어 짝이 아님 → 카운터 3
-    expect(out.map((s) => s.number)).toEqual(["1", "1", "2", "3"]);
+    // 목적=1 상속(빈 문단 무시). "별개 제목"은 본문이 끼어 짝이 아니고, 텍스트 번호 문서에선
+    // 문서가 안 보여주는 번호를 발명하지 않는다 → 무번호(3차 리포트: Note 계열).
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "2", ""]);
+  });
+
+  // 실물 3차 리포트(2026-07-27): 헤딩 스타일의 무번호 "Note"가 카운터를 소모해 이후 번호가 밀림.
+  // 텍스트 번호 문서에선 무번호 헤딩은 실문서에도 무번호 — 번호 발명 금지 + 카운터/스택 불변.
+  it("텍스트 번호 문서의 무번호 헤딩(Note)은 번호를 발명하지 않고 카운터도 밀지 않는다", async () => {
+    const xml = doc(
+      heading("H1", [], "3. Procedure") +
+      heading("H2", [], "3.1 Prepare") +
+      `<w:p><w:r><w:t>본문 내용</w:t></w:r></w:p>` +
+      heading("H2", [], "Note") +
+      heading("H2", [], "3.2 Execute"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["3", "3.1", "", "3.2"]);
+    expect(out.map((s) => s.title)).toEqual(["Procedure", "Prepare", "Note", "Execute"]);
+  });
+
+  it("텍스트 번호가 1건뿐인 문서는 우발 매치로 보고 기존 카운터를 유지한다 (자동넘버 문서군 보호)", async () => {
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Overview") +
+      heading("H1", ["_Toc1"], "Overview") +
+      heading("H2", [], "3 Way Handshake") + // 숫자로 시작하는 평범한 제목 — 번호 아님
+      heading("H2", [], "Details"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1.1", "1.2"]);
+    expect(out[1].title).toBe("3 Way Handshake"); // 제목 분리도 미발동
   });
 
   it("번호 제목 바로 다음의 무번호 같은 레벨 제목(언어 짝)은 번호를 상속하고 카운터를 밀지 않는다", async () => {

@@ -101,6 +101,10 @@ function normalizeTitle(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
+// 제목 텍스트 선두의 리터럴 번호("2. Scope"/"3.2 Detail") — 숫자 뒤에 실제 제목이 남아야
+// 번호로 인정("3." 단독 문단 배제). 넘버링 권위는 typedDoc 문서군에서만 발동.
+const TEXT_NUM_RE = /^(\d+(?:\.\d+)*)[.)]?\s+(\S.*)$/;
+
 // 본문 제목 걷기 — 파서(parseWordSections)와 생성기(word-doc-generator)가 같은 제목 집합·
 // 같은 합성 앵커(_bpmsecN) 순번을 공유하는 단일 소스. 순서·카운터를 바꾸면 저장된 노드 앵커가 깨진다.
 export function collectHeadings(doc: Document, styleLevels: Map<string, number>): HeadingHit[] {
@@ -144,6 +148,8 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
     }
     return true;
   };
+  // 1차 패스: 제목 후보 수집 — 넘버링 전에 문서 유형(typedDoc)을 알아야 해서 두 패스로 나눈다.
+  const candidates: { p: Element; pIdx: number; sid: string; level: number; text: string }[] = [];
   for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
     const p = paragraphs[pIdx];
     const pPr = p.getElementsByTagNameNS(W, "pPr")[0];
@@ -156,12 +162,19 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
     else level = levelFromStyleName(sid); // outlineLvl 없는 커스텀 제목 → 스타일 이름 숫자
     if (level === 0) continue; // 제목 아님
 
-    const text = Array.from(p.getElementsByTagNameNS(W, "t"))
-      .map((t) => t.textContent ?? "")
-      .join("")
-      .trim();
+    const text = textOf(p);
     if (!text) continue; // 빈 제목 문단(블랭크 라인) 제외 — 유령 항목·번호 오염 방지
+    candidates.push({ p, pIdx, sid, level, text });
+  }
 
+  // 텍스트 번호 문서 판정 — 표시 번호가 제목 텍스트에 직접 타이핑된 문서군(실물 이슈 2026-07-27).
+  // 이 문서군에선 텍스트 번호가 최우선 권위이고, 무번호 헤딩(Note 등)은 실문서에도 무번호라
+  // 번호를 발명하지 않는다. 우발적 숫자 선두 제목("3 Way Handshake") 1건으로 자동넘버 문서군이
+  // 오발동하지 않게 2건 이상일 때만 켠다.
+  const typedDoc = candidates.filter((c) => TEXT_NUM_RE.test(c.text)).length >= 2;
+
+  // 2차 패스: 넘버링 — 텍스트 리터럴(typedDoc) > TOC 씨앗 > 언어 짝 상속 > 로컬 카운터.
+  for (const { p, pIdx, sid, level, text } of candidates) {
     const names = Array.from(p.getElementsByTagNameNS(W, "bookmarkStart"))
       .map((b) => attr(b, "name"))
       .filter((n) => n && n !== "_GoBack");
@@ -174,10 +187,8 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
     if (seen.has(anchor)) continue;
     seen.add(anchor);
 
-    // 제목 텍스트 선두의 리터럴 번호 — 번호를 자동넘버가 아니라 본문에 직접 타이핑한 문서 유형
-    // (실물 이슈 2026-07-27: 카운터 재구성이 문서 실번호와 어긋남). 정답이 텍스트에 있으면 그걸 쓴다.
-    // 숫자 뒤에 실제 제목이 남아야 번호로 인정("3." 단독 문단 배제).
-    const textNumMatch = /^(\d+(?:\.\d+)*)[.)]?\s+(\S.*)$/.exec(text);
+    // 텍스트 리터럴 번호 — typedDoc 문서군에서만 권위(자동넘버 문서의 우발 매치 차단).
+    const textNumMatch = typedDoc ? TEXT_NUM_RE.exec(text) : null;
 
     // 번호: 어펜딕스=무번호 / 텍스트 리터럴=최우선 권위 / TOC(앵커 or 제목 매칭)=권위 /
     // 무번호 언어 짝=직전 번호 상속 / 그 외=재구성.
@@ -220,6 +231,11 @@ export function collectHeadings(doc: Document, styleLevels: Map<string, number>)
       // ("2. Scope" 아래 "범위")은 같은 섹션의 다른 언어 표기다. 번호를 상속하고 카운터는
       // 밀지 않는다(밀면 이후 전부 어긋남 — 실물 이슈 1·2차).
       number = prevHeading.number;
+    } else if (typedDoc) {
+      // 텍스트 번호 문서의 무번호 헤딩(Note 등) — 실문서에도 무번호다. 문서가 안 보여주는
+      // 번호를 발명하지 않고 카운터/스택도 건드리지 않는다(밀면 이후 하위 번호가 전부
+      // 어긋남 — 실물 3차 리포트).
+      number = "";
     } else {
       // 3단계+: 부모 번호에 로컬 카운터 이어붙임(레벨 상승 시 하위 리셋).
       for (let i = counters.length; i < level; i++) counters[i] = 0;
