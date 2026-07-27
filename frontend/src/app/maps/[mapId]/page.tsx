@@ -728,6 +728,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   // nodes를 오염시키지 않아 아웃라인·저장·라우팅 등 기존 가정이 깨지지 않는다(회귀 0). scopeId = 펼친 부모 id.
   const [childNodes, setChildNodes] = useState<AppNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // 새 맵 온보딩 — 시드 Start/End만 있는 빈 맵에서 AI 컨설턴트 안내 1회 (2026-07-28)
+  const [consultOnboardSeen, setConsultOnboardSeen] = useState(() =>
+    typeof window === "undefined"
+      ? true
+      : window.localStorage.getItem("bpm.consultOnboardSeen") === "1",
+  );
+  function dismissConsultOnboard() {
+    window.localStorage.setItem("bpm.consultOnboardSeen", "1");
+    setConsultOnboardSeen(true);
+  }
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
   const [newGroupId, setNewGroupId] = useState<string | null>(null);
@@ -7258,15 +7268,58 @@ function MapEditor({ mapId }: { mapId: number }) {
               onSaved={() => void refreshWorkflow()}
             />
           )}
-          <button
-            className={topIconBtn}
-            onClick={() => router.push(`/maps/${mapId}/consult?version=${versionId}`)}
-            disabled={readOnly}
-            title="AI Consultant"
-            data-id="open-consultant"
-          >
-            <Headset size={16} strokeWidth={1.5} />
-          </button>
+          {(() => {
+            // 온보딩 노출 — 시드 상태(Start/End 2노드 이하)의 편집 가능한 맵 + 미확인 사용자
+            const pristine =
+              !readOnly && nodes.length > 0 && nodes.length <= 2 &&
+              nodes.every((n) => n.data.nodeType === "start" || n.data.nodeType === "end") &&
+              edges.length <= 1;
+            const showOnboard = pristine && !consultOnboardSeen;
+            return (
+              <div className="relative">
+                <button
+                  className={topIconBtn + (showOnboard ? " ring-2 ring-accent/60" : "")}
+                  onClick={() => router.push(`/maps/${mapId}/consult?version=${versionId}`)}
+                  disabled={readOnly}
+                  title="AI Consultant"
+                  data-id="open-consultant"
+                >
+                  <Headset size={16} strokeWidth={1.5} />
+                </button>
+                {showOnboard ? (
+                  <div
+                    className="absolute right-0 top-full z-40 mt-2 w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+                    data-id="consult-onboard"
+                  >
+                    <div className="text-caption-strong text-ink">Try the AI consultant</div>
+                    <p className="mt-1 text-fine text-ink-secondary">
+                      Answer a few questions and this empty map draws itself — attach a document
+                      to go even faster.
+                    </p>
+                    <div className="mt-2 flex justify-end gap-1.5">
+                      <button
+                        className="rounded-sm px-2 py-1 text-fine text-ink-muted hover:bg-surface-alt"
+                        onClick={dismissConsultOnboard}
+                        data-id="consult-onboard-dismiss"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent"
+                        onClick={() => {
+                          dismissConsultOnboard();
+                          router.push(`/maps/${mapId}/consult?version=${versionId}`);
+                        }}
+                        data-id="consult-onboard-start"
+                      >
+                        Start
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
           <button
             className={topIconBtn}
             onClick={undo}
