@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.kb import embed_client
 from app.models import KbChunk
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ async def _load_cache(session) -> tuple[np.ndarray, list[KbChunk]]:
     result = await session.execute(select(KbChunk))
     rows = list(result.scalars().all())
     if not rows:
-        _cache = (np.zeros((0, embed_client.EMBED_DIM), dtype=np.float32), [])
+        _cache = (np.zeros((0, settings.embed_dim), dtype=np.float32), [])
         return _cache
     matrix = np.stack([unpack_embedding(r.embedding) for r in rows]).astype(np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)

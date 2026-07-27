@@ -12,16 +12,16 @@
 
 - P1 플랜(`2026-07-23-ai-consultant-interview-p1.md`)의 Global Constraints 전부 유지 — httpx2·KST·AI 모킹 패턴·React Compiler·토큰·LF·워크트리 고정(`/Users/hyeonjin/Documents/bpm/.claude/worktrees/ai-consultant`).
 - **임베딩 모킹 패턴**: `monkeypatch.setattr(embed_client, "embed_texts", fake)` — fake는 `(texts: list[str]) -> list[list[float]]`(1024차원). 전체 테스트는 임베딩 서버 없이 그린.
-- **`AI_EMBED_*` 4종은 Environment 카테고리** — `.env.example` + Settings + **docker-compose backend `environment:` 블록** 3곳 동시(env_file 없음 — `rules/backend/config.md`).
-- KB 활성 판정: `settings.ai_enabled and settings.ai_embed_base_url` — 비활성이면 인덱싱·검색 전부 no-op(P1 동작 불변).
+- **`EMBED_*` 4종(EMBED_URL/EMBED_MODEL/EMBED_DIM/EMBED_TIMEOUT_SECONDS)은 Environment 카테고리** — 변수명은 사내 타 임베딩 사용 서비스와 동일(인증 없음), 값 그대로 복사 가능. — `.env.example` + Settings + **docker-compose backend `environment:` 블록** 3곳 동시(env_file 없음 — `rules/backend/config.md`).
+- KB 활성 판정: `settings.ai_enabled and settings.embed_url` — 비활성이면 인덱싱·검색 전부 no-op(P1 동작 불변).
 - numpy는 requirements.txt(프로덕션) 추가 — 코사인 검색용, 버전 고정.
 - top-k=5·임계값 0.5·청크 500자/오버랩 80·배치 ≤32는 비즈니스 상수(모듈 상수) — .env 미노출.
 
 ## Tasks
 
 ### Task 1 — 설정 + embed 클라이언트 ✅
-- [x] Settings 4종: `ai_embed_base_url`(""), `ai_embed_model`("bge-m3"), `ai_embed_api_token`(""), `ai_embed_timeout_seconds`(30) + `.env.example` + docker-compose `environment:` 매핑.
-- [x] `app/kb/embed_client.py`: `embed_texts(texts) -> list[list[float]]` — POST `{base}/embeddings` `{"model", "input"}`, 배치 ≤32 분할, Bearer 토큰, httpx2, 실패는 `EmbedError`로 정규화(재시도 1회).
+- [x] Settings 4종: `embed_url`("", /v1 루트·/embeddings 전체 경로 모두 허용), `embed_model`("bge-m3"), `embed_dim`(1024), `embed_timeout_seconds`(30) + `.env.example` + docker-compose `environment:` 매핑. 인증 없음(토큰 필드 없음).
+- [x] `app/kb/embed_client.py`: `embed_texts(texts) -> list[list[float]]` — POST `{base}/embeddings` `{"model", "input"}`, 배치 ≤32 분할, httpx2(무인증), 실패는 `EmbedError`로 정규화(재시도 1회).
 - [x] tests: 배치 분할·응답 매핑·에러 정규화 (httpx2 모킹).
 
 ### Task 2 — KB 테이블 + 청킹 ✅
@@ -60,10 +60,10 @@
 
 ### Task 9 — 게이트 + 문서
 - [ ] 전체 게이트: BE pytest+ruff / FE vitest+tsc+lint+build+smoke 그린.
-- [ ] README/deploy 문서에 `AI_EMBED_*`·백필 절차 추가, PROGRESS 갱신, 메모리 갱신.
+- [ ] README/deploy 문서에 `EMBED_*`·백필 절차 추가, PROGRESS 갱신, 메모리 갱신.
 
 ## 검증 시나리오 (실서버)
-1. `.env`에 `AI_EMBED_BASE_URL`(bge-m3 서버)·토큰 설정 → 재배포.
+1. `.env`에 `EMBED_URL`(bge-m3 서버, 타 서비스 값 복사) 설정 → 재배포.
 2. sysadmin으로 라이브러리 문서 1개 업로드 → 인터뷰에서 해당 내용 질문 시 참조 반영 확인.
 3. 게시 맵 1개 백필 → 유사 프로세스 인터뷰에서 SP 제안 카드 확인.
 4. 임베딩 서버 중단 → 인터뷰 정상 진행 + 노티스 1회 확인.

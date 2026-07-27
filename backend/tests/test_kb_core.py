@@ -48,7 +48,7 @@ def _embed_payload(count: int) -> dict:
     # index 역순으로 반환 — 클라이언트가 index 기준 재정렬하는지 검증
     return {
         "data": [
-            {"index": i, "embedding": [float(i)] * embed_client.EMBED_DIM}
+            {"index": i, "embedding": [float(i)] * settings.embed_dim}
             for i in reversed(range(count))
         ]
     }
@@ -57,8 +57,7 @@ def _embed_payload(count: int) -> dict:
 @pytest.fixture()
 def embed_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "ai_enabled", True)
-    monkeypatch.setattr(settings, "ai_embed_base_url", "http://embed:8000/v1")
-    monkeypatch.setattr(settings, "ai_embed_api_token", "tok")
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
     monkeypatch.setattr(embed_client.httpx2, "AsyncClient", _FakeClient)
     _FakeClient.calls = []
     _FakeClient.responses = []
@@ -81,10 +80,18 @@ def test_embed_batches_and_orders_by_index(embed_env) -> None:
     vectors = asyncio.run(embed_client.embed_texts(texts))
     assert len(_FakeClient.calls) == 2  # 32 + 3 분할
     assert len(_FakeClient.calls[0]["json"]["input"]) == embed_client.EMBED_BATCH_SIZE
-    assert _FakeClient.calls[0]["headers"]["Authorization"] == "Bearer tok"
+    assert _FakeClient.calls[0]["headers"] is None  # 인증 없음 — 사내 임베딩 서버 계약
     assert _FakeClient.calls[0]["url"].endswith("/v1/embeddings")
     assert len(vectors) == len(texts)
     assert vectors[0][0] == 0.0  # index 재정렬 — 역순 응답이어도 입력 순서 보존
+
+
+def test_embed_url_accepts_full_embeddings_path(embed_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """EMBED_URL이 /embeddings 전체 경로여도 그대로 사용 — 타 서비스 .env 값 복사 호환."""
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1/embeddings")
+    _FakeClient.responses = [_FakeResponse(_embed_payload(1))]
+    asyncio.run(embed_client.embed_texts(["a"]))
+    assert _FakeClient.calls[-1]["url"] == "http://embed:8000/v1/embeddings"
 
 
 def test_embed_count_mismatch_raises(embed_env) -> None:
@@ -132,13 +139,13 @@ def test_chunk_short_and_empty() -> None:
 
 def _unit(direction: int) -> list[float]:
     """direction번째 축의 단위벡터 — 코사인이 0/1로 딱 떨어져 순위 검증이 쉬움."""
-    v = [0.0] * embed_client.EMBED_DIM
+    v = [0.0] * settings.embed_dim
     v[direction] = 1.0
     return v
 
 
 def _mix(a: int, b: int, wa: float, wb: float) -> list[float]:
-    v = [0.0] * embed_client.EMBED_DIM
+    v = [0.0] * settings.embed_dim
     v[a], v[b] = wa, wb
     return v
 
@@ -172,7 +179,7 @@ def _seed_chunks(client) -> None:
 def test_search_ranks_filters_and_scopes(client, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed_chunks(client)
     monkeypatch.setattr(settings, "ai_enabled", True)
-    monkeypatch.setattr(settings, "ai_embed_base_url", "http://embed:8000/v1")
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
 
     async def fake_embed(texts: list[str]) -> list[list[float]]:
         return [_unit(0) for _ in texts]
@@ -208,7 +215,7 @@ def test_search_disabled_returns_empty(client, monkeypatch: pytest.MonkeyPatch) 
 
 def test_cache_invalidation_picks_up_new_chunks(client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ai_enabled", True)
-    monkeypatch.setattr(settings, "ai_embed_base_url", "http://embed:8000/v1")
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
 
     async def fake_embed(texts: list[str]) -> list[list[float]]:
         return [_unit(5) for _ in texts]
@@ -241,20 +248,20 @@ def test_cache_invalidation_picks_up_new_chunks(client, monkeypatch: pytest.Monk
 
 
 def test_pack_unpack_roundtrip() -> None:
-    vec = [0.25] * embed_client.EMBED_DIM
+    vec = [0.25] * settings.embed_dim
     blob = retrieval.pack_embedding(vec)
-    assert len(blob) == embed_client.EMBED_DIM * 4  # float32
+    assert len(blob) == settings.embed_dim * 4  # float32
     restored = retrieval.unpack_embedding(blob)
-    assert restored.shape == (embed_client.EMBED_DIM,)
+    assert restored.shape == (settings.embed_dim,)
     assert float(restored[0]) == 0.25
 
 
 def test_is_embed_enabled_requires_both_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     """KB 활성 = AI 활성 AND 임베딩 주소 존재 — 한쪽만으론 no-op (P1 동작 불변 가드)."""
     monkeypatch.setattr(settings, "ai_enabled", True)
-    monkeypatch.setattr(settings, "ai_embed_base_url", "")
+    monkeypatch.setattr(settings, "embed_url", "")
     assert not embed_client.is_embed_enabled()
-    monkeypatch.setattr(settings, "ai_embed_base_url", "http://embed:8000/v1")
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
     assert embed_client.is_embed_enabled()
     monkeypatch.setattr(settings, "ai_enabled", False)
     assert not embed_client.is_embed_enabled()
