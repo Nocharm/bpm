@@ -39,7 +39,11 @@ const afterChoice = {
   checkpoints: [{ stage: "activities", message_seq: 5, working_graph: graph(["s", "e"]), created_at: "2026-07-23T10:02:00+09:00" }],
   messages: [...afterAnswer.messages,
     { id: 4, seq: 4, role: "user", kind: "choice", content: "opt-2", payload: { choice_id: "opt-2" }, stage: "activities", superseded: false, created_at: "2026-07-23T10:02:00+09:00" },
-    { id: 5, seq: 5, role: "consultant", kind: "question", content: "역할을 알려주세요.", payload: null, stage: "roles", superseded: false, created_at: "2026-07-23T10:02:05+09:00" }],
+    { id: 5, seq: 5, role: "consultant", kind: "question", content: "역할을 알려주세요.", payload: null, stage: "roles", superseded: false, created_at: "2026-07-23T10:02:05+09:00" },
+    // 유사 SP 제안(P2) — 캔버스 카드 노출·Dismiss 로컬 숨김 검증용
+    { id: 6, seq: 6, role: "consultant", kind: "sp_suggestion", content: "유사 맵을 찾았습니다.",
+      payload: { map_id: 777, map_name: "Standard Purchase", node_keys: ["a", "b"], score: 0.8 },
+      stage: "activities", superseded: false, created_at: "2026-07-23T10:02:06+09:00" }],
 };
 
 // 체크포인트 확정(revert) 후 상태 — 작업본이 스냅샷으로 복원, 해당 체크포인트는 제거.
@@ -114,6 +118,13 @@ const run = async () => {
   await page.waitForSelector(".react-flow__node");
   let nodes = await page.$$(".react-flow__node");
   if (nodes.length !== 4) throw new Error(`expected 4 preview nodes, got ${nodes.length}`);
+
+  // 유사 SP 제안 카드(P2) — 노출 확인 후 Dismiss로 로컬 숨김
+  await page.waitForSelector('[data-id="iv-sp-card"]');
+  const spText = await page.textContent('[data-id="iv-sp-card"]');
+  if (!spText.includes("Standard Purchase")) throw new Error("sp card should show target map name");
+  await page.click('[data-id="iv-sp-dismiss"]');
+  await page.waitForSelector('[data-id="iv-sp-card"]', { state: "detached" });
 
   // 체크포인트 클릭 = 맵만 프리뷰 → 취소 복귀 → 확정 시 실제 revert (2026-07-27)
   await page.click('[data-id="iv-checkpoint-activities"]');

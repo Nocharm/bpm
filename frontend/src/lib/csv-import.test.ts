@@ -755,6 +755,26 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("creates a real subprocess link node when AI carries linked_map_id (P2 SP accept)", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [{ ...aiNode("sp", "발주 프로세스", "subprocess"), linked_map_id: 42 }], edges: [], groups: [] },
+      { base: base([]) },
+    );
+    const sp = outcome.graph?.nodes.find((n) => n.title === "발주 프로세스");
+    expect(sp?.node_type).toBe("subprocess");
+    expect(sp?.linked_map_id).toBe(42);
+  });
+
+  it("still demotes linkless subprocess echo to process", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("sp", "가짜 서브", "subprocess")], edges: [], groups: [] },
+      { base: base([]) },
+    );
+    const node = outcome.graph?.nodes.find((n) => n.title === "가짜 서브");
+    expect(node?.node_type).toBe("process");
+    expect(node?.linked_map_id).toBeNull();
+  });
+
   it("preserves subprocess node_type/link/color on title match", () => {
     const sub = baseNode("s1", "발주 하위", { node_type: "subprocess", linked_map_id: 7, color: "" });
     const outcome = buildGraphFromAiProposal(

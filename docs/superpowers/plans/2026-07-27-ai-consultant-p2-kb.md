@@ -34,33 +34,33 @@
 - [x] 인메모리 캐시(모듈 전역: 행렬+행 메타) + `invalidate_cache()` — 인덱싱 삽입/삭제 시 호출.
 - [x] tests: 코사인 순위·임계값 컷·세션 스코프 격리·캐시 무효화.
 
-### Task 4 — 인덱싱 파이프라인(직렬 워커)
-- [ ] `app/kb/indexing.py`: 전역 `asyncio.Semaphore(1)` 직렬화 — `index_library_doc(doc_id)` · `index_map_version(version_id)`(게시본 직렬화: 맵 이름·노드 라벨·설명·구조 요약, 기존 `map` 청크 교체) · `index_attachment(attachment_id, session_id)`(세션 스코프 meta). 임베딩 배치 ≤32, 실패는 로깅 후 무해(그레이스풀).
-- [ ] 훅 2곳: `routers/versions.py` publish 성공 후 fire-and-forget + `routers/interviews.py` 첨부 파싱 성공 후.
-- [ ] `scripts/backfill_kb_maps.py`: 기존 게시본 1회 백필(서버에서 수동 실행).
-- [ ] tests: 소스별 인덱싱 청크 생성·map 재게시 시 구청크 교체·비활성 시 no-op·훅 발화(모킹).
+### Task 4 — 인덱싱 파이프라인(직렬 워커) ✅
+- [x] `app/kb/indexing.py`: 전역 `asyncio.Semaphore(1)` 직렬화 — `index_library_doc(doc_id)` · `index_map_version(version_id)`(게시본 직렬화: 맵 이름·노드 라벨·설명·구조 요약, 기존 `map` 청크 교체) · `index_attachment(attachment_id, session_id)`(세션 스코프 meta). 임베딩 배치 ≤32, 실패는 로깅 후 무해(그레이스풀).
+- [x] 훅 2곳: `routers/versions.py` publish 성공 후 fire-and-forget + `routers/interviews.py` 첨부 파싱 성공 후.
+- [x] `scripts/backfill_kb_maps.py`: 기존 게시본 1회 백필(서버에서 수동 실행).
+- [x] tests: 소스별 인덱싱 청크 생성·map 재게시 시 구청크 교체·비활성 시 no-op·훅 발화(모킹).
 
-### Task 5 — 라이브러리 관리 API (sysadmin)
-- [ ] `routers/kb.py`: `GET /api/kb/documents`(목록) · `POST /api/kb/documents`(업로드 — interview parsing 재사용, 파싱→인덱싱 큐) · `DELETE /api/kb/documents/{id}`(문서+청크 삭제, 캐시 무효화). 전부 sysadmin 가드.
-- [ ] tests: 권한(403)·업로드→파싱→청크·삭제 연쇄.
+### Task 5 — 라이브러리 관리 API (sysadmin) ✅ (FE UI는 Task 8)
+- [x] `routers/kb.py`: `GET /api/kb/documents`(목록) · `POST /api/kb/documents`(업로드 — interview parsing 재사용, 파싱→인덱싱 큐) · `DELETE /api/kb/documents/{id}`(문서+청크 삭제, 캐시 무효화). 전부 sysadmin 가드.
+- [x] tests: 권한(403)·업로드→파싱→청크·삭제 연쇄.
 
-### Task 6 — 인터뷰 검색 주입 + 디그레이드 노티스
-- [ ] `routers/interviews.py` 턴 경로: KB 활성 시 `search(맵 이름+스테이지 목표+최근 사용자 입력)` top-k → `[지식기반 참조]` 블록(출처: 문서 제목/맵 이름 표기)을 context_text에 예산 내 추가. agents 프롬프트에 "참조는 근거로만, 사실 날조 금지" 1줄.
-- [ ] 임베딩 호출 실패 시: 검색 스킵 + 세션당 1회 notice 메시지("지식기반 참조를 사용할 수 없습니다 — 인터뷰는 계속 진행됩니다").
-- [ ] tests: 주입 블록 포함·실패 시 스킵+노티스 1회·비활성 시 무주입(P1 회귀 가드).
+### Task 6 — 인터뷰 검색 주입 + 디그레이드 노티스 ✅
+- [x] `routers/interviews.py` 턴 경로: KB 활성 시 `search(맵 이름+스테이지 목표+최근 사용자 입력)` top-k → `[지식기반 참조]` 블록(출처: 문서 제목/맵 이름 표기)을 context_text에 예산 내 추가. 날조 금지 문구는 agents 계약 대신 주입 블록 헤더에 포함(프롬프트 표면 최소 변경).
+- [x] 임베딩 호출 실패 시: 검색 스킵 + 세션당 1회 notice 메시지("지식기반 참조를 사용할 수 없습니다 — 인터뷰는 계속 진행됩니다").
+- [x] tests: 주입 블록 포함·실패 시 스킵+노티스 1회·비활성 시 무주입(P1 회귀 가드).
 
-### Task 7 — 유사 서브프로세스 제안 (백엔드)
-- [ ] activities/review 스테이지 턴에서 작업본 조각(연속 process 3+개 시퀀스) 임베딩 → `source_type=map` 코퍼스 top-1(임계값 상향 0.65) → 턴 응답에 `sp_suggestion` payload(대상 맵 id/이름/구간 노드 키). 수락은 프론트가 기존 서브프로세스 링크 규칙(중복 가드·grandfather)으로 처리.
-- [ ] tests: 후보 검출·임계 미달 무제안·중복 가드 존중.
+### Task 7 — 유사 서브프로세스 제안 (백엔드) ✅
+- [x] activities/review 스테이지 턴에서 작업본 조각(연속 process 3+개 체인) 임베딩 → map 코퍼스 top-1(임계 0.65, 자기 맵·기링크 맵·비가시 맵 제외) → `sp_suggestion` 메시지(payload: map_id/map_name/node_keys). **수락은 백엔드 `POST /interviews/{id}/sp-accept`가 결정적으로 구간 치환**(subprocess 링크 노드+엣지 재배선) — 프론트 apply는 linked_map_id 스레딩으로 실제 Call Activity 저장. AI_NODE_TYPES에 subprocess 추가 + `_sanitize_subprocess`(이전 작업본 링크만 유지·환각 강등).
+- [x] tests: 후보 검출·임계 미달 무제안·중복 가드 존중.
 
-### Task 8 — 프론트 (라이브러리 관리 UI + 유사 SP 카드)
-- [ ] sysadmin 설정 화면에 KB 라이브러리 섹션(업로드/목록/삭제 — ManualDoc 관리 패턴 재사용) + `data-id`.
-- [ ] 인터뷰 캔버스에 유사 SP 제안 카드(미니 프리뷰+수락/무시) — 수락 시 해당 구간을 Call Activity 링크 노드로 대체(`buildGraphFromAiProposal` 경로 재사용).
-- [ ] vitest + pw-smoke(카드 표시·수락 배선은 모킹).
+### Task 8 — 프론트 (라이브러리 관리 UI + 유사 SP 카드) ✅ (카드 미니 프리뷰는 링크로 대체 — 대상 맵 새 탭 열람)
+- [x] sysadmin 설정 화면에 KB 라이브러리 섹션(업로드/목록/삭제 — ManualDoc 관리 패턴 재사용) + `data-id`.
+- [x] 인터뷰 캔버스에 유사 SP 제안 카드(미니 프리뷰+수락/무시) — 수락 시 해당 구간을 Call Activity 링크 노드로 대체(`buildGraphFromAiProposal` 경로 재사용).
+- [x] vitest + pw-smoke(카드 표시·수락 배선은 모킹).
 
-### Task 9 — 게이트 + 문서
-- [ ] 전체 게이트: BE pytest+ruff / FE vitest+tsc+lint+build+smoke 그린.
-- [ ] README/deploy 문서에 `EMBED_*`·백필 절차 추가, PROGRESS 갱신, 메모리 갱신.
+### Task 9 — 게이트 + 문서 ✅ (docs/deploy/kb-embedding.md 신설)
+- [x] 전체 게이트: BE pytest+ruff / FE vitest+tsc+lint+build+smoke 그린.
+- [x] README/deploy 문서에 `EMBED_*`·백필 절차 추가, PROGRESS 갱신, 메모리 갱신.
 
 ## 검증 시나리오 (실서버)
 1. `.env`에 `EMBED_URL`(bge-m3 서버, 타 서비스 값 복사) 설정 → 재배포.

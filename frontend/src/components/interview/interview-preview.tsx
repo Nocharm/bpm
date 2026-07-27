@@ -7,12 +7,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, NodeTypes } from "@xyflow/react";
-import { CheckCheck, MessageSquarePlus, Undo2, X } from "lucide-react";
+import { CheckCheck, MessageSquarePlus, Undo2, Workflow, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
 import {
-  completeInterview, getApiErrorDetail, getGraph, postInterviewRevert, saveGraph,
-  type ChoiceOption, type InterviewState, type WorkingGraph,
+  acceptSpSuggestion, completeInterview, getApiErrorDetail, getGraph, postInterviewRevert,
+  saveGraph, type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
 import { addedNodeKeys, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
@@ -228,6 +228,28 @@ export function InterviewPreview({
     }
   }
 
+  // 유사 SP 제안 카드 — 최신 라이브 제안 메시지 1건, Dismiss는 로컬(재제안 방지는 서버 dedupe)
+  const spMessage = interview
+    ? [...interview.messages].reverse().find((m) => !m.superseded && m.kind === "sp_suggestion") ?? null
+    : null;
+  const spData = (spMessage?.payload ?? null) as
+    | { map_id?: number; map_name?: string; node_keys?: string[] }
+    | null;
+  const [spDismissed, setSpDismissed] = useState<Set<number>>(new Set());
+  const [spBusy, setSpBusy] = useState(false);
+
+  async function handleSpAccept(messageId: number) {
+    if (!interview || spBusy) return;
+    setSpBusy(true);
+    try {
+      onUpdated(await acceptSpSuggestion(interview.id, messageId));
+    } catch (err) {
+      setApplyError(getApiErrorDetail(err) || "Failed to apply the suggestion.");
+    } finally {
+      setSpBusy(false);
+    }
+  }
+
   // 최근 체크포인트가 맨 위 — 새 항목이 위로 들어오며 아래로 밀리는 스택 (요구 6)
   const checkpointsNewestFirst = [...(interview?.checkpoints ?? [])].reverse();
   // 프리뷰 대상 — 같은 스테이지가 여럿이면 최신(백엔드 revert 대상 선택과 동일 규칙)
@@ -383,6 +405,45 @@ export function InterviewPreview({
                 </div>
               );
             })()}
+            {/* 유사 SP 제안 카드 — 수락 시 구간을 서브프로세스 링크로 치환 (design §7 P2) */}
+            {spMessage && spData?.map_id && !spDismissed.has(spMessage.id) &&
+            interview?.status === "active" ? (
+              <div
+                className="absolute bottom-3 left-1/2 z-10 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-2 shadow-lg"
+                data-id="iv-sp-card"
+              >
+                <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                <span className="min-w-0 truncate text-caption text-ink-secondary">
+                  Similar published map{" "}
+                  <a
+                    className="text-accent hover:underline"
+                    href={`/maps/${spData.map_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {spData.map_name || "map"}
+                  </a>{" "}
+                  — replace {spData.node_keys?.length ?? 0} steps with a subprocess link?
+                </span>
+                <button
+                  className="shrink-0 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setSpDismissed((prev) => new Set(prev).add(spMessage.id))}
+                  data-id="iv-sp-dismiss"
+                >
+                  Dismiss
+                </button>
+                <button
+                  className="shrink-0 rounded-sm bg-accent px-2.5 py-0.5 text-caption-strong text-on-accent disabled:opacity-40"
+                  disabled={spBusy}
+                  onClick={() => {
+                    void handleSpAccept(spMessage.id);
+                  }}
+                  data-id="iv-sp-accept"
+                >
+                  Replace
+                </button>
+              </div>
+            ) : null}
             {/* 선택지 플로팅 창 — 복수 안을 캔버스 위에, 3안은 큰 창 1+작은 창 2(탭 전환), 선택하면 모두 닫힘 */}
             {choices && choices.length > 0 ? (
               <ChoiceOverlay choices={choices} busy={busy} onChoose={onChoose} />

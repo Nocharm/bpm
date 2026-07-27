@@ -9,6 +9,7 @@
 - [`deploy/deploy.md`](deploy/deploy.md) — 서버 docker-compose 배포 절차(포트 3333·nginx 토폴로지·Keycloak·AD 동기화).
 - [`deploy/db-seed.md`](deploy/db-seed.md) — DB 초기화·데모 시드(`python -m scripts.reset_db`).
 - [`deploy/db-migration-9910.md`](deploy/db-migration-9910.md) — 운영 DB 복사 → 검증 스택(9910) 마이그레이션 절차.
+- [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
 
 ## QA · 검증 ([`qa/`](qa/))
 - [`qa/alarm-audit.md`](qa/alarm-audit.md) — 알림 기능 전수 조사·감사.

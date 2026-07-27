@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,8 +12,9 @@ from app import workflow
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
-from app.interview.engine import next_stage_key
+from app.interview.engine import get_stage, next_stage_key
 from app.interview.orchestrator import TurnError, run_turn
+from app.kb import embed_client, indexing, retrieval, sp_suggest
 from app.interview.parsing import (
     ALLOWED_EXTENSIONS,
     MAX_ATTACHMENT_BYTES,
@@ -25,6 +27,7 @@ from app.models import (
     InterviewAttachment,
     InterviewMessage,
     InterviewSession,
+    KbChunk,
     MapVersion,
     ProcessMap,
 )
@@ -35,6 +38,7 @@ from app.schemas import (
     InterviewAttachmentOut,
     InterviewCreateIn,
     InterviewRevertIn,
+    InterviewSpAcceptIn,
     InterviewStateOut,
     InterviewTurnIn,
 )
@@ -98,9 +102,10 @@ _SEED_ATTRS = (
     "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
 )
 
-# AI 계약(AI_NODE_TYPES) 밖 타입은 process로 강등 — subprocess도 제목이 유지되므로
-# apply 병합(제목 매칭 id·타입 보존)이 원본을 지킨다. note는 흐름이 아니라 시드 제외.
-_SEED_TYPES = {"start", "process", "decision", "end", "section"}
+# AI 계약(AI_NODE_TYPES) 밖 타입은 process로 강등. subprocess는 링크가 있으면 유지(P2 —
+# 오케스트레이터 _sanitize_subprocess가 이전 작업본 기준으로 에코를 보정), 플레이스홀더(무링크)는
+# process 강등(제목 유지 → apply 병합이 원본 보존). note는 흐름이 아니라 시드 제외.
+_SEED_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
 def _seed_working_graph(graph) -> dict | None:
@@ -112,14 +117,20 @@ def _seed_working_graph(graph) -> dict | None:
         attributes = {k: v for k in _SEED_ATTRS if (v := getattr(n, k))}
         if n.section_anchor:
             attributes["section_anchor"] = n.section_anchor
-        nodes.append({
+        node_type = n.node_type if n.node_type in _SEED_TYPES else "process"
+        if node_type == "subprocess" and not n.linked_map_id:
+            node_type = "process"
+        node = {
             "key": n.id,
             "title": n.title,
-            "node_type": n.node_type if n.node_type in _SEED_TYPES else "process",
+            "node_type": node_type,
             "description": n.description,
             "attributes": attributes or None,
             "group_key": n.group_ids[0] if n.group_ids else None,
-        })
+        }
+        if node_type == "subprocess":
+            node["linked_map_id"] = n.linked_map_id
+        nodes.append(node)
     if not nodes:
         return None
     kept = {n["key"] for n in nodes}
@@ -212,6 +223,101 @@ def _graph_summary(graph) -> str:
     """작업 컨텍스트용 현재 저장 그래프 요약 — 제목 나열(프롬프트 예산 절약)."""
     titles = [f"{n.node_type}:{n.title}" for n in graph.nodes]
     return ", ".join(titles) if titles else ""
+
+
+# 지식기반 검색 주입 (design 2026-07-23 §7 P2) — 실패는 턴을 죽이지 않는다(그레이스풀 디그레이드)
+_KB_CONTEXT_BUDGET = 4000  # 참조 블록 문자 예산 — 첨부 예산과 별도(작게)
+
+_KB_DEGRADE_NOTICE = {
+    "ko": "지식기반 참조를 지금 사용할 수 없어 참조 없이 진행합니다 — 인터뷰는 계속됩니다.",
+    "en": "The knowledge base is unavailable right now — continuing without references.",
+}
+
+
+async def _kb_reference_block(
+    session: AsyncSession, interview: InterviewSession, map_name: str, user_text: str
+) -> tuple[str, bool]:
+    """top-k 검색 → [지식기반 참조] 블록(출처 표기). 반환 (블록, 임베딩 실패 여부)."""
+    if not embed_client.is_embed_enabled():
+        return "", False
+    stage = get_stage(interview.current_stage, interview.mode)
+    goal = stage.goal_ko if interview.lang == "ko" else stage.goal_en
+    query = " ".join(part for part in (map_name, goal, user_text) if part).strip()
+    try:
+        hits = await retrieval.search(session, query, session_id=interview.id)
+    except embed_client.EmbedError as exc:
+        logger.warning("kb search failed — turn continues without references: %s", exc)
+        return "", True
+    lines: list[str] = []
+    total = 0
+    for hit in hits:
+        source = (
+            hit.meta.get("title") or hit.meta.get("map_name")
+            or hit.meta.get("filename") or hit.source_type
+        )
+        line = f"- ({source}) {hit.chunk_text}"
+        if total + len(line) > _KB_CONTEXT_BUDGET:
+            break
+        lines.append(line)
+        total += len(line)
+    if not lines:
+        return "", False
+    header = "\n\n[지식기반 참조 — 근거로만 활용하고, 아래 출처에 없는 사실을 지어내지 마세요]\n"
+    return header + "\n".join(lines), False
+
+
+def _has_kb_degrade_notice(interview: InterviewSession) -> bool:
+    texts = set(_KB_DEGRADE_NOTICE.values())
+    return any(m.kind == "notice" and m.content in texts for m in interview.messages)
+
+
+# 유사 SP 제안 (design §7 P2) — activities/review 스테이지에서 기회주의적으로 1회씩
+_SP_STAGES = ("activities", "review")
+
+_SP_SUGGEST_TEXT = {
+    "ko": "'{map_name}' 게시 맵과 유사한 구간(활동 {n}개)을 발견했습니다 — 캔버스의 제안 카드에서 서브프로세스 링크로 대체할 수 있어요.",
+    "en": "Found a segment ({n} steps) similar to the published map '{map_name}' — you can replace it with a subprocess link from the card on the canvas.",
+}
+
+_SP_ACCEPT_NOTICE = {
+    "ko": "활동 {n}개를 '{map_name}' 서브프로세스 링크로 대체했습니다. Apply 시 실제 링크 노드로 저장됩니다.",
+    "en": "Replaced {n} steps with a subprocess link to '{map_name}'. It becomes a real link node when applied.",
+}
+
+
+def _suggested_map_ids(interview: InterviewSession) -> set[int]:
+    """이미 제안했던 맵 — 무시/수락과 무관하게 재제안하지 않는다(스팸 방지)."""
+    ids: set[int] = set()
+    for m in interview.messages:
+        if m.kind == "sp_suggestion" and m.payload and m.payload.get("map_id"):
+            ids.add(m.payload["map_id"])
+    return ids
+
+
+async def _maybe_sp_suggestion(
+    session: AsyncSession, interview: InterviewSession, user: str
+) -> None:
+    """유사 SP 후보를 찾아 sp_suggestion 메시지 추가 — 실패·권한 없음은 침묵(기회주의적)."""
+    try:
+        suggestion = await sp_suggest.suggest_subprocess(session, interview)
+    except embed_client.EmbedError:
+        return
+    if suggestion is None or suggestion["map_id"] in _suggested_map_ids(interview):
+        return
+    try:
+        # 대상 맵 열람 권한이 없으면 이름조차 노출하지 않는다 (RBAC)
+        await assert_map_role(session, user, suggestion["map_id"], "viewer")
+    except HTTPException:
+        return
+    text = _SP_SUGGEST_TEXT.get(interview.lang, _SP_SUGGEST_TEXT["ko"]).format(
+        map_name=suggestion["map_name"], n=len(suggestion["node_keys"])
+    )
+    session.add(InterviewMessage(
+        session_id=interview.id,
+        seq=max((m.seq for m in interview.messages), default=0) + 1,
+        role="consultant", kind="sp_suggestion", content=text,
+        payload=suggestion, stage=interview.current_stage,
+    ))
 
 
 async def _context_text(interview: InterviewSession) -> str:
@@ -355,12 +461,16 @@ async def post_turn(
 
     # rollback 후 만료 대비 스칼라 선캡처
     map_id, version_id = interview.map_id, interview.version_id
+    pre_stage = interview.current_stage  # SP 제안 스테이지 판정 — 턴 중 전이 전 기준도 인정
 
     current = await _load_graph(session, interview.version_id)
-    context_text = await _context_text(interview)
+    found_map = await session.get(ProcessMap, interview.map_id)
+    kb_block, kb_failed = await _kb_reference_block(
+        session, interview, found_map.name if found_map else "", payload.content or ""
+    )
+    context_text = await _context_text(interview) + kb_block
     doc_sections: list[dict] | None = None
     if interview.mode == "word":
-        found_map = await session.get(ProcessMap, interview.map_id)
         doc_sections = list(found_map.doc_sections) if found_map else []
     try:
         await run_turn(
@@ -381,6 +491,20 @@ async def post_turn(
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
+    # 유사 SP 제안 — 구조 결정/검토 스테이지의 일반 모드 턴에서만, 맵당 1회 (design §7 P2)
+    if interview.mode == "normal" and (
+        pre_stage in _SP_STAGES or interview.current_stage in _SP_STAGES
+    ):
+        await _maybe_sp_suggestion(session, interview, user)
+    # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
+    if kb_failed and not _has_kb_degrade_notice(interview):
+        session.add(InterviewMessage(
+            session_id=interview.id,
+            seq=max((m.seq for m in interview.messages), default=0) + 1,
+            role="consultant", kind="notice",
+            content=_KB_DEGRADE_NOTICE.get(interview.lang, _KB_DEGRADE_NOTICE["ko"]),
+            stage=interview.current_stage,
+        ))
     session.add(AiUsageEvent(
         login_id=user, map_id=map_id, version_id=version_id,
         model="", kind="interview", ok=True,
@@ -430,6 +554,9 @@ async def upload_attachment(
     ))
     await session.commit()
     await session.refresh(row)
+    # 세션 스코프 지식기반 인덱싱 — fire-and-forget, 파싱 성공분만 (design 2026-07-23 §7)
+    if row.status == "parsed" and embed_client.is_embed_enabled():
+        indexing.spawn(indexing.index_attachment(row.id))
     return InterviewAttachmentOut.model_validate(row)
 
 
@@ -446,7 +573,75 @@ async def delete_attachment(
     if row is None:
         raise HTTPException(status_code=404, detail=f"attachment {attachment_id} not found")
     await session.delete(row)
+    # 첨부 청크도 함께 제거 — 이후 검색에서 즉시 제외
+    await session.execute(sa_delete(KbChunk).where(
+        KbChunk.source_type == "attachment", KbChunk.source_id == attachment_id
+    ))
     await session.commit()
+    retrieval.invalidate_cache()
+
+
+@router.post("/interviews/{interview_id}/sp-accept", response_model=InterviewStateOut)
+async def accept_sp_suggestion(
+    interview_id: int,
+    payload: InterviewSpAcceptIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """유사 SP 제안 수락 — 제안 구간을 subprocess 링크 노드 하나로 치환(결정적, AI 무관)."""
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    msg = next(
+        (m for m in interview.messages
+         if m.id == payload.message_id and m.kind == "sp_suggestion" and not m.superseded),
+        None,
+    )
+    if msg is None:
+        raise HTTPException(status_code=404, detail="suggestion not found")
+    data = msg.payload or {}
+    graph = interview.working_graph or {"nodes": [], "edges": [], "groups": []}
+    keys = set(data.get("node_keys") or [])
+    node_keys = {n["key"] for n in graph.get("nodes", [])}
+    if not keys or not keys.issubset(node_keys):
+        raise HTTPException(
+            status_code=409, detail="the suggested segment is no longer in the working map"
+        )
+
+    sp_key = f"sp-{data['map_id']}"
+    sp_node = {
+        "key": sp_key, "title": data.get("map_name") or "Subprocess",
+        "node_type": "subprocess", "description": "", "attributes": None,
+        "group_key": None, "linked_map_id": data["map_id"],
+    }
+    kept = [n for n in graph.get("nodes", []) if n["key"] not in keys]
+    edges: list[dict] = []
+    seen_pairs: set[tuple[str, str, str]] = set()
+    for edge in graph.get("edges", []):
+        src_in, tgt_in = edge["source"] in keys, edge["target"] in keys
+        if src_in and tgt_in:
+            continue  # 구간 내부 엣지는 제거
+        source = sp_key if src_in else edge["source"]
+        target = sp_key if tgt_in else edge["target"]
+        pair = (source, target, edge.get("label") or "")
+        if pair in seen_pairs:
+            continue  # 치환으로 겹친 엣지 dedupe
+        seen_pairs.add(pair)
+        edges.append({**edge, "source": source, "target": target})
+    interview.working_graph = {**graph, "nodes": [*kept, sp_node], "edges": edges}
+    msg.superseded = True  # 카드 소멸 — 대화 이력에서도 접힌다
+    session.add(InterviewMessage(
+        session_id=interview.id,
+        seq=max((m.seq for m in interview.messages), default=0) + 1,
+        role="consultant", kind="notice",
+        content=_SP_ACCEPT_NOTICE.get(interview.lang, _SP_ACCEPT_NOTICE["ko"]).format(
+            n=len(keys), map_name=data.get("map_name", "")
+        ),
+        stage=interview.current_stage,
+    ))
+    await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    return await _state_out(session, loaded)
 
 
 @router.post("/interviews/{interview_id}/revert", response_model=InterviewStateOut)
