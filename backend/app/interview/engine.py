@@ -44,8 +44,9 @@ STAGES: tuple[StageDef, ...] = (
     ),
     StageDef(
         "roles", "Roles & Systems",
-        "각 활동의 담당자/부서와 사용 시스템을 채운다",
-        "Fill in assignee/department and systems for each activity",
+        "각 활동의 부서(제시된 후보 목록 내)와 사용 시스템을 채운다 — 담당자는 에디터 피커로 지정하므로 묻지 않는다",
+        "Fill in the department (from the provided candidate list) and systems for each activity — "
+        "assignees are set via the editor picker, do not ask for them",
         ("roles",),
     ),
     StageDef(

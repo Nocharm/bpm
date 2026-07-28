@@ -3,6 +3,15 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-29 — GPU 실검증 2차 피드백 7종 (worktree-ai-consultant)
+- **수락 재드로 루프 차단**: choice 턴은 draw_due multi/single 신호를 억제(params 표 신호만 통과) — Use this option 직후 전이/redraw 신호가 방금 고른 안을 곧바로 다시 그려 제안 모달이 반복되던 회귀 종결.
+- **드래프터 최근 대화 동봉**: `build_drafter_messages`에 `[최근 대화]` 블록(6발화·발화당 400자) — facts에 안 잡힌 수정 요청(예: "라벨 전부 영문으로")이 draw에 전달되지 않아 동일안만 나와 전멸 필터("새로 제시할 게 없습니다")에 걸리던 원인 해소.
+- **'현재 맵 유지' 안 상시 제공**: draw 결과에 사용자 콘텐츠가 있는 현재 작업본을 `opt-current`(`same_as_current`)로 마지막에 추가 — 카드 좌상단 "Same as current" 배지, 수락=무변경 확정으로 루프 탈출구 겸용(시드뿐인 백지는 생략).
+- **담당자/부서 수집 개편**: 담당자(assignee)는 인터뷰에서 수집 금지(에디터 피커 안내만, 인터뷰어 규칙 13+roles goal 개정). 부서는 eligible-assignees와 동일 모수의 `[부서 후보 목록]`을 턴 프롬프트에 주입(상한 80) — 관련 후보 2~4개를 quick reply로 제시+건너뛰기, 목록 밖 부서명 기록 금지.
+- **세션 초기화 버튼**: consult 헤더 "Start over"(iv-restart) → 확인 모달 → abandon+새 세션 재개(맵·facts·대화 초기화, draft 불변).
+- **Apply to draft 상시 노출**: review 도달 전이라도 맵이 그려진 시점(start/end 외 노드 존재)부터 액션바에 노출 — 언제든 반영·세션 종료 가능.
+- **제안 모달 폭 확대**: ChoiceOverlay 1안 92%·2안 48%씩·3안 전폭(max-w-5xl 제거) — 뒤 캔버스는 안 보는 영역이라 가림 허용. **온보딩 z-인덱스 픽스**: 말풍선 z-40 → z-[1100](RF 선택 노드 1000·연결선 1001이 덮던 문제). 게이트: BE 831·ruff 0 / vitest 576·tsc 0·lint 0에러·build·consult/word 스모크 그린.
+
 ## 2026-07-28 — 인터뷰 간소화 3종: params 단계 폐지·첨부 추출·첨부 배지·온보딩 (worktree-ai-consultant)
 - **params 고정 스테이지 폐지(7→6단계)**: engine STAGES에서 제외(레거시 세션은 get_stage/next_stage_key 폴백으로 review 탈출) — 파라미터는 어느 스테이지에서든 언급 시 `params_table`로 수집(`_merge_facts_namespace`가 스테이지 무관 'params' 네임스페이스로 라우팅), review 진입 시 표 확정 신호(draw_due="params")·Params 버튼 안내는 review goal에 통합. FE INTERVIEW_STAGES 동기(6단계).
 - **첨부 시점 정보 추출**: 업로드 파싱 성공 시 백그라운드 AI 1콜 `extract_attachment_facts`(스테이지별 facts+params_table 추출·허용 네임스페이스만 병합·노티스) — 인터뷰 진행 전에 문서에서 최대한 수집. 프론트는 9s/22s 지연 재조회(seq 가드로 구상태 덮음 방지).

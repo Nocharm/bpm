@@ -37,7 +37,7 @@ from app.models import (
     MapVersion,
     ProcessMap,
 )
-from app.permissions.access import assert_map_role
+from app.permissions.access import assert_map_role, get_eligible_users
 from app.permissions.deps import require_map_role
 from app.routers.graph import _load_graph
 from app.schemas import (
@@ -231,6 +231,22 @@ def _graph_summary(graph) -> str:
     """작업 컨텍스트용 현재 저장 그래프 요약 — 제목 나열(프롬프트 예산 절약)."""
     titles = [f"{n.node_type}:{n.title}" for n in graph.nodes]
     return ", ".join(titles) if titles else ""
+
+
+# 인터뷰어에 싣는 부서 후보 상한 — 공개(글로벌) 맵은 전 부서가 후보라 프롬프트 예산 가드
+_DEPT_CATALOG_MAX = 80
+
+
+async def _dept_catalog(session: AsyncSession, interview: InterviewSession) -> str:
+    """노드 department 후보 목록 — 에디터 부서 피커(eligible-assignees)와 동일 모수.
+
+    인터뷰어가 목록 밖 부서명을 지어내지 않도록 프롬프트에 주입 (실사용 피드백 2026-07-28).
+    """
+    if interview.mode != "normal":
+        return ""
+    eligible = await get_eligible_users(session, interview.map_id)
+    departments = sorted({e.department for e in eligible if e.department})
+    return "\n".join(f"- {d}" for d in departments[:_DEPT_CATALOG_MAX])
 
 
 # 지식기반 검색 주입 (design 2026-07-23 §7 P2) — 실패는 턴을 죽이지 않는다(그레이스풀 디그레이드)
@@ -480,7 +496,7 @@ async def post_turn(
     try:
         result = await run_turn(
             session, interview, payload, _graph_summary(current), context_text,
-            doc_sections=doc_sections,
+            doc_sections=doc_sections, dept_catalog=await _dept_catalog(session, interview),
         )
     except TurnError as exc:
         await session.rollback()

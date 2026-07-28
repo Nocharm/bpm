@@ -653,3 +653,61 @@ def test_extract_attachment_facts_merges_and_notices(client: TestClient, monkeyp
     notices = [m for m in after["messages"] if m["kind"] == "notice"]
     assert any("sop.txt" in m["content"] and "추출" in m["content"] for m in notices)
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_appends_keep_current_option(client: TestClient, monkeypatch) -> None:
+    """작업본에 사용자 콘텐츠가 있으면 '현재 맵 유지' 안이 항상 마지막에 추가된다 (2026-07-28)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = json.loads(_DRAW_A)
+    graph.pop("kind", None)
+    graph.pop("message", None)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = graph
+            await session.commit()
+
+    asyncio.run(_seed())
+    _scripted(monkeypatch, [_DRAW_B])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    options = body["messages"][-1]["payload"]["options"]
+    assert len(options) == 2
+    assert options[0].get("same_as_current") is None  # AI 신규 안이 먼저
+    current = options[-1]
+    assert current["id"] == "opt-current"
+    assert current["same_as_current"] is True
+    assert current["graph"] == graph
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_seed_only_graph_skips_keep_current(client: TestClient, monkeypatch) -> None:
+    """start/end 시드뿐인 백지 작업본엔 '현재 맵 유지' 안을 만들지 않는다."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    _scripted(monkeypatch, [_DRAW_A])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    options = body["messages"][-1]["payload"]["options"]
+    assert all(not o.get("same_as_current") for o in options)
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_turn_prompt_includes_dept_catalog(client: TestClient, monkeypatch) -> None:
+    """턴의 인터뷰어 프롬프트에 eligible 부서 후보 목록이 주입된다 (실사용 피드백 2026-07-28)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    captured: dict = {}
+
+    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        captured["system"] = messages[0]["content"]
+        return ai_client.AiReply(content=json.dumps({"message": "ok", "facts_patch": {}}))
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    client.post(f"/api/interviews/{state['id']}/turns",
+                json={"type": "answer", "content": "담당 부서는요?"})
+    assert "[부서 후보 목록" in captured["system"]
+    assert "Owning Anchor Division" in captured["system"]
+    client.delete(f"/api/interviews/{state['id']}")

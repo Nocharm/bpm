@@ -447,3 +447,33 @@ def test_params_table_routes_to_params_namespace_from_any_stage() -> None:
     assert interview.facts["params"]["params_table"]["요청서 작성"]["duration"] == "1.00"
     assert "params_table" not in interview.facts["activities"]
     assert interview.facts["activities"]["activities"] == "요청서 작성"
+
+
+def test_choice_turn_suppresses_redraw_signals() -> None:
+    """수락 턴은 multi/single 재드로 신호를 내지 않는다 — 수락→재드로→모달 반복 루프 차단 (2026-07-28)."""
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "표준안", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(current_stage="activities", pending_choices={"options": [option]})
+    reply = json.dumps({"message": "확정했습니다", "facts_patch": {"activities": "요청·비교"},
+                        "stage_complete": True, "redraw": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.current_stage == "branches"  # 전이·체크포인트는 그대로
+    assert result.draw_due is None
+
+
+def test_choice_turn_params_signal_passes_through() -> None:
+    """수락 턴이 review로 전이하면 params 표 신호(AI 0콜 모달)는 그대로 통과한다."""
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "표준안", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(
+        current_stage="roles",
+        pending_choices={"options": [option]},
+        facts={"params": {"params_table": {"요청서 작성": {"duration": "0.30"}}}},
+    )
+    reply = json.dumps({"message": "역할 확정", "facts_patch": {"roles": "구매팀"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due == "params"

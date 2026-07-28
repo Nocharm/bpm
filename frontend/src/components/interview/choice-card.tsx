@@ -86,7 +86,15 @@ export function ChoiceWindow({
           <div className="mt-0.5 line-clamp-2 text-fine text-ink-tertiary">{option.summary}</div>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 bg-canvas">
+      <div className="relative min-h-0 flex-1 bg-canvas">
+        {option.same_as_current ? (
+          <span
+            className="absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
+            data-id="iv-choice-current-badge"
+          >
+            Same as current
+          </span>
+        ) : null}
         <ReactFlowProvider>
           <ChoiceCanvas option={option} highlight={highlight} />
         </ReactFlowProvider>
@@ -147,7 +155,8 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               </button>
             ))}
           </div>
-          <div className="flex max-h-[78%] min-h-0 w-full max-w-5xl flex-1 items-stretch justify-center gap-3">
+          {/* 좌우로 넓게 — 오버레이 뒤 캔버스는 어차피 안 보는 영역이라 가리는 게 낫다 (실사용 피드백 2026-07-28) */}
+          <div className="flex max-h-[80%] min-h-0 w-full flex-1 items-stretch justify-center gap-3">
             <ChoiceWindow
               option={focused}
               disabled={busy}
@@ -156,7 +165,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               className="h-full min-w-0 flex-[2]"
               focused
             />
-            <div className="flex h-full w-72 shrink-0 flex-col gap-3">
+            <div className="flex h-full w-80 shrink-0 flex-col gap-3">
               {rest.map((o) => (
                 <ChoiceWindow
                   key={o.id}
@@ -172,7 +181,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
           </div>
         </>
       ) : choices.length === 2 ? (
-        <div className="flex max-h-[80%] min-h-0 w-full flex-1 items-center justify-center gap-4">
+        <div className="flex max-h-[84%] min-h-0 w-full flex-1 items-center justify-center gap-4">
           {choices.map((o) => (
             <ChoiceWindow
               key={o.id}
@@ -180,18 +189,18 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               disabled={busy}
               onChoose={onChoose}
               highlight={highlight.get(o.id) ?? new Set()}
-              className="h-[min(480px,100%)] w-[min(460px,44%)] min-w-72"
+              className="h-[min(600px,100%)] w-[min(680px,48%)] min-w-72"
             />
           ))}
         </div>
       ) : (
-        <div className="flex max-h-[84%] min-h-0 w-full flex-1 items-center justify-center">
+        <div className="flex max-h-[88%] min-h-0 w-full flex-1 items-center justify-center">
           <ChoiceWindow
             option={focused}
             disabled={busy}
             onChoose={onChoose}
             highlight={highlight.get(focused.id) ?? new Set()}
-            className="h-[min(560px,100%)] w-[min(760px,72%)] min-w-72"
+            className="h-[min(640px,100%)] w-[min(1100px,92%)] min-w-72"
             focused
           />
         </div>

@@ -1835,6 +1835,8 @@ export interface ChoiceOption {
   title: string;
   summary: string;
   graph: WorkingGraph;
+  // 현재 작업본 그대로 유지 안 — 카드에 "Same as current" 배지 (2026-07-28)
+  same_as_current?: boolean;
 }
 
 export interface InterviewMessage {

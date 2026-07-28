@@ -42,7 +42,7 @@ const afterDraw = {
       payload: { options: [
         { id: "opt-1", title: "Standard", summary: "6 steps", graph: graph(["s", "a", "e"]) },
         { id: "opt-2", title: "Detailed", summary: "9 steps", graph: graph(["s", "a", "b", "e"]) },
-        { id: "opt-3", title: "Compact", summary: "2 steps", graph: graph(["s", "e"]) },
+        { id: "opt-3", title: "Compact", summary: "2 steps", graph: graph(["s", "e"]), same_as_current: true },
       ] }, superseded: false, created_at: "2026-07-23T10:01:20+09:00" }],
 };
 
@@ -91,6 +91,8 @@ const run = async () => {
     r.fulfill({ json: afterDraw });
   });
   await page.route("**/api/interviews/1/revert", (r) => r.fulfill({ json: afterRevert }));
+  // 세션 초기화(DELETE) — 이후 createOrResume이 초기 state를 돌려줘 처음부터 시작
+  await page.route("**/api/interviews/1", (r) => r.fulfill({ status: 204 }));
   await page.route("**/api/notifications*", (r) =>
     r.fulfill({ json: [] }),
   );
@@ -140,6 +142,9 @@ const run = async () => {
   // 3안 레이아웃(2026-07-27): 큰 창 1 + 작은 창 2 + 탭 — 탭 클릭으로 큰 창 교체
   const tabs = await page.$$('[data-id="iv-choice-tab"]');
   if (tabs.length !== 3) throw new Error(`expected 3 choice tabs, got ${tabs.length}`);
+  // '현재 맵 유지' 안 배지 — same_as_current 옵션 카드 좌상단 (2026-07-28)
+  const currentBadges = await page.$$('[data-id="iv-choice-current-badge"]');
+  if (currentBadges.length !== 1) throw new Error(`expected 1 same-as-current badge, got ${currentBadges.length}`);
   let focusedText = await page.textContent('[data-id="iv-choice-card"][data-focused="true"]');
   if (!focusedText.includes("Standard")) throw new Error("first option should be focused initially");
   await tabs[1].click();
@@ -158,6 +163,8 @@ const run = async () => {
   // 수락 직후 맵 기준 배지 — up to date
   const badge = await page.textContent('[data-id="iv-map-baseline"]');
   if (!badge.includes("up to date")) throw new Error(`unexpected baseline after accept: ${badge}`);
+  // Apply to draft — review 전이라도 맵이 그려져 있으면 노출 (2026-07-28)
+  await page.waitForSelector('[data-id="iv-apply"]');
 
   // 유사 SP 제안 카드(P2) — 노출 확인 후 Dismiss로 로컬 숨김
   await page.waitForSelector('[data-id="iv-sp-card"]');
@@ -180,6 +187,16 @@ const run = async () => {
   await page.waitForSelector('[data-id="iv-checkpoint-activities"]', { state: "detached" });
   nodes = await page.$$(".react-flow__node");
   if (nodes.length !== 2) throw new Error(`expected 2 nodes after revert, got ${nodes.length}`);
+
+  // 세션 초기화 — 확인 모달 후 abandon + 새 세션(초기 인사)으로 복귀 (2026-07-28)
+  await page.click('[data-id="iv-restart"]');
+  await page.waitForSelector('[data-id="confirm-dialog"]');
+  const restartText = await page.textContent('[data-id="confirm-dialog"]');
+  if (!restartText.includes("Start the interview over")) throw new Error("restart dialog missing");
+  await page.click('[data-id="confirm-dialog-confirm"]');
+  await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 0);
+  const resetBadge = await page.textContent('[data-id="iv-map-baseline"]');
+  if (!resetBadge.includes("not drawn")) throw new Error(`unexpected baseline after restart: ${resetBadge}`);
 
   console.log("PW consult smoke: OK");
   await browser.close();

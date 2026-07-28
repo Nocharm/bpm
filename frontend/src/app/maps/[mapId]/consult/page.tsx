@@ -5,10 +5,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Headset } from "lucide-react";
+import { ArrowLeft, Headset, RotateCcw } from "lucide-react";
 
 import {
   ApiError,
+  abandonInterview,
   applyInterviewParams,
   createOrResumeInterview,
   deleteInterviewAttachment,
@@ -65,6 +66,9 @@ export default function ConsultPage() {
   // params 표 확정 모달 — 수집된 파라미터를 표로 확인 후 결정적 반영(AI 0콜)
   const [paramsOpen, setParamsOpen] = useState(false);
   const [paramsBusy, setParamsBusy] = useState(false);
+  // 세션 초기화 — 현재 세션 abandon 후 새 세션으로 처음부터 (실사용 피드백 2026-07-28)
+  const [restartOpen, setRestartOpen] = useState(false);
+  const [restartBusy, setRestartBusy] = useState(false);
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -153,6 +157,27 @@ export default function ConsultPage() {
     } finally {
       setBusy(false);
       setOptimisticChoice(null); // 성공=서버 상태가 동일 그래프 보유, 실패=모달 복귀
+    }
+  }
+
+  async function handleRestart() {
+    if (!interview || restartBusy) return;
+    setRestartBusy(true);
+    try {
+      await abandonInterview(interview.id);
+      const fresh = await createOrResumeInterview(mapId, interview.version_id, lang);
+      setInterview(fresh);
+      setPending(null);
+      setError(null);
+      setDrawError(null);
+      setOptimisticChoice(null);
+      setParamsOpen(false);
+      lastTurnRef.current = null;
+    } catch (err) {
+      setError(getApiErrorDetail(err) || "Failed to restart the interview.");
+    } finally {
+      setRestartBusy(false);
+      setRestartOpen(false);
     }
   }
 
@@ -275,6 +300,16 @@ export default function ConsultPage() {
             />
           ))}
         </ol>
+        <button
+          className="ml-2 flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+          disabled={!interview || interview.status !== "active" || busy || !!drawBusy || restartBusy}
+          onClick={() => setRestartOpen(true)}
+          title="Discard this session and start the interview over"
+          data-id="iv-restart"
+        >
+          <RotateCcw size={16} strokeWidth={1.5} />
+          Start over
+        </button>
       </header>
       <div className="flex min-h-0 flex-1">
         <InterviewPreview
@@ -329,6 +364,20 @@ export default function ConsultPage() {
           busy={paramsBusy}
           onApply={() => void handleApplyParams()}
           onClose={() => setParamsOpen(false)}
+        />
+      ) : null}
+      {restartOpen ? (
+        <ConfirmDialog
+          title="Start the interview over?"
+          message="This discards the current session — conversation, collected facts, attachments, and the working map. The draft version itself is not affected."
+          confirmLabel={restartBusy ? "Restarting…" : "Start over"}
+          cancelLabel="Cancel"
+          danger
+          confirmDisabled={restartBusy}
+          onConfirm={() => {
+            void handleRestart();
+          }}
+          onClose={() => setRestartOpen(false)}
         />
       ) : null}
     </div>

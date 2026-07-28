@@ -7287,8 +7287,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                   <Headset size={16} strokeWidth={1.5} />
                 </button>
                 {showOnboard ? (
+                  // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
                   <div
-                    className="absolute right-0 top-full z-40 mt-2 w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+                    className="absolute right-0 top-full z-[1100] mt-2 w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
                     data-id="consult-onboard"
                   >
                     <div className="text-caption-strong text-ink">Try the AI consultant</div>

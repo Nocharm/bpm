@@ -236,6 +236,9 @@ def _graph_signature(graph: dict | None) -> tuple:
 
 _REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세분도 — 확정 안 된 내용은 넣지 않기"
 
+# 현재 작업본 그대로 유지 안의 표시 제목 — 수락하면 무변경 확정
+_KEEP_CURRENT_TITLE = {"ko": "현재 맵 유지", "en": "Keep current map"}
+
 
 def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
     """델타 복원 — 기존 노드 키 에코({"key":k})를 이전 작업본으로 완성 (speed redesign §5).
@@ -301,12 +304,16 @@ async def generate_proposals(
     else:
         hints = [_REDRAFT_HINT]
         count = 1
+    # 최근 대화 동봉 — facts에 안 잡힌 수정 요청(라벨 언어 변경 등)이 드래프터에 닿는 유일 통로.
+    # 없으면 요청과 무관한 동일안만 나와 전멸 필터에 걸린다 (실사용 회귀 2026-07-28).
+    history = _history_tail(interview)
     tasks = [
         _ask_json(
             build_drafter_messages(
                 interview.current_stage, interview.lang, interview.facts,
                 interview.working_graph, context_text, hints[i % len(hints)],
                 mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
+                history=history,
             ),
             model, AiProposal,
         )
@@ -351,6 +358,17 @@ async def generate_proposals(
         distinct.append(option)
     if not distinct:
         return None, demoted_total  # 전부 현재 작업본과 동일 — 라우터가 노티스로 안내
+    # 현재 작업본도 항상 1안으로 — "그대로 유지"를 클릭 한 번으로 골라 재드로 루프를 끊는 탈출구
+    # (실사용 피드백 2026-07-28). 시드(start/end)뿐인 백지엔 비교 의미가 없어 생략.
+    current_nodes = (interview.working_graph or {}).get("nodes") or []
+    if any(n.get("node_type") not in ("start", "end") for n in current_nodes):
+        distinct.append({
+            "id": "opt-current",
+            "title": _KEEP_CURRENT_TITLE.get(interview.lang, _KEEP_CURRENT_TITLE["ko"]),
+            "summary": "",
+            "graph": interview.working_graph,
+            "same_as_current": True,
+        })
     return {"options": distinct}, demoted_total
 
 
@@ -441,7 +459,7 @@ _UNKNOWN_VALUE = {"ko": "미정", "en": "TBD"}
 
 async def _run_skip_turn(
     db, interview: InterviewSession, graph_summary: str, context_text: str, model: str | None,
-    doc_sections: list[dict] | None = None,
+    doc_sections: list[dict] | None = None, dept_catalog: str = "",
 ) -> TurnResult:
     """결정적 스테이지 전진 — 미확정 필수 facts를 '미정'으로 채우고 체크포인트 후 다음 단계 개시.
 
@@ -478,6 +496,7 @@ async def _run_skip_turn(
             graph_summary, context_text, _history_tail(interview)[:-1],
             "[사용자가 다음 단계로 넘어가기를 선택했습니다. 새 단계의 첫 제안이나 질문을 하세요.]",
             mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
+            dept_catalog=dept_catalog,
         ),
         model, InterviewerOut,
     )
@@ -496,10 +515,13 @@ async def run_turn(
     context_text: str,
     model: str | None = None,
     doc_sections: list[dict] | None = None,
+    dept_catalog: str = "",
 ) -> TurnResult:
     """일반 턴 = 인터뷰어 1콜 — 그리기·선택지·톤 검수는 draw 이벤트로 분리 (speed redesign §3)."""
     if turn.type == "skip":
-        return await _run_skip_turn(db, interview, graph_summary, context_text, model, doc_sections)
+        return await _run_skip_turn(
+            db, interview, graph_summary, context_text, model, doc_sections, dept_catalog
+        )
 
     pre_stage = interview.current_stage
     # 선택 턴 — 대상 옵션을 먼저 확정(사용자 메시지에 제목을 남기기 위해 append보다 선행)
@@ -535,6 +557,7 @@ async def run_turn(
         interview.current_stage, interview.lang, interview.facts,
         graph_summary, context_text, _history_tail(interview)[:-1], user_input,
         mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
+        dept_catalog=dept_catalog,
     )
     out = await _ask_json(interviewer_messages, model, InterviewerOut)
     if _is_repeat(out.message, prev_consultant):
@@ -569,4 +592,9 @@ async def run_turn(
             message_seq=next_seq(interview) - 1,
         ))
         interview.current_stage = next_key
-    return TurnResult(draw_due=_draw_due(pre_stage, interview, out))
+    due = _draw_due(pre_stage, interview, out)
+    if turn.type == "choice" and due in ("multi", "single"):
+        # 수락 직후 재드로 금지 — 수락 턴의 전이/redraw 신호가 방금 고른 안을 곧바로 다시
+        # 그려 제안 모달이 반복되는 루프를 만든다 (실사용 회귀 2026-07-28). params 신호만 통과.
+        due = None
+    return TurnResult(draw_due=due)

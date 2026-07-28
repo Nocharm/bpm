@@ -290,6 +290,9 @@ export function InterviewPreview({
     (m, i) => i > lastChoiceIdx && m.role === "user",
   ).length;
   const hasMap = !!graph && graph.nodes.length > 0;
+  // Apply 노출 기준 — start/end 시드뿐인 백지는 반영할 내용이 없다
+  const hasDrawnMap =
+    !!graph && graph.nodes.some((n) => n.node_type !== "start" && n.node_type !== "end");
   const baselineText = !hasMap
     ? "Map not drawn yet"
     : lastChoiceIdx === -1
@@ -570,7 +573,8 @@ export function InterviewPreview({
           </button>
         ) : null}
         <span className="text-fine text-ink-muted" data-id="iv-map-baseline">{baselineText}</span>
-        {interview?.current_stage === "review" && interview.status === "active" ? (
+        {/* review까지 안 가도 맵이 그려진 시점부터 언제든 반영·종료 가능 (실사용 피드백 2026-07-28) */}
+        {interview?.status === "active" && hasDrawnMap ? (
           <button
             className="ml-auto flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent disabled:opacity-40"
             disabled={applyBusy || !graph || graph.nodes.length === 0}

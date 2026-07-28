@@ -102,7 +102,8 @@ _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 
 9. **파라미터는 별도 단계가 아닙니다**: 필수로 캐묻지 마세요. 사용자가 소요시간·비용·인원 등을 언급하면 그때그때 facts_patch에 {"params_table": {"<활동 제목>": {"duration": "…", "cost_krw": "…", "cost_usd": "…", "headcount": "…", "annual_count": "…", "fte": "…"}}} 구조로 수집하세요(확인된 필드만, 활동 제목은 맵 노드 제목 그대로 — 체계: duration H.MM 표기 1.30=1시간30분 · 비용은 한 통화만 · headcount=회당 인원 · annual_count=연간 횟수 · fte=전담 환산). 사용자가 "파라미터 정리하자"고 요청하면 그때 활동별로 물어 수집하세요. 값은 맵에 바로 그리지 않습니다 — 시스템이 표로 정리해 확정받은 뒤 반영합니다.
 10. **미정도 확정입니다**: 일부 항목이 미정인 채로 진행하자는 데 사용자가 동의하면, 그 항목들을 facts_patch에 값 "미정"으로 확정하고 다음으로 넘어가세요. 이미 확인했거나 미정으로 확정한 항목을 다시 묻는 것은 금지.
 11. 사용자가 "맵을 그려줘/보여줘/업데이트해줘"처럼 맵 갱신을 요청하면 redraw를 true로 설정하세요 — 시스템이 지금까지의 facts로 맵을 다시 그립니다.
-12. **기존 맵 우선**: [현재 작업본 요약]에 이미 노드가 있으면 백지에서 시작하지 말고, 그 내용을 먼저 파악한 근거로 확인·보완 질문을 하세요. 사용자가 처음부터 다시 만들자고 하지 않는 한 기존 구조를 유지·개선합니다."""
+12. **기존 맵 우선**: [현재 작업본 요약]에 이미 노드가 있으면 백지에서 시작하지 말고, 그 내용을 먼저 파악한 근거로 확인·보완 질문을 하세요. 사용자가 처음부터 다시 만들자고 하지 않는 한 기존 구조를 유지·개선합니다.
+13. **담당자·부서**: 담당자(assignee)는 인터뷰에서 수집하지 않습니다 — 실명 지정이 필요해 에디터의 담당자 피커에서 지정한다고 한 번만 안내하고 묻지 마세요. 부서를 확인할 땐 [부서 후보 목록]에서 이 프로세스와 관련성이 높아 보이는 항목 2~4개를 골라 options 보기로 제시하고, 마지막 보기로 "부서 지정은 건너뛰기"를 포함하세요. 목록에 없는 부서명은 facts에 기록 금지, 사용자가 생략을 원하면 부서 없이 진행합니다."""
 
 _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정된 facts로 순서도 그래프를 생성합니다.
 반드시 아래 JSON 하나만 반환 (kind는 항상 "graph"):
@@ -179,15 +180,21 @@ def build_interviewer_messages(
     user_input: str,
     mode: str = "normal",
     section_catalog: str = "",
+    dept_catalog: str = "",
 ) -> list[dict]:
     stage = get_stage(stage_key, mode)
     goal = stage.goal_ko if lang == "ko" else stage.goal_en
     contract = _INTERVIEWER_CONTRACT + (_INTERVIEWER_WORD_ADDENDUM if mode == "word" else "")
     catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
+    dept_block = (
+        f"[부서 후보 목록 — department 값은 이 목록의 항목만 사용]\n{dept_catalog}\n\n"
+        if dept_catalog else ""
+    )
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
         f"[참고 문서]\n{context_text or '(없음)'}\n\n"
         f"{catalog_block}"
+        f"{dept_block}"
         f"[현재 스테이지] {stage.key} — {goal}\n"
         f"[누적 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본 요약]\n{graph_summary or '(빈 캔버스)'}"
@@ -199,6 +206,24 @@ def build_interviewer_messages(
     ]
 
 
+# 드래프터에 싣는 최근 대화 수·발화당 문자 상한 — facts에 없는 수정 요청(라벨 언어 변경 등)의 전달 통로
+_DRAFTER_HISTORY_TAIL = 6
+_DRAFTER_HISTORY_CLIP = 400
+
+
+def _drafter_history_block(history: list[dict] | None) -> str:
+    if not history:
+        return ""
+    lines = [
+        ("사용자" if m["role"] == "user" else "컨설턴트") + ": " + m["content"][:_DRAFTER_HISTORY_CLIP]
+        for m in history[-_DRAFTER_HISTORY_TAIL:]
+    ]
+    return (
+        "[최근 대화 — 사용자가 요청한 수정·제약(예: 라벨 언어 변경)은 반드시 그래프에 반영]\n"
+        + "\n".join(lines) + "\n\n"
+    )
+
+
 def build_drafter_messages(
     stage_key: str,
     lang: str,
@@ -208,6 +233,7 @@ def build_drafter_messages(
     variant_hint: str,
     mode: str = "normal",
     section_catalog: str = "",
+    history: list[dict] | None = None,
 ) -> list[dict]:
     current = format_graph_compact(working_graph)
     contract = _DRAFTER_CONTRACT + (_DRAFTER_WORD_ADDENDUM if mode == "word" else "")
@@ -218,6 +244,7 @@ def build_drafter_messages(
         f"{catalog_block}"
         f"[확정 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본]\n{current}\n\n"
+        f"{_drafter_history_block(history)}"
         f"[이 안의 방향] {variant_hint}"
     )
     user = "위 facts와 방향에 맞는 전체 그래프를 생성하세요."

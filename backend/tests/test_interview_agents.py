@@ -137,3 +137,52 @@ def test_ai_proposal_accepts_section_node_type() -> None:
         "groups": [],
     })
     assert proposal.nodes[1].node_type == "section"
+
+
+def test_interviewer_messages_include_dept_catalog() -> None:
+    """부서 후보 목록 주입 — 인터뷰어가 목록 밖 부서명을 지어내지 않게 (실사용 피드백 2026-07-28)."""
+    msgs = build_interviewer_messages(
+        stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="다음은요?", dept_catalog="- System Team\n- Quality Team",
+    )
+    assert "[부서 후보 목록 — department" in msgs[0]["content"]
+    assert "- System Team" in msgs[0]["content"]
+
+
+def test_interviewer_messages_omit_dept_block_when_empty() -> None:
+    msgs = build_interviewer_messages(
+        stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="다음은요?",
+    )
+    # 계약 룰 13이 "[부서 후보 목록]"을 언급하므로 블록 헤더 전체로 판정한다
+    assert "[부서 후보 목록 — department" not in msgs[0]["content"]
+
+
+def test_interviewer_contract_bans_assignee_collection() -> None:
+    msgs = build_interviewer_messages(
+        stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="다음은요?",
+    )
+    assert "담당자(assignee)는 인터뷰에서 수집하지 않습니다" in msgs[0]["content"]
+
+
+def test_drafter_messages_include_recent_history() -> None:
+    """드래프터 최근 대화 동봉 — facts에 없는 수정 요청(라벨 언어 변경)이 전달된다 (2026-07-28)."""
+    msgs = build_drafter_messages(
+        stage_key="review", lang="ko", facts={}, working_graph=None,
+        context_text="", variant_hint="힌트",
+        history=[
+            {"role": "assistant", "content": "라벨을 영문으로 바꿀까요?"},
+            {"role": "user", "content": "네, 노드 라벨을 전부 영문으로 바꿔줘"},
+        ],
+    )
+    assert "[최근 대화" in msgs[0]["content"]
+    assert "전부 영문으로 바꿔줘" in msgs[0]["content"]
+
+
+def test_drafter_messages_without_history_omit_block() -> None:
+    msgs = build_drafter_messages(
+        stage_key="review", lang="ko", facts={}, working_graph=None,
+        context_text="", variant_hint="힌트",
+    )
+    assert "[최근 대화" not in msgs[0]["content"]
