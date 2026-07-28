@@ -265,3 +265,50 @@ def test_is_embed_enabled_requires_both_flags(monkeypatch: pytest.MonkeyPatch) -
     assert embed_client.is_embed_enabled()
     monkeypatch.setattr(settings, "ai_enabled", False)
     assert not embed_client.is_embed_enabled()
+
+
+def test_search_dimension_mismatch_raises_embed_error(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    """차원 불일치(모델 교체 후 미재색인)는 EmbedError로 정규화 — 호출측 디그레이드 계약 유지,
+    턴/draw 500 방지 (hardening T2). 캐시 적재(혼합 차원)·질의 내적(쿼리 차원) 두 경로 공통."""
+    from sqlalchemy import delete as sa_delete
+
+    from app.db import SessionLocal
+    from app.models import KbChunk
+
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
+
+    async def _seed_bad() -> None:
+        async with SessionLocal() as session:
+            session.add(KbChunk(
+                source_type="library", source_id=901, chunk_index=0,
+                chunk_text="옛 모델 청크",
+                embedding=retrieval.pack_embedding([1.0] * (settings.embed_dim // 2)),
+                meta={"title": "old"},
+            ))
+            await session.commit()
+
+    asyncio.run(_seed_bad())
+    retrieval.invalidate_cache()
+
+    async def fake_embed(texts: list[str]) -> list[list[float]]:
+        return [_unit(0) for _ in texts]
+
+    monkeypatch.setattr(embed_client, "embed_texts", fake_embed)
+    from app.db import SessionLocal as _SL
+
+    async def _search():
+        async with _SL() as session:
+            return await retrieval.search(session, "구매")
+
+    try:
+        with pytest.raises(embed_client.EmbedError):
+            asyncio.run(_search())
+    finally:
+        async def _cleanup() -> None:
+            async with SessionLocal() as session:
+                await session.execute(sa_delete(KbChunk).where(KbChunk.source_id == 901))
+                await session.commit()
+
+        asyncio.run(_cleanup())
+        retrieval.invalidate_cache()  # 오염 청크 잔존 시 이후 전 테스트가 EmbedError로 깨진다
