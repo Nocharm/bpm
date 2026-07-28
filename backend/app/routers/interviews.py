@@ -13,6 +13,7 @@ from app import workflow
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
+from app.interview.agents import format_graph_compact
 from app.interview.engine import get_stage, next_stage_key
 from app.interview.locks import interview_lock
 from app.interview.orchestrator import (
@@ -513,7 +514,12 @@ async def post_turn(
     # rollback 후 만료 대비 스칼라 선캡처
     map_id, version_id = interview.map_id, interview.version_id
 
-    current = await _load_graph(session, interview.version_id)
+    # "[현재 작업본 요약]"은 실제 작업본이어야 한다 — 수락으로 진화한 working_graph 대신
+    # 저장본(draft)을 주면 인터뷰어가 세션 내내 옛 맵을 보고 이미 그린 활동을 재질문 (hardening T4).
+    if interview.working_graph and interview.working_graph.get("nodes"):
+        graph_summary = format_graph_compact(interview.working_graph)
+    else:
+        graph_summary = _graph_summary(await _load_graph(session, interview.version_id))
     found_map = await session.get(ProcessMap, interview.map_id)
     kb_block, kb_failed = await _kb_reference_block(
         session, interview, found_map.name if found_map else "", payload.content or ""
@@ -524,7 +530,7 @@ async def post_turn(
         doc_sections = list(found_map.doc_sections) if found_map else []
     try:
         result = await run_turn(
-            session, interview, payload, _graph_summary(current), context_text,
+            session, interview, payload, graph_summary, context_text,
             doc_sections=doc_sections, dept_catalog=await _dept_catalog(session, interview),
         )
     except TurnError as exc:

@@ -711,3 +711,36 @@ def test_turn_prompt_includes_dept_catalog(client: TestClient, monkeypatch) -> N
     assert "[부서 후보 목록" in captured["system"]
     assert "Owning Anchor Division" in captured["system"]
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_turn_prompt_reflects_working_graph(client: TestClient, monkeypatch) -> None:
+    """인터뷰어의 [현재 작업본 요약]은 수락으로 진화한 working_graph — 저장본(draft)이 아니다
+    (hardening T4). 작업본이 없으면 기존처럼 저장본 요약 폴백."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = json.loads(_DRAW_B)
+    graph.pop("kind", None)
+    graph.pop("message", None)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = graph
+            await session.commit()
+
+    asyncio.run(_seed())
+    captured: dict = {}
+
+    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        captured["system"] = messages[0]["content"]
+        return ai_client.AiReply(content=json.dumps({"message": "ok", "facts_patch": {}}))
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    client.post(f"/api/interviews/{state['id']}/turns",
+                json={"type": "answer", "content": "다음은?"})
+    # 계약 룰 12 본문도 같은 라벨을 언급하므로 마지막(실제 블록) 세그먼트로 판정
+    summary = captured["system"].split("[현재 작업본 요약]")[-1]
+    assert "견적 비교" in summary  # 작업본에만 있는 노드가 보인다
+    client.delete(f"/api/interviews/{state['id']}")
