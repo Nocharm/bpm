@@ -50,7 +50,7 @@
 
 ---
 
-## Phase 1 — 백엔드 정합성 + 계측 (P1, 머지 전 강력 권장)
+## Phase 1 — 백엔드 정합성 + 계측 (P1, 머지 전 강력 권장) ✅ 완료 (2026-07-29)
 
 ### T6. `_expand_delta` attributes 딥머지 + groups 보존
 - 노드 병합 시 `attributes`는 `{**base_attrs, **new_attrs}` 딥머지(드래프터는 컴팩트 목록만 봐서 params를 모름 — 수정 노드에서 apply-params 축적분 증발 방지). 델타 에코 노드의 `group_key`가 참조하는 그룹이 proposal.groups에 없으면 prev 그룹 정의 복원.

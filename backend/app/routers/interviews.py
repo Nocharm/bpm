@@ -22,6 +22,8 @@ from app.interview.orchestrator import (
     extract_attachment_facts,
     generate_proposals,
     run_turn,
+    sum_usage,
+    usage_log,
 )
 from app.kb import embed_client, indexing, retrieval, sp_suggest
 from app.interview.parsing import (
@@ -363,12 +365,15 @@ async def _maybe_sp_suggestion(
     text = _SP_SUGGEST_TEXT.get(interview.lang, _SP_SUGGEST_TEXT["ko"]).format(
         map_name=suggestion["map_name"], n=len(suggestion["node_keys"])
     )
-    session.add(InterviewMessage(
+    msg = InterviewMessage(
         session_id=interview.id,
         seq=max((m.seq for m in interview.messages), default=0) + 1,
         role="consultant", kind="sp_suggestion", content=text,
         payload=suggestion, stage=interview.current_stage,
-    ))
+    )
+    session.add(msg)
+    # 같은 커밋에서 뒤이어 seq를 계산하는 쪽(KB 노티스)이 이 메시지를 보게 — 동일 seq 충돌 방지
+    interview.messages.append(msg)
 
 
 async def _context_text(interview: InterviewSession) -> str:
@@ -528,6 +533,8 @@ async def post_turn(
     doc_sections: list[dict] | None = None
     if interview.mode == "word":
         doc_sections = list(found_map.doc_sections) if found_map else []
+    usage: list[tuple[int | None, int | None]] = []
+    usage_token = usage_log.set(usage)
     try:
         result = await run_turn(
             session, interview, payload, graph_summary, context_text,
@@ -536,35 +543,50 @@ async def post_turn(
     except TurnError as exc:
         await session.rollback()
         # 실패도 계량 — 별도 커밋, 실패해도 502 전파 유지
+        prompt_total, completion_total = sum_usage(usage)
         try:
             session.add(AiUsageEvent(
                 login_id=user, map_id=map_id, version_id=version_id,
                 model="", kind=None, ok=False,
+                prompt_tokens=prompt_total, completion_tokens=completion_total,
             ))
             await session.commit()
         except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답을 바꾸지 않는다
             logger.warning("interview usage event insert failed (failure path)")
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        usage_log.reset(usage_token)
 
-    # 유사 SP 제안 — 작업본이 갱신되는 유일 시점(수락 턴)에서만 (speed redesign 이동)
-    if interview.mode == "normal" and payload.type == "choice":
-        await _maybe_sp_suggestion(session, interview, user)
-    # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
-    if kb_failed and not _has_kb_degrade_notice(interview):
-        session.add(InterviewMessage(
-            session_id=interview.id,
-            seq=max((m.seq for m in interview.messages), default=0) + 1,
-            role="consultant", kind="notice",
-            content=_KB_DEGRADE_NOTICE.get(interview.lang, _KB_DEGRADE_NOTICE["ko"]),
-            stage=interview.current_stage,
-        ))
+    prompt_total, completion_total = sum_usage(usage)
     session.add(AiUsageEvent(
         login_id=user, map_id=map_id, version_id=version_id,
         model="", kind="interview", ok=True,
+        prompt_tokens=prompt_total, completion_tokens=completion_total,
     ))
     interview.updated_at = now_kst()
+    # 턴 확정 — 이후 부가 로직(SP 제안/KB 노티스) 예외가 성공한 턴을 되돌리지 못한다 (hardening T8)
     await session.commit()
+
+    try:
+        # 유사 SP 제안 — 작업본이 갱신되는 유일 시점(수락 턴)에서만 (speed redesign 이동)
+        if interview.mode == "normal" and payload.type == "choice":
+            await _maybe_sp_suggestion(session, interview, user)
+        # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
+        if kb_failed and not _has_kb_degrade_notice(interview):
+            notice = InterviewMessage(
+                session_id=interview.id,
+                seq=max((m.seq for m in interview.messages), default=0) + 1,
+                role="consultant", kind="notice",
+                content=_KB_DEGRADE_NOTICE.get(interview.lang, _KB_DEGRADE_NOTICE["ko"]),
+                stage=interview.current_stage,
+            )
+            session.add(notice)
+            interview.messages.append(notice)
+        await session.commit()
+    except Exception:  # noqa: BLE001 -- 부가 로직 실패는 로그만 — AI 비용·답변 소실 방지
+        logger.exception("post-turn extras failed — turn already committed")
+        await session.rollback()
     loaded = await _get_owned_interview(session, interview_id, user)
     state = await _state_out(session, loaded)
     state.draw_due = result.draw_due  # 그리기 신호 — 프론트가 draw 이벤트로 이어받는다
@@ -605,22 +627,28 @@ async def draw_interview_proposals(
     doc_sections: list[dict] | None = None
     if interview.mode == "word":
         doc_sections = list(found_map.doc_sections) if found_map else []
+    usage: list[tuple[int | None, int | None]] = []
+    usage_token = usage_log.set(usage)
     try:
         choices, demoted = await generate_proposals(
             interview, context_text, doc_sections=doc_sections, variants=payload.variants,
         )
     except TurnError as exc:
         await session.rollback()
+        prompt_total, completion_total = sum_usage(usage)
         try:
             session.add(AiUsageEvent(
                 login_id=user, map_id=map_id, version_id=version_id,
                 model="", kind=None, ok=False,
+                prompt_tokens=prompt_total, completion_tokens=completion_total,
             ))
             await session.commit()
         except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답을 바꾸지 않는다
             logger.warning("interview usage event insert failed (draw failure path)")
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        usage_log.reset(usage_token)
 
     seq = max((m.seq for m in interview.messages), default=0) + 1
     if choices is None:
@@ -641,9 +669,11 @@ async def draw_interview_proposals(
             session_id=interview.id, seq=seq + 1, role="consultant", kind="notice",
             content=demote_notice_text(interview.lang, demoted), stage=interview.current_stage,
         ))
+    prompt_total, completion_total = sum_usage(usage)
     session.add(AiUsageEvent(
         login_id=user, map_id=map_id, version_id=version_id,
         model="", kind="interview", ok=True,
+        prompt_tokens=prompt_total, completion_tokens=completion_total,
     ))
     interview.updated_at = now_kst()
     await session.commit()
@@ -684,11 +714,19 @@ async def apply_interview_params(
         node = dict(raw)
         values = by_title.get((node.get("title") or "").strip())
         if values:
+            # subprocess는 annual_count·fte만 직접 편집 — 나머지 4필드는 링크 맵 지정값 상속.
+            # UI·CSV·AI 변환 3표면 강제 불변식의 4번째 표면 봉합 (hardening T9)
+            editable = (
+                ("annual_count", "fte")
+                if node.get("node_type") == "subprocess" else _PARAM_FIELDS
+            )
             attributes = dict(node.get("attributes") or {})
             row_krw = str(values.get("cost_krw") or "").strip()
             has_krw = bool(row_krw) and row_krw not in _PARAM_UNKNOWN_TOKENS
             touched = False
             for field in _PARAM_FIELDS:
+                if field not in editable:
+                    continue
                 if field == "cost_usd" and has_krw:
                     continue  # 통화 배타 — 행에 둘 다 있으면 krw 우선(두 통화 공존은 저장 시 422)
                 value = values.get(field)
@@ -735,6 +773,9 @@ async def upload_attachment(
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=422, detail=f"unsupported file type: {ext or filename}")
+    if len(filename) > 300:
+        # 컬럼 VARCHAR(300) — sqlite는 조용히 통과하지만 Postgres는 500. 확장자 보존 절단 (hardening T9)
+        filename = filename[: 300 - len(ext)] + ext
     data = await file.read()
     if len(data) > MAX_ATTACHMENT_BYTES:
         raise HTTPException(status_code=422, detail="file too large (max 20MB)")

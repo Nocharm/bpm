@@ -678,7 +678,7 @@ def test_draw_appends_keep_current_option(client: TestClient, monkeypatch) -> No
     assert len(options) == 2
     assert options[0].get("same_as_current") is None  # AI 신규 안이 먼저
     current = options[-1]
-    assert current["id"] == "opt-current"
+    assert current["id"].endswith("-current")
     assert current["same_as_current"] is True
     assert current["graph"] == graph
     client.delete(f"/api/interviews/{state['id']}")
@@ -743,4 +743,129 @@ def test_turn_prompt_reflects_working_graph(client: TestClient, monkeypatch) -> 
     # 계약 룰 12 본문도 같은 라벨을 언급하므로 마지막(실제 블록) 세그먼트로 판정
     summary = captured["system"].split("[현재 작업본 요약]")[-1]
     assert "견적 비교" in summary  # 작업본에만 있는 노드가 보인다
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_turn_survives_sp_suggestion_failure(client: TestClient, monkeypatch) -> None:
+    """성공한 턴은 사후 부가 로직(SP 제안) 예외로 롤백되지 않는다 (hardening T8)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = json.loads(_DRAW_A)
+    graph.pop("kind", None)
+    graph.pop("message", None)
+    option = {"id": "opt-x-1", "title": "표준안", "summary": "", "graph": graph}
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.pending_choices = {"options": [option]}
+            await session.commit()
+
+    asyncio.run(_seed())
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(_Q))
+
+    async def boom(session, interview, user):
+        raise RuntimeError("kb exploded")
+
+    monkeypatch.setattr("app.routers.interviews._maybe_sp_suggestion", boom)
+    resp = client.post(f"/api/interviews/{state['id']}/turns",
+                       json={"type": "choice", "choice_id": "opt-x-1"})
+    assert resp.status_code == 200
+    latest = client.get(f"/api/interviews/{state['id']}").json()
+    assert any(m["kind"] == "choice" for m in latest["messages"])  # 턴 커밋 보존
+    assert latest["working_graph"] is not None
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_attachment_long_filename_truncated(client: TestClient, monkeypatch) -> None:
+    """300자 초과 파일명은 확장자 보존 절단 — Postgres VARCHAR(300) 500 방지 (hardening T9)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    long_name = "가" * 320 + ".txt"
+    ok = client.post(
+        f"/api/interviews/{state['id']}/attachments",
+        files={"file": (long_name, b"hello", "text/plain")},
+    )
+    assert ok.status_code == 200
+    body = ok.json()
+    assert len(body["filename"]) <= 300
+    assert body["filename"].endswith(".txt")
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_apply_params_skips_uneditable_subprocess_fields(client: TestClient, monkeypatch) -> None:
+    """subprocess 노드엔 annual_count·fte만 반영 — 비편집 4필드 기록 차단(3표면 불변식의
+    4번째 표면, hardening T9)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = {
+                "nodes": [{"key": "sp", "title": "정산", "node_type": "subprocess",
+                           "linked_map_id": 1, "attributes": None, "description": "",
+                           "group_key": None}],
+                "edges": [], "groups": [],
+            }
+            row.facts = {"params": {"params_table": {
+                "정산": {"duration": "1.00", "annual_count": "12", "fte": "0.5"},
+            }}}
+            await session.commit()
+
+    asyncio.run(_seed())
+    body = client.post(f"/api/interviews/{state['id']}/apply-params").json()
+    node = body["working_graph"]["nodes"][0]
+    assert node["attributes"] == {"annual_count": "12", "fte": "0.5"}  # duration 스킵
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_turn_records_token_usage(client: TestClient, monkeypatch) -> None:
+    """턴 usage 이벤트에 콜별 토큰 합산 기록 (hardening T10)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    monkeypatch.setattr(ai_client, "call_ai", _fake_ai(_Q))  # 콜당 10/5
+    client.post(f"/api/interviews/{state['id']}/turns",
+                json={"type": "answer", "content": "x"})
+
+    async def _latest_ok() -> AiUsageEvent:
+        async with SessionLocal() as s:
+            rows = (await s.scalars(
+                select(AiUsageEvent).where(AiUsageEvent.ok.is_(True))
+                .order_by(AiUsageEvent.id.desc())
+            )).all()
+            return rows[0]
+
+    event = asyncio.run(_latest_ok())
+    assert event.prompt_tokens == 10 and event.completion_tokens == 5
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_sums_usage_across_parallel_calls(client: TestClient, monkeypatch) -> None:
+    """draw(multi)는 병렬 드래프터 콜의 토큰을 합산 기록한다 (hardening T10)."""
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(settings, "interview_choice_count", 2)
+    state = _iv_session(client)
+    queue = [_DRAW_A, _DRAW_B]
+
+    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        return ai_client.AiReply(content=queue.pop(0), prompt_tokens=10, completion_tokens=5)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "multi"})
+
+    async def _latest_ok() -> AiUsageEvent:
+        async with SessionLocal() as s:
+            rows = (await s.scalars(
+                select(AiUsageEvent).where(AiUsageEvent.ok.is_(True))
+                .order_by(AiUsageEvent.id.desc())
+            )).all()
+            return rows[0]
+
+    event = asyncio.run(_latest_ok())
+    assert event.prompt_tokens == 20 and event.completion_tokens == 10
     client.delete(f"/api/interviews/{state['id']}")

@@ -477,3 +477,62 @@ def test_choice_turn_params_signal_passes_through() -> None:
     _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
     assert interview.current_stage == "review"
     assert result.draw_due == "params"
+
+
+def test_expand_delta_deep_merges_attributes() -> None:
+    """수정 노드의 attributes 딥머지 — 드래프터가 모르는 apply-params 축적분(duration 등)이
+    통짜 교체로 증발하지 않는다 (hardening T6)."""
+    from app.schemas import AiProposal
+
+    prev = {"nodes": [{"key": "a", "title": "요청서 작성", "node_type": "process",
+                       "description": "", "group_key": None,
+                       "attributes": {"duration": "0.30", "cost_krw": "1000"}}],
+            "edges": [], "groups": []}
+    proposal = AiProposal.model_validate({
+        "kind": "graph", "message": "",
+        "nodes": [{"key": "a", "title": "구매 요청서 작성", "node_type": "process",
+                   "attributes": {"assignee": "김구매"}}],
+        "edges": [], "groups": [],
+    })
+    out = orchestrator._expand_delta(proposal, prev)
+    attrs = out.nodes[0].attributes
+    assert attrs is not None
+    assert attrs.duration == "0.30"  # 기존 params 보존
+    assert attrs.cost_krw == "1000"
+    assert attrs.assignee == "김구매"  # 명시 필드는 반영
+    assert out.nodes[0].title == "구매 요청서 작성"
+
+
+def test_expand_delta_restores_groups_and_drops_ghost_refs() -> None:
+    """에코 노드가 물려받은 group_key의 그룹은 이전 작업본에서 복원, 이전 작업본에도 정의가
+    없는 참조는 제거 (hardening T6). AiProposal 검증기가 명시 노드의 미지 group_key는 이미
+    거부하므로 — 이 경로는 에코 병합에서만 발생한다."""
+    from app.schemas import AiProposal
+
+    prev = {"nodes": [
+        {"key": "a", "title": "요청", "node_type": "process",
+         "description": "", "group_key": "g1", "attributes": None},
+        {"key": "c", "title": "검수", "node_type": "process",
+         "description": "", "group_key": "ghost", "attributes": None},  # prev 자체 결손 방어
+    ], "edges": [], "groups": [{"key": "g1", "label": "구매팀 레인"}]}
+    proposal = AiProposal.model_validate({
+        "kind": "graph", "message": "",
+        "nodes": [{"key": "a"}, {"key": "c"}],
+        "edges": [], "groups": [],
+    })
+    out = orchestrator._expand_delta(proposal, prev)
+    assert [g.key for g in out.groups] == ["g1"]
+    by_key = {n.key: n for n in out.nodes}
+    assert by_key["a"].group_key == "g1"  # 에코 노드의 그룹 복원
+    assert by_key["c"].group_key is None  # 어디에도 정의 없는 참조 제거
+
+
+def test_sanitize_subprocess_key_match_survives_rename() -> None:
+    """SP 링크는 키 우선 매칭 — 라벨 언어 변경 등 리네임만으로 process 강등되지 않는다 (hardening T7)."""
+    prev = {"nodes": [{"key": "sp1", "title": "정산 처리", "node_type": "subprocess",
+                       "linked_map_id": 42}]}
+    graph = {"nodes": [{"key": "sp1", "title": "Run settlement", "node_type": "subprocess"}],
+             "edges": [], "groups": []}
+    out = orchestrator._sanitize_subprocess(graph, prev)
+    assert out["nodes"][0]["node_type"] == "subprocess"
+    assert out["nodes"][0]["linked_map_id"] == 42
