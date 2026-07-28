@@ -399,8 +399,13 @@ _EXTRACT_NOTICE = {
 
 
 async def extract_attachment_facts(interview_id: int, attachment_id: int) -> None:
-    """첨부 파싱 직후 fire-and-forget 추출 — facts 병합 + 노티스. 실패는 무해(로그만)."""
+    """첨부 파싱 직후 fire-and-forget 추출 — facts 병합 + 노티스. 실패는 무해(로그만).
+
+    AI 콜은 락 밖(긴 호출이 턴을 막지 않게), 병합은 인터뷰 락 안에서 **신선 상태를 재조회**해
+    수행 — 추출 중 커밋된 턴 facts를 stale 스냅샷이 덮어쓰는 lost-update 차단 (hardening T3).
+    """
     from app.db import SessionLocal  # 상단 import 시 라우터-오케스트레이터 순환 위험 회피
+    from app.interview.locks import interview_lock
 
     try:
         async with SessionLocal() as session:
@@ -409,25 +414,32 @@ async def extract_attachment_facts(interview_id: int, attachment_id: int) -> Non
             if (interview is None or row is None or interview.status != "active"
                     or row.status != "parsed" or not (row.parsed_text or "").strip()):
                 return
-            out = await _ask_json(
-                [{"role": "system", "content": _EXTRACT_CONTRACT},
-                 {"role": "user", "content": (row.parsed_text or "")[:8000]}],
-                None, AttachmentFactsOut,
-            )
-            allowed = {s.key for s in engine.STAGES} | {"params"}
-            merged_any = False
-            for stage_key, patch in out.facts.items():
-                if stage_key not in allowed or not isinstance(patch, dict) or not patch:
-                    continue
-                _merge_facts_namespace(interview, stage_key, patch)
-                merged_any = True
-            if not merged_any:
-                return
-            await session.refresh(interview, ["messages"])
-            _append(session, interview, next_seq(interview), "consultant", "notice",
-                    _EXTRACT_NOTICE.get(interview.lang, _EXTRACT_NOTICE["ko"]).format(
-                        filename=row.filename))
-            await session.commit()
+            parsed_text = (row.parsed_text or "")[:8000]
+            filename = row.filename
+        out = await _ask_json(
+            [{"role": "system", "content": _EXTRACT_CONTRACT},
+             {"role": "user", "content": parsed_text}],
+            None, AttachmentFactsOut,
+        )
+        allowed = {s.key for s in engine.STAGES} | {"params"}
+        async with interview_lock(interview_id):
+            async with SessionLocal() as session:
+                interview = await session.get(InterviewSession, interview_id)
+                if interview is None or interview.status != "active":
+                    return
+                await session.refresh(interview, ["messages"])
+                merged_any = False
+                for stage_key, patch in out.facts.items():
+                    if stage_key not in allowed or not isinstance(patch, dict) or not patch:
+                        continue
+                    _merge_facts_namespace(interview, stage_key, patch)
+                    merged_any = True
+                if not merged_any:
+                    return
+                _append(session, interview, next_seq(interview), "consultant", "notice",
+                        _EXTRACT_NOTICE.get(interview.lang, _EXTRACT_NOTICE["ko"]).format(
+                            filename=filename))
+                await session.commit()
     except TurnError as exc:
         logger.warning("attachment facts extraction skipped: %s", exc)
     except Exception:  # noqa: BLE001 -- 백그라운드 실패는 서비스에 무해해야 한다

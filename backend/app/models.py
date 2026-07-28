@@ -685,6 +685,11 @@ class InterviewMessage(Base):
     """인터뷰 대화 1건 — P3 RAG 축적의 원재료. 되돌리기는 삭제 대신 superseded 접기."""
 
     __tablename__ = "interview_messages"
+    # seq는 세션 내 유일 — 동시 쓰기의 중복 seq를 DB가 최종 방어(락은 1차 방어, hardening T3).
+    # 기존 DB는 db.py 부트스트랩이 중복 리넘버 후 동명 유니크 인덱스로 보강한다.
+    __table_args__ = (
+        Index("uq_interview_messages_session_seq", "session_id", "seq", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(

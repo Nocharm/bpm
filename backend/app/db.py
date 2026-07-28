@@ -107,12 +107,45 @@ def _add_missing_indexes(conn: Connection) -> None:
         conn.execute(text(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table} {cols}"))
 
 
+def _enforce_interview_seq_unique(conn: Connection) -> None:
+    """interview_messages (session_id, seq) 유니크 보강 — 동시 쓰기 seq 중복의 최종 방어
+    (hardening T3). 기존 중복 행은 세션 max 뒤로 리넘버 — 비중복 seq를 건드리지 않아
+    체크포인트 message_seq 참조가 보존된다(중복 seq는 이미 순서가 모호했던 행만 이동)."""
+    inspector = inspect(conn)
+    if "interview_messages" not in inspector.get_table_names():
+        return
+    dupes = conn.execute(text(
+        "SELECT session_id, seq FROM interview_messages "
+        "GROUP BY session_id, seq HAVING COUNT(*) > 1"
+    )).fetchall()
+    for session_id, seq in dupes:
+        max_seq = conn.execute(
+            text("SELECT MAX(seq) FROM interview_messages WHERE session_id = :s"),
+            {"s": session_id},
+        ).scalar() or 0
+        ids = [row[0] for row in conn.execute(
+            text("SELECT id FROM interview_messages "
+                 "WHERE session_id = :s AND seq = :q ORDER BY id"),
+            {"s": session_id, "q": seq},
+        ).fetchall()]
+        for offset, message_id in enumerate(ids[1:], 1):  # 최저 id 1건은 제자리 유지
+            conn.execute(
+                text("UPDATE interview_messages SET seq = :new_seq WHERE id = :i"),
+                {"new_seq": max_seq + offset, "i": message_id},
+            )
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_interview_messages_session_seq "
+        "ON interview_messages (session_id, seq)"
+    ))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_missing_columns)
         await conn.run_sync(_add_missing_indexes)
+        await conn.run_sync(_enforce_interview_seq_unique)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

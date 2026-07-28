@@ -1,6 +1,7 @@
 """AI 컨설턴트 인터뷰 API — 세션·턴·첨부·체크포인트·완료 (design 2026-07-23 §5)."""
 
 import asyncio
+import functools
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -13,6 +14,7 @@ from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
 from app.interview.engine import get_stage, next_stage_key
+from app.interview.locks import interview_lock
 from app.interview.orchestrator import (
     TurnError,
     demote_notice_text,
@@ -57,6 +59,18 @@ logger = logging.getLogger(__name__)
 
 # 파싱 직렬화 — 무거운 파싱이 동시에 몰리지 않게 1개씩 (스펙 §4 백그라운드 직렬화의 단순화)
 _parse_lock = asyncio.Lock()
+
+
+def _locked_by_interview(handler):
+    """변이 핸들러 전체를 인터뷰 id 락으로 직렬화 — 동시 턴/첨부 추출의 facts 통짜 재할당
+    상호 침식과 seq 중복을 차단 (hardening T3). functools.wraps로 시그니처 보존(FastAPI DI)."""
+
+    @functools.wraps(handler)
+    async def wrapper(*args, **kwargs):
+        async with interview_lock(kwargs["interview_id"]):
+            return await handler(*args, **kwargs)
+
+    return wrapper
 
 _ATTACH_NOTICE = {
     "parsed": {
@@ -482,6 +496,7 @@ async def get_interview(
 
 
 @router.post("/interviews/{interview_id}/turns", response_model=InterviewStateOut)
+@_locked_by_interview
 async def post_turn(
     interview_id: int,
     payload: InterviewTurnIn,
@@ -562,6 +577,7 @@ _DRAW_EMPTY_TEXT = {
 
 
 @router.post("/interviews/{interview_id}/draw", response_model=InterviewStateOut)
+@_locked_by_interview
 async def draw_interview_proposals(
     interview_id: int,
     payload: InterviewDrawIn,
@@ -639,6 +655,7 @@ _PARAMS_APPLIED_NOTICE = {
 
 
 @router.post("/interviews/{interview_id}/apply-params", response_model=InterviewStateOut)
+@_locked_by_interview
 async def apply_interview_params(
     interview_id: int,
     user: str = Depends(get_current_user),
@@ -700,6 +717,7 @@ async def apply_interview_params(
 
 
 @router.post("/interviews/{interview_id}/attachments", response_model=InterviewAttachmentOut)
+@_locked_by_interview
 async def upload_attachment(
     interview_id: int,
     file: UploadFile,
@@ -748,6 +766,7 @@ async def upload_attachment(
 
 
 @router.delete("/interviews/{interview_id}/attachments/{attachment_id}", status_code=204)
+@_locked_by_interview
 async def delete_attachment(
     interview_id: int,
     attachment_id: int,
@@ -769,6 +788,7 @@ async def delete_attachment(
 
 
 @router.post("/interviews/{interview_id}/sp-accept", response_model=InterviewStateOut)
+@_locked_by_interview
 async def accept_sp_suggestion(
     interview_id: int,
     payload: InterviewSpAcceptIn,
@@ -832,6 +852,7 @@ async def accept_sp_suggestion(
 
 
 @router.post("/interviews/{interview_id}/revert", response_model=InterviewStateOut)
+@_locked_by_interview
 async def revert_to_checkpoint(
     interview_id: int,
     payload: InterviewRevertIn,
@@ -866,6 +887,7 @@ async def revert_to_checkpoint(
 
 
 @router.post("/interviews/{interview_id}/complete", response_model=InterviewStateOut)
+@_locked_by_interview
 async def complete_interview(
     interview_id: int,
     user: str = Depends(get_current_user),
@@ -882,6 +904,7 @@ async def complete_interview(
 
 
 @router.delete("/interviews/{interview_id}", status_code=204)
+@_locked_by_interview
 async def abandon_interview(
     interview_id: int,
     user: str = Depends(get_current_user),
