@@ -611,7 +611,7 @@ export function InterviewPreview({
             data-id="iv-apply"
           >
             <CheckCheck size={16} strokeWidth={1.5} />
-            Apply to draft
+            Apply & finish
           </button>
         ) : null}
         {applyError ? (
@@ -622,9 +622,10 @@ export function InterviewPreview({
         <ConfirmDialog
           title="Apply the interview result to the draft?"
           message={
-            conflict
+            (conflict
               ? "Warning: the draft has been edited since this interview started. Applying will merge onto the latest draft."
-              : "The working map will be merged into the draft version."
+              : "The working map will be merged into the draft version.") +
+            " This also finishes the interview session." // 상시 노출로 바뀐 뒤 멘탈 모델 명시 (T20)
           }
           confirmLabel={applyBusy ? "Applying…" : "Apply"}
           cancelLabel="Cancel"

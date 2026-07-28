@@ -78,9 +78,20 @@ export function ChoiceWindow({
       >
         <div className="flex items-center justify-between gap-2">
           <div className="truncate text-caption-strong text-ink">{option.title}</div>
-          {onFocus ? (
-            <Maximize2 size={16} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-          ) : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {option.lint && option.lint.length > 0 ? (
+              <span
+                className="rounded-sm bg-changed/10 px-1.5 py-0.5 text-fine text-changed"
+                title={option.lint.join("\n")}
+                data-id="iv-choice-lint"
+              >
+                Tone check {option.lint.length}
+              </span>
+            ) : null}
+            {onFocus ? (
+              <Maximize2 size={16} strokeWidth={1.5} className="text-ink-muted" />
+            ) : null}
+          </div>
         </div>
         {option.summary ? (
           <div className="mt-0.5 line-clamp-2 text-fine text-ink-tertiary">{option.summary}</div>

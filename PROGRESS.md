@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-29 — 하드닝 Phase 4: 제품 (worktree-ai-consultant) — **플랜 전 Phase 완결**
+- **T19 톤 결정적 린트**: `app/interview/lint.py`(AI 0콜 — '~하기' 접미·존댓말/서술 어미·활동 수 6±3 이탈 정규식) → draw 옵션 payload `lint`(normal 모드만 — word는 문서 제목이라 비적용) → 카드 헤더 "Tone check N" warn 칩(iv-choice-lint, 툴팁=경고 목록). 자동 수정 없음(표시만) — 앵커·SP·params 사니타이저와 동일 계보의 톤 보증 장치.
+- **T20 Apply 멘탈 모델**: 버튼 `Apply & finish` 개명 + 확인 모달에 "세션 종료" 명시 — 상시 노출 전환 후 무심코 눌러 세션을 잃는 불일치 해소. "적용하고 계속"은 백로그. 게이트: BE 856·ruff 0 / vitest 578·tsc 0·lint 0에러·build·스모크 2종. **하드닝 플랜 Phase 0~4 전체 완료 — 다음: GPU 실서버 재검증 → 워드 머지 → main 머지 판단.**
+
 ## 2026-07-29 — 하드닝 Phase 3: KB 운영 (worktree-ai-consultant)
 - **T16 삭제 맵 청크 수명**: 소프트삭제·영구삭제(퍼지) 시 map 청크 즉시 제거+캐시 무효화(`_delete_map_kb_chunks` — get_effective_role이 삭제 맵을 구분 안 해 검색 필터만으론 계속 주입됨), 복구 시 게시본 백그라운드 재인덱싱, 기동 시 고아 청크 스윕(`db._sweep_orphan_kb_chunks`, 멱등).
 - **T17 spawn 강참조 + 쿼리 타임아웃 분리**: `indexing._tasks` set 보관(asyncio 약참조 GC 소실 방지, done 시 discard — 테스트는 잔여 태스크 오염 대비 델타 판정) · `embed_texts(timeout=)` 파라미터화, 검색 쿼리 경로 5s 전용 상한(`retrieval.QUERY_TIMEOUT_SECONDS`) — embed 서버 행 시 턴 60s 블로킹 컷.

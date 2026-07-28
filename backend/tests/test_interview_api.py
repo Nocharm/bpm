@@ -869,3 +869,24 @@ def test_draw_sums_usage_across_parallel_calls(client: TestClient, monkeypatch) 
     event = asyncio.run(_latest_ok())
     assert event.prompt_tokens == 20 and event.completion_tokens == 10
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_options_include_tone_lint(client: TestClient, monkeypatch) -> None:
+    """draw 안에 결정적 톤 린트 경고 동봉 — 프롬프트 룰만으론 못 막는 톤 이탈 표시 (hardening T19)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    bad = json.dumps({
+        "kind": "graph", "message": "톤 이탈안",
+        "nodes": [
+            {"key": "s", "title": "시작", "node_type": "start"},
+            {"key": "a", "title": "요청서 작성하기", "node_type": "process"},
+            {"key": "e", "title": "끝", "node_type": "end"},
+        ],
+        "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
+        "groups": [],
+    })
+    _scripted(monkeypatch, [bad])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    options = body["messages"][-1]["payload"]["options"]
+    assert any("작성하기" in warning for warning in options[0]["lint"])
+    client.delete(f"/api/interviews/{state['id']}")
