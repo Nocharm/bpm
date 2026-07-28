@@ -125,11 +125,42 @@ export default function ConsultPage() {
     // lang 변경 시 재부트스트랩은 무해 — 서버는 기존 active 세션을 그대로 반환한다
   }, [mapId, lang]);
 
+  // 응답 유실 대조 — 서버는 턴을 커밋했는데 응답만 죽은 경우(nginx 504 이력) 재조회로 확인해
+  // 반영된 상태를 채택한다. true면 Retry 불필요(이중 제출 방지, hardening T5).
+  async function adoptDeliveredTurn(
+    turn: { type: "answer" | "choice" | "skip"; content?: string; choice_id?: string },
+    interviewId: number,
+    priorSeq: number,
+  ): Promise<boolean> {
+    try {
+      const latest = await getInterview(interviewId);
+      const lastUser = [...latest.messages]
+        .reverse()
+        .find((m) => !m.superseded && m.role === "user");
+      if (!lastUser || lastUser.seq <= priorSeq) return false;
+      const matches =
+        turn.type === "choice"
+          ? lastUser.kind === "choice" &&
+            (lastUser.payload as { choice_id?: string } | null)?.choice_id === turn.choice_id
+          : turn.type === "skip"
+            ? lastUser.kind === "skip"
+            : lastUser.kind === "answer" && lastUser.content === (turn.content ?? "");
+      if (!matches) return false;
+      setInterview(latest);
+      setPending(null);
+      lastTurnRef.current = null;
+      return true;
+    } catch {
+      return false; // 재조회도 실패 — 기존 Retry 경로 유지
+    }
+  }
+
   async function runTurn(turn: { type: "answer" | "choice" | "skip"; content?: string; choice_id?: string }) {
     if (!interview || busy) return;
     lastTurnRef.current = turn;
     setBusy(true);
     setError(null);
+    const priorSeq = interview.messages.reduce((max, m) => Math.max(max, m.seq), 0);
     if (turn.type === "choice") {
       const picked = choices?.find((o) => o.id === turn.choice_id) ?? null;
       if (picked) setOptimisticChoice({ graph: picked.graph });
@@ -153,7 +184,8 @@ export default function ConsultPage() {
       if (state.draw_due === "params") setParamsOpen(true);
       else if (state.draw_due) void startDraw(state.draw_due);
     } catch (err) {
-      setError(getApiErrorDetail(err) || "AI request failed.");
+      const adopted = await adoptDeliveredTurn(turn, interview.id, priorSeq);
+      if (!adopted) setError(getApiErrorDetail(err) || "AI request failed.");
     } finally {
       setBusy(false);
       setOptimisticChoice(null); // 성공=서버 상태가 동일 그래프 보유, 실패=모달 복귀

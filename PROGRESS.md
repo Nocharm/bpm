@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-29 — 하드닝 Phase 0: 릴리스 블로커 5종 (worktree-ai-consultant)
+- **T1 KB 가시성**: `_kb_reference_block`이 map 출처 히트를 사용자 viewer 권한으로 필터 — 비공개 맵 내용의 타 사용자 프롬프트 유출 차단(attachment 세션 스코프·library 통과 유지).
+- **T2 임베딩 오류 정규화**: retrieval의 캐시 적재(혼합 차원 stack)·질의 내적(차원 불일치) numpy ValueError를 EmbedError로 변환 — 모델/차원 교체 후 미재색인 상태에서 전 턴 500 나던 경로를 디그레이드 노티스로.
+- **T3 인터뷰 직렬화**: `app/interview/locks.py` 인터뷰 id 락(루프별 레지스트리) + 변이 엔드포인트 9종 `_locked_by_interview` 데코레이터(단일 워커 전제) · 첨부 추출은 AI 콜 밖/병합은 락 안 신선 재조회(lost-update 차단) · `(session_id, seq)` 유니크 인덱스+레거시 중복 리넘버 부트스트랩(`_enforce_interview_seq_unique`, 비중복 행 불변).
+- **T4 인터뷰어 작업본**: 턴 프롬프트 "[현재 작업본 요약]"을 실제 working_graph(`format_graph_compact`)로 — 저장본을 보며 이미 그린 활동을 재질문하던 체감 저하 해소(작업본 없으면 저장본 폴백).
+- **T5 Retry 이중 제출 방지**: FE 턴 실패 시 `getInterview` 재조회로 마지막 user 메시지(seq·kind·내용) 대조 — 반영돼 있으면 상태 채택·Retry 미노출(504 응답 유실 시나리오). 스모크에 504 유실 턴 시나리오 추가. 게이트: BE 837·ruff 0 / vitest·tsc·lint 0에러·build·스모크 2종 그린.
+
 ## 2026-07-29 — 하드닝 플랜 수립 (worktree-ai-consultant)
 - 전면 리뷰(블로커 5·M급 다수·제품 6) 코드 검증 후 실행 계획 확정: `docs/superpowers/plans/2026-07-29-ai-consultant-hardening.md` — Phase 0 블로커(KB 가시성 유출·임베딩 차원 500·인터뷰 직렬화·인터뷰어 스테일 그래프·Retry 이중 제출) → Phase 1 정합성+계측 → Phase 2 FE UX → Phase 3 KB 운영 → Phase 4 제품(톤 린트·Apply 명시). **P0+P1 전 main 머지 금지.**
 

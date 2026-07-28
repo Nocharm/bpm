@@ -21,7 +21,7 @@
 
 ---
 
-## Phase 0 — 릴리스 블로커 (P0, main 머지 전 필수)
+## Phase 0 — 릴리스 블로커 (P0, main 머지 전 필수) ✅ 완료 (2026-07-29, T1~T5 커밋 5개)
 
 ### T1. KB 참조 가시성 필터 (B1) — 보안
 - **수정**: `routers/interviews.py::_kb_reference_block` — hits 중 `source_type == "map"`은 map_id별 `get_effective_role(...) >= viewer` 검사 후 불허 히트 드롭(top-5라 최대 5회, map_id 중복은 1회만). `library`는 전사 공개 소스라 통과, `attachment`는 기존 세션 스코프 유지.

@@ -78,6 +78,11 @@ const run = async () => {
   await page.route("**/api/interviews/1/turns", async (r) => {
     turnCount += 1;
     if (turnCount === 1) {
+      // 응답 유실 재현 — 서버는 커밋(GET이 afterAnswer 반환)했는데 응답만 504 (hardening T5)
+      r.fulfill({ status: 504, contentType: "text/plain", body: "gateway timeout" });
+      return;
+    }
+    if (turnCount === 2) {
       r.fulfill({ json: afterAnswer });
       return;
     }
@@ -91,8 +96,12 @@ const run = async () => {
     r.fulfill({ json: afterDraw });
   });
   await page.route("**/api/interviews/1/revert", (r) => r.fulfill({ json: afterRevert }));
-  // 세션 초기화(DELETE) — 이후 createOrResume이 초기 state를 돌려줘 처음부터 시작
-  await page.route("**/api/interviews/1", (r) => r.fulfill({ status: 204 }));
+  // DELETE=세션 초기화(이후 createOrResume이 초기 state 반환), GET=유실 턴 대조용 반영 상태
+  await page.route("**/api/interviews/1", (r) =>
+    r.request().method() === "DELETE"
+      ? r.fulfill({ status: 204 })
+      : r.fulfill({ json: afterAnswer }),
+  );
   await page.route("**/api/notifications*", (r) =>
     r.fulfill({ json: [] }),
   );
@@ -128,8 +137,16 @@ const run = async () => {
   await page.click('[data-id="confirm-dialog-cancel"]');
   await page.waitForSelector('[data-id="confirm-dialog"]', { state: "detached" });
 
-  // 턴 전송 → draw_due 자동 트리거 → 진행 오버레이 → 제안 모달 (speed redesign)
+  // 턴 1 — 응답 504 유실: 재조회 대조로 반영 상태를 채택, Retry 미노출 (hardening T5)
   await page.fill('[data-id="iv-input"]', "구매 프로세스");
+  await page.click('[data-id="iv-send"]');
+  await page.waitForFunction(() =>
+    document.querySelector('[data-id="interview-panel"]')?.textContent?.includes("활동 골격"),
+  );
+  if (await page.$('[data-id="iv-error"]')) throw new Error("delivered turn must not show Retry");
+
+  // 턴 2 — draw_due 자동 트리거 → 진행 오버레이 → 제안 모달 (speed redesign)
+  await page.fill('[data-id="iv-input"]', "이대로 진행해줘");
   await page.click('[data-id="iv-send"]');
   await page.waitForSelector('[data-id="iv-draw-overlay"]');
   await page.waitForSelector('[data-id="iv-draw-overlay"]', { state: "detached", timeout: 15000 });
