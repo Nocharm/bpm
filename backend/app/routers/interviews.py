@@ -37,7 +37,7 @@ from app.models import (
     MapVersion,
     ProcessMap,
 )
-from app.permissions.access import assert_map_role, get_eligible_users
+from app.permissions.access import assert_map_role, get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role
 from app.routers.graph import _load_graph
 from app.schemas import (
@@ -272,6 +272,20 @@ async def _kb_reference_block(
     except embed_client.EmbedError as exc:
         logger.warning("kb search failed — turn continues without references: %s", exc)
         return "", True
+    # map 출처는 세션 사용자의 viewer 가시성 재검증 — 전 게시 맵이 인덱싱되므로 필터 없이는
+    # 비공개 맵 내용이 타 사용자 프롬프트로 유출된다(RBAC 우회, hardening T1). top-k라 검사 소수.
+    visible: dict[int, bool] = {}
+    checked: list[retrieval.KbHit] = []
+    for hit in hits:
+        if hit.source_type == "map":
+            hit_map_id = hit.meta.get("map_id") or hit.source_id
+            if hit_map_id not in visible:
+                role = await get_effective_role(session, interview.login_id, hit_map_id)
+                visible[hit_map_id] = role is not None
+            if not visible[hit_map_id]:
+                continue
+        checked.append(hit)
+    hits = checked
     lines: list[str] = []
     total = 0
     for hit in hits:

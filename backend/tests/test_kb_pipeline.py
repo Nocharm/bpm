@@ -459,3 +459,60 @@ def test_sp_accept_replaces_segment_with_link_node(client: TestClient, monkeypat
     assert client.post(f"/api/interviews/{state['id']}/sp-accept",
                        json={"message_id": suggestion["id"]}).status_code == 404
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_turn_kb_filters_invisible_map_hits(
+    client: TestClient, sysadmin_enforced: None, monkeypatch
+) -> None:
+    """map 출처 히트는 viewer 가시성 재검증 — 비공개 맵 내용이 타 사용자 프롬프트로
+    유출되지 않는다 (hardening T1). 본인 맵·library 출처는 통과."""
+    _enable_kb(monkeypatch)
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    secret = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": "kb secret map"},
+        headers={"X-Dev-User": "a"},
+    ).json()  # 기본 visibility=private — b는 무권한
+    mine = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": "kb my map"},
+        headers={"X-Dev-User": "b"},
+    ).json()
+    state = client.post(
+        f"/api/maps/{mine['id']}/interviews",
+        json={"version_id": mine["versions"][0]["id"]},
+        headers={"X-Dev-User": "b"},
+    ).json()
+    captured: list[list[dict]] = []
+
+    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        captured.append(messages)
+        return ai_client.AiReply(content=_Q)
+
+    monkeypatch.setattr(ai_client, "call_ai", fake_ai)
+
+    async def fake_search(session, query, top_k=5, session_id=None):
+        return [
+            retrieval.KbHit(source_type="map", source_id=secret["id"],
+                            chunk_text="비공개 맵의 활동 흐름", score=0.95,
+                            meta={"map_id": secret["id"], "map_name": "kb secret map"}),
+            retrieval.KbHit(source_type="map", source_id=mine["id"],
+                            chunk_text="내 맵의 활동 흐름", score=0.9,
+                            meta={"map_id": mine["id"], "map_name": "kb my map"}),
+            retrieval.KbHit(source_type="library", source_id=1,
+                            chunk_text="전사 표준 절차", score=0.8, meta={"title": "SOP"}),
+        ]
+
+    monkeypatch.setattr(retrieval, "search", fake_search)
+    resp = client.post(
+        f"/api/interviews/{state['id']}/turns",
+        json={"type": "answer", "content": "비슷한 프로세스 있어?"},
+        headers={"X-Dev-User": "b"},
+    )
+    assert resp.status_code == 200
+    system = captured[0][0]["content"]
+    assert "비공개 맵의 활동 흐름" not in system
+    assert "kb secret map" not in system
+    assert "내 맵의 활동 흐름" in system
+    assert "전사 표준 절차" in system
+    client.delete(f"/api/interviews/{state['id']}", headers={"X-Dev-User": "b"})
