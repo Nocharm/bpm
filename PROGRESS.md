@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-29 — 하드닝 Phase 2: 프론트 UX (worktree-ai-consultant)
+- **T12 카메라 게이팅**: `getGraphSignature`(BE `_graph_signature` 동형 — 설명·attributes 무시) 신설, 프리뷰 fitView를 서명 변경 시에만 — 맵이 안 변한 텍스트 턴마다 팬/줌 시점을 뺏던 문제 제거. vitest 2종.
+- **T13 draw 탈출구**: 오버레이 Cancel 버튼(iv-draw-cancel) + draw 취소 토큰(늦게 온 응답 무시) — 행 걸림 시 새로고침 없이 채팅 복귀(서버 작업은 계속, 결과는 다음 동기화 때 choices로 표시 가능).
+- **T14 숫자 키 2단계**: 보기 픽커 숫자 키=하이라이트만·Enter=확정 — "3일 걸립니다" 오제출(낙관 렌더라 회수 불가) 방지, 푸터 힌트 갱신.
+- **T15 소형 3건**: 새 메시지·낙관 수락 시 체크포인트 프리뷰 자동 해제(옛 스냅샷이 최신 캔버스 가림 방지) · 첨부 실패를 `attachError`(iv-attach-error, Retry 없음)로 분리 — 턴 Retry가 무관한 옛 턴 재전송하던 혼선 제거 · ChoiceOverlay `role="dialog"`+Escape 접기+재열기 칩(iv-choice-reopen, focus trap은 백로그). 게이트: vitest 578·tsc 0·lint 0에러·build·스모크 2종.
+
 ## 2026-07-29 — 하드닝 Phase 1: 백엔드 정합성 + 계측 (worktree-ai-consultant)
 - **T6 델타 병합 보강**: `_expand_delta` attributes 딥머지(드래프터는 컴팩트 목록만 봐서 params를 모름 — 수정 노드에서 apply-params 축적분 증발 차단) + 에코 노드 group_key 그룹 이전 작업본 복원·정의 없는 참조 제거(AiProposal 검증기가 명시 노드 미지 그룹은 이미 거부 — 에코 병합 경로만 해당).
 - **T7 SP 키 매칭**: `_sanitize_subprocess` 키 우선(제목 폴백) — 라벨 언어 변경 등 리네임만으로 링크가 process 강등되던 경로 제거.

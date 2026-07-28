@@ -14,7 +14,7 @@ import {
   acceptSpSuggestion, completeInterview, getApiErrorDetail, getGraph, postInterviewRevert,
   saveGraph, type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
-import { addedNodeKeys, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
+import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
@@ -51,12 +51,13 @@ interface InterviewPreviewProps {
   optimisticGraph?: WorkingGraph | null;
   busy: boolean;
   onChoose: (choiceId: string) => void;
-  // 그리기 이벤트(speed redesign §4) — 진행 오버레이·Draw map 버튼·에러 Retry
+  // 그리기 이벤트(speed redesign §4) — 진행 오버레이·Draw map 버튼·에러 Retry·취소 탈출구
   drawBusy: false | "multi" | "single";
   drawError: string | null;
   onDraw: (variants: "multi" | "single") => void;
   onDrawRetry: () => void;
   onDrawClearError: () => void;
+  onDrawCancel: () => void;
   // params 표 확정 — 수집분이 있으면 액션바에서 언제든 재오픈 (speed redesign 후속)
   paramsAvailable: boolean;
   onOpenParams: () => void;
@@ -105,9 +106,16 @@ function PreviewCanvas({
     return { nodes: laid.nodes, edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })) };
   }, [graph, added]);
   const { fitView, flowToScreenPosition } = useReactFlow();
+  // 구조가 실제로 바뀐 때만 카메라 리셋 — 맵이 안 변한 텍스트 턴마다 fitView가
+  // 사용자 팬/줌 시점을 뺏지 않게 서명으로 게이팅 (hardening T12)
+  const signature = useMemo(() => getGraphSignature(graph), [graph]);
+  const lastFitRef = useRef<string | null>(null);
   useEffect(() => {
-    if (nodes.length > 0) fitView({ duration: 400, padding: 0.2 });
-  }, [nodes, fitView]);
+    if (nodes.length > 0 && signature !== lastFitRef.current) {
+      lastFitRef.current = signature;
+      fitView({ duration: 400, padding: 0.2 });
+    }
+  }, [nodes, signature, fitView]);
 
   // 노드 호버 멘션 버튼 — leave 후 300ms 유예(버튼으로 마우스 이동 허용), 팬/줌 시 즉시 숨김
   const [hovered, setHovered] = useState<HoveredNode | null>(null);
@@ -186,7 +194,7 @@ function PreviewCanvas({
 
 export function InterviewPreview({
   interview, onUpdated, mapId, choices, optimisticGraph = null, busy, onChoose,
-  drawBusy, drawError, onDraw, onDrawRetry, onDrawClearError,
+  drawBusy, drawError, onDraw, onDrawRetry, onDrawClearError, onDrawCancel,
   paramsAvailable, onOpenParams,
 }: InterviewPreviewProps) {
   const router = useRouter();
@@ -194,6 +202,19 @@ export function InterviewPreview({
   // 체크포인트 클릭 = 맵만 먼저 프리뷰, 확정 버튼으로 실제 revert (실사용 피드백 2026-07-27)
   const [previewStage, setPreviewStage] = useState<string | null>(null);
   const [revertBusy, setRevertBusy] = useState(false);
+  // 새 메시지·낙관 수락이 오면 프리뷰 자동 해제 — 옛 스냅샷이 최신 캔버스를 가리지 않게 (hardening T15)
+  const messages = interview?.messages ?? [];
+  const lastSeq = messages.length ? messages[messages.length - 1].seq : 0;
+  const [seenSeq, setSeenSeq] = useState(lastSeq);
+  if (lastSeq !== seenSeq) {
+    setSeenSeq(lastSeq);
+    if (previewStage) setPreviewStage(null);
+  }
+  const [seenOptimistic, setSeenOptimistic] = useState<WorkingGraph | null>(optimisticGraph);
+  if (optimisticGraph !== seenOptimistic) {
+    setSeenOptimistic(optimisticGraph);
+    if (optimisticGraph && previewStage) setPreviewStage(null);
+  }
   // 노드 클릭 인스펙터 — 파라미터·담당 정보를 컨설턴트 모드 안에서 확인 (실사용 피드백 2026-07-24)
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -535,6 +556,14 @@ export function InterviewPreview({
                         {drawBusy === "multi" ? "Drawing proposals…" : "Drawing the map…"}
                         <DrawTimer />
                       </span>
+                      {/* 탈출구 — 행이 걸려도 새로고침 없이 채팅으로 복귀(서버 작업은 계속되며 결과는 다음 동기화 때 표시) */}
+                      <button
+                        className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                        onClick={onDrawCancel}
+                        data-id="iv-draw-cancel"
+                      >
+                        Cancel
+                      </button>
                     </>
                   )}
                 </div>

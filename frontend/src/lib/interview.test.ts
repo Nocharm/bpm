@@ -10,6 +10,7 @@ import {
   deriveParamsTable,
   deriveSequencePreview,
   distinctiveNodeKeys,
+  getGraphSignature,
   layoutWorkingGraph,
   stageIndex,
   stagesForMode,
@@ -171,5 +172,32 @@ describe("deriveParamsTable (params 표 확정 흐름)", () => {
   it("returns empty without params_table", () => {
     expect(deriveParamsTable({ params: { params_done: "yes" } })).toEqual([]);
     expect(deriveParamsTable(null)).toEqual([]);
+  });
+});
+
+describe("getGraphSignature", () => {
+  const base = (): WorkingGraph => ({
+    nodes: [
+      { key: "s", title: "시작", node_type: "start", description: "", attributes: null, group_key: null },
+      { key: "a", title: "요청서 작성", node_type: "process", description: "", attributes: null, group_key: null },
+    ],
+    edges: [{ source: "s", target: "a", label: "" }],
+    groups: [],
+  });
+
+  it("설명·attributes 차이는 같은 서명 — 텍스트 턴마다 카메라를 뺏지 않는다 (T12)", () => {
+    const changed = base();
+    changed.nodes[1] = { ...changed.nodes[1], description: "설명 추가", attributes: { duration: "0.30" } };
+    expect(getGraphSignature(changed)).toBe(getGraphSignature(base()));
+  });
+
+  it("제목·엣지 변경은 다른 서명 — 구조 변화만 fitView", () => {
+    const renamed = base();
+    renamed.nodes[1] = { ...renamed.nodes[1], title: "Draft request" };
+    expect(getGraphSignature(renamed)).not.toBe(getGraphSignature(base()));
+    const rewired = base();
+    rewired.edges = [{ source: "a", target: "s", label: "" }];
+    expect(getGraphSignature(rewired)).not.toBe(getGraphSignature(base()));
+    expect(getGraphSignature(null)).toBe("");
   });
 });

@@ -208,3 +208,17 @@ export function distinctiveNodeKeys(options: ChoiceOption[]): Map<string, Set<st
   }
   return result;
 }
+
+// BE orchestrator._graph_signature와 동형 — 설명·attributes 차이는 무시(화면상 같아 보이는
+// 그래프는 같은 서명). 프리뷰 카메라 리셋 게이팅용 (hardening T12).
+export function getGraphSignature(graph: WorkingGraph | null): string {
+  if (!graph) return "";
+  const titles = new Map(graph.nodes.map((n) => [n.key, (n.title ?? "").trim()]));
+  const nodes = graph.nodes
+    .map((n) => `${n.node_type}|${(n.title ?? "").trim()}|${n.group_key ?? ""}`)
+    .sort();
+  const edges = graph.edges
+    .map((e) => `${titles.get(e.source) ?? ""}>${titles.get(e.target) ?? ""}|${(e.label ?? "").trim()}`)
+    .sort();
+  return `${nodes.join(";")}#${edges.join(";")}`;
+}

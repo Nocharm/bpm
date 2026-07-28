@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { NodeTypes } from "@xyflow/react";
-import { Check, Maximize2 } from "lucide-react";
+import { Check, Layers, Maximize2 } from "lucide-react";
 
 import type { ChoiceOption } from "@/lib/api";
 import { distinctiveNodeKeys, layoutWorkingGraph } from "@/lib/interview";
@@ -122,14 +122,42 @@ interface ChoiceOverlayProps {
 
 export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  // Escape로 접기 — 안 고르고 캔버스/채팅을 먼저 보고 싶을 때의 탈출구. pending은 서버에
+  // 남아 있어 칩으로 재열기 (hardening T15). 새 선택지 세트가 오면 identity가 달라 자동 복귀.
+  const [dismissedFor, setDismissedFor] = useState<ChoiceOption[] | null>(null);
+  const dismissed = dismissedFor === choices;
+  useEffect(() => {
+    if (dismissed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDismissedFor(choices);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [choices, dismissed]);
   // 복수 안일 때 안 간 차이 노드(모든 안에 공통이 아닌 제목)를 하이라이트
   const highlight = useMemo(() => distinctiveNodeKeys(choices), [choices]);
   // 새 선택지 세트가 오면 stale id는 find 실패 → 첫 안으로 폴백 (effect 없이 파생)
   const focused = choices.find((o) => o.id === focusedId) ?? choices[0];
   const rest = choices.filter((o) => o.id !== focused.id);
 
+  if (dismissed) {
+    return (
+      <button
+        className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-3 py-1.5 text-caption text-ink-secondary shadow-lg hover:bg-surface-alt"
+        onClick={() => setDismissedFor(null)}
+        data-id="iv-choice-reopen"
+      >
+        <Layers size={16} strokeWidth={1.5} className="text-accent" />
+        View proposals ({choices.length})
+      </button>
+    );
+  }
+
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Map proposals"
       className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-ink/10 p-6"
       data-id="iv-choice-overlay"
     >

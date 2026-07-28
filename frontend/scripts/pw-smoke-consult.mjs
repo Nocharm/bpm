@@ -149,6 +149,7 @@ const run = async () => {
   await page.fill('[data-id="iv-input"]', "이대로 진행해줘");
   await page.click('[data-id="iv-send"]');
   await page.waitForSelector('[data-id="iv-draw-overlay"]');
+  await page.waitForSelector('[data-id="iv-draw-cancel"]'); // 행 걸림 탈출구 (hardening T13)
   await page.waitForSelector('[data-id="iv-draw-overlay"]', { state: "detached", timeout: 15000 });
   // 아웃라인 패널 — facts 수집 즉시 표시
   const outline = await page.textContent('[data-id="iv-outline"]');

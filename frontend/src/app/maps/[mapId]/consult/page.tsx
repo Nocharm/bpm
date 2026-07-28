@@ -60,6 +60,10 @@ export default function ConsultPage() {
   const [drawBusy, setDrawBusy] = useState<false | "multi" | "single">(false);
   const [drawError, setDrawError] = useState<string | null>(null);
   const lastDrawRef = useRef<"multi" | "single">("single");
+  // draw 취소 토큰 — 증가하면 진행 중 draw의 응답을 무시(행 걸림 탈출구, hardening T13)
+  const drawSeqRef = useRef(0);
+  // 첨부 실패는 턴 에러와 분리 — 턴 Retry가 무관한 옛 턴을 재전송하지 않게 (hardening T15)
+  const [attachError, setAttachError] = useState<string | null>(null);
   // 낙관적 수락 — 선택한 안을 즉시 캔버스에 반영·모달 닫기. 서버(그래프 반영+다음 질문 1콜)는
   // 백그라운드로 기다린다 — 실패하면 해제돼 모달이 복귀(choices 메시지가 여전히 마지막이라서).
   const [optimisticChoice, setOptimisticChoice] = useState<{ graph: WorkingGraph } | null>(null);
@@ -229,16 +233,27 @@ export default function ConsultPage() {
 
   async function startDraw(variants: "multi" | "single") {
     if (!interview || drawBusy) return;
+    const seq = ++drawSeqRef.current;
     lastDrawRef.current = variants;
     setDrawBusy(variants);
     setDrawError(null);
     try {
-      setInterview(await drawProposals(interview.id, variants));
+      const state = await drawProposals(interview.id, variants);
+      if (drawSeqRef.current !== seq) return; // 취소됨 — 늦게 온 응답 무시
+      setInterview(state);
     } catch (err) {
+      if (drawSeqRef.current !== seq) return;
       setDrawError(getApiErrorDetail(err) || "Failed to draw proposals.");
     } finally {
-      setDrawBusy(false);
+      if (drawSeqRef.current === seq) setDrawBusy(false);
     }
+  }
+
+  // 서버 작업은 계속된다(중단 API 없음) — 결과는 다음 상태 동기화 때 choices로 나타날 수 있다
+  function cancelDraw() {
+    drawSeqRef.current += 1;
+    setDrawBusy(false);
+    setDrawError(null);
   }
 
   // 첨부 추출(백그라운드 AI 1콜) 결과 픽업 — 오래된 상태로 덮지 않게 seq 가드
@@ -262,6 +277,7 @@ export default function ConsultPage() {
   // 성공 여부 반환 — 패널의 복수 업로드 진행/실패 표시용
   async function handleAttach(file: File): Promise<boolean> {
     if (!interview) return false;
+    setAttachError(null);
     try {
       const uploaded = await uploadInterviewAttachment(interview.id, file);
       setInterview((prev) =>
@@ -270,7 +286,7 @@ export default function ConsultPage() {
       scheduleExtractionRefresh(interview.id);
       return true;
     } catch (err) {
-      setError(getApiErrorDetail(err) || "Failed to upload the file.");
+      setAttachError(getApiErrorDetail(err) || "Failed to upload the file.");
       return false;
     }
   }
@@ -285,7 +301,7 @@ export default function ConsultPage() {
           : prev,
       );
     } catch (err) {
-      setError(getApiErrorDetail(err) || "Failed to delete the file.");
+      setAttachError(getApiErrorDetail(err) || "Failed to delete the file.");
     }
   }
 
@@ -357,6 +373,7 @@ export default function ConsultPage() {
           onDraw={(variants) => void startDraw(variants)}
           onDrawRetry={() => void startDraw(lastDrawRef.current)}
           onDrawClearError={() => setDrawError(null)}
+          onDrawCancel={cancelDraw}
           paramsAvailable={paramsRows.length > 0}
           onOpenParams={() => setParamsOpen(true)}
         />
@@ -375,6 +392,7 @@ export default function ConsultPage() {
               interview={interview}
               busy={busy || !!drawBusy}
               error={error}
+              attachError={attachError}
               pending={pending}
               hasChoices={choices !== null}
               onSend={(content) => runTurn({ type: "answer", content })}

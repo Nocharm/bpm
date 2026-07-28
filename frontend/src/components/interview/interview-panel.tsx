@@ -89,6 +89,8 @@ interface InterviewPanelProps {
   interview: InterviewState;
   busy: boolean;
   error: string | null;
+  // 첨부 실패 — 턴 에러와 분리(턴 Retry가 무관한 옛 턴을 재전송하지 않게, hardening T15)
+  attachError?: string | null;
   // 서버 반영 전의 낙관적 사용자 메시지 — 실패 시에도 유지되어 Retry 재전송 대상을 보여준다
   pending: string | null;
   hasChoices: boolean;
@@ -101,7 +103,8 @@ interface InterviewPanelProps {
 }
 
 export function InterviewPanel({
-  interview, busy, error, pending, hasChoices, onSend, onSkip, onRetry, onAttach, onDeleteAttachment,
+  interview, busy, error, attachError = null, pending, hasChoices,
+  onSend, onSkip, onRetry, onAttach, onDeleteAttachment,
 }: InterviewPanelProps) {
   const { t } = useI18n();
   const [input, setInput] = useState("");
@@ -488,6 +491,14 @@ export function InterviewPanel({
               <button className="ml-2 inline-flex items-center gap-1 text-caption-strong" onClick={onRetry}>
                 <RotateCcw size={16} strokeWidth={1.5} /> Retry
               </button>
+            </li>
+          ) : null}
+          {attachError ? (
+            <li
+              className="mt-4 rounded-md border border-error/40 bg-error/5 px-3 py-2 text-caption text-error"
+              data-id="iv-attach-error"
+            >
+              {attachError}
             </li>
           ) : null}
         </ul>
