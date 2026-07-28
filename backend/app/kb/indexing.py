@@ -31,10 +31,20 @@ def _get_semaphore() -> asyncio.Semaphore:
     return semaphore
 
 
+# 실행 중 태스크 강참조 — asyncio는 태스크를 약참조만 해 GC로 조용히 사라질 수 있다 (hardening T17)
+_tasks: set[asyncio.Task] = set()
+
+
 def spawn(coro) -> None:
-    """fire-and-forget 실행 — 예외는 소비(로깅은 인덱서 내부에서 이미 완료)."""
+    """fire-and-forget 실행 — 강참조 보관 + 예외 소비(로깅은 인덱서 내부에서 이미 완료)."""
     task = asyncio.get_running_loop().create_task(coro)
-    task.add_done_callback(lambda t: t.cancelled() or t.exception())
+    _tasks.add(task)
+
+    def _done(t: asyncio.Task) -> None:
+        _tasks.discard(t)
+        _ = t.cancelled() or t.exception()
+
+    task.add_done_callback(_done)
 
 
 async def _replace_chunks(

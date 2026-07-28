@@ -181,7 +181,7 @@ def test_search_ranks_filters_and_scopes(client, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
 
-    async def fake_embed(texts: list[str]) -> list[list[float]]:
+    async def fake_embed(texts: list[str], timeout: float | None = None) -> list[list[float]]:
         return [_unit(0) for _ in texts]
 
     monkeypatch.setattr(embed_client, "embed_texts", fake_embed)
@@ -217,7 +217,7 @@ def test_cache_invalidation_picks_up_new_chunks(client, monkeypatch: pytest.Monk
     monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
 
-    async def fake_embed(texts: list[str]) -> list[list[float]]:
+    async def fake_embed(texts: list[str], timeout: float | None = None) -> list[list[float]]:
         return [_unit(5) for _ in texts]
 
     monkeypatch.setattr(embed_client, "embed_texts", fake_embed)
@@ -291,7 +291,7 @@ def test_search_dimension_mismatch_raises_embed_error(client, monkeypatch: pytes
     asyncio.run(_seed_bad())
     retrieval.invalidate_cache()
 
-    async def fake_embed(texts: list[str]) -> list[list[float]]:
+    async def fake_embed(texts: list[str], timeout: float | None = None) -> list[list[float]]:
         return [_unit(0) for _ in texts]
 
     monkeypatch.setattr(embed_client, "embed_texts", fake_embed)
@@ -312,3 +312,50 @@ def test_search_dimension_mismatch_raises_embed_error(client, monkeypatch: pytes
 
         asyncio.run(_cleanup())
         retrieval.invalidate_cache()  # 오염 청크 잔존 시 이후 전 테스트가 EmbedError로 깨진다
+
+
+def test_search_uses_query_timeout(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    """쿼리 임베딩은 짧은 전용 타임아웃 — embed 서버 행 시 턴 블로킹 상한 (hardening T17)."""
+    _seed_chunks(client)
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
+    seen: dict = {}
+
+    async def fake_embed(texts: list[str], timeout: float | None = None) -> list[list[float]]:
+        seen["timeout"] = timeout
+        return [_unit(0) for _ in texts]
+
+    monkeypatch.setattr(embed_client, "embed_texts", fake_embed)
+    from app.db import SessionLocal
+
+    async def _search():
+        async with SessionLocal() as session:
+            return await retrieval.search(session, "구매")
+
+    asyncio.run(_search())
+    assert seen["timeout"] == retrieval.QUERY_TIMEOUT_SECONDS
+
+
+def test_spawn_holds_strong_reference_until_done(client) -> None:
+    """spawn 태스크는 완료까지 강참조 보관 — asyncio 약참조 GC 소실 방지 (hardening T17)."""
+    from app.kb import indexing
+
+    async def _run() -> None:
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def worker() -> None:
+            started.set()
+            await release.wait()
+
+        # 절대 카운트 금지 — 앞선 테스트들이 spawn한(닫힌 루프의) 잔여 태스크가 남아 있을 수 있다
+        before = set(indexing._tasks)
+        indexing.spawn(worker())
+        await started.wait()
+        mine = set(indexing._tasks) - before
+        assert len(mine) == 1  # 실행 중엔 보관
+        release.set()
+        await asyncio.sleep(0.01)
+        assert not (set(indexing._tasks) & mine)  # 완료 시 해제
+
+    asyncio.run(_run())

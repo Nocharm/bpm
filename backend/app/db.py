@@ -139,6 +139,21 @@ def _enforce_interview_seq_unique(conn: Connection) -> None:
     ))
 
 
+def _sweep_orphan_kb_chunks(conn: Connection) -> None:
+    """삭제(소프트/영구)된 맵의 KB 청크 잔재 정리 — 훅 추가 이전 데이터 소급 (hardening T16).
+
+    매 기동 시 멱등 실행 — kb_chunks는 소규모 전제라 비용 미미.
+    """
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    if "kb_chunks" not in tables or "process_maps" not in tables:
+        return
+    conn.execute(text(
+        "DELETE FROM kb_chunks WHERE source_type = 'map' AND source_id NOT IN "
+        "(SELECT id FROM process_maps WHERE deleted_at IS NULL)"
+    ))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
@@ -146,6 +161,7 @@ async def init_models() -> None:
         await conn.run_sync(_add_missing_columns)
         await conn.run_sync(_add_missing_indexes)
         await conn.run_sync(_enforce_interview_seq_unique)
+        await conn.run_sync(_sweep_orphan_kb_chunks)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

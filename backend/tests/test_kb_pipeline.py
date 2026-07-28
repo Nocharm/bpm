@@ -27,7 +27,7 @@ def _enable_kb(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "embed_url", "http://embed:8000/v1")
 
-    async def fake_embed(texts: list[str]) -> list[list[float]]:
+    async def fake_embed(texts: list[str], timeout: float | None = None) -> list[list[float]]:
         return [[1.0] + [0.0] * (DIM - 1) for _ in texts]
 
     monkeypatch.setattr(embed_client, "embed_texts", fake_embed)
@@ -516,3 +516,41 @@ def test_turn_kb_filters_invisible_map_hits(
     assert "내 맵의 활동 흐름" in system
     assert "전사 표준 절차" in system
     client.delete(f"/api/interviews/{state['id']}", headers={"X-Dev-User": "b"})
+
+
+def test_map_soft_delete_removes_kb_chunks(client: TestClient, monkeypatch) -> None:
+    """맵 소프트삭제 시 KB 청크 즉시 제거 — 삭제 맵이 무기한 검색·주입되지 않는다 (hardening T16)."""
+    _enable_kb(monkeypatch)
+    created = _make_map(client)
+
+    async def _seed_chunk() -> None:
+        async with SessionLocal() as session:
+            session.add(KbChunk(
+                source_type="map", source_id=created["id"], chunk_index=0,
+                chunk_text="삭제될 맵", embedding=b"\x00\x00\x80\x3f",
+                meta={"map_id": created["id"], "map_name": created["name"]},
+            ))
+            await session.commit()
+
+    asyncio.run(_seed_chunk())
+    assert client.delete(f"/api/maps/{created['id']}").status_code == 204
+    assert _chunks("map", created["id"]) == []
+
+
+def test_bootstrap_sweeps_orphan_map_chunks(client: TestClient) -> None:
+    """부트스트랩 스윕 — 존재하지 않는(또는 삭제된) 맵의 청크 잔재를 소급 정리 (hardening T16)."""
+    from app.db import init_models
+
+    ghost_map_id = 987654
+
+    async def _seed_orphan() -> None:
+        async with SessionLocal() as session:
+            session.add(KbChunk(
+                source_type="map", source_id=ghost_map_id, chunk_index=0,
+                chunk_text="고아 청크", embedding=b"\x00\x00\x80\x3f", meta={},
+            ))
+            await session.commit()
+
+    asyncio.run(_seed_orphan())
+    asyncio.run(init_models())
+    assert _chunks("map", ghost_map_id) == []

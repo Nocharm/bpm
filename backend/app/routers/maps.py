@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -48,6 +49,22 @@ router = APIRouter(
 RECOVERY_WINDOW = timedelta(days=7)
 
 
+async def _delete_map_kb_chunks(session: AsyncSession, map_ids: list[int]) -> None:
+    """맵 KB 청크 제거 — 삭제된 맵이 무기한 검색·프롬프트 주입되지 않게 (hardening T16).
+
+    복구(restore) 시엔 재게시 훅이 다시 인덱싱한다(kb-embedding.md 절차).
+    """
+    if not map_ids:
+        return
+    from app.kb import retrieval  # 최상단 import 시 kb→models 외 순환 여지 회피(지역 관례)
+    from app.models import KbChunk
+
+    await session.execute(
+        sa_delete(KbChunk).where(KbChunk.source_type == "map", KbChunk.source_id.in_(map_ids))
+    )
+    retrieval.invalidate_cache()
+
+
 async def _purge_expired(session: AsyncSession) -> None:
     """복구 기간(7일) 경과한 소프트삭제 맵을 영구 삭제 (별도 배치 없이 조회 시 lazy 정리)."""
     cutoff = now_kst() - RECOVERY_WINDOW
@@ -59,6 +76,7 @@ async def _purge_expired(session: AsyncSession) -> None:
         )
     ).all()
     if expired:
+        await _delete_map_kb_chunks(session, [m.id for m in expired])
         for stale_map in expired:
             await session.delete(stale_map)
         await session.commit()
@@ -1122,6 +1140,9 @@ async def delete_map(map_id: int, session: AsyncSession = Depends(get_session)) 
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     found_map.deleted_at = now_kst()
+    # KB 청크 즉시 제거 — get_effective_role이 삭제 맵을 구분하지 않아 검색 필터만으론
+    # 계속 주입된다. 복구 시 재게시 훅이 재인덱싱 (hardening T16)
+    await _delete_map_kb_chunks(session, [map_id])
     await session.commit()
 
 
@@ -1157,4 +1178,17 @@ async def restore_map(
     found_map.deleted_at = None
     await session.commit()
     await session.refresh(found_map)
+    # 소프트삭제 때 제거한 KB 청크 재인덱싱 — 게시본이 있으면 백그라운드 복원 (hardening T16)
+    from app.kb import embed_client, indexing
+
+    if embed_client.is_embed_enabled():
+        published_ids = (
+            await session.scalars(
+                select(MapVersion.id).where(
+                    MapVersion.map_id == map_id, MapVersion.status == workflow.PUBLISHED
+                )
+            )
+        ).all()
+        for version_id in published_ids:
+            indexing.spawn(indexing.index_map_version(version_id))
     return found_map

@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 TOP_K = 5  # 기본 반환 수 — 프롬프트 예산과의 절충
 MIN_SIMILARITY = 0.5  # 코사인 임계값 — 미달 청크는 잡음으로 간주해 제외
+# 쿼리 임베딩 타임아웃(초) — 인덱싱용(EMBED_TIMEOUT 30s×재시도)과 분리해 embed 서버 행 시
+# 턴이 최대 60초 막히던 것을 짧게 컷 (hardening T17). 재시도 1회 포함 최악 ~10s.
+QUERY_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -79,7 +82,10 @@ async def search(
     matrix, rows = await _load_cache(session)
     if not rows:
         return []
-    qvec = np.asarray((await embed_client.embed_texts([query]))[0], dtype=np.float32)
+    qvec = np.asarray(
+        (await embed_client.embed_texts([query], timeout=QUERY_TIMEOUT_SECONDS))[0],
+        dtype=np.float32,
+    )
     qvec = qvec / max(float(np.linalg.norm(qvec)), 1e-12)
     try:
         scores = matrix @ qvec

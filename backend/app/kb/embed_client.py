@@ -27,24 +27,29 @@ def _embeddings_url() -> str:
     return base if base.endswith("/embeddings") else base + "/embeddings"
 
 
-async def embed_texts(texts: list[str]) -> list[list[float]]:
-    """텍스트 목록 → EMBED_DIM 차원 float 벡터 목록(입력 순서 보존). 비활성/실패는 EmbedError."""
+async def embed_texts(texts: list[str], timeout: float | None = None) -> list[list[float]]:
+    """텍스트 목록 → EMBED_DIM 차원 float 벡터 목록(입력 순서 보존). 비활성/실패는 EmbedError.
+
+    timeout 미지정 시 인덱싱용 EMBED_TIMEOUT — 쿼리 경로는 짧은 상한을 넘겨 턴 블로킹을 막는다 (T17).
+    """
     if not texts:
         return []
     if not is_embed_enabled():
         raise EmbedError("embedding is disabled")
     vectors: list[list[float]] = []
     for start in range(0, len(texts), EMBED_BATCH_SIZE):
-        vectors.extend(await _embed_batch(texts[start : start + EMBED_BATCH_SIZE]))
+        vectors.extend(await _embed_batch(texts[start : start + EMBED_BATCH_SIZE], timeout))
     return vectors
 
 
-async def _embed_batch(batch: list[str]) -> list[list[float]]:
+async def _embed_batch(batch: list[str], timeout: float | None = None) -> list[list[float]]:
     payload = {"model": settings.embed_model, "input": batch}
     last_error: Exception | None = None
     for attempt in range(2):  # 일시 오류 1회 재시도 후 포기
         try:
-            async with httpx2.AsyncClient(timeout=settings.embed_timeout_seconds) as client:
+            async with httpx2.AsyncClient(
+                timeout=timeout if timeout is not None else settings.embed_timeout_seconds
+            ) as client:
                 response = await client.post(_embeddings_url(), json=payload)
             response.raise_for_status()
             data = response.json().get("data", [])
