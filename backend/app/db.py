@@ -1,5 +1,6 @@
 """Async database engine, session factory, and schema init."""
 
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import Connection, inspect, text
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.models import Base
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(settings.database_url)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
@@ -160,8 +163,14 @@ async def init_models() -> None:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_missing_columns)
         await conn.run_sync(_add_missing_indexes)
-        await conn.run_sync(_enforce_interview_seq_unique)
-        await conn.run_sync(_sweep_orphan_kb_chunks)
+    # 정리성 보강 스텝은 트랜잭션 분리 + 비치명 — Postgres는 트랜잭션 내 오류가 이후 문장까지
+    # 오염시키고, 스키마 보강 실패가 서비스 전체 기동을 막아선 안 된다(락이 1차 방어라 축소 동작 가능).
+    for step in (_enforce_interview_seq_unique, _sweep_orphan_kb_chunks):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(step)
+        except Exception:  # noqa: BLE001 -- 실패는 크게 로깅하고 기동은 계속
+            logger.exception("bootstrap step %s failed — continuing startup", step.__name__)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
