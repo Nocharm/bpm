@@ -738,6 +738,26 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.localStorage.setItem("bpm.consultOnboardSeen", "1");
     setConsultOnboardSeen(true);
   }
+  // AI 메뉴 — 챗·컨설턴트 진입을 버튼 하나로 통합(상단바 다이어트, 2026-07-30)
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
+  const aiMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aiMenuOpen) return;
+    const onDown = (event: PointerEvent) => {
+      if (aiMenuRef.current && !aiMenuRef.current.contains(event.target as Node)) {
+        setAiMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAiMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [aiMenuOpen]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
   const [newGroupId, setNewGroupId] = useState<string | null>(null);
@@ -6869,10 +6889,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         } else if (event.code === "KeyE" && event.shiftKey) {
           fire(() => void handleExportPng());
         } else if (event.code === "KeyC" && !event.shiftKey) {
-          // 선택 노드가 하나도 없으면 preventDefault·토스트 없이 브라우저 기본 텍스트 복사로 흘려보낸다.
-          // passthrough to native copy when no node is selected — matches handleCopy's .selected filter
+          // 선택 노드가 없거나 **텍스트를 드래그 선택 중**이면 브라우저 기본 복사로 흘려보낸다 —
+          // 노드가 선택된 채 AI 챗 본문을 선택 복사하면 노드 복사가 가로채 토스트만 뜨고
+          // 클립보드는 그대로이던 문제 (실서버 핫픽스 2026-07-30)
           const hasSelectedNode = nodesRef.current.filter((node) => node.selected).length > 0;
-          if (!hasSelectedNode) {
+          const selection = window.getSelection();
+          const hasTextSelection = selection !== null && !selection.isCollapsed;
+          if (!hasSelectedNode || hasTextSelection) {
             return;
           }
           fire(() => handleCopy());
@@ -7268,24 +7291,104 @@ function MapEditor({ mapId }: { mapId: number }) {
               onSaved={() => void refreshWorkflow()}
             />
           )}
+          <button
+            className={topIconBtn}
+            onClick={undo}
+            disabled={readOnly || historySize.past === 0}
+            title={t("editor.undoTitle")}
+          >
+            <Undo2 size={16} strokeWidth={1.5} />
+          </button>
+          <button
+            className={topIconBtn}
+            onClick={redo}
+            disabled={readOnly || historySize.future === 0}
+            title={t("editor.redoTitle")}
+          >
+            <Redo2 size={16} strokeWidth={1.5} />
+          </button>
+          <span className="mx-0.5 h-5 w-px bg-divider" />
+          <button
+            className={topIconBtn}
+            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : setLibraryOpen((open) => !open))}
+            title={t("library.toggle")}
+            aria-label={t("library.toggle")}
+          >
+            <Network size={16} strokeWidth={1.5} />
+          </button>
+          {/* AI 메뉴 — 챗·컨설턴트 진입 통합. 컨설턴트는 편집 불가 시 비활성+사유 툴팁 (2026-07-30) */}
           {(() => {
             // 온보딩 노출 — 시드 상태(Start/End 2노드 이하)의 편집 가능한 맵 + 미확인 사용자
             const pristine =
               !readOnly && nodes.length > 0 && nodes.length <= 2 &&
               nodes.every((n) => n.data.nodeType === "start" || n.data.nodeType === "end") &&
               edges.length <= 1;
-            const showOnboard = pristine && !consultOnboardSeen;
+            const showOnboard = pristine && !consultOnboardSeen && !aiMenuOpen;
+            const consultDisabledReason = !readOnly
+              ? null
+              : isViewer
+                ? "View-only access — consulting needs edit permission"
+                : checkout?.checked_out_by
+                  ? "Another user is editing this draft"
+                  : "This version isn't an editable draft";
             return (
-              <div className="relative">
+              <div className="relative" ref={aiMenuRef}>
                 <button
-                  className={topIconBtn + (showOnboard ? " ring-2 ring-accent/60" : "")}
-                  onClick={() => router.push(`/maps/${mapId}/consult?version=${versionId}`)}
-                  disabled={readOnly}
-                  title="AI Consultant"
-                  data-id="open-consultant"
+                  type="button"
+                  className={
+                    "inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt" +
+                    (aiMenuOpen ? " bg-surface-alt text-ink" : "") +
+                    (showOnboard ? " ring-2 ring-accent/60" : "")
+                  }
+                  onClick={() => setAiMenuOpen((open) => !open)}
+                  title={t("ai.toggle")}
+                  data-id="ai-menu"
                 >
-                  <Headset size={16} strokeWidth={1.5} />
+                  <Sparkles size={16} strokeWidth={1.5} />
+                  AI
                 </button>
+                {aiMenuOpen ? (
+                  <div
+                    className="absolute right-0 top-full z-[1100] mt-1 w-56 rounded-md border border-hairline bg-surface p-1 shadow-lg"
+                    data-id="ai-menu-pop"
+                  >
+                    <button
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                      onClick={() => {
+                        setAiMenuOpen(false);
+                        // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
+                        if (!aiOpen) {
+                          setWindowGeom((map) => {
+                            const g = map[AI_WINDOW_KEY];
+                            return g?.minimized
+                              ? { ...map, [AI_WINDOW_KEY]: { ...g, minimized: false } }
+                              : map;
+                          });
+                        }
+                        setAiOpen((open) => !open);
+                      }}
+                      data-id="ai-menu-chat"
+                    >
+                      <Sparkles size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                      <span className="flex-1 text-left">AI Chat</span>
+                    </button>
+                    {/* disabled 버튼은 마우스 이벤트가 죽어 래퍼에 title — 비활성 사유 툴팁 */}
+                    <div title={consultDisabledReason ?? undefined}>
+                      <button
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                        disabled={consultDisabledReason !== null}
+                        onClick={() => {
+                          setAiMenuOpen(false);
+                          router.push(`/maps/${mapId}/consult?version=${versionId}`);
+                        }}
+                        data-id="open-consultant"
+                      >
+                        <Headset size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                        <span className="flex-1 text-left">AI Consultant</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {showOnboard ? (
                   // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
                   <div
@@ -7321,50 +7424,6 @@ function MapEditor({ mapId }: { mapId: number }) {
               </div>
             );
           })()}
-          <button
-            className={topIconBtn}
-            onClick={undo}
-            disabled={readOnly || historySize.past === 0}
-            title={t("editor.undoTitle")}
-          >
-            <Undo2 size={16} strokeWidth={1.5} />
-          </button>
-          <button
-            className={topIconBtn}
-            onClick={redo}
-            disabled={readOnly || historySize.future === 0}
-            title={t("editor.redoTitle")}
-          >
-            <Redo2 size={16} strokeWidth={1.5} />
-          </button>
-          <span className="mx-0.5 h-5 w-px bg-divider" />
-          <button
-            className={topIconBtn}
-            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : setLibraryOpen((open) => !open))}
-            title={t("library.toggle")}
-            aria-label={t("library.toggle")}
-          >
-            <Network size={16} strokeWidth={1.5} />
-          </button>
-          {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-            onClick={() => {
-              // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
-              if (!aiOpen) {
-                setWindowGeom((map) => {
-                  const g = map[AI_WINDOW_KEY];
-                  return g?.minimized ? { ...map, [AI_WINDOW_KEY]: { ...g, minimized: false } } : map;
-                });
-              }
-              setAiOpen((open) => !open);
-            }}
-            title={t("ai.toggle")}
-          >
-            <Sparkles size={16} strokeWidth={1.5} />
-            AI
-          </button>
           <button
             className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}

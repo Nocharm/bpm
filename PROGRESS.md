@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 핫픽스 2종: 챗 텍스트 복사 가로채기 + AI 버튼 통합 (worktree-ai-consultant)
+- **AI 챗 복사 실패**: 캔버스 노드가 선택된 채 챗 본문을 드래그 복사하면 에디터 Ctrl+C(노드 복사)가 preventDefault로 가로채 토스트만 뜨고 클립보드는 불변 — **텍스트 선택(getSelection 비접힘)이 있으면 네이티브 복사로 패스스루**.
+- **AI 버튼 통합**: 상단바 컨설턴트(Headset)·AI(Sparkles) 2버튼 → AI 드롭다운 메뉴 하나(AI Chat/AI Consultant). 컨설턴트 항목은 편집 불가 시 비활성 + **래퍼 title로 사유 툴팁**(뷰어 권한/타인 점유/비편집 버전 구분 — disabled 버튼은 마우스 이벤트가 죽어 래퍼에 부착). 온보딩 말풍선은 통합 버튼으로 이식(메뉴 열림 중엔 숨김).
+
 ## 2026-07-30 — 컨설턴트 UX 폴리시 16종 (P0~P2, worktree-ai-consultant)
 - **P0**: ① 체크포인트 스택 3개 초과 "+N older" 접기 + 코너 소유권 규칙 주석(fast-forward 5개 일괄 생성과 좌하 아웃라인 충돌 방지) ② 채팅 autoscroll 예의 — 바닥 근처만 자동, 위에서 읽는 중엔 스크롤다운 버튼 점 뱃지(stickBottomRef, 본인 전송은 항상 바닥) ③ 첨부 "Reading…" — 업로드 후 추출 9~22초 가시화(칩/플라이아웃/배지, 추출 노티스 파일명 매칭+25s 타임아웃 해제) ④ PDF 아이콘 error→changed(상태색 전용) ⑤ 패스트트랙 armed 칩(iv-fasttrack-chip, Cancel 포함) — invisible 모드 해소.
 - **P1**: ⑥ 플로팅 진입 모션 통일(iv-pop 150ms — 오버레이·인스펙터·아웃라인·SP카드·draw카드·재열기칩·params모달, reduced-motion 가드) ⑦ 헤더 진행바 옆 현재 스테이지 라벨 ⑧ 빈 캔버스 고스트 노드+패스트트랙 CTA·워터마크 노드 아래(z-1)로+축소(72px/7%) ⑨ 액션바 재배치(baseline 좌측 그룹 소속·에러 좌측 고정+해제 X·ml-auto 이중 제거) ⑩ 인스펙터 값 있는 행만+빈 상태 문구+설명 스크롤 ⑪ params 표 Cost 열 합침(₩/$ 기호 병기, 배타 계약 표면화)·정식 라벨+title·Escape/백드롭 닫힘.
