@@ -367,10 +367,12 @@ button:not(:disabled):active {
 @keyframes donut-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
 
 /* 새 맵 다이얼로그 — 오우닝 부서 선택 후 결재자 피커 배경이 한 번 반짝여 시선을 유도.
-   box-shadow 링은 레이아웃 밖이라 모달 내 인접 요소·스크롤 클리핑과 겹쳐 깨져 보임 → 배경색 방식. */
+   box-shadow 링은 레이아웃 밖이라 모달 내 인접 요소·스크롤 클리핑과 겹쳐 깨져 보임 → 배경색 방식.
+   피크(35~65%)에서 잠시 머물러 급하지 않게 — duration은 클래스(1400ms)와 세트. */
 @keyframes picker-flash {
   0%   { background-color: transparent; }
-  30%  { background-color: var(--color-accent-tint); }
+  35%  { background-color: var(--color-accent-tint); }
+  65%  { background-color: var(--color-accent-tint); }
   100% { background-color: transparent; }
 }
 
