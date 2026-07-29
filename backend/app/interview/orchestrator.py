@@ -401,7 +401,7 @@ async def generate_proposals(
             "summary": result.message,
             "graph": graph,
             # 결정적 톤 린트 — word는 문서 제목("번호 제목" 재구성)이라 톤 규칙 비적용 (T19)
-            "lint": lint.lint_graph(graph) if interview.mode == "normal" else [],
+            "lint": lint.lint_graph(graph, interview.lang) if interview.mode == "normal" else [],
         })
     if not options:
         raise TurnError("AI failed to generate proposals")

@@ -154,7 +154,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
   if (dismissed) {
     return (
       <button
-        className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-3 py-1.5 text-caption text-ink-secondary shadow-lg hover:bg-surface-alt"
+        className="iv-pop absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-3 py-1.5 text-caption text-ink-secondary shadow-lg hover:bg-surface-alt"
         onClick={() => setDismissedFor(null)}
         data-id="iv-choice-reopen"
       >
@@ -169,7 +169,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Map proposals"
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-ink/10 p-6"
+      className="iv-pop absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-ink/10 p-6"
       data-id="iv-choice-overlay"
     >
       {choices.length >= 3 ? (

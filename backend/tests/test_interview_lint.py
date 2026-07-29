@@ -40,3 +40,9 @@ def test_start_end_titles_exempt() -> None:
     graph["nodes"][0]["title"] = "주문 접수하기"  # start
     graph["nodes"][-1]["title"] = "완료합니다"  # end
     assert lint_graph(graph) == []
+
+
+def test_lint_messages_localized_for_english_sessions() -> None:
+    """en 세션엔 영어 경고 — 칩 툴팁이 한국어 고정이던 문제 (P2 #16)."""
+    warnings = lint_graph(_graph([f"Step {i}" for i in range(16)]), lang="en")
+    assert any("16 activities" in w for w in warnings)

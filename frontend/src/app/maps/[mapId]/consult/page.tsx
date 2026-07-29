@@ -86,6 +86,13 @@ export default function ConsultPage() {
   // 패스트트랙 — 인사 보기 클릭(armed) → 첨부 성공 시 범위 제안 자동 턴(awaiting) →
   // "이대로 그리기" 인터셉트. 새로고침 시 소실 → 일반 인터뷰 폴백(무해, design 2026-07-29 §2)
   const [fastTrack, setFastTrack] = useState<"idle" | "armed" | "awaiting">("idle");
+  // 추출 중(Reading…) 표시 — 업로드 후 백그라운드 추출 9~22초가 invisible하던 것 가시화 (P0 #3).
+  // 해제: 추출 노티스(파일명 매칭) 도착 또는 25초 타임아웃(추출 실패는 노티스가 없다 — 로그만)
+  const [readingIds, setReadingIds] = useState<Set<number>>(new Set());
+
+  function persistChatWidth(width: number) {
+    window.localStorage.setItem(CHAT_WIDTH_KEY, String(width));
+  }
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -93,14 +100,29 @@ export default function ConsultPage() {
       const next = Math.min(CHAT_MAX, Math.max(CHAT_MIN, window.innerWidth - ev.clientX));
       setChatWidth(next);
     };
-    const onUp = (ev: PointerEvent) => {
+    const finish = (ev: PointerEvent) => {
       const finalWidth = Math.min(CHAT_MAX, Math.max(CHAT_MIN, window.innerWidth - ev.clientX));
-      window.localStorage.setItem(CHAT_WIDTH_KEY, String(finalWidth));
+      persistChatWidth(finalWidth);
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
     };
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointerup", finish);
+    // pointercancel(드래그 중단)에도 정리 — 리스너 누수 방지 (P2 #14)
+    window.addEventListener("pointercancel", finish);
+  }
+
+  // 키보드 리사이즈(16px 단위)·더블클릭 기본폭 복원 — 디바이더 접근성 (P2 #14)
+  function resizeChatBy(delta: number) {
+    const next = Math.min(CHAT_MAX, Math.max(CHAT_MIN, chatWidth + delta));
+    setChatWidth(next);
+    persistChatWidth(next);
+  }
+
+  function resetChatWidth() {
+    setChatWidth(420);
+    persistChatWidth(420);
   }
 
   useEffect(() => {
@@ -308,19 +330,41 @@ export default function ConsultPage() {
     setDrawError(null);
   }
 
+  // BE _EXTRACT_NOTICE 문구와 동기 — 추출 완료 노티스 판별(업로드 '읽었습니다' 노티스와 구분)
+  const EXTRACT_NOTICE_MARKERS = ["정보를 추출해", "Extracted details"];
+
+  function clearFinishedReadings(latest: InterviewState) {
+    setReadingIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      for (const att of latest.attachments) {
+        if (!next.has(att.id)) continue;
+        const done = latest.messages.some(
+          (m) =>
+            !m.superseded && m.kind === "notice" &&
+            m.content.includes(att.filename) &&
+            EXTRACT_NOTICE_MARKERS.some((marker) => m.content.includes(marker)),
+        );
+        if (done) next.delete(att.id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }
+
   // 첨부 추출(백그라운드 AI 1콜) 결과 픽업 — 오래된 상태로 덮지 않게 seq 가드
   function scheduleExtractionRefresh(interviewId: number) {
     for (const delay of [9000, 22000]) {
       window.setTimeout(() => {
         void getInterview(interviewId)
-          .then((latest) =>
+          .then((latest) => {
             setInterview((prev) => {
               if (!prev || prev.id !== latest.id) return prev;
               const seqOf = (s: InterviewState) =>
                 s.messages.reduce((max, m) => Math.max(max, m.seq), 0);
               return seqOf(latest) >= seqOf(prev) ? latest : prev;
-            }),
-          )
+            });
+            clearFinishedReadings(latest);
+          })
           .catch(() => undefined); // 실패해도 다음 턴에서 어차피 동기화
       }, delay);
     }
@@ -335,6 +379,17 @@ export default function ConsultPage() {
       setInterview((prev) =>
         prev ? { ...prev, attachments: [...prev.attachments, uploaded] } : prev,
       );
+      if (uploaded.status === "parsed") {
+        setReadingIds((prev) => new Set(prev).add(uploaded.id));
+        window.setTimeout(() => {
+          setReadingIds((prev) => {
+            if (!prev.has(uploaded.id)) return prev;
+            const next = new Set(prev);
+            next.delete(uploaded.id);
+            return next;
+          });
+        }, 25000);
+      }
       scheduleExtractionRefresh(interview.id);
       if (fastTrack === "armed") {
         // 패스트트랙 — 첨부 도착 즉시 범위 제안 턴(첨부 본문은 턴 컨텍스트에 이미 포함)
@@ -396,7 +451,11 @@ export default function ConsultPage() {
         <Headset size={16} strokeWidth={1.5} className="text-accent" />
         <span className="text-body-strong">{mapName || "…"}</span>
         <span className="text-caption text-ink-muted">— Consultant</span>
-        <ol className="ml-auto flex items-center gap-1" data-id="consult-progress">
+        {/* 진행바 옆 현재 스테이지 라벨 — 무명 인디케이터 해소 (P1 #6) */}
+        <span className="ml-auto text-caption text-ink-secondary" data-id="consult-stage-label">
+          {stagesForMode(interview?.mode)[stageIdx]?.label ?? ""}
+        </span>
+        <ol className="flex items-center gap-1" data-id="consult-progress">
           {stagesForMode(interview?.mode).map((stage, i) => (
             <li
               key={stage.key}
@@ -438,10 +497,32 @@ export default function ConsultPage() {
           onOpenParams={() => setParamsOpen(true)}
         />
         <div
-          className="w-1 shrink-0 cursor-col-resize bg-hairline transition-colors duration-150 hover:bg-accent/40"
+          className="flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-hairline outline-none transition-colors duration-150 hover:bg-accent/40 focus-visible:bg-accent/40"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize chat panel"
+          tabIndex={0}
+          title="Drag to resize · double-click to reset"
           onPointerDown={handleDividerDown}
+          onDoubleClick={resetChatWidth}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              resizeChatBy(16);
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault();
+              resizeChatBy(-16);
+            }
+          }}
           data-id="consult-divider"
-        />
+        >
+          {/* 그립 도트 — 드래그 가능 어포던스 */}
+          <span className="pointer-events-none flex flex-col gap-0.5" aria-hidden>
+            <span className="h-0.5 w-0.5 rounded-full bg-ink-tertiary/70" />
+            <span className="h-0.5 w-0.5 rounded-full bg-ink-tertiary/70" />
+            <span className="h-0.5 w-0.5 rounded-full bg-ink-tertiary/70" />
+          </span>
+        </div>
         <aside
           className="flex shrink-0 flex-col bg-surface"
           style={{ width: chatWidth }}
@@ -460,6 +541,10 @@ export default function ConsultPage() {
               onRetry={() => lastTurnRef.current && runTurn(lastTurnRef.current)}
               onAttach={handleAttach}
               onDeleteAttachment={handleDeleteAttachment}
+              readingIds={readingIds}
+              fastTrackArmed={fastTrack === "armed"}
+              onFastTrackCancel={() => setFastTrack("idle")}
+              onStartOver={() => setRestartOpen(true)}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center text-caption text-ink-muted">

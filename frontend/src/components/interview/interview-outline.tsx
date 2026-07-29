@@ -21,7 +21,7 @@ export function InterviewOutline({ facts, mode }: InterviewOutlineProps) {
 
   return (
     <div
-      className="absolute bottom-3 left-3 z-10 w-64 rounded-md border border-hairline bg-surface shadow-md"
+      className="iv-pop absolute bottom-3 left-3 z-10 w-64 rounded-md border border-hairline bg-surface shadow-md"
       data-id="iv-outline"
     >
       <button

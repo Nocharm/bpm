@@ -16,8 +16,8 @@ ACTIVITY_MIN = 7
 ACTIVITY_MAX = 13
 
 
-def lint_graph(graph: dict) -> list[str]:
-    """제목 톤·활동 수 검사 — 사람이 읽는 경고 문자열 목록(빈 목록=통과)."""
+def lint_graph(graph: dict, lang: str = "ko") -> list[str]:
+    """제목 톤·활동 수 검사 — 사람이 읽는 경고 문자열 목록(빈 목록=통과). 세션 언어로 출력 (P2 #16)."""
     warnings: list[str] = []
     flow_nodes = [
         n for n in graph.get("nodes", [])
@@ -31,12 +31,22 @@ def lint_graph(graph: dict) -> list[str]:
     if bad_titles:
         shown = ", ".join(f"'{t}'" for t in bad_titles[:3])
         more = len(bad_titles) - 3
-        warnings.append(
-            f"제목 톤 이탈 {len(bad_titles)}건 — {shown}"
-            + (f" 외 {more}건" if more > 0 else "")
-            + " ('명사+동사' 명사구 표준)"
-        )
+        if lang == "en":
+            warnings.append(
+                f"{len(bad_titles)} title tone issue(s) — {shown}"
+                + (f" and {more} more" if more > 0 else "")
+                + " (noun+verb standard)"
+            )
+        else:
+            warnings.append(
+                f"제목 톤 이탈 {len(bad_titles)}건 — {shown}"
+                + (f" 외 {more}건" if more > 0 else "")
+                + " ('명사+동사' 명사구 표준)"
+            )
     count = len(flow_nodes)
     if count and not (ACTIVITY_MIN <= count <= ACTIVITY_MAX):
-        warnings.append(f"활동 수 {count}개 — 표준 세분도 10±3 범위 밖")
+        warnings.append(
+            f"{count} activities — outside the 10±3 standard" if lang == "en"
+            else f"활동 수 {count}개 — 표준 세분도 10±3 범위 밖"
+        )
     return warnings

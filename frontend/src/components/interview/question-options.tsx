@@ -47,6 +47,9 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
         e.preventDefault();
         setSelected(idx);
       }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onFreeType?.(); // 픽커에서 컴포저로 — 보기는 그대로 남는다 (P2 #13)
     } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       onFreeType?.();
     }
@@ -58,14 +61,16 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
       tabIndex={0}
       role="listbox"
       aria-label="Answer options"
+      aria-activedescendant={`iv-opt-${selected}`}
       onKeyDown={handleKeyDown}
       className="rounded-md border border-accent-tint-border bg-surface shadow-md outline-none focus:border-accent"
       data-id="iv-question-options"
     >
-      <ul className="py-1">
+      <ul role="presentation" className="py-1">
         {options.map((option, i) => (
-          <li key={option}>
+          <li role="presentation" key={option}>
             <button
+              id={`iv-opt-${i}`}
               role="option"
               aria-selected={i === selected}
               className={
@@ -87,8 +92,9 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
             </button>
           </li>
         ))}
-        <li>
+        <li role="presentation">
           <button
+            id={`iv-opt-${options.length}`}
             role="option"
             aria-selected={selected === options.length}
             className={

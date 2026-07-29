@@ -5,11 +5,12 @@
 // 2026-07-26 리디자인: 스테이지 칩·전환 디바이더·메시지 그룹핑·typing dots·컴포저 카드·픽커 핀·스크롤 다운.
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import {
   ArrowDown, Check, File, FileChartPie, FileCode, FileSpreadsheet, FileText, FileType,
   Files, FolderOpen, HardDrive, Headset, Info, Layers, Lightbulb, Loader2, Paperclip,
-  RotateCcw, Send, SkipForward, X,
+  RotateCcw, Send, SkipForward, X, Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,13 +40,14 @@ const SCROLL_DOWN_AT = 160; // 바닥에서 이만큼(px) 이상 올라가면 �
 // 답변 대기 팁 — 서버 관리 팁(getAiTips) 우선, 미설정 시 i18n 폴백 (AI 챗과 동일 소스)
 const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
 
-// 첨부 칩 확장자 아이콘 — 색은 토큰만(브랜드색 대응: 시트=added, 프레젠테이션=changed, 문서=accent, PDF=error).
+// 첨부 칩 확장자 아이콘 — 색은 토큰만(브랜드색 대응: 시트=added, 프레젠테이션·PDF=changed, 문서=accent).
 // 현재 업로드 가능 포맷(pdf/docx/xlsx/txt/md) 외 확장자도 표시용으로 미리 매핑.
 const ATTACH_ICONS: Array<{ exts: string[]; icon: LucideIcon; cls: string }> = [
   { exts: ["xlsx", "xlsm", "xls", "csv"], icon: FileSpreadsheet, cls: "text-added" },
   { exts: ["ppt", "pptx"], icon: FileChartPie, cls: "text-changed" },
   { exts: ["doc", "docx"], icon: FileText, cls: "text-accent" },
-  { exts: ["pdf"], icon: FileType, cls: "text-error" },
+  // pdf는 브랜드 레드 대신 changed — error는 '파싱 실패' 상태색 전용(시맨틱 충돌 방지, P0 #4)
+  { exts: ["pdf"], icon: FileType, cls: "text-changed" },
   { exts: ["md", "markdown"], icon: FileCode, cls: "text-ink-tertiary" },
   { exts: ["txt"], icon: FileText, cls: "text-ink-tertiary" },
 ];
@@ -93,6 +95,13 @@ interface InterviewPanelProps {
   error: string | null;
   // 첨부 실패 — 턴 에러와 분리(턴 Retry가 무관한 옛 턴을 재전송하지 않게, hardening T15)
   attachError?: string | null;
+  // AI가 문서를 읽는 중(업로드 후 백그라운드 추출 9~22초) — 칩·플라이아웃·배지에 표시 (P0 #3)
+  readingIds?: Set<number>;
+  // 패스트트랙 armed(첨부 대기) 가시화 — 첨부 모달을 닫아도 모드를 알 수 있게 (P0 #16④)
+  fastTrackArmed?: boolean;
+  onFastTrackCancel?: () => void;
+  // 종료 상태 액션 바의 Start over — 재시작 확인 모달을 여는 페이지 핸들러 (P2 #15)
+  onStartOver?: () => void;
   // 서버 반영 전의 낙관적 사용자 메시지 — 실패 시에도 유지되어 Retry 재전송 대상을 보여준다
   pending: string | null;
   hasChoices: boolean;
@@ -107,6 +116,7 @@ interface InterviewPanelProps {
 export function InterviewPanel({
   interview, busy, error, attachError = null, pending, hasChoices,
   onSend, onSkip, onRetry, onAttach, onDeleteAttachment,
+  readingIds, fastTrackArmed = false, onFastTrackCancel, onStartOver,
 }: InterviewPanelProps) {
   const { t } = useI18n();
   const [input, setInput] = useState("");
@@ -114,6 +124,10 @@ export function InterviewPanel({
   const [tips, setTips] = useState<string[]>([]);
   const [showAttachInfo, setShowAttachInfo] = useState(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  // autoscroll 예의 — 바닥 부착 여부(스크롤 핸들러가 갱신)·안 본 새 메시지 뱃지 (P0 #2)
+  const stickBottomRef = useRef(true);
+  const prevLenRef = useRef(0);
+  const [hasUnseen, setHasUnseen] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
   // 복수/폴더 첨부 — 선택 파일 리뷰 목록(가능/불가+사유) 및 순차 업로드 진행 상태
   const [reviewFiles, setReviewFiles] = useState<ReviewFile[] | null>(null);
@@ -148,8 +162,20 @@ export function InterviewPanel({
   const quickReplies = (quickSource?.payload as { options?: string[] } | null)?.options ?? [];
   const activeChoices = interview.status === "active" ? choiceOptionsOf(live) : null;
 
+  // 바닥 근처일 때만 autoscroll — 위로 올려 읽는 중 노티스/턴 도착이 위치를 강탈하지 않게 (P0 #2).
+  // 사용자 자신의 전송(pending)은 항상 바닥으로. 떨어져 있으면 스크롤다운 버튼에 점 뱃지.
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    const el = listRef.current;
+    if (!el) return;
+    const grew = live.length > prevLenRef.current;
+    prevLenRef.current = live.length;
+    if (pending !== null || stickBottomRef.current) {
+      el.scrollTo({ top: el.scrollHeight });
+      return;
+    }
+    if (!grew) return;
+    const raf = requestAnimationFrame(() => setHasUnseen(true)); // 비동기 — set-state-in-effect 회피
+    return () => cancelAnimationFrame(raf);
   }, [live.length, busy, pending]);
 
   // 프리뷰 노드 멘션 수신 — setState는 이벤트 핸들러 안에서만 (react-hooks/set-state-in-effect 준수)
@@ -157,12 +183,13 @@ export function InterviewPanel({
     const handleMention = (event: Event) => {
       const label = (event as CustomEvent<string>).detail;
       if (!label) return;
-      setInput((prev) => (prev ? `${prev} [노드: ${label}] ` : `[노드: ${label}] `));
+      const tag = interview.lang === "en" ? "Node" : "노드";
+      setInput((prev) => (prev ? `${prev} [${tag}: ${label}] ` : `[${tag}: ${label}] `));
       inputRef.current?.focus();
     };
     window.addEventListener(MENTION_EVENT, handleMention);
     return () => window.removeEventListener(MENTION_EVENT, handleMention);
-  }, []);
+  }, [interview.lang]);
 
   // 패스트트랙 첨부 열기 수신 — 첨부 버튼 클릭과 동일하게 안내 모달부터
   useEffect(() => {
@@ -304,7 +331,10 @@ export function InterviewPanel({
   function handleScroll() {
     const el = listRef.current;
     if (!el) return;
-    setShowScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > SCROLL_DOWN_AT);
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickBottomRef.current = distance <= SCROLL_DOWN_AT;
+    if (stickBottomRef.current && hasUnseen) setHasUnseen(false);
+    setShowScrollDown(distance > SCROLL_DOWN_AT);
   }
 
   // 팁 로테이션 — 턴이 쌓일 때마다 다음 팁 (별도 상태 없이 렌더 파생)
@@ -517,17 +547,41 @@ export function InterviewPanel({
         {showScrollDown ? (
           <button
             className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-hairline bg-surface p-1.5 text-ink-secondary shadow-lg hover:bg-surface-alt"
-            title="Scroll to latest"
-            onClick={() =>
-              listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" })
-            }
+            title={hasUnseen ? "New messages below" : "Scroll to latest"}
+            onClick={() => {
+              setHasUnseen(false);
+              listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+            }}
             data-id="iv-scroll-down"
           >
-            <ArrowDown size={14} strokeWidth={1.5} />
+            <ArrowDown size={12} strokeWidth={1.5} />
+            {hasUnseen ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent"
+                data-id="iv-unseen-dot"
+              />
+            ) : null}
           </button>
         ) : null}
       </div>
       <div className="px-2 pb-2 pt-1.5">
+        {/* 패스트트랙 armed 인디케이터 — 첨부 모달을 닫아도 현재 모드가 보이게 (P0 #16④) */}
+        {fastTrackArmed ? (
+          <div
+            className="mb-1.5 flex items-center gap-1.5 rounded-md border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-caption text-accent"
+            data-id="iv-fasttrack-chip"
+          >
+            <Zap size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="min-w-0 flex-1">Fast track — attach a document to draw right away</span>
+            <button
+              className="shrink-0 text-fine underline hover:opacity-80"
+              onClick={onFastTrackCancel}
+              data-id="iv-fasttrack-cancel"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
         {/* 보기 픽커 — 스크롤에 밀리지 않게 컴포저 위 핀 고정 */}
         {quickReplies.length > 0 ? (
           <div className="mb-1.5" data-id="iv-quickreplies">
@@ -545,6 +599,34 @@ export function InterviewPanel({
             />
           </div>
         ) : null}
+        {/* 종료 상태 — 죽은 입력창 대신 액션 바 (P2 #15) */}
+        {interview.status !== "active" ? (
+          <div
+            className="flex items-center justify-between gap-2 rounded-lg border border-hairline bg-surface-alt px-3 py-2.5"
+            data-id="iv-finished-bar"
+          >
+            <span className="text-caption text-ink-secondary">Session finished</span>
+            <div className="flex items-center gap-2">
+              {onStartOver ? (
+                <button
+                  className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface"
+                  onClick={onStartOver}
+                  data-id="iv-finished-restart"
+                >
+                  Start over
+                </button>
+              ) : null}
+              <Link
+                href={`/maps/${interview.map_id}`}
+                className="rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent"
+                data-id="iv-finished-open"
+              >
+                Open in editor
+              </Link>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* 컴포저 카드 — 첨부·입력·액션을 한 카드로 통합, 포커스는 카드 테두리로 표시 */}
         <div
           className="rounded-lg border border-hairline bg-surface shadow-md transition-colors duration-150 focus-within:border-accent"
@@ -572,11 +654,21 @@ export function InterviewPanel({
                   data-id="iv-attachment-chip"
                 >
                   <FileIcon
-                    size={13}
+                    size={12}
                     strokeWidth={1.5}
                     className={"shrink-0 " + (a.status === "parsed" ? fileIcon.cls : "text-error")}
                   />
                   {a.filename}
+                  {readingIds?.has(a.id) ? (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-accent"
+                      title="AI is reading this document"
+                      data-id="iv-attach-reading"
+                    >
+                      <Loader2 size={12} strokeWidth={1.5} className="animate-spin" />
+                      Reading…
+                    </span>
+                  ) : null}
                   <button
                     className="rounded-xs text-ink-muted hover:text-error"
                     title="Remove document"
@@ -617,7 +709,7 @@ export function InterviewPanel({
             rows={1}
             maxLength={INPUT_MAX_LEN}
             placeholder={
-              interview.status === "active" ? "Type your answer…  ( / to focus)" : "Interview finished"
+              interview.status === "active" ? "Type your answer… ( / to focus)" : "Interview finished"
             }
             disabled={interview.status !== "active" || busy}
             value={input}
@@ -637,7 +729,7 @@ export function InterviewPanel({
               onClick={() => setShowAttachInfo(true)}
               data-id="iv-attach"
             >
-              <Paperclip size={15} strokeWidth={1.5} />
+              <Paperclip size={16} strokeWidth={1.5} />
             </button>
             {interview.attachments.length > 0 ? (
               <div className="relative" ref={attachListRef}>
@@ -650,10 +742,17 @@ export function InterviewPanel({
                   onClick={() => setAttachListOpen((v) => !v)}
                   data-id="iv-attach-badge"
                 >
-                  <Files size={15} strokeWidth={1.5} />
+                  <Files size={16} strokeWidth={1.5} />
                   <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[10px] font-semibold text-on-accent">
                     {interview.attachments.length}
                   </span>
+                  {readingIds && readingIds.size > 0 ? (
+                    <span
+                      className="absolute -left-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-accent"
+                      title="AI is reading a document"
+                      data-id="iv-badge-reading"
+                    />
+                  ) : null}
                 </button>
                 {attachListOpen ? (
                   <div
@@ -672,7 +771,7 @@ export function InterviewPanel({
                             data-id="iv-attach-flyout-row"
                           >
                             <FlyIcon
-                              size={14}
+                              size={12}
                               strokeWidth={1.5}
                               className={"shrink-0 " + (a.status === "parsed" ? fileIcon.cls : "text-error")}
                             />
@@ -685,13 +784,21 @@ export function InterviewPanel({
                             >
                               {a.filename}
                             </span>
+                            {readingIds?.has(a.id) ? (
+                              <Loader2
+                                size={12}
+                                strokeWidth={1.5}
+                                className="shrink-0 animate-spin text-accent"
+                                data-id="iv-flyout-reading"
+                              />
+                            ) : null}
                             <button
                               className="shrink-0 rounded-xs p-0.5 text-ink-muted hover:text-error"
                               title="Remove document"
                               onClick={() => onDeleteAttachment(a.id)}
                               data-id="iv-attach-flyout-delete"
                             >
-                              <X size={13} strokeWidth={1.5} />
+                              <X size={12} strokeWidth={1.5} />
                             </button>
                           </li>
                         );
@@ -767,11 +874,13 @@ export function InterviewPanel({
                 onClick={submit}
                 data-id="iv-send"
               >
-                <Send size={15} strokeWidth={1.5} />
+                <Send size={16} strokeWidth={1.5} />
               </button>
             </div>
           </div>
         </div>
+        </>
+        )}
       </div>
       {showAttachInfo
         ? createPortal(
@@ -807,9 +916,9 @@ export function InterviewPanel({
                     </li>
                   ))}
                 </ul>
-                <div className="flex w-full items-center gap-2">
+                <div className="flex w-full items-center justify-end gap-2">
                   <button
-                    className="mr-auto rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                    className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
                     onClick={() => setShowAttachInfo(false)}
                     data-id="iv-attach-info-cancel"
                   >

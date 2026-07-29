@@ -322,8 +322,17 @@ export function InterviewPreview({
         ? "Map up to date"
         : `Map from ${userTurnsSinceMap} turn${userTurnsSinceMap > 1 ? "s" : ""} ago`;
 
-  // 최근 체크포인트가 맨 위 — 새 항목이 위로 들어오며 아래로 밀리는 스택 (요구 6)
+  // 최근 체크포인트가 맨 위 — 새 항목이 위로 들어오며 아래로 밀리는 스택 (요구 6).
+  // N개 초과는 "+N older"로 접는다 — fast-forward가 5개를 한 번에 만들면 좌하 아웃라인과
+  // 충돌하던 문제 (P0 #1). 코너 소유권: 좌상=체크포인트 / 중상=프리뷰 바 / 우상=인스펙터 /
+  // 좌하=아웃라인 / 중하=SP 카드 / 우하=선택지 재열기 칩. 새 플로팅은 빈 코너만 사용할 것.
+  const CP_VISIBLE = 3;
+  const [cpExpanded, setCpExpanded] = useState(false);
   const checkpointsNewestFirst = [...(interview?.checkpoints ?? [])].reverse();
+  const visibleCheckpoints = cpExpanded
+    ? checkpointsNewestFirst
+    : checkpointsNewestFirst.slice(0, CP_VISIBLE);
+  const hiddenCpCount = checkpointsNewestFirst.length - CP_VISIBLE;
   // 프리뷰 대상 — 같은 스테이지가 여럿이면 최신(백엔드 revert 대상 선택과 동일 규칙)
   const previewCp = previewStage
     ? checkpointsNewestFirst.find((c) => c.stage === previewStage) ?? null
@@ -343,6 +352,9 @@ export function InterviewPreview({
 .iv-preview-flow .react-flow__node{z-index:2 !important}
 @keyframes iv-cp-in{from{opacity:0;max-height:0;transform:translateY(-6px)}to{opacity:1;max-height:40px;transform:translateY(0)}}
 .iv-cp-chip{overflow:hidden;animation:iv-cp-in .45s cubic-bezier(0.34,1.3,0.64,1)}
+@keyframes iv-pop-in{from{opacity:0;transform:scale(0.98)}to{opacity:1;transform:none}}
+.iv-pop{animation:iv-pop-in 150ms var(--ease-smooth)}
+@media(prefers-reduced-motion:reduce){.iv-cp-chip,.iv-pop{animation:none}}
       `}</style>
       <ReactFlowProvider>
         <NodeActionsContext.Provider value={PREVIEW_NODE_ACTIONS}>
@@ -355,22 +367,39 @@ export function InterviewPreview({
                 onNodeClick={setInspectedKey}
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-caption text-ink-muted">
-                {previewCp
-                  ? "This checkpoint has no map yet."
-                  : "The map will appear here as the interview progresses."}
+              /* 빈 캔버스 첫 화면 — 고스트 노드 미니 프리뷰 + 패스트트랙 CTA (P1 #7) */
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                <div className="flex items-center gap-2 opacity-70" aria-hidden>
+                  <span className="h-9 w-9 rounded-full border-[1.5px] border-dashed border-ink-tertiary/60 bg-surface" />
+                  <span className="h-px w-7 bg-ink-tertiary/50" />
+                  <span className="h-9 w-24 rounded-sm border-[1.5px] border-dashed border-accent/50 bg-accent-tint/40" />
+                  <span className="h-px w-7 bg-ink-tertiary/50" />
+                  <span className="h-9 w-9 rounded-full border-[1.5px] border-dashed border-ink-tertiary/60 bg-surface" />
+                </div>
+                {previewCp ? (
+                  <div className="text-caption text-ink-muted">This checkpoint has no map yet.</div>
+                ) : (
+                  <>
+                    <div className="text-caption text-ink-secondary">
+                      Answer a few questions — the map draws itself.
+                    </div>
+                    <div className="text-fine text-ink-muted">
+                      Attach a document in chat to draw right away (fast track).
+                    </div>
+                  </>
+                )}
               </div>
             )}
-            {/* 워터마크 — 비교화면 read-only 워터마크 재활용(z-4, 노드 위 투과) */}
-            <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
-              <span className="-rotate-[18deg] select-none whitespace-nowrap text-[110px] font-semibold uppercase tracking-widest text-accent opacity-[0.10]">
+            {/* 워터마크 — 노드(z-2) 아래(z-1)로 깔아 파스텔 색을 탁하게 만들지 않는다 (P1 #7) */}
+            <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center overflow-hidden">
+              <span className="-rotate-[18deg] select-none whitespace-nowrap text-[72px] font-semibold uppercase tracking-widest text-accent opacity-[0.07]">
                 AI Consultant
               </span>
             </div>
             {/* 체크포인트 스택 — 좌상단, 최근이 맨 위 */}
             {checkpointsNewestFirst.length > 0 ? (
               <div className="absolute left-3 top-3 z-10 flex w-44 flex-col gap-1.5" data-id="iv-checkpoints">
-                {checkpointsNewestFirst.map((cp, i) => {
+                {visibleCheckpoints.map((cp, i) => {
                   const label =
                     stagesForMode(interview?.mode).find((s) => s.key === cp.stage)?.label ?? cp.stage;
                   const active = cp.stage === previewStage;
@@ -393,12 +422,21 @@ export function InterviewPreview({
                     </button>
                   );
                 })}
+                {hiddenCpCount > 0 || cpExpanded ? (
+                  <button
+                    className="iv-cp-chip rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink-tertiary shadow-sm hover:bg-surface-alt"
+                    onClick={() => setCpExpanded((v) => !v)}
+                    data-id="iv-cp-toggle"
+                  >
+                    {cpExpanded ? "Show less" : `+${hiddenCpCount} older`}
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {/* 체크포인트 프리뷰 바 — 맵만 먼저 되돌려 보여주고, 확정해야 실제 revert */}
             {previewCp ? (
               <div
-                className="absolute left-1/2 top-3 z-10 flex max-w-[calc(100%-14rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-1.5 shadow-md"
+                className="iv-pop absolute left-1/2 top-3 z-10 flex max-w-[calc(100%-14rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-1.5 shadow-md"
                 data-id="iv-cp-preview"
               >
                 <Undo2 size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
@@ -431,18 +469,19 @@ export function InterviewPreview({
                 : undefined;
               if (!node) return null;
               const attrs = node.attributes;
-              const rows: [string, string][] = [
-                ["Assignee", attrs?.assignee || "—"],
-                ["Department", attrs?.department || "—"],
-                ["System", attrs?.system || "—"],
+              // 값 있는 행만 — 인터뷰 초반 노드가 대시 9줄이 되지 않게 (P1 #9)
+              const rows: [string, string][] = ([
+                ["Assignee", attrs?.assignee || ""],
+                ["Department", attrs?.department || ""],
+                ["System", attrs?.system || ""],
                 ...PARAM_FIELDS.map((field): [string, string] => [
                   PARAM_LABELS[field],
-                  attrs?.[field] ? formatParamValue(field, attrs[field] ?? "") : "—",
+                  attrs?.[field] ? formatParamValue(field, attrs[field] ?? "") : "",
                 ]),
-              ];
+              ] as [string, string][]).filter(([, value]) => value !== "");
               return (
                 <div
-                  className="absolute right-3 top-3 z-10 w-64 rounded-md border border-hairline bg-surface shadow-md"
+                  className="iv-pop absolute right-3 top-3 z-10 w-64 rounded-md border border-hairline bg-surface shadow-md"
                   data-id="iv-node-inspector"
                 >
                   <div className="flex items-start justify-between gap-2 border-b border-hairline px-3 py-2">
@@ -460,20 +499,22 @@ export function InterviewPreview({
                     </button>
                   </div>
                   {node.description ? (
-                    <div className="border-b border-hairline px-3 py-2 text-fine text-ink-secondary">
+                    <div className="max-h-24 overflow-y-auto break-words border-b border-hairline px-3 py-2 text-fine text-ink-secondary">
                       {node.description}
                     </div>
                   ) : null}
-                  <dl className="px-3 py-2">
-                    {rows.map(([label, value]) => (
-                      <div key={label} className="flex items-baseline justify-between gap-2 py-0.5">
-                        <dt className="shrink-0 text-fine text-ink-muted">{label}</dt>
-                        <dd className={"truncate text-fine " + (value === "—" ? "text-ink-muted" : "text-ink-secondary")}>
-                          {value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
+                  {rows.length > 0 ? (
+                    <dl className="px-3 py-2">
+                      {rows.map(([label, value]) => (
+                        <div key={label} className="flex items-baseline justify-between gap-2 py-0.5">
+                          <dt className="shrink-0 text-fine text-ink-muted">{label}</dt>
+                          <dd className="truncate text-fine text-ink-secondary">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : !node.description ? (
+                    <div className="px-3 py-2 text-fine text-ink-muted">No details collected yet.</div>
+                  ) : null}
                 </div>
               );
             })()}
@@ -483,7 +524,7 @@ export function InterviewPreview({
             {spMessage && spData?.map_id && !spDismissed.has(spMessage.id) &&
             interview?.status === "active" ? (
               <div
-                className="absolute bottom-3 left-1/2 z-10 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-2 shadow-lg"
+                className="iv-pop absolute bottom-3 left-1/2 z-10 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-hairline bg-surface px-3 py-2 shadow-lg"
                 data-id="iv-sp-card"
               >
                 <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
@@ -524,7 +565,7 @@ export function InterviewPreview({
                 className="absolute inset-0 z-20 flex items-center justify-center bg-ink/10"
                 data-id="iv-draw-overlay"
               >
-                <div className="flex w-96 max-w-[calc(100%-2rem)] flex-col items-center gap-3 rounded-md border border-hairline bg-surface p-6 shadow-lg">
+                <div className="iv-pop flex w-96 max-w-[calc(100%-2rem)] flex-col items-center gap-3 rounded-md border border-hairline bg-surface p-6 shadow-lg">
                   {drawError ? (
                     <>
                       <span className="text-center text-caption text-error">{drawError}</span>
@@ -601,22 +642,37 @@ export function InterviewPreview({
             Params
           </button>
         ) : null}
-        <span className="text-fine text-ink-muted" data-id="iv-map-baseline">{baselineText}</span>
-        {/* review까지 안 가도 맵이 그려진 시점부터 언제든 반영·종료 가능 (실사용 피드백 2026-07-28) */}
-        {interview?.status === "active" && hasDrawnMap ? (
-          <button
-            className="ml-auto flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent disabled:opacity-40"
-            disabled={applyBusy || !graph || graph.nodes.length === 0}
-            onClick={() => setApplyOpen(true)}
-            data-id="iv-apply"
-          >
-            <CheckCheck size={16} strokeWidth={1.5} />
-            Apply & finish
-          </button>
-        ) : null}
-        {applyError ? (
-          <span className="ml-auto text-fine text-error" data-id="iv-apply-error">{applyError}</span>
-        ) : null}
+        {/* baseline은 좌측 버튼 그룹에 구분선으로 소속 — 버튼 사이 부유 방지 (P1 #8) */}
+        <span className="ml-1 border-l border-divider pl-2 text-fine text-ink-muted" data-id="iv-map-baseline">
+          {baselineText}
+        </span>
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {applyError ? (
+            <span className="flex min-w-0 items-center gap-1 text-fine text-error" data-id="iv-apply-error">
+              <span className="truncate">{applyError}</span>
+              <button
+                className="shrink-0 rounded-xs p-0.5 hover:bg-error/10"
+                onClick={() => setApplyError(null)}
+                title="Dismiss"
+                data-id="iv-apply-error-dismiss"
+              >
+                <X size={12} strokeWidth={1.5} />
+              </button>
+            </span>
+          ) : null}
+          {/* review까지 안 가도 맵이 그려진 시점부터 언제든 반영·종료 가능 (실사용 피드백 2026-07-28) */}
+          {interview?.status === "active" && hasDrawnMap ? (
+            <button
+              className="flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent disabled:opacity-40"
+              disabled={applyBusy || !graph || graph.nodes.length === 0}
+              onClick={() => setApplyOpen(true)}
+              data-id="iv-apply"
+            >
+              <CheckCheck size={16} strokeWidth={1.5} />
+              Apply & finish
+            </button>
+          ) : null}
+        </div>
       </div>
       {applyOpen ? (
         <ConfirmDialog
