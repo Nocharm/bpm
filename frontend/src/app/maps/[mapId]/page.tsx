@@ -44,7 +44,7 @@ import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
 import { CommentSection } from "@/components/comment-section";
-import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { ContextMenu, EdgeSidesPad, type ContextMenuItem } from "@/components/context-menu";
 import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
@@ -8838,6 +8838,33 @@ function MapEditor({ mapId }: { mapId: number }) {
                           {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "—"}
                         </span>
                       </div>
+                      {/* 연결면 — 엣지 우클릭 메뉴의 EdgeSidesPad 재사용, 편집 모드에서만 (2026-07-30) */}
+                      {!readOnly && (
+                        <div>
+                          <label className="mb-1 block text-fine text-ink-tertiary">{t("edge.connection")}</label>
+                          <div className="rounded-sm border border-hairline py-1">
+                            <EdgeSidesPad
+                              item={{
+                                sourceLabel: t("edge.startBox"),
+                                targetLabel: t("edge.endBox"),
+                                sourceSide: sideFromHandleId(selectedEdge.sourceHandle, "right"),
+                                targetSide: sideFromHandleId(selectedEdge.targetHandle, "left"),
+                                // 하위프로세스 끝점은 전용 핸들 고정 — 컨텍스트 메뉴와 동일 잠금
+                                sourceLocked:
+                                  nodes.find((n) => n.id === selectedEdge.source)?.data.nodeType ===
+                                  "subprocess",
+                                targetLocked:
+                                  nodes.find((n) => n.id === selectedEdge.target)?.data.nodeType ===
+                                  "subprocess",
+                                onPickSource: (side: HandleSide) =>
+                                  setEdgeSide(selectedEdge.id, "source", side),
+                                onPickTarget: (side: HandleSide) =>
+                                  setEdgeSide(selectedEdge.id, "target", side),
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                       {selectedEdgeBranch !== null && (
                         <div>
                           <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.branchLabel")}</label>

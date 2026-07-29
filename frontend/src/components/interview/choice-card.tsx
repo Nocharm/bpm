@@ -16,6 +16,9 @@ import { ProcessNode } from "@/components/process-node";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
+// 하이라이트 없음 — 렌더마다 new Set()이면 ChoiceCanvas useMemo가 매번 재레이아웃한다
+const NO_HIGHLIGHT = new Set<string>();
+
 interface ChoiceWindowProps {
   option: ChoiceOption;
   disabled: boolean;
@@ -99,12 +102,23 @@ export function ChoiceWindow({
       </div>
       <div className="relative min-h-0 flex-1 bg-canvas">
         {option.same_as_current ? (
-          <span
-            className="absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
-            data-id="iv-choice-current-badge"
-          >
-            Same as current
-          </span>
+          <>
+            <span
+              className="absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
+              data-id="iv-choice-current-badge"
+            >
+              Same as current
+            </span>
+            {/* 현재맵 워터마크 — 노드 위 투과, 배지만으론 놓치기 쉬워 이중 표기 (2026-07-30) */}
+            <div
+              className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center overflow-hidden"
+              data-id="iv-choice-current-watermark"
+            >
+              <span className="-rotate-[18deg] select-none whitespace-nowrap text-[36px] font-semibold uppercase tracking-widest text-ink-secondary opacity-[0.08]">
+                Current map
+              </span>
+            </div>
+          </>
         ) : null}
         <ReactFlowProvider>
           <ChoiceCanvas option={option} highlight={highlight} />
@@ -145,8 +159,13 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [choices, dismissed]);
-  // 복수 안일 때 안 간 차이 노드(모든 안에 공통이 아닌 제목)를 하이라이트
-  const highlight = useMemo(() => distinctiveNodeKeys(choices), [choices]);
+  // 복수 안일 때 안 간 차이 노드(모든 안에 공통이 아닌 제목)를 하이라이트.
+  // '현재 맵 유지' 안은 비교 모수에서 제외 — 포함하면 무변경인 현재맵 노드가 '추가'로
+  // 표시되고 다른 안들의 차이 판정도 오염된다 (실사용 피드백 2026-07-30)
+  const highlight = useMemo(
+    () => distinctiveNodeKeys(choices.filter((option) => !option.same_as_current)),
+    [choices],
+  );
   // 새 선택지 세트가 오면 stale id는 find 실패 → 첫 안으로 폴백 (effect 없이 파생)
   const focused = choices.find((o) => o.id === focusedId) ?? choices[0];
   const rest = choices.filter((o) => o.id !== focused.id);
@@ -200,7 +219,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               option={focused}
               disabled={busy}
               onChoose={onChoose}
-              highlight={highlight.get(focused.id) ?? new Set()}
+              highlight={focused.same_as_current ? NO_HIGHLIGHT : highlight.get(focused.id) ?? NO_HIGHLIGHT}
               className="h-full min-w-0 flex-[2]"
               focused
             />
@@ -211,7 +230,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
                   option={o}
                   disabled={busy}
                   onChoose={onChoose}
-                  highlight={highlight.get(o.id) ?? new Set()}
+                  highlight={o.same_as_current ? NO_HIGHLIGHT : highlight.get(o.id) ?? NO_HIGHLIGHT}
                   className="min-h-0 flex-1"
                   onFocus={() => setFocusedId(o.id)}
                 />
@@ -227,7 +246,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               option={o}
               disabled={busy}
               onChoose={onChoose}
-              highlight={highlight.get(o.id) ?? new Set()}
+              highlight={o.same_as_current ? NO_HIGHLIGHT : highlight.get(o.id) ?? NO_HIGHLIGHT}
               className="h-[min(600px,100%)] w-[min(680px,48%)] min-w-72"
             />
           ))}
@@ -238,7 +257,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
             option={focused}
             disabled={busy}
             onChoose={onChoose}
-            highlight={highlight.get(focused.id) ?? new Set()}
+            highlight={focused.same_as_current ? NO_HIGHLIGHT : highlight.get(focused.id) ?? NO_HIGHLIGHT}
             className="h-[min(640px,100%)] w-[min(1100px,92%)] min-w-72"
             focused
           />

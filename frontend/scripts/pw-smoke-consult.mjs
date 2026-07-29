@@ -160,9 +160,11 @@ const run = async () => {
   // 3안 레이아웃(2026-07-27): 큰 창 1 + 작은 창 2 + 탭 — 탭 클릭으로 큰 창 교체
   const tabs = await page.$$('[data-id="iv-choice-tab"]');
   if (tabs.length !== 3) throw new Error(`expected 3 choice tabs, got ${tabs.length}`);
-  // '현재 맵 유지' 안 배지 — same_as_current 옵션 카드 좌상단 (2026-07-28)
+  // '현재 맵 유지' 안 배지+워터마크 — same_as_current 옵션 카드 (2026-07-28·30)
   const currentBadges = await page.$$('[data-id="iv-choice-current-badge"]');
   if (currentBadges.length !== 1) throw new Error(`expected 1 same-as-current badge, got ${currentBadges.length}`);
+  const currentMarks = await page.$$('[data-id="iv-choice-current-watermark"]');
+  if (currentMarks.length !== 1) throw new Error(`expected 1 current watermark, got ${currentMarks.length}`);
   let focusedText = await page.textContent('[data-id="iv-choice-card"][data-focused="true"]');
   if (!focusedText.includes("Standard")) throw new Error("first option should be focused initially");
   await tabs[1].click();
