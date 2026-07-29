@@ -18,7 +18,8 @@
 1. consult 진입 → 첫 인사말 quick reply에 **"문서로 바로 그리기"** 추가(신규 맵·기존맵 인지형
    인사 공통, word 모드 제외).
 2. 클릭 → FE가 파일 선택창 오픈 + **패스트트랙 상태 arm**(FE 로컬 state — DB 컬럼 없음).
-   파일 선택 취소 시 disarm.
+   파일 선택 취소 시 armed 잔류 — 취소 감지가 불안정해 단순화. 자유 발화 시 해제되고,
+   잔류 중 첨부하면 범위 제안이 이어져 무해.
 3. 업로드 성공(파싱은 업로드 요청에서 동기 완료) → FE가 자동으로 **범위 제안 턴** 전송.
    인터뷰어는 첨부 본문을 이미 컨텍스트로 받으므로 백그라운드 추출을 기다리지 않는다
    (추출 facts는 도착하는 대로 기존 딥머지로 합류).
@@ -47,7 +48,8 @@
       단 인터뷰어 후속 콜 없음) → `current_stage="review"` → 사용자 메시지
       (kind="fast_forward", 고정 문구 "이대로 그려주세요.") 1건 + 컨설턴트 노티스
       ("문서 기준으로 바로 그립니다…") 1건 append → `InterviewStateOut.draw_due="multi"` 반환.
-    - `pending_choices` 초기화, `updated_at` bump, 계측은 kind="interview" ok=True(토큰 0 — AI 무관).
+    - `pending_choices` 초기화, `updated_at` bump. 계측 이벤트 없음 — apply-params와 동일한
+      AI 0콜 관례.
 - **`interview/agents.py`**
   - 인터뷰어 계약에 어체 룰(전역): "문장은 짧게, 인사치레·사족·과한 격식('~해 주시면
     감사하겠습니다'류) 금지 — 정중하되 담백하게."
