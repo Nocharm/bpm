@@ -14,6 +14,7 @@ import {
   createOrResumeInterview,
   deleteInterviewAttachment,
   drawProposals,
+  fastForwardInterview,
   getApiErrorDetail,
   getInterview,
   getMe,
@@ -23,10 +24,19 @@ import {
   type InterviewState,
   type WorkingGraph,
 } from "@/lib/api";
-import { choiceOptionsOf, deriveParamsTable, stageIndex, stagesForMode } from "@/lib/interview";
+import {
+  FAST_TRACK_CONFIRM_LABELS,
+  FAST_TRACK_NORMAL_LABELS,
+  FAST_TRACK_SCOPE_MESSAGE,
+  FAST_TRACK_START_LABELS,
+  choiceOptionsOf,
+  deriveParamsTable,
+  stageIndex,
+  stagesForMode,
+} from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { InterviewPanel } from "@/components/interview/interview-panel";
+import { ATTACH_EVENT, InterviewPanel } from "@/components/interview/interview-panel";
 import { InterviewPreview } from "@/components/interview/interview-preview";
 import { ParamsTableDialog } from "@/components/interview/params-table-dialog";
 
@@ -73,6 +83,9 @@ export default function ConsultPage() {
   // 세션 초기화 — 현재 세션 abandon 후 새 세션으로 처음부터 (실사용 피드백 2026-07-28)
   const [restartOpen, setRestartOpen] = useState(false);
   const [restartBusy, setRestartBusy] = useState(false);
+  // 패스트트랙 — 인사 보기 클릭(armed) → 첨부 성공 시 범위 제안 자동 턴(awaiting) →
+  // "이대로 그리기" 인터셉트. 새로고침 시 소실 → 일반 인터뷰 폴백(무해, design 2026-07-29 §2)
+  const [fastTrack, setFastTrack] = useState<"idle" | "armed" | "awaiting">("idle");
 
   function handleDividerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -217,6 +230,45 @@ export default function ConsultPage() {
     }
   }
 
+  async function handleFastForward() {
+    if (!interview || busy || drawBusy) return;
+    setBusy(true);
+    setError(null);
+    setPending(interview.lang === "en" ? FAST_TRACK_CONFIRM_LABELS[1] : FAST_TRACK_CONFIRM_LABELS[0]);
+    try {
+      const state = await fastForwardInterview(interview.id);
+      setInterview(state);
+      setPending(null);
+      setFastTrack("idle");
+      if (state.draw_due === "multi" || state.draw_due === "single") void startDraw(state.draw_due);
+    } catch (err) {
+      setError(getApiErrorDetail(err) || "Failed to fast-forward.");
+      setPending(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleSend(content: string) {
+    if (FAST_TRACK_START_LABELS.includes(content)) {
+      // 턴을 소비하지 않고 첨부 플로우만 연다 — 첨부 성공이 범위 제안 턴을 발화
+      setFastTrack("armed");
+      window.dispatchEvent(new CustomEvent(ATTACH_EVENT));
+      return;
+    }
+    if (fastTrack === "awaiting" && FAST_TRACK_CONFIRM_LABELS.includes(content)) {
+      void handleFastForward();
+      return;
+    }
+    if (fastTrack !== "idle" && FAST_TRACK_NORMAL_LABELS.includes(content)) {
+      setFastTrack("idle");
+      void runTurn({ type: "answer", content });
+      return;
+    }
+    if (fastTrack === "armed") setFastTrack("idle"); // 첨부 대신 자유 발화 — 일반 흐름 복귀
+    void runTurn({ type: "answer", content });
+  }
+
   async function handleApplyParams() {
     if (!interview || paramsBusy) return;
     setParamsBusy(true);
@@ -284,6 +336,14 @@ export default function ConsultPage() {
         prev ? { ...prev, attachments: [...prev.attachments, uploaded] } : prev,
       );
       scheduleExtractionRefresh(interview.id);
+      if (fastTrack === "armed") {
+        // 패스트트랙 — 첨부 도착 즉시 범위 제안 턴(첨부 본문은 턴 컨텍스트에 이미 포함)
+        setFastTrack("awaiting");
+        void runTurn({
+          type: "answer",
+          content: FAST_TRACK_SCOPE_MESSAGE[interview.lang] ?? FAST_TRACK_SCOPE_MESSAGE.ko,
+        });
+      }
       return true;
     } catch (err) {
       setAttachError(getApiErrorDetail(err) || "Failed to upload the file.");
@@ -395,7 +455,7 @@ export default function ConsultPage() {
               attachError={attachError}
               pending={pending}
               hasChoices={choices !== null}
-              onSend={(content) => runTurn({ type: "answer", content })}
+              onSend={handleSend}
               onSkip={() => runTurn({ type: "skip" })}
               onRetry={() => lastTurnRef.current && runTurn(lastTurnRef.current)}
               onAttach={handleAttach}

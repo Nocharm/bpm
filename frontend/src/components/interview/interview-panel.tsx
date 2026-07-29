@@ -23,6 +23,8 @@ import { QuestionOptions } from "@/components/interview/question-options";
 
 // 프리뷰 노드 "Ask about this node" 버튼 → 입력창 멘션 삽입용 커스텀 이벤트 이름
 export const MENTION_EVENT = "iv-mention";
+// 첨부 안내 열기 — 패스트트랙(문서로 바로 그리기)이 페이지에서 첨부 플로우를 트리거 (design 2026-07-29)
+export const ATTACH_EVENT = "iv-open-attach";
 
 // 채팅 글자 크기(px) — 브라우저별 저장. 기본 13(기존 14 caption보다 한 단계 작게)
 const FONT_KEY = "bpm.consultChatFont";
@@ -157,6 +159,13 @@ export function InterviewPanel({
     };
     window.addEventListener(MENTION_EVENT, handleMention);
     return () => window.removeEventListener(MENTION_EVENT, handleMention);
+  }, []);
+
+  // 패스트트랙 첨부 열기 수신 — 첨부 버튼 클릭과 동일하게 안내 모달부터
+  useEffect(() => {
+    const handleOpenAttach = () => setShowAttachInfo(true);
+    window.addEventListener(ATTACH_EVENT, handleOpenAttach);
+    return () => window.removeEventListener(ATTACH_EVENT, handleOpenAttach);
   }, []);
 
   // 대기 팁 — 서버 관리 팁 1회 로드(실패 시 i18n 폴백 유지)
