@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 보기 픽커 노티스 내성 + 질문별 포커스 리셋 (worktree-ai-consultant)
+- quickReplies 파생을 "마지막 **비-notice** 메시지" 기준으로 — 첨부 추출 노티스가 질문 뒤에 도착하면 보기가 통째로 사라지던 구멍(패스트트랙 범위 제안 ~9초 뒤 거의 항상 발생) 봉합.
+- `QuestionOptions`를 질문 메시지 id로 key — 질문마다 리마운트되어 자동 포커스·선택 인덱스 리셋(마운트 1회 effect 한계 해소, 노출 즉시 ↑↓ 사용 가능). 스모크에 포커스·화살표 이동·노티스 내성 어설션 추가(hover 간섭은 '이동 여부' 판정으로 회피).
+
 ## 2026-07-29 — 인터뷰 패스트트랙 + 세분도 표준 10±3 (worktree-ai-consultant)
 - **패스트트랙**: 인사 보기 "문서로 바로 그리기" → 첨부 → 자동 범위 제안 턴(AI 1콜, 첨부 본문 컨텍스트) → "이대로 그리기" FE 인터셉트 → `POST /fast-forward`(AI 0콜 — skip 시맨틱 일괄 전진·체크포인트·review 점프) → 자동 multi draw(힌트는 fast_forward 감지로 activities 고정). 문구 단일 소스 FE `FAST_TRACK_*` 상수(BE 인사·룰 15와 글자 동일). 스모크 `pw-smoke-consult-fast.mjs` 신설. 설계 `docs/design/2026-07-29-interview-fast-track-design.md`.
 - **어체 간결화(룰 14)**: 인사치레·과격식 금지. **세분도 표준 10±3**: 계약·활동 힌트(표준 10내외/세밀 13~18/간결 6~8)·엔진 goal·린트(7~13) 동기(f735220).

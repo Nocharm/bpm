@@ -137,12 +137,15 @@ export function InterviewPanel({
   const fontRef = useRef<HTMLDivElement>(null);
 
   const live = interview.messages.filter((m) => !m.superseded);
-  const last = live[live.length - 1];
-  // 퀵리플라이 보기 — 마지막 메시지가 컨설턴트 질문 + options payload일 때만
-  const quickReplies =
-    interview.status === "active" && !busy && last?.role === "consultant" && last.kind === "question"
-      ? ((last.payload as { options?: string[] } | null)?.options ?? [])
-      : [];
+  // 퀵리플라이 보기 — 마지막 '비-notice' 메시지가 컨설턴트 질문 + options payload일 때 유지.
+  // 노티스(첨부 추출 등)가 질문 뒤에 도착해도 보기가 사라지지 않는다 (실사용 피드백 2026-07-30).
+  const lastNonNotice = [...live].reverse().find((m) => m.kind !== "notice");
+  const quickSource =
+    interview.status === "active" && !busy &&
+    lastNonNotice?.role === "consultant" && lastNonNotice.kind === "question"
+      ? lastNonNotice
+      : null;
+  const quickReplies = (quickSource?.payload as { options?: string[] } | null)?.options ?? [];
   const activeChoices = interview.status === "active" ? choiceOptionsOf(live) : null;
 
   useEffect(() => {
@@ -528,7 +531,10 @@ export function InterviewPanel({
         {/* 보기 픽커 — 스크롤에 밀리지 않게 컴포저 위 핀 고정 */}
         {quickReplies.length > 0 ? (
           <div className="mb-1.5" data-id="iv-quickreplies">
+            {/* key=질문 메시지 id — 질문이 바뀔 때마다 리마운트되어 자동 포커스·선택 인덱스 리셋
+                (마운트 1회 effect라 연속 질문에서 포커스가 안 잡히던 문제, 2026-07-30) */}
             <QuestionOptions
+              key={quickSource?.id}
               options={quickReplies}
               disabled={busy}
               onSelect={(value) => {

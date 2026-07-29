@@ -32,27 +32,30 @@ const afterScopeTurn = {
       payload: null, stage: "scope", superseded: false, created_at: "2026-07-29T10:01:00+09:00" },
     { id: 3, seq: 3, role: "consultant", kind: "question", content: "Here is the proposed scope.",
       payload: { options: ["Draw it as proposed", "I want changes", "Continue the full interview"] },
-      stage: "scope", superseded: false, created_at: "2026-07-29T10:01:05+09:00" }],
+      stage: "scope", superseded: false, created_at: "2026-07-29T10:01:05+09:00" },
+    // 첨부 추출 노티스가 질문 뒤에 도착한 상황 — 보기 픽커가 사라지면 안 된다 (2026-07-30)
+    { id: 4, seq: 4, role: "consultant", kind: "notice", content: "Extracted details from 'sop.txt'.",
+      payload: null, stage: "scope", superseded: false, created_at: "2026-07-29T10:01:10+09:00" }],
 };
 
 const afterFastForward = {
   ...afterScopeTurn, current_stage: "review", draw_due: "multi",
   checkpoints: [
-    { stage: "scope", message_seq: 4, working_graph: null, created_at: "2026-07-29T10:02:00+09:00" },
-    { stage: "activities", message_seq: 4, working_graph: null, created_at: "2026-07-29T10:02:00+09:00" },
+    { stage: "scope", message_seq: 5, working_graph: null, created_at: "2026-07-29T10:02:00+09:00" },
+    { stage: "activities", message_seq: 5, working_graph: null, created_at: "2026-07-29T10:02:00+09:00" },
   ],
   messages: [...afterScopeTurn.messages,
-    { id: 4, seq: 4, role: "user", kind: "fast_forward", content: "Draw it as proposed.", payload: null, stage: "scope", superseded: false, created_at: "2026-07-29T10:02:00+09:00" },
-    { id: 5, seq: 5, role: "consultant", kind: "notice", content: "Drawing straight from the document.", payload: null, stage: "review", superseded: false, created_at: "2026-07-29T10:02:01+09:00" }],
+    { id: 5, seq: 5, role: "user", kind: "fast_forward", content: "Draw it as proposed.", payload: null, stage: "scope", superseded: false, created_at: "2026-07-29T10:02:00+09:00" },
+    { id: 6, seq: 6, role: "consultant", kind: "notice", content: "Drawing straight from the document.", payload: null, stage: "review", superseded: false, created_at: "2026-07-29T10:02:01+09:00" }],
 };
 
 const afterDraw = {
   ...afterFastForward, draw_due: null,
   messages: [...afterFastForward.messages,
-    { id: 6, seq: 6, role: "consultant", kind: "choices", content: "Proposals are ready.", stage: "review",
+    { id: 7, seq: 7, role: "consultant", kind: "choices", content: "Proposals are ready.", stage: "review",
       payload: { options: [
-        { id: "opt-7-1", title: "Standard", summary: "10 steps", graph: graph(["s", "a", "b", "e"]) },
-        { id: "opt-7-2", title: "Detailed", summary: "14 steps", graph: graph(["s", "a", "b", "c", "e"]) },
+        { id: "opt-8-1", title: "Standard", summary: "10 steps", graph: graph(["s", "a", "b", "e"]) },
+        { id: "opt-8-2", title: "Detailed", summary: "14 steps", graph: graph(["s", "a", "b", "c", "e"]) },
       ] }, superseded: false, created_at: "2026-07-29T10:02:20+09:00" }],
 };
 
@@ -83,15 +86,36 @@ const run = async () => {
   await page.goto(`${BASE}/maps/${MAP_ID}/consult`);
   await page.waitForSelector('[data-id="interview-panel"]');
 
+  // 0) 보기 픽커 자동 포커스 — 노출 즉시 키보드 상하 사용 가능 (2026-07-30)
+  // (page.evaluate/$eval은 전 API 목킹된 자체 페이지의 DOM 검사 — Playwright 표준 사용, 안전)
+  await page.waitForSelector('[data-id="iv-question-options"]');
+  const focusedAtStart = await page.evaluate(() => document.activeElement?.getAttribute("data-id"));
+  if (focusedAtStart !== "iv-question-options") throw new Error(`picker not focused: ${focusedAtStart}`);
+
   // 1) 인사 보기 클릭 → 첨부 안내 모달(턴 소비 없음)
   await page.click('[data-id="iv-question-option"]:has-text("Draw from a document")');
   await page.waitForSelector('[data-id="iv-attach-info"]');
 
-  // 2) 파일 주입 → 업로드 → 자동 범위 제안 턴 → 확인 보기 노출
+  // 2) 파일 주입 → 업로드 → 자동 범위 제안 턴 → 확인 보기 노출(질문 뒤 노티스가 있어도 유지)
   await page.setInputFiles('[data-id="iv-file-input"]', [
     { name: "sop.txt", mimeType: "text/plain", buffer: Buffer.from("purchase process doc") },
   ]);
   await page.waitForSelector('[data-id="iv-question-option"]:has-text("Draw it as proposed")');
+
+  // 2-1) 새 질문의 픽커가 다시 포커스를 갖고, 화살표로 하이라이트가 이동한다
+  // (마우스가 픽커 위에 남아 hover가 시작 인덱스를 바꿀 수 있어 '이동 여부'로 판정)
+  const focusedAtScope = await page.evaluate(() => document.activeElement?.getAttribute("data-id"));
+  if (focusedAtScope !== "iv-question-options") throw new Error(`scope picker not focused: ${focusedAtScope}`);
+  await page.mouse.move(5, 5); // hover 간섭 제거
+  const readHighlighted = () =>
+    page.$eval(
+      '[data-id="iv-question-options"] [role="option"][aria-selected="true"]',
+      (el) => el.textContent,
+    );
+  const beforeArrow = await readHighlighted();
+  await page.keyboard.press("ArrowDown");
+  const afterArrow = await readHighlighted();
+  if (beforeArrow === afterArrow) throw new Error(`arrow selection did not move: ${afterArrow}`);
 
   // 3) 이대로 그리기 → fast-forward → 자동 multi draw → 오버레이 → 복수안 모달
   await page.click('[data-id="iv-question-option"]:has-text("Draw it as proposed")');
