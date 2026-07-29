@@ -368,7 +368,7 @@ def test_create_seeds_working_graph_and_data_aware_greeting(client: TestClient, 
     greeting = state["messages"][0]
     assert "요청서 작성" in greeting["content"]  # 파악한 활동을 오프닝에 제시
     assert "이미 작성된 내용" in greeting["content"]
-    assert len(greeting["payload"]["options"]) == 2  # 보완/재정리 quick reply
+    assert len(greeting["payload"]["options"]) == 3  # 보완/재정리 + 패스트트랙 quick reply
     client.delete(f"/api/interviews/{state['id']}")
 
 
@@ -382,7 +382,7 @@ def test_create_on_start_end_only_map_keeps_generic_greeting(client: TestClient,
     ).json()
     greeting = state["messages"][0]
     assert greeting["content"].startswith("안녕하세요, 프로세스 컨설턴트입니다. 지금부터")
-    assert greeting["payload"] is None
+    assert greeting["payload"] == {"options": ["문서로 바로 그리기"]}  # 패스트트랙 보기
     client.delete(f"/api/interviews/{state['id']}")
 
 
@@ -890,3 +890,31 @@ def test_draw_options_include_tone_lint(client: TestClient, monkeypatch) -> None
     options = body["messages"][-1]["payload"]["options"]
     assert any("작성하기" in warning for warning in options[0]["lint"])
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_greeting_offers_fast_track_option(client: TestClient, monkeypatch) -> None:
+    """normal 모드 인사말에 패스트트랙 보기 — word는 제외 (design 2026-07-29 §2)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    greeting = state["messages"][0]
+    assert "문서로 바로 그리기" in (greeting["payload"] or {}).get("options", [])
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_word_greeting_has_no_fast_track_option(client: TestClient, monkeypatch) -> None:
+    _enable_ai(monkeypatch)
+    m = client.post(
+        "/api/maps",
+        json={
+            "name": f"iv-word-ft-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+            "doc_name": "sop.docx",
+            "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+        },
+    ).json()
+    state = client.post(
+        f"/api/maps/{m['id']}/interviews", json={"version_id": m["versions"][0]["id"]}
+    ).json()
+    options = (state["messages"][0]["payload"] or {}).get("options", [])
+    assert "문서로 바로 그리기" not in options

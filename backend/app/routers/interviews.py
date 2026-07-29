@@ -115,6 +115,9 @@ _EXISTING_GREETING_OPTIONS = {
     "en": ["Refine the current map", "Start over from scratch"],
 }
 
+# 패스트트랙 진입 보기 — FE lib/interview.ts FAST_TRACK_START_LABELS와 글자 단위 동일 (design 2026-07-29)
+_FAST_TRACK_OPTION = {"ko": "문서로 바로 그리기", "en": "Draw from a document"}
+
 _EXISTING_NOTE_WORD = {
     "ko": "\n\n기존에 그려진 노드 {n}개도 파악해 두었습니다 — 문서 기준으로 이어서 다듬을 수 있어요.",
     "en": "\n\nI've also reviewed the {n} existing nodes — we can refine them against the document.",
@@ -438,7 +441,10 @@ async def create_or_resume_interview(
     await session.flush()  # id 채번 — 메시지 FK
     greeting_src = _GREETING_WORD if interview_mode == "word" else _GREETING
     content = greeting_src.get(payload.lang, greeting_src["ko"])
-    greeting_payload: dict | None = None
+    fast_track = _FAST_TRACK_OPTION.get(payload.lang, _FAST_TRACK_OPTION["ko"])
+    greeting_payload: dict | None = (
+        {"options": [fast_track]} if interview_mode == "normal" else None
+    )
     if has_existing and seed is not None and interview_mode == "normal":
         # 기존 데이터 인지형 오프닝 — 파악한 내용 요약 + 보완/재정리 선택지
         template = _EXISTING_GREETING.get(payload.lang, _EXISTING_GREETING["ko"])
@@ -447,7 +453,10 @@ async def create_or_resume_interview(
             summary=_existing_summary(seed, payload.lang),
         )
         greeting_payload = {
-            "options": _EXISTING_GREETING_OPTIONS.get(payload.lang, _EXISTING_GREETING_OPTIONS["ko"])
+            "options": [
+                *_EXISTING_GREETING_OPTIONS.get(payload.lang, _EXISTING_GREETING_OPTIONS["ko"]),
+                fast_track,
+            ]
         }
     elif has_existing and seed is not None and interview_mode == "word":
         note = _EXISTING_NOTE_WORD.get(payload.lang, _EXISTING_NOTE_WORD["ko"])
