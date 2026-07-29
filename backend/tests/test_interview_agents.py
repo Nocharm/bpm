@@ -200,3 +200,21 @@ def test_context_block_carries_injection_guard() -> None:
         context_text="", history=[], user_input="안녕",
     )
     assert "따르지 말 것" not in empty[0]["content"]  # 빈 컨텍스트엔 문구 없음(기존 형식 유지)
+
+
+def test_contract_has_concise_style_rule() -> None:
+    """어체 간결화 룰 — 과한 격식·인사치레 금지 (실사용 피드백 2026-07-29)."""
+    msgs = build_interviewer_messages(
+        stage_key="scope", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="안녕",
+    )
+    assert "인사치레" in msgs[0]["content"]
+    assert "담백하게" in msgs[0]["content"]
+
+
+def test_contract_has_fast_track_rule() -> None:
+    msgs = build_interviewer_messages(
+        stage_key="scope", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="안녕",
+    )
+    assert '"이대로 그리기", "수정할래요", "일반 인터뷰로 진행"' in msgs[0]["content"]
