@@ -329,6 +329,14 @@ def demote_notice_text(lang: str, n: int) -> str:
 
 def _recent_choice_stage(interview: InterviewSession) -> str:
     """가장 최근 완료(체크포인트)된 구조 스테이지 — multi 변형 힌트 선택 기준."""
+    # 패스트트랙 직후엔 세분도(activities)가 결정 축 — 일괄 체크포인트 순서상 branches가
+    # 최신으로 잡히는 것을 보정 (design 2026-07-29 §3)
+    last_user = next(
+        (m for m in reversed(interview.messages) if not m.superseded and m.role == "user"),
+        None,
+    )
+    if last_user is not None and last_user.kind == "fast_forward":
+        return "activities"
     for cp in sorted(interview.checkpoints, key=lambda c: c.id or 0, reverse=True):
         if engine.get_stage(cp.stage, interview.mode).choice_stage:
             return cp.stage

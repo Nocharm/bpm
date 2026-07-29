@@ -536,3 +536,22 @@ def test_sanitize_subprocess_key_match_survives_rename() -> None:
     out = orchestrator._sanitize_subprocess(graph, prev)
     assert out["nodes"][0]["node_type"] == "subprocess"
     assert out["nodes"][0]["linked_map_id"] == 42
+
+
+def test_recent_choice_stage_prefers_activities_after_fast_forward() -> None:
+    """fast-forward 직후 multi 힌트는 세분도(activities) 축 — 체크포인트 순서상 branches가
+    최신으로 잡히는 것을 보정 (design 2026-07-29 §3)."""
+    from app.models import InterviewCheckpoint, InterviewMessage
+
+    interview = _session(current_stage="review")
+    interview.messages.append(InterviewMessage(
+        session_id=1, seq=5, role="user", kind="fast_forward", content="이대로 그려주세요.",
+        stage="scope",
+    ))
+    interview.checkpoints = [
+        InterviewCheckpoint(id=1, session_id=1, stage="activities", facts={},
+                            working_graph=None, message_seq=5),
+        InterviewCheckpoint(id=2, session_id=1, stage="branches", facts={},
+                            working_graph=None, message_seq=5),
+    ]
+    assert orchestrator._recent_choice_stage(interview) == "activities"

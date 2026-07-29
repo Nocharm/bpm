@@ -36,6 +36,7 @@ from app.interview.parsing import (
 from app.models import (
     AiUsageEvent,
     InterviewAttachment,
+    InterviewCheckpoint,
     InterviewMessage,
     InterviewSession,
     KbChunk,
@@ -767,6 +768,74 @@ async def apply_interview_params(
     await session.commit()
     loaded = await _get_owned_interview(session, interview_id, user)
     return await _state_out(session, loaded)
+
+
+_FAST_FORWARD_USER_TEXT = {"ko": "이대로 그려주세요.", "en": "Draw it as proposed."}
+_FAST_FORWARD_NOTICE = {
+    "ko": "문서 기준으로 바로 그립니다 — 남은 단계는 '미정'으로 채우고 검토로 건너뜁니다.",
+    "en": "Drawing straight from the document — remaining stages are marked TBD, jumping to review.",
+}
+
+
+@router.post("/interviews/{interview_id}/fast-forward", response_model=InterviewStateOut)
+@_locked_by_interview
+async def fast_forward_interview(
+    interview_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """패스트트랙 확정 — 남은 스테이지를 skip 시맨틱('미정' 채움+체크포인트)으로 일괄 전진해
+    review로 점프, draw_due='multi' 신호 반환 (AI 0콜 — 전진을 프롬프트에 맡기지 않는다,
+    design 2026-07-29 §3). 계측 이벤트 없음(apply-params와 동일한 0콜 관례).
+    """
+    _require_ai_enabled()
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    if interview.mode == "word":
+        raise HTTPException(status_code=400, detail="fast-forward is not available for word maps")
+    if interview.current_stage == "review":
+        raise HTTPException(status_code=400, detail="already at review")
+
+    unknown = "TBD" if interview.lang == "en" else "미정"
+    seq = max((m.seq for m in interview.messages), default=0) + 1
+    message = InterviewMessage(
+        session_id=interview.id, seq=seq, role="user", kind="fast_forward",
+        content=_FAST_FORWARD_USER_TEXT.get(interview.lang, _FAST_FORWARD_USER_TEXT["ko"]),
+        stage=interview.current_stage,
+    )
+    session.add(message)
+    interview.messages.append(message)
+    while interview.current_stage != "review":
+        stage = get_stage(interview.current_stage, interview.mode)
+        stage_facts = dict(interview.facts.get(interview.current_stage) or {})
+        for name in stage.required_facts:
+            if not stage_facts.get(name):
+                stage_facts[name] = unknown
+        interview.facts = {**interview.facts, interview.current_stage: stage_facts}
+        session.add(InterviewCheckpoint(
+            session_id=interview.id, stage=interview.current_stage,
+            facts=interview.facts, working_graph=interview.working_graph,
+            message_seq=seq,
+        ))
+        next_key = next_stage_key(interview.current_stage, interview.mode)
+        if next_key is None:
+            break
+        interview.current_stage = next_key
+    interview.pending_choices = None
+    notice = InterviewMessage(
+        session_id=interview.id, seq=seq + 1, role="consultant", kind="notice",
+        content=_FAST_FORWARD_NOTICE.get(interview.lang, _FAST_FORWARD_NOTICE["ko"]),
+        stage=interview.current_stage,
+    )
+    session.add(notice)
+    interview.messages.append(notice)
+    interview.updated_at = now_kst()
+    await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    state = await _state_out(session, loaded)
+    state.draw_due = "multi"
+    return state
 
 
 @router.post("/interviews/{interview_id}/attachments", response_model=InterviewAttachmentOut)

@@ -918,3 +918,73 @@ def test_word_greeting_has_no_fast_track_option(client: TestClient, monkeypatch)
     ).json()
     options = (state["messages"][0]["payload"] or {}).get("options", [])
     assert "문서로 바로 그리기" not in options
+
+
+def test_fast_forward_jumps_to_review_and_signals_draw(client: TestClient, monkeypatch) -> None:
+    """fast-forward — 남은 스테이지 '미정' 채움+체크포인트 후 review 점프, draw_due='multi' (AI 0콜)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    calls = _scripted(monkeypatch, [])  # AI 호출이 있으면 IndexError로 실패
+    body = client.post(f"/api/interviews/{state['id']}/fast-forward").json()
+    assert calls["calls"] == 0
+    assert body["current_stage"] == "review"
+    assert body["draw_due"] == "multi"
+    for stage_key, names in [
+        ("scope", ["process_name", "purpose", "boundaries"]),
+        ("io", ["trigger", "inputs", "outputs"]),
+        ("activities", ["activities"]),
+        ("branches", ["branches"]),
+        ("roles", ["roles"]),
+    ]:
+        for name in names:
+            assert body["facts"][stage_key][name] == "미정"
+    assert [c["stage"] for c in body["checkpoints"]] == [
+        "scope", "io", "activities", "branches", "roles",
+    ]
+    kinds = [m["kind"] for m in body["messages"]]
+    assert "fast_forward" in kinds and kinds[-1] == "notice"
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_fast_forward_preserves_collected_facts(client: TestClient, monkeypatch) -> None:
+    """이미 수집된 facts(문서 추출분)는 '미정'으로 덮지 않는다."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.facts = {"scope": {"process_name": "구매 프로세스"}}
+            await session.commit()
+
+    asyncio.run(_seed())
+    body = client.post(f"/api/interviews/{state['id']}/fast-forward").json()
+    assert body["facts"]["scope"]["process_name"] == "구매 프로세스"
+    assert body["facts"]["scope"]["purpose"] == "미정"
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_fast_forward_guards(client: TestClient, monkeypatch) -> None:
+    """word 모드 400 · review에서 400."""
+    _enable_ai(monkeypatch)
+    m = client.post(
+        "/api/maps",
+        json={
+            "name": f"iv-word-ff-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word", "doc_name": "sop.docx",
+            "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+        },
+    ).json()
+    word_state = client.post(
+        f"/api/maps/{m['id']}/interviews", json={"version_id": m["versions"][0]["id"]}
+    ).json()
+    assert client.post(f"/api/interviews/{word_state['id']}/fast-forward").status_code == 400
+
+    state = _iv_session(client)
+    client.post(f"/api/interviews/{state['id']}/fast-forward")
+    assert client.post(f"/api/interviews/{state['id']}/fast-forward").status_code == 400  # 이미 review
+    client.delete(f"/api/interviews/{state['id']}")
+    client.delete(f"/api/interviews/{word_state['id']}")
