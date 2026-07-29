@@ -30,8 +30,8 @@ STAGES: tuple[StageDef, ...] = (
     ),
     StageDef(
         "activities", "Activities",
-        "주요 활동을 순서대로 나열한다 — 세분도(활동 6±3개)가 핵심 결정",
-        "List the main activities in order — granularity is the key decision",
+        "주요 활동을 순서대로 나열한다 — 세분도(활동 10개 내외)가 핵심 결정",
+        "List the main activities in order — granularity (around 10 activities) is the key decision",
         ("activities",),
         choice_stage=True,
     ),

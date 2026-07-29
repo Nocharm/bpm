@@ -11,9 +11,9 @@ _GERUND_SUFFIX = re.compile(r"하기$")
 # 존댓말·서술형 어미 — 노드 제목에 문장이 들어온 경우
 _SENTENCE_SUFFIX = re.compile(r"(합니다|하세요|해요|입니다|됩니다)$")
 
-# 활동 수 표준 6±3 — 이탈은 경고만(강제 아님, 사용자가 세밀/간결안을 고를 수 있다)
-ACTIVITY_MIN = 3
-ACTIVITY_MAX = 9
+# 활동 수 표준 10±3 — 이탈은 경고만(강제 아님, 사용자가 세밀/간결안을 고를 수 있다)
+ACTIVITY_MIN = 7
+ACTIVITY_MAX = 13
 
 
 def lint_graph(graph: dict) -> list[str]:
@@ -38,5 +38,5 @@ def lint_graph(graph: dict) -> list[str]:
         )
     count = len(flow_nodes)
     if count and not (ACTIVITY_MIN <= count <= ACTIVITY_MAX):
-        warnings.append(f"활동 수 {count}개 — 표준 세분도 6±3 범위 밖")
+        warnings.append(f"활동 수 {count}개 — 표준 세분도 10±3 범위 밖")
     return warnings
