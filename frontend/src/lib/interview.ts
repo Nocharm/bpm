@@ -222,3 +222,13 @@ export function getGraphSignature(graph: WorkingGraph | null): string {
     .sort();
   return `${nodes.join(";")}#${edges.join(";")}`;
 }
+
+// 패스트트랙 문구 — BE 인사 보기(_FAST_TRACK_OPTION)·인터뷰어 룰 15와 글자 단위 동일(단일 소스는
+// 여기, design 2026-07-29 §3). 인터뷰어가 다른 문구를 내면 클릭은 일반 턴으로 흘러간다(무해).
+export const FAST_TRACK_START_LABELS = ["문서로 바로 그리기", "Draw from a document"];
+export const FAST_TRACK_CONFIRM_LABELS = ["이대로 그리기", "Draw it as proposed"];
+export const FAST_TRACK_NORMAL_LABELS = ["일반 인터뷰로 진행", "Continue the full interview"];
+export const FAST_TRACK_SCOPE_MESSAGE: Record<string, string> = {
+  ko: "이 문서로 프로세스 맵을 그리고 싶어요. 이름·목적·범위를 먼저 제안해 주세요.",
+  en: "I'd like to draw the process map from this document. Please propose the name, purpose, and scope first.",
+};

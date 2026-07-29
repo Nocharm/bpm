@@ -2003,6 +2003,11 @@ export function abandonInterview(id: number): Promise<void> {
   return request<void>(`/interviews/${id}`, { method: "DELETE" });
 }
 
+// 패스트트랙 확정 — 남은 스테이지 결정적 전진(AI 0콜) 후 draw_due="multi" (design 2026-07-29)
+export function fastForwardInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/fast-forward`, { method: "POST" });
+}
+
 export function deleteInterviewAttachment(
   interviewId: number,
   attachmentId: number,
