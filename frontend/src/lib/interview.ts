@@ -254,3 +254,13 @@ export const FAST_TRACK_SCOPE_MESSAGE: Record<string, string> = {
   ko: "이 문서로 프로세스 맵을 그리고 싶어요. 이름·목적·범위를 먼저 제안해 주세요.",
   en: "I'd like to draw the process map from this document. Please propose the name, purpose, and scope first.",
 };
+
+// Draw 확인 다이얼로그용 마크다운 서머리 — 아웃라인 항목을 스테이지별 불릿으로 (2026-07-30)
+export function buildDrawSummary(entries: OutlineEntry[]): string {
+  if (entries.length === 0) {
+    return "_No details collected yet — the map will be drawn from the conversation so far._";
+  }
+  return entries
+    .map((entry) => `**${entry.label}**\n${entry.items.map(([key, value]) => `- ${key}: ${value}`).join("\n")}`)
+    .join("\n\n");
+}

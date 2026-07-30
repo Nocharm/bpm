@@ -29,7 +29,9 @@ import {
   FAST_TRACK_NORMAL_LABELS,
   FAST_TRACK_SCOPE_MESSAGE,
   FAST_TRACK_START_LABELS,
+  buildDrawSummary,
   choiceOptionsOf,
+  deriveOutline,
   deriveParamsEditorRows,
   stageIndex,
   stagesForMode,
@@ -37,6 +39,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ATTACH_EVENT, InterviewPanel } from "@/components/interview/interview-panel";
+import { DrawConfirmDialog } from "@/components/interview/draw-confirm-dialog";
 import { InterviewPreview } from "@/components/interview/interview-preview";
 import { ParamsTableDialog } from "@/components/interview/params-table-dialog";
 
@@ -86,6 +89,14 @@ export default function ConsultPage() {
   // 패스트트랙 — 인사 보기 클릭(armed) → 첨부 성공 시 범위 제안 자동 턴(awaiting) →
   // "이대로 그리기" 인터셉트. 새로고침 시 소실 → 일반 인터뷰 폴백(무해, design 2026-07-29 §2)
   const [fastTrack, setFastTrack] = useState<"idle" | "armed" | "awaiting">("idle");
+  // Draw map 확인 — 서머리 승인 대기 중 백그라운드 선그리기(prefetch). 승인 시 완성돼 있으면
+  // 즉시 모달, 아니면 기존 그리기 오버레이로 대기 (실사용 피드백 2026-07-30)
+  const [drawConfirmOpen, setDrawConfirmOpen] = useState(false);
+  const drawPrefetchRef = useRef<{
+    seq: number;
+    promise: Promise<{ state?: InterviewState; error?: string }>;
+    isDone: () => boolean;
+  } | null>(null);
   // 추출 중(Reading…) 표시 — 업로드 후 백그라운드 추출 9~22초가 invisible하던 것 가시화 (P0 #3).
   // 해제: 추출 노티스(파일명 매칭) 도착 또는 25초 타임아웃(추출 실패는 노티스가 없다 — 로그만)
   const [readingIds, setReadingIds] = useState<Set<number>>(new Set());
@@ -330,6 +341,44 @@ export default function ConsultPage() {
     setDrawError(null);
   }
 
+  // 수동 Draw map — 서머리 확인을 띄우면서 동시에 백그라운드 선그리기 시작
+  function requestManualDraw() {
+    if (!interview || busy || drawBusy || drawConfirmOpen) return;
+    const seq = ++drawSeqRef.current;
+    lastDrawRef.current = "single";
+    let done = false;
+    const promise = drawProposals(interview.id, "single")
+      .then((state) => ({ state }))
+      .catch((err: unknown) => ({ error: getApiErrorDetail(err) || "Failed to draw proposals." }))
+      .finally(() => {
+        done = true;
+      });
+    drawPrefetchRef.current = { seq, promise, isDone: () => done };
+    setDrawConfirmOpen(true);
+  }
+
+  async function confirmManualDraw() {
+    setDrawConfirmOpen(false);
+    const prefetch = drawPrefetchRef.current;
+    drawPrefetchRef.current = null;
+    if (!prefetch || drawSeqRef.current !== prefetch.seq) return;
+    if (!prefetch.isDone()) {
+      setDrawBusy("single"); // 아직 그리는 중 — 기존 오버레이로 시간 벌기
+      setDrawError(null);
+    }
+    const result = await prefetch.promise;
+    if (drawSeqRef.current !== prefetch.seq) return; // 그 사이 취소됨
+    if (result.state) setInterview(result.state);
+    else if (result.error) setDrawError(result.error);
+    setDrawBusy(false);
+  }
+
+  function cancelManualDraw() {
+    setDrawConfirmOpen(false);
+    drawSeqRef.current += 1; // 선그리기 응답 무시 — draw Cancel 버튼과 동일 시맨틱
+    drawPrefetchRef.current = null;
+  }
+
   // BE _EXTRACT_NOTICE 문구와 동기 — 추출 완료 노티스 판별(업로드 '읽었습니다' 노티스와 구분)
   const EXTRACT_NOTICE_MARKERS = ["정보를 추출해", "Extracted details"];
 
@@ -489,7 +538,9 @@ export default function ConsultPage() {
           onChoose={(choiceId) => runTurn({ type: "choice", choice_id: choiceId })}
           drawBusy={drawBusy}
           drawError={drawError}
-          onDraw={(variants) => void startDraw(variants)}
+          onDraw={(variants) =>
+            variants === "single" ? requestManualDraw() : void startDraw(variants)
+          }
           onDrawRetry={() => void startDraw(lastDrawRef.current)}
           onDrawClearError={() => setDrawError(null)}
           onDrawCancel={cancelDraw}
@@ -559,6 +610,13 @@ export default function ConsultPage() {
           busy={paramsBusy}
           onApply={(table) => void handleApplyParams(table)}
           onClose={() => setParamsOpen(false)}
+        />
+      ) : null}
+      {drawConfirmOpen && interview ? (
+        <DrawConfirmDialog
+          summary={buildDrawSummary(deriveOutline(interview.facts, interview.mode))}
+          onConfirm={() => void confirmManualDraw()}
+          onClose={cancelManualDraw}
         />
       ) : null}
       {restartOpen ? (

@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — Draw map 서머리 확인 + 백그라운드 선그리기 (worktree-ai-consultant)
+- 수동 Draw map 클릭 → **수집 정보 마크다운 서머리 확인 다이얼로그**(`draw-confirm-dialog`, MarkdownView 렌더·`buildDrawSummary`) + 동시에 **백그라운드 선그리기(prefetch)** 시작. 승인 시 이미 완성이면 즉시 제안 모달, 미완성이면 기존 그리기 오버레이로 대기(isDone 플래그로 오버레이 플리커 방지). Not now=응답 무시(draw Cancel과 동일 시맨틱). 자동 draw(draw_due·fast-forward·Retry)는 확인 없이 종전 경로. 스모크 시나리오 추가.
+
 ## 2026-07-30 — 선택 링 z 상승 + 프리뷰 노드 호버 글로우 (worktree-ai-consultant)
 - 선택 링이 이웃 노드에 가려지던 문제(긴 라벨로 실측 폭>추정 폭 → 겹침, 프리뷰 전 노드 z-2 고정) → `.selected` z-3 상승. 프리뷰·선택지 캔버스에 에디터와 동일한 `bpm-node-emph` 호버 글로우 + 클릭 가능 노드 pointer 커서.
 

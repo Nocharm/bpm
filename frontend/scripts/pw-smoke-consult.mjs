@@ -208,6 +208,14 @@ const run = async () => {
   nodes = await page.$$(".react-flow__node");
   if (nodes.length !== 2) throw new Error(`expected 2 nodes after revert, got ${nodes.length}`);
 
+  // 수동 Draw map — 서머리 확인 다이얼로그(마크다운) + 백그라운드 선그리기, Not now로 무시 (2026-07-30)
+  await page.click('[data-id="iv-draw"]');
+  await page.waitForSelector('[data-id="iv-draw-confirm"]');
+  const summaryText = await page.textContent('[data-id="iv-draw-confirm"]');
+  if (!summaryText.includes("구매")) throw new Error("draw summary should show collected facts");
+  await page.click('[data-id="iv-draw-confirm-cancel"]');
+  await page.waitForSelector('[data-id="iv-draw-confirm"]', { state: "detached" });
+
   // 세션 초기화 — 확인 모달 후 abandon + 새 세션(초기 인사)으로 복귀 (2026-07-28)
   await page.click('[data-id="iv-restart"]');
   await page.waitForSelector('[data-id="confirm-dialog"]');
