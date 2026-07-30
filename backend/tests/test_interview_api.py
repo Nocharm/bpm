@@ -990,6 +990,68 @@ def test_fast_forward_guards(client: TestClient, monkeypatch) -> None:
     client.delete(f"/api/interviews/{word_state['id']}")
 
 
+_DRAW_DUP = json.dumps({
+    "kind": "graph", "message": "중복안",
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start"},
+        {"key": "s2", "title": "Start", "node_type": "start"},
+        {"key": "a", "title": "요청서 작성", "node_type": "process"},
+        {"key": "e", "title": "끝", "node_type": "end"},
+        {"key": "e2", "title": "끝", "node_type": "end"},
+    ],
+    "edges": [
+        {"source": "s", "target": "a"}, {"source": "s2", "target": "a"},
+        {"source": "a", "target": "e"}, {"source": "a", "target": "e2"},
+    ],
+    "groups": [],
+})
+
+
+def test_draw_sanitizes_duplicate_start_and_end(client: TestClient, monkeypatch) -> None:
+    """시작 2개·같은 제목 끝 2개인 안은 병합(엣지 재배선)돼 저장 규칙을 지킨다 — 안 하면
+    수락본이 Apply에서 422(시작 노드는 정확히 1개)로 벽돌 (실사용 피드백 2026-07-30)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    _scripted(monkeypatch, [_DRAW_DUP])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    graph = body["messages"][-1]["payload"]["options"][0]["graph"]
+    starts = [n for n in graph["nodes"] if n["node_type"] == "start"]
+    assert len(starts) == 1 and starts[0]["key"] == "s"
+    end_titles = [n["title"] for n in graph["nodes"] if n["node_type"] == "end"]
+    assert end_titles == ["끝"]
+    pairs = [(e["source"], e["target"]) for e in graph["edges"]]
+    assert pairs == [("s", "a"), ("a", "e")]  # 중복 노드행 엣지는 생존 노드로 재배선 후 dedup
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_unsticks_invalid_working_graph(client: TestClient, monkeypatch) -> None:
+    """작업본이 이미 고장(시작 2개)난 세션 — 드래프터가 같은 그래프를 에코해도 sanitize가
+    고친 안은 현재 작업본과 달라져 전멸 필터를 통과한다(수정 요청이 '같은 안뿐'으로
+    막히던 갇힘 해소, 실사용 피드백 2026-07-30)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    broken = json.loads(_DRAW_DUP)
+    broken.pop("kind", None)
+    broken.pop("message", None)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = broken
+            await session.commit()
+
+    asyncio.run(_seed())
+    _scripted(monkeypatch, [_DRAW_DUP])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    last = body["messages"][-1]
+    assert last["kind"] == "choices"
+    fixed = last["payload"]["options"][0]["graph"]
+    assert len([n for n in fixed["nodes"] if n["node_type"] == "start"]) == 1
+    client.delete(f"/api/interviews/{state['id']}")
+
+
 def test_accept_checkpoint_captures_accepted_graph(client: TestClient, monkeypatch) -> None:
     """수락된 맵은 반드시 체크포인트에 남는다 — 전이 없는 수락(패스트트랙 review 등)도
     자체 체크포인트를 만든다. 없으면 좌상단 분기 저장이 전부 시드(초기 상태)만 보여준다

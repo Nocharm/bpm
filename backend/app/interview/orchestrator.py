@@ -232,6 +232,65 @@ def _sanitize_subprocess(graph: dict, prev: dict | None) -> dict:
     return {**graph, "nodes": nodes}
 
 
+def _sanitize_start_end(graph: dict, prev: dict | None) -> dict:
+    """저장 규칙(validate_process: 시작 정확히 1개·끝 제목 유니크) 위반 안을 결정적으로 교정.
+
+    안 하면 수락본이 Apply에서 422로 벽돌되고, 수정 요청도 드래프터가 같은 그래프를 에코하면
+    전멸 필터에 막혀 갇힌다 (실사용 피드백 2026-07-30). 중복은 드롭이 아닌 **병합** —
+    참조 엣지를 생존 노드로 재배선한다. 생존자는 이전 작업본에 있던 키 우선(diff 배지·
+    FE 매칭 안정), 없으면 선두. 시작이 아예 없으면 이전 작업본의 시작을 복원한다.
+    """
+    nodes = list(graph.get("nodes", []))
+    prev_nodes = (prev or {}).get("nodes", [])
+    prev_keys = {n.get("key") for n in prev_nodes}
+    order = {id(n): i for i, n in enumerate(nodes)}
+
+    def survivor(candidates: list[dict]) -> dict:
+        return min(candidates, key=lambda n: (0 if n.get("key") in prev_keys else 1, order[id(n)]))
+
+    remap: dict[str, str] = {}
+    starts = [n for n in nodes if n.get("node_type") == "start"]
+    dup_groups = [starts] if len(starts) > 1 else []
+    ends_by_title: dict[str, list[dict]] = {}
+    for node in nodes:
+        if node.get("node_type") == "end":
+            ends_by_title.setdefault(node.get("title") or "", []).append(node)
+    dup_groups.extend(g for g in ends_by_title.values() if len(g) > 1)
+    for group in dup_groups:
+        kept = survivor(group)
+        for node in group:
+            if node is not kept:
+                remap[node["key"]] = kept["key"]
+    if remap:
+        nodes = [n for n in nodes if n.get("key") not in remap]
+        # 재배선 — 병합으로 생긴 자기 루프·중복 페어만 정리(무관 엣지는 그대로)
+        pairs = {
+            (e.get("source"), e.get("target")) for e in graph.get("edges", [])
+            if e.get("source") not in remap and e.get("target") not in remap
+        }
+        edges = []
+        for edge in graph.get("edges", []):
+            touched = edge.get("source") in remap or edge.get("target") in remap
+            source = remap.get(edge.get("source"), edge.get("source"))
+            target = remap.get(edge.get("target"), edge.get("target"))
+            if touched:
+                if source == target or (source, target) in pairs:
+                    continue
+                pairs.add((source, target))
+            edges.append({**edge, "source": source, "target": target})
+    else:
+        edges = list(graph.get("edges", []))
+    if not any(n.get("node_type") == "start" for n in nodes):
+        prev_start = next((n for n in prev_nodes if n.get("node_type") == "start"), None)
+        if prev_start is not None:
+            targets = {e.get("target") for e in edges}
+            root = next((n.get("key") for n in nodes if n.get("key") not in targets), None)
+            nodes = [dict(prev_start), *nodes]
+            if root:
+                edges = [*edges, {"source": prev_start.get("key"), "target": root, "label": ""}]
+    return {**graph, "nodes": nodes, "edges": edges}
+
+
 def _word_catalog_text(interview: InterviewSession, doc_sections: list[dict] | None) -> str:
     if interview.mode != "word" or not doc_sections:
         return ""
@@ -434,6 +493,7 @@ async def generate_proposals(
         if interview.mode == "word" and doc_sections:
             graph, demoted = _sanitize_word_graph(graph, doc_sections)
             demoted_total += demoted
+        graph = _sanitize_start_end(graph, interview.working_graph)
         options.append({
             "id": f"opt-{draw_tag}-{i + 1}",
             "title": hints[i % len(hints)].split("—")[0].strip(),
