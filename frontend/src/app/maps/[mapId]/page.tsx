@@ -112,6 +112,7 @@ import {
   removeOutgoingEdges,
   insertNodeBefore,
   insertNodeAfter,
+  swapNodeEdges,
   withSubprocessHandles,
   pickDropZone,
   DROPZONE_HIT_OUTER_PAD,
@@ -3113,7 +3114,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return violatesTerminalRule(targetType, draggedType);
       }
       if (zone === "swap") {
-        // 스왑은 같은 종류만(subprocess↔process 예외) — 다른 종류면 무효(드롭존 흐림).
+        // 스왑은 비터미널끼리(decision↔일반 포함) 허용, start/end는 동종만 — 불허면 무효(드롭존 흐림).
         return !canSwapTypes(draggedType, targetType);
       }
       return false;
@@ -3945,19 +3946,15 @@ function MapEditor({ mapId }: { mapId: number }) {
           return node;
         });
       });
-      // 엣지 연결 상태도 교환 — A의 연결은 B로, B의 연결은 A로
-      const isSubprocess = (nodeId: string): boolean =>
-        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      // 엣지 연결 상태도 교환 — A의 연결은 B로, B의 연결은 A로.
+      // decision↔일반 스왑은 출력 부분 이관(일반은 1개만, 나머지는 decision에 라벨째 잔류) — swapNodeEdges.
       setEdges((current) =>
-        current.map((edge) => {
-          const source = edge.source === aId ? bId : edge.source === bId ? aId : edge.source;
-          const target = edge.target === aId ? bId : edge.target === bId ? aId : edge.target;
-          if (source === edge.source && target === edge.target) {
-            return edge;
-          }
-          // 끝점이 바뀌었으니 핸들을 새 끝점 타입에 맞춘다(하위프로세스 ↔ 일반).
-          return withSubprocessHandles({ ...edge, source, target }, isSubprocess);
-        }),
+        swapNodeEdges(
+          current,
+          aId,
+          bId,
+          (nodeId) => nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType,
+        ),
       );
       scheduleAutoSave();
     },
@@ -3968,7 +3965,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
       if (zone === "swap") {
-        // 다른 종류 노드는 스왑 불가(subprocess↔process 예외) — activateZone에서 이미 zone을
+        // 허용 안 되는 조합(start/end는 동종만)은 스왑 불가 — activateZone에서 이미 zone을
         // 죽이지만 방어적으로 차단.
         if (flowZoneViolates(aId, bId, "swap")) {
           return;

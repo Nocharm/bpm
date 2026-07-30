@@ -532,8 +532,14 @@ export function violatesTerminalRule(
   return target === "start" || source === "end";
 }
 
-// 스왑(위치·연결 교환) 허용 규칙 — 같은 종류 노드끼리만. 단 subprocess(하위프로세스 참조)는
-// 일반 process 노드와 호환(둘 다 활동 노드라 교환이 의미 있음). start/end/decision은 동종만.
+// 스왑(위치·연결 교환) 허용 규칙 — 같은 종류 노드끼리 + 비터미널(process/subprocess/decision)은
+// 상호 교환 가능. decision↔일반(활동) 노드는 출력 부분 이관 규칙 적용(swapNodeEdges 참조).
+// start/end(터미널)는 동종만.
+const SWAPPABLE_ACROSS_TYPES: ReadonlySet<ProcessNodeType> = new Set([
+  "process",
+  "subprocess",
+  "decision",
+]);
 export function canSwapTypes(
   a: ProcessNodeType | undefined,
   b: ProcessNodeType | undefined,
@@ -544,9 +550,7 @@ export function canSwapTypes(
   if (a === b) {
     return true;
   }
-  return (
-    (a === "subprocess" && b === "process") || (a === "process" && b === "subprocess")
-  );
+  return SWAPPABLE_ACROSS_TYPES.has(a) && SWAPPABLE_ACROSS_TYPES.has(b);
 }
 
 // 시작/끝 노드의 표시 라벨은 i18n·사용자 라벨과 무관하게 항상 영문 고정값.
@@ -719,6 +723,65 @@ export function withSubprocessHandles(
     return edge;
   }
   return { ...edge, sourceHandle, targetHandle };
+}
+
+/**
+ * 스왑(드롭존 중앙) 시 엣지 연결 교환 — A의 연결은 B로, B의 연결은 A로.
+ * decision↔일반(활동) 노드 스왑은 부분 이관: 입력(target)은 전면 교환하되, 출력(source)은
+ * 일반 노드가 decision의 출력 1개(배열 순서상 첫 번째)만 가져가고 나머지는 decision에
+ * 라벨째 그대로 남는다(일반 노드 출력=1개 관례 유지). decision은 일반 노드의 출력을 라벨
+ * 그대로 넘겨받는다. 둘을 직접 잇는 엣지는 끝점째 교환(D→N ⇒ N→D)되어 그 자체가
+ * "가져간 1개"가 된다(추가 이관 없음). 끝점이 바뀐 엣지는 하위프로세스 핸들 규칙 재적용.
+ */
+export function swapNodeEdges(
+  edges: Edge[],
+  aId: string,
+  bId: string,
+  typeOf: (nodeId: string) => ProcessNodeType | undefined,
+): Edge[] {
+  const aType = typeOf(aId);
+  const bType = typeOf(bId);
+  const decisionId =
+    aType === "decision" && bType !== "decision"
+      ? aId
+      : bType === "decision" && aType !== "decision"
+        ? bId
+        : null;
+  const otherId = decisionId === aId ? bId : aId;
+  // 일반 노드가 가져갈 decision 출력 1개 — 직접 연결(D→N)이 있으면 그 엣지가 교환으로
+  // N의 출력이 되므로 추가 이관 없음, 없으면 첫 출력 엣지.
+  let takenId: string | null = null;
+  if (decisionId) {
+    const hasPairOut = edges.some(
+      (edge) => edge.source === decisionId && edge.target === otherId,
+    );
+    takenId = hasPairOut
+      ? null
+      : (edges.find((edge) => edge.source === decisionId)?.id ?? null);
+  }
+  const isSubprocess = (nodeId: string): boolean => typeOf(nodeId) === "subprocess";
+  const swapEnd = (nodeId: string): string =>
+    nodeId === aId ? bId : nodeId === bId ? aId : nodeId;
+  return edges.map((edge) => {
+    const target = swapEnd(edge.target);
+    let source: string;
+    if (!decisionId) {
+      source = swapEnd(edge.source);
+    } else if (edge.source === otherId) {
+      // 일반 노드의 출력은 전부 decision으로(라벨 보존)
+      source = decisionId;
+    } else if (edge.source === decisionId && (edge.id === takenId || edge.target === otherId)) {
+      // 가져갈 1개(또는 직접 연결 엣지)만 일반 노드로
+      source = otherId;
+    } else {
+      // 나머지 decision 출력은 라벨째 decision에 잔류
+      source = edge.source;
+    }
+    if (source === edge.source && target === edge.target) {
+      return edge;
+    }
+    return withSubprocessHandles({ ...edge, source, target }, isSubprocess);
+  });
 }
 
 /** A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B. */
