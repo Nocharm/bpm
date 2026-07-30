@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 포커스 링 실체화 + params 표 전면 개편 3종 (worktree-ai-consultant)
+- **선택 노드 링 실체화**: 에디터 선택 효과는 페이지 오버레이 담당이라 selected 주입만으론 무표시였음 → 프리뷰·선택지 캔버스 공용 CSS(`.selected` outline accent 2px) — 클릭 노드=인스펙터 대상이 시각적으로 연결됨.
+- **params 표 전 활동 나열**: `deriveParamsEditorRows` — 수집분만이 아니라 작업본의 모든 활동(+맵에 없는 수집 고아 항목 뒤에 유지)을 행으로 — 어느 노드든 채팅 없이 값 입력 가능. "노드 많은데 일부만 보임" 해소.
+- **무한 스크롤 + 행 일괄 삭제 + dirty 게이트**: 30행 청크 렌더(하단 근접 시 추가 로드, ParamInput 대량 마운트 방지) · 행 호버 시 Trash 버튼(전 필드 클리어 — **수동 표에서 비운 필드는 서버가 맵 속성도 제거**, AI 경로 빈 값은 종전대로 무시) · Apply to map은 변경 있을 때만 활성.
+
 ## 2026-07-30 — 관리자 런타임 AI 차단 토글 (worktree-ai-consultant)
 - **AI access 토글(설정, sysadmin)**: app_settings `ai_access_disabled` — GPU 서버 다운 시 재배포 없이 전 AI 표면 차단. 유효 가용성 = env AI_ENABLED AND NOT 플래그(`is_ai_access_enabled`), 게이트 3면 배선: `/api/me` ai_enabled(전 화면 즉시 반영) · 인터뷰 `_require_ai_enabled`(async화, 5개 엔드포인트) · AI 챗/모델 목록 503. FE 설정 AI 챗 패널 상단 스위치 카드(Power 아이콘·차단 중 경고 문구). KB 임베딩은 별도 서버라 미차단(의도).
 

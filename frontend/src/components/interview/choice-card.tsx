@@ -120,7 +120,7 @@ export function ChoiceWindow({
           <div className="mt-0.5 line-clamp-2 text-fine text-ink-tertiary">{option.summary}</div>
         ) : null}
       </div>
-      <div className="relative min-h-0 flex-1 bg-canvas">
+      <div className="iv-choice-flow relative min-h-0 flex-1 bg-canvas">
         {option.same_as_current ? (
           <>
             <span

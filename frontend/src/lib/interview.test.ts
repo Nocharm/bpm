@@ -7,6 +7,7 @@ import {
   addedNodeKeys,
   choiceOptionsOf,
   deriveOutline,
+  deriveParamsEditorRows,
   deriveParamsTable,
   deriveSequencePreview,
   distinctiveNodeKeys,
@@ -199,5 +200,30 @@ describe("getGraphSignature", () => {
     rewired.edges = [{ source: "a", target: "s", label: "" }];
     expect(getGraphSignature(rewired)).not.toBe(getGraphSignature(base()));
     expect(getGraphSignature(null)).toBe("");
+  });
+});
+
+describe("deriveParamsEditorRows", () => {
+  const graph: WorkingGraph = {
+    nodes: [
+      { key: "s", title: "시작", node_type: "start", description: "", attributes: null, group_key: null },
+      { key: "a", title: "요청서 작성", node_type: "process", description: "", attributes: null, group_key: null },
+      { key: "b", title: "견적 비교", node_type: "process", description: "", attributes: null, group_key: null },
+      { key: "e", title: "끝", node_type: "end", description: "", attributes: null, group_key: null },
+    ],
+    edges: [],
+    groups: [],
+  };
+
+  it("작업본의 모든 활동을 나열 — 수집 없는 노드도 빈 값으로 편집 가능 (2026-07-30)", () => {
+    const rows = deriveParamsEditorRows(graph, { params: { params_table: { "요청서 작성": { duration: "0.30" } } } });
+    expect(rows.map((r) => r.activity)).toEqual(["요청서 작성", "견적 비교"]);
+    expect(rows[0].values.duration).toBe("0.30");
+    expect(rows[1].values).toEqual({});
+  });
+
+  it("맵에 없는 수집 항목(제목 불일치)은 뒤에 유지", () => {
+    const rows = deriveParamsEditorRows(graph, { params: { params_table: { "옛 활동": { fte: "1" } } } });
+    expect(rows.map((r) => r.activity)).toEqual(["요청서 작성", "견적 비교", "옛 활동"]);
   });
 });

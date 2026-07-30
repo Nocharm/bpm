@@ -127,6 +127,28 @@ export function deriveParamsTable(
     .filter((row) => Object.keys(row.values).length > 0);
 }
 
+// params 편집 표의 행 — 수집분만이 아니라 **작업본의 모든 활동**을 나열해 어느 노드든
+// 채팅 없이 값을 넣을 수 있게 한다. 맵에 없는 수집 항목(제목 불일치)은 뒤에 유지 (2026-07-30).
+export function deriveParamsEditorRows(
+  graph: WorkingGraph | null | undefined,
+  facts: Record<string, Record<string, unknown>> | null | undefined,
+): ParamsTableRow[] {
+  const collected = new Map(deriveParamsTable(facts).map((row) => [row.activity, row.values]));
+  const rows: ParamsTableRow[] = [];
+  const seen = new Set<string>();
+  for (const node of graph?.nodes ?? []) {
+    if (node.node_type === "start" || node.node_type === "end") continue;
+    const title = (node.title ?? "").trim();
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+    rows.push({ activity: title, values: collected.get(title) ?? {} });
+  }
+  for (const [activity, values] of collected) {
+    if (!seen.has(activity)) rows.push({ activity, values });
+  }
+  return rows;
+}
+
 export function choiceOptionsOf(messages: InterviewMessage[]): ChoiceOption[] | null {
   const last = messages[messages.length - 1];
   if (!last || last.role !== "consultant" || last.kind !== "choices") return null;

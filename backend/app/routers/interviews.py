@@ -721,6 +721,7 @@ async def apply_interview_params(
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
+    sanitized: dict[str, dict[str, str]] = {}
     if payload is not None and payload.params_table:
         sanitized = {
             str(title).strip(): {
@@ -744,7 +745,9 @@ async def apply_interview_params(
     nodes = []
     for raw in graph.get("nodes", []):
         node = dict(raw)
-        values = by_title.get((node.get("title") or "").strip())
+        node_title = (node.get("title") or "").strip()
+        values = by_title.get(node_title)
+        manual_values = sanitized.get(node_title, {})
         if values:
             # subprocess는 annual_count·fte만 직접 편집 — 나머지 4필드는 링크 맵 지정값 상속.
             # UI·CSV·AI 변환 3표면 강제 불변식의 4번째 표면 봉합 (hardening T9)
@@ -769,6 +772,10 @@ async def apply_interview_params(
                     if field == "cost_usd":
                         attributes.pop("cost_krw", None)
                     attributes[field] = text
+                    touched = True
+                elif field in manual_values and not text and field in attributes:
+                    # 수동 표에서 명시적으로 비운 필드 — 맵 속성도 제거(행 일괄 삭제)
+                    attributes.pop(field)
                     touched = True
             if touched:
                 node["attributes"] = attributes

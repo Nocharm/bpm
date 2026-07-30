@@ -366,6 +366,7 @@ export function InterviewPreview({
       <style>{`
 .iv-preview-flow .react-flow__handle{opacity:0;pointer-events:none}
 .iv-preview-flow .react-flow__node{z-index:2 !important}
+.iv-preview-flow .react-flow__node.selected,.iv-choice-flow .react-flow__node.selected{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:10px}
 @keyframes iv-cp-in{from{opacity:0;max-height:0;transform:translateY(-6px)}to{opacity:1;max-height:40px;transform:translateY(0)}}
 .iv-cp-chip{overflow:hidden;animation:iv-cp-in .45s cubic-bezier(0.34,1.3,0.64,1)}
 @keyframes iv-pop-in{from{opacity:0;transform:scale(0.98)}to{opacity:1;transform:none}}

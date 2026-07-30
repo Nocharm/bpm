@@ -30,7 +30,7 @@ import {
   FAST_TRACK_SCOPE_MESSAGE,
   FAST_TRACK_START_LABELS,
   choiceOptionsOf,
-  deriveParamsTable,
+  deriveParamsEditorRows,
   stageIndex,
   stagesForMode,
 } from "@/lib/interview";
@@ -435,7 +435,7 @@ export default function ConsultPage() {
   const stageIdx = interview ? stageIndex(interview.current_stage, interview.mode) : 0;
   const live = interview ? interview.messages.filter((m) => !m.superseded) : [];
   const choices = interview?.status === "active" ? choiceOptionsOf(live) : null;
-  const paramsRows = deriveParamsTable(interview?.facts);
+  const paramsRows = deriveParamsEditorRows(interview?.working_graph, interview?.facts);
 
   return (
     <div className="flex h-full flex-col" data-id="consult-page">

@@ -1060,3 +1060,35 @@ def test_apply_params_accepts_manual_edits(client: TestClient, monkeypatch) -> N
     assert node["attributes"]["duration"] == "2.30"
     assert node["attributes"]["headcount"] == "3"
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_apply_params_manual_clear_removes_map_attributes(client: TestClient, monkeypatch) -> None:
+    """수동 표에서 비운 필드는 맵 속성도 제거 — 행 일괄 삭제 지원 (2026-07-30).
+    AI 수집 경로(body 없음)의 빈 값은 종전대로 무시된다."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = {
+                "nodes": [{"key": "a", "title": "정산", "node_type": "process",
+                           "attributes": {"duration": "1.00", "headcount": "2"},
+                           "description": "", "group_key": None}],
+                "edges": [], "groups": [],
+            }
+            row.facts = {"params": {"params_table": {"정산": {"duration": "1.00", "headcount": "2"}}}}
+            await session.commit()
+
+    asyncio.run(_seed())
+    body = client.post(
+        f"/api/interviews/{state['id']}/apply-params",
+        json={"params_table": {"정산": {"duration": "", "headcount": "3"}}},
+    ).json()
+    node = body["working_graph"]["nodes"][0]
+    assert "duration" not in node["attributes"]  # 명시적 클리어 → 맵에서도 제거
+    assert node["attributes"]["headcount"] == "3"
+    assert body["facts"]["params"]["params_table"]["정산"]["duration"] == ""
+    client.delete(f"/api/interviews/{state['id']}")

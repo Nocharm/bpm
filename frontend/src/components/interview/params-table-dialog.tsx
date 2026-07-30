@@ -5,11 +5,13 @@
 // params 스테이지 완료 턴(draw_due="params")에 자동 오픈 + 액션바 Params 버튼으로 재오픈.
 
 import { useEffect, useState } from "react";
-import { Table2 } from "lucide-react";
+import { Table2, Trash2 } from "lucide-react";
 
 import type { ParamsTableRow } from "@/lib/interview";
 import type { ParamField } from "@/lib/params";
 import { ParamInput } from "@/components/param-input";
+
+const PAGE_SIZE = 30; // 청크 렌더 — 노드 많을 때 ParamInput 대량 마운트로 느려지는 것 방지
 
 // 통화(₩/$)는 노드별 배타 계약 — 열을 'Cost' 하나로 합치고 행별 통화 토글 (P1 #10)
 const COLUMNS: Array<{ key: string; label: string; title: string }> = [
@@ -78,9 +80,27 @@ interface ParamsTableDialogProps {
 export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableDialogProps) {
   // 열릴 때의 수집분으로 초기화 — 조건부 마운트라 매 오픈마다 신선 (page가 열림/닫힘 관리)
   const [draft, setDraft] = useState<Record<string, DraftRow>>(() => toDraft(rows));
+  // 변경이 있어야 Apply 활성 — 무의미한 재반영 방지
+  const [dirty, setDirty] = useState(false);
+  // 무한 스크롤 — 스크롤 하단 근접 시 다음 청크 (스크롤 핸들러에서 setState)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const visibleRows = rows.slice(0, visibleCount);
 
   function patchRow(activity: string, patch: Partial<DraftRow>) {
+    setDirty(true);
     setDraft((prev) => ({ ...prev, [activity]: { ...prev[activity], ...patch } }));
+  }
+
+  // 행 파라미터 일괄 삭제 — 빈 값은 서버가 facts와 맵 속성 모두에서 제거한다
+  function clearRow(activity: string) {
+    patchRow(activity, { duration: "", cost: "", headcount: "", annual_count: "", fte: "" });
+  }
+
+  function handleScroll(event: React.UIEvent<HTMLDivElement>) {
+    const el = event.currentTarget;
+    if (visibleCount < rows.length && el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+      setVisibleCount((count) => Math.min(count + PAGE_SIZE, rows.length));
+    }
   }
 
   // 모달 컨벤션 — Escape·백드롭 클릭 닫힘 (P1 #10)
@@ -111,7 +131,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
             </p>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-auto px-4 py-2">
+        <div className="min-h-0 flex-1 overflow-auto px-4 py-2" onScroll={handleScroll}>
           <table className="w-full text-caption">
             <thead>
               <tr className="text-left text-fine text-ink-muted">
@@ -125,14 +145,15 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                     {column.label}
                   </th>
                 ))}
+                <th className="w-7" aria-label="Row actions" />
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {visibleRows.map((row) => {
                 const current = draft[row.activity];
                 if (!current) return null;
                 return (
-                  <tr key={row.activity} className="border-t border-hairline" data-id="iv-params-row">
+                  <tr key={row.activity} className="group border-t border-hairline" data-id="iv-params-row">
                     <td className="max-w-44 truncate py-1.5 pr-2 text-ink" title={row.activity}>
                       {row.activity}
                     </td>
@@ -202,11 +223,28 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                         onCommit={(next) => patchRow(row.activity, { fte: next })}
                       />
                     </td>
+                    <td className="w-7 px-1 py-1 text-right">
+                      <button
+                        type="button"
+                        className="rounded-xs p-0.5 text-ink-muted opacity-0 transition-opacity duration-150 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+                        title="Clear all parameters for this activity"
+                        disabled={busy}
+                        onClick={() => clearRow(row.activity)}
+                        data-id="iv-params-clear-row"
+                      >
+                        <Trash2 size={12} strokeWidth={1.5} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          {visibleCount < rows.length ? (
+            <div className="py-1.5 text-center text-fine text-ink-muted" data-id="iv-params-more">
+              Scroll for {rows.length - visibleCount} more…
+            </div>
+          ) : null}
         </div>
         <footer className="flex items-center justify-end gap-2 border-t border-hairline px-4 py-3">
           <button
@@ -218,7 +256,8 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
           </button>
           <button
             className="rounded-sm bg-accent px-3 py-1.5 text-caption-strong text-on-accent disabled:opacity-40"
-            disabled={busy}
+            disabled={busy || !dirty}
+            title={dirty ? undefined : "No changes to apply"}
             onClick={() => onApply(toTable(draft))}
             data-id="iv-params-apply"
           >
