@@ -628,15 +628,21 @@ export function InterviewPanel({
         ) : (
         <>
         {/* 컴포저 카드 — 첨부·입력·액션을 한 카드로 통합, 포커스는 카드 테두리로 표시.
-            턴/draw 진행 중(busy)엔 전체를 시각·기능적으로 잠근다 — 입력 불가 시점 명시 (2026-07-30) */}
+            턴/draw 진행 중(busy)엔 스피너+문구 오버레이로 확실히 잠근다 — 입력 불가 시점 명시 (2026-07-30) */}
         <div
-          className={
-            "rounded-lg border border-hairline bg-surface shadow-md transition-opacity duration-150 focus-within:border-accent" +
-            (busy ? " pointer-events-none opacity-60" : "")
-          }
+          className="relative rounded-lg border border-hairline bg-surface shadow-md transition-colors duration-150 focus-within:border-accent"
           aria-disabled={busy || undefined}
           data-id="iv-composer"
         >
+          {busy ? (
+            <div
+              className="absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-surface/75 text-caption text-ink-secondary"
+              data-id="iv-composer-lock"
+            >
+              <Loader2 size={16} strokeWidth={1.5} className="animate-spin text-accent" />
+              Waiting for the consultant…
+            </div>
+          ) : null}
           {(() => {
             // 컴포저 칩은 "이번 메시지에 보낼" 최근 첨부만 — 전송하면 배지+플라이아웃으로 접힌다
             const recent = interview.attachments.filter((a) => a.id > attachWatermark);

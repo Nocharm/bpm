@@ -9,7 +9,7 @@
 
 ## 2026-07-30 — 수락=구조 확정 스탬프(재확인·재드로 루프 종결) + 컴포저 busy 잠금 (worktree-ai-consultant)
 - **채팅-맵 싱크 이탈 패턴 종결**: 수락 턴 draw 억제(어제)만으론 한 턴 뒤 재발 — 인터뷰어가 스테이지를 완료 처리하지 않고 "이대로 확정할까요?" 재질문 → "네" 답변 턴의 전이가 choice 스테이지발 multi 재드로 유발. **수락 시 choice 스테이지 필수 facts를 수락안에서 서버가 결정적 스탬프**(activities=수락안 활동 제목 배열·branches=디시전 제목/“분기 없음” 폴백) → 같은 턴 전이+체크포인트(수락 턴은 draw 억제) → 인터뷰어는 다음 주제로. 수락 지시문도 "반영 완료·재확인 금지" 명시.
-- **컴포저 busy 잠금**: 턴/draw 진행 중 컴포저 카드 전체 pointer-events-none+opacity-60(aria-disabled) — 입력 불가 시점이 시각적으로 드러나게.
+- **컴포저 busy 잠금**: 턴/draw 진행 중 컴포저 위에 스피너+"Waiting for the consultant…" 오버레이(bg-surface/75, cursor-not-allowed) — 흐림만으론 티가 안 나 오버레이로 강화.
 
 ## 2026-07-30 — 엣지 연결면 인스펙터 이식 + 현재맵 안 하이라이트 픽스 (worktree-ai-consultant)
 - **연결면 편집 인스펙터 추가**: 엣지 우클릭 메뉴의 `EdgeSidesPad`(자립형 200px)를 export해 엣지 속성 폼에 재사용 — 편집 모드에서만 노출, SP 끝점 잠금·`setEdgeSide` 배선은 메뉴와 동일.
