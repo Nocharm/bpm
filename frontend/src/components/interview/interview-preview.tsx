@@ -93,19 +93,25 @@ const PARAM_LABELS: Record<(typeof PARAM_FIELDS)[number], string> = {
 };
 
 function PreviewCanvas({
-  graph, added, wrapperRef, onNodeClick,
+  graph, added, wrapperRef, onNodeClick, focusedKey,
 }: {
   graph: WorkingGraph | null;
   added: Set<string>;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
-  onNodeClick: (key: string) => void;
+  onNodeClick: (key: string | null) => void;
+  // 클릭 포커스 노드(=인스펙터 대상) — 선택 링 표시 + 클릭 시 카메라 센터/줌 (2026-07-30)
+  focusedKey: string | null;
 }) {
   const { nodes, edges } = useMemo(() => {
     const laid = layoutWorkingGraph(graph, added);
     // layoutWorkingGraph의 엣지는 스타일 미지정(화살표 없음) — 에디터/비교와 동일한 기본 엣지 스타일을 입힌다.
-    return { nodes: laid.nodes, edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })) };
-  }, [graph, added]);
-  const { fitView, flowToScreenPosition } = useReactFlow();
+    // selected 주입 — elementsSelectable=false라 RF 대신 우리가 관리(ProcessNode 선택 링 재사용).
+    return {
+      nodes: laid.nodes.map((n) => ({ ...n, selected: n.id === focusedKey })),
+      edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
+    };
+  }, [graph, added, focusedKey]);
+  const { fitView, flowToScreenPosition, setCenter, getZoom } = useReactFlow();
   // 구조가 실제로 바뀐 때만 카메라 리셋 — 맵이 안 변한 텍스트 턴마다 fitView가
   // 사용자 팬/줌 시점을 뺏지 않게 서명으로 게이팅 (hardening T12)
   const signature = useMemo(() => getGraphSignature(graph), [graph]);
@@ -167,7 +173,17 @@ function PreviewCanvas({
         zoomActivationKeyCode={["Control", "Meta"]}
         onNodeMouseEnter={handleNodeEnter}
         onNodeMouseLeave={handleNodeLeave}
-        onNodeClick={(_, node) => onNodeClick(node.id)}
+        onNodeClick={(_, node) => {
+          onNodeClick(node.id);
+          // 포커스 줌 — 클릭 노드를 중앙으로 부드럽게(축소돼 있으면 1.1까지 확대, 확대 상태는 유지)
+          const width = node.measured?.width ?? node.width ?? 120;
+          const height = node.measured?.height ?? node.height ?? 40;
+          void setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+            zoom: Math.max(getZoom(), 1.1),
+            duration: 400,
+          });
+        }}
+        onPaneClick={() => onNodeClick(null)}
         onMoveStart={() => setHovered(null)}
       />
       {/* 점 격자 미사용 — 프리뷰는 민무늬 캔버스(실사용 피드백 2026-07-24) */}
@@ -365,6 +381,7 @@ export function InterviewPreview({
                 added={previewCp ? NO_ADDED : added}
                 wrapperRef={wrapperRef}
                 onNodeClick={setInspectedKey}
+                focusedKey={inspectedKey}
               />
             ) : (
               /* 빈 캔버스 첫 화면 — 고스트 노드 미니 프리뷰 + 패스트트랙 CTA (P1 #7) */
