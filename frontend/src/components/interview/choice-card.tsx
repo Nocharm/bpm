@@ -4,7 +4,7 @@
 // 3안: 좌측 큰 창 1 + 우측 작은 창 2(탭/헤더 클릭으로 큰 창 교체), 2안: 1:1, 1안: 큰 창 하나
 // (실사용 피드백 2026-07-27). 부모(InterviewPreview)의 NodeActionsContext 안에서 렌더.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { NodeTypes } from "@xyflow/react";
 import { Check, Layers, Maximize2 } from "lucide-react";
@@ -33,14 +33,24 @@ interface ChoiceWindowProps {
 }
 
 function ChoiceCanvas({ option, highlight }: { option: ChoiceOption; highlight: Set<string> }) {
+  // 노드 클릭 포커스 — 창별 독립 선택 링 + 카메라 센터/줌 (프리뷰와 동일 UX, 2026-07-30)
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const { nodes, edges } = useMemo(() => {
     const laid = layoutWorkingGraph(option.graph, highlight);
-    return { nodes: laid.nodes, edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })) };
-  }, [option.graph, highlight]);
-  const { fitView } = useReactFlow();
+    return {
+      nodes: laid.nodes.map((n) => ({ ...n, selected: n.id === focusedKey })),
+      edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
+    };
+  }, [option.graph, highlight, focusedKey]);
+  const { fitView, setCenter, getZoom } = useReactFlow();
+  // fitView는 그래프가 바뀔 때 1회만 — 포커스 클릭(nodes identity 변경)이 카메라를 되돌리지 않게
+  const fitForRef = useRef<unknown>(null);
   useEffect(() => {
-    if (nodes.length > 0) fitView({ duration: 300, padding: 0.15 });
-  }, [nodes, fitView]);
+    if (nodes.length > 0 && fitForRef.current !== option.graph) {
+      fitForRef.current = option.graph;
+      fitView({ duration: 300, padding: 0.15 });
+    }
+  }, [nodes, option.graph, fitView]);
   return (
     <ReactFlow
       nodes={nodes}
@@ -58,6 +68,16 @@ function ChoiceCanvas({ option, highlight }: { option: ChoiceOption; highlight: 
       zoomOnScroll={false}
       zoomOnPinch
       zoomActivationKeyCode={["Control", "Meta"]}
+      onNodeClick={(_, node) => {
+        setFocusedKey(node.id);
+        const width = node.measured?.width ?? node.width ?? 120;
+        const height = node.measured?.height ?? node.height ?? 40;
+        void setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+          zoom: Math.max(getZoom(), 1.1),
+          duration: 400,
+        });
+      }}
+      onPaneClick={() => setFocusedKey(null)}
     />
   );
 }

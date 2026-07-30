@@ -1027,3 +1027,36 @@ def test_draw_passes_description_only_changes(client: TestClient, monkeypatch) -
     options = last["payload"]["options"]
     assert any("Draft the purchase request" in str(o["graph"]) for o in options)
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_apply_params_accepts_manual_edits(client: TestClient, monkeypatch) -> None:
+    """Params 모달 직접 편집 — body 표를 facts에 딥머지 후 맵 반영, 무효 필드는 소거.
+    수동 변경도 AI 컨텍스트(facts)와 아웃라인에 남는다 (실사용 피드백 2026-07-30)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = {
+                "nodes": [{"key": "a", "title": "정산", "node_type": "process",
+                           "attributes": None, "description": "", "group_key": None}],
+                "edges": [], "groups": [],
+            }
+            row.facts = {"params": {"params_table": {"정산": {"duration": "1.00"}}}}
+            await session.commit()
+
+    asyncio.run(_seed())
+    body = client.post(
+        f"/api/interviews/{state['id']}/apply-params",
+        json={"params_table": {"정산": {"duration": "2.30", "headcount": "3", "bogus": "x"}}},
+    ).json()
+    table = body["facts"]["params"]["params_table"]["정산"]
+    assert table["duration"] == "2.30" and table["headcount"] == "3"
+    assert "bogus" not in table
+    node = body["working_graph"]["nodes"][0]
+    assert node["attributes"]["duration"] == "2.30"
+    assert node["attributes"]["headcount"] == "3"
+    client.delete(f"/api/interviews/{state['id']}")

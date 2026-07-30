@@ -1940,8 +1940,15 @@ export function drawProposals(
 }
 
 // params 표 확정 반영 — 수집된 파라미터를 작업본에 결정적 적용(AI 0콜, 즉시)
-export function applyInterviewParams(id: number): Promise<InterviewState> {
-  return request<InterviewState>(`/interviews/${id}/apply-params`, { method: "POST" });
+export function applyInterviewParams(
+  id: number,
+  paramsTable?: Record<string, Record<string, string>>,
+): Promise<InterviewState> {
+  // 표를 넘기면 서버가 facts에 딥머지 후 반영 — 수동 편집도 AI 컨텍스트에 남는다 (2026-07-30)
+  return request<InterviewState>(`/interviews/${id}/apply-params`, {
+    method: "POST",
+    ...(paramsTable ? { body: JSON.stringify({ params_table: paramsTable }) } : {}),
+  });
 }
 
 // 유사 SP 제안 수락 — 제안 구간을 subprocess 링크 노드로 치환한 갱신 상태 반환 (P2)

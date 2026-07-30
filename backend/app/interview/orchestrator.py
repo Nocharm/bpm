@@ -108,6 +108,11 @@ def _merge_stage_facts(interview: InterviewSession, patch: dict) -> None:
     _merge_facts_namespace(interview, interview.current_stage, patch)
 
 
+def merge_params_table(interview: InterviewSession, table: dict) -> None:
+    """params 표 수동 편집을 facts에 딥머지 — 인터뷰어/드래프터 컨텍스트·아웃라인에 반영 (2026-07-30)."""
+    _merge_facts_namespace(interview, "params", {"params_table": table})
+
+
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
 
 

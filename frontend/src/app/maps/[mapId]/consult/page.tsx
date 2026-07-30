@@ -291,11 +291,11 @@ export default function ConsultPage() {
     void runTurn({ type: "answer", content });
   }
 
-  async function handleApplyParams() {
+  async function handleApplyParams(paramsTable?: Record<string, Record<string, string>>) {
     if (!interview || paramsBusy) return;
     setParamsBusy(true);
     try {
-      setInterview(await applyInterviewParams(interview.id));
+      setInterview(await applyInterviewParams(interview.id, paramsTable));
       setParamsOpen(false);
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to apply parameters.");
@@ -557,7 +557,7 @@ export default function ConsultPage() {
         <ParamsTableDialog
           rows={paramsRows}
           busy={paramsBusy}
-          onApply={() => void handleApplyParams()}
+          onApply={(table) => void handleApplyParams(table)}
           onClose={() => setParamsOpen(false)}
         />
       ) : null}

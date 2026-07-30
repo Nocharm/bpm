@@ -1504,6 +1504,15 @@ class InterviewDrawIn(BaseModel):
     variants: Literal["multi", "single"] = "single"
 
 
+class InterviewApplyParamsIn(BaseModel):
+    """params 표 수동 편집 반영 — 활동 제목 → {필드: 값}. 없으면 수집분(facts) 그대로 적용.
+
+    유효 필드 필터·facts 딥머지는 라우터가 수행 — 수동 변경도 AI 컨텍스트(facts)에 남는다 (2026-07-30).
+    """
+
+    params_table: dict[str, dict[str, str]] | None = None
+
+
 class InterviewSpAcceptIn(BaseModel):
     """유사 SP 제안 수락 — 제안 메시지 id로 대상 구간·맵을 특정 (design 2026-07-23 §7 P2)."""
 

@@ -21,6 +21,7 @@ from app.interview.orchestrator import (
     demote_notice_text,
     extract_attachment_facts,
     generate_proposals,
+    merge_params_table,
     run_turn,
     sum_usage,
     usage_log,
@@ -47,6 +48,7 @@ from app.permissions.access import assert_map_role, get_effective_role, get_elig
 from app.permissions.deps import require_map_role
 from app.routers.graph import _load_graph
 from app.schemas import (
+    InterviewApplyParamsIn,
     InterviewAttachmentOut,
     InterviewCreateIn,
     InterviewDrawIn,
@@ -704,14 +706,32 @@ _PARAMS_APPLIED_NOTICE = {
 @_locked_by_interview
 async def apply_interview_params(
     interview_id: int,
+    payload: InterviewApplyParamsIn | None = None,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InterviewStateOut:
-    """수집된 params_table을 작업본 attributes에 결정적으로 반영 — 제목 매칭, AI 무관(즉시)."""
+    """수집된 params_table을 작업본 attributes에 결정적으로 반영 — 제목 매칭, AI 무관(즉시).
+
+    body에 수동 편집 표가 오면 먼저 facts에 딥머지 — 채팅 없이 조정한 값도 인터뷰어/드래프터
+    컨텍스트와 아웃라인에 남는다 (실사용 피드백 2026-07-30). 빈 값은 facts만 비우고 맵은 유지.
+    """
     _require_ai_enabled()
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
+    if payload is not None and payload.params_table:
+        sanitized = {
+            str(title).strip(): {
+                field: str(value).strip()
+                for field, value in values.items()
+                if field in _PARAM_FIELDS
+            }
+            for title, values in payload.params_table.items()
+            if isinstance(values, dict) and str(title).strip()
+        }
+        sanitized = {title: values for title, values in sanitized.items() if values}
+        if sanitized:
+            merge_params_table(interview, sanitized)
     table = (interview.facts.get("params") or {}).get("params_table") or {}
     if not isinstance(table, dict) or not table:
         raise HTTPException(status_code=400, detail="no collected parameters")
