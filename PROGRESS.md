@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 선택 링 z 상승 + 프리뷰 노드 호버 글로우 (worktree-ai-consultant)
+- 선택 링이 이웃 노드에 가려지던 문제(긴 라벨로 실측 폭>추정 폭 → 겹침, 프리뷰 전 노드 z-2 고정) → `.selected` z-3 상승. 프리뷰·선택지 캔버스에 에디터와 동일한 `bpm-node-emph` 호버 글로우 + 클릭 가능 노드 pointer 커서.
+
 ## 2026-07-30 — 포커스 링 실체화 + params 표 전면 개편 3종 (worktree-ai-consultant)
 - **선택 노드 링 실체화**: 에디터 선택 효과는 페이지 오버레이 담당이라 selected 주입만으론 무표시였음 → 프리뷰·선택지 캔버스 공용 CSS(`.selected` outline accent 2px) — 클릭 노드=인스펙터 대상이 시각적으로 연결됨.
 - **params 표 전 활동 나열**: `deriveParamsEditorRows` — 수집분만이 아니라 작업본의 모든 활동(+맵에 없는 수집 고아 항목 뒤에 유지)을 행으로 — 어느 노드든 채팅 없이 값 입력 가능. "노드 많은데 일부만 보임" 해소.
