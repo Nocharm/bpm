@@ -627,9 +627,14 @@ export function InterviewPanel({
           </div>
         ) : (
         <>
-        {/* 컴포저 카드 — 첨부·입력·액션을 한 카드로 통합, 포커스는 카드 테두리로 표시 */}
+        {/* 컴포저 카드 — 첨부·입력·액션을 한 카드로 통합, 포커스는 카드 테두리로 표시.
+            턴/draw 진행 중(busy)엔 전체를 시각·기능적으로 잠근다 — 입력 불가 시점 명시 (2026-07-30) */}
         <div
-          className="rounded-lg border border-hairline bg-surface shadow-md transition-colors duration-150 focus-within:border-accent"
+          className={
+            "rounded-lg border border-hairline bg-surface shadow-md transition-opacity duration-150 focus-within:border-accent" +
+            (busy ? " pointer-events-none opacity-60" : "")
+          }
+          aria-disabled={busy || undefined}
           data-id="iv-composer"
         >
           {(() => {

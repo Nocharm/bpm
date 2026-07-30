@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 수락=구조 확정 스탬프(재확인·재드로 루프 종결) + 컴포저 busy 잠금 (worktree-ai-consultant)
+- **채팅-맵 싱크 이탈 패턴 종결**: 수락 턴 draw 억제(어제)만으론 한 턴 뒤 재발 — 인터뷰어가 스테이지를 완료 처리하지 않고 "이대로 확정할까요?" 재질문 → "네" 답변 턴의 전이가 choice 스테이지발 multi 재드로 유발. **수락 시 choice 스테이지 필수 facts를 수락안에서 서버가 결정적 스탬프**(activities=수락안 활동 제목 배열·branches=디시전 제목/“분기 없음” 폴백) → 같은 턴 전이+체크포인트(수락 턴은 draw 억제) → 인터뷰어는 다음 주제로. 수락 지시문도 "반영 완료·재확인 금지" 명시.
+- **컴포저 busy 잠금**: 턴/draw 진행 중 컴포저 카드 전체 pointer-events-none+opacity-60(aria-disabled) — 입력 불가 시점이 시각적으로 드러나게.
+
 ## 2026-07-30 — 엣지 연결면 인스펙터 이식 + 현재맵 안 하이라이트 픽스 (worktree-ai-consultant)
 - **연결면 편집 인스펙터 추가**: 엣지 우클릭 메뉴의 `EdgeSidesPad`(자립형 200px)를 export해 엣지 속성 폼에 재사용 — 편집 모드에서만 노출, SP 끝점 잠금·`setEdgeSide` 배선은 메뉴와 동일.
 - **'현재 맵 유지' 안 오표시**: `distinctiveNodeKeys` 비교 모수에 현재맵 안이 포함돼 무변경 노드가 '추가' 하이라이트되고 다른 안 판정도 오염 → 계산·렌더 모두 same_as_current 제외(NO_HIGHLIGHT 상수 — new Set() 재레이아웃 함정 회피). 현재맵 카드에 "Current map" 대각 워터마크 추가(배지와 이중 표기), 스모크 어설션 포함.

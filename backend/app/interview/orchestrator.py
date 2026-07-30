@@ -262,6 +262,26 @@ _REDRAFT_HINT = "현재까지 확정된 facts를 충실히 반영한 표준 세�
 _KEEP_CURRENT_TITLE = {"ko": "현재 맵 유지", "en": "Keep current map"}
 
 
+def _accepted_fact_value(stage_key: str, graph: dict, lang: str) -> object:
+    """수락안에서 choice 스테이지 필수 facts 값을 도출 — 재확인 재질문 차단용 결정적 스탬프."""
+    nodes = graph.get("nodes", [])
+    if stage_key == "activities":
+        titles = [
+            n.get("title") for n in nodes
+            if n.get("node_type") not in ("start", "end") and n.get("title")
+        ]
+        if titles:
+            return titles
+    if stage_key == "branches":
+        decisions = [
+            n.get("title") for n in nodes if n.get("node_type") == "decision" and n.get("title")
+        ]
+        if decisions:
+            return decisions
+        return "No branches (per accepted map)" if lang == "en" else "분기 없음(수락안 기준)"
+    return "Settled by accepted map" if lang == "en" else "수락안 기준 확정"
+
+
 def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
     """델타 복원 — 기존 노드 키 에코({"key":k})를 이전 작업본으로 완성 (speed redesign §5).
 
@@ -626,7 +646,22 @@ async def run_turn(
     if chosen is not None:
         interview.working_graph = chosen["graph"]
         interview.pending_choices = None
-        user_input = f"[{chosen['title']}] 안을 선택했습니다. 이어서 진행하세요."
+        # 수락 = 이 스테이지의 구조 결정 확정 — choice 스테이지의 필수 facts를 수락안에서
+        # 결정적으로 스탬프해 같은 턴에 전이시킨다. 안 하면 인터뷰어가 "이대로 확정할까요?"를
+        # 재질문하고, 그 답변 턴의 전이가 재드로를 유발해 채팅-맵 싱크가 깨진다 (2026-07-30).
+        stage = engine.get_stage(interview.current_stage, interview.mode)
+        if stage.choice_stage:
+            stage_facts = dict(interview.facts.get(interview.current_stage) or {})
+            for name in stage.required_facts:
+                if not stage_facts.get(name):
+                    stage_facts[name] = _accepted_fact_value(
+                        interview.current_stage, chosen["graph"], interview.lang
+                    )
+            interview.facts = {**interview.facts, interview.current_stage: stage_facts}
+        user_input = (
+            f"[{chosen['title']}] 안을 선택해 맵에 반영을 완료했습니다. "
+            "같은 내용을 다시 확인하지 말고 다음 주제로 진행하세요."
+        )
     else:
         user_input = user_content
 

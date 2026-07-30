@@ -555,3 +555,32 @@ def test_recent_choice_stage_prefers_activities_after_fast_forward() -> None:
                             working_graph=None, message_seq=5),
     ]
     assert orchestrator._recent_choice_stage(interview) == "activities"
+
+
+def test_choice_accept_stamps_stage_facts_and_advances() -> None:
+    """수락 = 구조 결정 확정 — choice 스테이지 필수 facts를 수락안으로 스탬프하고 같은 턴에 전이.
+    안 하면 인터뷰어가 '이대로 확정할까요?'를 재질문하고 그 답변 턴의 전이가 재드로를
+    유발해 채팅-맵 싱크가 깨진다 (실사용 피드백 2026-07-30)."""
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "표준안", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(current_stage="activities", pending_choices={"options": [option]})
+    # 인터뷰어가 stage_complete를 주지 않아도 결정적으로 전이한다
+    reply = json.dumps({"message": "다음은 분기입니다.", "facts_patch": {}})
+    _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.facts["activities"]["activities"] == ["요청서 작성"]
+    assert interview.current_stage == "branches"
+    assert result.draw_due is None  # 수락 턴 재드로 억제와 결합 — 루프 종결
+    checkpoints = [o for o in db.added if type(o).__name__ == "InterviewCheckpoint"]
+    assert len(checkpoints) == 1 and checkpoints[0].stage == "activities"
+
+
+def test_choice_accept_branches_without_decisions_stamps_fallback() -> None:
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "해피패스", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(current_stage="branches", pending_choices={"options": [option]})
+    reply = json.dumps({"message": "역할로 넘어가죠.", "facts_patch": {}})
+    _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.facts["branches"]["branches"] == "분기 없음(수락안 기준)"
+    assert interview.current_stage == "roles"
