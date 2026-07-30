@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 관리자 런타임 AI 차단 토글 (worktree-ai-consultant)
+- **AI access 토글(설정, sysadmin)**: app_settings `ai_access_disabled` — GPU 서버 다운 시 재배포 없이 전 AI 표면 차단. 유효 가용성 = env AI_ENABLED AND NOT 플래그(`is_ai_access_enabled`), 게이트 3면 배선: `/api/me` ai_enabled(전 화면 즉시 반영) · 인터뷰 `_require_ai_enabled`(async화, 5개 엔드포인트) · AI 챗/모델 목록 503. FE 설정 AI 챗 패널 상단 스위치 카드(Power 아이콘·차단 중 경고 문구). KB 임베딩은 별도 서버라 미차단(의도).
+
 ## 2026-07-30 — params 표 직접 편집 + 제안 미리보기 노드 포커싱 (worktree-ai-consultant)
 - **params 수동 편집**: Params 모달 셀을 공용 `ParamInput`으로 편집 가능(Cost는 값+₩/$ 행별 토글 — 반대 통화는 ""로 전송해 facts 잔존값 정리). `POST /apply-params` body `params_table` 수용 — 서버가 **facts 딥머지 → 맵 반영** 순서로 처리해 수동 변경도 AI 컨텍스트(인터뷰어/드래프터·아웃라인)에 남고 기존 반영 노티스가 대화에 기록됨. 무효 필드 소거, 빈 값은 facts만 비우고 맵 속성 유지(클리어는 에디터에서).
 - **제안 미리보기 포커싱**: ChoiceCanvas에도 노드 클릭 선택 링+센터 줌(창별 독립, fitView는 그래프 변경 시 1회만 — 클릭 줌 안 되돌림), 빈 캔버스 클릭 해제.

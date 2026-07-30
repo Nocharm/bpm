@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.app_settings import is_ai_access_enabled
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session, init_models
@@ -131,7 +132,7 @@ async def get_me(
                     manager_ids.append(manager)
     return MeOut(
         username=login_id,
-        ai_enabled=settings.ai_enabled,
+        ai_enabled=await is_ai_access_enabled(session),  # env AND 관리자 차단 플래그
         manual_url=settings.manual_url,
         csv_manual_url=settings.csv_manual_url,
         name=emp.name if emp else login_id,

@@ -122,3 +122,34 @@ def test_app_settings_retention_defaults_and_roundtrip(client: TestClient) -> No
             "ai_chat_retention_days": 180,
         },
     )
+
+
+def test_ai_access_toggle_blocks_all_ai_surfaces(client, monkeypatch) -> None:
+    """관리자 런타임 AI 차단 — me.ai_enabled·인터뷰·AI 챗 모델 목록이 일괄 차단/복구 (2026-07-30)."""
+    from uuid import uuid4
+
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    # 차단
+    out = client.put("/api/admin/app-settings", json={"ai_access_disabled": True}).json()
+    assert out["ai_access_disabled"] is True
+    assert client.get("/api/me").json()["ai_enabled"] is False
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"ai-off-{uuid4().hex[:8]}"},
+    ).json()
+    resp = client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": created["versions"][0]["id"]}
+    )
+    assert resp.status_code == 503
+    assert client.get("/api/ai/models").status_code == 503
+    # 복구
+    out = client.put("/api/admin/app-settings", json={"ai_access_disabled": False}).json()
+    assert out["ai_access_disabled"] is False
+    assert client.get("/api/me").json()["ai_enabled"] is True
+    resp = client.post(
+        f"/api/maps/{created['id']}/interviews", json={"version_id": created["versions"][0]["id"]}
+    )
+    assert resp.status_code == 200
+    client.delete(f"/api/interviews/{resp.json()['id']}")

@@ -1012,6 +1012,7 @@ export interface AppSettings {
   ai_chat_max_sessions_per_map: number; // 보존 상한 — 사용자×맵당 대화 수
   ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
   ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
+  ai_access_disabled: boolean; // 관리자 런타임 AI 차단 — GPU 서버 점검용 (2026-07-30)
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -1026,6 +1027,7 @@ export function putAppSettings(patch: {
   ai_chat_max_sessions_per_map?: number;
   ai_chat_max_messages_per_session?: number;
   ai_chat_retention_days?: number;
+  ai_access_disabled?: boolean;
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",

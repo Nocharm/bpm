@@ -12,6 +12,7 @@ from app.app_settings import (
     get_ai_chat_max_messages,
     get_ai_chat_max_sessions,
     get_ai_chat_tips,
+    is_ai_access_enabled,
 )
 from app.manual_select import select_manual_sections
 from app.chat_history import (
@@ -165,7 +166,7 @@ async def ai_chat(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> AiProposal:
-    if not settings.ai_enabled:
+    if not await is_ai_access_enabled(session):
         raise HTTPException(status_code=503, detail="AI is disabled")
     version = await session.get(MapVersion, version_id)
     if version is None:
@@ -284,9 +285,9 @@ async def ai_chat(
 
 
 @router.get("/ai/models", response_model=AiModelsOut)
-async def ai_models() -> AiModelsOut:
+async def ai_models(session: AsyncSession = Depends(get_session)) -> AiModelsOut:
     """서빙 중인 모델 목록 — 프론트 모델 선택용. 조회 실패 시 기본 모델로 폴백."""
-    if not settings.ai_enabled:
+    if not await is_ai_access_enabled(session):
         raise HTTPException(status_code=503, detail="AI is disabled")
     try:
         models = await ai_client.list_models()

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.app_settings import is_ai_access_enabled
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
@@ -212,8 +213,9 @@ def _existing_summary(seed: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
-def _require_ai_enabled() -> None:
-    if not settings.ai_enabled:
+async def _require_ai_enabled(session: AsyncSession) -> None:
+    """env AI_ENABLED + 관리자 런타임 차단 플래그(app_settings) 통합 게이트 (2026-07-30)."""
+    if not await is_ai_access_enabled(session):
         raise HTTPException(status_code=503, detail="AI is disabled")
 
 
@@ -402,7 +404,7 @@ async def create_or_resume_interview(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InterviewStateOut:
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     existing = (
         await session.scalars(
             select(InterviewSession).where(
@@ -521,7 +523,7 @@ async def post_turn(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InterviewStateOut:
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
@@ -625,7 +627,7 @@ async def draw_interview_proposals(
     session: AsyncSession = Depends(get_session),
 ) -> InterviewStateOut:
     """그리기 이벤트(동기) — 제안 생성만 담당, 작업본은 수락(choice 턴) 시점에만 변경 (speed redesign §4)."""
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
@@ -715,7 +717,7 @@ async def apply_interview_params(
     body에 수동 편집 표가 오면 먼저 facts에 딥머지 — 채팅 없이 조정한 값도 인터뷰어/드래프터
     컨텍스트와 아웃라인에 남는다 (실사용 피드백 2026-07-30). 빈 값은 facts만 비우고 맵은 유지.
     """
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
@@ -808,7 +810,7 @@ async def fast_forward_interview(
     review로 점프, draw_due='multi' 신호 반환 (AI 0콜 — 전진을 프롬프트에 맡기지 않는다,
     design 2026-07-29 §3). 계측 이벤트 없음(apply-params와 동일한 0콜 관례).
     """
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")

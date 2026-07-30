@@ -1173,6 +1173,8 @@ class AppSettingsOut(BaseModel):
     ai_chat_max_sessions_per_map: int
     ai_chat_max_messages_per_session: int
     ai_chat_retention_days: int
+    # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
+    ai_access_disabled: bool = False
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -1184,6 +1186,7 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_sessions_per_map: int | None = Field(default=None, ge=1, le=200)
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
+    ai_access_disabled: bool | None = None
 
 
 class AiTipsOut(BaseModel):

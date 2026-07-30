@@ -1,7 +1,7 @@
 "use client";
 
 // AI 챗 설정(sysadmin) — 보존 상한(대화 수·메시지 수·보관 일수) + 로딩 중 기능 팁 관리.
-import { Database, Lightbulb } from "lucide-react";
+import { Database, Lightbulb, Power } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAppSettings, putAppSettings, type AppSettings } from "@/lib/api";
@@ -67,6 +67,21 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
     }
   };
 
+  // AI 접근 토글 — GPU 서버 점검 시 재배포 없이 전 AI 표면(챗·컨설턴트) 차단 (2026-07-30)
+  const toggleAiAccess = async () => {
+    if (busy || !appSettings) return;
+    setBusy(true);
+    try {
+      const next = await putAppSettings({ ai_access_disabled: !appSettings.ai_access_disabled });
+      setAppSettings(next);
+      onToast?.(next.ai_access_disabled ? "AI access disabled" : "AI access enabled");
+    } catch (err) {
+      onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // 팁 저장 — 한 줄당 1개, 빈 줄 무시. 전부 지우고 저장하면 서버가 기본 20종으로 복원.
   const saveTips = async () => {
     if (busy) return;
@@ -91,6 +106,51 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
     <div className="max-w-xl">
       <h2 className="text-body-strong text-ink">{t("aiLog.title")}</h2>
       <p className="mt-1 text-caption text-ink-secondary">{t("aiLog.desc")}</p>
+
+      {/* AI 접근 — 서버 점검 시 런타임 차단. me.ai_enabled를 통해 전 화면이 즉시 반영 */}
+      <div className="mt-4 rounded-md border border-hairline p-4" data-id="ai-access-card">
+        <div className="flex items-center gap-3">
+          <span
+            className={
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-sm " +
+              (appSettings?.ai_access_disabled ? "bg-error/10 text-error" : "bg-accent-tint text-accent")
+            }
+          >
+            <Power size={16} strokeWidth={1.5} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-caption-strong text-ink">AI access</div>
+            <div className="text-fine text-ink-tertiary">
+              Turn off while the AI server is down — blocks chat and consultant for everyone, no redeploy.
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!appSettings?.ai_access_disabled}
+            aria-label="AI access"
+            disabled={busy || !appSettings}
+            onClick={() => void toggleAiAccess()}
+            className={
+              "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150 disabled:opacity-40 " +
+              (appSettings?.ai_access_disabled ? "bg-ink-tertiary/40" : "bg-accent")
+            }
+            data-id="ai-access-toggle"
+          >
+            <span
+              className={
+                "absolute top-0.5 left-0 h-4 w-4 rounded-full bg-surface shadow-sm transition-transform duration-150 " +
+                (appSettings?.ai_access_disabled ? "translate-x-0.5" : "translate-x-[18px]")
+              }
+            />
+          </button>
+        </div>
+        {appSettings?.ai_access_disabled ? (
+          <p className="mt-2 rounded-sm bg-error/5 px-2 py-1 text-fine text-error" data-id="ai-access-off-note">
+            AI features are currently disabled for all users.
+          </p>
+        ) : null}
+      </div>
 
       <div className="mt-4 rounded-md border border-hairline p-4">
         <div className="flex items-center gap-3">
