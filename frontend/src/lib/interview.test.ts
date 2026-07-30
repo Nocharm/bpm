@@ -12,6 +12,7 @@ import {
   deriveSequencePreview,
   diffFromCurrentKeys,
   getGraphSignature,
+  highlightConnectedEdges,
   layoutWorkingGraph,
   stageIndex,
   stagesForMode,
@@ -83,6 +84,25 @@ describe("layoutWorkingGraph", () => {
     expect(a?.data.diffStatus).toBe("added");
     expect(typeof a?.position.x).toBe("number");
     expect(layoutWorkingGraph(null, new Set()).nodes).toHaveLength(0);
+  });
+});
+
+describe("highlightConnectedEdges", () => {
+  const edges = [
+    { id: "e1", source: "a", target: "b" },
+    { id: "e2", source: "b", target: "c" },
+    { id: "e3", source: "c", target: "d" },
+  ];
+
+  it("포커스 노드에 닿는 엣지만 액센트 스타일 (2026-07-30)", () => {
+    const out = highlightConnectedEdges(edges, new Set(["b"]));
+    expect(out[0].style?.stroke).toBe("var(--color-accent)");
+    expect(out[1].style?.stroke).toBe("var(--color-accent)");
+    expect(out[2].style).toBeUndefined();
+  });
+
+  it("빈 키셋이면 원본 배열 그대로", () => {
+    expect(highlightConnectedEdges(edges, new Set())).toBe(edges);
   });
 });
 

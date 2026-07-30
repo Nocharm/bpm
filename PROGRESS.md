@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 미리보기 포커스 엣지 하이라이트 (worktree-ai-consultant)
+- 노드 클릭 포커스(선택 링+줌) 시 입출 엣지를 액센트로 강조 — 공용 `highlightConnectedEdges`(lib/interview) 신설, 메인 미리보기(키 기준)·복수 안 창(제목 싱크 기준) 양쪽 적용. 빈 키셋은 원본 배열 반환(메모 재사용).
+
 ## 2026-07-30 — 시작/끝 중복 안 결정적 교정 — Apply 422 벽돌·전멸 필터 갇힘 해소 (worktree-ai-consultant)
 - **갇힘 체인**: AI 안이 시작 2개·같은 제목 끝 2개를 포함해도 가드가 없어 수락됨 → Apply가 `validate_process`(시작 정확히 1개·끝 제목 유니크) 422로 거부 → "시작 1개로 고쳐줘" 재드로는 드래프터 에코가 전멸 필터("같은 안뿐")에 걸려 탈출 불가.
 - 수정: `_sanitize_start_end`(orchestrator) — 제안 파이프라인 마지막 단계에서 중복 시작·같은 제목 끝을 **병합**(참조 엣지 생존 노드로 재배선, 병합 유래 자기루프·중복 페어만 정리), 생존자는 이전 작업본 키 우선. 시작 0개는 이전 작업본 시작 복원. 병합 방식이라 고장난 세션에서도 에코 안이 sanitize로 달라져 필터를 통과 → 수락으로 자가 복구 가능. 프롬프트 문구만으론 안 막힌다 계보.

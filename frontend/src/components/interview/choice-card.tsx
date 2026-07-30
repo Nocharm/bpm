@@ -10,7 +10,7 @@ import type { NodeTypes } from "@xyflow/react";
 import { Check, Layers, Maximize2 } from "lucide-react";
 
 import type { ChoiceOption, WorkingGraph } from "@/lib/api";
-import { diffFromCurrentKeys, layoutWorkingGraph, type GraphDiffKeys } from "@/lib/interview";
+import { diffFromCurrentKeys, layoutWorkingGraph, type GraphDiffKeys, highlightConnectedEdges } from "@/lib/interview";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
 import { ProcessNode } from "@/components/process-node";
 
@@ -49,10 +49,18 @@ function ChoiceCanvas({
 }) {
   const { nodes, edges } = useMemo(() => {
     const laid = layoutWorkingGraph(option.graph, diff.added, diff.changed);
+    // 싱크 포커스 — 같은 제목 노드가 모든 안에서 동시에 선택 링·엣지 강조를 갖는다
+    const focusedKeys = new Set(
+      focusedTitle !== null
+        ? laid.nodes.filter((n) => labelOf(n) === focusedTitle).map((n) => n.id)
+        : [],
+    );
     return {
-      // 싱크 포커스 — 같은 제목 노드가 모든 안에서 동시에 선택 링을 갖는다
-      nodes: laid.nodes.map((n) => ({ ...n, selected: focusedTitle !== null && labelOf(n) === focusedTitle })),
-      edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
+      nodes: laid.nodes.map((n) => ({ ...n, selected: focusedKeys.has(n.id) })),
+      edges: highlightConnectedEdges(
+        laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
+        focusedKeys,
+      ),
     };
   }, [option.graph, diff, focusedTitle]);
   const { fitView, setCenter, getZoom, getNodes } = useReactFlow();

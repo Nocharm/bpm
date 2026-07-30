@@ -1,6 +1,6 @@
 // AI 컨설턴트 인터뷰 — 순수 헬퍼: 스테이지 상수·선택지 추출·작업본 diff·dagre 배치 (design 2026-07-23)
 
-import type { Edge } from "@xyflow/react";
+import { MarkerType, type Edge } from "@xyflow/react";
 
 import type { ChoiceOption, InterviewMessage, WorkingGraph } from "./api";
 import type { AppNode } from "./canvas";
@@ -238,6 +238,23 @@ export function layoutWorkingGraph(
     label: e.label || undefined,
   }));
   return autoLayoutFlow(nodes, edges, "LR");
+}
+
+
+/** 포커스 노드에 닿는 엣지 강조 — 선택 링과 같은 액센트로 입출 흐름을 드러낸다 (2026-07-30).
+ *  keys가 비면 원본 그대로(레이아웃 메모 재사용). zIndex로 이웃 엣지 위로 올린다. */
+export function highlightConnectedEdges(edges: Edge[], keys: ReadonlySet<string>): Edge[] {
+  if (keys.size === 0) return edges;
+  return edges.map((e) =>
+    keys.has(e.source) || keys.has(e.target)
+      ? {
+          ...e,
+          style: { ...e.style, stroke: "var(--color-accent)", strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-accent)" },
+          zIndex: 1,
+        }
+      : e,
+  );
 }
 
 

@@ -14,7 +14,7 @@ import {
   acceptSpSuggestion, completeInterview, getApiErrorDetail, getGraph, postInterviewRevert,
   saveGraph, type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
-import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode } from "@/lib/interview";
+import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode, highlightConnectedEdges } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
@@ -29,6 +29,8 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 
 // 체크포인트 프리뷰 중 신규 하이라이트 억제용 — 렌더마다 새 Set이면 재레이아웃이 돈다
 const NO_ADDED = new Set<string>();
+// 포커스 없음 — 렌더마다 새 Set이면 엣지 재계산이 돈다
+const EMPTY_KEYS = new Set<string>();
 
 // compare의 COMPARE_NODE_ACTIONS와 동일 — ProcessNode가 요구하는 읽기전용 context
 const PREVIEW_NODE_ACTIONS: NodeActions = {
@@ -108,7 +110,11 @@ function PreviewCanvas({
     // selected 주입 — elementsSelectable=false라 RF 대신 우리가 관리(ProcessNode 선택 링 재사용).
     return {
       nodes: laid.nodes.map((n) => ({ ...n, selected: n.id === focusedKey })),
-      edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
+      // 포커스 노드의 입출 엣지는 액센트 강조 — 선택 링과 세트 (2026-07-30)
+      edges: highlightConnectedEdges(
+        laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
+        focusedKey ? new Set([focusedKey]) : EMPTY_KEYS,
+      ),
     };
   }, [graph, added, focusedKey]);
   const { fitView, flowToScreenPosition, setCenter, getZoom } = useReactFlow();
