@@ -685,6 +685,11 @@ class InterviewMessage(Base):
     """인터뷰 대화 1건 — P3 RAG 축적의 원재료. 되돌리기는 삭제 대신 superseded 접기."""
 
     __tablename__ = "interview_messages"
+    # seq는 세션 내 유일 — 동시 쓰기의 중복 seq를 DB가 최종 방어(락은 1차 방어, hardening T3).
+    # 기존 DB는 db.py 부트스트랩이 중복 리넘버 후 동명 유니크 인덱스로 보강한다.
+    __table_args__ = (
+        Index("uq_interview_messages_session_seq", "session_id", "seq", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(
@@ -692,8 +697,9 @@ class InterviewMessage(Base):
     )
     seq: Mapped[int] = mapped_column(Integer)
     role: Mapped[str] = mapped_column(String(12))  # consultant|user
-    # consultant: question|choices|confirm|notice / user: answer|choice|confirm|skip
-    kind: Mapped[str] = mapped_column(String(12))
+    # consultant: question|choices|confirm|notice|sp_suggestion / user: answer|choice|confirm|skip|fast_forward
+    # sp_suggestion(13자)이 12를 넘어 운영 Postgres에서 무음 유실됐던 회귀 — 20으로 확장 (final review 2026-07-30)
+    kind: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text, default="")
     payload: Mapped[dict | None] = mapped_column(JSON, default=None)  # 선택지·선택결과 등
     stage: Mapped[str] = mapped_column(String(20))
@@ -702,7 +708,7 @@ class InterviewMessage(Base):
 
 
 class InterviewCheckpoint(Base):
-    """스테이지 완료 시점 스냅샷 — '이전 단계로'의 복원 지점."""
+    """스테이지 완료·안 수락 시점 스냅샷 — '이전 단계로'의 복원 지점."""
 
     __tablename__ = "interview_checkpoints"
 

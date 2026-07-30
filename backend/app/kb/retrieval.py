@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 TOP_K = 5  # 기본 반환 수 — 프롬프트 예산과의 절충
 MIN_SIMILARITY = 0.5  # 코사인 임계값 — 미달 청크는 잡음으로 간주해 제외
+# 쿼리 임베딩 타임아웃(초) — 인덱싱용(EMBED_TIMEOUT 30s×재시도)과 분리해 embed 서버 행 시
+# 턴이 최대 60초 막히던 것을 짧게 컷 (hardening T17). 재시도 1회 포함 최악 ~10s.
+QUERY_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -53,7 +56,14 @@ async def _load_cache(session) -> tuple[np.ndarray, list[KbChunk]]:
     if not rows:
         _cache = (np.zeros((0, settings.embed_dim), dtype=np.float32), [])
         return _cache
-    matrix = np.stack([unpack_embedding(r.embedding) for r in rows]).astype(np.float32)
+    try:
+        matrix = np.stack([unpack_embedding(r.embedding) for r in rows]).astype(np.float32)
+    except ValueError as exc:
+        # 저장 청크 간 차원 불일치(EMBED_MODEL/DIM 교체 후 미재색인) — numpy 오류를
+        # EmbedError로 정규화해 호출측 디그레이드 계약("KB 실패는 턴을 죽이지 않는다") 유지.
+        raise embed_client.EmbedError(
+            f"stored embeddings have mixed dimensions — reindex required: {exc}"
+        ) from exc
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     matrix = matrix / np.maximum(norms, 1e-12)  # 단위정규화 — 내적 = 코사인
     _cache = (matrix, rows)
@@ -72,9 +82,18 @@ async def search(
     matrix, rows = await _load_cache(session)
     if not rows:
         return []
-    qvec = np.asarray((await embed_client.embed_texts([query]))[0], dtype=np.float32)
+    qvec = np.asarray(
+        (await embed_client.embed_texts([query], timeout=QUERY_TIMEOUT_SECONDS))[0],
+        dtype=np.float32,
+    )
     qvec = qvec / max(float(np.linalg.norm(qvec)), 1e-12)
-    scores = matrix @ qvec
+    try:
+        scores = matrix @ qvec
+    except ValueError as exc:
+        # 쿼리 차원 ≠ 저장 차원(모델 교체 후 미재색인) — EmbedError로 정규화 (위와 동일 계약)
+        raise embed_client.EmbedError(
+            f"query embedding dimension mismatch — reindex required: {exc}"
+        ) from exc
     allowed = np.array([
         r.source_type != "attachment" or (r.meta or {}).get("session_id") == session_id
         for r in rows

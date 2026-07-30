@@ -741,7 +741,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         {/* 결재자 / approvers */}
         <div
           ref={approversRef}
-          className={`flex flex-col gap-1.5 rounded-sm ${flashApprovers ? "motion-safe:animate-[picker-flash_800ms_var(--ease-smooth)]" : ""}`}
+          className={`flex flex-col gap-1.5 rounded-sm ${flashApprovers ? "motion-safe:animate-[picker-flash_1400ms_ease-in-out]" : ""}`}
         >
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}

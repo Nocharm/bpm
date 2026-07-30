@@ -1,9 +1,29 @@
 // Word 홈 스모크 — Word documents 섹션 분리 표시·행 노출·생성 진입 버튼·상세 카드(설계 2026-07-24 §2, Task 11).
 // 실행: node scripts/pw-smoke-word-home.mjs  (backend 8000 / frontend 3000 기동 전제)
+import { readFileSync } from "node:fs";
+
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const API = "http://localhost:8000/api";
+
+// 워드 기능 플래그 OFF(AI 독립 라인) — 섹션이 실제로 가려졌는지만 검증하고 종료 (2026-07-27)
+const featureSrc = readFileSync(new URL("../src/lib/features.ts", import.meta.url), "utf8");
+if (!/WORD_FEATURES_ENABLED\s*=\s*true/.test(featureSrc)) {
+  const hiddenBrowser = await chromium.launch({ executablePath: CHROME, headless: true });
+  const hiddenCtx = await hiddenBrowser.newContext({ viewport: { width: 1600, height: 1000 } });
+  await hiddenCtx.addInitScript(() => window.localStorage.setItem("bpm.devUser", "admin.sys"));
+  const hiddenPage = await hiddenCtx.newPage();
+  await hiddenPage.goto("http://localhost:3000/", { waitUntil: "networkidle" });
+  const visible = await hiddenPage.locator('[data-id="word-docs-section"]').count();
+  await hiddenBrowser.close();
+  if (visible !== 0) {
+    console.log(JSON.stringify({ wordFlag: "off", sectionCount: visible, pass: false }));
+    process.exit(1);
+  }
+  console.log(JSON.stringify({ wordFlag: "off", sectionHidden: true, pass: true }));
+  process.exit(0);
+}
 
 // owning_department는 실제 조직 경로여야 backend _assert_known_department를 통과한다
 // (dev.db엔 브리프의 "Owning Anchor Division"이 없음 — conftest 전용 픽스처 값이라 여기선 무효,

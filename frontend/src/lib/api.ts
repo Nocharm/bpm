@@ -1012,6 +1012,7 @@ export interface AppSettings {
   ai_chat_max_sessions_per_map: number; // 보존 상한 — 사용자×맵당 대화 수
   ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
   ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
+  ai_access_disabled: boolean; // 관리자 런타임 AI 차단 — GPU 서버 점검용 (2026-07-30)
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -1026,6 +1027,7 @@ export function putAppSettings(patch: {
   ai_chat_max_sessions_per_map?: number;
   ai_chat_max_messages_per_session?: number;
   ai_chat_retention_days?: number;
+  ai_access_disabled?: boolean;
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",
@@ -1835,6 +1837,10 @@ export interface ChoiceOption {
   title: string;
   summary: string;
   graph: WorkingGraph;
+  // 현재 작업본 그대로 유지 안 — 카드에 "Same as current" 배지 (2026-07-28)
+  same_as_current?: boolean;
+  // 결정적 톤 린트 경고('~하기' 접미·존댓말 어미·활동 수 10±3 이탈) — 카드 warn 칩 (hardening T19)
+  lint?: string[];
 }
 
 export interface InterviewMessage {
@@ -1875,6 +1881,8 @@ export interface InterviewState {
   current_stage: string;
   // 인터뷰 모드 — normal | word (design 2026-07-26 §2)
   mode?: string;
+  // 확정 facts — 아웃라인 패널(수집된 정보) 렌더용 (speed redesign)
+  facts?: Record<string, Record<string, unknown>>;
   lang: string;
   working_graph: WorkingGraph | null;
   messages: InterviewMessage[];
@@ -1882,6 +1890,8 @@ export interface InterviewState {
   attachments: InterviewAttachment[];
   version_updated_at: string | null;
   base_graph_updated_at: string | null;
+  // 턴 응답 전용 그리기 신호(비영속) — multi/single은 draw 이벤트, params는 표 확정 모달 (speed redesign)
+  draw_due?: "multi" | "single" | "params" | null;
 }
 
 export function createOrResumeInterview(
@@ -1917,6 +1927,29 @@ export function postInterviewRevert(id: number, stage: string): Promise<Intervie
   return request<InterviewState>(`/interviews/${id}/revert`, {
     method: "POST",
     body: JSON.stringify({ stage }),
+  });
+}
+
+// 그리기 이벤트(동기) — 제안 생성만, 작업본은 수락 시점에 변경 (speed redesign)
+export function drawProposals(
+  id: number,
+  variants: "multi" | "single",
+): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/draw`, {
+    method: "POST",
+    body: JSON.stringify({ variants }),
+  });
+}
+
+// params 표 확정 반영 — 수집된 파라미터를 작업본에 결정적 적용(AI 0콜, 즉시)
+export function applyInterviewParams(
+  id: number,
+  paramsTable?: Record<string, Record<string, string>>,
+): Promise<InterviewState> {
+  // 표를 넘기면 서버가 facts에 딥머지 후 반영 — 수동 편집도 AI 컨텍스트에 남는다 (2026-07-30)
+  return request<InterviewState>(`/interviews/${id}/apply-params`, {
+    method: "POST",
+    ...(paramsTable ? { body: JSON.stringify({ params_table: paramsTable }) } : {}),
   });
 }
 
@@ -1977,6 +2010,11 @@ export function deleteKbDocument(id: number): Promise<void> {
 
 export function abandonInterview(id: number): Promise<void> {
   return request<void>(`/interviews/${id}`, { method: "DELETE" });
+}
+
+// 패스트트랙 확정 — 남은 스테이지 결정적 전진(AI 0콜) 후 draw_due="multi" (design 2026-07-29)
+export function fastForwardInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/fast-forward`, { method: "POST" });
 }
 
 export function deleteInterviewAttachment(

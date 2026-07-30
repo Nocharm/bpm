@@ -378,7 +378,8 @@ function SideBox({
   );
 }
 
-function EdgeSidesPad({
+// 인스펙터 엣지 속성 폼에서도 재사용 — 메뉴 밖 단독 렌더 가능(자립형, 2026-07-30)
+export function EdgeSidesPad({
   item,
 }: {
   item: {

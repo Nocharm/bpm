@@ -1,6 +1,7 @@
 """AI 컨설턴트 인터뷰 API — 세션·턴·첨부·체크포인트·완료 (design 2026-07-23 §5)."""
 
 import asyncio
+import functools
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -9,11 +10,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.app_settings import is_ai_access_enabled
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
+from app.interview.agents import format_graph_compact
 from app.interview.engine import get_stage, next_stage_key
-from app.interview.orchestrator import TurnError, run_turn
+from app.interview.locks import interview_lock
+from app.interview.orchestrator import (
+    TurnError,
+    demote_notice_text,
+    extract_attachment_facts,
+    generate_proposals,
+    merge_params_table,
+    run_turn,
+    sum_usage,
+    usage_log,
+)
 from app.kb import embed_client, indexing, retrieval, sp_suggest
 from app.interview.parsing import (
     ALLOWED_EXTENSIONS,
@@ -25,18 +38,21 @@ from app.interview.parsing import (
 from app.models import (
     AiUsageEvent,
     InterviewAttachment,
+    InterviewCheckpoint,
     InterviewMessage,
     InterviewSession,
     KbChunk,
     MapVersion,
     ProcessMap,
 )
-from app.permissions.access import assert_map_role
+from app.permissions.access import assert_map_role, get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role
 from app.routers.graph import _load_graph
 from app.schemas import (
+    InterviewApplyParamsIn,
     InterviewAttachmentOut,
     InterviewCreateIn,
+    InterviewDrawIn,
     InterviewRevertIn,
     InterviewSpAcceptIn,
     InterviewStateOut,
@@ -50,6 +66,18 @@ logger = logging.getLogger(__name__)
 
 # 파싱 직렬화 — 무거운 파싱이 동시에 몰리지 않게 1개씩 (스펙 §4 백그라운드 직렬화의 단순화)
 _parse_lock = asyncio.Lock()
+
+
+def _locked_by_interview(handler):
+    """변이 핸들러 전체를 인터뷰 id 락으로 직렬화 — 동시 턴/첨부 추출의 facts 통짜 재할당
+    상호 침식과 seq 중복을 차단 (hardening T3). functools.wraps로 시그니처 보존(FastAPI DI)."""
+
+    @functools.wraps(handler)
+    async def wrapper(*args, **kwargs):
+        async with interview_lock(kwargs["interview_id"]):
+            return await handler(*args, **kwargs)
+
+    return wrapper
 
 _ATTACH_NOTICE = {
     "parsed": {
@@ -90,6 +118,9 @@ _EXISTING_GREETING_OPTIONS = {
     "ko": ["기존 맵을 보완할래요", "처음부터 다시 정리할래요"],
     "en": ["Refine the current map", "Start over from scratch"],
 }
+
+# 패스트트랙 진입 보기 — FE lib/interview.ts FAST_TRACK_START_LABELS와 글자 단위 동일 (design 2026-07-29)
+_FAST_TRACK_OPTION = {"ko": "문서로 바로 그리기", "en": "Draw from a document"}
 
 _EXISTING_NOTE_WORD = {
     "ko": "\n\n기존에 그려진 노드 {n}개도 파악해 두었습니다 — 문서 기준으로 이어서 다듬을 수 있어요.",
@@ -182,8 +213,9 @@ def _existing_summary(seed: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
-def _require_ai_enabled() -> None:
-    if not settings.ai_enabled:
+async def _require_ai_enabled(session: AsyncSession) -> None:
+    """env AI_ENABLED + 관리자 런타임 차단 플래그(app_settings) 통합 게이트 (2026-07-30)."""
+    if not await is_ai_access_enabled(session):
         raise HTTPException(status_code=503, detail="AI is disabled")
 
 
@@ -210,6 +242,7 @@ async def _state_out(session: AsyncSession, interview: InterviewSession) -> Inte
         current_stage=interview.current_stage,
         lang=interview.lang,
         mode=interview.mode,
+        facts=interview.facts or {},
         working_graph=interview.working_graph,
         messages=sorted(interview.messages, key=lambda m: m.seq),
         checkpoints=sorted(interview.checkpoints, key=lambda c: c.id),
@@ -223,6 +256,22 @@ def _graph_summary(graph) -> str:
     """작업 컨텍스트용 현재 저장 그래프 요약 — 제목 나열(프롬프트 예산 절약)."""
     titles = [f"{n.node_type}:{n.title}" for n in graph.nodes]
     return ", ".join(titles) if titles else ""
+
+
+# 인터뷰어에 싣는 부서 후보 상한 — 공개(글로벌) 맵은 전 부서가 후보라 프롬프트 예산 가드
+_DEPT_CATALOG_MAX = 80
+
+
+async def _dept_catalog(session: AsyncSession, interview: InterviewSession) -> str:
+    """노드 department 후보 목록 — 에디터 부서 피커(eligible-assignees)와 동일 모수.
+
+    인터뷰어가 목록 밖 부서명을 지어내지 않도록 프롬프트에 주입 (실사용 피드백 2026-07-28).
+    """
+    if interview.mode != "normal":
+        return ""
+    eligible = await get_eligible_users(session, interview.map_id)
+    departments = sorted({e.department for e in eligible if e.department})
+    return "\n".join(f"- {d}" for d in departments[:_DEPT_CATALOG_MAX])
 
 
 # 지식기반 검색 주입 (design 2026-07-23 §7 P2) — 실패는 턴을 죽이지 않는다(그레이스풀 디그레이드)
@@ -248,6 +297,20 @@ async def _kb_reference_block(
     except embed_client.EmbedError as exc:
         logger.warning("kb search failed — turn continues without references: %s", exc)
         return "", True
+    # map 출처는 세션 사용자의 viewer 가시성 재검증 — 전 게시 맵이 인덱싱되므로 필터 없이는
+    # 비공개 맵 내용이 타 사용자 프롬프트로 유출된다(RBAC 우회, hardening T1). top-k라 검사 소수.
+    visible: dict[int, bool] = {}
+    checked: list[retrieval.KbHit] = []
+    for hit in hits:
+        if hit.source_type == "map":
+            hit_map_id = hit.meta.get("map_id") or hit.source_id
+            if hit_map_id not in visible:
+                role = await get_effective_role(session, interview.login_id, hit_map_id)
+                visible[hit_map_id] = role is not None
+            if not visible[hit_map_id]:
+                continue
+        checked.append(hit)
+    hits = checked
     lines: list[str] = []
     total = 0
     for hit in hits:
@@ -271,9 +334,7 @@ def _has_kb_degrade_notice(interview: InterviewSession) -> bool:
     return any(m.kind == "notice" and m.content in texts for m in interview.messages)
 
 
-# 유사 SP 제안 (design §7 P2) — activities/review 스테이지에서 기회주의적으로 1회씩
-_SP_STAGES = ("activities", "review")
-
+# 유사 SP 제안 (design §7 P2) — 수락(choice) 턴 직후, 맵당 1회
 _SP_SUGGEST_TEXT = {
     "ko": "'{map_name}' 게시 맵과 유사한 구간(활동 {n}개)을 발견했습니다 — 캔버스의 제안 카드에서 서브프로세스 링크로 대체할 수 있어요.",
     "en": "Found a segment ({n} steps) similar to the published map '{map_name}' — you can replace it with a subprocess link from the card on the canvas.",
@@ -312,12 +373,15 @@ async def _maybe_sp_suggestion(
     text = _SP_SUGGEST_TEXT.get(interview.lang, _SP_SUGGEST_TEXT["ko"]).format(
         map_name=suggestion["map_name"], n=len(suggestion["node_keys"])
     )
-    session.add(InterviewMessage(
+    msg = InterviewMessage(
         session_id=interview.id,
         seq=max((m.seq for m in interview.messages), default=0) + 1,
         role="consultant", kind="sp_suggestion", content=text,
         payload=suggestion, stage=interview.current_stage,
-    ))
+    )
+    session.add(msg)
+    # 같은 커밋에서 뒤이어 seq를 계산하는 쪽(KB 노티스)이 이 메시지를 보게 — 동일 seq 충돌 방지
+    interview.messages.append(msg)
 
 
 async def _context_text(interview: InterviewSession) -> str:
@@ -340,7 +404,7 @@ async def create_or_resume_interview(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InterviewStateOut:
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     existing = (
         await session.scalars(
             select(InterviewSession).where(
@@ -382,7 +446,10 @@ async def create_or_resume_interview(
     await session.flush()  # id 채번 — 메시지 FK
     greeting_src = _GREETING_WORD if interview_mode == "word" else _GREETING
     content = greeting_src.get(payload.lang, greeting_src["ko"])
-    greeting_payload: dict | None = None
+    fast_track = _FAST_TRACK_OPTION.get(payload.lang, _FAST_TRACK_OPTION["ko"])
+    greeting_payload: dict | None = (
+        {"options": [fast_track]} if interview_mode == "normal" else None
+    )
     if has_existing and seed is not None and interview_mode == "normal":
         # 기존 데이터 인지형 오프닝 — 파악한 내용 요약 + 보완/재정리 선택지
         template = _EXISTING_GREETING.get(payload.lang, _EXISTING_GREETING["ko"])
@@ -391,7 +458,10 @@ async def create_or_resume_interview(
             summary=_existing_summary(seed, payload.lang),
         )
         greeting_payload = {
-            "options": _EXISTING_GREETING_OPTIONS.get(payload.lang, _EXISTING_GREETING_OPTIONS["ko"])
+            "options": [
+                *_EXISTING_GREETING_OPTIONS.get(payload.lang, _EXISTING_GREETING_OPTIONS["ko"]),
+                fast_track,
+            ]
         }
     elif has_existing and seed is not None and interview_mode == "word":
         note = _EXISTING_NOTE_WORD.get(payload.lang, _EXISTING_NOTE_WORD["ko"])
@@ -446,13 +516,14 @@ async def get_interview(
 
 
 @router.post("/interviews/{interview_id}/turns", response_model=InterviewStateOut)
+@_locked_by_interview
 async def post_turn(
     interview_id: int,
     payload: InterviewTurnIn,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InterviewStateOut:
-    _require_ai_enabled()
+    await _require_ai_enabled(session)
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
@@ -461,9 +532,13 @@ async def post_turn(
 
     # rollback 후 만료 대비 스칼라 선캡처
     map_id, version_id = interview.map_id, interview.version_id
-    pre_stage = interview.current_stage  # SP 제안 스테이지 판정 — 턴 중 전이 전 기준도 인정
 
-    current = await _load_graph(session, interview.version_id)
+    # "[현재 작업본 요약]"은 실제 작업본이어야 한다 — 수락으로 진화한 working_graph 대신
+    # 저장본(draft)을 주면 인터뷰어가 세션 내내 옛 맵을 보고 이미 그린 활동을 재질문 (hardening T4).
+    if interview.working_graph and interview.working_graph.get("nodes"):
+        graph_summary = format_graph_compact(interview.working_graph)
+    else:
+        graph_summary = _graph_summary(await _load_graph(session, interview.version_id))
     found_map = await session.get(ProcessMap, interview.map_id)
     kb_block, kb_failed = await _kb_reference_block(
         session, interview, found_map.name if found_map else "", payload.content or ""
@@ -472,42 +547,147 @@ async def post_turn(
     doc_sections: list[dict] | None = None
     if interview.mode == "word":
         doc_sections = list(found_map.doc_sections) if found_map else []
+    usage: list[tuple[int | None, int | None]] = []
+    usage_token = usage_log.set(usage)
     try:
-        await run_turn(
-            session, interview, payload, _graph_summary(current), context_text,
-            doc_sections=doc_sections,
+        result = await run_turn(
+            session, interview, payload, graph_summary, context_text,
+            doc_sections=doc_sections, dept_catalog=await _dept_catalog(session, interview),
         )
     except TurnError as exc:
         await session.rollback()
         # 실패도 계량 — 별도 커밋, 실패해도 502 전파 유지
+        prompt_total, completion_total = sum_usage(usage)
         try:
             session.add(AiUsageEvent(
                 login_id=user, map_id=map_id, version_id=version_id,
                 model="", kind=None, ok=False,
+                prompt_tokens=prompt_total, completion_tokens=completion_total,
             ))
             await session.commit()
         except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답을 바꾸지 않는다
             logger.warning("interview usage event insert failed (failure path)")
             await session.rollback()
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        usage_log.reset(usage_token)
 
-    # 유사 SP 제안 — 구조 결정/검토 스테이지의 일반 모드 턴에서만, 맵당 1회 (design §7 P2)
-    if interview.mode == "normal" and (
-        pre_stage in _SP_STAGES or interview.current_stage in _SP_STAGES
-    ):
-        await _maybe_sp_suggestion(session, interview, user)
-    # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
-    if kb_failed and not _has_kb_degrade_notice(interview):
-        session.add(InterviewMessage(
-            session_id=interview.id,
-            seq=max((m.seq for m in interview.messages), default=0) + 1,
-            role="consultant", kind="notice",
-            content=_KB_DEGRADE_NOTICE.get(interview.lang, _KB_DEGRADE_NOTICE["ko"]),
-            stage=interview.current_stage,
-        ))
+    prompt_total, completion_total = sum_usage(usage)
     session.add(AiUsageEvent(
         login_id=user, map_id=map_id, version_id=version_id,
         model="", kind="interview", ok=True,
+        prompt_tokens=prompt_total, completion_tokens=completion_total,
+    ))
+    interview.updated_at = now_kst()
+    # 턴 확정 — 이후 부가 로직(SP 제안/KB 노티스) 예외가 성공한 턴을 되돌리지 못한다 (hardening T8)
+    await session.commit()
+
+    try:
+        # 유사 SP 제안 — 작업본이 갱신되는 유일 시점(수락 턴)에서만 (speed redesign 이동)
+        if interview.mode == "normal" and payload.type == "choice":
+            await _maybe_sp_suggestion(session, interview, user)
+        # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
+        if kb_failed and not _has_kb_degrade_notice(interview):
+            notice = InterviewMessage(
+                session_id=interview.id,
+                seq=max((m.seq for m in interview.messages), default=0) + 1,
+                role="consultant", kind="notice",
+                content=_KB_DEGRADE_NOTICE.get(interview.lang, _KB_DEGRADE_NOTICE["ko"]),
+                stage=interview.current_stage,
+            )
+            session.add(notice)
+            interview.messages.append(notice)
+        await session.commit()
+    except Exception:  # noqa: BLE001 -- 부가 로직 실패는 로그만 — AI 비용·답변 소실 방지
+        logger.exception("post-turn extras failed — turn already committed")
+        await session.rollback()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    state = await _state_out(session, loaded)
+    state.draw_due = result.draw_due  # 그리기 신호 — 프론트가 draw 이벤트로 이어받는다
+    return state
+
+
+# draw 이벤트 안내 문구 — 인터뷰어 호출 없이 고정 (speed redesign §4)
+_DRAW_CHOICES_TEXT = {
+    "ko": "안을 준비했습니다 — 캔버스에서 골라주세요.",
+    "en": "Proposals are ready — pick one on the canvas.",
+}
+_DRAW_EMPTY_TEXT = {
+    "ko": "현재 맵과 사실상 같은 안뿐이라 새로 제시할 게 없습니다 — 대화를 더 진행한 뒤 다시 그려보세요.",
+    "en": "All drafts matched the current map — continue the interview and draw again later.",
+}
+
+
+@router.post("/interviews/{interview_id}/draw", response_model=InterviewStateOut)
+@_locked_by_interview
+async def draw_interview_proposals(
+    interview_id: int,
+    payload: InterviewDrawIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """그리기 이벤트(동기) — 제안 생성만 담당, 작업본은 수락(choice 턴) 시점에만 변경 (speed redesign §4)."""
+    await _require_ai_enabled(session)
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    map_id, version_id = interview.map_id, interview.version_id
+
+    found_map = await session.get(ProcessMap, interview.map_id)
+    kb_block, _ = await _kb_reference_block(
+        session, interview, found_map.name if found_map else "", ""
+    )
+    context_text = await _context_text(interview) + kb_block
+    doc_sections: list[dict] | None = None
+    if interview.mode == "word":
+        doc_sections = list(found_map.doc_sections) if found_map else []
+    usage: list[tuple[int | None, int | None]] = []
+    usage_token = usage_log.set(usage)
+    try:
+        choices, demoted = await generate_proposals(
+            interview, context_text, doc_sections=doc_sections, variants=payload.variants,
+        )
+    except TurnError as exc:
+        await session.rollback()
+        prompt_total, completion_total = sum_usage(usage)
+        try:
+            session.add(AiUsageEvent(
+                login_id=user, map_id=map_id, version_id=version_id,
+                model="", kind=None, ok=False,
+                prompt_tokens=prompt_total, completion_tokens=completion_total,
+            ))
+            await session.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답을 바꾸지 않는다
+            logger.warning("interview usage event insert failed (draw failure path)")
+            await session.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        usage_log.reset(usage_token)
+
+    seq = max((m.seq for m in interview.messages), default=0) + 1
+    if choices is None:
+        session.add(InterviewMessage(
+            session_id=interview.id, seq=seq, role="consultant", kind="notice",
+            content=_DRAW_EMPTY_TEXT.get(interview.lang, _DRAW_EMPTY_TEXT["ko"]),
+            stage=interview.current_stage,
+        ))
+    else:
+        interview.pending_choices = choices
+        session.add(InterviewMessage(
+            session_id=interview.id, seq=seq, role="consultant", kind="choices",
+            content=_DRAW_CHOICES_TEXT.get(interview.lang, _DRAW_CHOICES_TEXT["ko"]),
+            payload=choices, stage=interview.current_stage,
+        ))
+    if demoted:
+        session.add(InterviewMessage(
+            session_id=interview.id, seq=seq + 1, role="consultant", kind="notice",
+            content=demote_notice_text(interview.lang, demoted), stage=interview.current_stage,
+        ))
+    prompt_total, completion_total = sum_usage(usage)
+    session.add(AiUsageEvent(
+        login_id=user, map_id=map_id, version_id=version_id,
+        model="", kind="interview", ok=True,
+        prompt_tokens=prompt_total, completion_tokens=completion_total,
     ))
     interview.updated_at = now_kst()
     await session.commit()
@@ -515,7 +695,182 @@ async def post_turn(
     return await _state_out(session, loaded)
 
 
+# params 표 반영 — AI 0콜 결정적 적용 (speed redesign 후속, 실사용 피드백 2026-07-27)
+_PARAM_FIELDS = ("duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte")
+_PARAM_UNKNOWN_TOKENS = {"미정", "TBD", "tbd", "-"}
+_PARAMS_APPLIED_NOTICE = {
+    "ko": "확정된 파라미터를 활동 {n}개에 반영했습니다.",
+    "en": "Applied the confirmed parameters to {n} activities.",
+}
+
+
+@router.post("/interviews/{interview_id}/apply-params", response_model=InterviewStateOut)
+@_locked_by_interview
+async def apply_interview_params(
+    interview_id: int,
+    payload: InterviewApplyParamsIn | None = None,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """수집된 params_table을 작업본 attributes에 결정적으로 반영 — 제목 매칭, AI 무관(즉시).
+
+    body에 수동 편집 표가 오면 먼저 facts에 딥머지 — 채팅 없이 조정한 값도 인터뷰어/드래프터
+    컨텍스트와 아웃라인에 남는다 (실사용 피드백 2026-07-30). 빈 값은 facts만 비우고 맵은 유지.
+    """
+    await _require_ai_enabled(session)
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    sanitized: dict[str, dict[str, str]] = {}
+    if payload is not None and payload.params_table:
+        sanitized = {
+            str(title).strip(): {
+                field: str(value).strip()
+                for field, value in values.items()
+                if field in _PARAM_FIELDS
+            }
+            for title, values in payload.params_table.items()
+            if isinstance(values, dict) and str(title).strip()
+        }
+        sanitized = {title: values for title, values in sanitized.items() if values}
+        if sanitized:
+            merge_params_table(interview, sanitized)
+    table = (interview.facts.get("params") or {}).get("params_table") or {}
+    if not isinstance(table, dict) or not table:
+        raise HTTPException(status_code=400, detail="no collected parameters")
+
+    graph = interview.working_graph or {"nodes": [], "edges": [], "groups": []}
+    by_title = {str(k).strip(): v for k, v in table.items() if isinstance(v, dict)}
+    applied = 0
+    nodes = []
+    for raw in graph.get("nodes", []):
+        node = dict(raw)
+        node_title = (node.get("title") or "").strip()
+        values = by_title.get(node_title)
+        manual_values = sanitized.get(node_title, {})
+        if values:
+            # subprocess는 annual_count·fte만 직접 편집 — 나머지 4필드는 링크 맵 지정값 상속.
+            # UI·CSV·AI 변환 3표면 강제 불변식의 4번째 표면 봉합 (hardening T9)
+            editable = (
+                ("annual_count", "fte")
+                if node.get("node_type") == "subprocess" else _PARAM_FIELDS
+            )
+            attributes = dict(node.get("attributes") or {})
+            row_krw = str(values.get("cost_krw") or "").strip()
+            has_krw = bool(row_krw) and row_krw not in _PARAM_UNKNOWN_TOKENS
+            touched = False
+            for field in _PARAM_FIELDS:
+                if field not in editable:
+                    continue
+                if field == "cost_usd" and has_krw:
+                    continue  # 통화 배타 — 행에 둘 다 있으면 krw 우선(두 통화 공존은 저장 시 422)
+                value = values.get(field)
+                text = str(value).strip() if value is not None else ""
+                if text and text not in _PARAM_UNKNOWN_TOKENS:
+                    if field == "cost_krw":
+                        attributes.pop("cost_usd", None)
+                    if field == "cost_usd":
+                        attributes.pop("cost_krw", None)
+                    attributes[field] = text
+                    touched = True
+                elif field in manual_values and not text and field in attributes:
+                    # 수동 표에서 명시적으로 비운 필드 — 맵 속성도 제거(행 일괄 삭제)
+                    attributes.pop(field)
+                    touched = True
+            if touched:
+                node["attributes"] = attributes
+                applied += 1
+        nodes.append(node)
+    if applied == 0:
+        raise HTTPException(
+            status_code=409, detail="no matching activities for the collected parameters"
+        )
+    interview.working_graph = {**graph, "nodes": nodes}
+    # 표 반영 전 draw된 카드가 살아있으면 스테일 수락이 이 변이를 통째로 되돌린다 (final review 2026-07-30)
+    interview.pending_choices = None
+    session.add(InterviewMessage(
+        session_id=interview.id,
+        seq=max((m.seq for m in interview.messages), default=0) + 1,
+        role="consultant", kind="notice",
+        content=_PARAMS_APPLIED_NOTICE.get(interview.lang, _PARAMS_APPLIED_NOTICE["ko"]).format(n=applied),
+        stage=interview.current_stage,
+    ))
+    interview.updated_at = now_kst()
+    await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    return await _state_out(session, loaded)
+
+
+_FAST_FORWARD_USER_TEXT = {"ko": "이대로 그려주세요.", "en": "Draw it as proposed."}
+_FAST_FORWARD_NOTICE = {
+    "ko": "문서 기준으로 바로 그립니다 — 남은 단계는 '미정'으로 채우고 검토로 건너뜁니다.",
+    "en": "Drawing straight from the document — remaining stages are marked TBD, jumping to review.",
+}
+
+
+@router.post("/interviews/{interview_id}/fast-forward", response_model=InterviewStateOut)
+@_locked_by_interview
+async def fast_forward_interview(
+    interview_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """패스트트랙 확정 — 남은 스테이지를 skip 시맨틱('미정' 채움+체크포인트)으로 일괄 전진해
+    review로 점프, draw_due='multi' 신호 반환 (AI 0콜 — 전진을 프롬프트에 맡기지 않는다,
+    design 2026-07-29 §3). 계측 이벤트 없음(apply-params와 동일한 0콜 관례).
+    """
+    await _require_ai_enabled(session)
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    if interview.mode == "word":
+        raise HTTPException(status_code=400, detail="fast-forward is not available for word maps")
+    if interview.current_stage == "review":
+        raise HTTPException(status_code=400, detail="already at review")
+
+    unknown = "TBD" if interview.lang == "en" else "미정"
+    seq = max((m.seq for m in interview.messages), default=0) + 1
+    message = InterviewMessage(
+        session_id=interview.id, seq=seq, role="user", kind="fast_forward",
+        content=_FAST_FORWARD_USER_TEXT.get(interview.lang, _FAST_FORWARD_USER_TEXT["ko"]),
+        stage=interview.current_stage,
+    )
+    session.add(message)
+    interview.messages.append(message)
+    while interview.current_stage != "review":
+        stage = get_stage(interview.current_stage, interview.mode)
+        stage_facts = dict(interview.facts.get(interview.current_stage) or {})
+        for name in stage.required_facts:
+            if not stage_facts.get(name):
+                stage_facts[name] = unknown
+        interview.facts = {**interview.facts, interview.current_stage: stage_facts}
+        session.add(InterviewCheckpoint(
+            session_id=interview.id, stage=interview.current_stage,
+            facts=interview.facts, working_graph=interview.working_graph,
+            message_seq=seq,
+        ))
+        next_key = next_stage_key(interview.current_stage, interview.mode)
+        if next_key is None:
+            break
+        interview.current_stage = next_key
+    interview.pending_choices = None
+    notice = InterviewMessage(
+        session_id=interview.id, seq=seq + 1, role="consultant", kind="notice",
+        content=_FAST_FORWARD_NOTICE.get(interview.lang, _FAST_FORWARD_NOTICE["ko"]),
+        stage=interview.current_stage,
+    )
+    session.add(notice)
+    interview.messages.append(notice)
+    interview.updated_at = now_kst()
+    await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    state = await _state_out(session, loaded)
+    state.draw_due = "multi"
+    return state
+
+
 @router.post("/interviews/{interview_id}/attachments", response_model=InterviewAttachmentOut)
+@_locked_by_interview
 async def upload_attachment(
     interview_id: int,
     file: UploadFile,
@@ -527,6 +882,9 @@ async def upload_attachment(
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=422, detail=f"unsupported file type: {ext or filename}")
+    if len(filename) > 300:
+        # 컬럼 VARCHAR(300) — sqlite는 조용히 통과하지만 Postgres는 500. 확장자 보존 절단 (hardening T9)
+        filename = filename[: 300 - len(ext)] + ext
     data = await file.read()
     if len(data) > MAX_ATTACHMENT_BYTES:
         raise HTTPException(status_code=422, detail="file too large (max 20MB)")
@@ -557,10 +915,15 @@ async def upload_attachment(
     # 세션 스코프 지식기반 인덱싱 — fire-and-forget, 파싱 성공분만 (design 2026-07-23 §7)
     if row.status == "parsed" and embed_client.is_embed_enabled():
         indexing.spawn(indexing.index_attachment(row.id))
+    # 첨부 시점 정보 추출 — 백그라운드 1콜로 facts를 최대한 미리 수집 (2026-07-28)
+    # 관리자 런타임 차단(app_settings)도 존중 — env만 보면 점검 중에도 GPU로 콜이 나간다
+    if row.status == "parsed" and await is_ai_access_enabled(session):
+        indexing.spawn(extract_attachment_facts(interview.id, row.id))
     return InterviewAttachmentOut.model_validate(row)
 
 
 @router.delete("/interviews/{interview_id}/attachments/{attachment_id}", status_code=204)
+@_locked_by_interview
 async def delete_attachment(
     interview_id: int,
     attachment_id: int,
@@ -582,6 +945,7 @@ async def delete_attachment(
 
 
 @router.post("/interviews/{interview_id}/sp-accept", response_model=InterviewStateOut)
+@_locked_by_interview
 async def accept_sp_suggestion(
     interview_id: int,
     payload: InterviewSpAcceptIn,
@@ -629,6 +993,7 @@ async def accept_sp_suggestion(
         seen_pairs.add(pair)
         edges.append({**edge, "source": source, "target": target})
     interview.working_graph = {**graph, "nodes": [*kept, sp_node], "edges": edges}
+    interview.pending_choices = None  # 치환 전 카드의 스테일 수락이 SP 링크를 되돌리는 것 방지
     msg.superseded = True  # 카드 소멸 — 대화 이력에서도 접힌다
     session.add(InterviewMessage(
         session_id=interview.id,
@@ -645,6 +1010,7 @@ async def accept_sp_suggestion(
 
 
 @router.post("/interviews/{interview_id}/revert", response_model=InterviewStateOut)
+@_locked_by_interview
 async def revert_to_checkpoint(
     interview_id: int,
     payload: InterviewRevertIn,
@@ -679,6 +1045,7 @@ async def revert_to_checkpoint(
 
 
 @router.post("/interviews/{interview_id}/complete", response_model=InterviewStateOut)
+@_locked_by_interview
 async def complete_interview(
     interview_id: int,
     user: str = Depends(get_current_user),
@@ -695,6 +1062,7 @@ async def complete_interview(
 
 
 @router.delete("/interviews/{interview_id}", status_code=204)
+@_locked_by_interview
 async def abandon_interview(
     interview_id: int,
     user: str = Depends(get_current_user),

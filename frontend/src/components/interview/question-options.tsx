@@ -42,9 +42,14 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
     } else if (/^[1-9]$/.test(e.key)) {
       const idx = Number(e.key) - 1;
       if (idx < options.length) {
+        // 숫자는 하이라이트만, Enter로 확정 — "3일 걸립니다"를 치려던 3이 3번 보기를
+        // 즉시 제출(낙관 렌더라 회수 불가)하던 오제출 방지 (hardening T14)
         e.preventDefault();
-        onSelect(options[idx]);
+        setSelected(idx);
       }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onFreeType?.(); // 픽커에서 컴포저로 — 보기는 그대로 남는다 (P2 #13)
     } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       onFreeType?.();
     }
@@ -56,14 +61,16 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
       tabIndex={0}
       role="listbox"
       aria-label="Answer options"
+      aria-activedescendant={`iv-opt-${selected}`}
       onKeyDown={handleKeyDown}
       className="rounded-md border border-accent-tint-border bg-surface shadow-md outline-none focus:border-accent"
       data-id="iv-question-options"
     >
-      <ul className="py-1">
+      <ul role="presentation" className="py-1">
         {options.map((option, i) => (
-          <li key={option}>
+          <li role="presentation" key={option}>
             <button
+              id={`iv-opt-${i}`}
               role="option"
               aria-selected={i === selected}
               className={
@@ -85,8 +92,9 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
             </button>
           </li>
         ))}
-        <li>
+        <li role="presentation">
           <button
+            id={`iv-opt-${options.length}`}
             role="option"
             aria-selected={selected === options.length}
             className={
@@ -115,7 +123,7 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
         </li>
       </ul>
       <div className="border-t border-hairline px-3 py-1 text-fine text-ink-muted">
-        ↑↓ move · Enter select · 1–{Math.min(options.length, 9)} quick pick
+        ↑↓ / 1–{Math.min(options.length, 9)} move · Enter select
       </div>
     </div>
   );

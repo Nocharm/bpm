@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.app_settings import (
+    AI_ACCESS_DISABLED_KEY,
     AI_CHAT_MAX_MESSAGES_KEY,
     AI_CHAT_MAX_SESSIONS_KEY,
     AI_CHAT_RETENTION_DAYS_KEY,
@@ -15,6 +16,7 @@ from app.app_settings import (
     get_ai_chat_max_sessions,
     get_ai_chat_retention_days,
     get_ai_chat_tips,
+    get_ai_access_disabled,
     set_app_setting,
 )
 from app.auth import get_current_user, require_sysadmin
@@ -35,6 +37,7 @@ async def _to_out(session: AsyncSession) -> AppSettingsOut:
         AI_CHAT_MAX_SESSIONS_KEY,
         AI_CHAT_MAX_MESSAGES_KEY,
         AI_CHAT_RETENTION_DAYS_KEY,
+        AI_ACCESS_DISABLED_KEY,
     ]
     rows = (
         await session.scalars(select(AppSetting).where(AppSetting.key.in_(managed)))
@@ -45,6 +48,7 @@ async def _to_out(session: AsyncSession) -> AppSettingsOut:
         ai_chat_max_sessions_per_map=await get_ai_chat_max_sessions(session),
         ai_chat_max_messages_per_session=await get_ai_chat_max_messages(session),
         ai_chat_retention_days=await get_ai_chat_retention_days(session),
+        ai_access_disabled=await get_ai_access_disabled(session),
         updated_by=latest.updated_by if latest else None,
         updated_at=latest.updated_at if latest else None,
     )
@@ -73,5 +77,10 @@ async def put_app_settings(
     ):
         if value is not None:
             await set_app_setting(session, key, str(value), user)
+    if payload.ai_access_disabled is not None:
+        await set_app_setting(
+            session, AI_ACCESS_DISABLED_KEY,
+            "true" if payload.ai_access_disabled else "false", user,
+        )
     await session.commit()
     return await _to_out(session)

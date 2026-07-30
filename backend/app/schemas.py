@@ -1173,6 +1173,8 @@ class AppSettingsOut(BaseModel):
     ai_chat_max_sessions_per_map: int
     ai_chat_max_messages_per_session: int
     ai_chat_retention_days: int
+    # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
+    ai_access_disabled: bool = False
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -1184,6 +1186,7 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_sessions_per_map: int | None = Field(default=None, ge=1, le=200)
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
+    ai_access_disabled: bool | None = None
 
 
 class AiTipsOut(BaseModel):
@@ -1296,7 +1299,8 @@ class AiNodeAttributes(BaseModel):
 
 class AiNode(BaseModel):
     key: str = Field(min_length=1, max_length=50)
-    title: str = Field(min_length=1, max_length=200)
+    # 빈 제목 허용 — 인터뷰 델타 계약의 키 에코 {"key": ...}용 (orchestrator._expand_delta가 복원)
+    title: str = Field(default="", max_length=200)
     node_type: str = "process"
     description: str = ""
     # 선택 메타 — 미제공이면 None (apply가 빈값/기존값으로 처리, D1)
@@ -1497,6 +1501,21 @@ class InterviewAttachmentOut(BaseModel):
     created_at: datetime
 
 
+class InterviewDrawIn(BaseModel):
+    """그리기 이벤트 입력 — multi(구조 스테이지 완료 복수안) / single(수동·redraw·최종안)."""
+
+    variants: Literal["multi", "single"] = "single"
+
+
+class InterviewApplyParamsIn(BaseModel):
+    """params 표 수동 편집 반영 — 활동 제목 → {필드: 값}. 없으면 수집분(facts) 그대로 적용.
+
+    유효 필드 필터·facts 딥머지는 라우터가 수행 — 수동 변경도 AI 컨텍스트(facts)에 남는다 (2026-07-30).
+    """
+
+    params_table: dict[str, dict[str, str]] | None = None
+
+
 class InterviewSpAcceptIn(BaseModel):
     """유사 SP 제안 수락 — 제안 메시지 id로 대상 구간·맵을 특정 (design 2026-07-23 §7 P2)."""
 
@@ -1526,6 +1545,8 @@ class InterviewStateOut(BaseModel):
     current_stage: str
     lang: str
     mode: str = "normal"
+    # 확정 facts — 프론트 아웃라인 패널(수집된 정보) 렌더용 (speed redesign §6)
+    facts: dict = Field(default_factory=dict)
     working_graph: dict | None = None
     messages: list[InterviewMessageOut] = Field(default_factory=list)
     checkpoints: list[InterviewCheckpointOut] = Field(default_factory=list)
@@ -1533,3 +1554,5 @@ class InterviewStateOut(BaseModel):
     # 충돌 경고 판정용 — 현재 draft updated_at vs 세션 시작 시점
     version_updated_at: datetime | None = None
     base_graph_updated_at: datetime | None = None
+    # 턴 응답 전용 그리기 신호(비영속) — "multi" | "single" | None (speed redesign §4)
+    draw_due: str | None = None

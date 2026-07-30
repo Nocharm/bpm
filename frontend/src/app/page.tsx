@@ -13,6 +13,7 @@ import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps } from "@/lib/o
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
+import { WORD_FEATURES_ENABLED } from "@/lib/features";
 import { splitMapsByMode } from "@/lib/word-map-home";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -703,16 +704,18 @@ export default function MapListPage() {
                     onSelect={setSelectedId}
                     renderCard={renderCard}
                   />
-                  <WordDocsSection
-                    maps={wordMaps}
-                    open={wordOpen}
-                    onToggle={() => setWordOpen((v) => !v)}
-                    selectedId={effectiveSelected}
-                    onSelect={setSelectedId}
-                    onCreate={() => setWordModalOpen(true)}
-                    onReimport={(m) => setReimportTarget(m)}
-                    onPromote={(m) => setPromoteTarget({ id: m.id, name: m.name })}
-                  />
+                  {WORD_FEATURES_ENABLED ? (
+                    <WordDocsSection
+                      maps={wordMaps}
+                      open={wordOpen}
+                      onToggle={() => setWordOpen((v) => !v)}
+                      selectedId={effectiveSelected}
+                      onSelect={setSelectedId}
+                      onCreate={() => setWordModalOpen(true)}
+                      onReimport={(m) => setReimportTarget(m)}
+                      onPromote={(m) => setPromoteTarget({ id: m.id, name: m.name })}
+                    />
+                  ) : null}
                   <OrgAccordion
                     roots={orgTree.roots}
                     unassigned={orgTree.unassigned}

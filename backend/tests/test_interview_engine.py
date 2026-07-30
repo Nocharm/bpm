@@ -6,14 +6,22 @@ from app.interview import engine
 
 
 def test_stage_order_fixed() -> None:
+    # params는 2026-07-28부터 시퀀스에서 제외 — 수시 수집 + 표 확정으로 대체
     assert [s.key for s in engine.STAGES] == [
-        "scope", "io", "activities", "branches", "roles", "params", "review",
+        "scope", "io", "activities", "branches", "roles", "review",
     ]
 
 
 def test_next_stage_key() -> None:
     assert engine.next_stage_key("scope") == "io"
+    assert engine.next_stage_key("roles") == "review"
     assert engine.next_stage_key("review") is None
+
+
+def test_legacy_params_stage_exits_to_review() -> None:
+    """진행 중이던 레거시 params 세션 — get_stage 조회 가능, 다음 단계는 review."""
+    assert engine.get_stage("params").key == "params"
+    assert engine.next_stage_key("params") == "review"
 
 
 def test_get_stage_unknown_raises() -> None:
@@ -66,8 +74,8 @@ def test_word_stage_completion_and_first_incomplete() -> None:
 
 
 def test_normal_mode_unchanged() -> None:
-    """mode 기본값 — 기존 7스테이지 동작 그대로."""
+    """mode 기본값 — 일반 6스테이지(params 제외, 2026-07-28) 동작."""
     from app.interview.engine import STAGES, next_stage_key
 
-    assert len(STAGES) == 7
+    assert len(STAGES) == 6
     assert next_stage_key("scope") == "io"

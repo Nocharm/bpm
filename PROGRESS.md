@@ -3,6 +3,154 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 브랜치 최종 리뷰 픽스 배치 (worktree-ai-consultant)
+3방향 병렬 리뷰(백엔드 코어·프론트 표면·최근 픽스 회귀) 적발분 중 확정 항목 일괄 수정:
+- **[블로커] `InterviewMessage.kind` VARCHAR(12)→(20)**: `sp_suggestion`(13자)이 운영 Postgres에서 extras 커밋을 터뜨려 SP 제안이 무음 유실(sqlite는 길이 미강제라 로컬 그린). `db.py` 부트스트랩에 postgres 전용 ALTER 스텝 추가(배포 시 자동), 선언 폭 회귀 테스트 동반.
+- apply-params·sp-accept가 `pending_choices` 미무효화 → 스테일 카드 수락이 방금 반영한 파라미터/SP 치환을 되돌리던 구멍 봉합. 스테일 choice는 502→**409**(TurnError status_code 파라미터화).
+- 첨부 추출 AI 콜이 관리자 런타임 차단(app_settings)을 우회 → `is_ai_access_enabled` 게이트.
+- FE: fastTrack awaiting이 review 도달 후에도 "이대로 그리기" 클릭을 fast-forward로 인터셉트(백엔드 400 루프) → review에선 일반 턴 폴백+상태 해제. Start over가 fastTrack/readingIds/attachError/canRetry 미리셋 → 전체 리셋. 에러 배너 Retry가 재생 불가 실패(fast-forward·params)에도 노출돼 no-op/무관 턴 재전송 → `canRetry` 게이트. params 표 무변경 blur가 dirty 게이트 뚫던 것 수정 + **SP 행 필드 게이팅**(`getEditableParamFields` — CLAUDE.md 3표면 불변식의 4번째 표면). 체크포인트 revert 실패 무음 → 액션 바 에러 표면화. fast-forward 낙관 문구를 서버 기록과 동일화. 고아 주석·스테일 테스트 주석 정리.
+- 백로그(추적만): FE Apply의 잔여 422 입구(end 제목 되돌림 충돌·keep-current 무교정)·에디터 AI 챗 start/end sanitize 대칭·세션 생성 레이스(부분 유니크 인덱스)·모달 뒤 키보드 턴·타이머 정리·같은 스테이지 칩 중복 표현.
+
+## 2026-07-30 — 미리보기 포커스 엣지 하이라이트 (worktree-ai-consultant)
+- 노드 클릭 포커스(선택 링+줌) 시 입출 엣지를 액센트로 강조 — 공용 `highlightConnectedEdges`(lib/interview) 신설, 메인 미리보기(키 기준)·복수 안 창(제목 싱크 기준) 양쪽 적용. 빈 키셋은 원본 배열 반환(메모 재사용).
+
+## 2026-07-30 — 시작/끝 중복 안 결정적 교정 — Apply 422 벽돌·전멸 필터 갇힘 해소 (worktree-ai-consultant)
+- **갇힘 체인**: AI 안이 시작 2개·같은 제목 끝 2개를 포함해도 가드가 없어 수락됨 → Apply가 `validate_process`(시작 정확히 1개·끝 제목 유니크) 422로 거부 → "시작 1개로 고쳐줘" 재드로는 드래프터 에코가 전멸 필터("같은 안뿐")에 걸려 탈출 불가.
+- 수정: `_sanitize_start_end`(orchestrator) — 제안 파이프라인 마지막 단계에서 중복 시작·같은 제목 끝을 **병합**(참조 엣지 생존 노드로 재배선, 병합 유래 자기루프·중복 페어만 정리), 생존자는 이전 작업본 키 우선. 시작 0개는 이전 작업본 시작 복원. 병합 방식이라 고장난 세션에서도 에코 안이 sanitize로 달라져 필터를 통과 → 수락으로 자가 복구 가능. 프롬프트 문구만으론 안 막힌다 계보.
+
+## 2026-07-30 — 수락 시 분기 저장(체크포인트) 누락 픽스 (worktree-ai-consultant)
+- **좌상단 분기 저장이 늘 초기 상태**: 그리기가 턴에서 분리(speed redesign)된 뒤 체크포인트는 스테이지 완료(전이) 시점에만 생성 — 수락은 전이 이후라 **전이 없는 수락(패스트트랙 review·리뷰 중 재드로 수락)의 맵이 어떤 체크포인트에도 저장되지 않았다**. 패스트트랙은 일괄 체크포인트가 전부 시드 상태.
+- 수정: choice 턴에서 전이 체크포인트가 안 생겼으면 현재 스테이지로 수락본 체크포인트 생성('그대로 유지' 수락은 맵 불변이라 제외). 같은 스테이지 복수 체크포인트는 revert가 최신부터 한 겹씩 벗기는 히스토리로 동작(기존 규칙 그대로).
+
+## 2026-07-30 — 제안 diff 태그를 현재맵 대비로 전환 + 구조 중복 안 제거 (worktree-ai-consultant)
+- **동일해 보이는 안 2개 문제**: 내용 포함 서명 도입(설명 병기 통과) 때 안끼리 중복 제거에도 적용된 부작용 — 워딩만 다른 구조 동일안이 둘 다 생존. **안끼리 중복은 구조 서명으로 복원**(현재맵 대비 판정만 내용 포함 유지).
+- **변경/추가 태그 미작동**: 안끼리 차이(distinctiveNodeKeys — 안들이 비슷하면 무표시) 폐기 → **현재 작업본 대비 diff**(`diffFromCurrentKeys`: 새 제목=added·같은 제목 설명/attributes 변경=changed, layoutWorkingGraph changed 지원 추가, 비교화면 diff색 뱃지 재사용). keep-current 안은 정의상 무태그.
+
+## 2026-07-30 — 도형 밀착 선택 링 + 복수 안 싱크 포커스 (worktree-ai-consultant)
+- 선택 링을 래퍼 outline(추정 높이 박스 — 긴 라벨 노드와 어긋남)에서 **실제 도형(`bpm-node-emph`)의 box-shadow 이중 링**으로 — 알약/카드/마름모(회전 포함) 실측 크기를 그대로 감쌈. z-3 상승 유지.
+- 복수 안 미리보기 **싱크 포커스**: 노드 클릭 시 제목 기준으로(안마다 키가 달라서) 모든 창이 동시에 선택 링 + 자기 매칭 노드로 카메라 센터(1.1 줌, centeredForRef 중복 방지). 빈 캔버스 클릭=전 창 해제.
+
+## 2026-07-30 — 온보딩 플래그 맵별 키로 전환 (worktree-ai-consultant)
+- 새 맵 온보딩이 안 뜨던 원인 = `bpm.consultOnboardSeen`이 **전역·영구 키** — 컨설턴트를 한 번이라도 쓰면(Start/Dismiss/AI 메뉴 진입) 이후 모든 새 맵에서 비노출. `bpm.consultOnboardSeen.<mapId>` 맵별 키로 전환 — 새 맵마다 안내, 맵당 1회.
+
+## 2026-07-30 — Draw map 서머리 확인 + 백그라운드 선그리기 (worktree-ai-consultant)
+- 수동 Draw map 클릭 → **수집 정보 마크다운 서머리 확인 다이얼로그**(`draw-confirm-dialog`, MarkdownView 렌더·`buildDrawSummary`) + 동시에 **백그라운드 선그리기(prefetch)** 시작. 승인 시 이미 완성이면 즉시 제안 모달, 미완성이면 기존 그리기 오버레이로 대기(isDone 플래그로 오버레이 플리커 방지). Not now=응답 무시(draw Cancel과 동일 시맨틱). 자동 draw(draw_due·fast-forward·Retry)는 확인 없이 종전 경로. 스모크 시나리오 추가.
+
+## 2026-07-30 — 선택 링 z 상승 + 프리뷰 노드 호버 글로우 (worktree-ai-consultant)
+- 선택 링이 이웃 노드에 가려지던 문제(긴 라벨로 실측 폭>추정 폭 → 겹침, 프리뷰 전 노드 z-2 고정) → `.selected` z-3 상승. 프리뷰·선택지 캔버스에 에디터와 동일한 `bpm-node-emph` 호버 글로우 + 클릭 가능 노드 pointer 커서.
+
+## 2026-07-30 — 포커스 링 실체화 + params 표 전면 개편 3종 (worktree-ai-consultant)
+- **선택 노드 링 실체화**: 에디터 선택 효과는 페이지 오버레이 담당이라 selected 주입만으론 무표시였음 → 프리뷰·선택지 캔버스 공용 CSS(`.selected` outline accent 2px) — 클릭 노드=인스펙터 대상이 시각적으로 연결됨.
+- **params 표 전 활동 나열**: `deriveParamsEditorRows` — 수집분만이 아니라 작업본의 모든 활동(+맵에 없는 수집 고아 항목 뒤에 유지)을 행으로 — 어느 노드든 채팅 없이 값 입력 가능. "노드 많은데 일부만 보임" 해소.
+- **무한 스크롤 + 행 일괄 삭제 + dirty 게이트**: 30행 청크 렌더(하단 근접 시 추가 로드, ParamInput 대량 마운트 방지) · 행 호버 시 Trash 버튼(전 필드 클리어 — **수동 표에서 비운 필드는 서버가 맵 속성도 제거**, AI 경로 빈 값은 종전대로 무시) · Apply to map은 변경 있을 때만 활성.
+
+## 2026-07-30 — 관리자 런타임 AI 차단 토글 (worktree-ai-consultant)
+- **AI access 토글(설정, sysadmin)**: app_settings `ai_access_disabled` — GPU 서버 다운 시 재배포 없이 전 AI 표면 차단. 유효 가용성 = env AI_ENABLED AND NOT 플래그(`is_ai_access_enabled`), 게이트 3면 배선: `/api/me` ai_enabled(전 화면 즉시 반영) · 인터뷰 `_require_ai_enabled`(async화, 5개 엔드포인트) · AI 챗/모델 목록 503. FE 설정 AI 챗 패널 상단 스위치 카드(Power 아이콘·차단 중 경고 문구). KB 임베딩은 별도 서버라 미차단(의도).
+
+## 2026-07-30 — params 표 직접 편집 + 제안 미리보기 노드 포커싱 (worktree-ai-consultant)
+- **params 수동 편집**: Params 모달 셀을 공용 `ParamInput`으로 편집 가능(Cost는 값+₩/$ 행별 토글 — 반대 통화는 ""로 전송해 facts 잔존값 정리). `POST /apply-params` body `params_table` 수용 — 서버가 **facts 딥머지 → 맵 반영** 순서로 처리해 수동 변경도 AI 컨텍스트(인터뷰어/드래프터·아웃라인)에 남고 기존 반영 노티스가 대화에 기록됨. 무효 필드 소거, 빈 값은 facts만 비우고 맵 속성 유지(클리어는 에디터에서).
+- **제안 미리보기 포커싱**: ChoiceCanvas에도 노드 클릭 선택 링+센터 줌(창별 독립, fitView는 그래프 변경 시 1회만 — 클릭 줌 안 되돌림), 빈 캔버스 클릭 해제.
+
+## 2026-07-30 — 프리뷰 노드 클릭 포커싱+줌 (worktree-ai-consultant)
+- 컨설턴트 프리뷰에서 노드 클릭 시 선택 링(ProcessNode selected 재사용 — elementsSelectable=false라 selected 직접 주입) + 카메라 센터/줌(축소 상태면 1.1까지, 확대 상태 유지, 400ms). 빈 캔버스 클릭=포커스·인스펙터 해제. 카메라 게이팅(서명)과 독립이라 텍스트 턴 시점 강탈 없음.
+
+## 2026-07-30 — 전멸 필터 내용 포함 서명(설명 병기 통과) + 온보딩 메뉴 경유 seen (worktree-ai-consultant)
+- **설명만 바뀐 안 통과**: `_graph_signature(include_content=True)` — 전멸 필터 판정에 설명·attributes 포함. "설명 한/영 병기" 요청이 구조 동일이라 "같은 맵" 노티스로 거부되던 문제 해소. 에코 노드는 델타 복원이 이전 내용을 그대로 살리므로 진짜 무변화 안은 여전히 필터됨(노이즈 재발 없음). FE 카메라 게이팅은 구조 서명 유지(설명 변경 시 시점 안 뺏음).
+- **온보딩 seen 보강(6d0e84d)**: AI 메뉴 경유 컨설턴트 진입도 seen 처리 — 말풍선 재노출 틈 봉합.
+
+## 2026-07-30 — 수락=구조 확정 스탬프(재확인·재드로 루프 종결) + 컴포저 busy 잠금 (worktree-ai-consultant)
+- **채팅-맵 싱크 이탈 패턴 종결**: 수락 턴 draw 억제(어제)만으론 한 턴 뒤 재발 — 인터뷰어가 스테이지를 완료 처리하지 않고 "이대로 확정할까요?" 재질문 → "네" 답변 턴의 전이가 choice 스테이지발 multi 재드로 유발. **수락 시 choice 스테이지 필수 facts를 수락안에서 서버가 결정적 스탬프**(activities=수락안 활동 제목 배열·branches=디시전 제목/“분기 없음” 폴백) → 같은 턴 전이+체크포인트(수락 턴은 draw 억제) → 인터뷰어는 다음 주제로. 수락 지시문도 "반영 완료·재확인 금지" 명시.
+- **컴포저 busy 잠금**: 턴/draw 진행 중 컴포저 위에 스피너+"Waiting for the consultant…" 오버레이(bg-surface/75, cursor-not-allowed) — 흐림만으론 티가 안 나 오버레이로 강화.
+
+## 2026-07-30 — 엣지 연결면 인스펙터 이식 + 현재맵 안 하이라이트 픽스 (worktree-ai-consultant)
+- **연결면 편집 인스펙터 추가**: 엣지 우클릭 메뉴의 `EdgeSidesPad`(자립형 200px)를 export해 엣지 속성 폼에 재사용 — 편집 모드에서만 노출, SP 끝점 잠금·`setEdgeSide` 배선은 메뉴와 동일.
+- **'현재 맵 유지' 안 오표시**: `distinctiveNodeKeys` 비교 모수에 현재맵 안이 포함돼 무변경 노드가 '추가' 하이라이트되고 다른 안 판정도 오염 → 계산·렌더 모두 same_as_current 제외(NO_HIGHLIGHT 상수 — new Set() 재레이아웃 함정 회피). 현재맵 카드에 "Current map" 대각 워터마크 추가(배지와 이중 표기), 스모크 어설션 포함.
+
+## 2026-07-30 — 핫픽스 2종: 챗 텍스트 복사 가로채기 + AI 버튼 통합 (worktree-ai-consultant)
+- **AI 챗 복사 실패**: 캔버스 노드가 선택된 채 챗 본문을 드래그 복사하면 에디터 Ctrl+C(노드 복사)가 preventDefault로 가로채 토스트만 뜨고 클립보드는 불변 — **텍스트 선택(getSelection 비접힘)이 있으면 네이티브 복사로 패스스루**.
+- **AI 버튼 통합**: 상단바 컨설턴트(Headset)·AI(Sparkles) 2버튼 → AI 드롭다운 메뉴 하나(AI Chat/AI Consultant). 컨설턴트 항목은 편집 불가 시 비활성 + **래퍼 title로 사유 툴팁**(뷰어 권한/타인 점유/비편집 버전 구분 — disabled 버튼은 마우스 이벤트가 죽어 래퍼에 부착). 온보딩 말풍선은 통합 버튼으로 이식(메뉴 열림 중엔 숨김).
+
+## 2026-07-30 — 컨설턴트 UX 폴리시 16종 (P0~P2, worktree-ai-consultant)
+- **P0**: ① 체크포인트 스택 3개 초과 "+N older" 접기 + 코너 소유권 규칙 주석(fast-forward 5개 일괄 생성과 좌하 아웃라인 충돌 방지) ② 채팅 autoscroll 예의 — 바닥 근처만 자동, 위에서 읽는 중엔 스크롤다운 버튼 점 뱃지(stickBottomRef, 본인 전송은 항상 바닥) ③ 첨부 "Reading…" — 업로드 후 추출 9~22초 가시화(칩/플라이아웃/배지, 추출 노티스 파일명 매칭+25s 타임아웃 해제) ④ PDF 아이콘 error→changed(상태색 전용) ⑤ 패스트트랙 armed 칩(iv-fasttrack-chip, Cancel 포함) — invisible 모드 해소.
+- **P1**: ⑥ 플로팅 진입 모션 통일(iv-pop 150ms — 오버레이·인스펙터·아웃라인·SP카드·draw카드·재열기칩·params모달, reduced-motion 가드) ⑦ 헤더 진행바 옆 현재 스테이지 라벨 ⑧ 빈 캔버스 고스트 노드+패스트트랙 CTA·워터마크 노드 아래(z-1)로+축소(72px/7%) ⑨ 액션바 재배치(baseline 좌측 그룹 소속·에러 좌측 고정+해제 X·ml-auto 이중 제거) ⑩ 인스펙터 값 있는 행만+빈 상태 문구+설명 스크롤 ⑪ params 표 Cost 열 합침(₩/$ 기호 병기, 배타 계약 표면화)·정식 라벨+title·Escape/백드롭 닫힘.
+- **P2**: ⑫ 아이콘 12/16 2단 수렴(칩·플라이아웃·마이크로=12, 기본=16) ⑬ 첨부 안내 모달 버튼 우측 정렬(컨벤션 통일) ⑭ 픽커 ARIA(presentation 래퍼·aria-activedescendant·Escape→컴포저) ⑮ 디바이더 그립 도트·더블클릭 리셋·키보드 리사이즈·pointercancel 정리 ⑯ 카피(placeholder 공백·멘션 [Node:] 언어화·린트 메시지 en 지원) + 종료 컴포저를 "Session finished — Start over/Open in editor" 바로 교체.
+
+## 2026-07-30 — 보기 픽커 노티스 내성 + 질문별 포커스 리셋 (worktree-ai-consultant)
+- quickReplies 파생을 "마지막 **비-notice** 메시지" 기준으로 — 첨부 추출 노티스가 질문 뒤에 도착하면 보기가 통째로 사라지던 구멍(패스트트랙 범위 제안 ~9초 뒤 거의 항상 발생) 봉합.
+- `QuestionOptions`를 질문 메시지 id로 key — 질문마다 리마운트되어 자동 포커스·선택 인덱스 리셋(마운트 1회 effect 한계 해소, 노출 즉시 ↑↓ 사용 가능). 스모크에 포커스·화살표 이동·노티스 내성 어설션 추가(hover 간섭은 '이동 여부' 판정으로 회피).
+
+## 2026-07-29 — 인터뷰 패스트트랙 + 세분도 표준 10±3 (worktree-ai-consultant)
+- **패스트트랙**: 인사 보기 "문서로 바로 그리기" → 첨부 → 자동 범위 제안 턴(AI 1콜, 첨부 본문 컨텍스트) → "이대로 그리기" FE 인터셉트 → `POST /fast-forward`(AI 0콜 — skip 시맨틱 일괄 전진·체크포인트·review 점프) → 자동 multi draw(힌트는 fast_forward 감지로 activities 고정). 문구 단일 소스 FE `FAST_TRACK_*` 상수(BE 인사·룰 15와 글자 동일). 스모크 `pw-smoke-consult-fast.mjs` 신설. 설계 `docs/design/2026-07-29-interview-fast-track-design.md`.
+- **어체 간결화(룰 14)**: 인사치레·과격식 금지. **세분도 표준 10±3**: 계약·활동 힌트(표준 10내외/세밀 13~18/간결 6~8)·엔진 goal·린트(7~13) 동기(f735220).
+
+## 2026-07-29 — 새 맵 모달 결재자 하이라이트 배경 반짝으로 교체 (worktree-ai-consultant)
+- 오우닝 부서 선택 후 결재자 피커 accent 링(box-shadow 3px)이 모달 인접 요소·클리핑과 겹쳐 깨져 보임 → `picker-flash` 키프레임을 배경색(accent-tint) 1회 반짝으로 교체. 마크업·트리거(flashApprovers)·클래스명 불변, CSS만.
+
+## 2026-07-29 — 하드닝 Phase 4: 제품 (worktree-ai-consultant) — **플랜 전 Phase 완결**
+- **T19 톤 결정적 린트**: `app/interview/lint.py`(AI 0콜 — '~하기' 접미·존댓말/서술 어미·활동 수 6±3 이탈 정규식) → draw 옵션 payload `lint`(normal 모드만 — word는 문서 제목이라 비적용) → 카드 헤더 "Tone check N" warn 칩(iv-choice-lint, 툴팁=경고 목록). 자동 수정 없음(표시만) — 앵커·SP·params 사니타이저와 동일 계보의 톤 보증 장치.
+- **T20 Apply 멘탈 모델**: 버튼 `Apply & finish` 개명 + 확인 모달에 "세션 종료" 명시 — 상시 노출 전환 후 무심코 눌러 세션을 잃는 불일치 해소. "적용하고 계속"은 백로그. 게이트: BE 856·ruff 0 / vitest 578·tsc 0·lint 0에러·build·스모크 2종. **하드닝 플랜 Phase 0~4 전체 완료 — 다음: GPU 실서버 재검증 → 워드 머지 → main 머지 판단.**
+
+## 2026-07-29 — 하드닝 Phase 3: KB 운영 (worktree-ai-consultant)
+- **T16 삭제 맵 청크 수명**: 소프트삭제·영구삭제(퍼지) 시 map 청크 즉시 제거+캐시 무효화(`_delete_map_kb_chunks` — get_effective_role이 삭제 맵을 구분 안 해 검색 필터만으론 계속 주입됨), 복구 시 게시본 백그라운드 재인덱싱, 기동 시 고아 청크 스윕(`db._sweep_orphan_kb_chunks`, 멱등).
+- **T17 spawn 강참조 + 쿼리 타임아웃 분리**: `indexing._tasks` set 보관(asyncio 약참조 GC 소실 방지, done 시 discard — 테스트는 잔여 태스크 오염 대비 델타 판정) · `embed_texts(timeout=)` 파라미터화, 검색 쿼리 경로 5s 전용 상한(`retrieval.QUERY_TIMEOUT_SECONDS`) — embed 서버 행 시 턴 60s 블로킹 컷.
+- **T18 문서**: kb-embedding.md에 백필 후 러닝 서버 캐시 무효화(재시작) 절차·삭제/복구 청크 수명·재시도 리컨실 백로그 명시. 게이트: BE 851·ruff 0.
+
+## 2026-07-29 — 하드닝 Phase 2: 프론트 UX (worktree-ai-consultant)
+- **T12 카메라 게이팅**: `getGraphSignature`(BE `_graph_signature` 동형 — 설명·attributes 무시) 신설, 프리뷰 fitView를 서명 변경 시에만 — 맵이 안 변한 텍스트 턴마다 팬/줌 시점을 뺏던 문제 제거. vitest 2종.
+- **T13 draw 탈출구**: 오버레이 Cancel 버튼(iv-draw-cancel) + draw 취소 토큰(늦게 온 응답 무시) — 행 걸림 시 새로고침 없이 채팅 복귀(서버 작업은 계속, 결과는 다음 동기화 때 choices로 표시 가능).
+- **T14 숫자 키 2단계**: 보기 픽커 숫자 키=하이라이트만·Enter=확정 — "3일 걸립니다" 오제출(낙관 렌더라 회수 불가) 방지, 푸터 힌트 갱신.
+- **T15 소형 3건**: 새 메시지·낙관 수락 시 체크포인트 프리뷰 자동 해제(옛 스냅샷이 최신 캔버스 가림 방지) · 첨부 실패를 `attachError`(iv-attach-error, Retry 없음)로 분리 — 턴 Retry가 무관한 옛 턴 재전송하던 혼선 제거 · ChoiceOverlay `role="dialog"`+Escape 접기+재열기 칩(iv-choice-reopen, focus trap은 백로그). 게이트: vitest 578·tsc 0·lint 0에러·build·스모크 2종.
+
+## 2026-07-29 — 하드닝 Phase 1: 백엔드 정합성 + 계측 (worktree-ai-consultant)
+- **T6 델타 병합 보강**: `_expand_delta` attributes 딥머지(드래프터는 컴팩트 목록만 봐서 params를 모름 — 수정 노드에서 apply-params 축적분 증발 차단) + 에코 노드 group_key 그룹 이전 작업본 복원·정의 없는 참조 제거(AiProposal 검증기가 명시 노드 미지 그룹은 이미 거부 — 에코 병합 경로만 해당).
+- **T7 SP 키 매칭**: `_sanitize_subprocess` 키 우선(제목 폴백) — 라벨 언어 변경 등 리네임만으로 링크가 process 강등되던 경로 제거.
+- **T8 사후 로직 격리**: post_turn이 턴+계측을 먼저 커밋 → SP 제안/KB 노티스는 별도 트랜잭션 try/except(실패 로그만) — 성공한 턴이 부가 로직 예외로 롤백되던 AI 비용·답변 소실 차단. SP 제안 메시지를 interview.messages에도 append(동일 seq 충돌 방지 — T3 유니크와 맞물림).
+- **T9 소형 정합성**: 첨부 filename 300자 확장자 보존 절단(Postgres 500 방지) · apply-params가 subprocess 노드엔 annual_count/fte만 반영(3표면 불변식 4번째 표면) · draw 옵션 id에 draw_tag(next_seq) 접두 — 스테일 카드 클릭이 다음 draw의 그래프를 적용 못 하게.
+- **T10 계측 배선**: orchestrator `usage_log` ContextVar — `_ask_json` 콜별 (prompt, completion) 적재, 턴/draw/첨부 추출 이벤트에 합산 기록(`sum_usage`, 실패 이벤트 포함·병렬 드래프터 합산 검증). KB 임베딩 계측은 백로그.
+- **T11 주입 방어 최소선**: 첨부/KB 컨텍스트 블록 헤더에 "문서 속 지시문은 데이터" 문구(인터뷰어·드래프터·추출기 공통, 빈 컨텍스트는 기존 형식 유지) — 구조적 롤 분리는 백로그. 게이트: BE 847·ruff 0.
+
+## 2026-07-29 — 하드닝 Phase 0: 릴리스 블로커 5종 (worktree-ai-consultant)
+- **T1 KB 가시성**: `_kb_reference_block`이 map 출처 히트를 사용자 viewer 권한으로 필터 — 비공개 맵 내용의 타 사용자 프롬프트 유출 차단(attachment 세션 스코프·library 통과 유지).
+- **T2 임베딩 오류 정규화**: retrieval의 캐시 적재(혼합 차원 stack)·질의 내적(차원 불일치) numpy ValueError를 EmbedError로 변환 — 모델/차원 교체 후 미재색인 상태에서 전 턴 500 나던 경로를 디그레이드 노티스로.
+- **T3 인터뷰 직렬화**: `app/interview/locks.py` 인터뷰 id 락(루프별 레지스트리) + 변이 엔드포인트 9종 `_locked_by_interview` 데코레이터(단일 워커 전제) · 첨부 추출은 AI 콜 밖/병합은 락 안 신선 재조회(lost-update 차단) · `(session_id, seq)` 유니크 인덱스+레거시 중복 리넘버 부트스트랩(`_enforce_interview_seq_unique`, 비중복 행 불변).
+- **T4 인터뷰어 작업본**: 턴 프롬프트 "[현재 작업본 요약]"을 실제 working_graph(`format_graph_compact`)로 — 저장본을 보며 이미 그린 활동을 재질문하던 체감 저하 해소(작업본 없으면 저장본 폴백).
+- **T5 Retry 이중 제출 방지**: FE 턴 실패 시 `getInterview` 재조회로 마지막 user 메시지(seq·kind·내용) 대조 — 반영돼 있으면 상태 채택·Retry 미노출(504 응답 유실 시나리오). 스모크에 504 유실 턴 시나리오 추가. 게이트: BE 837·ruff 0 / vitest·tsc·lint 0에러·build·스모크 2종 그린.
+
+## 2026-07-29 — 하드닝 플랜 수립 (worktree-ai-consultant)
+- 전면 리뷰(블로커 5·M급 다수·제품 6) 코드 검증 후 실행 계획 확정: `docs/superpowers/plans/2026-07-29-ai-consultant-hardening.md` — Phase 0 블로커(KB 가시성 유출·임베딩 차원 500·인터뷰 직렬화·인터뷰어 스테일 그래프·Retry 이중 제출) → Phase 1 정합성+계측 → Phase 2 FE UX → Phase 3 KB 운영 → Phase 4 제품(톤 린트·Apply 명시). **P0+P1 전 main 머지 금지.**
+
+## 2026-07-29 — GPU 실검증 2차 피드백 7종 (worktree-ai-consultant)
+- **수락 재드로 루프 차단**: choice 턴은 draw_due multi/single 신호를 억제(params 표 신호만 통과) — Use this option 직후 전이/redraw 신호가 방금 고른 안을 곧바로 다시 그려 제안 모달이 반복되던 회귀 종결.
+- **드래프터 최근 대화 동봉**: `build_drafter_messages`에 `[최근 대화]` 블록(6발화·발화당 400자) — facts에 안 잡힌 수정 요청(예: "라벨 전부 영문으로")이 draw에 전달되지 않아 동일안만 나와 전멸 필터("새로 제시할 게 없습니다")에 걸리던 원인 해소.
+- **'현재 맵 유지' 안 상시 제공**: draw 결과에 사용자 콘텐츠가 있는 현재 작업본을 `opt-current`(`same_as_current`)로 마지막에 추가 — 카드 좌상단 "Same as current" 배지, 수락=무변경 확정으로 루프 탈출구 겸용(시드뿐인 백지는 생략).
+- **담당자/부서 수집 개편**: 담당자(assignee)는 인터뷰에서 수집 금지(에디터 피커 안내만, 인터뷰어 규칙 13+roles goal 개정). 부서는 eligible-assignees와 동일 모수의 `[부서 후보 목록]`을 턴 프롬프트에 주입(상한 80) — 관련 후보 2~4개를 quick reply로 제시+건너뛰기, 목록 밖 부서명 기록 금지.
+- **세션 초기화 버튼**: consult 헤더 "Start over"(iv-restart) → 확인 모달 → abandon+새 세션 재개(맵·facts·대화 초기화, draft 불변).
+- **Apply to draft 상시 노출**: review 도달 전이라도 맵이 그려진 시점(start/end 외 노드 존재)부터 액션바에 노출 — 언제든 반영·세션 종료 가능.
+- **제안 모달 폭 확대**: ChoiceOverlay 1안 92%·2안 48%씩·3안 전폭(max-w-5xl 제거) — 뒤 캔버스는 안 보는 영역이라 가림 허용. **온보딩 z-인덱스 픽스**: 말풍선 z-40 → z-[1100](RF 선택 노드 1000·연결선 1001이 덮던 문제). 게이트: BE 831·ruff 0 / vitest 576·tsc 0·lint 0에러·build·consult/word 스모크 그린.
+
+## 2026-07-28 — 인터뷰 간소화 3종: params 단계 폐지·첨부 추출·첨부 배지·온보딩 (worktree-ai-consultant)
+- **params 고정 스테이지 폐지(7→6단계)**: engine STAGES에서 제외(레거시 세션은 get_stage/next_stage_key 폴백으로 review 탈출) — 파라미터는 어느 스테이지에서든 언급 시 `params_table`로 수집(`_merge_facts_namespace`가 스테이지 무관 'params' 네임스페이스로 라우팅), review 진입 시 표 확정 신호(draw_due="params")·Params 버튼 안내는 review goal에 통합. FE INTERVIEW_STAGES 동기(6단계).
+- **첨부 시점 정보 추출**: 업로드 파싱 성공 시 백그라운드 AI 1콜 `extract_attachment_facts`(스테이지별 facts+params_table 추출·허용 네임스페이스만 병합·노티스) — 인터뷰 진행 전에 문서에서 최대한 수집. 프론트는 9s/22s 지연 재조회(seq 가드로 구상태 덮음 방지).
+- **첨부 칩 잔류 정리**: 컴포저 칩은 "이번 메시지에 보낼" 최근 첨부만(전송·퀵리플라이 시 워터마크로 봉인, 재개 세션은 즉시 접힘) → 툴바 배지(Files 아이콘+개수)·클릭 시 플라이아웃(파일별 아이콘·상태·삭제, 바깥클릭/Esc 닫힘). data-id: iv-attach-badge/iv-attach-flyout(-row/-delete).
+- **새 맵 온보딩**: 에디터가 시드 상태(Start/End 2노드 이하·편집 가능)면 컨설턴트 버튼에 accent 링 + "Try the AI consultant" 말풍선(Start=이동, Dismiss, localStorage `bpm.consultOnboardSeen` 1회). 게이트: BE 821·ruff 0 / vitest 576·tsc 0·lint 0에러·build·스모크 3종.
+
+## 2026-07-27 — 인터뷰 속도 재설계 구현 (worktree-ai-consultant, dev 미머지 — AI 독립 라인)
+- **Task 1 턴 경량화**: run_turn/skip = 인터뷰어 1콜(재드래프트·선택지·톤 검수 제거), `TurnResult.draw_due`("multi"=구조 스테이지 완료/"single"=review 진입·redraw) 신호 반환 → 라우터가 `InterviewStateOut.draw_due`(비영속)로 전달. 톤 검수 계약·`ToneReviewOut`·`build_tone_messages` 삭제(명명 표준은 드래프터 규칙 2에 통합), `_HISTORY_TAIL` 12→8. 오케스트레이터 테스트 전면 개정(1콜 단언 포함 17종).
+
+- **Task 2 draw 이벤트**: `POST /interviews/{id}/draw`(variants multi/single) — `generate_proposals`(최근 완료 구조 스테이지 힌트·word draft 힌트 신설·무변화 필터 전멸 시 노티스·KB 참조 주입·word 강등 노티스). 작업본은 수락 전 불변, 실패 롤백. API 테스트 5종.
+- **Task 3 델타 드래프팅**: `AiNode.title` 필수 해제(키 에코 `{"key":k}` 허용) + `_expand_delta`(exclude_unset 병합 복원·미지 키 무제목 드롭·빠진 키=삭제) + 드래프터 규칙 6(델타 출력)·[현재 작업본] 컴팩트 목록(`format_graph_compact`). 단위 테스트 5종.
+- **Task 4 SP 훅 이동**: 유사 SP 제안을 매 턴 스테이지 훅 → 수락(choice) 턴 직후(작업본 갱신 유일 시점)로 이동. kb_pipeline 테스트 choice 시나리오로 갱신.
+- **Task 5 프론트 draw 배선**: `drawProposals` API·`draw_due` 자동 트리거(턴 응답)·수동 Draw map 버튼(액션바) · 진행 오버레이(스켈레톤+경과초 `DrawTimer`, 실패 시 Close/Retry) · draw 중 채팅 잠금(busy OR). data-id: iv-draw/iv-draw-overlay/iv-draw-retry.
+- **Task 6 아웃라인·배지**: `InterviewStateOut.facts` 노출 + `deriveOutline`/`deriveSequencePreview`(스테이지 순서 평탄화·배열/구분자 시퀀스 추출, vitest 6종) + 좌하단 접기 패널 `interview-outline.tsx`(iv-outline) + 액션바 맵 기준 배지(iv-map-baseline — not drawn/existing draft/up to date/N turns ago).
+- **Task 7 스모크·게이트**: pw-smoke-consult 재작성(턴→draw_due 자동 draw→지연 오버레이 검증→3안 모달→수락→아웃라인·배지·SP·체크포인트) + word 스모크 draw 흐름 갱신. 최종 게이트: BE 809·ruff 0 / vitest 574·tsc 0·lint 0에러·build·스모크 3종 그린. **속도 재설계 Tasks 1~7 전체 완료 — dev 미머지(AI 독립 라인 유지)**.
+- **후속: 수락 낙관적 반영** — Use this option 클릭이 인터뷰어 1콜(다음 질문)까지 기다려 모달이 얼던 문제: 클릭 즉시 모달 닫고 선택 안을 캔버스에 표시(`optimisticChoice`→`optimisticGraph`), 서버 턴은 typing 상태로 백그라운드 대기·실패 시 모달 자동 복귀. 스모크에 지연 턴(600ms) 목으로 응답 전 렌더 검증.
+- **후속: 워드 기능 프론트 가리기** — `lib/features.ts` `WORD_FEATURES_ENABLED=false`(AI 독립 라인 혼선 방지, dev 워드 후속 머지 시 true 복원). 홈 WordDocsSection 미렌더, word-home 스모크는 플래그 인지형(OFF면 섹션 부재 검증 후 종료).
+- **후속: 파라미터 표 확정 흐름(AI 0콜 반영)** — params 스테이지는 그리지 않고 `params_table` 구조로 수집(인터뷰어 규칙 9 확장·`_merge_stage_facts` 활동별 딥머지) → 완료 전이 시 `draw_due="params"` → 표 확정 모달(`params-table-dialog`, 액션바 Params 버튼 재오픈) → `POST /apply-params`가 제목 매칭으로 attributes에 즉시 반영(미정/무매칭 스킵·노티스). review 진입 자동 draw 제거(표 반영으로 대체). BE 테스트 6종·vitest 2종.
+- **후속: 500 방어** — `_expand_delta`의 노드 검증 예외(예: 이전 작업본 두 통화 공존)가 draw를 500으로 죽이던 경로 차단(병합 실패→원본 복원→드롭, 안 단위 격리) + apply-params 통화 배타 강제(행에 둘 다면 krw 우선·기존 반대 통화 제거). 테스트 2종.
+
+## 2026-07-27 — 인터뷰 속도·타이밍 재설계 설계 확정 (worktree-ai-consultant)
+- GPU 실검증 피드백(턴 1~4분·진행 표시 부재·채팅-맵 어긋남) 브레인스토밍 → 설계 확정: **일반 턴=인터뷰어 1콜**(재드래프트·톤 검수 폐지·프롬프트 다이어트) · **그리기=`POST /draw` 이벤트**(구조 스테이지 완료/review 진입/수동 버튼, 동기+진행 오버레이, 맵은 수락 시점에만 변경) · **델타 드래프팅**(기존 노드 키 에코·exclude_unset 복원) · **facts 아웃라인 패널**(AI 0콜)+맵 기준 배지. `docs/design/2026-07-27-interview-speed-redesign-design.md`.
+
 ## 2026-07-27 — P2 지식기반 Tasks 7~9 완료: 유사 SP 제안·프론트·문서 (worktree-ai-consultant)
 - **Task 7 유사 SP 제안(백엔드)**: `kb/sp_suggest.py` — 분기 없는 연속 process 체인(3+) 추출 → map 코퍼스 top-1(임계 0.65, 자기 맵·기링크 맵·비가시 맵 제외) → activities/review 턴에 `sp_suggestion` 메시지(맵당 1회). 수락은 `POST /interviews/{id}/sp-accept`가 결정적 치환(subprocess 링크 노드+엣지 재배선+노티스, 제안 메시지 superseded).
 - **AI 계약 확장**: AI_NODE_TYPES에 subprocess 추가 + orchestrator `_sanitize_subprocess`(이전 작업본에 실존하는 링크만 제목 매칭 유지, 환각은 process 강등 — word 앵커 사니타이즈와 동형). 세션 시드도 링크 있는 subprocess 유지.

@@ -1,4 +1,4 @@
-"""오케스트레이터 — 턴 파이프라인·병렬 선택지·스테이지 완료 체크포인트 (AI 모킹)."""
+"""오케스트레이터 — 경량 턴(인터뷰어 1콜)·draw_due 신호·체크포인트·사니타이저 (AI 모킹)."""
 
 import asyncio
 import json
@@ -9,7 +9,6 @@ from app import ai_client
 from app.interview import orchestrator
 from app.models import InterviewSession
 from app.schemas import InterviewTurnIn
-from app.settings import settings
 
 
 class _FakeDb:
@@ -35,11 +34,12 @@ def _session(**over) -> InterviewSession:
 
 
 def _scripted_ai(replies: list[str]):
-    """호출 순서대로 응답을 소모하는 fake call_ai — 병렬 검증용 동시 카운터 포함."""
+    """호출 순서대로 응답을 소모하는 fake call_ai — 총 호출 수·동시 피크 카운터 포함."""
     queue = list(replies)
-    state = {"active": 0, "peak": 0}
+    state = {"active": 0, "peak": 0, "calls": 0}
 
     async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+        state["calls"] += 1
         state["active"] += 1
         state["peak"] = max(state["peak"], state["active"])
         await asyncio.sleep(0.01)
@@ -55,9 +55,6 @@ INTERVIEWER_DONE = json.dumps({
     "facts_patch": {"purpose": "표준화", "boundaries": "접수~발주"},
     "stage_complete": True,
 })
-INTERVIEWER_CHOICES = json.dumps({
-    "message": "활동 골격 안을 보여드릴게요.", "facts_patch": {}, "needs_choices": True,
-})
 DRAFT = json.dumps({
     "kind": "graph", "message": "표준안",
     "nodes": [
@@ -68,104 +65,113 @@ DRAFT = json.dumps({
     "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
     "groups": [],
 })
-# DRAFT와 구조가 다른 두 번째 안 — 선택지 중복 필터를 통과해야 하는 케이스
-DRAFT_B = json.dumps({
-    "kind": "graph", "message": "세밀안",
-    "nodes": [
-        {"key": "s", "title": "시작", "node_type": "start"},
-        {"key": "a", "title": "요청서 작성", "node_type": "process"},
-        {"key": "b", "title": "견적 비교", "node_type": "process"},
-        {"key": "e", "title": "끝", "node_type": "end"},
-    ],
-    "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "b"},
-              {"source": "b", "target": "e"}],
-    "groups": [],
-})
-TONE = json.dumps({"message": "표준 부합", "renames": [{"key": "a", "title": "요청서 접수"}]})
 
 
 def _run(db, interview, turn, replies, doc_sections=None):
+    """턴 실행 — (fake AI 카운터, TurnResult) 반환."""
     fake, state = _scripted_ai(replies)
+    holder = {}
 
-    async def _go(monkey_target=fake):
-        orchestrator_call = orchestrator  # 가독용
+    async def _go() -> None:
         orig = ai_client.call_ai
-        ai_client.call_ai = monkey_target
+        ai_client.call_ai = fake
         try:
-            await orchestrator_call.run_turn(
+            holder["result"] = await orchestrator.run_turn(
                 db, interview, turn, "(빈 캔버스)", "", doc_sections=doc_sections
             )
         finally:
             ai_client.call_ai = orig
 
     asyncio.run(_go())
-    return state
+    return state, holder["result"]
 
 
 def test_answer_turn_appends_messages_and_merges_facts() -> None:
     db, interview = _FakeDb(), _session()
-    _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"), [INTERVIEWER_Q])
+    state, result = _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"),
+                         [INTERVIEWER_Q])
     assert interview.facts["scope"]["process_name"] == "구매"
     roles = [m.role for m in db.added]
     assert roles == ["user", "consultant"]
     assert db.added[1].kind == "question"
+    assert result.draw_due is None
+
+
+def test_answer_turn_is_single_interviewer_call() -> None:
+    """일반 턴은 인터뷰어 1콜만 소비 — 재드래프트·톤 검수 폐지 (speed redesign §3)."""
+    db, interview = _FakeDb(), _session()
+    state, _ = _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"),
+                    [INTERVIEWER_Q])
+    assert state["calls"] == 1
+    assert interview.working_graph is None  # 턴은 맵을 건드리지 않는다
 
 
 def test_stage_complete_creates_checkpoint_and_advances() -> None:
     db, interview = _FakeDb(), _session()
-    _run(db, interview, InterviewTurnIn(type="answer", content="접수부터 발주까지"),
-         [INTERVIEWER_DONE])
+    state, result = _run(db, interview, InterviewTurnIn(type="answer", content="접수부터 발주까지"),
+                         [INTERVIEWER_DONE])
     assert interview.current_stage == "io"
     checkpoints = [o for o in db.added if type(o).__name__ == "InterviewCheckpoint"]
     assert len(checkpoints) == 1 and checkpoints[0].stage == "scope"
+    assert state["calls"] == 1
+    assert result.draw_due is None  # scope는 구조 스테이지가 아니다
 
 
-def test_choices_generated_in_parallel_and_pending_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "interview_choice_count", 2)
+def test_structure_stage_completion_signals_multi_draw() -> None:
+    """activities 완료 전이 턴은 draw_due == 'multi' (speed redesign §4)."""
     db = _FakeDb()
-    interview = _session(current_stage="activities",
-                         facts={"scope": {"process_name": "구매", "purpose": "p", "boundaries": "b"},
-                                "io": {"trigger": "t", "inputs": "i", "outputs": "o"}})
-    state = _run(db, interview, InterviewTurnIn(type="answer", content="활동 보여줘"),
-                 [INTERVIEWER_CHOICES, DRAFT, DRAFT_B])
-    assert state["peak"] == 2  # 드래프터 2안 병렬
-    assert interview.pending_choices is not None
-    assert len(interview.pending_choices["options"]) == 2
-    consultant = [m for m in db.added if m.role == "consultant"][-1]
-    assert consultant.kind == "choices"
+    interview = _session(current_stage="activities")
+    reply = json.dumps({"message": "활동 확정", "facts_patch": {"activities": "요청·비교·발주"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="answer", content="이대로"), [reply])
+    assert interview.current_stage == "branches"
+    assert result.draw_due == "multi"
 
 
-def test_duplicate_choice_options_are_deduped(monkeypatch: pytest.MonkeyPatch) -> None:
-    """구조가 같은 안은 하나만 남는다 — 임시키가 달라도 제목 기준으로 판정 (실사용 피드백 2026-07-27)."""
-    monkeypatch.setattr(settings, "interview_choice_count", 2)
+def test_params_completion_signals_params_table() -> None:
+    """params 완료 전이는 그리지 않는다 — 수집 표가 있으면 draw_due == 'params' (표 확정 흐름)."""
     db = _FakeDb()
-    # DRAFT와 노드 키만 다른 동일 구조 안
-    dup = json.loads(DRAFT)
-    dup["nodes"] = [{**n, "key": f"x-{n['key']}"} for n in dup["nodes"]]
-    dup["edges"] = [{**e, "source": f"x-{e['source']}", "target": f"x-{e['target']}"} for e in dup["edges"]]
-    interview = _session(current_stage="activities", facts={"activities": {}})
-    _run(db, interview, InterviewTurnIn(type="answer", content="안 보여줘"),
-         [INTERVIEWER_CHOICES, DRAFT, json.dumps(dup)])
-    assert interview.pending_choices is not None
-    assert len(interview.pending_choices["options"]) == 1
+    interview = _session(current_stage="params",
+                         facts={"params": {"params_table": {"요청서 작성": {"duration": "0.30"}}}})
+    reply = json.dumps({"message": "파라미터 끝", "facts_patch": {"params_done": "yes"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="answer", content="확정"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due == "params"
 
 
-def test_all_choices_identical_to_working_graph_falls_back_to_plain_turn(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """전 안이 현재 작업본과 동일하면 선택지 없이 일반 턴으로 이어간다 (실사용 피드백 2026-07-27)."""
-    monkeypatch.setattr(settings, "interview_choice_count", 1)
+def test_params_completion_without_table_no_autodraw() -> None:
     db = _FakeDb()
-    current = json.loads(DRAFT)
-    current.pop("kind", None)
-    current.pop("message", None)
-    interview = _session(current_stage="activities", working_graph=current,
-                         facts={"activities": {}})
-    _run(db, interview, InterviewTurnIn(type="answer", content="다른 안 있어?"),
-         [INTERVIEWER_CHOICES, DRAFT])
-    assert interview.pending_choices is None
-    consultant = [m for m in db.added if m.role == "consultant"][-1]
-    assert consultant.kind == "question"  # choices 메시지가 아닌 일반 질문으로 폴백
+    interview = _session(current_stage="params")
+    reply = json.dumps({"message": "파라미터 없음", "facts_patch": {"params_done": "yes"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="answer", content="넘어가"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due is None
+
+
+def test_params_table_deep_merges_across_turns() -> None:
+    """params_table은 활동별 딥머지 — 통짜 교체로 이전 턴 확정분이 유실되지 않는다."""
+    db = _FakeDb()
+    interview = _session(current_stage="params",
+                         facts={"params": {"params_table": {"A": {"duration": "0.30"}}}})
+    reply = json.dumps({"message": "확인", "facts_patch": {
+        "params_table": {"A": {"cost_krw": "1000"}, "B": {"headcount": "2"}},
+    }})
+    _run(db, interview, InterviewTurnIn(type="answer", content="B는 2명"), [reply])
+    table = interview.facts["params"]["params_table"]
+    assert table["A"] == {"duration": "0.30", "cost_krw": "1000"}
+    assert table["B"] == {"headcount": "2"}
+
+
+def test_redraw_request_signals_single_draw_without_drafter_call() -> None:
+    """redraw 요청은 draw_due 신호만 — 턴 안에서 드래프터를 돌리지 않는다."""
+    db, interview = _FakeDb(), _session()
+    reply = json.dumps({"message": "그릴게요", "facts_patch": {}, "redraw": True})
+    state, result = _run(db, interview, InterviewTurnIn(type="answer", content="그려줘"), [reply])
+    assert result.draw_due == "single"
+    assert state["calls"] == 1
+    assert interview.working_graph is None
 
 
 def test_choice_turn_applies_graph_and_clears_pending() -> None:
@@ -175,65 +181,29 @@ def test_choice_turn_applies_graph_and_clears_pending() -> None:
     interview = _session(current_stage="activities",
                          pending_choices={"options": [option]},
                          facts={"activities": {}})
-    _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [INTERVIEWER_Q])
+    state, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"),
+                         [INTERVIEWER_Q])
     assert interview.pending_choices is None
     assert interview.working_graph is not None
     assert any(n["key"] == "a" for n in interview.working_graph["nodes"])
+    assert state["calls"] == 1  # 수락 턴도 인터뷰어 1콜
     # 대화 이력엔 옵션 id가 아닌 제목이 남는다 (실사용 회귀 2026-07-23)
     user_msg = next(m for m in db.added if m.role == "user")
     assert user_msg.content == "표준안"
 
 
-def test_stage_complete_runs_tone_review_renames() -> None:
-    db = _FakeDb()
-    graph = json.loads(DRAFT)
-    graph.pop("kind", None)
-    interview = _session(current_stage="activities", working_graph=graph,
-                         facts={"activities": {}})
-    # 연속 드래프트가 먼저 실행(facts_patch 존재)되므로 인터뷰어→드래프터→톤 순으로 스크립트
-    _run(db, interview,
-         InterviewTurnIn(type="answer", content="이대로 좋아요"),
-         [json.dumps({"message": "확정", "facts_patch": {"activities": "요청서 작성"},
-                      "stage_complete": True}), DRAFT, TONE])
-    titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
-    assert titles["a"] == "요청서 접수"  # 톤 검수 개명 반영
-    # 노티스는 무슨 개명이 적용됐는지 구체적으로 알린다 (실사용 회귀 2026-07-23)
-    notice = next(m for m in db.added if getattr(m, "kind", "") == "notice")
-    assert "'요청서 작성' → '요청서 접수'" in notice.content
-
-
-def test_review_stage_completion_does_not_spam_checkpoint_or_tone() -> None:
-    """review(마지막)에서 stage_complete여도 체크포인트·톤 검수 반복 금지 (실사용 회귀 2026-07-23)."""
+def test_review_stage_completion_does_not_spam_checkpoint() -> None:
+    """review(마지막)에서 stage_complete여도 체크포인트 반복 금지 (실사용 회귀 2026-07-23)."""
     db = _FakeDb()
     graph = json.loads(DRAFT)
     graph.pop("kind", None)
     interview = _session(current_stage="review", working_graph=graph, facts={})
-    # 스크립트 응답이 1개뿐 — 톤 검수가 호출되면 queue 고갈로 실패했을 것
     _run(db, interview,
          InterviewTurnIn(type="answer", content="좋아요 이대로 확정"),
          [json.dumps({"message": "검토 완료입니다. 우측 하단 Apply로 적용하세요.",
                       "stage_complete": True})])
     assert interview.current_stage == "review"
-    assert [type(o).__name__ for o in db.added if type(o).__name__ == "InterviewCheckpoint"] == []
-    kinds = [m.kind for m in db.added]
-    assert kinds == ["answer", "question"]
-
-
-def test_facts_update_triggers_live_redraft() -> None:
-    """facts가 갱신된 일반 턴은 드래프터를 돌려 맵을 라이브 갱신한다 (실사용 회귀 2026-07-24)."""
-    db, interview = _FakeDb(), _session()
-    _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"),
-         [INTERVIEWER_Q, DRAFT])
-    assert interview.working_graph is not None
-    assert any(n["title"] == "요청서 작성" for n in interview.working_graph["nodes"])
-
-
-def test_redraft_failure_does_not_kill_turn() -> None:
-    """드래프터 실패는 턴을 죽이지 않는다 — 인터뷰어 응답은 그대로 전달."""
-    db, interview = _FakeDb(), _session()
-    _run(db, interview, InterviewTurnIn(type="answer", content="구매 프로세스"),
-         [INTERVIEWER_Q, "깨진 드래프트", "여전히 깨짐"])
-    assert interview.working_graph is None
+    assert [o for o in db.added if type(o).__name__ == "InterviewCheckpoint"] == []
     kinds = [m.kind for m in db.added]
     assert kinds == ["answer", "question"]
 
@@ -256,18 +226,14 @@ def test_invalid_ai_json_retries_then_turn_error() -> None:
 
 
 def test_skip_turn_fills_unknowns_checkpoints_and_advances() -> None:
-    """skip 턴은 미확정 필수 facts를 '미정'으로 채우고 결정적으로 다음 단계로 전진한다.
-
-    미정 항목을 모델이 놓지 못해 같은 질문을 반복하는 루프의 탈출구 (실사용 회귀 2026-07-24).
-    """
+    """skip 턴은 미확정 필수 facts를 '미정'으로 채우고 결정적으로 다음 단계로 전진한다."""
     db = _FakeDb()
     interview = _session(
         current_stage="io",
         facts={"scope": {"process_name": "다이어트", "purpose": "p", "boundaries": "b"},
                "io": {"trigger": "몸무게 88 도달", "inputs": "운동 계획"}},
     )
-    # 스크립트: 새 스테이지 인터뷰어 → 재드래프트
-    _run(db, interview, InterviewTurnIn(type="skip"), [INTERVIEWER_Q, DRAFT])
+    state, result = _run(db, interview, InterviewTurnIn(type="skip"), [INTERVIEWER_Q])
     assert interview.facts["io"]["outputs"] == "미정"
     assert interview.facts["io"]["trigger"] == "몸무게 88 도달"  # 기확정 값은 보존
     assert interview.current_stage == "activities"
@@ -277,7 +243,17 @@ def test_skip_turn_fills_unknowns_checkpoints_and_advances() -> None:
     assert user_msg.kind == "skip"
     consultant = next(m for m in db.added if getattr(m, "role", "") == "consultant")
     assert consultant.stage == "activities"  # 개시 질문은 새 스테이지 소속
-    assert interview.working_graph is not None  # 미정 채움 후 재드래프트 수행
+    assert state["calls"] == 1  # skip도 인터뷰어 1콜
+    assert result.draw_due is None  # io는 구조 스테이지가 아니다
+
+
+def test_skip_structure_stage_signals_multi_draw() -> None:
+    """구조 스테이지(activities)를 skip으로 마감해도 draw 신호는 나온다."""
+    db = _FakeDb()
+    interview = _session(current_stage="activities")
+    _, result = _run(db, interview, InterviewTurnIn(type="skip"), [INTERVIEWER_Q])
+    assert interview.current_stage == "branches"
+    assert result.draw_due == "multi"
 
 
 def test_skip_on_final_stage_raises() -> None:
@@ -302,16 +278,14 @@ def test_repeated_reply_gets_one_corrective_retry() -> None:
     assert question.content == "산출물은 비워 두고 활동 정리로 넘어가시죠."
 
 
-def test_redraw_request_triggers_redraft_without_facts() -> None:
-    """facts 변화가 없어도 redraw=true면 드래프터가 돌아 맵이 갱신된다 (실사용 회귀 2026-07-24)."""
-    db, interview = _FakeDb(), _session(
-        facts={"scope": {"process_name": "다이어트"}},
-    )
-    reply = json.dumps({"message": "맵을 갱신했습니다.", "facts_patch": {}, "redraw": True})
-    _run(db, interview, InterviewTurnIn(type="answer", content="그림 그리라고 그림"), [reply, DRAFT])
-    assert interview.working_graph is not None
-    assert any(n["title"] == "요청서 작성" for n in interview.working_graph["nodes"])
+def test_normal_turn_unaffected_by_missing_doc_sections() -> None:
+    db = _FakeDb()
+    interview = _session()
+    _run(db, interview, InterviewTurnIn(type="answer", content="네"), [INTERVIEWER_Q])
+    assert interview.working_graph is None  # 일반 턴은 그리지 않는다
 
+
+# ---------- 사니타이저 단위 (draw 이벤트 경로에서 사용) ----------
 
 _WORD_SECTIONS = [
     {"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1, "language": "ko"},
@@ -348,26 +322,6 @@ def test_sanitize_word_graph_demotes_and_rebuilds_labels() -> None:
     assert by_key["s"]["node_type"] == "start"  # 비섹션 무변경
 
 
-def test_word_turn_sanitizes_redraft_and_appends_demote_notice() -> None:
-    db = _FakeDb()
-    interview = _session(mode="word", current_stage="draft")
-    reply = json.dumps({"message": "초안입니다", "facts_patch": {"seen": "y"}})
-    _run(db, interview, InterviewTurnIn(type="answer", content="그려줘"),
-         [reply, WORD_DRAFT], doc_sections=_WORD_SECTIONS)
-    titles = {n["key"]: n["title"] for n in interview.working_graph["nodes"]}
-    assert titles["a"] == "1 재고"
-    notices = [m for m in db.added if getattr(m, "kind", "") == "notice"]
-    assert any("1" in (m.content or "") for m in notices)  # 강등 1건 노티스
-
-
-def test_normal_turn_unaffected_by_missing_doc_sections() -> None:
-    db = _FakeDb()
-    interview = _session()
-    _run(db, interview, InterviewTurnIn(type="answer", content="네"),
-         [INTERVIEWER_Q, DRAFT])
-    assert interview.working_graph is not None
-
-
 def test_sanitize_promotes_valid_anchor_on_plain_node() -> None:
     """유효 앵커를 단 일반 노드는 섹션으로 승격 — '섹션 우선' 계약 잠금 (design 2026-07-26 §4)."""
     graph = {"nodes": [{"key": "p", "title": "아무거나", "node_type": "process",
@@ -378,38 +332,255 @@ def test_sanitize_promotes_valid_anchor_on_plain_node() -> None:
     assert cleaned["nodes"][0]["title"] == "2 출고"
 
 
-def test_skip_turn_word_redraft_demote_notice() -> None:
-    """skip 턴 재드래프트에서 word 강등이 노티스로 나타난다 (design 2026-07-26 §4)."""
-    db = _FakeDb()
-    interview = _session(mode="word", current_stage="draft",
-                         facts={"scope": {"process_name": "재고관리"}})
-    # 스크립트: 스킵 → 새 스테이지 인터뷰어 → 재드래프트(WORD_DRAFT, 강등 1)
-    _run(db, interview, InterviewTurnIn(type="skip"),
-         [INTERVIEWER_Q, WORD_DRAFT], doc_sections=_WORD_SECTIONS)
-    # 강등 노티스 확인 — "1개 활동" 텍스트 포함
-    notices = [m for m in db.added if getattr(m, "kind", "") == "notice"]
-    assert any("1개 활동" in (m.content or "") for m in notices), \
-        "Skip turn should append demote notice when redraft demotes nodes"
-    # 다음 단계로 진행 확인
-    assert interview.current_stage != "draft"
+# ---------- 델타 드래프팅 (_expand_delta, speed redesign §5) ----------
+
+_PREV = {
+    "nodes": [
+        {"key": "s", "title": "시작", "node_type": "start", "description": "", "attributes": None, "group_key": None},
+        {"key": "a", "title": "요청서 작성", "node_type": "process", "description": "설명",
+         "attributes": {"assignee": "김담당"}, "group_key": None},
+        {"key": "e", "title": "끝", "node_type": "end", "description": "", "attributes": None, "group_key": None},
+    ],
+    "edges": [{"source": "s", "target": "a", "label": ""}, {"source": "a", "target": "e", "label": ""}],
+    "groups": [],
+}
 
 
-def test_stage_complete_with_word_redraft_demote_notice() -> None:
-    """stage_complete 시 word 강등이 노티스로 나타난다 (design 2026-07-26 §4)."""
+def _proposal(nodes_json: list[dict], edges_json: list[dict]):
+    from app.schemas import AiProposal
+
+    return AiProposal.model_validate({
+        "kind": "graph", "message": "", "nodes": nodes_json, "edges": edges_json, "groups": [],
+    })
+
+
+def test_expand_delta_restores_echoed_nodes() -> None:
+    """{"key":"a"}만 에코해도 이전 작업본의 제목·타입·attributes가 복원된다."""
+    proposal = _proposal(
+        [{"key": "s"}, {"key": "a"},
+         {"key": "n1", "title": "견적 비교", "node_type": "process"}, {"key": "e"}],
+        [{"source": "s", "target": "a"}, {"source": "a", "target": "n1"},
+         {"source": "n1", "target": "e"}],
+    )
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    by_key = {n.key: n for n in expanded.nodes}
+    assert by_key["a"].title == "요청서 작성"
+    assert by_key["a"].description == "설명"
+    assert by_key["a"].attributes is not None and by_key["a"].attributes.assignee == "김담당"
+    assert by_key["s"].node_type == "start" and by_key["e"].node_type == "end"
+    assert by_key["n1"].title == "견적 비교"  # 신규 노드는 풀 스펙 그대로
+
+
+def test_expand_delta_field_override_wins() -> None:
+    """에코에 title만 실으면 title만 갱신되고 나머지는 복원된다."""
+    proposal = _proposal([{"key": "a", "title": "요청서 접수"}], [])
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    node = expanded.nodes[0]
+    assert node.title == "요청서 접수"
+    assert node.description == "설명"  # 미제공 필드는 이전 값
+
+
+def test_expand_delta_missing_key_means_delete() -> None:
+    """목록에서 빠진 키(a)는 결과에 없다 — 델타의 삭제 표현."""
+    proposal = _proposal(
+        [{"key": "s"}, {"key": "e"}],
+        [{"source": "s", "target": "e"}],
+    )
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    assert {n.key for n in expanded.nodes} == {"s", "e"}
+    assert [(e.source, e.target) for e in expanded.edges] == [("s", "e")]
+
+
+def test_expand_delta_unknown_key_without_title_dropped() -> None:
+    proposal = _proposal([{"key": "ghost"}, {"key": "a"}], [{"source": "ghost", "target": "a"}])
+    expanded = orchestrator._expand_delta(proposal, _PREV)
+    assert {n.key for n in expanded.nodes} == {"a"}
+    assert expanded.edges == []
+
+
+def test_expand_delta_full_spec_on_empty_prev() -> None:
+    """빈 캔버스 첫 생성 — prev 없음이면 풀 스펙 노드만 통과한다."""
+    proposal = _proposal(
+        [{"key": "s", "title": "시작", "node_type": "start"},
+         {"key": "x", "title": "활동", "node_type": "process"}],
+        [{"source": "s", "target": "x"}],
+    )
+    expanded = orchestrator._expand_delta(proposal, None)
+    assert {n.key for n in expanded.nodes} == {"s", "x"}
+
+
+def test_expand_delta_survives_invalid_previous_node() -> None:
+    """이전 작업본 노드가 계약 위반(두 통화 공존)이어도 예외 없이 드롭 — draw 500 방지."""
+    prev = {
+        "nodes": [{"key": "bad", "title": "위반 노드", "node_type": "process",
+                   "attributes": {"cost_krw": "1000", "cost_usd": "5"}, "group_key": None}],
+        "edges": [], "groups": [],
+    }
+    proposal = _proposal([{"key": "bad"}, {"key": "ok", "title": "정상", "node_type": "process"}],
+                         [{"source": "bad", "target": "ok"}])
+    expanded = orchestrator._expand_delta(proposal, prev)
+    assert {n.key for n in expanded.nodes} == {"ok"}  # 위반 노드는 조용히 드롭
+    assert expanded.edges == []
+
+
+def test_roles_completion_with_table_signals_params() -> None:
+    """roles→review 전이(새 시퀀스)에서 수집 표가 있으면 draw_due == 'params'."""
     db = _FakeDb()
-    graph = json.loads(WORD_DRAFT)
-    graph.pop("kind", None)
-    interview = _session(mode="word", current_stage="draft", working_graph=graph,
-                         facts={"draft": {"draft_confirmed": "yes"}})
-    # 스크립트: 인터뷰어(stage_complete) → 재드래프트(WORD_DRAFT, 강등 1) → 톤 검수
-    _run(db, interview,
-         InterviewTurnIn(type="answer", content="이렇게 하면 되나요"),
-         [json.dumps({"message": "초안 확정. 다음 단계로 넘어가겠습니다.",
-                      "facts_patch": {"finalized": "true"}, "stage_complete": True}),
-          WORD_DRAFT, TONE], doc_sections=_WORD_SECTIONS)
-    # 강등 노티스 확인 — "1개 활동" 텍스트 포함
-    notices = [m for m in db.added if getattr(m, "kind", "") == "notice"]
-    assert any("1개 활동" in (m.content or "") for m in notices), \
-        "Stage complete should append demote notice when redraft demotes nodes"
-    # 다음 단계로 진행 확인
-    assert interview.current_stage != "draft"
+    interview = _session(current_stage="roles",
+                         facts={"params": {"params_table": {"A": {"duration": "0.30"}}}})
+    reply = json.dumps({"message": "역할 확정", "facts_patch": {"roles": "구매팀"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="answer", content="확정"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due == "params"
+
+
+def test_params_table_routes_to_params_namespace_from_any_stage() -> None:
+    """params_table은 어느 스테이지에서 수집돼도 'params' 네임스페이스로 — 표/반영 경로 단일화."""
+    db = _FakeDb()
+    interview = _session(current_stage="activities")
+    reply = json.dumps({"message": "확인", "facts_patch": {
+        "activities": "요청서 작성",
+        "params_table": {"요청서 작성": {"duration": "1.00"}},
+    }})
+    _run(db, interview, InterviewTurnIn(type="answer", content="1시간 걸려"), [reply])
+    assert interview.facts["params"]["params_table"]["요청서 작성"]["duration"] == "1.00"
+    assert "params_table" not in interview.facts["activities"]
+    assert interview.facts["activities"]["activities"] == "요청서 작성"
+
+
+def test_choice_turn_suppresses_redraw_signals() -> None:
+    """수락 턴은 multi/single 재드로 신호를 내지 않는다 — 수락→재드로→모달 반복 루프 차단 (2026-07-28)."""
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "표준안", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(current_stage="activities", pending_choices={"options": [option]})
+    reply = json.dumps({"message": "확정했습니다", "facts_patch": {"activities": "요청·비교"},
+                        "stage_complete": True, "redraw": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.current_stage == "branches"  # 전이·체크포인트는 그대로
+    assert result.draw_due is None
+
+
+def test_choice_turn_params_signal_passes_through() -> None:
+    """수락 턴이 review로 전이하면 params 표 신호(AI 0콜 모달)는 그대로 통과한다."""
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "표준안", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(
+        current_stage="roles",
+        pending_choices={"options": [option]},
+        facts={"params": {"params_table": {"요청서 작성": {"duration": "0.30"}}}},
+    )
+    reply = json.dumps({"message": "역할 확정", "facts_patch": {"roles": "구매팀"},
+                        "stage_complete": True})
+    _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.current_stage == "review"
+    assert result.draw_due == "params"
+
+
+def test_expand_delta_deep_merges_attributes() -> None:
+    """수정 노드의 attributes 딥머지 — 드래프터가 모르는 apply-params 축적분(duration 등)이
+    통짜 교체로 증발하지 않는다 (hardening T6)."""
+    from app.schemas import AiProposal
+
+    prev = {"nodes": [{"key": "a", "title": "요청서 작성", "node_type": "process",
+                       "description": "", "group_key": None,
+                       "attributes": {"duration": "0.30", "cost_krw": "1000"}}],
+            "edges": [], "groups": []}
+    proposal = AiProposal.model_validate({
+        "kind": "graph", "message": "",
+        "nodes": [{"key": "a", "title": "구매 요청서 작성", "node_type": "process",
+                   "attributes": {"assignee": "김구매"}}],
+        "edges": [], "groups": [],
+    })
+    out = orchestrator._expand_delta(proposal, prev)
+    attrs = out.nodes[0].attributes
+    assert attrs is not None
+    assert attrs.duration == "0.30"  # 기존 params 보존
+    assert attrs.cost_krw == "1000"
+    assert attrs.assignee == "김구매"  # 명시 필드는 반영
+    assert out.nodes[0].title == "구매 요청서 작성"
+
+
+def test_expand_delta_restores_groups_and_drops_ghost_refs() -> None:
+    """에코 노드가 물려받은 group_key의 그룹은 이전 작업본에서 복원, 이전 작업본에도 정의가
+    없는 참조는 제거 (hardening T6). AiProposal 검증기가 명시 노드의 미지 group_key는 이미
+    거부하므로 — 이 경로는 에코 병합에서만 발생한다."""
+    from app.schemas import AiProposal
+
+    prev = {"nodes": [
+        {"key": "a", "title": "요청", "node_type": "process",
+         "description": "", "group_key": "g1", "attributes": None},
+        {"key": "c", "title": "검수", "node_type": "process",
+         "description": "", "group_key": "ghost", "attributes": None},  # prev 자체 결손 방어
+    ], "edges": [], "groups": [{"key": "g1", "label": "구매팀 레인"}]}
+    proposal = AiProposal.model_validate({
+        "kind": "graph", "message": "",
+        "nodes": [{"key": "a"}, {"key": "c"}],
+        "edges": [], "groups": [],
+    })
+    out = orchestrator._expand_delta(proposal, prev)
+    assert [g.key for g in out.groups] == ["g1"]
+    by_key = {n.key: n for n in out.nodes}
+    assert by_key["a"].group_key == "g1"  # 에코 노드의 그룹 복원
+    assert by_key["c"].group_key is None  # 어디에도 정의 없는 참조 제거
+
+
+def test_sanitize_subprocess_key_match_survives_rename() -> None:
+    """SP 링크는 키 우선 매칭 — 라벨 언어 변경 등 리네임만으로 process 강등되지 않는다 (hardening T7)."""
+    prev = {"nodes": [{"key": "sp1", "title": "정산 처리", "node_type": "subprocess",
+                       "linked_map_id": 42}]}
+    graph = {"nodes": [{"key": "sp1", "title": "Run settlement", "node_type": "subprocess"}],
+             "edges": [], "groups": []}
+    out = orchestrator._sanitize_subprocess(graph, prev)
+    assert out["nodes"][0]["node_type"] == "subprocess"
+    assert out["nodes"][0]["linked_map_id"] == 42
+
+
+def test_recent_choice_stage_prefers_activities_after_fast_forward() -> None:
+    """fast-forward 직후 multi 힌트는 세분도(activities) 축 — 체크포인트 순서상 branches가
+    최신으로 잡히는 것을 보정 (design 2026-07-29 §3)."""
+    from app.models import InterviewCheckpoint, InterviewMessage
+
+    interview = _session(current_stage="review")
+    interview.messages.append(InterviewMessage(
+        session_id=1, seq=5, role="user", kind="fast_forward", content="이대로 그려주세요.",
+        stage="scope",
+    ))
+    interview.checkpoints = [
+        InterviewCheckpoint(id=1, session_id=1, stage="activities", facts={},
+                            working_graph=None, message_seq=5),
+        InterviewCheckpoint(id=2, session_id=1, stage="branches", facts={},
+                            working_graph=None, message_seq=5),
+    ]
+    assert orchestrator._recent_choice_stage(interview) == "activities"
+
+
+def test_choice_accept_stamps_stage_facts_and_advances() -> None:
+    """수락 = 구조 결정 확정 — choice 스테이지 필수 facts를 수락안으로 스탬프하고 같은 턴에 전이.
+    안 하면 인터뷰어가 '이대로 확정할까요?'를 재질문하고 그 답변 턴의 전이가 재드로를
+    유발해 채팅-맵 싱크가 깨진다 (실사용 피드백 2026-07-30)."""
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "표준안", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(current_stage="activities", pending_choices={"options": [option]})
+    # 인터뷰어가 stage_complete를 주지 않아도 결정적으로 전이한다
+    reply = json.dumps({"message": "다음은 분기입니다.", "facts_patch": {}})
+    _, result = _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.facts["activities"]["activities"] == ["요청서 작성"]
+    assert interview.current_stage == "branches"
+    assert result.draw_due is None  # 수락 턴 재드로 억제와 결합 — 루프 종결
+    checkpoints = [o for o in db.added if type(o).__name__ == "InterviewCheckpoint"]
+    assert len(checkpoints) == 1 and checkpoints[0].stage == "activities"
+
+
+def test_choice_accept_branches_without_decisions_stamps_fallback() -> None:
+    db = _FakeDb()
+    option = {"id": "opt-1", "title": "해피패스", "summary": "", "graph": json.loads(DRAFT)}
+    option["graph"].pop("kind", None)
+    interview = _session(current_stage="branches", pending_choices={"options": [option]})
+    reply = json.dumps({"message": "역할로 넘어가죠.", "facts_patch": {}})
+    _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
+    assert interview.facts["branches"]["branches"] == "분기 없음(수락안 기준)"
+    assert interview.current_stage == "roles"
