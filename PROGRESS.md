@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 전멸 필터 내용 포함 서명(설명 병기 통과) + 온보딩 메뉴 경유 seen (worktree-ai-consultant)
+- **설명만 바뀐 안 통과**: `_graph_signature(include_content=True)` — 전멸 필터 판정에 설명·attributes 포함. "설명 한/영 병기" 요청이 구조 동일이라 "같은 맵" 노티스로 거부되던 문제 해소. 에코 노드는 델타 복원이 이전 내용을 그대로 살리므로 진짜 무변화 안은 여전히 필터됨(노이즈 재발 없음). FE 카메라 게이팅은 구조 서명 유지(설명 변경 시 시점 안 뺏음).
+- **온보딩 seen 보강(6d0e84d)**: AI 메뉴 경유 컨설턴트 진입도 seen 처리 — 말풍선 재노출 틈 봉합.
+
 ## 2026-07-30 — 수락=구조 확정 스탬프(재확인·재드로 루프 종결) + 컴포저 busy 잠금 (worktree-ai-consultant)
 - **채팅-맵 싱크 이탈 패턴 종결**: 수락 턴 draw 억제(어제)만으론 한 턴 뒤 재발 — 인터뷰어가 스테이지를 완료 처리하지 않고 "이대로 확정할까요?" 재질문 → "네" 답변 턴의 전이가 choice 스테이지발 multi 재드로 유발. **수락 시 choice 스테이지 필수 facts를 수락안에서 서버가 결정적 스탬프**(activities=수락안 활동 제목 배열·branches=디시전 제목/“분기 없음” 폴백) → 같은 턴 전이+체크포인트(수락 턴은 draw 억제) → 인터뷰어는 다음 주제로. 수락 지시문도 "반영 완료·재확인 금지" 명시.
 - **컴포저 busy 잠금**: 턴/draw 진행 중 컴포저 카드 전체 pointer-events-none+opacity-60(aria-disabled) — 입력 불가 시점이 시각적으로 드러나게.

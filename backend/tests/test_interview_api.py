@@ -988,3 +988,42 @@ def test_fast_forward_guards(client: TestClient, monkeypatch) -> None:
     assert client.post(f"/api/interviews/{state['id']}/fast-forward").status_code == 400  # 이미 review
     client.delete(f"/api/interviews/{state['id']}")
     client.delete(f"/api/interviews/{word_state['id']}")
+
+
+def test_draw_passes_description_only_changes(client: TestClient, monkeypatch) -> None:
+    """구조가 같아도 설명이 바뀐 안은 전멸 필터를 통과한다 — "설명 한/영 병기" 요청이
+    '같은 맵' 노티스로 거부되던 문제 (실사용 피드백 2026-07-30)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = json.loads(_DRAW_A)
+    graph.pop("kind", None)
+    graph.pop("message", None)
+
+    async def _seed() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.working_graph = graph
+            await session.commit()
+
+    asyncio.run(_seed())
+    # 동일 구조·동일 제목이지만 설명만 병기된 안
+    bilingual = json.dumps({
+        "kind": "graph", "message": "설명 병기안",
+        "nodes": [
+            {"key": "s", "title": "시작", "node_type": "start"},
+            {"key": "a", "title": "요청서 작성", "node_type": "process",
+             "description": "구매 요청서 작성 / Draft the purchase request"},
+            {"key": "e", "title": "끝", "node_type": "end"},
+        ],
+        "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
+        "groups": [],
+    })
+    _scripted(monkeypatch, [bilingual])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "single"}).json()
+    last = body["messages"][-1]
+    assert last["kind"] == "choices"  # 노티스가 아니라 선택지
+    options = last["payload"]["options"]
+    assert any("Draft the purchase request" in str(o["graph"]) for o in options)
+    client.delete(f"/api/interviews/{state['id']}")

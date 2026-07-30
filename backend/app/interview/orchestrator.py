@@ -234,18 +234,32 @@ def _word_catalog_text(interview: InterviewSession, doc_sections: list[dict] | N
     return format_section_catalog(doc_sections, language)
 
 
-def _graph_signature(graph: dict | None) -> tuple:
+def _graph_signature(graph: dict | None, include_content: bool = False) -> tuple:
     """구조 시그니처 — 임시키가 아닌 제목 기준으로 노드·엣지·그룹을 정규화해 안 간 동일성을 판정.
 
-    설명·attributes 차이는 무시한다 — 화면(순서도)에서 같아 보이는 안은 같은 안이다.
+    기본은 설명·attributes 무시(화면에서 같아 보이면 같은 안 — FE 카메라 게이팅과 동형).
+    include_content=True면 설명·attributes까지 포함 — 전멸 필터용. "설명만 병기해줘" 같은
+    내용 변경 요청이 '같은 맵'으로 걸러지지 않게 한다. 에코 노드는 _expand_delta가 이전
+    내용을 그대로 복원하므로 진짜 무변화 안은 여전히 걸러진다 (실사용 피드백 2026-07-30).
     """
     if not graph:
         return ()
     titles = {n.get("key"): (n.get("title") or "").strip() for n in graph.get("nodes", [])}
     group_labels = {g.get("key"): (g.get("label") or "").strip() for g in graph.get("groups", [])}
+
+    def content_of(node: dict) -> tuple:
+        if not include_content:
+            return ()
+        attrs = tuple(sorted(
+            (key, str(value).strip())
+            for key, value in (node.get("attributes") or {}).items()
+            if str(value or "").strip()
+        ))
+        return ((node.get("description") or "").strip(), attrs)
+
     nodes = sorted(
         (n.get("node_type") or "", (n.get("title") or "").strip(),
-         group_labels.get(n.get("group_key") or "", ""))
+         group_labels.get(n.get("group_key") or "", ""), content_of(n))
         for n in graph.get("nodes", [])
     )
     edges = sorted(
@@ -425,12 +439,13 @@ async def generate_proposals(
         })
     if not options:
         raise TurnError("AI failed to generate proposals")
-    # 무변화·중복 안 필터 — 현재 작업본과 같은 안, 서로 같은 안은 제시 의미가 없다 (실사용 피드백 2026-07-27)
-    current_sig = _graph_signature(interview.working_graph)
+    # 무변화·중복 안 필터 — 현재 작업본과 같은 안, 서로 같은 안은 제시 의미가 없다 (실사용 피드백 2026-07-27).
+    # 판정은 내용 포함 서명 — 설명/attributes만 바뀐 안(예: 설명 한/영 병기)도 유효한 제안이다 (2026-07-30)
+    current_sig = _graph_signature(interview.working_graph, include_content=True)
     seen: set[tuple] = set()
     distinct = []
     for option in options:
-        sig = _graph_signature(option["graph"])
+        sig = _graph_signature(option["graph"], include_content=True)
         if sig == current_sig or sig in seen:
             continue
         seen.add(sig)
