@@ -25,6 +25,9 @@ interface ChoiceWindowProps {
   onChoose: (id: string) => void;
   // 다른 안에는 없는 이 안만의 노드 키 — diffStatus 하이라이트(복수 안 비교용)
   highlight: Set<string>;
+  // 안 간 싱크 포커스 — 제목 기준(키는 안마다 다름). 클릭한 노드가 모든 창에서 동시 포커싱 (2026-07-30)
+  focusedTitle: string | null;
+  onFocusNode: (title: string | null) => void;
   // 크기·배치는 오버레이가 결정 — 창은 구조만 책임진다
   className: string;
   // 작은 창 헤더 클릭 → 큰 창으로 승격 (3안 레이아웃)
@@ -32,17 +35,27 @@ interface ChoiceWindowProps {
   focused?: boolean;
 }
 
-function ChoiceCanvas({ option, highlight }: { option: ChoiceOption; highlight: Set<string> }) {
-  // 노드 클릭 포커스 — 창별 독립 선택 링 + 카메라 센터/줌 (프리뷰와 동일 UX, 2026-07-30)
-  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+function labelOf(node: { data?: unknown }): string {
+  return String((node.data as { label?: string } | undefined)?.label ?? "").trim();
+}
+
+function ChoiceCanvas({
+  option, highlight, focusedTitle, onFocusNode,
+}: {
+  option: ChoiceOption;
+  highlight: Set<string>;
+  focusedTitle: string | null;
+  onFocusNode: (title: string | null) => void;
+}) {
   const { nodes, edges } = useMemo(() => {
     const laid = layoutWorkingGraph(option.graph, highlight);
     return {
-      nodes: laid.nodes.map((n) => ({ ...n, selected: n.id === focusedKey })),
+      // 싱크 포커스 — 같은 제목 노드가 모든 안에서 동시에 선택 링을 갖는다
+      nodes: laid.nodes.map((n) => ({ ...n, selected: focusedTitle !== null && labelOf(n) === focusedTitle })),
       edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
     };
-  }, [option.graph, highlight, focusedKey]);
-  const { fitView, setCenter, getZoom } = useReactFlow();
+  }, [option.graph, highlight, focusedTitle]);
+  const { fitView, setCenter, getZoom, getNodes } = useReactFlow();
   // fitView는 그래프가 바뀔 때 1회만 — 포커스 클릭(nodes identity 변경)이 카메라를 되돌리지 않게
   const fitForRef = useRef<unknown>(null);
   useEffect(() => {
@@ -51,6 +64,21 @@ function ChoiceCanvas({ option, highlight }: { option: ChoiceOption; highlight: 
       fitView({ duration: 300, padding: 0.15 });
     }
   }, [nodes, option.graph, fitView]);
+  // 포커스 제목 변경 시 각 창이 자기 매칭 노드로 카메라 센터 — 클릭한 창 포함 전 창 싱크
+  const centeredForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusedTitle === centeredForRef.current) return;
+    centeredForRef.current = focusedTitle;
+    if (!focusedTitle) return;
+    const target = getNodes().find((node) => labelOf(node) === focusedTitle);
+    if (!target) return;
+    const width = target.measured?.width ?? target.width ?? 120;
+    const height = target.measured?.height ?? target.height ?? 40;
+    void setCenter(target.position.x + width / 2, target.position.y + height / 2, {
+      zoom: Math.max(getZoom(), 1.1),
+      duration: 400,
+    });
+  }, [focusedTitle, nodes, getNodes, setCenter, getZoom]);
   return (
     <ReactFlow
       nodes={nodes}
@@ -68,22 +96,15 @@ function ChoiceCanvas({ option, highlight }: { option: ChoiceOption; highlight: 
       zoomOnScroll={false}
       zoomOnPinch
       zoomActivationKeyCode={["Control", "Meta"]}
-      onNodeClick={(_, node) => {
-        setFocusedKey(node.id);
-        const width = node.measured?.width ?? node.width ?? 120;
-        const height = node.measured?.height ?? node.height ?? 40;
-        void setCenter(node.position.x + width / 2, node.position.y + height / 2, {
-          zoom: Math.max(getZoom(), 1.1),
-          duration: 400,
-        });
-      }}
-      onPaneClick={() => setFocusedKey(null)}
+      onNodeClick={(_, node) => onFocusNode(labelOf(node) || null)}
+      onPaneClick={() => onFocusNode(null)}
     />
   );
 }
 
 export function ChoiceWindow({
   option, disabled, onChoose, highlight, className, onFocus, focused,
+  focusedTitle, onFocusNode,
 }: ChoiceWindowProps) {
   return (
     <div
@@ -141,7 +162,12 @@ export function ChoiceWindow({
           </>
         ) : null}
         <ReactFlowProvider>
-          <ChoiceCanvas option={option} highlight={highlight} />
+          <ChoiceCanvas
+            option={option}
+            highlight={highlight}
+            focusedTitle={focusedTitle}
+            onFocusNode={onFocusNode}
+          />
         </ReactFlowProvider>
       </div>
       <div className="border-t border-hairline p-2">
@@ -189,6 +215,8 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
   // 새 선택지 세트가 오면 stale id는 find 실패 → 첫 안으로 폴백 (effect 없이 파생)
   const focused = choices.find((o) => o.id === focusedId) ?? choices[0];
   const rest = choices.filter((o) => o.id !== focused.id);
+  // 안 간 싱크 포커스 — 제목 기준으로 모든 창이 동시에 링+센터 (2026-07-30)
+  const [focusNodeTitle, setFocusNodeTitle] = useState<string | null>(null);
 
   if (dismissed) {
     return (
@@ -240,6 +268,8 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               disabled={busy}
               onChoose={onChoose}
               highlight={focused.same_as_current ? NO_HIGHLIGHT : highlight.get(focused.id) ?? NO_HIGHLIGHT}
+              focusedTitle={focusNodeTitle}
+              onFocusNode={setFocusNodeTitle}
               className="h-full min-w-0 flex-[2]"
               focused
             />
@@ -251,6 +281,8 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
                   disabled={busy}
                   onChoose={onChoose}
                   highlight={o.same_as_current ? NO_HIGHLIGHT : highlight.get(o.id) ?? NO_HIGHLIGHT}
+                  focusedTitle={focusNodeTitle}
+                  onFocusNode={setFocusNodeTitle}
                   className="min-h-0 flex-1"
                   onFocus={() => setFocusedId(o.id)}
                 />
@@ -267,6 +299,8 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               disabled={busy}
               onChoose={onChoose}
               highlight={o.same_as_current ? NO_HIGHLIGHT : highlight.get(o.id) ?? NO_HIGHLIGHT}
+              focusedTitle={focusNodeTitle}
+              onFocusNode={setFocusNodeTitle}
               className="h-[min(600px,100%)] w-[min(680px,48%)] min-w-72"
             />
           ))}
@@ -278,6 +312,8 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
             disabled={busy}
             onChoose={onChoose}
             highlight={focused.same_as_current ? NO_HIGHLIGHT : highlight.get(focused.id) ?? NO_HIGHLIGHT}
+            focusedTitle={focusNodeTitle}
+            onFocusNode={setFocusNodeTitle}
             className="h-[min(640px,100%)] w-[min(1100px,92%)] min-w-72"
             focused
           />

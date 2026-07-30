@@ -367,10 +367,12 @@ export function InterviewPreview({
 .iv-preview-flow .react-flow__handle{opacity:0;pointer-events:none}
 .iv-preview-flow .react-flow__node{z-index:2 !important;cursor:pointer}
 .iv-choice-flow .react-flow__node{cursor:pointer}
-/* 선택 링 — 이웃 노드(긴 라벨로 실측 폭이 추정보다 커진 경우 겹침)가 링을 덮지 않게 z 상승 */
-.iv-preview-flow .react-flow__node.selected,.iv-choice-flow .react-flow__node.selected{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:10px;z-index:3 !important}
 /* 노드 호버 강조 — 에디터의 bpm-node-emph 글로우와 동일 룰(ProcessNode 공유) */
 .iv-preview-flow .react-flow__node:hover .bpm-node-emph,.iv-choice-flow .react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}
+/* 선택 링 — 래퍼 outline은 추정 높이 박스라 도형과 어긋남 → 실제 도형(bpm-node-emph)의
+   box-shadow 이중 링(마름모는 회전까지 따라감). 이웃 가림 방지 z 상승. 호버 룰보다 뒤=우선 */
+.iv-preview-flow .react-flow__node.selected,.iv-choice-flow .react-flow__node.selected{z-index:3 !important}
+.iv-preview-flow .react-flow__node.selected .bpm-node-emph,.iv-choice-flow .react-flow__node.selected .bpm-node-emph{box-shadow:0 0 0 2px var(--color-surface),0 0 0 4px var(--color-accent)}
 @keyframes iv-cp-in{from{opacity:0;max-height:0;transform:translateY(-6px)}to{opacity:1;max-height:40px;transform:translateY(0)}}
 .iv-cp-chip{overflow:hidden;animation:iv-cp-in .45s cubic-bezier(0.34,1.3,0.64,1)}
 @keyframes iv-pop-in{from{opacity:0;transform:scale(0.98)}to{opacity:1;transform:none}}
