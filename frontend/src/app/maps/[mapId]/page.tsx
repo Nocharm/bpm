@@ -7379,6 +7379,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         disabled={consultDisabledReason !== null}
                         onClick={() => {
                           setAiMenuOpen(false);
+                          // 어떤 경로로든 컨설턴트 진입 = 온보딩 목적 달성 — 말풍선 재노출 방지
+                          dismissConsultOnboard();
                           router.push(`/maps/${mapId}/consult?version=${versionId}`);
                         }}
                         data-id="open-consultant"
