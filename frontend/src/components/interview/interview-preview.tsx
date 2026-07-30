@@ -293,6 +293,9 @@ export function InterviewPreview({
       const state = await postInterviewRevert(interview.id, previewStage);
       onUpdated(state);
       setPreviewStage(null);
+    } catch (err) {
+      // 무음 실패 방지 — handleApply와 동일하게 액션 바 에러로 표면화 (final review)
+      setApplyError(getApiErrorDetail(err) || "Failed to go back to the checkpoint.");
     } finally {
       setRevertBusy(false);
     }

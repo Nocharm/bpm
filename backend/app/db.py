@@ -157,6 +157,18 @@ def _sweep_orphan_kb_chunks(conn: Connection) -> None:
     ))
 
 
+def _widen_interview_message_kind(conn: Connection) -> None:
+    """interview_messages.kind VARCHAR(12)→VARCHAR(20) — sp_suggestion(13자)이 운영 Postgres에서
+    extras 커밋을 터뜨려 무음 유실되던 회귀(final review 2026-07-30). 컬럼 추가가 아닌 타입 변경이라
+    _ADDED_COLUMNS로는 못 다루는 케이스. sqlite는 길이 미강제라 스킵."""
+    if conn.dialect.name != "postgresql":
+        return
+    inspector = inspect(conn)
+    if "interview_messages" not in inspector.get_table_names():
+        return
+    conn.execute(text("ALTER TABLE interview_messages ALTER COLUMN kind TYPE VARCHAR(20)"))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
@@ -165,7 +177,7 @@ async def init_models() -> None:
         await conn.run_sync(_add_missing_indexes)
     # 정리성 보강 스텝은 트랜잭션 분리 + 비치명 — Postgres는 트랜잭션 내 오류가 이후 문장까지
     # 오염시키고, 스키마 보강 실패가 서비스 전체 기동을 막아선 안 된다(락이 1차 방어라 축소 동작 가능).
-    for step in (_enforce_interview_seq_unique, _sweep_orphan_kb_chunks):
+    for step in (_enforce_interview_seq_unique, _sweep_orphan_kb_chunks, _widen_interview_message_kind):
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(step)

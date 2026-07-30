@@ -786,6 +786,8 @@ async def apply_interview_params(
             status_code=409, detail="no matching activities for the collected parameters"
         )
     interview.working_graph = {**graph, "nodes": nodes}
+    # 표 반영 전 draw된 카드가 살아있으면 스테일 수락이 이 변이를 통째로 되돌린다 (final review 2026-07-30)
+    interview.pending_choices = None
     session.add(InterviewMessage(
         session_id=interview.id,
         seq=max((m.seq for m in interview.messages), default=0) + 1,
@@ -914,7 +916,8 @@ async def upload_attachment(
     if row.status == "parsed" and embed_client.is_embed_enabled():
         indexing.spawn(indexing.index_attachment(row.id))
     # 첨부 시점 정보 추출 — 백그라운드 1콜로 facts를 최대한 미리 수집 (2026-07-28)
-    if row.status == "parsed" and settings.ai_enabled:
+    # 관리자 런타임 차단(app_settings)도 존중 — env만 보면 점검 중에도 GPU로 콜이 나간다
+    if row.status == "parsed" and await is_ai_access_enabled(session):
         indexing.spawn(extract_attachment_facts(interview.id, row.id))
     return InterviewAttachmentOut.model_validate(row)
 
@@ -990,6 +993,7 @@ async def accept_sp_suggestion(
         seen_pairs.add(pair)
         edges.append({**edge, "source": source, "target": target})
     interview.working_graph = {**graph, "nodes": [*kept, sp_node], "edges": edges}
+    interview.pending_choices = None  # 치환 전 카드의 스테일 수락이 SP 링크를 되돌리는 것 방지
     msg.superseded = True  # 카드 소멸 — 대화 이력에서도 접힌다
     session.add(InterviewMessage(
         session_id=interview.id,

@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { Table2, Trash2 } from "lucide-react";
 
 import type { ParamsTableRow } from "@/lib/interview";
-import type { ParamField } from "@/lib/params";
+import { getEditableParamFields, type ParamField } from "@/lib/params";
 import { ParamInput } from "@/components/param-input";
 
 const PAGE_SIZE = 30; // 청크 렌더 — 노드 많을 때 ParamInput 대량 마운트로 느려지는 것 방지
@@ -87,13 +87,23 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
   const visibleRows = rows.slice(0, visibleCount);
 
   function patchRow(activity: string, patch: Partial<DraftRow>) {
+    // 무변경 blur(포커스만 줬다 뺌)로 dirty 게이트가 뚫리지 않게 실제 변화만 반영 (final review)
+    const current: Record<string, string> = { ...(draft[activity] ?? {}) };
+    if (Object.entries(patch).every(([key, value]) => current[key] === value)) return;
     setDirty(true);
     setDraft((prev) => ({ ...prev, [activity]: { ...prev[activity], ...patch } }));
   }
 
   // 행 파라미터 일괄 삭제 — 빈 값은 서버가 facts와 맵 속성 모두에서 제거한다
-  function clearRow(activity: string) {
-    patchRow(activity, { duration: "", cost: "", headcount: "", annual_count: "", fte: "" });
+  function clearRow(activity: string, editable: ReadonlySet<string>) {
+    // SP 상속 필드는 건드리지 않는다 — 편집 가능한 필드만 비움 (CLAUDE.md SP 3표면 게이팅)
+    const patch: Partial<DraftRow> = {};
+    if (editable.has("duration")) patch.duration = "";
+    if (editable.has("cost_krw") || editable.has("cost_usd")) patch.cost = "";
+    if (editable.has("headcount")) patch.headcount = "";
+    if (editable.has("annual_count")) patch.annual_count = "";
+    if (editable.has("fte")) patch.fte = "";
+    patchRow(activity, patch);
   }
 
   function handleScroll(event: React.UIEvent<HTMLDivElement>) {
@@ -152,6 +162,8 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
               {visibleRows.map((row) => {
                 const current = draft[row.activity];
                 if (!current) return null;
+                // subprocess는 annual_count·fte만 직접 편집 — 나머지는 링크 맵 지정값 상속(읽기전용)
+                const editable = new Set<string>(getEditableParamFields(row.nodeType ?? "process"));
                 return (
                   <tr key={row.activity} className="group border-t border-hairline" data-id="iv-params-row">
                     <td className="max-w-44 truncate py-1.5 pr-2 text-ink" title={row.activity}>
@@ -161,7 +173,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                       <ParamInput
                         field="duration"
                         value={current.duration}
-                        disabled={busy}
+                        disabled={busy || !editable.has("duration")}
                         className={CELL_INPUT}
                         ariaLabel={`${row.activity} duration`}
                         onCommit={(next) => patchRow(row.activity, { duration: next })}
@@ -173,7 +185,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                           type="button"
                           className="shrink-0 rounded-sm border border-hairline px-1 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
                           title="Toggle currency (exclusive per activity)"
-                          disabled={busy}
+                          disabled={busy || !editable.has("cost_krw")}
                           onClick={() =>
                             patchRow(row.activity, {
                               currency: current.currency === "krw" ? "usd" : "krw",
@@ -186,7 +198,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                         <ParamInput
                           field={(current.currency === "krw" ? "cost_krw" : "cost_usd") as ParamField}
                           value={current.cost}
-                          disabled={busy}
+                          disabled={busy || !editable.has("cost_krw")}
                           className={CELL_INPUT}
                           ariaLabel={`${row.activity} cost`}
                           onCommit={(next) => patchRow(row.activity, { cost: next })}
@@ -197,7 +209,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                       <ParamInput
                         field="headcount"
                         value={current.headcount}
-                        disabled={busy}
+                        disabled={busy || !editable.has("headcount")}
                         className={CELL_INPUT}
                         ariaLabel={`${row.activity} headcount`}
                         onCommit={(next) => patchRow(row.activity, { headcount: next })}
@@ -207,7 +219,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                       <ParamInput
                         field="annual_count"
                         value={current.annual_count}
-                        disabled={busy}
+                        disabled={busy || !editable.has("annual_count")}
                         className={CELL_INPUT}
                         ariaLabel={`${row.activity} runs per year`}
                         onCommit={(next) => patchRow(row.activity, { annual_count: next })}
@@ -217,7 +229,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                       <ParamInput
                         field="fte"
                         value={current.fte}
-                        disabled={busy}
+                        disabled={busy || !editable.has("fte")}
                         className={CELL_INPUT}
                         ariaLabel={`${row.activity} FTE`}
                         onCommit={(next) => patchRow(row.activity, { fte: next })}
@@ -229,7 +241,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                         className="rounded-xs p-0.5 text-ink-muted opacity-0 transition-opacity duration-150 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
                         title="Clear all parameters for this activity"
                         disabled={busy}
-                        onClick={() => clearRow(row.activity)}
+                        onClick={() => clearRow(row.activity, editable)}
                         data-id="iv-params-clear-row"
                       >
                         <Trash2 size={12} strokeWidth={1.5} />

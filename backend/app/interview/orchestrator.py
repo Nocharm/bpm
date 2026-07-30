@@ -54,9 +54,9 @@ def sum_usage(usage: list[tuple[int | None, int | None]]) -> tuple[int | None, i
 class TurnError(Exception):
     """AI 호출/검증 실패 — 라우터가 502로 변환. 세션 상태는 롤백으로 불변."""
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, status_code: int = 502) -> None:
         super().__init__(message)
-        self.status_code = 502
+        self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -717,7 +717,8 @@ async def run_turn(
             (o for o in pending.get("options", []) if o["id"] == turn.choice_id), None
         )
         if chosen is None:
-            raise TurnError("unknown choice id")
+            # 스테일/이중 클릭 — AI 서버 오류(502)가 아니라 클라이언트 상태 충돌(409)
+            raise TurnError("unknown choice id", status_code=409)
 
     seq = next_seq(interview)
     # 대화 이력엔 옵션 id가 아닌 사람이 읽는 제목을 남긴다 (P3 RAG 원재료 겸용)

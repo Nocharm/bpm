@@ -1052,6 +1052,77 @@ def test_draw_unsticks_invalid_working_graph(client: TestClient, monkeypatch) ->
     client.delete(f"/api/interviews/{state['id']}")
 
 
+def test_message_kind_column_fits_all_kinds() -> None:
+    """kind VARCHAR 폭 회귀 가드 — sp_suggestion(13자)이 12자 컬럼을 넘어 운영 Postgres에서
+    extras 커밋째 무음 유실되던 회귀(final review 2026-07-30). sqlite는 길이 미강제라
+    런타임 테스트로는 안 잡힌다 — 선언 폭을 직접 단언한다."""
+    from app.models import InterviewMessage
+
+    kinds = ("question", "choices", "confirm", "notice", "sp_suggestion",
+             "answer", "choice", "skip", "fast_forward")
+    assert InterviewMessage.__table__.c.kind.type.length >= max(len(k) for k in kinds)
+
+
+def test_apply_params_invalidates_pending_choices(client: TestClient, monkeypatch) -> None:
+    """표 반영은 이전 draw 카드를 무효화 — 스테일 카드 수락이 방금 반영한 파라미터를
+    통째로 되돌리는 것 방지. 스테일 choice는 502가 아닌 409 (final review 2026-07-30)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = {
+        "nodes": [
+            {"key": "s", "title": "시작", "node_type": "start", "attributes": None},
+            {"key": "a", "title": "요청서 작성", "node_type": "process", "attributes": None},
+        ],
+        "edges": [], "groups": [],
+    }
+    _seed_interview_params(state["id"], {"요청서 작성": {"duration": "0.30"}}, graph)
+
+    async def _seed_pending() -> None:
+        from app.models import InterviewSession as IvSession
+
+        async with SessionLocal() as session:
+            row = await session.get(IvSession, state["id"])
+            row.pending_choices = {"options": [{"id": "opt-9-1", "title": "옛 안", "graph": graph}]}
+            await session.commit()
+
+    asyncio.run(_seed_pending())
+    assert client.post(f"/api/interviews/{state['id']}/apply-params").status_code == 200
+    stale = client.post(
+        f"/api/interviews/{state['id']}/turns", json={"type": "choice", "choice_id": "opt-9-1"}
+    )
+    assert stale.status_code == 409
+    client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_attachment_extraction_respects_runtime_ai_block(client: TestClient, monkeypatch) -> None:
+    """관리자 런타임 AI 차단 중엔 첨부 추출 스폰도 스킵 — env만 보면 점검 중에도 GPU로
+    콜이 나간다 (final review 2026-07-30). 업로드 자체(파싱·노티스)는 계속 동작."""
+    _enable_ai(monkeypatch)
+    from app.kb import indexing
+
+    spawned: list[str] = []
+
+    def fake_spawn(coro) -> None:
+        spawned.append(coro.__name__)
+        coro.close()
+
+    monkeypatch.setattr(indexing, "spawn", fake_spawn)
+    state = _iv_session(client)
+    assert client.put(
+        "/api/admin/app-settings", json={"ai_access_disabled": True}
+    ).status_code == 200
+    try:
+        ok = client.post(
+            f"/api/interviews/{state['id']}/attachments",
+            files={"file": ("sop.txt", "구매 절차 문서".encode(), "text/plain")},
+        )
+        assert ok.status_code == 200 and ok.json()["status"] == "parsed"
+        assert "extract_attachment_facts" not in spawned
+    finally:
+        client.put("/api/admin/app-settings", json={"ai_access_disabled": False})
+    client.delete(f"/api/interviews/{state['id']}")
+
+
 def test_accept_checkpoint_captures_accepted_graph(client: TestClient, monkeypatch) -> None:
     """수락된 맵은 반드시 체크포인트에 남는다 — 전이 없는 수락(패스트트랙 review 등)도
     자체 체크포인트를 만든다. 없으면 좌상단 분기 저장이 전부 시드(초기 상태)만 보여준다

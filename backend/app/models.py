@@ -697,8 +697,9 @@ class InterviewMessage(Base):
     )
     seq: Mapped[int] = mapped_column(Integer)
     role: Mapped[str] = mapped_column(String(12))  # consultant|user
-    # consultant: question|choices|confirm|notice / user: answer|choice|confirm|skip
-    kind: Mapped[str] = mapped_column(String(12))
+    # consultant: question|choices|confirm|notice|sp_suggestion / user: answer|choice|confirm|skip|fast_forward
+    # sp_suggestion(13자)이 12를 넘어 운영 Postgres에서 무음 유실됐던 회귀 — 20으로 확장 (final review 2026-07-30)
+    kind: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text, default="")
     payload: Mapped[dict | None] = mapped_column(JSON, default=None)  # 선택지·선택결과 등
     stage: Mapped[str] = mapped_column(String(20))

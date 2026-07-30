@@ -36,7 +36,7 @@ function msg(over: Partial<InterviewMessage>): InterviewMessage {
 }
 
 describe("INTERVIEW_STAGES", () => {
-  it("고정 7단계 순서", () => {
+  it("고정 6단계 순서(params 폐지 반영)", () => {
     expect(INTERVIEW_STAGES.map((s) => s.key)).toEqual(
       ["scope", "io", "activities", "branches", "roles", "review"],
     );
@@ -239,6 +239,7 @@ describe("deriveParamsEditorRows", () => {
     const rows = deriveParamsEditorRows(graph, { params: { params_table: { "요청서 작성": { duration: "0.30" } } } });
     expect(rows.map((r) => r.activity)).toEqual(["요청서 작성", "견적 비교"]);
     expect(rows[0].values.duration).toBe("0.30");
+    expect(rows[0].nodeType).toBe("process"); // SP 필드 게이팅용 타입 스레딩
     expect(rows[1].values).toEqual({});
   });
 

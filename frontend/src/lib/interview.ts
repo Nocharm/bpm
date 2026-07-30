@@ -104,6 +104,8 @@ export const PARAM_TABLE_KEYS = [
 export interface ParamsTableRow {
   activity: string;
   values: Record<string, string>;
+  // 작업본 노드 타입 — SP 필드 게이팅용(deriveParamsEditorRows만 채움, 미지정=process 취급)
+  nodeType?: string;
 }
 
 // facts.params.params_table → 표 행 — 확인된 필드만, 빈 행 제거
@@ -141,7 +143,7 @@ export function deriveParamsEditorRows(
     const title = (node.title ?? "").trim();
     if (!title || seen.has(title)) continue;
     seen.add(title);
-    rows.push({ activity: title, values: collected.get(title) ?? {} });
+    rows.push({ activity: title, values: collected.get(title) ?? {}, nodeType: node.node_type });
   }
   for (const [activity, values] of collected) {
     if (!seen.has(activity)) rows.push({ activity, values });
@@ -257,9 +259,6 @@ export function highlightConnectedEdges(edges: Edge[], keys: ReadonlySet<string>
   );
 }
 
-
-// 복수 제안 간 차이 노드 — 모든 안에 공통으로 등장하지 않는 제목의 노드 키(안별) → 프리뷰 하이라이트.
-// 안마다 드래프터가 독립 생성이라 키는 비교 불가 — 제목(트림)으로 동질성 판단.
 
 // BE orchestrator._graph_signature와 동형 — 설명·attributes 차이는 무시(화면상 같아 보이는
 // 그래프는 같은 서명). 프리뷰 카메라 리셋 게이팅용 (hardening T12).

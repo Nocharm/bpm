@@ -107,6 +107,7 @@ interface InterviewPanelProps {
   hasChoices: boolean;
   onSend: (content: string) => void;
   onSkip: () => void;
+  canRetry: boolean; // 재시도 가능한 턴 실패에만 Retry 노출 — no-op/무관 턴 재전송 방지
   onRetry: () => void;
   // 파일 1개 업로드 — 성공 여부 반환(복수 업로드 진행/실패 표시용). 실패 시 에러 표시는 호출자(page)가 담당.
   onAttach: (file: File) => Promise<boolean>;
@@ -115,7 +116,8 @@ interface InterviewPanelProps {
 
 export function InterviewPanel({
   interview, busy, error, attachError = null, pending, hasChoices,
-  onSend, onSkip, onRetry, onAttach, onDeleteAttachment,
+  onSend, onSkip, canRetry,
+  onRetry, onAttach, onDeleteAttachment,
   readingIds, fastTrackArmed = false, onFastTrackCancel, onStartOver,
 }: InterviewPanelProps) {
   const { t } = useI18n();
@@ -530,9 +532,11 @@ export function InterviewPanel({
               data-id="iv-error"
             >
               {error}
-              <button className="ml-2 inline-flex items-center gap-1 text-caption-strong" onClick={onRetry}>
-                <RotateCcw size={16} strokeWidth={1.5} /> Retry
-              </button>
+              {canRetry ? (
+                <button className="ml-2 inline-flex items-center gap-1 text-caption-strong" onClick={onRetry}>
+                  <RotateCcw size={16} strokeWidth={1.5} /> Retry
+                </button>
+              ) : null}
             </li>
           ) : null}
           {attachError ? (

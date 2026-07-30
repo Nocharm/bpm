@@ -89,6 +89,8 @@ export default function ConsultPage() {
   // 패스트트랙 — 인사 보기 클릭(armed) → 첨부 성공 시 범위 제안 자동 턴(awaiting) →
   // "이대로 그리기" 인터셉트. 새로고침 시 소실 → 일반 인터뷰 폴백(무해, design 2026-07-29 §2)
   const [fastTrack, setFastTrack] = useState<"idle" | "armed" | "awaiting">("idle");
+  // 에러 배너 Retry 노출 여부 — 유효한 턴 실패에만 true(패스트포워드/params 실패는 재생 불가)
+  const [canRetry, setCanRetry] = useState(false);
   // Draw map 확인 — 서머리 승인 대기 중 백그라운드 선그리기(prefetch). 승인 시 완성돼 있으면
   // 즉시 모달, 아니면 기존 그리기 오버레이로 대기 (실사용 피드백 2026-07-30)
   const [drawConfirmOpen, setDrawConfirmOpen] = useState(false);
@@ -235,7 +237,10 @@ export default function ConsultPage() {
       else if (state.draw_due) void startDraw(state.draw_due);
     } catch (err) {
       const adopted = await adoptDeliveredTurn(turn, interview.id, priorSeq);
-      if (!adopted) setError(getApiErrorDetail(err) || "AI request failed.");
+      if (!adopted) {
+        setError(getApiErrorDetail(err) || "AI request failed.");
+        setCanRetry(true);
+      }
     } finally {
       setBusy(false);
       setOptimisticChoice(null); // 성공=서버 상태가 동일 그래프 보유, 실패=모달 복귀
@@ -254,6 +259,11 @@ export default function ConsultPage() {
       setDrawError(null);
       setOptimisticChoice(null);
       setParamsOpen(false);
+      // 이전 세션 흔적 전체 리셋 — fast-track 칩·읽는 중 배지·첨부 에러 잔존 방지 (final review)
+      setFastTrack("idle");
+      setReadingIds(new Set());
+      setAttachError(null);
+      setCanRetry(false);
       lastTurnRef.current = null;
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to restart the interview.");
@@ -267,7 +277,8 @@ export default function ConsultPage() {
     if (!interview || busy || drawBusy) return;
     setBusy(true);
     setError(null);
-    setPending(interview.lang === "en" ? FAST_TRACK_CONFIRM_LABELS[1] : FAST_TRACK_CONFIRM_LABELS[0]);
+    // 낙관 표시는 서버 기록(_FAST_FORWARD_USER_TEXT)과 동일 문구 — 도착 시 치환 티 안 나게
+    setPending(interview.lang === "en" ? "Draw it as proposed." : "이대로 그려주세요.");
     try {
       const state = await fastForwardInterview(interview.id);
       setInterview(state);
@@ -276,6 +287,7 @@ export default function ConsultPage() {
       if (state.draw_due === "multi" || state.draw_due === "single") void startDraw(state.draw_due);
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to fast-forward.");
+      setCanRetry(false); // lastTurnRef 재생 대상이 아님 — Retry 무의미
       setPending(null);
     } finally {
       setBusy(false);
@@ -290,8 +302,12 @@ export default function ConsultPage() {
       return;
     }
     if (fastTrack === "awaiting" && FAST_TRACK_CONFIRM_LABELS.includes(content)) {
-      void handleFastForward();
-      return;
+      // review 도달 후엔 fast-forward가 무의미(백엔드 400) — 상태를 접고 일반 턴으로 (final review)
+      if (interview?.current_stage !== "review") {
+        void handleFastForward();
+        return;
+      }
+      setFastTrack("idle");
     }
     if (fastTrack !== "idle" && FAST_TRACK_NORMAL_LABELS.includes(content)) {
       setFastTrack("idle");
@@ -310,6 +326,7 @@ export default function ConsultPage() {
       setParamsOpen(false);
     } catch (err) {
       setError(getApiErrorDetail(err) || "Failed to apply parameters.");
+      setCanRetry(false); // params 실패도 턴 재생 대상 아님
       setParamsOpen(false);
     } finally {
       setParamsBusy(false);
@@ -589,6 +606,7 @@ export default function ConsultPage() {
               hasChoices={choices !== null}
               onSend={handleSend}
               onSkip={() => runTurn({ type: "skip" })}
+              canRetry={canRetry}
               onRetry={() => lastTurnRef.current && runTurn(lastTurnRef.current)}
               onAttach={handleAttach}
               onDeleteAttachment={handleDeleteAttachment}

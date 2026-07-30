@@ -3,6 +3,14 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 브랜치 최종 리뷰 픽스 배치 (worktree-ai-consultant)
+3방향 병렬 리뷰(백엔드 코어·프론트 표면·최근 픽스 회귀) 적발분 중 확정 항목 일괄 수정:
+- **[블로커] `InterviewMessage.kind` VARCHAR(12)→(20)**: `sp_suggestion`(13자)이 운영 Postgres에서 extras 커밋을 터뜨려 SP 제안이 무음 유실(sqlite는 길이 미강제라 로컬 그린). `db.py` 부트스트랩에 postgres 전용 ALTER 스텝 추가(배포 시 자동), 선언 폭 회귀 테스트 동반.
+- apply-params·sp-accept가 `pending_choices` 미무효화 → 스테일 카드 수락이 방금 반영한 파라미터/SP 치환을 되돌리던 구멍 봉합. 스테일 choice는 502→**409**(TurnError status_code 파라미터화).
+- 첨부 추출 AI 콜이 관리자 런타임 차단(app_settings)을 우회 → `is_ai_access_enabled` 게이트.
+- FE: fastTrack awaiting이 review 도달 후에도 "이대로 그리기" 클릭을 fast-forward로 인터셉트(백엔드 400 루프) → review에선 일반 턴 폴백+상태 해제. Start over가 fastTrack/readingIds/attachError/canRetry 미리셋 → 전체 리셋. 에러 배너 Retry가 재생 불가 실패(fast-forward·params)에도 노출돼 no-op/무관 턴 재전송 → `canRetry` 게이트. params 표 무변경 blur가 dirty 게이트 뚫던 것 수정 + **SP 행 필드 게이팅**(`getEditableParamFields` — CLAUDE.md 3표면 불변식의 4번째 표면). 체크포인트 revert 실패 무음 → 액션 바 에러 표면화. fast-forward 낙관 문구를 서버 기록과 동일화. 고아 주석·스테일 테스트 주석 정리.
+- 백로그(추적만): FE Apply의 잔여 422 입구(end 제목 되돌림 충돌·keep-current 무교정)·에디터 AI 챗 start/end sanitize 대칭·세션 생성 레이스(부분 유니크 인덱스)·모달 뒤 키보드 턴·타이머 정리·같은 스테이지 칩 중복 표현.
+
 ## 2026-07-30 — 미리보기 포커스 엣지 하이라이트 (worktree-ai-consultant)
 - 노드 클릭 포커스(선택 링+줌) 시 입출 엣지를 액센트로 강조 — 공용 `highlightConnectedEdges`(lib/interview) 신설, 메인 미리보기(키 기준)·복수 안 창(제목 싱크 기준) 양쪽 적용. 빈 키셋은 원본 배열 반환(메모 재사용).
 
