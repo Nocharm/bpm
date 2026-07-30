@@ -728,14 +728,17 @@ function MapEditor({ mapId }: { mapId: number }) {
   // nodes를 오염시키지 않아 아웃라인·저장·라우팅 등 기존 가정이 깨지지 않는다(회귀 0). scopeId = 펼친 부모 id.
   const [childNodes, setChildNodes] = useState<AppNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  // 새 맵 온보딩 — 시드 Start/End만 있는 빈 맵에서 AI 컨설턴트 안내 1회 (2026-07-28)
+  // 새 맵 온보딩 — 시드 Start/End만 있는 빈 맵에서 AI 컨설턴트 안내, **맵별 1회** (2026-07-30).
+  // 전역 키였을 땐 컨설턴트를 한 번이라도 쓰면(Start/Dismiss/메뉴 진입) 이후 새 맵 전부에서
+  // 영구 비노출됐다 — 새 맵마다 안내하는 의도와 어긋나 맵 단위 키로 전환.
+  const consultOnboardKey = `bpm.consultOnboardSeen.${mapId}`;
   const [consultOnboardSeen, setConsultOnboardSeen] = useState(() =>
     typeof window === "undefined"
       ? true
-      : window.localStorage.getItem("bpm.consultOnboardSeen") === "1",
+      : window.localStorage.getItem(consultOnboardKey) === "1",
   );
   function dismissConsultOnboard() {
-    window.localStorage.setItem("bpm.consultOnboardSeen", "1");
+    window.localStorage.setItem(consultOnboardKey, "1");
     setConsultOnboardSeen(true);
   }
   // AI 메뉴 — 챗·컨설턴트 진입을 버튼 하나로 통합(상단바 다이어트, 2026-07-30)

@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 온보딩 플래그 맵별 키로 전환 (worktree-ai-consultant)
+- 새 맵 온보딩이 안 뜨던 원인 = `bpm.consultOnboardSeen`이 **전역·영구 키** — 컨설턴트를 한 번이라도 쓰면(Start/Dismiss/AI 메뉴 진입) 이후 모든 새 맵에서 비노출. `bpm.consultOnboardSeen.<mapId>` 맵별 키로 전환 — 새 맵마다 안내, 맵당 1회.
+
 ## 2026-07-30 — Draw map 서머리 확인 + 백그라운드 선그리기 (worktree-ai-consultant)
 - 수동 Draw map 클릭 → **수집 정보 마크다운 서머리 확인 다이얼로그**(`draw-confirm-dialog`, MarkdownView 렌더·`buildDrawSummary`) + 동시에 **백그라운드 선그리기(prefetch)** 시작. 승인 시 이미 완성이면 즉시 제안 모달, 미완성이면 기존 그리기 오버레이로 대기(isDone 플래그로 오버레이 플리커 방지). Not now=응답 무시(draw Cancel과 동일 시맨틱). 자동 draw(draw_due·fast-forward·Retry)는 확인 없이 종전 경로. 스모크 시나리오 추가.
 
