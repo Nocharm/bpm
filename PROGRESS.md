@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 제안 diff 태그를 현재맵 대비로 전환 + 구조 중복 안 제거 (worktree-ai-consultant)
+- **동일해 보이는 안 2개 문제**: 내용 포함 서명 도입(설명 병기 통과) 때 안끼리 중복 제거에도 적용된 부작용 — 워딩만 다른 구조 동일안이 둘 다 생존. **안끼리 중복은 구조 서명으로 복원**(현재맵 대비 판정만 내용 포함 유지).
+- **변경/추가 태그 미작동**: 안끼리 차이(distinctiveNodeKeys — 안들이 비슷하면 무표시) 폐기 → **현재 작업본 대비 diff**(`diffFromCurrentKeys`: 새 제목=added·같은 제목 설명/attributes 변경=changed, layoutWorkingGraph changed 지원 추가, 비교화면 diff색 뱃지 재사용). keep-current 안은 정의상 무태그.
+
 ## 2026-07-30 — 도형 밀착 선택 링 + 복수 안 싱크 포커스 (worktree-ai-consultant)
 - 선택 링을 래퍼 outline(추정 높이 박스 — 긴 라벨 노드와 어긋남)에서 **실제 도형(`bpm-node-emph`)의 box-shadow 이중 링**으로 — 알약/카드/마름모(회전 포함) 실측 크기를 그대로 감쌈. z-3 상승 유지.
 - 복수 안 미리보기 **싱크 포커스**: 노드 클릭 시 제목 기준으로(안마다 키가 달라서) 모든 창이 동시에 선택 링 + 자기 매칭 노드로 카메라 센터(1.1 줌, centeredForRef 중복 방지). 빈 캔버스 클릭=전 창 해제.

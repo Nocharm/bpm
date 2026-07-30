@@ -9,22 +9,22 @@ import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { NodeTypes } from "@xyflow/react";
 import { Check, Layers, Maximize2 } from "lucide-react";
 
-import type { ChoiceOption } from "@/lib/api";
-import { distinctiveNodeKeys, layoutWorkingGraph } from "@/lib/interview";
+import type { ChoiceOption, WorkingGraph } from "@/lib/api";
+import { diffFromCurrentKeys, layoutWorkingGraph, type GraphDiffKeys } from "@/lib/interview";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
 import { ProcessNode } from "@/components/process-node";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
 
-// 하이라이트 없음 — 렌더마다 new Set()이면 ChoiceCanvas useMemo가 매번 재레이아웃한다
-const NO_HIGHLIGHT = new Set<string>();
+// diff 없음 — 렌더마다 새 객체면 ChoiceCanvas useMemo가 매번 재레이아웃한다
+const EMPTY_DIFF: GraphDiffKeys = { added: new Set<string>(), changed: new Set<string>() };
 
 interface ChoiceWindowProps {
   option: ChoiceOption;
   disabled: boolean;
   onChoose: (id: string) => void;
-  // 다른 안에는 없는 이 안만의 노드 키 — diffStatus 하이라이트(복수 안 비교용)
-  highlight: Set<string>;
+  // 현재 작업본 대비 diff — 추가/변경 노드 뱃지(비교화면 diff색 재사용)
+  diff: GraphDiffKeys;
   // 안 간 싱크 포커스 — 제목 기준(키는 안마다 다름). 클릭한 노드가 모든 창에서 동시 포커싱 (2026-07-30)
   focusedTitle: string | null;
   onFocusNode: (title: string | null) => void;
@@ -40,21 +40,21 @@ function labelOf(node: { data?: unknown }): string {
 }
 
 function ChoiceCanvas({
-  option, highlight, focusedTitle, onFocusNode,
+  option, diff, focusedTitle, onFocusNode,
 }: {
   option: ChoiceOption;
-  highlight: Set<string>;
+  diff: GraphDiffKeys;
   focusedTitle: string | null;
   onFocusNode: (title: string | null) => void;
 }) {
   const { nodes, edges } = useMemo(() => {
-    const laid = layoutWorkingGraph(option.graph, highlight);
+    const laid = layoutWorkingGraph(option.graph, diff.added, diff.changed);
     return {
       // 싱크 포커스 — 같은 제목 노드가 모든 안에서 동시에 선택 링을 갖는다
       nodes: laid.nodes.map((n) => ({ ...n, selected: focusedTitle !== null && labelOf(n) === focusedTitle })),
       edges: laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
     };
-  }, [option.graph, highlight, focusedTitle]);
+  }, [option.graph, diff, focusedTitle]);
   const { fitView, setCenter, getZoom, getNodes } = useReactFlow();
   // fitView는 그래프가 바뀔 때 1회만 — 포커스 클릭(nodes identity 변경)이 카메라를 되돌리지 않게
   const fitForRef = useRef<unknown>(null);
@@ -103,7 +103,7 @@ function ChoiceCanvas({
 }
 
 export function ChoiceWindow({
-  option, disabled, onChoose, highlight, className, onFocus, focused,
+  option, disabled, onChoose, diff, className, onFocus, focused,
   focusedTitle, onFocusNode,
 }: ChoiceWindowProps) {
   return (
@@ -164,7 +164,7 @@ export function ChoiceWindow({
         <ReactFlowProvider>
           <ChoiceCanvas
             option={option}
-            highlight={highlight}
+            diff={diff}
             focusedTitle={focusedTitle}
             onFocusNode={onFocusNode}
           />
@@ -187,11 +187,13 @@ export function ChoiceWindow({
 
 interface ChoiceOverlayProps {
   choices: ChoiceOption[];
+  // 현재 작업본 — 안별 추가/변경 뱃지의 비교 기준 (2026-07-30)
+  currentGraph: WorkingGraph | null;
   busy: boolean;
   onChoose: (id: string) => void;
 }
 
-export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
+export function ChoiceOverlay({ choices, currentGraph, busy, onChoose }: ChoiceOverlayProps) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   // Escape로 접기 — 안 고르고 캔버스/채팅을 먼저 보고 싶을 때의 탈출구. pending은 서버에
   // 남아 있어 칩으로 재열기 (hardening T15). 새 선택지 세트가 오면 identity가 달라 자동 복귀.
@@ -205,12 +207,11 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [choices, dismissed]);
-  // 복수 안일 때 안 간 차이 노드(모든 안에 공통이 아닌 제목)를 하이라이트.
-  // '현재 맵 유지' 안은 비교 모수에서 제외 — 포함하면 무변경인 현재맵 노드가 '추가'로
-  // 표시되고 다른 안들의 차이 판정도 오염된다 (실사용 피드백 2026-07-30)
-  const highlight = useMemo(
-    () => distinctiveNodeKeys(choices.filter((option) => !option.same_as_current)),
-    [choices],
+  // 안별 diff = **현재 작업본 대비**(제목 기준 추가·내용 변경) — 안끼리 비교는 안들이
+  // 비슷하면 아무 표시도 없던 문제로 폐기. keep-current 안은 정의상 diff 없음 (2026-07-30)
+  const diffs = useMemo(
+    () => new Map(choices.map((option) => [option.id, diffFromCurrentKeys(option.graph, currentGraph)])),
+    [choices, currentGraph],
   );
   // 새 선택지 세트가 오면 stale id는 find 실패 → 첫 안으로 폴백 (effect 없이 파생)
   const focused = choices.find((o) => o.id === focusedId) ?? choices[0];
@@ -267,7 +268,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               option={focused}
               disabled={busy}
               onChoose={onChoose}
-              highlight={focused.same_as_current ? NO_HIGHLIGHT : highlight.get(focused.id) ?? NO_HIGHLIGHT}
+              diff={diffs.get(focused.id) ?? EMPTY_DIFF}
               focusedTitle={focusNodeTitle}
               onFocusNode={setFocusNodeTitle}
               className="h-full min-w-0 flex-[2]"
@@ -280,7 +281,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
                   option={o}
                   disabled={busy}
                   onChoose={onChoose}
-                  highlight={o.same_as_current ? NO_HIGHLIGHT : highlight.get(o.id) ?? NO_HIGHLIGHT}
+                  diff={diffs.get(o.id) ?? EMPTY_DIFF}
                   focusedTitle={focusNodeTitle}
                   onFocusNode={setFocusNodeTitle}
                   className="min-h-0 flex-1"
@@ -298,7 +299,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
               option={o}
               disabled={busy}
               onChoose={onChoose}
-              highlight={o.same_as_current ? NO_HIGHLIGHT : highlight.get(o.id) ?? NO_HIGHLIGHT}
+              diff={diffs.get(o.id) ?? EMPTY_DIFF}
               focusedTitle={focusNodeTitle}
               onFocusNode={setFocusNodeTitle}
               className="h-[min(600px,100%)] w-[min(680px,48%)] min-w-72"
@@ -311,7 +312,7 @@ export function ChoiceOverlay({ choices, busy, onChoose }: ChoiceOverlayProps) {
             option={focused}
             disabled={busy}
             onChoose={onChoose}
-            highlight={focused.same_as_current ? NO_HIGHLIGHT : highlight.get(focused.id) ?? NO_HIGHLIGHT}
+            diff={diffs.get(focused.id) ?? EMPTY_DIFF}
             focusedTitle={focusNodeTitle}
             onFocusNode={setFocusNodeTitle}
             className="h-[min(640px,100%)] w-[min(1100px,92%)] min-w-72"

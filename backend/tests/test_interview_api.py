@@ -1092,3 +1092,29 @@ def test_apply_params_manual_clear_removes_map_attributes(client: TestClient, mo
     assert node["attributes"]["headcount"] == "3"
     assert body["facts"]["params"]["params_table"]["정산"]["duration"] == ""
     client.delete(f"/api/interviews/{state['id']}")
+
+
+def test_draw_dedupes_structurally_identical_options(client: TestClient, monkeypatch) -> None:
+    """안끼리 중복 제거는 구조 기준 — 설명 워딩만 다른 동일 구조안 2개가 나란히 뜨지 않는다
+    (2026-07-30). 현재 작업본 대비 판정(내용 포함)과는 별개."""
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(settings, "interview_choice_count", 2)
+    state = _iv_session(client)
+
+    def _variant(desc: str) -> str:
+        return json.dumps({
+            "kind": "graph", "message": desc,
+            "nodes": [
+                {"key": "s", "title": "시작", "node_type": "start"},
+                {"key": "a", "title": "요청서 작성", "node_type": "process", "description": desc},
+                {"key": "e", "title": "끝", "node_type": "end"},
+            ],
+            "edges": [{"source": "s", "target": "a"}, {"source": "a", "target": "e"}],
+            "groups": [],
+        })
+
+    _scripted(monkeypatch, [_variant("설명 A"), _variant("설명 B")])
+    body = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "multi"}).json()
+    options = body["messages"][-1]["payload"]["options"]
+    assert len(options) == 1  # 구조 동일 → 1안만 (시드 start/end뿐이라 keep-current 없음)
+    client.delete(f"/api/interviews/{state['id']}")

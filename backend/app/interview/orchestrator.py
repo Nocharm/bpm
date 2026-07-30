@@ -445,15 +445,17 @@ async def generate_proposals(
     if not options:
         raise TurnError("AI failed to generate proposals")
     # 무변화·중복 안 필터 — 현재 작업본과 같은 안, 서로 같은 안은 제시 의미가 없다 (실사용 피드백 2026-07-27).
-    # 판정은 내용 포함 서명 — 설명/attributes만 바뀐 안(예: 설명 한/영 병기)도 유효한 제안이다 (2026-07-30)
+    # 현재 작업본 대비는 내용 포함 서명(설명 병기 요청 통과), **안끼리 중복은 구조 서명** —
+    # 설명 워딩만 다른 구조 동일안 2개가 나란히 뜨는 것 방지 (실사용 피드백 2026-07-30)
     current_sig = _graph_signature(interview.working_graph, include_content=True)
     seen: set[tuple] = set()
     distinct = []
     for option in options:
-        sig = _graph_signature(option["graph"], include_content=True)
-        if sig == current_sig or sig in seen:
+        content_sig = _graph_signature(option["graph"], include_content=True)
+        structural_sig = _graph_signature(option["graph"])
+        if content_sig == current_sig or structural_sig in seen:
             continue
-        seen.add(sig)
+        seen.add(structural_sig)
         distinct.append(option)
     if not distinct:
         return None, demoted_total  # 전부 현재 작업본과 동일 — 라우터가 노티스로 안내

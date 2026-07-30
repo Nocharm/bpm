@@ -636,7 +636,7 @@ export function InterviewPreview({
             ) : null}
             {/* 선택지 플로팅 창 — 복수 안을 캔버스 위에, 3안은 큰 창 1+작은 창 2(탭 전환), 선택하면 모두 닫힘 */}
             {choices && choices.length > 0 && !drawBusy ? (
-              <ChoiceOverlay choices={choices} busy={busy} onChoose={onChoose} />
+              <ChoiceOverlay choices={choices} currentGraph={graph} busy={busy} onChoose={onChoose} />
             ) : null}
           </div>
         </NodeActionsContext.Provider>

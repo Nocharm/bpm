@@ -149,6 +149,38 @@ export function deriveParamsEditorRows(
   return rows;
 }
 
+export interface GraphDiffKeys {
+  added: Set<string>;
+  changed: Set<string>;
+}
+
+// 제안 안의 현재 작업본 대비 diff — 새 제목=added, 같은 제목·내용(설명/attributes) 변경=changed.
+// 안끼리 비교(distinctiveNodeKeys)를 대체 — 안들이 비슷하면 아무것도 표시되지 않던 문제 (2026-07-30).
+export function diffFromCurrentKeys(
+  graph: WorkingGraph,
+  current: WorkingGraph | null | undefined,
+): GraphDiffKeys {
+  const contentOf = (node: WorkingGraph["nodes"][number]): string =>
+    JSON.stringify([
+      (node.description ?? "").trim(),
+      Object.entries(node.attributes ?? {})
+        .filter(([, value]) => String(value ?? "").trim() !== "")
+        .map(([key, value]) => [key, String(value).trim()])
+        .sort(),
+    ]);
+  const currentByTitle = new Map(
+    (current?.nodes ?? []).map((node) => [node.title.trim(), contentOf(node)]),
+  );
+  const added = new Set<string>();
+  const changed = new Set<string>();
+  for (const node of graph.nodes) {
+    const existing = currentByTitle.get(node.title.trim());
+    if (existing === undefined) added.add(node.key);
+    else if (existing !== contentOf(node)) changed.add(node.key);
+  }
+  return { added, changed };
+}
+
 export function choiceOptionsOf(messages: InterviewMessage[]): ChoiceOption[] | null {
   const last = messages[messages.length - 1];
   if (!last || last.role !== "consultant" || last.kind !== "choices") return null;
@@ -168,6 +200,7 @@ export function addedNodeKeys(
 export function layoutWorkingGraph(
   graph: WorkingGraph | null,
   added: Set<string>,
+  changed?: Set<string>,
 ): { nodes: AppNode[]; edges: Edge[] } {
   if (!graph || graph.nodes.length === 0) return { nodes: [], edges: [] };
   const nodes: AppNode[] = graph.nodes.map((n) => {
@@ -190,7 +223,11 @@ export function layoutWorkingGraph(
         groupIds: [],
         hasChildren: false,
         sideHandles: true,
-        diffStatus: added.has(n.key) ? ("added" as const) : undefined,
+        diffStatus: added.has(n.key)
+          ? ("added" as const)
+          : changed?.has(n.key)
+            ? ("changed" as const)
+            : undefined,
       },
     } as AppNode;
   });
@@ -206,30 +243,6 @@ export function layoutWorkingGraph(
 
 // 복수 제안 간 차이 노드 — 모든 안에 공통으로 등장하지 않는 제목의 노드 키(안별) → 프리뷰 하이라이트.
 // 안마다 드래프터가 독립 생성이라 키는 비교 불가 — 제목(트림)으로 동질성 판단.
-export function distinctiveNodeKeys(options: ChoiceOption[]): Map<string, Set<string>> {
-  const result = new Map<string, Set<string>>();
-  if (options.length < 2) {
-    for (const option of options) result.set(option.id, new Set());
-    return result;
-  }
-  const titleCount = new Map<string, number>();
-  for (const option of options) {
-    for (const title of new Set(option.graph.nodes.map((n) => n.title.trim()))) {
-      titleCount.set(title, (titleCount.get(title) ?? 0) + 1);
-    }
-  }
-  for (const option of options) {
-    result.set(
-      option.id,
-      new Set(
-        option.graph.nodes
-          .filter((n) => (titleCount.get(n.title.trim()) ?? 0) < options.length)
-          .map((n) => n.key),
-      ),
-    );
-  }
-  return result;
-}
 
 // BE orchestrator._graph_signature와 동형 — 설명·attributes 차이는 무시(화면상 같아 보이는
 // 그래프는 같은 서명). 프리뷰 카메라 리셋 게이팅용 (hardening T12).

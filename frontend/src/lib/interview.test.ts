@@ -10,7 +10,7 @@ import {
   deriveParamsEditorRows,
   deriveParamsTable,
   deriveSequencePreview,
-  distinctiveNodeKeys,
+  diffFromCurrentKeys,
   getGraphSignature,
   layoutWorkingGraph,
   stageIndex,
@@ -86,29 +86,29 @@ describe("layoutWorkingGraph", () => {
   });
 });
 
-describe("distinctiveNodeKeys", () => {
-  const opt = (id: string, titles: string[]) => ({
-    id, title: id, summary: "",
-    graph: {
-      nodes: titles.map((t, i) => ({
-        key: `${id}-n${i}`, title: t, node_type: "process",
-        description: "", attributes: null, group_key: null,
-      })),
+describe("diffFromCurrentKeys", () => {
+  const node = (key: string, title: string, description = "") => ({
+    key, title, node_type: "process", description, attributes: null, group_key: null,
+  });
+  const current: WorkingGraph = { nodes: [node("c1", "요청서 작성", "기존 설명")], edges: [], groups: [] };
+
+  it("새 제목=added, 같은 제목·설명 변경=changed, 동일 내용은 무표시 (2026-07-30)", () => {
+    const option: WorkingGraph = {
+      nodes: [
+        node("k1", "요청서 작성", "기존 설명"),
+        node("k2", "요청서 작성 ", "새 설명 / New description"),
+        node("k3", "견적 비교"),
+      ],
       edges: [], groups: [],
-    },
+    };
+    const diff = diffFromCurrentKeys(option, current);
+    expect(diff.added).toEqual(new Set(["k3"]));
+    expect(diff.changed).toEqual(new Set(["k2"]));
   });
 
-  it("모든 안에 공통인 제목은 제외, 다른 부분만 안별로 하이라이트", () => {
-    const a = opt("opt-1", ["시작", "요청서 작성", "끝"]);
-    const b = opt("opt-2", ["시작", "요청서 작성", "검토 승인", "끝"]);
-    const keys = distinctiveNodeKeys([a, b]);
-    expect(keys.get("opt-1")).toEqual(new Set());
-    expect(keys.get("opt-2")).toEqual(new Set(["opt-2-n2"]));
-  });
-
-  it("단일 안이면 하이라이트 없음", () => {
-    const a = opt("opt-1", ["시작", "끝"]);
-    expect(distinctiveNodeKeys([a]).get("opt-1")).toEqual(new Set());
+  it("현재 맵이 없으면 전부 added", () => {
+    const option: WorkingGraph = { nodes: [node("k1", "A")], edges: [], groups: [] };
+    expect(diffFromCurrentKeys(option, null).added).toEqual(new Set(["k1"]));
   });
 });
 
