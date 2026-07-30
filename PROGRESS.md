@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-07-30 — 수락 시 분기 저장(체크포인트) 누락 픽스 (worktree-ai-consultant)
+- **좌상단 분기 저장이 늘 초기 상태**: 그리기가 턴에서 분리(speed redesign)된 뒤 체크포인트는 스테이지 완료(전이) 시점에만 생성 — 수락은 전이 이후라 **전이 없는 수락(패스트트랙 review·리뷰 중 재드로 수락)의 맵이 어떤 체크포인트에도 저장되지 않았다**. 패스트트랙은 일괄 체크포인트가 전부 시드 상태.
+- 수정: choice 턴에서 전이 체크포인트가 안 생겼으면 현재 스테이지로 수락본 체크포인트 생성('그대로 유지' 수락은 맵 불변이라 제외). 같은 스테이지 복수 체크포인트는 revert가 최신부터 한 겹씩 벗기는 히스토리로 동작(기존 규칙 그대로).
+
 ## 2026-07-30 — 제안 diff 태그를 현재맵 대비로 전환 + 구조 중복 안 제거 (worktree-ai-consultant)
 - **동일해 보이는 안 2개 문제**: 내용 포함 서명 도입(설명 병기 통과) 때 안끼리 중복 제거에도 적용된 부작용 — 워딩만 다른 구조 동일안이 둘 다 생존. **안끼리 중복은 구조 서명으로 복원**(현재맵 대비 판정만 내용 포함 유지).
 - **변경/추가 태그 미작동**: 안끼리 차이(distinctiveNodeKeys — 안들이 비슷하면 무표시) 폐기 → **현재 작업본 대비 diff**(`diffFromCurrentKeys`: 새 제목=added·같은 제목 설명/attributes 변경=changed, layoutWorkingGraph changed 지원 추가, 비교화면 diff색 뱃지 재사용). keep-current 안은 정의상 무태그.

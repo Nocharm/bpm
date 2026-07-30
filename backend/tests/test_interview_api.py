@@ -990,6 +990,33 @@ def test_fast_forward_guards(client: TestClient, monkeypatch) -> None:
     client.delete(f"/api/interviews/{word_state['id']}")
 
 
+def test_accept_checkpoint_captures_accepted_graph(client: TestClient, monkeypatch) -> None:
+    """수락된 맵은 반드시 체크포인트에 남는다 — 전이 없는 수락(패스트트랙 review 등)도
+    자체 체크포인트를 만든다. 없으면 좌상단 분기 저장이 전부 시드(초기 상태)만 보여준다
+    (실사용 피드백 2026-07-30)."""
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(settings, "interview_choice_count", 1)
+    state = _iv_session(client)
+    client.post(f"/api/interviews/{state['id']}/fast-forward")
+    _scripted(monkeypatch, [_DRAW_A])
+    drawn = client.post(f"/api/interviews/{state['id']}/draw", json={"variants": "multi"}).json()
+    option_id = drawn["messages"][-1]["payload"]["options"][0]["id"]
+    _scripted(monkeypatch, [_Q])
+    body = client.post(
+        f"/api/interviews/{state['id']}/turns", json={"type": "choice", "choice_id": option_id}
+    ).json()
+    newest = body["checkpoints"][-1]
+    assert newest["stage"] == "review"
+    titles = [n["title"] for n in (newest["working_graph"] or {}).get("nodes", [])]
+    assert "요청서 작성" in titles
+    # 수락 이전 체크포인트(패스트트랙 일괄분)는 그 시점 상태 그대로 — 히스토리 재작성 없음
+    assert all(
+        "요청서 작성" not in [n["title"] for n in (c["working_graph"] or {}).get("nodes", [])]
+        for c in body["checkpoints"][:-1]
+    )
+    client.delete(f"/api/interviews/{state['id']}")
+
+
 def test_draw_passes_description_only_changes(client: TestClient, monkeypatch) -> None:
     """구조가 같아도 설명이 바뀐 안은 전멸 필터를 통과한다 — "설명 한/영 병기" 요청이
     '같은 맵' 노티스로 거부되던 문제 (실사용 피드백 2026-07-30)."""

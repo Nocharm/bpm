@@ -707,7 +707,7 @@ class InterviewMessage(Base):
 
 
 class InterviewCheckpoint(Base):
-    """스테이지 완료 시점 스냅샷 — '이전 단계로'의 복원 지점."""
+    """스테이지 완료·안 수락 시점 스냅샷 — '이전 단계로'의 복원 지점."""
 
     __tablename__ = "interview_checkpoints"
 

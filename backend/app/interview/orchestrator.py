@@ -725,6 +725,7 @@ async def run_turn(
     is_complete = out.stage_complete or engine.is_stage_complete(
         interview.current_stage, interview.facts, interview.mode
     )
+    checkpointed = False
     if is_complete and next_key is not None:
         db.add(InterviewCheckpoint(
             session_id=interview.id, stage=interview.current_stage,
@@ -732,6 +733,16 @@ async def run_turn(
             message_seq=next_seq(interview) - 1,
         ))
         interview.current_stage = next_key
+        checkpointed = True
+    # 전이 없는 수락(패스트트랙 review·스테이지 중간 재드로)도 분기 저장 — 수락된 맵이
+    # 어느 체크포인트에도 안 남아 좌상단 분기 저장이 전부 시드만 보여주던 문제
+    # (실사용 피드백 2026-07-30). '그대로 유지' 수락은 맵 불변이라 저장할 게 없다.
+    if chosen is not None and not checkpointed and not chosen.get("same_as_current"):
+        db.add(InterviewCheckpoint(
+            session_id=interview.id, stage=interview.current_stage,
+            facts=interview.facts, working_graph=interview.working_graph,
+            message_seq=next_seq(interview) - 1,
+        ))
     due = _draw_due(pre_stage, interview, out)
     if turn.type == "choice" and due in ("multi", "single"):
         # 수락 직후 재드로 금지 — 수락 턴의 전이/redraw 신호가 방금 고른 안을 곧바로 다시
