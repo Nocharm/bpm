@@ -156,6 +156,43 @@ describe("swapNodeEdges (스왑 시 엣지 교환)", () => {
     expect(result.filter((e) => e.source === "N")).toHaveLength(1);
   });
 
+  it("takenEdgeId 지정 시 그 출력선을 일반 노드가 가져간다(선택 모달 픽)", () => {
+    const edges = [
+      { id: "e1", source: "D", target: "X", label: "Yes" },
+      { id: "e2", source: "D", target: "Y", label: "No" },
+      { id: "e3", source: "N", target: "Z" },
+    ] as Edge[];
+    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), "e2");
+    expect(result.map((e) => [e.source, e.target, e.label ?? ""])).toEqual([
+      ["D", "X", "Yes"], // 선택 안 된 분기는 라벨째 잔류
+      ["N", "Y", "No"], // 지정한 출력선을 일반 노드가 가져감
+      ["D", "Z", ""],
+    ]);
+  });
+
+  it("takenEdgeId가 decision 출력이 아니면 첫 출력으로 폴백", () => {
+    const edges = [
+      { id: "e1", source: "D", target: "X", label: "Yes" },
+      { id: "e2", source: "D", target: "Y", label: "No" },
+      { id: "e3", source: "N", target: "Z" },
+    ] as Edge[];
+    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), "e3");
+    expect(result[0]).toMatchObject({ source: "N", target: "X" });
+    expect(result[1]).toBe(edges[1]);
+  });
+
+  it("직접 분기(D→N)가 있으면 takenEdgeId를 무시하고 그 엣지가 가져간 1개(자기루프 방지)", () => {
+    const edges = [
+      { id: "e1", source: "D", target: "N", label: "Yes" },
+      { id: "e2", source: "D", target: "Y", label: "No" },
+    ] as Edge[];
+    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), "e2");
+    expect(result.map((e) => [e.source, e.target])).toEqual([
+      ["N", "D"],
+      ["D", "Y"],
+    ]);
+  });
+
   it("decision↔subprocess: 끝점이 바뀐 엣지는 하위프로세스 전용 핸들로 재조정", () => {
     const edges = [
       { id: "e1", source: "D", target: "X", label: "Yes", sourceHandle: "s-right" },

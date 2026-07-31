@@ -861,6 +861,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     | null
   >(null);
+  // decision↔일반 스왑 시 — 일반 노드가 가져갈 decision 출력선 선택. 픽 시점에 위치·연결
+  // 교환을 일괄 적용(취소=무변경). aStart: 드래그 시작 좌표 — onNodeDragStop이 handleZoneDrop
+  // 직후 dragStartPosRef를 비우므로 모달을 열 때 캡처해 둔다.
+  const [swapSelect, setSwapSelect] = useState<
+    | {
+        aId: string;
+        bId: string;
+        options: { edgeId: string; branchKind: BranchKind; edgeLabel: string; targetLabel: string }[];
+        at: { x: number; y: number };
+        aStart: { x: number; y: number } | null;
+      }
+    | null
+  >(null);
   // 출력선 선택 모달에서 행 hover 중인 엣지 — 캔버스의 해당 엣지를 하이라이트(styledEdges).
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
@@ -3925,17 +3938,30 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, setNodes, pushHistory, scheduleAutoSave],
   );
 
-  // A를 B의 자리로, B를 A의 드래그 시작 자리로 교환 (드롭존 중앙=swap)
+  // A를 B의 자리로, B를 A의 드래그 시작 자리로 교환 (드롭존 중앙=swap).
+  // takenEdgeId: decision↔일반 스왑에서 일반 노드가 가져갈 출력선(선택 모달 픽).
+  // aStartOverride: 모달로 스왑을 미룬 경우의 드래그 시작 좌표 — onNodeDragStop이
+  // handleZoneDrop 직후 dragStartPosRef를 비우므로 모달 열 때 캡처한 값을 받는다.
   const swapNodes = useCallback(
-    (aId: string, bId: string) => {
+    (
+      aId: string,
+      bId: string,
+      takenEdgeId?: string | null,
+      aStartOverride?: { x: number; y: number } | null,
+    ) => {
       const start = dragStartPosRef.current;
+      const aOrig =
+        aStartOverride !== undefined
+          ? aStartOverride
+          : start && start.id === aId
+            ? { x: start.x, y: start.y }
+            : null;
       setNodes((current) => {
         const b = current.find((node) => node.id === bId);
         if (!b) {
           return current;
         }
         const bPos = { ...b.position };
-        const aOrig = start && start.id === aId ? { x: start.x, y: start.y } : null;
         return current.map((node) => {
           if (node.id === aId) {
             return { ...node, position: bPos };
@@ -3954,6 +3980,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           aId,
           bId,
           (nodeId) => nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType,
+          takenEdgeId ?? null,
         ),
       );
       scheduleAutoSave();
@@ -3969,6 +3996,42 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 죽이지만 방어적으로 차단.
         if (flowZoneViolates(aId, bId, "swap")) {
           return;
+        }
+        // decision↔일반 스왑에서 decision 출력이 2개 이상이면 일반 노드가 어느 출력선을
+        // 가져갈지 선택 모달 — 직접 분기(D→N)가 있으면 그 엣지가 끝점째 교환되므로 선택 불요.
+        const aType = nodesRef.current.find((node) => node.id === aId)?.data.nodeType;
+        const bType = nodesRef.current.find((node) => node.id === bId)?.data.nodeType;
+        const decisionId =
+          aType === "decision" && bType !== "decision"
+            ? aId
+            : bType === "decision" && aType !== "decision"
+              ? bId
+              : null;
+        if (decisionId) {
+          const otherId = decisionId === aId ? bId : aId;
+          const decisionOut = getOutgoingEdges(edgesRef.current, decisionId);
+          const hasPairOut = decisionOut.some((edge) => edge.target === otherId);
+          if (!hasPairOut && decisionOut.length >= 2) {
+            const options = decisionOut.map((edge) => {
+              const targetTitle =
+                nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+              return {
+                edgeId: edge.id,
+                branchKind: branchKindOf(edge.label),
+                edgeLabel: typeof edge.label === "string" ? edge.label : "",
+                targetLabel: targetTitle,
+              };
+            });
+            const start = dragStartPosRef.current;
+            setSwapSelect({
+              aId,
+              bId,
+              options,
+              at: { ...pointerScreenRef.current },
+              aStart: start && start.id === aId ? { x: start.x, y: start.y } : null,
+            });
+            return;
+          }
         }
         swapNodes(aId, bId);
         return;
@@ -7035,6 +7098,19 @@ function MapEditor({ mapId }: { mapId: number }) {
     [edgeSelect, interceptIntoEdge],
   );
 
+  // decision↔일반 스왑 — 선택 모달에서 고른 출력선을 일반 노드가 가져가며 스왑 일괄 적용.
+  const applySwapSelect = useCallback(
+    (edgeId: string) => {
+      if (swapSelect === null) {
+        return;
+      }
+      const { aId, bId, aStart } = swapSelect;
+      setSwapSelect(null);
+      swapNodes(aId, bId, edgeId, aStart);
+    },
+    [swapSelect, swapNodes],
+  );
+
   // 디시전 드롭 모달: 인터셉트 — 출력선 ≥2면 선택 모달, 1개면 그 선에 바로 끼움 (F1).
   const applyDecisionIntercept = useCallback(() => {
     if (decisionDrop === null) {
@@ -9610,6 +9686,22 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => {
             setHoveredEdgeId(null);
             setEdgeSelect(null);
+          }}
+        />
+      )}
+      {swapSelect && (
+        <EdgeSelectModal
+          position={swapSelect.at}
+          options={swapSelect.options}
+          title={t("edge.selectSwapOutput")}
+          onHoverOption={setHoveredEdgeId}
+          onPick={(edgeId) => {
+            setHoveredEdgeId(null);
+            applySwapSelect(edgeId);
+          }}
+          onClose={() => {
+            setHoveredEdgeId(null);
+            setSwapSelect(null);
           }}
         />
       )}

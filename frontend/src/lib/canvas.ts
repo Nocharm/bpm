@@ -728,16 +728,19 @@ export function withSubprocessHandles(
 /**
  * 스왑(드롭존 중앙) 시 엣지 연결 교환 — A의 연결은 B로, B의 연결은 A로.
  * decision↔일반(활동) 노드 스왑은 부분 이관: 입력(target)은 전면 교환하되, 출력(source)은
- * 일반 노드가 decision의 출력 1개(배열 순서상 첫 번째)만 가져가고 나머지는 decision에
- * 라벨째 그대로 남는다(일반 노드 출력=1개 관례 유지). decision은 일반 노드의 출력을 라벨
- * 그대로 넘겨받는다. 둘을 직접 잇는 엣지는 끝점째 교환(D→N ⇒ N→D)되어 그 자체가
- * "가져간 1개"가 된다(추가 이관 없음). 끝점이 바뀐 엣지는 하위프로세스 핸들 규칙 재적용.
+ * 일반 노드가 decision의 출력 1개만 가져가고 나머지는 decision에 라벨째 그대로 남는다
+ * (일반 노드 출력=1개 관례 유지). 가져갈 엣지는 takenEdgeId(선택 모달 픽)로 지정하며,
+ * 미지정·불일치면 배열 순서상 첫 출력. decision은 일반 노드의 출력을 라벨 그대로 넘겨받는다.
+ * 둘을 직접 잇는 엣지는 끝점째 교환(D→N ⇒ N→D)되어 그 자체가 "가져간 1개"가 된다
+ * (추가 이관 없음 — takenEdgeId도 무시, 아니면 D→D 자기루프). 끝점이 바뀐 엣지는
+ * 하위프로세스 핸들 규칙 재적용.
  */
 export function swapNodeEdges(
   edges: Edge[],
   aId: string,
   bId: string,
   typeOf: (nodeId: string) => ProcessNodeType | undefined,
+  takenEdgeId?: string | null,
 ): Edge[] {
   const aType = typeOf(aId);
   const bType = typeOf(bId);
@@ -749,15 +752,18 @@ export function swapNodeEdges(
         : null;
   const otherId = decisionId === aId ? bId : aId;
   // 일반 노드가 가져갈 decision 출력 1개 — 직접 연결(D→N)이 있으면 그 엣지가 교환으로
-  // N의 출력이 되므로 추가 이관 없음, 없으면 첫 출력 엣지.
+  // N의 출력이 되므로 추가 이관 없음, 없으면 지정된 엣지(유효할 때) 또는 첫 출력 엣지.
   let takenId: string | null = null;
   if (decisionId) {
     const hasPairOut = edges.some(
       (edge) => edge.source === decisionId && edge.target === otherId,
     );
-    takenId = hasPairOut
-      ? null
-      : (edges.find((edge) => edge.source === decisionId)?.id ?? null);
+    if (!hasPairOut) {
+      const requested = takenEdgeId
+        ? edges.find((edge) => edge.id === takenEdgeId && edge.source === decisionId)
+        : undefined;
+      takenId = (requested ?? edges.find((edge) => edge.source === decisionId))?.id ?? null;
+    }
   }
   const isSubprocess = (nodeId: string): boolean => typeOf(nodeId) === "subprocess";
   const swapEnd = (nodeId: string): string =>
