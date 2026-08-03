@@ -55,11 +55,30 @@
 - 열린 필: `border-accent-tint-border bg-accent-tint text-accent`
 - `w-24`(96px) 고정 + `truncate`이므로 **`title` 속성에 전체 부서명 필수**
 
-**체인 병합 규칙** — 노드 `n`에서 시작해 `n.children.length === 1 && n.maps.length === 0`인 동안 유일 자식으로 내려가며 필을 쌓고, 그 결과를 한 행에 `( A )›( B )`로 렌더한다. 분기(자식 2개 이상)나 자기 맵을 가진 노드에서 멈춘다.
+**체인 병합 규칙** — 노드 `n`에서 시작해 **현재 노드가 맵을 갖지 않고 자식이 정확히 1개인 동안** 유일 자식으로 내려가며 필을 쌓고, 그 결과를 한 행에 `( A )›( B )`로 렌더한다. 분기(자식 2개 이상)·말단·자기 맵을 가진 노드가 그 행의 **터미널**이 된다.
 
-> **`maps.length === 0` 조건이 핵심.** 중간 노드가 자기 맵을 가지면 그 맵을 어느 행 아래에 그릴지 모호해진다. 병합은 "통과만 하는" 노드에만 허용한다.
+병합은 컴포넌트에 인라인하지 않고 **`lib/org-tree.ts`에 순수 함수 `collectPillChain(node: OrgNode): OrgNode[]`로 추가**한다(단위 테스트 대상). 기존 함수는 건드리지 않는다.
 
-**토글 대상은 체인의 첫 노드 path**로 둔다. `page.tsx:723-733`의 기존 핸들러가 이미 `collectSingleChildChain`으로 나머지 path를 자동 추가하므로 `page.tsx`는 손대지 않아도 된다. 다만 `collectSingleChildChain`은 현재 `children.length === 1`만 보고 `maps`를 보지 않아 병합 조건과 어긋나므로, **`lib/org-tree.ts`의 `collectSingleChildChain`에도 `maps.length === 0` 조건을 추가**하고 `org-tree.test.ts`에 케이스를 넣는다.
+```ts
+export function collectPillChain(node: OrgNode): OrgNode[] {
+  const chain = [node];
+  let cur = node;
+  while (cur.maps.length === 0 && cur.children.length === 1) {
+    cur = cur.children[0];
+    chain.push(cur);
+  }
+  return chain; // 마지막 원소 = 터미널, 이 행의 카운트·맵·자식을 소유
+}
+```
+
+> **`maps.length === 0` 조건이 핵심.** 중간 노드가 자기 맵을 가지면 그 맵이 뒤쪽 필에 속한 것처럼 보인다. 병합은 "통과만 하는" 노드에만 허용한다. 터미널 자신이 맵을 갖는 것은 정상(루프가 자식으로 내려간 뒤 조건을 재검사하므로 터미널은 항상 chain에 포함된다).
+
+**열림 판정·토글 대상은 모두 체인의 첫 노드 `n.path`**로 둔다. 행이 닫혀 있으면 터미널의 맵·자식을 아예 렌더하지 않으므로 중간 path의 openPaths 등재 여부는 관측되지 않는다. 따라서:
+
+- **`page.tsx`의 토글 핸들러 무변경** — 펼침 시 `collectSingleChildChain`이 중간 path를 채우는 것도, 접힘 시 첫 path만 지우는 것도 그대로 옳다.
+- **`collectSingleChildChain` 무변경** — 자동펼침(어느 노드가 *열리는가*)과 필 병합(어느 노드가 *같은 행에 그려지는가*)은 독립 관심사다. `collectSingleChildChain`이 터미널을 지나 한 단계 더 여는 경우가 있으나, 그 노드는 자기 행을 갖고 "선택지 없는 단일 자식은 계속 내려간다"는 기존 의도(`org-tree.test.ts:79-84`의 unconditional chaining 테스트)와 일치한다. **이 테스트를 병합 규칙에 맞춰 고치려 들지 말 것** — 두 규칙은 의도적으로 다르다.
+
+`mapCount` 표시는 터미널 값을 쓴다 — 병합 구간은 자기 맵이 없는 통과 노드뿐이라 롤업 결과가 첫 노드와 동일하다.
 
 ### A2. 맵 카드는 풀폭
 
@@ -109,6 +128,10 @@
 
 내 부서 맵이 없는 사용자(신규·미배치)는 현행대로 조상 체인을 시드해 빈 조직도만 보는 상황을 막는다.
 
+> **경합 주의.** 현재 시드는 `me`만 기다린다. `getMe()`가 `listMaps()`보다 먼저 도착하면 그 시점 내 부서 맵은 0개라 시드가 돌고, 직후 맵이 도착해 My dept 섹션이 열리면서 **결국 둘 다 펼쳐진다**. 시드 가드에 `maps.length === 0`을 넣어 **양쪽이 다 도착한 뒤 1회만** 판단한다. 맵이 0개인 사용자는 `visibleMaps.length === 0` 분기로 `WelcomePlaceholder`가 뜨고 아코디언 자체가 렌더되지 않으므로 이 가드로 놓치는 경우는 없다.
+>
+> 의존성은 배열 identity가 아닌 **길이 스칼라**(`maps.length`, `myDeptMaps.length > 0`)로 잡는다 — `refresh()`마다 새 배열 참조가 생겨 값이 같아도 이펙트가 재실행되는 함정은 `page.tsx:339-341`에 이미 기록돼 있다.
+
 `MyDeptFavorites`는 유지한다 — 하위 부서 맵까지 모아 보는 기능은 조직도 병합으로는 대체되지 않는다.
 
 ### C2. 접힘 상태는 새로고침에도 유지
@@ -122,22 +145,40 @@
 | 검색어·가시성·상태·권한·오우닝 필터 | `sessionStorage` `bpm.home.filters` | 초기화 (현행 유지) |
 | `orgOpen` / `favOpen` / `wordOpen` / `unassignedOpen` | `localStorage` `bpm.home.tree` | **유지** |
 
-복원 우선순위는 **저장값 > C1 시드**. 저장값이 있으면 `seededOrg.current = true`로 막아 시드가 덮어쓰지 않게 한다(현행 `page.tsx:198`과 동일한 패턴).
+복원 우선순위는 **저장값 > C1 시드**. 저장값이 있으면 `seededOrg.current = true`로 막아 시드가 덮어쓰지 않게 한다(현행 `page.tsx:198`과 동일한 패턴). 이중 소스를 남기지 않도록 `bpm.home.filters`의 `orgOpen`/`fav`/`word`/`unassigned` 필드는 저장·복원 양쪽에서 제거한다.
+
+**저장은 이펙트가 아니라 토글 핸들러에서 한다.** `[orgOpen, favOpen, …]` 의존 이펙트로 저장하면 StrictMode 이중 마운트에서 **초기 default가 저장값을 덮어쓰는** 사고가 난다(선례: 파라미터 토글 영속화). `skip` ref로 첫 실행을 건너뛰어도 두 번째 마운트에서 다시 열리는 창이 있다. 다음 형태로 둔다:
+
+```ts
+// 접힘 상태 영속 — 이펙트 저장은 StrictMode 재마운트에서 default가 저장값을 덮어쓴다. 반드시 핸들러에서.
+const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean) => {
+  window.localStorage.setItem(
+    "bpm.home.tree",
+    JSON.stringify({ orgOpen: [...org], fav, word, unassigned }),
+  );
+};
+```
+
+네 토글 핸들러(`onToggle`·`onCollapseAll`·`favOpen`·`wordOpen`·`unassignedOpen`)가 각각 **다음 값을 계산해 state와 `writeTree`에 동시에 넘긴다**.
+
+**C1 시드는 저장하지 않는다** — 사용자 행동이 아니라 파생 기본값이므로, 사용자가 트리를 한 번도 건드리지 않았다면 저장소는 비어 있고 다음 진입에서 같은 규칙으로 다시 계산된다.
 
 ## 5. 불변식 · 랜드마인
 
 - **필 `w-24` 고정 + `truncate`** → `title` 속성 없으면 긴 부서명이 완전히 사라진다. 필·breadcrumb 세그먼트 모두 필수.
-- **체인 병합 조건과 `collectSingleChildChain`은 한 쌍**이다. 한쪽만 `maps.length === 0`을 보면 자동펼침이 병합되지 않은 노드까지 열어 시각과 상태가 어긋난다.
+- **`collectPillChain`(렌더)과 `collectSingleChildChain`(자동펼침)은 의도적으로 규칙이 다르다.** 전자만 `maps.length === 0`을 본다. 후자를 "일관성" 명목으로 맞추면 `org-tree.test.ts:79-84`의 unconditional chaining 테스트가 깨진다 — 그 테스트는 옳다.
+- **병합 행의 열림 판정·토글은 첫 노드 path**로 통일한다. 터미널 path로 판정하면 접기(`next.delete(path)`는 첫 path만 지움)가 먹지 않는 죽은 행이 된다.
 - **sticky는 스크롤 컨테이너 안에서만 동작**한다. `page.tsx:697` div가 `overflow-y-auto`라 성립하지만, 조상에 `overflow-hidden`이 끼면 조용히 깨진다.
 - **`react-hooks/set-state-in-effect`** — localStorage hydration은 마운트 1회 이펙트라 기존 `eslint-disable` 주석 패턴을 따른다.
-- **StrictMode 이중 마운트** — 저장 이펙트는 첫 실행을 건너뛰는 `saveSkip` ref 패턴이 필수다(초기 default가 저장값을 덮어쓰는 사고 방지). `localStorage`용 별도 skip ref를 둔다.
+- **접힘 상태 저장은 핸들러에서만.** 의존 이펙트 저장은 StrictMode 재마운트에서 default가 저장값을 덮어쓴다(§4 C2).
+- **React Compiler `preserve-manual-memoization`** — 새로 만드는 토글 핸들러는 `useCallback` 의존성을 맞추기보다 **평범한 함수로 두어** 컴파일러가 메모하게 한다(`frontend/AGENTS.md`).
 - **카드 풀폭화는 인라인 상세 아코디언에도 적용**된다(`renderCard`가 카드+상세를 함께 반환). 980px 미만 화면에서 상세도 풀폭이 되는 것은 의도된 결과.
 
 ## 6. 검증
 
 | 항목 | 방법 |
 |---|---|
-| `collectSingleChildChain`의 `maps` 조건 | `lib/org-tree.test.ts` 케이스 추가 → `npm run test` |
+| `collectPillChain` 병합 규칙 | `lib/org-tree.test.ts` 케이스 추가(통과 병합·맵 보유 중단·분기 중단·말단) → `npm run test` |
 | 린트·타입·빌드 | `npm run lint` · `npx tsc --noEmit` · `npm run build` |
 | depth별 카드 폭 동일 | 브라우저 — depth 0·3 카드 `getBoundingClientRect().width` 동일 확인 |
 | sticky 헤더 | 브라우저 — 카드 구간 스크롤 중 헤더가 컨테이너 상단에 고정, 다음 부서 헤더가 밀어냄 |
