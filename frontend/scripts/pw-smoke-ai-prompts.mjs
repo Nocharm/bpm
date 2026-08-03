@@ -6,14 +6,30 @@ import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const API_BASE = process.env.API_BASE ?? "http://localhost:8000";
 const SHOT_DIR = process.env.SHOT_DIR ?? ".";
 const CUSTOM = "SMOKE custom nudge — **bold-marker**";
+const DEV_USER = "admin.sys";
 
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
 };
+
+// 실패 경로(중간 throw)에서도 dev.db에 오버라이드가 남지 않게 항상 시도하는 best-effort 정리.
+// DELETE는 멱등(app/routers/ai_prompts.py)이라 정상 경로 후에도 무해.
+async function cleanupOverride() {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/ai-prompts/anti_repeat_nudge`, {
+      method: "DELETE",
+      headers: { "X-Dev-User": DEV_USER },
+    });
+    if (!res.ok) console.warn(`cleanup warning: DELETE returned ${res.status}`);
+  } catch (e) {
+    console.warn(`cleanup warning: ${e}`);
+  }
+}
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -76,7 +92,11 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/ai-prompts-reset.png` });
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
+} catch (e) {
+  // 중간 throw(타임아웃·내비 실패 등) 시에도 finally의 클린업이 실행되도록 여기서 흡수 — 실패로 기록.
+  check("script completed", false, String(e));
 } finally {
+  await cleanupOverride();
   await browser.close();
 }
 
