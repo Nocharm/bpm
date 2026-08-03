@@ -91,6 +91,7 @@ export function AiPromptsPanel({ onToast }: AiPromptsPanelProps) {
   };
 
   const selectPrompt = (key: string) => {
+    if (busy) return; // 저장/복원 비행 중 전환 차단 — 늦은 응답의 setDraft가 다른 프롬프트 draft를 덮는 경합 방지
     if (key === selectedKey) return;
     if (dirty) {
       setPendingSwitch(key);
