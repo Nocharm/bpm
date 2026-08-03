@@ -29,6 +29,7 @@ from app.db import get_session
 from app.permissions.deps import require_version_map_role
 from app.manual import get_manual
 from app.models import AiChatMessage, AiChatSession, AiUsageEvent, ManualDoc, MapVersion
+from app.prompt_registry import get_prompt_overrides
 from app.routers.graph import _load_graph
 from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
 from app.settings import settings
@@ -196,7 +197,8 @@ async def ai_chat(
         await _load_manual_text(session), payload.instruction, _MANUAL_SELECT_BUDGET
     )
     messages = build_messages(
-        manual_text, current, can_edit, payload.instruction, payload.history
+        manual_text, current, can_edit, payload.instruction, payload.history,
+        overrides=await get_prompt_overrides(session),
     )
 
     try:

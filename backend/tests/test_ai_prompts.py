@@ -83,3 +83,30 @@ def test_requires_sysadmin(client: TestClient, sysadmin_enforced: None) -> None:
     assert client.delete(f"/api/admin/ai-prompts/{key}", headers=headers).status_code == 403
     ok = {"X-Dev-User": SYSADMIN}
     assert client.get("/api/admin/ai-prompts", headers=ok).status_code == 200
+
+
+def test_overrides_reach_prompt_builders() -> None:
+    from app.ai_prompt import build_system_prompt
+    from app.interview.agents import build_drafter_messages, build_interviewer_messages
+    from app.schemas import GraphOut
+
+    graph = GraphOut(nodes=[], edges=[])
+    custom = build_system_prompt("", graph, True, overrides={"ai_chat_instructions": "CUSTOM-CHAT"})
+    assert custom.startswith("CUSTOM-CHAT")
+    assert not build_system_prompt("", graph, True).startswith("CUSTOM-CHAT")
+
+    interviewer = build_interviewer_messages(
+        "scope", "ko", {}, "", "", [], "hi", overrides={"interviewer_contract": "CUSTOM-INT"}
+    )
+    assert interviewer[0]["content"].startswith("CUSTOM-INT")
+
+    word = build_interviewer_messages(
+        "scope", "ko", {}, "", "", [], "hi", mode="word",
+        overrides={"interviewer_word_addendum": "\nCUSTOM-ADDENDUM"},
+    )
+    assert "CUSTOM-ADDENDUM" in word[0]["content"]
+
+    drafter = build_drafter_messages(
+        "activities", "ko", {}, None, "", "표준", overrides={"drafter_contract": "CUSTOM-DRAFT"}
+    )
+    assert drafter[0]["content"].startswith("CUSTOM-DRAFT")
