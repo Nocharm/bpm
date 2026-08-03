@@ -1,5 +1,6 @@
 """Async database engine, session factory, and schema init."""
 
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import Connection, inspect, text
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.models import Base
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(settings.database_url)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
@@ -65,6 +68,17 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
     # 지정 설명 — 자유 텍스트 (design 2026-07-17)
     ("process_maps", "sp_description", "TEXT"),
+    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드의 주 링크 (design 2026-07-18)
+    ("nodes", "section_anchor", "VARCHAR(200) DEFAULT ''"),
+    # Word 맵 모드 & 임포트 카탈로그 — mode="word"만 doc_name·doc_sections 사용 (design 2026-07-18)
+    ("process_maps", "mode", "VARCHAR(20) DEFAULT 'normal'"),
+    ("process_maps", "doc_name", "VARCHAR(300) DEFAULT ''"),
+    ("process_maps", "doc_sections", "JSON"),
+    # Word 맵 개정 타임스탬프 — 재임포트·완결 문서 생성 시각 (design 2026-07-24 §5)
+    ("process_maps", "doc_imported_at", "TIMESTAMP"),
+    ("process_maps", "doc_generated_at", "TIMESTAMP"),
+    # 인터뷰 word 변환 모드 — interview_sessions는 개발서버에 기존재라 자동 ALTER 필요 (design 2026-07-26 §2)
+    ("interview_sessions", "mode", "VARCHAR(20) DEFAULT 'normal'"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
@@ -96,12 +110,79 @@ def _add_missing_indexes(conn: Connection) -> None:
         conn.execute(text(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table} {cols}"))
 
 
+def _enforce_interview_seq_unique(conn: Connection) -> None:
+    """interview_messages (session_id, seq) 유니크 보강 — 동시 쓰기 seq 중복의 최종 방어
+    (hardening T3). 기존 중복 행은 세션 max 뒤로 리넘버 — 비중복 seq를 건드리지 않아
+    체크포인트 message_seq 참조가 보존된다(중복 seq는 이미 순서가 모호했던 행만 이동)."""
+    inspector = inspect(conn)
+    if "interview_messages" not in inspector.get_table_names():
+        return
+    dupes = conn.execute(text(
+        "SELECT session_id, seq FROM interview_messages "
+        "GROUP BY session_id, seq HAVING COUNT(*) > 1"
+    )).fetchall()
+    for session_id, seq in dupes:
+        max_seq = conn.execute(
+            text("SELECT MAX(seq) FROM interview_messages WHERE session_id = :s"),
+            {"s": session_id},
+        ).scalar() or 0
+        ids = [row[0] for row in conn.execute(
+            text("SELECT id FROM interview_messages "
+                 "WHERE session_id = :s AND seq = :q ORDER BY id"),
+            {"s": session_id, "q": seq},
+        ).fetchall()]
+        for offset, message_id in enumerate(ids[1:], 1):  # 최저 id 1건은 제자리 유지
+            conn.execute(
+                text("UPDATE interview_messages SET seq = :new_seq WHERE id = :i"),
+                {"new_seq": max_seq + offset, "i": message_id},
+            )
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_interview_messages_session_seq "
+        "ON interview_messages (session_id, seq)"
+    ))
+
+
+def _sweep_orphan_kb_chunks(conn: Connection) -> None:
+    """삭제(소프트/영구)된 맵의 KB 청크 잔재 정리 — 훅 추가 이전 데이터 소급 (hardening T16).
+
+    매 기동 시 멱등 실행 — kb_chunks는 소규모 전제라 비용 미미.
+    """
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    if "kb_chunks" not in tables or "process_maps" not in tables:
+        return
+    conn.execute(text(
+        "DELETE FROM kb_chunks WHERE source_type = 'map' AND source_id NOT IN "
+        "(SELECT id FROM process_maps WHERE deleted_at IS NULL)"
+    ))
+
+
+def _widen_interview_message_kind(conn: Connection) -> None:
+    """interview_messages.kind VARCHAR(12)→VARCHAR(20) — sp_suggestion(13자)이 운영 Postgres에서
+    extras 커밋을 터뜨려 무음 유실되던 회귀(final review 2026-07-30). 컬럼 추가가 아닌 타입 변경이라
+    _ADDED_COLUMNS로는 못 다루는 케이스. sqlite는 길이 미강제라 스킵."""
+    if conn.dialect.name != "postgresql":
+        return
+    inspector = inspect(conn)
+    if "interview_messages" not in inspector.get_table_names():
+        return
+    conn.execute(text("ALTER TABLE interview_messages ALTER COLUMN kind TYPE VARCHAR(20)"))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_missing_columns)
         await conn.run_sync(_add_missing_indexes)
+    # 정리성 보강 스텝은 트랜잭션 분리 + 비치명 — Postgres는 트랜잭션 내 오류가 이후 문장까지
+    # 오염시키고, 스키마 보강 실패가 서비스 전체 기동을 막아선 안 된다(락이 1차 방어라 축소 동작 가능).
+    for step in (_enforce_interview_seq_unique, _sweep_orphan_kb_chunks, _widen_interview_message_kind):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(step)
+        except Exception:  # noqa: BLE001 -- 실패는 크게 로깅하고 기동은 계속
+            logger.exception("bootstrap step %s failed — continuing startup", step.__name__)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

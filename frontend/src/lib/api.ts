@@ -1,5 +1,7 @@
 // 백엔드 REST 클라이언트. /api는 nginx(운영) 또는 next.config rewrites(로컬)가 backend로 프록시.
 
+import type { SectionEntry } from "./word-import";
+
 export type VersionStatus =
   | "draft"
   | "pending"
@@ -69,6 +71,13 @@ export interface MapSummary {
   sp_changed_at?: string | null;
   // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
   owning_department?: string | null;
+  // Word 맵 모드 & 임포트 카탈로그 — 목록 응답(MapOut)에도 포함되어 홈 분리(processMaps/wordMaps)에 필요 (design 2026-07-24 §2)
+  mode?: string;
+  doc_name?: string;
+  doc_sections?: SectionEntry[];
+  // 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
+  doc_imported_at?: string | null;
+  doc_generated_at?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -94,6 +103,8 @@ export interface GraphNode {
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
+  // Word 맵 섹션 노드(node_type==="section")의 문서 내부 앵커 (design 2026-07-18)
+  section_anchor?: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;
@@ -246,6 +257,7 @@ export function createMap(
   description: string,
   visibility: MapSummary["visibility"],
   owningDepartment: string,
+  word?: { docName: string; sections: SectionEntry[] },
 ): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
@@ -254,15 +266,25 @@ export function createMap(
       description,
       visibility,
       owning_department: owningDepartment,
+      ...(word ? { mode: "word", doc_name: word.docName, doc_sections: word.sections } : {}),
     }),
   });
 }
 
 // 승인본(approved/published) 기준 맵 복사 — 새 private 맵의 초기 draft에 그래프 복제 (F12)
-export function copyMap(mapId: number, name?: string): Promise<MapDetail> {
+// convertToNormal: word 맵 승격 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
+export function copyMap(
+  mapId: number,
+  name?: string,
+  opts?: { convertToNormal?: boolean; owningDepartment?: string },
+): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}/copy`, {
     method: "POST",
-    body: JSON.stringify(name ? { name } : {}),
+    body: JSON.stringify({
+      ...(name ? { name } : {}),
+      ...(opts?.convertToNormal ? { convert_to_normal: true } : {}),
+      ...(opts?.owningDepartment ? { owning_department: opts.owningDepartment } : {}),
+    }),
   });
 }
 
@@ -291,6 +313,22 @@ export function updateMap(
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+// Word 맵 문서 재임포트 — 카탈로그(doc_name + 섹션 목록) 교체. (design 2026-07-18, 엔드포인트 A3)
+export function setWordDoc(
+  mapId: number,
+  body: { doc_name: string; sections: SectionEntry[] },
+): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/word-doc`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// 완결 문서 생성 성공 기록 — 서버는 doc_generated_at만 스탬프 (design 2026-07-24 §5)
+export function markWordDocGenerated(mapId: number): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/word-doc/generated`, { method: "POST" });
 }
 
 // 이름 변경 요청 — editor는 즉시 적용 대신 pending ApprovalRequest(owner 승인 필요). owner/sysadmin은 updateMap 직접 사용.
@@ -974,6 +1012,7 @@ export interface AppSettings {
   ai_chat_max_sessions_per_map: number; // 보존 상한 — 사용자×맵당 대화 수
   ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
   ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
+  ai_access_disabled: boolean; // 관리자 런타임 AI 차단 — GPU 서버 점검용 (2026-07-30)
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -988,6 +1027,7 @@ export function putAppSettings(patch: {
   ai_chat_max_sessions_per_map?: number;
   ai_chat_max_messages_per_session?: number;
   ai_chat_retention_days?: number;
+  ai_access_disabled?: boolean;
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",
@@ -1678,6 +1718,8 @@ export interface AiNodeAttributes {
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
+  // section_anchor는 단순 passthrough — AI가 비우면 mergeNode(csv-import.ts)의 pick이 기존값을 보존
+  section_anchor?: string | null;
 }
 
 export interface AiNode {
@@ -1689,6 +1731,8 @@ export interface AiNode {
   attributes: AiNodeAttributes | null;
   // 소속 그룹 — AiProposal.groups[].key 참조. null=무소속
   group_key: string | null;
+  // 서브프로세스 링크 대상 (P2 유사 SP 수락) — 있으면 apply 시 실제 Call Activity 링크로 변환
+  linked_map_id?: number | null;
 }
 
 export interface AiEdge {
@@ -1778,6 +1822,237 @@ export function aiChat(
     method: "POST",
     body: JSON.stringify({ instruction, history, model, session_id: sessionId }),
   });
+}
+
+// ---------- AI 컨설턴트 인터뷰 (design 2026-07-23) ----------
+
+export interface WorkingGraph {
+  nodes: AiNode[];
+  edges: AiEdge[];
+  groups: AiGroup[];
+}
+
+export interface ChoiceOption {
+  id: string;
+  title: string;
+  summary: string;
+  graph: WorkingGraph;
+  // 현재 작업본 그대로 유지 안 — 카드에 "Same as current" 배지 (2026-07-28)
+  same_as_current?: boolean;
+  // 결정적 톤 린트 경고('~하기' 접미·존댓말 어미·활동 수 10±3 이탈) — 카드 warn 칩 (hardening T19)
+  lint?: string[];
+}
+
+export interface InterviewMessage {
+  id: number;
+  seq: number;
+  role: string; // consultant | user
+  kind: string; // question | choices | notice | answer | choice | confirm | skip
+  content: string;
+  payload: Record<string, unknown> | null;
+  stage: string;
+  superseded: boolean;
+  created_at: string;
+}
+
+export interface InterviewCheckpoint {
+  stage: string;
+  message_seq: number;
+  // 클릭 프리뷰용 스냅샷 — 확정 전 캔버스만 이 그래프로 되돌려 보여준다
+  working_graph: WorkingGraph | null;
+  created_at: string;
+}
+
+export interface InterviewAttachment {
+  id: number;
+  filename: string;
+  mime: string;
+  size: number;
+  status: string; // parsed | failed
+  error: string;
+  created_at: string;
+}
+
+export interface InterviewState {
+  id: number;
+  map_id: number;
+  version_id: number;
+  status: string; // active | completed | abandoned
+  current_stage: string;
+  // 인터뷰 모드 — normal | word (design 2026-07-26 §2)
+  mode?: string;
+  // 확정 facts — 아웃라인 패널(수집된 정보) 렌더용 (speed redesign)
+  facts?: Record<string, Record<string, unknown>>;
+  lang: string;
+  working_graph: WorkingGraph | null;
+  messages: InterviewMessage[];
+  checkpoints: InterviewCheckpoint[];
+  attachments: InterviewAttachment[];
+  version_updated_at: string | null;
+  base_graph_updated_at: string | null;
+  // 턴 응답 전용 그리기 신호(비영속) — multi/single은 draw 이벤트, params는 표 확정 모달 (speed redesign)
+  draw_due?: "multi" | "single" | "params" | null;
+}
+
+export function createOrResumeInterview(
+  mapId: number,
+  versionId: number,
+  lang: "ko" | "en",
+): Promise<InterviewState> {
+  return request<InterviewState>(`/maps/${mapId}/interviews`, {
+    method: "POST",
+    body: JSON.stringify({ version_id: versionId, lang }),
+  });
+}
+
+export function getInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}`);
+}
+
+export function getActiveInterview(mapId: number): Promise<InterviewState> {
+  return request<InterviewState>(`/maps/${mapId}/interviews/active`);
+}
+
+export function postInterviewTurn(
+  id: number,
+  turn: { type: "answer" | "choice" | "confirm" | "skip"; content?: string; choice_id?: string },
+): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/turns`, {
+    method: "POST",
+    body: JSON.stringify({ content: "", ...turn }),
+  });
+}
+
+export function postInterviewRevert(id: number, stage: string): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/revert`, {
+    method: "POST",
+    body: JSON.stringify({ stage }),
+  });
+}
+
+// 그리기 이벤트(동기) — 제안 생성만, 작업본은 수락 시점에 변경 (speed redesign)
+export function drawProposals(
+  id: number,
+  variants: "multi" | "single",
+): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/draw`, {
+    method: "POST",
+    body: JSON.stringify({ variants }),
+  });
+}
+
+// params 표 확정 반영 — 수집된 파라미터를 작업본에 결정적 적용(AI 0콜, 즉시)
+export function applyInterviewParams(
+  id: number,
+  paramsTable?: Record<string, Record<string, string>>,
+): Promise<InterviewState> {
+  // 표를 넘기면 서버가 facts에 딥머지 후 반영 — 수동 편집도 AI 컨텍스트에 남는다 (2026-07-30)
+  return request<InterviewState>(`/interviews/${id}/apply-params`, {
+    method: "POST",
+    ...(paramsTable ? { body: JSON.stringify({ params_table: paramsTable }) } : {}),
+  });
+}
+
+// 유사 SP 제안 수락 — 제안 구간을 subprocess 링크 노드로 치환한 갱신 상태 반환 (P2)
+export function acceptSpSuggestion(id: number, messageId: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/sp-accept`, {
+    method: "POST",
+    body: JSON.stringify({ message_id: messageId }),
+  });
+}
+
+export function completeInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/complete`, { method: "POST" });
+}
+
+// ---------- 지식기반 라이브러리 (P2, sysadmin) ----------
+
+export interface KbDocument {
+  id: number;
+  title: string;
+  filename: string;
+  mime: string;
+  status: string; // parsed | failed
+  uploaded_by: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+export function listKbDocuments(): Promise<KbDocument[]> {
+  return request<KbDocument[]>("/kb/documents");
+}
+
+export async function uploadKbDocument(file: File): Promise<KbDocument> {
+  // multipart — request()의 JSON Content-Type을 쓰면 boundary가 깨져 별도 경로 (첨부 업로드와 동일)
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch("/api/kb/documents", { method: "POST", body: form, headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(
+      `API POST /kb/documents failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return (await response.json()) as KbDocument;
+}
+
+export function deleteKbDocument(id: number): Promise<void> {
+  return request<void>(`/kb/documents/${id}`, { method: "DELETE" });
+}
+
+export function abandonInterview(id: number): Promise<void> {
+  return request<void>(`/interviews/${id}`, { method: "DELETE" });
+}
+
+// 패스트트랙 확정 — 남은 스테이지 결정적 전진(AI 0콜) 후 draw_due="multi" (design 2026-07-29)
+export function fastForwardInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/fast-forward`, { method: "POST" });
+}
+
+export function deleteInterviewAttachment(
+  interviewId: number,
+  attachmentId: number,
+): Promise<void> {
+  return request<void>(`/interviews/${interviewId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function uploadInterviewAttachment(
+  id: number,
+  file: File,
+): Promise<InterviewAttachment> {
+  // multipart — request()의 JSON Content-Type을 쓰면 boundary가 깨져 별도 경로
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch(`/api/interviews/${id}/attachments`, {
+    method: "POST",
+    body: form,
+    headers,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(
+      `API POST /interviews/${id}/attachments failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return (await response.json()) as InterviewAttachment;
 }
 
 // ── AI 챗 서버 저장 히스토리 (design 2026-07-08) ──────────────

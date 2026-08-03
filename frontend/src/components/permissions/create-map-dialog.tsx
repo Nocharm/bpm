@@ -15,6 +15,7 @@ import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp, LockKeyhole } from "
 import {
   acquireCheckout,
   addMapPermission,
+  copyMap,
   createMap,
   getDirectory,
   listGroups,
@@ -35,6 +36,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
+import type { WordCreateOutcome } from "@/components/word-create-modal";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
 // Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
@@ -72,13 +74,17 @@ interface Props {
   onCreated: (silent?: boolean) => void; // 생성 후 목록 갱신 콜백 — silent=true면 성공 토스트 억제(임포트 실패 시) / refresh list; silent suppresses the success toast
   // CSV로 만들기 — 홈의 CSV 모달이 넘긴다. **optional 필수**: map-name-dropdown.tsx도 이 컴포넌트를 마운트한다.
   csv?: { outcome: CsvImportOutcome; fileName: string };
+  // Word 문서로 만들기 — 홈의 Word 모달이 넘긴다(csv와 동형).
+  word?: WordCreateOutcome;
   // 이름 프리필 — 에디터 피커의 "새 맵" 검색어 이어받기 (spec 2026-07-19)
   initialName?: string;
   // 지정 시 생성 후 이동(router.push) 대신 호출측이 후속 처리(플레이스홀더 자동 링크)
   onCreatedMap?: (mapId: number, name: string) => void;
+  /** Word 맵 승격 복사 — 지정 시 createMap 대신 copyMap(convertToNormal)으로 생성 (design 2026-07-24 §6). */
+  promote?: { mapId: number; defaultName: string };
 }
 
-export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreatedMap }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote }: Props) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -138,10 +144,13 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
   // ── 폼 상태 / form state ──
   // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
   const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
-  const [name, setName] = useState(initialName ?? csvBaseName);
+  // Word 문서로 만들 때는 문서명(확장자 제외)을 이름 기본값으로 — csvBaseName과 동일한 우선순위로 합류
+  const wordBaseName = word ? word.docName.replace(/\.docx$/i, "") : "";
+  const [name, setName] = useState(initialName ?? promote?.defaultName ?? (csvBaseName || wordBaseName));
   const [description, setDescription] = useState(csvBaseName);
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
+  const [wordOpen, setWordOpen] = useState(false);
   // 생성 완료 표시 — createMap 직후 즉시 기록해야 한다. 부분 실패 후 Create 재클릭 시
   // 맵을 다시 만들면 이름 중복 409로 영영 막힌다(백엔드 _assert_unique_name).
   const createdRef = useRef<{ mapId: number; versionId: number } | null>(null);
@@ -285,7 +294,18 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
       // 생성은 최초 1회만 — 협업자/결재자 단계가 실패해도 맵은 이미 있으므로
       // createMap 직후 즉시 기록해 재시도에서 재생성(이름 409)을 막는다
       if (createdRef.current === null) {
-        const detail = await createMap(trimmed, description.trim(), visibility, owningDept.id);
+        const detail = promote
+          ? await copyMap(promote.mapId, trimmed, {
+              convertToNormal: true,
+              owningDepartment: owningDept.id,
+            })
+          : await createMap(
+              trimmed,
+              description.trim(),
+              visibility,
+              owningDept.id,
+              word ? { docName: word.docName, sections: word.sections } : undefined,
+            );
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
@@ -341,7 +361,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, onCreated, onClose, onCreatedMap, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, promote, onCreated, onClose, onCreatedMap, router, t]);
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -416,7 +436,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
       <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-body-strong text-ink">{t("perm.createDialog.title")}</h2>
+          <h2 className="text-body-strong text-ink">
+            {promote ? "Convert to process map" : t("perm.createDialog.title")}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -453,20 +475,22 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
           />
         </div>
 
-        {/* 설명 / description */}
-        <div className="flex flex-col gap-1">
-          <label className="text-caption text-ink-secondary">
-            {t("perm.createDialog.descriptionLabel")}
-          </label>
-          <textarea
-            data-id="create-map-description"
-            className="min-h-[4rem] resize-y rounded-sm border border-hairline bg-surface px-3 py-1.5 text-body text-ink outline-none placeholder:text-ink-tertiary focus:border-accent"
-            placeholder={t("perm.createDialog.descriptionPlaceholder")}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={submitting}
-          />
-        </div>
+        {/* 설명 / description — promote 모드에선 description이 백엔드에 무시되므로 UI 숨김 */}
+        {!promote && (
+          <div className="flex flex-col gap-1">
+            <label className="text-caption text-ink-secondary">
+              {t("perm.createDialog.descriptionLabel")}
+            </label>
+            <textarea
+              data-id="create-map-description"
+              className="min-h-[4rem] resize-y rounded-sm border border-hairline bg-surface px-3 py-1.5 text-body text-ink outline-none placeholder:text-ink-tertiary focus:border-accent"
+              placeholder={t("perm.createDialog.descriptionPlaceholder")}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
+        )}
 
         {/* 오우닝 부서(필수) — 선택 전 피커, 선택 후 잠금 표시 행 + X(재선택) */}
         <div className="flex flex-col gap-1">
@@ -513,45 +537,47 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
           )}
         </div>
 
-        {/* 공개 범위 / visibility */}
-        <div className="flex flex-col gap-1">
-          <span className="text-caption text-ink-secondary">
-            {t("perm.createDialog.visibilityLabel")}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => handleVisibilityChange("public")}
-              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
-                visibility === "public"
-                  ? "border-accent bg-accent-tint text-accent"
-                  : "border-hairline text-ink hover:bg-surface-alt"
-              }`}
-              disabled={submitting}
-            >
-              <Globe size={16} strokeWidth={1.5} />
-              {t("perm.createDialog.visibilityPublic")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleVisibilityChange("private")}
-              className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
-                visibility === "private"
-                  ? "border-accent bg-accent-tint text-accent"
-                  : "border-hairline text-ink hover:bg-surface-alt"
-              }`}
-              disabled={submitting}
-            >
-              <Lock size={16} strokeWidth={1.5} />
-              {t("perm.createDialog.visibilityPrivate")}
-            </button>
+        {/* 공개 범위 / visibility — copy는 항상 private로 생성되므로 promote 모드에선 무의미해 통째로 숨김 */}
+        {!promote && (
+          <div className="flex flex-col gap-1">
+            <span className="text-caption text-ink-secondary">
+              {t("perm.createDialog.visibilityLabel")}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleVisibilityChange("public")}
+                className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                  visibility === "public"
+                    ? "border-accent bg-accent-tint text-accent"
+                    : "border-hairline text-ink hover:bg-surface-alt"
+                }`}
+                disabled={submitting}
+              >
+                <Globe size={16} strokeWidth={1.5} />
+                {t("perm.createDialog.visibilityPublic")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleVisibilityChange("private")}
+                className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-caption ${
+                  visibility === "private"
+                    ? "border-accent bg-accent-tint text-accent"
+                    : "border-hairline text-ink hover:bg-surface-alt"
+                }`}
+                disabled={submitting}
+              >
+                <Lock size={16} strokeWidth={1.5} />
+                {t("perm.createDialog.visibilityPrivate")}
+              </button>
+            </div>
+            {visibility === "public" && (
+              <p className="text-fine text-ink-tertiary">
+                {t("perm.createDialog.visibilityViewerNote")}
+              </p>
+            )}
           </div>
-          {visibility === "public" && (
-            <p className="text-fine text-ink-tertiary">
-              {t("perm.createDialog.visibilityViewerNote")}
-            </p>
-          )}
-        </div>
+        )}
 
         {/* CSV로 만들기 — 파일명 아코디언. 누르면 요약·경고를 펼친다. */}
         {csv && (
@@ -582,114 +608,140 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
           </div>
         )}
 
-        {/* 초기 협업자 / initial collaborators */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-caption text-ink-secondary">
-            {t("perm.createDialog.collaboratorsLabel")}
-          </span>
-          {/* 목록을 피커 위로 표시(드롭다운이 아래로 열려도 실시간 추가가 안 가려지게) — col-reverse: DOM은 picker→list, 화면은 list 위 */}
-          <div className="flex flex-col-reverse gap-1.5">
-          {/* picker + role — 선택한 역할로 드롭다운 선택 즉시 추가(Add 버튼 없음). items-start로 드롭다운 플로팅 시 역할 컨트롤 안 늘어남 */}
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <PrincipalPicker
-                users={pickerUsers}
-                departments={pickerDepts}
-                groups={toPickerGroups(groups)}
-                excludeIds={collabExcludeIds}
-                userDepartments={userDepartments}
-                deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
-                onSelect={addCollaborator}
-              />
-            </div>
-            {/* 역할 선택 — public이면 editor 1옵션이라 드롭다운 대신 정적 표시(화살표 없음, PV) */}
-            {visibility === "public" ? (
-              <span
-                className="rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary"
-                title={t("perm.createDialog.collaboratorRoleViewerDisabled")}
-              >
-                {t("perm.createDialog.collaboratorRoleEditor")}
-              </span>
-            ) : (
-              <select
-                className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none"
-                value={pendingCollabRole}
-                onChange={(e) => setPendingCollabRole(e.target.value as "viewer" | "editor")}
-                disabled={submitting}
-              >
-                <option value="viewer">{t("perm.createDialog.collaboratorRoleViewer")}</option>
-                <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
-              </select>
+        {/* Word 문서로 만들기 — 파일명 아코디언. 누르면 섹션 카탈로그 개수를 펼친다. */}
+        {word && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              data-id="word-file-accordion"
+              aria-expanded={wordOpen}
+              onClick={() => setWordOpen((open) => !open)}
+              className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-caption text-ink hover:bg-surface"
+            >
+              {wordOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
+              <FileUp size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="truncate">{word.docName}</span>
+            </button>
+            {wordOpen && (
+              <div data-id="word-file-summary" className="flex flex-col gap-1 rounded-sm border border-hairline px-3 py-2">
+                <p className="text-caption text-ink-secondary">
+                  {word.sections.length} linkable section{word.sections.length === 1 ? "" : "s"} found.
+                </p>
+              </div>
             )}
           </div>
-          {/* 추가된 협업자 목록 — 높이 고정(~3.5행)·내부 스크롤로 모달 크기 불변(추가해도 안 늘어남) /
-              fixed ~3.5-row scroll area so the modal stays the same size as collaborators stack. */}
-          <ul className="scroll-soft flex h-[7.5rem] flex-col gap-1">
-              {owningDept && (
-                <li
-                  data-id="owning-dept-locked-row"
-                  className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1 text-caption text-ink"
+        )}
+
+        {/* 초기 협업자 / initial collaborators — promote 모드에선 UI 숨김(설계: docs/design/2026-07-24-word-map-lifecycle-design.md §6) */}
+        {!promote && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-caption text-ink-secondary">
+              {t("perm.createDialog.collaboratorsLabel")}
+            </span>
+            {/* 목록을 피커 위로 표시(드롭다운이 아래로 열려도 실시간 추가가 안 가려지게) — col-reverse: DOM은 picker→list, 화면은 list 위 */}
+            <div className="flex flex-col-reverse gap-1.5">
+            {/* picker + role — 선택한 역할로 드롭다운 선택 즉시 추가(Add 버튼 없음). items-start로 드롭다운 플로팅 시 역할 컨트롤 안 늘어남 */}
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <PrincipalPicker
+                  users={pickerUsers}
+                  departments={pickerDepts}
+                  groups={toPickerGroups(groups)}
+                  excludeIds={collabExcludeIds}
+                  userDepartments={userDepartments}
+                  deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+                  onSelect={addCollaborator}
+                />
+              </div>
+              {/* 역할 선택 — public이면 editor 1옵션이라 드롭다운 대신 정적 표시(화살표 없음, PV) */}
+              {visibility === "public" ? (
+                <span
+                  className="rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary"
+                  title={t("perm.createDialog.collaboratorRoleViewerDisabled")}
                 >
-                  <PrincipalIcon type="department" />
-                  <span className="flex-1 truncate">
-                    {owningDept.korean_name || owningDept.name}
-                  </span>
-                  <span
-                    title={t("perm.owningDept.lockedNote")}
-                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary"
-                  >
-                    <LockKeyhole size={12} strokeWidth={1.5} />
-                    {t("perm.owningDept.lockedEditor")}
-                  </span>
-                </li>
+                  {t("perm.createDialog.collaboratorRoleEditor")}
+                </span>
+              ) : (
+                <select
+                  className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none"
+                  value={pendingCollabRole}
+                  onChange={(e) => setPendingCollabRole(e.target.value as "viewer" | "editor")}
+                  disabled={submitting}
+                >
+                  <option value="viewer">{t("perm.createDialog.collaboratorRoleViewer")}</option>
+                  <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
+                </select>
               )}
-              {collaborators.map((c) => (
-                <li
-                  key={c.key}
-                  className="animate-item-in flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
-                >
-                  <PrincipalIcon type={c.principalType} />
-                  <span className="flex-1 truncate">{c.displayName}</span>
-                  {/* 권한 클릭 토글(생성 단계) — public은 editor 고정 (#9) */}
-                  <button
-                    type="button"
-                    disabled={submitting || visibility === "public"}
-                    onClick={() => handleToggleCollabRole(c.key)}
-                    title={t("perm.createDialog.clickToToggleRole")}
-                    className="rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
+            </div>
+            {/* 추가된 협업자 목록 — 높이 고정(~3.5행)·내부 스크롤로 모달 크기 불변(추가해도 안 늘어남) /
+                fixed ~3.5-row scroll area so the modal stays the same size as collaborators stack. */}
+            <ul className="scroll-soft flex h-[7.5rem] flex-col gap-1">
+                {owningDept && (
+                  <li
+                    data-id="owning-dept-locked-row"
+                    className="flex shrink-0 items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1 text-caption text-ink"
                   >
-                    {c.role === "editor"
-                      ? t("perm.createDialog.collaboratorRoleEditor")
-                      : t("perm.createDialog.collaboratorRoleViewer")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCollab(c.key)}
-                    className="text-ink-tertiary hover:text-ink"
-                    aria-label={t("perm.removeButton")}
-                    disabled={submitting}
+                    <PrincipalIcon type="department" />
+                    <span className="flex-1 truncate">
+                      {owningDept.korean_name || owningDept.name}
+                    </span>
+                    <span
+                      title={t("perm.owningDept.lockedNote")}
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary"
+                    >
+                      <LockKeyhole size={12} strokeWidth={1.5} />
+                      {t("perm.owningDept.lockedEditor")}
+                    </span>
+                  </li>
+                )}
+                {collaborators.map((c) => (
+                  <li
+                    key={c.key}
+                    className="animate-item-in flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
                   >
-                    <X size={16} strokeWidth={1.5} />
-                  </button>
-                </li>
-              ))}
-              {/* 수동 추가한 협업자가 없을 때 회색 안내문구 — 박스 중앙. 오우닝 부서 잠금 행과 무관 */}
-              {collaborators.length === 0 && (
-                <li
-                  data-id="collaborators-empty-hint"
-                  className="flex flex-1 items-center justify-center px-2 text-center text-fine text-ink-tertiary"
-                >
-                  {t("perm.createDialog.collaboratorsEmpty")}
-                </li>
-              )}
-          </ul>
+                    <PrincipalIcon type={c.principalType} />
+                    <span className="flex-1 truncate">{c.displayName}</span>
+                    {/* 권한 클릭 토글(생성 단계) — public은 editor 고정 (#9) */}
+                    <button
+                      type="button"
+                      disabled={submitting || visibility === "public"}
+                      onClick={() => handleToggleCollabRole(c.key)}
+                      title={t("perm.createDialog.clickToToggleRole")}
+                      className="rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
+                    >
+                      {c.role === "editor"
+                        ? t("perm.createDialog.collaboratorRoleEditor")
+                        : t("perm.createDialog.collaboratorRoleViewer")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCollab(c.key)}
+                      className="text-ink-tertiary hover:text-ink"
+                      aria-label={t("perm.removeButton")}
+                      disabled={submitting}
+                    >
+                      <X size={16} strokeWidth={1.5} />
+                    </button>
+                  </li>
+                ))}
+                {/* 수동 추가한 협업자가 없을 때 회색 안내문구 — 박스 중앙. 오우닝 부서 잠금 행과 무관 */}
+                {collaborators.length === 0 && (
+                  <li
+                    data-id="collaborators-empty-hint"
+                    className="flex flex-1 items-center justify-center px-2 text-center text-fine text-ink-tertiary"
+                  >
+                    {t("perm.createDialog.collaboratorsEmpty")}
+                  </li>
+                )}
+            </ul>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 결재자 / approvers */}
         <div
           ref={approversRef}
-          className={`flex flex-col gap-1.5 rounded-sm ${flashApprovers ? "motion-safe:animate-[picker-flash_800ms_var(--ease-smooth)]" : ""}`}
+          className={`flex flex-col gap-1.5 rounded-sm ${flashApprovers ? "motion-safe:animate-[picker-flash_1400ms_ease-in-out]" : ""}`}
         >
           <span className="text-caption text-ink-secondary">
             {t("perm.createDialog.approversLabel")}

@@ -50,14 +50,14 @@ describe("buildDocx — 노드 도형", () => {
     expect(doc).toContain('<a:srgbClr val="000000"/>');
   });
 
-  it("Arial + 바탕체 11pt, 제목 굵게 가운데 정렬", async () => {
+  it("Arial + 돋움 8pt, 가운데 정렬(비볼드)", async () => {
     const parts = await unzipDocx(buildDocx([nodeDecision], noEdges));
     const doc = parts["word/document.xml"];
     expect(doc).toContain('w:ascii="Arial"');
-    expect(doc).toContain('w:eastAsia="바탕체"');
-    expect(doc).toContain('<w:sz w:val="22"/>');
+    expect(doc).toContain('w:eastAsia="돋움"');
+    expect(doc).toContain('<w:sz w:val="16"/>'); // 8pt 통일
     expect(doc).toContain('<w:jc w:val="center"/>');
-    expect(doc).toContain("<w:b/>");
+    expect(doc).not.toContain("<w:b/>"); // 볼드 제거(사용자 요청) — 도형 텍스트 비볼드
   });
 
   it("url 있는 노드만 하이퍼링크 — rels TargetMode=External + 파랑 밑줄 라벨", async () => {
@@ -117,14 +117,31 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
     sourceId: "a", targetId: "b", label: "적합", sourceSide: "right", targetSide: "left",
   };
 
-  it("bentConnector3 + 화살촉 + 도형 접점(stCxn/endCxn)으로 연결한다", async () => {
+  it("어긋난 노드는 bentConnector3 + 화살촉 + stCxn/endCxn(도형 연결)", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], [edgeAB]));
     const doc = parts["word/document.xml"];
-    expect(doc).toContain('prst="bentConnector3"');
+    expect(doc).toContain('prst="bentConnector3"'); // A·B 어긋남 → 꺾은선
     expect(doc).toContain('<a:tailEnd type="triangle"/>');
-    // 노드 도형 id: a=2, b=3. right=3, left=1 (top0/left1/bottom2/right3)
-    expect(doc).toContain('<a:stCxn id="2" idx="3"/>');
-    expect(doc).toContain('<a:endCxn id="3" idx="1"/>');
+    // 도형 연결(Word에서 이동 시 선 따라옴) — right=idx2, left=idx0 (left0/top1/right2/bottom3)
+    expect(doc).toContain('<a:stCxn id="2" idx="2"/>');
+    expect(doc).toContain('<a:endCxn id="3" idx="0"/>');
+  });
+
+  it("정렬된 노드(같은 x)는 straightConnector1로 낸다", async () => {
+    const a = { id: "a", title: "A", nodeType: "process" as const, x: 100, y: 0, w: 100, h: 50 };
+    const b = { id: "b", title: "B", nodeType: "process" as const, x: 100, y: 200, w: 100, h: 50 };
+    const e = { sourceId: "a", targetId: "b", sourceSide: "bottom" as const, targetSide: "top" as const };
+    const doc = (await unzipDocx(buildDocx([a, b], [e])))["word/document.xml"];
+    expect(doc).toContain('prst="straightConnector1"');
+    expect(doc).not.toContain("bentConnector3");
+  });
+
+  it("fitToPage=false는 축소 없이 px×9525로 도형 크기를 그대로 낸다 (1.5×3cm 정확)", async () => {
+    const big = { id: "n", title: "T", nodeType: "process" as const, x: 0, y: 0, w: 2000, h: 1000 };
+    const exact = (await unzipDocx(buildDocx([big], [], false)))["word/document.xml"];
+    const fit = (await unzipDocx(buildDocx([big], [])))["word/document.xml"];
+    expect(exact).toContain('<a:ext cx="19050000" cy="9525000"/>'); // 2000·1000 px×9525, 미축소
+    expect(fit).not.toContain('<a:ext cx="19050000"'); // fit=기본 → 페이지에 맞춰 축소
   });
 
   it("라벨 있는 엣지만 중점에 라벨 텍스트박스를 만든다", async () => {
@@ -150,7 +167,7 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
       sourceId: "a", targetId: "ghost", sourceSide: "right", targetSide: "left",
     };
     const parts = await unzipDocx(buildDocx([nodeWithUrl], [dangling]));
-    expect(parts["word/document.xml"]).not.toContain("bentConnector3");
+    expect(parts["word/document.xml"]).not.toContain('name="edge-'); // 커넥터 도형 자체가 안 생김
   });
 });
 
@@ -178,6 +195,33 @@ describe("buildDocx — 하이퍼링크 URL 정규화", () => {
     expect(rels).not.toContain("hyperlink");
     expect(doc).not.toContain("<w:hyperlink");
     expect(doc).toContain("메모만 적음</w:t>");
+  });
+});
+
+describe("buildDocx — 섹션 노드 내부 앵커 링크", () => {
+  it("첫 토큰만 내부 앵커 링크, 나머지는 plain 텍스트", async () => {
+    const section: WordExportNode = {
+      id: "n1", title: "1.22스탭 참고", nodeType: "section",
+      x: 0, y: 0, w: 113, h: 57, sectionAnchor: "_Toc9001",
+    };
+    const parts = await unzipDocx(buildDocx([section], noEdges));
+    const doc = parts["word/document.xml"];
+    expect(doc).toContain('<w:hyperlink w:anchor="_Toc9001">');
+    expect(doc).toContain("1.22스탭"); // 링크된 첫 토큰
+    expect(doc).toContain("참고"); // plain 잔여 텍스트도 여전히 존재
+  });
+
+  it("url까지 있으면 내부 앵커 링크·외부 url 링크가 공존한다", async () => {
+    const section: WordExportNode = {
+      id: "n1", title: "1.2 절차", nodeType: "section",
+      x: 0, y: 0, w: 113, h: 57, sectionAnchor: "_Toc1",
+      url: "https://x.test", urlLabel: "SOP",
+    };
+    const parts = await unzipDocx(buildDocx([section], noEdges));
+    const doc = parts["word/document.xml"];
+    const rels = parts["word/_rels/document.xml.rels"];
+    expect(doc).toContain('<w:hyperlink w:anchor="_Toc1">'); // 내부
+    expect(rels).toContain('TargetMode="External"'); // 외부(url 라인, 현행 유지)
   });
 });
 

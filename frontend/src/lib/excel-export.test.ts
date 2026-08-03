@@ -450,7 +450,7 @@ describe("buildExcelModel", () => {
       // 백엔드 get_subprocess_refs는 호출 그래프 자신의 서브프로세스 노드 기준으로 채운다 — map1이 가짐
       subprocess_refs: {
         2: {
-          designated: true, department: null, assignee: null, system: null,
+          name: null, designated: true, department: null, assignee: null, system: null,
           duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", url: null, url_label: null,
           sp_description: null,
         },
@@ -485,7 +485,7 @@ describe("buildExcelModel", () => {
       groups: [],
       subprocess_refs: {
         2: {
-          designated: true, department: null, assignee: null, system: null,
+          name: null, designated: true, department: null, assignee: null, system: null,
           duration: null, cost_krw: null, cost_usd: null, headcount: null, url: null, url_label: null,
           sp_description: "표준 절차 설명",
         },

@@ -216,6 +216,7 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   start: "#84a07c", // sage
   end: "#c2849a", // rose
   subprocess: "#7c6adc", // violet
+  section: "#909098", // stone
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
@@ -599,6 +600,15 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {data.url && <UrlBadge url={data.url} />}
       {data.assigneeWarning && <AssigneeWarningBadge />}
+      {data.staleAnchor && (
+        <span
+          title="Section no longer exists in the imported document"
+          className="absolute -right-1.5 -top-1.5 rounded-full bg-surface text-changed"
+          data-id="node-stale-anchor-badge"
+        >
+          <AlertTriangle size={16} strokeWidth={1.5} />
+        </span>
+      )}
       {showCopyBadge && <CopyDragBadge />}
       <NodeHandles connectable={isConnectable ?? true} />
     </div>

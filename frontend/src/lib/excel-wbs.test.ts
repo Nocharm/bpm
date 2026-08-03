@@ -191,7 +191,7 @@ describe("buildWbsModel", () => {
       groups: [],
       subprocess_refs: {
         2: {
-          designated: true, department: "Ops", assignee: null, system: null, duration: "72",
+          name: null, designated: true, department: "Ops", assignee: null, system: null, duration: "72",
           cost_krw: "2000000", cost_usd: null, headcount: "6", url: null, url_label: null,
           sp_description: "base desc",
         },

@@ -1,6 +1,12 @@
 """Map CRUD endpoint tests."""
 
+import asyncio
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
+
+from app.db import SessionLocal
+from app.models import MapVersion, Node, ProcessMap
 
 
 def test_create_map_returns_default_version(client: TestClient) -> None:
@@ -193,3 +199,201 @@ def test_me_includes_csv_manual_url(client: TestClient) -> None:
 
     assert "csv_manual_url" in body
     assert body["csv_manual_url"] == ""
+
+
+def test_create_word_map_stores_catalog(client: TestClient) -> None:
+    """Word 맵 생성 시 mode·doc_name·doc_sections이 응답에 그대로 실린다 (design 2026-07-18)."""
+    payload = {
+        "name": "SOP Flow",
+        "owning_department": "Owning Anchor Division",
+        "mode": "word",
+        "doc_name": "sop.docx",
+        "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+    }
+    r = client.post("/api/maps", json=payload)
+    assert r.status_code == 201
+    body = r.json()
+    assert body["mode"] == "word"
+    assert body["doc_name"] == "sop.docx"
+    assert body["doc_sections"][0]["anchor"] == "_Toc1"
+
+
+def test_create_map_defaults_mode_normal(client: TestClient) -> None:
+    """mode를 지정하지 않으면 기존 일반 맵과 동일하게 normal·빈 카탈로그로 남는다."""
+    body = client.post(
+        "/api/maps", json={"owning_department": "Owning Anchor Division", "name": "일반 맵"}
+    ).json()
+    assert body["mode"] == "normal"
+    assert body["doc_name"] == ""
+    assert body["doc_sections"] == []
+
+
+def test_copy_inherits_word_mode_and_catalog(client: TestClient) -> None:
+    """copy는 원본 Word 맵의 mode·doc_name·doc_sections도 상속한다 (design 2026-07-18)."""
+    name = f"word-src-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(
+                name=name,
+                visibility="public",
+                mode="word",
+                doc_name="sop.docx",
+                doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+            )
+            m.versions.append(MapVersion(label="As-Is", status="approved"))
+            session.add(m)
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(f"/api/maps/{map_id}/copy", json={})
+    assert res.status_code == 201
+    body = res.json()
+    assert body["mode"] == "word"
+    assert body["doc_name"] == "sop.docx"
+    assert body["doc_sections"][0]["anchor"] == "_Toc1"
+
+
+def test_reimport_replaces_catalog(client: TestClient) -> None:
+    """PUT /word-doc는 맵의 doc_name·doc_sections을 통째로 교체한다 (재임포트, design 2026-07-18)."""
+    created = client.post(
+        "/api/maps",
+        json={
+            "name": "reimport target",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+            "doc_name": "v1.docx",
+            "doc_sections": [{"anchor": "_Toc1", "title": "Old", "number": "1", "level": 1}],
+        },
+    ).json()
+    map_id = created["id"]
+    r = client.put(
+        f"/api/maps/{map_id}/word-doc",
+        json={
+            "doc_name": "v2.docx",
+            "sections": [{"anchor": "_Toc9", "title": "New", "number": "3", "level": 1}],
+        },
+    )
+    assert r.status_code == 200
+    detail = client.get(f"/api/maps/{map_id}")
+    assert detail.json()["doc_name"] == "v2.docx"
+    assert detail.json()["doc_sections"] == [
+        {"anchor": "_Toc9", "title": "New", "number": "3", "level": 1, "language": ""}
+    ]
+
+
+def test_reimport_stamps_imported_at(client: TestClient) -> None:
+    """재임포트 성공 시 doc_imported_at이 찍힌다 (design 2026-07-24 §5)."""
+    created = client.post(
+        "/api/maps",
+        json={
+            "name": f"stamp-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+            "doc_name": "v1.docx",
+            "doc_sections": [],
+        },
+    ).json()
+    assert created["doc_imported_at"] is None
+    r = client.put(
+        f"/api/maps/{created['id']}/word-doc",
+        json={"doc_name": "v2.docx", "sections": []},
+    )
+    assert r.status_code == 200
+    assert r.json()["doc_imported_at"] is not None
+
+
+def test_mark_generated_stamps_timestamp(client: TestClient) -> None:
+    """완결 문서 생성 기록 — 서버는 doc_generated_at만 스탬프 (design 2026-07-24 §5)."""
+    created = client.post(
+        "/api/maps",
+        json={
+            "name": f"gen-{uuid4().hex[:8]}",
+            "owning_department": "Owning Anchor Division",
+            "mode": "word",
+        },
+    ).json()
+    r = client.post(f"/api/maps/{created['id']}/word-doc/generated")
+    assert r.status_code == 200
+    assert r.json()["doc_generated_at"] is not None
+
+    missing = client.post("/api/maps/999999/word-doc/generated")
+    assert missing.status_code in (403, 404)
+
+
+def test_copy_convert_to_normal_promotes_sections(client: TestClient) -> None:
+    """승격 복사 — mode/doc 소거, 섹션 노드는 process 변환(앵커 소거·url 유지) (design 2026-07-24 §6)."""
+    name = f"word-promote-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(
+                name=name,
+                visibility="public",
+                mode="word",
+                doc_name="sop.docx",
+                doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+            )
+            v = MapVersion(label="As-Is", status="approved")
+            m.versions.append(v)
+            session.add(m)
+            await session.flush()
+            session.add(
+                Node(
+                    id="sec-1",
+                    version_id=v.id,
+                    title="1 재고",
+                    node_type="section",
+                    section_anchor="_Toc1",
+                    url="http://docs.example/sop",
+                    url_label="SOP",
+                )
+            )
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(
+        f"/api/maps/{map_id}/copy",
+        json={"convert_to_normal": True, "owning_department": "Owning Anchor Division"},
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["mode"] == "normal"
+    assert body["doc_name"] == ""
+    assert body["doc_sections"] == []
+    assert body["owning_department"] == "Owning Anchor Division"
+    graph = client.get(f"/api/versions/{body['versions'][0]['id']}/graph").json()
+    node = next(n for n in graph["nodes"] if n["title"] == "1 재고")
+    assert node["node_type"] == "process"
+    assert node["section_anchor"] == ""
+    assert node["url"] == "http://docs.example/sop"
+
+
+def test_copy_rejects_unknown_owning_department(client: TestClient) -> None:
+    """복사 시 owning_department override도 create_map과 동일하게 실제 조직 경로만 허용 (422)."""
+    name = f"word-promote-badd-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(
+                name=name,
+                visibility="public",
+                mode="word",
+                doc_name="sop.docx",
+                doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
+            )
+            v = MapVersion(label="As-Is", status="approved")
+            m.versions.append(v)
+            session.add(m)
+            await session.flush()
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(
+        f"/api/maps/{map_id}/copy",
+        json={"convert_to_normal": True, "owning_department": "No Such Division"},
+    )
+    assert res.status_code == 422

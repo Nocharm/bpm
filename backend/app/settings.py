@@ -41,6 +41,20 @@ class Settings(BaseSettings):
     # 비우면 위 단일 설정(AI_BASE_URL 등) 사용. 토큰은 시크릿이라 .env 전용(app_settings 아님).
     ai_endpoints: str = ""
 
+    # P2 지식기반 — bge-m3 임베딩 서버(OpenAI 호환 /embeddings, 인증 없음). url 비우면 KB 기능 전체 no-op (design 2026-07-23 §7)
+    # 변수명은 사내 다른 임베딩 사용 서비스와 동일(EMBED_URL/EMBED_MODEL/EMBED_DIM) — 값 그대로 복사 가능.
+    embed_url: str = ""  # /v1 루트 또는 /embeddings 전체 경로 모두 허용
+    embed_model: str = "bge-m3"
+    embed_dim: int = 1024  # bge-m3 출력 차원
+    embed_timeout_seconds: int = 30
+
+    # AI 부하 가드 — 백엔드 전체 동시 AI 호출 상한(인터뷰·챗 공용)
+    ai_max_concurrency: int = 4
+    # 인터뷰 선택지 병렬 생성 개수(구조 결정 지점에서만)
+    interview_choice_count: int = 2
+    # 인터뷰 컨텍스트 주입 문자 예산(첨부 발췌 등)
+    interview_context_budget: int = 12000
+
     # 사내 AD(LDAP) 동기화 — 비우면 비활성(로컬). 시크릿은 .env만 (design 2026-06-16)
     ldap_url: str = ""  # 예: ldaps://ad.example.com:636
     ldap_bind_dn: str = ""  # 서비스 계정 DN

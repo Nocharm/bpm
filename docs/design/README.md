@@ -17,6 +17,8 @@
 - [Excel 출력 1안 — 구조 노드 정리·분기 주석](2026-07-17-excel-export-format-v1-design.md)
 - [Excel 출력 2안 — WBS 레벨 컬럼·형식 선택 모달](2026-07-17-excel-export-wbs-v2-design.md)
 - [Word 도형 순서도 내보내기](2026-07-11-word-export-design.md)
+- [Word 맵 섹션 링크 — 문서 내부 하이퍼링크 순서도](2026-07-18-word-map-section-linking-design.md) — 섹션=서브프로세스 대체·read-only 북마크 파서·앵커 링크(진행 중)
+- [Word 맵 — 맵 탭 분리 표현·생성 분기·라이프사이클](2026-07-24-word-map-lifecycle-design.md) — 문서 부속 산출물 정체성·홈 섹션 분리·자동값 생성·개정 타임스탬프·승격 복사
 
 ## CSV
 - [CSV로 새 맵 만들기 + 클립보드 복사 수정](2026-07-10-csv-create-flow-design.md)
@@ -26,6 +28,10 @@
 - [AI 권한 게이트 + 제안 페이로드 저장](2026-07-10-ai-gate-payload-design.md)
 - [AI graph 제안 CSV 병합 파이프라인](2026-07-11-ai-graph-merge-design.md)
 - [AI 사용량 계측·집계 + 매뉴얼 섹션 선별](2026-07-11-ai-usage-manual-select-design.md)
+- [AI 컨설턴트 인터뷰 모드](2026-07-23-ai-consultant-interview-design.md) — 풀스크린 인터뷰·스테이지 엔진·선택지 병렬 생성·지식기반/RAG(P1~P3)
+- [Word 맵 AI 컨설턴트 — 문서→순서도 변환 모드](2026-07-26-word-map-ai-consultant-design.md) — word 전용 3스테이지·섹션 매핑 계약(앵커 검증·라벨 재구성)·카탈로그+원본 업로드
+- [인터뷰 속도·타이밍 재설계](2026-07-27-interview-speed-redesign-design.md) — 턴=인터뷰어 1콜·그리기는 draw 이벤트로 응축·델타 드래프팅·facts 아웃라인·맵 기준 배지
+- [인터뷰 패스트트랙 — 문서 첨부만으로 바로 그리기](2026-07-29-interview-fast-track-design.md) — 인사말 보기 진입·범위 제안 1콜·결정적 fast-forward(AI 0콜)·기존 multi draw 재사용·어체 간결화
 
 ## 권한 · 워크플로 · 맵
 - [맵 필수 필드 '오우닝 부서'](2026-07-10-owning-department-design.md)

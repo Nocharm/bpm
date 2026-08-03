@@ -1,0 +1,226 @@
+// @vitest-environment jsdom
+import { describe, it, expect } from "vitest";
+import { zipSync, strToU8 } from "fflate";
+import { parseWordSections } from "./word-import";
+
+// 커스텀 제목 스타일에 outlineLvl 지정(실물 SBL_Text N …과 동형 — 이름 무관, outlineLvl로만 레벨 판정).
+const STYLES =
+  `<?xml version="1.0"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+  `<w:style w:type="paragraph" w:styleId="H1"><w:pPr><w:outlineLvl w:val="0"/></w:pPr></w:style>` +
+  `<w:style w:type="paragraph" w:styleId="H2"><w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>` +
+  `<w:style w:type="paragraph" w:styleId="H3"><w:pPr><w:outlineLvl w:val="2"/></w:pPr></w:style>` +
+  `<w:style w:type="paragraph" w:styleId="Title"/>` + // 문서 제목 — outlineLvl 없음(헤딩 아님)
+  `</w:styles>`;
+
+const NS = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`;
+const doc = (body: string) => `<?xml version="1.0"?><w:document ${NS}><w:body>${body}</w:body></w:document>`;
+
+// TOC 항목 문단(캐시): 내부 하이퍼링크(w:anchor) + "번호\t제목\t페이지" 런. (스타일 무관 — 하이퍼링크로 식별)
+const tocEntry = (anchor: string, number: string, title: string, page = "3") =>
+  `<w:p><w:hyperlink w:anchor="${anchor}">` +
+  `<w:r><w:t>${number}</w:t></w:r><w:r><w:tab/></w:r>` +
+  `<w:r><w:t>${title}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>${page}</w:t></w:r>` +
+  `</w:hyperlink></w:p>`;
+
+// 본문 제목 문단: 커스텀 스타일 + 책갈피(들) + 제목 런(번호는 자동넘버라 런에 없음).
+const heading = (styleId: string, bookmarks: string[], title: string) =>
+  `<w:p><w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>` +
+  bookmarks.map((n, i) => `<w:bookmarkStart w:id="${i}" w:name="${n}"/>`).join("") +
+  `<w:r><w:t>${title}</w:t></w:r></w:p>`;
+
+const makeDocx = (documentXml: string, stylesXml = STYLES): Uint8Array =>
+  zipSync({ "word/document.xml": strToU8(documentXml), "word/styles.xml": strToU8(stylesXml) });
+
+describe("parseWordSections", () => {
+  it("레벨은 커스텀 스타일의 outlineLvl로 판정하고 번호는 TOC 캐시에서 가져온다", async () => {
+    const xml = doc(tocEntry("_Toc1", "1.", "Purpose") + heading("H1", ["_Toc1"], "Purpose"));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ anchor: "_Toc1", number: "1", title: "Purpose", level: 1 });
+  });
+
+  it("3단계+ 번호는 TOC 부모에서 씨앗 받아 로컬 카운터로 재구성한다", async () => {
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Purpose") + tocEntry("_Toc2", "1.1", "Scope") +
+      heading("H1", ["_Toc1"], "Purpose") + heading("H2", ["_Toc2"], "Scope") +
+      heading("H3", ["_Toc3"], "Detail A") + heading("H3", ["_Toc4"], "Detail B"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1.1", "1.1.1", "1.1.2"]);
+    expect(out.map((s) => s.level)).toEqual([1, 2, 3, 3]);
+    expect(out[2].anchor).toBe("_Toc3"); // TOC에 없는 3단계도 본문 책갈피로 잡힘
+  });
+
+  it("잔재로 중복된 책갈피 중 TOC가 참조하는 활성 앵커를 고르고 한 번만 낸다", async () => {
+    const xml = doc(
+      tocEntry("_Toc_active", "6.1", "Procedure") +
+      heading("H2", ["_Toc_stale", "_Toc_active"], "Procedure"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ anchor: "_Toc_active", number: "6.1", level: 2 });
+  });
+
+  it("_GoBack·outlineLvl 없는 문서 제목·비제목 문단은 제외한다", async () => {
+    const xml = doc(
+      `<w:p><w:bookmarkStart w:id="9" w:name="_GoBack"/><w:r><w:t>본문</w:t></w:r></w:p>` +
+      heading("Title", ["_TocTitle"], "SOP 제목"), // Title 스타일=outlineLvl 없음 → 헤딩 아님
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(0);
+  });
+
+  it("Eng·Kor 두 TOC와 각 본문 제목을 모두 뽑는다", async () => {
+    const xml = doc(
+      tocEntry("_TocE1", "1.", "Purpose") + tocEntry("_TocK1", "1.", "목적") +
+      heading("H1", ["_TocE1"], "Purpose") + heading("H1", ["_TocK1"], "목적"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.anchor)).toEqual(["_TocE1", "_TocK1"]);
+    expect(out.map((s) => s.title)).toEqual(["Purpose", "목적"]);
+  });
+
+  it("레벨을 건너뛰면 새 최상위로 리셋하지 않고 가장 가까운 조상 아래로 중첩한다", async () => {
+    // 레벨1 "6"(TOC) 바로 뒤 레벨2 없이 TOC 없는 레벨3 → "6" 아래로 붙어야("6.1"), 바 "1"(새 최상위) 아님.
+    const xml = doc(
+      tocEntry("_Toc1", "6.", "Procedure") +
+      heading("H1", ["_Toc1"], "Procedure") + heading("H3", ["_Toc3"], "Detail"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["6", "6.1"]);
+    expect(out[1]).toMatchObject({ anchor: "_Toc3", level: 3 });
+  });
+
+  it("outlineLvl 없는 커스텀 제목 스타일은 이름의 숫자로 레벨을 잡는다", async () => {
+    // SBLText3Kor는 STYLES에 정의 없음(outlineLvl 미보유) → 이름 "Text3"에서 레벨 3 유추.
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Purpose") +
+      heading("H1", ["_Toc1"], "Purpose") + heading("SBLText3Kor", ["_Toc3"], "Detail"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.find((s) => s.anchor === "_Toc3")?.level).toBe(3);
+  });
+
+  it("책갈피 없는 제목도 합성 앵커(_bpmsec)로 목록에 낸다 — 주입 대상", async () => {
+    const xml = doc(heading("H1", [], "No bookmark section"));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ anchor: "_bpmsec1", title: "No bookmark section", level: 1 });
+  });
+
+  it("빈 제목 문단(블랭크)은 제외한다 — 유령 항목·번호 오염 방지", async () => {
+    const xml = doc(heading("H1", ["_Toc1"], "Real") + heading("H1", [], ""));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out).toHaveLength(1);
+    expect(out[0].title).toBe("Real");
+  });
+
+  it("어펜딕스 제목은 번호 없이(무번호) 낸다", async () => {
+    const xml = doc(heading("SBLAppendixTitleKor", ["_Toc1"], "Annex"));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out[0]).toMatchObject({ title: "Annex", number: "", level: 1 });
+  });
+
+  it("책갈피 없는 레벨1 제목은 TOC 제목 매칭으로 권위 번호를 받아 카운터를 리셋한다", async () => {
+    // "First"(TOC 1, 책갈피) 다음 "목적"(책갈피 없음) — 제목 매칭으로 TOC "1"을 받아 2가 아닌 1.
+    const xml = doc(
+      tocEntry("_TocE", "1.", "First") + tocEntry("_TocK", "1.", "목적") +
+      heading("H1", ["_TocE"], "First") + heading("H1", [], "목적"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1"]);
+    expect(out[1].anchor).toBe("_bpmsec1");
+  });
+
+  it("스타일명 접미사로 언어를 태그한다 (Kor→ko / Eng→en)", async () => {
+    const xml = doc(
+      heading("SBLText1Kor", ["_Toc1"], "목적") + heading("SBLText1Eng", ["_Toc2"], "Purpose"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.find((s) => s.anchor === "_Toc1")?.language).toBe("ko");
+    expect(out.find((s) => s.anchor === "_Toc2")?.language).toBe("en");
+  });
+
+  it("백엔드 한도 초과 title은 500자로 클램프한다 (422 방지)", async () => {
+    const xml = doc(heading("H1", ["_Toc1"], "가".repeat(600)));
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out[0].title.length).toBe(500);
+  });
+
+  // 실물 이슈(2026-07-27): 번호가 자동넘버가 아니라 본문 제목 텍스트에 직접 타이핑된 문서 +
+  // 영어/한글 짝이 별도 문단(Enter)으로 이어지는 구조 — 한글 줄이 카운터를 밀어 이후 번호 전부 어긋남.
+  it("제목 텍스트 선두의 리터럴 번호를 권위로 쓰고 제목에서 분리한다", async () => {
+    const xml = doc(
+      heading("H1", [], "1. Purpose") +
+      heading("H1", [], "2. Scope") +
+      heading("H2", [], "2.1 Boundary") +
+      heading("H1", [], "4. Records"), // 문서가 3을 건너뛰어도 텍스트 번호를 그대로 따른다
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "2", "2.1", "4"]);
+    expect(out.map((s) => s.title)).toEqual(["Purpose", "Scope", "Boundary", "Records"]);
+  });
+
+  // 실물 2차 리포트(2026-07-27): TOC가 있는 문서에선 영어 제목이 텍스트가 아닌 TOC로 번호를 받아
+  // fromText 가드에 걸려 한글 짝이 여전히 카운터를 밀었다(목적=2, 1.1→2.1). 기준은 "명시적 번호
+  // (텍스트 or TOC)를 가진 헤더" — 그 직후 같은 레벨 무번호 제목이 번호를 상속한다.
+  it("TOC 번호 제목 바로 다음의 무번호 언어 짝도 번호를 상속한다", async () => {
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Purpose") + tocEntry("_Toc2", "1.1", "Boundary") +
+      heading("H1", ["_Toc1"], "Purpose") + heading("H1", [], "목적") +
+      heading("H2", ["_Toc2"], "Boundary") + heading("H2", [], "경계"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "1.1", "1.1"]);
+  });
+
+  it("짝 사이의 빈 문단은 상속을 끊지 않지만, 본문 텍스트가 끼면 새 섹션으로 센다", async () => {
+    const xml = doc(
+      heading("H1", [], "1. Purpose") + `<w:p></w:p>` + heading("H1", [], "목적") +
+      heading("H1", [], "2. Scope") +
+      `<w:p><w:r><w:t>본문 내용</w:t></w:r></w:p>` + heading("H1", [], "별개 제목"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    // 목적=1 상속(빈 문단 무시). "별개 제목"은 본문이 끼어 짝이 아니고, 텍스트 번호 문서에선
+    // 문서가 안 보여주는 번호를 발명하지 않는다 → 무번호(3차 리포트: Note 계열).
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "2", ""]);
+  });
+
+  // 실물 3차 리포트(2026-07-27): 헤딩 스타일의 무번호 "Note"가 카운터를 소모해 이후 번호가 밀림.
+  // 텍스트 번호 문서에선 무번호 헤딩은 실문서에도 무번호 — 번호 발명 금지 + 카운터/스택 불변.
+  it("텍스트 번호 문서의 무번호 헤딩(Note)은 번호를 발명하지 않고 카운터도 밀지 않는다", async () => {
+    const xml = doc(
+      heading("H1", [], "3. Procedure") +
+      heading("H2", [], "3.1 Prepare") +
+      `<w:p><w:r><w:t>본문 내용</w:t></w:r></w:p>` +
+      heading("H2", [], "Note") +
+      heading("H2", [], "3.2 Execute"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["3", "3.1", "", "3.2"]);
+    expect(out.map((s) => s.title)).toEqual(["Procedure", "Prepare", "Note", "Execute"]);
+  });
+
+  it("텍스트 번호가 1건뿐인 문서는 우발 매치로 보고 기존 카운터를 유지한다 (자동넘버 문서군 보호)", async () => {
+    const xml = doc(
+      tocEntry("_Toc1", "1.", "Overview") +
+      heading("H1", ["_Toc1"], "Overview") +
+      heading("H2", [], "3 Way Handshake") + // 숫자로 시작하는 평범한 제목 — 번호 아님
+      heading("H2", [], "Details"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1.1", "1.2"]);
+    expect(out[1].title).toBe("3 Way Handshake"); // 제목 분리도 미발동
+  });
+
+  it("번호 제목 바로 다음의 무번호 같은 레벨 제목(언어 짝)은 번호를 상속하고 카운터를 밀지 않는다", async () => {
+    const xml = doc(
+      heading("H1", [], "1. Purpose") + heading("H1", [], "목적") +
+      heading("H1", [], "2. Scope") + heading("H1", [], "범위") +
+      heading("H1", [], "3. Responsibility") + heading("H1", [], "책임"),
+    );
+    const out = await parseWordSections(makeDocx(xml));
+    expect(out.map((s) => s.number)).toEqual(["1", "1", "2", "2", "3", "3"]);
+    expect(out.map((s) => s.title)).toEqual(["Purpose", "목적", "Scope", "범위", "Responsibility", "책임"]);
+  });
+});

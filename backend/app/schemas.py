@@ -21,6 +21,15 @@ def _assert_single_currency(krw: str, usd: str) -> None:
         raise ValueError("cost_krw and cost_usd are mutually exclusive — fill only one")
 
 
+class SectionEntryIn(BaseModel):
+    # Word 문서 카탈로그 1건 — read-only 파서가 뽑은 북마크 (design 2026-07-18)
+    anchor: str = Field(max_length=200)
+    title: str = Field(default="", max_length=500)
+    number: str = Field(default="", max_length=50)
+    level: int = 0
+    language: str = Field(default="", max_length=8)  # 이중언어 문서 필터용 "ko"|"en"|""
+
+
 class MapCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
@@ -28,11 +37,25 @@ class MapCreate(BaseModel):
     visibility: Literal["private", "public"] = "private"
     # 오우닝 부서(필수) — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)
+    # Word 맵 모드 & 임포트 카탈로그 — 생성 시 문서 링크를 함께 실을 수 있다 (design 2026-07-18)
+    mode: Literal["normal", "word"] = "normal"
+    doc_name: str = Field(default="", max_length=300)
+    doc_sections: list[SectionEntryIn] = Field(default_factory=list)
+
+
+class WordDocIn(BaseModel):
+    # 재임포트 페이로드 — 맵의 doc_name·doc_sections을 통째로 교체 (design 2026-07-18)
+    doc_name: str = Field(default="", max_length=300)
+    sections: list[SectionEntryIn] = Field(default_factory=list)
 
 
 class MapCopy(BaseModel):
     # 새 맵 이름 — 비우면 "<원본명> (Copy)" (F12 승인본 복사)
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    # Word 맵 → 일반 맵 승격 복사 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
+    convert_to_normal: bool = False
+    # 승격 관문에서 지정한 오우닝 부서 — 없으면 원본 상속
+    owning_department: str | None = None
 
 
 class MapUpdate(BaseModel):
@@ -577,6 +600,13 @@ class MapOut(BaseModel):
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
     owning_department: str | None = None
+    # Word 맵 모드 & 임포트 카탈로그 — mode="word"인 맵만 doc_name·doc_sections 사용 (design 2026-07-18)
+    mode: str = "normal"
+    doc_name: str = ""
+    doc_sections: list[SectionEntryIn] = Field(default_factory=list)
+    # 개정 라이프사이클 타임스탬프 — 홈 word 행·상세 카드 표시용 (design 2026-07-24 §5)
+    doc_imported_at: datetime | None = None
+    doc_generated_at: datetime | None = None
 
     @field_validator("sp_duration", mode="after")
     @classmethod
@@ -585,6 +615,13 @@ class MapOut(BaseModel):
         if value is None or value == "":
             return value
         return normalize_duration(value)
+
+    @field_validator("doc_sections", mode="before")
+    @classmethod
+    def _coerce_doc_sections(cls, value: object) -> object:
+        # doc_sections DDL엔 DEFAULT가 없어(JSON) 기존 행은 ALTER 후 NULL — from_attributes 로드 시
+        # None → [] 보정(NodeIn._coerce_group_ids와 동일 결정, design 2026-07-18)
+        return [] if value is None else value
 
 
 class MapDetailOut(MapOut):
@@ -615,6 +652,8 @@ class NodeIn(BaseModel):
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
     url_label: str = Field(default="", max_length=100)
+    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드 (design 2026-07-18)
+    section_anchor: str = Field(default="", max_length=200)
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
@@ -1122,7 +1161,9 @@ class EligibleAssigneesOut(BaseModel):
     dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
-AI_NODE_TYPES = {"start", "process", "decision", "end"}
+# "section"은 word 맵 변환 모드 드래프터 출력 — 앵커 실존 검증은 orchestrator._sanitize_word_graph (design 2026-07-26 §4)
+# subprocess는 P2 유사 SP 수락으로 작업본에 존재할 수 있어 에코 허용 — 환각은 orchestrator가 강등
+AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
 class AppSettingsOut(BaseModel):
@@ -1132,6 +1173,8 @@ class AppSettingsOut(BaseModel):
     ai_chat_max_sessions_per_map: int
     ai_chat_max_messages_per_session: int
     ai_chat_retention_days: int
+    # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
+    ai_access_disabled: bool = False
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -1143,6 +1186,7 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_sessions_per_map: int | None = Field(default=None, ge=1, le=200)
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
+    ai_access_disabled: bool | None = None
 
 
 class AiTipsOut(BaseModel):
@@ -1233,6 +1277,9 @@ class AiNodeAttributes(BaseModel):
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
     url_label: str | None = Field(default=None, max_length=100)
+    # 문서 섹션 앵커 — word 맵 드래프터/제안 passthrough. 실존 검증은 orchestrator
+    # _sanitize_word_graph에서 (design 2026-07-26 §4)
+    section_anchor: str | None = Field(default=None, max_length=200)
 
     @field_validator("duration", mode="after")
     @classmethod
@@ -1252,13 +1299,17 @@ class AiNodeAttributes(BaseModel):
 
 class AiNode(BaseModel):
     key: str = Field(min_length=1, max_length=50)
-    title: str = Field(min_length=1, max_length=200)
+    # 빈 제목 허용 — 인터뷰 델타 계약의 키 에코 {"key": ...}용 (orchestrator._expand_delta가 복원)
+    title: str = Field(default="", max_length=200)
     node_type: str = "process"
     description: str = ""
     # 선택 메타 — 미제공이면 None (apply가 빈값/기존값으로 처리, D1)
     attributes: AiNodeAttributes | None = None
     # 소속 그룹 — AiProposal.groups[].key 참조 (단일 태그). null=무소속
     group_key: str | None = Field(default=None, max_length=50)
+    # 서브프로세스 링크 대상 — 진실원은 서버(orchestrator._sanitize_subprocess가 이전 작업본
+    # 기준으로 강제). AI 에코가 값을 실어 보낼 수 있게만 열어둔다 (design 2026-07-23 §7 P2)
+    linked_map_id: int | None = None
 
 
 class AiEdge(BaseModel):
@@ -1392,3 +1443,116 @@ class EmbedCheckOut(BaseModel):
     """임베드 체크 — True/False=판정, None=대상 도달 실패(판정 불가) (embed-check design 2026-07-08)."""
 
     embeddable: bool | None
+
+
+# ---------- AI 컨설턴트 인터뷰 (design 2026-07-23) ----------
+
+InterviewUserTurnType = Literal["answer", "choice", "confirm", "skip"]
+
+
+class InterviewCreateIn(BaseModel):
+    version_id: int
+    lang: Literal["ko", "en"] = "ko"
+
+
+class InterviewTurnIn(BaseModel):
+    type: InterviewUserTurnType
+    content: str = Field(default="", max_length=4000)
+    choice_id: str | None = Field(default=None, max_length=20)
+
+
+class InterviewRevertIn(BaseModel):
+    stage: str = Field(min_length=1, max_length=20)
+
+
+class InterviewMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    seq: int
+    role: str
+    kind: str
+    content: str
+    payload: dict | None = None
+    stage: str
+    superseded: bool
+    created_at: datetime
+
+
+class InterviewCheckpointOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    stage: str
+    message_seq: int
+    # 프론트 체크포인트 클릭 프리뷰용 — 확정 전 맵만 먼저 되돌려 보여준다 (실사용 피드백 2026-07-27)
+    working_graph: dict | None = None
+    created_at: datetime
+
+
+class InterviewAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    mime: str
+    size: int
+    status: str
+    error: str
+    created_at: datetime
+
+
+class InterviewDrawIn(BaseModel):
+    """그리기 이벤트 입력 — multi(구조 스테이지 완료 복수안) / single(수동·redraw·최종안)."""
+
+    variants: Literal["multi", "single"] = "single"
+
+
+class InterviewApplyParamsIn(BaseModel):
+    """params 표 수동 편집 반영 — 활동 제목 → {필드: 값}. 없으면 수집분(facts) 그대로 적용.
+
+    유효 필드 필터·facts 딥머지는 라우터가 수행 — 수동 변경도 AI 컨텍스트(facts)에 남는다 (2026-07-30).
+    """
+
+    params_table: dict[str, dict[str, str]] | None = None
+
+
+class InterviewSpAcceptIn(BaseModel):
+    """유사 SP 제안 수락 — 제안 메시지 id로 대상 구간·맵을 특정 (design 2026-07-23 §7 P2)."""
+
+    message_id: int
+
+
+class KbDocumentOut(BaseModel):
+    """지식기반 라이브러리 문서 — sysadmin 관리 목록용 (design 2026-07-23 §7 P2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    filename: str
+    mime: str
+    status: str
+    uploaded_by: str
+    chunk_count: int = 0  # 인덱싱 완료 여부 표식 — 0이면 대기/실패
+    created_at: datetime
+
+
+class InterviewStateOut(BaseModel):
+    id: int
+    map_id: int
+    version_id: int
+    status: str
+    current_stage: str
+    lang: str
+    mode: str = "normal"
+    # 확정 facts — 프론트 아웃라인 패널(수집된 정보) 렌더용 (speed redesign §6)
+    facts: dict = Field(default_factory=dict)
+    working_graph: dict | None = None
+    messages: list[InterviewMessageOut] = Field(default_factory=list)
+    checkpoints: list[InterviewCheckpointOut] = Field(default_factory=list)
+    attachments: list[InterviewAttachmentOut] = Field(default_factory=list)
+    # 충돌 경고 판정용 — 현재 draft updated_at vs 세션 시작 시점
+    version_updated_at: datetime | None = None
+    base_graph_updated_at: datetime | None = None
+    # 턴 응답 전용 그리기 신호(비영속) — "multi" | "single" | None (speed redesign §4)
+    draw_due: str | None = None

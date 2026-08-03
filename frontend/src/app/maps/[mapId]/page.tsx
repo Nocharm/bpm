@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Hourglass, Info, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, Info, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -44,7 +44,7 @@ import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
 import { VersionPill } from "@/components/version-pill";
 import { CommentSection } from "@/components/comment-section";
-import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { ContextMenu, EdgeSidesPad, type ContextMenuItem } from "@/components/context-menu";
 import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
@@ -68,6 +68,8 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
+import { SectionPanel } from "@/components/section-panel";
+import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { WithdrawHandoff } from "@/components/withdraw-handoff";
@@ -91,6 +93,7 @@ import { CsvImportTab } from "@/components/csv-import-tab";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   alignSelected,
+  buildNodeData,
   buildOutline,
   distributeSelected,
   layoutWithDagre,
@@ -109,6 +112,7 @@ import {
   removeOutgoingEdges,
   insertNodeBefore,
   insertNodeAfter,
+  swapNodeEdges,
   withSubprocessHandles,
   pickDropZone,
   DROPZONE_HIT_OUTER_PAD,
@@ -163,6 +167,7 @@ import {
   getWorkflowState,
   listComments,
   listLibraryProcesses,
+  markWordDocGenerated,
   publishVersion,
   rejectVersion,
   renameVersion,
@@ -170,6 +175,7 @@ import {
   requestCheckout,
   withdrawCheckoutRequest,
   saveGraph,
+  setWordDoc,
   submitVersion,
   transferCheckout,
   updateComment,
@@ -195,6 +201,8 @@ import {
 } from "@/lib/api";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
+import { getStaleSectionNodeIds } from "@/lib/word-map-home";
+import type { SectionEntry } from "@/lib/word-import";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
@@ -245,6 +253,14 @@ const GROUP_TITLE_GAP = 26; // 박스 상단에 타이틀바를 얹을 추가 �
 const EXTENT_MARGIN = 600; // 우/하단 패닝·노드 여백 — 콘텐츠 성장 여유
 const EXTENT_TOPLEFT_MARGIN = 120; // 좌/상단 여백 — 작게(좌상단 고정: 위/왼쪽으로 콘텐츠가 가운데로 밀리지 않게)
 const MIN_ZOOM = 0.2; // 최소 줌 — translateExtent 우하단 확장(pane/MIN_ZOOM)이 이 값과 일치해야 줌아웃 centering 방지
+// Word 산출물 도형 크기 — 전 노드·분기 통일(사용자 요구: 1.5cm×3cm). 캔버스 px 기준(word-export layout이 ×9525로 EMU 변환).
+// 3cm≈113.4px(가로) · 1.5cm≈56.7px(세로). 정확 수치·엣지 라우팅은 시각 검토로 튜닝 예정(design §7, F1 수동 확인).
+const WORD_SHAPE_W = 1080000 / 9525; // 3cm(너비) 정확값 — ×9525(EMU_PER_PX)=1,080,000 EMU
+const WORD_SHAPE_H = 540000 / 9525; // 1.5cm(높이) — 540,000 EMU
+// Word 산출물 1페이지 가용영역(A4·여백 2.5cm 제외 = word-export PAGE_*_EMU) − 내보내기 패딩(2×20px).
+// 캔버스에 이 크기의 경계를 그려, 노드가 이 안이면 산출물이 1페이지에 들어감을 알린다(크기 감각).
+const WORD_PAGE_W_PX = 5760720 / 9525 - 40; // ≈ 565px
+const WORD_PAGE_H_PX = 8892540 / 9525 - 40; // ≈ 894px
 // 엣지 라벨(분기 Yes/No/기타 등) — 디자인 토큰으로 알약 스타일(서피스 배경 + hairline 테두리 + ink 텍스트)
 const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
@@ -549,6 +565,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       fte: node.fte ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
+      section_anchor: node.section_anchor ?? "",
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
@@ -595,9 +612,12 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     id,
     title: node.title,
     description: node.description,
-    // 링크 없는 subprocess는 process로 강등 — linked_map_id는 바로 아래서 null 고정이라
-    // node_type만 subprocess면 칩/인스펙터에 값이 렌더되지 않는 죽은 상태가 된다(finding)
-    node_type: coerceAiNewNodeType(node.node_type),
+    // 링크 없는 subprocess는 process로 강등 — 링크가 실린 subprocess(P2 유사 SP 수락)만
+    // 실제 Call Activity로 생성 (csv-import buildGraphFromAiProposal과 대칭)
+    node_type:
+      node.node_type === "subprocess" && node.linked_map_id
+        ? "subprocess"
+        : coerceAiNewNodeType(node.node_type),
     color: attr?.color ?? "",
     assignee: attr?.assignee ?? "",
     department: attr?.department ?? "",
@@ -612,11 +632,13 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
+    // 문서 섹션 앵커 — word 맵 제안 스레딩(AI 변환 2곳 대칭 — csv-import buildGraphFromAiProposal과 동일)
+    section_anchor: attr?.section_anchor ?? "",
     pos_x: 0,
     pos_y: 0,
     sort_order: 0,
     group_ids: groupId ? [groupId] : [],
-    linked_map_id: null,
+    linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : null,
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
@@ -654,6 +676,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       fte: node.data.fte ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
+      section_anchor: node.data.section_anchor ?? "",
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -706,6 +729,39 @@ function MapEditor({ mapId }: { mapId: number }) {
   // nodes를 오염시키지 않아 아웃라인·저장·라우팅 등 기존 가정이 깨지지 않는다(회귀 0). scopeId = 펼친 부모 id.
   const [childNodes, setChildNodes] = useState<AppNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // 새 맵 온보딩 — 시드 Start/End만 있는 빈 맵에서 AI 컨설턴트 안내, **맵별 1회** (2026-07-30).
+  // 전역 키였을 땐 컨설턴트를 한 번이라도 쓰면(Start/Dismiss/메뉴 진입) 이후 새 맵 전부에서
+  // 영구 비노출됐다 — 새 맵마다 안내하는 의도와 어긋나 맵 단위 키로 전환.
+  const consultOnboardKey = `bpm.consultOnboardSeen.${mapId}`;
+  const [consultOnboardSeen, setConsultOnboardSeen] = useState(() =>
+    typeof window === "undefined"
+      ? true
+      : window.localStorage.getItem(consultOnboardKey) === "1",
+  );
+  function dismissConsultOnboard() {
+    window.localStorage.setItem(consultOnboardKey, "1");
+    setConsultOnboardSeen(true);
+  }
+  // AI 메뉴 — 챗·컨설턴트 진입을 버튼 하나로 통합(상단바 다이어트, 2026-07-30)
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
+  const aiMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aiMenuOpen) return;
+    const onDown = (event: PointerEvent) => {
+      if (aiMenuRef.current && !aiMenuRef.current.contains(event.target as Node)) {
+        setAiMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAiMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [aiMenuOpen]);
   const [groups, setGroups] = useState<GraphGroup[]>([]);
   // 방금 생성된 그룹 id — 해당 GroupTitleBar가 마운트 시 이름 편집모드로 진입하도록 신호
   const [newGroupId, setNewGroupId] = useState<string | null>(null);
@@ -745,6 +801,26 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // Word 맵 전용 — 섹션 패널 열림 + 맵의 문서 모드/카탈로그(임포트 시 채워짐, design 2026-07-18)
+  const [sectionsOpen, setSectionsOpen] = useState(false);
+  const [wordReimportOpen, setWordReimportOpen] = useState(false);
+  const [mapMode, setMapMode] = useState<string>("normal");
+  const [docName, setDocName] = useState<string>("");
+  const [docSections, setDocSections] = useState<SectionEntry[]>([]);
+  const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
+  const isWordMap = mapMode === "word";
+  // stale 앵커 — 재임포트 후 카탈로그에서 사라진 앵커를 참조하는 섹션 노드 (design 2026-07-24 §5)
+  const staleAnchorIds = useMemo(() => {
+    if (!isWordMap) return new Set<string>();
+    return getStaleSectionNodeIds(
+      nodes.map((n) => ({
+        id: n.id,
+        nodeType: n.data.nodeType,
+        sectionAnchor: n.data.section_anchor,
+      })),
+      docSections,
+    );
+  }, [isWordMap, nodes, docSections]);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
@@ -782,6 +858,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         target: string;
         options: { edgeId: string; branchKind: BranchKind; edgeLabel: string; targetLabel: string }[];
         at: { x: number; y: number };
+      }
+    | null
+  >(null);
+  // decision↔일반 스왑 시 — 일반 노드가 가져갈 decision 출력선 선택. 픽 시점에 위치·연결
+  // 교환을 일괄 적용(취소=무변경). aStart: 드래그 시작 좌표 — onNodeDragStop이 handleZoneDrop
+  // 직후 dragStartPosRef를 비우므로 모달을 열 때 캡처해 둔다.
+  const [swapSelect, setSwapSelect] = useState<
+    | {
+        aId: string;
+        bId: string;
+        options: { edgeId: string; branchKind: BranchKind; edgeLabel: string; targetLabel: string }[];
+        at: { x: number; y: number };
+        aStart: { x: number; y: number } | null;
       }
     | null
   >(null);
@@ -2021,6 +2110,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapName(detail.name);
         setMapOwner(detail.created_by);
         setMyRole(detail.my_role);
+        setMapMode(detail.mode ?? "normal");
+        setDocName(detail.doc_name ?? "");
+        setDocSections(detail.doc_sections ?? []);
         setVersions(detail.versions);
         setUsername(me.username);
         setAiEnabled(me.ai_enabled);
@@ -3035,7 +3127,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return violatesTerminalRule(targetType, draggedType);
       }
       if (zone === "swap") {
-        // 스왑은 같은 종류만(subprocess↔process 예외) — 다른 종류면 무효(드롭존 흐림).
+        // 스왑은 비터미널끼리(decision↔일반 포함) 허용, start/end는 동종만 — 불허면 무효(드롭존 흐림).
         return !canSwapTypes(draggedType, targetType);
       }
       return false;
@@ -3136,30 +3228,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           selected: true,
           // 생성 위치를 알 수 있도록 잠깐 페이드 반짝(클래스는 flashNode가 제거)
           className: "bpm-node-flash",
-          data: {
-            // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
-            label:
-              nodeType === "start" || nodeType === "end"
-                ? ""
-                : makeUniqueLabel(
-                    t("editor.newStep"),
-                    current.map((node) => node.data.label),
-                  ),
-            description: "",
+          // start/end는 기본 공란(표시는 terminalDisplayLabel이 "Start"/"End"로) — 그 외는 "New step" (#2)
+          data: buildNodeData(
             nodeType,
-            color: "",
-            assignee: "",
-            department: "",
-            system: "",
-            duration: "",
-            cost_krw: "",
-            cost_usd: "",
-            headcount: "",
-            annual_count: "",
-            fte: "",
-            groupIds: [],
-            hasChildren: false,
-          },
+            nodeType === "start" || nodeType === "end"
+              ? ""
+              : makeUniqueLabel(
+                  t("editor.newStep"),
+                  current.map((node) => node.data.label),
+                ),
+          ),
         },
       ]);
       setSelectedId(id);
@@ -3860,17 +3938,30 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, setNodes, pushHistory, scheduleAutoSave],
   );
 
-  // A를 B의 자리로, B를 A의 드래그 시작 자리로 교환 (드롭존 중앙=swap)
+  // A를 B의 자리로, B를 A의 드래그 시작 자리로 교환 (드롭존 중앙=swap).
+  // takenEdgeId: decision↔일반 스왑에서 일반 노드가 가져갈 출력선(선택 모달 픽).
+  // aStartOverride: 모달로 스왑을 미룬 경우의 드래그 시작 좌표 — onNodeDragStop이
+  // handleZoneDrop 직후 dragStartPosRef를 비우므로 모달 열 때 캡처한 값을 받는다.
   const swapNodes = useCallback(
-    (aId: string, bId: string) => {
+    (
+      aId: string,
+      bId: string,
+      takenEdgeId?: string | null,
+      aStartOverride?: { x: number; y: number } | null,
+    ) => {
       const start = dragStartPosRef.current;
+      const aOrig =
+        aStartOverride !== undefined
+          ? aStartOverride
+          : start && start.id === aId
+            ? { x: start.x, y: start.y }
+            : null;
       setNodes((current) => {
         const b = current.find((node) => node.id === bId);
         if (!b) {
           return current;
         }
         const bPos = { ...b.position };
-        const aOrig = start && start.id === aId ? { x: start.x, y: start.y } : null;
         return current.map((node) => {
           if (node.id === aId) {
             return { ...node, position: bPos };
@@ -3881,19 +3972,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           return node;
         });
       });
-      // 엣지 연결 상태도 교환 — A의 연결은 B로, B의 연결은 A로
-      const isSubprocess = (nodeId: string): boolean =>
-        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      // 엣지 연결 상태도 교환 — A의 연결은 B로, B의 연결은 A로.
+      // decision↔일반 스왑은 출력 부분 이관(일반은 1개만, 나머지는 decision에 라벨째 잔류) — swapNodeEdges.
       setEdges((current) =>
-        current.map((edge) => {
-          const source = edge.source === aId ? bId : edge.source === bId ? aId : edge.source;
-          const target = edge.target === aId ? bId : edge.target === bId ? aId : edge.target;
-          if (source === edge.source && target === edge.target) {
-            return edge;
-          }
-          // 끝점이 바뀌었으니 핸들을 새 끝점 타입에 맞춘다(하위프로세스 ↔ 일반).
-          return withSubprocessHandles({ ...edge, source, target }, isSubprocess);
-        }),
+        swapNodeEdges(
+          current,
+          aId,
+          bId,
+          (nodeId) => nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType,
+          takenEdgeId ?? null,
+        ),
       );
       scheduleAutoSave();
     },
@@ -3904,10 +3992,46 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleZoneDrop = useCallback(
     (aId: string, bId: string, zone: DropZone) => {
       if (zone === "swap") {
-        // 다른 종류 노드는 스왑 불가(subprocess↔process 예외) — activateZone에서 이미 zone을
+        // 허용 안 되는 조합(start/end는 동종만)은 스왑 불가 — activateZone에서 이미 zone을
         // 죽이지만 방어적으로 차단.
         if (flowZoneViolates(aId, bId, "swap")) {
           return;
+        }
+        // decision↔일반 스왑에서 decision 출력이 2개 이상이면 일반 노드가 어느 출력선을
+        // 가져갈지 선택 모달 — 직접 분기(D→N)가 있으면 그 엣지가 끝점째 교환되므로 선택 불요.
+        const aType = nodesRef.current.find((node) => node.id === aId)?.data.nodeType;
+        const bType = nodesRef.current.find((node) => node.id === bId)?.data.nodeType;
+        const decisionId =
+          aType === "decision" && bType !== "decision"
+            ? aId
+            : bType === "decision" && aType !== "decision"
+              ? bId
+              : null;
+        if (decisionId) {
+          const otherId = decisionId === aId ? bId : aId;
+          const decisionOut = getOutgoingEdges(edgesRef.current, decisionId);
+          const hasPairOut = decisionOut.some((edge) => edge.target === otherId);
+          if (!hasPairOut && decisionOut.length >= 2) {
+            const options = decisionOut.map((edge) => {
+              const targetTitle =
+                nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+              return {
+                edgeId: edge.id,
+                branchKind: branchKindOf(edge.label),
+                edgeLabel: typeof edge.label === "string" ? edge.label : "",
+                targetLabel: targetTitle,
+              };
+            });
+            const start = dragStartPosRef.current;
+            setSwapSelect({
+              aId,
+              bId,
+              options,
+              at: { ...pointerScreenRef.current },
+              aStart: start && start.id === aId ? { x: start.x, y: start.y } : null,
+            });
+            return;
+          }
         }
         swapNodes(aId, bId);
         return;
@@ -4070,6 +4194,40 @@ function MapEditor({ mapId }: { mapId: number }) {
       void createLinkNodeAt(linkedMapId, mapName, pinned, position);
     },
     [readOnly, reactFlow, createLinkNodeAt],
+  );
+
+  // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
+  const handleSectionDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      if (readOnly) return;
+      const anchor = e.dataTransfer.getData("application/bpm-section");
+      if (!anchor) return;
+      const number = e.dataTransfer.getData("application/bpm-section-number");
+      const title = e.dataTransfer.getData("application/bpm-section-title");
+      // 라벨 = "번호 제목" — 내보내기 시 첫 공백토큰(번호)만 앵커 링크, 제목은 plain (design §8)
+      const label = [number, title].filter(Boolean).join(" ");
+      pushHistory();
+      const id = genId();
+      const point = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const position = findFreeSpot(point.x - NODE_WIDTH / 2, point.y - NODE_HEIGHT / 2);
+      setNodes((current) => [
+        ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
+        {
+          id,
+          type: "process",
+          position,
+          selected: true,
+          className: "bpm-node-flash",
+          data: buildNodeData("section", label, { section_anchor: anchor }),
+        },
+      ]);
+      setSelectedId(id);
+      setSelectedEdgeId(null);
+      scheduleAutoSave();
+      flashNode(id);
+    },
+    [readOnly, reactFlow, findFreeSpot, pushHistory, setNodes, scheduleAutoSave, flashNode],
   );
 
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
@@ -4789,42 +4947,94 @@ function MapEditor({ mapId }: { mapId: number }) {
     [buildExportFileName],
   );
 
-  const handleExportWord = () => {
-    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
-    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[-:T]/g, "")
-      .slice(0, 14);
-    try {
-      const exportNodes = nodesRef.current.map((node) => {
-        const size = nodeSizeOf(node.data.nodeType);
-        return {
-          id: node.id,
-          title: node.data.label,
-          nodeType: node.data.nodeType,
-          x: node.position.x,
-          y: node.position.y,
-          w: size.w,
-          h: size.h,
-          url: node.data.url,
-          urlLabel: node.data.urlLabel,
-        };
-      });
-      const exportEdges = edgesRef.current.map((edge) => ({
+  // Word 내보내기/완결문서 생성 공용 — 캔버스 노드·엣지를 export 모델로(word맵은 고정크기+섹션앵커).
+  const buildWordExportModel = () => {
+    const exportNodes = nodesRef.current.map((node) => {
+      const size = isWordMap
+        ? { w: WORD_SHAPE_W, h: WORD_SHAPE_H }
+        : nodeSizeOf(node.data.nodeType);
+      return {
+        id: node.id,
+        title: node.data.label,
+        nodeType: node.data.nodeType,
+        x: node.position.x,
+        y: node.position.y,
+        w: size.w,
+        h: size.h,
+        url: node.data.url,
+        urlLabel: node.data.urlLabel,
+        sectionAnchor: node.data.section_anchor,
+      };
+    });
+    const nodeById = new Map(exportNodes.map((n) => [n.id, n]));
+    const exportEdges = edgesRef.current.map((edge) => {
+      let sourceSide = sideFromHandleId(edge.sourceHandle, "right");
+      let targetSide = sideFromHandleId(edge.targetHandle, "left");
+      // Word 맵: 캔버스 핸들이 폴백(right/left)으로 어긋나는 문제 회피 — 노드 상대 위치로 변을 유도해
+      // 실제 레이아웃(위/아래·좌/우)과 연결 변을 일치시킨다. 일반 맵은 기존 핸들 기반 유지.
+      const s = nodeById.get(edge.source);
+      const t = nodeById.get(edge.target);
+      if (isWordMap && s && t) {
+        const dx = t.x + t.w / 2 - (s.x + s.w / 2);
+        const dy = t.y + t.h / 2 - (s.y + s.h / 2);
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          sourceSide = dx >= 0 ? "right" : "left";
+          targetSide = dx >= 0 ? "left" : "right";
+        } else {
+          sourceSide = dy >= 0 ? "bottom" : "top";
+          targetSide = dy >= 0 ? "top" : "bottom";
+        }
+      }
+      return {
         sourceId: edge.source,
         targetId: edge.target,
         label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
-        sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
-        targetSide: sideFromHandleId(edge.targetHandle, "left"),
-      }));
-      exportCanvasWord(
-        exportNodes,
-        exportEdges,
-        `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.docx`,
-      );
+        sourceSide,
+        targetSide,
+      };
+    });
+    return { exportNodes, exportEdges };
+  };
+
+  const wordDocFileName = (suffix: string) => {
+    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
+    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
+    const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+    return `${sanitize(mapName)}_${sanitize(versionLabel)}${suffix}_${stamp}.docx`;
+  };
+
+  const handleExportWord = () => {
+    try {
+      const { exportNodes, exportEdges } = buildWordExportModel();
+      // word 맵은 fit-to-page 끔 → 도형 정확히 1.5×3cm(스프레드 시 페이지 초과 가능).
+      exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""), !isWordMap);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t("err.exportWord"));
+    }
+  };
+
+  // 완결 문서 생성 — 사용자가 원본 .docx 선택 → 사본에 합성 책갈피 주입 + 끝에 순서도 페이지 → 다운로드.
+  const handleCompleteDocPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 재선택 허용
+    if (!file) return;
+    try {
+      const originalDocx = new Uint8Array(await file.arrayBuffer());
+      const { exportNodes, exportEdges } = buildWordExportModel();
+      const { generateCompleteWordDoc } = await import("@/lib/word-doc-generator");
+      const blob = await generateCompleteWordDoc(originalDocx, exportNodes, exportEdges);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = wordDocFileName("_complete");
+      link.click();
+      URL.revokeObjectURL(url);
+      // 생성 성공 기록 — 실패해도 다운로드는 이미 완료라 흐름을 막지 않는다 (design 2026-07-24 §5)
+      void markWordDocGenerated(mapId).catch((err) =>
+        console.warn("word-doc generated stamp failed", err),
+      );
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Complete document generation failed");
     }
   };
 
@@ -4955,12 +5165,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
       const libraryItem: ContextMenuItem = {
-        label: t("library.open"),
+        label: isWordMap ? "Add section" : t("library.open"),
         icon: Network,
         // accel 필수 — 전역 S 핸들러는 메뉴 열림 중 무시(!menu)라, 우클릭 후 S는 메뉴 가속기가 처리
         accel: "s",
         shortcut: "S",
-        onSelect: () => setLibraryOpen(true),
+        onSelect: () => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)),
       };
       if (readOnly) {
         return [moreItem, { divider: true }, libraryItem];
@@ -5236,6 +5446,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     recolorGroup,
     applyAutoLayout,
     reactFlow,
+    isWordMap,
     t,
   ]);
 
@@ -5795,7 +6006,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           data: ghost.data,
         }))
       : [];
-    return [...mapped, ...ancestorContextNodes, ...ghostNodes];
+    let result: AppNode[] = [...mapped, ...ancestorContextNodes, ...ghostNodes];
+    // stale 앵커 배지 — 재임포트로 사라진 앵커를 참조하는 섹션 노드에 표시 플래그 주입 (design 2026-07-24 §5)
+    if (staleAnchorIds.size > 0) {
+      result = result.map((n) =>
+        staleAnchorIds.has(n.id) ? { ...n, data: { ...n.data, staleAnchor: true } } : n,
+      );
+    }
+    return result;
   }, [
     nodes,
     childNodes,
@@ -5808,6 +6026,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     injectSubEnds,
     ctrlDragActive,
     ctrlDragGhosts,
+    staleAnchorIds,
   ]);
 
   // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
@@ -6723,7 +6942,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         event.code === "KeyS" &&
         !menu
       ) {
-        fire(() => setLibraryOpen(true));
+        fire(() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)));
         return;
       }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
@@ -6733,10 +6952,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         } else if (event.code === "KeyE" && event.shiftKey) {
           fire(() => void handleExportPng());
         } else if (event.code === "KeyC" && !event.shiftKey) {
-          // 선택 노드가 하나도 없으면 preventDefault·토스트 없이 브라우저 기본 텍스트 복사로 흘려보낸다.
-          // passthrough to native copy when no node is selected — matches handleCopy's .selected filter
+          // 선택 노드가 없거나 **텍스트를 드래그 선택 중**이면 브라우저 기본 복사로 흘려보낸다 —
+          // 노드가 선택된 채 AI 챗 본문을 선택 복사하면 노드 복사가 가로채 토스트만 뜨고
+          // 클립보드는 그대로이던 문제 (실서버 핫픽스 2026-07-30)
           const hasSelectedNode = nodesRef.current.filter((node) => node.selected).length > 0;
-          if (!hasSelectedNode) {
+          const selection = window.getSelection();
+          const hasTextSelection = selection !== null && !selection.isCollapsed;
+          if (!hasSelectedNode || hasTextSelection) {
             return;
           }
           fire(() => handleCopy());
@@ -6798,6 +7020,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPng,
     handleCopy,
     handlePaste,
+    isWordMap,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
@@ -6873,6 +7096,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       interceptIntoEdge(source, target, edgeId);
     },
     [edgeSelect, interceptIntoEdge],
+  );
+
+  // decision↔일반 스왑 — 선택 모달에서 고른 출력선을 일반 노드가 가져가며 스왑 일괄 적용.
+  const applySwapSelect = useCallback(
+    (edgeId: string) => {
+      if (swapSelect === null) {
+        return;
+      }
+      const { aId, bId, aStart } = swapSelect;
+      setSwapSelect(null);
+      swapNodes(aId, bId, edgeId, aStart);
+    },
+    [swapSelect, swapNodes],
   );
 
   // 디시전 드롭 모달: 인터셉트 — 출력선 ≥2면 선택 모달, 1개면 그 선에 바로 끼움 (F1).
@@ -7150,31 +7386,122 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
             className={topIconBtn}
-            onClick={() => setLibraryOpen((open) => !open)}
+            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : setLibraryOpen((open) => !open))}
             title={t("library.toggle")}
             aria-label={t("library.toggle")}
           >
             <Network size={16} strokeWidth={1.5} />
           </button>
-          {/* AI 토글은 항상 노출 — 패널 내부에서 비활성/사유 안내 (서버 ai_enabled 기준) */}
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-            onClick={() => {
-              // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
-              if (!aiOpen) {
-                setWindowGeom((map) => {
-                  const g = map[AI_WINDOW_KEY];
-                  return g?.minimized ? { ...map, [AI_WINDOW_KEY]: { ...g, minimized: false } } : map;
-                });
-              }
-              setAiOpen((open) => !open);
-            }}
-            title={t("ai.toggle")}
-          >
-            <Sparkles size={16} strokeWidth={1.5} />
-            AI
-          </button>
+          {/* AI 메뉴 — 챗·컨설턴트 진입 통합. 컨설턴트는 편집 불가 시 비활성+사유 툴팁 (2026-07-30) */}
+          {(() => {
+            // 온보딩 노출 — 시드 상태(Start/End 2노드 이하)의 편집 가능한 맵 + 미확인 사용자
+            const pristine =
+              !readOnly && nodes.length > 0 && nodes.length <= 2 &&
+              nodes.every((n) => n.data.nodeType === "start" || n.data.nodeType === "end") &&
+              edges.length <= 1;
+            const showOnboard = pristine && !consultOnboardSeen && !aiMenuOpen;
+            const consultDisabledReason = !readOnly
+              ? null
+              : isViewer
+                ? "View-only access — consulting needs edit permission"
+                : checkout?.checked_out_by
+                  ? "Another user is editing this draft"
+                  : "This version isn't an editable draft";
+            return (
+              <div className="relative" ref={aiMenuRef}>
+                <button
+                  type="button"
+                  className={
+                    "inline-flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt" +
+                    (aiMenuOpen ? " bg-surface-alt text-ink" : "") +
+                    (showOnboard ? " ring-2 ring-accent/60" : "")
+                  }
+                  onClick={() => setAiMenuOpen((open) => !open)}
+                  title={t("ai.toggle")}
+                  data-id="ai-menu"
+                >
+                  <Sparkles size={16} strokeWidth={1.5} />
+                  AI
+                </button>
+                {aiMenuOpen ? (
+                  <div
+                    className="absolute right-0 top-full z-[1100] mt-1 w-56 rounded-md border border-hairline bg-surface p-1 shadow-lg"
+                    data-id="ai-menu-pop"
+                  >
+                    <button
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                      onClick={() => {
+                        setAiMenuOpen(false);
+                        // 열 때 dock에 최소화돼 있던 상태면 창으로 복원
+                        if (!aiOpen) {
+                          setWindowGeom((map) => {
+                            const g = map[AI_WINDOW_KEY];
+                            return g?.minimized
+                              ? { ...map, [AI_WINDOW_KEY]: { ...g, minimized: false } }
+                              : map;
+                          });
+                        }
+                        setAiOpen((open) => !open);
+                      }}
+                      data-id="ai-menu-chat"
+                    >
+                      <Sparkles size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                      <span className="flex-1 text-left">AI Chat</span>
+                    </button>
+                    {/* disabled 버튼은 마우스 이벤트가 죽어 래퍼에 title — 비활성 사유 툴팁 */}
+                    <div title={consultDisabledReason ?? undefined}>
+                      <button
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                        disabled={consultDisabledReason !== null}
+                        onClick={() => {
+                          setAiMenuOpen(false);
+                          // 어떤 경로로든 컨설턴트 진입 = 온보딩 목적 달성 — 말풍선 재노출 방지
+                          dismissConsultOnboard();
+                          router.push(`/maps/${mapId}/consult?version=${versionId}`);
+                        }}
+                        data-id="open-consultant"
+                      >
+                        <Headset size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                        <span className="flex-1 text-left">AI Consultant</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {showOnboard ? (
+                  // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
+                  <div
+                    className="absolute right-0 top-full z-[1100] mt-2 w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+                    data-id="consult-onboard"
+                  >
+                    <div className="text-caption-strong text-ink">Try the AI consultant</div>
+                    <p className="mt-1 text-fine text-ink-secondary">
+                      Answer a few questions and this empty map draws itself — attach a document
+                      to go even faster.
+                    </p>
+                    <div className="mt-2 flex justify-end gap-1.5">
+                      <button
+                        className="rounded-sm px-2 py-1 text-fine text-ink-muted hover:bg-surface-alt"
+                        onClick={dismissConsultOnboard}
+                        data-id="consult-onboard-dismiss"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent"
+                        onClick={() => {
+                          dismissConsultOnboard();
+                          router.push(`/maps/${mapId}/consult?version=${versionId}`);
+                        }}
+                        data-id="consult-onboard-start"
+                      >
+                        Start
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
           <button
             className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
@@ -7228,7 +7555,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       {!readOnly && (
         <EditorToolbar
           onAddNode={(type) => handleAddNode(null, type)}
-          onOpenLibrary={() => setLibraryOpen(true)}
+          onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true))}
           onAutoLayout={(dir) => {
             // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
             const ids = new Set(
@@ -7295,12 +7622,45 @@ function MapEditor({ mapId }: { mapId: number }) {
             onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
           />
         )}
+        {sectionsOpen && (
+          <SectionPanel
+            sections={docSections}
+            docName={docName}
+            onReimport={() => setWordReimportOpen(true)}
+            onClose={() => setSectionsOpen(false)}
+            staleCount={staleAnchorIds.size}
+          />
+        )}
+        {wordReimportOpen && (
+          <WordCreateModal
+            onClose={() => setWordReimportOpen(false)}
+            onContinue={(outcome) => {
+              setWordReimportOpen(false);
+              void (async () => {
+                try {
+                  const updated = await setWordDoc(mapId, {
+                    doc_name: outcome.docName,
+                    sections: outcome.sections,
+                  });
+                  setDocName(updated.doc_name ?? "");
+                  setDocSections(updated.doc_sections ?? []);
+                  showToast("Sections re-imported");
+                } catch {
+                  showToast("Re-import failed");
+                }
+              })();
+            }}
+          />
+        )}
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
           className="relative flex-1 select-none overflow-hidden bg-canvas"
           onDragOver={(e) => {
-            if (e.dataTransfer.types.includes("application/bpm-process")) {
+            if (
+              e.dataTransfer.types.includes("application/bpm-process") ||
+              e.dataTransfer.types.includes("application/bpm-section")
+            ) {
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
             }
@@ -7308,6 +7668,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           onDrop={(e) => {
             if (e.dataTransfer.types.includes("application/bpm-process")) {
               void handleLibraryDrop(e);
+            } else if (e.dataTransfer.types.includes("application/bpm-section")) {
+              void handleSectionDrop(e);
             }
           }}
         >
@@ -7644,6 +8006,37 @@ function MapEditor({ mapId }: { mapId: number }) {
                           size={1.8}
                           color="var(--color-canvas-dot)"
                         />
+                      )}
+                      {/* Word 맵 1페이지 경계 — 크기 감각용(노드가 이 안이면 산출물 1페이지). ViewportPortal=flow 좌표(팬/줌 정합). */}
+                      {isWordMap && (
+                        <ViewportPortal>
+                          <div
+                            data-id="word-page-boundary"
+                            style={{
+                              position: "absolute",
+                              left: 0,
+                              top: 0,
+                              width: WORD_PAGE_W_PX,
+                              height: WORD_PAGE_H_PX,
+                              border: "1.5px dashed var(--color-accent)",
+                              borderRadius: 2,
+                              pointerEvents: "none",
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: "absolute",
+                                top: 3,
+                                left: 5,
+                                fontSize: 11,
+                                color: "var(--color-accent)",
+                                opacity: 0.65,
+                              }}
+                            >
+                              1 page
+                            </span>
+                          </div>
+                        </ViewportPortal>
                       )}
                       {/* 미니맵 — 줌아웃으로 통째로 채워지면 페이드 아웃(줌인 복귀). 패널 자체에 opacity를 줘
                           z-index(패널 레이어)를 보존 → 노드/캔버스 위·클릭(시점 이동) 유효. 뷰포트 채움 오버레이 포함. */}
@@ -8523,6 +8916,33 @@ function MapEditor({ mapId }: { mapId: number }) {
                           {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "—"}
                         </span>
                       </div>
+                      {/* 연결면 — 엣지 우클릭 메뉴의 EdgeSidesPad 재사용, 편집 모드에서만 (2026-07-30) */}
+                      {!readOnly && (
+                        <div>
+                          <label className="mb-1 block text-fine text-ink-tertiary">{t("edge.connection")}</label>
+                          <div className="rounded-sm border border-hairline py-1">
+                            <EdgeSidesPad
+                              item={{
+                                sourceLabel: t("edge.startBox"),
+                                targetLabel: t("edge.endBox"),
+                                sourceSide: sideFromHandleId(selectedEdge.sourceHandle, "right"),
+                                targetSide: sideFromHandleId(selectedEdge.targetHandle, "left"),
+                                // 하위프로세스 끝점은 전용 핸들 고정 — 컨텍스트 메뉴와 동일 잠금
+                                sourceLocked:
+                                  nodes.find((n) => n.id === selectedEdge.source)?.data.nodeType ===
+                                  "subprocess",
+                                targetLocked:
+                                  nodes.find((n) => n.id === selectedEdge.target)?.data.nodeType ===
+                                  "subprocess",
+                                onPickSource: (side: HandleSide) =>
+                                  setEdgeSide(selectedEdge.id, "source", side),
+                                onPickTarget: (side: HandleSide) =>
+                                  setEdgeSide(selectedEdge.id, "target", side),
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                       {selectedEdgeBranch !== null && (
                         <div>
                           <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.branchLabel")}</label>
@@ -8713,15 +9133,36 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {t("inspector.exportCsv")}
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      data-id="inspector-export-word"
-                      onClick={handleExportWord}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
-                    >
-                      <FileText size={16} strokeWidth={1.5} />
-                      {t("inspector.exportWord")}
-                    </button>
+                    {isWordMap && (
+                      <>
+                        <button
+                          type="button"
+                          data-id="inspector-generate-complete-doc"
+                          onClick={() => completeDocPickerRef.current?.click()}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          Generate complete document
+                        </button>
+                        <button
+                          type="button"
+                          data-id="inspector-export-word"
+                          onClick={handleExportWord}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          {t("inspector.exportWord")}
+                        </button>
+                        <input
+                          ref={completeDocPickerRef}
+                          type="file"
+                          accept=".docx"
+                          className="hidden"
+                          onChange={handleCompleteDocPicked}
+                        />
+                      </>
+                    )}
                   </div>
                 }
                 approvalSlot={
@@ -8922,7 +9363,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
-                onOpenLibrary={() => setLibraryOpen(true)}
+                onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true))}
                 onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
                 nodeCount={nodes.length}
                 edgeCount={edges.length}
@@ -9245,6 +9686,22 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => {
             setHoveredEdgeId(null);
             setEdgeSelect(null);
+          }}
+        />
+      )}
+      {swapSelect && (
+        <EdgeSelectModal
+          position={swapSelect.at}
+          options={swapSelect.options}
+          title={t("edge.selectSwapOutput")}
+          onHoverOption={setHoveredEdgeId}
+          onPick={(edgeId) => {
+            setHoveredEdgeId(null);
+            applySwapSelect(edgeId);
+          }}
+          onClose={() => {
+            setHoveredEdgeId(null);
+            setSwapSelect(null);
           }}
         />
       )}

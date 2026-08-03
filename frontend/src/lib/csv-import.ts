@@ -69,7 +69,7 @@ export interface CsvImportContext {
 // 14컬럼 스키마 (design 2026-07-13 §5.1) — 순서는 Cost_KRW/Cost_USD/Headcount/Annual_Count/FTE
 const HEADER_COLUMNS = [
   "name", "description", "assignee", "department", "system", "duration",
-  "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "next",
+  "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
@@ -89,6 +89,7 @@ const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
   fte: 50,
   url: 500,
   url_label: 100,
+  section_anchor: 200, // backend models.py Node.section_anchor String(200) 미러
 };
 
 // 십진 파라미터 컬럼(duration 제외 — 별도 H.MM 검증) — 에러 문구는 컬럼명이 아닌 사람이 읽는 라벨로.
@@ -179,6 +180,7 @@ const NODE_DEFAULTS = {
   fte: "",
   url: "",
   url_label: "",
+  section_anchor: "",
   pos_x: 0,
   pos_y: 0,
   group_ids: [] as string[],
@@ -211,11 +213,22 @@ const mergeNode = (
   // 통화 전환은 편도 pick이 아니라 반대쪽을 함께 비우는 병합 — resolveCostFields(finding: 한쪽만
   // pick하면 기존 반대쪽 통화값이 안 지워져 두 통화가 동시에 채워진 채로 저장 시도돼 422 루프에 빠진다)
   const cost = resolveCostFields(allowed.cost_krw ?? "", allowed.cost_usd ?? "", existing.cost_krw ?? "", existing.cost_usd ?? "");
+  const mergedSectionAnchor = pick(next.section_anchor ?? "", existing.section_anchor ?? "");
   return {
     node: {
       ...existing,
       title: next.title,
-      node_type: existing.linked_map_id !== null ? existing.node_type : next.node_type,
+      node_type:
+        existing.linked_map_id !== null
+          ? existing.node_type
+          : next.node_type === "start" || next.node_type === "end"
+            ? next.node_type
+            // 앵커가 살아남으면 섹션 유지 — 서버 _sanitize_word_graph 승격 규칙의 FE 미러(AI가 타입을 process로 에코해도 링크 보존)
+            : mergedSectionAnchor !== ""
+              ? "section"
+              : next.node_type,
+      // 기존 링크 우선, 없으면 후보의 링크 채택(P2 유사 SP 수락 스레딩)
+      linked_map_id: existing.linked_map_id ?? next.linked_map_id ?? null,
       description: pick(next.description, existing.description),
       assignee: pick(next.assignee, existing.assignee),
       department: pick(next.department, existing.department),
@@ -228,6 +241,7 @@ const mergeNode = (
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
+      section_anchor: mergedSectionAnchor,
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,
@@ -381,6 +395,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     fte: numCellOf(r, "fte"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
+    section_anchor: cellOf(r, "section_anchor"),
     nextRaw: cellOf(r, "next"),
     line: r.line,
   }));
@@ -397,7 +412,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label"] as const) {
+    for (const col of ["name", "system", "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -531,6 +546,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         fte: normalizeNumericParam(row.fte) ?? "",
         url: row.url,
         url_label: row.url_label,
+        section_anchor: row.section_anchor,
         sort_order: i + 1,
       });
       // 서브프로세스 매칭 행 — duration/cost_krw/cost_usd/headcount는 링크 맵 지정값이라 CSV로 못 바꾼다
@@ -749,7 +765,12 @@ export function buildGraphFromAiProposal(
       title,
       // 링크 없는 subprocess는 process로 강등(coerceAiNewNodeType) — 신규 노드도, 아직 링크가 없는
       // 매칭 노드도 이 candidate.node_type을 그대로 쓰므로 한 곳에서 막으면 두 경로가 대칭 유지된다.
-      node_type: coerceAiNewNodeType(node.node_type),
+      // 링크가 실린 subprocess(P2 유사 SP 수락)는 실제 Call Activity로 생성.
+      node_type:
+        node.node_type === "subprocess" && node.linked_map_id
+          ? "subprocess"
+          : coerceAiNewNodeType(node.node_type),
+      linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : NODE_DEFAULTS.linked_map_id,
       description: node.description,
       assignee: attr?.assignee ?? "",
       department: attr?.department ?? "",
@@ -762,6 +783,7 @@ export function buildGraphFromAiProposal(
       fte: num(attr?.fte),
       url: attr?.url ?? "",
       url_label: attr?.url_label ?? "",
+      section_anchor: attr?.section_anchor ?? "",
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,

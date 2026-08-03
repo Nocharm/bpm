@@ -13,6 +13,7 @@ from app.auth import get_current_user
 from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
+from app.kb import embed_client, indexing
 from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
@@ -76,6 +77,7 @@ async def clone_graph(
             fte=node.fte,
             url=node.url,
             url_label=node.url_label,
+            section_anchor=node.section_anchor,
             # 계보 루트 전파 — 복제의 복제도 최초 원본을 가리켜 diff 매칭 유지
             source_node_id=node.source_node_id or node.id,
             pos_x=node.pos_x,
@@ -669,6 +671,9 @@ async def publish_version(
     )
     record_version_event(session, version_id, "published", user)
     await session.commit()
+    # 게시본 지식기반 인덱싱 — fire-and-forget(임베딩 지연이 게시 응답을 막지 않게) (design 2026-07-23 §7)
+    if embed_client.is_embed_enabled():
+        indexing.spawn(indexing.index_map_version(version_id))
     await session.refresh(version)
     return version
 

@@ -31,6 +31,7 @@ export function EdgeSelectModal({
   onPick,
   onClose,
   onHoverOption,
+  title,
 }: {
   position: { x: number; y: number };
   options: SelectOption[];
@@ -38,6 +39,8 @@ export function EdgeSelectModal({
   onClose: () => void;
   /** 행 hover 시 캔버스의 대응 엣지를 하이라이트하도록 알림(빈값이면 해제). */
   onHoverOption?: (edgeId: string | null) => void;
+  /** 헤더 캡션 오버라이드 — 미지정 시 삽입용 기본 문구(edge.selectOutput). */
+  title?: string;
 }) {
   const { t } = useI18n();
 
@@ -69,7 +72,7 @@ export function EdgeSelectModal({
       >
         <div className="flex items-center justify-between px-1 pb-1.5">
           <span className="text-fine font-semibold uppercase tracking-wide text-ink-tertiary">
-            {t("edge.selectOutput")}
+            {title ?? t("edge.selectOutput")}
           </span>
           <button
             type="button"

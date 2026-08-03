@@ -677,3 +677,28 @@ def test_graph_blocks_duplicate_increase_on_already_grandfathered_target(client:
     response = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert response.status_code == 422
     assert "already linked" in response.json()["detail"].lower()
+
+
+def test_section_anchor_roundtrips(client: TestClient) -> None:
+    # Word 맵 섹션 노드(node_type="section")는 문서 내부 앵커를 PUT/GET 그래프에서 왕복 보존해야 한다.
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "1.2.2 재고 실사", "node_type": "section", "section_anchor": "_Toc123456"},
+        ],
+        "edges": [],
+    }
+    put_response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert put_response.status_code == 200
+
+    get_response = client.get(f"/api/versions/{version_id}/graph")
+    node = next(n for n in get_response.json()["nodes"] if n["id"] == "n1")
+    assert node["section_anchor"] == "_Toc123456"
+
+    # 두 번째 PUT은 기존 노드 갱신(upsert existing 분기)을 지난다
+    graph["nodes"][1]["section_anchor"] = "_Toc999"
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert node["section_anchor"] == "_Toc999"

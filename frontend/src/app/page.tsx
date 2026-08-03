@@ -7,17 +7,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 
-import { copyMap, deleteMap, getDirectory, getMe, listMaps, type Directory, type MapSummary, type Me } from "@/lib/api";
+import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { type CsvImportOutcome } from "@/lib/csv-import";
-import { buildOrgTree, filterMyDeptMaps } from "@/lib/org-tree";
+import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
+import { WORD_FEATURES_ENABLED } from "@/lib/features";
+import { splitMapsByMode } from "@/lib/word-map-home";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
+import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
+import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { MapCard } from "@/components/maps/map-card";
@@ -25,6 +29,7 @@ import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
 import { OrgAccordion } from "@/components/maps/org-accordion";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
+import { WordDocsSection } from "@/components/maps/word-docs-section";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { SearchBox } from "@/components/search-box";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -43,9 +48,18 @@ export default function MapListPage() {
   const [csvModalOpen, setCsvModalOpen] = useState(false);
   // CSV 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 파일명)
   const [csvHandoff, setCsvHandoff] = useState<{ outcome: CsvImportOutcome; fileName: string } | null>(null);
+  const [wordModalOpen, setWordModalOpen] = useState(false);
+  // Word 모달 → 생성 다이얼로그 핸드오프 (파싱 결과 + 문서명)
+  const [wordHandoff, setWordHandoff] = useState<WordCreateOutcome | null>(null);
+  // 재임포트 타겟 맵 — onReimport 핸들러 시작
+  const [reimportTarget, setReimportTarget] = useState<MapSummary | null>(null);
+  // org_path 보유 유저 전용 빠른 생성(자동값 축소) — design 2026-07-24 §3
+  const [wordQuick, setWordQuick] = useState<WordCreateOutcome | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // 재임포트 후 열린 상세 카드 강제 리마운트(키에 포함) — refresh()는 리스트만 갱신, 상세는 재조회 안 함.
+  const [detailReloadKey, setDetailReloadKey] = useState(0);
   const [mapQuery, setMapQuery] = useState("");
   // 가시성 필터 탭 — ALL/Public/Private
   const [visFilter, setVisFilter] = useState<"all" | "public" | "private">("all");
@@ -56,6 +70,8 @@ export default function MapListPage() {
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // word 맵 승격 대상 — 지정 시 승격 관문 다이얼로그(CreateMapDialog promote 모드)를 연다 (design 2026-07-24 §6).
+  const [promoteTarget, setPromoteTarget] = useState<{ id: number; name: string } | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
 
   // 브라우즈 좌측 컬럼 — 내 정보(부서 즐겨찾기)·디렉터리(조직도 트리) + 아코디언 펼침 상태 /
@@ -65,6 +81,7 @@ export default function MapListPage() {
   const [orgOpen, setOrgOpen] = useState<Set<string>>(new Set());
   const [favOpen, setFavOpen] = useState(true);
   const [unassignedOpen, setUnassignedOpen] = useState(true);
+  const [wordOpen, setWordOpen] = useState(true);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -154,6 +171,10 @@ export default function MapListPage() {
         status?: unknown;
         perm?: unknown;
         owning?: unknown;
+        orgOpen?: unknown;
+        fav?: unknown;
+        word?: unknown;
+        unassigned?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -171,6 +192,14 @@ export default function MapListPage() {
       if (Array.isArray(s.owning)) {
         setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
       }
+      // 좌측 접힘 상태 복원 — 조직도·즐겨찾기·Word 섹션·미지정 (검색·필터와 동일한 SPA 복귀 정책)
+      if (Array.isArray(s.orgOpen)) {
+        setOrgOpen(new Set(s.orgOpen.filter((x): x is string => typeof x === "string")));
+        seededOrg.current = true; // 복원값이 내 부서 시드보다 우선 — 시드가 덮어쓰지 않게
+      }
+      if (typeof s.fav === "boolean") setFavOpen(s.fav);
+      if (typeof s.word === "boolean") setWordOpen(s.word);
+      if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
     } catch {
       /* 손상된 저장값 무시 */
     }
@@ -191,9 +220,13 @@ export default function MapListPage() {
         status: [...statusFilter],
         perm: [...permFilter],
         owning: [...owningFilter],
+        orgOpen: [...orgOpen],
+        fav: favOpen,
+        word: wordOpen,
+        unassigned: unassignedOpen,
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, orgOpen, favOpen, wordOpen, unassignedOpen]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -300,6 +333,9 @@ export default function MapListPage() {
     [maps],
   );
 
+  // word 맵은 문서 부속 산출물 — 조직도/집계는 processMaps만, Word documents 섹션은 wordMaps (design 2026-07-24 §2)
+  const { processMaps, wordMaps } = useMemo(() => splitMapsByMode(visibleMaps), [visibleMaps]);
+
   // selectedDept를 render에서 파생 — visibleMaps는 refresh()마다 새 배열 참조라 effect deps에 직접 넣으면
   // 배열 identity 변화만으로 재실행되어(값은 동일) 사용자가 방금 접은 아코디언 노드를 재펼침해버린다 /
   // Derive at render so refresh()'s new visibleMaps reference doesn't re-trigger the effect below.
@@ -362,12 +398,13 @@ export default function MapListPage() {
     const parts = me.org_path.split("/");
     return new Set(parts.map((_, i) => parts.slice(0, i + 1).join("/")));
   }, [me]);
+  // 조직도·나의 부서 즐겨찾기는 word 맵 제외(splitMapsByMode) — 검색(filteredMaps 자체)은 word 맵 포함 유지 (design 2026-07-24 §2)
   const orgTree = useMemo(
-    () => buildOrgTree(filteredMaps, directory?.departments ?? [], myDeptKeepPaths),
+    () => buildOrgTree(splitMapsByMode(filteredMaps).processMaps, directory?.departments ?? [], myDeptKeepPaths),
     [filteredMaps, directory, myDeptKeepPaths],
   );
   const myDeptMaps = useMemo(
-    () => (me?.org_path ? filterMyDeptMaps(filteredMaps, me.org_path) : []),
+    () => (me?.org_path ? filterMyDeptMaps(splitMapsByMode(filteredMaps).processMaps, me.org_path) : []),
     [filteredMaps, me],
   );
   // department가 ""(빈 문자열)일 수 있어 ??는 폴백을 건너뛴다 — || 로 org_path 리프까지 폴백
@@ -415,9 +452,11 @@ export default function MapListPage() {
           {effectiveSelected === processMap.id && (
             <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
               <MapDetailCard
+                key={`${processMap.id}-${detailReloadKey}`}
                 mapId={processMap.id}
                 onDelete={(id) => void handleDelete(id)}
                 onCopy={handleCopyOpen}
+                onPromote={(id, name) => setPromoteTarget({ id, name })}
                 onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
               />
             </div>
@@ -653,7 +692,8 @@ export default function MapListPage() {
                   {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
               ) : (
-                /* 브라우즈 — 나의 부서 즐겨찾기 + 조직도 아코디언 */
+                /* 브라우즈 — 나의 부서 즐겨찾기 + Word 문서 섹션 + 조직도 아코디언.
+                   Word 섹션은 조직도 위 고정 — 트리 아래에 두면 스크롤 밖으로 묻혀 발견 불가(사용자 피드백). */
                 <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto pr-1">
                   <MyDeptFavorites
                     maps={myDeptMaps}
@@ -664,13 +704,31 @@ export default function MapListPage() {
                     onSelect={setSelectedId}
                     renderCard={renderCard}
                   />
+                  {WORD_FEATURES_ENABLED ? (
+                    <WordDocsSection
+                      maps={wordMaps}
+                      open={wordOpen}
+                      onToggle={() => setWordOpen((v) => !v)}
+                      selectedId={effectiveSelected}
+                      onSelect={setSelectedId}
+                      onCreate={() => setWordModalOpen(true)}
+                      onReimport={(m) => setReimportTarget(m)}
+                      onPromote={(m) => setPromoteTarget({ id: m.id, name: m.name })}
+                    />
+                  ) : null}
                   <OrgAccordion
                     roots={orgTree.roots}
                     unassigned={orgTree.unassigned}
                     openPaths={orgOpen}
                     onToggle={(path) => setOrgOpen((prev) => {
                       const next = new Set(prev);
-                      if (next.has(path)) next.delete(path); else next.add(path);
+                      if (next.has(path)) {
+                        next.delete(path);
+                      } else {
+                        next.add(path);
+                        // 하위 부서가 1개뿐인 구간은 이어서 자동 펼침 — 선택지 없는 클릭 반복 제거
+                        for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
+                      }
                       return next;
                     })}
                     onCollapseAll={() => { setOrgOpen(new Set()); setUnassignedOpen(false); }}
@@ -693,14 +751,15 @@ export default function MapListPage() {
             >
               {effectiveSelected !== null ? (
                 <MapDetailCard
-                  key={effectiveSelected}
+                  key={`${effectiveSelected}-${detailReloadKey}`}
                   mapId={effectiveSelected}
                   onDelete={(id) => void handleDelete(id)}
                   onCopy={handleCopyOpen}
+                  onPromote={(id, name) => setPromoteTarget({ id, name })}
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                 />
               ) : (
-                <HomeDashboard maps={visibleMaps} onSelect={setSelectedId} />
+                <HomeDashboard maps={processMaps} onSelect={setSelectedId} />
               )}
             </aside>
           </>
@@ -718,17 +777,79 @@ export default function MapListPage() {
         />
       )}
 
+      {wordModalOpen && (
+        <WordCreateModal
+          onClose={() => setWordModalOpen(false)}
+          onContinue={(outcome) => {
+            setWordModalOpen(false);
+            if (me?.org_path) {
+              setWordQuick(outcome); // 빠른 생성 — 부서/승인자 자동 (design 2026-07-24 §3)
+            } else {
+              setWordHandoff(outcome); // 폴백: org_path 없는 유저는 기존 전체 다이얼로그
+              setDialogOpen(true);
+            }
+          }}
+        />
+      )}
+      {wordQuick && me?.org_path && (
+        <WordQuickCreateDialog
+          outcome={wordQuick}
+          owningDepartment={me.org_path}
+          approverId={me.username}
+          onClose={() => setWordQuick(null)}
+          onCreated={(detail) => {
+            setWordQuick(null);
+            void refresh();
+            showToast(t("perm.createDialog.toastSuccess"));
+            router.push(`/maps/${detail.id}`);
+          }}
+          onPartialCreate={() => void refresh()}
+        />
+      )}
+
+      {reimportTarget && (
+        <WordCreateModal
+          onClose={() => setReimportTarget(null)}
+          onContinue={(outcome) => {
+            const target = reimportTarget;
+            setReimportTarget(null);
+            void setWordDoc(target.id, { doc_name: outcome.docName, sections: outcome.sections })
+              .then(() => {
+                void refresh();
+                setDetailReloadKey((k) => k + 1);
+                showToast("Document re-imported.");
+              })
+              .catch((err) => {
+                showToast(err instanceof Error ? err.message : "Re-import failed.");
+              });
+          }}
+        />
+      )}
+
       {dialogOpen && (
         <CreateMapDialog
           csv={csvHandoff ?? undefined}
+          word={wordHandoff ?? undefined}
           onClose={() => {
             setDialogOpen(false);
             setCsvHandoff(null);
+            setWordHandoff(null);
           }}
           onCreated={(silent) => {
             void refresh();
             // silent — 임포트 실패 경로: 맵은 생겼지만 성공 토스트는 띄우지 않는다
             if (!silent) showToast(t("perm.createDialog.toastSuccess"));
+          }}
+        />
+      )}
+
+      {promoteTarget && (
+        <CreateMapDialog
+          promote={{ mapId: promoteTarget.id, defaultName: `${promoteTarget.name} (Copy)` }}
+          onClose={() => setPromoteTarget(null)}
+          onCreated={(silent) => {
+            void refresh();
+            if (!silent) showToast("Converted to process map.");
           }}
         />
       )}

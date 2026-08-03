@@ -22,6 +22,7 @@ import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
 import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
 import { AiChatSettingsPanel } from "@/components/settings/ai-chat-settings-panel";
+import { KbManagePanel } from "@/components/settings/kb-manage-panel";
 import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
 import { DashboardPanel } from "@/components/settings/dashboard-panel";
 
@@ -36,6 +37,7 @@ type TabId =
   | "trash"
   | "notices"
   | "manual"
+  | "kb"
   | "aiChat"
   | "dashboard";
 type Access = "everyone" | "admin" | "sysadmin" | "dashboard";
@@ -55,6 +57,7 @@ const CATEGORIES: Category[] = [
     tabs: [
       { id: "notices", labelKey: "nav.tab.notices" },
       { id: "manual", labelKey: "manual.manage.tab" },
+      { id: "kb", labelKey: "kb.manage.tab" },
       { id: "aiChat", labelKey: "aiLog.tab" },
     ],
   },
@@ -214,6 +217,9 @@ export default function SettingsPage() {
           )}
           {current === "manual" && (
             <ManualManagePanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
+          {current === "kb" && (
+            <KbManagePanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
           {current === "aiChat" && (
             <AiChatSettingsPanel onToast={(message) => showToast({ id: genId(), message })} />

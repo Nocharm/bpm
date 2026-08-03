@@ -5,11 +5,14 @@ import json
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AppSetting
+from app.settings import settings
 
 AI_CHAT_TIPS_KEY = "ai_chat_tips"
 AI_CHAT_MAX_SESSIONS_KEY = "ai_chat_max_sessions_per_map"
 AI_CHAT_MAX_MESSAGES_KEY = "ai_chat_max_messages_per_session"
 AI_CHAT_RETENTION_DAYS_KEY = "ai_chat_retention_days"
+# 관리자 런타임 AI 차단 — GPU 서버 점검 시 재배포 없이 전 AI 표면(me·챗·인터뷰)을 끈다 (2026-07-30)
+AI_ACCESS_DISABLED_KEY = "ai_access_disabled"
 
 # 보존 상한 기본값 — 사용자×맵당 세션 수 / 세션당 메시지 수 / 마지막 활동 후 보관 일수
 DEFAULT_AI_CHAT_MAX_SESSIONS = 20
@@ -52,6 +55,17 @@ async def get_ai_chat_tips(session: AsyncSession) -> list[str]:
         return DEFAULT_AI_CHAT_TIPS
     tips = [tip for tip in stored if isinstance(tip, str) and tip.strip()]
     return tips if tips else DEFAULT_AI_CHAT_TIPS
+
+
+async def get_ai_access_disabled(session: AsyncSession) -> bool:
+    """관리자 AI 차단 플래그 — 행 부재=차단 아님."""
+    row = await session.get(AppSetting, AI_ACCESS_DISABLED_KEY)
+    return row is not None and row.value == "true"
+
+
+async def is_ai_access_enabled(session: AsyncSession) -> bool:
+    """유효 AI 가용성 — env AI_ENABLED와 관리자 차단 플래그의 AND. 모든 AI 게이트가 이걸 본다."""
+    return settings.ai_enabled and not await get_ai_access_disabled(session)
 
 
 async def set_app_setting(session: AsyncSession, key: str, value: str, user: str) -> AppSetting:

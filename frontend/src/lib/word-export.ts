@@ -1,6 +1,6 @@
 // Word 도형 순서도 내보내기 — 노드/엣지를 Word 순정 도형(DrawingML)으로 담은 .docx 생성.
 // OOXML 4파트를 직접 조립한다(docx 라이브러리는 도형 프리셋·연결선 미지원). zip은 fflate.
-// 스타일: 흑백톤 + Arial/바탕체 11pt, 하이퍼링크만 Word 표준 파랑.
+// 스타일: 흑백톤 + Arial/돋움 8pt, 하이퍼링크만 Word 표준 파랑.
 // spec: docs/design/2026-07-11-word-export-design.md
 
 import { strToU8, zipSync } from "fflate";
@@ -17,6 +17,8 @@ export interface WordExportNode {
   h: number;
   url?: string;
   urlLabel?: string;
+  // 문서 내부 섹션 앵커 — section 노드의 첫 라벨 토큰을 w:anchor 링크로 만든다 (design 2026-07-18 §8)
+  sectionAnchor?: string;
 }
 
 export interface WordExportEdge {
@@ -31,7 +33,7 @@ const EMU_PER_PX = 9525;
 const PAGE_W_EMU = 5_760_720; // A4 세로, 여백 2.5cm 제외 가용 폭 16.0cm
 const PAGE_H_EMU = 8_892_540; // 가용 높이 24.7cm
 const PADDING_PX = 20; // 노드 bounds 바깥 여백
-const FONT_HALF_PT = "22"; // 11pt (half-point 단위)
+const FONT_HALF_PT = "16"; // 8pt (half-point 단위 — 도형 내부 텍스트 통일)
 const HYPERLINK_BLUE = "0563C1"; // Word 표준 하이퍼링크 색 — 흑백톤의 유일한 예외
 
 const NODE_PRESET: Record<ProcessNodeType, string> = {
@@ -40,6 +42,9 @@ const NODE_PRESET: Record<ProcessNodeType, string> = {
   start: "flowChartTerminator",
   end: "flowChartTerminator",
   subprocess: "flowChartPredefinedProcess",
+  // 섹션 노드는 일반 process 도형으로 내보낸다(값 확정, 변경 예정 없음).
+  // Task E2는 내보내기 버튼 노출 여부·section_anchor 값 threading만 다루고, 이 도형 자체는 제외하지 않는다.
+  section: "flowChartProcess",
 };
 
 // 하이퍼링크 rels Target(xsd:anyURI)용 정규화 — 공백·한글이 든 URL을 raw로 넣으면
@@ -72,16 +77,19 @@ interface Layout {
   extH: number;
 }
 
-function computeLayout(nodes: WordExportNode[]): Layout {
+function computeLayout(nodes: WordExportNode[], fitToPage = true): Layout {
   const minX = Math.min(...nodes.map((n) => n.x)) - PADDING_PX;
   const minY = Math.min(...nodes.map((n) => n.y)) - PADDING_PX;
   const maxX = Math.max(...nodes.map((n) => n.x + n.w)) + PADDING_PX;
   const maxY = Math.max(...nodes.map((n) => n.y + n.h)) + PADDING_PX;
-  const scale = Math.min(
-    1,
-    PAGE_W_EMU / ((maxX - minX) * EMU_PER_PX),
-    PAGE_H_EMU / ((maxY - minY) * EMU_PER_PX),
-  );
+  // fitToPage=false면 px→EMU 1:1(축소 안 함) — Word 맵은 도형을 정확히 1.5×3cm로 유지(넓게 배치 시 페이지 초과 가능).
+  const scale = fitToPage
+    ? Math.min(
+        1,
+        PAGE_W_EMU / ((maxX - minX) * EMU_PER_PX),
+        PAGE_H_EMU / ((maxY - minY) * EMU_PER_PX),
+      )
+    : 1;
   const toEmu = (px: number) => Math.round(px * EMU_PER_PX * scale);
   return {
     toX: (px) => toEmu(px - minX),
@@ -95,7 +103,7 @@ function computeLayout(nodes: WordExportNode[]): Layout {
 function buildRunProps(opts: { bold?: boolean; hyperlink?: boolean }): string {
   return (
     "<w:rPr>" +
-    '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="바탕체" w:cs="Arial"/>' +
+    '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="돋움" w:cs="Arial"/>' +
     (opts.bold ? "<w:b/>" : "") +
     (opts.hyperlink ? `<w:color w:val="${HYPERLINK_BLUE}"/><w:u w:val="single"/>` : "") +
     `<w:sz w:val="${FONT_HALF_PT}"/><w:szCs w:val="${FONT_HALF_PT}"/>` +
@@ -120,6 +128,21 @@ function buildHyperlinkParagraph(text: string, relId: string): string {
   );
 }
 
+// 앵커 라벨 — 첫 공백 토큰만 내부 하이퍼링크(w:anchor), 나머지는 plain run. (design 2026-07-18 §8)
+function buildAnchorLabelParagraph(label: string, anchor: string): string {
+  const sp = label.search(/\s/);
+  const linked = sp === -1 ? label : label.slice(0, sp);
+  const rest = sp === -1 ? "" : label.slice(sp); // 선행 공백 포함, plain
+  const linkedRun =
+    `<w:hyperlink w:anchor="${escapeXml(anchor)}">` +
+    `<w:r>${buildRunProps({ hyperlink: true })}` +
+    `<w:t xml:space="preserve">${escapeXml(linked)}</w:t></w:r></w:hyperlink>`;
+  const restRun = rest
+    ? `<w:r>${buildRunProps({})}<w:t xml:space="preserve">${escapeXml(rest)}</w:t></w:r>`
+    : "";
+  return `<w:p>${CENTERED_P_PROPS}${linkedRun}${restRun}</w:p>`;
+}
+
 // 노드 1개 → wps 도형. hyperlinkRelId가 있으면 2행째에 URL 라벨 하이퍼링크.
 function buildNodeShape(
   node: WordExportNode,
@@ -132,7 +155,11 @@ function buildNodeShape(
       ? buildHyperlinkParagraph(node.urlLabel || node.url, hyperlinkRelId)
       : buildCenteredParagraph(node.urlLabel || node.url, {}) // 정규화 실패 URL — 링크 없이 일반 텍스트
     : "";
-  const paragraphs = buildCenteredParagraph(node.title, { bold: true }) + urlLine;
+  const titleLine =
+    node.nodeType === "section" && node.sectionAnchor
+      ? buildAnchorLabelParagraph(node.title, node.sectionAnchor)
+      : buildCenteredParagraph(node.title, {});
+  const paragraphs = titleLine + urlLine;
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="${escapeXml(node.title)}"/>` +
@@ -151,9 +178,9 @@ function buildNodeShape(
   );
 }
 
-// 프리셋 4접점(cxnLst) 인덱스 — flowChart류 프리셋은 top/left/bottom/right 순.
-// ⚠️ 실제 Word에서 접점 위치는 Task 4 수동 검증으로 확인한다(스펙 §4 — 구현 시 실측 확정).
-const SIDE_TO_CXN_IDX: Record<HandleSide, number> = { top: 0, left: 1, bottom: 2, right: 3 };
+// 프리셋 cxnLst 연결점 인덱스 — ECMA flowChartProcess 기준 left0/top1/right2/bottom3.
+// stCxn/endCxn에 쓰여 Word에서 노드를 옮겨도 선이 따라온다. 특정 프리셋이 다르게 붙으면 이 매핑만 조정.
+const SIDE_TO_CXN_IDX: Record<HandleSide, number> = { left: 0, top: 1, right: 2, bottom: 3 };
 
 // 노드 변의 중앙점 (캔버스 px)
 function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: number } {
@@ -169,7 +196,8 @@ function getSideAnchor(node: WordExportNode, side: HandleSide): { x: number; y: 
   }
 }
 
-// 엣지 1개 → 꺾인 연결선. 접점 연결로 Word에서 도형을 움직여도 선이 따라온다.
+// 엣지 1개 → 연결선. stCxn/endCxn으로 도형에 실제 연결 → Word에서 노드를 옮기면 선이 따라온다(cxn 최우선).
+// 접점 idx는 SIDE_TO_CXN_IDX(프리셋 cxnLst 순서). 변(위/아래·좌/우)은 호출부에서 노드 위치로 유도됨.
 function buildConnectorShape(
   edge: WordExportEdge,
   shapeId: number,
@@ -185,6 +213,8 @@ function buildConnectorShape(
   const flipV = end.y < start.y;
   const off = { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y) };
   const ext = { w: Math.abs(end.x - start.x), h: Math.abs(end.y - start.y) };
+  // 두 접점이 같은 x/y(정렬)면 직선, 어긋나면 꺾은선(elbow). 직선은 폭 0 박스에서도 안 무너진다.
+  const preset = start.x === end.x || start.y === end.y ? "straightConnector1" : "bentConnector3";
   return (
     "<wps:wsp>" +
     `<wps:cNvPr id="${shapeId}" name="edge-${shapeId}"/>` +
@@ -196,7 +226,7 @@ function buildConnectorShape(
     `<a:xfrm${flipH ? ' flipH="1"' : ""}${flipV ? ' flipV="1"' : ""}>` +
     `<a:off x="${layout.toX(off.x)}" y="${layout.toY(off.y)}"/>` +
     `<a:ext cx="${layout.toLen(ext.w)}" cy="${layout.toLen(ext.h)}"/></a:xfrm>` +
-    '<a:prstGeom prst="bentConnector3"><a:avLst/></a:prstGeom>' +
+    `<a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>` +
     "<a:noFill/>" +
     '<a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>' +
     '<a:tailEnd type="triangle"/></a:ln>' +
@@ -264,53 +294,55 @@ const ROOT_RELS_XML =
   '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
   "</Relationships>";
 
+/** 외부 하이퍼링크 Relationship 요소 1개 — buildDocx rels와 완결문서 생성기의 rels 병합이 공유. */
+export function buildHyperlinkRelXml(relId: string, url: string): string {
+  return `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXml(url)}" TargetMode="External"/>`;
+}
+
 function buildDocumentRelsXml(hyperlinks: { relId: string; url: string }[]): string {
-  const rels = hyperlinks
-    .map(
-      ({ relId, url }) =>
-        `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXml(url)}" TargetMode="External"/>`,
-    )
-    .join("");
+  const rels = hyperlinks.map(({ relId, url }) => buildHyperlinkRelXml(relId, url)).join("");
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`
   );
 }
 
-function buildDocumentXml(shapesXml: string, extW: number, extH: number): string {
+// 순서도 DrawingML이 요구하는 네임스페이스(w 제외) — 완결문서 생성기가 원본 루트에 보강할 때도 사용.
+export const DRAWING_NAMESPACES: readonly (readonly [string, string])[] = [
+  ["r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships"],
+  ["wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
+  ["a", "http://schemas.openxmlformats.org/drawingml/2006/main"],
+  ["wps", "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"],
+  ["wpg", "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"],
+];
+
+function buildDocumentXml(flowchartParagraphXml: string): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
-    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
-    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
-    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
-    ' xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"' +
-    ' xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">' +
-    "<w:body><w:p><w:r><w:drawing>" +
-    '<wp:inline distT="0" distB="0" distL="0" distR="0">' +
-    `<wp:extent cx="${extW}" cy="${extH}"/>` +
-    '<wp:docPr id="1" name="ProcessMap"/>' +
-    "<a:graphic>" +
-    '<a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">' +
-    "<wpg:wgp><wpg:cNvGrpSpPr/><wpg:grpSpPr>" +
-    `<a:xfrm><a:off x="0" y="0"/><a:ext cx="${extW}" cy="${extH}"/>` +
-    `<a:chOff x="0" y="0"/><a:chExt cx="${extW}" cy="${extH}"/></a:xfrm>` +
-    "<a:noFill/></wpg:grpSpPr>" +
-    shapesXml +
-    "</wpg:wgp></a:graphicData></a:graphic></wp:inline>" +
-    "</w:drawing></w:r></w:p>" +
+    DRAWING_NAMESPACES.map(([prefix, uri]) => ` xmlns:${prefix}="${uri}"`).join("") +
+    ">" +
+    "<w:body>" +
+    flowchartParagraphXml +
     '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
     '<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>' +
     "</w:sectPr></w:body></w:document>"
   );
 }
 
-/** 노드/엣지를 Word 도형 순서도 docx Blob으로 만든다 (순수 — DOM 불의존). */
-export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blob {
+/**
+ * 순서도 그리기 문단 1개(<w:p><w:r><w:drawing>…)와 외부 하이퍼링크 rels 목록을 만든다 —
+ * buildDocx(단독 문서)와 완결문서 생성기(원본에 삽입)가 공유하는 단일 소스.
+ */
+export function buildFlowchartDrawing(
+  nodes: WordExportNode[],
+  edges: WordExportEdge[],
+  fitToPage = true,
+): { paragraphXml: string; hyperlinks: { relId: string; url: string }[] } {
   if (nodes.length === 0) {
-    throw new Error("buildDocx: nodes must not be empty");
+    throw new Error("buildFlowchartDrawing: nodes must not be empty");
   }
-  const layout = computeLayout(nodes);
+  const layout = computeLayout(nodes, fitToPage);
   // 도형 id: 1은 docPr, 노드는 2부터
   const shapeIdOf = new Map(nodes.map((node, i) => [node.id, i + 2]));
   const hyperlinks: { relId: string; url: string }[] = [];
@@ -344,7 +376,27 @@ export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[]): Blo
       shapes.push(buildEdgeLabelShape(edge.label, nextShapeId++, sourceNode, targetNode, edge, layout));
     }
   }
-  const documentXml = buildDocumentXml(shapes.join(""), layout.extW, layout.extH);
+  const paragraphXml =
+    "<w:p><w:r><w:drawing>" +
+    '<wp:inline distT="0" distB="0" distL="0" distR="0">' +
+    `<wp:extent cx="${layout.extW}" cy="${layout.extH}"/>` +
+    '<wp:docPr id="1" name="ProcessMap"/>' +
+    "<a:graphic>" +
+    '<a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">' +
+    "<wpg:wgp><wpg:cNvGrpSpPr/><wpg:grpSpPr>" +
+    `<a:xfrm><a:off x="0" y="0"/><a:ext cx="${layout.extW}" cy="${layout.extH}"/>` +
+    `<a:chOff x="0" y="0"/><a:chExt cx="${layout.extW}" cy="${layout.extH}"/></a:xfrm>` +
+    "<a:noFill/></wpg:grpSpPr>" +
+    shapes.join("") +
+    "</wpg:wgp></a:graphicData></a:graphic></wp:inline>" +
+    "</w:drawing></w:r></w:p>";
+  return { paragraphXml, hyperlinks };
+}
+
+/** 노드/엣지를 Word 도형 순서도 docx Blob으로 만든다 (순수 — DOM 불의존). */
+export function buildDocx(nodes: WordExportNode[], edges: WordExportEdge[], fitToPage = true): Blob {
+  const { paragraphXml, hyperlinks } = buildFlowchartDrawing(nodes, edges, fitToPage);
+  const documentXml = buildDocumentXml(paragraphXml);
   const zipped = zipSync({
     "[Content_Types].xml": strToU8(CONTENT_TYPES_XML),
     "_rels/.rels": strToU8(ROOT_RELS_XML),
@@ -361,11 +413,12 @@ export function exportCanvasWord(
   nodes: WordExportNode[],
   edges: WordExportEdge[],
   fileName: string,
+  fitToPage = true,
 ): void {
   if (nodes.length === 0) {
     return;
   }
-  const blob = buildDocx(nodes, edges);
+  const blob = buildDocx(nodes, edges, fitToPage);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -36,6 +37,7 @@ from app.schemas import (
     SubprocessDesignationIn,
     SubprocessUsageOut,
     SubprocessUsedByOut,
+    WordDocIn,
 )
 from app.version_events import record_version_event
 
@@ -45,6 +47,22 @@ router = APIRouter(
 
 # 소프트삭제 후 복구 가능 기간 — 경과분은 조회 시 lazy 영구삭제 (DL)
 RECOVERY_WINDOW = timedelta(days=7)
+
+
+async def _delete_map_kb_chunks(session: AsyncSession, map_ids: list[int]) -> None:
+    """맵 KB 청크 제거 — 삭제된 맵이 무기한 검색·프롬프트 주입되지 않게 (hardening T16).
+
+    복구(restore) 시엔 재게시 훅이 다시 인덱싱한다(kb-embedding.md 절차).
+    """
+    if not map_ids:
+        return
+    from app.kb import retrieval  # 최상단 import 시 kb→models 외 순환 여지 회피(지역 관례)
+    from app.models import KbChunk
+
+    await session.execute(
+        sa_delete(KbChunk).where(KbChunk.source_type == "map", KbChunk.source_id.in_(map_ids))
+    )
+    retrieval.invalidate_cache()
 
 
 async def _purge_expired(session: AsyncSession) -> None:
@@ -58,6 +76,7 @@ async def _purge_expired(session: AsyncSession) -> None:
         )
     ).all()
     if expired:
+        await _delete_map_kb_chunks(session, [m.id for m in expired])
         for stale_map in expired:
             await session.delete(stale_map)
         await session.commit()
@@ -264,6 +283,9 @@ async def create_map(
         owner_id=user,
         visibility=payload.visibility,  # 생성자가 고른 초기 공개 범위(기본 private)
         owning_department=payload.owning_department,
+        mode=payload.mode,
+        doc_name=payload.doc_name,
+        doc_sections=[s.model_dump() for s in payload.doc_sections],
     )
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
@@ -339,19 +361,33 @@ async def copy_map(
 
     copy_name = payload.name or f"{source_map.name} (Copy)"
     await _assert_unique_name(session, copy_name)
+    if payload.owning_department:
+        await _assert_known_department(session, payload.owning_department)
+    convert = payload.convert_to_normal
     new_map = ProcessMap(
         name=copy_name,
         description=source_map.description,
         created_by=user,
         owner_id=user,
         visibility="private",
-        owning_department=source_map.owning_department,
+        owning_department=payload.owning_department or source_map.owning_department,
+        # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 승격(convert)은 일반 맵으로 소거 (design 2026-07-24 §6)
+        mode="normal" if convert else source_map.mode,
+        doc_name="" if convert else source_map.doc_name,
+        doc_sections=[] if convert else list(source_map.doc_sections),
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
     session.add(new_map)
     await session.flush()
     await clone_graph(session, source_version, new_version.id)
+    if convert:
+        # 승격: 섹션 노드 → 일반 process 노드 일괄 변환(앵커 소거·url은 유지) (design 2026-07-24 §6)
+        for node in await session.scalars(
+            select(Node).where(Node.version_id == new_version.id, Node.node_type == "section")
+        ):
+            node.node_type = "process"
+            node.section_anchor = ""
     record_version_event(session, new_version.id, "created", user)
     session.add(
         MapPermission(
@@ -795,6 +831,56 @@ async def withdraw_sp_designation_request(
 
 
 @router.put(
+    "/{map_id}/word-doc",
+    response_model=MapDetailOut,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def set_word_doc(
+    map_id: int,
+    payload: WordDocIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """Word 맵 재임포트 — doc_name·doc_sections을 통째로 교체한다 (design 2026-07-18)."""
+    found_map = await session.get(
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
+    )
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.doc_name = payload.doc_name
+    found_map.doc_sections = [s.model_dump() for s in payload.sections]
+    found_map.doc_imported_at = _now()
+    await session.commit()
+    await session.refresh(found_map, attribute_names=["versions"])
+    for version in found_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    found_map.my_role = await get_effective_role(session, user, map_id)
+    return found_map
+
+
+@router.post(
+    "/{map_id}/word-doc/generated",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def mark_word_doc_generated(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """완결 문서 생성 성공 기록 — 생성은 클라이언트 전용이라 서버는 시각만 스탬프 (design 2026-07-24 §5)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    found_map.doc_generated_at = _now()
+    await session.commit()
+    found_map.my_role = await get_effective_role(session, user, map_id)
+    return found_map
+
+
+@router.put(
     "/{map_id}/owning-department",
     response_model=MapOut,
     dependencies=[Depends(require_map_role("owner"))],
@@ -1054,6 +1140,9 @@ async def delete_map(map_id: int, session: AsyncSession = Depends(get_session)) 
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     found_map.deleted_at = now_kst()
+    # KB 청크 즉시 제거 — get_effective_role이 삭제 맵을 구분하지 않아 검색 필터만으론
+    # 계속 주입된다. 복구 시 재게시 훅이 재인덱싱 (hardening T16)
+    await _delete_map_kb_chunks(session, [map_id])
     await session.commit()
 
 
@@ -1089,4 +1178,17 @@ async def restore_map(
     found_map.deleted_at = None
     await session.commit()
     await session.refresh(found_map)
+    # 소프트삭제 때 제거한 KB 청크 재인덱싱 — 게시본이 있으면 백그라운드 복원 (hardening T16)
+    from app.kb import embed_client, indexing
+
+    if embed_client.is_embed_enabled():
+        published_ids = (
+            await session.scalars(
+                select(MapVersion.id).where(
+                    MapVersion.map_id == map_id, MapVersion.status == workflow.PUBLISHED
+                )
+            )
+        ).all()
+        for version_id in published_ids:
+            indexing.spawn(indexing.index_map_version(version_id))
     return found_map
