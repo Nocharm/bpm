@@ -40,6 +40,19 @@ class AppSetting(Base):
     )
 
 
+class AiPrompt(Base):
+    """AI 시스템 프롬프트 오버라이드 — 행이 있으면 코드 기본값 대신 사용. 복원=행 삭제."""
+
+    __tablename__ = "ai_prompts"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    content: Mapped[str] = mapped_column(Text)
+    updated_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class AiChatSession(Base):
     """AI 챗 대화 세션 — 사용자×맵 귀속 서버 원장. 목록 정렬 기준은 updated_at desc."""
 
