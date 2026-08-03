@@ -17,6 +17,7 @@ from app.permissions.logic import is_sysadmin, org_path
 from app.routers import (
     admin,
     ai,
+    ai_prompts,
     ai_sessions,
     app_settings,
     embed,
@@ -62,6 +63,7 @@ app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(ai_sessions.router)
 app.include_router(app_settings.router)
+app.include_router(ai_prompts.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
