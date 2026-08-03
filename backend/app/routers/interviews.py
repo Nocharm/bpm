@@ -47,6 +47,7 @@ from app.models import (
 )
 from app.permissions.access import assert_map_role, get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role
+from app.prompt_registry import get_prompt_overrides
 from app.routers.graph import _load_graph
 from app.schemas import (
     InterviewApplyParamsIn,
@@ -553,6 +554,7 @@ async def post_turn(
         result = await run_turn(
             session, interview, payload, graph_summary, context_text,
             doc_sections=doc_sections, dept_catalog=await _dept_catalog(session, interview),
+            overrides=await get_prompt_overrides(session),
         )
     except TurnError as exc:
         await session.rollback()
@@ -646,6 +648,7 @@ async def draw_interview_proposals(
     try:
         choices, demoted = await generate_proposals(
             interview, context_text, doc_sections=doc_sections, variants=payload.variants,
+            overrides=await get_prompt_overrides(session),
         )
     except TurnError as exc:
         await session.rollback()

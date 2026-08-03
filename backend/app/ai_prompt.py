@@ -1,5 +1,7 @@
 """AI 시스템 프롬프트 구성 — 그래프 스키마 + 매뉴얼 + 현재 그래프 직렬화 (design 2026-06-15)."""
 
+from collections.abc import Mapping
+
 from app.schemas import AiChatTurn, GraphOut, NodeOut
 
 _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
@@ -240,7 +242,9 @@ def build_system_prompt(
     manual: str,
     current_graph: GraphOut,
     can_edit: bool,
+    overrides: Mapping[str, str] | None = None,
 ) -> str:
+    instructions = (overrides or {}).get("ai_chat_instructions") or _INSTRUCTIONS
     edit_note = (
         "사용자는 현재 이 맵을 편집할 수 있습니다(graph/ops 가능)."
         if can_edit
@@ -251,7 +255,7 @@ def build_system_prompt(
         "[구조 힌트]\n" + "\n".join(f"- {hint}" for hint in hints) + "\n\n" if hints else ""
     )
     return (
-        f"{_INSTRUCTIONS}\n{edit_note}\n\n"
+        f"{instructions}\n{edit_note}\n\n"
         f"{hint_block}"
         f"[현재 그래프]\n{_serialize_graph(current_graph)}\n\n"
         f"[제품 매뉴얼]\n{manual}"
@@ -264,11 +268,12 @@ def build_messages(
     can_edit: bool,
     instruction: str,
     history: list[AiChatTurn],
+    overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     messages: list[dict] = [
         {
             "role": "system",
-            "content": build_system_prompt(manual, current_graph, can_edit),
+            "content": build_system_prompt(manual, current_graph, can_edit, overrides),
         }
     ]
     for turn in history:

@@ -3,6 +3,18 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-04 — AI 프롬프트 관리(sysadmin) 설계 (feat/ai-prompts-admin)
+- 프롬프트 7종(AI 챗 지침·인터뷰어/드래프터 계약·Word 애드덤 2종·추출 계약·반복 넛지)을 sysadmin이 설정 탭에서 열람·수정·기본값 복원하는 기능 설계 확정 — `docs/design/2026-08-04-ai-prompts-admin-design.md`. 신규 `ai_prompts` 테이블(오버라이드만 행 저장, 없으면 코드 기본값), 매뉴얼 관리 패널 편집 패턴 재사용.
+- 구현 플랜 작성 — `docs/superpowers/plans/2026-08-04-ai-prompts-admin.md` (태스크 5개: 모델+레지스트리 → API → 빌더 스레딩 → 설정 탭 → 브라우저 스모크).
+- 구현: AiPrompt 오버라이드 모델 + prompt_registry(기본값 매핑·오버라이드 조회).
+- 구현: /api/admin/ai-prompts GET/PUT/DELETE(sysadmin 전용, 404/422/멱등 복원).
+- 구현: 프롬프트 빌더 7표면에 overrides 스레딩(None=기존 상수 폴백, 기존 테스트 무변경 그린).
+- 구현: 설정 Content > AI prompts 탭(7종 목록·편집/프리뷰·기본값 복원, MarkdownView 재사용).
+- 픽스: 저장/복원 비행 중 프롬프트 전환 경합 차단(리뷰 지적).
+- 검증: pw 스모크 10체크 그린(편집·저장·프리뷰·지속성·복원) + 전체 게이트(pytest·ruff·lint·vitest·build).
+- 픽스: 스모크 스크립트 실패경로(중간 throw)에서도 finally에서 오버라이드 DELETE 클린업 항상 시도(리뷰 지적 — 이전엔 try/finally라 throw 시 dev.db에 오버라이드 잔존 가능).
+- 최종 리뷰 반영: 저장 비행 중 textarea 잠금·스모크 reset 단언 강화.
+
 ## 2026-08-03 — 컨테이너 메모리 예약 최적화 (docker-compose)
 - 공용 서버(71번) 과예약 방지 — 4개 서비스에 `deploy.resources` 메모리 reservations/limits 명시(예약 합계 ~800M, 상한 합계 ~2.9G: proxy 32M/128M · frontend 256M/768M · backend 256M/1G · db 256M/1G).
 - backend에 `MALLOC_ARENA_MAX=2`(glibc arena 증식으로 인한 RSS 팽창 방지), frontend(Next.js standalone)에 `NODE_OPTIONS=--max-old-space-size=512`(V8 힙 상한) 추가. `docker compose config`로 해석 결과 검증.

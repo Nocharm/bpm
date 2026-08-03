@@ -5,6 +5,7 @@ vLLM prefix cache 적중을 유도한다. AI 호출 자체는 orchestrator가 �
 """
 
 import json
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -196,10 +197,15 @@ def build_interviewer_messages(
     mode: str = "normal",
     section_catalog: str = "",
     dept_catalog: str = "",
+    overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     stage = get_stage(stage_key, mode)
     goal = stage.goal_ko if lang == "ko" else stage.goal_en
-    contract = _INTERVIEWER_CONTRACT + (_INTERVIEWER_WORD_ADDENDUM if mode == "word" else "")
+    ov = overrides or {}
+    contract = (ov.get("interviewer_contract") or _INTERVIEWER_CONTRACT) + (
+        (ov.get("interviewer_word_addendum") or _INTERVIEWER_WORD_ADDENDUM)
+        if mode == "word" else ""
+    )
     catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
     dept_block = (
         f"[부서 후보 목록 — department 값은 이 목록의 항목만 사용]\n{dept_catalog}\n\n"
@@ -249,9 +255,13 @@ def build_drafter_messages(
     mode: str = "normal",
     section_catalog: str = "",
     history: list[dict] | None = None,
+    overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     current = format_graph_compact(working_graph)
-    contract = _DRAFTER_CONTRACT + (_DRAFTER_WORD_ADDENDUM if mode == "word" else "")
+    ov = overrides or {}
+    contract = (ov.get("drafter_contract") or _DRAFTER_CONTRACT) + (
+        (ov.get("drafter_word_addendum") or _DRAFTER_WORD_ADDENDUM) if mode == "word" else ""
+    )
     catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"

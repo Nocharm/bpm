@@ -32,6 +32,7 @@
 - [Word 맵 AI 컨설턴트 — 문서→순서도 변환 모드](2026-07-26-word-map-ai-consultant-design.md) — word 전용 3스테이지·섹션 매핑 계약(앵커 검증·라벨 재구성)·카탈로그+원본 업로드
 - [인터뷰 속도·타이밍 재설계](2026-07-27-interview-speed-redesign-design.md) — 턴=인터뷰어 1콜·그리기는 draw 이벤트로 응축·델타 드래프팅·facts 아웃라인·맵 기준 배지
 - [인터뷰 패스트트랙 — 문서 첨부만으로 바로 그리기](2026-07-29-interview-fast-track-design.md) — 인사말 보기 진입·범위 제안 1콜·결정적 fast-forward(AI 0콜)·기존 multi draw 재사용·어체 간결화
+- [AI 프롬프트 관리(sysadmin)](2026-08-04-ai-prompts-admin-design.md) — 프롬프트 7종 DB 오버라이드(`ai_prompts` 테이블)·행 없으면 코드 기본값·설정 탭 편집/프리뷰/복원
 
 ## 권한 · 워크플로 · 맵
 - [맵 필수 필드 '오우닝 부서'](2026-07-10-owning-department-design.md)
