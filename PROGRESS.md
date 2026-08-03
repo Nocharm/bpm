@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-04 — AI 프롬프트 관리(sysadmin) 설계 (feat/ai-prompts-admin)
+- 프롬프트 7종(AI 챗 지침·인터뷰어/드래프터 계약·Word 애드덤 2종·추출 계약·반복 넛지)을 sysadmin이 설정 탭에서 열람·수정·기본값 복원하는 기능 설계 확정 — `docs/design/2026-08-04-ai-prompts-admin-design.md`. 신규 `ai_prompts` 테이블(오버라이드만 행 저장, 없으면 코드 기본값), 매뉴얼 관리 패널 편집 패턴 재사용.
+
 ## 2026-08-03 — 컨테이너 메모리 예약 최적화 (docker-compose)
 - 공용 서버(71번) 과예약 방지 — 4개 서비스에 `deploy.resources` 메모리 reservations/limits 명시(예약 합계 ~800M, 상한 합계 ~2.9G: proxy 32M/128M · frontend 256M/768M · backend 256M/1G · db 256M/1G).
 - backend에 `MALLOC_ARENA_MAX=2`(glibc arena 증식으로 인한 RSS 팽창 방지), frontend(Next.js standalone)에 `NODE_OPTIONS=--max-old-space-size=512`(V8 힙 상한) 추가. `docker compose config`로 해석 결과 검증.
