@@ -85,7 +85,7 @@ try {
   await page.locator('[data-id="confirm-dialog-confirm"]').click();
   await page.waitForTimeout(600);
   const restored = await page.locator('[data-id="ai-prompt-editor"] textarea').inputValue();
-  check("reset restores default", restored !== CUSTOM && restored.trim().length > 0);
+  check("reset restores default", restored === initial);
   const rowAfter = await page.locator('[data-id="ai-prompt-row-anti_repeat_nudge"]').innerText();
   check("badge cleared after reset", !rowAfter.includes("Customized"));
   check("reset disabled at default", await page.locator('[data-id="ai-prompt-reset"]').isDisabled());

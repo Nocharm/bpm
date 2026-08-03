@@ -13,6 +13,7 @@
 - 픽스: 저장/복원 비행 중 프롬프트 전환 경합 차단(리뷰 지적).
 - 검증: pw 스모크 10체크 그린(편집·저장·프리뷰·지속성·복원) + 전체 게이트(pytest·ruff·lint·vitest·build).
 - 픽스: 스모크 스크립트 실패경로(중간 throw)에서도 finally에서 오버라이드 DELETE 클린업 항상 시도(리뷰 지적 — 이전엔 try/finally라 throw 시 dev.db에 오버라이드 잔존 가능).
+- 최종 리뷰 반영: 저장 비행 중 textarea 잠금·스모크 reset 단언 강화.
 
 ## 2026-08-03 — 컨테이너 메모리 예약 최적화 (docker-compose)
 - 공용 서버(71번) 과예약 방지 — 4개 서비스에 `deploy.resources` 메모리 reservations/limits 명시(예약 합계 ~800M, 상한 합계 ~2.9G: proxy 32M/128M · frontend 256M/768M · backend 256M/1G · db 256M/1G).

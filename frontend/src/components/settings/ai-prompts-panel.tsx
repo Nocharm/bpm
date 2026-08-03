@@ -238,7 +238,8 @@ export function AiPromptsPanel({ onToast }: AiPromptsPanelProps) {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               spellCheck={false}
-              className="min-h-0 flex-1 resize-none rounded-b-sm bg-surface px-5 py-4 font-mono text-caption leading-relaxed text-ink outline-none"
+              disabled={busy}
+              className="min-h-0 flex-1 resize-none rounded-b-sm bg-surface px-5 py-4 font-mono text-caption leading-relaxed text-ink outline-none disabled:opacity-50"
             />
           )}
         </div>
