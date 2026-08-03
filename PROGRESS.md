@@ -9,6 +9,7 @@
 - 구현: AiPrompt 오버라이드 모델 + prompt_registry(기본값 매핑·오버라이드 조회).
 - 구현: /api/admin/ai-prompts GET/PUT/DELETE(sysadmin 전용, 404/422/멱등 복원).
 - 구현: 프롬프트 빌더 7표면에 overrides 스레딩(None=기존 상수 폴백, 기존 테스트 무변경 그린).
+- 구현: 설정 Content > AI prompts 탭(7종 목록·편집/프리뷰·기본값 복원, MarkdownView 재사용).
 
 ## 2026-08-03 — 컨테이너 메모리 예약 최적화 (docker-compose)
 - 공용 서버(71번) 과예약 방지 — 4개 서비스에 `deploy.resources` 메모리 reservations/limits 명시(예약 합계 ~800M, 상한 합계 ~2.9G: proxy 32M/128M · frontend 256M/768M · backend 256M/1G · db 256M/1G).
