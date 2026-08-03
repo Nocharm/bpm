@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-04 — 홈 부서 가시성·시인성 개선 설계
+- 좌측 조직도 문제 2건 실측 확정: ①`depth*12+16` 들여쓰기로 맵 카드 폭이 depth별 401~365px로 제각각(콘텐츠 333px에서 제목 말줄임) ②My dept 섹션과 조직도가 첫 진입 시 동시 펼침 상태로 **동일 카드를 중복 렌더**(시선 분산의 진짜 원인).
+- 설계 확정 — `docs/design/2026-08-04-home-dept-visibility-design.md`. 부서명 고정폭 필(단일자식 구간 한 행 병합)·카드 풀폭 417px 통일·맵 보유 부서만 sticky 경로 헤더·최근접속 표시 호버 반전(기본은 accent 시계 칩)·내 부서 맵 있으면 조직도 접힘 시작 + 접힘 상태 localStorage 영속.
+
 ## 2026-08-04 — AI 프롬프트 관리(sysadmin) 설계 (feat/ai-prompts-admin)
 - 프롬프트 7종(AI 챗 지침·인터뷰어/드래프터 계약·Word 애드덤 2종·추출 계약·반복 넛지)을 sysadmin이 설정 탭에서 열람·수정·기본값 복원하는 기능 설계 확정 — `docs/design/2026-08-04-ai-prompts-admin-design.md`. 신규 `ai_prompts` 테이블(오버라이드만 행 저장, 없으면 코드 기본값), 매뉴얼 관리 패널 편집 패턴 재사용.
 - 구현 플랜 작성 — `docs/superpowers/plans/2026-08-04-ai-prompts-admin.md` (태스크 5개: 모델+레지스트리 → API → 빌더 스레딩 → 설정 탭 → 브라우저 스모크).

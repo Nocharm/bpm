@@ -44,6 +44,7 @@
 - [운영 대시보드 — 실운영 화면 + 접근 권한](2026-07-11-dashboard-design.md)
 
 ## UI · 홈 · 디렉터리
+- [홈 부서 가시성·시인성 개선](2026-08-04-home-dept-visibility-design.md) — 부서명 고정폭 필 체인(단일자식 병합)·카드 풀폭 통일·sticky 경로 헤더·최근접속 호버 반전·접힘 상태 영속
 - [메인 탭 UX 리프레시](2026-07-17-main-tabs-ux-design.md)
 - [멤버 카드 아이콘 톤·조직 레벨 아이콘](2026-07-09-member-card-icons-design.md)
 - [UI 개선 배치 2 (7항목)](2026-07-09-ui-batch2-design.md)
