@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-03 — 컨테이너 메모리 예약 최적화 (docker-compose)
+- 공용 서버(71번) 과예약 방지 — 4개 서비스에 `deploy.resources` 메모리 reservations/limits 명시(예약 합계 ~800M, 상한 합계 ~2.9G: proxy 32M/128M · frontend 256M/768M · backend 256M/1G · db 256M/1G).
+- backend에 `MALLOC_ARENA_MAX=2`(glibc arena 증식으로 인한 RSS 팽창 방지), frontend(Next.js standalone)에 `NODE_OPTIONS=--max-old-space-size=512`(V8 힙 상한) 추가. `docker compose config`로 해석 결과 검증.
+
 ## 2026-07-30 — 브랜치 최종 리뷰 픽스 배치 (worktree-ai-consultant)
 3방향 병렬 리뷰(백엔드 코어·프론트 표면·최근 픽스 회귀) 적발분 중 확정 항목 일괄 수정:
 - **[블로커] `InterviewMessage.kind` VARCHAR(12)→(20)**: `sp_suggestion`(13자)이 운영 Postgres에서 extras 커밋을 터뜨려 SP 제안이 무음 유실(sqlite는 길이 미강제라 로컬 그린). `db.py` 부트스트랩에 postgres 전용 ALTER 스텝 추가(배포 시 자동), 선언 폭 회귀 테스트 동반.
