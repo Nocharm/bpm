@@ -109,8 +109,9 @@ export function MapCard({
     };
   }, []);
 
-  // 오너·수정시각 메타 — 기본 노출. recent면 시계 칩만 accent+tint로 강조해 "최근 열람"을 표시한다
-  // (배지를 상시 띄우는 대신 시계 하나로 압축, 상세는 호버 시 교체) / owner + updated meta
+  // 오너·수정시각 메타 — 기본 노출. 시각은 다른 카드와 똑같이 "최근 수정"이고, 최근 열람 사실은
+  // 시계 "아이콘 색"으로만 표시한다 — 칩 배경까지 입히면 그 줄이 최근 수정이 아닌 다른 값처럼 읽힌다.
+  // 상세한 열람 시각은 호버 시 교체 노출 / owner + updated meta
   const renderOwnerAndTime = (recent: boolean) => (
     <>
       {(map.owner_name ?? map.created_by) && (
@@ -128,11 +129,14 @@ export function MapCard({
       <span
         data-id="map-card-updated-chip"
         title={recent ? t("home.recentBadge") : undefined}
-        className={`inline-flex shrink-0 items-center gap-1 ${
-          recent ? "rounded-full bg-accent-tint px-2 py-0.5 text-accent" : ""
-        }`}
+        className="inline-flex shrink-0 items-center gap-1"
       >
-        <Clock size={12} strokeWidth={1.5} />
+        <Clock
+          data-id="map-card-recent-icon"
+          size={12}
+          strokeWidth={1.5}
+          className={recent ? "text-accent" : undefined}
+        />
         {relativeTime(map.updated_at)}
       </span>
     </>
@@ -208,15 +212,17 @@ export function MapCard({
       <div className="relative mt-2 flex items-center justify-between gap-2 text-fine text-ink-tertiary">
         <div className="flex min-w-0 items-center gap-2">
           {recentOpenedAt !== undefined ? (
-            // 최근 열람 맵 — 기본은 오너/수정시각(시계 칩만 accent), 호버 시 최근 접속 기록으로 교체.
+            // 최근 열람 맵 — 기본은 오너/수정시각(시계 아이콘만 accent), 호버 시 최근 접속 기록으로 교체.
             // 두 텍스트를 같은 그리드 셀에 겹쳐 박스를 더 넓은 쪽 폭으로 고정 → 교체 시 폭 점프 없음.
+            // 전환 타이밍은 비대칭이다 — 들어올 땐 1초 머문 뒤 페이드(스쳐 지나는 커서에 반응하지 않게),
+            // 나갈 땐 duration/delay 0으로 즉시 복귀(원래 정보로 바로 돌아와야 하므로).
             <div data-id="map-card-recent-badge" className="grid w-fit items-center">
-              <div className="col-start-1 row-start-1 flex items-center gap-2 whitespace-nowrap transition-opacity duration-350 ease-smooth group-hover:opacity-0">
+              <div className="col-start-1 row-start-1 flex items-center gap-2 whitespace-nowrap transition-opacity delay-0 duration-0 ease-smooth group-hover:opacity-0 group-hover:delay-1000 group-hover:duration-350">
                 {renderOwnerAndTime(true)}
               </div>
               <span
                 data-id="map-card-recent-pill"
-                className="col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent-tint px-2 py-0.5 text-accent opacity-0 transition-opacity duration-350 ease-smooth group-hover:opacity-100"
+                className="col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent-tint px-2 py-0.5 text-accent opacity-0 transition-opacity delay-0 duration-0 ease-smooth group-hover:opacity-100 group-hover:delay-1000 group-hover:duration-350"
               >
                 <Clock size={12} strokeWidth={1.5} />
                 {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}

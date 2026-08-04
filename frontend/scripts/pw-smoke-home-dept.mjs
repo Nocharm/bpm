@@ -262,11 +262,14 @@ try {
       if (!root) return null;
       const pill = root.querySelector('[data-id="map-card-recent-pill"]');
       const chip = root.querySelector('[data-id="map-card-updated-chip"]');
+      const icon = root.querySelector('[data-id="map-card-recent-icon"]');
       const owner = chip?.parentElement ?? null;
       return {
         pill: pill ? Number(getComputedStyle(pill).opacity) : -1,
         owner: owner ? Number(getComputedStyle(owner).opacity) : -1,
+        // 최근 열람 표시는 시계 "아이콘 색"뿐 — 칩 배경은 없어야 한다(다른 카드와 같은 한 줄로 읽혀야 하므로)
         chipBg: chip ? getComputedStyle(chip).backgroundColor : "",
+        iconColor: icon ? getComputedStyle(icon).color : "",
       };
     });
 
@@ -276,21 +279,42 @@ try {
     before !== null && before.owner > 0.9 && before.pill < 0.1,
     `owner=${before?.owner} pill=${before?.pill}`,
   );
+  // accent(#6A41FF) = rgb(106, 65, 255) — 아이콘만 액센트, 칩 배경은 투명이어야 한다
   check(
-    "updated chip carries the accent tint background",
-    before !== null && before.chipBg !== "rgba(0, 0, 0, 0)" && before.chipBg !== "",
-    `chipBg=${before?.chipBg}`,
+    "recent marker is the clock icon colour only, no chip background",
+    before !== null && before.iconColor === "rgb(106, 65, 255)" && before.chipBg === "rgba(0, 0, 0, 0)",
+    `iconColor=${before?.iconColor} chipBg=${before?.chipBg}`,
   );
 
+  // 들어올 때는 1초 지연 후 페이드 — 스쳐 지나는 커서에 반응하지 않게 한다.
   await card.hover();
-  await pageC.waitForTimeout(500); // duration-350 전이 완료 대기
+  await pageC.waitForTimeout(400); // 지연 구간 한가운데: 아직 바뀌면 안 된다
+  const midHover = await readLayers();
+  check(
+    "hover does not swap during the 1s delay",
+    midHover !== null && midHover.owner > 0.9 && midHover.pill < 0.1,
+    `owner=${midHover?.owner} pill=${midHover?.pill}`,
+  );
+
+  await pageC.waitForTimeout(1200); // 1000ms 지연 + 350ms 페이드 완료
   const after = await readLayers();
   check(
-    "hover swaps to the recent-opened pill",
+    "hover swaps to the recent-opened pill after the delay",
     after !== null && after.pill > 0.9 && after.owner < 0.1,
     `owner=${after?.owner} pill=${after?.pill}`,
   );
   await pageC.screenshot({ path: `${SHOT_DIR}/home-dept-4-hover.png`, fullPage: false });
+
+  // 나갈 때는 즉시 복귀 — duration/delay 0이라 100ms 안에 이미 되돌아와 있어야 한다.
+  // (역방향도 지연됐다면 이 시점엔 아직 pill이 떠 있어 이 검사가 잡는다)
+  await pageC.mouse.move(5, 5);
+  await pageC.waitForTimeout(100);
+  const afterLeave = await readLayers();
+  check(
+    "un-hover reverts immediately",
+    afterLeave !== null && afterLeave.owner > 0.9 && afterLeave.pill < 0.1,
+    `owner=${afterLeave?.owner} pill=${afterLeave?.pill}`,
+  );
   await ctxC.close();
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
