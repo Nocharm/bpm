@@ -100,10 +100,15 @@ export default function MapListPage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const seededOrg = useRef(false);
+
   // 접힘 상태 저장 — 의존성 이펙트로 저장하면 StrictMode 재마운트에서 초기 default가 저장값을 덮어쓴다.
   // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: docs/design/2026-08-04-home-dept-visibility-design.md §4).
   // C1 시드는 사용자 행동이 아니므로 저장하지 않는다 — 미조작 사용자는 매 진입 같은 규칙으로 재계산된다.
   const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean) => {
+    // 사용자가 트리를 직접 건드린 순간부터 시드는 무효 — maps가 늦게 도착해 시드가 처음 발화하면
+    // setOrgOpen이 집합을 "교체"하므로 방금 편 노드가 사라진다.
+    seededOrg.current = true;
     window.localStorage.setItem(
       TREE_STATE_KEY,
       JSON.stringify({ orgOpen: [...org], fav, word, unassigned }),
@@ -145,8 +150,6 @@ export default function MapListPage() {
     void getDirectory().then((d) => { if (active) setDirectory(d); }).catch(() => {});
     return () => { active = false; };
   }, []);
-
-  const seededOrg = useRef(false);
 
   // 접힘 상태 복원 — localStorage(새로고침에도 유지). 저장값이 있으면 내 부서 시드보다 우선한다.
   useEffect(() => {
@@ -429,7 +432,7 @@ export default function MapListPage() {
     if (hasMyDeptMaps) return;
     const parts = me.org_path.split("/");
     const paths = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time seed once me+maps have both landed
     setOrgOpen(new Set(paths)); // one-time seed from my org_path
   }, [me, maps.length, hasMyDeptMaps]);
 
