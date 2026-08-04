@@ -1,4 +1,6 @@
 // 홈 좌측 상단 — 나의 부서 맵 즐겨찾기(핀). 아코디언과 별개로 빠른 접근.
+// 부서 하나 + 그 맵이라는 같은 모양이라 조직도와 동일한 태그·박스 규칙을 쓴다.
+// 설계: docs/design/2026-08-04-home-dept-list-revision-design.md R6
 "use client";
 
 import { ChevronDown, ChevronRight, Star } from "lucide-react";
@@ -6,6 +8,8 @@ import type { ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { CountTag } from "@/components/maps/count-tag";
+import { DeptGroupBox } from "@/components/maps/dept-group-box";
 import { MapCard } from "@/components/maps/map-card";
 
 interface MyDeptFavoritesProps {
@@ -23,26 +27,45 @@ interface MyDeptFavoritesProps {
 export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, onSelect, renderCard }: MyDeptFavoritesProps) {
   const { t } = useI18n();
   if (maps.length === 0) return null;
+
+  const header = (
+    <button
+      type="button"
+      data-id="my-dept-toggle"
+      aria-expanded={open}
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-divider"
+    >
+      {open
+        ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+        : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
+      <Star size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+      <span
+        data-id="org-node-name"
+        className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
+      >
+        {t("home.myDepartment")} — {deptLabel}
+      </span>
+      {!open && <CountTag count={maps.length} />}
+    </button>
+  );
+
   return (
     <section data-id="home-my-dept" className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        className="group flex items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-surface-alt"
-      >
-        {open ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
-        <Star size={14} strokeWidth={1.5} className="text-accent" />
-        <span className="text-fine text-ink-secondary">{t("home.myDepartment")} — {deptLabel}</span>
-        <span className="ml-auto text-fine text-ink-tertiary">({maps.length})</span>
-      </button>
-      {open && (
-        <ul className="flex flex-col gap-2 pl-1">
-          {maps.map((m) => (
-            <li key={m.id}>
-              {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}
-            </li>
-          ))}
-        </ul>
+      {open ? (
+        <DeptGroupBox>
+          {header}
+          {/* 인셋은 pl-5 pr-2 고정값(depth 파생 아님) — 조직도 카드 리스트와 동일 상수라야 폭이 일치한다 */}
+          <ul className="flex flex-col gap-2 pl-5 pr-2">
+            {maps.map((m) => (
+              <li key={m.id}>
+                {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}
+              </li>
+            ))}
+          </ul>
+        </DeptGroupBox>
+      ) : (
+        header
       )}
     </section>
   );
