@@ -37,6 +37,9 @@ import { ToastStack, type ToastItem } from "@/components/toast-stack";
 // 상태 필터 필 순서 — 초안/검토중/승인됨/반려/게시 / status filter pills order.
 const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] as const;
 
+// 좌측 접힘 상태 영속 키 — 검색·필터(sessionStorage, 새로고침 시 초기화)와 달리 새로고침에도 유지한다.
+const TREE_STATE_KEY = "bpm.home.tree";
+
 export default function MapListPage() {
   const { t } = useI18n();
   const router = useRouter();
@@ -97,6 +100,16 @@ export default function MapListPage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // 접힘 상태 저장 — 의존성 이펙트로 저장하면 StrictMode 재마운트에서 초기 default가 저장값을 덮어쓴다.
+  // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: docs/design/2026-08-04-home-dept-visibility-design.md §4).
+  // C1 시드는 사용자 행동이 아니므로 저장하지 않는다 — 미조작 사용자는 매 진입 같은 규칙으로 재계산된다.
+  const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean) => {
+    window.localStorage.setItem(
+      TREE_STATE_KEY,
+      JSON.stringify({ orgOpen: [...org], fav, word, unassigned }),
+    );
+  };
+
   const refresh = useCallback(async () => {
     try {
       setMaps(await listMaps());
@@ -133,16 +146,28 @@ export default function MapListPage() {
     return () => { active = false; };
   }, []);
 
-  // 아코디언 초기 펼침 — 내 org_path 조상 경로를 1회 시드(이후는 사용자 토글만 반영) /
-  // seed org accordion expansion from my org_path once when it arrives.
   const seededOrg = useRef(false);
+
+  // 접힘 상태 복원 — localStorage(새로고침에도 유지). 저장값이 있으면 내 부서 시드보다 우선한다.
   useEffect(() => {
-    if (seededOrg.current || !me?.org_path) return;
-    seededOrg.current = true;
-    const parts = me.org_path.split("/");
-    const paths = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
-    setOrgOpen(new Set(paths)); // one-time seed from my org_path
-  }, [me]);
+    try {
+      const raw = window.localStorage.getItem(TREE_STATE_KEY);
+      if (!raw) {
+        return;
+      }
+      const s = JSON.parse(raw) as { orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown };
+      if (Array.isArray(s.orgOpen)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setOrgOpen(new Set(s.orgOpen.filter((x): x is string => typeof x === "string"))); // one-time hydration
+        seededOrg.current = true; // 저장값이 시드를 덮어쓰지 않게
+      }
+      if (typeof s.fav === "boolean") setFavOpen(s.fav);
+      if (typeof s.word === "boolean") setWordOpen(s.word);
+      if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
+    } catch {
+      /* 손상된 저장값 무시 */
+    }
+  }, []);
 
   // 최근 열람 로드 — localStorage는 클라 전용이라 마운트 후 복원(초기 render는 빈 배열).
   useEffect(() => {
@@ -171,10 +196,6 @@ export default function MapListPage() {
         status?: unknown;
         perm?: unknown;
         owning?: unknown;
-        orgOpen?: unknown;
-        fav?: unknown;
-        word?: unknown;
-        unassigned?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -192,14 +213,6 @@ export default function MapListPage() {
       if (Array.isArray(s.owning)) {
         setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
       }
-      // 좌측 접힘 상태 복원 — 조직도·즐겨찾기·Word 섹션·미지정 (검색·필터와 동일한 SPA 복귀 정책)
-      if (Array.isArray(s.orgOpen)) {
-        setOrgOpen(new Set(s.orgOpen.filter((x): x is string => typeof x === "string")));
-        seededOrg.current = true; // 복원값이 내 부서 시드보다 우선 — 시드가 덮어쓰지 않게
-      }
-      if (typeof s.fav === "boolean") setFavOpen(s.fav);
-      if (typeof s.word === "boolean") setWordOpen(s.word);
-      if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
     } catch {
       /* 손상된 저장값 무시 */
     }
@@ -220,13 +233,9 @@ export default function MapListPage() {
         status: [...statusFilter],
         perm: [...permFilter],
         owning: [...owningFilter],
-        orgOpen: [...orgOpen],
-        fav: favOpen,
-        word: wordOpen,
-        unassigned: unassignedOpen,
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, orgOpen, favOpen, wordOpen, unassignedOpen]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -409,6 +418,20 @@ export default function MapListPage() {
   );
   // department가 ""(빈 문자열)일 수 있어 ??는 폴백을 건너뛴다 — || 로 org_path 리프까지 폴백
   const myDeptLabel = (me?.department || me?.org_path?.split("/").pop()) ?? "";
+
+  // 아코디언 초기 펼침 — 내 부서 섹션이 진입점이므로, 내 부서 맵이 있으면 조직도는 접힌 채로 둔다.
+  // me·maps가 모두 도착한 뒤 1회만 판단한다 — 먼저 도착한 쪽만 보고 시드하면 뒤늦게 뜬 My dept 섹션과
+  // 조직도가 결국 둘 다 펼쳐진다. deps는 배열 identity가 아닌 길이 스칼라로(refresh()마다 새 참조).
+  const hasMyDeptMaps = myDeptMaps.length > 0;
+  useEffect(() => {
+    if (seededOrg.current || !me?.org_path || maps.length === 0) return;
+    seededOrg.current = true;
+    if (hasMyDeptMaps) return;
+    const parts = me.org_path.split("/");
+    const paths = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrgOpen(new Set(paths)); // one-time seed from my org_path
+  }, [me, maps.length, hasMyDeptMaps]);
 
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋). 검색 모드 전용
   // (브라우즈는 즐겨찾기+아코디언이라 별도 증분 렌더 없음).
@@ -699,7 +722,11 @@ export default function MapListPage() {
                     maps={myDeptMaps}
                     deptLabel={myDeptLabel}
                     open={favOpen}
-                    onToggle={() => setFavOpen((v) => !v)}
+                    onToggle={() => {
+                      const next = !favOpen;
+                      setFavOpen(next);
+                      writeTree(orgOpen, next, wordOpen, unassignedOpen);
+                    }}
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
                     renderCard={renderCard}
@@ -708,7 +735,11 @@ export default function MapListPage() {
                     <WordDocsSection
                       maps={wordMaps}
                       open={wordOpen}
-                      onToggle={() => setWordOpen((v) => !v)}
+                      onToggle={() => {
+                        const next = !wordOpen;
+                        setWordOpen(next);
+                        writeTree(orgOpen, favOpen, next, unassignedOpen);
+                      }}
                       selectedId={effectiveSelected}
                       onSelect={setSelectedId}
                       onCreate={() => setWordModalOpen(true)}
@@ -720,8 +751,8 @@ export default function MapListPage() {
                     roots={orgTree.roots}
                     unassigned={orgTree.unassigned}
                     openPaths={orgOpen}
-                    onToggle={(path) => setOrgOpen((prev) => {
-                      const next = new Set(prev);
+                    onToggle={(path) => {
+                      const next = new Set(orgOpen);
                       if (next.has(path)) {
                         next.delete(path);
                       } else {
@@ -729,14 +760,24 @@ export default function MapListPage() {
                         // 하위 부서가 1개뿐인 구간은 이어서 자동 펼침 — 선택지 없는 클릭 반복 제거
                         for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
                       }
-                      return next;
-                    })}
-                    onCollapseAll={() => { setOrgOpen(new Set()); setUnassignedOpen(false); }}
+                      setOrgOpen(next);
+                      writeTree(next, favOpen, wordOpen, unassignedOpen);
+                    }}
+                    onCollapseAll={() => {
+                      const next = new Set<string>();
+                      setOrgOpen(next);
+                      setUnassignedOpen(false);
+                      writeTree(next, favOpen, wordOpen, false);
+                    }}
                     selectedId={effectiveSelected}
                     highlightId={highlightId}
                     onSelect={setSelectedId}
                     unassignedOpen={unassignedOpen}
-                    onToggleUnassigned={() => setUnassignedOpen((v) => !v)}
+                    onToggleUnassigned={() => {
+                      const next = !unassignedOpen;
+                      setUnassignedOpen(next);
+                      writeTree(orgOpen, favOpen, wordOpen, next);
+                    }}
                     renderCard={renderCard}
                   />
                 </div>
