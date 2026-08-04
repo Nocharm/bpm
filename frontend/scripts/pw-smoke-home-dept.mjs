@@ -1,4 +1,4 @@
-// 홈 부서 가시성 스모크 — 카드 폭 depth 무관 통일 · sticky 경로 헤더 · 첫 진입 조직도 접힘 ·
+// 홈 부서 목록 스모크 — 카드 폭 depth 무관 통일 · 그룹 박스/카운트 태그/펼침 톤다운 · 첫 진입 조직도 접힘 ·
 // 접힘 상태 새로고침 유지 · 최근접속 호버 반전.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 SHOT_DIR=<dir> node scripts/pw-smoke-home-dept.mjs
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, 시드 완료. 언어 en 고정.
@@ -88,6 +88,15 @@ try {
   check("org tree starts collapsed", openedOnEntry === 0, `open=${openedOnEntry}`);
   await pageA.screenshot({ path: `${SHOT_DIR}/home-dept-1-entry.png`, fullPage: false });
 
+  // 톤다운 비교 기준색 — 아직 전부 닫힌 지금 캡처해둔다. expandAll은 리프 부서까지
+  // 전부 펼쳐버려 그 뒤엔 aria-expanded="false"인 행이 하나도 안 남는다(닫힌 색을 못 구함).
+  const closedNameColor = await pageA.evaluate(() => {
+    const el = document.querySelector(
+      '[data-id="org-node-toggle"][aria-expanded="false"] [data-id="org-node-name"]',
+    );
+    return el ? getComputedStyle(el).color : null;
+  });
+
   // ── 2) 카드 폭 — depth 무관 동일 ──────────────────────────────────────────
   await expandAll(pageA);
   const widths = await pageA
@@ -100,6 +109,16 @@ try {
     `cards=${widths.length} widths=${uniq.join(",")}`,
   );
 
+  // 내 부서 섹션도 같은 박스라 카드 폭이 조직도와 같아야 한다 — 한쪽만 박스를 빼면 여기서 갈린다
+  const myDeptWidths = await pageA
+    .locator('[data-id="home-my-dept"] [data-id="map-card"]')
+    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().width)));
+  check(
+    "my-dept cards match accordion card width",
+    myDeptWidths.length > 0 && uniq.length === 1 && myDeptWidths.every((w) => w === uniq[0]),
+    `myDept=${[...new Set(myDeptWidths)].join(",")} accordion=${uniq.join(",")}`,
+  );
+
   // 펼친 깊이가 실제로 2단계 이상이어야 위 단언이 의미 있다
   const depths = await pageA
     .locator('[data-id="org-node-toggle"][aria-expanded="true"]')
@@ -107,22 +126,63 @@ try {
   check("expanded tree spans multiple depths", new Set(depths).size >= 2, `depths=${[...new Set(depths)].join(",")}`);
   await pageA.screenshot({ path: `${SHOT_DIR}/home-dept-2-expanded.png`, fullPage: false });
 
-  // ── 3) sticky 경로 헤더 — 스크롤해도 컨테이너 상단에 붙는다 ──────────────────
-  const stickyCount = await pageA.locator('[data-id="org-node-toggle"][data-sticky="true"]').count();
-  check("map-owning rows are sticky", stickyCount >= 1, `sticky=${stickyCount}`);
+  // ── 3) 그룹 박스 · 카운트 태그 · 펼침 톤다운 ────────────────────────────────
+  const boxCount = await pageA.locator('[data-id="org-group-box"]').count();
+  check("map-owning depts render a group box", boxCount >= 1, `boxes=${boxCount}`);
 
-  const stuck = await pageA.evaluate(() => {
-    const scroller = document.querySelector('[data-id="home-org-accordion"]')?.parentElement;
-    if (!scroller) return { ok: false, reason: "scroller not found" };
-    scroller.scrollTop = scroller.scrollHeight; // 끝까지 내린다
-    const headers = [...document.querySelectorAll('[data-id="org-node-toggle"][data-sticky="true"]')];
-    const top = scroller.getBoundingClientRect().top;
-    // 화면에 걸린 sticky 헤더 중 하나는 컨테이너 상단(±2px)에 붙어 있어야 한다
-    const pinned = headers.filter((h) => Math.abs(h.getBoundingClientRect().top - top) <= 2);
-    return { ok: pinned.length >= 1, reason: `pinned=${pinned.length} headers=${headers.length}` };
+  // 박스는 그 부서가 "직접" 가진 맵만 감싼다 — 자식 부서 행이 박스 안에 들어가면 박스가 중첩되고
+  // depth마다 카드 폭이 줄어든다(설계 R4의 핵심 불변식).
+  const nested = await pageA.evaluate(() => {
+    const boxes = [...document.querySelectorAll('[data-id="org-group-box"]')];
+    // 박스 안의 토글 행은 그 박스 자신의 헤더 1개뿐이어야 한다
+    const bad = boxes.filter((b) => b.querySelectorAll('[data-id="org-node-toggle"]').length > 1);
+    const nestedBoxes = boxes.filter((b) => b.querySelector('[data-id="org-group-box"]') !== null);
+    return { ok: bad.length === 0 && nestedBoxes.length === 0, reason: `multiToggle=${bad.length} nested=${nestedBoxes.length}` };
   });
-  check("a sticky header pins to the container top", stuck.ok, stuck.reason);
-  await pageA.screenshot({ path: `${SHOT_DIR}/home-dept-3-sticky.png`, fullPage: false });
+  check("child depts render outside their parent's box", nested.ok, nested.reason);
+
+  // 펼친 행은 태그를 숨기고 접힌 행만 단다
+  const tags = await pageA.evaluate(() => {
+    const rows = [...document.querySelectorAll('[data-id="org-node-toggle"]')];
+    const openWithTag = rows.filter(
+      (r) => r.getAttribute("aria-expanded") === "true" && r.querySelector('[data-id="org-node-count"]') !== null,
+    );
+    const closedWithoutTag = rows.filter(
+      (r) => r.getAttribute("aria-expanded") === "false" && r.querySelector('[data-id="org-node-count"]') === null,
+    );
+    return {
+      ok: rows.length > 0 && openWithTag.length === 0 && closedWithoutTag.length === 0,
+      reason: `rows=${rows.length} openWithTag=${openWithTag.length} closedWithoutTag=${closedWithoutTag.length}`,
+    };
+  });
+  check("expanded rows hide the count tag, collapsed rows show it", tags.ok, tags.reason);
+
+  // 펼친 행 이름은 톤다운 — 위에서 미리 캡처해둔 닫힌 색과 computed color가 달라야 한다
+  const openNameColor = await pageA.evaluate(() => {
+    const row = document.querySelector('[data-id="org-node-toggle"][aria-expanded="true"]');
+    const el = row?.querySelector('[data-id="org-node-name"]');
+    return el ? getComputedStyle(el).color : null;
+  });
+  const tone = {
+    ok: openNameColor !== null && closedNameColor !== null && openNameColor !== closedNameColor,
+    reason: `open=${openNameColor} closed=${closedNameColor}`,
+  };
+  check("expanded row name is toned down", tone.ok, tone.reason);
+  await pageA.screenshot({ path: `${SHOT_DIR}/home-dept-3-boxes.png`, fullPage: false });
+
+  // ── 3b) 좁은 폭에서 행이 무음으로 잘리지 않는다 ─────────────────────────────
+  // 스크롤 컨테이너가 overflow-x-hidden이라 넘치면 스크롤바 없이 잘린다. 980~1280px는
+  // 우측 상세 패널이 아직 보여 컬럼이 1/3로 좁아지는 실사용 구간이다(직전 브랜치 회귀 전례).
+  for (const width of [1000, 1280]) {
+    await pageA.setViewportSize({ width, height: 900 });
+    await pageA.waitForTimeout(150);
+    const clipped = await pageA.evaluate(() =>
+      [...document.querySelectorAll('[data-id="org-node-toggle"]')].filter((r) => r.scrollWidth > r.clientWidth + 1).length,
+    );
+    check(`no dept row clipping at ${width}px`, clipped === 0, `clipped=${clipped}`);
+  }
+  await pageA.setViewportSize({ width: 1440, height: 900 });
+  await pageA.waitForTimeout(150);
 
   // ── 4) 접힘 상태가 새로고침에도 유지 ────────────────────────────────────────
   const firstPath = await pageA
