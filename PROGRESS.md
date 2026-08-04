@@ -12,6 +12,7 @@
 - 구현: 첫 진입 포커스 — 내 부서 맵이 있으면 조직도 시드 생략(me·maps 도착 후 1회 판단으로 경합 차단), 접힘 상태는 `bpm.home.tree`(localStorage)로 분리해 새로고침에도 유지(저장은 StrictMode 사고 회피 위해 토글 핸들러에서).
 - 검증: 브라우저 스모크 `pw-smoke-home-dept.mjs` 15/15 통과(진입 접힘·카드 폭 통일·sticky 고정·새로고침 유지·호버 반전) + 전체 게이트(lint·tsc·vitest 596·build·pytest 884).
 - 최종 리뷰 픽스 3건: sticky 행 breadcrumb을 바로 위 부모 1개(+"…" 압축)로 줄이고 그 폭을 터미널 필에 양보(형제 부서 식별 가능, `DeptPill` `grow` prop) · My부서 카드 리스트 `pl-1` 제거(아코디언과 동일 417px) · 트리 시드 래치를 `touched` 필드로 분리(조직도 자체 조작만 래치, My부서/Word/미지정 토글은 이어받기만 해 내 부서 맵 없는 유저의 시드가 계속 재계산되게).
+- 회귀 픽스: 980-1280px 구간에서 breadcrumb 없는 체인 필(2-3개) 행이 `(N)` 카운트를 클리핑(overflow-x-hidden이 무음 절단, 1000px에서 71px 잘림 실측) — `DeptPill` `shrink-0`→`min-w-0`(w-24는 floor 아닌 basis) + 체인 필 wrapper span도 `min-w-0 shrink`로 전환해 필이 줄어들며 truncate, 카운트는 고정 유지. 1000/1100/1280/1440px 재측정 결과 0 clipped, 1440px 96px 정렬 유지 확인.
 
 ## 2026-08-04 — AI 프롬프트 관리(sysadmin) 설계 (feat/ai-prompts-admin)
 - 프롬프트 7종(AI 챗 지침·인터뷰어/드래프터 계약·Word 애드덤 2종·추출 계약·반복 넛지)을 sysadmin이 설정 탭에서 열람·수정·기본값 복원하는 기능 설계 확정 — `docs/design/2026-08-04-ai-prompts-admin-design.md`. 신규 `ai_prompts` 테이블(오버라이드만 행 저장, 없으면 코드 기본값), 매뉴얼 관리 패널 편집 패턴 재사용.

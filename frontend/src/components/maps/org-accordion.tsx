@@ -35,14 +35,16 @@ interface DeptPillProps {
   grow?: boolean;
 }
 
-// 부서명 필 — 기본 폭 고정(96px)이라 같은 depth의 필이 세로로 정렬되어, 카드를 들여쓰지 않고도 계층이 읽힌다.
+// 부서명 필 — 기본 폭은 96px "기준값"(basis)이라 넉넉한 폭에선 같은 depth의 필이 세로로 정렬되어
+// 카드를 들여쓰지 않고도 계층이 읽히지만, min-w-0이라 폭이 모자란 좁은 화면(체인 필 여러 개+카운트)에선
+// 줄어들며 truncate로 말줄임된다 — 그래야 뒤쪽 카운트가 박스 밖으로 밀려나지 않는다.
 // grow=true(sticky 행 터미널)는 폭을 콘텐츠에 맞추되 13rem에서 truncate — 유일한 예외.
 // truncate가 긴 부서명을 자르므로 title은 필수.
 function DeptPill({ name, active, grow = false }: DeptPillProps) {
   return (
     <span
       title={name}
-      className={`shrink-0 truncate rounded-full border px-2 py-0.5 text-center text-fine ${
+      className={`min-w-0 truncate rounded-full border px-2 py-0.5 text-center text-fine ${
         grow ? "max-w-[13rem]" : "w-24"
       } ${
         active
@@ -118,7 +120,9 @@ export function OrgAccordion(props: OrgAccordionProps) {
             </span>
           )}
           {chain.map((n, i) => (
-            <span key={n.path} className="flex shrink-0 items-center gap-1">
+            // min-w-0 + shrink — 이 래퍼가 shrink-0이면 안의 DeptPill이 줄어들어도 래퍼 폭이 고정돼
+            // 카운트가 밀려난다. 화살표 아이콘만 shrink-0 유지.
+            <span key={n.path} className="flex min-w-0 shrink items-center gap-1">
               {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
               <DeptPill name={n.name} active={open} grow={sticky && i === chain.length - 1} />
             </span>
