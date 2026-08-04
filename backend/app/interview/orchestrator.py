@@ -6,6 +6,7 @@
 import asyncio
 import difflib
 import logging
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TypeVar
@@ -29,6 +30,7 @@ from app.models import (
     InterviewMessage,
     InterviewSession,
 )
+from app.prompt_registry import get_prompt_overrides
 from app.schemas import AiGroup, AiNode, AiProposal, InterviewTurnIn
 from app.settings import settings
 
@@ -444,6 +446,7 @@ def _recent_choice_stage(interview: InterviewSession) -> str:
 async def generate_proposals(
     interview: InterviewSession, context_text: str, model: str | None = None,
     doc_sections: list[dict] | None = None, variants: str = "single",
+    overrides: Mapping[str, str] | None = None,
 ) -> tuple[dict | None, int]:
     """draw 이벤트용 제안 생성 — multi=변형 힌트 병렬, single=표준 1안 (speed redesign §4).
 
@@ -465,7 +468,7 @@ async def generate_proposals(
                 interview.current_stage, interview.lang, interview.facts,
                 interview.working_graph, context_text, hints[i % len(hints)],
                 mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
-                history=history,
+                history=history, overrides=overrides,
             ),
             model, AiProposal,
         )
@@ -578,11 +581,12 @@ async def extract_attachment_facts(interview_id: int, attachment_id: int) -> Non
                 return
             parsed_text = (row.parsed_text or "")[:8000]
             filename = row.filename
+            overrides = await get_prompt_overrides(session)
         usage: list[tuple[int | None, int | None]] = []
         usage_token = usage_log.set(usage)
         try:
             out = await _ask_json(
-                [{"role": "system", "content": _EXTRACT_CONTRACT},
+                [{"role": "system", "content": overrides.get("extract_contract") or _EXTRACT_CONTRACT},
                  {"role": "user", "content": parsed_text}],
                 None, AttachmentFactsOut,
             )
@@ -645,6 +649,7 @@ _UNKNOWN_VALUE = {"ko": "미정", "en": "TBD"}
 async def _run_skip_turn(
     db, interview: InterviewSession, graph_summary: str, context_text: str, model: str | None,
     doc_sections: list[dict] | None = None, dept_catalog: str = "",
+    overrides: Mapping[str, str] | None = None,
 ) -> TurnResult:
     """결정적 스테이지 전진 — 미확정 필수 facts를 '미정'으로 채우고 체크포인트 후 다음 단계 개시.
 
@@ -681,7 +686,7 @@ async def _run_skip_turn(
             graph_summary, context_text, _history_tail(interview)[:-1],
             "[사용자가 다음 단계로 넘어가기를 선택했습니다. 새 단계의 첫 제안이나 질문을 하세요.]",
             mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
-            dept_catalog=dept_catalog,
+            dept_catalog=dept_catalog, overrides=overrides,
         ),
         model, InterviewerOut,
     )
@@ -701,11 +706,13 @@ async def run_turn(
     model: str | None = None,
     doc_sections: list[dict] | None = None,
     dept_catalog: str = "",
+    overrides: Mapping[str, str] | None = None,
 ) -> TurnResult:
     """일반 턴 = 인터뷰어 1콜 — 그리기·선택지·톤 검수는 draw 이벤트로 분리 (speed redesign §3)."""
     if turn.type == "skip":
         return await _run_skip_turn(
-            db, interview, graph_summary, context_text, model, doc_sections, dept_catalog
+            db, interview, graph_summary, context_text, model, doc_sections, dept_catalog,
+            overrides=overrides,
         )
 
     pre_stage = interview.current_stage
@@ -758,7 +765,7 @@ async def run_turn(
         interview.current_stage, interview.lang, interview.facts,
         graph_summary, context_text, _history_tail(interview)[:-1], user_input,
         mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
-        dept_catalog=dept_catalog,
+        dept_catalog=dept_catalog, overrides=overrides,
     )
     out = await _ask_json(interviewer_messages, model, InterviewerOut)
     if _is_repeat(out.message, prev_consultant):
@@ -766,7 +773,7 @@ async def run_turn(
             out = await _ask_json(
                 [*interviewer_messages,
                  {"role": "assistant", "content": out.message},
-                 {"role": "user", "content": _ANTI_REPEAT_NUDGE}],
+                 {"role": "user", "content": (overrides or {}).get("anti_repeat_nudge") or _ANTI_REPEAT_NUDGE}],
                 model, InterviewerOut,
             )
         except TurnError:

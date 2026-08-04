@@ -1039,6 +1039,31 @@ export function getAiTips(): Promise<{ tips: string[] }> {
   return request<{ tips: string[] }>("/ai/tips");
 }
 
+// ── AI 프롬프트 관리 (sysadmin) ────────────────────────────────
+export interface AiPromptItem {
+  key: string;
+  content: string; // 유효값 — 오버라이드 있으면 그것, 없으면 코드 기본값
+  is_customized: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export function getAiPrompts(): Promise<AiPromptItem[]> {
+  return request<AiPromptItem[]>("/admin/ai-prompts");
+}
+
+export function putAiPrompt(key: string, content: string): Promise<AiPromptItem> {
+  return request<AiPromptItem>(`/admin/ai-prompts/${key}`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
+// 기본값 복원 — 오버라이드 행 삭제(멱등)
+export function resetAiPrompt(key: string): Promise<AiPromptItem> {
+  return request<AiPromptItem>(`/admin/ai-prompts/${key}`, { method: "DELETE" });
+}
+
 // ── 매뉴얼 다중 문서 (F10) ────────────────────────────────────
 export type ManualLang = "ko" | "en";
 

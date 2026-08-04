@@ -1189,6 +1189,27 @@ class AppSettingsUpdate(BaseModel):
     ai_access_disabled: bool | None = None
 
 
+class AiPromptOut(BaseModel):
+    """AI 프롬프트 항목 — content는 유효값(오버라이드 있으면 그것, 없으면 코드 기본값)."""
+
+    key: str
+    content: str
+    is_customized: bool
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class AiPromptUpdate(BaseModel):
+    content: str = Field(max_length=50_000)  # 프롬프트 상한 — 가장 긴 기본값(~6k)의 여유 배수
+
+    @field_validator("content")
+    @classmethod
+    def check_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("content must not be blank")
+        return value
+
+
 class AiTipsOut(BaseModel):
     tips: list[str]
 

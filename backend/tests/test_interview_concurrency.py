@@ -53,7 +53,7 @@ def test_turn_handler_holds_interview_lock(client: TestClient, monkeypatch) -> N
     seen: dict = {}
 
     async def fake_run_turn(db, interview, turn, graph_summary, context_text,
-                            model=None, doc_sections=None, dept_catalog=""):
+                            model=None, doc_sections=None, dept_catalog="", overrides=None):
         seen["locked"] = interview_lock(interview.id).locked()
         return orchestrator.TurnResult()
 

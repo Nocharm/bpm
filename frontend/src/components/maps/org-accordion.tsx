@@ -1,11 +1,13 @@
-// 홈 좌측 — owning department 조직도 아코디언. 리프/노드에 MapCard, 상위 노드는 롤업 카운트.
+// 홈 좌측 — owning department 조직도 아코디언. 부서명은 고정폭 필, 자기 맵 없이 자식이 1개뿐인
+// 구간은 한 행에 병합하고, 맵 카드는 depth 무관 풀폭으로 그린다.
+// 설계: docs/design/2026-08-04-home-dept-visibility-design.md
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
-import type { OrgNode } from "@/lib/org-tree";
+import { collectPillChain, type OrgNode } from "@/lib/org-tree";
 import { useI18n } from "@/lib/i18n";
 import { MapCard } from "@/components/maps/map-card";
 
@@ -26,41 +28,114 @@ interface OrgAccordionProps {
   renderCard?: (map: MapSummary) => ReactNode;
 }
 
+interface DeptPillProps {
+  name: string;
+  active: boolean;
+  // sticky 행의 터미널(그 행을 실제로 소유한 부서)만 true — 콘텐츠 폭까지 늘어나 형제 부서를 식별 가능하게 한다.
+  grow?: boolean;
+}
+
+// 부서명 필 — 기본 폭은 96px "기준값"(basis)이라 넉넉한 폭에선 같은 depth의 필이 세로로 정렬되어
+// 카드를 들여쓰지 않고도 계층이 읽히지만, min-w-0이라 폭이 모자란 좁은 화면(체인 필 여러 개+카운트)에선
+// 줄어들며 truncate로 말줄임된다 — 그래야 뒤쪽 카운트가 박스 밖으로 밀려나지 않는다.
+// grow=true(sticky 행 터미널)는 폭을 콘텐츠에 맞추되 13rem에서 truncate — 유일한 예외.
+// truncate가 긴 부서명을 자르므로 title은 필수.
+function DeptPill({ name, active, grow = false }: DeptPillProps) {
+  return (
+    <span
+      title={name}
+      className={`min-w-0 truncate rounded-full border px-2 py-0.5 text-center text-fine ${
+        grow ? "max-w-[13rem]" : "w-24"
+      } ${
+        active
+          ? "border-accent-tint-border bg-accent-tint text-accent"
+          : "border-hairline bg-surface text-ink-secondary"
+      }`}
+    >
+      {name}
+    </span>
+  );
+}
+
 export function OrgAccordion(props: OrgAccordionProps) {
   const { t } = useI18n();
-  const { roots, unassigned, openPaths, onToggle, onCollapseAll, selectedId, highlightId, onSelect, unassignedOpen, onToggleUnassigned, renderCard } = props;
+  const {
+    roots, unassigned, openPaths, onToggle, onCollapseAll, selectedId, highlightId,
+    onSelect, unassignedOpen, onToggleUnassigned, renderCard,
+  } = props;
+
+  // 맵 목록 — 들여쓰기 없음(전 depth 동일 폭). 부서 노드와 미지정 섹션이 공유.
+  const renderMapList = (maps: MapSummary[]) => (
+    <ul className="flex flex-col gap-2 pt-2">
+      {maps.map((m) => (
+        <li key={m.id}>
+          {renderCard
+            ? renderCard(m)
+            : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
+        </li>
+      ))}
+    </ul>
+  );
 
   const renderNode = (node: OrgNode, depth: number) => {
+    // 열림 판정·토글은 체인의 첫 노드 path — 터미널 path로 판정하면 접기(page.tsx가 첫 path만 삭제)가
+    // 먹지 않는 죽은 행이 된다.
     const open = openPaths.has(node.path);
+    const chain = collectPillChain(node);
+    const terminal = chain[chain.length - 1];
+    // 자기 맵을 가진 행만 sticky — 순수 네비 행까지 sticky면 4단계가 계단식으로 쌓여 높이를 잠식한다.
+    // 전부 같은 top-0이라 나중 헤더가 앞 헤더를 덮어 화면에 보이는 sticky는 항상 1개.
+    const sticky = open && terminal.maps.length > 0;
+    // sticky 행은 조상이 스크롤 밖으로 나가므로 경로를 breadcrumb으로 동반하되, 바로 위 부모 1개만 보여준다 —
+    // 조상 전부를 나열하면 세그먼트마다 잘려서 정작 행을 식별하는 터미널 필의 폭을 굶긴다.
+    // 더 위 조상은 "…"로 압축하고, 전체 경로는 버튼 title로 복구 가능하게 남긴다.
+    const ancestors = sticky ? node.path.split("/").slice(0, -1) : [];
+    const immediateParent = ancestors.length > 0 ? ancestors[ancestors.length - 1] : null;
+    const hasDroppedAncestors = ancestors.length > 1;
     return (
       <li key={node.path} className="flex flex-col">
         <button
           type="button"
           data-id="org-node-toggle"
           data-path={node.path}
+          data-sticky={sticky ? "true" : undefined}
+          aria-expanded={open}
+          title={sticky ? terminal.path : undefined}
           onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
-          style={{ paddingLeft: `${depth * 12 + 4}px` }}
-          className="group flex items-center gap-1.5 rounded-sm py-1 text-left hover:bg-surface-alt"
+          // sticky 행은 들여쓰지 않는다 — breadcrumb이 경로를 담아 중복이고, 가장 넓은 행이라 폭이 아쉽다.
+          style={sticky ? undefined : { paddingLeft: `${depth * 12 + 4}px` }}
+          className={`group flex items-center gap-1 rounded-sm py-1 text-left hover:bg-surface-alt ${
+            sticky ? "sticky top-0 z-10 border-b border-hairline bg-surface px-1" : ""
+          }`}
         >
-          {open ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
-          <span className="truncate text-fine text-ink-secondary group-hover:text-ink">{node.name}</span>
-          <span className="ml-auto shrink-0 text-fine text-ink-tertiary">({node.mapCount})</span>
+          {open
+            ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+            : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
+          {immediateParent && (
+            // min-w-0 + shrink — 폭이 모자라면 필이 아니라 breadcrumb이 먼저 줄어든다.
+            <span className="flex min-w-0 shrink items-center gap-1 text-fine text-ink-tertiary">
+              {hasDroppedAncestors && <span aria-hidden>…</span>}
+              <span className="max-w-[7rem] truncate" title={immediateParent}>{immediateParent}</span>
+              <span aria-hidden>/</span>
+            </span>
+          )}
+          {chain.map((n, i) => (
+            // min-w-0 + shrink — 이 래퍼가 shrink-0이면 안의 DeptPill이 줄어들어도 래퍼 폭이 고정돼
+            // 카운트가 밀려난다. 화살표 아이콘만 shrink-0 유지.
+            <span key={n.path} className="flex min-w-0 shrink items-center gap-1">
+              {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
+              <DeptPill name={n.name} active={open} grow={sticky && i === chain.length - 1} />
+            </span>
+          ))}
+          <span className="ml-auto shrink-0 pl-1 text-fine text-ink-tertiary">({terminal.mapCount})</span>
         </button>
         {open && (
           <div className="flex flex-col gap-2">
-            {node.children.length > 0 && (
-              <ul className="flex flex-col">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
-            )}
-            {node.maps.length > 0 && (
-              <ul className="flex flex-col gap-2" style={{ paddingLeft: `${depth * 12 + 16}px` }}>
-                {node.maps.map((m) => (
-                  <li key={m.id}>
-                    {renderCard
-                      ? renderCard(m)
-                      : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
-                  </li>
-                ))}
-              </ul>
+            {/* 자기 맵을 자식보다 먼저 — 반대면 손자 카드가 헤더와 자기 맵 사이에 통째로 끼어들어
+                sticky 헤더가 자기 것 아닌 카드를 덮는다. */}
+            {terminal.maps.length > 0 && renderMapList(terminal.maps)}
+            {terminal.children.length > 0 && (
+              <ul className="flex flex-col">{terminal.children.map((c) => renderNode(c, depth + 1))}</ul>
             )}
           </div>
         )}
@@ -87,24 +162,20 @@ export function OrgAccordion(props: OrgAccordionProps) {
           <button
             type="button"
             data-id="org-unassigned-toggle"
+            data-sticky={unassignedOpen ? "true" : undefined}
+            aria-expanded={unassignedOpen}
             onClick={(e) => { e.stopPropagation(); onToggleUnassigned(); }}
-            className="group flex items-center gap-1.5 rounded-sm py-1 pl-1 text-left hover:bg-surface-alt"
+            className={`group flex items-center gap-1 rounded-sm px-1 py-1 text-left hover:bg-surface-alt ${
+              unassignedOpen ? "sticky top-0 z-10 border-b border-hairline bg-surface" : ""
+            }`}
           >
-            {unassignedOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
-            <span className="truncate text-fine text-ink-tertiary group-hover:text-ink">{t("home.unassignedDept")}</span>
-            <span className="ml-auto shrink-0 text-fine text-ink-tertiary">({unassigned.length})</span>
+            {unassignedOpen
+              ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+              : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
+            <DeptPill name={t("home.unassignedDept")} active={unassignedOpen} />
+            <span className="ml-auto shrink-0 pl-1 text-fine text-ink-tertiary">({unassigned.length})</span>
           </button>
-          {unassignedOpen && (
-            <ul className="flex flex-col gap-2 pl-1">
-              {unassigned.map((m) => (
-                <li key={m.id}>
-                  {renderCard
-                    ? renderCard(m)
-                    : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
-                </li>
-              ))}
-            </ul>
-          )}
+          {unassignedOpen && renderMapList(unassigned)}
         </div>
       )}
     </section>

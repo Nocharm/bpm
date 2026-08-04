@@ -3,6 +3,33 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-04 — 홈 부서 가시성·시인성 개선 설계
+- 좌측 조직도 문제 2건 실측 확정: ①`depth*12+16` 들여쓰기로 맵 카드 폭이 depth별 401~365px로 제각각(콘텐츠 333px에서 제목 말줄임) ②My dept 섹션과 조직도가 첫 진입 시 동시 펼침 상태로 **동일 카드를 중복 렌더**(시선 분산의 진짜 원인).
+- 설계 확정 — `docs/design/2026-08-04-home-dept-visibility-design.md`. 부서명 고정폭 필(단일자식 구간 한 행 병합)·카드 풀폭 417px 통일·맵 보유 부서만 sticky 경로 헤더·최근접속 표시 호버 반전(기본은 accent 시계 칩)·내 부서 맵 있으면 조직도 접힘 시작 + 접힘 상태 localStorage 영속.
+- 구현: `collectPillChain` 순수 함수(통과 노드 병합·맵 보유 시 중단) + 단위 테스트 3종.
+- 구현: 조직도 아코디언 재구성 — 부서명 고정폭 필 체인(단일자식 병합)·맵 카드 들여쓰기 제거(전 depth 동일 폭)·맵 보유 행만 sticky 경로 헤더(조상 breadcrumb 동반)·자기 맵을 자식보다 먼저 렌더.
+- 구현: 맵 카드 최근접속 표시 반전 — 기본은 오너/수정시각(시계 칩 accent+tint)·호버 시 `Recent · N ago` 필로 교체(겹침 그리드 유지로 폭 점프 없음).
+- 구현: 첫 진입 포커스 — 내 부서 맵이 있으면 조직도 시드 생략(me·maps 도착 후 1회 판단으로 경합 차단), 접힘 상태는 `bpm.home.tree`(localStorage)로 분리해 새로고침에도 유지(저장은 StrictMode 사고 회피 위해 토글 핸들러에서).
+- 검증: 브라우저 스모크 `pw-smoke-home-dept.mjs` 15/15 통과(진입 접힘·카드 폭 통일·sticky 고정·새로고침 유지·호버 반전) + 전체 게이트(lint·tsc·vitest 596·build·pytest 884).
+- 최종 리뷰 픽스 3건: sticky 행 breadcrumb을 바로 위 부모 1개(+"…" 압축)로 줄이고 그 폭을 터미널 필에 양보(형제 부서 식별 가능, `DeptPill` `grow` prop) · My부서 카드 리스트 `pl-1` 제거(아코디언과 동일 417px) · 트리 시드 래치를 `touched` 필드로 분리(조직도 자체 조작만 래치, My부서/Word/미지정 토글은 이어받기만 해 내 부서 맵 없는 유저의 시드가 계속 재계산되게).
+- 회귀 픽스: 980-1280px 구간에서 breadcrumb 없는 체인 필(2-3개) 행이 `(N)` 카운트를 클리핑(overflow-x-hidden이 무음 절단, 1000px에서 71px 잘림 실측) — `DeptPill` `shrink-0`→`min-w-0`(w-24는 floor 아닌 basis) + 체인 필 wrapper span도 `min-w-0 shrink`로 전환해 필이 줄어들며 truncate, 카운트는 고정 유지. 1000/1100/1280/1440px 재측정 결과 0 clipped, 1440px 96px 정렬 유지 확인.
+
+## 2026-08-04 — AI 프롬프트 관리(sysadmin) 설계 (feat/ai-prompts-admin)
+- 프롬프트 7종(AI 챗 지침·인터뷰어/드래프터 계약·Word 애드덤 2종·추출 계약·반복 넛지)을 sysadmin이 설정 탭에서 열람·수정·기본값 복원하는 기능 설계 확정 — `docs/design/2026-08-04-ai-prompts-admin-design.md`. 신규 `ai_prompts` 테이블(오버라이드만 행 저장, 없으면 코드 기본값), 매뉴얼 관리 패널 편집 패턴 재사용.
+- 구현 플랜 작성 — `docs/superpowers/plans/2026-08-04-ai-prompts-admin.md` (태스크 5개: 모델+레지스트리 → API → 빌더 스레딩 → 설정 탭 → 브라우저 스모크).
+- 구현: AiPrompt 오버라이드 모델 + prompt_registry(기본값 매핑·오버라이드 조회).
+- 구현: /api/admin/ai-prompts GET/PUT/DELETE(sysadmin 전용, 404/422/멱등 복원).
+- 구현: 프롬프트 빌더 7표면에 overrides 스레딩(None=기존 상수 폴백, 기존 테스트 무변경 그린).
+- 구현: 설정 Content > AI prompts 탭(7종 목록·편집/프리뷰·기본값 복원, MarkdownView 재사용).
+- 픽스: 저장/복원 비행 중 프롬프트 전환 경합 차단(리뷰 지적).
+- 검증: pw 스모크 10체크 그린(편집·저장·프리뷰·지속성·복원) + 전체 게이트(pytest·ruff·lint·vitest·build).
+- 픽스: 스모크 스크립트 실패경로(중간 throw)에서도 finally에서 오버라이드 DELETE 클린업 항상 시도(리뷰 지적 — 이전엔 try/finally라 throw 시 dev.db에 오버라이드 잔존 가능).
+- 최종 리뷰 반영: 저장 비행 중 textarea 잠금·스모크 reset 단언 강화.
+
+## 2026-08-03 — 컨테이너 메모리 예약 최적화 (docker-compose)
+- 공용 서버(71번) 과예약 방지 — 4개 서비스에 `deploy.resources` 메모리 reservations/limits 명시(예약 합계 ~800M, 상한 합계 ~2.9G: proxy 32M/128M · frontend 256M/768M · backend 256M/1G · db 256M/1G).
+- backend에 `MALLOC_ARENA_MAX=2`(glibc arena 증식으로 인한 RSS 팽창 방지), frontend(Next.js standalone)에 `NODE_OPTIONS=--max-old-space-size=512`(V8 힙 상한) 추가. `docker compose config`로 해석 결과 검증.
+
 ## 2026-07-30 — 브랜치 최종 리뷰 픽스 배치 (worktree-ai-consultant)
 3방향 병렬 리뷰(백엔드 코어·프론트 표면·최근 픽스 회귀) 적발분 중 확정 항목 일괄 수정:
 - **[블로커] `InterviewMessage.kind` VARCHAR(12)→(20)**: `sp_suggestion`(13자)이 운영 Postgres에서 extras 커밋을 터뜨려 SP 제안이 무음 유실(sqlite는 길이 미강제라 로컬 그린). `db.py` 부트스트랩에 postgres 전용 ALTER 스텝 추가(배포 시 자동), 선언 폭 회귀 테스트 동반.
