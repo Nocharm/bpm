@@ -96,17 +96,3 @@ export function collectSingleChildChain(roots: OrgNode[], path: string): string[
   }
   return chain;
 }
-
-// 렌더용 필 체인 — "통과만 하는" 노드(자기 맵 없이 자식 1개)를 이어붙여 한 행에 그릴 부서 목록을 만든다.
-// 마지막 원소가 터미널로, 그 행의 카운트·맵·자식을 소유한다. 자기 맵을 가진 노드에서 멈추는 이유는
-// 병합하면 그 맵이 뒤쪽 필에 속한 것처럼 보이기 때문. 자동펼침용 collectSingleChildChain과는
-// 규칙이 의도적으로 다르다(그쪽은 맵 보유와 무관하게 계속 내려간다).
-export function collectPillChain(node: OrgNode): OrgNode[] {
-  const chain = [node];
-  let cur = node;
-  while (cur.maps.length === 0 && cur.children.length === 1) {
-    cur = cur.children[0];
-    chain.push(cur);
-  }
-  return chain;
-}
