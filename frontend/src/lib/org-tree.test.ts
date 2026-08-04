@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildOrgTree, collectPillChain, collectSingleChildChain, filterMyDeptMaps, type OrgNode } from "@/lib/org-tree";
+import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps, type OrgNode } from "@/lib/org-tree";
 import type { DirectoryDept, MapSummary } from "@/lib/api";
 
 function makeMap(id: number, dept: string | null): MapSummary {
@@ -89,34 +89,5 @@ describe("collectSingleChildChain", () => {
     expect(collectSingleChildChain(roots, "Div")).toEqual([]); // 하위 2개 — 분기
     expect(collectSingleChildChain(roots, "Div/OfficeA")).toEqual([]); // 말단
     expect(collectSingleChildChain(roots, "Nope")).toEqual([]); // 미존재 경로
-  });
-});
-
-describe("collectPillChain", () => {
-  it("merges pass-through nodes into one row", () => {
-    // Div → Sub(유일 자식·맵 없음) → Team(유일 자식·맵 없음) → {A, B} 분기에서 멈춤
-    const maps = [makeMap(1, "Div/Sub/Team/A"), makeMap(2, "Div/Sub/Team/B")];
-    const { roots } = buildOrgTree(maps, []);
-    expect(collectPillChain(roots[0]).map((n) => n.path)).toEqual([
-      "Div",
-      "Div/Sub",
-      "Div/Sub/Team",
-    ]);
-  });
-
-  it("stops at a node that holds its own maps", () => {
-    // Sub가 직속 맵을 가지면 병합 중단 — 병합하면 그 맵이 뒤쪽 필 소속으로 보인다.
-    // 같은 트리에서 collectSingleChildChain은 계속 내려간다(규칙이 의도적으로 다름).
-    const maps = [makeMap(1, "Div/Sub"), makeMap(2, "Div/Sub/Team/Leaf")];
-    const { roots } = buildOrgTree(maps, []);
-    expect(collectPillChain(roots[0]).map((n) => n.path)).toEqual(["Div", "Div/Sub"]);
-  });
-
-  it("returns the node alone when it branches or is a leaf", () => {
-    const maps = [makeMap(1, "Div/OfficeA"), makeMap(2, "Div/OfficeB")];
-    const { roots } = buildOrgTree(maps, []);
-    expect(collectPillChain(roots[0]).map((n) => n.path)).toEqual(["Div"]); // 하위 2개 — 분기
-    const leaf = roots[0].children[0];
-    expect(collectPillChain(leaf).map((n) => n.path)).toEqual([leaf.path]); // 말단
   });
 });
