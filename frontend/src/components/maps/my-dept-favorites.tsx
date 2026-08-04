@@ -31,8 +31,10 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
   const header = (
     <button
       type="button"
+      data-id="my-dept-toggle"
+      aria-expanded={open}
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
-      className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-surface-alt"
+      className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-divider"
     >
       {open
         ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
@@ -53,7 +55,8 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
       {open ? (
         <DeptGroupBox>
           {header}
-          <ul className="flex flex-col gap-2">
+          {/* 인셋은 pl-5 pr-2 고정값(depth 파생 아님) — 조직도 카드 리스트와 동일 상수라야 폭이 일치한다 */}
+          <ul className="flex flex-col gap-2 pl-5 pr-2">
             {maps.map((m) => (
               <li key={m.id}>
                 {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}

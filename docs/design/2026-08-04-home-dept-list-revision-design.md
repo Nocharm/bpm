@@ -64,13 +64,13 @@ Departments                              Collapse all
 
 ### R4. 맵 보유 부서 + 그 카드를 박스로 묶음
 
-자기 맵을 가진 부서를 펼치면 **그 부서의 헤더 행과 자기 카드만** 테두리 박스로 감싼다.
+자기 맵을 가진 부서를 펼치면 **그 부서의 헤더 행과 자기 카드만** 틴트 박스로 감싼다(테두리 없음, 아래 참고).
 
 - **박스 헤더가 곧 트리 행이다.** 부서명을 트리 행과 박스 제목에 따로 쓰면 같은 이름이 두 줄 연속으로 나온다 — 하나로 합친다. 헤더는 여전히 토글 버튼이고 chevron·회색·태그 숨김 규칙을 그대로 따른다.
-- **박스는 컬럼 풀폭**(들여쓰기 0에서 시작). 계층은 박스 **안쪽** 헤더의 `paddingLeft`로 표현한다. 그래서 **카드 폭이 depth와 무관하게 399px로 고정**된다 — §2가 해결했던 폭 문제를 되돌리지 않기 위한 선택이다.
+- **박스는 컬럼 풀폭**(들여쓰기 0에서 시작). 계층은 박스 **안쪽** 헤더의 `paddingLeft`로 표현한다. 그래서 **카드 폭이 depth와 무관하게 고정**된다(≈389px, 인셋 출처는 아래 박스 스타일 항목) — §2가 해결했던 폭 문제를 되돌리지 않기 위한 선택이다.
 - **자식 부서는 박스 밖.** 박스가 닫힌 뒤 트리가 이어진다. 박스의 뜻은 "이 부서가 **직접** 가진 맵"으로 고정되고, 박스가 중첩되지 않아 depth마다 카드가 좁아지는 일이 없다.
 - **접힌 부서는 박스가 없다** — 감쌀 카드가 없으므로 일반 행 + 태그.
-- 박스: `rounded-sm border border-hairline bg-surface-alt p-2`, `data-id="org-group-box"`.
+- 박스: `rounded-sm bg-surface-alt py-2`, `data-id="org-group-box"` — **테두리 없음**(개정). 박스가 감싸는 카드는 이미 자체 테두리를 갖고 있어, 박스에도 `border-hairline`을 두면 9px 간격을 두고 거의 동심인 둥근 테두리 두 겹이 겹쳐 보였다(사용자 육안 지적으로 확정) — 틴트 배경만으로 그룹을 표시한다. 좌우 패딩도 없애고, 카드 리스트 쪽에 `pl-5 pr-2`(20px/8px) **고정 인셋**을 준다 — depth가 아니라 상수로 고정해야 카드 폭이 모든 depth에서 동일(≈389px, 컬럼 가용폭 ≈417px 기준)하게 유지된다.
 
 ### R5. 자기 맵을 자식보다 먼저
 
@@ -87,7 +87,7 @@ main은 `children → maps` 순이라 박스 헤더와 자기 카드 사이에 �
 - **들여쓰기는 박스 안쪽에.** 박스 자체를 들여쓰면 카드 폭이 다시 depth에 묶인다.
 - **R2·R3은 `open` 하나로 갈린다** — 태그 유무와 색이 같은 조건을 보므로 조건을 두 벌로 쓰지 말 것.
 - **`collectPillChain` 제거 시 테스트도 함께.** `collectSingleChildChain`과 그 테스트(`org-tree.test.ts`의 unconditional chaining)는 자동펼침에 계속 쓰이므로 **건드리지 않는다**.
-- **DOM 계약** — 브라우저 스모크가 의존한다. 토글 행은 `data-id="org-node-toggle"` · `data-path` · `aria-expanded`를 **그대로 유지**하고, `data-sticky`는 제거한다. 신설은 `data-id="org-group-box"`(R4 박스)와 `data-id="org-node-count"`(R1 태그) 둘뿐이다.
+- **DOM 계약** — 브라우저 스모크가 의존한다. 토글 행은 `data-id="org-node-toggle"` · `data-path` · `aria-expanded`를 **그대로 유지**하고, `data-sticky`는 제거한다. 신설은 `data-id="org-group-box"`(R4 박스) · `data-id="org-node-count"`(R1 태그) · `data-id="org-node-name"`(톤다운 검사가 읽는 부서명 span) · `data-id="my-dept-toggle"`(내 부서 헤더 — 트리 토글과 다른 id를 쓴다. 트리는 첫 진입에 접혀 있고 내 부서는 기본 펼침이라, 같은 id를 재사용하면 "조직도 접힘" 검사의 0건 기대가 깨진다) 네 개다.
 - **접힌 행은 카운트가 0이어도 태그를 단다** — `keepEmptyPaths`로 살아남은 빈 부서(내 org_path 앵커)가 `⟨ 0 ⟩`을 보여주는 것은 의도된 결과다. "비어 있음"이 정보다.
 - **스모크의 sticky 검사 2건은 폐기 대상이다.** `data-sticky` 기반 검사(“map-owning rows are sticky”, “a sticky header pins to the container top”)는 장치가 사라지므로 그룹 박스 검사로 교체한다. 카드 폭 검사는 `[data-id="home-org-accordion"]` 스코프라 그대로 유효하다.
 

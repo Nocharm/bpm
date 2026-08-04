@@ -37,9 +37,10 @@ export function OrgAccordion(props: OrgAccordionProps) {
     onSelect, unassignedOpen, onToggleUnassigned, renderCard,
   } = props;
 
-  // 맵 목록 — 들여쓰기 없음. 감싸는 DeptGroupBox의 p-2가 안쪽 여백을 담당한다.
+  // 맵 목록 — 인셋은 pl-5 pr-2 고정값(depth에서 파생하지 않는 상수). 박스가 테두리를 잃은 뒤
+  // 카드가 헤더 아래 소속임을 보여주는 유일한 단서라, 상수로 고정해야 모든 depth에서 카드 폭이 동일하다.
   const renderMapList = (maps: MapSummary[]) => (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-2 pl-5 pr-2">
       {maps.map((m) => (
         <li key={m.id}>
           {renderCard
@@ -65,7 +66,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
         aria-expanded={open}
         onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-surface-alt"
+        className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider"
       >
         {open
           ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
@@ -82,10 +83,10 @@ export function OrgAccordion(props: OrgAccordionProps) {
     );
 
     return (
-      <li key={node.path} className="flex flex-col gap-1">
+      <li key={node.path} className="flex flex-col gap-2">
         {boxed ? <DeptGroupBox>{header}{renderMapList(node.maps)}</DeptGroupBox> : header}
         {open && node.children.length > 0 && (
-          <ul className="flex flex-col gap-1">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
+          <ul className="flex flex-col gap-2">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
         )}
       </li>
     );
@@ -98,7 +99,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
       data-id="org-unassigned-toggle"
       aria-expanded={unassignedOpen}
       onClick={(e) => { e.stopPropagation(); onToggleUnassigned(); }}
-      className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-surface-alt"
+      className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-divider"
     >
       {unassignedOpen
         ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
@@ -126,7 +127,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
           {t("home.collapseAll")}
         </button>
       </div>
-      <ul className="flex flex-col gap-1">{roots.map((r) => renderNode(r, 0))}</ul>
+      <ul className="flex flex-col gap-2">{roots.map((r) => renderNode(r, 0))}</ul>
       {unassigned.length > 0 && (
         <div className="pt-2">
           {unassignedOpen

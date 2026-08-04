@@ -88,14 +88,28 @@ try {
   check("org tree starts collapsed", openedOnEntry === 0, `open=${openedOnEntry}`);
   await pageA.screenshot({ path: `${SHOT_DIR}/home-dept-1-entry.png`, fullPage: false });
 
-  // 톤다운 비교 기준색 — 아직 전부 닫힌 지금 캡처해둔다. expandAll은 리프 부서까지
-  // 전부 펼쳐버려 그 뒤엔 aria-expanded="false"인 행이 하나도 안 남는다(닫힌 색을 못 구함).
-  const closedNameColor = await pageA.evaluate(() => {
-    const el = document.querySelector(
-      '[data-id="org-node-toggle"][aria-expanded="false"] [data-id="org-node-name"]',
-    );
+  // 톤다운·카운트 태그 비교 기준 — 아직 전부 닫힌 지금 캡처해둔다. expandAll은 리프 부서까지
+  // 전부 펼쳐버려 그 뒤엔 aria-expanded="false"인 행이 하나도 안 남는다(닫힌 색·닫힌 태그를 못 구함).
+  // my-dept-toggle도 함께 본다(Fix 6 신설) — org-node-toggle만 보면 그 data-id·aria-expanded가
+  // 톤다운·태그 검사를 통과 못 해도 안 걸린다.
+  const toggleRowSelector = (expanded) =>
+    `[data-id="org-node-toggle"][aria-expanded="${expanded}"], [data-id="my-dept-toggle"][aria-expanded="${expanded}"]`;
+  const toggleNameSelector = (expanded) =>
+    `[data-id="org-node-toggle"][aria-expanded="${expanded}"] [data-id="org-node-name"], ` +
+    `[data-id="my-dept-toggle"][aria-expanded="${expanded}"] [data-id="org-node-name"]`;
+
+  const closedNameColor = await pageA.evaluate((sel) => {
+    const el = document.querySelector(sel);
     return el ? getComputedStyle(el).color : null;
-  });
+  }, toggleNameSelector("false"));
+
+  // 태그 검사의 "닫힌 행은 태그를 단다" 절반 — expandAll 뒤엔 닫힌 행이 하나도 안 남아 그 절반이
+  // 공집합만 걸러 항상 통과하던 버그(리뷰 M5)를 막기 위해 펼치기 전 지금 미리 캡처한다.
+  const closedTagState = await pageA.evaluate((sel) => {
+    const rows = [...document.querySelectorAll(sel)];
+    const withoutTag = rows.filter((r) => r.querySelector('[data-id="org-node-count"]') === null);
+    return { rowCount: rows.length, withoutTagCount: withoutTag.length };
+  }, toggleRowSelector("false"));
 
   // ── 2) 카드 폭 — depth 무관 동일 ──────────────────────────────────────────
   await expandAll(pageA);
@@ -141,31 +155,33 @@ try {
   });
   check("child depts render outside their parent's box", nested.ok, nested.reason);
 
-  // 펼친 행은 태그를 숨기고 접힌 행만 단다
-  const tags = await pageA.evaluate(() => {
-    const rows = [...document.querySelectorAll('[data-id="org-node-toggle"]')];
-    const openWithTag = rows.filter(
-      (r) => r.getAttribute("aria-expanded") === "true" && r.querySelector('[data-id="org-node-count"]') !== null,
-    );
-    const closedWithoutTag = rows.filter(
-      (r) => r.getAttribute("aria-expanded") === "false" && r.querySelector('[data-id="org-node-count"]') === null,
-    );
-    return {
-      ok: rows.length > 0 && openWithTag.length === 0 && closedWithoutTag.length === 0,
-      reason: `rows=${rows.length} openWithTag=${openWithTag.length} closedWithoutTag=${closedWithoutTag.length}`,
-    };
-  });
+  // 펼친 행은 태그를 숨긴다 — "닫힌 행은 태그를 단다" 절반은 expandAll 전에 미리 캡처해둔
+  // closedTagState를 쓴다(펼친 뒤엔 닫힌 행이 하나도 안 남아 그 절반이 공집합만 보게 된다).
+  const openWithTagCount = await pageA.evaluate((sel) => {
+    const rows = [...document.querySelectorAll(sel)];
+    return rows.filter((r) => r.querySelector('[data-id="org-node-count"]') !== null).length;
+  }, toggleRowSelector("true"));
+  const tags = {
+    ok: closedTagState.rowCount > 0 && closedTagState.withoutTagCount === 0 && openWithTagCount === 0,
+    reason:
+      `closedRows=${closedTagState.rowCount} closedWithoutTag=${closedTagState.withoutTagCount} ` +
+      `openWithTag=${openWithTagCount}`,
+  };
   check("expanded rows hide the count tag, collapsed rows show it", tags.ok, tags.reason);
 
-  // 펼친 행 이름은 톤다운 — 위에서 미리 캡처해둔 닫힌 색과 computed color가 달라야 한다
-  const openNameColor = await pageA.evaluate(() => {
-    const row = document.querySelector('[data-id="org-node-toggle"][aria-expanded="true"]');
-    const el = row?.querySelector('[data-id="org-node-name"]');
-    return el ? getComputedStyle(el).color : null;
-  });
+  // 펼친 행 이름은 톤다운 — 매칭되는 모든 펼친 행(org-node-toggle + my-dept-toggle)의 computed color가
+  // 위에서 미리 캡처해둔 닫힌 색과 전부 달라야 한다. 하나만 보면 my-dept-toggle이 회귀해도 다른 행이
+  // 먼저 걸려 통과할 수 있다.
+  const openNameColors = await pageA.evaluate((sel) => {
+    const rows = [...document.querySelectorAll(sel)];
+    return rows.map((el) => getComputedStyle(el).color);
+  }, toggleNameSelector("true"));
   const tone = {
-    ok: openNameColor !== null && closedNameColor !== null && openNameColor !== closedNameColor,
-    reason: `open=${openNameColor} closed=${closedNameColor}`,
+    ok:
+      openNameColors.length > 0 &&
+      closedNameColor !== null &&
+      openNameColors.every((c) => c !== closedNameColor),
+    reason: `open=${openNameColors.join("|")} closed=${closedNameColor}`,
   };
   check("expanded row name is toned down", tone.ok, tone.reason);
   await pageA.screenshot({ path: `${SHOT_DIR}/home-dept-3-boxes.png`, fullPage: false });
