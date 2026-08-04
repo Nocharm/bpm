@@ -85,6 +85,8 @@ export default function MapListPage() {
   const [favOpen, setFavOpen] = useState(true);
   const [unassignedOpen, setUnassignedOpen] = useState(true);
   const [wordOpen, setWordOpen] = useState(true);
+  // "조직도 트리 자체를 조작"했는지 — My부서/Word/미지정 토글과 구분해 시드 재실행 여부를 가른다 (아래 writeTree).
+  const [treeTouched, setTreeTouched] = useState(false);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -105,13 +107,15 @@ export default function MapListPage() {
   // 접힘 상태 저장 — 의존성 이펙트로 저장하면 StrictMode 재마운트에서 초기 default가 저장값을 덮어쓴다.
   // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: docs/design/2026-08-04-home-dept-visibility-design.md §4).
   // C1 시드는 사용자 행동이 아니므로 저장하지 않는다 — 미조작 사용자는 매 진입 같은 규칙으로 재계산된다.
-  const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean) => {
-    // 사용자가 트리를 직접 건드린 순간부터 시드는 무효 — maps가 늦게 도착해 시드가 처음 발화하면
-    // setOrgOpen이 집합을 "교체"하므로 방금 편 노드가 사라진다.
-    seededOrg.current = true;
+  // touched는 "조직도 트리 자체를 편집"했을 때만 true(OrgAccordion onToggle/onCollapseAll) — My부서/Word/
+  // 미지정 토글은 트리를 바꾸지 않으므로 touched를 그대로 이어받아 저장만 하고 래치하지 않는다. 그래야
+  // 내 부서 맵이 없는 유저가 트리와 무관한 토글만 건드려도 진입할 때마다 시드가 계속 재계산된다.
+  const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean, touched: boolean = false) => {
+    if (touched) seededOrg.current = true;
+    setTreeTouched(touched);
     window.localStorage.setItem(
       TREE_STATE_KEY,
-      JSON.stringify({ orgOpen: [...org], fav, word, unassigned }),
+      JSON.stringify({ orgOpen: [...org], fav, word, unassigned, touched }),
     );
   };
 
@@ -158,15 +162,21 @@ export default function MapListPage() {
       if (!raw) {
         return;
       }
-      const s = JSON.parse(raw) as { orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown };
+      const s = JSON.parse(raw) as {
+        orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown; touched?: unknown;
+      };
       if (Array.isArray(s.orgOpen)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setOrgOpen(new Set(s.orgOpen.filter((x): x is string => typeof x === "string"))); // one-time hydration
-        seededOrg.current = true; // 저장값이 시드를 덮어쓰지 않게
       }
       if (typeof s.fav === "boolean") setFavOpen(s.fav);
       if (typeof s.word === "boolean") setWordOpen(s.word);
       if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
+      if (typeof s.touched === "boolean") {
+        setTreeTouched(s.touched);
+        // orgOpen 존재 자체는 더 이상 근거가 아니다 — 조직도 트리를 실제로 조작한 적 있을 때만 시드를 막는다.
+        if (s.touched) seededOrg.current = true;
+      }
     } catch {
       /* 손상된 저장값 무시 */
     }
@@ -728,7 +738,7 @@ export default function MapListPage() {
                     onToggle={() => {
                       const next = !favOpen;
                       setFavOpen(next);
-                      writeTree(orgOpen, next, wordOpen, unassignedOpen);
+                      writeTree(orgOpen, next, wordOpen, unassignedOpen, treeTouched);
                     }}
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
@@ -741,7 +751,7 @@ export default function MapListPage() {
                       onToggle={() => {
                         const next = !wordOpen;
                         setWordOpen(next);
-                        writeTree(orgOpen, favOpen, next, unassignedOpen);
+                        writeTree(orgOpen, favOpen, next, unassignedOpen, treeTouched);
                       }}
                       selectedId={effectiveSelected}
                       onSelect={setSelectedId}
@@ -764,13 +774,13 @@ export default function MapListPage() {
                         for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
                       }
                       setOrgOpen(next);
-                      writeTree(next, favOpen, wordOpen, unassignedOpen);
+                      writeTree(next, favOpen, wordOpen, unassignedOpen, true);
                     }}
                     onCollapseAll={() => {
                       const next = new Set<string>();
                       setOrgOpen(next);
                       setUnassignedOpen(false);
-                      writeTree(next, favOpen, wordOpen, false);
+                      writeTree(next, favOpen, wordOpen, false, true);
                     }}
                     selectedId={effectiveSelected}
                     highlightId={highlightId}
@@ -779,7 +789,7 @@ export default function MapListPage() {
                     onToggleUnassigned={() => {
                       const next = !unassignedOpen;
                       setUnassignedOpen(next);
-                      writeTree(orgOpen, favOpen, wordOpen, next);
+                      writeTree(orgOpen, favOpen, wordOpen, next, treeTouched);
                     }}
                     renderCard={renderCard}
                   />

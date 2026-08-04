@@ -36,7 +36,7 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
         <span className="ml-auto text-fine text-ink-tertiary">({maps.length})</span>
       </button>
       {open && (
-        <ul className="flex flex-col gap-2 pl-1">
+        <ul className="flex flex-col gap-2">
           {maps.map((m) => (
             <li key={m.id}>
               {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}

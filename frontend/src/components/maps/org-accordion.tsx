@@ -31,15 +31,20 @@ interface OrgAccordionProps {
 interface DeptPillProps {
   name: string;
   active: boolean;
+  // sticky 행의 터미널(그 행을 실제로 소유한 부서)만 true — 콘텐츠 폭까지 늘어나 형제 부서를 식별 가능하게 한다.
+  grow?: boolean;
 }
 
-// 부서명 필 — 폭 고정(96px)이라 같은 depth의 필이 세로로 정렬되어, 카드를 들여쓰지 않고도 계층이 읽힌다.
+// 부서명 필 — 기본 폭 고정(96px)이라 같은 depth의 필이 세로로 정렬되어, 카드를 들여쓰지 않고도 계층이 읽힌다.
+// grow=true(sticky 행 터미널)는 폭을 콘텐츠에 맞추되 13rem에서 truncate — 유일한 예외.
 // truncate가 긴 부서명을 자르므로 title은 필수.
-function DeptPill({ name, active }: DeptPillProps) {
+function DeptPill({ name, active, grow = false }: DeptPillProps) {
   return (
     <span
       title={name}
-      className={`w-24 shrink-0 truncate rounded-full border px-2 py-0.5 text-center text-fine ${
+      className={`shrink-0 truncate rounded-full border px-2 py-0.5 text-center text-fine ${
+        grow ? "max-w-[13rem]" : "w-24"
+      } ${
         active
           ? "border-accent-tint-border bg-accent-tint text-accent"
           : "border-hairline bg-surface text-ink-secondary"
@@ -79,8 +84,12 @@ export function OrgAccordion(props: OrgAccordionProps) {
     // 자기 맵을 가진 행만 sticky — 순수 네비 행까지 sticky면 4단계가 계단식으로 쌓여 높이를 잠식한다.
     // 전부 같은 top-0이라 나중 헤더가 앞 헤더를 덮어 화면에 보이는 sticky는 항상 1개.
     const sticky = open && terminal.maps.length > 0;
-    // sticky 행은 조상이 스크롤 밖으로 나가므로 경로를 흐린 breadcrumb으로 동반한다(필보다 좁게).
+    // sticky 행은 조상이 스크롤 밖으로 나가므로 경로를 breadcrumb으로 동반하되, 바로 위 부모 1개만 보여준다 —
+    // 조상 전부를 나열하면 세그먼트마다 잘려서 정작 행을 식별하는 터미널 필의 폭을 굶긴다.
+    // 더 위 조상은 "…"로 압축하고, 전체 경로는 버튼 title로 복구 가능하게 남긴다.
     const ancestors = sticky ? node.path.split("/").slice(0, -1) : [];
+    const immediateParent = ancestors.length > 0 ? ancestors[ancestors.length - 1] : null;
+    const hasDroppedAncestors = ancestors.length > 1;
     return (
       <li key={node.path} className="flex flex-col">
         <button
@@ -89,6 +98,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
           data-path={node.path}
           data-sticky={sticky ? "true" : undefined}
           aria-expanded={open}
+          title={sticky ? terminal.path : undefined}
           onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
           // sticky 행은 들여쓰지 않는다 — breadcrumb이 경로를 담아 중복이고, 가장 넓은 행이라 폭이 아쉽다.
           style={sticky ? undefined : { paddingLeft: `${depth * 12 + 4}px` }}
@@ -99,21 +109,18 @@ export function OrgAccordion(props: OrgAccordionProps) {
           {open
             ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
             : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
-          {ancestors.length > 0 && (
+          {immediateParent && (
             // min-w-0 + shrink — 폭이 모자라면 필이 아니라 breadcrumb이 먼저 줄어든다.
             <span className="flex min-w-0 shrink items-center gap-1 text-fine text-ink-tertiary">
-              {ancestors.map((seg) => (
-                <span key={seg} className="flex min-w-0 items-center gap-1">
-                  <span className="max-w-[4.5rem] truncate" title={seg}>{seg}</span>
-                  <span aria-hidden>/</span>
-                </span>
-              ))}
+              {hasDroppedAncestors && <span aria-hidden>…</span>}
+              <span className="max-w-[7rem] truncate" title={immediateParent}>{immediateParent}</span>
+              <span aria-hidden>/</span>
             </span>
           )}
           {chain.map((n, i) => (
             <span key={n.path} className="flex shrink-0 items-center gap-1">
               {i > 0 && <ChevronRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
-              <DeptPill name={n.name} active={open} />
+              <DeptPill name={n.name} active={open} grow={sticky && i === chain.length - 1} />
             </span>
           ))}
           <span className="ml-auto shrink-0 pl-1 text-fine text-ink-tertiary">({terminal.mapCount})</span>
