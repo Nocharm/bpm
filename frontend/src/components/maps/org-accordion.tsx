@@ -28,9 +28,14 @@ interface OrgAccordionProps {
   renderCard?: (map: MapSummary) => ReactNode;
 }
 
+interface DeptPillProps {
+  name: string;
+  active: boolean;
+}
+
 // 부서명 필 — 폭 고정(96px)이라 같은 depth의 필이 세로로 정렬되어, 카드를 들여쓰지 않고도 계층이 읽힌다.
 // truncate가 긴 부서명을 자르므로 title은 필수.
-function DeptPill({ name, active }: { name: string; active: boolean }) {
+function DeptPill({ name, active }: DeptPillProps) {
   return (
     <span
       title={name}
