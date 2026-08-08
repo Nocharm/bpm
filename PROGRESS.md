@@ -7,6 +7,7 @@
 - 브레인스토밍 확정 — 설계서 2건 신설: [`docs/design/2026-08-08-consultant-hierarchy-design.md`](docs/design/2026-08-08-consultant-hierarchy-design.md)(L1~L5 카테고리 트리·L6=맵·연계=subprocess 변환·SP 지정 확장 I/O·canonical JSON 계약·멱등 임포트 스크립트 — "임포트=부트스트랩, 수명주기=BPM 거버넌스" 이양 모델) + [`docs/design/2026-08-08-governance-ux-design.md`](docs/design/2026-08-08-governance-ux-design.md)(게시 모달 가시성 동봉·맵 카드 권한 목록 편집·승인 탭 비버전 승인 통합+red dot).
 - 재임포트는 CSV 임포트식 무충돌 모델 — 현업 편집이 있어도 안 막히고(스킵/차단 없음) 새 버전 적재+게시로 이력 보존, 변경점은 dry-run 리포트+버전 비교 화면으로 확인.
 - 스케일 전제 반영(§8): 컨설턴트 추산 L5 ~3,000·L6 맵 ~20,000 — canonical을 `maps.jsonl` 스트리밍으로 전환(어댑터 자동 생성, 수기 아님), 벌크 임포트+청크 커밋, dry-run CSV 출력, Phase 2 선행 조건으로 맵 목록 API 서버 필터/페이지네이션·카테고리 트리 lazy-load·SP 피커 검색 재설계 명시.
+- 설계서 2건 사용자 승인 → Phase 1 구현 플랜 작성: [`docs/superpowers/plans/2026-08-08-consultant-import-phase1.md`](docs/superpowers/plans/2026-08-08-consultant-import-phase1.md) — 7태스크 TDD(스키마→canonical 파서→결정적 id 그래프 빌더→카테고리/오우닝부서→업서트 엔진(버전 게시·SP 지정·변경 감지)→dry-run CLI/CSV/청크 커밋→전체 게이트). 결정적 노드 id(코드 sha1 파생)로 재임포트 버전 비교 매칭 성립, 거버넌스 필드는 생성 시에만·재임포트는 콘텐츠만 갱신.
 
 ## 2026-08-04 — 맵 카드 최근열람 표시 정정
 - 기본 상태에서 시계 칩 전체가 accent-tint 배경이라 그 줄이 "최근 수정"이 아닌 다른 값처럼 읽혔다 — 칩 스타일을 빼고 **시계 아이콘에만** 최근 열람을 표시(아이콘 색 + 배경 하이라이트, 텍스트는 다른 카드와 동일하게 `updated_at`).
