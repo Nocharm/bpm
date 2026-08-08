@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-08 — 컨설턴트 전사 프로세스 체계(7단계) 수용 설계
+- 브레인스토밍 확정 — 설계서 2건 신설: [`docs/design/2026-08-08-consultant-hierarchy-design.md`](docs/design/2026-08-08-consultant-hierarchy-design.md)(L1~L5 카테고리 트리·L6=맵·연계=subprocess 변환·SP 지정 확장 I/O·canonical JSON 계약·멱등 임포트 스크립트 — "임포트=부트스트랩, 수명주기=BPM 거버넌스" 이양 모델) + [`docs/design/2026-08-08-governance-ux-design.md`](docs/design/2026-08-08-governance-ux-design.md)(게시 모달 가시성 동봉·맵 카드 권한 목록 편집·승인 탭 비버전 승인 통합+red dot).
+- 재임포트는 CSV 임포트식 무충돌 모델 — 현업 편집이 있어도 안 막히고(스킵/차단 없음) 새 버전 적재+게시로 이력 보존, 변경점은 dry-run 리포트+버전 비교 화면으로 확인.
+
 ## 2026-08-04 — 맵 카드 최근열람 표시 정정
 - 기본 상태에서 시계 칩 전체가 accent-tint 배경이라 그 줄이 "최근 수정"이 아닌 다른 값처럼 읽혔다 — 칩 스타일을 빼고 **시계 아이콘에만** 최근 열람을 표시(아이콘 색 + 배경 하이라이트, 텍스트는 다른 카드와 동일하게 `updated_at`).
 - 호버 전환: 들어올 땐 **0.5초 지연 후 0.5초 페이드**(스쳐 지나는 커서에 반응하지 않게), 나갈 땐 지연 없이 **0.5초 페이드로 복귀**.
