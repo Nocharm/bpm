@@ -3,6 +3,10 @@
 설계: docs/design/2026-08-08-consultant-hierarchy-design.md §5·§8. 승인 워크플로·알림은
 부트스트랩 경로로 의도적으로 우회한다(오너 이양 전 대량 알림 방지).
 
+중단된 --apply 재실행은 안전하다 — consultant_code 기준 멱등 업서트라 이미 커밋된 맵은 건너뛰고
+이어서 처리한다. 다만 청크 커밋 경계 사이에 크래시하면 재실행이 끝날 때까지 버전 없는 빈 껍데기
+맵(pass 1만 커밋되고 pass 2의 그래프/버전은 아직 못 채운 상태)이 목록에 보일 수 있다.
+
 실행 (backend/ 에서, 기본 dry-run):
     bash:       .venv/bin/python -m scripts.import_consultant <delivery_dir> [--apply]
     PowerShell: .venv\\Scripts\\python -m scripts.import_consultant <delivery_dir> [--apply]
@@ -362,6 +366,7 @@ async def import_delivery(
     # report.rows에서 "error" action을 다시 스캔하지 않는다 — 중복 code 에러 행이 살아남은 첫
     # 항목과 같은 code를 써서 그 항목까지 pass 2에서 스킵되는 오염을 막기 위해 카테고리 에러만 별도 추적.
     category_errored: set[str] = set()
+    created_count = 0  # 신규 생성분만 세어 청크 커밋(기존 맵은 쓰기가 없어 카운트에서 제외)
     for cmap in maps:
         if cmap.category not in category_ids:
             report.add(cmap.code, "error", f"unknown category {cmap.category}")
@@ -387,6 +392,11 @@ async def import_delivery(
             session.add(MapApprover(map_id=new_map.id, user_id=approver, assigned_by=actor))
         existing[cmap.code] = new_map
         created.add(cmap.code)
+        created_count += 1
+        # pass 2와 동일 청크 크기 — 안 걸면 pass 1 전체(최대 20k 맵 껍데기)가 첫 pass-2 커밋에
+        # 한꺼번에 실려 크래시 시 미완성 껍데기가 대량으로 남는다(design §8).
+        if commit_every is not None and created_count % commit_every == 0:
+            await session.commit()
 
     # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스). DB-only 대상(이번
     # 전달분에 없음)은 canonical params가 없어 annual/fte가 빈 값으로 폴백한다 — 아래 pass 2가

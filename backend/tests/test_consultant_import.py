@@ -359,6 +359,51 @@ def test_duplicate_map_code_in_delivery_errors_on_second(client) -> None:
     assert m.name == "First"  # 첫 항목만 처리, 중복은 스킵
 
 
+def test_chunked_commit_across_both_passes(client) -> None:
+    # commit_every=1로 3개 맵을 임포트 — pass 1(껍데기 생성)·pass 2(그래프/버전) 양쪽 모두
+    # 맵마다 커밋 경계를 넘어야 한다. fix round 1: pass 1도 청크 커밋해야 크래시 시 미완성
+    # 껍데기가 전달분 전체 규모로 쌓이지 않는다(design §8).
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+    from scripts.import_consultant import import_delivery
+
+    _seed_import_employees()
+    codes = ["L6-CHNK-1", "L6-CHNK-2", "L6-CHNK-3"]
+    maps = [_canonical_map(code=c) for c in codes]
+    cats, cmaps = _delivery(maps)
+
+    async def _apply_chunked():
+        async with SessionLocal() as session:
+            report = await import_delivery(
+                session, categories=cats, maps=cmaps, actor="admin.sys",
+                label="CHUNK", commit_every=1,
+            )
+            await session.commit()
+        return report
+
+    report = _run(_apply_chunked())
+    assert report.counts() == {"created": 3}
+
+    async def _load():
+        async with SessionLocal() as session:
+            out = []
+            for code in codes:
+                m = (await session.scalars(
+                    select(ProcessMap).where(ProcessMap.consultant_code == code)
+                )).one()
+                v = (await session.scalars(
+                    select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+                )).one()
+                out.append((m, v))
+        return out
+
+    results = _run(_load())
+    assert len(results) == 3
+    assert all(v.status == "published" for _, v in results)
+
+
 def _write_delivery(tmp_path, maps):
     import json
 
