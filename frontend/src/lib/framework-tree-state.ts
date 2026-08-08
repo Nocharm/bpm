@@ -83,6 +83,16 @@ export function hasCachedChildren(state: FrameworkTreeState, parentId: ParentKey
   return state.childrenByParent.has(parentId);
 }
 
+// 펼침 fetch 가드 — 캐시가 있거나 이미 인플라이트(닫았다 재펼침해도 첫 요청이 아직 안 끝남)면 재요청하지 않는다.
+export function shouldFetchChildren(state: FrameworkTreeState, categoryId: number): boolean {
+  return !hasCachedChildren(state, categoryId) && !state.loadingIds.has(categoryId);
+}
+
+// "더 보기" fetch 가드 — 인플라이트 중 중복 클릭 시 같은 offset으로 재요청되어 중복 id가 append되는 것을 막는다.
+export function shouldFetchMore(state: FrameworkTreeState, categoryId: number): boolean {
+  return !state.loadingIds.has(categoryId);
+}
+
 // 루트 목록 — parentId 생략 호출(최상위 레벨).
 export function fetchRootChildren(): Promise<CategoryNode[]> {
   return listCategoryNodes();

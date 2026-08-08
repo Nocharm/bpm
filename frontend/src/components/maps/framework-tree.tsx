@@ -16,6 +16,8 @@ import {
   hasCachedChildren,
   reduceFrameworkTree,
   ROOT,
+  shouldFetchChildren,
+  shouldFetchMore,
   type FrameworkTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
@@ -49,26 +51,35 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
       setState((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
       return;
     }
-    const cached = hasCachedChildren(state, categoryId);
+    // 캐시 있거나 이미 인플라이트면 재요청 안 함 — 닫았다 로딩 중 재펼침해도 fetch는 1회만.
+    const shouldFetch = shouldFetchChildren(state, categoryId);
     setState((prev) => {
       let next = reduceFrameworkTree(prev, { type: "opened", categoryId });
-      if (!cached) next = reduceFrameworkTree(next, { type: "loading_started", categoryId });
+      if (shouldFetch) next = reduceFrameworkTree(next, { type: "loading_started", categoryId });
       return next;
     });
-    if (cached) return;
+    if (!shouldFetch) return;
     void fetchCategoryChildren(categoryId).then(({ nodes, maps }) => {
       setState((prev) => applyCategoryLoaded(prev, categoryId, nodes, maps));
     });
   }
 
   function handleLoadMore(categoryId: number) {
+    // 인플라이트 중 중복 클릭 가드 — 없으면 같은 offset이 두 번 요청되어 중복 id가 append된다.
+    if (!shouldFetchMore(state, categoryId)) return;
+    setState((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
     void fetchMoreMaps(state, categoryId).then((maps) => {
-      setState((prev) => reduceFrameworkTree(prev, { type: "maps_loaded", categoryId, maps, append: true }));
+      setState((prev) => {
+        let next = reduceFrameworkTree(prev, { type: "maps_loaded", categoryId, maps, append: true });
+        next = reduceFrameworkTree(next, { type: "loading_ended", categoryId });
+        return next;
+      });
     });
   }
 
-  // 맵 인셋 — org-accordion.tsx와 동일 상수(depth 무관 고정폭).
-  const renderMapList = (categoryId: number, mapsData: CategoryMaps | undefined) => {
+  // 맵 인셋 — org-accordion.tsx와 동일 상수(depth 무관 고정폭). loading은 "더 보기" 인플라이트 중
+  // 버튼만 비활성화(이미 로드된 목록은 그대로 유지 — 초기 로딩 placeholder와 달리 목록을 지우지 않는다).
+  const renderMapList = (categoryId: number, mapsData: CategoryMaps | undefined, loading: boolean) => {
     if (!mapsData) return null;
     const shown = mapsData.maps.length;
     return (
@@ -84,7 +95,8 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
             <button
               type="button"
               data-id="framework-more"
-              className="text-fine text-accent hover:underline"
+              disabled={loading}
+              className="text-fine text-accent hover:underline disabled:opacity-40"
               onClick={() => handleLoadMore(categoryId)}
             >
               {t("home.frameworkMore")}
@@ -98,6 +110,8 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
   const renderNode = (node: CategoryNode, depth: number): ReactNode => {
     const open = state.openIds.has(node.id);
     const loading = state.loadingIds.has(node.id);
+    // 최초 펼침 로딩만 전체를 placeholder로 대체 — 캐시가 이미 있으면(= "더 보기" 로딩) 기존 목록을 유지한다.
+    const initialLoading = loading && !hasCachedChildren(state, node.id);
     const children = state.childrenByParent.get(node.id) ?? [];
     const mapsData = state.mapsByCategory.get(node.id);
 
@@ -121,7 +135,7 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
           {!open && <CountTag count={node.map_count} />}
         </button>
         {open && (
-          loading ? (
+          initialLoading ? (
             <p style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }} className="text-fine text-ink-tertiary">
               {t("common.loading")}
             </p>
@@ -130,7 +144,7 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
               {children.length > 0 && (
                 <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
               )}
-              {renderMapList(node.id, mapsData)}
+              {renderMapList(node.id, mapsData, loading)}
             </>
           )
         )}

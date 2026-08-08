@@ -4,10 +4,13 @@ import {
   applyCategoryLoaded,
   createInitialState,
   fetchCategoryChildren,
+  fetchMoreMaps,
   fetchRootChildren,
   hasCachedChildren,
   reduceFrameworkTree,
   ROOT,
+  shouldFetchChildren,
+  shouldFetchMore,
 } from "./framework-tree-state";
 import { listCategoryMaps, listCategoryNodes, type CategoryMaps, type CategoryNode } from "./api";
 
@@ -78,6 +81,43 @@ describe("펼침 캐시", () => {
     expect(listMapsMock).toHaveBeenCalledTimes(1);
     expect(state.childrenByParent.get(5)).toEqual(children);
   });
+
+  it("펼침 중(fetch 미완료) 접었다 재펼침해도 fetch는 1회만 발생한다 — loadingIds 가드 회귀", async () => {
+    const children: CategoryNode[] = [
+      { id: 21, code: "B1", name: "Sub B1", level: 2, sort_order: 0, child_count: 0, map_count: 1 },
+    ];
+    const maps: CategoryMaps = { total: 1, hidden: 0, maps: [] };
+    let resolveNodes!: (v: CategoryNode[]) => void;
+    let resolveMaps!: (v: CategoryMaps) => void;
+    listNodesMock.mockReturnValue(new Promise((resolve) => { resolveNodes = resolve; }));
+    listMapsMock.mockReturnValue(new Promise((resolve) => { resolveMaps = resolve; }));
+
+    let state = createInitialState();
+
+    // 펼침 — 인플라이트 시작(아직 응답 안 옴). 컴포넌트 handleToggle과 동일 순서로 시뮬레이션.
+    expect(shouldFetchChildren(state, 7)).toBe(true);
+    state = reduceFrameworkTree(state, { type: "opened", categoryId: 7 });
+    state = reduceFrameworkTree(state, { type: "loading_started", categoryId: 7 });
+    const inFlight = fetchCategoryChildren(7);
+
+    // 접기 — loadingIds는 그대로(응답 도착 시에만 loading_ended)
+    state = reduceFrameworkTree(state, { type: "closed", categoryId: 7 });
+    expect(state.openIds.has(7)).toBe(false);
+
+    // 재펼침 — 캐시도 없고 아직 인플라이트라 가드가 재요청을 막아야 한다
+    expect(shouldFetchChildren(state, 7)).toBe(false);
+    state = reduceFrameworkTree(state, { type: "opened", categoryId: 7 });
+
+    // 인플라이트 응답 도착 — 정상 반영
+    resolveNodes(children);
+    resolveMaps(maps);
+    const loaded = await inFlight;
+    state = applyCategoryLoaded(state, 7, loaded.nodes, loaded.maps);
+
+    expect(listNodesMock).toHaveBeenCalledTimes(1);
+    expect(listMapsMock).toHaveBeenCalledTimes(1);
+    expect(state.childrenByParent.get(7)).toEqual(children);
+  });
 });
 
 describe("hidden·빈 카테고리 표시", () => {
@@ -131,5 +171,38 @@ describe("loadMoreMaps", () => {
       append: true,
     });
     expect(state2.mapsByCategory.get(1)?.maps.map((m) => m.id)).toEqual([1, 2]);
+  });
+
+  it("더 보기 연타(응답 전 중복 클릭)해도 fetch는 1회, 중복 id 없이 append된다 — loadingIds 가드 회귀", async () => {
+    const initialMaps: CategoryMaps = { total: 3, hidden: 0, maps: [{ id: 1 } as CategoryMaps["maps"][number]] };
+    const page2: CategoryMaps = { total: 3, hidden: 0, maps: [{ id: 2 } as CategoryMaps["maps"][number]] };
+
+    let state = reduceFrameworkTree(createInitialState(), {
+      type: "maps_loaded",
+      categoryId: 3,
+      maps: initialMaps,
+      append: false,
+    });
+
+    let resolvePage!: (v: CategoryMaps) => void;
+    listMapsMock.mockReturnValue(new Promise((resolve) => { resolvePage = resolve; }));
+
+    // 1차 클릭 — 인플라이트 시작. 컴포넌트 handleLoadMore와 동일 순서로 시뮬레이션.
+    expect(shouldFetchMore(state, 3)).toBe(true);
+    state = reduceFrameworkTree(state, { type: "loading_started", categoryId: 3 });
+    const inFlight = fetchMoreMaps(state, 3);
+
+    // 2차 클릭(응답 전) — 가드가 재요청을 막아야 한다(막지 않으면 같은 offset이 두 번 나가 중복 id가 붙는다)
+    expect(shouldFetchMore(state, 3)).toBe(false);
+
+    resolvePage(page2);
+    const loaded = await inFlight;
+    state = reduceFrameworkTree(state, { type: "maps_loaded", categoryId: 3, maps: loaded, append: true });
+    state = reduceFrameworkTree(state, { type: "loading_ended", categoryId: 3 });
+
+    expect(listMapsMock).toHaveBeenCalledTimes(1);
+    const ids = state.mapsByCategory.get(3)?.maps.map((m) => m.id) ?? [];
+    expect(ids).toEqual([1, 2]);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
