@@ -1319,6 +1319,8 @@ const en = {
   "perm.sp.undesignateWarn": "Maps using this subprocess will show a warning and become locked.",
   "sp.sumAllNodes": "Sum all nodes (published version)",
   "sp.sumNeedsPublished": "Requires a published version",
+  "sp.input": "Input",
+  "sp.output": "Output",
   // ── 버전 게시 탭 / Versions tab ──
   "perm.version.hint": "Request approval to publish a version, then publish after approval.",
   "perm.version.noVersions": "No versions yet.",
@@ -2854,6 +2856,8 @@ const ko: Record<MessageKey, string> = {
   "perm.sp.undesignateWarn": "이 서브프로세스를 사용 중인 맵에 경고가 표시되고 잠금 처리됩니다.",
   "sp.sumAllNodes": "전체 노드 합산(게시본 기준)",
   "sp.sumNeedsPublished": "게시본이 필요합니다",
+  "sp.input": "인풋",
+  "sp.output": "아웃풋",
   // ── 버전 게시 탭 / Versions tab ──
   "perm.version.hint": "버전 게시 승인을 요청한 뒤 승인 후 게시합니다.",
   "perm.version.noVersions": "버전이 없습니다.",

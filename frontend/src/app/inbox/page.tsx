@@ -338,6 +338,8 @@ export default function InboxPage() {
         headcount: spModal.detail.sp_headcount ?? "",
         url: spModal.detail.sp_url ?? "",
         urlLabel: spModal.detail.sp_url_label ?? "",
+        input: spModal.detail.sp_input ?? "",
+        output: spModal.detail.sp_output ?? "",
         description: spModal.detail.sp_description ?? "",
       }
     : null;

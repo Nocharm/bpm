@@ -41,6 +41,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     headcount: "",
     url: "",
     urlLabel: "",
+    input: "",
+    output: "",
     description: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
@@ -100,6 +102,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       headcount: detail?.sp_headcount ?? "",
       url: detail?.sp_url ?? "",
       urlLabel: detail?.sp_url_label ?? "",
+      input: detail?.sp_input ?? "",
+      output: detail?.sp_output ?? "",
       description: detail?.sp_description ?? "",
     });
     setError(null);
@@ -134,6 +138,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
     { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },
     { label: t("field.headcount"), value: detail.sp_headcount },
+    ...(detail.sp_input ? [{ label: t("sp.input"), value: detail.sp_input }] : []),
+    ...(detail.sp_output ? [{ label: t("sp.output"), value: detail.sp_output }] : []),
     ...(detail.sp_description ? [{ label: t("field.description"), value: detail.sp_description }] : []),
   ];
 

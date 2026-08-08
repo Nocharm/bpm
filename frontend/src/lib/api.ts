@@ -399,6 +399,8 @@ export interface SubprocessDesignationBody {
   headcount?: string;
   url?: string;
   url_label?: string;
+  input?: string;
+  output?: string;
   description?: string;
 }
 

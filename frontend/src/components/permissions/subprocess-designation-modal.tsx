@@ -26,6 +26,8 @@ export interface DesignationForm {
   headcount: string;
   url: string;
   urlLabel: string;
+  input: string;
+  output: string;
   description: string;
 }
 
@@ -114,6 +116,8 @@ export function SubprocessDesignationModal({
         headcount: form.headcount,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
+        input: form.input.trim(),
+        output: form.output.trim(),
         description: form.description.trim(),
       });
       onSaved(updated);
@@ -204,6 +208,26 @@ export function SubprocessDesignationModal({
               value={form.urlLabel}
               disabled={form.url.trim() === ""}
               onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+            <span className="shrink-0 text-caption text-ink-secondary">{t("sp.input")}</span>
+            <input
+              data-id="subprocess-designation-input"
+              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+              maxLength={500}
+              value={form.input}
+              onChange={(e) => setForm((prev) => ({ ...prev, input: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+            <span className="shrink-0 text-caption text-ink-secondary">{t("sp.output")}</span>
+            <input
+              data-id="subprocess-designation-output"
+              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+              maxLength={500}
+              value={form.output}
+              onChange={(e) => setForm((prev) => ({ ...prev, output: e.target.value }))}
             />
           </div>
           <div className="flex flex-col gap-1 border-t border-divider py-1">
