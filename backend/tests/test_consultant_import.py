@@ -140,7 +140,15 @@ def test_upsert_categories_idempotent(client) -> None:
         async with SessionLocal() as session:
             second = await upsert_categories(session, cats)
             await session.commit()
-            rows = (await session.scalars(select(ProcessCategory).order_by(ProcessCategory.code))).all()
+            # code로 좁혀 조회 — 세션 스코프 DB를 공유하는 test_categories_api.py의 CAT-* 시드가
+            # 섞여도(파일 실행 순서 무관) 이 테스트의 대상 행만 본다.
+            rows = (
+                await session.scalars(
+                    select(ProcessCategory)
+                    .where(ProcessCategory.code.in_(["A", "A1"]))
+                    .order_by(ProcessCategory.code)
+                )
+            ).all()
         return first, second, rows
 
     first, second, rows = _run(_twice())

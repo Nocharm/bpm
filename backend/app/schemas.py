@@ -607,6 +607,14 @@ class MapOut(BaseModel):
     # 개정 라이프사이클 타임스탬프 — 홈 word 행·상세 카드 표시용 (design 2026-07-24 §5)
     doc_imported_at: datetime | None = None
     doc_generated_at: datetime | None = None
+    # 컨설턴트 체계 소속 — category_id 존재가 소속 판정, consultant_code는 임포트 출처 (design 2026-08-08)
+    category_id: int | None = None
+    # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
+    category_path: str | None = None
+    consultant_code: str | None = None
+    # L6 Input/Output — 자유 텍스트
+    sp_input: str | None = None
+    sp_output: str | None = None
 
     @field_validator("sp_duration", mode="after")
     @classmethod
@@ -626,6 +634,28 @@ class MapOut(BaseModel):
 
 class MapDetailOut(MapOut):
     versions: list[VersionDetailOut]
+
+
+class CategoryNodeOut(BaseModel):
+    """카테고리 트리 1노드 — lazy 자식 조회 응답 (design 2026-08-08 §6)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    level: int
+    sort_order: int
+    child_count: int = 0  # 직계 자식 카테고리 수
+    map_count: int = 0  # 서브트리 전체(자기 포함)의 연결 맵 수 — 소프트삭제 제외, 가시성 무관
+
+
+class CategoryMapsOut(BaseModel):
+    """카테고리 1노드에 직접 연결된 맵 페이지 — 비가시 맵은 hidden으로만 집계(name 미노출)."""
+
+    total: int
+    hidden: int
+    maps: list[MapOut]
 
 
 class NodeIn(BaseModel):

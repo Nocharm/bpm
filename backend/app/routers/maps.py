@@ -13,7 +13,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember, _now
+from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.permissions import logic
 from app.permissions.access import (
     get_effective_role,
@@ -21,6 +21,7 @@ from app.permissions.access import (
     get_user_active_group_ids,
 )
 from app.permissions.deps import require_map_role
+from app.routers.categories import build_category_paths
 from app.routers.versions import clone_graph
 from app.schemas import (
     ApprovalRequestOut,
@@ -136,6 +137,14 @@ async def list_maps(
         ).all()
     )
     is_admin = logic.is_sysadmin(user)
+    # 카테고리 트리 전체를 1회 로드(수천 행) → id별 "L1/.../연결노드" 경로 dict (design 2026-08-08)
+    category_paths = build_category_paths(
+        (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+            )
+        ).all()
+    )
     # 맵별 최신 버전(최대 id) 상태·id — 홈 카드 표시용. 한 번의 쿼리로 N+1 회피.
     latest_status: dict[int, str] = {}
     latest_vid: dict[int, int] = {}
@@ -211,6 +220,7 @@ async def list_maps(
         m.node_count = node_count_by_vid.get(tvid, 0) if tvid is not None else 0
         m.member_count = member_count.get(m.id, 0)
         m.owner_name = owner_name.get(m.created_by) if m.created_by else None
+        m.category_path = category_paths.get(m.category_id) if m.category_id else None
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)
@@ -535,6 +545,15 @@ async def get_map(
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     # 호출자의 서버 산정 역할을 응답에 부착 — 프론트 게이팅 단일 소스
     found_map.my_role = await get_effective_role(session, user, map_id)
+    if found_map.category_id is not None:
+        category_paths = build_category_paths(
+            (
+                await session.execute(
+                    select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+                )
+            ).all()
+        )
+        found_map.category_path = category_paths.get(found_map.category_id)
     return found_map
 
 

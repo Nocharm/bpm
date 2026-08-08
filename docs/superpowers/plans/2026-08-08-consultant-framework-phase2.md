@@ -50,7 +50,7 @@
 - `child_count`/`map_count`: 요청당 카테고리 전량 1회 로드 + `SELECT category_id, count(*) FROM process_maps WHERE deleted_at IS NULL AND category_id IS NOT NULL GROUP BY category_id` 1회 → 부모 역방향 누적으로 서브트리 합산(메모리, ~수천 행).
 - path 조인 유틸은 `categories.py`에 `build_category_paths(rows) -> dict[int, str]` 순수 함수로 두고 maps.py가 import(중복 구현 금지).
 
-- [ ] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_categories_api.py` 신규
+- [x] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_categories_api.py` 신규
 
 ```python
 """카테고리 트리 조회 API — lazy 자식·서브트리 카운트·카테고리별 맵 페이지네이션/가시성 마스킹."""
@@ -119,13 +119,13 @@ def test_map_out_exposes_category_fields(client: TestClient) -> None:
 
 주의: `_seed_tree`는 테스트마다 같은 code로 재시드하면 unique 충돌 — 함수 첫머리에서 기존 `CAT-A*` 행/맵을 조회해 있으면 재사용하도록 멱등 처리(간단히: code로 조회 후 존재 시 기존 id 반환). DEV_ENFORCE_PERMISSIONS=false 기본에서도 private 마스킹이 동작하는지 확인 — 만약 enforce OFF에서 전부 보인다면 conftest의 enforce 픽스처(권한 강제 ON 런타임 토글)를 사용해 마스킹 테스트만 enforce ON으로 감쌀 것(기존 권한 테스트들의 패턴을 따른다).
 
-- [ ] **Step 2: 실패 확인** — `pytest tests/test_categories_api.py -q` → 404/필드 누락으로 FAIL.
+- [x] **Step 2: 실패 확인** — `pytest tests/test_categories_api.py -q` → 404/필드 누락으로 FAIL.
 
-- [ ] **Step 3: 구현** — 위 Interfaces·구현 지침 대로. main.py 라우터 등록 잊지 말 것(`app.include_router(categories.router)` — 기존 나열부와 동일 스타일, prefix는 라우터 내 `/categories`).
+- [x] **Step 3: 구현** — 위 Interfaces·구현 지침 대로. main.py 라우터 등록 잊지 말 것(`app.include_router(categories.router)` — 기존 나열부와 동일 스타일, prefix는 라우터 내 `/categories`).
 
-- [ ] **Step 4: 통과 확인** — 대상 파일 + `tests/test_consultant_import.py`(회귀) green.
+- [x] **Step 4: 통과 확인** — 대상 파일 + `tests/test_consultant_import.py`(회귀) green.
 
-- [ ] **Step 5: 린트+커밋** — ruff 후 `feat(categories): lazy tree read API + MapOut category exposure — 카테고리 트리 조회 API·MapOut 노출` (+PROGRESS/플랜 체크박스).
+- [x] **Step 5: 린트+커밋** — ruff 후 `feat(categories): lazy tree read API + MapOut category exposure — 카테고리 트리 조회 API·MapOut 노출` (+PROGRESS/플랜 체크박스).
 
 ---
 
