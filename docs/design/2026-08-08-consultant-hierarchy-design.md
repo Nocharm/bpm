@@ -65,31 +65,33 @@
 | 신규 업무 추가 | 일반 맵에 카테고리 연결만 하면 체계에 편입 — 임포트 불요 |
 | 전사 오버뷰 | 전 L6가 SP 지정되므로 **기존 기능으로 그리는 일반 맵**(L6들을 라이브러리에서 끌어다 노드로, 연계를 엣지로). 비-리프 카테고리에 대표로 연결. 자동 생성은 하지 않음(후속 옵션) |
 
-## 4. Canonical 임포트 계약 (JSON, 1파일 = 1회 전달)
+## 4. Canonical 임포트 계약
+
+**1회 전달 = 디렉터리 2파일**: `categories.json`(카테고리 전체) + `maps.jsonl`(**1줄 = 1맵** — 2만 맵 스케일에서 스트리밍 파싱 필수, §8). **어댑터가 컨설턴트 테이블에서 자동 생성**하는 기계 산출물이며 수기 작성 양식이 아니다 — 사람 손은 스키마 매핑 규칙(Phase 3 어댑터) 1회.
 
 ```json
+// categories.json
 {
   "categories": [
     { "code": "A01", "name": "구매", "level": 1, "parent": null }
-  ],
-  "maps": [
-    {
-      "code": "A01-B02-...-L6-01",
-      "name": "원자재 구매 요청",
-      "category": "<L5 code>",
-      "owner": "hong.gildong",
-      "approvers": ["kim.cs"],
-      "department": "Division/Office/Team",
-      "visibility": "public",
-      "params": { "duration": "", "cost_krw": "", "cost_usd": "", "headcount": "",
-                  "annual_count": "", "fte": "", "input": "", "output": "" },
-      "nodes": [
-        { "code": "N1", "name": "…", "type": "process", "department": "", "assignee": "", "system": "", "seq": 1 }
-      ],
-      "edges": [ { "from": "N1", "to": "N2", "label": "" } ],
-      "links": [ { "to_map": "<L6 code>", "after_node": "N9" } ]
-    }
   ]
+}
+// maps.jsonl — 한 줄에 맵 하나(아래는 펼쳐 쓴 예시)
+{
+  "code": "A01-B02-...-L6-01",
+  "name": "원자재 구매 요청",
+  "category": "<L5 code>",
+  "owner": "hong.gildong",
+  "approvers": ["kim.cs"],
+  "department": "Division/Office/Team",
+  "visibility": "public",
+  "params": { "duration": "", "cost_krw": "", "cost_usd": "", "headcount": "",
+              "annual_count": "", "fte": "", "input": "", "output": "" },
+  "nodes": [
+    { "code": "N1", "name": "…", "type": "process", "department": "", "assignee": "", "system": "", "seq": 1 }
+  ],
+  "edges": [ { "from": "N1", "to": "N2", "label": "" } ],
+  "links": [ { "to_map": "<L6 code>", "after_node": "N9" } ]
 }
 ```
 
@@ -138,11 +140,24 @@
 ## 7. 구현 페이즈 (각각 스펙→플랜→구현 사이클)
 
 1. **Phase 1** — 스키마(§2) + canonical 계약(§4) + 임포트 스크립트(§5) + pytest(업서트 멱등성·2-pass 연계·버전 적재·오우닝 부서 규칙·dry-run 리포트).
-2. **Phase 2** — 홈 카테고리 트리 + 경로 뱃지/I/O 표시 + 슬롯 이양·카테고리 연결 UI(§6).
+2. **Phase 2** — **선행: 목록 스케일 재설계(§8 — 맵 목록 API 서버 필터/페이지네이션·트리 lazy-load·SP 피커 검색)** → 홈 카테고리 트리 + 경로 뱃지/I/O 표시 + 슬롯 이양·카테고리 연결 UI(§6).
 3. **Phase 3** — 컨설턴트 실스키마 → canonical 어댑터(스키마 확정 후: 조인·이름→login_id 해석·미매칭 리포트).
 4. **병렬 트랙** — 거버넌스 UX([`2026-08-08-governance-ux-design.md`](2026-08-08-governance-ux-design.md)) — 임포트와 독립적으로 구현 가능.
 
-## 8. 결정 로그 (브레인스토밍 확정 순)
+## 8. 스케일 전제 — L5 카테고리 ~3,000 · L6 맵 ~20,000
+
+컨설턴트 추산 규모. 전달은 컨설팅 진행에 따라 점진 증가(초기 수백 → 최종 2만)하므로 임포트가 첫날부터 풀 스케일은 아니지만, 최종 규모가 다음을 강제한다:
+
+| 영역 | 강제 사항 |
+|---|---|
+| canonical | `maps.jsonl` 스트리밍(단일 JSON은 수백 MB — 메모리 로드 불가). 카테고리 ~수천 행은 단일 JSON 허용 |
+| 임포트 | 벌크 인서트 + **청크 커밋**(N맵 단위) + 진행 로그. 재실행 시 무변경 맵 스킵이 곧 중단 재개. 성능 픽스처(생성 1k맵)로 pytest 검증 |
+| dry-run | 2만 건 diff는 눈으로 못 읽음 — **요약 stdout + 상세 CSV 파일** 출력 |
+| 홈/목록 (Phase 2 선행 조건) | 현재 홈은 맵 전체 fetch 전제 — 2만 맵이면 목록 페이로드만 수 MB. **맵 목록 API 서버 필터/페이지네이션 + 카테고리 트리 lazy-load(펼칠 때 자식 조회) + 검색 우선 탐색** 재설계 필요. 이중 노출 결정은 유지하되 로딩 방식이 바뀜 |
+| SP 라이브러리 피커 | 전원 SP 지정 → 2만 개 피커 — 서버 검색/페이지네이션 필요(현재 수십 개 전제) |
+| 버전 이력 | 재임포트는 **변경 맵만** 새 버전(전량 클론 방지). 그래도 노드 행 수십만 단위 — postgres 무난, 로컬 sqlite는 부분 데이터로 검증 |
+
+## 9. 결정 로그 (브레인스토밍 확정 순)
 
 | 질문 | 결정 |
 |---|---|
@@ -156,3 +171,4 @@
 | 오너/승인자 | 인터뷰이 명단으로 임포트가 세팅 후 게시(이양) |
 | 가시성 | 맵별 public/private 선택(canonical 필드, 기본 public) |
 | 오우닝 부서 | canonical department → 오너 org_path 파생 → NULL+경고 (§5.3) |
+| 스케일 | L5 ~3,000·L6 ~20,000 (컨설턴트 추산) — canonical JSONL·벌크 임포트·목록/피커 재설계 강제 (§8). canonical은 어댑터 자동 생성(수기 아님) |
