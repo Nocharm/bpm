@@ -87,3 +87,75 @@ def test_build_graph_rows_missing_link_target_warns() -> None:
     nodes, edges, warnings = build_graph_rows(cmap, link_targets={})
     assert not any(n.node_type == "subprocess" for n in nodes)
     assert any("GHOST" in w for w in warnings)
+
+
+def _run(coro):
+    import asyncio
+
+    return asyncio.run(coro)
+
+
+def _seed_import_employees() -> None:
+    from app.db import SessionLocal
+    from app.models import Employee
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            for login, org in (("cons.owner", ("Consult Div", "Consult Team")), ("cons.appr", ())):
+                if await session.get(Employee, login) is None:
+                    orgs = dict(zip(("org_l1", "org_l2"), org))
+                    session.add(Employee(login_id=login, name=login, source="local", active=False, **orgs))
+            await session.commit()
+
+    _run(_seed())
+
+
+def test_upsert_categories_idempotent(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+    from scripts.consultant_canonical import CanonicalCategory
+    from scripts.import_consultant import upsert_categories
+
+    cats = [
+        CanonicalCategory(code="A", name="구매", level=1, parent=None),
+        CanonicalCategory(code="A1", name="직접구매", level=2, parent="A"),
+    ]
+
+    async def _twice() -> tuple[dict, dict, list]:
+        async with SessionLocal() as session:
+            first = await upsert_categories(session, cats)
+            await session.commit()
+        cats[1].name = "직접구매(개정)"
+        async with SessionLocal() as session:
+            second = await upsert_categories(session, cats)
+            await session.commit()
+            rows = (await session.scalars(select(ProcessCategory).order_by(ProcessCategory.code))).all()
+        return first, second, rows
+
+    first, second, rows = _run(_twice())
+    assert first == second  # 같은 code → 같은 id (멱등)
+    assert [r.code for r in rows] == ["A", "A1"]
+    assert rows[1].name == "직접구매(개정)" and rows[1].parent_id == first["A"]
+
+
+def test_resolve_owning_department(client) -> None:
+    from app.db import SessionLocal
+    from scripts.import_consultant import build_known_departments, resolve_owning_department
+
+    _seed_import_employees()
+
+    async def _resolve() -> list:
+        async with SessionLocal() as session:
+            known = await build_known_departments(session)
+            return [
+                await resolve_owning_department(session, known, "Consult Div/Consult Team", "cons.owner"),
+                await resolve_owning_department(session, known, "Nope/Nowhere", "cons.owner"),
+                await resolve_owning_department(session, known, "", "cons.appr"),
+            ]
+
+    direct, fallback, none = _run(_resolve())
+    assert direct == ("Consult Div/Consult Team", None)
+    assert fallback[0] == "Consult Div/Consult Team" and "fallback" in (fallback[1] or "")
+    assert none[0] is None and none[1] is not None

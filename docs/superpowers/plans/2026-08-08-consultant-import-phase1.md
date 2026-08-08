@@ -664,7 +664,7 @@ git commit -m "feat(consultant): deterministic graph builder for canonical maps 
   - `async build_known_departments(session: AsyncSession) -> set[str]` — `_assert_known_department`(app/routers/maps.py:96)와 동일 규약: 직원 org_l1~l5 전 prefix의 "/" 조인 집합
   - `async resolve_owning_department(session, known: set[str], dept: str, owner: str) -> tuple[str | None, str | None]` — (org_path|None, 경고|None). 1순위 dept∈known → 2순위 owner의 Employee org 경로 → 실패 시 (None, 경고) (design §5.3)
 
-- [ ] **Step 1: 실패하는 테스트 작성** — append. 테스트 직원은 **active=False**로 시드(Global Constraints 참조).
+- [x] **Step 1: 실패하는 테스트 작성** — append. 테스트 직원은 **active=False**로 시드(Global Constraints 참조).
 
 ```python
 def _run(coro):
@@ -739,9 +739,9 @@ def test_resolve_owning_department(client) -> None:
     assert none[0] is None and none[1] is not None
 ```
 
-- [ ] **Step 2: 실패 확인** — `pytest tests/test_consultant_import.py -q` → 신규 2건 FAIL (ImportError).
+- [x] **Step 2: 실패 확인** — `pytest tests/test_consultant_import.py -q` → 신규 2건 FAIL (ImportError).
 
-- [ ] **Step 3: 구현** — `import_consultant.py`에 append
+- [x] **Step 3: 구현** — `import_consultant.py`에 append
 
 ```python
 from sqlalchemy import select
@@ -812,9 +812,9 @@ async def resolve_owning_department(
     return None, f"department {dept!r} unknown and owner {owner!r} has no org — left NULL"
 ```
 
-- [ ] **Step 4: 통과 확인** — `pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → PASS.
+- [x] **Step 4: 통과 확인** — `pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → PASS.
 
-- [ ] **Step 5: 린트 + 커밋**
+- [x] **Step 5: 린트 + 커밋**
 
 ```bash
 .venv/bin/ruff check scripts/ tests/

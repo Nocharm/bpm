@@ -10,8 +10,11 @@
 
 import hashlib
 
-from app.models import Edge, Node
-from scripts.consultant_canonical import CanonicalMap, CanonicalParams
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Edge, Employee, Node, ProcessCategory
+from scripts.consultant_canonical import CanonicalCategory, CanonicalMap, CanonicalParams
 
 _X_STEP = 240  # rank 간 가로 간격(px) — create_map Start/End 시드(120→480)와 동일 리듬
 _Y_STEP = 120  # rank 내 세로 간격(px)
@@ -131,3 +134,64 @@ def build_graph_rows(
         for src, dst, label in flow
     ]
     return nodes, edges, warnings
+
+
+async def upsert_categories(
+    session: AsyncSession, cats: list[CanonicalCategory]
+) -> dict[str, int]:
+    """code 기준 멱등 업서트 — 개명 안전. 반환: code→id (parent 해석용)."""
+    existing = {
+        c.code: c for c in (await session.scalars(select(ProcessCategory))).all()
+    }
+    ids: dict[str, int] = {}
+    for order, cat in enumerate(sorted(cats, key=lambda c: c.level)):
+        row = existing.get(cat.code)
+        parent_id = ids.get(cat.parent) if cat.parent else None
+        if row is None:
+            row = ProcessCategory(code=cat.code, name=cat.name, level=cat.level,
+                                  parent_id=parent_id, sort_order=order)
+            session.add(row)
+            await session.flush()
+            existing[cat.code] = row
+        else:
+            row.name, row.level, row.parent_id, row.sort_order = cat.name, cat.level, parent_id, order
+        ids[cat.code] = row.id
+    return ids
+
+
+async def build_known_departments(session: AsyncSession) -> set[str]:
+    # routers/maps._assert_known_department와 동일 규약 — 직원 org 전 prefix의 "/" 조인
+    rows = (
+        await session.execute(
+            select(Employee.org_l1, Employee.org_l2, Employee.org_l3,
+                   Employee.org_l4, Employee.org_l5)
+        )
+    ).all()
+    known: set[str] = set()
+    for levels in rows:
+        parts = [lv for lv in levels if lv]
+        for i in range(1, len(parts) + 1):
+            known.add("/".join(parts[:i]))
+    return known
+
+
+async def resolve_owning_department(
+    session: AsyncSession, known: set[str], dept: str, owner: str
+) -> tuple[str | None, str | None]:
+    """canonical department → 오너 org 폴백 → (None, 경고) (design §5.3)."""
+    dept = dept.strip()
+    if dept and dept in known:
+        return dept, None
+    employee = await session.get(Employee, owner)
+    parts = (
+        [lv for lv in (employee.org_l1, employee.org_l2, employee.org_l3,
+                       employee.org_l4, employee.org_l5) if lv]
+        if employee else []
+    )
+    if parts:
+        path = "/".join(parts)
+        note = f"department {dept!r} unknown — fallback to owner org {path!r}" if dept else None
+        if not dept:
+            note = f"department empty — fallback to owner org {path!r}"
+        return path, note
+    return None, f"department {dept!r} unknown and owner {owner!r} has no org — left NULL"
