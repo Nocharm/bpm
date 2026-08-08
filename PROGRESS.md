@@ -25,6 +25,7 @@
 - **픽스 웨이브 정정**: I-5에서 `CanonicalParams.input`/`output`에 건 50자 상한이 잘못 — design §2.2상 `sp_input`/`sp_output`은 자유 텍스트(Text, 무상한)라 실제 문장형 값이 거부될 수 있었다. 두 필드만 상한 해제(숫자형 6필드는 `String(50)` 그대로 유지). pytest 911/911, ruff 클린.
 - **회귀 가드 추가**: `test_long_input_output_accepted` — input/output 500자 자유 텍스트가 파서에서 수용되는지 확인하는 테스트 전용 후속(운영 코드 변경 없음). pytest 912/912, ruff 클린.
 - **Phase 2 Task 1 완료**: `GET /api/categories/nodes`(lazy 자식 + 서브트리 map_count, 레벨 역순 부모 누적)·`GET /api/categories/{id}/maps`(직접 연결 맵 페이지네이션, subprocess-usage hidden_count 마스킹 선례 재사용·list_maps 카드 메트릭 스코프 재사용) 신설. `MapOut`에 `category_id`/`category_path`(트랜지언트, `build_category_paths` 순수 함수)/`consultant_code`/`sp_input`/`sp_output` 노출, `list_maps`·`get_map`에 경로 주입. 마스킹 테스트는 기본 스위트(auth OFF→전원 sysadmin)로는 트리거 안 돼 `test_permission_gates.py`의 `enforce` 픽스처 패턴을 로컬 복제해 감쌈. 부수 발견: 세션 스코프 DB를 공유하는 `test_consultant_import.py::test_upsert_categories_idempotent`가 전체 테이블 스냅샷을 단언해 신규 시드와 충돌 — code 필터로 좁혀 회귀 없이 정정. pytest 915/915, ruff 클린.
+- **Phase 2 Task 1 fix round 1**: 리뷰 지적 Important 1건 — `list_category_maps`가 offset/limit을 가시성 필터 이전에 적용해, 비가시 맵만 있는 페이지가 total>0인데 maps=[]로 창을 통째로 잃는 버그. 직접연결 맵(카테고리당 소량, 서브트리 아님)을 전량 로드→가시성 분리→그 뒤에만 `visible[offset:offset+limit]` 슬라이스로 수정(total=전체 비삭제 수, hidden=페이지 무관 전체 비가시 수로 안정화). Minor 1건 — 존재하지 않는 category_id 404 회귀 테스트 추가(라우터 자체는 이미 404 처리 중). 신규 테스트 2건. pytest 917/917, ruff 클린.
 
 ## 2026-08-04 — 맵 카드 최근열람 표시 정정
 - 기본 상태에서 시계 칩 전체가 accent-tint 배경이라 그 줄이 "최근 수정"이 아닌 다른 값처럼 읽혔다 — 칩 스타일을 빼고 **시계 아이콘에만** 최근 열람을 표시(아이콘 색 + 배경 하이라이트, 텍스트는 다른 카드와 동일하게 `updated_at`).

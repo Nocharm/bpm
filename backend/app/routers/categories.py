@@ -257,31 +257,30 @@ async def list_category_maps(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> CategoryMapsOut:
-    """이 노드에 직접 연결된(서브트리 아님) 맵 페이지 — 비가시 맵은 hidden으로만 집계."""
+    """이 노드에 직접 연결된(서브트리 아님) 맵 페이지.
+
+    계약: total=비삭제 직접연결 맵 전체 수, hidden=그중 호출자가 열람 불가한 수(페이지 무관, 전체
+    기준으로 안정) — 즉 가시성 필터를 먼저 전체 집합에 적용한 뒤에만 offset/limit을 슬라이스한다.
+    그러지 않으면 비가시 맵만 있는 페이지가 total>0인데도 maps=[]로 창을 통째로 잃는다(직접연결
+    맵은 카테고리당 소량 — 서브트리가 아니라 fetch-all 금지 제약과 무관).
+    """
     category = await session.get(ProcessCategory, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
 
-    total = (
-        await session.scalar(
-            select(func.count())
-            .select_from(ProcessMap)
-            .where(ProcessMap.category_id == category_id, ProcessMap.deleted_at.is_(None))
-        )
-    ) or 0
-    page_maps = list(
+    all_maps = list(
         (
             await session.scalars(
                 select(ProcessMap)
                 .where(ProcessMap.category_id == category_id, ProcessMap.deleted_at.is_(None))
                 .order_by(ProcessMap.updated_at.desc())
-                .offset(offset)
-                .limit(limit)
             )
         ).all()
     )
-    visible, hidden = await _split_visible_maps(session, user, page_maps)
-    await _apply_card_metrics(session, visible)
+    total = len(all_maps)
+    visible, hidden = await _split_visible_maps(session, user, all_maps)
+    page = visible[offset : offset + limit]
+    await _apply_card_metrics(session, page)
     return CategoryMapsOut(
-        total=total, hidden=hidden, maps=[MapOut.model_validate(m) for m in visible]
+        total=total, hidden=hidden, maps=[MapOut.model_validate(m) for m in page]
     )

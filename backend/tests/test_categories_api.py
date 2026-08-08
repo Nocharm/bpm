@@ -127,3 +127,64 @@ def test_map_out_exposes_category_fields(client: TestClient) -> None:
     assert detail["category_path"] == "구매/직접구매"
     assert detail["consultant_code"] == "CAT-M1"
     assert "sp_input" in detail and "sp_output" in detail
+
+
+def _seed_paging_category(client: TestClient) -> int:
+    """L1 카테고리 1개 + private 맵 2·public 맵 1 직접 연결. 반환: category id.
+
+    가시성 필터가 offset/limit보다 먼저 전체 집합에 적용되는지 검증하기 위한 시드 —
+    비가시 맵이 페이지 창을 소모하면 안 된다(fix round 1, Important #1).
+    """
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory, ProcessMap
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            cat = await session.scalar(
+                select(ProcessCategory).where(ProcessCategory.code == "CAT-PG")
+            )
+            if cat is None:
+                cat = ProcessCategory(code="CAT-PG", name="페이징", level=1, sort_order=0)
+                session.add(cat)
+                await session.flush()
+            for code, name, visibility in (
+                ("CAT-PG1", "paging private 1", "private"),
+                ("CAT-PG2", "paging private 2", "private"),
+                ("CAT-PG3", "paging public", "public"),
+            ):
+                existing = await session.scalar(
+                    select(ProcessMap).where(ProcessMap.consultant_code == code)
+                )
+                if existing is None:
+                    session.add(
+                        ProcessMap(
+                            name=name, visibility=visibility,
+                            owner_id="cat.owner", created_by="cat.owner",
+                            category_id=cat.id, consultant_code=code,
+                        )
+                    )
+            await session.commit()
+            return cat.id
+
+    return asyncio.run(_seed())
+
+
+def test_category_maps_visibility_filtered_before_pagination(
+    client: TestClient, enforce: None
+) -> None:
+    category_id = _seed_paging_category(client)
+    act_as("cat.stranger")  # sysadmin 아님 + 권한 행 없음 → private 2건은 hidden
+    body = client.get(f"/api/categories/{category_id}/maps?limit=1").json()
+    # limit=1이 비가시 맵에 먼저 소모되면 maps=[]가 된다 — 전체 집합에 필터 후 슬라이스해야
+    # total은 전체(3), hidden은 페이지 무관 전체 비가시 수(2), maps는 가시 맵만 담는다.
+    assert body["total"] == 3
+    assert body["hidden"] == 2
+    assert [m["name"] for m in body["maps"]] == ["paging public"]
+
+
+def test_category_maps_missing_category_404(client: TestClient) -> None:
+    assert client.get("/api/categories/999999/maps").status_code == 404
