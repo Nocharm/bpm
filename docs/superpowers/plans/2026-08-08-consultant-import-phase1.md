@@ -40,14 +40,14 @@
 **Interfaces:**
 - Produces: `app.models.ProcessCategory` (id·code·name·level·parent_id·sort_order), `ProcessMap.category_id/consultant_code/sp_input/sp_output` — Task 4~6이 사용
 
-- [ ] **Step 0: venv 셋업** (워크트리 최초 1회)
+- [x] **Step 0: venv 셋업** (워크트리 최초 1회)
 
 ```bash
 cd /Users/hyeonjin/Documents/bpm/.claude/worktrees/consultant-hierarchy/backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 ```
 
-- [ ] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_consultant_import.py` 신규
+- [x] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_consultant_import.py` 신규
 
 ```python
 """컨설턴트 임포트 — 스키마·엔진 테스트. 설계: docs/design/2026-08-08-consultant-hierarchy-design.md"""
@@ -76,12 +76,12 @@ def test_schema_has_consultant_columns(client: TestClient) -> None:
         assert ("process_maps", col) in added
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/test_consultant_import.py -q`
 Expected: FAIL — `no such table: process_categories` (또는 no such column)
 
-- [ ] **Step 3: 모델 구현** — `app/models.py`
+- [x] **Step 3: 모델 구현** — `app/models.py`
 
 `ProcessMap` 클래스 직전에 추가:
 
@@ -134,12 +134,12 @@ class ProcessCategory(Base):
     ("process_maps", "sp_output", "TEXT"),
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/test_consultant_import.py -q` → PASS.
 주의: conftest가 `test_processmap.db`를 지우고 새로 만들므로 create_all에 신규 테이블 포함 확인이 곧 스모크다.
 
-- [ ] **Step 5: 린트 + 커밋**
+- [x] **Step 5: 린트 + 커밋**
 
 ```bash
 .venv/bin/ruff check app/ tests/
