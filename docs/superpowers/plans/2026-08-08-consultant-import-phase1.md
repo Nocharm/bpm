@@ -1116,7 +1116,7 @@ async def import_delivery(
         created.add(cmap.code)
 
     # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스).
-    # DB-only 대상은 canonical params가 없어 annual/fte 시드는 공백(경고 불요 — 부모 맥락 값이라 후속 편집 몫).
+    # (구현 개정: DB-only 대상은 annual/fte가 일단 공백으로 폴백하지만, pass 2가 직전 게시본의 같은 연계 노드 값을 이어받아 채운다 — 부분 재전달로 값이 사라지지 않게 §5.2 "아무것도 안 잃는다" 보존)
     link_targets: dict[str, tuple[int, CanonicalParams]] = {
         code: (m.id, CanonicalParams()) for code, m in existing.items()
     }

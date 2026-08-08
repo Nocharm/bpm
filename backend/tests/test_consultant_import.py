@@ -301,3 +301,59 @@ def test_param_normalization_warnings(client) -> None:
     warnings = [r for r in report.rows if r[1] == "warning"]
     assert any("duration" in w[2] for w in warnings)
     assert any("cost" in w[2] for w in warnings)
+
+
+def test_partial_redelivery_preserves_link_node_params(client) -> None:
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+    a = _canonical_map(code="L6-PART-A", links=[{"to_map": "L6-PART-B"}])
+    b = _canonical_map(code="L6-PART-B", params={"annual_count": "42", "fte": "3.0"})
+    _run(_import_once(maps=[a, b]))
+
+    # Delivery 2 — A만 재전달(내용 동일), B는 이전 전달분에만 있던 DB-only 연계 대상.
+    a_again = _canonical_map(code="L6-PART-A", links=[{"to_map": "L6-PART-B"}])
+    report = _run(_import_once(maps=[a_again], label="Delivery 2"))
+    assert report.counts() == {"unchanged": 1}
+
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-PART-A"))).one()
+            version_count = await session.scalar(
+                select(func.count()).select_from(MapVersion).where(MapVersion.map_id == m.id)
+            )
+            v = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            sp = (await session.scalars(
+                select(Node).where(Node.version_id == v.id, Node.node_type == "subprocess")
+            )).one()
+        return version_count, sp
+
+    version_count, sp = _run(_load())
+    assert version_count == 1  # 새 버전 안 찍힘
+    assert sp.annual_count == "42" and sp.fte == "3.0"  # 값 유실 없음
+
+
+def test_duplicate_map_code_in_delivery_errors_on_second(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    first = _canonical_map(code="L6-DUP-01", name="First")
+    second = _canonical_map(code="L6-DUP-01", name="Second")
+    report = _run(_import_once(maps=[first, second]))
+    assert report.counts() == {"created": 1, "error": 1}
+    assert ("L6-DUP-01", "error", "duplicate map code in delivery — skipped") in report.rows
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-DUP-01"))).one()
+
+    m = _run(_load())
+    assert m.name == "First"  # 첫 항목만 처리, 중복은 스킵

@@ -318,20 +318,41 @@ async def import_delivery(
 ) -> ImportReport:
     """전달분 1건 임포트(2-pass) — commit은 호출자 책임(dry-run=rollback, apply=commit)."""
     report = ImportReport()
+
+    # 전달분 내 중복 code는 첫 항목만 처리 — 이후 중복은 에러 행만 남기고 제외(뒤 항목이 앞을
+    # 조용히 덮어써 일관성 없는 리포트가 나오는 걸 방지).
+    seen_codes: set[str] = set()
+    deduped: list[CanonicalMap] = []
+    for cmap in maps:
+        if cmap.code in seen_codes:
+            report.add(cmap.code, "error", "duplicate map code in delivery — skipped")
+            continue
+        seen_codes.add(cmap.code)
+        deduped.append(cmap)
+    maps = deduped
+    delivery_codes = {m.code for m in maps}
+
     category_ids = await upsert_categories(session, categories)
     known = await build_known_departments(session)
 
-    existing = {
+    # consultant_code is_not(None)로 이미 필터했지만 컬럼 타입은 str | None이라 아래서 str 키로
+    # 쓰려면 명시 가드가 필요(Pyright dict[str, ...] 추론).
+    existing: dict[str, ProcessMap] = {
         m.consultant_code: m
         for m in (
             await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code.is_not(None)))
         ).all()
+        if m.consultant_code is not None
     }
     # pass 1 — 맵 껍데기 확보(신규 생성 포함) → link_targets 완성. 거버넌스 필드는 신규 생성 시에만 설정.
     created: set[str] = set()
+    # report.rows에서 "error" action을 다시 스캔하지 않는다 — 중복 code 에러 행이 살아남은 첫
+    # 항목과 같은 code를 써서 그 항목까지 pass 2에서 스킵되는 오염을 막기 위해 카테고리 에러만 별도 추적.
+    category_errored: set[str] = set()
     for cmap in maps:
         if cmap.category not in category_ids:
             report.add(cmap.code, "error", f"unknown category {cmap.category}")
+            category_errored.add(cmap.code)
             continue
         if cmap.code in existing:
             continue
@@ -354,8 +375,9 @@ async def import_delivery(
         existing[cmap.code] = new_map
         created.add(cmap.code)
 
-    # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스).
-    # DB-only 대상은 canonical params가 없어 annual/fte 시드는 공백(경고 불요 — 후속 편집 몫).
+    # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스). DB-only 대상(이번
+    # 전달분에 없음)은 canonical params가 없어 annual/fte가 빈 값으로 폴백한다 — 아래 pass 2가
+    # 그 경우 직전 게시본의 연계 노드 값을 이어받아 채운다(§5.2 "아무것도 안 잃는다").
     link_targets: dict[str, tuple[int, CanonicalParams]] = {
         code: (m.id, CanonicalParams()) for code, m in existing.items()
     }
@@ -363,19 +385,21 @@ async def import_delivery(
         if cmap.code in existing:
             link_targets[cmap.code] = (existing[cmap.code].id, cmap.params)
 
+    # 연계 노드 title을 대상 맵 이름으로 교체(빌더는 code 폴백) — DB-only 대상 포함, 이번 전달분
+    # 우선. existing/maps는 pass 2 진입 전 이미 확정이라 루프 밖에서 1회만 구성(20k맵 스케일에서
+    # 맵마다 다시 만들면 O(n²)).
+    names: dict[str, str] = {code: m.name for code, m in existing.items()}
+    names.update({m.code: m.name for m in maps})
+
     # pass 2 — 그래프·버전·SP 지정. 콘텐츠 필드만 갱신(거버넌스는 위 신규 생성 분기에서만 설정).
-    errored = {r[0] for r in report.rows if r[1] == "error"}
     for cmap in maps:
-        if cmap.code in errored:
+        if cmap.code in category_errored:
             continue
         found_map = existing[cmap.code]
         params = _normalize_params(cmap, report)
         nodes, edges, warnings = build_graph_rows(cmap, link_targets)
         for w in warnings:
             report.add(cmap.code, "warning", w)
-        # 연계 노드 title을 대상 맵 이름으로 교체(빌더는 code 폴백) — DB-only 대상 포함, 이번 전달분 우선
-        names = {code: m.name for code, m in existing.items()}
-        names.update({m.code: m.name for m in maps})
         for n in nodes:
             if n.node_type == "subprocess" and n.title in names:
                 n.title = names[n.title]
@@ -383,10 +407,31 @@ async def import_delivery(
         latest = await _latest_published(session, found_map.id)
         old_nodes: list[Node] = []
         old_edges: list[Edge] = []
-        graph_changed = True
         if latest is not None:
             old_nodes = list((await session.scalars(select(Node).where(Node.version_id == latest.id))).all())
             old_edges = list((await session.scalars(select(Edge).where(Edge.version_id == latest.id))).all())
+
+        # DB-only 연계 대상(이번 전달분에 없어 canonical params가 빈 값으로 폴백)의 annual_count/fte를
+        # 직전 게시본의 같은 연계 노드에서 이어받는다 — 안 그러면 부분 재전달마다 값이 초기화되고
+        # (내용은 그대로인데) 시그니처가 달라져 불필요한 새 버전이 찍힌다.
+        if old_nodes:
+            old_by_root = {(n.source_node_id or n.id): n for n in old_nodes}
+            for link in cmap.links:
+                if link.to_map in delivery_codes:
+                    continue  # 이번 전달분에 canonical params 존재 — 새로 시드한 값 유지
+                node_root = make_node_id(cmap.code, f"__link__{link.to_map}")
+                old_link_node = old_by_root.get(node_root)
+                if old_link_node is None:
+                    continue
+                new_link_node = next(
+                    (n for n in nodes if (n.source_node_id or n.id) == node_root), None
+                )
+                if new_link_node is not None:
+                    new_link_node.annual_count = old_link_node.annual_count
+                    new_link_node.fte = old_link_node.fte
+
+        graph_changed = True
+        if latest is not None:
             graph_changed = _graph_signature(old_nodes, old_edges) != _graph_signature(nodes, edges)
 
         sp_department = cmap.department.strip() or found_map.owning_department or ""
@@ -418,6 +463,7 @@ async def import_delivery(
         found_map.sp_changed_by = actor
         found_map.sp_changed_at = now_kst()
 
+        version: MapVersion | None = None
         if graph_changed:
             # 만료되는 이전 버전의 그래프 행은 지우지 않는다 — 새 버전은 build_graph_rows가 매번
             # 새로 발급한 uuid Node/Edge.id를 쓰므로(계보는 source_node_id) PK 충돌이 없고,
@@ -432,7 +478,10 @@ async def import_delivery(
             await _publish(session, found_map.id, version, actor)
 
         if cmap.code in created:
-            report.add(cmap.code, "created", f"published v{version.version_number}" if graph_changed else "")
+            report.add(
+                cmap.code, "created",
+                f"published v{version.version_number}" if version is not None else "",
+            )
         elif graph_changed or fields_changed:
             report.add(cmap.code, "updated", "graph" if graph_changed else "map fields only")
         else:
