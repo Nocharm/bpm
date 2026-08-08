@@ -23,17 +23,18 @@ class CanonicalCategory(BaseModel):
 
 
 class CanonicalParams(BaseModel):
-    # 50자 상한 — Node.duration/cost_krw/cost_usd/headcount/annual_count/fte는 String(50),
-    # input/output도 짧은 문서/코드 식별자 계약(§4 예시 "PR"/"PO") — postgres 컬럼폭 초과 시
-    # sqlite에서는 안 걸리는데 서버(pg)에서만 apply 중 크래시하는 걸 파서 단계에서 막는다.
+    # 50자 상한 — Node.duration/cost_krw/cost_usd/headcount/annual_count/fte는 String(50).
+    # postgres 컬럼폭 초과 시 sqlite에서는 안 걸리는데 서버(pg)에서만 apply 중 크래시하는 걸
+    # 파서 단계에서 막는다. input/output은 무상한 — sp_input/sp_output은 Text(자유 텍스트,
+    # design §2.2), 실제 값은 문장 단위라 50자 상한을 걸면 정상 데이터가 거부된다.
     duration: str = Field(default="", max_length=50)
     cost_krw: str = Field(default="", max_length=50)
     cost_usd: str = Field(default="", max_length=50)
     headcount: str = Field(default="", max_length=50)
     annual_count: str = Field(default="", max_length=50)
     fte: str = Field(default="", max_length=50)
-    input: str = Field(default="", max_length=50)
-    output: str = Field(default="", max_length=50)
+    input: str = ""
+    output: str = ""
 
 
 class CanonicalNode(BaseModel):
