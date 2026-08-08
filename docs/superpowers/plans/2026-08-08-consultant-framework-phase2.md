@@ -234,11 +234,11 @@ export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Pr
   - `data-id`: `framework-tree`, 노드 행 `framework-node`, 로드모어 `framework-more`.
 - i18n 키(EN/KO 양쪽): `home.viewDepartments`·`home.viewFramework`·`home.frameworkEmpty`("No categories yet — run the consultant import."/"카테고리가 아직 없습니다 — 컨설턴트 임포트를 실행하세요.")·`home.frameworkHidden`·`home.frameworkMore`("Load more"/"더 보기").
 
-- [ ] **Step 1: 실패하는 테스트 작성** — 트리 캐시·펼침 로직을 vitest로. fetch 목킹은 `listCategoryNodes`/`listCategoryMaps`를 vi.mock으로 대체(리포 관례: page.route가 아닌 모듈 목). 최소 3케이스: ①루트 로드 렌더 ②펼침 시 자식+맵 1회만 fetch(재펼침 시 캐시) ③hidden 행·빈 카테고리 행 표시. (컴포넌트 테스트가 기존 리포에 없다면 — `frontend/src/components` 아래 `.test.tsx` 부재 확인 후 — 캐시/펼침 로직을 `frontend/src/lib/framework-tree-state.ts` 순수 리듀서로 분리해 그걸 vitest하고 컴포넌트는 thin 렌더로 유지하는 쪽을 택한다. 리포 테스트 관례를 먼저 확인하고 맞출 것.)
-- [ ] **Step 2: 실패 확인** — `npx vitest run <대상>` FAIL.
-- [ ] **Step 3: 구현** — Interfaces 대로. page.tsx 변경은 외과적으로: 토글 state·writeTree 확장·좌측 컬럼 조건 분기만.
-- [ ] **Step 4: 게이트** — `npx vitest run` 전체 · `npx tsc --noEmit` · `npm run lint` green.
-- [ ] **Step 5: 커밋** — `feat(home): framework view toggle + lazy category tree — 홈 업무 체계 토글·lazy 카테고리 트리`.
+- [x] **Step 1: 실패하는 테스트 작성** — 트리 캐시·펼침 로직을 vitest로. fetch 목킹은 `listCategoryNodes`/`listCategoryMaps`를 vi.mock으로 대체(리포 관례: page.route가 아닌 모듈 목). 최소 3케이스: ①루트 로드 렌더 ②펼침 시 자식+맵 1회만 fetch(재펼침 시 캐시) ③hidden 행·빈 카테고리 행 표시. (컴포넌트 테스트가 기존 리포에 없다면 — `frontend/src/components` 아래 `.test.tsx` 부재 확인 후 — 캐시/펼침 로직을 `frontend/src/lib/framework-tree-state.ts` 순수 리듀서로 분리해 그걸 vitest하고 컴포넌트는 thin 렌더로 유지하는 쪽을 택한다. 리포 테스트 관례를 먼저 확인하고 맞출 것.) — `vitest.config.ts`가 `src/**/*.test.ts`만 include(`.test.tsx` 부재 확인) → lib 분리 경로 채택, 4케이스로 구현(load more append 1건 추가).
+- [x] **Step 2: 실패 확인** — `npx vitest run <대상>` FAIL. — 모듈 미존재로 import resolve 실패 확인.
+- [x] **Step 3: 구현** — Interfaces 대로. page.tsx 변경은 외과적으로: 토글 state·writeTree 확장·좌측 컬럼 조건 분기만.
+- [x] **Step 4: 게이트** — `npx vitest run` 전체 · `npx tsc --noEmit` · `npm run lint` green. — 597/597 · 클린 · 0 errors(사전 warning 1건 무관). `npm run build`도 성공 확인(§Global Constraints 프론트 게이트).
+- [x] **Step 5: 커밋** — `feat(home): framework view toggle + lazy category tree — 홈 업무 체계 토글·lazy 카테고리 트리`.
 
 ---
 

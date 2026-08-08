@@ -1517,6 +1517,12 @@ const en = {
   "perm.sysadmin.kindCheckout": "Checkout request",
   "digest.selectHint": "Select an item to view",
   "digest.unread": "Unread: {n}",
+  // ── 홈 Framework 뷰 토글 + lazy 카테고리 트리 (Phase 2) ──
+  "home.viewDepartments": "Departments",
+  "home.viewFramework": "Framework",
+  "home.frameworkEmpty": "No categories yet — run the consultant import.",
+  "home.frameworkHidden": "{n} hidden",
+  "home.frameworkMore": "Load more",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -3035,6 +3041,12 @@ const ko: Record<MessageKey, string> = {
   "perm.sysadmin.kindCheckout": "체크아웃 요청",
   "digest.selectHint": "항목을 선택하세요",
   "digest.unread": "안 읽음: {n}",
+  // ── 홈 Framework 뷰 토글 + lazy 카테고리 트리 (Phase 2) ──
+  "home.viewDepartments": "부서",
+  "home.viewFramework": "업무 체계",
+  "home.frameworkEmpty": "카테고리가 아직 없습니다 — 컨설턴트 임포트를 실행하세요.",
+  "home.frameworkHidden": "{n}개 비공개",
+  "home.frameworkMore": "더 보기",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

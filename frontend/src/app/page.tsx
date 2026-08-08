@@ -23,6 +23,7 @@ import { CsvCreateModal } from "@/components/csv-create-modal";
 import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
 import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
+import { FrameworkTree } from "@/components/maps/framework-tree";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -87,6 +88,8 @@ export default function MapListPage() {
   const [wordOpen, setWordOpen] = useState(true);
   // "조직도 트리 자체를 조작"했는지 — My부서/Word/미지정 토글과 구분해 시드 재실행 여부를 가른다 (아래 writeTree).
   const [treeTouched, setTreeTouched] = useState(false);
+  // 좌측 컬럼 뷰 — 부서 트리(기존) ↔ 업무 체계(Framework, Phase 2 lazy 카테고리 트리)
+  const [homeView, setHomeView] = useState<"departments" | "framework">("departments");
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -110,12 +113,19 @@ export default function MapListPage() {
   // touched는 "조직도 트리 자체를 편집"했을 때만 true(OrgAccordion onToggle/onCollapseAll) — My부서/Word/
   // 미지정 토글은 트리를 바꾸지 않으므로 touched를 그대로 이어받아 저장만 하고 래치하지 않는다. 그래야
   // 내 부서 맵이 없는 유저가 트리와 무관한 토글만 건드려도 진입할 때마다 시드가 계속 재계산된다.
-  const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean, touched: boolean = false) => {
+  const writeTree = (
+    org: Set<string>,
+    fav: boolean,
+    word: boolean,
+    unassigned: boolean,
+    touched: boolean = false,
+    view: "departments" | "framework",
+  ) => {
     if (touched) seededOrg.current = true;
     setTreeTouched(touched);
     window.localStorage.setItem(
       TREE_STATE_KEY,
-      JSON.stringify({ orgOpen: [...org], fav, word, unassigned, touched }),
+      JSON.stringify({ orgOpen: [...org], fav, word, unassigned, touched, view }),
     );
   };
 
@@ -163,7 +173,7 @@ export default function MapListPage() {
         return;
       }
       const s = JSON.parse(raw) as {
-        orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown; touched?: unknown;
+        orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown; touched?: unknown; view?: unknown;
       };
       if (Array.isArray(s.orgOpen)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -172,6 +182,7 @@ export default function MapListPage() {
       if (typeof s.fav === "boolean") setFavOpen(s.fav);
       if (typeof s.word === "boolean") setWordOpen(s.word);
       if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
+      if (s.view === "departments" || s.view === "framework") setHomeView(s.view);
       if (typeof s.touched === "boolean") {
         setTreeTouched(s.touched);
         // orgOpen 존재 자체는 더 이상 근거가 아니다 — 조직도 트리를 실제로 조작한 적 있을 때만 시드를 막는다.
@@ -600,6 +611,35 @@ export default function MapListPage() {
           <>
             {/* 좌측 리스트 컬럼 — 상단에 검색·필터탭(같은 폭), 아래 리스트 (#5) */}
             <div className="flex min-h-0 min-w-[18rem] flex-1 flex-col gap-2">
+              {/* 뷰 토글 — 부서 트리 ↔ 업무 체계(Framework, Phase 2). 가시성 필터 세그먼트(아래) 스타일 복제 */}
+              <div
+                data-id="home-view-toggle"
+                className="flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+              >
+                {(["departments", "framework"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={homeView === v}
+                    className={`flex-1 rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                      homeView === v
+                        ? "bg-accent-tint text-accent"
+                        : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                    }`}
+                    onClick={() => {
+                      setHomeView(v);
+                      writeTree(orgOpen, favOpen, wordOpen, unassignedOpen, treeTouched, v);
+                    }}
+                  >
+                    {t(v === "departments" ? "home.viewDepartments" : "home.viewFramework")}
+                  </button>
+                ))}
+              </div>
+              {homeView === "framework" ? (
+                // Framework 뷰 — v1은 브라우즈 전용, 검색은 Departments 뷰가 커버 (설계 §6 v1 단순화)
+                <FrameworkTree renderCard={renderCard} selectedId={effectiveSelected} />
+              ) : (
+              <>
               <SearchBox
                 value={mapQuery}
                 onChange={setMapQuery}
@@ -738,7 +778,7 @@ export default function MapListPage() {
                     onToggle={() => {
                       const next = !favOpen;
                       setFavOpen(next);
-                      writeTree(orgOpen, next, wordOpen, unassignedOpen, treeTouched);
+                      writeTree(orgOpen, next, wordOpen, unassignedOpen, treeTouched, homeView);
                     }}
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
@@ -751,7 +791,7 @@ export default function MapListPage() {
                       onToggle={() => {
                         const next = !wordOpen;
                         setWordOpen(next);
-                        writeTree(orgOpen, favOpen, next, unassignedOpen, treeTouched);
+                        writeTree(orgOpen, favOpen, next, unassignedOpen, treeTouched, homeView);
                       }}
                       selectedId={effectiveSelected}
                       onSelect={setSelectedId}
@@ -774,13 +814,13 @@ export default function MapListPage() {
                         for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
                       }
                       setOrgOpen(next);
-                      writeTree(next, favOpen, wordOpen, unassignedOpen, true);
+                      writeTree(next, favOpen, wordOpen, unassignedOpen, true, homeView);
                     }}
                     onCollapseAll={() => {
                       const next = new Set<string>();
                       setOrgOpen(next);
                       setUnassignedOpen(false);
-                      writeTree(next, favOpen, wordOpen, false, true);
+                      writeTree(next, favOpen, wordOpen, false, true, homeView);
                     }}
                     selectedId={effectiveSelected}
                     highlightId={highlightId}
@@ -789,11 +829,13 @@ export default function MapListPage() {
                     onToggleUnassigned={() => {
                       const next = !unassignedOpen;
                       setUnassignedOpen(next);
-                      writeTree(orgOpen, favOpen, wordOpen, next, treeTouched);
+                      writeTree(orgOpen, favOpen, wordOpen, next, treeTouched, homeView);
                     }}
                     renderCard={renderCard}
                   />
                 </div>
+              )}
+              </>
               )}
             </div>
 
