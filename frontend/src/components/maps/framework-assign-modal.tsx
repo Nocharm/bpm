@@ -11,6 +11,7 @@ import { Network, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
+  getCategoryChain,
   listCategoryNodes,
   listMaps,
   postFrameworkTransfer,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/api";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
-import { pickCascadeLevel } from "@/lib/category-cascade";
+import { pickCascadeLevel, seedChainIds, seedLevelParents } from "@/lib/category-cascade";
 import { useI18n } from "@/lib/i18n";
 
 interface FrameworkAssignModalProps {
@@ -48,24 +49,43 @@ export function FrameworkAssignModal({
   const [loadingRoot, setLoadingRoot] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 자식 fetch를 시도한 parentId 집합(결과가 리프였든 아니든) — 재요청 가드 + 로딩 표시 파생에 사용.
+  // depth가 아닌 parentId로 키잉해야 같은 depth를 다른 id로 재선택해도 stale 캐시를 안 밟는다 (fix round 1 #4).
+  const [fetchedParentIds, setFetchedParentIds] = useState<Set<number>>(new Set());
   // 이양 섹션 — 펼칠 때 1회 지연 로드.
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferMaps, setTransferMaps] = useState<MapSummary[] | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
 
-  // 루트 1회 로드.
+  // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 선택 체인 + 레벨별
+  // 옵션을 한 번에 시딩(fix round 1 #2: 재지정 시 매번 루트부터 다시 클릭하지 않도록). 없으면 루트만 로드.
   useEffect(() => {
     let active = true;
-    void listCategoryNodes().then((nodes) => {
+    async function init() {
+      if (currentCategoryId == null) {
+        const nodes = await listCategoryNodes();
+        if (active) {
+          setOptionsByDepth([nodes]);
+          setLoadingRoot(false);
+        }
+        return;
+      }
+      const chainNodes = await getCategoryChain(currentCategoryId);
+      const ids = seedChainIds(chainNodes);
+      const levels = await Promise.all(
+        seedLevelParents(ids).map((parentId) => listCategoryNodes(parentId)),
+      );
       if (active) {
-        setOptionsByDepth([nodes]);
+        setChain(ids);
+        setOptionsByDepth(levels);
         setLoadingRoot(false);
       }
-    });
+    }
+    void init();
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentCategoryId]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -80,21 +100,30 @@ export function FrameworkAssignModal({
     if (chain.length === 0) return;
     const depth = chain.length - 1;
     const parentId = chain[depth];
-    if (optionsByDepth[depth + 1]) return; // 이미 로드됨
+    if (optionsByDepth[depth + 1] || fetchedParentIds.has(parentId)) return; // 이미 로드됐거나 리프로 확인됨
     let active = true;
     void listCategoryNodes(parentId).then((nodes) => {
-      if (active && nodes.length > 0) {
+      if (!active) return;
+      if (nodes.length > 0) {
         setOptionsByDepth((prev) => {
           const next = prev.slice(0, depth + 1);
           next[depth + 1] = nodes;
           return next;
         });
       }
+      setFetchedParentIds((prev) => new Set(prev).add(parentId));
     });
     return () => {
       active = false;
     };
-  }, [chain, optionsByDepth]);
+  }, [chain, optionsByDepth, fetchedParentIds]);
+
+  // 파생값(state 아님) — 체인 끝의 자식 fetch가 아직 인플라이트인지, optionsByDepth·fetchedParentIds로 판단.
+  const deepestDepth = chain.length - 1;
+  const loadingChildren =
+    deepestDepth >= 0 &&
+    !optionsByDepth[deepestDepth + 1] &&
+    !fetchedParentIds.has(chain[deepestDepth]);
 
   function pickAt(depth: number, categoryId: number) {
     setChain((prev) => pickCascadeLevel(prev, depth, categoryId));
@@ -155,8 +184,9 @@ export function FrameworkAssignModal({
     }
   }
 
+  // 이미 슬롯(카테고리 또는 컨설턴트 코드)을 가진 맵은 이양 대상에서 제외 — 자기 자신도 제외 (fix round 1 #3).
   const mapOptions = (transferMaps ?? [])
-    .filter((m) => m.id !== mapId)
+    .filter((m) => m.id !== mapId && m.category_id == null && m.consultant_code == null)
     .map((m) => ({ value: String(m.id), label: m.name }));
 
   return createPortal(
@@ -218,6 +248,7 @@ export function FrameworkAssignModal({
               </select>
             ))
           )}
+          {loadingChildren && <p className="text-fine text-ink-tertiary">{t("common.loading")}</p>}
         </div>
 
         <div className="flex flex-wrap gap-2">

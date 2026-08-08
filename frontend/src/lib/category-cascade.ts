@@ -4,3 +4,14 @@
 export function pickCascadeLevel(chain: number[], depth: number, categoryId: number): number[] {
   return [...chain.slice(0, depth), categoryId];
 }
+
+// 기존 연결 카테고리로 캐스케이드 시딩 — 조상 체인(루트→자신) 응답에서 선택 체인 id만 추출 (fix round 1 #2).
+export function seedChainIds(chain: { id: number }[]): number[] {
+  return chain.map((node) => node.id);
+}
+
+// 시딩 시 레벨별 옵션(listCategoryNodes) prefetch에 쓸 parentId 목록 — depth 0은 루트(undefined),
+// 이후 depth는 그 앞 depth에서 선택된 id(그 카테고리의 자식들이 이번 depth의 옵션).
+export function seedLevelParents(ids: number[]): (number | undefined)[] {
+  return ids.map((_, i) => (i === 0 ? undefined : ids[i - 1]));
+}

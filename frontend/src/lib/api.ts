@@ -2175,6 +2175,11 @@ export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Pr
   return request<CategoryMaps>(`/categories/${categoryId}/maps?offset=${offset}&limit=${limit}`);
 }
 
+// 조상 체인 루트→자신 — 캐스케이드 셀렉트를 기존 연결 카테고리로 시딩할 때 사용 (fix round 1 #2).
+export function getCategoryChain(categoryId: number): Promise<CategoryNode[]> {
+  return request<CategoryNode[]>(`/categories/${categoryId}/chain`);
+}
+
 // 카테고리 연결/해제 — null이면 해제. owner/sysadmin 전용(서버 가드), 모든 레벨 연결 허용.
 export function putMapCategory(mapId: number, categoryId: number | null): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}/category`, {

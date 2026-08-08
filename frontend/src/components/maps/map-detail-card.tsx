@@ -143,6 +143,8 @@ interface MapDetailCardProps {
   onGoToVersion?: (id: number) => void;
   // 현재 보고 있는 버전 — 그 카드엔 "이 버전으로 가기" 숨김.
   currentVersionId?: number | null;
+  // 카테고리 연결/해제/이양 성공 알림 — 홈 FrameworkTree 캐시 무효화용(page.tsx만 전달, fix round 1 #1).
+  onFrameworkChanged?: () => void;
 }
 
 export function MapDetailCard({
@@ -154,6 +156,7 @@ export function MapDetailCard({
   only,
   reloadKey,
   onGoToVersion,
+  onFrameworkChanged,
   currentVersionId,
 }: MapDetailCardProps) {
   const { t, lang } = useI18n();
@@ -457,7 +460,10 @@ export function MapDetailCard({
           currentPath={detail.category_path}
           hasConsultantCode={Boolean(detail.consultant_code)}
           onClose={() => setFrameworkModalOpen(false)}
-          onChanged={() => setLocalReloadKey((n) => n + 1)}
+          onChanged={() => {
+            setLocalReloadKey((n) => n + 1);
+            onFrameworkChanged?.();
+          }}
         />
       )}
         </>

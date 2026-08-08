@@ -249,6 +249,55 @@ async def list_category_nodes(
     ]
 
 
+@router.get("/{category_id}/chain", response_model=list[CategoryNodeOut])
+async def get_category_chain(
+    category_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> list[CategoryNodeOut]:
+    """조상 체인 루트→자신 순 — 프론트 캐스케이드 셀렉트가 기존 연결 카테고리로 시딩할 때 사용
+    (fix round 1 #2). map_count는 이 응답의 소비처(시딩)에 불필요해 0 고정 — /nodes가 진실.
+    """
+    rows = (
+        await session.execute(
+            select(
+                ProcessCategory.id,
+                ProcessCategory.parent_id,
+                ProcessCategory.code,
+                ProcessCategory.name,
+                ProcessCategory.level,
+                ProcessCategory.sort_order,
+            )
+        )
+    ).all()
+    by_id = {row.id: row for row in rows}
+    if category_id not in by_id:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    children_by_parent: dict[int | None, list] = {}
+    for row in rows:
+        children_by_parent.setdefault(row.parent_id, []).append(row)
+
+    chain = []
+    cursor: int | None = category_id
+    while cursor is not None:
+        row = by_id[cursor]
+        chain.append(row)
+        cursor = row.parent_id
+    chain.reverse()
+
+    return [
+        CategoryNodeOut(
+            id=r.id,
+            code=r.code,
+            name=r.name,
+            level=r.level,
+            sort_order=r.sort_order,
+            child_count=len(children_by_parent.get(r.id, [])),
+            map_count=0,
+        )
+        for r in chain
+    ]
+
+
 @router.get("/{category_id}/maps", response_model=CategoryMapsOut)
 async def list_category_maps(
     category_id: int,

@@ -90,6 +90,9 @@ export default function MapListPage() {
   const [treeTouched, setTreeTouched] = useState(false);
   // 좌측 컬럼 뷰 — 부서 트리(기존) ↔ 업무 체계(Framework, Phase 2 lazy 카테고리 트리)
   const [homeView, setHomeView] = useState<"departments" | "framework">("departments");
+  // 카테고리 연결/해제/이양 성공 시 증가 — FrameworkTree key로 넘겨 강제 리마운트(캐시 무효화, fix round 1 #1).
+  const [frameworkVersion, setFrameworkVersion] = useState(0);
+  const handleFrameworkChanged = () => setFrameworkVersion((v) => v + 1);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -505,6 +508,7 @@ export default function MapListPage() {
                 onCopy={handleCopyOpen}
                 onPromote={(id, name) => setPromoteTarget({ id, name })}
                 onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
+                onFrameworkChanged={handleFrameworkChanged}
               />
             </div>
           )}
@@ -636,8 +640,9 @@ export default function MapListPage() {
                 ))}
               </div>
               {homeView === "framework" ? (
-                // Framework 뷰 — v1은 브라우즈 전용, 검색은 Departments 뷰가 커버 (설계 §6 v1 단순화)
-                <FrameworkTree renderCard={renderCard} selectedId={effectiveSelected} />
+                // Framework 뷰 — v1은 브라우즈 전용, 검색은 Departments 뷰가 커버 (설계 §6 v1 단순화).
+                // key=frameworkVersion — 카테고리 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
+                <FrameworkTree key={frameworkVersion} renderCard={renderCard} selectedId={effectiveSelected} />
               ) : (
               <>
               <SearchBox
@@ -853,6 +858,7 @@ export default function MapListPage() {
                   onCopy={handleCopyOpen}
                   onPromote={(id, name) => setPromoteTarget({ id, name })}
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
+                  onFrameworkChanged={handleFrameworkChanged}
                 />
               ) : (
                 <HomeDashboard maps={processMaps} onSelect={setSelectedId} />

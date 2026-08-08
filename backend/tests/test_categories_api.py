@@ -190,6 +190,16 @@ def test_category_maps_missing_category_404(client: TestClient) -> None:
     assert client.get("/api/categories/999999/maps").status_code == 404
 
 
+def test_category_chain_returns_root_to_self(client: TestClient) -> None:
+    ids = _seed_tree(client)
+    chain = client.get(f"/api/categories/{ids['A1']}/chain").json()
+    assert [c["code"] for c in chain] == ["CAT-A", "CAT-A1"]
+
+
+def test_category_chain_missing_category_404(client: TestClient) -> None:
+    assert client.get("/api/categories/999999/chain").status_code == 404
+
+
 def test_designation_saves_input_output(client: TestClient) -> None:
     ids = _seed_tree(client)
     resp = client.put(
