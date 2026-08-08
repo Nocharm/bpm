@@ -287,8 +287,8 @@ export function postFrameworkTransfer(mapId: number, toMapId: number): Promise<{
 - `DesignationForm`·`SubprocessDesignationBody`에 `input: string`·`output: string` 추가(빈 문자열 기본). 모달 렌더는 description textarea(209-217) **앞**에 Input/Output 각 1줄 텍스트 입력(멀티라인 아님 — 간결, 필요 시 후속) 추가, 라벨 i18n `sp.input`("Input"/"인풋")·`sp.output`. panel의 `modalInitial`은 맵의 `sp_input ?? ""`/`sp_output ?? ""` 프리필.
 - 저장 경로는 기존 `putSubprocessDesignation` 그대로(Task 2가 백엔드 수용). **길이 제한·정규화 없음**(자유 텍스트).
 
-- [ ] **Step 1~4:** 이 태스크는 폼 배선 4파일 — 신규 로직이 없어 vitest 신규 케이스는 불요(기존 스위트 회귀만). tsc·lint·vitest 전체 green으로 검증.
-- [ ] **Step 5: 커밋** — `feat(sp): input/output fields on designation form — SP 지정 폼 I/O 편집`.
+- [x] **Step 1~4:** 이 태스크는 폼 배선 4파일 — 신규 로직이 없어 vitest 신규 케이스는 불요(기존 스위트 회귀만). tsc·lint·vitest 전체 green으로 검증.
+- [x] **Step 5: 커밋** — `feat(sp): input/output fields on designation form — SP 지정 폼 I/O 편집`.
 
 ---
 

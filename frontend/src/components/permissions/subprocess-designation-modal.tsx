@@ -215,7 +215,6 @@ export function SubprocessDesignationModal({
             <input
               data-id="subprocess-designation-input"
               className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
-              maxLength={500}
               value={form.input}
               onChange={(e) => setForm((prev) => ({ ...prev, input: e.target.value }))}
             />
@@ -225,7 +224,6 @@ export function SubprocessDesignationModal({
             <input
               data-id="subprocess-designation-output"
               className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
-              maxLength={500}
               value={form.output}
               onChange={(e) => setForm((prev) => ({ ...prev, output: e.target.value }))}
             />
