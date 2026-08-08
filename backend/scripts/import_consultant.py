@@ -9,11 +9,25 @@
 """
 
 import hashlib
+from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Edge, Employee, Node, ProcessCategory
+from app.clock import now as now_kst
+from app.duration import normalize_duration
+from app.models import (
+    Edge,
+    Employee,
+    MapApprover,
+    MapPermission,
+    MapVersion,
+    Node,
+    ProcessCategory,
+    ProcessMap,
+)
+from app.schemas import NUMERIC_RE
+from app.version_events import record_version_event
 from scripts.consultant_canonical import CanonicalCategory, CanonicalMap, CanonicalParams
 
 _X_STEP = 240  # rank 간 가로 간격(px) — create_map Start/End 시드(120→480)와 동일 리듬
@@ -195,3 +209,217 @@ async def resolve_owning_department(
             note = f"department empty — fallback to owner org {path!r}"
         return path, note
     return None, f"department {dept!r} unknown and owner {owner!r} has no org — left NULL"
+
+
+@dataclass
+class ImportReport:
+    """전달분 1건의 임포트 결과 — 맵별 행(action∈created/updated/unchanged/error/warning)."""
+
+    rows: list[tuple[str, str, str]] = field(default_factory=list)
+
+    def add(self, map_code: str, action: str, detail: str = "") -> None:
+        self.rows.append((map_code, action, detail))
+
+    def counts(self) -> dict[str, int]:
+        # warning은 부가 정보라 맵 단위 집계(created/updated/unchanged/error)에서 제외
+        out: dict[str, int] = {}
+        for _, action, _ in self.rows:
+            if action != "warning":
+                out[action] = out.get(action, 0) + 1
+        return out
+
+
+def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalParams:
+    """duration/cost/headcount 정규화 — 무효값은 경고 후 "" 소거(422 아님, §7 무효값 계약과 동형)."""
+    p = cmap.params.model_copy()
+    if p.duration:
+        normalized = normalize_duration(p.duration)
+        if normalized is None:
+            report.add(cmap.code, "warning", f"invalid duration {p.duration!r} dropped")
+            p.duration = ""
+        else:
+            p.duration = normalized
+    if p.cost_krw.strip() and p.cost_usd.strip():
+        report.add(cmap.code, "warning", "both cost_krw and cost_usd set — cost_usd dropped")
+        p.cost_usd = ""
+    for name in ("cost_krw", "cost_usd", "headcount", "annual_count", "fte"):
+        value = getattr(p, name).strip()
+        if value and not NUMERIC_RE.fullmatch(value):
+            report.add(cmap.code, "warning", f"invalid {name} {value!r} dropped")
+            value = ""
+        setattr(p, name, value)
+    return p
+
+
+def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
+    # pos_x/pos_y 제외 — 레이아웃은 콘텐츠 diff 대상이 아님(엔진 규칙 5).
+    # `or ""` — build_graph_rows가 만든 미영속 행은 컬럼 default가 아직 적용되지 않아 미설정
+    # 문자열 필드가 None인 반면 DB에서 읽은 기존 행은 이미 ""로 굳어 있다 — 안 맞추면 항상 "변경"으로 오판.
+    return (
+        sorted(
+            (n.id, n.title, n.node_type, n.department or "", n.assignee or "", n.system or "",
+             n.linked_map_id, n.annual_count or "", n.fte or "", bool(n.is_primary_end))
+            for n in nodes
+        ),
+        sorted((e.source_node_id, e.target_node_id, e.label or "") for e in edges),
+    )
+
+
+async def _latest_published(session: AsyncSession, map_id: int) -> MapVersion | None:
+    return await session.scalar(
+        select(MapVersion)
+        .where(MapVersion.map_id == map_id, MapVersion.status == "published")
+        .order_by(MapVersion.version_number.desc())
+        .limit(1)
+    )
+
+
+async def _publish(session: AsyncSession, map_id: int, version: MapVersion, actor: str) -> None:
+    """routers/versions.publish_version과 동일 규칙(채번·기존 게시본 expired) — 승인·알림은 우회."""
+    max_num = await session.scalar(
+        select(func.max(MapVersion.version_number)).where(MapVersion.map_id == map_id)
+    )
+    version.version_number = (max_num or 0) + 1
+    prior = await session.scalars(
+        select(MapVersion).where(MapVersion.map_id == map_id, MapVersion.status == "published")
+    )
+    for p in prior:
+        p.status = "expired"
+        record_version_event(session, p.id, "expired", actor)
+    version.status = "published"
+    record_version_event(session, version.id, "published", actor)
+
+
+async def import_delivery(
+    session: AsyncSession,
+    *,
+    categories: list[CanonicalCategory],
+    maps: list[CanonicalMap],
+    actor: str,
+    label: str,
+) -> ImportReport:
+    """전달분 1건 임포트(2-pass) — commit은 호출자 책임(dry-run=rollback, apply=commit)."""
+    report = ImportReport()
+    category_ids = await upsert_categories(session, categories)
+    known = await build_known_departments(session)
+
+    existing = {
+        m.consultant_code: m
+        for m in (
+            await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code.is_not(None)))
+        ).all()
+    }
+    # pass 1 — 맵 껍데기 확보(신규 생성 포함) → link_targets 완성. 거버넌스 필드는 신규 생성 시에만 설정.
+    created: set[str] = set()
+    for cmap in maps:
+        if cmap.category not in category_ids:
+            report.add(cmap.code, "error", f"unknown category {cmap.category}")
+            continue
+        if cmap.code in existing:
+            continue
+        owning, note = await resolve_owning_department(session, known, cmap.department, cmap.owner)
+        if note:
+            report.add(cmap.code, "warning", note)
+        new_map = ProcessMap(
+            name=cmap.name, created_by=actor, owner_id=cmap.owner,
+            visibility=cmap.visibility, owning_department=owning,
+            category_id=category_ids[cmap.category], consultant_code=cmap.code,
+        )
+        session.add(new_map)
+        await session.flush()
+        session.add(MapPermission(
+            map_id=new_map.id, principal_type="user",
+            principal_id=cmap.owner, role="owner", granted_by=actor,
+        ))
+        for approver in dict.fromkeys(cmap.approvers):
+            session.add(MapApprover(map_id=new_map.id, user_id=approver, assigned_by=actor))
+        existing[cmap.code] = new_map
+        created.add(cmap.code)
+
+    # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스).
+    # DB-only 대상은 canonical params가 없어 annual/fte 시드는 공백(경고 불요 — 후속 편집 몫).
+    link_targets: dict[str, tuple[int, CanonicalParams]] = {
+        code: (m.id, CanonicalParams()) for code, m in existing.items()
+    }
+    for cmap in maps:
+        if cmap.code in existing:
+            link_targets[cmap.code] = (existing[cmap.code].id, cmap.params)
+
+    # pass 2 — 그래프·버전·SP 지정. 콘텐츠 필드만 갱신(거버넌스는 위 신규 생성 분기에서만 설정).
+    errored = {r[0] for r in report.rows if r[1] == "error"}
+    for cmap in maps:
+        if cmap.code in errored:
+            continue
+        found_map = existing[cmap.code]
+        params = _normalize_params(cmap, report)
+        nodes, edges, warnings = build_graph_rows(cmap, link_targets)
+        for w in warnings:
+            report.add(cmap.code, "warning", w)
+        # 연계 노드 title을 대상 맵 이름으로 교체(빌더는 code 폴백) — DB-only 대상 포함, 이번 전달분 우선
+        names = {code: m.name for code, m in existing.items()}
+        names.update({m.code: m.name for m in maps})
+        for n in nodes:
+            if n.node_type == "subprocess" and n.title in names:
+                n.title = names[n.title]
+
+        latest = await _latest_published(session, found_map.id)
+        old_nodes: list[Node] = []
+        old_edges: list[Edge] = []
+        graph_changed = True
+        if latest is not None:
+            old_nodes = list((await session.scalars(select(Node).where(Node.version_id == latest.id))).all())
+            old_edges = list((await session.scalars(select(Edge).where(Edge.version_id == latest.id))).all())
+            graph_changed = _graph_signature(old_nodes, old_edges) != _graph_signature(nodes, edges)
+
+        sp_department = cmap.department.strip() or found_map.owning_department or ""
+        if not sp_department:
+            report.add(cmap.code, "warning", "sp_department empty")
+        fields_changed = (
+            found_map.name != cmap.name
+            or found_map.category_id != category_ids[cmap.category]
+            or (found_map.sp_department or "") != sp_department
+            or (found_map.sp_input or "") != params.input
+            or (found_map.sp_output or "") != params.output
+            or (found_map.sp_duration or "") != params.duration
+            or (found_map.sp_cost_krw or "") != params.cost_krw
+            or (found_map.sp_cost_usd or "") != params.cost_usd
+            or (found_map.sp_headcount or "") != params.headcount
+        )
+        # 콘텐츠 필드 갱신 — 거버넌스 필드(owner·visibility·owning_department·approvers)는 불변
+        found_map.name = cmap.name
+        found_map.category_id = category_ids[cmap.category]
+        if found_map.sp_designated_at is None:
+            found_map.sp_designated_at = now_kst()
+        found_map.sp_department = sp_department
+        found_map.sp_duration = params.duration
+        found_map.sp_cost_krw = params.cost_krw
+        found_map.sp_cost_usd = params.cost_usd
+        found_map.sp_headcount = params.headcount
+        found_map.sp_input = params.input
+        found_map.sp_output = params.output
+        found_map.sp_changed_by = actor
+        found_map.sp_changed_at = now_kst()
+
+        if graph_changed:
+            # 노드/엣지 id는 make_node_id/make_edge_id로 map_code+code에서 결정적으로 파생되어
+            # 재임포트해도 불변(diff 매칭용) — 그래서 만료될 이전 버전의 행을 먼저 지워야 같은
+            # id로 새 버전 행을 넣을 수 있다(Node/Edge.id는 버전 범위가 아닌 테이블 전역 PK).
+            # MapVersion 행·이벤트는 보존(감사이력 유지), 그래프 스냅샷만 최신 버전으로 대체.
+            for old_row in (*old_nodes, *old_edges):
+                await session.delete(old_row)
+            version = MapVersion(map_id=found_map.id, label=label, status="draft")
+            session.add(version)
+            await session.flush()
+            record_version_event(session, version.id, "created", actor)
+            for row in (*nodes, *edges):
+                row.version_id = version.id
+                session.add(row)
+            await _publish(session, found_map.id, version, actor)
+
+        if cmap.code in created:
+            report.add(cmap.code, "created", f"published v{version.version_number}" if graph_changed else "")
+        elif graph_changed or fields_changed:
+            report.add(cmap.code, "updated", "graph" if graph_changed else "map fields only")
+        else:
+            report.add(cmap.code, "unchanged", "")
+    return report

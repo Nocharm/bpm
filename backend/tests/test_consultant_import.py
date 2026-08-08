@@ -159,3 +159,136 @@ def test_resolve_owning_department(client) -> None:
     assert direct == ("Consult Div/Consult Team", None)
     assert fallback[0] == "Consult Div/Consult Team" and "fallback" in (fallback[1] or "")
     assert none[0] is None and none[1] is not None
+
+
+def _delivery(maps=None):
+    from scripts.consultant_canonical import CanonicalCategory
+
+    cats = [
+        CanonicalCategory(code="A", name="구매", level=1, parent=None),
+        CanonicalCategory(code="A1", name="직접구매", level=2, parent="A"),
+    ]
+    return cats, maps if maps is not None else [_canonical_map()]
+
+
+async def _import_once(maps=None, label="Consultant import"):
+    from app.db import SessionLocal
+    from scripts.import_consultant import import_delivery
+
+    cats, cmaps = _delivery(maps)
+    async with SessionLocal() as session:
+        report = await import_delivery(session, categories=cats, maps=cmaps, actor="admin.sys", label=label)
+        await session.commit()
+    return report
+
+
+def test_initial_import_creates_published_map(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapApprover, MapPermission, MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+    report = _run(_import_once())
+    assert report.counts() == {"created": 1}
+
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
+            v = (await session.scalars(select(MapVersion).where(MapVersion.map_id == m.id))).one()
+            nodes = (await session.scalars(select(Node).where(Node.version_id == v.id))).all()
+            perms = (await session.scalars(select(MapPermission).where(MapPermission.map_id == m.id))).all()
+            apprs = (await session.scalars(select(MapApprover).where(MapApprover.map_id == m.id))).all()
+        return m, v, nodes, perms, apprs
+
+    m, v, nodes, perms, apprs = _run(_load())
+    assert m.owner_id == "cons.owner" and m.owning_department == "Consult Div/Consult Team"
+    assert m.category_id is not None and m.visibility == "public"
+    assert m.sp_designated_at is not None and m.sp_input == "PR" and m.sp_output == "PO"
+    assert m.sp_duration == "1.30"
+    assert v.status == "published" and v.version_number == 1
+    assert {n.node_type for n in nodes} == {"start", "process", "end"}
+    assert [(p.principal_id, p.role) for p in perms] == [("cons.owner", "owner")]
+    assert [a.user_id for a in apprs] == ["cons.appr"]
+
+
+def test_reimport_unchanged_is_noop(client) -> None:
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once())
+    report = _run(_import_once())
+    assert report.counts() == {"unchanged": 1}
+
+    async def _count():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
+            return await session.scalar(select(func.count()).select_from(MapVersion).where(MapVersion.map_id == m.id))
+
+    assert _run(_count()) == 1  # 새 버전 없음
+
+
+def test_reimport_changed_publishes_new_version(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once())
+    changed = _canonical_map()
+    changed.nodes[0].name = "요청(개정)"
+    report = _run(_import_once(maps=[changed], label="Delivery 2"))
+    assert report.counts() == {"updated": 1}
+
+    async def _versions():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
+            return (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id).order_by(MapVersion.id)
+            )).all()
+
+    versions = _run(_versions())
+    assert [v.status for v in versions] == ["expired", "published"]
+    assert versions[1].version_number == 2  # 현업 편집 있어도 같은 규칙 — 아무것도 안 막는다
+
+
+def test_reimport_preserves_governance_fields(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once())
+
+    async def _handover():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
+            m.owner_id = "someone.else"  # 이양 후 거버넌스 변경 시뮬레이션
+            m.visibility = "private"
+            await session.commit()
+
+    _run(_handover())
+    changed = _canonical_map(name="이름 개정")
+    _run(_import_once(maps=[changed]))
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
+
+    m = _run(_load())
+    assert m.owner_id == "someone.else" and m.visibility == "private"  # 거버넌스 불변
+    assert m.name == "이름 개정"  # 콘텐츠는 갱신
+
+
+def test_param_normalization_warnings(client) -> None:
+    _seed_import_employees()
+    bad = _canonical_map(code="L6-77", params={"duration": "about 3 days", "cost_krw": "100", "cost_usd": "1"})
+    report = _run(_import_once(maps=[bad]))
+    warnings = [r for r in report.rows if r[1] == "warning"]
+    assert any("duration" in w[2] for w in warnings)
+    assert any("cost" in w[2] for w in warnings)

@@ -848,7 +848,7 @@ git commit -m "feat(consultant): category upsert + owning department resolution 
 7. SP 지정: `sp_designated_at`(None일 때만 now_kst), `sp_department=canonical department 원문(빈 값이면 owning 해석값, 그마저 없으면 "" + warning)`, `sp_duration/sp_cost_krw/sp_cost_usd/sp_headcount` 정규화값, `sp_input/sp_output`, `sp_changed_by=actor`, `sp_changed_at=now_kst()`.
 8. action 판정: 신규=created / 그래프 or 맵 필드 변경=updated / 완전 동일=unchanged.
 
-- [ ] **Step 1: 실패하는 테스트 작성** — append (핵심 5 시나리오)
+- [x] **Step 1: 실패하는 테스트 작성** — append (핵심 5 시나리오)
 
 ```python
 def _delivery(maps=None):
@@ -984,9 +984,9 @@ def test_param_normalization_warnings(client) -> None:
     assert any("cost" in w[2] for w in warnings)
 ```
 
-- [ ] **Step 2: 실패 확인** — `pytest tests/test_consultant_import.py -q` → 신규 5건 FAIL (ImportError: import_delivery).
+- [x] **Step 2: 실패 확인** — `pytest tests/test_consultant_import.py -q` → 신규 5건 FAIL (ImportError: import_delivery).
 
-- [ ] **Step 3: 구현** — `import_consultant.py`에 append. 위 엔진 규칙 1~8 그대로. 뼈대:
+- [x] **Step 3: 구현** — `import_consultant.py`에 append. 위 엔진 규칙 1~8 그대로. 뼈대:
 
 ```python
 from dataclasses import dataclass, field
@@ -1195,9 +1195,9 @@ async def import_delivery(
     return report
 ```
 
-- [ ] **Step 4: 통과 확인** — `pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → 전부 PASS. 시나리오 간 DB 공유(세션 스코프 sqlite) 주의 — 맵 code가 겹치는 테스트는 같은 맵에 업서트되므로 각 테스트의 단언은 위 코드처럼 code 필터로 조회한다.
+- [x] **Step 4: 통과 확인** — `pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → 전부 PASS. 시나리오 간 DB 공유(세션 스코프 sqlite) 주의 — 맵 code가 겹치는 테스트는 같은 맵에 업서트되므로 각 테스트의 단언은 위 코드처럼 code 필터로 조회한다.
 
-- [ ] **Step 5: 린트 + 커밋**
+- [x] **Step 5: 린트 + 커밋**
 
 ```bash
 .venv/bin/ruff check scripts/ tests/

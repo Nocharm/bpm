@@ -12,6 +12,7 @@
 - **Phase 1 Task 2 완료**: canonical 파서 모듈(카테고리/맵 Pydantic 모델 + 로더 함수) 구현 완료. load_categories 구조 검증(중복코드/parent 존재/level 체인), load_maps 줄단위 오류 수집(벌크 임포트 계약) — pytest 5/5 통과.
 - **Phase 1 Task 3 완료**: 결정적 그래프 빌더 구현 — make_node_id/make_edge_id(컨설턴트 코드 sha1 파생), build_graph_rows(Start/End 자동 시드, 연계 노드 subprocess 변환·SP 파라미터 상속, 위상 정렬 레이아웃). pytest 3/3 통과(체인·연계·경고), 린트 OK.
 - **Phase 1 Task 4 완료**: 카테고리/오우닝부서 해석 모듈 구현 — upsert_categories 멱등 업서트(code 기준·parent 2-pass), build_known_departments 직원 org 전 prefix, resolve_owning_department dept/owner 폴백 규약. pytest 2/2 통과, 린트 OK.
+- **Phase 1 Task 5 완료**: 맵 업서트 엔진 `import_delivery` 구현 — 2-pass(맵 껍데기+link_targets → 그래프/버전/SP 지정), 게시는 routers/versions.publish_version 규칙 재현(채번·기존 게시본 expired·이벤트, 승인·알림 우회), 거버넌스 필드는 생성 시에만 세팅. 결정적 노드/엣지 id(Task 3)가 테이블 전역 PK라 재게시 시 만료되는 이전 버전의 그래프 행을 지워 id를 재사용(버전 메타·이벤트는 보존, 그래프 스냅샷만 최신으로 대체 — 향후 버전비교 화면에서 만료본 그래프 조회 불가는 알려진 트레이드오프). 변경 감지 시그니처 비교 시 미영속 Node/Edge의 컬럼 default 미적용(None) vs DB 로드본("") 불일치로 오탐되던 버그 수정. pytest 16/16(신규 5 포함) + 백엔드 전체 900/900 통과, 린트 OK.
 
 ## 2026-08-04 — 맵 카드 최근열람 표시 정정
 - 기본 상태에서 시계 칩 전체가 accent-tint 배경이라 그 줄이 "최근 수정"이 아닌 다른 값처럼 읽혔다 — 칩 스타일을 빼고 **시계 아이콘에만** 최근 열람을 표시(아이콘 색 + 배경 하이라이트, 텍스트는 다른 카드와 동일하게 `updated_at`).
