@@ -425,7 +425,7 @@ git commit -m "feat(consultant): canonical delivery parser (categories.json + ma
 4. 연계(link): `node_type="subprocess"`, `title=대상 이름은 엔진이 세팅`(빌더는 to_map code를 title 폴백), `linked_map_id`, `follow_latest=True`, **`annual_count`/`fte`=대상 맵 params에서 시드**(부모 맥락 계약 — design §4). 부착 엣지: `after_node` 지정 시 그 노드→연계, 생략 시 최대 seq 노드→연계(End 배선은 건드리지 않는 병렬 분기).
 5. 좌표: Kahn 토폴로지 순서로 rank(=max(선행 rank)+1) 계산, `pos_x = 120 + rank*240`, `pos_y = 200 + (rank 내 순번)*120`. 사이클로 남은 노드는 rank=max+1부터 순차 배정(전량 배치 보장).
 
-- [ ] **Step 1: 실패하는 테스트 작성** — `test_consultant_import.py`에 append
+- [x] **Step 1: 실패하는 테스트 작성** — `test_consultant_import.py`에 append
 
 ```python
 def _canonical_map(**over: object):
@@ -494,12 +494,12 @@ def test_build_graph_rows_missing_link_target_warns() -> None:
     assert any("GHOST" in w for w in warnings)
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `.venv/bin/python -m pytest tests/test_consultant_import.py -q`
 Expected: 기존 스키마 테스트 PASS + 신규 3건 FAIL (`ModuleNotFoundError: scripts.import_consultant`)
 
-- [ ] **Step 3: 구현** — `backend/scripts/import_consultant.py` 신규
+- [x] **Step 3: 구현** — `backend/scripts/import_consultant.py` 신규
 
 ```python
 """컨설턴트 canonical 전달물 임포트 — 멱등 업서트·버전 적재/게시·SP 지정 (dry-run/apply).
@@ -637,11 +637,11 @@ def build_graph_rows(
     return nodes, edges, warnings
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `.venv/bin/python -m pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → 전부 PASS.
 
-- [ ] **Step 5: 린트 + 커밋**
+- [x] **Step 5: 린트 + 커밋**
 
 ```bash
 .venv/bin/ruff check scripts/ tests/

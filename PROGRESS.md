@@ -10,6 +10,7 @@
 - 설계서 2건 사용자 승인 → Phase 1 구현 플랜 작성: [`docs/superpowers/plans/2026-08-08-consultant-import-phase1.md`](docs/superpowers/plans/2026-08-08-consultant-import-phase1.md) — 7태스크 TDD(스키마→canonical 파서→결정적 id 그래프 빌더→카테고리/오우닝부서→업서트 엔진(버전 게시·SP 지정·변경 감지)→dry-run CLI/CSV/청크 커밋→전체 게이트). 결정적 노드 id(코드 sha1 파생)로 재임포트 버전 비교 매칭 성립, 거버넌스 필드는 생성 시에만·재임포트는 콘텐츠만 갱신.
 - **Phase 1 Task 1 완료**: ProcessCategory 신규 테이블(L1~L5 트리 저장, code 기준 유니크) + ProcessMap에 4컬럼(category_id/consultant_code/sp_input/sp_output) 추가. db.py _ADDED_COLUMNS 등록 완료, 스키마 스모크 테스트 그린.
 - **Phase 1 Task 2 완료**: canonical 파서 모듈(카테고리/맵 Pydantic 모델 + 로더 함수) 구현 완료. load_categories 구조 검증(중복코드/parent 존재/level 체인), load_maps 줄단위 오류 수집(벌크 임포트 계약) — pytest 5/5 통과.
+- **Phase 1 Task 3 완료**: 결정적 그래프 빌더 구현 — make_node_id/make_edge_id(컨설턴트 코드 sha1 파생), build_graph_rows(Start/End 자동 시드, 연계 노드 subprocess 변환·SP 파라미터 상속, 위상 정렬 레이아웃). pytest 3/3 통과(체인·연계·경고), 린트 OK.
 
 ## 2026-08-04 — 맵 카드 최근열람 표시 정정
 - 기본 상태에서 시계 칩 전체가 accent-tint 배경이라 그 줄이 "최근 수정"이 아닌 다른 값처럼 읽혔다 — 칩 스타일을 빼고 **시계 아이콘에만** 최근 열람을 표시(아이콘 색 + 배경 하이라이트, 텍스트는 다른 카드와 동일하게 `updated_at`).
