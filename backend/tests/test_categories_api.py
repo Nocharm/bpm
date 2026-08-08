@@ -118,6 +118,8 @@ def test_category_maps_visibility_masking(
     assert "framework pub map" in names
     assert body["total"] == 2 and body["hidden"] >= 1
     assert all(m["name"] != "framework private map" for m in body["maps"])
+    # M-2: 이 엔드포인트도 다른 맵 응답과 동일하게 category_path를 주입해야 한다 (maps.py 패턴 대칭).
+    assert body["maps"][0]["category_path"] == "구매/직접구매"
 
 
 def test_map_out_exposes_category_fields(client: TestClient) -> None:
@@ -240,3 +242,34 @@ def test_framework_transfer_moves_slot(client: TestClient) -> None:
     assert dst["category_path"] == "구매/직접구매" and dst["consultant_code"] == "CAT-M1"
     # 재이양 시 source에 슬롯 없음 → 409
     assert client.post(f"/api/maps/{ids['pub']}/framework-transfer", json={"to_map_id": target}).status_code == 409
+
+
+def test_category_put_non_owner_403(client: TestClient, enforce: None) -> None:
+    """PUT /maps/{id}/category — public 맵은 비-owner라도 viewer 바닥값을 받지만 owner는 아니라 403."""
+    ids = _seed_tree(client)
+    act_as("cat.viewer_stranger")  # framework pub map: public visibility → viewer, grants 없음
+    resp = client.put(f"/api/maps/{ids['pub']}/category", json={"category_id": ids["A1"]})
+    assert resp.status_code == 403
+
+
+def test_framework_transfer_target_not_owned_403(client: TestClient, enforce: None) -> None:
+    """source는 owner(경로 의존성 통과)지만 target은 아닌 caller — inline assert_map_role(target) 배선 검증."""
+    ids = _seed_tree(client)
+    act_as("cat.src_owner")
+    source = client.post("/api/maps", json={
+        "name": "framework transfer src-only-owner",
+        "owning_department": "Owning Anchor Division",
+    }).json()
+    sid = source["id"]
+    assert client.put(f"/api/maps/{sid}/category", json={"category_id": ids["A1"]}).status_code == 200
+
+    act_as("cat.tgt_owner")
+    target = client.post("/api/maps", json={
+        "name": "framework transfer tgt-only-owner",
+        "owning_department": "Owning Anchor Division",
+    }).json()
+    tid = target["id"]
+
+    act_as("cat.src_owner")  # source owner(경로 의존성 통과) — target은 owner도 grant도 없음
+    resp = client.post(f"/api/maps/{sid}/framework-transfer", json={"to_map_id": tid})
+    assert resp.status_code == 403

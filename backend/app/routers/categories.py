@@ -330,6 +330,17 @@ async def list_category_maps(
     visible, hidden = await _split_visible_maps(session, user, all_maps)
     page = visible[offset : offset + limit]
     await _apply_card_metrics(session, page)
+    # 페이지 내 맵은 전부 이 카테고리 하나에 연결돼 있으므로 조회는 1회로 충분 (maps.py 패턴과 동일).
+    category_paths = build_category_paths(
+        (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+            )
+        ).all()
+    )
+    path = category_paths.get(category_id)
+    for m in page:
+        m.category_path = path
     return CategoryMapsOut(
         total=total, hidden=hidden, maps=[MapOut.model_validate(m) for m in page]
     )
