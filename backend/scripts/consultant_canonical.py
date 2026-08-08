@@ -6,7 +6,7 @@
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
@@ -23,30 +23,34 @@ class CanonicalCategory(BaseModel):
 
 
 class CanonicalParams(BaseModel):
-    duration: str = ""
-    cost_krw: str = ""
-    cost_usd: str = ""
-    headcount: str = ""
-    annual_count: str = ""
-    fte: str = ""
-    input: str = ""
-    output: str = ""
+    # 50자 상한 — Node.duration/cost_krw/cost_usd/headcount/annual_count/fte는 String(50),
+    # input/output도 짧은 문서/코드 식별자 계약(§4 예시 "PR"/"PO") — postgres 컬럼폭 초과 시
+    # sqlite에서는 안 걸리는데 서버(pg)에서만 apply 중 크래시하는 걸 파서 단계에서 막는다.
+    duration: str = Field(default="", max_length=50)
+    cost_krw: str = Field(default="", max_length=50)
+    cost_usd: str = Field(default="", max_length=50)
+    headcount: str = Field(default="", max_length=50)
+    annual_count: str = Field(default="", max_length=50)
+    fte: str = Field(default="", max_length=50)
+    input: str = Field(default="", max_length=50)
+    output: str = Field(default="", max_length=50)
 
 
 class CanonicalNode(BaseModel):
     code: str = Field(min_length=1, max_length=100)
     name: str = Field(max_length=200)
     type: Literal["process", "decision"] = "process"
-    department: str = ""
-    assignee: str = ""
-    system: str = ""
+    # Node.department/assignee/system은 String(100) — 컬럼폭 상한과 동기화 (위 CanonicalParams와 동일 이유)
+    department: str = Field(default="", max_length=100)
+    assignee: str = Field(default="", max_length=100)
+    system: str = Field(default="", max_length=100)
     seq: int = 0
 
 
 class CanonicalEdge(BaseModel):
     source: str = Field(alias="from")
     target: str = Field(alias="to")
-    label: str = ""
+    label: str = Field(default="", max_length=200)  # Edge.label은 String(200)
 
 
 class CanonicalLink(BaseModel):
@@ -58,9 +62,10 @@ class CanonicalMap(BaseModel):
     code: str = Field(min_length=1, max_length=200)
     name: str = Field(min_length=1, max_length=200)
     category: str
-    owner: str = Field(min_length=1)
-    approvers: list[str] = []
-    department: str = ""
+    owner: str = Field(min_length=1, max_length=100)  # MapPermission.principal_id는 String(100)
+    approvers: list[Annotated[str, Field(max_length=100)]] = []  # MapApprover.user_id는 String(100)
+    # ProcessMap.owning_department는 String(200)이지만 sp_department는 String(100) — 좁은 쪽에 맞춘다
+    department: str = Field(default="", max_length=100)
     visibility: Literal["public", "private"] = "public"
     params: CanonicalParams = CanonicalParams()
     nodes: list[CanonicalNode] = []
@@ -79,7 +84,11 @@ class CanonicalMap(BaseModel):
             for end in (edge.source, edge.target):
                 if end not in seen:
                     raise ValueError(f"edge references unknown node: {end}")
+        linked_maps: set[str] = set()
         for link in self.links:
+            if link.to_map in linked_maps:
+                raise ValueError(f"duplicate link target: {link.to_map}")
+            linked_maps.add(link.to_map)
             if link.after_node is not None and link.after_node not in seen:
                 raise ValueError(f"link.after_node unknown node: {link.after_node}")
         return self

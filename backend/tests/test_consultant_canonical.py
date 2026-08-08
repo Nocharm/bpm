@@ -85,3 +85,31 @@ def test_map_validates_duplicate_node_codes() -> None:
             make_map(nodes=[{"code": "N1", "name": "a", "type": "process", "seq": 1},
                             {"code": "N1", "name": "b", "type": "process", "seq": 2}])
         )
+
+
+def test_map_validates_duplicate_link_targets() -> None:
+    # 같은 to_map을 두 번 링크하면 가상 노드 code(__link__{to_map})가 충돌해 계보/배선이 꼬인다
+    # (finding M-1) — 파서 단계에서 명확한 에러로 막는다.
+    with pytest.raises(ValueError, match="duplicate link target"):
+        CanonicalMap.model_validate(
+            make_map(links=[{"to_map": "L6-02"}, {"to_map": "L6-02", "after_node": "N2"}])
+        )
+
+
+def test_load_maps_rejects_overlong_fields(tmp_path: Path) -> None:
+    # Node.department/assignee/system과 MapApprover.user_id는 각각 String(100) — sqlite는 폭을
+    # 안 걸지만 postgres(서버)는 apply 중 크래시한다(finding I-5). 파서 단계 max_length로 막아
+    # load_maps가 라인 에러로 수집하게 한다(크래시 아님).
+    long_dept = "x" * 101
+    long_approver = "y" * 101
+    bad_department = make_map(code="L6-04", nodes=[
+        {"code": "N1", "name": "요청", "type": "process", "seq": 1, "department": long_dept},
+        {"code": "N2", "name": "승인", "type": "decision", "seq": 2},
+    ])
+    bad_approver = make_map(code="L6-05", approvers=[long_approver])
+    lines = [json.dumps(bad_department), json.dumps(bad_approver)]
+    path = tmp_path / "maps.jsonl"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    maps, errors = load_maps(path)
+    assert maps == []
+    assert len(errors) == 2
