@@ -7,6 +7,7 @@ import {
   fetchMoreMaps,
   fetchRootChildren,
   hasCachedChildren,
+  hasMoreMaps,
   reduceFrameworkTree,
   ROOT,
   shouldFetchChildren,
@@ -204,5 +205,53 @@ describe("loadMoreMaps", () => {
     const ids = state.mapsByCategory.get(3)?.maps.map((m) => m.id) ?? [];
     expect(ids).toEqual([1, 2]);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("펼침 실패 복구", () => {
+  it("fetchCategoryChildren 실패 후 loading_ended를 디스패치하면 shouldFetchChildren이 다시 true가 된다 (M-1 회귀)", async () => {
+    listNodesMock.mockRejectedValue(new Error("network"));
+    listMapsMock.mockResolvedValue({ total: 0, hidden: 0, maps: [] });
+
+    let state = createInitialState();
+    expect(shouldFetchChildren(state, 8)).toBe(true);
+    state = reduceFrameworkTree(state, { type: "opened", categoryId: 8 });
+    state = reduceFrameworkTree(state, { type: "loading_started", categoryId: 8 });
+
+    // 컴포넌트의 .catch가 하는 일 그대로 재현 — fetch 거부 후 loading_ended만 디스패치.
+    await expect(fetchCategoryChildren(8)).rejects.toThrow();
+    state = reduceFrameworkTree(state, { type: "loading_ended", categoryId: 8 });
+
+    expect(state.loadingIds.has(8)).toBe(false);
+    expect(shouldFetchChildren(state, 8)).toBe(true); // 캐시 없고 인플라이트도 아니므로 재시도 가능
+  });
+});
+
+describe("hasMoreMaps", () => {
+  it("total이 (가시 maps 수 + hidden)보다 클 때만 true — hidden도 합산에 포함해야 한다", () => {
+    const loaded = reduceFrameworkTree(createInitialState(), {
+      type: "maps_loaded",
+      categoryId: 1,
+      maps: {
+        total: 5,
+        hidden: 2,
+        maps: [{ id: 1 } as CategoryMaps["maps"][number], { id: 2 } as CategoryMaps["maps"][number]],
+      },
+      append: false,
+    });
+    // shown(2) + hidden(2) = 4 < total(5) → 더 있음
+    expect(hasMoreMaps(loaded, 1)).toBe(true);
+
+    const exhausted = reduceFrameworkTree(loaded, {
+      type: "maps_loaded",
+      categoryId: 1,
+      maps: { total: 5, hidden: 2, maps: [{ id: 3 } as CategoryMaps["maps"][number]] },
+      append: true,
+    });
+    // shown(3) + hidden(2) = 5 == total(5) → 경계에서 더 없음
+    expect(hasMoreMaps(exhausted, 1)).toBe(false);
+
+    // 캐시가 없는 카테고리는 무조건 false
+    expect(hasMoreMaps(createInitialState(), 99)).toBe(false);
   });
 });

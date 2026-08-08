@@ -1525,6 +1525,7 @@ const en = {
   "home.frameworkEmpty": "No categories yet — run the consultant import.",
   "home.frameworkHidden": "{n} hidden",
   "home.frameworkMore": "Load more",
+  "home.frameworkLoadError": "Failed to load — click to retry.",
   // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
   "home.frameworkTitle": "Framework category",
   "home.frameworkCurrent": "Currently in: {path}",
@@ -3062,6 +3063,7 @@ const ko: Record<MessageKey, string> = {
   "home.frameworkEmpty": "카테고리가 아직 없습니다 — 컨설턴트 임포트를 실행하세요.",
   "home.frameworkHidden": "{n}개 비공개",
   "home.frameworkMore": "더 보기",
+  "home.frameworkLoadError": "불러오기 실패 — 클릭해서 재시도하세요.",
   // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
   "home.frameworkTitle": "업무 체계 카테고리",
   "home.frameworkCurrent": "현재 연결: {path}",

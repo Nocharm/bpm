@@ -81,7 +81,13 @@ export function FrameworkAssignModal({
         setLoadingRoot(false);
       }
     }
-    void init();
+    void init().catch((err: unknown) => {
+      // 실패해도 로딩 스피너가 영원히 남지 않도록 해제 — 기존 하단 에러 텍스트로 안내.
+      if (active) {
+        setLoadingRoot(false);
+        setError(getApiErrorDetail(err));
+      }
+    });
     return () => {
       active = false;
     };

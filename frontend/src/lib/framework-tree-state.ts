@@ -93,6 +93,13 @@ export function shouldFetchMore(state: FrameworkTreeState, categoryId: number): 
   return !state.loadingIds.has(categoryId);
 }
 
+// "더 보기" 버튼 노출 조건 — 이미 로드된 맵(가시 maps + 마스킹된 hidden) 합이 total보다 적을 때만 더 있다.
+export function hasMoreMaps(state: FrameworkTreeState, categoryId: number): boolean {
+  const mapsData = state.mapsByCategory.get(categoryId);
+  if (!mapsData) return false;
+  return mapsData.total > mapsData.maps.length + mapsData.hidden;
+}
+
 // 루트 목록 — parentId 생략 호출(최상위 레벨).
 export function fetchRootChildren(): Promise<CategoryNode[]> {
   return listCategoryNodes();

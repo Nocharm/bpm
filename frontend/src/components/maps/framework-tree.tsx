@@ -14,6 +14,7 @@ import {
   fetchMoreMaps,
   fetchRootChildren,
   hasCachedChildren,
+  hasMoreMaps,
   reduceFrameworkTree,
   ROOT,
   shouldFetchChildren,
@@ -26,62 +27,86 @@ import { CountTag } from "@/components/maps/count-tag";
 interface FrameworkTreeProps {
   // page.tsx의 기존 renderCard를 그대로 물려받아 맵 행 렌더를 OrgAccordion과 일원화 (selectedId는 renderCard 클로저 내부 처리).
   renderCard: (map: MapSummary) => ReactNode;
-  selectedId: number | null;
 }
 
 export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
+  // 루트 fetch 실패 표시 — children_loaded가 한 번도 없으면 rootLoaded는 영원히 false로 남는데,
+  // effect는 마운트 1회뿐이라 실패 시 재시도 트리거가 없다. 별도 플래그로 에러 행 + 재시도 버튼을 낸다.
+  const [rootError, setRootError] = useState(false);
 
   // 루트 1회 로드 — StrictMode 이중 마운트는 `active` 가드로(기존 page.tsx 패턴과 동일).
   useEffect(() => {
     let active = true;
-    void fetchRootChildren().then((nodes) => {
-      if (active) {
-        setState((prev) => reduceFrameworkTree(prev, { type: "children_loaded", parentId: ROOT, nodes }));
-      }
-    });
+    void fetchRootChildren()
+      .then((nodes) => {
+        if (active) {
+          setState((prev) => reduceFrameworkTree(prev, { type: "children_loaded", parentId: ROOT, nodes }));
+        }
+      })
+      .catch(() => {
+        if (active) setRootError(true);
+      });
     return () => {
       active = false;
     };
   }, []);
+
+  function handleRetryRoot() {
+    setRootError(false);
+    void fetchRootChildren()
+      .then((nodes) => {
+        setState((prev) => reduceFrameworkTree(prev, { type: "children_loaded", parentId: ROOT, nodes }));
+      })
+      .catch(() => setRootError(true));
+  }
+
+  // opened 판단 없이 무조건 fetch — handleToggle(최초 펼침)과 에러 재시도 행 둘 다 호출.
+  function loadChildren(categoryId: number) {
+    setState((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
+    void fetchCategoryChildren(categoryId)
+      .then(({ nodes, maps }) => {
+        setState((prev) => applyCategoryLoaded(prev, categoryId, nodes, maps));
+      })
+      .catch(() => {
+        // loading_ended만 지우면 재요청 잠금이 풀린다 — 재시도 행 클릭이나 재펼침으로 다시 시도 가능.
+        setState((prev) => reduceFrameworkTree(prev, { type: "loading_ended", categoryId }));
+      });
+  }
 
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {
       setState((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
       return;
     }
+    setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     // 캐시 있거나 이미 인플라이트면 재요청 안 함 — 닫았다 로딩 중 재펼침해도 fetch는 1회만.
-    const shouldFetch = shouldFetchChildren(state, categoryId);
-    setState((prev) => {
-      let next = reduceFrameworkTree(prev, { type: "opened", categoryId });
-      if (shouldFetch) next = reduceFrameworkTree(next, { type: "loading_started", categoryId });
-      return next;
-    });
-    if (!shouldFetch) return;
-    void fetchCategoryChildren(categoryId).then(({ nodes, maps }) => {
-      setState((prev) => applyCategoryLoaded(prev, categoryId, nodes, maps));
-    });
+    if (shouldFetchChildren(state, categoryId)) loadChildren(categoryId);
   }
 
   function handleLoadMore(categoryId: number) {
     // 인플라이트 중 중복 클릭 가드 — 없으면 같은 offset이 두 번 요청되어 중복 id가 append된다.
     if (!shouldFetchMore(state, categoryId)) return;
     setState((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
-    void fetchMoreMaps(state, categoryId).then((maps) => {
-      setState((prev) => {
-        let next = reduceFrameworkTree(prev, { type: "maps_loaded", categoryId, maps, append: true });
-        next = reduceFrameworkTree(next, { type: "loading_ended", categoryId });
-        return next;
+    void fetchMoreMaps(state, categoryId)
+      .then((maps) => {
+        setState((prev) => {
+          let next = reduceFrameworkTree(prev, { type: "maps_loaded", categoryId, maps, append: true });
+          next = reduceFrameworkTree(next, { type: "loading_ended", categoryId });
+          return next;
+        });
+      })
+      .catch(() => {
+        // 버튼 disabled를 풀어 재클릭으로 재시도 가능하게 — 실패해도 offset(로드된 개수)은 그대로라 안전.
+        setState((prev) => reduceFrameworkTree(prev, { type: "loading_ended", categoryId }));
       });
-    });
   }
 
   // 맵 인셋 — org-accordion.tsx와 동일 상수(depth 무관 고정폭). loading은 "더 보기" 인플라이트 중
   // 버튼만 비활성화(이미 로드된 목록은 그대로 유지 — 초기 로딩 placeholder와 달리 목록을 지우지 않는다).
   const renderMapList = (categoryId: number, mapsData: CategoryMaps | undefined, loading: boolean) => {
     if (!mapsData) return null;
-    const shown = mapsData.maps.length;
     return (
       <ul className="flex flex-col gap-2 pl-5 pr-2">
         {mapsData.maps.map((m) => (
@@ -90,7 +115,7 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
         {mapsData.hidden > 0 && (
           <li className="text-fine text-ink-tertiary">{t("home.frameworkHidden", { n: mapsData.hidden })}</li>
         )}
-        {mapsData.total > shown + mapsData.hidden && (
+        {hasMoreMaps(state, categoryId) && (
           <li>
             <button
               type="button"
@@ -112,6 +137,8 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
     const loading = state.loadingIds.has(node.id);
     // 최초 펼침 로딩만 전체를 placeholder로 대체 — 캐시가 이미 있으면(= "더 보기" 로딩) 기존 목록을 유지한다.
     const initialLoading = loading && !hasCachedChildren(state, node.id);
+    // 펼침 fetch 실패 — 열려 있는데 로딩 중도 아니고 캐시도 없으면 실패로 catch가 loading_ended만 지운 상태.
+    const loadFailed = open && !loading && !hasCachedChildren(state, node.id);
     const children = state.childrenByParent.get(node.id) ?? [];
     const mapsData = state.mapsByCategory.get(node.id);
 
@@ -139,6 +166,16 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
             <p style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }} className="text-fine text-ink-tertiary">
               {t("common.loading")}
             </p>
+          ) : loadFailed ? (
+            <button
+              type="button"
+              data-id="framework-node-retry"
+              style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }}
+              className="text-left text-fine text-error hover:underline"
+              onClick={() => loadChildren(node.id)}
+            >
+              {node.name} — {t("home.frameworkLoadError")}
+            </button>
           ) : (
             <>
               {children.length > 0 && (
@@ -161,7 +198,16 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
       data-id="framework-tree"
       className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pr-1"
     >
-      {!rootLoaded ? (
+      {rootError ? (
+        <button
+          type="button"
+          data-id="framework-root-retry"
+          className="p-4 text-left text-caption text-error hover:underline"
+          onClick={handleRetryRoot}
+        >
+          {t("home.frameworkLoadError")}
+        </button>
+      ) : !rootLoaded ? (
         <p className="p-4 text-caption text-ink-tertiary">{t("common.loading")}</p>
       ) : roots.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-sm border border-hairline bg-surface p-4 text-center text-caption text-ink-tertiary">

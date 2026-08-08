@@ -642,7 +642,7 @@ export default function MapListPage() {
               {homeView === "framework" ? (
                 // Framework 뷰 — v1은 브라우즈 전용, 검색은 Departments 뷰가 커버 (설계 §6 v1 단순화).
                 // key=frameworkVersion — 카테고리 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
-                <FrameworkTree key={frameworkVersion} renderCard={renderCard} selectedId={effectiveSelected} />
+                <FrameworkTree key={frameworkVersion} renderCard={renderCard} />
               ) : (
               <>
               <SearchBox
