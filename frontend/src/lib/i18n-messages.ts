@@ -1523,6 +1523,17 @@ const en = {
   "home.frameworkEmpty": "No categories yet — run the consultant import.",
   "home.frameworkHidden": "{n} hidden",
   "home.frameworkMore": "Load more",
+  // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
+  "home.frameworkTitle": "Framework category",
+  "home.frameworkCurrent": "Currently in: {path}",
+  "home.frameworkNotConnected": "Not connected to the framework",
+  "home.frameworkPickCategory": "Pick a category",
+  "home.frameworkAssign": "Add to framework",
+  "home.frameworkUnassign": "Unassign",
+  "home.frameworkTransfer": "Transfer slot",
+  "home.frameworkTransferPick": "Pick a target map",
+  "home.ioInput": "Input",
+  "home.ioOutput": "Output",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -3047,6 +3058,17 @@ const ko: Record<MessageKey, string> = {
   "home.frameworkEmpty": "카테고리가 아직 없습니다 — 컨설턴트 임포트를 실행하세요.",
   "home.frameworkHidden": "{n}개 비공개",
   "home.frameworkMore": "더 보기",
+  // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
+  "home.frameworkTitle": "업무 체계 카테고리",
+  "home.frameworkCurrent": "현재 연결: {path}",
+  "home.frameworkNotConnected": "업무 체계에 연결되지 않음",
+  "home.frameworkPickCategory": "카테고리 선택",
+  "home.frameworkAssign": "업무 체계에 연결",
+  "home.frameworkUnassign": "연결 해제",
+  "home.frameworkTransfer": "슬롯 이양",
+  "home.frameworkTransferPick": "대상 맵 선택",
+  "home.ioInput": "인풋",
+  "home.ioOutput": "아웃풋",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

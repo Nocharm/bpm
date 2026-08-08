@@ -270,11 +270,11 @@ export function postFrameworkTransfer(mapId: number, toMapId: number): Promise<{
   - 성공 시 `onChanged()` → 카드 reloadKey 갱신(기존 detailReloadKey 패턴).
 - i18n: `home.frameworkAssign`·`home.frameworkUnassign`·`home.frameworkTransfer`·`home.frameworkPickCategory` 등 EN/KO.
 
-- [ ] **Step 1: 실패하는 테스트 작성** — 모달의 캐스케이드 상태 로직을 순수 헬퍼로 분리 시 vitest(선택 체인 변경 시 하위 리셋), 최소 1~2케이스. UI 상호작용 자체는 Task 6 스모크가 커버.
-- [ ] **Step 2: 실패 확인.**
-- [ ] **Step 3: 구현.**
-- [ ] **Step 4: 게이트** — vitest 전체·tsc·lint green.
-- [ ] **Step 5: 커밋** — `feat(home): category badge + I/O display + framework assign/transfer modal — 경로 뱃지·I/O 표시·연결/이양 모달`.
+- [x] **Step 1: 실패하는 테스트 작성** — 모달의 캐스케이드 상태 로직을 순수 헬퍼로 분리 시 vitest(선택 체인 변경 시 하위 리셋), 최소 1~2케이스. UI 상호작용 자체는 Task 6 스모크가 커버.
+- [x] **Step 2: 실패 확인.**
+- [x] **Step 3: 구현.**
+- [x] **Step 4: 게이트** — vitest 전체·tsc·lint green.
+- [x] **Step 5: 커밋** — `feat(home): category badge + I/O display + framework assign/transfer modal — 경로 뱃지·I/O 표시·연결/이양 모달`.
 
 ---
 

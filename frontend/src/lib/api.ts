@@ -2174,3 +2174,22 @@ export function listCategoryNodes(parentId?: number): Promise<CategoryNode[]> {
 export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Promise<CategoryMaps> {
   return request<CategoryMaps>(`/categories/${categoryId}/maps?offset=${offset}&limit=${limit}`);
 }
+
+// 카테고리 연결/해제 — null이면 해제. owner/sysadmin 전용(서버 가드), 모든 레벨 연결 허용.
+export function putMapCategory(mapId: number, categoryId: number | null): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/category`, {
+    method: "PUT",
+    body: JSON.stringify({ category_id: categoryId }),
+  });
+}
+
+// 체계 슬롯(category_id+consultant_code) 이양 — source→target, source는 해제. 양쪽 owner 필요(서버 가드).
+export function postFrameworkTransfer(
+  mapId: number,
+  toMapId: number,
+): Promise<{ from_map_id: number; to_map_id: number }> {
+  return request(`/maps/${mapId}/framework-transfer`, {
+    method: "POST",
+    body: JSON.stringify({ to_map_id: toMapId }),
+  });
+}

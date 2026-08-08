@@ -19,6 +19,7 @@ import {
   Landmark,
   Loader2,
   Lock,
+  Network,
   PencilLine,
   Puzzle,
   Settings,
@@ -39,6 +40,7 @@ import {
 } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
+import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
@@ -183,6 +185,10 @@ export function MapDetailCard({
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 카테고리 연결/이양 모달 표시 여부 (Phase 2) / framework assign modal visibility.
+  const [frameworkModalOpen, setFrameworkModalOpen] = useState(false);
+  // 모달 성공 시 내부 재조회 트리거 — 부모의 reloadKey 없이도 detail을 최신화 (기존 reloadKey 패턴과 동일 기법).
+  const [localReloadKey, setLocalReloadKey] = useState(0);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
@@ -253,7 +259,7 @@ export function MapDetailCard({
     return () => {
       active = false;
     };
-  }, [mapId, loginId, reloadKey]);
+  }, [mapId, loginId, reloadKey, localReloadKey]);
 
   if (error) {
     return <p className="p-4 text-caption text-error">{error}</p>;
@@ -365,6 +371,32 @@ export function MapDetailCard({
               {t("home.owningMissingBadge")}
             </span>
           )}
+          {/* 업무 체계 카테고리 — 오너는 클릭해 연결/해제/이양 모달, 비오너는 연결돼 있을 때만 표시 (Phase 2) */}
+          {isOwner ? (
+            <button
+              type="button"
+              data-id="map-detail-category"
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
+                detail.category_path
+                  ? "bg-accent-tint text-accent"
+                  : "border border-dashed border-hairline text-ink-tertiary hover:border-accent hover:text-accent"
+              }`}
+              onClick={() => setFrameworkModalOpen(true)}
+            >
+              <Network size={12} strokeWidth={1.5} />
+              {detail.category_path || t("home.frameworkAssign")}
+            </button>
+          ) : (
+            detail.category_path && (
+              <span
+                data-id="map-detail-category"
+                className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+              >
+                <Network size={12} strokeWidth={1.5} />
+                {detail.category_path}
+              </span>
+            )
+          )}
         </div>
       </div>
 
@@ -396,6 +428,38 @@ export function MapDetailCard({
           <span className="text-ink-tertiary">{t("home.descEmpty")}</span>
         )}
       </div>
+
+      {/* 지정 I/O — sp_input/sp_output 중 하나라도 있으면 노출 (Phase 2) */}
+      {(detail.sp_input || detail.sp_output) && (
+        <div
+          data-id="map-detail-io"
+          className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface p-3 text-caption text-ink"
+        >
+          {detail.sp_input && (
+            <p>
+              <span className="text-ink-tertiary">{t("home.ioInput")}: </span>
+              {detail.sp_input}
+            </p>
+          )}
+          {detail.sp_output && (
+            <p>
+              <span className="text-ink-tertiary">{t("home.ioOutput")}: </span>
+              {detail.sp_output}
+            </p>
+          )}
+        </div>
+      )}
+
+      {frameworkModalOpen && (
+        <FrameworkAssignModal
+          mapId={detail.id}
+          currentCategoryId={detail.category_id}
+          currentPath={detail.category_path}
+          hasConsultantCode={Boolean(detail.consultant_code)}
+          onClose={() => setFrameworkModalOpen(false)}
+          onChanged={() => setLocalReloadKey((n) => n + 1)}
+        />
+      )}
         </>
       )}
 
