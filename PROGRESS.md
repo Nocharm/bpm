@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-08 — 컨설턴트 전사 프로세스 체계(7단계) 수용 설계
+- **Phase 1 최종 리뷰 클린(912 green)** — 브랜치 전체 리뷰(Important 7 적발·전량 수정: 무변경 맵 재기록 게이트/연계 파라미터 정규화/휴지통 맵 스킵/중복 이름 경고 정책/파서 길이 캡(postgres 사각)/미참조 fte 경고/pass-1 청크 커밋). 잔여 유예: 최종 대량 전달 전 maps.jsonl 스트리밍 재구조(현재 전량 메모리 보유)·KB 인덱싱 백필 별도·pending map_rename supersede는 거버넌스 UX 트랙에서 결정·vs-DB 동명 충돌 분기 전용 테스트.
 - 브레인스토밍 확정 — 설계서 2건 신설: [`docs/design/2026-08-08-consultant-hierarchy-design.md`](docs/design/2026-08-08-consultant-hierarchy-design.md)(L1~L5 카테고리 트리·L6=맵·연계=subprocess 변환·SP 지정 확장 I/O·canonical JSON 계약·멱등 임포트 스크립트 — "임포트=부트스트랩, 수명주기=BPM 거버넌스" 이양 모델) + [`docs/design/2026-08-08-governance-ux-design.md`](docs/design/2026-08-08-governance-ux-design.md)(게시 모달 가시성 동봉·맵 카드 권한 목록 편집·승인 탭 비버전 승인 통합+red dot).
 - 재임포트는 CSV 임포트식 무충돌 모델 — 현업 편집이 있어도 안 막히고(스킵/차단 없음) 새 버전 적재+게시로 이력 보존, 변경점은 dry-run 리포트+버전 비교 화면으로 확인.
 - 스케일 전제 반영(§8): 컨설턴트 추산 L5 ~3,000·L6 맵 ~20,000 — canonical을 `maps.jsonl` 스트리밍으로 전환(어댑터 자동 생성, 수기 아님), 벌크 임포트+청크 커밋, dry-run CSV 출력, Phase 2 선행 조건으로 맵 목록 API 서버 필터/페이지네이션·카테고리 트리 lazy-load·SP 피커 검색 재설계 명시.
