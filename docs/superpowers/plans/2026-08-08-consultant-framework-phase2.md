@@ -306,9 +306,9 @@ export function postFrameworkTransfer(mapId: number, toMapId: number): Promise<{
 4. Departments 토글 복귀 → 조직도 정상(회귀)
 5. 새로고침 → 토글 상태 유지(localStorage)
 
-- [ ] **Step 1: 샘플 전달물 작성** — canonical 계약(§4) 준수, `python -m scripts.import_consultant docs/samples/consultant-delivery-sample`(dry-run)이 error 0으로 통과하는지 backend에서 확인.
-- [ ] **Step 2: 스모크 작성·실행** — 5시나리오 green. dev.db 오염/포트 좀비 함정은 lessons 문서 절차대로.
-- [ ] **Step 3: 전체 게이트** — backend pytest 전체 + ruff / frontend vitest·tsc·lint·build 전부 green.
-- [ ] **Step 4: 커밋** — `feat(consultant): sample delivery + framework smoke — 샘플 전달물·업무 체계 스모크` (+PROGRESS에 Phase 2 완료 요약).
+- [x] **Step 1: 샘플 전달물 작성** — canonical 계약(§4) 준수, `python -m scripts.import_consultant docs/samples/consultant-delivery-sample`(dry-run)이 error 0으로 통과하는지 backend에서 확인. — dry-run `created=3` (errors=0, warnings=0).
+- [x] **Step 2: 스모크 작성·실행** — 5시나리오 green. dev.db 오염/포트 좀비 함정은 lessons 문서 절차대로. — `pw-smoke-framework.mjs` 8/8 checks passed (재실행 2회 안정).
+- [x] **Step 3: 전체 게이트** — backend pytest 전체 + ruff / frontend vitest·tsc·lint·build 전부 green. — pytest 922 passed·ruff clean / vitest 603 passed·tsc clean·lint 0 errors(사전 warning 1건 무관)·build 성공.
+- [x] **Step 4: 커밋** — `feat(consultant): sample delivery + framework smoke — 샘플 전달물·업무 체계 스모크` (+PROGRESS에 Phase 2 완료 요약).
 
 미검증 잔여(정직 보고 대상): 서버(원격 IP·평문 HTTP) 실배포 확인, 대량(수천 카테고리) 렌더 성능 실측, SP 피커/기존 홈 스케일 하드닝(별도 트랙).

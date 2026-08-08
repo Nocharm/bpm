@@ -31,3 +31,4 @@
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
+[`samples/consultant-delivery-sample/`](samples/consultant-delivery-sample/) — 컨설턴트 canonical 전달물 샘플(`categories.json`+`maps.jsonl`, `scripts/import_consultant.py` 입력).
