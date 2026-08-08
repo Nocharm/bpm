@@ -51,17 +51,22 @@ def test_build_graph_rows_chain_and_ids() -> None:
         by_type.setdefault(n.node_type, []).append(n)
     assert len(by_type["start"]) == 1 and len(by_type["end"]) == 1
     assert by_type["end"][0].is_primary_end is True
-    # 결정적 id — 같은 입력이면 재실행에도 동일 (버전 비교 매칭의 핵심)
-    assert by_type["process"][0].id == make_node_id("L6-01", "N1")
+    # 결정적 계보(source_node_id) — 같은 입력이면 재실행에도 동일 (버전 비교 매칭의 핵심).
+    # Node.id 자체는 테이블 전역 PK라 빌드마다 새 uuid(clone_graph와 같은 계보 규약).
+    assert by_type["process"][0].source_node_id == make_node_id("L6-01", "N1")
     nodes2, _, _ = build_graph_rows(_canonical_map(), link_targets={})
-    assert sorted(n.id for n in nodes) == sorted(n.id for n in nodes2)
-    # 체인: Start→N1→N2→End
-    pairs = {(e.source_node_id, e.target_node_id) for e in edges}
+    assert sorted(n.source_node_id for n in nodes) == sorted(n.source_node_id for n in nodes2)
+    # 체인: Start→N1→N2→End — 엣지 끝점을 id→source_node_id로 매핑해 계보로 비교
+    by_id = {n.id: n for n in nodes}
+    pairs = {
+        (by_id[e.source_node_id].source_node_id, by_id[e.target_node_id].source_node_id)
+        for e in edges
+    }
     n1, n2 = make_node_id("L6-01", "N1"), make_node_id("L6-01", "N2")
     start_id, end_id = make_node_id("L6-01", "__start__"), make_node_id("L6-01", "__end__")
     assert pairs == {(start_id, n1), (n1, n2), (n2, end_id)}
-    # 레이아웃 — rank가 x로 단조 증가
-    xs = {n.id: n.pos_x for n in nodes}
+    # 레이아웃 — rank가 x로 단조 증가 (계보 키로 조회)
+    xs = {n.source_node_id: n.pos_x for n in nodes}
     assert xs[start_id] < xs[n1] < xs[n2] < xs[end_id]
 
 
@@ -75,9 +80,13 @@ def test_build_graph_rows_link_node_seeds_params() -> None:
     sp = next(n for n in nodes if n.node_type == "subprocess")
     assert sp.linked_map_id == 99 and sp.follow_latest is True
     assert sp.annual_count == "7" and sp.fte == "1.5"
-    assert sp.id == make_node_id("L6-01", "__link__L6-02")
-    pairs = {(e.source_node_id, e.target_node_id) for e in edges}
-    assert (make_node_id("L6-01", "N1"), sp.id) in pairs
+    assert sp.source_node_id == make_node_id("L6-01", "__link__L6-02")
+    by_id = {n.id: n for n in nodes}
+    pairs = {
+        (by_id[e.source_node_id].source_node_id, by_id[e.target_node_id].source_node_id)
+        for e in edges
+    }
+    assert (make_node_id("L6-01", "N1"), sp.source_node_id) in pairs
 
 
 def test_build_graph_rows_missing_link_target_warns() -> None:

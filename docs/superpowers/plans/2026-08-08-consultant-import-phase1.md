@@ -414,7 +414,7 @@ git commit -m "feat(consultant): canonical delivery parser (categories.json + ma
 **Interfaces:**
 - Consumes: Task 2의 `CanonicalMap` 계열
 - Produces:
-  - `make_node_id(map_code: str, node_code: str) -> str` — `"c" + sha1(f"{map_code}|{node_code}")[:24]` (≤25자, Node.id String(50) 안전). Start/End/연계는 가상 노드코드 `"__start__"`/`"__end__"`/`f"__link__{to_map}"` 사용 → **재임포트에도 id 불변 = 버전 비교 diff 매칭 성립**
+  - `make_node_id(map_code: str, node_code: str) -> str` — `"c" + sha1(f"{map_code}|{node_code}")[:24]` (≤25자, Node.id String(50) 안전). Start/End/연계는 가상 노드코드 `"__start__"`/`"__end__"`/`f"__link__{to_map}"` 사용 → **재임포트에도 id 불변 = 버전 비교 diff 매칭 성립** (구현 개정: PK 전역 유니크 제약으로 id는 uuid, 결정성은 source_node_id 계보 루트로 이동 — diff.ts 계보 매칭)
   - `make_edge_id(map_code: str, src_code: str, dst_code: str) -> str` — `"e" + sha1(...)[:24]`
   - `build_graph_rows(cmap: CanonicalMap, link_targets: dict[str, tuple[int, CanonicalParams]]) -> tuple[list[Node], list[Edge], list[str]]` — version_id 미지정 ORM 객체(호출자가 채움) + 경고 리스트. `link_targets`는 to_map code → (map_id, 대상 맵 params)
 

@@ -9,6 +9,7 @@
 """
 
 import hashlib
+import uuid
 from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
@@ -35,12 +36,10 @@ _Y_STEP = 120  # rank 내 세로 간격(px)
 
 
 def make_node_id(map_code: str, node_code: str) -> str:
-    # 컨설턴트 코드에서 파생한 결정적 id — 재임포트에도 불변이라 버전 비교 diff가 노드를 매칭한다
+    # 컨설턴트 코드에서 파생한 결정적 값 — Node.id(테이블 전역 PK)로는 못 쓴다(재게시마다 충돌).
+    # source_node_id 계보 루트로만 쓴다 — clone_graph와 같은 계보 규약(diff.ts getLineageKey)이라
+    # 재임포트해도 버전 비교 diff가 노드를 매칭한다. 실제 Node.id는 빌드마다 uuid4로 새로 발급.
     return "c" + hashlib.sha1(f"{map_code}|{node_code}".encode()).hexdigest()[:24]
-
-
-def make_edge_id(map_code: str, src_code: str, dst_code: str) -> str:
-    return "e" + hashlib.sha1(f"{map_code}|{src_code}|{dst_code}".encode()).hexdigest()[:24]
 
 
 def _compute_ranks(codes: list[str], pairs: list[tuple[str, str]]) -> dict[str, int]:
@@ -114,35 +113,48 @@ def build_graph_rows(
         row_in_rank[r] = row + 1
         return 120 + r * _X_STEP, 200 + row * _Y_STEP
 
+    # code(가상/L7) → 이번 빌드에서 발급한 Node.id — 엣지 배선은 이 id로, 계보는 source_node_id로 별도 기록
+    code_to_id: dict[str, str] = {}
+
     nodes: list[Node] = []
     sx, sy = place(start)
-    nodes.append(Node(id=make_node_id(cmap.code, start), title="Start", node_type="start", pos_x=sx, pos_y=sy, sort_order=0))
+    code_to_id[start] = uuid.uuid4().hex
+    nodes.append(Node(
+        id=code_to_id[start], source_node_id=make_node_id(cmap.code, start),
+        title="Start", node_type="start", pos_x=sx, pos_y=sy, sort_order=0,
+    ))
     for i, cn in enumerate(ordered, start=1):
         x, y = place(cn.code)
+        code_to_id[cn.code] = uuid.uuid4().hex
         nodes.append(Node(
-            id=make_node_id(cmap.code, cn.code), title=cn.name, node_type=cn.type,
+            id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
+            title=cn.name, node_type=cn.type,
             department=cn.department, assignee=cn.assignee, system=cn.system,
             pos_x=x, pos_y=y, sort_order=i,
         ))
     for j, (virtual, _, map_id, params) in enumerate(link_rows):
         x, y = place(virtual)
+        code_to_id[virtual] = uuid.uuid4().hex
         nodes.append(Node(
-            id=make_node_id(cmap.code, virtual), title=virtual.removeprefix("__link__"),
+            id=code_to_id[virtual], source_node_id=make_node_id(cmap.code, virtual),
+            title=virtual.removeprefix("__link__"),
             node_type="subprocess", linked_map_id=map_id, follow_latest=True,
             annual_count=params.annual_count, fte=params.fte,
             pos_x=x, pos_y=y, sort_order=len(ordered) + 1 + j,
         ))
     ex, ey = place(end)
+    code_to_id[end] = uuid.uuid4().hex
     nodes.append(Node(
-        id=make_node_id(cmap.code, end), title="End", node_type="end",
+        id=code_to_id[end], source_node_id=make_node_id(cmap.code, end),
+        title="End", node_type="end",
         is_primary_end=True, pos_x=ex, pos_y=ey, sort_order=len(nodes),
     ))
 
     edges = [
         Edge(
-            id=make_edge_id(cmap.code, src, dst),
-            source_node_id=make_node_id(cmap.code, src),
-            target_node_id=make_node_id(cmap.code, dst),
+            id=uuid.uuid4().hex,
+            source_node_id=code_to_id[src],
+            target_node_id=code_to_id[dst],
             label=label,
         )
         for src, dst, label in flow
@@ -253,15 +265,21 @@ def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalPara
 
 def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     # pos_x/pos_y 제외 — 레이아웃은 콘텐츠 diff 대상이 아님(엔진 규칙 5).
+    # 식별은 Node.id(빌드마다 새 uuid)가 아닌 source_node_id 계보 루트로 — diff.ts getLineageKey와
+    # 동일 규약(node.source_node_id ?? node.id). 엣지도 끝점을 id→계보 루트로 매핑해 비교한다.
     # `or ""` — build_graph_rows가 만든 미영속 행은 컬럼 default가 아직 적용되지 않아 미설정
     # 문자열 필드가 None인 반면 DB에서 읽은 기존 행은 이미 ""로 굳어 있다 — 안 맞추면 항상 "변경"으로 오판.
+    id_to_root = {n.id: (n.source_node_id or n.id) for n in nodes}
     return (
         sorted(
-            (n.id, n.title, n.node_type, n.department or "", n.assignee or "", n.system or "",
-             n.linked_map_id, n.annual_count or "", n.fte or "", bool(n.is_primary_end))
+            (n.source_node_id or n.id, n.title, n.node_type, n.department or "", n.assignee or "",
+             n.system or "", n.linked_map_id, n.annual_count or "", n.fte or "", bool(n.is_primary_end))
             for n in nodes
         ),
-        sorted((e.source_node_id, e.target_node_id, e.label or "") for e in edges),
+        sorted(
+            (id_to_root[e.source_node_id], id_to_root[e.target_node_id], e.label or "")
+            for e in edges
+        ),
     )
 
 
@@ -401,12 +419,9 @@ async def import_delivery(
         found_map.sp_changed_at = now_kst()
 
         if graph_changed:
-            # 노드/엣지 id는 make_node_id/make_edge_id로 map_code+code에서 결정적으로 파생되어
-            # 재임포트해도 불변(diff 매칭용) — 그래서 만료될 이전 버전의 행을 먼저 지워야 같은
-            # id로 새 버전 행을 넣을 수 있다(Node/Edge.id는 버전 범위가 아닌 테이블 전역 PK).
-            # MapVersion 행·이벤트는 보존(감사이력 유지), 그래프 스냅샷만 최신 버전으로 대체.
-            for old_row in (*old_nodes, *old_edges):
-                await session.delete(old_row)
+            # 만료되는 이전 버전의 그래프 행은 지우지 않는다 — 새 버전은 build_graph_rows가 매번
+            # 새로 발급한 uuid Node/Edge.id를 쓰므로(계보는 source_node_id) PK 충돌이 없고,
+            # 버전 비교 화면이 만료본 그래프를 그대로 조회할 수 있어야 한다(append-only 이력).
             version = MapVersion(map_id=found_map.id, label=label, status="draft")
             session.add(version)
             await session.flush()
