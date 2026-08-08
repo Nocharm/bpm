@@ -7,6 +7,9 @@
 이어서 처리한다. 다만 청크 커밋 경계 사이에 크래시하면 재실행이 끝날 때까지 버전 없는 빈 껍데기
 맵(pass 1만 커밋되고 pass 2의 그래프/버전은 아직 못 채운 상태)이 목록에 보일 수 있다.
 
+`_publish`는 routers/versions.publish_version과 달리 KB 인덱싱을 스킵한다 — 전달 스케일
+(최대 2만 맵)의 대량 임베딩은 부적절하며, 필요하면 별도 백필 스크립트로 다룬다.
+
 실행 (backend/ 에서, 기본 dry-run):
     bash:       .venv/bin/python -m scripts.import_consultant <delivery_dir> [--apply]
     PowerShell: .venv\\Scripts\\python -m scripts.import_consultant <delivery_dir> [--apply]
@@ -18,7 +21,6 @@ import csv
 import hashlib
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -361,6 +363,53 @@ async def import_delivery(
         ).all()
         if m.consultant_code is not None
     }
+
+    # 휴지통(소프트삭제) 맵은 되살리지 않는다 — 재전달로 새 버전을 얹으면 _purge_expired가 7일
+    # 내 그 버전째 영구삭제한다. pass 1/2 양쪽에서 건너뛰고 link_targets에서도 제외한다.
+    trashed_in_delivery: set[str] = {
+        cmap.code for cmap in maps
+        if cmap.code in existing and existing[cmap.code].deleted_at is not None
+    }
+    for code in trashed_in_delivery:
+        report.add(code, "error", "map is in trash — restore or purge before re-import")
+
+    # params 정규화는 여기 1회만 — link_targets 시딩과 pass 2 SP 지정이 같은 값을 공유한다.
+    # (예전엔 link_targets가 raw params를 써서 대상 맵의 무효값이 정규화 없이 연계 노드에 그대로 박혔다.)
+    normalized: dict[str, CanonicalParams] = {m.code: _normalize_params(m, report) for m in maps}
+
+    # annual_count/fte가 있는데 이번 전달분에 인바운드 연계가 없으면 그 값은 갈 곳이 없다 — 경고만
+    # (design §4 "아무것도 안 잃는다"의 반례를 리포트로 표면화). NORMALIZED 값 기준(무효값 소거 후).
+    inbound_linked = {link.to_map for m in maps for link in m.links}
+    for cmap in maps:
+        p = normalized[cmap.code]
+        if (p.annual_count or p.fte) and cmap.code not in inbound_linked:
+            report.add(cmap.code, "warning",
+                       "annual_count/fte have no landing site — no inbound link in this delivery")
+
+    # 맵 이름 중복은 차단·강제개명 대상이 아니다(컨트롤러 결정) — 컨설턴트 식별은 consultant_code,
+    # 표시 구분은 카테고리 경로가 맡는다. 경고만 남기고 양쪽 다 정상 진행.
+    name_counts: dict[str, list[str]] = {}
+    for m in maps:
+        name_counts.setdefault(m.name, []).append(m.code)
+    delivery_dupe_names = {name for name, codes in name_counts.items() if len(codes) > 1}
+    existing_names: dict[str, set[str | None]] = {}
+    for name, code in (
+        await session.execute(
+            select(ProcessMap.name, ProcessMap.consultant_code).where(ProcessMap.deleted_at.is_(None))
+        )
+    ).all():
+        existing_names.setdefault(name, set()).add(code)
+    for m in maps:
+        if m.name in delivery_dupe_names:
+            report.add(m.code, "warning",
+                       f"duplicate map name {m.name!r} also used by another map in this delivery")
+        if existing_names.get(m.name, set()) - {m.code}:
+            report.add(m.code, "warning", f"duplicate map name {m.name!r} already used by an existing map")
+
+    # owner/approver 유령(직원 미등재) 감지 — 승인 정족수는 안 막힌다(load_active_approvers가
+    # 미등재를 이미 걸러냄) — 관측용 경고. 조회는 한 번만.
+    known_logins: set[str] = set((await session.scalars(select(Employee.login_id))).all())
+
     # pass 1 — 맵 껍데기 확보(신규 생성 포함) → link_targets 완성. 거버넌스 필드는 신규 생성 시에만 설정.
     created: set[str] = set()
     # report.rows에서 "error" action을 다시 스캔하지 않는다 — 중복 code 에러 행이 살아남은 첫
@@ -368,6 +417,8 @@ async def import_delivery(
     category_errored: set[str] = set()
     created_count = 0  # 신규 생성분만 세어 청크 커밋(기존 맵은 쓰기가 없어 카운트에서 제외)
     for cmap in maps:
+        if cmap.code in trashed_in_delivery:
+            continue
         if cmap.category not in category_ids:
             report.add(cmap.code, "error", f"unknown category {cmap.category}")
             category_errored.add(cmap.code)
@@ -377,6 +428,11 @@ async def import_delivery(
         owning, note = await resolve_owning_department(session, known, cmap.department, cmap.owner)
         if note:
             report.add(cmap.code, "warning", note)
+        if cmap.owner not in known_logins:
+            report.add(cmap.code, "warning", f"owner {cmap.owner!r} not found in employees")
+        for approver in dict.fromkeys(cmap.approvers):
+            if approver not in known_logins:
+                report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
         new_map = ProcessMap(
             name=cmap.name, created_by=actor, owner_id=cmap.owner,
             visibility=cmap.visibility, owning_department=owning,
@@ -397,16 +453,17 @@ async def import_delivery(
         # 한꺼번에 실려 크래시 시 미완성 껍데기가 대량으로 남는다(design §8).
         if commit_every is not None and created_count % commit_every == 0:
             await session.commit()
+            print(f"pass1 committed {created_count} created")
 
     # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스). DB-only 대상(이번
     # 전달분에 없음)은 canonical params가 없어 annual/fte가 빈 값으로 폴백한다 — 아래 pass 2가
     # 그 경우 직전 게시본의 연계 노드 값을 이어받아 채운다(§5.2 "아무것도 안 잃는다").
     link_targets: dict[str, tuple[int, CanonicalParams]] = {
-        code: (m.id, CanonicalParams()) for code, m in existing.items()
+        code: (m.id, CanonicalParams()) for code, m in existing.items() if m.deleted_at is None
     }
     for cmap in maps:
-        if cmap.code in existing:
-            link_targets[cmap.code] = (existing[cmap.code].id, cmap.params)
+        if cmap.code in existing and existing[cmap.code].deleted_at is None:
+            link_targets[cmap.code] = (existing[cmap.code].id, normalized[cmap.code])
 
     # 연계 노드 title을 대상 맵 이름으로 교체(빌더는 code 폴백) — DB-only 대상 포함, 이번 전달분
     # 우선. existing/maps는 pass 2 진입 전 이미 확정이라 루프 밖에서 1회만 구성(20k맵 스케일에서
@@ -416,10 +473,10 @@ async def import_delivery(
 
     # pass 2 — 그래프·버전·SP 지정. 콘텐츠 필드만 갱신(거버넌스는 위 신규 생성 분기에서만 설정).
     for index, cmap in enumerate(maps):
-        if cmap.code in category_errored:
+        if cmap.code in category_errored or cmap.code in trashed_in_delivery:
             continue
         found_map = existing[cmap.code]
-        params = _normalize_params(cmap, report)
+        params = normalized[cmap.code]
         nodes, edges, warnings = build_graph_rows(cmap, link_targets)
         for w in warnings:
             report.add(cmap.code, "warning", w)
@@ -460,6 +517,7 @@ async def import_delivery(
         sp_department = cmap.department.strip() or found_map.owning_department or ""
         if not sp_department:
             report.add(cmap.code, "warning", "sp_department empty")
+        old_name = found_map.name
         fields_changed = (
             found_map.name != cmap.name
             or found_map.category_id != category_ids[cmap.category]
@@ -471,20 +529,25 @@ async def import_delivery(
             or (found_map.sp_cost_usd or "") != params.cost_usd
             or (found_map.sp_headcount or "") != params.headcount
         )
-        # 콘텐츠 필드 갱신 — 거버넌스 필드(owner·visibility·owning_department·approvers)는 불변
-        found_map.name = cmap.name
-        found_map.category_id = category_ids[cmap.category]
-        if found_map.sp_designated_at is None:
-            found_map.sp_designated_at = now_kst()
-        found_map.sp_department = sp_department
-        found_map.sp_duration = params.duration
-        found_map.sp_cost_krw = params.cost_krw
-        found_map.sp_cost_usd = params.cost_usd
-        found_map.sp_headcount = params.headcount
-        found_map.sp_input = params.input
-        found_map.sp_output = params.output
-        found_map.sp_changed_by = actor
-        found_map.sp_changed_at = now_kst()
+        is_new = cmap.code in created
+        # 내용이 그대로면 아무것도 쓰지 않는다 — 안 그러면 재전달마다 updated_at이 갱신돼 홈
+        # 목록(updated_at desc)이 무변경 맵으로 도배되고 sp_changed_at 이력도 오염된다.
+        # sp_designated_at는 예외 — 최초 지정 시점은 내용 변경 여부와 무관하게 채워야 한다.
+        if is_new or graph_changed or fields_changed or found_map.sp_designated_at is None:
+            # 콘텐츠 필드 갱신 — 거버넌스 필드(owner·visibility·owning_department·approvers)는 불변
+            found_map.name = cmap.name
+            found_map.category_id = category_ids[cmap.category]
+            if found_map.sp_designated_at is None:
+                found_map.sp_designated_at = now_kst()
+            found_map.sp_department = sp_department
+            found_map.sp_duration = params.duration
+            found_map.sp_cost_krw = params.cost_krw
+            found_map.sp_cost_usd = params.cost_usd
+            found_map.sp_headcount = params.headcount
+            found_map.sp_input = params.input
+            found_map.sp_output = params.output
+            found_map.sp_changed_by = actor
+            found_map.sp_changed_at = now_kst()
 
         version: MapVersion | None = None
         if graph_changed:
@@ -500,18 +563,22 @@ async def import_delivery(
                 session.add(row)
             await _publish(session, found_map.id, version, actor)
 
-        if cmap.code in created:
+        if is_new:
             report.add(
                 cmap.code, "created",
                 f"published v{version.version_number}" if version is not None else "",
             )
         elif graph_changed or fields_changed:
-            report.add(cmap.code, "updated", "graph" if graph_changed else "map fields only")
+            detail = "graph" if graph_changed else "map fields only"
+            if old_name != cmap.name:
+                detail = f"name '{old_name}' -> '{cmap.name}'; {detail}"
+            report.add(cmap.code, "updated", detail)
         else:
             report.add(cmap.code, "unchanged", "")
 
         if commit_every is not None and (index + 1) % commit_every == 0:
             await session.commit()  # 스케일 대응 — 20k 맵 단일 트랜잭션 방지 (design §8)
+            print(f"pass2 {index + 1}/{len(maps)} maps")
     return report
 
 
@@ -550,12 +617,17 @@ def main() -> None:
     parser.add_argument("delivery_dir", type=Path)
     parser.add_argument("--apply", action="store_true", help="write to DB (default: dry-run)")
     parser.add_argument("--actor", default="consultant-import")
-    parser.add_argument("--label", default=f"Consultant {date.today().isoformat()}")
+    parser.add_argument("--label", default=None, help="version label (default: Consultant <KST date>)")
     parser.add_argument("--report", type=Path, default=None, help="detail CSV path")
     args = parser.parse_args()
+    # KST 고정 — 컨테이너 UTC 자정 근처에 돌리면 date.today()가 하루 밀린다 (CLAUDE.md 운영 노트).
+    label = args.label if args.label is not None else f"Consultant {now_kst().date().isoformat()}"
+    if len(label) > 100:  # MapVersion.label은 String(100)
+        print(f"--label truncated to 100 chars (was {len(label)})")
+        label = label[:100]
     report = asyncio.run(run_import(
         args.delivery_dir, apply=args.apply, actor=args.actor,
-        label=args.label, report_path=args.report,
+        label=label, report_path=args.report,
     ))
     mode = "APPLY" if args.apply else "DRY-RUN"
     print(f"{mode}  " + ", ".join(f"{k}={v}" for k, v in sorted(report.counts().items())))

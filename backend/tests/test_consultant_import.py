@@ -229,6 +229,14 @@ def test_reimport_unchanged_is_noop(client) -> None:
 
     _seed_import_employees()
     _run(_import_once())
+
+    async def _snapshot():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
+            return m.sp_changed_at, m.updated_at
+
+    sp_changed_before, updated_before = _run(_snapshot())
+
     report = _run(_import_once())
     assert report.counts() == {"unchanged": 1}
 
@@ -238,6 +246,12 @@ def test_reimport_unchanged_is_noop(client) -> None:
             return await session.scalar(select(func.count()).select_from(MapVersion).where(MapVersion.map_id == m.id))
 
     assert _run(_count()) == 1  # 새 버전 없음
+
+    # 내용 무변경 재전달은 아무것도 쓰지 않는다 — 안 그러면 updated_at이 갱신돼 홈 목록
+    # (updated_at desc)이 무변경 맵으로 도배되고 sp_changed_at 이력도 오염된다 (finding I-1).
+    sp_changed_after, updated_after = _run(_snapshot())
+    assert sp_changed_after == sp_changed_before
+    assert updated_after == updated_before
 
 
 def test_reimport_changed_publishes_new_version(client) -> None:
@@ -357,6 +371,96 @@ def test_duplicate_map_code_in_delivery_errors_on_second(client) -> None:
 
     m = _run(_load())
     assert m.name == "First"  # 첫 항목만 처리, 중복은 스킵
+
+
+def test_link_target_uses_normalized_params(client) -> None:
+    # 링크 대상(B)의 무효 annual_count가 정규화("" 소거) 없이 그대로 연계 노드에 박히던 버그
+    # (finding I-2) — link_targets가 raw params 대신 정규화된 값을 써야 한다.
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+    a = _canonical_map(code="L6-NORM-A", links=[{"to_map": "L6-NORM-B"}])
+    b = _canonical_map(code="L6-NORM-B", params={"annual_count": "twelve"})
+    report = _run(_import_once(maps=[a, b]))
+    warnings = [r for r in report.rows if r[1] == "warning"]
+    assert any(code == "L6-NORM-B" and "annual_count" in detail for code, _, detail in warnings)
+
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-NORM-A"))).one()
+            v = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            return (await session.scalars(
+                select(Node).where(Node.version_id == v.id, Node.node_type == "subprocess")
+            )).one()
+
+    sp = _run(_load())
+    assert sp.annual_count == ""  # 무효값은 드롭 — "twelve"가 그대로 새지 않는다
+
+
+def test_reimport_trashed_map_errors(client) -> None:
+    # 휴지통(소프트삭제) 맵을 재전달로 되살리지 않는다(finding I-3) — _purge_expired가 7일
+    # 내 그 맵을 새로 얹은 버전째 영구삭제할 수 있어서다.
+    from sqlalchemy import func, select
+
+    from app.clock import now as now_kst
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once(maps=[_canonical_map(code="L6-TRASH-1")]))
+
+    async def _trash():
+        async with SessionLocal() as session:
+            found = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "L6-TRASH-1")
+            )).one()
+            found.deleted_at = now_kst()
+            await session.commit()
+
+    _run(_trash())
+
+    report = _run(_import_once(maps=[_canonical_map(code="L6-TRASH-1")], label="Delivery 2"))
+    assert ("L6-TRASH-1", "error", "map is in trash — restore or purge before re-import") in report.rows
+
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "L6-TRASH-1")
+            )).one()
+            version_count = await session.scalar(
+                select(func.count()).select_from(MapVersion).where(MapVersion.map_id == m.id)
+            )
+        return m, version_count
+
+    m, version_count = _run(_load())
+    assert m.deleted_at is not None  # 휴지통 상태 불변 — 되살아나지 않음
+    assert version_count == 1  # 재게시 없음(휴지통 맵은 pass 2에서 제외)
+
+
+def test_duplicate_name_different_codes_warns_but_both_import(client) -> None:
+    # 맵 이름 중복은 차단·강제개명 대상이 아니다(컨트롤러 결정, finding I-4) — 컨설턴트 식별은
+    # consultant_code이므로 이름 충돌은 경고만 남기고 둘 다 정상 임포트한다.
+    _seed_import_employees()
+    first = _canonical_map(code="L6-NAME-1", name="Shared Name")
+    second = _canonical_map(code="L6-NAME-2", name="Shared Name")
+    report = _run(_import_once(maps=[first, second]))
+    assert report.counts() == {"created": 2}
+    warnings = [r for r in report.rows if r[1] == "warning"]
+    assert any("duplicate map name" in detail for _, _, detail in warnings)
+
+
+def test_annual_count_without_inbound_link_warns(client) -> None:
+    # design §4 "아무것도 안 잃는다"의 반례 — annual_count/fte가 있는데 이번 전달분에 인바운드
+    # 연계가 없으면 그 값은 어디에도 집계되지 않는다(finding I-6). 경고로 표면화.
+    _seed_import_employees()
+    report = _run(_import_once(maps=[_canonical_map(code="L6-LONE", links=[])]))
+    warnings = [r for r in report.rows if r[1] == "warning" and r[0] == "L6-LONE"]
+    assert any("landing site" in detail for _, _, detail in warnings)
 
 
 def test_chunked_commit_across_both_passes(client) -> None:
