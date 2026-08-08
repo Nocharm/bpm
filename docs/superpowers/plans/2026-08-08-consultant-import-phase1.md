@@ -162,7 +162,7 @@ git commit -m "feat(consultant): process_categories table + ProcessMap intake co
   - `load_maps(path: Path) -> tuple[list[CanonicalMap], list[str]]` — jsonl 한 줄=한 맵. **한 줄 파싱/검증 실패는 전체를 죽이지 않고 에러 문자열(줄번호 포함)로 수집**, (정상 맵 리스트, 에러 리스트) 반환
   - `class CanonicalError(ValueError)`
 
-- [ ] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_consultant_canonical.py`
+- [x] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_consultant_canonical.py`
 
 ```python
 """canonical 전달물 파서 테스트 — DB 무관 순수 검증."""
@@ -254,12 +254,12 @@ def test_map_validates_duplicate_node_codes() -> None:
         )
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `.venv/bin/python -m pytest tests/test_consultant_canonical.py -q`
 Expected: FAIL — `ModuleNotFoundError: scripts.consultant_canonical`
 
-- [ ] **Step 3: 구현** — `backend/scripts/consultant_canonical.py`
+- [x] **Step 3: 구현** — `backend/scripts/consultant_canonical.py`
 
 ```python
 """컨설턴트 canonical 전달물(categories.json + maps.jsonl) 파서 — DB 무관 순수 검증.
@@ -391,11 +391,11 @@ def load_maps(path: Path) -> tuple[list[CanonicalMap], list[str]]:
     return maps, errors
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `.venv/bin/python -m pytest tests/test_consultant_canonical.py -q` → PASS (5개).
 
-- [ ] **Step 5: 린트 + 커밋**
+- [x] **Step 5: 린트 + 커밋**
 
 ```bash
 .venv/bin/ruff check scripts/ tests/
