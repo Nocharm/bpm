@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-08 — 컨설턴트 전사 프로세스 체계(7단계) 수용 설계
+- **Phase 2 최종 리뷰 클린(머지 가능)** — 브랜치 리뷰 Minor 3+테스트 갭 3 전량 수정(fetch 실패 복구·category_path 대칭·403 배선 테스트·hasMoreMaps 술어). 게이트: BE pytest 924·ruff 0 / FE vitest 605·tsc 0·lint 0·build OK / 실브라우저 스모크 8/8. 잔여 유예: 서버 실배포 검증·수천 카테고리 렌더 실측·스케일 하드닝 트랙(기존 홈 fetch-all·SP 피커).
 - Phase 2 구현 플랜 작성: [`docs/superpowers/plans/2026-08-08-consultant-framework-phase2.md`](docs/superpowers/plans/2026-08-08-consultant-framework-phase2.md) — 6태스크(카테고리 조회 API+MapOut 노출 → 지정 I/O·연결/이양 API → 홈 토글+lazy 트리 → 상세 카드 뱃지/I/O/모달 → SP 폼 I/O → 샘플 전달물+pw 스모크).
 - Phase 2 스코핑 확정: 배치=Maps 탭 좌측 세그먼트 토글(Departments↔Framework), 스케일=신규 카테고리 트리 표면만 서버 주도 lazy로 정합(기존 홈 fetch-all·SP 피커 재설계는 별도 스케일 하드닝 트랙 분리) — 설계 §6/§7 개정.
 - **Phase 1 최종 리뷰 클린(912 green)** — 브랜치 전체 리뷰(Important 7 적발·전량 수정: 무변경 맵 재기록 게이트/연계 파라미터 정규화/휴지통 맵 스킵/중복 이름 경고 정책/파서 길이 캡(postgres 사각)/미참조 fte 경고/pass-1 청크 커밋). 잔여 유예: 최종 대량 전달 전 maps.jsonl 스트리밍 재구조(현재 전량 메모리 보유)·KB 인덱싱 백필 별도·pending map_rename supersede는 거버넌스 UX 트랙에서 결정·vs-DB 동명 충돌 분기 전용 테스트.
