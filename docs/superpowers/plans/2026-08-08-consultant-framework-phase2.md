@@ -140,7 +140,7 @@ def test_map_out_exposes_category_fields(client: TestClient) -> None:
 - `PUT /api/maps/{map_id}/category` body `{"category_id": <int|null>}` → 갱신된 MapDetailOut. 가드: **`set_owning_department`(maps.py:888)와 동일한 오너/sysadmin 가드 패턴을 그대로 미러**. category_id 존재 검증(404), null=해제.
 - `POST /api/maps/{map_id}/framework-transfer` body `{"to_map_id": <int>}` → 200 + `{from_map_id, to_map_id}`. 시맨틱: source의 `category_id`+`consultant_code`를 target으로 이전하고 source는 둘 다 NULL. 가드: sysadmin이거나 **두 맵 모두의** 오너. 409: source에 category_id 없음 / target이 이미 category_id 또는 consultant_code 보유 / target 소프트삭제·source 소프트삭제는 404.
 
-- [ ] **Step 1: 실패하는 테스트 작성** — append
+- [x] **Step 1: 실패하는 테스트 작성** — append
 
 ```python
 def test_designation_saves_input_output(client: TestClient) -> None:
@@ -187,10 +187,10 @@ def test_framework_transfer_moves_slot(client: TestClient) -> None:
 
 주의: `_seed_tree` 멱등 재사용 시 이전 테스트가 슬롯을 옮겨놨을 수 있음 — transfer 테스트는 자기 시드 맵(`pub`)의 현재 상태를 전제하므로 **테스트 순서 의존을 피하기 위해 transfer 테스트 전용 코드로 새 시드(code 접두 `CAT-T*`)를 쓰는 별도 헬퍼**로 작성해도 된다(구현자 판단 — 단언 강도 유지).
 
-- [ ] **Step 2: 실패 확인** → 신규 3건 FAIL.
-- [ ] **Step 3: 구현** — Interfaces 대로. 이양은 알림 없음(최소 스코프 — 후속).
-- [ ] **Step 4: 통과 확인** — `tests/test_categories_api.py` 전체 + `tests/test_consultant_import.py` green.
-- [ ] **Step 5: 린트+커밋** — `feat(maps): designation I/O + category assign + framework slot transfer — 지정 I/O·카테고리 연결·슬롯 이양`.
+- [x] **Step 2: 실패 확인** → 신규 3건 FAIL.
+- [x] **Step 3: 구현** — Interfaces 대로. 이양은 알림 없음(최소 스코프 — 후속).
+- [x] **Step 4: 통과 확인** — `tests/test_categories_api.py` 전체 + `tests/test_consultant_import.py` green.
+- [x] **Step 5: 린트+커밋** — `feat(maps): designation I/O + category assign + framework slot transfer — 지정 I/O·카테고리 연결·슬롯 이양`.
 
 ---
 

@@ -93,6 +93,9 @@ class SubprocessDesignationIn(BaseModel):
     url_label: str = Field(default="", max_length=100)
     # 지정 설명 — 자유 텍스트, 선택 (design 2026-07-17)
     description: str = Field(default="")
+    # L6 Input/Output — 자유 텍스트, 길이 캡 없음 (design 2026-08-08)
+    input: str = Field(default="")
+    output: str = Field(default="")
 
     @field_validator("department")
     @classmethod
@@ -114,7 +117,7 @@ class SubprocessDesignationIn(BaseModel):
         text = value.strip()
         return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
 
-    @field_validator("description", mode="after")
+    @field_validator("description", "input", "output", mode="after")
     @classmethod
     def _trim_description(cls, value: str) -> str:
         return value.strip()
@@ -656,6 +659,16 @@ class CategoryMapsOut(BaseModel):
     total: int
     hidden: int
     maps: list[MapOut]
+
+
+class MapCategoryIn(BaseModel):
+    # 체계 카테고리 연결/해제 — null=해제, 존재 검증은 라우터에서 (design 2026-08-08)
+    category_id: int | None = None
+
+
+class FrameworkTransferIn(BaseModel):
+    # 체계 슬롯(category_id+consultant_code) 이양 대상 맵 (design 2026-08-08)
+    to_map_id: int
 
 
 class NodeIn(BaseModel):

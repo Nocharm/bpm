@@ -188,3 +188,45 @@ def test_category_maps_visibility_filtered_before_pagination(
 
 def test_category_maps_missing_category_404(client: TestClient) -> None:
     assert client.get("/api/categories/999999/maps").status_code == 404
+
+
+def test_designation_saves_input_output(client: TestClient) -> None:
+    ids = _seed_tree(client)
+    resp = client.put(
+        f"/api/maps/{ids['pub']}/subprocess-designation",
+        json={"department": "Owning Anchor Division", "input": "PR 문서", "output": "PO 문서"},
+    )
+    assert resp.status_code == 200
+    body = client.get(f"/api/maps/{ids['pub']}").json()
+    assert body["sp_input"] == "PR 문서" and body["sp_output"] == "PO 문서"
+
+
+def test_category_assign_and_unassign(client: TestClient) -> None:
+    ids = _seed_tree(client)
+    created = client.post("/api/maps", json={
+        "name": "framework assign target", "description": "",
+        "owning_department": "Owning Anchor Division", "visibility": "public",
+    }).json()
+    mid = created["id"]
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": ids["A1"]}).status_code == 200
+    assert client.get(f"/api/maps/{mid}").json()["category_path"] == "구매/직접구매"
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": None}).status_code == 200
+    assert client.get(f"/api/maps/{mid}").json()["category_id"] is None
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": 999999}).status_code == 404
+
+
+def test_framework_transfer_moves_slot(client: TestClient) -> None:
+    ids = _seed_tree(client)
+    created = client.post("/api/maps", json={
+        "name": "framework transfer target", "description": "",
+        "owning_department": "Owning Anchor Division", "visibility": "public",
+    }).json()
+    target = created["id"]
+    resp = client.post(f"/api/maps/{ids['pub']}/framework-transfer", json={"to_map_id": target})
+    assert resp.status_code == 200
+    src = client.get(f"/api/maps/{ids['pub']}").json()
+    dst = client.get(f"/api/maps/{target}").json()
+    assert src["category_id"] is None and src["consultant_code"] is None
+    assert dst["category_path"] == "구매/직접구매" and dst["consultant_code"] == "CAT-M1"
+    # 재이양 시 source에 슬롯 없음 → 409
+    assert client.post(f"/api/maps/{ids['pub']}/framework-transfer", json={"to_map_id": target}).status_code == 409

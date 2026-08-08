@@ -16,6 +16,7 @@ from app.db import get_session
 from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.permissions import logic
 from app.permissions.access import (
+    assert_map_role,
     get_effective_role,
     get_eligible_users,
     get_user_active_group_ids,
@@ -27,6 +28,8 @@ from app.schemas import (
     ApprovalRequestOut,
     DirectoryUserOut,
     EligibleApproverOut,
+    FrameworkTransferIn,
+    MapCategoryIn,
     MapCopy,
     MapCreate,
     MapDetailOut,
@@ -921,6 +924,87 @@ async def set_owning_department(
 
 
 @router.put(
+    "/{map_id}/category",
+    response_model=MapDetailOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def set_map_category(
+    map_id: int,
+    payload: MapCategoryIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """체계 카테고리 연결/해제 — 모든 레벨 허용, null=해제. owner/sysadmin 전용 (design 2026-08-08)."""
+    found_map = await session.get(
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
+    )
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if payload.category_id is not None:
+        category = await session.get(ProcessCategory, payload.category_id)
+        if category is None:
+            raise HTTPException(
+                status_code=404, detail=f"category {payload.category_id} not found"
+            )
+    found_map.category_id = payload.category_id
+    await session.commit()
+    await session.refresh(found_map, attribute_names=["versions"])
+    for version in found_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    found_map.my_role = await get_effective_role(session, user, map_id)
+    if found_map.category_id is not None:
+        category_paths = build_category_paths(
+            (
+                await session.execute(
+                    select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+                )
+            ).all()
+        )
+        found_map.category_path = category_paths.get(found_map.category_id)
+    return found_map
+
+
+@router.post(
+    "/{map_id}/framework-transfer",
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def transfer_framework_slot(
+    map_id: int,
+    payload: FrameworkTransferIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> dict[str, int]:
+    """체계 슬롯(category_id+consultant_code)을 source→target으로 이전, source는 해제한다.
+
+    가드: sysadmin이거나 두 맵 모두의 owner (design 2026-08-08). 알림 없음 — 최소 스코프.
+    """
+    source = await session.get(ProcessMap, map_id)
+    if source is None or source.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    target = await session.get(ProcessMap, payload.to_map_id)
+    if target is None or target.deleted_at is not None:
+        raise HTTPException(
+            status_code=404, detail=f"map {payload.to_map_id} not found"
+        )
+    # source의 owner 여부는 경로 의존성(require_map_role)이 이미 검증 — target은 별도 검증
+    await assert_map_role(session, user, payload.to_map_id, "owner")
+    if source.category_id is None:
+        raise HTTPException(status_code=409, detail="source map has no framework slot")
+    if target.category_id is not None or target.consultant_code is not None:
+        raise HTTPException(
+            status_code=409, detail="target map already has a framework slot"
+        )
+    target.category_id = source.category_id
+    target.consultant_code = source.consultant_code
+    source.category_id = None
+    source.consultant_code = None
+    await session.commit()
+    return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
+
+
+@router.put(
     "/{map_id}/subprocess-designation",
     response_model=MapOut,
     dependencies=[Depends(require_map_role("owner"))],
@@ -957,6 +1041,8 @@ async def designate_subprocess(
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
     found_map.sp_description = payload.description or None
+    found_map.sp_input = payload.input or None
+    found_map.sp_output = payload.output or None
     found_map.sp_changed_by = user
     found_map.sp_changed_at = now_kst()
     if was_new:
