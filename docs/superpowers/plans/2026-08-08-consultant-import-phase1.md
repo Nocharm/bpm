@@ -1385,16 +1385,16 @@ git commit -m "feat(consultant): dry-run/apply CLI with CSV report + chunked com
 **Files:**
 - Modify: `PROGRESS.md`, 이 플랜 파일(체크박스)
 
-- [ ] **Step 1: 백엔드 전체 테스트**
+- [x] **Step 1: 백엔드 전체 테스트**
 
 Run: `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/ -q`
 Expected: 전체 그린(기존 ~884 + 신규 ~15). 기존 테스트가 깨지면 원인 파악 먼저 — 특히 활성 직원 수 단언(test_notices 계열)이 깨지면 임포트 테스트 시드의 active=False 누락이다.
 
-- [ ] **Step 2: 린트 전체**
+- [x] **Step 2: 린트 전체**
 
 Run: `.venv/bin/ruff check app/ tests/ scripts/` → 0 오류.
 
-- [ ] **Step 3: PROGRESS.md 정리 + 최종 커밋**
+- [x] **Step 3: PROGRESS.md 정리 + 최종 커밋**
 
 PROGRESS.md 2026-08-08 섹션에 Phase 1 완료 요약(스키마·파서·엔진·CLI·테스트 수) 추가, 플랜 체크박스 전체 갱신 후:
 
