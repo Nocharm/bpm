@@ -1220,7 +1220,7 @@ git commit -m "feat(consultant): map upsert engine with version publish + SP des
   - CLI: `python -m scripts.import_consultant <delivery_dir> [--apply] [--actor consultant-import] [--label "Consultant import"] [--report path.csv]` — **기본 dry-run**(안전). stdout에 counts 요약 + warning/error 상위 20건
 - **스케일 노트 (design §8)**: 청크 커밋은 `import_delivery`가 아닌 apply 경로에서 맵 N건마다 `session.commit()`을 걸 수 있도록 `import_delivery`에 `commit_every: int | None = None` 파라미터를 추가한다(pass 2 루프에서 `apply`시 200건마다 commit — dry-run은 None이라 단일 트랜잭션→rollback). 테스트는 `commit_every=1`로 경로만 검증(20k 성능 벤치는 범위 밖 — 서버 실측으로 미룸을 리포트에 명기).
 
-- [ ] **Step 1: 실패하는 테스트 작성** — append
+- [x] **Step 1: 실패하는 테스트 작성** — append
 
 ```python
 def _write_delivery(tmp_path, maps):
@@ -1291,9 +1291,9 @@ def test_apply_persists_and_line_errors_reported(client, tmp_path) -> None:
     assert _run(_present()).name == "드라이런 L6-APPLY"
 ```
 
-- [ ] **Step 2: 실패 확인** — FAIL (ImportError: run_import).
+- [x] **Step 2: 실패 확인** — FAIL (ImportError: run_import).
 
-- [ ] **Step 3: 구현** — append
+- [x] **Step 3: 구현** — append
 
 ```python
 import argparse
@@ -1368,9 +1368,9 @@ if __name__ == "__main__":
 
 (pass 2 `for` 루프를 `for index, cmap in enumerate(maps):`로 바꾼다. Task 5 테스트는 commit_every 미지정이라 무영향.)
 
-- [ ] **Step 4: 통과 확인** — `pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → 전부 PASS.
+- [x] **Step 4: 통과 확인** — `pytest tests/test_consultant_import.py tests/test_consultant_canonical.py -q` → 전부 PASS.
 
-- [ ] **Step 5: 린트 + 커밋**
+- [x] **Step 5: 린트 + 커밋**
 
 ```bash
 .venv/bin/ruff check scripts/ tests/

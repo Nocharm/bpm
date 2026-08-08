@@ -8,14 +8,20 @@
     PowerShell: .venv\\Scripts\\python -m scripts.import_consultant <delivery_dir> [--apply]
 """
 
+import argparse
+import asyncio
+import csv
 import hashlib
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
+from app.db import SessionLocal
 from app.duration import normalize_duration
 from app.models import (
     Edge,
@@ -29,7 +35,13 @@ from app.models import (
 )
 from app.schemas import NUMERIC_RE
 from app.version_events import record_version_event
-from scripts.consultant_canonical import CanonicalCategory, CanonicalMap, CanonicalParams
+from scripts.consultant_canonical import (
+    CanonicalCategory,
+    CanonicalMap,
+    CanonicalParams,
+    load_categories,
+    load_maps,
+)
 
 _X_STEP = 240  # rank 간 가로 간격(px) — create_map Start/End 시드(120→480)와 동일 리듬
 _Y_STEP = 120  # rank 내 세로 간격(px)
@@ -315,6 +327,7 @@ async def import_delivery(
     maps: list[CanonicalMap],
     actor: str,
     label: str,
+    commit_every: int | None = None,
 ) -> ImportReport:
     """전달분 1건 임포트(2-pass) — commit은 호출자 책임(dry-run=rollback, apply=commit)."""
     report = ImportReport()
@@ -392,7 +405,7 @@ async def import_delivery(
     names.update({m.code: m.name for m in maps})
 
     # pass 2 — 그래프·버전·SP 지정. 콘텐츠 필드만 갱신(거버넌스는 위 신규 생성 분기에서만 설정).
-    for cmap in maps:
+    for index, cmap in enumerate(maps):
         if cmap.code in category_errored:
             continue
         found_map = existing[cmap.code]
@@ -486,4 +499,62 @@ async def import_delivery(
             report.add(cmap.code, "updated", "graph" if graph_changed else "map fields only")
         else:
             report.add(cmap.code, "unchanged", "")
+
+        if commit_every is not None and (index + 1) % commit_every == 0:
+            await session.commit()  # 스케일 대응 — 20k 맵 단일 트랜잭션 방지 (design §8)
     return report
+
+
+async def run_import(
+    delivery_dir: Path,
+    *,
+    apply: bool,
+    actor: str,
+    label: str,
+    report_path: Path | None,
+) -> ImportReport:
+    """전달 디렉터리 임포트 — 기본 dry-run(rollback). apply=True만 영속."""
+    categories = load_categories(delivery_dir / "categories.json")
+    maps, line_errors = load_maps(delivery_dir / "maps.jsonl")
+    async with SessionLocal() as session:
+        report = await import_delivery(
+            session, categories=categories, maps=maps, actor=actor, label=label,
+            commit_every=200 if apply else None,
+        )
+        if apply:
+            await session.commit()
+        else:
+            await session.rollback()
+    for err in line_errors:
+        report.add("-", "error", err)
+    if report_path is not None:
+        with report_path.open("w", encoding="utf-8", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["map_code", "action", "detail"])
+            writer.writerows(report.rows)
+    return report
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Import consultant canonical delivery")
+    parser.add_argument("delivery_dir", type=Path)
+    parser.add_argument("--apply", action="store_true", help="write to DB (default: dry-run)")
+    parser.add_argument("--actor", default="consultant-import")
+    parser.add_argument("--label", default=f"Consultant {date.today().isoformat()}")
+    parser.add_argument("--report", type=Path, default=None, help="detail CSV path")
+    args = parser.parse_args()
+    report = asyncio.run(run_import(
+        args.delivery_dir, apply=args.apply, actor=args.actor,
+        label=args.label, report_path=args.report,
+    ))
+    mode = "APPLY" if args.apply else "DRY-RUN"
+    print(f"{mode}  " + ", ".join(f"{k}={v}" for k, v in sorted(report.counts().items())))
+    issues = [r for r in report.rows if r[1] in ("warning", "error")]
+    for map_code, action, detail in issues[:20]:
+        print(f"{action:8} {map_code}: {detail}")
+    if len(issues) > 20:
+        print(f"... {len(issues) - 20} more (use --report for full CSV)")
+
+
+if __name__ == "__main__":
+    main()
