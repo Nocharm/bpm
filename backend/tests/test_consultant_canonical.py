@@ -96,6 +96,16 @@ def test_map_validates_duplicate_link_targets() -> None:
         )
 
 
+def test_long_input_output_accepted() -> None:
+    # sp_input/sp_output은 Text(자유 텍스트, design §2.2) — 숫자형 6필드와 달리 상한이 없다.
+    # I-5 픽스에서 실수로 걸었던 50자 상한을 되풀이하지 않도록 회귀 가드.
+    long_input = "가" * 500
+    long_output = "나" * 500
+    m = CanonicalMap.model_validate(make_map(params={"input": long_input, "output": long_output}))
+    assert m.params.input == long_input
+    assert m.params.output == long_output
+
+
 def test_load_maps_rejects_overlong_fields(tmp_path: Path) -> None:
     # Node.department/assignee/system과 MapApprover.user_id는 각각 String(100) — sqlite는 폭을
     # 안 걸지만 postgres(서버)는 apply 중 크래시한다(finding I-5). 파서 단계 max_length로 막아
