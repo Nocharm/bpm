@@ -65,7 +65,6 @@ def _seed_employee(login_id: str, *, active: bool) -> None:
             session.add(emp)
         emp.name = login_id
         emp.active = active
-        emp.email = f"{login_id}@corp" if active else ""
         emp.department = "Test"
     _run(_do)
 

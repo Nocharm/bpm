@@ -611,7 +611,7 @@ def test_transfer_owner_and_sysadmin_can_transfer(
 def test_editors_list_name_resolution_and_group(
     client: TestClient, _transfer_enforce: None
 ) -> None:
-    """editors 피커 — Employee 이름/id 폴백/그룹 경유 편집자 모두 포함 (Fix 1 회귀 방지).
+    """editors 피커 — Employee 이름 머지·그룹 경유 편집자 포함·Employee 미존재 제외 (Fix 1 회귀 방지 + F4).
 
     인증 게이트: require_map_role("viewer") — owner.u가 맵 viewer+ 이므로 통과.
     """
@@ -644,7 +644,7 @@ def test_editors_list_name_resolution_and_group(
                 )
             )
 
-            # 직접 user editor — Employee 행 없음 → login_id 폴백
+            # 직접 user editor — Employee 행 없음 → 후보에서 제외 (F4, design 2026-08-10 §7)
             session.add(
                 MapPermission(
                     map_id=m.id,
@@ -655,13 +655,14 @@ def test_editors_list_name_resolution_and_group(
                 )
             )
 
-            # 그룹 경유 editor — Fix 1 회귀 방지
+            # 그룹 경유 editor — Fix 1 회귀 방지(그룹 멤버가 후보에 반영되는지)
             grp = UserGroup(name=f"grp-{uuid4().hex[:4]}", status="active", created_by="seed")
             session.add(grp)
             await session.flush()
             session.add(
                 UserGroupMember(group_id=grp.id, member_type="user", member_id="group.editor.u")
             )
+            session.add(Employee(login_id="group.editor.u", name="Group Editor"))
             session.add(
                 MapPermission(
                     map_id=m.id,
@@ -698,9 +699,8 @@ def test_editors_list_name_resolution_and_group(
     assert items["editor.with.emp"]["name"] == "Hong Gildong"
     assert items["editor.with.emp"]["korean_name"] == "홍길동"
 
-    # Employee 행 없는 편집자 → login_id 폴백
-    assert "editor.no.emp" in items
-    assert items["editor.no.emp"]["name"] == "editor.no.emp"
+    # Employee 행 없는 편집자 → 점유권 이전 후보에서 제외 (F4, design 2026-08-10 §7)
+    assert "editor.no.emp" not in items
 
     # 그룹 경유 편집자 → 포함됨 (Fix 1 핵심)
     assert "group.editor.u" in items

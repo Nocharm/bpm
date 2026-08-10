@@ -1,5 +1,7 @@
 # 사용자·조직도 소스 교체 — AD LDAP → n8n HR 웹훅 (2026-08-10)
 
+> 상태: 구현 완료(feat/hr-webhook-directory → dev). 운영 이행은 §9 절차 대기.
+
 사용자 목록·조직도의 단일 소스를 사내 AD(LDAP 디렉터리 조회)에서 사내 n8n HR 웹훅으로 교체한다.
 LDAP은 삭제하지 않고 **title 조인 전용**으로 축소 유지한다(인증 폴백 기능은 현존하지 않으며 이번 범위 아님 — 코드 보존만).
 
@@ -115,7 +117,7 @@ POST {N8N_HR_URL}          # 예: http://182.199.63.71:5678/webhook/hr-dept (※
 2. **드라이런 실행 → diff 리포트 검토**(login_id 불일치 0 확인이 진행 조건)
 3. 첫 실 sync 수동 실행 → 요약 확인(org_mismatches·dept_info_orphans·삭제 수)
 4. 고아 부서 경로는 dept-remap 콘솔로 수동 이관
-5. 스케줄러 활성(`HR_SYNC_INTERVAL_HOURS`)
+5. 스케줄러 활성(`HR_SYNC_INTERVAL_HOURS`) — 최초 배포 시 0(off)으로 두고 2~4단계(프리뷰→첫 수동 sync) 완료 후에만 24로 올린다
 
 ## 10. 테스트 (httpx MockTransport 목 — 실 HTTP 없음)
 

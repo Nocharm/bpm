@@ -47,35 +47,6 @@ def test_employees_include_korean_fields(client: TestClient) -> None:
     assert by_id["kr.have"]["korean_dept"] == "AI Operations그룹"
 
 
-def test_ad_upsert_preserves_korean_fields(client: TestClient) -> None:
-    """AD 동기화 upsert가 korean_name/korean_dept를 덮지 않는다 — AD 미제공 필드 회귀 가드."""
-    from app.ad.service import EmployeeFields, _upsert
-
-    _seed("kr.sync", "김철수", "공정혁신그룹")
-
-    async def _run() -> None:
-        fields = EmployeeFields(
-            login_id="kr.sync",
-            name="CS Kim",
-            title="Pro",
-            org_l1=None,
-            org_l2=None,
-            org_l3=None,
-            org_l4=None,
-            org_l5=None,
-            department="TeamA",
-            role="user",
-            active=True,
-            email="",
-        )
-        async with SessionLocal() as session:
-            await _upsert(session, fields)
-            await session.commit()
-
-    asyncio.run(_run())
-    assert _get_korean_fields("kr.sync") == ("김철수", "공정혁신그룹")
-
-
 @pytest.fixture
 def sysadmin_enforced() -> Iterator[None]:
     """enforce ON + sysadmin=admin.kim — 비 sysadmin 403 검증용(test_employees.py와 동일 패턴)."""

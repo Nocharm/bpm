@@ -125,7 +125,14 @@ async def get_eligible_users(session: AsyncSession, map_id: int) -> list[Employe
     데이터(grants·approvers·group 멤버십)는 1회씩만 로드하고 직원별로 순수 effective_role 재사용.
     """
     found_map = await session.get(ProcessMap, map_id)
-    employees = list((await session.scalars(select(Employee).order_by(Employee.name))).all())
+    # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
+    employees = list(
+        (
+            await session.scalars(
+                select(Employee).where(Employee.active.is_(True)).order_by(Employee.name)
+            )
+        ).all()
+    )
     if found_map is not None and found_map.visibility == "public":
         return employees
 

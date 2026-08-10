@@ -1,4 +1,4 @@
-"""퇴사자(AD 프룬) 정리 — 승인 정족수 제외·pending 재평가·점유 자동 해제 (2026-07-09)."""
+"""퇴사자(HR 프룬) 정리 — 승인 정족수 제외·pending 재평가·점유 자동 해제 (2026-07-09, HR 웹훅 전환은 2026-08-10)."""
 
 import asyncio
 
@@ -7,14 +7,14 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models import Employee, MapVersion, Notification
-from app.settings import settings
+from tests.hr_sync_helpers import _hr_row, _mock_hr
 
 OWNER = {"X-Dev-User": "owner.kim"}
 LEE = {"X-Dev-User": "user.lee"}
 
 
 def _seed_ad_employee(login_id: str, name: str = "") -> None:
-    """active=True source='ad' 직원 행 시드 — 프룬 대상 승인자/점유자용."""
+    """active=True source='ad' 직원 행 시드 — 프룬 대상 승인자/점유자용(레거시 ad 행도 HR 프룬 대상, §5-1)."""
 
     async def _run() -> None:
         async with SessionLocal() as session:
@@ -28,25 +28,6 @@ def _seed_ad_employee(login_id: str, name: str = "") -> None:
             await session.commit()
 
     asyncio.run(_run())
-
-
-def _mock_ldap(monkeypatch, raws: list) -> None:
-    from app.ad import client as ldap_client
-    from app.ad import service
-
-    monkeypatch.setattr(settings, "ldap_url", "ldaps://x")
-    monkeypatch.setattr(settings, "ldap_bind_dn", "cn=svc")
-    monkeypatch.setattr(settings, "ldap_bind_credentials", "pw")
-    monkeypatch.setattr(settings, "ldap_user_search_base", "dc=corp")
-    monkeypatch.setattr(service, "_last_full_sync_at", None)
-    monkeypatch.setattr(ldap_client, "fetch_all_users", lambda: raws)
-
-
-def _keepalive_raw():
-    """프룬 가드(valid_ids 비면 스킵) 통과용 더미 스캔 유저."""
-    from app.ad.client import RawUser
-
-    return RawUser("fresh.keep", "Keep Alive", "사원", "OU=TeamA,DC=corp", 0x200, None, [])
 
 
 def _create_map_with_version(client: TestClient, name: str) -> tuple[int, int]:
@@ -97,16 +78,16 @@ def test_departed_approver_excluded_from_quorum(client: TestClient) -> None:
 
 
 def test_sync_releases_checkout_of_purged_holder(client: TestClient, monkeypatch) -> None:
-    """AD 프룬이 점유자 행을 지우면 해당 점유도 자동 해제."""
+    """HR 프룬이 점유자 행을 지우면 해당 점유도 자동 해제."""
     _seed_ad_employee("holder.gone")
     map_id, vid = _create_map_with_version(client, "T holder auto release")
     client.post(f"/api/versions/{vid}/checkout", json={}, headers={"X-Dev-User": "holder.gone"})
     assert _version_row(vid).checked_out_by == "holder.gone"
 
-    _mock_ldap(monkeypatch, [_keepalive_raw()])  # holder.gone은 스캔에 없음 → 프룬
+    _mock_hr(monkeypatch, [_hr_row("fresh.keep")])  # holder.gone은 스캔에 없음 → 프룬
     res = client.post("/api/employees/sync", headers=OWNER)
     assert res.status_code == 200
-    assert res.json()["purged"] >= 1
+    assert res.json()["deleted"] >= 1
 
     v = _version_row(vid)
     assert v.checked_out_by is None
@@ -121,7 +102,7 @@ def test_sync_cancels_pending_when_sole_approver_purged(client: TestClient, monk
     client.post(f"/api/versions/{vid}/checkout", json={}, headers=LEE)
     assert client.post(f"/api/versions/{vid}/submit", headers=LEE).status_code == 200
 
-    _mock_ldap(monkeypatch, [_keepalive_raw()])
+    _mock_hr(monkeypatch, [_hr_row("fresh.keep")])
     assert client.post("/api/employees/sync", headers=OWNER).status_code == 200
 
     v = _version_row(vid)
@@ -148,7 +129,7 @@ def test_sync_completes_pending_when_departed_was_last_blocker(
     res = client.post(f"/api/versions/{vid}/approve", headers=LEE)
     assert res.json()["status"] == "pending"  # blocker.gone 행이 살아있는 동안은 1/2
 
-    _mock_ldap(monkeypatch, [_keepalive_raw()])
+    _mock_hr(monkeypatch, [_hr_row("fresh.keep")])
     assert client.post("/api/employees/sync", headers=OWNER).status_code == 200
 
     v = _version_row(vid)

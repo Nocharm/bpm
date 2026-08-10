@@ -27,7 +27,12 @@ async def get_directory(
     Returns all employees + distinct org-path prefixes at each level so the
     collaborator picker can target both leaf teams and parent offices.
     """
-    rows = (await session.scalars(select(Employee).order_by(Employee.login_id))).all()
+    # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
+    rows = (
+        await session.scalars(
+            select(Employee).where(Employee.active.is_(True)).order_by(Employee.login_id)
+        )
+    ).all()
 
     users = [
         DirectoryUserOut(

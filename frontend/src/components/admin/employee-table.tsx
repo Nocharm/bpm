@@ -35,7 +35,9 @@ export function EmployeeTable() {
     try {
       const s: SyncSummary = await syncEmployees();
       setMsg(
-        `scanned ${s.scanned} · upserted ${s.upserted} · excluded ${s.excluded} · purged ${s.purged}`,
+        s.aborted_reason
+          ? `aborted — ${s.aborted_reason}`
+          : `scanned ${s.scanned} · upserted ${s.upserted} · deactivated ${s.deactivated} · deleted ${s.deleted} · skipped ${s.skipped}`,
       );
       void listEmployees().then(setRows).catch(() => setRows([]));
     } catch (err) {

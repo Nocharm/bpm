@@ -1079,10 +1079,37 @@ class KoreanNamesImportOut(BaseModel):
 
 
 class SyncSummaryOut(BaseModel):
+    """HR 전체 동기화 요약 (design 2026-08-10 §5-9). aborted_reason 있으면 DB 무변경 중단."""
+
     scanned: int
     upserted: int
-    excluded: int
-    purged: int  # 전체 동기화에서 삭제된 스테일 ad 행 수 (2026-07-09)
+    deactivated: int
+    deleted: int
+    skipped: int
+    org_mismatches: int
+    truncated_levels: int
+    departments_upserted: int
+    dept_info_orphans: list[str]
+    title_refreshed: int | None = None
+    aborted_reason: str | None = None
+
+
+class HrSyncPreviewOut(BaseModel):
+    """이행 드라이런 리포트 (design 2026-08-10 §9) — 샘플 리스트는 50개 캡."""
+
+    scanned: int
+    skipped: int
+    would_upsert: int
+    would_deactivate: int
+    would_delete: int
+    org_mismatches: int
+    truncated_levels: int
+    korean_overwrites: int
+    new_login_ids: list[str]
+    delete_login_ids: list[str]
+    case_mismatches: list[str]
+    orphan_dept_paths: list[str]
+    dept_info_orphans: list[str]
 
 
 # ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────

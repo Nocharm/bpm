@@ -1,5 +1,7 @@
 """FastAPI app entrypoint — routes are mounted under /api (nginx pass-through)."""
 
+import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -10,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.app_settings import is_ai_access_enabled
 from app.auth import get_current_user
 from app.clock import now as now_kst
-from app.db import get_session, init_models
+from app.db import SessionLocal, get_session, init_models
 from app.models import DeptInfo, Employee, LoginRecord
 from app.permissions.access import can_view_dashboard_db
 from app.permissions.logic import is_sysadmin, org_path
@@ -45,6 +47,27 @@ from app.routers import (
 from app.schemas import MeOut
 from app.settings import settings
 
+logger = logging.getLogger(__name__)
+
+
+async def _run_hr_sync_loop() -> None:
+    """내장 HR 동기화 스케줄러 — sleep-first(첫 자동 실행은 1주기 후, 배포 직후 실동기화는 수동 절차 §9)."""
+    from app.hr import service as hr_service
+
+    interval = settings.hr_sync_interval_hours * 3600
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            async with SessionLocal() as session:
+                summary = await hr_service.run_full_sync(session)
+                logger.info("scheduled HR sync: %s", summary)
+        except hr_service.SyncTooSoon:
+            pass  # 수동 sync 직후 겹침 — 다음 주기로
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 -- 주기 실패가 프로세스를 죽이면 안 됨
+            logger.exception("scheduled HR sync failed — retrying next interval")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -52,11 +75,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 로컬(인증 OFF)은 임시 유저 5명 시드 — role별 테스트용
     if not settings.auth_enabled:
         from app.ad.service import seed_local_employees
-        from app.db import SessionLocal
 
         async with SessionLocal() as session:
             await seed_local_employees(session)
+    hr_task: asyncio.Task | None = None
+    if settings.hr_enabled and settings.hr_sync_interval_hours > 0:
+        hr_task = asyncio.create_task(_run_hr_sync_loop())
     yield
+    if hr_task is not None:
+        hr_task.cancel()
 
 
 app = FastAPI(title="BPM API", lifespan=lifespan)
@@ -98,9 +125,9 @@ async def get_me(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MeOut:
-    # 인증 ON + LDAP 설정 시 로그인 시점 1인 동기화 (로컬은 skip)
-    if settings.auth_enabled and settings.ldap_enabled:
-        from app.ad.service import sync_one
+    # 인증 ON + HR 웹훅 설정 시 로그인 시점 1인 동기화 — 하루 1회 스로틀은 서비스가 담당 (design §6)
+    if settings.auth_enabled and settings.hr_enabled:
+        from app.hr.service import sync_one
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)
