@@ -28,6 +28,8 @@
 
 ## 릴리스 공지 ([`notices/`](notices/))
 - [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md)
+- [`notices/2026-08-09-consultant-delivery-interface-mail.md`](notices/2026-08-09-consultant-delivery-interface-mail.md) — 컨설팅사 발송용 메일 초안(수용 방향 + 전달 데이터 인터페이스(안)).
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
+[`samples/consultant-delivery-sample/`](samples/consultant-delivery-sample/) — 컨설턴트 canonical 전달물 샘플(`categories.json`+`maps.jsonl`, `scripts/import_consultant.py` 입력).

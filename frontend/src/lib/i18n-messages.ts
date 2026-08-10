@@ -1319,6 +1319,8 @@ const en = {
   "perm.sp.undesignateWarn": "Maps using this subprocess will show a warning and become locked.",
   "sp.sumAllNodes": "Sum all nodes (published version)",
   "sp.sumNeedsPublished": "Requires a published version",
+  "sp.input": "Input",
+  "sp.output": "Output",
   // ── 버전 게시 탭 / Versions tab ──
   "perm.version.hint": "Request approval to publish a version, then publish after approval.",
   "perm.version.noVersions": "No versions yet.",
@@ -1517,6 +1519,24 @@ const en = {
   "perm.sysadmin.kindCheckout": "Checkout request",
   "digest.selectHint": "Select an item to view",
   "digest.unread": "Unread: {n}",
+  // ── 홈 Framework 뷰 토글 + lazy 카테고리 트리 (Phase 2) ──
+  "home.viewDepartments": "Departments",
+  "home.viewFramework": "Framework",
+  "home.frameworkEmpty": "No categories yet — run the consultant import.",
+  "home.frameworkHidden": "{n} hidden",
+  "home.frameworkMore": "Load more",
+  "home.frameworkLoadError": "Failed to load — click to retry.",
+  // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
+  "home.frameworkTitle": "Framework category",
+  "home.frameworkCurrent": "Currently in: {path}",
+  "home.frameworkNotConnected": "Not connected to the framework",
+  "home.frameworkPickCategory": "Pick a category",
+  "home.frameworkAssign": "Add to framework",
+  "home.frameworkUnassign": "Unassign",
+  "home.frameworkTransfer": "Transfer slot",
+  "home.frameworkTransferPick": "Pick a target map",
+  "home.ioInput": "Input",
+  "home.ioOutput": "Output",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -2837,6 +2857,8 @@ const ko: Record<MessageKey, string> = {
   "perm.sp.undesignateWarn": "이 서브프로세스를 사용 중인 맵에 경고가 표시되고 잠금 처리됩니다.",
   "sp.sumAllNodes": "전체 노드 합산(게시본 기준)",
   "sp.sumNeedsPublished": "게시본이 필요합니다",
+  "sp.input": "인풋",
+  "sp.output": "아웃풋",
   // ── 버전 게시 탭 / Versions tab ──
   "perm.version.hint": "버전 게시 승인을 요청한 뒤 승인 후 게시합니다.",
   "perm.version.noVersions": "버전이 없습니다.",
@@ -3035,6 +3057,24 @@ const ko: Record<MessageKey, string> = {
   "perm.sysadmin.kindCheckout": "체크아웃 요청",
   "digest.selectHint": "항목을 선택하세요",
   "digest.unread": "안 읽음: {n}",
+  // ── 홈 Framework 뷰 토글 + lazy 카테고리 트리 (Phase 2) ──
+  "home.viewDepartments": "부서",
+  "home.viewFramework": "업무 체계",
+  "home.frameworkEmpty": "카테고리가 아직 없습니다 — 컨설턴트 임포트를 실행하세요.",
+  "home.frameworkHidden": "{n}개 비공개",
+  "home.frameworkMore": "더 보기",
+  "home.frameworkLoadError": "불러오기 실패 — 클릭해서 재시도하세요.",
+  // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
+  "home.frameworkTitle": "업무 체계 카테고리",
+  "home.frameworkCurrent": "현재 연결: {path}",
+  "home.frameworkNotConnected": "업무 체계에 연결되지 않음",
+  "home.frameworkPickCategory": "카테고리 선택",
+  "home.frameworkAssign": "업무 체계에 연결",
+  "home.frameworkUnassign": "연결 해제",
+  "home.frameworkTransfer": "슬롯 이양",
+  "home.frameworkTransferPick": "대상 맵 선택",
+  "home.ioInput": "인풋",
+  "home.ioOutput": "아웃풋",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

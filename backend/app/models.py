@@ -91,6 +91,28 @@ class AiChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ProcessCategory(Base):
+    """컨설턴트 체계 카테고리(L1~L5) 트리 — code 기준 멱등 업서트, 빈 카테고리도 행으로 존재.
+
+    설계: docs/design/2026-08-08-consultant-hierarchy-design.md §2.1
+    """
+
+    __tablename__ = "process_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(100), unique=True)
+    name: Mapped[str] = mapped_column(String(300))
+    level: Mapped[int] = mapped_column(Integer)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_categories.id"), default=None
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class ProcessMap(Base):
     __tablename__ = "process_maps"
 
@@ -148,6 +170,16 @@ class ProcessMap(Base):
     doc_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 컨설턴트 체계 (design 2026-08-08) — 체계 소속 판정=category_id 존재, 출처=consultant_code.
+    # category_id는 모든 레벨 허용(리프=L6 업무 맵, 비-리프=오버뷰 맵 대표).
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_categories.id"), default=None
+    )
+    # L6 멱등 업서트 키 — 임포트된 맵만 non-null. 레거시 DB는 유니크 제약 없이 앱 계층에서 보장.
+    consultant_code: Mapped[str | None] = mapped_column(String(200), unique=True, default=None)
+    # L6 Input/Output — 자유 텍스트(구조화는 후속 승격) (design 2026-08-08 §2.2)
+    sp_input: Mapped[str | None] = mapped_column(Text, default=None)
+    sp_output: Mapped[str | None] = mapped_column(Text, default=None)
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"

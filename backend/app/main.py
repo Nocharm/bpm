@@ -20,6 +20,7 @@ from app.routers import (
     ai_prompts,
     ai_sessions,
     app_settings,
+    categories,
     embed,
     approvers,
     checkout,
@@ -64,6 +65,7 @@ app.include_router(ai.router)
 app.include_router(ai_sessions.router)
 app.include_router(app_settings.router)
 app.include_router(ai_prompts.router)
+app.include_router(categories.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
 app.include_router(versions.router)

@@ -35,6 +35,8 @@
 - [AI 프롬프트 관리(sysadmin)](2026-08-04-ai-prompts-admin-design.md) — 프롬프트 7종 DB 오버라이드(`ai_prompts` 테이블)·행 없으면 코드 기본값·설정 탭 편집/프리뷰/복원
 
 ## 권한 · 워크플로 · 맵
+- [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — L1~L5 카테고리 트리·L6=맵·연계=subprocess 변환·SP 지정 확장(I/O)·canonical 계약+멱등 임포트(이양 모델)
+- [거버넌스 UX 확장 3종](2026-08-08-governance-ux-design.md) — 게시 모달 가시성 동봉·맵 카드 권한 목록 편집·승인 탭 비버전 승인 통합+red dot
 - [맵 필수 필드 '오우닝 부서'](2026-07-10-owning-department-design.md)
 - [맵 이름 변경 승인 워크플로](2026-07-18-map-rename-workflow-design.md)
 - [알림 통합·삭제(퍼지)·100개 한도](2026-07-16-notification-purge-design.md)

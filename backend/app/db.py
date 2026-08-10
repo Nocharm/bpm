@@ -79,6 +79,12 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "doc_generated_at", "TIMESTAMP"),
     # 인터뷰 word 변환 모드 — interview_sessions는 개발서버에 기존재라 자동 ALTER 필요 (design 2026-07-26 §2)
     ("interview_sessions", "mode", "VARCHAR(20) DEFAULT 'normal'"),
+    # 컨설턴트 체계 수용 (design 2026-08-08) — process_categories는 신규 테이블이라 create_all이 처리.
+    # 기존 DB의 consultant_code 유니크는 ALTER로 못 걸어 앱 계층(코드 기준 업서트)이 보장한다.
+    ("process_maps", "category_id", "INTEGER"),
+    ("process_maps", "consultant_code", "VARCHAR(200)"),
+    ("process_maps", "sp_input", "TEXT"),
+    ("process_maps", "sp_output", "TEXT"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

@@ -78,6 +78,12 @@ export interface MapSummary {
   // 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
   doc_imported_at?: string | null;
   doc_generated_at?: string | null;
+  // 컨설턴트 업무 체계 카테고리 연결 — null=미연결(레거시). category_path는 응답 시 서버가 조립(비영속) (Phase 2)
+  category_id?: number | null;
+  category_path?: string | null;
+  consultant_code?: string | null;
+  sp_input?: string | null;
+  sp_output?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -393,6 +399,8 @@ export interface SubprocessDesignationBody {
   headcount?: string;
   url?: string;
   url_label?: string;
+  input?: string;
+  output?: string;
   description?: string;
 }
 
@@ -2138,4 +2146,57 @@ export function deleteAiChatSession(sessionId: number): Promise<void> {
 
 export function getAiModels(): Promise<{ models: string[] }> {
   return request<{ models: string[] }>("/ai/models");
+}
+
+// ── 컨설턴트 업무 체계 카테고리 (Phase 2) ──────────────
+
+export interface CategoryNode {
+  id: number;
+  code: string;
+  name: string;
+  level: number;
+  sort_order: number;
+  child_count: number;
+  // 서브트리 누적(직속 아님) — backend가 역-레벨 순회로 산정 (Task 1)
+  map_count: number;
+}
+
+export interface CategoryMaps {
+  total: number;
+  hidden: number;
+  maps: MapSummary[];
+}
+
+// parentId 생략 시 루트(최상위 레벨) 자식 목록
+export function listCategoryNodes(parentId?: number): Promise<CategoryNode[]> {
+  const qs = parentId === undefined ? "" : `?parent_id=${parentId}`;
+  return request<CategoryNode[]>(`/categories/nodes${qs}`);
+}
+
+export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Promise<CategoryMaps> {
+  return request<CategoryMaps>(`/categories/${categoryId}/maps?offset=${offset}&limit=${limit}`);
+}
+
+// 조상 체인 루트→자신 — 캐스케이드 셀렉트를 기존 연결 카테고리로 시딩할 때 사용 (fix round 1 #2).
+export function getCategoryChain(categoryId: number): Promise<CategoryNode[]> {
+  return request<CategoryNode[]>(`/categories/${categoryId}/chain`);
+}
+
+// 카테고리 연결/해제 — null이면 해제. owner/sysadmin 전용(서버 가드), 모든 레벨 연결 허용.
+export function putMapCategory(mapId: number, categoryId: number | null): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/category`, {
+    method: "PUT",
+    body: JSON.stringify({ category_id: categoryId }),
+  });
+}
+
+// 체계 슬롯(category_id+consultant_code) 이양 — source→target, source는 해제. 양쪽 owner 필요(서버 가드).
+export function postFrameworkTransfer(
+  mapId: number,
+  toMapId: number,
+): Promise<{ from_map_id: number; to_map_id: number }> {
+  return request(`/maps/${mapId}/framework-transfer`, {
+    method: "POST",
+    body: JSON.stringify({ to_map_id: toMapId }),
+  });
 }
