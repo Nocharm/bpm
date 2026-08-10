@@ -74,9 +74,7 @@ async def seed_local_employees(session: AsyncSession) -> None:
         emp.org_l4 = spec["org_l4"]
         emp.org_l5 = spec["org_l5"]
         emp.department = spec["department"]
-        # Dev users are always active; placeholder email for local testing
-        emp.active = True
-        emp.email = f"{spec['login_id']}@corp"
+        emp.active = True  # Dev users are always active
     await session.commit()
 
 
@@ -93,7 +91,6 @@ class EmployeeFields:
     department: str
     role: str
     active: bool        # derived from AD userAccountControl bit 0x2
-    email: str          # derived from AD mail attribute (empty string if absent)
 
 
 @dataclass(frozen=True)
@@ -130,7 +127,6 @@ def to_employee_fields(raw: client.RawUser) -> EmployeeFields | None:
         department=org.department,
         role=resolve_role(login_id),
         active=True,  # 비활성은 위에서 제외 — 도달 시 항상 활성
-        email=raw.mail or "",
     )
 
 
@@ -150,7 +146,6 @@ async def _upsert(session: AsyncSession, fields: EmployeeFields) -> Employee:
     emp.org_l5 = fields.org_l5
     emp.department = fields.department
     emp.active = fields.active
-    emp.email = fields.email
     return emp
 
 

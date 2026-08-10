@@ -66,7 +66,6 @@ def test_ad_upsert_preserves_korean_fields(client: TestClient) -> None:
             department="TeamA",
             role="user",
             active=True,
-            email="",
         )
         async with SessionLocal() as session:
             await _upsert(session, fields)

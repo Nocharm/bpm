@@ -481,7 +481,7 @@ class Employee(Base):
     login_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), default="")
     title: Mapped[str] = mapped_column(String(100), default="")
-    source: Mapped[str] = mapped_column(String(10), default="ad")  # ad | local
+    source: Mapped[str] = mapped_column(String(10), default="ad")  # ad | local | hr
     role: Mapped[str] = mapped_column(String(10), default="user")  # admin | user
     org_l1: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l2: Mapped[str | None] = mapped_column(String(200), default=None)
@@ -489,9 +489,10 @@ class Employee(Base):
     org_l4: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l5: Mapped[str | None] = mapped_column(String(200), default=None)
     department: Mapped[str] = mapped_column(String(200), default="")
-    # AD-derived fields (Task 2) — active from userAccountControl bit 0x2; email from mail attr.
+    # AD-derived fields (Task 2) — active from userAccountControl bit 0x2.
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    email: Mapped[str] = mapped_column(String(200), default="")
+    # HR deptCode — departments.dept_code 느슨 참조 (design 2026-08-10 §3). AD 시절 행은 NULL.
+    dept_code: Mapped[str | None] = mapped_column(String(100), default=None)
     # 한글이름·한글그룹 — AD 미제공. 어드민 JSON 임포트로만 채운다(spec 2026-07-09). sync 미간섭.
     korean_name: Mapped[str] = mapped_column(String(200), default="")
     korean_dept: Mapped[str] = mapped_column(String(200), default="")
@@ -509,6 +510,24 @@ class DeptInfo(Base):
     department: Mapped[str] = mapped_column(String(200), primary_key=True)
     korean_name: Mapped[str] = mapped_column(String(200), default="")
     manager: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
+class Department(Base):
+    """HR 조직도 미러 — kind=departments 응답 그대로, dept_code 키.
+
+    이번 범위 소비처 없음(조직도 트리 후속 기반). 설계: docs/design/2026-08-10-hr-webhook-directory-design.md §3.
+    """
+
+    __tablename__ = "departments"
+
+    dept_code: Mapped[str] = mapped_column(String(100), primary_key=True)
+    parent_dept_code: Mapped[str | None] = mapped_column(String(100), default=None)
+    level: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(300), default="")
+    name_ko: Mapped[str] = mapped_column(String(300), default="")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )

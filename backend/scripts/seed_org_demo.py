@@ -185,7 +185,7 @@ async def _seed_employees(session: AsyncSession, total: int = 400) -> list[dict]
         login_id="admin.sys", name="System Admin", title="Manager", source="local",
         role="admin", org_l1=admin_leaf["l1"], org_l2=admin_leaf["l2"],
         org_l3=admin_leaf["l3"], org_l4=None, department=admin_leaf["department"],
-        active=True, email="admin.sys@corp",
+        active=True,
     ))
     used_ids.add("admin.sys")
     people.append({"login_id": "admin.sys", "name": "System Admin", "role": "admin",
@@ -199,7 +199,7 @@ async def _seed_employees(session: AsyncSession, total: int = 400) -> list[dict]
         session.add(Employee(
             login_id=lid, name=name, title=RNG.choice(TITLES), source="local",
             role="user", org_l1=leaf["l1"], org_l2=leaf["l2"], org_l3=leaf["l3"],
-            org_l4=leaf["l4"], department=leaf["department"], active=True, email=f"{lid}@corp",
+            org_l4=leaf["l4"], department=leaf["department"], active=True,
         ))
         people.append({"login_id": lid, "name": name, "role": "user", "leaf": leaf,
                        "path": _org_path(leaf)})
