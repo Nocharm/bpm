@@ -529,11 +529,12 @@ async def list_editors(
     return [
         DirectoryUserOut(
             id=lid,
-            name=emp_map[lid].name if lid in emp_map else lid,
-            department=emp_map[lid].department or "" if lid in emp_map else "",
-            korean_name=emp_map[lid].korean_name if lid in emp_map else "",
+            name=emp_map[lid].name,
+            department=emp_map[lid].department or "",
+            korean_name=emp_map[lid].korean_name,
         )
         for lid in sorted(login_ids)
+        if lid in emp_map  # 퇴직자·소멸 계정은 점유권 이전 후보에서 제외 (design 2026-08-10 §7)
     ]
 
 

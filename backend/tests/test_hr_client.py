@@ -1,5 +1,8 @@
 """HR 웹훅 클라이언트 파싱 테스트 — 순수 함수(HTTP 없음). 설계 §1 계약: loginId 외 전부 null 가능."""
 
+import asyncio
+
+from app.hr import client as hr_client
 from app.hr.client import RawHrEmployee, parse_department_row, parse_employee_row
 
 
@@ -42,3 +45,16 @@ def test_parse_department_row() -> None:
     assert (parsed.dept_code, parsed.parent_dept_code, parsed.level) == ("D100", "D1", 3)
     assert parse_department_row({"name": "no code"}) is None
     assert parse_department_row({"deptCode": "D2", "level": "bad"}).level is None
+
+
+def test_fetch_employee_uses_single_timeout(monkeypatch) -> None:
+    """단건 조회는 전수용 180초가 아닌 로그인 크리티컬 패스용 10초 타임아웃 사용 (F2)."""
+    captured: dict = {}
+
+    async def fake_post(payload: dict, timeout: float = hr_client.HR_TIMEOUT_SECONDS) -> dict:
+        captured["timeout"] = timeout
+        return {"rows": []}
+
+    monkeypatch.setattr(hr_client, "_post", fake_post)
+    asyncio.run(hr_client.fetch_employee("someone"))
+    assert captured["timeout"] == hr_client.HR_SINGLE_TIMEOUT_SECONDS == 10.0

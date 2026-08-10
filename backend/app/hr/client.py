@@ -12,6 +12,8 @@ from app.settings import settings
 
 # 계약 §1 — 전수 약 6,000명/3MB/수초, 상한 180초
 HR_TIMEOUT_SECONDS = 180.0
+# 로그인 크리티컬 패스 — /api/me 1인 동기화가 최대 대기하는 상한 (전수 180초는 부적합)
+HR_SINGLE_TIMEOUT_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -85,8 +87,8 @@ def parse_department_row(row: object) -> RawHrDepartment | None:
     )
 
 
-async def _post(payload: dict) -> dict:
-    async with httpx2.AsyncClient(timeout=HR_TIMEOUT_SECONDS) as client:
+async def _post(payload: dict, timeout: float = HR_TIMEOUT_SECONDS) -> dict:
+    async with httpx2.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             settings.n8n_hr_url,
             json=payload,
@@ -106,7 +108,7 @@ async def fetch_all_employees() -> tuple[int, list[RawHrEmployee | None]]:
 
 async def fetch_employee(login_id: str) -> RawHrEmployee | None:
     """단건 조회 — 계약상 부분검색 불가, loginId 정확 일치만 신뢰."""
-    body = await _post({"kind": "employees", "loginId": login_id})
+    body = await _post({"kind": "employees", "loginId": login_id}, timeout=HR_SINGLE_TIMEOUT_SECONDS)
     for row in body.get("rows") or []:
         parsed = parse_employee_row(row)
         if parsed is not None and parsed.login_id == login_id:

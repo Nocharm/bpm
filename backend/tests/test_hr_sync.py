@@ -61,6 +61,15 @@ def test_sync_count_mismatch_aborts(client: TestClient, monkeypatch) -> None:
     assert summary.aborted_reason is not None and "count" in summary.aborted_reason
 
 
+def test_sync_empty_feed_aborts_without_changes(client: TestClient, monkeypatch) -> None:
+    # 유효 직원 0명 = 전멸 사고 방어 — cap=0(_mock_hr 기본, 가드 off)이어도 막혀야 함 (§5-4 ②)
+    _seed_employee("survivor.hr", source="hr")
+    _mock_hr(monkeypatch, [])
+    summary = _run_sync()
+    assert summary.aborted_reason == "empty feed: no valid employee rows"
+    assert _get_employee("survivor.hr") is not None    # 아무것도 안 바뀜
+
+
 def test_sync_skips_rows_without_login_id_and_reports(client: TestClient, monkeypatch) -> None:
     rows = [_hr_row("ok.user"), None,
             _hr_row("deep.user", org_levels=["A", "B", "C", "D", "E", "F"], department="F")]
@@ -68,6 +77,24 @@ def test_sync_skips_rows_without_login_id_and_reports(client: TestClient, monkey
     summary = _run_sync()
     assert summary.skipped == 1
     assert summary.truncated_levels == 1 and summary.org_mismatches == 1
+
+
+def test_sync_clips_oversized_fields_and_skips_long_login_id(client: TestClient, monkeypatch) -> None:
+    # Postgres VARCHAR 초과 사각 — sqlite는 강제 안 하지만 클램프·skip 로직 자체를 검증 (§3)
+    long_name = "N" * 250
+    long_dept_code = "D" * 120
+    long_login_id = "L" * 110
+    rows = [
+        _hr_row("clip.user", name=long_name, dept_code=long_dept_code),
+        _hr_row(long_login_id),
+    ]
+    _mock_hr(monkeypatch, rows)
+    summary = _run_sync()
+    assert summary.skipped == 1                        # 초과 login_id 행만 skip
+    emp = _get_employee("clip.user")
+    assert emp.name == long_name[:200]
+    assert emp.dept_code == long_dept_code[:100]
+    assert _get_employee(long_login_id) is None         # 저장 자체가 안 됨
 
 
 def test_sync_chunked_delete_over_bind_limit(client: TestClient, monkeypatch) -> None:

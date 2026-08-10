@@ -117,7 +117,7 @@ POST {N8N_HR_URL}          # 예: http://182.199.63.71:5678/webhook/hr-dept (※
 2. **드라이런 실행 → diff 리포트 검토**(login_id 불일치 0 확인이 진행 조건)
 3. 첫 실 sync 수동 실행 → 요약 확인(org_mismatches·dept_info_orphans·삭제 수)
 4. 고아 부서 경로는 dept-remap 콘솔로 수동 이관
-5. 스케줄러 활성(`HR_SYNC_INTERVAL_HOURS`)
+5. 스케줄러 활성(`HR_SYNC_INTERVAL_HOURS`) — 최초 배포 시 0(off)으로 두고 2~4단계(프리뷰→첫 수동 sync) 완료 후에만 24로 올린다
 
 ## 10. 테스트 (httpx MockTransport 목 — 실 HTTP 없음)
 

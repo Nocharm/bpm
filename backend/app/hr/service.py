@@ -47,8 +47,16 @@ def _resolve_role(login_id: str) -> str:
     return "admin" if login_id in settings.admin_login_ids() else "user"
 
 
+def _clip(value: str | None, limit: int) -> str | None:
+    """길이 초과 문자열 자르기 — sqlite는 VARCHAR 미강제지만 운영 Postgres는 초과 시 sync 전체가 실패 (§3)."""
+    return value if value is None else value[:limit]
+
+
 def to_employee_fields(raw: RawHrEmployee) -> HrEmployeeFields:
-    """RawHrEmployee → 저장 필드. 순수 — DB 미접근. 매핑 표는 설계 §4."""
+    """RawHrEmployee → 저장 필드. 순수 — DB 미접근. 매핑 표는 설계 §4.
+
+    login_id 길이(100자 초과) 검증은 호출부 책임(파싱 직후 skip) — 여기선 나머지 문자열만 클램프.
+    """
     top5 = raw.org_levels[:5]  # 5레벨 초과는 루트 쪽 5개 (AD parse_org와 동일 규약)
     l1 = top5[0] if len(top5) > 0 else None
     l2 = top5[1] if len(top5) > 1 else None
@@ -59,12 +67,13 @@ def to_employee_fields(raw: RawHrEmployee) -> HrEmployeeFields:
     department = raw.department or stored_leaf or ""
     return HrEmployeeFields(
         login_id=raw.login_id,
-        name=raw.name or raw.login_id,
-        korean_name=raw.name_ko,
-        korean_dept=raw.department_ko,
-        dept_code=raw.dept_code,
-        department=department,
-        org_l1=l1, org_l2=l2, org_l3=l3, org_l4=l4, org_l5=l5,
+        name=(raw.name or raw.login_id)[:200],
+        korean_name=_clip(raw.name_ko, 200),
+        korean_dept=_clip(raw.department_ko, 200),
+        dept_code=_clip(raw.dept_code, 100),
+        department=department[:200],
+        org_l1=_clip(l1, 200), org_l2=_clip(l2, 200), org_l3=_clip(l3, 200),
+        org_l4=_clip(l4, 200), org_l5=_clip(l5, 200),
         # status 결측은 보수적으로 활성 — AD uac None 관례와 동일
         active=(raw.status or "active") == "active",
         role=_resolve_role(raw.login_id),
@@ -129,10 +138,22 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
 
     fields_by_id: dict[str, HrEmployeeFields] = {}
     for raw in parsed:
-        if raw is not None:
-            fields_by_id[raw.login_id] = to_employee_fields(raw)  # 중복 loginId는 마지막 행 우선
+        if raw is None:
+            continue
+        if len(raw.login_id) > 100:
+            skipped += 1  # Postgres VARCHAR(100) 초과 — 매핑 불가 (§3)
+            continue
+        fields_by_id[raw.login_id] = to_employee_fields(raw)  # 중복 loginId는 마지막 행 우선
     org_mismatches = sum(1 for f in fields_by_id.values() if f.dept_mismatch)
     truncated_levels = sum(1 for f in fields_by_id.values() if f.truncated)
+
+    if not fields_by_id:
+        # 유효 직원 0명 = 전멸 사고 방어 — 캡(0=off)과 무관하게 항상 중단 (§5-4 ②)
+        return HrSyncSummary(
+            scanned=scanned, skipped=skipped, org_mismatches=org_mismatches,
+            truncated_levels=truncated_levels,
+            aborted_reason="empty feed: no valid employee rows",
+        )
 
     existing = (await session.execute(select(Employee.login_id, Employee.source))).all()
     managed_ids = {lid for lid, src in existing if src in ("ad", "hr")}
@@ -185,13 +206,15 @@ async def _mirror_departments(session: AsyncSession) -> int:
     rows = await client.fetch_departments()
     seen: set[str] = set()
     for row in rows:
+        if len(row.dept_code) > 100:
+            continue  # Postgres VARCHAR(100) 초과 — 매핑 불가 (§3)
         dept = await session.get(Department, row.dept_code)
         if dept is None:
             dept = Department(dept_code=row.dept_code)
             session.add(dept)
-        dept.name = row.name or ""
-        dept.name_ko = row.name_ko or ""
-        dept.parent_dept_code = row.parent_dept_code
+        dept.name = (row.name or "")[:300]
+        dept.name_ko = (row.name_ko or "")[:300]
+        dept.parent_dept_code = _clip(row.parent_dept_code, 100)
         dept.level = row.level if row.level is not None else 0
         seen.add(row.dept_code)
     if seen:
@@ -253,6 +276,8 @@ async def sync_one(session: AsyncSession, login_id: str) -> Employee | None:
     _one_sync_done[login_id] = today  # 미존재·성공 모두 오늘 재조회 안 함
     if raw is None:
         return None
+    if len(raw.login_id) > 100:
+        return None  # Postgres VARCHAR(100) 초과 — 매핑 불가, 기존 행 유지 (§3)
     newly_inactive = await _upsert(session, to_employee_fields(raw))
     if newly_inactive:
         await workflow.reconcile_departures(session, {login_id})
@@ -281,7 +306,14 @@ async def build_sync_preview(session: AsyncSession) -> HrSyncPreview:
     """이행 드라이런 (§9) — DB 무변경으로 첫 실동기화 영향 정량화. 가드 미소모."""
     _, parsed = await client.fetch_all_employees()
     skipped = sum(1 for p in parsed if p is None)
-    fields_by_id = {r.login_id: to_employee_fields(r) for r in parsed if r is not None}
+    fields_by_id: dict[str, HrEmployeeFields] = {}
+    for r in parsed:
+        if r is None:
+            continue
+        if len(r.login_id) > 100:
+            skipped += 1  # Postgres VARCHAR(100) 초과 — 매핑 불가 (§3)
+            continue
+        fields_by_id[r.login_id] = to_employee_fields(r)
 
     rows = (await session.execute(
         select(Employee.login_id, Employee.source, Employee.active, Employee.korean_name)
