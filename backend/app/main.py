@@ -98,9 +98,9 @@ async def get_me(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MeOut:
-    # 인증 ON + LDAP 설정 시 로그인 시점 1인 동기화 (로컬은 skip)
-    if settings.auth_enabled and settings.ldap_enabled:
-        from app.ad.service import sync_one
+    # 인증 ON + HR 웹훅 설정 시 로그인 시점 1인 동기화 — 하루 1회 스로틀은 서비스가 담당 (design §6)
+    if settings.auth_enabled and settings.hr_enabled:
+        from app.hr.service import sync_one
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)

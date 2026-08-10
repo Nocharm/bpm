@@ -12,14 +12,16 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.clock import now as now_kst
 from app.hr import client
 from app.hr.client import RawHrEmployee
-from app.models import Department, DeptInfo, Employee
+from app.models import Department, DeptInfo, Employee, MapPermission, ProcessMap, UserGroupMember
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
 _DELETE_CHUNK = 500  # SQLite IN 바인드 상한(구버전 999) 아래로 유지 (§5-3)
+_PREVIEW_SAMPLE_CAP = 50  # 프리뷰 샘플 리스트 상한 — 6천명 전수 나열 방지
 
 
 @dataclass(frozen=True)
@@ -230,3 +232,119 @@ async def run_full_sync(session: AsyncSession) -> HrSyncSummary:
     if summary.aborted_reason is None:
         _last_full_sync_at = now
     return summary
+
+
+# 1인 동기화 하루 1회 스로틀 — login_id → KST 날짜 iso (인메모리, 단일 컨테이너 전제)
+_one_sync_done: dict[str, str] = {}
+
+
+async def sync_one(session: AsyncSession, login_id: str) -> Employee | None:
+    """로그인 시 1인 동기화 — HR 미설정/미존재/오늘 기동기화면 None(기존 행 유지). title 보존."""
+    if not settings.hr_enabled:
+        return None
+    today = now_kst().date().isoformat()
+    if _one_sync_done.get(login_id) == today:
+        return None
+    try:
+        raw = await client.fetch_employee(login_id)
+    except Exception:  # noqa: BLE001 -- 웹훅 장애가 로그인을 막으면 안 됨 — 기존 행으로 동작
+        logger.exception("HR single sync failed for %s — keeping existing row", login_id)
+        return None
+    _one_sync_done[login_id] = today  # 미존재·성공 모두 오늘 재조회 안 함
+    if raw is None:
+        return None
+    newly_inactive = await _upsert(session, to_employee_fields(raw))
+    if newly_inactive:
+        await workflow.reconcile_departures(session, {login_id})
+    await session.commit()
+    return await session.get(Employee, login_id)
+
+
+@dataclass(frozen=True)
+class HrSyncPreview:
+    scanned: int
+    skipped: int
+    would_upsert: int
+    would_deactivate: int
+    would_delete: int
+    org_mismatches: int
+    truncated_levels: int
+    korean_overwrites: int
+    new_login_ids: list[str] = field(default_factory=list)
+    delete_login_ids: list[str] = field(default_factory=list)
+    case_mismatches: list[str] = field(default_factory=list)
+    orphan_dept_paths: list[str] = field(default_factory=list)
+    dept_info_orphans: list[str] = field(default_factory=list)
+
+
+async def build_sync_preview(session: AsyncSession) -> HrSyncPreview:
+    """이행 드라이런 (§9) — DB 무변경으로 첫 실동기화 영향 정량화. 가드 미소모."""
+    _, parsed = await client.fetch_all_employees()
+    skipped = sum(1 for p in parsed if p is None)
+    fields_by_id = {r.login_id: to_employee_fields(r) for r in parsed if r is not None}
+
+    rows = (await session.execute(
+        select(Employee.login_id, Employee.source, Employee.active, Employee.korean_name)
+    )).all()
+    db_ids = {r.login_id for r in rows}
+    managed_ids = {r.login_id for r in rows if r.source in ("ad", "hr")}
+    active_ids = {r.login_id for r in rows if r.active}
+    korean_by_id = {r.login_id: r.korean_name for r in rows}
+
+    new_ids = sorted(fields_by_id.keys() - db_ids)
+    delete_ids = sorted(managed_ids - fields_by_id.keys())
+    lower_db = {lid.lower(): lid for lid in db_ids}
+    case_mismatches = sorted(
+        f"{f.login_id} != db:{lower_db[f.login_id.lower()]}"
+        for f in fields_by_id.values()
+        if f.login_id not in db_ids and f.login_id.lower() in lower_db
+    )
+    korean_overwrites = sum(
+        1 for f in fields_by_id.values()
+        if f.korean_name and korean_by_id.get(f.login_id) and korean_by_id[f.login_id] != f.korean_name
+    )
+
+    # 새 피드 기준 유효 org 경로 프리픽스 ∪ local 행 경로 — 여기 없는 부서 principal 참조 = 이행 후 고아
+    valid_paths: set[str] = set()
+    for f in fields_by_id.values():
+        levels = [lv for lv in (f.org_l1, f.org_l2, f.org_l3, f.org_l4, f.org_l5) if lv]
+        for i in range(1, len(levels) + 1):
+            valid_paths.add("/".join(levels[:i]))
+    local_levels = (await session.execute(
+        select(Employee.org_l1, Employee.org_l2, Employee.org_l3,
+               Employee.org_l4, Employee.org_l5).where(Employee.source == "local")
+    )).all()
+    for row in local_levels:
+        levels = [lv for lv in row if lv]
+        for i in range(1, len(levels) + 1):
+            valid_paths.add("/".join(levels[:i]))
+
+    referenced: set[str] = set(
+        (await session.scalars(
+            select(MapPermission.principal_id).where(MapPermission.principal_type == "department").distinct()
+        )).all()
+    )
+    referenced.update((await session.scalars(
+        select(UserGroupMember.member_id).where(UserGroupMember.member_type == "department").distinct()
+    )).all())
+    referenced.update(
+        p for p in (await session.scalars(select(ProcessMap.owning_department).distinct())).all() if p
+    )
+
+    return HrSyncPreview(
+        scanned=len(parsed),
+        skipped=skipped,
+        would_upsert=len(fields_by_id),
+        would_deactivate=sum(
+            1 for f in fields_by_id.values() if not f.active and f.login_id in active_ids
+        ),
+        would_delete=len(delete_ids),
+        org_mismatches=sum(1 for f in fields_by_id.values() if f.dept_mismatch),
+        truncated_levels=sum(1 for f in fields_by_id.values() if f.truncated),
+        korean_overwrites=korean_overwrites,
+        new_login_ids=new_ids[:_PREVIEW_SAMPLE_CAP],
+        delete_login_ids=delete_ids[:_PREVIEW_SAMPLE_CAP],
+        case_mismatches=case_mismatches[:_PREVIEW_SAMPLE_CAP],
+        orphan_dept_paths=sorted(referenced - valid_paths)[:_PREVIEW_SAMPLE_CAP],
+        dept_info_orphans=(await _find_dept_info_orphans(session))[:_PREVIEW_SAMPLE_CAP],
+    )

@@ -722,9 +722,15 @@ export function listEmployees(): Promise<EmployeeRow[]> {
 export interface SyncSummary {
   scanned: number;
   upserted: number;
-  excluded: number;
-  // 전체 동기화에서 삭제된 스테일 ad 행 수(비활성·퇴사·제외 대상)
-  purged: number;
+  deactivated: number;
+  deleted: number;
+  skipped: number;
+  org_mismatches: number;
+  truncated_levels: number;
+  departments_upserted: number;
+  dept_info_orphans: string[];
+  title_refreshed: number | null;
+  aborted_reason: string | null;
 }
 
 export function syncEmployees(): Promise<SyncSummary> {
