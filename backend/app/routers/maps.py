@@ -501,7 +501,10 @@ async def list_editors(
 
         if dept_patterns:
             # department 멤버: 모든 직원의 org_path로 판정 (belongs_to_department 재사용)
-            all_emps = list((await session.scalars(select(Employee))).all())
+            # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
+            all_emps = list(
+                (await session.scalars(select(Employee).where(Employee.active.is_(True)))).all()
+            )
             for emp in all_emps:
                 org = logic.org_path(
                     emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department or ""
@@ -512,10 +515,15 @@ async def list_editors(
     if not login_ids:
         return []
 
+    # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
     emp_map: dict[str, Employee] = {
         e.login_id: e
         for e in (
-            await session.scalars(select(Employee).where(Employee.login_id.in_(login_ids)))
+            await session.scalars(
+                select(Employee).where(
+                    Employee.active.is_(True), Employee.login_id.in_(login_ids)
+                )
+            )
         ).all()
     }
     return [
