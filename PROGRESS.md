@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-10 — 사용자·조직도 소스 교체(AD→n8n HR 웹훅) 설계
+- 구현 플랜 작성: [`docs/superpowers/plans/2026-08-10-hr-webhook-directory.md`](docs/superpowers/plans/2026-08-10-hr-webhook-directory.md) — 9태스크(클라이언트+설정 → 스키마/email 제거 → 매핑 → sync 코어 → 소스 교체+프리뷰 → title 패스 → active 필터 → 스케줄러 → 게이트).
 - 브레인스토밍 확정 — 설계서 신설: [`docs/design/2026-08-10-hr-webhook-directory-design.md`](docs/design/2026-08-10-hr-webhook-directory-design.md). 신규 `app/hr/`(웹훅 클라이언트+동기화)로 employees 단일 소스 교체, LDAP은 title 전용 패스로 축소 보존. 결정: 퇴직자 active=false 유지+피커·디렉터리 제외+reconcile, 내장 스케줄러(주기 env), email 모델 제거(운영 NOT NULL 완화 부트스트랩 필수), dept_code+departments 미러 신설, 드라이런 diff·삭제 20% 상한 가드로 기존 데이터(권한 경로·login_id 참조·수동 한글값) 이행 방어.
 
 
