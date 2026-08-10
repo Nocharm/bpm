@@ -33,30 +33,6 @@ def test_employees_table_created(client: TestClient) -> None:
     assert asyncio.run(_count()) >= 5  # 로컬 임시 유저 5명 시드됨
 
 
-def test_to_employee_fields_maps_and_filters() -> None:
-    from app.ad.client import RawUser
-    from app.ad.service import to_employee_fields
-
-    raw = RawUser(
-        sam_account_name="hong.gildong",
-        display_name="홍길동",
-        title="책임",
-        distinguished_name="CN=H,OU=TeamA,OU=DeptB,OU=SAMSUNGBIOLOGICS,DC=corp",
-        user_account_control=None,
-        mail=None,
-        member_of=[],
-    )
-    fields = to_employee_fields(raw)
-    assert fields is not None
-    assert fields.login_id == "hong.gildong"
-    assert fields.department == "TeamA"  # 루트→리프 중 가장 깊은 레벨
-    assert fields.role == "user"
-    assert fields.active is True   # uac=None → active
-
-    excluded = RawUser("nodot", "이름", "", "OU=TeamA,DC=corp", None, None, [])  # loginId에 '.' 없음
-    assert to_employee_fields(excluded) is None
-
-
 def test_get_current_user_prefers_dev_header() -> None:
     # auth_enabled=False(기본)일 때 X-Dev-User 우선, 없으면 dev_user
     from app.auth import get_current_user
@@ -152,12 +128,6 @@ def test_sync_requires_admin(client: TestClient, sysadmin_enforced: None) -> Non
 
 
 # ── 비활성 계정 제외 (design 2026-07-09) — sync-mocked/스테일 프룬 커버리지는
-# app.hr.service 이관(2026-08-10)으로 tests/test_hr_sync.py·test_hr_endpoints.py가 대체 ──
-
-
-def test_to_employee_fields_excludes_disabled_account() -> None:
-    from app.ad.client import RawUser
-    from app.ad.service import to_employee_fields
-
-    disabled = RawUser("gone.user", "비활성계정", "사원", "OU=TeamA,DC=corp", 0x202, None, [])
-    assert to_employee_fields(disabled) is None  # uac 0x2 → 동기화 제외
+# app.hr.service 이관(2026-08-10)으로 tests/test_hr_sync.py·test_hr_endpoints.py가 대체.
+# to_employee_fields 자체는 ad/service 축소(Task 6)로 제거 — is_active 순수 테스트는
+# tests/test_ad_active.py에 유지 ──
