@@ -3,7 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-08-08 — 컨설턴트 전사 프로세스 체계(7단계) 수용 설계
+## 2026-08-10 — 사용자·조직도 소스 교체(AD→n8n HR 웹훅) 설계
+- 브레인스토밍 확정 — 설계서 신설: [`docs/design/2026-08-10-hr-webhook-directory-design.md`](docs/design/2026-08-10-hr-webhook-directory-design.md). 신규 `app/hr/`(웹훅 클라이언트+동기화)로 employees 단일 소스 교체, LDAP은 title 전용 패스로 축소 보존. 결정: 퇴직자 active=false 유지+피커·디렉터리 제외+reconcile, 내장 스케줄러(주기 env), email 모델 제거(운영 NOT NULL 완화 부트스트랩 필수), dept_code+departments 미러 신설, 드라이런 diff·삭제 20% 상한 가드로 기존 데이터(권한 경로·login_id 참조·수동 한글값) 이행 방어.
+
+
 - 컨설팅사 발송용 메일 초안 신설: [`docs/notices/2026-08-09-consultant-delivery-interface-mail.md`](docs/notices/2026-08-09-consultant-delivery-interface-mail.md) — 수용 방향(부트스트랩·재전달 무충돌)과 전달 데이터 인터페이스(안)(categories.json+maps.jsonl 항목 정의·표기 규칙·인터뷰 수집 항목·협의 요청).
 - **Phase 2 최종 리뷰 클린(머지 가능)** — 브랜치 리뷰 Minor 3+테스트 갭 3 전량 수정(fetch 실패 복구·category_path 대칭·403 배선 테스트·hasMoreMaps 술어). 게이트: BE pytest 924·ruff 0 / FE vitest 605·tsc 0·lint 0·build OK / 실브라우저 스모크 8/8. 잔여 유예: 서버 실배포 검증·수천 카테고리 렌더 실측·스케일 하드닝 트랙(기존 홈 fetch-all·SP 피커).
 - Phase 2 구현 플랜 작성: [`docs/superpowers/plans/2026-08-08-consultant-framework-phase2.md`](docs/superpowers/plans/2026-08-08-consultant-framework-phase2.md) — 6태스크(카테고리 조회 API+MapOut 노출 → 지정 I/O·연결/이양 API → 홈 토글+lazy 트리 → 상세 카드 뱃지/I/O/모달 → SP 폼 I/O → 샘플 전달물+pw 스모크).
