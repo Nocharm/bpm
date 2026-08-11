@@ -1,24 +1,28 @@
 // 홈 Framework 뷰 — lazy 카테고리 트리(컨설턴트 업무 체계). org-accordion.tsx 행 UX를 미러하되
-// 캐시·펼침 상태는 lib/framework-tree-state.ts 순수 리듀서가 소유(thin 렌더러). v1은 브라우즈 전용 —
-// 검색은 Departments 뷰가 커버(설계 §6 v1 단순화).
+// 캐시·펼침 상태는 lib/framework-tree-state.ts 순수 리듀서가 소유(thin 렌더러). 검색은 페이지 공용
+// 플랫 검색 모드가 커버하고, 여기선 활성 필터(filterMap)를 로드된 맵 카드에만 적용한다.
 "use client";
 
 import { ChevronDown, ChevronRight, FolderTree } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CategoryMaps, CategoryNode, MapSummary } from "@/lib/api";
 import {
   applyCategoryLoaded,
+  CASCADE_BUDGET,
+  collectCascadeTargets,
   createInitialState,
   fetchCategoryChildren,
   fetchMoreMaps,
   fetchRootChildren,
   hasCachedChildren,
   hasMoreMaps,
+  readPersistedOpenIds,
   reduceFrameworkTree,
   ROOT,
   shouldFetchChildren,
   shouldFetchMore,
+  writePersistedOpenIds,
   type FrameworkTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
@@ -27,11 +31,42 @@ import { CountTag } from "@/components/maps/count-tag";
 interface FrameworkTreeProps {
   // page.tsx의 기존 renderCard를 그대로 물려받아 맵 행 렌더를 OrgAccordion과 일원화 (selectedId는 renderCard 클로저 내부 처리).
   renderCard: (map: MapSummary) => ReactNode;
+  // 활성 필터 술어(가시성·상태·역할) — null이면 필터 없음. 로드된 맵 카드에만 적용하고
+  // 카운트 태그·total은 서버 전체 기준 그대로 둔다(lazy 트리라 전수 재계산 불가).
+  filterMap: ((map: MapSummary) => boolean) | null;
 }
 
-export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
+export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
+  // 캐스케이드 예산 — 펼침 제스처마다 리셋. 재귀 loadChildren들이 공유 차감한다.
+  const cascadeBudgetRef = useRef(0);
+  // 영속 게이트 — 복원 effect가 지나기 전 persist effect가 빈 초기 상태로 저장값을 덮는 것을 막는다.
+  const hydratedRef = useRef(false);
+  // 복원 대상 스냅샷 — StrictMode 이중 실행 사이에 persist가 끼어들어도 첫 판독값을 유지한다.
+  const restoreIdsRef = useRef<number[] | null>(null);
+
+  // 펼침 상태 영속 — 복원 effect(아래)보다 먼저 선언해 첫 실행이 hydration 전에 스킵되게 한다.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    writePersistedOpenIds(state.openIds);
+  }, [state.openIds]);
+
+  // 펼침 상태 복원 — 뒤로가기/새로고침 후 저장된 openIds를 다시 열고 각 노드를 재fetch(캐스케이드 없음:
+  // 저장값이 곧 사용자의 최종 상태다). 삭제된 카테고리 id는 부모 목록에 없어 렌더되지 않는다(무해).
+  useEffect(() => {
+    restoreIdsRef.current ??= readPersistedOpenIds();
+    const ids = restoreIdsRef.current;
+    hydratedRef.current = true;
+    if (ids.length === 0) return;
+    setState((prev) => {
+      let next = prev;
+      for (const id of ids) next = reduceFrameworkTree(next, { type: "opened", categoryId: id });
+      return next;
+    }); // one-time hydration (부서 트리 page.tsx 복원과 동일 관례)
+    for (const id of ids) loadChildren(id, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // 루트 fetch 실패 표시 — children_loaded가 한 번도 없으면 rootLoaded는 영원히 false로 남는데,
   // effect는 마운트 1회뿐이라 실패 시 재시도 트리거가 없다. 별도 플래그로 에러 행 + 재시도 버튼을 낸다.
   const [rootError, setRootError] = useState(false);
@@ -62,12 +97,23 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
       .catch(() => setRootError(true));
   }
 
-  // opened 판단 없이 무조건 fetch — handleToggle(최초 펼침)과 에러 재시도 행 둘 다 호출.
-  function loadChildren(categoryId: number) {
+  // opened 판단 없이 무조건 fetch — handleToggle(최초 펼침)·에러 재시도 행·복원이 호출.
+  // cascade=true(사용자 펼침 제스처)면 로드 결과에서 맵 있는 자식을 예산 내 자동 펼침·재귀 로드 —
+  // 한 클릭으로 맵이 있는 범위까지 트리가 퍼진다. 복원(false)은 저장된 상태만 되살린다.
+  function loadChildren(categoryId: number, cascade: boolean) {
     setState((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
     void fetchCategoryChildren(categoryId)
       .then(({ nodes, maps }) => {
         setState((prev) => applyCategoryLoaded(prev, categoryId, nodes, maps));
+        if (!cascade) return;
+        const targets = collectCascadeTargets(nodes, cascadeBudgetRef.current);
+        cascadeBudgetRef.current -= targets.length;
+        for (const id of targets) {
+          // 방금 부모의 첫 fetch로 발견된 자식이라 사실상 미캐시 — 복원 fetch와 겹치는 극단 케이스도
+          // 같은 데이터 덮어쓰기라 무해해 shouldFetchChildren 재판정은 생략한다.
+          setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId: id }));
+          loadChildren(id, true);
+        }
       })
       .catch(() => {
         // loading_ended만 지우면 재요청 잠금이 풀린다 — 재시도 행 클릭이나 재펼침으로 다시 시도 가능.
@@ -82,7 +128,17 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
     }
     setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     // 캐시 있거나 이미 인플라이트면 재요청 안 함 — 닫았다 로딩 중 재펼침해도 fetch는 1회만.
-    if (shouldFetchChildren(state, categoryId)) loadChildren(categoryId);
+    // 캐스케이드도 첫 로드에만 — 재펼침은 사용자가 접어둔 하위 상태를 존중한다.
+    if (shouldFetchChildren(state, categoryId)) {
+      cascadeBudgetRef.current = CASCADE_BUDGET;
+      loadChildren(categoryId, true);
+    }
+  }
+
+  // 펼침 실패 재시도 — 첫 로드의 재시도이므로 캐스케이드도 새 예산으로 다시 시도한다.
+  function handleRetryNode(categoryId: number) {
+    cascadeBudgetRef.current = CASCADE_BUDGET;
+    loadChildren(categoryId, true);
   }
 
   function handleLoadMore(categoryId: number) {
@@ -107,11 +163,19 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
   // 버튼만 비활성화(이미 로드된 목록은 그대로 유지 — 초기 로딩 placeholder와 달리 목록을 지우지 않는다).
   const renderMapList = (categoryId: number, mapsData: CategoryMaps | undefined, loading: boolean) => {
     if (!mapsData) return null;
+    // 활성 필터는 로드된 카드에만 적용 — 숨긴 개수를 노트로 밝혀 카운트 태그(전체 기준)와의 차이를 설명한다.
+    const shownMaps = filterMap ? mapsData.maps.filter(filterMap) : mapsData.maps;
+    const filteredOut = mapsData.maps.length - shownMaps.length;
     return (
       <ul className="flex flex-col gap-2 pl-5 pr-2">
-        {mapsData.maps.map((m) => (
+        {shownMaps.map((m) => (
           <li key={m.id}>{renderCard(m)}</li>
         ))}
+        {filteredOut > 0 && (
+          <li data-id="framework-filtered-note" className="text-fine text-ink-tertiary">
+            {t("home.frameworkFilteredOut", { n: filteredOut })}
+          </li>
+        )}
         {mapsData.hidden > 0 && (
           <li className="text-fine text-ink-tertiary">{t("home.frameworkHidden", { n: mapsData.hidden })}</li>
         )}
@@ -172,7 +236,7 @@ export function FrameworkTree({ renderCard }: FrameworkTreeProps) {
               data-id="framework-node-retry"
               style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }}
               className="text-left text-fine text-error hover:underline"
-              onClick={() => loadChildren(node.id)}
+              onClick={() => handleRetryNode(node.id)}
             >
               {node.name} — {t("home.frameworkLoadError")}
             </button>

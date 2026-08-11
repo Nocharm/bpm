@@ -100,6 +100,37 @@ export function hasMoreMaps(state: FrameworkTreeState, categoryId: number): bool
   return mapsData.total > mapsData.maps.length + mapsData.hidden;
 }
 
+// 캐스케이드 자동 펼침 예산 — 클릭 1회당 자동으로 열 수 있는 하위 카테고리 상한.
+// 대량 전달(카테고리 수천)에서 한 클릭이 서브트리 전체 fetch로 폭주하는 것을 막는다(초과분은 수동 펼침).
+export const CASCADE_BUDGET = 40;
+
+// 캐스케이드 대상 — 맵이 있는(서브트리 rollup>0) 자식만, 예산 내에서. 빈 가지는 펼쳐도 보여줄 게 없다.
+export function collectCascadeTargets(nodes: CategoryNode[], budget: number): number[] {
+  return nodes.filter((n) => n.map_count > 0).slice(0, Math.max(0, budget)).map((n) => n.id);
+}
+
+// 펼침 상태 영속 — 부서 트리(bpm.home.tree)와 동일하게 localStorage(새로고침·뒤로가기에도 유지).
+const FRAMEWORK_TREE_KEY = "bpm.framework.tree";
+
+export function readPersistedOpenIds(): number[] {
+  try {
+    const raw = window.localStorage.getItem(FRAMEWORK_TREE_KEY);
+    if (!raw) return [];
+    const s = JSON.parse(raw) as { openIds?: unknown };
+    return Array.isArray(s.openIds) ? s.openIds.filter((x): x is number => typeof x === "number") : [];
+  } catch {
+    return []; // 손상된 저장값 무시
+  }
+}
+
+export function writePersistedOpenIds(openIds: Set<number>): void {
+  try {
+    window.localStorage.setItem(FRAMEWORK_TREE_KEY, JSON.stringify({ openIds: [...openIds] }));
+  } catch {
+    // 저장 실패(용량 등)는 UX에 치명적이지 않다 — 펼침 상태만 복원 안 될 뿐.
+  }
+}
+
 // 루트 목록 — parentId 생략 호출(최상위 레벨).
 export function fetchRootChildren(): Promise<CategoryNode[]> {
   return listCategoryNodes();
