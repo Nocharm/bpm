@@ -135,6 +135,10 @@ export function FrameworkAssignModal({
     setChain((prev) => pickCascadeLevel(prev, depth, categoryId));
     // 체인과 정합 유지 — 재선택된 depth보다 깊은 옵션은 폐기(위 effect가 새 부모 기준으로 다시 채운다).
     setOptionsByDepth((prev) => prev.slice(0, depth + 1));
+    // fetchedParentIds도 함께 리셋 — 안 그러면 예전에 "리프로 확인됨" 표시가 남아, 옵션이 이미
+    // 잘려나간 노드를 다시 선택해도 위 effect의 가드가 재조회를 막아 하위 셀렉트가 영영 안 돌아온다
+    // (pick A→pick D→pick A 재선택 시 A의 하위 레벨이 사라지던 버그).
+    setFetchedParentIds(new Set());
   }
 
   function openTransfer() {

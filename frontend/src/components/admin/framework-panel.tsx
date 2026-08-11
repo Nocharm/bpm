@@ -205,7 +205,8 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
             )}
             <span className="truncate text-fine text-ink">{node.name}</span>
             <span className="shrink-0 text-fine text-ink-muted">{node.code}</span>
-            <CountTag count={node.map_count} />
+            {/* 접힌 행에만 — 펼치면 하위 행이 다 보여 롤업 숫자가 중복(count-tag.tsx 계약) */}
+            {!open && <CountTag count={node.map_count} />}
           </button>
           <div className="flex shrink-0 items-center gap-0.5 pr-1">
             {node.level < MAX_CATEGORY_LEVEL && (
@@ -427,11 +428,15 @@ function MoveCategoryModal({ node, onClose, onMoved, onToast }: MoveCategoryModa
       setRootPicked(true);
       setChain([]);
       setOptionsByDepth((prev) => prev.slice(0, 1));
+      // optionsByDepth를 잘라낸 만큼 fetchedParentIds도 리셋 — 안 그러면 예전에 "리프로 확인됨"
+      // 표시가 남아, 옵션이 이미 잘려나간 노드를 다시 선택해도 effect 가드가 재조회를 막는다.
+      setFetchedParentIds(new Set());
       return;
     }
     setRootPicked(false);
     setChain((prev) => pickCascadeLevel(prev, depth, Number(value)));
     setOptionsByDepth((prev) => prev.slice(0, depth + 1));
+    setFetchedParentIds(new Set());
   }
 
   const canConfirm = rootPicked || chain.length > 0;

@@ -1544,7 +1544,6 @@ const en = {
   "framework.adminRenamed": "Category renamed.",
   "framework.adminMoved": "Category moved.",
   "framework.adminDeleted": "Category deleted.",
-  "framework.adminImportPlaceholder": "Bulk import — coming in a follow-up task.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -3089,7 +3088,6 @@ const ko: Record<MessageKey, string> = {
   "framework.adminRenamed": "카테고리 이름을 변경했습니다.",
   "framework.adminMoved": "카테고리를 이동했습니다.",
   "framework.adminDeleted": "카테고리를 삭제했습니다.",
-  "framework.adminImportPlaceholder": "대량 임포트 — 후속 작업에서 추가됩니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
