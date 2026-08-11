@@ -697,6 +697,38 @@ class FrameworkTransferIn(BaseModel):
     to_map_id: int
 
 
+class FrameworkImportIn(BaseModel):
+    """웹 JSON 대량 임포트 요청 — categories.json/maps.jsonl과 동일 구조를 인라인으로 받는다.
+
+    구조 검증은 scripts.consultant_canonical(parse_categories/parse_map_objs)이 담당 —
+    여기서는 raw dict 그대로 통과시킨다(brief §2).
+    """
+
+    categories: list[dict[str, Any]] = []
+    maps: list[dict[str, Any]] = []
+    apply: bool = False
+    label: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+
+class FrameworkImportRow(BaseModel):
+    """임포트 리포트 1행 — action∈created/updated/unchanged/error/warning (ImportReport.rows 미러)."""
+
+    code: str
+    action: str
+    detail: str = ""
+
+
+class FrameworkImportOut(BaseModel):
+    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated)."""
+
+    applied: bool
+    summary: dict[str, int]
+    rows: list[FrameworkImportRow]
+    truncated: bool
+
+
 class NodeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

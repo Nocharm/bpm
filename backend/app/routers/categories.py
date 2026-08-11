@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
 from app.auth import get_current_user, require_sysadmin
+from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
     Employee,
@@ -27,6 +28,9 @@ from app.schemas import (
     CategoryMapsOut,
     CategoryNodeOut,
     CategoryUpdateIn,
+    FrameworkImportIn,
+    FrameworkImportOut,
+    FrameworkImportRow,
     MapOut,
 )
 
@@ -255,6 +259,55 @@ async def list_category_nodes(
         )
         for r in targets
     ]
+
+
+@router.post("/import", response_model=FrameworkImportOut)
+async def import_framework_delivery(
+    payload: FrameworkImportIn,
+    login_id: str = Depends(require_sysadmin),
+    session: AsyncSession = Depends(get_session),
+) -> FrameworkImportOut:
+    """웹 JSON 대량 임포트 — CLI(scripts.import_consultant)와 동일 엔진 재사용, 기본 dry-run.
+
+    literal "/import"는 `/{category_id}/...` 패턴에 앞서 선언 — FastAPI는 등록 순서대로
+    매칭하므로 path-param 라우트가 이 세그먼트를 가로채지 않게 한다(brief 주의사항).
+    scripts는 app 모듈을 가져와 순환참조가 생기므로 함수 지역에서 지연 임포트한다.
+    """
+    from scripts.consultant_canonical import CanonicalError, parse_categories, parse_map_objs
+    from scripts.import_consultant import import_delivery
+
+    try:
+        categories = parse_categories({"categories": payload.categories})
+    except CanonicalError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    maps, item_errors = parse_map_objs(payload.maps)
+    label = payload.label or f"Web import {now_kst():%Y-%m-%d}"
+
+    report = await import_delivery(
+        session, categories=categories, maps=maps, actor=login_id, label=label,
+        commit_every=None,
+    )
+    for err in item_errors:
+        report.add("-", "error", err)
+
+    if payload.apply:
+        await session.commit()
+    else:
+        await session.rollback()
+
+    # error/warning 행 우선 포함 후 나머지 순서대로(brief §2) — summary는 잘림 전 전체 기준
+    priority = [r for r in report.rows if r[1] in ("error", "warning")]
+    rest = [r for r in report.rows if r[1] not in ("error", "warning")]
+    ordered = priority + rest
+    truncated = len(ordered) > 500
+
+    return FrameworkImportOut(
+        applied=payload.apply,
+        summary=report.counts(),
+        rows=[FrameworkImportRow(code=c, action=a, detail=d) for c, a, d in ordered[:500]],
+        truncated=truncated,
+    )
 
 
 @router.get("/{category_id}/chain", response_model=list[CategoryNodeOut])

@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- **Framework Admin UI Task 2**: `POST /api/categories/import` sysadmin 전용 웹 JSON 대량 임포트 추가 — CLI(`scripts.import_consultant.import_delivery`)와 동일 엔진 재사용(dry-run 기본, apply 시에만 commit). `consultant_canonical.py`를 `parse_categories`/`parse_map_objs`(순수 검증) + `load_categories`/`load_maps`(파일 IO 위임)로 분리, 항목 오류는 error 행으로 합류·rows 500행 캡(error/warning 우선). BE 994(+5)·ruff 0.
 - **Framework Admin UI Task 1**: `POST/PATCH/DELETE /api/categories` sysadmin 전용 CRUD 추가 — 생성(level 파생·`ui-` 자동채번)·이동(자손 가드+서브트리 BFS level 재계산)·삭제(자식/맵 연결 가드). BE 989(+7)·ruff 0.
 - 9910 가이드에 컨설턴트 임포트 CLI 절차 추가 — Framework 검증 항목이 데이터 시드 단계 없이 UI 확인만 요구해 "임포트 수단이 없다" 혼선 유발(임포트는 설계상 UI 없는 관리자 CLI).
 - **템플릿 룰 동기화**(claude-code-template 8/1 개정 반영): guidelines Claude 5 튜닝(ask-first 축소, §1 표가 단일 기준)·git.md 커밋 전 체크 확장(PROGRESS 1–3줄 맥락 위주·README는 영향 섹션만·브랜치 머지 시 PROGRESS 압축)·`rules/frontend/identifiers.md` 신설 — 템플릿의 `data-testid`는 기존 컨벤션 `data-id`(450+곳)로 속성명만 유지.
