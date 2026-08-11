@@ -186,3 +186,10 @@ def test_valid_prefixes_exclude_inactive_only_departments(
     prefixes = session(_seed_and_load)
     assert "Orgt Live Team" in prefixes
     assert all("Orgt Ghost Team" not in p for p in prefixes)
+
+
+def test_broken_parent_chain_falls_back_to_columns() -> None:
+    """부모 코드가 미러에 없는 단절 체인 — 부분 경로(루트로 뜨는 고아) 대신 org 컬럼 폴백."""
+    idx = _index(_dept("D9", "Dangling Team", "MISSING-PARENT"))
+    emp = _emp(dept_code="D9", org_l1="Real Root", org_l2="Real Office", department="Real Office")
+    assert resolve_org_path(emp, idx) == "Real Root/Real Office"

@@ -65,7 +65,9 @@ def resolve_org_path(emp: Employee, index: DeptIndex) -> str:
             if name:
                 names_leaf_to_root.append(sanitize_org_segment(name))
             cur = parent
-        if names_leaf_to_root:
+        # cur is None = 루트까지 닿음. cur가 남아 있으면 부모 코드가 미러에 없는 단절 체인 —
+        # 부분 경로는 트림 후 루트로 떠서 인원 있는 고아 노드가 되므로 통째로 폴백 (2026-08 9910 적발)
+        if names_leaf_to_root and cur is None:
             names = list(reversed(names_leaf_to_root))
             # 최상위 N레벨 제외 — 법인·사업부급 범용 레벨은 분류에서 뺀다. 체인이 그보다 짧으면 리프만.
             trim = settings.org_trim_levels

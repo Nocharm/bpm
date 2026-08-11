@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- 단절 체인 폴백: 부모 dept_code가 미러에 없으면(부서 피드 불완전) 부분 경로 대신 org 컬럼 폴백 — 인원 있는 고아 루트 노드의 범인(최종리뷰 백로그 #10 해소). BE 980(+1).
 - EDW positions 타임아웃 30→180초 — 9910 실측 뷰 스캔 지연으로 타임아웃 발생.
 - **9910 검증 픽스 3차**: ① 관리 부서 트리의 고아 루트 노드 — 퇴사자(active=false, 부서 정보 미갱신) 스테일 경로가 부서 목록에 새던 것 → `get_admin_users` 부서 파생을 active 직원 경로만으로(users 목록은 전체 유지) ② n8n hr-position 쿼리 — 제외 직책 확장(프로·담당과장·계약직사원·담당임원), NAME 컬럼 제거(n8n 마스킹 [object Object]). BE 979(+1)·ruff 0.
 - **9910 검증 픽스 2차**: ① 부서명 내 "/"(AX/PI Department·ADC T/F) 경로 파손 — `orgchart.sanitize_org_segment`(전각 슬래시 치환)를 체인 해석·폴백·name_ko 키에 적용 ② inactive만 남은 부서는 선택지·remap에서 자동 제외(`load_valid_org_prefixes(active_only=)` — 오우닝 *검증*은 관대 유지, conftest 앵커 보존) ③ position 미입력 진단 — AD 패스 로그(사용자·사번 수)+`position_unmatched_sample`(≤10) 요약 노출·sync 버튼 메시지에 표시 ④ 부서 탭 개편 — 테이블을 조직도 트리(들여쓰기·접기)로, 소멸 부서 재지정 대상은 드롭다운 대신 **트리 모달**(`dept-tree-picker`, active 부서만·검색) ⑤ org 디버그 토글·열 제거. 게이트 BE 978·ruff 0·FE tsc/lint/vitest 589/build 그린.
