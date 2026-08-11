@@ -46,7 +46,7 @@
 - [운영 대시보드 — 실운영 화면 + 접근 권한](2026-07-11-dashboard-design.md)
 
 ## UI · 홈 · 디렉터리
-- [조직 기준 전환 — dept_info → departments + AD 인원별 manager](2026-08-11-departments-org-basis-design.md) — 경로 해석 계층(`app/orgchart.py`, dept_code 체인+org_l1~l5 폴백)·dept_info 소비 제거(임포트 API 삭제)·`manager_login_id` AD 역추적·개인 매니저 체인 2단계 태그·부서관리 고아 섹션 상단 이동
+- [조직 기준 전환 — dept_info → departments + EDW 직책 기반 관리자](2026-08-11-departments-org-basis-design.md) — 경로 해석 계층(`app/orgchart.py`, dept_code 체인+org_l1~l5 폴백)·dept_info 소비 제거(임포트 API 삭제)·EDW 부서장 파이프라인(n8n `hr-position` 워크플로+AD employeeNumber 매핑→`employees.position`)·노출 직책 allowlist·부서 체인 Manager 태그·부서관리 고아 섹션 상단 이동
 - [사용자·조직도 소스 교체 — AD LDAP → n8n HR 웹훅](2026-08-10-hr-webhook-directory-design.md) — 신규 `app/hr/` 동기화·퇴직자 active=false+피커 제외·title AD 패스·email 모델 제거(NOT NULL 완화)·departments 미러·드라이런/삭제 상한 이행 절차
 - [홈 부서 목록 재조정(개정)](2026-08-04-home-dept-list-revision-design.md) — 위 문서 §2를 대체. main 들여쓰기 트리로 회귀 + 카운트 태그·펼친 부서 태그 숨김/톤다운·맵 보유 부서를 풀폭 그룹 박스로 묶음
 - [홈 부서 가시성·시인성 개선](2026-08-04-home-dept-visibility-design.md) — 부서명 고정폭 필 체인(단일자식 병합)·카드 풀폭 통일·sticky 경로 헤더·최근접속 호버 반전·접힘 상태 영속 (**§2는 위 개정판으로 대체됨**)
