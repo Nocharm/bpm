@@ -2220,7 +2220,10 @@ export interface FrameworkImportRow {
 
 export interface FrameworkImportResult {
   applied: boolean;
-  summary: { created: number; updated: number; unchanged: number; errors: number; warnings: number };
+  // 서버는 action별 카운트만 채워 보낸다(0인 키는 아예 없음, action="warning"은 집계 제외 —
+  // backend ImportReport.counts() 미러) — created/updated/unchanged/error만 나타날 수 있고,
+  // warning 개수는 rows에서 action==="warning" 행 수로 직접 세야 한다.
+  summary: Record<string, number>;
   rows: FrameworkImportRow[];
   truncated: boolean;
 }

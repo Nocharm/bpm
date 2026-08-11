@@ -1544,6 +1544,26 @@ const en = {
   "framework.adminRenamed": "Category renamed.",
   "framework.adminMoved": "Category moved.",
   "framework.adminDeleted": "Category deleted.",
+  // ── Framework 탭 — 대량 임포트 (Task 4) ──
+  "framework.importTitle": "Bulk import",
+  "framework.importCliHint": "Large deliveries (thousands of maps) should use the server CLI instead.",
+  "framework.importCategoriesPick": "Choose categories.json",
+  "framework.importMapsPick": "Choose maps.jsonl",
+  "framework.importItemCount": "{n} items",
+  "framework.importDryRun": "Dry run",
+  "framework.importApply": "Apply",
+  "framework.importApplyTitle": "Apply this delivery?",
+  "framework.importApplyMessage": "This persists the categories and maps in the dry-run report below.",
+  "framework.importApplySuccess": "Import applied.",
+  "framework.importCreated": "Created",
+  "framework.importUpdated": "Updated",
+  "framework.importUnchanged": "Unchanged",
+  "framework.importErrors": "Errors",
+  "framework.importWarnings": "Warnings",
+  "framework.importColCode": "Code",
+  "framework.importColAction": "Action",
+  "framework.importColDetail": "Detail",
+  "framework.importTruncated": "Showing the first 500 rows (errors and warnings first).",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -3088,6 +3108,26 @@ const ko: Record<MessageKey, string> = {
   "framework.adminRenamed": "카테고리 이름을 변경했습니다.",
   "framework.adminMoved": "카테고리를 이동했습니다.",
   "framework.adminDeleted": "카테고리를 삭제했습니다.",
+  // ── Framework 탭 — 대량 임포트 (Task 4) ──
+  "framework.importTitle": "대량 임포트",
+  "framework.importCliHint": "수천 건 규모의 대량 전달물은 서버 CLI를 사용하세요.",
+  "framework.importCategoriesPick": "categories.json 선택",
+  "framework.importMapsPick": "maps.jsonl 선택",
+  "framework.importItemCount": "{n}개 항목",
+  "framework.importDryRun": "드라이런",
+  "framework.importApply": "적용",
+  "framework.importApplyTitle": "이 전달물을 적용할까요?",
+  "framework.importApplyMessage": "아래 드라이런 리포트의 카테고리·맵이 그대로 저장됩니다.",
+  "framework.importApplySuccess": "임포트를 적용했습니다.",
+  "framework.importCreated": "생성",
+  "framework.importUpdated": "갱신",
+  "framework.importUnchanged": "변경없음",
+  "framework.importErrors": "오류",
+  "framework.importWarnings": "경고",
+  "framework.importColCode": "코드",
+  "framework.importColAction": "동작",
+  "framework.importColDetail": "상세",
+  "framework.importTruncated": "최대 500행만 표시합니다(오류·경고 우선).",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

@@ -3,7 +3,8 @@
 // 설정 Framework 탭 — 컨설턴트 업무 체계 카테고리 관리 트리(CRUD). 홈의 lib/framework-tree-state.ts는
 // 맵 목록까지 함께 로드하는 브라우징 전용 캐시라 여기(뮤테이션 후 영향받는 노드를 전체 재조회)엔
 // 그대로 맞지 않는다 — brief가 admin 전용 확장을 금지해 이 파일 안에 별도의 단순 상태를 둔다.
-// 임포트(대량 업로드) UI는 Task 4 — 하단에 자리만 남겨둔다.
+// 대량 임포트 섹션(트리 하단)은 클라이언트 파싱(framework-import-parse.ts)만 하고, 스키마 검증은
+// 서버 dry-run(POST /categories/import apply=false)이 진실 — 실제 저장은 apply=true 확인 후에만.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -16,6 +17,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 
@@ -23,11 +25,14 @@ import {
   createCategory,
   deleteCategory,
   getApiErrorDetail,
+  importFramework,
   listCategoryNodes,
   updateCategory,
   type CategoryNode,
+  type FrameworkImportResult,
 } from "@/lib/api";
 import { pickCascadeLevel } from "@/lib/category-cascade";
+import { parseCategoriesFile, parseMapsFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -38,6 +43,22 @@ const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 �
 
 const ROW_ICON_BTN =
   "hidden shrink-0 rounded-sm p-1 text-ink-muted hover:bg-surface-alt group-hover:block";
+
+const IMPORT_FILE_BTN =
+  "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline px-2.5 py-1.5 " +
+  "text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
+
+interface CategoriesFileState {
+  name: string;
+  categories: unknown[];
+  error?: string;
+}
+
+interface MapsFileState {
+  name: string;
+  maps: unknown[];
+  lineErrors: string[];
+}
 
 interface FrameworkPanelProps {
   onToast: (message: string) => void;
@@ -62,6 +83,15 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
   const [deletingNode, setDeletingNode] = useState<CategoryNode | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // 대량 임포트 섹션 — 파일 2개(클라이언트 파싱만) + dry-run 리포트 + apply.
+  const categoriesInputRef = useRef<HTMLInputElement>(null);
+  const mapsInputRef = useRef<HTMLInputElement>(null);
+  const [categoriesFile, setCategoriesFile] = useState<CategoriesFileState | null>(null);
+  const [mapsFile, setMapsFile] = useState<MapsFileState | null>(null);
+  const [importResult, setImportResult] = useState<FrameworkImportResult | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
 
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
   const openIdsRef = useRef<Set<number>>(new Set());
@@ -118,6 +148,88 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
       openList.forEach((id, i) => next.set(id, childLists[i]));
       return next;
     });
+  }
+
+  // 파일 선택 → 클라이언트 파싱만(스키마 검증은 서버 dry-run). 선택이 바뀌면 이전 dry-run은 무효.
+  async function handleCategoriesFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setCategoriesFile({ name: file.name, ...parseCategoriesFile(text) });
+    setImportResult(null);
+  }
+
+  async function handleMapsFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setMapsFile({ name: file.name, ...parseMapsFile(text) });
+    setImportResult(null);
+  }
+
+  async function handleDryRun() {
+    setImportBusy(true);
+    try {
+      const result = await importFramework({
+        categories: categoriesFile?.categories ?? [],
+        maps: mapsFile?.maps ?? [],
+        apply: false,
+      });
+      setImportResult(result);
+    } catch (err) {
+      onToast(getApiErrorDetail(err));
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  async function handleApply() {
+    setConfirmApply(false);
+    setImportBusy(true);
+    try {
+      const result = await importFramework({
+        categories: categoriesFile?.categories ?? [],
+        maps: mapsFile?.maps ?? [],
+        apply: true,
+      });
+      setImportResult(result);
+      await refreshTree();
+      onToast(t("framework.importApplySuccess"));
+    } catch (err) {
+      onToast(getApiErrorDetail(err));
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  // 요약 칩 5종 — created/updated/unchanged/error는 summary(0이면 키 자체가 없음), warnings는
+  // summary 집계 대상에서 제외돼(backend ImportReport.counts()) rows에서 직접 센다.
+  function renderImportSummary(result: FrameworkImportResult) {
+    const chips: { key: string; label: string; count: number; danger?: boolean }[] = [
+      { key: "created", label: t("framework.importCreated"), count: result.summary.created ?? 0 },
+      { key: "updated", label: t("framework.importUpdated"), count: result.summary.updated ?? 0 },
+      { key: "unchanged", label: t("framework.importUnchanged"), count: result.summary.unchanged ?? 0 },
+      { key: "errors", label: t("framework.importErrors"), count: result.summary.error ?? 0, danger: true },
+      {
+        key: "warnings",
+        label: t("framework.importWarnings"),
+        count: result.rows.filter((row) => row.action === "warning").length,
+      },
+    ];
+    return (
+      <div className="flex flex-wrap gap-2">
+        {chips.map((chip) => (
+          <span
+            key={chip.key}
+            className={`rounded-sm border px-2 py-1 text-fine ${
+              chip.danger && chip.count > 0
+                ? "border-error/40 bg-error/10 text-error"
+                : "border-hairline bg-surface-alt text-ink-secondary"
+            }`}
+          >
+            {chip.label} {chip.count}
+          </span>
+        ))}
+      </div>
+    );
   }
 
   function handleToggle(id: number) {
@@ -308,7 +420,154 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
         )}
       </div>
 
-      {/* 대량 임포트 슬롯 — Task 4가 여기 파일 업로드/미리보기 UI를 채운다. */}
+      <div className="flex flex-col gap-3 border-t border-hairline pt-4" data-id="framework-import">
+        <div>
+          <h3 className="text-body-strong text-ink">{t("framework.importTitle")}</h3>
+          <p className="pt-1 text-caption text-ink-tertiary">{t("framework.importCliHint")}</p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <input
+              ref={categoriesInputRef}
+              type="file"
+              accept=".json,application/json"
+              data-id="framework-import-categories-file"
+              className="hidden"
+              onChange={(event) => void handleCategoriesFile(event.target.files?.[0] ?? null)}
+            />
+            <button
+              type="button"
+              className={IMPORT_FILE_BTN}
+              onClick={() => categoriesInputRef.current?.click()}
+            >
+              <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">
+                {categoriesFile ? categoriesFile.name : t("framework.importCategoriesPick")}
+              </span>
+            </button>
+            {categoriesFile && !categoriesFile.error && (
+              <p className="text-fine text-ink-tertiary">
+                {t("framework.importItemCount", { n: categoriesFile.categories.length })}
+              </p>
+            )}
+            {categoriesFile?.error && <p className="text-fine text-error">{categoriesFile.error}</p>}
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <input
+              ref={mapsInputRef}
+              type="file"
+              accept=".jsonl,.json,application/json,text/plain"
+              data-id="framework-import-maps-file"
+              className="hidden"
+              onChange={(event) => void handleMapsFile(event.target.files?.[0] ?? null)}
+            />
+            <button type="button" className={IMPORT_FILE_BTN} onClick={() => mapsInputRef.current?.click()}>
+              <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">
+                {mapsFile ? mapsFile.name : t("framework.importMapsPick")}
+              </span>
+            </button>
+            {mapsFile && (
+              <p className="text-fine text-ink-tertiary">
+                {t("framework.importItemCount", { n: mapsFile.maps.length })}
+              </p>
+            )}
+            {mapsFile && mapsFile.lineErrors.length > 0 && (
+              <ul className="scroll-soft flex max-h-24 flex-col gap-0.5">
+                {mapsFile.lineErrors.map((msg) => (
+                  <li key={msg} className="text-fine text-error">
+                    {msg}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-id="framework-import-dryrun"
+            disabled={importBusy}
+            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+            onClick={() => void handleDryRun()}
+          >
+            {t("framework.importDryRun")}
+          </button>
+          <button
+            type="button"
+            data-id="framework-import-apply"
+            disabled={importBusy || !importResult}
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={() => setConfirmApply(true)}
+          >
+            {t("framework.importApply")}
+          </button>
+        </div>
+
+        {importResult && (
+          <div className="flex flex-col gap-2" data-id="framework-import-report">
+            {renderImportSummary(importResult)}
+            <div className="scroll-soft max-h-64 overflow-y-auto rounded-sm border border-hairline">
+              <table className="w-full text-fine">
+                <thead className="sticky top-0 z-[1]">
+                  <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
+                    <th className="px-2 py-1.5">{t("framework.importColCode")}</th>
+                    <th className="px-2 py-1.5">{t("framework.importColAction")}</th>
+                    <th className="px-2 py-1.5">{t("framework.importColDetail")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importResult.rows.map((row, i) => (
+                    <tr
+                      key={i}
+                      className={`border-b border-divider last:border-0 ${
+                        row.action === "error"
+                          ? "bg-error/10"
+                          : row.action === "warning"
+                            ? "bg-changed/10"
+                            : ""
+                      }`}
+                    >
+                      <td className="px-2 py-1 text-ink">{row.code}</td>
+                      <td
+                        className={`px-2 py-1 ${
+                          row.action === "error"
+                            ? "text-error"
+                            : row.action === "warning"
+                              ? "text-changed"
+                              : "text-ink-secondary"
+                        }`}
+                      >
+                        {row.action}
+                      </td>
+                      <td className="px-2 py-1 text-ink-tertiary">{row.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {importResult.truncated && (
+              <p className="text-fine text-ink-tertiary">{t("framework.importTruncated")}</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {confirmApply && importResult && (
+        <ConfirmDialog
+          title={t("framework.importApplyTitle")}
+          message={t("framework.importApplyMessage")}
+          banner={renderImportSummary(importResult)}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          confirmDisabled={importBusy}
+          onConfirm={() => void handleApply()}
+          onClose={() => setConfirmApply(false)}
+        />
+      )}
 
       {namePrompt && (
         <PromptDialog
