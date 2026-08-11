@@ -417,6 +417,20 @@ export default function MapListPage() {
     [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, spFilter],
   );
 
+  // Framework 뷰 카드 필터 — filteredMaps 술어의 부분집합(가시성·상태·역할만, owning/SP는 부서 뷰 전용).
+  // 트리는 lazy 서버 fetch라 filteredMaps를 못 쓰고 술어를 넘겨 로드된 카드에만 적용한다.
+  const frameworkFilterActive = visFilter !== "all" || statusFilter.size > 0 || permFilter.size > 0;
+  const frameworkFilterMap = frameworkFilterActive
+    ? (m: MapSummary) => {
+        const visOk = visFilter === "all" || m.visibility === visFilter;
+        const statusOk =
+          statusFilter.size === 0 ||
+          (m.latest_version_status !== null && statusFilter.has(m.latest_version_status));
+        const permOk = permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
+        return visOk && statusOk && permOk;
+      }
+    : null;
+
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
   const mapHits = useMemo(
     () =>
@@ -650,12 +664,8 @@ export default function MapListPage() {
                   </button>
                 ))}
               </div>
-              {homeView === "framework" ? (
-                // Framework 뷰 — v1은 브라우즈 전용, 검색은 Departments 뷰가 커버 (설계 §6 v1 단순화).
-                // key=frameworkVersion — 카테고리 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
-                <FrameworkTree key={frameworkVersion} renderCard={renderCard} />
-              ) : (
-              <>
+              {/* 검색·가시성·상태·역할 필터는 두 뷰 공용 — owning/SP 필터만 부서 뷰 전용(선별 이식).
+                  검색 입력 시 뷰와 무관하게 아래 공용 플랫 검색 리스트로 전환된다. */}
               <SearchBox
                 value={mapQuery}
                 onChange={setMapQuery}
@@ -729,53 +739,57 @@ export default function MapListPage() {
                     })
                   }
                 />
-                <FilterDropdown
-                  label={t("home.filterOwning")}
-                  dataId="home-owning-filter"
-                  icon={<Building2 size={14} strokeWidth={1.5} />}
-                  options={[
-                    {
-                      value: "missing",
-                      label: t("home.owningMissingOption"),
-                      icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                    },
-                  ]}
-                  selected={owningFilter}
-                  onToggle={(v) =>
-                    setOwningFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(v)) next.delete(v);
-                      else next.add(v);
-                      return next;
-                    })
-                  }
-                />
-                <FilterDropdown
-                  label={t("home.filterSp")}
-                  dataId="home-sp-filter"
-                  icon={<Workflow size={14} strokeWidth={1.5} />}
-                  options={[
-                    {
-                      value: "sp",
-                      label: t("home.spOption"),
-                      icon: <Workflow size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                    },
-                    {
-                      value: "non_sp",
-                      label: t("home.spNonOption"),
-                      icon: <CircleSlash2 size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                    },
-                  ]}
-                  selected={spFilter}
-                  onToggle={(v) =>
-                    setSpFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(v)) next.delete(v);
-                      else next.add(v);
-                      return next;
-                    })
-                  }
-                />
+                {homeView === "departments" && (
+                  <>
+                    <FilterDropdown
+                      label={t("home.filterOwning")}
+                      dataId="home-owning-filter"
+                      icon={<Building2 size={14} strokeWidth={1.5} />}
+                      options={[
+                        {
+                          value: "missing",
+                          label: t("home.owningMissingOption"),
+                          icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
+                        },
+                      ]}
+                      selected={owningFilter}
+                      onToggle={(v) =>
+                        setOwningFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(v)) next.delete(v);
+                          else next.add(v);
+                          return next;
+                        })
+                      }
+                    />
+                    <FilterDropdown
+                      label={t("home.filterSp")}
+                      dataId="home-sp-filter"
+                      icon={<Workflow size={14} strokeWidth={1.5} />}
+                      options={[
+                        {
+                          value: "sp",
+                          label: t("home.spOption"),
+                          icon: <Workflow size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
+                        },
+                        {
+                          value: "non_sp",
+                          label: t("home.spNonOption"),
+                          icon: <CircleSlash2 size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
+                        },
+                      ]}
+                      selected={spFilter}
+                      onToggle={(v) =>
+                        setSpFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(v)) next.delete(v);
+                          else next.add(v);
+                          return next;
+                        })
+                      }
+                    />
+                  </>
+                )}
                 {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0) && (
                   <button
                     type="button"
@@ -793,8 +807,8 @@ export default function MapListPage() {
                   </button>
                 )}
               </div>
-              {mapHits.length === 0 ? (
-                /* 필터/검색 결과 없음 */
+              {isSearching && mapHits.length === 0 ? (
+                /* 검색 결과 없음(두 뷰 공용) */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
                   {t("home.empty")}
                 </div>
@@ -810,6 +824,14 @@ export default function MapListPage() {
                   )}
                   {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
+              ) : homeView === "framework" ? (
+                // Framework 브라우즈 — key=frameworkVersion: 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
+                <FrameworkTree key={frameworkVersion} renderCard={renderCard} filterMap={frameworkFilterMap} />
+              ) : mapHits.length === 0 ? (
+                /* 필터 결과 없음(부서 브라우즈) — 필터가 전량 제외한 경우 */
+                <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+                  {t("home.empty")}
+                </div>
               ) : (
                 /* 브라우즈 — 나의 부서 즐겨찾기 + Word 문서 섹션 + 조직도 아코디언.
                    Word 섹션은 조직도 위 고정 — 트리 아래에 두면 스크롤 밖으로 묻혀 발견 불가(사용자 피드백). */
@@ -877,8 +899,6 @@ export default function MapListPage() {
                     renderCard={renderCard}
                   />
                 </div>
-              )}
-              </>
               )}
             </div>
 

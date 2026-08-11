@@ -1,5 +1,6 @@
-// 홈 Framework 뷰 스모크 — 세그먼트 토글·lazy 카테고리 트리 펼침·맵 카드 노출·상세 카드 경로뱃지/IO·
-// Departments 회귀·새로고침 뷰 유지. docs/samples/consultant-delivery-sample import --apply 전제.
+// 홈 Framework 뷰 스모크 — 세그먼트 토글·캐스케이드 원클릭 펼침·공용 검색/가시성 필터·펼침 상태 영속
+// (localStorage 복원)·상세 카드 경로뱃지/IO·Departments 회귀·새로고침 뷰 유지.
+// docs/samples/consultant-delivery-sample import --apply 전제.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 node scripts/pw-smoke-framework.mjs
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, reset_db 시드 + import_consultant --apply 완료.
 // docs/lessons/browser-verification.md 준수(시스템 Chrome·playwright-core, node는 frontend/ cwd).
@@ -47,7 +48,7 @@ try {
   const toggleVisible = await page.locator('[data-id="home-view-toggle"]').isVisible().catch(() => false);
   check("home-view-toggle visible", toggleVisible);
 
-  // ── 2) Framework 클릭 → 트리 펼침 → 체인 하강 → 맵 카드 노출 ──────────────
+  // ── 2) Framework 클릭 → L1 한 번 클릭 → 캐스케이드로 맵까지 자동 펼침 ──────
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
   await page.waitForSelector('[data-id="framework-tree"]', { timeout: 8000 });
   // 루트 카테고리는 마운트 후 비동기 fetch로 채워진다 — isVisible()의 즉시 스냅샷이 아니라
@@ -56,17 +57,51 @@ try {
     .then(() => true).catch(() => false);
   check("framework-tree root category row visible", rootVisible, CHAIN[0]);
 
-  for (const name of CHAIN) {
-    const btn = nodeButton(page, name).first();
-    await btn.waitFor({ state: "visible", timeout: 8000 });
-    await btn.click();
-    await page.waitForTimeout(150); // lazy fetch(children+maps) 왕복 대기
-  }
+  // L1 클릭 1회만 — 맵 있는 가지(map_count>0)가 L5까지 자동 펼쳐져 맵 카드가 바로 보여야 한다.
+  await nodeButton(page, CHAIN[0]).first().click();
   const mapCard = page.locator('[data-id="framework-tree"] [data-id="map-card-name"]', { hasText: MAP_NAME });
-  const mapVisible = await mapCard.first().isVisible().catch(() => false);
-  check("imported map card visible after expanding L1→L5 chain", mapVisible, MAP_NAME);
+  const mapVisible = await mapCard.first().waitFor({ state: "visible", timeout: 12000 })
+    .then(() => true).catch(() => false);
+  check("one-click cascade reveals imported map card (L1→L5)", mapVisible, MAP_NAME);
+  const midVisible = await nodeButton(page, CHAIN[3]).first().isVisible().catch(() => false);
+  check("cascade auto-opened intermediate levels", midVisible, CHAIN[3]);
 
-  // ── 3) 맵 선택 → 상세 카드 경로뱃지 + IO ───────────────────────────────────
+  // ── 3) 검색 — Framework 뷰에서도 공용 플랫 검색으로 전환·복귀 ──────────────
+  await page.locator('[data-id="home-map-search"]').fill(MAP_NAME);
+  const searchHit = await page
+    .locator('[data-id="map-card-name"]', { hasText: MAP_NAME })
+    .first()
+    .waitFor({ state: "visible", timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  const treeGoneInSearch = (await page.locator('[data-id="framework-tree"]').count()) === 0;
+  check("search in framework view switches to flat results", searchHit && treeGoneInSearch,
+    `hit=${searchHit} treeGone=${treeGoneInSearch}`);
+  await page.locator('[data-id="home-map-search"]').fill("");
+  // 검색 해제 → 트리 리마운트 + localStorage 복원으로 펼침 상태가 그대로 돌아와야 한다.
+  const mapBackAfterSearch = await mapCard.first().waitFor({ state: "visible", timeout: 12000 })
+    .then(() => true).catch(() => false);
+  check("clearing search restores expanded tree (persisted open state)", mapBackAfterSearch);
+
+  // ── 4) 필터 — Private 세그먼트 → 카드 숨김 + filtered-out 노트, All 복귀 ───
+  await page.locator('[data-id="home-visibility-filter"] button', { hasText: "Private" }).click();
+  const noteVisible = await page.locator('[data-id="framework-filtered-note"]').first()
+    .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  const cardHidden = !(await mapCard.first().isVisible().catch(() => false));
+  check("Private filter hides public cards with filtered-out note", noteVisible && cardHidden,
+    `note=${noteVisible} cardHidden=${cardHidden}`);
+  await page.locator('[data-id="home-visibility-filter"] button', { hasText: "All" }).click();
+  const noteGone = (await page.locator('[data-id="framework-filtered-note"]').count()) === 0;
+  check("All filter clears filtered-out note", noteGone);
+
+  // ── 5) 새로고침 — framework 뷰 유지 + 펼침 상태 복원(무클릭으로 맵 노출) ────
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 8000 });
+  const mapAfterReload = await mapCard.first().waitFor({ state: "visible", timeout: 12000 })
+    .then(() => true).catch(() => false);
+  check("reload keeps framework view and restores open state", mapAfterReload);
+
+  // ── 6) 맵 선택 → 상세 카드 경로뱃지 + IO ───────────────────────────────────
   // map-detail-*는 이중 마운트(모바일 인라인 아코디언 split:hidden + 데스크톱 우측 aside)가 기존
   // 패턴 — 뷰포트 1440에서 인라인 쪽은 CSS로 숨어 있으므로 :visible로 실제 노출본만 골라야 한다.
   await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: MAP_NAME }).first().click();
@@ -78,13 +113,13 @@ try {
   const ioText = (await page.locator('[data-id="map-detail-io"]:visible').first().textContent()) ?? "";
   check("map-detail-io shows Input/Output values", ioText.includes("PR") && ioText.includes("PO"), ioText.trim());
 
-  // ── 4) Departments 복귀 — 조직도 회귀 ──────────────────────────────────────
+  // ── 7) Departments 복귀 — 조직도 회귀 ──────────────────────────────────────
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Departments" }).click();
   await page.waitForSelector('[data-id="home-org-accordion"]', { timeout: 8000 });
   const orgVisible = await page.locator('[data-id="home-org-accordion"]').isVisible().catch(() => false);
   check("Departments toggle renders org accordion (regression)", orgVisible);
 
-  // ── 5) 새로고침 — 마지막 선택(Departments) 유지 ────────────────────────────
+  // ── 8) 새로고침 — 마지막 선택(Departments) 유지 ────────────────────────────
   await page.reload({ waitUntil: "networkidle" });
   const storedRaw = await page.evaluate(() => window.localStorage.getItem("bpm.home.tree"));
   const storedView = (() => {

@@ -2,16 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyCategoryLoaded,
+  collectCascadeTargets,
   createInitialState,
   fetchCategoryChildren,
   fetchMoreMaps,
   fetchRootChildren,
   hasCachedChildren,
   hasMoreMaps,
+  readPersistedOpenIds,
   reduceFrameworkTree,
   ROOT,
   shouldFetchChildren,
   shouldFetchMore,
+  writePersistedOpenIds,
 } from "./framework-tree-state";
 import { listCategoryMaps, listCategoryNodes, type CategoryMaps, type CategoryNode } from "./api";
 
@@ -253,5 +256,36 @@ describe("hasMoreMaps", () => {
 
     // 캐시가 없는 카테고리는 무조건 false
     expect(hasMoreMaps(createInitialState(), 99)).toBe(false);
+  });
+});
+
+describe("collectCascadeTargets", () => {
+  const makeNode = (id: number, mapCount: number): CategoryNode => ({
+    id, code: `C${id}`, name: `Cat ${id}`, level: 2, sort_order: id, child_count: 0, map_count: mapCount,
+  });
+
+  it("맵 있는(서브트리 rollup>0) 자식만 예산 내에서 — 빈 가지는 제외, 초과분은 잘린다", () => {
+    const nodes = [makeNode(1, 3), makeNode(2, 0), makeNode(3, 1), makeNode(4, 2)];
+    expect(collectCascadeTargets(nodes, 10)).toEqual([1, 3, 4]);
+    expect(collectCascadeTargets(nodes, 2)).toEqual([1, 3]);
+    expect(collectCascadeTargets(nodes, 0)).toEqual([]);
+    // 음수 예산(과차감 방어)도 빈 배열
+    expect(collectCascadeTargets(nodes, -1)).toEqual([]);
+  });
+});
+
+describe("펼침 상태 영속", () => {
+  it("write→read 라운드트립 — Set이 배열로 저장되고 그대로 복원된다", () => {
+    writePersistedOpenIds(new Set([3, 7]));
+    expect(readPersistedOpenIds()).toEqual([3, 7]);
+  });
+
+  it("손상 JSON·타입 오염은 무해하게 무시 — 유효 숫자만 남는다", () => {
+    window.localStorage.setItem("bpm.framework.tree", "{broken");
+    expect(readPersistedOpenIds()).toEqual([]);
+    window.localStorage.setItem("bpm.framework.tree", JSON.stringify({ openIds: [1, "x", 2] }));
+    expect(readPersistedOpenIds()).toEqual([1, 2]);
+    window.localStorage.removeItem("bpm.framework.tree");
+    expect(readPersistedOpenIds()).toEqual([]);
   });
 });
