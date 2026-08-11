@@ -7,7 +7,7 @@
 - **로컬에서 실행하는 명령어는 bash(macOS/Linux)와 PowerShell(Windows)을 항상 병기**한다 — 로컬 검증이 Windows PC에서 이뤄지는 운영 파이프라인 때문. 서버(리눅스) 전용 절차(docker compose 등)는 bash만 작성한다.
 - If the project warrants a `USAGE.md` (CLI tool, library, app with separate end-user guide), write **that project's** usage — not a meta guide.
 - For projects started from a template, replacing the root `README.md` placeholder is one of the first tasks.
-- Sync README on request, not on every change — when asked, align sections with code/structure changes (backend/Docker projects: `rules/backend/sync-checklist.md`).
+- README upkeep is two-tier — at commit time, update only the sections the commit invalidates (see `git.md` — Before Every Commit); full sweeps run on request via `/sync` · `/sync-all` (backend/Docker projects: `rules/backend/sync-checklist.md`).
 
 **Don't:**
 - Stack `feat:` / `fix:` commits while `_TODO_` or `<project name>` placeholders remain.
