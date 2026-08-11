@@ -134,7 +134,10 @@ def test_position_empty_feed_skips_erasure(client: TestClient, monkeypatch) -> N
 
 
 def test_position_all_unmatched_still_erases_existing_holders(client: TestClient, monkeypatch) -> None:
-    """극단 케이스 고정 — positions가 정상(1행+)이면 매칭 0건이어도 소거는 실행된다(설계 §4-2, 브리프 채택)."""
+    """극단 케이스 고정 — AD 사번 맵이 살아있는데(employeeNumber 일부 존재) 매칭이 0건이어도
+    소거는 실행된다(설계 §4-2, 브리프 채택). AD가 employeeNumber를 아예 안 주는 경우는
+    test_position_empno_feed_empty_skips_erasure로 별도 방어.
+    """
     _seed_employee("stale.user", source="hr", name="Stale", position="Old Lead")
     _mock_ldap_titles(
         monkeypatch,
@@ -143,6 +146,20 @@ def test_position_all_unmatched_still_erases_existing_holders(client: TestClient
     result = _run_refresh([_position_row("999", "Ghost Lead")])  # "999"는 "420"과 불일치
     assert result == (0, 1, 1)  # 소거 1(pos_refreshed) + unmatched 1
     assert _get_employee("stale.user").position is None
+
+
+def test_position_empno_feed_empty_skips_erasure(client: TestClient, monkeypatch) -> None:
+    """EDW는 정상(positions 1행+)인데 AD가 employeeNumber를 전혀 안 주면(empno_to_sam 전멸)
+    매칭 전멸을 전원 소거로 오인하지 않고 스킵한다 — 기존 보유자 유지 + unmatched=전체.
+    """
+    _seed_employee("stale.user", source="hr", name="Stale", position="Old Lead")
+    _mock_ldap_titles(
+        monkeypatch,
+        [RawUser("stale.user", "S", "", "OU=X,DC=corp", 0x200, None, [])],  # employee_number 없음
+    )
+    result = _run_refresh([_position_row("420", "New Lead"), _position_row("421", "Other Lead")])
+    assert result == (0, 0, 2)  # 소거 없음 + unmatched 전체
+    assert _get_employee("stale.user").position == "Old Lead"
 
 
 def test_full_sync_runs_title_and_position_pass(client: TestClient, monkeypatch) -> None:

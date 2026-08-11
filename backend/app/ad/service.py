@@ -1,6 +1,7 @@
 """로컬 시드 + AD title/position 패스(HR 전환 2026-08-10 — 디렉터리 소스는 app/hr)."""
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -11,6 +12,8 @@ from app.models import Employee
 
 if TYPE_CHECKING:  # hr.client → ad.service 순환 방지, 타입 힌트 전용 (설계 2026-08-11 §4)
     from app.hr.client import RawHrPosition
+
+logger = logging.getLogger(__name__)
 
 # 로컬 임시 유저 5명 (auth OFF). loginId는 '.' 포함·'_' 미포함(필터 비충돌), name 무 '_'.
 # AD-aligned English data — login_id(=sAMAccountName) 불변, name/title/org만 영문화.
@@ -85,6 +88,8 @@ async def refresh_titles_and_positions(
     HR 응답에 title이 없어 AD 조인 유지 (design 2026-08-10 §5-7). 실패는 호출부가 삼켜 sync를 지킨다.
     반환 (title_refreshed, position_refreshed, position_unmatched).
     소거는 positions 비어있지 않을 때만 — 빈 피드 전멸 방어 (설계 2026-08-11 §4-2).
+    AD가 employeeNumber를 전혀 안 주면(empno_to_sam 전멸)도 동일하게 매칭 불가 전원 소거로
+    이어지므로 스킵 — EDW는 정상인데 AD 쪽 피드 이상으로 기존 보유자가 전부 지워지는 사고 방지.
     """
     raws = await asyncio.to_thread(client.fetch_all_users)
     empno_to_sam: dict[str, str] = {}
@@ -107,7 +112,13 @@ async def refresh_titles_and_positions(
             titles += 1
     pos_refreshed = 0
     unmatched = 0
-    if positions:
+    if positions and not empno_to_sam:
+        logger.warning(
+            "AD employeeNumber feed empty — skipping position match/erasure (%d unmatched)",
+            len(positions),
+        )
+        unmatched = len(positions)
+    elif positions:
         matched: set[str] = set()
         for p in positions:
             sam = None if p.emp_id in dup_empnos else empno_to_sam.get(p.emp_id)

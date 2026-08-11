@@ -4,7 +4,8 @@
 // Department table — name + imported korean name + member count (roster on hover). Org-view swaps count for org columns.
 // orgLevels depth is VARIABLE — max depth computed at runtime, never hardcoded.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   type AdminDept,
@@ -23,33 +24,73 @@ import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admi
 const PILL =
   "inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary";
 
-/** 인원수 호버 명단 툴팁 — 이름 필(언어 토글 연동), 25행 청킹. 충돌 툴팁과 동일한 호버 연속(pt-1 래퍼). */
+const ROSTER_TOOLTIP_W = 288; // w-72 — 우측 가장자리 근처 행 호버 시 뷰포트 밖으로 넘치지 않게 클램프
+const ROSTER_MARGIN = 8; // 뷰포트 가장자리 최소 여백 (search-select.tsx MARGIN과 동일 값)
+
+/**
+ * 인원수 호버 명단 툴팁 — 이름 필(언어 토글 연동), 25행 청킹.
+ * `dept-table-scroll`(max-h-[60vh] overflow-y-auto)이 클립 컨테이너가 되어 하단 행에서
+ * absolute 배치가 잘리므로 body 포털 + fixed 좌표로 렌더(search-select.tsx 패턴 참고).
+ * 포털이라 트리거↔패널이 DOM상 남남 — pt-1 브리지(gap 없는 시각적 여백)는 유지하되,
+ * 호버 연속성은 짧은 닫기 지연(cancel-on-enter)으로 보장. 스크롤 중 위치는 재계산하지
+ * 않음 — 스크롤로 트리거가 커서 밑에서 벗어나면 mouseleave가 자연히 닫는다.
+ */
 function RosterHover({ members, count }: { members: AdminUser[]; count: number }) {
   const { lang } = useI18n();
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(members, "");
+
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 120);
+  };
+  const openTooltip = () => {
+    cancelClose();
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const maxLeft = Math.max(ROSTER_MARGIN, window.innerWidth - ROSTER_MARGIN - ROSTER_TOOLTIP_W);
+      setPos({ left: Math.min(rect.left, maxLeft), top: rect.bottom });
+    }
+    setOpen(true);
+  };
+
+  useEffect(() => () => cancelClose(), []);
+
   return (
-    <span
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
+    <span ref={triggerRef} onMouseEnter={openTooltip} onMouseLeave={scheduleClose}>
       <span className="cursor-help text-ink-secondary underline decoration-dotted">{count}</span>
-      {open && (
-        <div className="absolute left-0 top-full z-10 pt-1">
+      {open &&
+        pos &&
+        createPortal(
           <div
-            data-id="dept-roster-tooltip"
-            className="flex max-h-64 w-72 flex-col items-start gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            className="fixed z-[1350] pt-1"
+            style={{ left: pos.left, top: pos.top }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
           >
-            {visible.map((m) => (
-              <span key={m.login_id} className={PILL}>
-                {formatRosterName(m, lang)}
-              </span>
-            ))}
-            {hasMore && <span ref={sentinelRef} className="h-4 w-full" />}
-          </div>
-        </div>
-      )}
+            <div
+              data-id="dept-roster-tooltip"
+              className="flex max-h-64 w-72 flex-col items-start gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            >
+              {visible.map((m) => (
+                <span key={m.login_id} className={PILL}>
+                  {formatRosterName(m, lang)}
+                </span>
+              ))}
+              {hasMore && <span ref={sentinelRef} className="h-4 w-full" />}
+            </div>
+          </div>,
+          document.body,
+        )}
     </span>
   );
 }
