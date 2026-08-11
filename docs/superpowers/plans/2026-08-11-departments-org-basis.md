@@ -323,6 +323,7 @@ async def get_exposed_positions(session: AsyncSession) -> list[str]:
 
 **Files:**
 - Modify: `frontend/src/lib/api.ts`, `frontend/src/lib/korean-dept.ts`, `frontend/src/components/permissions/principal-picker.tsx`
+- Modify(구현 중 발견된 플랜 누락 — `manager` 타입 제거의 잔여 소비처 5파일): `frontend/src/components/groups/group-detail.tsx`, `frontend/src/components/groups/groups-panel.tsx`, `frontend/src/components/permissions/collaborators-panel.tsx`, `frontend/src/components/permissions/create-map-dialog.tsx`, `frontend/src/components/permissions/map-details-panel.tsx` — `manager` 프로퍼티 전달/참조 제거(동작 무변경, 타입 정합만)
 - Test: `frontend/src/lib/korean-dept.test.ts` 갱신
 
 - [ ] **Step 1: api.ts** — `SyncSummary`: `dept_info_orphans` 삭제, `position_refreshed: number | null`·`position_unmatched: number | null` 추가. `DirectoryDept.manager`·`AdminDept.manager` 삭제(주석 소스 표기 갱신), `DirectoryUser.position?: string` 추가. eligible `dept_infos` 타입(`api.ts:308` 부근)에서 `manager` 삭제. `importKoreanNames`·`KoreanNamesImportSummary`·`importDeptInfo`·`DeptInfoImportSummary` 삭제. app-settings 타입에 `exposed_positions: string[]`·`available_positions: string[]`(+PUT 파라미터) 추가 — 기존 AppSettings 함수 형태 준수.
