@@ -115,6 +115,40 @@ def test_move_recomputes_levels(client: TestClient) -> None:
     assert leaf_row["level"] == 4  # sub 이동에 연동해 자손도 +1
 
 
+def test_cycle_safe_paths_and_move(client: TestClient) -> None:
+    """(동시성으로 생긴) 부모 사이클이 있어도 build_category_paths·update_category의 BFS 서브트리
+    순회가 멈추지 않아야 한다(merge review FIX 3). API로는 사이클에 도달할 수 없으므로(자기자신/
+    자손 이동 가드) ORM으로 직접 만들어 레이스를 시뮬레이션한다."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+    from app.routers.categories import build_category_paths
+
+    root_a = client.post("/api/categories", json={"name": "CYC A", "code": "ADM-CYC-A"}).json()
+    node_b = client.post(
+        "/api/categories", json={"name": "CYC B", "parent_id": root_a["id"], "code": "ADM-CYC-B"}
+    ).json()
+    root_c = client.post("/api/categories", json={"name": "CYC C", "code": "ADM-CYC-C"}).json()
+
+    async def _corrupt() -> None:
+        async with SessionLocal() as session:
+            row = await session.get(ProcessCategory, root_a["id"])
+            row.parent_id = node_b["id"]  # A→B→A 사이클 완성
+            await session.commit()
+
+    asyncio.run(_corrupt())
+
+    # (a) 경로 조립 — RecursionError 없이 부분 경로(사이클 지점에서 끊긴)를 반환
+    rows = [(root_a["id"], node_b["id"], "A"), (node_b["id"], root_a["id"], "B")]
+    paths = build_category_paths(rows)
+    assert set(paths) == {root_a["id"], node_b["id"]}
+
+    # (b) 사이클을 포함한 서브트리를 옮기는 PATCH가 (행 아니라) 정상 응답한다
+    resp = client.patch(f"/api/categories/{root_a['id']}", json={"parent_id": root_c["id"]})
+    assert resp.status_code == 200
+
+
 def test_move_guards(client: TestClient) -> None:
     root = client.post("/api/categories", json={"name": "GR", "code": "ADM-GD-ROOT"}).json()
     child = client.post(

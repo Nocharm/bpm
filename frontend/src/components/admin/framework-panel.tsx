@@ -142,12 +142,14 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
       listCategoryNodes(),
       ...openList.map((id) => listCategoryNodes(id)),
     ]);
-    setChildrenByParent((prev) => {
-      const next = new Map(prev);
-      next.set(null, rootNodes);
-      openList.forEach((id, i) => next.set(id, childLists[i]));
-      return next;
-    });
+    // prev를 베이스로 병합하지 않는다 — 병합하면 지금은 접혀 있어 재조회 대상에서 빠진(하지만
+    // 예전에 펼쳤던) 노드의 자식 목록이 캐시에 영원히 남아, 웹 임포트로 그 아래 자식이 추가돼도
+    // 재펼침 시 임포트 이전 목록이 그대로 보인다. 재조회한 것(루트+현재 펼친 id)만으로 새로
+    // 구성해 접힌 가지는 다음 펼침에서 다시 fetch되게 한다(handleToggle의 !has(id) 가드).
+    const next = new Map<number | null, CategoryNode[]>();
+    next.set(null, rootNodes);
+    openList.forEach((id, i) => next.set(id, childLists[i]));
+    setChildrenByParent(next);
   }
 
   // 파일 선택 → 클라이언트 파싱만(스키마 검증은 서버 dry-run). 선택이 바뀌면 이전 dry-run은 무효.

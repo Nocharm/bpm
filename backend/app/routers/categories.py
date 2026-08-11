@@ -49,11 +49,20 @@ def build_category_paths(rows: Sequence[tuple[int, int | None, str]]) -> dict[in
     by_id = {row[0]: row for row in rows}
     cache: dict[int, str] = {}
 
+    visiting: set[int] = set()  # current recursion stack — detects a parent cycle
+
     def _path(cid: int) -> str:
         if cid in cache:
             return cache[cid]
         _, parent_id, name = by_id[cid]
-        path = f"{_path(parent_id)}/{name}" if parent_id in by_id else name
+        if parent_id in by_id and parent_id not in visiting:
+            visiting.add(cid)
+            path = f"{_path(parent_id)}/{name}"
+            visiting.discard(cid)
+        else:
+            # root, or parent_id already on this call's stack (cycle) — stop and return
+            # the partial path instead of recursing forever into a RecursionError.
+            path = name
         cache[cid] = path
         return path
 
@@ -527,7 +536,9 @@ async def update_category(
         for r in rows:
             children_by_parent.setdefault(r.parent_id, []).append(r.id)
 
-        # 자손 집합 + 서브트리 높이 — 한 번의 BFS로 함께 산정(자기자신 이동 가드·깊이 가드 공용)
+        # 자손 집합 + 서브트리 높이 — 한 번의 BFS로 함께 산정(자기자신 이동 가드·깊이 가드 공용).
+        # descendants에 이미 담긴 id는 다음 frontier에서 제외 — (동시성으로 생긴) 부모 사이클이
+        # 있어도 매 depth마다 같은 노드를 무한히 재방문하지 않는다(cycle guard).
         descendants: set[int] = set()
         subtree_height = 0
         frontier = children_by_parent.get(category_id, [])
@@ -535,7 +546,12 @@ async def update_category(
         while frontier:
             descendants.update(frontier)
             subtree_height = depth
-            frontier = [nid for n in frontier for nid in children_by_parent.get(n, [])]
+            frontier = [
+                nid
+                for n in frontier
+                for nid in children_by_parent.get(n, [])
+                if nid not in descendants
+            ]
             depth += 1
 
         if new_parent_id is not None and (
@@ -547,12 +563,16 @@ async def update_category(
         if new_level + subtree_height > MAX_CATEGORY_LEVEL:
             raise HTTPException(status_code=422, detail="max depth is 5")
 
-        # 서브트리 전체 level 재계산 — BFS로 부모 level+1 전파
+        # 서브트리 전체 level 재계산 — BFS로 부모 level+1 전파. level_by_id에 이미 있는 id는
+        # 스킵(cycle guard) — 부모 사이클이 있으면 안 그럴 시 같은 id가 계속 frontier에 다시
+        # 실려 워커를 무한 루프에 빠뜨린다.
         level_by_id: dict[int, int] = {category_id: new_level}
         frontier = children_by_parent.get(category_id, [])
         while frontier:
             next_frontier: list[int] = []
             for nid in frontier:
+                if nid in level_by_id:
+                    continue
                 level_by_id[nid] = level_by_id[by_id[nid].parent_id] + 1
                 next_frontier.extend(children_by_parent.get(nid, []))
             frontier = next_frontier

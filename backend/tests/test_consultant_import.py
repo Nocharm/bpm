@@ -157,6 +157,49 @@ def test_upsert_categories_idempotent(client) -> None:
     assert rows[1].name == "직접구매(개정)" and rows[1].parent_id == first["A"]
 
 
+def test_upsert_categories_recomputes_ui_child_levels(client) -> None:
+    """delivery code(RCLV-*)만 업서트해도 UI 생성 자식(ui-* code, 임포트 대상 아님)의 level이
+    조상 depth 변경에 맞춰 트리 전체 BFS로 따라와야 한다(merge review FIX 1 — level==depth
+    불변식은 list_category_nodes 롤업·create/move의 parent.level+1 가드가 전제로 삼는다)."""
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+    from scripts.consultant_canonical import CanonicalCategory
+    from scripts.import_consultant import upsert_categories
+
+    async def _flow() -> int:
+        async with SessionLocal() as session:
+            ids = await upsert_categories(
+                session, [CanonicalCategory(code="RCLV-A", name="A", level=1, parent=None)]
+            )
+            # UI에서 만든 자식 — 생성 당시(A가 level 1)엔 level=2가 맞았다.
+            ui_child = ProcessCategory(
+                code="ui-rclv-child", name="UI child", level=2,
+                parent_id=ids["RCLV-A"], sort_order=0,
+            )
+            session.add(ui_child)
+            await session.commit()
+            await session.refresh(ui_child)
+            assert ui_child.level == 2
+            ui_child_id = ui_child.id
+
+        # 재전달 — A를 새 루트 아래 한 단계 더 깊게 재부모(level 1→2)
+        async with SessionLocal() as session:
+            await upsert_categories(
+                session,
+                [
+                    CanonicalCategory(code="RCLV-ROOT", name="Root", level=1, parent=None),
+                    CanonicalCategory(code="RCLV-A", name="A", level=2, parent="RCLV-ROOT"),
+                ],
+            )
+            await session.commit()
+
+        async with SessionLocal() as session:
+            row = await session.get(ProcessCategory, ui_child_id)
+            return row.level
+
+    assert _run(_flow()) == 3  # A: 1→2, UI child follows: 2→3
+
+
 def test_resolve_owning_department(client) -> None:
     from app.db import SessionLocal
     from app.orgchart import load_dept_index, load_valid_org_prefixes
