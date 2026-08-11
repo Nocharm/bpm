@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- 설계서 신설: [`docs/design/2026-08-11-departments-org-basis-design.md`](docs/design/2026-08-11-departments-org-basis-design.md). 경로 해석 계층 `app/orgchart.py`(dept_code→departments 부모 체인, org_l1~l5 폴백)로 권한 판정·조직도·한글명 소스를 departments로 단일화, dept_info 소비 전제거(임포트 API 2종 삭제·모델 삭제·테이블 잔류), AD `manager` 속성 역추적(`employees.manager_login_id`, DN 매칭+CN 사번 폴백)으로 피커 Manager 태그를 개인 체인 2단계로 재정의, 부서관리 고아 재지정 섹션 상단 이동+테이블 스크롤 격리. 결정: principal 경로 문자열 유지·빈 부서 숨김·임포트 API까지 제거.
+
 ## 2026-08-10 — 사용자·조직도 소스 교체(AD→n8n HR 웹훅) 설계
 - 구현 플랜 작성: [`docs/superpowers/plans/2026-08-10-hr-webhook-directory.md`](docs/superpowers/plans/2026-08-10-hr-webhook-directory.md) — 9태스크(클라이언트+설정 → 스키마/email 제거 → 매핑 → sync 코어 → 소스 교체+프리뷰 → title 패스 → active 필터 → 스케줄러 → 게이트).
 - 브레인스토밍 확정 — 설계서 신설: [`docs/design/2026-08-10-hr-webhook-directory-design.md`](docs/design/2026-08-10-hr-webhook-directory-design.md). 신규 `app/hr/`(웹훅 클라이언트+동기화)로 employees 단일 소스 교체, LDAP은 title 전용 패스로 축소 보존. 결정: 퇴직자 active=false 유지+피커·디렉터리 제외+reconcile, 내장 스케줄러(주기 env), email 모델 제거(운영 NOT NULL 완화 부트스트랩 필수), dept_code+departments 미러 신설, 드라이런 diff·삭제 20% 상한 가드로 기존 데이터(권한 경로·login_id 참조·수동 한글값) 이행 방어.
