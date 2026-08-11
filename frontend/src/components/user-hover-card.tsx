@@ -7,6 +7,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import type { DirectoryUser } from "@/lib/api";
+import { formatTitleWithPosition } from "@/lib/korean-dept";
 
 // 호버 후 카드가 뜨기까지 지연(ms) — 요청: 1초 경과
 const HOVER_DELAY_MS = 1000;
@@ -30,7 +31,7 @@ export function UserHoverCard({
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
   const name = user?.name ?? loginId;
-  const title = user?.title ?? "";
+  const title = formatTitleWithPosition(user?.title ?? "", user?.position ?? "");
   const levels = orgLevels(user?.org_path ?? "");
 
   const scheduleShow = () => {

@@ -97,6 +97,14 @@ export function buildKoreanDeptByPath(
   return byPath;
 }
 
+/** 직급·직책 병기 — 둘 다 있으면 "{title} · {position}", 한쪽만 있으면 그 값만. allowlist 필터는 백엔드가 이미 적용. */
+export function formatTitleWithPosition(title: string, position: string): string {
+  const t = title.trim();
+  const p = position.trim();
+  if (t && p) return `${t} · ${p}`;
+  return t || p;
+}
+
 /** 부서 표시명 — 이름과 같은 규칙: ko는 확정 한글명(dept_info), 없으면 영문 폴백. en은 영문 리프. */
 export function formatDeptName(
   orgPath: string,

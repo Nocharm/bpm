@@ -10,6 +10,7 @@ import {
   deriveDeptKoreanKeywords,
   formatDeptName,
   formatRosterName,
+  formatTitleWithPosition,
   getDeptMembers,
   sortManagersFirst,
 } from "./korean-dept";
@@ -191,6 +192,20 @@ describe("buildDepartmentOptions", () => {
     const opts = buildDepartmentOptions(["TeamA", "TeamB"], users, "ko", infos);
     expect(opts[0].label).toBe("TeamA"); // info 없음 — 영문만
     expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: undefined });
+  });
+});
+
+describe("formatTitleWithPosition", () => {
+  it("joins both with a middle dot", () => {
+    expect(formatTitleWithPosition("Manager", "Team Lead")).toBe("Manager · Team Lead");
+  });
+
+  it("falls back to title alone when position is empty", () => {
+    expect(formatTitleWithPosition("Manager", "")).toBe("Manager");
+  });
+
+  it("falls back to position alone when title is empty", () => {
+    expect(formatTitleWithPosition("", "Team Lead")).toBe("Team Lead");
   });
 });
 
