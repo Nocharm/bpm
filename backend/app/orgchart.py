@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ad.org import org_path
 from app.models import Department, Employee
+from app.settings import settings
 
 # 체인 상향 최대 깊이 — HR 계약상 6레벨, 여유분 포함. 초과는 사이클 취급 → 폴백.
 _MAX_DEPTH = 15
@@ -55,7 +56,12 @@ def resolve_org_path(emp: Employee, index: DeptIndex) -> str:
                 names_leaf_to_root.append(name)
             cur = parent
         if names_leaf_to_root:
-            return "/".join(reversed(names_leaf_to_root))
+            names = list(reversed(names_leaf_to_root))
+            # 최상위 N레벨 제외 — 법인·사업부급 범용 레벨은 분류에서 뺀다. 체인이 그보다 짧으면 리프만.
+            trim = settings.org_trim_levels
+            if trim > 0:
+                names = names[trim:] if len(names) > trim else names[-1:]
+            return "/".join(names)
     return org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
 
 
@@ -65,3 +71,17 @@ def resolve_org_prefixes(path: str) -> list[str]:
         return []
     segments = path.split("/")
     return ["/".join(segments[: i + 1]) for i in range(len(segments))]
+
+
+async def load_valid_org_prefixes(session: AsyncSession) -> set[str]:
+    """현 조직 유효 경로 프리픽스 합집합 — 전 직원 resolved 경로 기준.
+
+    피커(directory)·오우닝 부서 검증(maps)·dept-remap(admin)이 같은 집합을 봐야
+    "피커에서 고른 값이 검증에서 거부"되는 불일치가 안 생긴다 (2026-08 9910 검증에서 적발).
+    """
+    index = await load_dept_index(session)
+    employees = (await session.scalars(select(Employee))).all()
+    prefixes: set[str] = set()
+    for emp in employees:
+        prefixes.update(resolve_org_prefixes(resolve_org_path(emp, index)))
+    return prefixes

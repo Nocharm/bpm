@@ -60,16 +60,29 @@ def test_department_grant_uses_chain_path_not_org_columns(
     login_id = "orgperm.chain.user"
 
     async def _seed_dept_and_map(session) -> int:
+        # 최상위 2레벨(법인·사업부급)은 해석 시 트림됨(settings.org_trim_levels) — 판정 경로에 안 낀다
         session.add_all(
             [
                 Department(
-                    dept_code="ORGPERM-D1", name="Chain Division", parent_dept_code=None, level=0
+                    dept_code="ORGPERM-D0a", name="Orgperm Corp", parent_dept_code=None, level=0
+                ),
+                Department(
+                    dept_code="ORGPERM-D0b",
+                    name="Orgperm BU",
+                    parent_dept_code="ORGPERM-D0a",
+                    level=1,
+                ),
+                Department(
+                    dept_code="ORGPERM-D1",
+                    name="Chain Division",
+                    parent_dept_code="ORGPERM-D0b",
+                    level=2,
                 ),
                 Department(
                     dept_code="ORGPERM-D2",
                     name="Chain Office",
                     parent_dept_code="ORGPERM-D1",
-                    level=1,
+                    level=3,
                 ),
             ]
         )

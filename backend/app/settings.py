@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     n8n_position_url: str = ""  # EDW 부서장 직책(FRNM) 웹훅 — 토큰은 n8n_hr_token 공용 (설계 2026-08-11 §4)
     hr_sync_interval_hours: int = 24  # 내장 스케줄러 주기(시간). 0 = off
     hr_sync_delete_cap_pct: int = 20  # 전체 동기화 삭제 상한(% of 배치 관리 행). 0 = 가드 off
+    # 조직 경로 해석에서 제외할 최상위 레벨 수 — HR 조직 상위 2단계(법인·사업부급)는 범용이라 분류 제외
+    # (2026-08 9910 검증 확정). departments 체인 해석에만 적용, employees org 컬럼·폴백은 원본 보존.
+    # 비즈니스 상수 — env 미노출 (rules/backend/config.md).
+    org_trim_levels: int = 2
 
     @property
     def ldap_enabled(self) -> bool:

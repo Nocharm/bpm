@@ -25,7 +25,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT DT, DEPTCO, EMPID, NAME, FRNM\nFROM dbo.VW_HR_EMP_CENTER_MAPPING\nWHERE DT = (\n  SELECT MAX(DT) FROM dbo.VW_HR_EMP_CENTER_MAPPING\n  WHERE DT <= CONVERT(varchar(8), GETDATE(), 112)\n)\n  AND FRNM IS NOT NULL\n  AND LTRIM(RTRIM(FRNM)) <> N''\n  AND LTRIM(RTRIM(FRNM)) <> N'프로'",
+        "query": "SELECT DT, DEPTCD, EMPID, NAME, FRNM\nFROM dbo.VW_HR_EMP_CENTER_MAPPING\nWHERE DT = (\n  SELECT MAX(DT) FROM dbo.VW_HR_EMP_CENTER_MAPPING\n  WHERE DT <= CONVERT(varchar(8), GETDATE(), 112)\n)\n  AND FRNM IS NOT NULL\n  AND LTRIM(RTRIM(FRNM)) <> N''\n  AND LTRIM(RTRIM(FRNM)) <> N'프로'",
         "options": {}
       },
       "id": "aa000001-0000-4000-8000-000000000002",
@@ -43,7 +43,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// MSSQL 행 → 백엔드 계약 {kind, dt, count, rows}. 트림 후 empId·position 결측 행 제외.\nconst items = $input.all().map((i) => i.json);\nconst rows = items\n  .map((r) => ({\n    empId: String(r.EMPID ?? '').trim(),\n    deptCode: String(r.DEPTCO ?? '').trim(),\n    name: String(r.NAME ?? '').trim(),\n    position: String(r.FRNM ?? '').trim(),\n  }))\n  .filter((r) => r.empId && r.position);\nconst dt = items.length ? String(items[0].DT ?? '') : '';\nreturn [{ json: { kind: 'positions', dt, count: rows.length, rows } }];"
+        "jsCode": "// MSSQL 행 → 백엔드 계약 {kind, dt, count, rows}. 트림 후 empId·position 결측 행 제외.\nconst items = $input.all().map((i) => i.json);\nconst rows = items\n  .map((r) => ({\n    empId: String(r.EMPID ?? '').trim(),\n    deptCode: String(r.DEPTCD ?? '').trim(),\n    name: String(r.NAME ?? '').trim(),\n    position: String(r.FRNM ?? '').trim(),\n  }))\n  .filter((r) => r.empId && r.position);\nconst dt = items.length ? String(items[0].DT ?? '') : '';\nreturn [{ json: { kind: 'positions', dt, count: rows.length, rows } }];"
       },
       "id": "aa000001-0000-4000-8000-000000000003",
       "name": "Shape Response",

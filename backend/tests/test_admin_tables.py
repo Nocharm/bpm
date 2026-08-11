@@ -96,3 +96,46 @@ def test_read_table_non_sysadmin_403(client: TestClient, sysadmin_enforced: None
         "/api/admin/tables/employees", headers={"X-Dev-User": NON_SYSADMIN}
     )
     assert res.status_code == 403
+
+
+def test_read_table_binary_column_rendered(client: TestClient, sysadmin_enforced: None) -> None:
+    """LargeBinary 컬럼(kb_chunks.embedding)은 크기 표시로 대체 — bytes 직렬화 500 회귀 방지."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.models import KbChunk
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            chunk = KbChunk(
+                source_type="library",
+                source_id=999999,
+                chunk_index=0,
+                chunk_text="admin tables binary render probe",
+                embedding=b"\x00\x01\x02\x03",
+                meta={},
+            )
+            session.add(chunk)
+            await session.commit()
+            return chunk.id
+
+    chunk_id = asyncio.run(_seed())
+    try:
+        res = client.get(
+            "/api/admin/tables/kb_chunks",
+            params={"q": "admin tables binary render probe"},
+            headers={"X-Dev-User": SYSADMIN},
+        )
+        assert res.status_code == 200
+        rows = res.json()["rows"]
+        mine = next(r for r in rows if r["id"] == chunk_id)
+        assert mine["embedding"] == "<binary 4 bytes>"
+    finally:
+        async def _cleanup() -> None:
+            async with SessionLocal() as session:
+                row = await session.get(KbChunk, chunk_id)
+                if row is not None:
+                    await session.delete(row)
+                    await session.commit()
+
+        asyncio.run(_cleanup())

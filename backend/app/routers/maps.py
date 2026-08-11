@@ -14,7 +14,7 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
-from app.orgchart import load_dept_index, resolve_org_path
+from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
     assert_map_role,
@@ -99,27 +99,12 @@ async def _assert_unique_name(
 
 
 async def _assert_known_department(session: AsyncSession, dept_path: str) -> None:
-    """오우닝 부서는 실제 조직 경로여야 한다 — 직원 org 레벨의 전 prefix와 대조, 아니면 422.
+    """오우닝 부서는 실제 조직 경로여야 한다 — resolver 유효 경로 프리픽스와 대조, 아니면 422.
 
-    directory.py의 부서 목록과 같은 규약(각 깊이 슬라이스의 "/" 조인). active 여부는 무관.
+    피커(directory)와 같은 소스(orgchart.load_valid_org_prefixes) — org 컬럼 인라인 조합을 쓰면
+    체인 해석과 어긋나 피커에서 고른 값이 여기서 거부된다 (9910 검증 적발). active 여부는 무관.
     """
-    rows = (
-        await session.execute(
-            select(
-                Employee.org_l1,
-                Employee.org_l2,
-                Employee.org_l3,
-                Employee.org_l4,
-                Employee.org_l5,
-            )
-        )
-    ).all()
-    known: set[str] = set()
-    for levels in rows:
-        parts = [lv for lv in levels if lv]
-        for i in range(1, len(parts) + 1):
-            known.add("/".join(parts[:i]))
-    if dept_path not in known:
+    if dept_path not in await load_valid_org_prefixes(session):
         raise HTTPException(status_code=422, detail=f"unknown department: {dept_path}")
 
 

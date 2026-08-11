@@ -14,7 +14,11 @@ from app.auth import get_current_user
 from app.clock import KST
 from app.db import get_session
 from app.models import Base, Employee, MapPermission, Notification, UserGroupMember
-from app.orgchart import load_dept_index, resolve_org_path, resolve_org_prefixes
+from app.orgchart import (
+    load_dept_index,
+    load_valid_org_prefixes,
+    resolve_org_path,
+)
 from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
@@ -101,13 +105,8 @@ def _require_sysadmin(login_id: str) -> None:
 
 
 async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
-    """현 employees org 레벨에서 파생되는 모든 경로 프리픽스 — /api/directory 파생과 동일 규약."""
-    rows = (await session.scalars(select(Employee))).all()
-    dept_index = await load_dept_index(session)
-    paths: set[str] = set()
-    for emp in rows:
-        paths.update(resolve_org_prefixes(resolve_org_path(emp, dept_index)))
-    return paths
+    """현 조직 유효 경로 프리픽스 — orgchart 공용 헬퍼 위임(피커·오우닝 검증과 동일 소스)."""
+    return await load_valid_org_prefixes(session)
 
 
 @router.get("/dept-remap", response_model=list[DeptRemapItemOut])
@@ -282,8 +281,15 @@ async def read_table(
     stmt = stmt.limit(size).offset((page - 1) * size)
 
     result = (await session.execute(stmt)).mappings().all()
-    rows = [dict(row) for row in result]
+    rows = [{k: _render_cell(v) for k, v in row.items()} for row in result]
     return TableDataOut(columns=columns, rows=rows, total=total, page=page, size=size)
+
+
+def _render_cell(value: object) -> object:
+    """행 값 → JSON 직렬화 가능 값. 바이너리(kb_chunks.embedding 등)는 크기 표시로 대체 — 500 방지."""
+    if isinstance(value, (bytes, memoryview)):
+        return f"<binary {len(value)} bytes>"
+    return value
 
 
 def _build_kst_range(from_date: date, to_date: date) -> tuple[datetime, datetime]:

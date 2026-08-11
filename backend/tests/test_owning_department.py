@@ -267,3 +267,39 @@ def test_add_permission_for_owning_department_409(client: TestClient) -> None:
         },
     )
     assert res2.status_code == 201
+
+
+def test_create_accepts_chain_resolved_department(client: TestClient) -> None:
+    """피커가 주는 체인 해석 경로(최상위 2레벨 트림)가 검증도 통과 — 피커·검증 소스 불일치 회귀 방지 (9910 적발)."""
+    from app.models import Department, Employee
+
+    async def _seed(session) -> None:
+        session.add_all(
+            [
+                Department(dept_code="OWNCH-0a", name="Ownch Corp", parent_dept_code=None, level=0),
+                Department(dept_code="OWNCH-0b", name="Ownch BU", parent_dept_code="OWNCH-0a", level=1),
+                Department(dept_code="OWNCH-1", name="Ownch Division", parent_dept_code="OWNCH-0b", level=2),
+                Department(dept_code="OWNCH-2", name="Ownch Office", parent_dept_code="OWNCH-1", level=3),
+            ]
+        )
+        emp = Employee(login_id="ownch.user", name="Ownch User", source="local")
+        emp.dept_code = "OWNCH-2"
+        session.add(emp)
+
+    _run_seed(_seed)
+
+    # 체인 경로는 트림돼 "Ownch Division/Ownch Office" — org 컬럼엔 없는 값이지만 검증을 통과해야 한다
+    res = client.post(
+        "/api/maps",
+        json={"owning_department": "Ownch Division/Ownch Office", "name": _name()},
+    )
+    assert res.status_code == 201
+
+
+def _run_seed(coro_factory) -> None:
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            await coro_factory(session)
+            await session.commit()
+
+    asyncio.run(_run())

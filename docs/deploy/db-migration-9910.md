@@ -93,7 +93,7 @@ curl -s -X POST http://182.199.63.71:5678/webhook/hr-dept \
 3. 쿼리 확인 — 뷰명은 `dbo.VW_HR_EMP_CENTER_MAPPING`으로 이미 반영돼 있다. 쿼리 계약:
    - `DT = (SELECT MAX(DT) ... WHERE DT <= 오늘 YYYYMMDD)` — 스냅샷 지연 시 자동으로 직전 일자분.
    - `FRNM` 트림 후 `'프로'`·빈값 제외 → **응답 rows는 이미 부서장 후보만**.
-4. 노드 테스트: MSSQL 노드 단독 실행(Execute step) → 행이 나오는지, `DT`/`DEPTCO`/`EMPID`/`NAME`/`FRNM` 컬럼이 맞는지 확인. 컬럼명이 다르면 여기서 멈추고 쿼리 수정(저장소 JSON에도 반영 요청).
+4. 노드 테스트: MSSQL 노드 단독 실행(Execute step) → 행이 나오는지, `DT`/`DEPTCD`/`EMPID`/`NAME`/`FRNM` 컬럼이 맞는지 확인(부서코드 컬럼은 **DEPTCD** — 9910 실측 확정). 컬럼명이 다르면 여기서 멈추고 쿼리 수정(저장소 JSON에도 반영 요청).
 5. **Activate** 토글 ON (프로덕션 webhook URL 활성 — `/webhook/hr-position`).
 6. 스모크:
    ```bash

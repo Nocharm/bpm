@@ -32,7 +32,7 @@
 - [ ] 운영 Postgres email NOT NULL 완화 스텝 배포 로그 1회 확인
 
 ### ③ 조직 기준 전환 + EDW 직책 (`60ba560`) — 설계 §7 이행·§8 한계
-- [ ] n8n hr-position 워크플로 실호출 — `dbo.VW_HR_EMP_CENTER_MAPPING` 응답 필드(EMPID·DEPTCO·FRNM)·DT 필터 실검증
+- [x] n8n hr-position 워크플로 실호출 — `dbo.VW_HR_EMP_CENTER_MAPPING` 응답 필드(EMPID·**DEPTCD**·FRNM — 9910에서 DEPTCO→DEPTCD 정정)·DT 필터 실검증
 - [ ] AD `employeeNumber` 실값 확인 — `position_unmatched` 크면 **사번 zero-padding 불일치**(EDW `00100` vs AD `100`) 우선 의심 → `lstrip("0")` 정규화 후보
 - [ ] 첫 sync 후 dept-remap 콘솔에서 경로 이동분(HR orgLevels ↔ departments 계층 불일치) 확인·이관
 - [ ] 수집된 직책 목록 보고 노출 allowlist(기본: 그룹장·파트장·팀장·센터장) 조정

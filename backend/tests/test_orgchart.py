@@ -55,10 +55,34 @@ def _index(*depts: Department) -> DeptIndex:
     )
 
 
-def test_chain_resolves_root_to_leaf() -> None:
-    idx = _index(_dept("D1", "Alpha Division"), _dept("D2", "Beta Office", "D1"), _dept("D3", "Gamma Team", "D2"))
+def _generic_tops() -> tuple[Department, Department]:
+    """HR 조직 최상위 2레벨(법인·사업부급) — settings.org_trim_levels가 해석 시 제외."""
+    return _dept("D0a", "Corp Holding"), _dept("D0b", "Bio Business", "D0a")
+
+
+def test_chain_resolves_root_to_leaf_with_top_levels_trimmed() -> None:
+    idx = _index(
+        *_generic_tops(),
+        _dept("D1", "Alpha Division", "D0b"),
+        _dept("D2", "Beta Office", "D1"),
+        _dept("D3", "Gamma Team", "D2"),
+    )
     emp = _emp(dept_code="D3", org_l1="Stale Root", department="Stale Leaf")
     assert resolve_org_path(emp, idx) == "Alpha Division/Beta Office/Gamma Team"
+
+
+def test_trim_keeps_leaf_when_chain_short() -> None:
+    """체인이 트림 레벨 이하로 짧으면 리프만 남긴다 — 범용 레벨 직속 직원 엣지."""
+    idx = _index(*_generic_tops())
+    emp = _emp(dept_code="D0b")
+    assert resolve_org_path(emp, idx) == "Bio Business"
+
+
+def test_trim_applies_only_to_chain_not_fallback() -> None:
+    """트림은 체인 해석 전용 — org 컬럼 폴백은 원본 그대로."""
+    idx = _index()
+    emp = _emp(dept_code=None, org_l1="Corp Holding", org_l2="Bio Business", org_l3="Alpha", department="Alpha")
+    assert resolve_org_path(emp, idx) == "Corp Holding/Bio Business/Alpha"
 
 
 def test_fallback_when_dept_code_missing_or_stale() -> None:
@@ -82,7 +106,12 @@ def test_cycle_guard_falls_back() -> None:
 
 
 def test_empty_name_segment_skipped() -> None:
-    idx = _index(_dept("D1", "Alpha"), _dept("D2", "", "D1"), _dept("D3", "Gamma", "D2"))
+    idx = _index(
+        *_generic_tops(),
+        _dept("D1", "Alpha", "D0b"),
+        _dept("D2", "", "D1"),
+        _dept("D3", "Gamma", "D2"),
+    )
     emp = _emp(dept_code="D3")
     assert resolve_org_path(emp, idx) == "Alpha/Gamma"
 

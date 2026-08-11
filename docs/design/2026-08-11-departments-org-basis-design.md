@@ -57,7 +57,7 @@ def resolve_org_prefixes(path) -> list[str]            # "A/B/C" → ["A","A/B",
 
 `resolve_org_path` 규칙:
 
-1. `emp.dept_code`가 index에 있으면 `parent_dept_code` 체인을 루트까지 상향, `name`을 루트→리프로 조인. **깊이 제한 없음**(5레벨 캡 해소). 가드: 방문 집합 사이클 차단·최대 깊이 15, 빈 `name` 세그먼트 건너뜀.
+1. `emp.dept_code`가 index에 있으면 `parent_dept_code` 체인을 루트까지 상향, `name`을 루트→리프로 조인. **깊이 제한 없음**(5레벨 캡 해소). 가드: 방문 집합 사이클 차단·최대 깊이 15, 빈 `name` 세그먼트 건너뜀. **최상위 `settings.org_trim_levels`(기본 2)레벨은 조인에서 제외** — HR 조직 상위 2단계(법인·사업부급)는 범용이라 분류 무의미(2026-08 9910 검증 확정, 트림 덕에 기존 저장 경로 표기와도 정렬). 체인이 그보다 짧으면 리프만. 트림은 체인 해석 전용 — employees org 컬럼·폴백은 원본 보존.
 2. dept_code가 없거나 index에 없으면 **현행 폴백**: `org_path(org_l1..l5, department)` (`app/ad/org.py` 재사용).
 3. departments가 비어 있으면 전 직원 폴백 → **로컬 sqlite·테스트·HR 미설정 환경은 현행과 완전 동일 동작** (핵심 불변식).
 
@@ -72,7 +72,8 @@ def resolve_org_prefixes(path) -> list[str]            # "A/B/C" → ["A","A/B",
 | `routers/directory.py` | org 컬럼 경로·`dept_infos` 조인(korean·manager) | 경로·프리픽스 = resolver, `korean_name` = `name_ko_by_name`, **`manager` 필드 삭제**, `DirectoryUserOut.position` 추가(§6) |
 | `routers/versions.py` eligible-assignees `dept_infos` | DeptInfo 조인 | `name_ko_by_name` — `DeptInfoValueOut`은 `korean_name`만(`manager` 삭제) |
 | `routers/admin.py` `get_admin_users` | org 컬럼 파생 + DeptInfo 조인 | resolver 파생(users·departments 동일 소스) + `name_ko_by_name`, **manager 필드 삭제** |
-| `routers/admin.py` `_load_valid_org_paths` | org 컬럼 프리픽스 | 전 직원 resolved 경로 프리픽스 합집합 |
+| `routers/admin.py` `_load_valid_org_paths` | org 컬럼 프리픽스 | 전 직원 resolved 경로 프리픽스 합집합(`orgchart.load_valid_org_prefixes` 공용 헬퍼) |
+| `routers/maps.py` `_assert_known_department`(오우닝 부서 검증) | org 컬럼 프리픽스 인라인 조합 | `load_valid_org_prefixes` — 피커와 동일 소스. **9910 검증에서 적발된 v2 플랜 누락**(인라인 조합이라 grep 스윕이 놓침) |
 | `routers/dashboard.py` `_resolve_display_name`·coverage 한글맵 | DeptInfo 조회 | departments `name_ko` 조회(리프명, dept_code 정렬 첫 행) |
 | `routers/employees.py` `PUT /employees/korean-names` | 직원 한글명 임포트 | **삭제** |
 | `routers/admin.py` `PUT /admin/dept-info` | dept_info 임포트 | **삭제** |
