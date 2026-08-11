@@ -14,14 +14,12 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
-import { KoreanNameModal } from "./korean-name-modal";
 
 export function EmployeeTable() {
   const { t } = useI18n();
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [showKrModal, setShowKrModal] = useState(false);
   // 직원 ~5000행 전량 렌더 부하 방지 — 25행씩 증분(스크롤 끝 센티널 행)
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(rows, "");
 
@@ -52,14 +50,6 @@ export function EmployeeTable() {
       <div className="flex items-center justify-between">
         <p className="text-body-strong text-ink">{t("admin.title")}</p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-id="kr-add-btn"
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-            onClick={() => setShowKrModal(true)}
-          >
-            {t("admin.krAdd")}
-          </button>
           <button
             type="button"
             className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
@@ -128,13 +118,6 @@ export function EmployeeTable() {
           )}
         </tbody>
       </TableCard>
-      {showKrModal && (
-        <KoreanNameModal
-          rows={rows}
-          onClose={() => setShowKrModal(false)}
-          onApplied={() => void listEmployees().then(setRows).catch(() => setRows([]))}
-        />
-      )}
     </div>
   );
 }
