@@ -14,8 +14,9 @@ from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import SessionLocal, get_session, init_models
 from app.models import DeptInfo, Employee, LoginRecord
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions.access import can_view_dashboard_db
-from app.permissions.logic import is_sysadmin, org_path
+from app.permissions.logic import is_sysadmin
 from app.routers import (
     admin,
     ai,
@@ -131,6 +132,8 @@ async def get_me(
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)
+    # departments 체인 우선 해석 — Task 4의 manager 체인도 같은 인덱스를 재사용한다.
+    dept_index = await load_dept_index(session)
     # 로그인/활동 기록 — 현황조사용. /me는 앱 로드(새 탭·새로고침·토큰갱신)마다 호출되므로
     # 하루 1건으로 중복제거(KST 기준 자정 이후 기록 없을 때만 추가) = "그날 접속" 단위.
     day_start = now_kst().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -170,11 +173,7 @@ async def get_me(
         role=emp.role if emp else "user",
         department=emp.department if emp else "",
         # 부서 소속 판정용 org_path(루트→리프) — 프론트 멤버 하이라이트(HM-2)
-        org_path=(
-            org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-            if emp
-            else ""
-        ),
+        org_path=resolve_org_path(emp, dept_index) if emp else "",
         is_sysadmin=is_sysadmin(login_id),
         can_view_dashboard=await can_view_dashboard_db(session, login_id),
         manager_ids=manager_ids,
