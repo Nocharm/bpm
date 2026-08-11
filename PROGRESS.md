@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- **Framework Admin UI Task 3**: 설정 Framework 탭(sysadmin 전용) 신설 — 카테고리 관리 트리(`components/admin/framework-panel.tsx`). `api.ts`에 `createCategory`/`updateCategory`/`deleteCategory`/`importFramework`+`FrameworkImportResult` 추가(parent_id는 body 키 존재 여부로 "미전송 vs null 이동" 구분). 트리 상태는 홈 브라우징용 `framework-tree-state.ts`(맵 목록까지 동시 로드)와 요구가 달라 admin 전용 로컬 모델(`Map<number|null, CategoryNode[]>`+openIds, 뮤테이션 후 루트+펼친 노드 전체 재조회)로 별도 구현(brief가 공용 파일 확장을 금지). 행 액션(하위추가/이름변경/이동/삭제) — 이동은 `framework-assign-modal.tsx`의 캐스케이드 셀렉트 패턴을 재사용한 모달("(root)" 옵션 포함, 자기자손 이동은 서버 422+토스트 신뢰), 삭제 409(자식/맵 카운트)는 다이얼로그 내 인라인 표시. 대량 임포트 UI는 Task 4 자리만 남김. 게이트 FE tsc 0·lint 0(무관 사전 경고 1건)·vitest 589/589·build OK.
 - **Framework Admin UI Task 2**: `POST /api/categories/import` sysadmin 전용 웹 JSON 대량 임포트 추가 — CLI(`scripts.import_consultant.import_delivery`)와 동일 엔진 재사용(dry-run 기본, apply 시에만 commit). `consultant_canonical.py`를 `parse_categories`/`parse_map_objs`(순수 검증) + `load_categories`/`load_maps`(파일 IO 위임)로 분리, 항목 오류는 error 행으로 합류·rows 500행 캡(error/warning 우선). BE 994(+5)·ruff 0.
 - **Framework Admin UI Task 1**: `POST/PATCH/DELETE /api/categories` sysadmin 전용 CRUD 추가 — 생성(level 파생·`ui-` 자동채번)·이동(자손 가드+서브트리 BFS level 재계산)·삭제(자식/맵 연결 가드). BE 989(+7)·ruff 0.
 - 9910 가이드에 컨설턴트 임포트 CLI 절차 추가 — Framework 검증 항목이 데이터 시드 단계 없이 UI 확인만 요구해 "임포트 수단이 없다" 혼선 유발(임포트는 설계상 UI 없는 관리자 CLI).

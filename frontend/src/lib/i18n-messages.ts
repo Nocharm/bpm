@@ -1520,6 +1520,31 @@ const en = {
   "home.frameworkTransferPick": "Pick a target map",
   "home.ioInput": "Input",
   "home.ioOutput": "Output",
+  // ── 설정 Framework 탭 — 카테고리 관리 트리 (Task 3) ──
+  "admin.catFramework": "Framework",
+  "framework.adminTab": "Categories & import",
+  "framework.adminReimportHint":
+    "Re-imports overwrite category names/structure by code — the last delivery is the source of truth.",
+  "framework.adminAddRoot": "Add top-level category",
+  "framework.adminAddChild": "Add child",
+  "framework.adminRename": "Rename",
+  "framework.adminMove": "Move",
+  "framework.adminDelete": "Delete",
+  "framework.adminAddRootTitle": "New top-level category",
+  "framework.adminAddChildTitle": "New child category",
+  "framework.adminRenameTitle": "Rename category",
+  "framework.adminNamePlaceholder": "Category name",
+  "framework.adminMoveTitle": "Move category",
+  "framework.adminMovePickParent": "Pick a new parent",
+  "framework.adminMoveRootOption": "(root — top level)",
+  "framework.adminDeleteTitle": "Delete category?",
+  "framework.adminDeleteMessage":
+    "This only works if the category has no children and no linked maps.",
+  "framework.adminCreated": "Category created.",
+  "framework.adminRenamed": "Category renamed.",
+  "framework.adminMoved": "Category moved.",
+  "framework.adminDeleted": "Category deleted.",
+  "framework.adminImportPlaceholder": "Bulk import — coming in a follow-up task.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -3041,6 +3066,30 @@ const ko: Record<MessageKey, string> = {
   "home.frameworkTransferPick": "대상 맵 선택",
   "home.ioInput": "인풋",
   "home.ioOutput": "아웃풋",
+  // ── 설정 Framework 탭 — 카테고리 관리 트리 (Task 3) ──
+  "admin.catFramework": "프레임워크",
+  "framework.adminTab": "카테고리·임포트",
+  "framework.adminReimportHint":
+    "재임포트는 코드 기준으로 카테고리 이름·구조를 덮어씁니다 — 최신 배송본이 항상 최종 진실입니다.",
+  "framework.adminAddRoot": "최상위 카테고리 추가",
+  "framework.adminAddChild": "하위 추가",
+  "framework.adminRename": "이름변경",
+  "framework.adminMove": "이동",
+  "framework.adminDelete": "삭제",
+  "framework.adminAddRootTitle": "새 최상위 카테고리",
+  "framework.adminAddChildTitle": "새 하위 카테고리",
+  "framework.adminRenameTitle": "카테고리 이름변경",
+  "framework.adminNamePlaceholder": "카테고리 이름",
+  "framework.adminMoveTitle": "카테고리 이동",
+  "framework.adminMovePickParent": "새 상위 카테고리 선택",
+  "framework.adminMoveRootOption": "(최상위로)",
+  "framework.adminDeleteTitle": "카테고리를 삭제할까요?",
+  "framework.adminDeleteMessage": "하위 카테고리·연결된 맵이 없어야 삭제됩니다.",
+  "framework.adminCreated": "카테고리를 생성했습니다.",
+  "framework.adminRenamed": "카테고리 이름을 변경했습니다.",
+  "framework.adminMoved": "카테고리를 이동했습니다.",
+  "framework.adminDeleted": "카테고리를 삭제했습니다.",
+  "framework.adminImportPlaceholder": "대량 임포트 — 후속 작업에서 추가됩니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
