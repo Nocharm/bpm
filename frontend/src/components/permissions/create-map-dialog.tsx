@@ -121,25 +121,15 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     isSysadmin: false,
     korean_name: u.korean_name ?? "",
   }));
-  // 부서장은 login_id로만 저장된다(dept_info.manager) — 부서를 부서장 "이름"으로도 찾을 수 있게
-  // 디렉터리로 한/영 이름을 해석해 검색 텍스트에 합친다. 표시엔 쓰이지 않고 검색 키워드 전용.
-  const userById = new Map(dirUsers.map((u) => [u.id, u]));
-  const pickerDepts: Department[] = dirDepts.map((d) => {
-    const head = d.manager ? userById.get(d.manager) : undefined;
-    const managerKeywords = [d.manager, head?.name, head?.korean_name]
-      .filter(Boolean)
-      .join(" ");
-    return {
-      id: d.id,
-      code: "",
-      name: d.name,
-      orgLevels: [],
-      parentId: null,
-      rawDn: "",
-      korean_name: d.korean_name,
-      manager: managerKeywords,
-    };
-  });
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+    korean_name: d.korean_name,
+  }));
 
   // ── 폼 상태 / form state ──
   // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
@@ -166,7 +156,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
   const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
   const router = useRouter();
-  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path, manager=리더 login_id)
+  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path)
   const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
   // 자동 추가한 리더 승인자 추적 — 부서 변경 시 자동분만 교체하고 수동 추가는 보존
   const autoLeaderRef = useRef<string | null>(null);
@@ -186,12 +176,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
   const applyVisibilityChange = (v: MapVisibility) => {
     setVisibility(v);
-    // 후보군 변경 → 승인자 초기화. 오우닝 부서 리더 자동 추가분은 다시 심는다(양쪽 후보군에서 유효).
-    const leader = owningDept?.manager ? userById.get(owningDept.manager) : undefined;
-    setApprovers(
-      leader ? [{ key: genId(), userId: leader.id, displayName: leader.name }] : [],
-    );
-    autoLeaderRef.current = leader?.id ?? null;
+    // 후보군 변경 → 승인자 초기화.
+    setApprovers([]);
+    autoLeaderRef.current = null;
     if (v === "public" && pendingCollabRole === "viewer") {
       setPendingCollabRole("editor");
     }
@@ -231,16 +218,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     const dept = dirDepts.find((d) => d.id === opt.principalId);
     if (!dept) return;
     const removeId = autoLeaderRef.current;
-    const leader = dept.manager ? userById.get(dept.manager) : undefined;
     const kept = removeId ? approvers.filter((a) => a.userId !== removeId) : approvers;
-    // 자동 추가로 기록하는 건 실제로 추가했을 때만 — 수동 추가분을 auto로 오인해 clear 시 지우는 버그 방지
-    const shouldAdd = leader !== undefined && !kept.some((a) => a.userId === leader.id);
-    setApprovers(
-      shouldAdd
-        ? [...kept, { key: genId(), userId: leader.id, displayName: leader.name }]
-        : kept,
-    );
-    autoLeaderRef.current = shouldAdd ? leader.id : null;
+    setApprovers(kept);
+    autoLeaderRef.current = null;
     setOwningDept(dept);
     setFlashApprovers(true);
     window.setTimeout(() => setFlashApprovers(false), 850); // 애니메이션 후 리셋(재선택 시 재발화)
@@ -411,8 +391,8 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         })
         .map((u) => u.id)
     : [];
-  const owningLeaderId =
-    owningDept?.manager && userById.has(owningDept.manager) ? owningDept.manager : null;
+  // 오우닝 부서 리더 자동 핀 — DirectoryDept.manager 폐기로 상시 null (design 2026-08-11 §5 후속)
+  const owningLeaderId: string | null = null;
   const approverEligibleIds = new Set<string>([
     ...(currentUser ? [currentUser.id] : []),
     ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
