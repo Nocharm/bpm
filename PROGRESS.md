@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- 구현 플랜 v2 작성: [`docs/superpowers/plans/2026-08-11-departments-org-basis.md`](docs/superpowers/plans/2026-08-11-departments-org-basis.md) — 10태스크(v1 셔리픽 2건 재사용 → EDW positions 파이프라인 → allowlist+me 체인 → 표시/판정 전환 → dept_info 제거 → FE 4태스크 → 게이트).
 - **설계 v2 개정**: EDW에 사번 키 DEPTCD·직책(FRNM) 뷰 발견 → v1의 AD manager DN 역추적 폐기, **EDW 직책 기반 부서장 모델**로 재설계(n8n `hr-position` 워크플로 JSON 신설 `docs/deploy/n8n/hr-position-workflow.json`, AD employeeNumber 사번 매핑→`employees.position`, 노출 직책 allowlist=app_settings, Manager 태그=부서 체인 직책 보유자). v1 구현 4태스크는 `backup/dept-basis-v1-impl` 보존·코드 리셋.
 - 설계서 신설: [`docs/design/2026-08-11-departments-org-basis-design.md`](docs/design/2026-08-11-departments-org-basis-design.md). 경로 해석 계층 `app/orgchart.py`(dept_code→departments 부모 체인, org_l1~l5 폴백)로 권한 판정·조직도·한글명 소스를 departments로 단일화, dept_info 소비 전제거(임포트 API 2종 삭제·모델 삭제·테이블 잔류), AD `manager` 속성 역추적(`employees.manager_login_id`, DN 매칭+CN 사번 폴백)으로 피커 Manager 태그를 개인 체인 2단계로 재정의, 부서관리 고아 재지정 섹션 상단 이동+테이블 스크롤 격리. 결정: principal 경로 문자열 유지·빈 부서 숨김·임포트 API까지 제거.
 
