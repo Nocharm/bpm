@@ -653,6 +653,32 @@ class CategoryNodeOut(BaseModel):
     map_count: int = 0  # 서브트리 전체(자기 포함)의 연결 맵 수 — 소프트삭제 제외, 가시성 무관
 
 
+class CategoryCreateIn(BaseModel):
+    """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+    parent_id: int | None = None
+    code: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+        | None
+    ) = None
+
+
+class CategoryUpdateIn(BaseModel):
+    """카테고리 부분 갱신 — name·parent_id(이동)·sort_order.
+
+    parent_id는 `model_fields_set`으로 "미전송 vs null" 구분 필수 — null=루트로 이동,
+    필드 자체 부재=이동 없음(라우터에서 판정, 스키마 레벨에선 둘 다 None으로 보임).
+    """
+
+    name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+        | None
+    ) = None
+    parent_id: int | None = None
+    sort_order: int | None = None
+
+
 class CategoryMapsOut(BaseModel):
     """카테고리 1노드에 직접 연결된 맵 페이지 — 비가시 맵은 hidden으로만 집계(name 미노출)."""
 
