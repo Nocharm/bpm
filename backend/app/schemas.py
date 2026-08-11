@@ -1058,26 +1058,6 @@ class EmployeeOut(BaseModel):
     is_sysadmin: bool = False
 
 
-class KoreanNameEntryIn(BaseModel):
-    """임포트 항목 — 이름 필수, 그룹(dept) 선택. max_length 200 = VARCHAR(200) 초과 DataError 방지."""
-
-    name: Annotated[str, StringConstraints(max_length=200)]
-    dept: Annotated[str, StringConstraints(max_length=200)] = ""
-
-
-class KoreanNamesImportIn(BaseModel):
-    """한글이름 일괄 등록 — mode: skip(기존 값 보유 유저 건너뜀) | overwrite(덮어씀)."""
-
-    mode: Literal["skip", "overwrite"]
-    entries: dict[str, KoreanNameEntryIn]
-
-
-class KoreanNamesImportOut(BaseModel):
-    updated: int
-    skipped: int
-    unknown: list[str]
-
-
 class SyncSummaryOut(BaseModel):
     """HR 전체 동기화 요약 (design 2026-08-10 §5-9). aborted_reason 있으면 DB 무변경 중단."""
 
@@ -1089,7 +1069,6 @@ class SyncSummaryOut(BaseModel):
     org_mismatches: int
     truncated_levels: int
     departments_upserted: int
-    dept_info_orphans: list[str]
     title_refreshed: int | None = None
     position_refreshed: int | None = None
     position_unmatched: int | None = None
@@ -1111,7 +1090,6 @@ class HrSyncPreviewOut(BaseModel):
     delete_login_ids: list[str]
     case_mismatches: list[str]
     orphan_dept_paths: list[str]
-    dept_info_orphans: list[str]
 
 
 # ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
@@ -1136,24 +1114,6 @@ class AdminDeptOut(BaseModel):
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
     korean_name: str = ""  # departments.name_ko (2026-08-11 dept_info→departments 전환)
-
-
-class DeptInfoEntryIn(BaseModel):
-    """부서 임포트 항목 — 빈 필드는 미기입(기존 보존). max_length 200 = VARCHAR(200) 초과 방지."""
-
-    korean_name: Annotated[str, StringConstraints(max_length=200)] = ""
-    manager: Annotated[str, StringConstraints(max_length=200)] = ""
-
-
-class DeptInfoImportIn(BaseModel):
-    """부서 한글명·부서장 일괄 등록 — 키는 영문 부서명(리프), 비어있지 않은 필드만 덮어씀."""
-
-    entries: dict[str, DeptInfoEntryIn]
-
-
-class DeptInfoImportOut(BaseModel):
-    updated: int
-    unknown: list[str]  # 현존 부서와 매칭 실패한 부서명
 
 
 class DeptRemapItemOut(BaseModel):

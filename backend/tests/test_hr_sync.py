@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
 from app.hr.client import RawHrDepartment
-from app.models import Department, DeptInfo
+from app.models import Department
 from app.settings import settings
 from tests.hr_sync_helpers import _get_employee, _hr_row, _mock_hr, _run_sync, _seed_employee
 
@@ -107,29 +107,18 @@ def test_sync_chunked_delete_over_bind_limit(client: TestClient, monkeypatch) ->
     assert _get_employee("bulk0.hr") is None and _get_employee("bulk1099.hr") is None
 
 
-def test_sync_mirrors_departments_and_reports_dept_info_orphans(client: TestClient, monkeypatch) -> None:
-    async def _seed_info() -> None:
-        async with SessionLocal() as session:
-            if await session.get(DeptInfo, "Ghost Team") is None:
-                session.add(DeptInfo(department="Ghost Team", korean_name="유령팀", manager="ghost.mgr"))
-            await session.commit()
-
-    asyncio.run(_seed_info())
+def test_sync_mirrors_departments(client: TestClient, monkeypatch) -> None:
     depts = [RawHrDepartment("D1", "Div", "본부", None, 1), RawHrDepartment("D11", "Team A", "A팀", "D1", 2)]
     _mock_hr(monkeypatch, [_hr_row("mirror.user")], departments=depts)
     summary = _run_sync()
     assert summary.departments_upserted == 2
-    assert "Ghost Team" in summary.dept_info_orphans
 
-    async def _check() -> tuple:
+    async def _check() -> Department | None:
         async with SessionLocal() as session:
-            dept = await session.get(Department, "D11")
-            info = await session.get(DeptInfo, "Ghost Team")
-            return dept, info
+            return await session.get(Department, "D11")
 
-    dept, info = asyncio.run(_check())
+    dept = asyncio.run(_check())
     assert dept is not None and dept.parent_dept_code == "D1"
-    assert info is not None and info.manager == "ghost.mgr"  # dept_info 절대 미변경 (§5-6)
 
 
 def test_reconcile_releases_checkout_of_deactivated(client: TestClient, monkeypatch) -> None:

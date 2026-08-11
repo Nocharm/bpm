@@ -13,15 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.clock import KST
 from app.db import get_session
-from app.models import Base, DeptInfo, Employee, MapPermission, Notification, UserGroupMember
+from app.models import Base, Employee, MapPermission, Notification, UserGroupMember
 from app.orgchart import load_dept_index, resolve_org_path, resolve_org_prefixes
 from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
     AdminDirectoryOut,
     AdminUserOut,
-    DeptInfoImportIn,
-    DeptInfoImportOut,
     DeptRemapIn,
     DeptRemapItemOut,
     DeptRemapOut,
@@ -214,53 +212,6 @@ async def remap_dept_refs(
 
     await session.commit()
     return DeptRemapOut(map_grants=moved_grants, group_members=moved_members)
-
-
-@router.put("/dept-info", response_model=DeptInfoImportOut)
-async def import_dept_info(
-    payload: DeptInfoImportIn,
-    login_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> DeptInfoImportOut:
-    """부서 한글명·부서장 일괄 등록 — 현존 부서만 반영, 미존재는 unknown.
-
-    현존 판정에 org_l1~l5를 모두 포함한다: 조직도 tree는 본부·실까지 담고, 상위 레벨
-    dept_info가 있어야 /api/me의 상위 부서장 체인과 피커의 상위 부서 한글 검색이 산다.
-    """
-    _require_sysadmin(login_id)
-    rows = await session.execute(
-        select(
-            Employee.org_l1,
-            Employee.org_l2,
-            Employee.org_l3,
-            Employee.org_l4,
-            Employee.org_l5,
-            Employee.department,
-        ).distinct()
-    )
-    known = {name for row in rows for name in row if name}
-    updated = 0
-    unknown: list[str] = []
-    for dept_name, entry in payload.entries.items():
-        korean = entry.korean_name.strip()
-        manager = entry.manager.strip()
-        if not korean and not manager:
-            continue  # 둘 다 빈 항목은 통째로 무시 — 삭제 기능 아님
-        if dept_name not in known:
-            unknown.append(dept_name)
-            continue
-        info = await session.get(DeptInfo, dept_name)
-        if info is None:
-            info = DeptInfo(department=dept_name)
-            session.add(info)
-        # 빈 필드는 미기입 — 기존 값을 지우지 않는다 (korean-names의 dept 보존 규칙과 동일)
-        if korean:
-            info.korean_name = korean
-        if manager:
-            info.manager = manager
-        updated += 1
-    await session.commit()
-    return DeptInfoImportOut(updated=updated, unknown=unknown)
 
 
 @router.get("/tables", response_model=list[TableInfoOut])

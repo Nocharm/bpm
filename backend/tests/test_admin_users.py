@@ -93,3 +93,13 @@ def test_admin_users_departments_korean_name_from_departments(
     depts = {d["name"]: d for d in res.json()["departments"]}
     assert depts["Sourcing Team 1"]["korean_name"] == "구매1팀"
     assert "manager" not in depts["Sourcing Team 1"]
+
+
+def test_admin_dept_info_import_route_removed(client: TestClient) -> None:
+    """PUT /api/admin/dept-info — 임포트 API 제거 확인 (dept_info→departments 전환)."""
+    res = client.put(
+        "/api/admin/dept-info",
+        headers={"X-Dev-User": SYSADMIN},
+        json={"entries": {}},
+    )
+    assert res.status_code == 404
