@@ -271,7 +271,17 @@ docker exec -it "$DEV_DB" psql -U processmap -d processmap -c \
 - [ ] **운영 데이터 보존**: §5-2 행수와 화면(맵·버전·알림) 대조. 검증 중 만든 데이터는 복사본에만 남는다.
 - [ ] **부서관리 재배치**: Departments 탭 — Manager 열 없음, 테이블 자체 스크롤(60vh), 인원수 호버 툴팁이 하단 행에서도 잘리지 않음(포털 픽스).
 - [ ] **임포트 버튼 부재**: Employees 탭 한글명 임포트·Departments 탭 부서정보 추가 버튼이 없어야 함(API도 404).
-- [ ] **컨설턴트 체계**: 홈 Framework 토글 → 카테고리 트리 lazy 로드, 연결/이양 모달, SP 폼 I/O 필드(설계: [`2026-08-08-consultant-hierarchy-design.md`](../design/2026-08-08-consultant-hierarchy-design.md)).
+- [ ] **컨설턴트 체계**: 아래 임포트를 먼저 돌려야 Framework 탭에 데이터가 보인다(임포트는 UI 없음 — 관리자 CLI 전용, 설계 §5). 이후 홈 Framework 토글 → 카테고리 트리 lazy 로드, 상세 카드 경로 pill·I/O, 연결/이양 모달(오너 계정), 연계 subprocess 노드·게시 v1, apply 재실행 시 전부 `unchanged`(멱등) 확인(설계: [`2026-08-08-consultant-hierarchy-design.md`](../design/2026-08-08-consultant-hierarchy-design.md)).
+
+  ```bash
+  # 샘플 전달물 커스터마이즈(권장): maps.jsonl의 owner → 본인 login_id(오너 화면 확인용),
+  # department → 홈 Departments 트리에 보이는 경로 그대로 "/" 조인(= resolver 경로.
+  # 안 맞으면 차단 없이 오너 org 폴백 + 경고). scripts/는 이미지에 있지만 docs/samples는 없음 → docker cp.
+  BACKEND=$(docker ps --format '{{.Names}}' | grep '9910.*backend')
+  docker cp docs/samples/consultant-delivery-sample "$BACKEND":/tmp/delivery
+  docker exec "$BACKEND" python -m scripts.import_consultant /tmp/delivery              # dry-run 리포트
+  docker exec "$BACKEND" python -m scripts.import_consultant /tmp/delivery --apply --actor <본인ID>
+  ```
 - [ ] **기존 SP 링크·권한**: 기존 맵의 부서 권한이 그대로 동작(경로 문자열 principal 무변경 — 판정만 체인 해석), SP 임베드 정상.
 
 ---

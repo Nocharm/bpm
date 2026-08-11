@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- 9910 가이드에 컨설턴트 임포트 CLI 절차 추가 — Framework 검증 항목이 데이터 시드 단계 없이 UI 확인만 요구해 "임포트 수단이 없다" 혼선 유발(임포트는 설계상 UI 없는 관리자 CLI).
 - **템플릿 룰 동기화**(claude-code-template 8/1 개정 반영): guidelines Claude 5 튜닝(ask-first 축소, §1 표가 단일 기준)·git.md 커밋 전 체크 확장(PROGRESS 1–3줄 맥락 위주·README는 영향 섹션만·브랜치 머지 시 PROGRESS 압축)·`rules/frontend/identifiers.md` 신설 — 템플릿의 `data-testid`는 기존 컨벤션 `data-id`(450+곳)로 속성명만 유지.
 - **컨설턴트 임포트 orgchart resolver 정합**: `import_consultant.py`의 부서 유효 집합·오너 org 폴백이 raw org_l 인라인 조합으로 남아 조직 기준 전환 스윕에서 누락돼 있던 것(체인 해석·새니타이즈·상위 트림 미반영 → 서버에서 owning 고아 경로 위험) → `orgchart.load_valid_org_prefixes`+`resolve_org_path`로 통일(피커·maps 검증과 단일 소스), 체인+트림 회귀 가드 테스트 추가. BE 982(+1)·ruff 0.
 - **9910 픽스 4차**: ① org 정보 전무 직원(org_l1~l5 전부 빈 + 체인 불가) 예외처리 — `has_org_info` 신설, department 단독 가짜 경로를 트리·유효 경로·directory 파생에서 제외(권한 판정·개인 표시는 불변) ② 홈 부서 트리 한/영 연동 — ko 모드는 departments.name_ko 우선 표기. BE 981·FE 그린.
