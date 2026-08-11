@@ -62,7 +62,8 @@ def test_dry_run_reports_without_persisting(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["applied"] is False
-    assert body["summary"] == {"created": 1}
+    # warning은 라우터가 항상 채운다(0건이어도 키 존재 — fix round 1, rows 캡 대비 별도 카운트)
+    assert body["summary"] == {"created": 1, "warning": 0}
     assert body["truncated"] is False
     assert [r["action"] for r in body["rows"]] == ["created"]
 
@@ -100,7 +101,7 @@ def test_apply_persists_and_publishes(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["applied"] is True
-    assert body["summary"] == {"created": 1}
+    assert body["summary"] == {"created": 1, "warning": 0}
 
     from sqlalchemy import select
 
@@ -123,7 +124,7 @@ def test_apply_persists_and_publishes(client: TestClient) -> None:
 
     resp2 = client.post("/api/categories/import", json=payload)
     assert resp2.status_code == 200
-    assert resp2.json()["summary"] == {"unchanged": 1}
+    assert resp2.json()["summary"] == {"unchanged": 1, "warning": 0}
 
 
 def test_invalid_map_item_reports_error_row(client: TestClient) -> None:
@@ -144,6 +145,31 @@ def test_invalid_map_item_reports_error_row(client: TestClient) -> None:
     assert len(error_rows) == 1
     assert error_rows[0]["code"] == "-"
     assert "GHOST" in error_rows[0]["detail"]
+
+
+def test_summary_includes_warning_count(client: TestClient) -> None:
+    """summary["warning"]은 counts()가 제외해도 라우터가 별도로 채운다(fix round 1 IMPORTANT 2).
+
+    department="" → 미지정 department는 known이 아니라 owner org로 폴백하며 경고 행을 남긴다
+    (import_consultant.resolve_owning_department, cons.owner의 org는 conftest 시드).
+    """
+    _seed_import_employees()
+    payload = {
+        "categories": _cats("WWARN"),
+        "maps": [
+            # name도 고유하게 — 기본값("원자재 구매")은 앞선 테스트(session-scoped client/db)가 이미
+            # 영속시켜, 겹치면 duplicate-name 경고가 하나 더 붙어 count가 어긋난다.
+            _map_payload(code="CM-WWARN-01", name="경고 테스트 맵", category="WWARN-A1", department="")
+        ],
+        "apply": False,
+    }
+    resp = client.post("/api/categories/import", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["summary"]["warning"] == 1
+    warning_rows = [r for r in body["rows"] if r["action"] == "warning"]
+    assert len(warning_rows) == 1
+    assert "fallback" in warning_rows[0]["detail"]
 
 
 def test_invalid_categories_422(client: TestClient) -> None:

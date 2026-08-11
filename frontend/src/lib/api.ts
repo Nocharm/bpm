@@ -2220,9 +2220,9 @@ export interface FrameworkImportRow {
 
 export interface FrameworkImportResult {
   applied: boolean;
-  // 서버는 action별 카운트만 채워 보낸다(0인 키는 아예 없음, action="warning"은 집계 제외 —
-  // backend ImportReport.counts() 미러) — created/updated/unchanged/error만 나타날 수 있고,
-  // warning 개수는 rows에서 action==="warning" 행 수로 직접 세야 한다.
+  // 서버는 action별 카운트만 채워 보낸다(0인 키는 아예 없음) — created/updated/unchanged/error는
+  // backend ImportReport.counts() 미러, warning은 counts()가 제외하는 대신 라우터가 rows 전체
+  // (500행 캡 이전) 기준으로 별도 채운다 — rows에서 세면 캡 초과 시 undercount된다(fix round 1).
   summary: Record<string, number>;
   rows: FrameworkImportRow[];
   truncated: boolean;

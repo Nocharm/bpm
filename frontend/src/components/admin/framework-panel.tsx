@@ -200,19 +200,16 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     }
   }
 
-  // 요약 칩 5종 — created/updated/unchanged/error는 summary(0이면 키 자체가 없음), warnings는
-  // summary 집계 대상에서 제외돼(backend ImportReport.counts()) rows에서 직접 센다.
+  // 요약 칩 5종 — 전부 summary에서 읽는다(0이면 키 자체가 없음). warning은 backend
+  // ImportReport.counts() 집계에서 제외되지만, endpoint가 rows 전체(500행 캡 이전) 기준으로
+  // summary["warning"]을 별도로 채워 보낸다 — rows에서 세면 캡 초과 시 undercount된다(fix round 1).
   function renderImportSummary(result: FrameworkImportResult) {
     const chips: { key: string; label: string; count: number; danger?: boolean }[] = [
       { key: "created", label: t("framework.importCreated"), count: result.summary.created ?? 0 },
       { key: "updated", label: t("framework.importUpdated"), count: result.summary.updated ?? 0 },
       { key: "unchanged", label: t("framework.importUnchanged"), count: result.summary.unchanged ?? 0 },
       { key: "errors", label: t("framework.importErrors"), count: result.summary.error ?? 0, danger: true },
-      {
-        key: "warnings",
-        label: t("framework.importWarnings"),
-        count: result.rows.filter((row) => row.action === "warning").length,
-      },
+      { key: "warnings", label: t("framework.importWarnings"), count: result.summary.warning ?? 0 },
     ];
     return (
       <div className="flex flex-wrap gap-2">
@@ -434,10 +431,15 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
               accept=".json,application/json"
               data-id="framework-import-categories-file"
               className="hidden"
-              onChange={(event) => void handleCategoriesFile(event.target.files?.[0] ?? null)}
+              disabled={importBusy}
+              onChange={(event) => {
+                void handleCategoriesFile(event.target.files?.[0] ?? null);
+                event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
+              }}
             />
             <button
               type="button"
+              disabled={importBusy}
               className={IMPORT_FILE_BTN}
               onClick={() => categoriesInputRef.current?.click()}
             >
@@ -461,9 +463,18 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
               accept=".jsonl,.json,application/json,text/plain"
               data-id="framework-import-maps-file"
               className="hidden"
-              onChange={(event) => void handleMapsFile(event.target.files?.[0] ?? null)}
+              disabled={importBusy}
+              onChange={(event) => {
+                void handleMapsFile(event.target.files?.[0] ?? null);
+                event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
+              }}
             />
-            <button type="button" className={IMPORT_FILE_BTN} onClick={() => mapsInputRef.current?.click()}>
+            <button
+              type="button"
+              disabled={importBusy}
+              className={IMPORT_FILE_BTN}
+              onClick={() => mapsInputRef.current?.click()}
+            >
               <Upload size={14} strokeWidth={1.5} className="shrink-0" />
               <span className="truncate">
                 {mapsFile ? mapsFile.name : t("framework.importMapsPick")}

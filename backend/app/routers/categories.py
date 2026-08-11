@@ -302,9 +302,15 @@ async def import_framework_delivery(
     ordered = priority + rest
     truncated = len(ordered) > 500
 
+    # counts()는 warning을 집계 제외한다(CLI 요약용 의미는 그대로 둔다) — 이 엔드포인트만 응답에
+    # warning 카운트를 별도로 채운다. rows는 500행에서 잘리므로(위 truncated) FE가 rows에서 세면
+    # 캡 초과 전달물에서 undercount된다 — 잘리기 전 report.rows 전체를 기준으로 센다(fix round 1).
+    summary = report.counts()
+    summary["warning"] = sum(1 for r in report.rows if r[1] == "warning")
+
     return FrameworkImportOut(
         applied=payload.apply,
-        summary=report.counts(),
+        summary=summary,
         rows=[FrameworkImportRow(code=c, action=a, detail=d) for c, a, d in ordered[:500]],
         truncated=truncated,
     )

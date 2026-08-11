@@ -721,7 +721,12 @@ class FrameworkImportRow(BaseModel):
 
 
 class FrameworkImportOut(BaseModel):
-    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated)."""
+    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated).
+
+    summary는 ImportReport.counts()(created/updated/unchanged/error, 0인 키는 없음)에 라우터가
+    "warning" 키를 별도로 더한 것 — counts()는 CLI 요약용이라 warning을 집계 제외하지만, 이 카운트를
+    빼면 rows가 500행에서 잘릴 때 FE가 undercount하므로 잘리기 전 전체 기준으로 채운다.
+    """
 
     applied: bool
     summary: dict[str, int]
