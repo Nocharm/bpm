@@ -97,6 +97,14 @@ export function buildKoreanDeptByPath(
   return byPath;
 }
 
+/** 직급·직책 병기 — 둘 다 있으면 "{title} · {position}", 한쪽만 있으면 그 값만. allowlist 필터는 백엔드가 이미 적용. */
+export function formatTitleWithPosition(title: string, position: string): string {
+  const t = title.trim();
+  const p = position.trim();
+  if (t && p) return `${t} · ${p}`;
+  return t || p;
+}
+
 /** 부서 표시명 — 이름과 같은 규칙: ko는 확정 한글명(dept_info), 없으면 영문 폴백. en은 영문 리프. */
 export function formatDeptName(
   orgPath: string,
@@ -138,13 +146,13 @@ export function buildAssigneeOptions(
   }));
 }
 
-/** 부서 SelectOption 빌더 — dept_info(확정 한글명·부서장) + 소속 유저 distinct 한글부서를 검색 키워드로.
+/** 부서 SelectOption 빌더 — dept_info(확정 한글명) + 소속 유저 distinct 한글부서를 검색 키워드로.
  *  label은 lang 토글(이름과 동일 규칙: ko=`한글 (영문)`), value(저장값)는 영문 유지. */
 export function buildDepartmentOptions(
   departments: string[],
   users: { department: string; korean_dept?: string }[],
   lang: Lang,
-  deptInfos?: Record<string, { korean_name?: string; manager?: string }>,
+  deptInfos?: Record<string, { korean_name?: string }>,
 ): SelectOption[] {
   const byDept = new Map<string, string[]>();
   for (const u of users) {
@@ -157,12 +165,11 @@ export function buildDepartmentOptions(
   return departments.map((d) => {
     const info = deptInfos?.[d];
     const koreanName = (info?.korean_name ?? "").trim();
-    const manager = (info?.manager ?? "").trim();
     return {
       value: d,
       label: formatRosterName({ name: d, korean_name: koreanName }, lang),
       keywords:
-        [koreanName, manager, ...(byDept.get(d) ?? [])].filter(Boolean).join(" ") || undefined,
+        [koreanName, ...(byDept.get(d) ?? [])].filter(Boolean).join(" ") || undefined,
     };
   });
 }

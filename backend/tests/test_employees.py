@@ -43,20 +43,40 @@ def test_get_current_user_prefers_dev_header() -> None:
 
 
 def test_me_includes_manager_ids_chain(client: TestClient) -> None:
-    """/api/me manager_ids — 내 org 체인(리프→루트) 부서장, 본인 제외·빈값 제외 (피커 Manager 라벨)."""
-    from app.models import DeptInfo
+    """/api/me manager_ids — 부서 체인(리프→루트)의 노출 직책 보유자, 본인 제외·빈값 제외 (피커 Manager 라벨).
+
+    구 dept_info 기반 로직(org 레벨명으로 dept_info.manager 조회)은 Task 4에서 departments
+    dept_code 체인 + EDW position allowlist 기반으로 교체됨 — 시드도 전용 employee/department로 전환
+    (admin.kim 등 공유 액터는 다른 테스트가 org_path로 의존하므로 건드리지 않는다).
+    """
+    from app.models import Department
 
     async def _run() -> None:
         async with SessionLocal() as session:
-            # admin.kim org: Management Support Division / Process Innovation Office / Process Innovation Team
-            await session.merge(DeptInfo(department="Process Innovation Team", korean_name="", manager="lead.kim"))
-            await session.merge(DeptInfo(department="Process Innovation Office", korean_name="", manager="head.lee"))
-            # 본인이 부서장인 상위 레벨 — 본인은 제외돼야 함
-            await session.merge(DeptInfo(department="Management Support Division", korean_name="", manager="admin.kim"))
+            session.add_all(
+                [
+                    Department(dept_code="EMPME-D1", name="EMPME Root"),
+                    Department(dept_code="EMPME-D2", name="EMPME Mid", parent_dept_code="EMPME-D1"),
+                    Department(dept_code="EMPME-D3", name="EMPME Leaf", parent_dept_code="EMPME-D2"),
+                ]
+            )
+            session.add_all(
+                [
+                    Employee(
+                        login_id="lead.kim", name="Lead Kim", dept_code="EMPME-D2",
+                        position="팀장", active=True, source="local",
+                    ),
+                    Employee(
+                        login_id="head.lee", name="Head Lee", dept_code="EMPME-D1",
+                        position="센터장", active=True, source="local",
+                    ),
+                    Employee(login_id="empme.me", name="Me", dept_code="EMPME-D3", source="local"),
+                ]
+            )
             await session.commit()
 
     asyncio.run(_run())
-    res = client.get("/api/me", headers={"X-Dev-User": "admin.kim"})
+    res = client.get("/api/me", headers={"X-Dev-User": "empme.me"})
     assert res.status_code == 200
     # 리프(직속)→루트 순, 본인 제외
     assert res.json()["manager_ids"] == ["lead.kim", "head.lee"]

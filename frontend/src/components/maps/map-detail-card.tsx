@@ -45,7 +45,12 @@ import { VersionTimeline } from "@/components/maps/version-timeline";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
-import { buildKoreanDeptByPath, buildOrgPathChain, formatDeptName } from "@/lib/korean-dept";
+import {
+  buildKoreanDeptByPath,
+  buildOrgPathChain,
+  formatDeptName,
+  formatTitleWithPosition,
+} from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
 import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
@@ -230,7 +235,9 @@ export function MapDetailCard({
             setMembersStatus("ready");
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
             setKoreanNameById(new Map(dir.users.map((u) => [u.id, u.korean_name ?? ""])));
-            setTitleById(new Map(dir.users.map((u) => [u.id, u.title ?? ""])));
+            setTitleById(
+              new Map(dir.users.map((u) => [u.id, formatTitleWithPosition(u.title ?? "", u.position ?? "")])),
+            );
             setOrgPathById(new Map(dir.users.map((u) => [u.id, u.org_path ?? ""])));
             setKoreanDeptByPath(buildKoreanDeptByPath(dir.departments, dir.users));
             setGroupInfo(

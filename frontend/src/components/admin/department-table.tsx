@@ -1,10 +1,11 @@
 "use client";
 
-// 부서 테이블 — 기본: 부서명 + 한글부서(임포트값) + 부서장 + 인원수(호버 명단). 디버그 토글(org 보기) 시 인원수 대신 가변 orgLevels 컬럼 /
-// Department table — name + imported korean name/manager + member count (roster on hover). Org-view swaps count for org columns.
+// 부서 테이블 — 기본: 부서명 + 한글부서(임포트값) + 인원수(호버 명단). 디버그 토글(org 보기) 시 인원수 대신 가변 orgLevels 컬럼 /
+// Department table — name + imported korean name + member count (roster on hover). Org-view swaps count for org columns.
 // orgLevels depth is VARIABLE — max depth computed at runtime, never hardcoded.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   type AdminDept,
@@ -19,38 +20,77 @@ import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { SearchSelect } from "@/components/search-select";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
-import { DeptInfoModal } from "./dept-info-modal";
 
 const PILL =
   "inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary";
 
-/** 인원수 호버 명단 툴팁 — 이름 필(언어 토글 연동), 25행 청킹. 충돌 툴팁과 동일한 호버 연속(pt-1 래퍼). */
+const ROSTER_TOOLTIP_W = 288; // w-72 — 우측 가장자리 근처 행 호버 시 뷰포트 밖으로 넘치지 않게 클램프
+const ROSTER_MARGIN = 8; // 뷰포트 가장자리 최소 여백 (search-select.tsx MARGIN과 동일 값)
+
+/**
+ * 인원수 호버 명단 툴팁 — 이름 필(언어 토글 연동), 25행 청킹.
+ * `dept-table-scroll`(max-h-[60vh] overflow-y-auto)이 클립 컨테이너가 되어 하단 행에서
+ * absolute 배치가 잘리므로 body 포털 + fixed 좌표로 렌더(search-select.tsx 패턴 참고).
+ * 포털이라 트리거↔패널이 DOM상 남남 — pt-1 브리지(gap 없는 시각적 여백)는 유지하되,
+ * 호버 연속성은 짧은 닫기 지연(cancel-on-enter)으로 보장. 스크롤 중 위치는 재계산하지
+ * 않음 — 스크롤로 트리거가 커서 밑에서 벗어나면 mouseleave가 자연히 닫는다.
+ */
 function RosterHover({ members, count }: { members: AdminUser[]; count: number }) {
   const { lang } = useI18n();
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(members, "");
+
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 120);
+  };
+  const openTooltip = () => {
+    cancelClose();
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const maxLeft = Math.max(ROSTER_MARGIN, window.innerWidth - ROSTER_MARGIN - ROSTER_TOOLTIP_W);
+      setPos({ left: Math.min(rect.left, maxLeft), top: rect.bottom });
+    }
+    setOpen(true);
+  };
+
+  useEffect(() => () => cancelClose(), []);
+
   return (
-    <span
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
+    <span ref={triggerRef} onMouseEnter={openTooltip} onMouseLeave={scheduleClose}>
       <span className="cursor-help text-ink-secondary underline decoration-dotted">{count}</span>
-      {open && (
-        <div className="absolute left-0 top-full z-10 pt-1">
+      {open &&
+        pos &&
+        createPortal(
           <div
-            data-id="dept-roster-tooltip"
-            className="flex max-h-64 w-72 flex-col items-start gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            className="fixed z-[1350] pt-1"
+            style={{ left: pos.left, top: pos.top }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
           >
-            {visible.map((m) => (
-              <span key={m.login_id} className={PILL}>
-                {formatRosterName(m, lang)}
-              </span>
-            ))}
-            {hasMore && <span ref={sentinelRef} className="h-4 w-full" />}
-          </div>
-        </div>
-      )}
+            <div
+              data-id="dept-roster-tooltip"
+              className="flex max-h-64 w-72 flex-col items-start gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            >
+              {visible.map((m) => (
+                <span key={m.login_id} className={PILL}>
+                  {formatRosterName(m, lang)}
+                </span>
+              ))}
+              {hasMore && <span ref={sentinelRef} className="h-4 w-full" />}
+            </div>
+          </div>,
+          document.body,
+        )}
     </span>
   );
 }
@@ -61,8 +101,7 @@ export function DepartmentTable() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showOrg, setShowOrg] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  // 임포트/재지정 적용 후 재조회 트리거 — reloadKey 범프(effect 내 함수 dep 회피)
+  // 재지정 적용 후 재조회 트리거 — reloadKey 범프(effect 내 함수 dep 회피)
   const [reloadKey, setReloadKey] = useState(0);
   // 소멸 부서(조직개편 잔재) 참조 목록 + 행별 재지정 대상 선택
   const [missingRefs, setMissingRefs] = useState<DeptRemapItem[]>([]);
@@ -105,7 +144,7 @@ export function DepartmentTable() {
   // Compute max orgLevels length dynamically across all departments.
   const maxOrgDepth = departments.reduce((max, d) => Math.max(max, d.org_levels.length), 0);
   const orgColIndices = Array.from({ length: maxOrgDepth }, (_, i) => i);
-  const colCount = showOrg ? 3 + maxOrgDepth : 4;
+  const colCount = showOrg ? 2 + maxOrgDepth : 3;
 
   // 재지정 대상 옵션 — 현 조직 전체 경로 프리픽스(상위 부서 포함)
   const pathSet = new Set<string>();
@@ -135,64 +174,8 @@ export function DepartmentTable() {
           />
           {t("perm.sysadmin.deptDebugToggle")}
         </label>
-        <button
-          type="button"
-          data-id="dept-info-add-btn"
-          className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
-          onClick={() => setShowImportModal(true)}
-        >
-          {t("admin.deptInfoAdd")}
-        </button>
       </div>
 
-      <TableCard>
-        <thead>
-          <tr className={ADMIN_HEAD_ROW}>
-            <th className={ADMIN_TH}>{t("perm.sysadmin.deptColName")}</th>
-            <th className={ADMIN_TH}>{t("admin.deptKrCol")}</th>
-            <th className={ADMIN_TH}>{t("admin.deptManagerCol")}</th>
-            {/* org 미보기 시 인원수 열 / member-count column when org view is off */}
-            {!showOrg && <th className={ADMIN_TH}>{t("perm.sysadmin.deptColCount")}</th>}
-            {showOrg &&
-              orgColIndices.map((i) => (
-                <th key={i} className={ADMIN_TH}>
-                  {t("perm.sysadmin.deptOrgCol", { n: String(i + 1) })}
-                </th>
-              ))}
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((dept, idx) => {
-            const members = getDeptMembers(users, dept.org_levels);
-            return (
-              <tr key={idx} className={ADMIN_ROW} data-id="dept-row">
-                <td className={ADMIN_TD}>{dept.name}</td>
-                {/* 임포트된 한글 부서명·부서장 — dept_info 조인값 (직원 집계 필은 폐기, 2026-07-09) */}
-                <td className={ADMIN_TD} data-id="dept-kr-cell">{dept.korean_name}</td>
-                <td className={`${ADMIN_TD} text-ink-secondary`} data-id="dept-manager-cell">
-                  {dept.manager}
-                </td>
-                {!showOrg && (
-                  <td className={ADMIN_TD}>
-                    <RosterHover members={members} count={members.length} />
-                  </td>
-                )}
-                {showOrg &&
-                  orgColIndices.map((i) => (
-                    <td key={i} className={`${ADMIN_TD} text-ink-tertiary`}>
-                      {dept.org_levels[i] ?? ""}
-                    </td>
-                  ))}
-              </tr>
-            );
-          })}
-          {hasMore && (
-            <tr ref={sentinelRef}>
-              <td className={ADMIN_TD} colSpan={colCount} />
-            </tr>
-          )}
-        </tbody>
-      </TableCard>
       {/* 소멸 부서 재지정 — 조직개편으로 사라진 경로를 참조하는 권한/그룹 멤버 일괄 이동 */}
       {missingRefs.length > 0 && (
         <div
@@ -234,12 +217,53 @@ export function DepartmentTable() {
           {remapMsg && <p className="text-fine text-ink-tertiary">{remapMsg}</p>}
         </div>
       )}
-      {showImportModal && (
-        <DeptInfoModal
-          onClose={() => setShowImportModal(false)}
-          onApplied={() => setReloadKey((k) => k + 1)}
-        />
-      )}
+
+      <div className="max-h-[60vh] overflow-y-auto" data-id="dept-table-scroll">
+        <TableCard>
+          <thead>
+            <tr className={ADMIN_HEAD_ROW}>
+              <th className={ADMIN_TH}>{t("perm.sysadmin.deptColName")}</th>
+              <th className={ADMIN_TH}>{t("admin.deptKrCol")}</th>
+              {/* org 미보기 시 인원수 열 / member-count column when org view is off */}
+              {!showOrg && <th className={ADMIN_TH}>{t("perm.sysadmin.deptColCount")}</th>}
+              {showOrg &&
+                orgColIndices.map((i) => (
+                  <th key={i} className={ADMIN_TH}>
+                    {t("perm.sysadmin.deptOrgCol", { n: String(i + 1) })}
+                  </th>
+                ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((dept, idx) => {
+              const members = getDeptMembers(users, dept.org_levels);
+              return (
+                <tr key={idx} className={ADMIN_ROW} data-id="dept-row">
+                  <td className={ADMIN_TD}>{dept.name}</td>
+                  {/* 임포트된 한글 부서명 — dept_info 조인값 (직원 집계 필은 폐기, 2026-07-09) */}
+                  <td className={ADMIN_TD} data-id="dept-kr-cell">{dept.korean_name}</td>
+                  {!showOrg && (
+                    <td className={ADMIN_TD}>
+                      <RosterHover members={members} count={members.length} />
+                    </td>
+                  )}
+                  {showOrg &&
+                    orgColIndices.map((i) => (
+                      <td key={i} className={`${ADMIN_TD} text-ink-tertiary`}>
+                        {dept.org_levels[i] ?? ""}
+                      </td>
+                    ))}
+                </tr>
+              );
+            })}
+            {hasMore && (
+              <tr ref={sentinelRef}>
+                <td className={ADMIN_TD} colSpan={colCount} />
+              </tr>
+            )}
+          </tbody>
+        </TableCard>
+      </div>
     </div>
   );
 }

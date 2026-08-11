@@ -1058,26 +1058,6 @@ class EmployeeOut(BaseModel):
     is_sysadmin: bool = False
 
 
-class KoreanNameEntryIn(BaseModel):
-    """임포트 항목 — 이름 필수, 그룹(dept) 선택. max_length 200 = VARCHAR(200) 초과 DataError 방지."""
-
-    name: Annotated[str, StringConstraints(max_length=200)]
-    dept: Annotated[str, StringConstraints(max_length=200)] = ""
-
-
-class KoreanNamesImportIn(BaseModel):
-    """한글이름 일괄 등록 — mode: skip(기존 값 보유 유저 건너뜀) | overwrite(덮어씀)."""
-
-    mode: Literal["skip", "overwrite"]
-    entries: dict[str, KoreanNameEntryIn]
-
-
-class KoreanNamesImportOut(BaseModel):
-    updated: int
-    skipped: int
-    unknown: list[str]
-
-
 class SyncSummaryOut(BaseModel):
     """HR 전체 동기화 요약 (design 2026-08-10 §5-9). aborted_reason 있으면 DB 무변경 중단."""
 
@@ -1089,8 +1069,9 @@ class SyncSummaryOut(BaseModel):
     org_mismatches: int
     truncated_levels: int
     departments_upserted: int
-    dept_info_orphans: list[str]
     title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
     aborted_reason: str | None = None
 
 
@@ -1109,7 +1090,6 @@ class HrSyncPreviewOut(BaseModel):
     delete_login_ids: list[str]
     case_mismatches: list[str]
     orphan_dept_paths: list[str]
-    dept_info_orphans: list[str]
 
 
 # ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
@@ -1133,26 +1113,7 @@ class AdminDeptOut(BaseModel):
 
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
-    korean_name: str = ""  # dept_info 조인 — 어드민 임포트 전용 (2026-07-09)
-    manager: str = ""
-
-
-class DeptInfoEntryIn(BaseModel):
-    """부서 임포트 항목 — 빈 필드는 미기입(기존 보존). max_length 200 = VARCHAR(200) 초과 방지."""
-
-    korean_name: Annotated[str, StringConstraints(max_length=200)] = ""
-    manager: Annotated[str, StringConstraints(max_length=200)] = ""
-
-
-class DeptInfoImportIn(BaseModel):
-    """부서 한글명·부서장 일괄 등록 — 키는 영문 부서명(리프), 비어있지 않은 필드만 덮어씀."""
-
-    entries: dict[str, DeptInfoEntryIn]
-
-
-class DeptInfoImportOut(BaseModel):
-    updated: int
-    unknown: list[str]  # 현존 부서와 매칭 실패한 부서명
+    korean_name: str = ""  # departments.name_ko (2026-08-11 dept_info→departments 전환)
 
 
 class DeptRemapItemOut(BaseModel):
@@ -1193,6 +1154,7 @@ class DirectoryUserOut(BaseModel):
     role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
     korean_name: str = ""  # 멤버 카드 한/영 토글용
     korean_dept: str = ""  # 담당자 피커 한글 부서 검색용
+    position: str = ""  # 노출 직책(allowlist 필터, 아니면 빈 문자열) — 멤버 카드 title 병기 (설계 2026-08-11 §5·§6)
 
 
 class EligibleApproverOut(DirectoryUserOut):
@@ -1206,8 +1168,7 @@ class DirectoryDeptOut(BaseModel):
 
     id: str       # org_path ("l1/l2/l3" or leaf segment)
     name: str     # leaf segment (display label)
-    korean_name: str = ""  # dept_info 조인(리프명 키) — 피커 한/영 표시·검색 (2026-07-09)
-    manager: str = ""
+    korean_name: str = ""  # departments.name_ko(리프명 키) — 피커 한/영 표시·검색 (2026-08-11 dept_info→departments 전환)
 
 
 class DirectoryOut(BaseModel):
@@ -1219,7 +1180,6 @@ class DeptInfoValueOut(BaseModel):
     """부서 부가정보 값 — dept_infos 맵 원소 (키는 영문 부서명)."""
 
     korean_name: str = ""
-    manager: str = ""
 
 
 class EligibleAssigneesOut(BaseModel):
@@ -1227,7 +1187,7 @@ class EligibleAssigneesOut(BaseModel):
 
     users: list[DirectoryUserOut]
     departments: list[str]
-    # 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
+    # 부서명 → 한글 부서명 (departments.name_ko 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
     dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
@@ -1237,7 +1197,7 @@ AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
 class AppSettingsOut(BaseModel):
-    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한."""
+    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한 + 노출 직책 allowlist."""
 
     ai_chat_tips: list[str]
     ai_chat_max_sessions_per_map: int
@@ -1245,6 +1205,10 @@ class AppSettingsOut(BaseModel):
     ai_chat_retention_days: int
     # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
     ai_access_disabled: bool = False
+    # 부서장으로 노출할 EDW 직책(FRNM) allowlist — /api/me manager_ids 산출 기준 (설계 2026-08-11 §5)
+    exposed_positions: list[str] = []
+    # employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
+    available_positions: list[str] = []
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -1257,6 +1221,8 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
     ai_access_disabled: bool | None = None
+    # 빈 목록 저장 = 전부 비노출(get_exposed_positions가 기본값으로 되돌리지 않음)
+    exposed_positions: list[str] | None = Field(default=None, max_length=50)
 
 
 class AiPromptOut(BaseModel):

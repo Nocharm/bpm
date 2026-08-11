@@ -9,9 +9,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.app_settings import get_exposed_positions
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import DeptInfo, Employee
+from app.models import Employee
+from app.orgchart import load_dept_index, resolve_org_path, resolve_org_prefixes
 from app.schemas import DirectoryDeptOut, DirectoryOut, DirectoryUserOut
 
 router = APIRouter(prefix="/api/directory", tags=["directory"])
@@ -34,45 +36,40 @@ async def get_directory(
         )
     ).all()
 
+    dept_index = await load_dept_index(session)
+    exposed = set(await get_exposed_positions(session))
+    # 직원별 조직 경로 — resolver(departments 체인 우선, org 컬럼 폴백) 1회씩 (design 2026-08-11 §2)
+    org_paths = {emp.login_id: resolve_org_path(emp, dept_index) for emp in rows}
+
     users = [
         DirectoryUserOut(
             id=emp.login_id,
             name=emp.name,
             department=emp.department,
             title=emp.title,
-            org_path="/".join(
-                lv
-                for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5)
-                if lv is not None
-            ),
+            org_path=org_paths[emp.login_id],
             role=emp.role,
             korean_name=emp.korean_name,
             korean_dept=emp.korean_dept,
+            position=emp.position if emp.position and emp.position in exposed else "",
         )
         for emp in rows
     ]
 
-    # 각 직원의 org 레벨에서 "/" 구분 프리픽스를 모두 수집 (l1, l1/l2, l1/l2/l3, …).
-    # org_path(l1,l2,l3,l4,l5, dept) 규약을 그대로 따르되, 각 깊이별 슬라이스를 직접 조합.
+    # 각 직원의 조직 경로에서 "/" 구분 프리픽스를 모두 수집 (l1, l1/l2, l1/l2/l3, …).
     # Collect all "/"-joined org-level prefixes at each depth per employee.
     seen_paths: set[str] = set()
-    for emp in rows:
-        levels = [lv for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5) if lv is not None]
-        for i in range(1, len(levels) + 1):
-            seen_paths.add("/".join(levels[:i]))
+    for path in org_paths.values():
+        seen_paths.update(resolve_org_prefixes(path))
 
-    # dept_info 조인 — 리프 세그먼트명 키 (피커 한/영 표시·한글명/부서장 검색)
-    infos = {d.department: d for d in (await session.scalars(select(DeptInfo))).all()}
     departments = []
     for path in sorted(seen_paths):
         leaf = path.split("/")[-1]  # 리프 세그먼트를 표시명으로 / leaf segment as label
-        info = infos.get(leaf)
         departments.append(
             DirectoryDeptOut(
                 id=path,
                 name=leaf,
-                korean_name=info.korean_name if info else "",
-                manager=info.manager if info else "",
+                korean_name=dept_index.name_ko_by_name.get(leaf, ""),
             )
         )
 

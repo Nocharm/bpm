@@ -160,22 +160,16 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
     }
   }
 
-  // 피커용 부서 어댑터 — create-map-dialog.tsx:117-132와 동일한 변환(부서만 필요, users는 생략).
-  const userById = new Map(dirUsers.map((u) => [u.id, u]));
-  const pickerDepts: Department[] = dirDepts.map((d) => {
-    const head = d.manager ? userById.get(d.manager) : undefined;
-    const managerKeywords = [d.manager, head?.name, head?.korean_name].filter(Boolean).join(" ");
-    return {
-      id: d.id,
-      code: "",
-      name: d.name,
-      orgLevels: [],
-      parentId: null,
-      rawDn: "",
-      korean_name: d.korean_name,
-      manager: managerKeywords,
-    };
-  });
+  // 피커용 부서 어댑터 — create-map-dialog.tsx와 동일한 변환(부서만 필요, users는 생략).
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+    korean_name: d.korean_name,
+  }));
   const koreanByPath = buildKoreanDeptByPath(dirDepts, dirUsers);
 
   return (

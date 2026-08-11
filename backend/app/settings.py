@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     # 사내 n8n HR 웹훅 — 사용자·조직도 단일 소스 (design 2026-08-10). 둘 다 비우면 비활성.
     n8n_hr_url: str = ""  # 예: http://<n8n-host>:5678/webhook/hr-dept
     n8n_hr_token: str = ""  # X-API-Key 시크릿 (.env만)
+    n8n_position_url: str = ""  # EDW 부서장 직책(FRNM) 웹훅 — 토큰은 n8n_hr_token 공용 (설계 2026-08-11 §4)
     hr_sync_interval_hours: int = 24  # 내장 스케줄러 주기(시간). 0 = off
     hr_sync_delete_cap_pct: int = 20  # 전체 동기화 삭제 상한(% of 배치 관리 행). 0 = 가드 off
 
@@ -87,6 +88,11 @@ class Settings(BaseSettings):
     def hr_enabled(self) -> bool:
         """HR 웹훅 동기화 활성 여부 — URL·토큰이 모두 설정된 경우만."""
         return bool(self.n8n_hr_url and self.n8n_hr_token)
+
+    @property
+    def position_enabled(self) -> bool:
+        """EDW 직책 수집 활성 — URL과 HR 토큰(공용) 둘 다 필요."""
+        return bool(self.n8n_position_url and self.n8n_hr_token)
 
     def admin_login_ids(self) -> set[str]:
         return {x.strip() for x in self.system_admin_login_ids.split(",") if x.strip()}

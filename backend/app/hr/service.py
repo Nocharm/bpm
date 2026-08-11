@@ -1,7 +1,7 @@
 """HR 웹훅 동기화 서비스 — 전체/단건 동기화·부서 미러·이행 프리뷰.
 
 설계: docs/design/2026-08-10-hr-webhook-directory-design.md §4~§6·§9.
-title은 절대 건드리지 않는다 — AD title 패스(app/ad/service.refresh_titles) 전용.
+title은 절대 건드리지 않는다 — AD title 패스(app/ad/service.refresh_titles_and_positions) 전용.
 """
 
 import logging
@@ -15,7 +15,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.hr import client
 from app.hr.client import RawHrEmployee
-from app.models import Department, DeptInfo, Employee, MapPermission, ProcessMap, UserGroupMember
+from app.models import Department, Employee, MapPermission, ProcessMap, UserGroupMember
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -96,8 +96,9 @@ class HrSyncSummary:
     org_mismatches: int = 0
     truncated_levels: int = 0
     departments_upserted: int = 0
-    dept_info_orphans: list[str] = field(default_factory=list)
     title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
     aborted_reason: str | None = None
 
 
@@ -181,23 +182,33 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
         await workflow.reconcile_departures(session, departed)
 
     departments_upserted = await _mirror_departments(session)
-    dept_info_orphans = await _find_dept_info_orphans(session)
     await session.commit()
 
     title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
     if settings.ldap_enabled:
+        positions: list[client.RawHrPosition] = []
+        if settings.position_enabled:
+            try:
+                positions = await client.fetch_positions()
+            except Exception:  # noqa: BLE001 -- EDW 실패 시 title만 갱신 (설계 §4-2)
+                logger.exception("EDW positions fetch failed — proceeding with title-only AD pass")
         try:
-            from app.ad.service import refresh_titles  # Task 6 신설 — 지연 import(LDAP 미설정 환경 무부하)
+            from app.ad.service import refresh_titles_and_positions  # 지연 import(LDAP 미설정 무부하)
 
-            title_refreshed = await refresh_titles(session)
-        except Exception:  # noqa: BLE001 -- title 패스 실패가 sync 자체를 깨면 안 됨 (§5-7)
-            logger.exception("AD title refresh failed — HR sync itself succeeded")
+            title_refreshed, position_refreshed, position_unmatched = (
+                await refresh_titles_and_positions(session, positions)
+            )
+        except Exception:  # noqa: BLE001 -- AD 패스 실패가 sync 자체를 깨면 안 됨 (§5-7)
+            logger.exception("AD title/position refresh failed — HR sync itself succeeded")
 
     return HrSyncSummary(
         scanned=scanned, upserted=len(fields_by_id), deactivated=len(deactivated_now),
         deleted=len(delete_ids), skipped=skipped, org_mismatches=org_mismatches,
         truncated_levels=truncated_levels, departments_upserted=departments_upserted,
-        dept_info_orphans=dept_info_orphans, title_refreshed=title_refreshed,
+        title_refreshed=title_refreshed,
+        position_refreshed=position_refreshed, position_unmatched=position_unmatched,
     )
 
 
@@ -222,17 +233,6 @@ async def _mirror_departments(session: AsyncSession) -> int:
         for chunk in _chunks(sorted(existing_codes - seen), _DELETE_CHUNK):
             await session.execute(delete(Department).where(Department.dept_code.in_(chunk)))
     return len(seen)
-
-
-async def _find_dept_info_orphans(session: AsyncSession) -> list[str]:
-    """dept_info 키 중 현 조직(업서트 반영 후 employees org 전 레벨 ∪ department)에 없는 것 — 리포트만 (§5-6)."""
-    rows = await session.execute(
-        select(Employee.org_l1, Employee.org_l2, Employee.org_l3,
-               Employee.org_l4, Employee.org_l5, Employee.department).distinct()
-    )
-    known = {name for row in rows for name in row if name}
-    info_keys = set((await session.scalars(select(DeptInfo.department))).all())
-    return sorted(info_keys - known)
 
 
 # 전체 동기화 5분 가드 — 인메모리(단일 컨테이너 전제, AD 시절과 동일 규약)
@@ -299,7 +299,6 @@ class HrSyncPreview:
     delete_login_ids: list[str] = field(default_factory=list)
     case_mismatches: list[str] = field(default_factory=list)
     orphan_dept_paths: list[str] = field(default_factory=list)
-    dept_info_orphans: list[str] = field(default_factory=list)
 
 
 async def build_sync_preview(session: AsyncSession) -> HrSyncPreview:
@@ -378,5 +377,4 @@ async def build_sync_preview(session: AsyncSession) -> HrSyncPreview:
         delete_login_ids=delete_ids[:_PREVIEW_SAMPLE_CAP],
         case_mismatches=case_mismatches[:_PREVIEW_SAMPLE_CAP],
         orphan_dept_paths=sorted(referenced - valid_paths)[:_PREVIEW_SAMPLE_CAP],
-        dept_info_orphans=(await _find_dept_info_orphans(session))[:_PREVIEW_SAMPLE_CAP],
     )

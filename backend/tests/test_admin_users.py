@@ -1,11 +1,14 @@
 """GET /api/admin/users — sysadmin-gated admin console directory (Layer 4 Task 0b)."""
 
+import asyncio
 from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
 from app.main import app
+from app.models import Department
 from app.settings import settings
 
 SYSADMIN = "admin.kim"
@@ -70,3 +73,33 @@ def test_admin_users_non_sysadmin_403(
     """non-sysadmin → 403."""
     res = client.get("/api/admin/users", headers={"X-Dev-User": NON_SYSADMIN})
     assert res.status_code == 403
+
+
+def test_admin_users_departments_korean_name_from_departments(
+    client: TestClient, sysadmin_enforced: None
+) -> None:
+    """부서 한글명은 departments.name_ko 소스, manager 필드는 부재 (2026-08-11 dept_info→departments 전환)."""
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            await session.merge(
+                Department(dept_code="ADMU-D1", name="Sourcing Team 1", name_ko="구매1팀")
+            )
+            await session.commit()
+
+    asyncio.run(_seed())
+    res = client.get("/api/admin/users", headers={"X-Dev-User": SYSADMIN})
+    assert res.status_code == 200
+    depts = {d["name"]: d for d in res.json()["departments"]}
+    assert depts["Sourcing Team 1"]["korean_name"] == "구매1팀"
+    assert "manager" not in depts["Sourcing Team 1"]
+
+
+def test_admin_dept_info_import_route_removed(client: TestClient) -> None:
+    """PUT /api/admin/dept-info — 임포트 API 제거 확인 (dept_info→departments 전환)."""
+    res = client.put(
+        "/api/admin/dept-info",
+        headers={"X-Dev-User": SYSADMIN},
+        json={"entries": {}},
+    )
+    assert res.status_code == 404

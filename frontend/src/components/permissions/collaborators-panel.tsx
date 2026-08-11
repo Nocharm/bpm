@@ -224,7 +224,6 @@ function AddCollaboratorForm({
     parentId: null,
     rawDn: "",
     korean_name: d.korean_name,
-    manager: d.manager,
   }));
 
   return (

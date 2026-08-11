@@ -17,7 +17,7 @@ def test_sync_endpoint_returns_new_summary_and_guard(client: TestClient, monkeyp
     assert res.status_code == 200
     body = res.json()
     assert body["upserted"] == 1 and body["skipped"] == 1
-    assert "dept_info_orphans" in body and body["aborted_reason"] is None
+    assert body["aborted_reason"] is None
     assert client.post("/api/employees/sync", headers={"X-Dev-User": "admin.kim"}).status_code == 429
 
 

@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import DeptInfo, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import Department, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -245,7 +245,8 @@ def test_eligible_assignees_includes_korean_fields(client: TestClient, enforce: 
 
 
 def test_eligible_assignees_includes_dept_infos(client: TestClient, enforce: None) -> None:
-    """담당자 응답에 dept_infos(한글 부서명·부서장) 맵 전달 — 부서 피커 검색·한/영 표시용."""
+    """담당자 응답에 dept_infos(한글 부서명) 맵 전달 — 부서 피커 검색·한/영 표시용
+    (2026-08-11 dept_info→departments 전환)."""
     map_id = seed_map(
         visibility="private",
         grants=[("user", "owner.u", "owner"), ("user", "user.lee", "viewer")],
@@ -256,7 +257,7 @@ def test_eligible_assignees_includes_dept_infos(client: TestClient, enforce: Non
         async with SessionLocal() as session:
             emp = await session.get(Employee, "user.lee")
             dept = emp.department
-            await session.merge(DeptInfo(department=dept, korean_name="소싱1팀", manager="mgr.kim"))
+            await session.merge(Department(dept_code="EAINFO-D1", name=dept, name_ko="소싱1팀"))
             await session.commit()
             return dept
 
@@ -266,7 +267,7 @@ def test_eligible_assignees_includes_dept_infos(client: TestClient, enforce: Non
     assert res.status_code == 200
     body = res.json()
     assert dept in body["departments"]
-    assert body["dept_infos"][dept] == {"korean_name": "소싱1팀", "manager": "mgr.kim"}
+    assert body["dept_infos"][dept] == {"korean_name": "소싱1팀"}
 
 
 def test_eligible_approvers_includes_korean_name(client: TestClient, enforce: None) -> None:

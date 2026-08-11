@@ -683,8 +683,8 @@ describe("toCsvDirectory", () => {
       { id: "lee.yh", name: "이영희", department: "Finance Part" },
     ],
     departments: [
-      { id: "HQ/Quality Office/Quality Part 1", name: "Quality Part 1", korean_name: "품질1파트", manager: "hong.gd" },
-      { id: "HQ/Finance Part", name: "Finance Part", korean_name: "", manager: "" },
+      { id: "HQ/Quality Office/Quality Part 1", name: "Quality Part 1", korean_name: "품질1파트" },
+      { id: "HQ/Finance Part", name: "Finance Part", korean_name: "" },
     ],
   };
 
