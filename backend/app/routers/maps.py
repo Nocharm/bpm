@@ -14,6 +14,7 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
     assert_map_role,
@@ -232,9 +233,7 @@ async def list_maps(
 
     emp = await session.get(Employee, user)
     emp_org_path = (
-        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-        if emp is not None
-        else ""
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
     )
     # 사용자에게 걸린 권한 행 전체(맵별로 묶어 메모리 판정)
     perm_rows = (
@@ -429,15 +428,14 @@ async def list_eligible_approvers(
 ) -> list[EligibleApproverOut]:
     """승인자 지정 후보 — 맵 조회권한(viewer+) 보유 직원만 (AP). 담당자 후보와 동일 자격."""
     eligible = await get_eligible_users(session, map_id)
+    dept_index = await load_dept_index(session)  # 다수 루프 — 인덱스 1회 로드 후 재사용
     return [
         EligibleApproverOut(
             id=e.login_id,
             name=e.name or e.login_id,
             department=e.department or "",
             # 소속 경로(센터/부서/팀/그룹/파트) — 승인자 카드 표시용 (ST)
-            org_path=logic.org_path(
-                e.org_l1, e.org_l2, e.org_l3, e.org_l4, e.org_l5, e.department or ""
-            ),
+            org_path=resolve_org_path(e, dept_index),
             korean_name=e.korean_name,
             korean_dept=e.korean_dept,
         )
@@ -505,10 +503,9 @@ async def list_editors(
             all_emps = list(
                 (await session.scalars(select(Employee).where(Employee.active.is_(True)))).all()
             )
+            dept_index = await load_dept_index(session)  # 다수 루프 — 인덱스 1회 로드 후 재사용
             for emp in all_emps:
-                org = logic.org_path(
-                    emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department or ""
-                )
+                org = resolve_org_path(emp, dept_index)
                 if any(logic.belongs_to_department(org, d) for d in dept_patterns):
                     login_ids.add(emp.login_id)
 

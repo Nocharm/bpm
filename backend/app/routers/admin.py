@@ -14,6 +14,7 @@ from app.auth import get_current_user
 from app.clock import KST
 from app.db import get_session
 from app.models import Base, DeptInfo, Employee, MapPermission, Notification, UserGroupMember
+from app.orgchart import load_dept_index, resolve_org_path, resolve_org_prefixes
 from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
@@ -52,14 +53,17 @@ async def get_admin_users(
         raise HTTPException(status_code=403, detail="sysadmin required")
 
     rows = (await session.scalars(select(Employee).order_by(Employee.login_id))).all()
+    dept_index = await load_dept_index(session)
 
     users: list[AdminUserOut] = []
     # Track distinct leaf org-paths for department list.
-    # Key = tuple of non-null levels (unique leaf path); value = list[str] of levels.
+    # Key = tuple of levels (unique leaf path); value = list[str] of levels.
     seen_leaves: dict[tuple[str, ...], list[str]] = {}
 
     for emp in rows:
-        levels = [lv for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5) if lv is not None]
+        # resolver 경로(departments 체인 우선, org 컬럼 폴백) → 세그먼트 리스트. 빈 경로는 [] (design 2026-08-11 §3)
+        path = resolve_org_path(emp, dept_index)
+        levels = path.split("/") if path else []
         users.append(
             AdminUserOut(
                 login_id=emp.login_id,
@@ -78,18 +82,14 @@ async def get_admin_users(
             if key not in seen_leaves:
                 seen_leaves[key] = levels
 
-    # dept_info 조인 — 임포트된 한글 부서명·부서장 (리프명 키)
-    infos = {d.department: d for d in (await session.scalars(select(DeptInfo))).all()}
     departments = []
     for levels in sorted(seen_leaves.values(), key=lambda lv: lv):
         leaf = levels[-1] if levels else ""
-        info = infos.get(leaf)
         departments.append(
             AdminDeptOut(
                 name=leaf,
                 org_levels=levels,
-                korean_name=info.korean_name if info else "",
-                manager=info.manager if info else "",
+                korean_name=dept_index.name_ko_by_name.get(leaf, ""),
             )
         )
 
@@ -104,16 +104,11 @@ def _require_sysadmin(login_id: str) -> None:
 
 async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
     """현 employees org 레벨에서 파생되는 모든 경로 프리픽스 — /api/directory 파생과 동일 규약."""
-    rows = (
-        await session.execute(
-            select(Employee.org_l1, Employee.org_l2, Employee.org_l3, Employee.org_l4, Employee.org_l5)
-        )
-    ).all()
+    rows = (await session.scalars(select(Employee))).all()
+    dept_index = await load_dept_index(session)
     paths: set[str] = set()
-    for level_row in rows:
-        levels = [lv for lv in level_row if lv is not None]
-        for i in range(1, len(levels) + 1):
-            paths.add("/".join(levels[:i]))
+    for emp in rows:
+        paths.update(resolve_org_prefixes(resolve_org_path(emp, dept_index)))
     return paths
 
 

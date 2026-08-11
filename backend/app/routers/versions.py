@@ -14,12 +14,12 @@ from app.version_events import record_version_event
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.kb import embed_client, indexing
+from app.orgchart import load_dept_index
 from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
     CheckoutRequest,
-    DeptInfo,
     Edge,
     Group,
     MapVersion,
@@ -226,13 +226,12 @@ async def list_eligible_assignees(
         for e in eligible
     ]
     departments = sorted({e.department for e in eligible if e.department})
-    # 부서 부가정보(한글 부서명·부서장) — 후보 부서 중 dept_info 보유 행만 (셀렉트 검색·한/영 표시)
-    info_rows = (
-        await session.scalars(select(DeptInfo).where(DeptInfo.department.in_(departments)))
-    ).all()
+    # 부서 한글명 — 후보 부서 중 departments.name_ko 보유 행만 (셀렉트 검색·한/영 표시)
+    name_ko_by_name = (await load_dept_index(session)).name_ko_by_name
     dept_infos = {
-        d.department: DeptInfoValueOut(korean_name=d.korean_name, manager=d.manager)
-        for d in info_rows
+        name: DeptInfoValueOut(korean_name=name_ko_by_name[name])
+        for name in departments
+        if name in name_ko_by_name
     }
     return EligibleAssigneesOut(users=users, departments=departments, dept_infos=dept_infos)
 

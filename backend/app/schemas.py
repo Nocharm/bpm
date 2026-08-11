@@ -1135,8 +1135,7 @@ class AdminDeptOut(BaseModel):
 
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
-    korean_name: str = ""  # dept_info 조인 — 어드민 임포트 전용 (2026-07-09)
-    manager: str = ""
+    korean_name: str = ""  # departments.name_ko (2026-08-11 dept_info→departments 전환)
 
 
 class DeptInfoEntryIn(BaseModel):
@@ -1195,6 +1194,7 @@ class DirectoryUserOut(BaseModel):
     role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
     korean_name: str = ""  # 멤버 카드 한/영 토글용
     korean_dept: str = ""  # 담당자 피커 한글 부서 검색용
+    position: str = ""  # 노출 직책(allowlist 필터, 아니면 빈 문자열) — 멤버 카드 title 병기 (설계 2026-08-11 §5·§6)
 
 
 class EligibleApproverOut(DirectoryUserOut):
@@ -1208,8 +1208,7 @@ class DirectoryDeptOut(BaseModel):
 
     id: str       # org_path ("l1/l2/l3" or leaf segment)
     name: str     # leaf segment (display label)
-    korean_name: str = ""  # dept_info 조인(리프명 키) — 피커 한/영 표시·검색 (2026-07-09)
-    manager: str = ""
+    korean_name: str = ""  # departments.name_ko(리프명 키) — 피커 한/영 표시·검색 (2026-08-11 dept_info→departments 전환)
 
 
 class DirectoryOut(BaseModel):
@@ -1221,7 +1220,6 @@ class DeptInfoValueOut(BaseModel):
     """부서 부가정보 값 — dept_infos 맵 원소 (키는 영문 부서명)."""
 
     korean_name: str = ""
-    manager: str = ""
 
 
 class EligibleAssigneesOut(BaseModel):
@@ -1229,7 +1227,7 @@ class EligibleAssigneesOut(BaseModel):
 
     users: list[DirectoryUserOut]
     departments: list[str]
-    # 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
+    # 부서명 → 한글 부서명 (departments.name_ko 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
     dept_infos: dict[str, DeptInfoValueOut] = {}
 
 

@@ -172,7 +172,7 @@ def test_inactive_approver_does_not_count_toward_submit(
 
 def test_directory_response_excludes_sensitive_fields(client: TestClient) -> None:
     """GET /api/directory users carry only display fields
-    (id/name/department/title/org_path/role/korean_name/korean_dept)
+    (id/name/department/title/org_path/role/korean_name/korean_dept/position)
     for the member 2nd line (H2) — never email/active."""
     resp = client.get("/api/directory")
     assert resp.status_code == 200, resp.text
@@ -189,6 +189,7 @@ def test_directory_response_excludes_sensitive_fields(client: TestClient) -> Non
         "role",
         "korean_name",
         "korean_dept",
+        "position",
     }
     for user in users:
         extra = set(user.keys()) - allowed_keys

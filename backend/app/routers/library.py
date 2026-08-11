@@ -8,6 +8,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.duration import normalize_duration
 from app.models import Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.logic import role_rank
@@ -33,9 +34,7 @@ async def _filter_visible_map_ids(
         return {mid for mid, _, _ in candidates}
     emp = await session.get(Employee, user)
     emp_org_path = (
-        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-        if emp is not None
-        else ""
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
     )
     perm_rows = (
         await session.execute(

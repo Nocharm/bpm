@@ -5,7 +5,7 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
-from app.models import DeptInfo, Employee
+from app.models import Department, Employee
 
 
 def test_directory_accessible_by_non_admin(client: TestClient) -> None:
@@ -81,13 +81,14 @@ def test_directory_includes_korean_dept(client: TestClient) -> None:
     assert by_id["user.lee"]["korean_dept"] == "소싱1팀"
 
 
-def test_directory_departments_include_dept_info(client: TestClient) -> None:
-    """피커 부서 검색·한/영 표시용 — 부서 항목에 dept_info(한글 부서명·부서장) 조인."""
+def test_directory_departments_include_departments_korean_name(client: TestClient) -> None:
+    """피커 부서 검색·한/영 표시용 — 부서 항목의 한글명은 departments.name_ko 소스
+    (2026-08-11 dept_info→departments 전환), manager 필드는 부재."""
 
     async def _run() -> None:
         async with SessionLocal() as session:
             await session.merge(
-                DeptInfo(department="Sourcing Team 1", korean_name="구매1팀", manager="hong.gildong")
+                Department(dept_code="DIRTEST-D1", name="Sourcing Team 1", name_ko="구매1팀")
             )
             await session.commit()
 
@@ -96,7 +97,25 @@ def test_directory_departments_include_dept_info(client: TestClient) -> None:
     assert res.status_code == 200
     depts = {d["name"]: d for d in res.json()["departments"]}
     assert depts["Sourcing Team 1"]["korean_name"] == "구매1팀"
-    assert depts["Sourcing Team 1"]["manager"] == "hong.gildong"
-    # dept_info 행이 없는 부서는 빈 문자열 기본값 (상위 프리픽스도 임포트 대상이라 미임포트 부서로 확인)
+    assert "manager" not in depts["Sourcing Team 1"]
+    # departments 행이 없는 부서는 빈 문자열 기본값 (미시드 부서로 확인)
     assert depts["Procurement Office"]["korean_name"] == ""
-    assert depts["Procurement Office"]["manager"] == ""
+
+
+def test_directory_position_exposed_only_when_allowlisted(client: TestClient) -> None:
+    """position은 노출 직책 allowlist에 든 값만 직렬화, 아니면 빈 문자열 (설계 2026-08-11 §5·§6)."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "user.lee")
+            emp.position = "팀장"  # 기본 allowlist(그룹장/파트장/팀장/센터장) 포함
+            emp2 = await session.get(Employee, "admin.kim")
+            emp2.position = "사원"  # 기본 allowlist 밖
+            await session.commit()
+
+    asyncio.run(_run())
+    res = client.get("/api/directory", headers={"X-Dev-User": "admin.kim"})
+    assert res.status_code == 200
+    by_id = {u["id"]: u for u in res.json()["users"]}
+    assert by_id["user.lee"]["position"] == "팀장"
+    assert by_id["admin.kim"]["position"] == ""

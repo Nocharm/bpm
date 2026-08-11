@@ -21,6 +21,7 @@ from app.models import (
     UserGroupMember,
     _now,
 )
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
 from app.permissions.deps import assert_group_manager_or_sysadmin
 from app.schemas import (
@@ -120,7 +121,7 @@ async def _emp_org_path(session: AsyncSession, user: str) -> str:
     emp = await session.get(Employee, user)
     if emp is None:
         return ""
-    return logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
+    return resolve_org_path(emp, await load_dept_index(session))
 
 
 def _belongs(group: GroupOut, user: str, emp_org_path: str) -> bool:
