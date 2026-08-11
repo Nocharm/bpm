@@ -79,7 +79,9 @@ async def get_admin_users(
                 korean_dept=emp.korean_dept,
             )
         )
-        if levels:
+        # 부서 목록은 active 직원 경로만 — 퇴사자는 부서 정보가 갱신되지 않아 스테일 경로
+        # (미러에서 사라진 dept_code·구 org 컬럼)가 트리 밖 고아 노드로 샌다 (2026-08 9910 적발)
+        if levels and emp.active:
             key = tuple(levels)
             if key not in seen_leaves:
                 seen_leaves[key] = levels
