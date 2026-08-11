@@ -23,8 +23,6 @@ export interface PrincipalOption {
   department?: string;
   /** 한글명 — 유저는 korean_name, 부서는 dept_info 확정 한글 부서명. 표시 토글·검색 겸용 */
   koreanName?: string;
-  /** 부서 항목 전용 — 부서장(검색 키워드, 표시 없음) */
-  manager?: string;
   /** 부서 항목 전용 — 소속 유저들의 distinct 한글부서(검색 키워드) */
   koreanKeywords?: string[];
 }
@@ -70,7 +68,6 @@ function buildOptions(
     principalId: d.id,
     displayName: d.name,
     koreanName: d.korean_name ?? "",
-    manager: d.manager ?? "",
     koreanKeywords: deptKoreanKeywords?.get(d.id) ?? [],
   }));
   const groupOpts: PrincipalOption[] = groups
@@ -154,7 +151,6 @@ export function PrincipalPicker({
           : [
               { field: "name", text: o.displayName },
               ...(o.koreanName ? [{ field: "koreanName", text: o.koreanName }] : []),
-              ...(o.manager ? [{ field: "manager", text: o.manager }] : []),
               ...(o.koreanKeywords ?? []).map((k) => ({ field: "koreanDept", text: k })),
             ],
       )

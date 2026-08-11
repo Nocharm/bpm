@@ -304,8 +304,8 @@ export interface EligibleAssignees {
     korean_dept?: string;
   }[];
   departments: string[];
-  // 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시
-  dept_infos?: Record<string, { korean_name?: string; manager?: string }>;
+  // 부서명 → 한글 부서명 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시
+  dept_infos?: Record<string, { korean_name?: string }>;
 }
 export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
   return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
@@ -728,29 +728,14 @@ export interface SyncSummary {
   org_mismatches: number;
   truncated_levels: number;
   departments_upserted: number;
-  dept_info_orphans: string[];
   title_refreshed: number | null;
+  position_refreshed: number | null;
+  position_unmatched: number | null;
   aborted_reason: string | null;
 }
 
 export function syncEmployees(): Promise<SyncSummary> {
   return request<SyncSummary>("/employees/sync", { method: "POST" });
-}
-
-export interface KoreanNamesImportSummary {
-  updated: number;
-  skipped: number;
-  unknown: string[];
-}
-
-export function importKoreanNames(
-  mode: "skip" | "overwrite",
-  entries: Record<string, { name: string; dept: string }>,
-): Promise<KoreanNamesImportSummary> {
-  return request<KoreanNamesImportSummary>("/employees/korean-names", {
-    method: "PUT",
-    body: JSON.stringify({ mode, entries }),
-  });
 }
 
 // ── 어드민 테이블 뷰어 (sysadmin 전용, 읽기전용) / Admin table viewer ──
@@ -1027,6 +1012,10 @@ export interface AppSettings {
   ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
   ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
   ai_access_disabled: boolean; // 관리자 런타임 AI 차단 — GPU 서버 점검용 (2026-07-30)
+  // 부서장으로 노출할 EDW 직책(FRNM) allowlist — /me manager_ids 산출 기준 (design 2026-08-11 §5)
+  exposed_positions: string[];
+  // employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
+  available_positions: string[];
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -1042,6 +1031,7 @@ export function putAppSettings(patch: {
   ai_chat_max_messages_per_session?: number;
   ai_chat_retention_days?: number;
   ai_access_disabled?: boolean;
+  exposed_positions?: string[];
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",
@@ -1296,13 +1286,13 @@ export interface DirectoryUser {
   role?: string;     // admin | user — 로컬 로그인 피커 관리자 식별
   korean_name?: string; // 한글 이름 — 서버 기본 "" (member-card design 2026-07-09)
   korean_dept?: string; // 한글 부서명 — 피커 검색 키워드 파생 (picker-korean-search design 2026-07-09)
+  position?: string; // 노출 직책(exposed_positions allowlist로 서버가 필터) (design 2026-08-11 §5)
 }
 
 export interface DirectoryDept {
   id: string;        // org_path string (e.g. "Management Support Division/Procurement Office")
   name: string;      // leaf segment
   korean_name: string; // dept_info 조인(리프명 키) — 없으면 ""
-  manager: string;
 }
 
 export interface Directory {
@@ -1482,12 +1472,6 @@ export interface AdminDept {
   name: string;        // leaf segment
   org_levels: string[];
   korean_name: string; // dept_info 임포트값 — 없으면 ""
-  manager: string;
-}
-
-export interface DeptInfoImportSummary {
-  updated: number;
-  unknown: string[];
 }
 
 export interface DeptRemapItem {
@@ -1509,16 +1493,6 @@ export function postDeptRemap(
   return request("/admin/dept-remap", {
     method: "POST",
     body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
-  });
-}
-
-/** sysadmin 전용 — 부서 한글명·부서장 일괄 등록 (키: 영문 리프 부서명, 빈 필드는 기존 보존). */
-export function importDeptInfo(
-  entries: Record<string, { korean_name: string; manager: string }>,
-): Promise<DeptInfoImportSummary> {
-  return request<DeptInfoImportSummary>("/admin/dept-info", {
-    method: "PUT",
-    body: JSON.stringify({ entries }),
   });
 }
 

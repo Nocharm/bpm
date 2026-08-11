@@ -172,7 +172,7 @@ describe("buildDepartmentOptions", () => {
   });
 
   it("dept_info korean name toggles label by lang, value stays English", () => {
-    const infos = { TeamA: { korean_name: "에이팀", manager: "kim.cs" } };
+    const infos = { TeamA: { korean_name: "에이팀" } };
     const ko = buildDepartmentOptions(["TeamA"], users, "ko", infos);
     expect(ko[0].value).toBe("TeamA");
     expect(ko[0].label).toBe("에이팀 (TeamA)");
@@ -180,17 +180,17 @@ describe("buildDepartmentOptions", () => {
     expect(en[0].label).toBe("TeamA (에이팀)");
   });
 
-  it("adds dept_info korean name and manager to keywords ahead of observations", () => {
-    const infos = { TeamA: { korean_name: "에이팀", manager: "kim.cs" } };
+  it("adds dept_info korean name to keywords ahead of observations", () => {
+    const infos = { TeamA: { korean_name: "에이팀" } };
     const opts = buildDepartmentOptions(["TeamA"], users, "en", infos);
-    expect(opts[0].keywords).toBe("에이팀 kim.cs 팀에이 팀A그룹");
+    expect(opts[0].keywords).toBe("에이팀 팀에이 팀A그룹");
   });
 
-  it("missing korean name or manager degrades gracefully", () => {
-    const infos = { TeamB: { korean_name: "", manager: "lee.mj" } };
+  it("missing korean name degrades gracefully (dept_info row present but empty)", () => {
+    const infos = { TeamB: { korean_name: "" } };
     const opts = buildDepartmentOptions(["TeamA", "TeamB"], users, "ko", infos);
     expect(opts[0].label).toBe("TeamA"); // info 없음 — 영문만
-    expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: "lee.mj" });
+    expect(opts[1]).toEqual({ value: "TeamB", label: "TeamB", keywords: undefined });
   });
 });
 
