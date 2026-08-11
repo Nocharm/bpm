@@ -140,3 +140,49 @@ def test_load_dept_index_name_collision_first_code_wins(
     session(_seed_depts)
     idx = session(load_dept_index)
     assert idx.name_ko_by_name["Same Name Orgchart Test"] == "먼저"
+
+
+def test_slash_in_dept_name_sanitized() -> None:
+    """부서명 속 "/"(AX/PI Department 등)는 전각 슬래시로 치환 — 경로 split/프리픽스 파손 방지."""
+    idx = _index(
+        *_generic_tops(),
+        _dept("D1", "Alpha Division", "D0b"),
+        _dept("D2", "AX/PI Department", "D1"),
+    )
+    emp = _emp(dept_code="D2")
+    path = resolve_org_path(emp, idx)
+    assert path == "Alpha Division/AX／PI Department"
+    # 프리픽스가 세그먼트 수(2)와 일치 — 이름 내부 슬래시로 3조각 나면 파손
+    assert resolve_org_prefixes(path) == ["Alpha Division", "Alpha Division/AX／PI Department"]
+
+
+def test_slash_sanitized_in_fallback_columns() -> None:
+    idx = _index()
+    emp = _emp(dept_code=None, org_l1="Ops", org_l2="ADC T/F", department="ADC T/F")
+    assert resolve_org_path(emp, idx) == "Ops/ADC T／F"
+
+
+def test_valid_prefixes_exclude_inactive_only_departments(
+    session: Callable[[Callable[[Any], Coroutine[Any, Any, Any]]], Any],
+) -> None:
+    """퇴직자만 남은 부서는 유효 경로에서 제외 — 피커·검증·remap 대상에서 자동 필터."""
+    from app.orgchart import load_valid_org_prefixes
+
+    async def _seed_and_load(db_session: Any) -> set[str]:
+        db_session.add_all([
+            Department(dept_code="ORGT-ACT-1", name="Orgt Active Root", parent_dept_code=None, level=0),
+            Department(dept_code="ORGT-ACT-2", name="Orgt Active BU", parent_dept_code="ORGT-ACT-1", level=1),
+            Department(dept_code="ORGT-ACT-3", name="Orgt Live Team", parent_dept_code="ORGT-ACT-2", level=2),
+            Department(dept_code="ORGT-ACT-4", name="Orgt Ghost Team", parent_dept_code="ORGT-ACT-2", level=2),
+        ])
+        live = Employee(login_id="orgt.live.user", name="Live", source="hr", active=True)
+        live.dept_code = "ORGT-ACT-3"
+        ghost = Employee(login_id="orgt.ghost.user", name="Ghost", source="hr", active=False)
+        ghost.dept_code = "ORGT-ACT-4"
+        db_session.add_all([live, ghost])
+        await db_session.flush()
+        return await load_valid_org_prefixes(db_session, active_only=True)
+
+    prefixes = session(_seed_and_load)
+    assert "Orgt Live Team" in prefixes
+    assert all("Orgt Ghost Team" not in p for p in prefixes)

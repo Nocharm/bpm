@@ -82,11 +82,11 @@ async def seed_local_employees(session: AsyncSession) -> None:
 
 async def refresh_titles_and_positions(
     session: AsyncSession, positions: "list[RawHrPosition]"
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, list[str]]:
     """HR sync 후속 AD 패스 — title 갱신 + EDW 부서장 직책 매핑(employeeNumber=EMPID).
 
     HR 응답에 title이 없어 AD 조인 유지 (design 2026-08-10 §5-7). 실패는 호출부가 삼켜 sync를 지킨다.
-    반환 (title_refreshed, position_refreshed, position_unmatched).
+    반환 (title_refreshed, position_refreshed, position_unmatched, unmatched_sample≤10 — 사번 포맷 진단용).
     소거는 positions 비어있지 않을 때만 — 빈 피드 전멸 방어 (설계 2026-08-11 §4-2).
     AD가 employeeNumber를 전혀 안 주면(empno_to_sam 전멸)도 동일하게 매칭 불가 전원 소거로
     이어지므로 스킵 — EDW는 정상인데 AD 쪽 피드 이상으로 기존 보유자가 전부 지워지는 사고 방지.
@@ -102,6 +102,8 @@ async def refresh_titles_and_positions(
             dup_empnos.add(empno)  # 사번 중복 — 오매칭 방지, 매핑 불가 처리
         else:
             empno_to_sam[empno] = r.sam_account_name
+    # 사번 매핑 진단 — unmatched 전량일 때 AD 속성 결측인지 포맷 불일치인지 즉시 판별용
+    logger.info("AD pass: %d users, %d employee numbers", len(raws), len(empno_to_sam))
     titles = 0
     for raw in raws:
         if not raw.title:
@@ -112,12 +114,14 @@ async def refresh_titles_and_positions(
             titles += 1
     pos_refreshed = 0
     unmatched = 0
+    unmatched_sample: list[str] = []
     if positions and not empno_to_sam:
         logger.warning(
             "AD employeeNumber feed empty — skipping position match/erasure (%d unmatched)",
             len(positions),
         )
         unmatched = len(positions)
+        unmatched_sample = [p.emp_id for p in positions[:10]]
     elif positions:
         matched: set[str] = set()
         for p in positions:
@@ -125,6 +129,8 @@ async def refresh_titles_and_positions(
             emp = await session.get(Employee, sam) if sam else None
             if emp is None:
                 unmatched += 1
+                if len(unmatched_sample) < 10:
+                    unmatched_sample.append(p.emp_id)
                 continue
             matched.add(emp.login_id)
             if emp.position != p.position:
@@ -142,4 +148,4 @@ async def refresh_titles_and_positions(
                 emp.position = None
                 pos_refreshed += 1
     await session.commit()
-    return titles, pos_refreshed, unmatched
+    return titles, pos_refreshed, unmatched, unmatched_sample

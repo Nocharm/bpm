@@ -17,7 +17,6 @@ from app.models import (
     Comment,
     DashboardCoverageDept,
     DashboardPermission,
-    Department,
     Employee,
     LoginRecord,
     MapVersion,
@@ -167,11 +166,10 @@ async def _resolve_display_name(
         emp = await session.get(Employee, principal_id)
         return emp.name if emp else principal_id
     if principal_type == "department":
+        # 리프 세그먼트는 새니타이즈된 경로에서 옴 — name_ko 맵(동일 새니타이즈 키)으로 조회
         leaf = principal_id.rsplit("/", maxsplit=1)[-1]
-        dept = await session.scalar(
-            select(Department).where(Department.name == leaf).order_by(Department.dept_code).limit(1)
-        )
-        return dept.name_ko if dept and dept.name_ko else leaf
+        index = await load_dept_index(session)
+        return index.name_ko_by_name.get(leaf) or leaf
     if principal_type == "group":
         group = await session.get(UserGroup, int(principal_id)) if principal_id.isdigit() else None
         return group.name if group else principal_id

@@ -1072,6 +1072,7 @@ class SyncSummaryOut(BaseModel):
     title_refreshed: int | None = None
     position_refreshed: int | None = None
     position_unmatched: int | None = None
+    position_unmatched_sample: list[str] = []  # 미매칭 EMPID 샘플(≤10) — 사번 포맷 진단
     aborted_reason: str | None = None
 
 

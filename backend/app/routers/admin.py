@@ -105,8 +105,8 @@ def _require_sysadmin(login_id: str) -> None:
 
 
 async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
-    """현 조직 유효 경로 프리픽스 — orgchart 공용 헬퍼 위임(피커·오우닝 검증과 동일 소스)."""
-    return await load_valid_org_prefixes(session)
+    """현 조직 유효 경로 프리픽스 — orgchart 공용 헬퍼 위임. remap은 active 부서만(퇴직자만 남은 부서 제외)."""
+    return await load_valid_org_prefixes(session, active_only=True)
 
 
 @router.get("/dept-remap", response_model=list[DeptRemapItemOut])

@@ -99,6 +99,8 @@ class HrSyncSummary:
     title_refreshed: int | None = None
     position_refreshed: int | None = None
     position_unmatched: int | None = None
+    # 미매칭 EMPID 샘플(≤10) — 사번 포맷(zero-padding 등) 불일치 진단용
+    position_unmatched_sample: list[str] = field(default_factory=list)
     aborted_reason: str | None = None
 
 
@@ -187,8 +189,11 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
     title_refreshed: int | None = None
     position_refreshed: int | None = None
     position_unmatched: int | None = None
+    position_unmatched_sample: list[str] = []
     if settings.ldap_enabled:
         positions: list[client.RawHrPosition] = []
+        if not settings.position_enabled:
+            logger.info("position pass disabled — N8N_POSITION_URL unset")
         if settings.position_enabled:
             try:
                 positions = await client.fetch_positions()
@@ -197,7 +202,7 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
         try:
             from app.ad.service import refresh_titles_and_positions  # 지연 import(LDAP 미설정 무부하)
 
-            title_refreshed, position_refreshed, position_unmatched = (
+            title_refreshed, position_refreshed, position_unmatched, position_unmatched_sample = (
                 await refresh_titles_and_positions(session, positions)
             )
         except Exception:  # noqa: BLE001 -- AD 패스 실패가 sync 자체를 깨면 안 됨 (§5-7)
@@ -209,6 +214,7 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
         truncated_levels=truncated_levels, departments_upserted=departments_upserted,
         title_refreshed=title_refreshed,
         position_refreshed=position_refreshed, position_unmatched=position_unmatched,
+        position_unmatched_sample=position_unmatched_sample,
     )
 
 

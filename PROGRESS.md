@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- **9910 검증 픽스 2차**: ① 부서명 내 "/"(AX/PI Department·ADC T/F) 경로 파손 — `orgchart.sanitize_org_segment`(전각 슬래시 치환)를 체인 해석·폴백·name_ko 키에 적용 ② inactive만 남은 부서는 선택지·remap에서 자동 제외(`load_valid_org_prefixes(active_only=)` — 오우닝 *검증*은 관대 유지, conftest 앵커 보존) ③ position 미입력 진단 — AD 패스 로그(사용자·사번 수)+`position_unmatched_sample`(≤10) 요약 노출·sync 버튼 메시지에 표시 ④ 부서 탭 개편 — 테이블을 조직도 트리(들여쓰기·접기)로, 소멸 부서 재지정 대상은 드롭다운 대신 **트리 모달**(`dept-tree-picker`, active 부서만·검색) ⑤ org 디버그 토글·열 제거. 게이트 BE 978·ruff 0·FE tsc/lint/vitest 589/build 그린.
 - dept-remap에 오우닝 부서 포함: 목록 집계(`owning_maps`)·이관(단일 컬럼 치환, 소프트삭제 포함) 확장 — 홈 "내 부서" 트리는 owning_department 기준이라 빠지면 이관해도 맵이 미아로 남음(9910 적발). FE 카운트 표기·i18n 동기. BE 974(+1)·ruff 0·FE 그린.
 - 홈 맵 필터에 SP 여부 추가: 상태·권한·오우닝 옆 4번째 드롭다운(`home-sp-filter`) — SP maps/Non-SP maps(`sp_designated_at` 기준), 세션 영속·Clear 연동. FE tsc/lint/vitest 589/build 그린.
 - **9910 검증 픽스 4종**: ① EDW 뷰 부서코드 컬럼 DEPTCO→**DEPTCD** 정정(n8n 워크플로 JSON·문서) ② 조직 최상위 2레벨(법인·사업부급) 해석 제외 — `settings.org_trim_levels=2`, departments 체인 해석 전용(org 컬럼·폴백 원본 보존) ③ 오우닝 부서 검증(maps `_assert_known_department`)이 org 컬럼 인라인 조합이라 피커(체인 경로)와 불일치 → 신설 `orgchart.load_valid_org_prefixes` 공용 헬퍼로 통일(unknown department 422 해소, admin dept-remap도 위임) ④ 어드민 테이블 뷰어 kb_chunks 500 — LargeBinary 셀을 크기 표시로 직렬화. 게이트 BE 973(+4)·ruff 0.

@@ -731,6 +731,7 @@ export interface SyncSummary {
   title_refreshed: number | null;
   position_refreshed: number | null;
   position_unmatched: number | null;
+  position_unmatched_sample: string[]; // 미매칭 EMPID 샘플(≤10) — 사번 포맷 진단
   aborted_reason: string | null;
 }
 

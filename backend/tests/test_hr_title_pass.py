@@ -48,9 +48,14 @@ def _position_row(emp_id: str, position: str, **overrides) -> RawHrPosition:
 
 
 def _run_refresh(positions: list[RawHrPosition]) -> tuple[int, int, int]:
+    """카운트 3튜플만 반환 — 진단 샘플은 _run_refresh_full로."""
+    return _run_refresh_full(positions)[:3]
+
+
+def _run_refresh_full(positions: list[RawHrPosition]) -> tuple[int, int, int, list[str]]:
     from app.ad.service import refresh_titles_and_positions
 
-    async def _run() -> tuple[int, int, int]:
+    async def _run() -> tuple[int, int, int, list[str]]:
         async with SessionLocal() as session:
             return await refresh_titles_and_positions(session, positions)
 
@@ -236,3 +241,16 @@ def test_full_sync_skips_position_fetch_when_disabled(client: TestClient, monkey
     assert summary.title_refreshed == 1
     assert summary.position_refreshed == 0
     assert summary.position_unmatched == 0
+
+
+def test_position_unmatched_sample_reports_emp_ids(client: TestClient, monkeypatch) -> None:
+    """미매칭 EMPID 샘플(≤10) — 사번 포맷 불일치를 요약만 보고 진단할 수 있어야 한다."""
+    _mock_ldap_titles(
+        monkeypatch,
+        [RawUser("sample.user", "S", "", "OU=X,DC=corp", 0x200, None, [], employee_number="700")],
+    )
+    _seed_employee("sample.user", source="hr", name="Sample")
+    result = _run_refresh_full([_position_row("000700", "팀장"), _position_row("700", "팀장")])
+    # "000700"은 미매칭(zero-padding 재현) — 샘플에 원문 그대로 담긴다
+    assert result[2] == 1
+    assert result[3] == ["000700"]

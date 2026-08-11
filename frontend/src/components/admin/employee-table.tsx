@@ -134,10 +134,19 @@ export function EmployeeTable() {
     setMsg("");
     try {
       const s: SyncSummary = await syncEmployees();
+      // position null = 패스 미실행(N8N_POSITION_URL 미설정 or LDAP off) — 미입력 원인 즉시 판별용
+      const positionInfo =
+        s.position_refreshed === null
+          ? "positions: pass not run"
+          : `positions ${s.position_refreshed} · unmatched ${s.position_unmatched ?? 0}${
+              s.position_unmatched_sample.length > 0
+                ? ` (e.g. ${s.position_unmatched_sample.slice(0, 3).join(", ")})`
+                : ""
+            }`;
       setMsg(
         s.aborted_reason
           ? `aborted — ${s.aborted_reason}`
-          : `scanned ${s.scanned} · upserted ${s.upserted} · deactivated ${s.deactivated} · deleted ${s.deleted} · skipped ${s.skipped}`,
+          : `scanned ${s.scanned} · upserted ${s.upserted} · deactivated ${s.deactivated} · deleted ${s.deleted} · skipped ${s.skipped} · ${positionInfo}`,
       );
       void listEmployees().then(setRows).catch(() => setRows([]));
     } catch (err) {
