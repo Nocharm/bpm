@@ -14,8 +14,8 @@ from app.settings import settings
 HR_TIMEOUT_SECONDS = 180.0
 # 로그인 크리티컬 패스 — /api/me 1인 동기화가 최대 대기하는 상한 (전수 180초는 부적합)
 HR_SINGLE_TIMEOUT_SECONDS = 10.0
-# EDW 부서장 목록 — 수백 행 규모, 전수 180초보다 짧게 (설계 2026-08-11 §4)
-HR_POSITION_TIMEOUT_SECONDS = 30.0
+# EDW 부서장 목록 — 뷰 스캔이 느려 전수와 동일 180초 (9910 실측: 30초는 타임아웃)
+HR_POSITION_TIMEOUT_SECONDS = 180.0
 
 
 @dataclass(frozen=True)
