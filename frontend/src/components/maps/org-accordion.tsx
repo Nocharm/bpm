@@ -31,7 +31,7 @@ interface OrgAccordionProps {
 }
 
 export function OrgAccordion(props: OrgAccordionProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const {
     roots, unassigned, openPaths, onToggle, onCollapseAll, selectedId, highlightId,
     onSelect, unassignedOpen, onToggleUnassigned, renderCard,
@@ -76,7 +76,8 @@ export function OrgAccordion(props: OrgAccordionProps) {
           data-id="org-node-name"
           className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
         >
-          {node.name}
+          {/* 한/영 토글 연동 — ko는 한글명 우선(없으면 영문 유지) */}
+          {lang === "ko" && node.koreanName ? node.koreanName : node.name}
         </span>
         {!open && <CountTag count={node.mapCount} />}
       </button>

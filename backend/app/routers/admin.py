@@ -15,6 +15,7 @@ from app.clock import KST
 from app.db import get_session
 from app.models import Base, Employee, MapPermission, Notification, ProcessMap, UserGroupMember
 from app.orgchart import (
+    has_org_info,
     load_dept_index,
     load_valid_org_prefixes,
     resolve_org_path,
@@ -79,9 +80,9 @@ async def get_admin_users(
                 korean_dept=emp.korean_dept,
             )
         )
-        # 부서 목록은 active 직원 경로만 — 퇴사자는 부서 정보가 갱신되지 않아 스테일 경로
-        # (미러에서 사라진 dept_code·구 org 컬럼)가 트리 밖 고아 노드로 샌다 (2026-08 9910 적발)
-        if levels and emp.active:
+        # 부서 목록은 active + 조직 정보 실재 직원 경로만 — 퇴사자 스테일 경로와
+        # org 전무 직원의 department 단독 경로가 트리 밖 고아 노드로 샌다 (2026-08 9910 적발)
+        if levels and emp.active and has_org_info(emp, dept_index):
             key = tuple(levels)
             if key not in seen_leaves:
                 seen_leaves[key] = levels

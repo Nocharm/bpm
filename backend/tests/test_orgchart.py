@@ -193,3 +193,18 @@ def test_broken_parent_chain_falls_back_to_columns() -> None:
     idx = _index(_dept("D9", "Dangling Team", "MISSING-PARENT"))
     emp = _emp(dept_code="D9", org_l1="Real Root", org_l2="Real Office", department="Real Office")
     assert resolve_org_path(emp, idx) == "Real Root/Real Office"
+
+
+def test_has_org_info_excludes_department_only_employees() -> None:
+    """org 컬럼 전무 + 체인 불가 직원 — department 단독 가짜 경로의 원천이라 파생 제외 판정."""
+    from app.orgchart import has_org_info
+
+    idx = _index()
+    bare = _emp(dept_code=None, department="Ghost Only Dept")
+    with_col = _emp(dept_code=None, org_l1="Real Root", department="Real Root")
+    assert has_org_info(bare, idx) is False
+    assert has_org_info(with_col, idx) is True
+    # 체인이 살아 있으면 org 컬럼이 없어도 True
+    chained_idx = _index(*_generic_tops(), _dept("D1", "Alpha", "D0b"))
+    chained = _emp(dept_code="D1")
+    assert has_org_info(chained, chained_idx) is True

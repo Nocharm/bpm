@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- **9910 픽스 4차**: ① org 정보 전무 직원(org_l1~l5 전부 빈 + 체인 불가) 예외처리 — `has_org_info` 신설, department 단독 가짜 경로를 트리·유효 경로·directory 파생에서 제외(권한 판정·개인 표시는 불변) ② 홈 부서 트리 한/영 연동 — ko 모드는 departments.name_ko 우선 표기. BE 981·FE 그린.
 - 단절 체인 폴백: 부모 dept_code가 미러에 없으면(부서 피드 불완전) 부분 경로 대신 org 컬럼 폴백 — 인원 있는 고아 루트 노드의 범인(최종리뷰 백로그 #10 해소). BE 980(+1).
 - EDW positions 타임아웃 30→180초 — 9910 실측 뷰 스캔 지연으로 타임아웃 발생.
 - **9910 검증 픽스 3차**: ① 관리 부서 트리의 고아 루트 노드 — 퇴사자(active=false, 부서 정보 미갱신) 스테일 경로가 부서 목록에 새던 것 → `get_admin_users` 부서 파생을 active 직원 경로만으로(users 목록은 전체 유지) ② n8n hr-position 쿼리 — 제외 직책 확장(프로·담당과장·계약직사원·담당임원), NAME 컬럼 제거(n8n 마스킹 [object Object]). BE 979(+1)·ruff 0.

@@ -13,7 +13,7 @@ from app.app_settings import get_exposed_positions
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import Employee
-from app.orgchart import load_dept_index, resolve_org_path, resolve_org_prefixes
+from app.orgchart import has_org_info, load_dept_index, resolve_org_path, resolve_org_prefixes
 from app.schemas import DirectoryDeptOut, DirectoryOut, DirectoryUserOut
 
 router = APIRouter(prefix="/api/directory", tags=["directory"])
@@ -59,8 +59,10 @@ async def get_directory(
     # 각 직원의 조직 경로에서 "/" 구분 프리픽스를 모두 수집 (l1, l1/l2, l1/l2/l3, …).
     # Collect all "/"-joined org-level prefixes at each depth per employee.
     seen_paths: set[str] = set()
-    for path in org_paths.values():
-        seen_paths.update(resolve_org_prefixes(path))
+    for emp in rows:
+        if not has_org_info(emp, dept_index):
+            continue  # 조직 정보 전무 — department 단독 가짜 부서 노드 방지 (9910 적발)
+        seen_paths.update(resolve_org_prefixes(org_paths[emp.login_id]))
 
     departments = []
     for path in sorted(seen_paths):
