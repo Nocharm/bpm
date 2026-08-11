@@ -18,6 +18,7 @@ _ATTRS = [
     "userAccountControl",
     "mail",
     "memberOf",
+    "employeeNumber",  # EDW 부서장 목록(empId) 매핑 키 (설계 2026-08-11 §4)
 ]
 
 
@@ -32,6 +33,8 @@ class RawUser:
     mail: str | None
     # AD group DNs — reference only; NOT mirrored into user_groups (Task 3 handles app groups)
     member_of: list[str]
+    # 사번(EDW empId 매핑 키) — AD 미설정이면 None (설계 2026-08-11 §4)
+    employee_number: str | None = None
 
 
 def _connect() -> Connection:
@@ -90,6 +93,7 @@ def _to_raw(entry: object) -> RawUser:
         user_account_control=int_val("userAccountControl"),
         mail=str_val("mail"),
         member_of=list_val("memberOf"),
+        employee_number=str_val("employeeNumber"),
     )
 
 
@@ -152,6 +156,7 @@ def fetch_all_users() -> list[RawUser]:
                 user_account_control=_int_attr(e["attributes"], "userAccountControl"),
                 mail=_str_attr(e["attributes"], "mail"),
                 member_of=_list_attr(e["attributes"], "memberOf"),
+                employee_number=_str_attr(e["attributes"], "employeeNumber"),
             )
             for e in entries
             if e.get("type") == "searchResEntry"

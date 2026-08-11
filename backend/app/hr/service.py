@@ -1,7 +1,7 @@
 """HR 웹훅 동기화 서비스 — 전체/단건 동기화·부서 미러·이행 프리뷰.
 
 설계: docs/design/2026-08-10-hr-webhook-directory-design.md §4~§6·§9.
-title은 절대 건드리지 않는다 — AD title 패스(app/ad/service.refresh_titles) 전용.
+title은 절대 건드리지 않는다 — AD title 패스(app/ad/service.refresh_titles_and_positions) 전용.
 """
 
 import logging
@@ -98,6 +98,8 @@ class HrSyncSummary:
     departments_upserted: int = 0
     dept_info_orphans: list[str] = field(default_factory=list)
     title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
     aborted_reason: str | None = None
 
 
@@ -185,19 +187,30 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
     await session.commit()
 
     title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
     if settings.ldap_enabled:
+        positions: list[client.RawHrPosition] = []
+        if settings.position_enabled:
+            try:
+                positions = await client.fetch_positions()
+            except Exception:  # noqa: BLE001 -- EDW 실패 시 title만 갱신 (설계 §4-2)
+                logger.exception("EDW positions fetch failed — proceeding with title-only AD pass")
         try:
-            from app.ad.service import refresh_titles  # Task 6 신설 — 지연 import(LDAP 미설정 환경 무부하)
+            from app.ad.service import refresh_titles_and_positions  # 지연 import(LDAP 미설정 무부하)
 
-            title_refreshed = await refresh_titles(session)
-        except Exception:  # noqa: BLE001 -- title 패스 실패가 sync 자체를 깨면 안 됨 (§5-7)
-            logger.exception("AD title refresh failed — HR sync itself succeeded")
+            title_refreshed, position_refreshed, position_unmatched = (
+                await refresh_titles_and_positions(session, positions)
+            )
+        except Exception:  # noqa: BLE001 -- AD 패스 실패가 sync 자체를 깨면 안 됨 (§5-7)
+            logger.exception("AD title/position refresh failed — HR sync itself succeeded")
 
     return HrSyncSummary(
         scanned=scanned, upserted=len(fields_by_id), deactivated=len(deactivated_now),
         deleted=len(delete_ids), skipped=skipped, org_mismatches=org_mismatches,
         truncated_levels=truncated_levels, departments_upserted=departments_upserted,
         dept_info_orphans=dept_info_orphans, title_refreshed=title_refreshed,
+        position_refreshed=position_refreshed, position_unmatched=position_unmatched,
     )
 
 

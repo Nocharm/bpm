@@ -87,6 +87,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_output", "TEXT"),
     # HR 웹훅 동기화 — deptCode 미러 (design 2026-08-10 §3)
     ("employees", "dept_code", "VARCHAR(100)"),
+    # EDW 부서장 직책(FRNM) — AD employeeNumber 매핑으로 갱신 (설계 2026-08-11 §4)
+    ("employees", "position", "VARCHAR(100)"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

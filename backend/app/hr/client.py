@@ -14,6 +14,8 @@ from app.settings import settings
 HR_TIMEOUT_SECONDS = 180.0
 # 로그인 크리티컬 패스 — /api/me 1인 동기화가 최대 대기하는 상한 (전수 180초는 부적합)
 HR_SINGLE_TIMEOUT_SECONDS = 10.0
+# EDW 부서장 목록 — 수백 행 규모, 전수 180초보다 짧게 (설계 2026-08-11 §4)
+HR_POSITION_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,14 @@ class RawHrEmployee:
     department: str | None
     department_ko: str | None
     org_levels: list[str]  # 루트→리프, 빈 단계 압축(최대 6)
+
+
+@dataclass(frozen=True)
+class RawHrPosition:
+    emp_id: str
+    dept_code: str | None
+    name: str | None
+    position: str
 
 
 @dataclass(frozen=True)
@@ -87,10 +97,26 @@ def parse_department_row(row: object) -> RawHrDepartment | None:
     )
 
 
-async def _post(payload: dict, timeout: float = HR_TIMEOUT_SECONDS) -> dict:
+def parse_position_row(row: object) -> RawHrPosition | None:
+    """positions row 파싱 — empId·position 결측/비dict은 None(호출부가 skip)."""
+    if not isinstance(row, dict):
+        return None
+    emp_id = _clean(row.get("empId"))
+    position = _clean(row.get("position"))
+    if not emp_id or not position:
+        return None
+    return RawHrPosition(
+        emp_id=emp_id,
+        dept_code=_clean(row.get("deptCode")),
+        name=_clean(row.get("name")),
+        position=position,
+    )
+
+
+async def _post(payload: dict, timeout: float = HR_TIMEOUT_SECONDS, url: str | None = None) -> dict:
     async with httpx2.AsyncClient(timeout=timeout) as client:
         response = await client.post(
-            settings.n8n_hr_url,
+            url or settings.n8n_hr_url,
             json=payload,
             headers={"X-API-Key": settings.n8n_hr_token},
         )
@@ -119,3 +145,13 @@ async def fetch_employee(login_id: str) -> RawHrEmployee | None:
 async def fetch_departments() -> list[RawHrDepartment]:
     body = await _post({"kind": "departments"})
     return [d for d in (parse_department_row(r) for r in body.get("rows") or []) if d is not None]
+
+
+async def fetch_positions() -> list[RawHrPosition]:
+    """EDW 부서장 목록 — n8n hr-position 워크플로(FRNM≠'프로' 필터 완료본)."""
+    data = await _post({"kind": "positions"}, HR_POSITION_TIMEOUT_SECONDS, url=settings.n8n_position_url)
+    rows = data.get("rows") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return []
+    parsed = (parse_position_row(r) for r in rows)
+    return [p for p in parsed if p is not None]

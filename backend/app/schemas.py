@@ -1091,6 +1091,8 @@ class SyncSummaryOut(BaseModel):
     departments_upserted: int
     dept_info_orphans: list[str]
     title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
     aborted_reason: str | None = None
 
 

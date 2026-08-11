@@ -493,6 +493,8 @@ class Employee(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     # HR deptCode — departments.dept_code 느슨 참조 (design 2026-08-10 §3). AD 시절 행은 NULL.
     dept_code: Mapped[str | None] = mapped_column(String(100), default=None)
+    # EDW 직책(FRNM) — 부서장 목록 행만, 그 외 NULL. AD employeeNumber 매핑으로 갱신 (설계 2026-08-11 §4)
+    position: Mapped[str | None] = mapped_column(String(100), default=None)
     # 한글이름·한글그룹 — AD 미제공. 어드민 JSON 임포트로만 채운다(spec 2026-07-09). sync 미간섭.
     korean_name: Mapped[str] = mapped_column(String(200), default="")
     korean_dept: Mapped[str] = mapped_column(String(200), default="")

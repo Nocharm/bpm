@@ -1,12 +1,16 @@
-"""로컬 시드 + AD title 전용 패스(HR 전환 2026-08-10 — 디렉터리 소스는 app/hr)."""
+"""로컬 시드 + AD title/position 패스(HR 전환 2026-08-10 — 디렉터리 소스는 app/hr)."""
 
 import asyncio
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ad import client
 from app.models import Employee
+
+if TYPE_CHECKING:  # hr.client → ad.service 순환 방지, 타입 힌트 전용 (설계 2026-08-11 §4)
+    from app.hr.client import RawHrPosition
 
 # 로컬 임시 유저 5명 (auth OFF). loginId는 '.' 포함·'_' 미포함(필터 비충돌), name 무 '_'.
 # AD-aligned English data — login_id(=sAMAccountName) 불변, name/title/org만 영문화.
@@ -73,19 +77,59 @@ async def seed_local_employees(session: AsyncSession) -> None:
     await session.commit()
 
 
-async def refresh_titles(session: AsyncSession) -> int:
-    """HR 전체 동기화 후속 — AD에서 title만 갱신(이름·조직·active 미터치). 반환: 갱신 행 수.
+async def refresh_titles_and_positions(
+    session: AsyncSession, positions: "list[RawHrPosition]"
+) -> tuple[int, int, int]:
+    """HR sync 후속 AD 패스 — title 갱신 + EDW 부서장 직책 매핑(employeeNumber=EMPID).
 
-    HR 응답에 title이 없어 AD 조인 유지 (design 2026-08-10 §5-7). 실패는 호출부가 삼켜 sync를 지키다.
+    HR 응답에 title이 없어 AD 조인 유지 (design 2026-08-10 §5-7). 실패는 호출부가 삼켜 sync를 지킨다.
+    반환 (title_refreshed, position_refreshed, position_unmatched).
+    소거는 positions 비어있지 않을 때만 — 빈 피드 전멸 방어 (설계 2026-08-11 §4-2).
     """
     raws = await asyncio.to_thread(client.fetch_all_users)
-    updated = 0
+    empno_to_sam: dict[str, str] = {}
+    dup_empnos: set[str] = set()
+    for r in raws:
+        empno = (r.employee_number or "").strip()
+        if not empno:
+            continue
+        if empno in empno_to_sam and empno_to_sam[empno] != r.sam_account_name:
+            dup_empnos.add(empno)  # 사번 중복 — 오매칭 방지, 매핑 불가 처리
+        else:
+            empno_to_sam[empno] = r.sam_account_name
+    titles = 0
     for raw in raws:
         if not raw.title:
             continue
         emp = await session.get(Employee, raw.sam_account_name)
         if emp is not None and emp.title != raw.title:
             emp.title = raw.title
-            updated += 1
+            titles += 1
+    pos_refreshed = 0
+    unmatched = 0
+    if positions:
+        matched: set[str] = set()
+        for p in positions:
+            sam = None if p.emp_id in dup_empnos else empno_to_sam.get(p.emp_id)
+            emp = await session.get(Employee, sam) if sam else None
+            if emp is None:
+                unmatched += 1
+                continue
+            matched.add(emp.login_id)
+            if emp.position != p.position:
+                emp.position = p.position
+                pos_refreshed += 1
+        stale_ids = (
+            await session.scalars(
+                select(Employee.login_id).where(
+                    Employee.position.is_not(None), Employee.login_id.not_in(matched)
+                )
+            )
+        ).all()
+        for lid in stale_ids:  # 목록 밖 기존 보유자 소거 — 승진·이동 반영
+            emp = await session.get(Employee, lid)
+            if emp is not None:
+                emp.position = None
+                pos_refreshed += 1
     await session.commit()
-    return updated
+    return titles, pos_refreshed, unmatched
