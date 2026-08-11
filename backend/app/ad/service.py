@@ -119,13 +119,12 @@ async def refresh_titles_and_positions(
             if emp.position != p.position:
                 emp.position = p.position
                 pos_refreshed += 1
-        stale_ids = (
-            await session.scalars(
-                select(Employee.login_id).where(
-                    Employee.position.is_not(None), Employee.login_id.not_in(matched)
-                )
-            )
+        # matched를 not_in() 바인드로 넘기면 부서장 수만큼 파라미터가 전개된다 — sqlite 999 상한 위험
+        # (hr/service.py가 삭제를 500단위로 청크하는 이유와 동일). position 보유자만 뽑아 파이썬에서 차집합.
+        holder_ids = (
+            await session.scalars(select(Employee.login_id).where(Employee.position.is_not(None)))
         ).all()
+        stale_ids = [lid for lid in holder_ids if lid not in matched]
         for lid in stale_ids:  # 목록 밖 기존 보유자 소거 — 승진·이동 반영
             emp = await session.get(Employee, lid)
             if emp is not None:

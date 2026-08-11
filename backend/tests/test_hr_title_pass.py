@@ -166,3 +166,56 @@ def test_full_sync_runs_title_and_position_pass(client: TestClient, monkeypatch)
     emp = _get_employee("combo.user")
     assert emp.title == "Senior"
     assert emp.position == "Team Lead"
+
+
+def test_full_sync_survives_edw_fetch_failure_title_only(client: TestClient, monkeypatch) -> None:
+    """EDW fetch 실패 시 title만 갱신되고 기존 position 보유자는 소거되지 않는다(positions=[] → 소거 스킵, 설계 §4-2).
+
+    stale.user는 source=local로 시드 — HR 피드에 없어도 sync_all의 managed(ad/hr) 행 삭제 대상이 아니라서
+    position 소거 스킵을 순수하게 검증할 수 있다(managed 삭제와 뒤섞이지 않음).
+    """
+    _seed_employee("stale.user", source="local", name="Stale", position="Old Lead")
+    _mock_hr(monkeypatch, [_hr_row("combo2.user")])
+    _mock_ldap_titles(
+        monkeypatch,
+        [RawUser("combo2.user", "X", "Senior", "OU=Y,DC=corp", 0x200, None, [], employee_number="901")],
+    )
+    monkeypatch.setattr(settings, "n8n_position_url", "http://hr.local/webhook/position")
+
+    from app.hr import client as hr_client
+
+    async def failing_positions() -> list[RawHrPosition]:
+        raise RuntimeError("EDW webhook down")
+
+    monkeypatch.setattr(hr_client, "fetch_positions", failing_positions)
+    summary = _run_sync()
+    assert summary.title_refreshed == 1
+    assert summary.position_refreshed == 0
+    assert summary.position_unmatched == 0
+    assert _get_employee("combo2.user").title == "Senior"
+    assert _get_employee("stale.user").position == "Old Lead"  # 소거 안 됨
+
+
+def test_full_sync_skips_position_fetch_when_disabled(client: TestClient, monkeypatch) -> None:
+    """position_enabled=False(N8N_POSITION_URL 미설정)면 fetch_positions 자체가 호출되지 않는다."""
+    _mock_hr(monkeypatch, [_hr_row("combo3.user")])
+    _mock_ldap_titles(
+        monkeypatch,
+        [RawUser("combo3.user", "X", "Senior", "OU=Y,DC=corp", 0x200, None, [], employee_number="902")],
+    )
+    monkeypatch.setattr(settings, "n8n_position_url", "")  # 명시적으로 비활성
+
+    from app.hr import client as hr_client
+
+    calls: list[None] = []
+
+    async def spy_positions() -> list[RawHrPosition]:
+        calls.append(None)
+        return []
+
+    monkeypatch.setattr(hr_client, "fetch_positions", spy_positions)
+    summary = _run_sync()
+    assert calls == []  # 호출 안 됨
+    assert summary.title_refreshed == 1
+    assert summary.position_refreshed == 0
+    assert summary.position_unmatched == 0
