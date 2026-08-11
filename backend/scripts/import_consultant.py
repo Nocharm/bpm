@@ -201,6 +201,29 @@ async def upsert_categories(
         else:
             row.name, row.level, row.parent_id, row.sort_order = cat.name, cat.level, parent_id, order
         ids[cat.code] = row.id
+
+    # 위 루프는 전달분 code만 건드린다 — UI 생성 카테고리(`ui-*`, POST /api/categories)는
+    # 조상 depth가 바뀌어도 안 건드려져 level이 낡은 채 남는다. 모든 소비처(list_category_nodes/
+    # _category_metrics 롤업, create/move의 parent.level+1 depth 가드)가 level==depth를 전제하므로
+    # 테이블 전체를 루트부터 BFS 재계산해 어긋난 행만 고친다. `existing`은 위 루프가 이미 전체
+    # process_categories를 담고 있으니(신규분 포함) 추가 조회 불필요.
+    by_id = {row.id: row for row in existing.values()}
+    children_by_parent: dict[int | None, list[int]] = {}
+    for row in by_id.values():
+        children_by_parent.setdefault(row.parent_id, []).append(row.id)
+    visited: set[int] = set()
+    frontier = [(rid, 1) for rid in children_by_parent.get(None, [])]
+    while frontier:
+        next_frontier: list[tuple[int, int]] = []
+        for rid, level in frontier:
+            if rid in visited:
+                continue  # cycle guard — a corrupt parent chain can't hang the import
+            visited.add(rid)
+            row = by_id[rid]
+            if row.level != level:
+                row.level = level
+            next_frontier.extend((cid, level + 1) for cid in children_by_parent.get(rid, []))
+        frontier = next_frontier
     return ids
 
 

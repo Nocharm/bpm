@@ -2182,3 +2182,61 @@ export function postFrameworkTransfer(
     body: JSON.stringify({ to_map_id: toMapId }),
   });
 }
+
+// 카테고리 생성(sysadmin) — parent_id 미지정 시 루트(L1). code 미지정 시 서버가 `ui-{uuid8}` 자동 채번.
+export function createCategory(body: {
+  name: string;
+  parent_id?: number | null;
+  code?: string;
+}): Promise<CategoryNode> {
+  return request<CategoryNode>("/categories", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// 카테고리 부분 갱신(sysadmin) — 이름·이동(parent_id)·정렬. parent_id는 body에 키 자체가 있어야
+// "이동"으로 처리된다(서버 model_fields_set 판정) — 이동 없음이면 키를 아예 넣지 않는다.
+export function updateCategory(
+  id: number,
+  body: { name?: string; parent_id?: number | null; sort_order?: number },
+): Promise<CategoryNode> {
+  return request<CategoryNode>(`/categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// 카테고리 삭제(sysadmin) — 자식/연결 맵이 있으면 서버가 409.
+export function deleteCategory(id: number): Promise<void> {
+  return request<void>(`/categories/${id}`, { method: "DELETE" });
+}
+
+export interface FrameworkImportRow {
+  code: string;
+  action: string;
+  detail: string;
+}
+
+export interface FrameworkImportResult {
+  applied: boolean;
+  // 서버는 action별 카운트만 채워 보낸다(0인 키는 아예 없음) — created/updated/unchanged/error는
+  // backend ImportReport.counts() 미러, warning은 counts()가 제외하는 대신 라우터가 rows 전체
+  // (500행 캡 이전) 기준으로 별도 채운다 — rows에서 세면 캡 초과 시 undercount된다(fix round 1).
+  summary: Record<string, number>;
+  rows: FrameworkImportRow[];
+  truncated: boolean;
+}
+
+// 웹 JSON 대량 임포트(sysadmin) — apply=false는 dry-run 미리보기, categories/maps는 CLI 임포터와 동일 raw 구조.
+export function importFramework(body: {
+  categories: unknown[];
+  maps: unknown[];
+  apply: boolean;
+  label?: string;
+}): Promise<FrameworkImportResult> {
+  return request<FrameworkImportResult>("/categories/import", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

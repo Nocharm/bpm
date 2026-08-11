@@ -5,6 +5,7 @@
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -95,10 +96,14 @@ class CanonicalMap(BaseModel):
         return self
 
 
-def load_categories(path: Path) -> list[CanonicalCategory]:
-    raw = json.loads(path.read_text(encoding="utf-8"))
+def parse_categories(raw: object) -> list[CanonicalCategory]:
+    """categories 구조 검증(JSON 파싱 이후) — 중복 code·부모 참조·레벨 트리.
+
+    raw는 `{"categories": [...]}` 형태 — categories.json 파일과 웹 임포트 API 바디가
+    동일 구조를 공유해 파일 로더(`load_categories`)·라우터 양쪽이 이 함수 하나로 검증한다.
+    """
     try:
-        cats = [CanonicalCategory.model_validate(c) for c in raw["categories"]]
+        cats = [CanonicalCategory.model_validate(c) for c in raw["categories"]]  # type: ignore[index]
     except (KeyError, ValidationError) as exc:
         raise CanonicalError(f"categories.json invalid: {exc}") from exc
     by_code: dict[str, CanonicalCategory] = {}
@@ -119,6 +124,27 @@ def load_categories(path: Path) -> list[CanonicalCategory]:
                 f"category {cat.code}: level {cat.level} under parent level {parent.level}"
             )
     return cats
+
+
+def load_categories(path: Path) -> list[CanonicalCategory]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return parse_categories(raw)
+
+
+def parse_map_objs(items: Sequence[object]) -> tuple[list[CanonicalMap], list[str]]:
+    """이미 파싱된 canonical map 객체 리스트를 검증 — 항목별 오류는 "item {i}: {msg}"로 수집.
+
+    웹 임포트 API 바디는 JSON 배열이라 파싱 자체는 FastAPI가 이미 끝낸 상태 — `load_maps`의
+    줄 단위(JSON 디코드 포함) 수집과는 입력 형태가 달라 별도 함수로 둔다(대칭 계약, brief §1).
+    """
+    maps: list[CanonicalMap] = []
+    errors: list[str] = []
+    for i, item in enumerate(items):
+        try:
+            maps.append(CanonicalMap.model_validate(item))
+        except (ValidationError, ValueError) as exc:
+            errors.append(f"item {i}: {exc}")
+    return maps, errors
 
 
 def load_maps(path: Path) -> tuple[list[CanonicalMap], list[str]]:

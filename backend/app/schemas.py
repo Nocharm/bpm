@@ -653,6 +653,32 @@ class CategoryNodeOut(BaseModel):
     map_count: int = 0  # 서브트리 전체(자기 포함)의 연결 맵 수 — 소프트삭제 제외, 가시성 무관
 
 
+class CategoryCreateIn(BaseModel):
+    """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+    parent_id: int | None = None
+    code: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+        | None
+    ) = None
+
+
+class CategoryUpdateIn(BaseModel):
+    """카테고리 부분 갱신 — name·parent_id(이동)·sort_order.
+
+    parent_id는 `model_fields_set`으로 "미전송 vs null" 구분 필수 — null=루트로 이동,
+    필드 자체 부재=이동 없음(라우터에서 판정, 스키마 레벨에선 둘 다 None으로 보임).
+    """
+
+    name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+        | None
+    ) = None
+    parent_id: int | None = None
+    sort_order: int | None = None
+
+
 class CategoryMapsOut(BaseModel):
     """카테고리 1노드에 직접 연결된 맵 페이지 — 비가시 맵은 hidden으로만 집계(name 미노출)."""
 
@@ -669,6 +695,43 @@ class MapCategoryIn(BaseModel):
 class FrameworkTransferIn(BaseModel):
     # 체계 슬롯(category_id+consultant_code) 이양 대상 맵 (design 2026-08-08)
     to_map_id: int
+
+
+class FrameworkImportIn(BaseModel):
+    """웹 JSON 대량 임포트 요청 — categories.json/maps.jsonl과 동일 구조를 인라인으로 받는다.
+
+    구조 검증은 scripts.consultant_canonical(parse_categories/parse_map_objs)이 담당 —
+    여기서는 raw dict 그대로 통과시킨다(brief §2).
+    """
+
+    categories: list[dict[str, Any]] = []
+    maps: list[dict[str, Any]] = []
+    apply: bool = False
+    label: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+
+class FrameworkImportRow(BaseModel):
+    """임포트 리포트 1행 — action∈created/updated/unchanged/error/warning (ImportReport.rows 미러)."""
+
+    code: str
+    action: str
+    detail: str = ""
+
+
+class FrameworkImportOut(BaseModel):
+    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated).
+
+    summary는 ImportReport.counts()(created/updated/unchanged/error, 0인 키는 없음)에 라우터가
+    "warning" 키를 별도로 더한 것 — counts()는 CLI 요약용이라 warning을 집계 제외하지만, 이 카운트를
+    빼면 rows가 500행에서 잘릴 때 FE가 undercount하므로 잘리기 전 전체 기준으로 채운다.
+    """
+
+    applied: bool
+    summary: dict[str, int]
+    rows: list[FrameworkImportRow]
+    truncated: bool
 
 
 class NodeIn(BaseModel):

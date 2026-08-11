@@ -1,41 +1,52 @@
-# dev ↔ main 미반영분 확인 체크리스트 · 백로그
+# dev ↔ main 확인 체크리스트 · 백로그
 
-> 기준: main `4980277` ↔ dev `60ba560` (2026-08-11). dev에만 있는 변경은 **3묶음** — 각 항목의 상세는 링크된 설계 문서가 원본이며 여기선 중복 서술하지 않는다. main 머지·운영 배포 전 이 문서의 확인 항목을 소거할 것.
+> 기준: main `4980277` ↔ dev (2026-08-12, 컨설턴트 프레임워크 관리 탭 포함). **n8n 연동(HR 웹훅·EDW 직책)은 연동·검증 완료 전제** — 유저 목록·부서 트리는 9910에서 확인 끝(2026-08-11). 남은 건 아래 화면 확인 → main 머지 → 운영 배포.
 
-## 미반영 묶음 요약
+## 확인 방법
 
-| 머지 커밋 | 묶음 | 설계 원본 |
-|---|---|---|
-| `1423f41` | 컨설턴트 전사 7단계 체계 수용 (Phase 1+2) | [`docs/design/2026-08-08-consultant-hierarchy-design.md`](../design/2026-08-08-consultant-hierarchy-design.md) |
-| `953d5cb` | 사용자·조직도 소스 AD→n8n HR 웹훅 교체 | [`docs/design/2026-08-10-hr-webhook-directory-design.md`](../design/2026-08-10-hr-webhook-directory-design.md) |
-| `60ba560` | 조직 기준 departments 전환 + EDW 직책 부서장 | [`docs/design/2026-08-11-departments-org-basis-design.md`](../design/2026-08-11-departments-org-basis-design.md) |
+9910(또는 dev 스택)에 최신 dev를 배포하고 **sysadmin 계정**으로 아래를 순서대로 본다. 각 줄 형식: 어디서 → 무엇을 → 통과 기준.
 
-## 배포 시 통합 순서 (세 묶음이 함께 나갈 때)
+## 1. 완료된 것 (재확인 불필요)
 
-1. **배포** — 스키마 자동 보강 확인: `employees.email` NOT NULL 완화 부트스트랩 로그 1회 + `dept_code`·`position` 자동 ALTER (`db.py _ADDED_COLUMNS`). 최초 배포는 `HR_SYNC_INTERVAL_HOURS=0`으로 스케줄러 OFF.
-2. **HR 웹훅 이행** — HR 설계 §9 절차: `POST /api/employees/sync-preview` 드라이런 → **login_id 케이스 불일치 0 확인이 진행 조건** → 첫 수동 sync → dept-remap 콘솔로 고아 경로 이관 → 스케줄러 24h 활성.
-3. **EDW 직책 이행** — departments 설계 §7 절차: n8n에 [`docs/deploy/n8n/hr-position-workflow.json`](../deploy/n8n/hr-position-workflow.json) 임포트(자격증명 2곳 지정) → `.env`에 `N8N_POSITION_URL` → sync 1회 후 `position_refreshed`/`position_unmatched` 확인 → 설정 Employees 탭에서 노출 직책 조정.
-4. **컨설턴트 체계** — 서버 실환경(9910)에서 Framework 트리·임포트 결과 실검증.
+- [x] 유저 목록·부서 — HR 웹훅 동기화·퇴직자 제외·부서 트리·직책(Manager 태그) 검증 완료 (2026-08-11, 9910)
+- [x] n8n hr-position 실호출(DEPTCD)·스키마 자동 보강(dept_code·position·email NOT NULL 완화)
 
-## 묶음별 확인 항목 (서버/실데이터에서만 가능한 것)
+## 2. 컨설턴트 프레임워크 — 신규 확인
 
-### ① 컨설턴트 7단계 체계 (`1423f41`)
-- [ ] 9910 실서버에서 Framework 토글·lazy 트리·연결/이양 모달·SP I/O 실동작 확인 (로컬 게이트는 통과: BE 924·FE 605·스모크 8/8)
-- 다음 단계 후보(설계 참조): 거버넌스 UX 확장([`2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md), 미구현) 또는 스케일 하드닝
+### 2-1. 웹 임포트 — 설정 → Framework 탭
 
-### ② HR 웹훅 (`953d5cb`) — 설계 §9 이행·§11 실데이터 검증
-- [ ] 웹훅 URL 철자 확정(계약서 표기 `webhoop` 오타 여부)
-- [ ] orgLevels가 루트→리프 순서인지 실응답으로 확인
-- [ ] HR 영문 부서명 ↔ 기존 AD OU 표기 diff 규모 (sync-preview로 정량화)
-- [ ] loginId ↔ sAMAccountName 대소문자 일치 (불일치 0이 이행 진행 조건)
-- [ ] 6레벨 조직 실재 여부 (`truncated_levels` 카운트)
-- [ ] 운영 Postgres email NOT NULL 완화 스텝 배포 로그 1회 확인
+- [ ] 설정 열기 → **Framework** 탭이 보인다(sysadmin에게만) → Categories 트리는 임포트 전이라 비어 있음
+- [ ] Import 섹션에서 `categories.json`·`maps.jsonl` 선택(샘플: `docs/samples/consultant-delivery-sample/` — owner를 본인 계정, department를 홈 부서 트리에 보이는 경로로 바꿔서) → 파일명·항목 수 표시
+- [ ] **Dry-run** 클릭 → 요약 칩(created/updated/unchanged/errors/warnings) + 행 테이블 → 홈에는 아무 변화 없음(미영속)
+- [ ] **Apply** 클릭 → 확인 다이얼로그 → 완료 후 탭의 카테고리 트리에 구매→소싱→… 생김
+- [ ] 같은 파일로 Dry-run 재실행 → 전부 unchanged (멱등)
 
-### ③ 조직 기준 전환 + EDW 직책 (`60ba560`) — 설계 §7 이행·§8 한계
-- [x] n8n hr-position 워크플로 실호출 — `dbo.VW_HR_EMP_CENTER_MAPPING` 응답 필드(EMPID·**DEPTCD**·FRNM — 9910에서 DEPTCO→DEPTCD 정정)·DT 필터 실검증
-- [ ] AD `employeeNumber` 실값 확인 — `position_unmatched` 크면 **사번 zero-padding 불일치**(EDW `00100` vs AD `100`) 우선 의심 → `lstrip("0")` 정규화 후보
-- [ ] 첫 sync 후 dept-remap 콘솔에서 경로 이동분(HR orgLevels ↔ departments 계층 불일치) 확인·이관
-- [ ] 수집된 직책 목록 보고 노출 allowlist(기본: 그룹장·파트장·팀장·센터장) 조정
+### 2-2. 카테고리 관리 — 같은 탭
+
+- [ ] 루트 **Add** → 이름 입력 → 트리에 나타남 (code는 `ui-` 자동)
+- [ ] **Rename** → 이름 변경이 트리에 반영
+- [ ] **Move** → 캐스케이드로 다른 부모 선택 → 이동 반영 (자기 자손 아래·레벨 5 초과는 에러 안내)
+- [ ] 자식·연결 맵 있는 카테고리 **Delete** → 사유(개수)와 함께 거부 / 빈 카테고리는 삭제됨
+
+### 2-3. 홈 노출 (임포트 결과)
+
+- [ ] Maps 탭 좌측 **Framework 토글** → 카테고리 트리 펼침 → 임포트된 맵 3개 노출, 새로고침 후 토글 유지
+- [ ] 맵 선택 → 상세 카드에 카테고리 경로 pill + Input/Output 표시
+- [ ] (오너 계정) 경로 pill 클릭 → 연결/이양 모달 동작 — 캐스케이드에서 같은 브랜치 재선택 시 하위 셀렉트가 정상적으로 다시 뜨는지 포함
+- [ ] `CM-PUR-001` 에디터 → 연계 subprocess 노드 + 게시 v1 확인
+- [ ] 홈 맵 필터의 **SP / Non-SP** 필터 동작
+
+## 3. 기존 화면 회귀 스팟 (빠르게)
+
+- [ ] 홈 Departments 뷰·최근 목록·도넛 정상
+- [ ] 아무 맵 에디터 열기 → 편집 → 저장 정상
+- [ ] 설정 Employees / Departments 탭 정상(직책 병기·트리 테이블)
+
+## 4. 통과 후 절차
+
+1. dev → main 머지 — 머지 시 PROGRESS 항목 압축(`rules/common/git.md` — On Branch Merge)
+2. 운영 배포 — 기동 로그에서 자동 보강 확인: `process_categories` 테이블 + `process_maps` 4컬럼(category_id·consultant_code·sp_input·sp_output) (+ HR 묶음 보강은 이미 적용 전제)
+3. 운영 첫 임포트는 **설정 → Framework 탭**으로. 초대형 전달(수천 맵+)만 서버 CLI(`docs/deploy/db-migration-9910.md` §8 참조)
 
 ## 결정 대기
 
@@ -58,3 +69,8 @@
 10. 체인 중간 단절 시 부분 경로 무통지 사용 — 로그 또는 docstring 명시
 11. `employee-table` 노출 직책 카드 초기 GET `.catch(() => undefined)` 무통지 삼킴
 12. 스테일 Playwright 스크립트 2종 정리 — `pw-verify-dept-tree-import.mjs`·`pw-smoke-korean-names.mjs`(삭제된 모달·버튼 타깃, 영구 브로큰)
+
+### 프레임워크 관리 탭 잔여 (2026-08-12 태스크 리뷰 Minor 유예분)
+13. 캐스케이드 모달(연결/이양·Move) 컴포넌트 회귀 테스트 부재 — 재선택 버그 픽스 가드용
+14. categories.json 파싱 실패 시 빈 배열로 조용히 진행(인라인 오류만) — 리포트에 상관 표시 후보
+15. 파서 CRLF 테스트 부재(Windows 파이프라인 보험) · DELETE 409 소프트삭제 맵 분기 미테스트 · import label>100 422 미테스트
