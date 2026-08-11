@@ -87,8 +87,8 @@ def test_dept_info_blank_entry_ignored(client: TestClient) -> None:
 def test_dept_info_accepts_parent_org_levels(client: TestClient) -> None:
     """조직도 tree는 본부·실까지 담는다 — 직원이 직접 소속되지 않은 상위 레벨도 수용해야 한다.
 
-    상위 레벨 dept_info가 있어야 /api/me의 상위 부서장 체인(manager_ids)과
-    피커의 상위 부서 한글 검색이 동작한다.
+    상위 레벨 dept_info가 있어야 피커의 상위 부서 한글 검색이 동작한다.
+    (manager_ids는 Task 4에서 departments 부서 체인 + EDW position allowlist로 전환 — dept_info 무관)
     """
     res = client.put(
         "/api/admin/dept-info",

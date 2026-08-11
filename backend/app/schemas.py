@@ -1239,7 +1239,7 @@ AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
 class AppSettingsOut(BaseModel):
-    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한."""
+    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한 + 노출 직책 allowlist."""
 
     ai_chat_tips: list[str]
     ai_chat_max_sessions_per_map: int
@@ -1247,6 +1247,10 @@ class AppSettingsOut(BaseModel):
     ai_chat_retention_days: int
     # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
     ai_access_disabled: bool = False
+    # 부서장으로 노출할 EDW 직책(FRNM) allowlist — /api/me manager_ids 산출 기준 (설계 2026-08-11 §5)
+    exposed_positions: list[str] = []
+    # employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
+    available_positions: list[str] = []
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -1259,6 +1263,8 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
     ai_access_disabled: bool | None = None
+    # 빈 목록 저장 = 전부 비노출(get_exposed_positions가 기본값으로 되돌리지 않음)
+    exposed_positions: list[str] | None = Field(default=None, max_length=50)
 
 
 class AiPromptOut(BaseModel):
