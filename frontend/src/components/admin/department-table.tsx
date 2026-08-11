@@ -128,7 +128,9 @@ export function DepartmentTable() {
     setRemapMsg("");
     try {
       const res = await postDeptRemap(fromPath, toPath);
-      setRemapMsg(`${fromPath} → ${toPath} · grants ${res.map_grants} · group members ${res.group_members}`);
+      setRemapMsg(
+        `${fromPath} → ${toPath} · grants ${res.map_grants} · group members ${res.group_members} · owning maps ${res.owning_maps}`,
+      );
       setReloadKey((k) => k + 1);
     } catch (err) {
       setRemapMsg(err instanceof Error ? err.message : "remap failed");
@@ -193,6 +195,7 @@ export function DepartmentTable() {
                 {t("admin.deptRemapRefs", {
                   grants: String(ref.map_grants),
                   members: String(ref.group_members),
+                  owning: String(ref.owning_maps),
                 })}
               </span>
               <SearchSelect

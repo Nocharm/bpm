@@ -1478,18 +1478,19 @@ export interface DeptRemapItem {
   path: string;         // 현 조직에 없는 org_path (조직개편 잔재)
   map_grants: number;   // 이 경로를 참조하는 맵 부서 권한 수
   group_members: number; // 이 경로를 참조하는 그룹 부서 멤버 수
+  owning_maps: number;  // 이 경로를 오우닝 부서로 갖는 맵 수 — 홈 트리 미아 방지
 }
 
-/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버 집계. */
+/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버·오우닝 맵 집계. */
 export function getDeptRemap(): Promise<DeptRemapItem[]> {
   return request<DeptRemapItem[]>("/admin/dept-remap");
 }
 
-/** sysadmin 전용 — from_path 참조 전부를 현존 to_path로 일괄 이동(중복은 병합). */
+/** sysadmin 전용 — from_path 참조 전부(권한·그룹 멤버·오우닝)를 현존 to_path로 일괄 이동(중복은 병합). */
 export function postDeptRemap(
   fromPath: string,
   toPath: string,
-): Promise<{ map_grants: number; group_members: number }> {
+): Promise<{ map_grants: number; group_members: number; owning_maps: number }> {
   return request("/admin/dept-remap", {
     method: "POST",
     body: JSON.stringify({ from_path: fromPath, to_path: toPath }),

@@ -125,3 +125,46 @@ def test_remap_rejects_unknown_target_and_requires_sysadmin(
         json={"from_path": GONE, "to_path": LIVE},
     )
     assert res2.status_code == 403
+
+
+def test_remap_moves_owning_department(client: TestClient) -> None:
+    """오우닝 부서 참조도 목록 집계·이관 대상 — 빠지면 홈 트리에서 맵이 미아가 된다 (9910 적발)."""
+    gone_owning = "Old Division/Old Office/Owning Only Team"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(
+                name=f"remap owning {id(object())}",
+                visibility="private",
+                created_by="owner.u",
+                owner_id="owner.u",
+                owning_department=gone_owning,
+            )
+            session.add(m)
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+
+    # 목록에 owning_maps 카운트로 집계
+    res = client.get("/api/admin/dept-remap", headers=SYS)
+    assert res.status_code == 200
+    row = next((r for r in res.json() if r["path"] == gone_owning), None)
+    assert row is not None
+    assert row["owning_maps"] >= 1
+
+    # 이관 → owning_department 치환 + 응답 카운트
+    res = client.post(
+        "/api/admin/dept-remap",
+        json={"from_path": gone_owning, "to_path": LIVE},
+        headers=SYS,
+    )
+    assert res.status_code == 200
+    assert res.json()["owning_maps"] >= 1
+
+    async def _check() -> str | None:
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, map_id)
+            return m.owning_department if m else None
+
+    assert asyncio.run(_check()) == LIVE

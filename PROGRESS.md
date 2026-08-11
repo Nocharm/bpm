@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- dept-remap에 오우닝 부서 포함: 목록 집계(`owning_maps`)·이관(단일 컬럼 치환, 소프트삭제 포함) 확장 — 홈 "내 부서" 트리는 owning_department 기준이라 빠지면 이관해도 맵이 미아로 남음(9910 적발). FE 카운트 표기·i18n 동기. BE 974(+1)·ruff 0·FE 그린.
 - 홈 맵 필터에 SP 여부 추가: 상태·권한·오우닝 옆 4번째 드롭다운(`home-sp-filter`) — SP maps/Non-SP maps(`sp_designated_at` 기준), 세션 영속·Clear 연동. FE tsc/lint/vitest 589/build 그린.
 - **9910 검증 픽스 4종**: ① EDW 뷰 부서코드 컬럼 DEPTCO→**DEPTCD** 정정(n8n 워크플로 JSON·문서) ② 조직 최상위 2레벨(법인·사업부급) 해석 제외 — `settings.org_trim_levels=2`, departments 체인 해석 전용(org 컬럼·폴백 원본 보존) ③ 오우닝 부서 검증(maps `_assert_known_department`)이 org 컬럼 인라인 조합이라 피커(체인 경로)와 불일치 → 신설 `orgchart.load_valid_org_prefixes` 공용 헬퍼로 통일(unknown department 422 해소, admin dept-remap도 위임) ④ 어드민 테이블 뷰어 kb_chunks 500 — LargeBinary 셀을 크기 표시로 직렬화. 게이트 BE 973(+4)·ruff 0.
 - 9910 검증 가이드 갱신: [`docs/deploy/db-migration-9910.md`](docs/deploy/db-migration-9910.md) — 운영(main) DB 복사→dev 60ba560 검증 절차 8월판(스키마 델타 표·n8n hr-dept URL 실측/hr-position 임포트 상세·HR §9 이행 리허설·EDW 직책 검증·운영 승격 절차).

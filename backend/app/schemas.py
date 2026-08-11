@@ -1122,6 +1122,7 @@ class DeptRemapItemOut(BaseModel):
     path: str
     map_grants: int      # 이 경로를 참조하는 맵 부서 권한 행 수
     group_members: int   # 이 경로를 참조하는 그룹 부서 멤버 행 수
+    owning_maps: int = 0  # 이 경로를 오우닝 부서로 갖는 맵 수 — 홈 트리 미아 방지
 
 
 class DeptRemapIn(BaseModel):
@@ -1134,6 +1135,7 @@ class DeptRemapIn(BaseModel):
 class DeptRemapOut(BaseModel):
     map_grants: int
     group_members: int
+    owning_maps: int = 0
 
 
 class AdminDirectoryOut(BaseModel):
