@@ -12,6 +12,7 @@
 - [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
 
 ## QA · 검증 ([`qa/`](qa/))
+- [`qa/dev-vs-main-checklist.md`](qa/dev-vs-main-checklist.md) — dev↔main 미반영 3묶음(컨설턴트 체계·HR 웹훅·조직 기준 전환)의 배포 순서·서버 확인 항목·백로그 12건.
 - [`qa/alarm-audit.md`](qa/alarm-audit.md) — 알림 기능 전수 조사·감사.
 - [`qa/ai-connectivity-test.md`](qa/ai-connectivity-test.md) — AI(LLM) 연결성 점검 절차.
 - [`qa/ai-real-model-smoke.md`](qa/ai-real-model-smoke.md) — AI 실모델 스모크 테스트.
