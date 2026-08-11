@@ -17,16 +17,19 @@ import {
   fetchRootChildren,
   hasCachedChildren,
   hasMoreMaps,
-  readPersistedOpenIds,
+  readPersistedTreeState,
   reduceFrameworkTree,
   ROOT,
   shouldFetchChildren,
   shouldFetchMore,
-  writePersistedOpenIds,
+  writePersistedTreeState,
   type FrameworkTreeState,
+  type PersistedTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
+import { ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
+import { DeptGroupBox } from "@/components/maps/dept-group-box";
 
 interface FrameworkTreeProps {
   // page.tsx의 기존 renderCard를 그대로 물려받아 맵 행 렌더를 OrgAccordion과 일원화 (selectedId는 renderCard 클로저 내부 처리).
@@ -44,27 +47,32 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
   // 영속 게이트 — 복원 effect가 지나기 전 persist effect가 빈 초기 상태로 저장값을 덮는 것을 막는다.
   const hydratedRef = useRef(false);
   // 복원 대상 스냅샷 — StrictMode 이중 실행 사이에 persist가 끼어들어도 첫 판독값을 유지한다.
-  const restoreIdsRef = useRef<number[] | null>(null);
+  const restoreRef = useRef<PersistedTreeState | null>(null);
+  // 맵 리스트 3.5개 클램프의 "전체 펼치기" 상태 — 카테고리 id 키, openIds와 함께 영속.
+  const [expandedLists, setExpandedLists] = useState<Set<number>>(new Set());
 
   // 펼침 상태 영속 — 복원 effect(아래)보다 먼저 선언해 첫 실행이 hydration 전에 스킵되게 한다.
   useEffect(() => {
     if (!hydratedRef.current) return;
-    writePersistedOpenIds(state.openIds);
-  }, [state.openIds]);
+    writePersistedTreeState(state.openIds, expandedLists);
+  }, [state.openIds, expandedLists]);
 
   // 펼침 상태 복원 — 뒤로가기/새로고침 후 저장된 openIds를 다시 열고 각 노드를 재fetch(캐스케이드 없음:
   // 저장값이 곧 사용자의 최종 상태다). 삭제된 카테고리 id는 부모 목록에 없어 렌더되지 않는다(무해).
   useEffect(() => {
-    restoreIdsRef.current ??= readPersistedOpenIds();
-    const ids = restoreIdsRef.current;
+    restoreRef.current ??= readPersistedTreeState();
+    const persisted = restoreRef.current;
     hydratedRef.current = true;
-    if (ids.length === 0) return;
+    if (persisted.expandedLists.length > 0) {
+      setExpandedLists(new Set(persisted.expandedLists)); // one-time hydration
+    }
+    if (persisted.openIds.length === 0) return;
     setState((prev) => {
       let next = prev;
-      for (const id of ids) next = reduceFrameworkTree(next, { type: "opened", categoryId: id });
+      for (const id of persisted.openIds) next = reduceFrameworkTree(next, { type: "opened", categoryId: id });
       return next;
     }); // one-time hydration (부서 트리 page.tsx 복원과 동일 관례)
-    for (const id of ids) loadChildren(id, false);
+    for (const id of persisted.openIds) loadChildren(id, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // 루트 fetch 실패 표시 — children_loaded가 한 번도 없으면 rootLoaded는 영원히 false로 남는데,
@@ -141,6 +149,16 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     loadChildren(categoryId, true);
   }
 
+  // 리스트 "전체 펼치기" 토글 — 영속은 persist effect가 expandedLists 변경을 따라 저장한다.
+  function toggleListExpand(categoryId: number) {
+    setExpandedLists((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return next;
+    });
+  }
+
   function handleLoadMore(categoryId: number) {
     // 인플라이트 중 중복 클릭 가드 — 없으면 같은 offset이 두 번 요청되어 중복 id가 append된다.
     if (!shouldFetchMore(state, categoryId)) return;
@@ -167,6 +185,12 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const shownMaps = filterMap ? mapsData.maps.filter(filterMap) : mapsData.maps;
     const filteredOut = mapsData.maps.length - shownMaps.length;
     return (
+      <ClampedList
+        count={shownMaps.length}
+        expanded={expandedLists.has(categoryId)}
+        onToggle={() => toggleListExpand(categoryId)}
+        dataId={`framework-list-expand-${categoryId}`}
+      >
       <ul className="flex flex-col gap-2 pl-5 pr-2">
         {shownMaps.map((m) => (
           <li key={m.id}>{renderCard(m)}</li>
@@ -193,6 +217,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
           </li>
         )}
       </ul>
+      </ClampedList>
     );
   };
 
@@ -205,26 +230,40 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const loadFailed = open && !loading && !hasCachedChildren(state, node.id);
     const children = state.childrenByParent.get(node.id) ?? [];
     const mapsData = state.mapsByCategory.get(node.id);
+    // 직접 보유 맵이 있는 카테고리를 펼치면 헤더+자기 맵만 틴트 박스로 묶는다 — 부서 목록(org-accordion)과
+    // 동일 규칙: 박스의 뜻은 "이 카테고리가 직접 가진 맵", 자식 카테고리는 박스 밖(중첩 금지).
+    const boxed = open && !initialLoading && !loadFailed && (mapsData?.total ?? 0) > 0;
+
+    const header = (
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => handleToggle(node.id)}
+        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider"
+      >
+        {open
+          ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+          : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
+        <span
+          className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
+        >
+          {node.name}
+        </span>
+        {!open && <CountTag count={node.map_count} />}
+      </button>
+    );
 
     return (
       <li key={node.id} data-id="framework-node" className="flex flex-col gap-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => handleToggle(node.id)}
-          style={{ paddingLeft: `${depth * 12 + 4}px` }}
-          className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider"
-        >
-          {open
-            ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
-            : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
-          <span
-            className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
-          >
-            {node.name}
-          </span>
-          {!open && <CountTag count={node.map_count} />}
-        </button>
+        {boxed
+          ? (
+            <DeptGroupBox dataId="framework-group-box">
+              {header}
+              {renderMapList(node.id, mapsData, loading)}
+            </DeptGroupBox>
+          )
+          : header}
         {open && (
           initialLoading ? (
             <p style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }} className="text-fine text-ink-tertiary">
@@ -241,12 +280,9 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
               {node.name} — {t("home.frameworkLoadError")}
             </button>
           ) : (
-            <>
-              {children.length > 0 && (
-                <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
-              )}
-              {renderMapList(node.id, mapsData, loading)}
-            </>
+            children.length > 0 && (
+              <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
+            )
           )
         )}
       </li>

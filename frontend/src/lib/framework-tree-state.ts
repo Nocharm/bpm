@@ -110,22 +110,33 @@ export function collectCascadeTargets(nodes: CategoryNode[], budget: number): nu
 }
 
 // 펼침 상태 영속 — 부서 트리(bpm.home.tree)와 동일하게 localStorage(새로고침·뒤로가기에도 유지).
+// openIds=카테고리 펼침, expandedLists=맵 리스트 3.5개 클램프의 "전체 펼치기" 상태(카테고리 id 키).
 const FRAMEWORK_TREE_KEY = "bpm.framework.tree";
 
-export function readPersistedOpenIds(): number[] {
+export interface PersistedTreeState {
+  openIds: number[];
+  expandedLists: number[];
+}
+
+export function readPersistedTreeState(): PersistedTreeState {
+  const pickNumbers = (v: unknown): number[] =>
+    Array.isArray(v) ? v.filter((x): x is number => typeof x === "number") : [];
   try {
     const raw = window.localStorage.getItem(FRAMEWORK_TREE_KEY);
-    if (!raw) return [];
-    const s = JSON.parse(raw) as { openIds?: unknown };
-    return Array.isArray(s.openIds) ? s.openIds.filter((x): x is number => typeof x === "number") : [];
+    if (!raw) return { openIds: [], expandedLists: [] };
+    const s = JSON.parse(raw) as { openIds?: unknown; expandedLists?: unknown };
+    return { openIds: pickNumbers(s.openIds), expandedLists: pickNumbers(s.expandedLists) };
   } catch {
-    return []; // 손상된 저장값 무시
+    return { openIds: [], expandedLists: [] }; // 손상된 저장값 무시
   }
 }
 
-export function writePersistedOpenIds(openIds: Set<number>): void {
+export function writePersistedTreeState(openIds: Set<number>, expandedLists: Set<number>): void {
   try {
-    window.localStorage.setItem(FRAMEWORK_TREE_KEY, JSON.stringify({ openIds: [...openIds] }));
+    window.localStorage.setItem(
+      FRAMEWORK_TREE_KEY,
+      JSON.stringify({ openIds: [...openIds], expandedLists: [...expandedLists] }),
+    );
   } catch {
     // 저장 실패(용량 등)는 UX에 치명적이지 않다 — 펼침 상태만 복원 안 될 뿐.
   }

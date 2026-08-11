@@ -11,12 +11,14 @@ import type { ReactNode } from "react";
 
 interface DeptGroupBoxProps {
   children: ReactNode;
+  // 표면별 식별자 — 업무 체계(framework-tree)가 같은 박스를 재사용하며 data-id만 달리 단다.
+  dataId?: string;
 }
 
-export function DeptGroupBox({ children }: DeptGroupBoxProps) {
+export function DeptGroupBox({ children, dataId = "org-group-box" }: DeptGroupBoxProps) {
   return (
     <div
-      data-id="org-group-box"
+      data-id={dataId}
       className="flex flex-col gap-2 rounded-sm bg-surface-alt py-2"
     >
       {children}

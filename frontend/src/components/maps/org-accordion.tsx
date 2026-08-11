@@ -4,14 +4,20 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
 import type { OrgNode } from "@/lib/org-tree";
 import { useI18n } from "@/lib/i18n";
+import { ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
 import { MapCard } from "@/components/maps/map-card";
+
+// 리스트 3.5개 클램프의 "전체 펼치기" 상태 영속 키 — 트리 펼침(bpm.home.tree)과 별도 보관.
+const LIST_EXPAND_KEY = "bpm.home.deptListExpand";
+// 미지정 섹션 리스트 키 — 부서 path와 충돌하지 않는 센티널.
+const UNASSIGNED_LIST_KEY = "__unassigned__";
 
 interface OrgAccordionProps {
   roots: OrgNode[];
@@ -37,18 +43,49 @@ export function OrgAccordion(props: OrgAccordionProps) {
     onSelect, unassignedOpen, onToggleUnassigned, renderCard,
   } = props;
 
+  // 리스트 "전체 펼치기" 상태 — 박스별(부서 path·미지정 센티널). localStorage 복원으로 뒤로가기에도 유지.
+  const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LIST_EXPAND_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw) as { paths?: unknown };
+      if (Array.isArray(s.paths)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setExpandedLists(new Set(s.paths.filter((x): x is string => typeof x === "string"))); // one-time hydration
+      }
+    } catch {
+      /* 손상된 저장값 무시 */
+    }
+  }, []);
+  const toggleListExpand = (key: string) => {
+    const next = new Set(expandedLists);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setExpandedLists(next);
+    window.localStorage.setItem(LIST_EXPAND_KEY, JSON.stringify({ paths: [...next] }));
+  };
+
   // 맵 목록 — 인셋은 pl-5 pr-2 고정값(depth에서 파생하지 않는 상수). 박스가 테두리를 잃은 뒤
   // 카드가 헤더 아래 소속임을 보여주는 유일한 단서라, 상수로 고정해야 모든 depth에서 카드 폭이 동일하다.
-  const renderMapList = (maps: MapSummary[]) => (
-    <ul className="flex flex-col gap-2 pl-5 pr-2">
-      {maps.map((m) => (
-        <li key={m.id}>
-          {renderCard
-            ? renderCard(m)
-            : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
-        </li>
-      ))}
-    </ul>
+  // 3.5개 초과 목록은 ClampedList가 자르고 풀폭 쉐브론 버튼으로 전체 펼침을 토글한다.
+  const renderMapList = (maps: MapSummary[], listKey: string) => (
+    <ClampedList
+      count={maps.length}
+      expanded={expandedLists.has(listKey)}
+      onToggle={() => toggleListExpand(listKey)}
+      dataId={`org-list-expand-${listKey}`}
+    >
+      <ul className="flex flex-col gap-2 pl-5 pr-2">
+        {maps.map((m) => (
+          <li key={m.id}>
+            {renderCard
+              ? renderCard(m)
+              : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
+          </li>
+        ))}
+      </ul>
+    </ClampedList>
   );
 
   const renderNode = (node: OrgNode, depth: number) => {
@@ -85,7 +122,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
 
     return (
       <li key={node.path} className="flex flex-col gap-2">
-        {boxed ? <DeptGroupBox>{header}{renderMapList(node.maps)}</DeptGroupBox> : header}
+        {boxed ? <DeptGroupBox>{header}{renderMapList(node.maps, node.path)}</DeptGroupBox> : header}
         {open && node.children.length > 0 && (
           <ul className="flex flex-col gap-2">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
         )}
@@ -132,7 +169,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
       {unassigned.length > 0 && (
         <div className="pt-2">
           {unassignedOpen
-            ? <DeptGroupBox>{unassignedHeader}{renderMapList(unassigned)}</DeptGroupBox>
+            ? <DeptGroupBox>{unassignedHeader}{renderMapList(unassigned, UNASSIGNED_LIST_KEY)}</DeptGroupBox>
             : unassignedHeader}
         </div>
       )}

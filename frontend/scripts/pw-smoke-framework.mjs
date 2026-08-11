@@ -65,6 +65,11 @@ try {
   check("one-click cascade reveals imported map card (L1→L5)", mapVisible, MAP_NAME);
   const midVisible = await nodeButton(page, CHAIN[3]).first().isVisible().catch(() => false);
   check("cascade auto-opened intermediate levels", midVisible, CHAIN[3]);
+  // 직접 보유 맵이 있는 카테고리(L5)는 부서 목록과 같은 틴트 박스로 묶인다 — 맵 카드가 박스 안에 있어야 한다.
+  const boxedCard = await page
+    .locator('[data-id="framework-group-box"] [data-id="map-card-name"]', { hasText: MAP_NAME })
+    .first().isVisible().catch(() => false);
+  check("map-holding category renders tint group box", boxedCard);
 
   // ── 3) 검색 — Framework 뷰에서도 공용 플랫 검색으로 전환·복귀 ──────────────
   await page.locator('[data-id="home-map-search"]').fill(MAP_NAME);
@@ -113,11 +118,20 @@ try {
   const ioText = (await page.locator('[data-id="map-detail-io"]:visible').first().textContent()) ?? "";
   check("map-detail-io shows Input/Output values", ioText.includes("PR") && ioText.includes("PO"), ioText.trim());
 
-  // ── 7) Departments 복귀 — 조직도 회귀 ──────────────────────────────────────
+  // ── 7) Departments 복귀 — 조직도 회귀 + 3.5개 클램프/전체 펼치기 ───────────
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Departments" }).click();
   await page.waitForSelector('[data-id="home-org-accordion"]', { timeout: 8000 });
   const orgVisible = await page.locator('[data-id="home-org-accordion"]').isVisible().catch(() => false);
   check("Departments toggle renders org accordion (regression)", orgVisible);
+
+  // 직접 맵 4개+ 리스트(시드에선 미지정 섹션, 기본 펼침)는 3.5개 높이로 잘리고 Show all 버튼이 뜬다.
+  const clampBtn = page.locator('[data-id^="org-list-expand-"]').first();
+  const clampShown = await clampBtn.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  const clampLabel = clampShown ? ((await clampBtn.textContent()) ?? "") : "";
+  check("dept map list clamps with Show all button", clampShown && clampLabel.includes("Show all"), clampLabel.trim());
+  await clampBtn.click();
+  const expandedLabel = (await clampBtn.textContent()) ?? "";
+  check("Show all expands list and turns into Collapse", expandedLabel.includes("Collapse"), expandedLabel.trim());
 
   // ── 8) 새로고침 — 마지막 선택(Departments) 유지 ────────────────────────────
   await page.reload({ waitUntil: "networkidle" });
@@ -136,6 +150,12 @@ try {
     storedView === "departments" && orgStillVisible && frameworkGone,
     `view=${storedView} orgVisible=${orgStillVisible} frameworkGone=${frameworkGone}`,
   );
+  // 리스트 "전체 펼치기" 상태도 새로고침에 유지 — Growth Center 트리 펼침(bpm.home.tree)과
+  // 리스트 확장(bpm.home.deptListExpand) 둘 다 복원돼 버튼이 Collapse로 남아야 한다.
+  const clampAfterReload = page.locator('[data-id^="org-list-expand-"]').first();
+  const persistedLabel = await clampAfterReload.waitFor({ state: "visible", timeout: 8000 })
+    .then(async () => (await clampAfterReload.textContent()) ?? "").catch(() => "");
+  check("list expand state persists across reload", persistedLabel.includes("Collapse"), persistedLabel.trim());
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
   await ctx.close();

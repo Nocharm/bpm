@@ -9,12 +9,12 @@ import {
   fetchRootChildren,
   hasCachedChildren,
   hasMoreMaps,
-  readPersistedOpenIds,
+  readPersistedTreeState,
   reduceFrameworkTree,
   ROOT,
   shouldFetchChildren,
   shouldFetchMore,
-  writePersistedOpenIds,
+  writePersistedTreeState,
 } from "./framework-tree-state";
 import { listCategoryMaps, listCategoryNodes, type CategoryMaps, type CategoryNode } from "./api";
 
@@ -275,17 +275,23 @@ describe("collectCascadeTargets", () => {
 });
 
 describe("펼침 상태 영속", () => {
-  it("write→read 라운드트립 — Set이 배열로 저장되고 그대로 복원된다", () => {
-    writePersistedOpenIds(new Set([3, 7]));
-    expect(readPersistedOpenIds()).toEqual([3, 7]);
+  it("write→read 라운드트립 — openIds·expandedLists 둘 다 배열로 저장·복원된다", () => {
+    writePersistedTreeState(new Set([3, 7]), new Set([7]));
+    expect(readPersistedTreeState()).toEqual({ openIds: [3, 7], expandedLists: [7] });
   });
 
-  it("손상 JSON·타입 오염은 무해하게 무시 — 유효 숫자만 남는다", () => {
+  it("손상 JSON·타입 오염·구버전 블롭(expandedLists 없음)은 무해하게 무시", () => {
     window.localStorage.setItem("bpm.framework.tree", "{broken");
-    expect(readPersistedOpenIds()).toEqual([]);
-    window.localStorage.setItem("bpm.framework.tree", JSON.stringify({ openIds: [1, "x", 2] }));
-    expect(readPersistedOpenIds()).toEqual([1, 2]);
+    expect(readPersistedTreeState()).toEqual({ openIds: [], expandedLists: [] });
+    window.localStorage.setItem(
+      "bpm.framework.tree",
+      JSON.stringify({ openIds: [1, "x", 2], expandedLists: "nope" }),
+    );
+    expect(readPersistedTreeState()).toEqual({ openIds: [1, 2], expandedLists: [] });
+    // 구버전 블롭 — openIds만 있던 이전 커밋 저장값과의 호환
+    window.localStorage.setItem("bpm.framework.tree", JSON.stringify({ openIds: [5] }));
+    expect(readPersistedTreeState()).toEqual({ openIds: [5], expandedLists: [] });
     window.localStorage.removeItem("bpm.framework.tree");
-    expect(readPersistedOpenIds()).toEqual([]);
+    expect(readPersistedTreeState()).toEqual({ openIds: [], expandedLists: [] });
   });
 });
