@@ -159,23 +159,74 @@ def test_upsert_categories_idempotent(client) -> None:
 
 def test_resolve_owning_department(client) -> None:
     from app.db import SessionLocal
-    from scripts.import_consultant import build_known_departments, resolve_owning_department
+    from app.orgchart import load_dept_index, load_valid_org_prefixes
+    from scripts.import_consultant import resolve_owning_department
 
     _seed_import_employees()
 
     async def _resolve() -> list:
         async with SessionLocal() as session:
-            known = await build_known_departments(session)
+            known = await load_valid_org_prefixes(session)
+            index = await load_dept_index(session)
             return [
-                await resolve_owning_department(session, known, "Consult Div/Consult Team", "cons.owner"),
-                await resolve_owning_department(session, known, "Nope/Nowhere", "cons.owner"),
-                await resolve_owning_department(session, known, "", "cons.appr"),
+                await resolve_owning_department(
+                    session, known, index, "Consult Div/Consult Team", "cons.owner"
+                ),
+                await resolve_owning_department(session, known, index, "Nope/Nowhere", "cons.owner"),
+                await resolve_owning_department(session, known, index, "", "cons.appr"),
             ]
 
     direct, fallback, none = _run(_resolve())
     assert direct == ("Consult Div/Consult Team", None)
     assert fallback[0] == "Consult Div/Consult Team" and "fallback" in (fallback[1] or "")
     assert none[0] is None and none[1] is not None
+
+
+def test_resolve_owning_department_uses_dept_chain(client) -> None:
+    """departments 체인 보유 오너의 폴백·known은 resolver 경로(트림 반영) — org 컬럼 원본이 아니다.
+
+    조직 기준 전환(2026-08) 후 임포트가 raw org_l 조합을 쓰면 피커·오우닝 검증과 어긋난
+    고아 경로가 박히는 회귀 가드.
+    """
+    from app.db import SessionLocal
+    from app.models import Department, Employee
+    from app.orgchart import load_dept_index, load_valid_org_prefixes
+    from scripts.import_consultant import resolve_owning_department
+
+    async def _arrange() -> None:
+        async with SessionLocal() as session:
+            if await session.get(Department, "CIMP-L1") is None:
+                for code, parent, level, name in (
+                    ("CIMP-L1", None, 1, "Consult Corp"),
+                    ("CIMP-L2", "CIMP-L1", 2, "Consult Biz"),
+                    ("CIMP-L3", "CIMP-L2", 3, "Consult Office"),
+                    ("CIMP-L4", "CIMP-L3", 4, "Consult Chain Team"),
+                ):
+                    session.add(Department(dept_code=code, parent_dept_code=parent, level=level, name=name))
+            if await session.get(Employee, "cons.chain") is None:
+                session.add(Employee(
+                    login_id="cons.chain", name="cons.chain", source="local", active=False,
+                    dept_code="CIMP-L4", org_l1="Raw Legacy Div", org_l2="Raw Legacy Team",
+                ))
+            await session.commit()
+
+    async def _resolve() -> tuple:
+        async with SessionLocal() as session:
+            known = await load_valid_org_prefixes(session)
+            index = await load_dept_index(session)
+            fallback = await resolve_owning_department(session, known, index, "", "cons.chain")
+            raw_dept = await resolve_owning_department(
+                session, known, index, "Raw Legacy Div/Raw Legacy Team", "cons.chain"
+            )
+            return known, fallback, raw_dept
+
+    _run(_arrange())
+    known, fallback, raw_dept = _run(_resolve())
+    # 상위 2레벨(org_trim_levels) 트림 후 체인 경로만 유효 집합에 존재
+    assert "Consult Office/Consult Chain Team" in known
+    assert fallback[0] == "Consult Office/Consult Chain Team"
+    # raw org 컬럼 조합은 더 이상 known이 아니다 → resolver 경로로 폴백
+    assert raw_dept[0] == "Consult Office/Consult Chain Team" and "fallback" in (raw_dept[1] or "")
 
 
 def _delivery(maps=None):

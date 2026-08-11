@@ -39,6 +39,7 @@ from app.models import (
     ProcessCategory,
     ProcessMap,
 )
+from app.orgchart import DeptIndex, load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.schemas import NUMERIC_RE
 from app.version_events import record_version_event
 from scripts.consultant_canonical import (
@@ -203,37 +204,21 @@ async def upsert_categories(
     return ids
 
 
-async def build_known_departments(session: AsyncSession) -> set[str]:
-    # routers/maps._assert_known_department와 동일 규약 — 직원 org 전 prefix의 "/" 조인
-    rows = (
-        await session.execute(
-            select(Employee.org_l1, Employee.org_l2, Employee.org_l3,
-                   Employee.org_l4, Employee.org_l5)
-        )
-    ).all()
-    known: set[str] = set()
-    for levels in rows:
-        parts = [lv for lv in levels if lv]
-        for i in range(1, len(parts) + 1):
-            known.add("/".join(parts[:i]))
-    return known
-
-
 async def resolve_owning_department(
-    session: AsyncSession, known: set[str], dept: str, owner: str
+    session: AsyncSession, known: set[str], index: DeptIndex, dept: str, owner: str
 ) -> tuple[str | None, str | None]:
-    """canonical department → 오너 org 폴백 → (None, 경고) (design §5.3)."""
+    """canonical department → 오너 org 폴백 → (None, 경고) (design §5.3).
+
+    known·폴백 모두 orgchart resolver 소스(체인 해석+새니타이즈+상위 트림) — 피커·
+    maps._assert_known_department와 같은 집합이어야 임포트가 박은 owning이 앱 검증·홈
+    트리와 어긋나지 않는다(org 컬럼 인라인 조합 금지, 2026-08 조직 기준 전환 정합).
+    """
     dept = dept.strip()
     if dept and dept in known:
         return dept, None
     employee = await session.get(Employee, owner)
-    parts = (
-        [lv for lv in (employee.org_l1, employee.org_l2, employee.org_l3,
-                       employee.org_l4, employee.org_l5) if lv]
-        if employee else []
-    )
-    if parts:
-        path = "/".join(parts)
+    path = resolve_org_path(employee, index) if employee else ""
+    if path:
         note = f"department {dept!r} unknown — fallback to owner org {path!r}" if dept else None
         if not dept:
             note = f"department empty — fallback to owner org {path!r}"
@@ -352,7 +337,8 @@ async def import_delivery(
     delivery_codes = {m.code for m in maps}
 
     category_ids = await upsert_categories(session, categories)
-    known = await build_known_departments(session)
+    known = await load_valid_org_prefixes(session)  # 피커·오우닝 검증과 동일 소스
+    dept_index = await load_dept_index(session)
 
     # consultant_code is_not(None)로 이미 필터했지만 컬럼 타입은 str | None이라 아래서 str 키로
     # 쓰려면 명시 가드가 필요(Pyright dict[str, ...] 추론).
@@ -425,7 +411,9 @@ async def import_delivery(
             continue
         if cmap.code in existing:
             continue
-        owning, note = await resolve_owning_department(session, known, cmap.department, cmap.owner)
+        owning, note = await resolve_owning_department(
+            session, known, dept_index, cmap.department, cmap.owner
+        )
         if note:
             report.add(cmap.code, "warning", note)
         if cmap.owner not in known_logins:
