@@ -25,7 +25,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- TODO: EDW_VIEW_TODO 두 곳을 실제 스키마.뷰명으로 교체\nSELECT DT, DEPTCO, EMPID, NAME, FRNM\nFROM EDW_VIEW_TODO\nWHERE DT = (\n  SELECT MAX(DT) FROM EDW_VIEW_TODO\n  WHERE DT <= CONVERT(varchar(8), GETDATE(), 112)\n)\n  AND FRNM IS NOT NULL\n  AND LTRIM(RTRIM(FRNM)) <> N''\n  AND LTRIM(RTRIM(FRNM)) <> N'프로'",
+        "query": "SELECT DT, DEPTCO, EMPID, NAME, FRNM\nFROM dbo.VW_HR_EMP_CENTER_MAPPING\nWHERE DT = (\n  SELECT MAX(DT) FROM dbo.VW_HR_EMP_CENTER_MAPPING\n  WHERE DT <= CONVERT(varchar(8), GETDATE(), 112)\n)\n  AND FRNM IS NOT NULL\n  AND LTRIM(RTRIM(FRNM)) <> N''\n  AND LTRIM(RTRIM(FRNM)) <> N'프로'",
         "options": {}
       },
       "id": "aa000001-0000-4000-8000-000000000002",

@@ -85,7 +85,7 @@ def resolve_org_prefixes(path) -> list[str]            # "A/B/C" → ["A","A/B",
 
 ### 4-1. n8n 워크플로
 
-`docs/deploy/n8n/hr-position-workflow.json` — n8n에 임포트 후 ① 웹훅 헤더 자격증명(hr-dept와 동일 X-API-Key) ② MSSQL 자격증명 ③ 쿼리의 `EDW_VIEW_TODO` 실제 뷰명, 3곳만 지정하면 된다.
+`docs/deploy/n8n/hr-position-workflow.json` — n8n에 임포트 후 ① 웹훅 헤더 자격증명(hr-dept와 동일 X-API-Key) ② MSSQL 자격증명, 2곳만 지정하면 된다. 뷰는 `dbo.VW_HR_EMP_CENTER_MAPPING`(쿼리에 반영됨).
 
 - 쿼리: `DT = MAX(DT ≤ 오늘 YYYYMMDD)` 스냅샷(업데이트 지연 시 자동으로 전일분), `FRNM` 트림 후 `'프로'`·빈값 제외.
 - 응답 계약: `POST /webhook/hr-position` (X-API-Key) → `{kind:"positions", dt:"20260811", count, rows:[{empId, deptCode, name, position}]}` — rows는 이미 부서장 후보만.
