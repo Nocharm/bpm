@@ -122,6 +122,8 @@ async def list_inbox_approvals(
         my_maps = select(MapApprover.map_id).where(MapApprover.user_id == user)
         ar_q = ar_q.where(ApprovalRequest.map_id.in_(my_maps))
     for req, pm in (await session.execute(ar_q)).all():
+        if req.kind == "visibility_change" and req.payload.get("version_id") is not None:
+            continue  # 동봉 행 — 버전 항목(block 1)이 결정 표면 (governance A)
         # 변경 전/후 값 — 가시성은 현재 맵 값, 권한 하향은 대상 MapPermission 현재 역할
         before = after = principal = None
         if req.kind == "visibility_change":

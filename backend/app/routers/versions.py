@@ -480,6 +480,21 @@ async def get_workflow_state(
     )
 
 
+async def _find_bundled_visibility(
+    session: AsyncSession, version_id: int
+) -> ApprovalRequest | None:
+    """이 버전에 동봉된 pending 가시성 요청 — payload.version_id 연계 (governance A)."""
+    rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    return next(
+        (r for r in rows.all() if r.payload.get("version_id") == version_id), None
+    )
+
+
 @router.post("/versions/{version_id}/submit", response_model=VersionOut)
 async def submit_version(
     version_id: int,
@@ -515,12 +530,21 @@ async def submit_version(
                 status_code=422, detail="visibility unchanged — nothing to bundle"
             )
         # Standalone pending 이 있으면 동봉이 대체 — 요청자에게 supersede 알림 (P0 대칭)
-        standalone = await session.scalar(
-            select(ApprovalRequest).where(
-                ApprovalRequest.map_id == version.map_id,
-                ApprovalRequest.kind == "visibility_change",
-                ApprovalRequest.status == "pending",
-            )
+        standalone = next(
+            (
+                r
+                for r in (
+                    await session.scalars(
+                        select(ApprovalRequest).where(
+                            ApprovalRequest.map_id == version.map_id,
+                            ApprovalRequest.kind == "visibility_change",
+                            ApprovalRequest.status == "pending",
+                        )
+                    )
+                ).all()
+                if r.payload.get("version_id") is None  # 동봉 행 제외 — 단독 요청만 대체
+            ),
+            None,
         )
         if standalone is not None:
             standalone.status = "superseded"
@@ -662,6 +686,21 @@ async def reject_version(
             version_id=version_id,
             message=f"'{version.label}' was rejected: {payload.reason}",
         )
+
+    # 동봉 가시성 변경 거절
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        bundled.status = "rejected"
+        bundled.decided_by = user
+        bundled.decided_at = _now()
+        await workflow.create_notifications(
+            session,
+            [bundled.requested_by],
+            type="permission_rejected",
+            map_id=version.map_id,
+            message=f"Your bundled visibility change on '{version.label}' was rejected with the version",
+        )
+
     record_version_event(session, version_id, "rejected", user, note=payload.reason)
     await session.commit()
     await session.refresh(version)
@@ -704,6 +743,25 @@ async def publish_version(
     for prior in prior_published:
         prior.status = workflow.EXPIRED
         record_version_event(session, prior.id, "expired", user)
+
+    # 동봉 가시성 변경 적용 — 단독 승인과 동일 적용기 재사용(viewer 스윕·삭제맵 멱등 포함).
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        # 함수-로컬 import: permissions 모듈이 versions 를 import 하지 않는지 먼저 확인 —
+        # 순환이 없으면 모듈 상단 import 로 승격해도 된다(주석 유지).
+        from app.routers.permissions import _apply_request
+
+        await _apply_request(session, bundled)
+        bundled.status = "applied"
+        bundled.decided_by = user
+        bundled.decided_at = _now()
+        await workflow.create_notifications(
+            session,
+            [bundled.requested_by],
+            type="permission_approved",
+            map_id=version.map_id,
+            message=f"Your bundled visibility change on '{version.label}' was applied with the publish",
+        )
 
     version.status = workflow.PUBLISHED
     await workflow.create_notifications(
@@ -822,6 +880,11 @@ async def withdraw_version(
 
     # 반려본 회수는 항상 기록(반려 이력이 의미 있음) — 상태 변경 전에 판정.
     was_rejected = version.status == workflow.REJECTED
+
+    # 동봉 가시성 변경 회수
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        bundled.status = "withdrawn"
 
     version.status = workflow.DRAFT
     version.checked_out_by = user

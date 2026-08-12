@@ -502,6 +502,11 @@ async def decide_approval_request(
         await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
         raise HTTPException(status_code=409, detail=f"request already {req.status}")
+    if req.kind == "visibility_change" and req.payload.get("version_id") is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="bundled with a version submission — decided by the version approval",
+        )
 
     req.decided_by = user
     req.decided_at = _now()

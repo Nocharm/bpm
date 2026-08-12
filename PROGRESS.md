@@ -5,6 +5,7 @@
 
 ## 2026-08-13 — 거버넌스 A 게시 동봉 (feat/governance-ux)
 - **Task A1 완결 게이트**: BE pytest 1017·ruff 0 / 신규 test_version_bundle.py 4건 전부 PASS. `SubmitIn` 스키마(to_visibility optional), `submit_version` 함수가 bundle payload 수용(동봉 가시성 변경을 버전 결정에 병합)·단독 pending 요청 supersede·approval_requests 생성(version_id 링크).
+- **Task A2 완결 게이트**: BE pytest 1023·ruff 0 / test_version_bundle.py 신규 6건 전부 PASS. `_find_bundled_visibility` 헬퍼 + publish·reject·withdraw·decide·inbox 5 표면 동봉 처리(연쇄 적용·종결·409 직결정·박스 제외). 원형 import 확인: permissions.py→versions.py 의존 없음, 함수-로컬 import 안전. supersede query 단독 요청만(version_id None 필터) 대체, 다른 버전의 동봉 간섭 원천차단.
 
 ## 2026-08-13 — 거버넌스 B 카드 멤버 편집 (feat/governance-ux)
 - **B 완결 게이트**: BE pytest 1013·ruff 0(무변경 확인) / FE vitest 598·lint 0 error·tsc 0·build OK. 홈/에디터 맵 카드에서 멤버 추가·제거가 설정 화면과 같은 규칙(승격 즉시·강등 승인 경유)으로 가능.
