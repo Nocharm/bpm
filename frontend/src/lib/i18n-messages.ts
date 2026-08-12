@@ -1543,7 +1543,9 @@ const en = {
   "framework.adminMoveRootOption": "(root — top level)",
   "framework.adminDeleteTitle": "Delete category?",
   "framework.adminDeleteMessage":
-    "This only works if the category has no children and no linked maps.",
+    "Deletes this category together with all of its subcategories. Blocked if any map is linked anywhere below.",
+  "framework.adminMoveDepthHint":
+    "Pick the new parent — max 5 levels. Spots too deep for this category are disabled.",
   "framework.adminCreated": "Category created.",
   "framework.adminRenamed": "Category renamed.",
   "framework.adminMoved": "Category moved.",
@@ -3111,7 +3113,8 @@ const ko: Record<MessageKey, string> = {
   "framework.adminMovePickParent": "새 상위 카테고리 선택",
   "framework.adminMoveRootOption": "(최상위로)",
   "framework.adminDeleteTitle": "카테고리를 삭제할까요?",
-  "framework.adminDeleteMessage": "하위 카테고리·연결된 맵이 없어야 삭제됩니다.",
+  "framework.adminDeleteMessage": "하위 카테고리까지 묶음으로 삭제됩니다. 아래 어디든 연결된 맵이 1개라도 있으면 삭제할 수 없습니다.",
+  "framework.adminMoveDepthHint": "새 상위 카테고리 선택 — 최대 5레벨. 이 카테고리가 들어갈 수 없는 깊은 위치는 비활성화됩니다.",
   "framework.adminCreated": "카테고리를 생성했습니다.",
   "framework.adminRenamed": "카테고리 이름을 변경했습니다.",
   "framework.adminMoved": "카테고리를 이동했습니다.",
