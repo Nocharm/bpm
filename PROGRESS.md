@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-13 — 거버넌스 C 승인 탭 통합 (feat/governance-ux)
+- **C 완결 게이트**: BE pytest 1013·ruff 0 / FE vitest 598·lint 0 error·tsc 0·build OK. 결재 대기 탭이 4종 전종을 다루고(행별 결정권=서버 게이트와 일치), 좌측 레일·top-nav 인박스에 pending 카운트 배지.
 - **Task C1 — 결재 목록 게이트 오너 확대**: `GET /api/maps/{map_id}/approval-requests`를 오너(비승인자)에게도 허용 — `_assert_owner_or_approver` 헬퍼 신설, `list_approval_requests` 런타임 판정 전환. rename/sp 결정권자인 오너가 통합 결재 대기 탭을 보기 위한 전제. 테스트 2건 추가, pytest 1013·ruff OK.
 - **Task C2+C3 — 결재 대기 탭 4종 통합 + 레일 배지**: `PendingApprovalsPanel`을 permission_downgrade/visibility_change/map_rename/sp_designation 4종으로 확대, 행별 결정권(`canDecideKind` — rename/sp는 오너, 나머지는 승인자) + `onCountChange` 콜백. 설정 페이지는 `canSeeApprovals = canDecide || isOwner`로 탭 게이트 확대하고 좌측 레일에 pending 카운트 배지 추가. i18n 4키(EN/KO). 게이트: vitest 598·lint 0 error·tsc 0·build OK.
 - **Task C4 — top-nav 인박스 카운트 배지**: `InboxBadge` 신설 컴포넌트(`src/components/inbox-badge.tsx` — `listInboxApprovals` 15s 폴링, notification-bell 선례), top-nav NAV_TABS 인박스 탭에 조건부 렌더. 게이트: vitest 598·lint 0 error·tsc 0·build OK.
