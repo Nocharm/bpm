@@ -3029,6 +3029,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 전체 버전 재로딩 — 게시 시 직전 published→expired 반영(우측에 published 2개 방지).
         const detail = await getMap(mapId);
         setVersions(detail.versions);
+        // 동봉 가시성 변경(셀프 게시 체인 포함)이 서버에 반영된 뒤 bundleTargetVis 소스도 갱신 — 안 하면 다음 동봉 계산이 구 값 기준.
+        setMapVisibility(detail.visibility);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
@@ -9527,15 +9529,23 @@ function MapEditor({ mapId }: { mapId: number }) {
       {selfPublishPrompt && (
         <SelfPublishPopover
           position={selfPublishPrompt}
-          onYes={() => {
+          onYes={(bundle) => {
             setSelfPublishPrompt(null);
-            void runTransition(runSelfPublishChain);
+            void runTransition((id) =>
+              runSelfPublishChain(id, bundle ? bundleTargetVis : undefined),
+            );
           }}
           onNo={() => {
             setSelfPublishPrompt(null);
             setSubmitConfirmOpen(true);
           }}
           onClose={() => setSelfPublishPrompt(null)}
+          bundleLabel={t("approval.bundleVisibility", {
+            target:
+              bundleTargetVis === "public"
+                ? t("perm.visibilityPublic")
+                : t("perm.visibilityPrivate"),
+          })}
         />
       )}
       {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}

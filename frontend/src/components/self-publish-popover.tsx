@@ -3,7 +3,7 @@
 // 셀프 게시 확인 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점(마우스 근처)에 뜨는 소형 Yes/No.
 // Yes = 승인요청→승인→게시 일괄, No = 기존 승인요청 확인 플로우 계속, 바깥 클릭·Escape = 취소.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Upload } from "lucide-react";
 
@@ -14,13 +14,23 @@ import { useI18n } from "@/lib/i18n";
 interface SelfPublishPopoverProps {
   /** 클릭 지점 — 이 자리에(화면 안으로 클램프) 띄운다 (동선 최소화). */
   position: { x: number; y: number };
-  onYes: () => void;
+  /** Yes 클릭 — 동봉 체크박스 상태(bundleLabel 미지정 시 항상 false)를 함께 전달. */
+  onYes: (bundleVisibility: boolean) => void;
   onNo: () => void;
   onClose: () => void;
+  /** 지정 시 Yes/No 버튼 위에 가시성 동봉 체크박스 렌더. */
+  bundleLabel?: string;
 }
 
-export function SelfPublishPopover({ position, onYes, onNo, onClose }: SelfPublishPopoverProps) {
+export function SelfPublishPopover({
+  position,
+  onYes,
+  onNo,
+  onClose,
+  bundleLabel,
+}: SelfPublishPopoverProps) {
   const { t } = useI18n();
+  const [bundleVisibility, setBundleVisibility] = useState(false);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -49,12 +59,23 @@ export function SelfPublishPopover({ position, onYes, onNo, onClose }: SelfPubli
           {t("approval.selfPublishTitle")}
         </p>
         <p className="mt-1 text-caption text-ink-secondary">{t("approval.selfPublishBody")}</p>
+        {bundleLabel && (
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-caption text-ink">
+            <input
+              type="checkbox"
+              data-id="self-publish-bundle"
+              checked={bundleVisibility}
+              onChange={(event) => setBundleVisibility(event.target.checked)}
+            />
+            {bundleLabel}
+          </label>
+        )}
         <div className="mt-2.5 flex gap-1.5">
           <button
             type="button"
             data-id="self-publish-yes"
             className="flex-1 rounded-sm border border-accent px-2 py-1 text-caption text-accent hover:bg-accent-tint"
-            onClick={onYes}
+            onClick={() => onYes(bundleVisibility)}
           >
             {t("approval.selfPublishYes")}
           </button>

@@ -407,7 +407,9 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       currentUserId={currentMockUser.id}
                       canEdit={canEdit}
+                      visibility={visibility}
                       onToast={showToast}
+                      onChanged={() => void refreshMap()}
                     />
                   ) : tab.id === "danger" ? (
                     isOwner ? (
