@@ -1,13 +1,13 @@
 "use client";
 
 // 업무 체계 카테고리 연결/해제 + 슬롯 이양 — 상세 카드 카테고리 필/유령 필에서 오너 전용으로 오픈 (Phase 2).
-// 레벨별 캐스케이드 셀렉트(listCategoryNodes lazy, 루트부터)로 아무 깊이(비-리프 포함)나 연결 가능
-// (설계 §2.2). 선택 체인 갱신(하위 리셋)은 순수 헬퍼(lib/category-cascade.ts)로 분리해 유닛 테스트.
+// 카테고리 선택은 조직도식 lazy 트리(listCategoryNodes) — 가장 하위(리프) 카테고리만 선택 가능,
+// 선택 행은 accent 강조, 미선택이면 연결 버튼 비활성(2026-08-12 캐스케이드 셀렉트에서 개편).
 // 이양 대상 맵 목록은 v1: 클라 listMaps() 지연 로드(서버 검색은 스케일 하드닝 트랙, 브리프 폴백).
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Network, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Network, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
@@ -21,7 +21,6 @@ import {
 } from "@/lib/api";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
-import { pickCascadeLevel, seedChainIds, seedLevelParents } from "@/lib/category-cascade";
 import { useI18n } from "@/lib/i18n";
 
 interface FrameworkAssignModalProps {
@@ -42,44 +41,43 @@ export function FrameworkAssignModal({
   onChanged,
 }: FrameworkAssignModalProps) {
   const { t } = useI18n();
-  // 레벨별 선택 체인 — depth i는 chain[i](카테고리 id). 재선택 시 pickCascadeLevel이 하위를 리셋.
-  const [chain, setChain] = useState<number[]>([]);
-  // depth별 옵션 — [0]=루트, [i+1]=chain[i]의 자식(리프면 없음 → 더 이상 select가 나타나지 않는다).
-  const [optionsByDepth, setOptionsByDepth] = useState<CategoryNode[][]>([]);
+  // 조직도식 lazy 트리 — 자식 캐시(null 키=루트)·펼침·선택(리프만)·인플라이트.
+  const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(new Map());
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set());
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [loadingRoot, setLoadingRoot] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 자식 fetch를 시도한 parentId 집합(결과가 리프였든 아니든) — 재요청 가드 + 로딩 표시 파생에 사용.
-  // depth가 아닌 parentId로 키잉해야 같은 depth를 다른 id로 재선택해도 stale 캐시를 안 밟는다 (fix round 1 #4).
-  const [fetchedParentIds, setFetchedParentIds] = useState<Set<number>>(new Set());
   // 이양 섹션 — 펼칠 때 1회 지연 로드.
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferMaps, setTransferMaps] = useState<MapSummary[] | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
 
-  // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 선택 체인 + 레벨별
-  // 옵션을 한 번에 시딩(fix round 1 #2: 재지정 시 매번 루트부터 다시 클릭하지 않도록). 없으면 루트만 로드.
+  // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
+  // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
   useEffect(() => {
     let active = true;
     async function init() {
       if (currentCategoryId == null) {
-        const nodes = await listCategoryNodes();
+        const roots = await listCategoryNodes();
         if (active) {
-          setOptionsByDepth([nodes]);
+          setChildrenByParent(new Map([[null, roots]]));
           setLoadingRoot(false);
         }
         return;
       }
       const chainNodes = await getCategoryChain(currentCategoryId);
-      const ids = seedChainIds(chainNodes);
-      const levels = await Promise.all(
-        seedLevelParents(ids).map((parentId) => listCategoryNodes(parentId)),
-      );
-      if (active) {
-        setChain(ids);
-        setOptionsByDepth(levels);
-        setLoadingRoot(false);
-      }
+      const ids = chainNodes.map((n) => n.id);
+      const parents: (number | null)[] = [null, ...ids];
+      const lists = await Promise.all(parents.map((p) => listCategoryNodes(p ?? undefined)));
+      if (!active) return;
+      setChildrenByParent(new Map(parents.map((p, i) => [p, lists[i]] as const)));
+      // 자식 있는 조상만 펼침 — 리프(현재 지정)는 펼칠 게 없다.
+      setOpenIds(new Set(ids.filter((_, i) => lists[i + 1].length > 0)));
+      const last = chainNodes[chainNodes.length - 1];
+      if (last && last.child_count === 0) setSelectedId(last.id);
+      setLoadingRoot(false);
     }
     void init().catch((err: unknown) => {
       // 실패해도 로딩 스피너가 영원히 남지 않도록 해제 — 기존 하단 에러 텍스트로 안내.
@@ -101,44 +99,36 @@ export function FrameworkAssignModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // 체인 끝(마지막 선택)의 자식을 lazy 로드 — 있으면 다음 레벨 select가 나타난다.
-  useEffect(() => {
-    if (chain.length === 0) return;
-    const depth = chain.length - 1;
-    const parentId = chain[depth];
-    if (optionsByDepth[depth + 1] || fetchedParentIds.has(parentId)) return; // 이미 로드됐거나 리프로 확인됨
-    let active = true;
-    void listCategoryNodes(parentId).then((nodes) => {
-      if (!active) return;
-      if (nodes.length > 0) {
-        setOptionsByDepth((prev) => {
-          const next = prev.slice(0, depth + 1);
-          next[depth + 1] = nodes;
-          return next;
+  // 행 클릭 — 리프(child_count 0)는 선택, 상위 카테고리는 펼침/접힘 전용(선택 불가).
+  function handleNodeClick(node: CategoryNode) {
+    if (node.child_count === 0) {
+      setSelectedId(node.id);
+      return;
+    }
+    if (openIds.has(node.id)) {
+      setOpenIds((prev) => {
+        const next = new Set(prev);
+        next.delete(node.id);
+        return next;
+      });
+      return;
+    }
+    setOpenIds((prev) => new Set(prev).add(node.id));
+    if (!childrenByParent.has(node.id) && !loadingIds.has(node.id)) {
+      setLoadingIds((prev) => new Set(prev).add(node.id));
+      void listCategoryNodes(node.id)
+        .then((nodes) => {
+          setChildrenByParent((prev) => new Map(prev).set(node.id, nodes));
+        })
+        .catch((err: unknown) => setError(getApiErrorDetail(err)))
+        .finally(() => {
+          setLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(node.id);
+            return next;
+          });
         });
-      }
-      setFetchedParentIds((prev) => new Set(prev).add(parentId));
-    });
-    return () => {
-      active = false;
-    };
-  }, [chain, optionsByDepth, fetchedParentIds]);
-
-  // 파생값(state 아님) — 체인 끝의 자식 fetch가 아직 인플라이트인지, optionsByDepth·fetchedParentIds로 판단.
-  const deepestDepth = chain.length - 1;
-  const loadingChildren =
-    deepestDepth >= 0 &&
-    !optionsByDepth[deepestDepth + 1] &&
-    !fetchedParentIds.has(chain[deepestDepth]);
-
-  function pickAt(depth: number, categoryId: number) {
-    setChain((prev) => pickCascadeLevel(prev, depth, categoryId));
-    // 체인과 정합 유지 — 재선택된 depth보다 깊은 옵션은 폐기(위 effect가 새 부모 기준으로 다시 채운다).
-    setOptionsByDepth((prev) => prev.slice(0, depth + 1));
-    // fetchedParentIds도 함께 리셋 — 안 그러면 예전에 "리프로 확인됨" 표시가 남아, 옵션이 이미
-    // 잘려나간 노드를 다시 선택해도 위 effect의 가드가 재조회를 막아 하위 셀렉트가 영영 안 돌아온다
-    // (pick A→pick D→pick A 재선택 시 A의 하위 레벨이 사라지던 버그).
-    setFetchedParentIds(new Set());
+    }
   }
 
   function openTransfer() {
@@ -151,11 +141,11 @@ export function FrameworkAssignModal({
   }
 
   async function handleAssign() {
-    if (chain.length === 0) return;
+    if (selectedId === null) return;
     setSubmitting(true);
     setError(null);
     try {
-      await putMapCategory(mapId, chain[chain.length - 1]);
+      await putMapCategory(mapId, selectedId);
       onChanged();
       onClose();
     } catch (err) {
@@ -193,6 +183,53 @@ export function FrameworkAssignModal({
       setSubmitting(false);
     }
   }
+
+  // 트리 행 — 상위는 쉐브론 토글, 리프는 선택(가능 대상). 선택 행은 accent 틴트+체크로 강조.
+  const renderNode = (node: CategoryNode, depth: number): ReactNode => {
+    const isLeaf = node.child_count === 0;
+    const open = openIds.has(node.id);
+    const children = childrenByParent.get(node.id) ?? [];
+    const selected = selectedId === node.id;
+    return (
+      <li key={node.id} className="flex flex-col">
+        <button
+          type="button"
+          data-id={`framework-pick-${node.id}`}
+          aria-pressed={isLeaf ? selected : undefined}
+          aria-expanded={isLeaf ? undefined : open}
+          onClick={() => handleNodeClick(node)}
+          style={{ paddingLeft: `${depth * 14 + 4}px` }}
+          className={`flex w-full items-center gap-1.5 rounded-sm py-1 pr-1.5 text-left text-caption ${
+            selected
+              ? "bg-accent-tint text-accent"
+              : isLeaf
+                ? "text-ink hover:bg-divider"
+                : "text-ink-secondary hover:bg-divider"
+          }`}
+        >
+          {isLeaf ? (
+            <span className="inline-block w-3.5 shrink-0" /> // 쉐브론 폭만큼 자리 맞춤 — 리프 정렬 유지
+          ) : open ? (
+            <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+          ) : (
+            <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
+          )}
+          <span className="min-w-0 truncate">{node.name}</span>
+          {selected && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
+        </button>
+        {open &&
+          (loadingIds.has(node.id) ? (
+            <p style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }} className="py-0.5 text-fine text-ink-tertiary">
+              {t("common.loading")}
+            </p>
+          ) : (
+            children.length > 0 && (
+              <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1))}</ul>
+            )
+          ))}
+      </li>
+    );
+  };
 
   // 이미 슬롯(카테고리 또는 컨설턴트 코드)을 가진 맵은 이양 대상에서 제외 — 자기 자신도 제외 (fix round 1 #3).
   const mapOptions = (transferMaps ?? [])
@@ -234,38 +271,24 @@ export function FrameworkAssignModal({
           </button>
         </div>
 
-        <div data-id="framework-cascade" className="flex flex-col gap-2 rounded-sm bg-surface-alt p-2">
-          <p className="text-fine text-ink-tertiary">{t("home.frameworkPickCategory")}</p>
+        <div data-id="framework-pick-tree" className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-sm bg-surface-alt p-2">
+          <p className="text-fine text-ink-tertiary">{t("home.frameworkPickLeafHint")}</p>
           {loadingRoot ? (
             <p className="text-caption text-ink-tertiary">{t("common.loading")}</p>
+          ) : (childrenByParent.get(null) ?? []).length === 0 ? (
+            <p className="text-caption text-ink-tertiary">{t("home.frameworkEmpty")}</p>
           ) : (
-            optionsByDepth.map((options, depth) => (
-              <select
-                key={depth}
-                data-id={`framework-cascade-level-${depth}`}
-                className="w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
-                value={chain[depth] ?? ""}
-                onChange={(event) => pickAt(depth, Number(event.target.value))}
-              >
-                <option value="" disabled>
-                  {t("home.frameworkPickCategory")}
-                </option>
-                {options.map((node) => (
-                  <option key={node.id} value={node.id}>
-                    {node.name}
-                  </option>
-                ))}
-              </select>
-            ))
+            <ul className="flex flex-col">
+              {(childrenByParent.get(null) ?? []).map((node) => renderNode(node, 0))}
+            </ul>
           )}
-          {loadingChildren && <p className="text-fine text-ink-tertiary">{t("common.loading")}</p>}
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             data-id="framework-assign-btn"
-            disabled={chain.length === 0 || submitting}
+            disabled={selectedId === null || submitting}
             className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={() => void handleAssign()}
           >
