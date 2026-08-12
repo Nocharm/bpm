@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
@@ -658,12 +658,21 @@ async def delete_category(
             status_code=409, detail=f"{map_count} maps are linked in this subtree"
         )
 
-    # 자식부터 삭제(level 역순) — 자기참조 FK 제약 하에서도 안전한 순서.
-    subtree_rows = (
-        await session.scalars(
-            select(ProcessCategory).where(ProcessCategory.id.in_(subtree_ids))
+    # 자식부터 명시적 벌크 DELETE(레벨 역순 배치) — ORM 개별 delete는 플러시 순서가 보장되지
+    # 않아 부모가 자식보다 먼저 지워질 수 있고, 자기참조 FK를 즉시 강제하는 Postgres에서
+    # IntegrityError(500)가 났다(sqlite는 FK 미강제라 로컬·테스트에선 재현 안 됨 — 9910 실측).
+    level_rows = (
+        await session.execute(
+            select(ProcessCategory.id, ProcessCategory.level).where(
+                ProcessCategory.id.in_(subtree_ids)
+            )
         )
     ).all()
-    for row_obj in sorted(subtree_rows, key=lambda c: -c.level):
-        await session.delete(row_obj)
+    ids_by_level: dict[int, list[int]] = {}
+    for cid, lvl in level_rows:
+        ids_by_level.setdefault(lvl, []).append(cid)
+    for lvl in sorted(ids_by_level, reverse=True):
+        await session.execute(
+            delete(ProcessCategory).where(ProcessCategory.id.in_(ids_by_level[lvl]))
+        )
     await session.commit()

@@ -201,14 +201,21 @@ def test_delete_guards_and_ok(client: TestClient) -> None:
     assert resp2.status_code == 409
     assert "maps are linked in this subtree" in resp2.json()["detail"]
 
-    # 맵 연결 해제 후 부모 삭제 → 자식까지 묶음으로 사라진다
+    # 맵 연결 해제 후 부모(3레벨 서브트리) 삭제 → 자식·손자까지 묶음으로 사라진다.
+    # 삭제는 레벨 역순 명시적 벌크 DELETE — Postgres의 자기참조 FK 즉시 강제 하에서도 안전
+    # (sqlite는 FK 미강제라 순서 버그가 로컬 테스트론 안 잡힘 — 9910 실측 500의 원인이었다).
     client.put(f"/api/maps/{created_map['id']}/category", json={"category_id": None})
+    grandchild = client.post(
+        "/api/categories", json={"name": "DG", "parent_id": child["id"], "code": "ADM-DEL-G"}
+    ).json()
     resp3 = client.delete(f"/api/categories/{parent['id']}")
     assert resp3.status_code == 204
 
     roots_after = client.get("/api/categories/nodes").json()
     assert all(n["id"] != parent["id"] for n in roots_after)
     assert client.get(f"/api/categories/nodes?parent_id={parent['id']}").json() == []
+    assert client.get(f"/api/categories/nodes?parent_id={child['id']}").json() == []
+    assert client.delete(f"/api/categories/{grandchild['id']}").status_code == 404
 
 
 def test_crud_requires_sysadmin(client: TestClient, enforce: None) -> None:
