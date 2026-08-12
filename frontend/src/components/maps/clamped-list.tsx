@@ -1,4 +1,5 @@
 // 맵 카드 리스트 3.5개 높이 클램프 — 긴 목록은 3.5개만 보여 "더 있음"을 암시하고,
+// 접힌 영역은 내부 스크롤(휠이 올라간 영역만 스크롤 — overscroll-contain으로 바깥 전파 차단),
 // 아래 풀폭 쉐브론 버튼(Show all ⌄ / Collapse ⌃)으로 전체 펼침·재접힘을 토글한다.
 // 홈 부서 목록(org-accordion)과 업무 체계 목록(framework-tree)이 공유. 펼침 상태 영속은 호출부 책임.
 "use client";
@@ -30,7 +31,8 @@ export function ClampedList({ count, expanded, onToggle, dataId, children }: Cla
   return (
     <div className="flex flex-col gap-1">
       <div
-        className={clamped ? "overflow-hidden" : undefined}
+        data-id={`${dataId}-scroll`}
+        className={clamped ? "overflow-y-auto overscroll-contain" : undefined}
         style={clamped ? { maxHeight: `${CLAMP_MAX_HEIGHT_PX}px` } : undefined}
       >
         {children}

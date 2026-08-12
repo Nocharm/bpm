@@ -1,16 +1,21 @@
 // 홈 좌측 상단 — 나의 부서 맵 즐겨찾기(핀). 아코디언과 별개로 빠른 접근.
-// 부서 하나 + 그 맵이라는 같은 모양이라 조직도와 동일한 태그·박스 규칙을 쓴다.
+// 부서 하나 + 그 맵이라는 같은 모양이라 조직도와 동일한 태그·박스·클램프·스티키 헤더 규칙을 쓴다.
 // 설계: docs/design/2026-08-04-home-dept-list-revision-design.md R6
 "use client";
 
 import { ChevronDown, ChevronRight, Star } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
 import { MapCard } from "@/components/maps/map-card";
+import { StickyBoxHeader } from "@/components/maps/sticky-box-header";
+
+// 리스트 "전체 펼치기" 영속 키 — 단일 리스트라 boolean 블롭(부서 목록의 bpm.home.deptListExpand와 동형 규칙).
+const FAV_LIST_EXPAND_KEY = "bpm.home.favListExpand";
 
 interface MyDeptFavoritesProps {
   maps: MapSummary[];
@@ -26,6 +31,28 @@ interface MyDeptFavoritesProps {
 
 export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, onSelect, renderCard }: MyDeptFavoritesProps) {
   const { t } = useI18n();
+
+  // 리스트 "전체 펼치기" 상태 — localStorage 복원으로 뒤로가기/새로고침에도 유지.
+  const [listExpanded, setListExpanded] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(FAV_LIST_EXPAND_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw) as { expanded?: unknown };
+      if (s.expanded === true) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setListExpanded(true); // one-time hydration
+      }
+    } catch {
+      /* 손상된 저장값 무시 */
+    }
+  }, []);
+  const toggleListExpand = () => {
+    const next = !listExpanded;
+    setListExpanded(next);
+    window.localStorage.setItem(FAV_LIST_EXPAND_KEY, JSON.stringify({ expanded: next }));
+  };
+
   if (maps.length === 0) return null;
 
   const header = (
@@ -54,15 +81,31 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
     <section data-id="home-my-dept" className="flex flex-col gap-2">
       {open ? (
         <DeptGroupBox>
-          {header}
-          {/* 인셋은 pl-5 pr-2 고정값(depth 파생 아님) — 조직도 카드 리스트와 동일 상수라야 폭이 일치한다 */}
-          <ul className="flex flex-col gap-2 pl-5 pr-2">
-            {maps.map((m) => (
-              <li key={m.id}>
-                {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}
-              </li>
-            ))}
-          </ul>
+          <StickyBoxHeader
+            showCollapse={maps.length > CLAMP_VISIBLE && listExpanded}
+            onCollapse={toggleListExpand}
+            dataId="my-dept-list-collapse"
+          >
+            {header}
+          </StickyBoxHeader>
+          {/* accordion-open — 펼침 시 0→콘텐츠 높이 진입 애니메이션(globals.css). 인셋은 pl-5 pr-2
+              고정값(depth 파생 아님) — 조직도 카드 리스트와 동일 상수라야 폭이 일치한다 */}
+          <div className="accordion-open">
+            <ClampedList
+              count={maps.length}
+              expanded={listExpanded}
+              onToggle={toggleListExpand}
+              dataId="my-dept-list-expand"
+            >
+              <ul className="flex flex-col gap-2 pl-5 pr-2">
+                {maps.map((m) => (
+                  <li key={m.id}>
+                    {renderCard ? renderCard(m) : <MapCard map={m} selected={selectedId === m.id} onSelect={onSelect} />}
+                  </li>
+                ))}
+              </ul>
+            </ClampedList>
+          </div>
         </DeptGroupBox>
       ) : (
         header

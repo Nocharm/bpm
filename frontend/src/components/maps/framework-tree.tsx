@@ -27,9 +27,10 @@ import {
   type PersistedTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
-import { ClampedList } from "@/components/maps/clamped-list";
+import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
+import { StickyBoxHeader } from "@/components/maps/sticky-box-header";
 
 interface FrameworkTreeProps {
   // page.tsx의 기존 renderCard를 그대로 물려받아 맵 행 렌더를 OrgAccordion과 일원화 (selectedId는 renderCard 클로저 내부 처리).
@@ -185,6 +186,8 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const shownMaps = filterMap ? mapsData.maps.filter(filterMap) : mapsData.maps;
     const filteredOut = mapsData.maps.length - shownMaps.length;
     return (
+      // accordion-open — 펼침(로드 완료) 시 마운트되며 0→콘텐츠 높이로 자라는 진입 애니메이션(globals.css).
+      <div className="accordion-open">
       <ClampedList
         count={shownMaps.length}
         expanded={expandedLists.has(categoryId)}
@@ -218,6 +221,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
         )}
       </ul>
       </ClampedList>
+      </div>
     );
   };
 
@@ -254,12 +258,23 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
       </button>
     );
 
+    // 헤더 우측 다시 접기 조건은 렌더 목록과 같은 기준(필터 적용 후 개수)이어야 한다 — renderMapList와 동일 필터.
+    const shownCount = mapsData
+      ? (filterMap ? mapsData.maps.filter(filterMap) : mapsData.maps).length
+      : 0;
+
     return (
       <li key={node.id} data-id="framework-node" className="flex flex-col gap-2">
         {boxed
           ? (
             <DeptGroupBox dataId="framework-group-box">
-              {header}
+              <StickyBoxHeader
+                showCollapse={shownCount > CLAMP_VISIBLE && expandedLists.has(node.id)}
+                onCollapse={() => toggleListExpand(node.id)}
+                dataId={`framework-list-collapse-${node.id}`}
+              >
+                {header}
+              </StickyBoxHeader>
               {renderMapList(node.id, mapsData, loading)}
             </DeptGroupBox>
           )
@@ -281,7 +296,9 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
             </button>
           ) : (
             children.length > 0 && (
-              <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
+              <div className="accordion-open">
+                <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
+              </div>
             )
           )
         )}

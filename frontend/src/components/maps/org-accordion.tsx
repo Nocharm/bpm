@@ -9,10 +9,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { MapSummary } from "@/lib/api";
 import type { OrgNode } from "@/lib/org-tree";
 import { useI18n } from "@/lib/i18n";
-import { ClampedList } from "@/components/maps/clamped-list";
+import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
 import { MapCard } from "@/components/maps/map-card";
+import { StickyBoxHeader } from "@/components/maps/sticky-box-header";
 
 // 리스트 3.5개 클램프의 "전체 펼치기" 상태 영속 키 — 트리 펼침(bpm.home.tree)과 별도 보관.
 const LIST_EXPAND_KEY = "bpm.home.deptListExpand";
@@ -69,23 +70,26 @@ export function OrgAccordion(props: OrgAccordionProps) {
   // 맵 목록 — 인셋은 pl-5 pr-2 고정값(depth에서 파생하지 않는 상수). 박스가 테두리를 잃은 뒤
   // 카드가 헤더 아래 소속임을 보여주는 유일한 단서라, 상수로 고정해야 모든 depth에서 카드 폭이 동일하다.
   // 3.5개 초과 목록은 ClampedList가 자르고 풀폭 쉐브론 버튼으로 전체 펼침을 토글한다.
+  // accordion-open — 펼침 시 마운트되며 0→콘텐츠 높이로 자라는 진입 애니메이션(globals.css).
   const renderMapList = (maps: MapSummary[], listKey: string) => (
-    <ClampedList
-      count={maps.length}
-      expanded={expandedLists.has(listKey)}
-      onToggle={() => toggleListExpand(listKey)}
-      dataId={`org-list-expand-${listKey}`}
-    >
-      <ul className="flex flex-col gap-2 pl-5 pr-2">
-        {maps.map((m) => (
-          <li key={m.id}>
-            {renderCard
-              ? renderCard(m)
-              : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
-          </li>
-        ))}
-      </ul>
-    </ClampedList>
+    <div className="accordion-open">
+      <ClampedList
+        count={maps.length}
+        expanded={expandedLists.has(listKey)}
+        onToggle={() => toggleListExpand(listKey)}
+        dataId={`org-list-expand-${listKey}`}
+      >
+        <ul className="flex flex-col gap-2 pl-5 pr-2">
+          {maps.map((m) => (
+            <li key={m.id}>
+              {renderCard
+                ? renderCard(m)
+                : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
+            </li>
+          ))}
+        </ul>
+      </ClampedList>
+    </div>
   );
 
   const renderNode = (node: OrgNode, depth: number) => {
@@ -122,9 +126,22 @@ export function OrgAccordion(props: OrgAccordionProps) {
 
     return (
       <li key={node.path} className="flex flex-col gap-2">
-        {boxed ? <DeptGroupBox>{header}{renderMapList(node.maps, node.path)}</DeptGroupBox> : header}
+        {boxed ? (
+          <DeptGroupBox>
+            <StickyBoxHeader
+              showCollapse={node.maps.length > CLAMP_VISIBLE && expandedLists.has(node.path)}
+              onCollapse={() => toggleListExpand(node.path)}
+              dataId={`org-list-collapse-${node.path}`}
+            >
+              {header}
+            </StickyBoxHeader>
+            {renderMapList(node.maps, node.path)}
+          </DeptGroupBox>
+        ) : header}
         {open && node.children.length > 0 && (
-          <ul className="flex flex-col gap-2">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
+          <div className="accordion-open">
+            <ul className="flex flex-col gap-2">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
+          </div>
         )}
       </li>
     );
@@ -169,7 +186,18 @@ export function OrgAccordion(props: OrgAccordionProps) {
       {unassigned.length > 0 && (
         <div className="pt-2">
           {unassignedOpen
-            ? <DeptGroupBox>{unassignedHeader}{renderMapList(unassigned, UNASSIGNED_LIST_KEY)}</DeptGroupBox>
+            ? (
+              <DeptGroupBox>
+                <StickyBoxHeader
+                  showCollapse={unassigned.length > CLAMP_VISIBLE && expandedLists.has(UNASSIGNED_LIST_KEY)}
+                  onCollapse={() => toggleListExpand(UNASSIGNED_LIST_KEY)}
+                  dataId="org-list-collapse-unassigned"
+                >
+                  {unassignedHeader}
+                </StickyBoxHeader>
+                {renderMapList(unassigned, UNASSIGNED_LIST_KEY)}
+              </DeptGroupBox>
+            )
             : unassignedHeader}
         </div>
       )}
