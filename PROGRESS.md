@@ -3,7 +3,8 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-08-12 — 거버넌스 P0 선행 정비 Task 1·2·3·4·5·6 (feat/governance-ux)
+## 2026-08-12~13 — 거버넌스 P0 선행 정비 (feat/governance-ux)
+- **P0 완결 게이트**: BE pytest 1011·ruff 0 / FE vitest 598·lint 0 error·tsc 0·build OK. visibility/permission 승인 요청이 rename/sp와 대칭(중복 409·withdraw·supersede)이 됐고 소프트삭제 유령 pending·승인자0 데드락 해소 — A(게시 동봉)·C(승인 탭 통합)의 전제 충족.
 - **Task 1 — visibility_change 요청 가드 3종**: 무변경 422(`to_visibility == current`) · 중복 409(pending 요청 존재) · 승인자0 409(`load_active_approvers` 결과 공집합). 기존 permission 테스트 6건 회귀 확인(approver 시드 추가+test_auth_off_management_open 승인자 inline 추가). 게이트 59/59.
 - **Task 2 — permission_downgrade 중복 409**: `_find_pending_downgrade` 헬퍼(payload 필터링)로 같은 grant 대상 pending 다운그레이드 요청 감지, PATCH/DELETE 중복 제출 시 409 차단. grant 단위 격리(다른 grant은 영향 無). TDD 테스트 2건 추가·pytest 1002·ruff OK.
 - **Task 3 — 오너 직접 적용 시 pending 다운그레이드 supersede**: `_supersede_pending_downgrades` 헬퍼로 update_permission/delete_permission/transfer_owner 3곳에서 pending 다운그레이드를 무효화+요청자 알림(permission_superseded type). TDD 테스트 3건·workflow.create_notifications 활용.
