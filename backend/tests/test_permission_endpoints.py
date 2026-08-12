@@ -1062,3 +1062,75 @@ def test_owner_transfer_supersedes_pending_on_promoted_grant(
     assert r.status_code == 200
     assert request_status(req_id) == "superseded"
     assert grant_role(map_id, "ed") == "owner"
+
+
+# ── C. Visibility request ──────────────────────────────────────
+
+
+def test_pending_visibility_peek_and_withdraw(client: TestClient, enforce: None) -> None:
+    """peek 는 pending 반환(없으면 null), 요청자 철회 → withdrawn, 이후 재요청 가능."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    assert client.get(f"/api/maps/{map_id}/visibility-requests/pending").json() is None
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    peek = client.get(f"/api/maps/{map_id}/visibility-requests/pending").json()
+    assert peek is not None and peek["id"] == req["id"]
+
+    assert client.delete(f"/api/approval-requests/{req['id']}").status_code == 204
+    assert request_status(req["id"]) == "withdrawn"
+    assert client.get(f"/api/maps/{map_id}/visibility-requests/pending").json() is None
+    # withdrawn 은 pending 아님 — 재요청 201
+    again = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert again.status_code == 201
+
+
+def test_withdraw_guards(client: TestClient, enforce: None) -> None:
+    """철회는 요청자 본인(403)·pending 상태(409)·해당 kind(409)만 허용."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "actor.ed", "editor"), ("user", "ed", "editor")],
+        approvers=["a"],
+    )
+    act_as("owner.u")
+    vis_req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    # 비요청자 → 403
+    act_as("actor.ed")
+    assert client.delete(f"/api/approval-requests/{vis_req['id']}").status_code == 403
+    # 결정된 요청 → 409
+    act_as("a")
+    client.post(f"/api/approval-requests/{vis_req['id']}/decide", json={"decision": "reject"})
+    act_as("owner.u")
+    assert client.delete(f"/api/approval-requests/{vis_req['id']}").status_code == 409
+    # rename kind → 409 (맵 스코프 전용 경로 유지)
+    act_as("actor.ed")
+    rn = client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "renamed x"}).json()
+    assert client.delete(f"/api/approval-requests/{rn['id']}").status_code == 409
+
+
+def test_withdraw_own_downgrade_request(client: TestClient, enforce: None) -> None:
+    """다운그레이드 요청자도 같은 엔드포인트로 철회 — 철회 후 재요청 가능(중복 가드 해제)."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+    assert client.delete(f"/api/approval-requests/{req_id}").status_code == 204
+    assert request_status(req_id) == "withdrawn"
+    # 철회 후 재요청 (중복 가드 해제됨)
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is True

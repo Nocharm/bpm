@@ -403,6 +403,25 @@ async def request_visibility_change(
     return req
 
 
+@router.get(
+    "/maps/{map_id}/visibility-requests/pending",
+    response_model=ApprovalRequestOut | None,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_pending_visibility_request(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> ApprovalRequest | None:
+    """pending 가시성 요청 조회 — Settings 마운트 시 pending 마커 복원용 (없으면 null)."""
+    await _get_map_or_404(session, map_id)
+    return await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+
+
 # ── D. Approval requests — list + decide ──────────────────────
 
 
@@ -481,6 +500,26 @@ async def decide_approval_request(
     await session.commit()
     await session.refresh(req)
     return req
+
+
+@router.delete("/approval-requests/{request_id}", status_code=204)
+async def withdraw_approval_request(
+    request_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """본인 pending 요청 철회 → withdrawn (행 보존 — 이력). rename/sp 는 맵 스코프 경로 유지."""
+    req = await session.get(ApprovalRequest, request_id)
+    if req is None:
+        raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
+    if req.kind not in ("permission_downgrade", "visibility_change"):
+        raise HTTPException(status_code=409, detail="use the kind-specific withdraw endpoint")
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"request already {req.status}")
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    req.status = "withdrawn"
+    await session.commit()
 
 
 async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
