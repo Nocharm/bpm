@@ -115,6 +115,7 @@ async def list_inbox_approvals(
             ApprovalRequest.status == "pending",
             # map_rename·sp_designation은 오너 게이트 — 4·5번 블록에서 처리
             ApprovalRequest.kind.not_in(["map_rename", "sp_designation"]),
+            ProcessMap.deleted_at.is_(None),
         )
     )
     if not sysadmin:

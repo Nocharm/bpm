@@ -14,7 +14,16 @@ from sqlalchemy import func, select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import ApprovalRequest, Department, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import (
+    ApprovalRequest,
+    Department,
+    Employee,
+    MapApprover,
+    MapPermission,
+    MapVersion,
+    ProcessMap,
+    _now,
+)
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -157,6 +166,14 @@ def request_status(request_id: int) -> str | None:
         return None if req is None else req.status
 
     return _seed(_get)  # type: ignore[return-value]
+
+
+def soft_delete_map(map_id: int) -> None:
+    async def _del(session) -> None:
+        m = await session.get(ProcessMap, map_id)
+        m.deleted_at = _now()
+
+    _seed(_del)
 
 
 # ── A. Collaborators ──────────────────────────────────────────
@@ -1134,3 +1151,44 @@ def test_withdraw_own_downgrade_request(client: TestClient, enforce: None) -> No
     # 철회 후 재요청 (중복 가드 해제됨)
     r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
     assert r.status_code == 200 and r.json()["pending"] is True
+
+
+# ── 소프트삭제 스윕 통일 ────────────────────────────────────────
+
+
+def test_soft_deleted_map_permission_endpoints_404(client: TestClient, enforce: None) -> None:
+    """소프트삭제 맵은 권한/가시성/승인목록 엔드포인트 전부 404 (rename 선례와 대칭)."""
+    map_id = seed_map(
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")], approvers=["a"]
+    )
+    gid = grant_id(map_id, "ed")
+    soft_delete_map(map_id)
+    act_as("owner.u")
+    assert client.get(f"/api/maps/{map_id}/permissions").status_code == 404
+    assert (
+        client.post(
+            f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}).status_code
+        == 404
+    )
+    act_as("a")
+    assert client.get(f"/api/maps/{map_id}/approval-requests").status_code == 404
+
+
+def test_sysadmin_queue_excludes_soft_deleted(client: TestClient, enforce: None) -> None:
+    """sysadmin 전역 큐는 소프트삭제 맵의 pending 을 숨긴다."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    soft_delete_map(map_id)
+    act_as(SYSADMIN)
+    ids = [r["id"] for r in client.get("/api/approval-requests").json()]
+    assert req["id"] not in ids

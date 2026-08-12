@@ -38,7 +38,7 @@ router = APIRouter(
 
 async def _get_map_or_404(session: AsyncSession, map_id: int) -> ProcessMap:
     found_map = await session.get(ProcessMap, map_id)
-    if found_map is None:
+    if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     return found_map
 
@@ -456,7 +456,11 @@ async def list_pending_approval_requests(
     """
     rows = await session.scalars(
         select(ApprovalRequest)
-        .where(ApprovalRequest.status == "pending")
+        .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+        .where(
+            ApprovalRequest.status == "pending",
+            ProcessMap.deleted_at.is_(None),
+        )
         .order_by(ApprovalRequest.created_at.desc())
     )
     return list(rows.all())
@@ -525,6 +529,9 @@ async def withdraw_approval_request(
 async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
     """승인된 요청의 payload 를 실제 데이터에 적용 (downgrade / visibility_change)."""
     if req.kind == "permission_downgrade":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 적용 없이 applied
         permission_id = req.payload.get("permission_id")
         to_role = req.payload.get("to_role")
         grant = await session.get(MapPermission, permission_id)
@@ -536,7 +543,7 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
             grant.role = to_role
     elif req.kind == "visibility_change":
         found_map = await session.get(ProcessMap, req.map_id)
-        if found_map is not None:
+        if found_map is not None and found_map.deleted_at is None:
             to_vis = req.payload.get("to_visibility")
             found_map.visibility = to_vis
             # 퍼블릭 전환 시 잔존 viewer 그랜트 제거 — 전원 열람이라 불필요 (PV)

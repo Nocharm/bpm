@@ -3,11 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-08-12 — 거버넌스 P0 선행 정비 Task 1·2·3·4 (feat/governance-ux)
+## 2026-08-12 — 거버넌스 P0 선행 정비 Task 1·2·3·4·5 (feat/governance-ux)
 - **Task 1 — visibility_change 요청 가드 3종**: 무변경 422(`to_visibility == current`) · 중복 409(pending 요청 존재) · 승인자0 409(`load_active_approvers` 결과 공집합). 기존 permission 테스트 6건 회귀 확인(approver 시드 추가+test_auth_off_management_open 승인자 inline 추가). 게이트 59/59.
 - **Task 2 — permission_downgrade 중복 409**: `_find_pending_downgrade` 헬퍼(payload 필터링)로 같은 grant 대상 pending 다운그레이드 요청 감지, PATCH/DELETE 중복 제출 시 409 차단. grant 단위 격리(다른 grant은 영향 無). TDD 테스트 2건 추가·pytest 1002·ruff OK.
 - **Task 3 — 오너 직접 적용 시 pending 다운그레이드 supersede**: `_supersede_pending_downgrades` 헬퍼로 update_permission/delete_permission/transfer_owner 3곳에서 pending 다운그레이드를 무효화+요청자 알림(permission_superseded type). TDD 테스트 3건·workflow.create_notifications 활용.
 - **Task 4 — pending 가시성 요청 peek + 요청자 철회**: GET `/maps/{map_id}/visibility-requests/pending`(viewer 게이트)·DELETE `/approval-requests/{request_id}`(요청자 전용, permission_downgrade/visibility_change 한정, pending→withdrawn). 중복 가드 해제로 철회 후 재요청 가능. TDD 테스트 3건 추가, pytest 1008·ruff OK.
+- **Task 5 — 소프트삭제 스윕 통일**: `_get_map_or_404`에 `deleted_at` 체크 추가(권한/가시성/승인목록 전부 404, rename 선례와 대칭), `_apply_request`의 downgrade·visibility_change 분기에 삭제 맵 멱등 가드, sysadmin 전역 큐(`list_pending_approval_requests`)·inbox block 3에 `ProcessMap.deleted_at.is_(None)` 필터 추가. TDD 테스트 3건 추가, 기존 회귀 없음(전체 그린) — pytest 1011·ruff OK.
 
 ## 2026-08-12 — 거버넌스 UX 설계 재검토 반영
 - 코드 실측 재검토로 설계 문서 개정: **P0 선행 정비 신설**(visibility/permission 라이프사이클 대칭화·소프트삭제 스윕 통일·승인자 0명 데드락 409), A 배선 표면 3곳+withdraw 연쇄, B 게이트 editor 기준 확정, C는 red dot→count pill+top-nav inbox 배지. 구현 순서 P0→C→B→A 확정.
