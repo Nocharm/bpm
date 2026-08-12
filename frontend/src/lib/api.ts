@@ -780,6 +780,37 @@ export function getDbTable(name: string, query: TableQuery = {}): Promise<TableD
   );
 }
 
+// 전체 행 CSV 내보내기(페이징 없음) — text/csv 원문 그대로 반환, JSON 파싱 금지.
+// request()를 그대로 쓰지 않는 이유: request<T>는 항상 response.json()을 반환해 raw text와 계약이 다름 —
+// 베이스 URL·인증 헤더 규칙만 미러하는 별도 함수로 분리(기존 request의 다수 호출부 계약은 건드리지 않음).
+export async function exportDbTableCsv(
+  name: string,
+  query: Pick<TableQuery, "sort" | "order" | "q"> = {},
+): Promise<string> {
+  const params = new URLSearchParams();
+  if (query.sort) params.set("sort", query.sort);
+  if (query.order) params.set("order", query.order);
+  if (query.q) params.set("q", query.q);
+  const qs = params.toString();
+  const path = `/admin/tables/${encodeURIComponent(name)}/export${qs ? `?${qs}` : ""}`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch(`/api${path}`, { headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(
+      `API GET ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return response.text();
+}
+
 export function getWorkflowState(versionId: number): Promise<WorkflowState> {
   return request<WorkflowState>(`/versions/${versionId}/workflow`);
 }
