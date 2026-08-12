@@ -612,7 +612,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           </div>
         )}
 
-        {/* 초기 협업자 / initial collaborators — promote 모드에선 UI 숨김(설계: docs/design/2026-07-24-word-map-lifecycle-design.md §6) */}
+        {/* 초기 협업자 / initial collaborators — promote 모드에선 UI 숨김(설계: 2026-07-24-word-map-lifecycle-design.md §6) */}
         {!promote && (
           <div className="flex flex-col gap-1.5">
             <span className="text-caption text-ink-secondary">

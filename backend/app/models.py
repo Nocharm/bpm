@@ -507,7 +507,7 @@ class Employee(Base):
 class Department(Base):
     """HR 조직도 미러 — kind=departments 응답 그대로, dept_code 키.
 
-    이번 범위 소비처 없음(조직도 트리 후속 기반). 설계: docs/design/2026-08-10-hr-webhook-directory-design.md §3.
+    이번 범위 소비처 없음(조직도 트리 후속 기반). 설계: 2026-08-10-hr-webhook-directory-design.md §3.
     """
 
     __tablename__ = "departments"

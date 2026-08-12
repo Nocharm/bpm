@@ -1,6 +1,6 @@
 // 홈 좌측 상단 — 나의 부서 맵 즐겨찾기(핀). 아코디언과 별개로 빠른 접근.
 // 부서 하나 + 그 맵이라는 같은 모양이라 조직도와 동일한 태그·박스·클램프·스티키 헤더 규칙을 쓴다.
-// 설계: docs/design/2026-08-04-home-dept-list-revision-design.md R6
+// 설계: 2026-08-04-home-dept-list-revision-design.md R6
 "use client";
 
 import { ChevronDown, ChevronRight, Star } from "lucide-react";

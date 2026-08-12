@@ -1,6 +1,6 @@
 """n8n HR 웹훅 클라이언트 — 사용자·조직도 단일 소스.
 
-설계: docs/design/2026-08-10-hr-webhook-directory-design.md §1·§2.
+설계: 2026-08-10-hr-webhook-directory-design.md §1·§2.
 부분검색 불가 계약 — 단건은 반드시 loginId, 전수는 status=all.
 """
 

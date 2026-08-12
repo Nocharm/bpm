@@ -2,7 +2,7 @@
 
 운영 스택(포트 **9900**, main 계열 커밋 시점)의 DB를 **복사**해서, **dev**(`60ba560` 조직 기준 전환 머지, 문서 커밋 `c9108cd`)를 포트 **9910**에 별도 스택으로 띄워 마이그레이션·기능을 검증하는 절차. 검증이 끝나면 dev→main 머지 후 운영(9900)을 같은 방식으로 승격한다. **운영 스택과 볼륨은 일절 건드리지 않는다**(덤프 읽기만).
 
-이번 회차 특이점: 코드 변경 외에 **외부 연동 2종(n8n HR 웹훅·EDW 직책 웹훅)의 이행 리허설**이 포함된다. 9910은 운영 DB 복사본이므로 **실 HR sync를 돌려도 운영 무영향** — [HR 설계 §9 이행 절차](../design/2026-08-10-hr-webhook-directory-design.md)와 [조직 기준 전환 §7](../design/2026-08-11-departments-org-basis-design.md)을 여기서 그대로 리허설하는 것이 이 검증의 핵심이다. 묶음별 확인 항목 원본: [`docs/qa/dev-vs-main-checklist.md`](../qa/dev-vs-main-checklist.md).
+이번 회차 특이점: 코드 변경 외에 **외부 연동 2종(n8n HR 웹훅·EDW 직책 웹훅)의 이행 리허설**이 포함된다. 9910은 운영 DB 복사본이므로 **실 HR sync를 돌려도 운영 무영향** — HR 설계 §9 이행 절차와 조직 기준 전환 §7을 여기서 그대로 리허설하는 것이 이 검증의 핵심이다. 묶음별 확인 항목 원본: [`docs/qa/dev-vs-main-checklist.md`](../qa/dev-vs-main-checklist.md).
 
 전례: 컨테이너명·compose 병합 함정 등 서버 실측값은 1·2차 때 확인값 그대로(상세는 git history `db-migration-9800.md`).
 
@@ -183,7 +183,7 @@ docker exec -it "$DEV_DB"  psql -U processmap -d processmap -c "$Q"
 
 ---
 
-## 6. HR 웹훅 이행 리허설 ([HR 설계 §9](../design/2026-08-10-hr-webhook-directory-design.md) 절차를 복사본에서 그대로)
+## 6. HR 웹훅 이행 리허설 (HR 설계 §9 절차를 복사본에서 그대로)
 
 전 단계는 sysadmin 계정으로 http://<서버IP>:9910 로그인 후 진행. 스케줄러는 `.env.9910`에서 0으로 꺼져 있어야 한다.
 
@@ -237,7 +237,7 @@ docker exec -it "$DEV_DB" psql -U processmap -d processmap -c \
 
 ---
 
-## 7. EDW 직책 검증 ([조직 기준 전환 §7](../design/2026-08-11-departments-org-basis-design.md))
+## 7. EDW 직책 검증 (조직 기준 전환 §7)
 
 ### 7-1. sync 요약의 position 필드
 

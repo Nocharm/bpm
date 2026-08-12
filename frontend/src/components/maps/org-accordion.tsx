@@ -1,6 +1,6 @@
 // 홈 좌측 — owning department 조직도 아코디언. main의 들여쓰기 트리 위에 카운트 태그·펼침 톤다운·
 // 맵 보유 부서의 그룹 박스를 얹는다.
-// 설계: docs/design/2026-08-04-home-dept-list-revision-design.md
+// 설계: 2026-08-04-home-dept-list-revision-design.md
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";

@@ -1,6 +1,6 @@
 # 지식기반(KB) 임베딩 설정 · 백필
 
-AI 컨설턴트 P2 지식기반 — bge-m3 임베딩 서버 연결과 기존 게시본 1회 백필 절차. (설계: `docs/design/2026-07-23-ai-consultant-interview-design.md` §7)
+AI 컨설턴트 P2 지식기반 — bge-m3 임베딩 서버 연결과 기존 게시본 1회 백필 절차. (설계: `2026-07-23-ai-consultant-interview-design.md` §7)
 
 ## 1. 환경 변수 (`.env`)
 

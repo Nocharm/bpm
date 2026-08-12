@@ -113,7 +113,7 @@ export default function MapListPage() {
   const seededOrg = useRef(false);
 
   // 접힘 상태 저장 — 의존성 이펙트로 저장하면 StrictMode 재마운트에서 초기 default가 저장값을 덮어쓴다.
-  // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: docs/design/2026-08-04-home-dept-visibility-design.md §4).
+  // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: 2026-08-04-home-dept-visibility-design.md §4).
   // C1 시드는 사용자 행동이 아니므로 저장하지 않는다 — 미조작 사용자는 매 진입 같은 규칙으로 재계산된다.
   // touched는 "조직도 트리 자체를 편집"했을 때만 true(OrgAccordion onToggle/onCollapseAll) — My부서/Word/
   // 미지정 토글은 트리를 바꾸지 않으므로 touched를 그대로 이어받아 저장만 하고 래치하지 않는다. 그래야
