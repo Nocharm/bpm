@@ -134,19 +134,20 @@ try {
   const clampShown = await clampBtn.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   const clampLabel = clampShown ? ((await clampBtn.textContent()) ?? "") : "";
   check("dept map list clamps with Show all button", clampShown && clampLabel.includes("Show all"), clampLabel.trim());
-  // 접힌 영역은 내부 스크롤 — 넘친 콘텐츠를 휠로 볼 수 있고(scrollTop 이동), overscroll-contain으로
-  // 경계에서 바깥 목록로의 스크롤 전파를 막는다(마우스가 올라간 영역만 스크롤).
+  // 접힌 영역은 내부 스크롤(스크롤바 숨김 — 폭 밀림 방지), 끝에 닿으면 바깥 목록 스크롤로
+  // 자연 체이닝(overscroll 기본값 auto — contain 금지).
   const scrollInfo = await page.locator('[data-id$="-scroll"]').first().evaluate((el) => {
     el.scrollTop = 120;
     return {
       scrollable: el.scrollHeight > el.clientHeight,
       moved: el.scrollTop > 0,
-      contain: getComputedStyle(el).overscrollBehaviorY === "contain",
+      chains: getComputedStyle(el).overscrollBehaviorY === "auto",
+      barHidden: getComputedStyle(el).scrollbarWidth === "none",
     };
   });
   check(
-    "clamped area scrolls internally with overscroll containment",
-    scrollInfo.scrollable && scrollInfo.moved && scrollInfo.contain,
+    "clamped area scrolls internally, hidden scrollbar, chains to outer list",
+    scrollInfo.scrollable && scrollInfo.moved && scrollInfo.chains && scrollInfo.barHidden,
     JSON.stringify(scrollInfo),
   );
   await clampBtn.click();
@@ -195,6 +196,15 @@ try {
   const favSticky = await page.locator('[data-id="home-my-dept"] div.sticky').first()
     .evaluate((el) => getComputedStyle(el).position).catch(() => "none");
   check("my-dept favorites box header is sticky too", favSticky === "sticky", favSticky);
+
+  // ── 10) 접힘 애니메이션 — 닫기 클릭 직후 accordion-close 재생, 종료 후 언마운트 ──
+  await page.locator('[data-id="org-unassigned-toggle"]').click();
+  const closingCount = await page.locator(".accordion-close").count();
+  check("collapse plays accordion-close before unmount", closingCount > 0, `closing=${closingCount}`);
+  await page.waitForTimeout(500);
+  const closedGone = (await page.locator(".accordion-close").count()) === 0
+    && (await page.locator('button[data-id^="org-list-expand-"]').count()) === 0;
+  check("collapsed section unmounts after the animation", closedGone);
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
   await ctx.close();

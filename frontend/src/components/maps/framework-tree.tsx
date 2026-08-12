@@ -27,6 +27,7 @@ import {
   type PersistedTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
+import { useClosingKeys } from "@/lib/use-closing-keys";
 import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
@@ -51,6 +52,8 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
   const restoreRef = useRef<PersistedTreeState | null>(null);
   // 맵 리스트 3.5개 클램프의 "전체 펼치기" 상태 — 카테고리 id 키, openIds와 함께 영속.
   const [expandedLists, setExpandedLists] = useState<Set<number>>(new Set());
+  // 카테고리 접힘 애니메이션 — 상태는 즉시 커밋(영속 보존), 고스트 렌더로 accordion-close만 재생.
+  const { closingKeys, beginClose, cancelClose } = useClosingKeys<number>();
 
   // 펼침 상태 영속 — 복원 effect(아래)보다 먼저 선언해 첫 실행이 hydration 전에 스킵되게 한다.
   useEffect(() => {
@@ -132,9 +135,12 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
 
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {
+      // 닫기: 상태·영속은 즉시, 콘텐츠는 고스트로 accordion-close 재생 후 언마운트("뿅" 방지).
+      beginClose(categoryId);
       setState((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
       return;
     }
+    cancelClose(categoryId);
     setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     // 캐시 있거나 이미 인플라이트면 재요청 안 함 — 닫았다 로딩 중 재펼침해도 fetch는 1회만.
     // 캐스케이드도 첫 로드에만 — 재펼침은 사용자가 접어둔 하위 상태를 존중한다.
@@ -186,8 +192,8 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const shownMaps = filterMap ? mapsData.maps.filter(filterMap) : mapsData.maps;
     const filteredOut = mapsData.maps.length - shownMaps.length;
     return (
-      // accordion-open — 펼침(로드 완료) 시 마운트되며 0→콘텐츠 높이로 자라는 진입 애니메이션(globals.css).
-      <div className="accordion-open">
+      // accordion-open/close — 펼침(로드 완료) 진입·접힘 퇴장 높이 애니메이션(globals.css).
+      <div className={closingKeys.has(categoryId) ? "accordion-close" : "accordion-open"}>
       <ClampedList
         count={shownMaps.length}
         expanded={expandedLists.has(categoryId)}
@@ -227,6 +233,9 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
 
   const renderNode = (node: CategoryNode, depth: number): ReactNode => {
     const open = state.openIds.has(node.id);
+    // 접힘 애니메이션 중(고스트) — open은 이미 false, 콘텐츠만 accordion-close 재생 동안 남긴다.
+    const isClosing = closingKeys.has(node.id);
+    const showContent = open || isClosing;
     const loading = state.loadingIds.has(node.id);
     // 최초 펼침 로딩만 전체를 placeholder로 대체 — 캐시가 이미 있으면(= "더 보기" 로딩) 기존 목록을 유지한다.
     const initialLoading = loading && !hasCachedChildren(state, node.id);
@@ -236,7 +245,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const mapsData = state.mapsByCategory.get(node.id);
     // 직접 보유 맵이 있는 카테고리를 펼치면 헤더+자기 맵만 틴트 박스로 묶는다 — 부서 목록(org-accordion)과
     // 동일 규칙: 박스의 뜻은 "이 카테고리가 직접 가진 맵", 자식 카테고리는 박스 밖(중첩 금지).
-    const boxed = open && !initialLoading && !loadFailed && (mapsData?.total ?? 0) > 0;
+    const boxed = showContent && !initialLoading && !loadFailed && (mapsData?.total ?? 0) > 0;
 
     const header = (
       <button
@@ -279,7 +288,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
             </DeptGroupBox>
           )
           : header}
-        {open && (
+        {showContent && (
           initialLoading ? (
             <p style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }} className="text-fine text-ink-tertiary">
               {t("common.loading")}
@@ -296,7 +305,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
             </button>
           ) : (
             children.length > 0 && (
-              <div className="accordion-open">
+              <div className={isClosing ? "accordion-close" : "accordion-open"}>
                 <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
               </div>
             )

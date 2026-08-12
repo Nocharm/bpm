@@ -9,6 +9,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { MapSummary } from "@/lib/api";
 import type { OrgNode } from "@/lib/org-tree";
 import { useI18n } from "@/lib/i18n";
+import { useClosingKeys } from "@/lib/use-closing-keys";
 import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
@@ -67,12 +68,15 @@ export function OrgAccordion(props: OrgAccordionProps) {
     window.localStorage.setItem(LIST_EXPAND_KEY, JSON.stringify({ paths: [...next] }));
   };
 
+  // 섹션 접힘 애니메이션 — 상태는 즉시 커밋, 고스트 렌더로 accordion-close만 재생 후 언마운트.
+  const { closingKeys, beginClose, cancelClose } = useClosingKeys<string>();
+
   // 맵 목록 — 인셋은 pl-5 pr-2 고정값(depth에서 파생하지 않는 상수). 박스가 테두리를 잃은 뒤
   // 카드가 헤더 아래 소속임을 보여주는 유일한 단서라, 상수로 고정해야 모든 depth에서 카드 폭이 동일하다.
   // 3.5개 초과 목록은 ClampedList가 자르고 풀폭 쉐브론 버튼으로 전체 펼침을 토글한다.
-  // accordion-open — 펼침 시 마운트되며 0→콘텐츠 높이로 자라는 진입 애니메이션(globals.css).
+  // accordion-open/close — 펼침은 0→콘텐츠 높이 진입, 접힘은 역방향 재생 후 언마운트(globals.css).
   const renderMapList = (maps: MapSummary[], listKey: string) => (
-    <div className="accordion-open">
+    <div className={closingKeys.has(listKey) ? "accordion-close" : "accordion-open"}>
       <ClampedList
         count={maps.length}
         expanded={expandedLists.has(listKey)}
@@ -94,9 +98,12 @@ export function OrgAccordion(props: OrgAccordionProps) {
 
   const renderNode = (node: OrgNode, depth: number) => {
     const open = openPaths.has(node.path);
+    // 접힘 애니메이션 중(고스트) — open은 이미 false, 콘텐츠만 accordion-close 재생 동안 남긴다.
+    const isClosing = closingKeys.has(node.path);
+    const showContent = open || isClosing;
     // 자기 맵을 가진 부서를 펼치면 헤더 행과 자기 카드만 박스로 묶는다. 자식은 박스 밖 —
     // 박스의 뜻을 "이 부서가 직접 가진 맵"으로 고정하고 박스 중첩을 막는다.
-    const boxed = open && node.maps.length > 0;
+    const boxed = showContent && node.maps.length > 0;
 
     // 박스 안이든 밖이든 같은 행이다 — 부서명을 트리 행과 박스 제목에 따로 쓰면 같은 이름이 두 줄 연속으로 나온다.
     const header = (
@@ -105,7 +112,13 @@ export function OrgAccordion(props: OrgAccordionProps) {
         data-id="org-node-toggle"
         data-path={node.path}
         aria-expanded={open}
-        onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          // 닫기: 상태·영속은 즉시, 콘텐츠는 고스트로 accordion-close 재생 후 언마운트("뿅" 방지).
+          if (open) beginClose(node.path);
+          else cancelClose(node.path);
+          onToggle(node.path);
+        }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider"
       >
@@ -138,8 +151,8 @@ export function OrgAccordion(props: OrgAccordionProps) {
             {renderMapList(node.maps, node.path)}
           </DeptGroupBox>
         ) : header}
-        {open && node.children.length > 0 && (
-          <div className="accordion-open">
+        {showContent && node.children.length > 0 && (
+          <div className={isClosing ? "accordion-close" : "accordion-open"}>
             <ul className="flex flex-col gap-2">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
           </div>
         )}
@@ -147,13 +160,19 @@ export function OrgAccordion(props: OrgAccordionProps) {
     );
   };
 
-  // 미지정 섹션 — 부서 하나 + 그 맵이라는 같은 모양이므로 같은 헤더·박스 규칙을 쓴다.
+  // 미지정 섹션 — 부서 하나 + 그 맵이라는 같은 모양이므로 같은 헤더·박스·접힘 애니 규칙을 쓴다.
+  const unassignedClosing = closingKeys.has(UNASSIGNED_LIST_KEY);
   const unassignedHeader = (
     <button
       type="button"
       data-id="org-unassigned-toggle"
       aria-expanded={unassignedOpen}
-      onClick={(e) => { e.stopPropagation(); onToggleUnassigned(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (unassignedOpen) beginClose(UNASSIGNED_LIST_KEY);
+        else cancelClose(UNASSIGNED_LIST_KEY);
+        onToggleUnassigned();
+      }}
       className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-divider"
     >
       {unassignedOpen
@@ -185,7 +204,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
       <ul className="flex flex-col gap-2">{roots.map((r) => renderNode(r, 0))}</ul>
       {unassigned.length > 0 && (
         <div className="pt-2">
-          {unassignedOpen
+          {(unassignedOpen || unassignedClosing)
             ? (
               <DeptGroupBox>
                 <StickyBoxHeader
