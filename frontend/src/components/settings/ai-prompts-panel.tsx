@@ -1,7 +1,7 @@
 "use client";
 
 // AI 프롬프트 관리 패널 — sysadmin이 AI 시스템 프롬프트를 열람·오버라이드·기본값 복원.
-// 행 없음 = 코드 기본값 (설계: docs/design/2026-08-04-ai-prompts-admin-design.md)
+// 행 없음 = 코드 기본값 (설계: 2026-08-04-ai-prompts-admin-design.md)
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Eye, Pencil, RotateCcw } from "lucide-react";

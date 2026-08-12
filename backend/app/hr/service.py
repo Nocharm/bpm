@@ -1,6 +1,6 @@
 """HR 웹훅 동기화 서비스 — 전체/단건 동기화·부서 미러·이행 프리뷰.
 
-설계: docs/design/2026-08-10-hr-webhook-directory-design.md §4~§6·§9.
+설계: 2026-08-10-hr-webhook-directory-design.md §4~§6·§9.
 title은 절대 건드리지 않는다 — AD title 패스(app/ad/service.refresh_titles_and_positions) 전용.
 """
 

@@ -1,7 +1,7 @@
 "use client";
 
 // Word 맵 빠른 생성 — 파싱 결과에서 이름만 확인, 오우닝 부서=내 org_path·승인자=본인 자동.
-// 설계: docs/design/2026-07-24-word-map-lifecycle-design.md §3. 영어 하드코딩(word-create-modal 관례).
+// 설계: 2026-07-24-word-map-lifecycle-design.md §3. 영어 하드코딩(word-create-modal 관례).
 import { useRef, useState } from "react";
 
 import { FileText, X } from "lucide-react";

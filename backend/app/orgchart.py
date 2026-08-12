@@ -1,6 +1,6 @@
 """직원 → 조직 경로 해석 단일화 — departments 부모 체인 1순위, org_l1~l5 폴백.
 
-설계: docs/design/2026-08-11-departments-org-basis-design.md §2.
+설계: 2026-08-11-departments-org-basis-design.md §2.
 departments가 빈 환경(로컬 sqlite·테스트)은 전원 폴백 → 현행 동작과 동일(불변식).
 """
 

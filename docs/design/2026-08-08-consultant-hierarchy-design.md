@@ -140,7 +140,7 @@
 - **슬롯 이양 액션**: 오너/sysadmin이 `category_id`+`consultant_code`를 다른 맵으로 이전(일반 맵으로 대체 시나리오).
 - 카테고리 연결/해제 UI(맵 설정 또는 상세 카드) — 신규 편입·폐기 시나리오 지원.
 
-> **개정(2026-08-12) — 관리자 Framework 탭**: 설정(admin 콘솔)에 sysadmin 전용 **Framework 탭** 추가 — ① 카테고리 트리 직접 관리(생성·개명·이동·삭제, `ui-` 자동 code, 레벨≤5·순환·비어있지 않음 가드) ② **웹 대량 임포트**(`POST /api/categories/import`, categories.json+maps.jsonl 업로드 → dry-run 리포트 → apply). §5의 CLI는 초대형 전달 대안으로 병행 유지. **재임포트 upsert가 UI 카테고리 수정을 덮는 정책은 불변**(전달물=소스 오브 트루스 — 탭에 안내 문구). 플랜: `docs/superpowers/plans/2026-08-11-framework-admin-ui.md`.
+> **개정(2026-08-12) — 관리자 Framework 탭**: 설정(admin 콘솔)에 sysadmin 전용 **Framework 탭** 추가 — ① 카테고리 트리 직접 관리(생성·개명·이동·삭제, `ui-` 자동 code, 레벨≤5·순환·비어있지 않음 가드) ② **웹 대량 임포트**(`POST /api/categories/import`, categories.json+maps.jsonl 업로드 → dry-run 리포트 → apply). §5의 CLI는 초대형 전달 대안으로 병행 유지. **재임포트 upsert가 UI 카테고리 수정을 덮는 정책은 불변**(전달물=소스 오브 트루스 — 탭에 안내 문구). 플랜: `2026-08-11-framework-admin-ui.md`(git history).
 
 ## 7. 구현 페이즈 (각각 스펙→플랜→구현 사이클)
 

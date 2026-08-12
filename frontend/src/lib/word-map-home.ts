@@ -1,5 +1,5 @@
 // Word 맵 홈 표현 파생 헬퍼 — 목록 분리·재생성 힌트·stale 앵커 판정.
-// 설계: docs/design/2026-07-24-word-map-lifecycle-design.md §2·§5
+// 설계: 2026-07-24-word-map-lifecycle-design.md §2·§5
 
 // 홈 목록 분리 — 조직도/집계는 processMaps만, Word documents 섹션은 wordMaps만 사용한다.
 export function splitMapsByMode<T extends { mode?: string }>(

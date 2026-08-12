@@ -1,4 +1,4 @@
-"""AI 프롬프트 레지스트리 — 코드 기본값 단일 소스 + sysadmin DB 오버라이드 조회 (설계: docs/design/2026-08-04-ai-prompts-admin-design.md)."""
+"""AI 프롬프트 레지스트리 — 코드 기본값 단일 소스 + sysadmin DB 오버라이드 조회 (설계: 2026-08-04-ai-prompts-admin-design.md)."""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
