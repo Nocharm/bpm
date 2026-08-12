@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import Department, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import ApprovalRequest, Department, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -133,6 +133,21 @@ def first_version_id(map_id: int) -> int:
         )
 
     return _seed(_get)  # type: ignore[return-value]
+
+
+def pending_request_count(map_id: int, kind: str) -> int:
+    async def _count(session) -> int:
+        return await session.scalar(
+            select(func.count())
+            .select_from(ApprovalRequest)
+            .where(
+                ApprovalRequest.map_id == map_id,
+                ApprovalRequest.kind == kind,
+                ApprovalRequest.status == "pending",
+            )
+        )
+
+    return _seed(_count)  # type: ignore[return-value]
 
 
 # ── A. Collaborators ──────────────────────────────────────────
@@ -522,7 +537,9 @@ def test_owner_transfer_new_owner_not_editor_409(
 def test_visibility_request_owner_creates_pending(
     client: TestClient, enforce: None
 ) -> None:
-    map_id = seed_map(visibility="private", grants=[("user", "owner.u", "owner")])
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
     act_as("owner.u")
     r = client.post(
         f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
@@ -545,6 +562,47 @@ def test_visibility_request_non_owner_403(client: TestClient, enforce: None) -> 
         ).status_code
         == 403
     )
+
+
+def test_visibility_request_duplicate_pending_409(client: TestClient, enforce: None) -> None:
+    """같은 맵에 pending 가시성 요청이 있으면 재요청은 409 — 행이 쌓이지 않는다."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    first = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert first.status_code == 201
+    dup = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert dup.status_code == 409
+    assert pending_request_count(map_id, "visibility_change") == 1
+
+
+def test_visibility_request_noop_422(client: TestClient, enforce: None) -> None:
+    """현재값과 같은 가시성 요청은 422 — rename 의 'new name equals current name' 대칭."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    r = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "private"}
+    )
+    assert r.status_code == 422
+
+
+def test_visibility_request_no_approvers_409(client: TestClient, enforce: None) -> None:
+    """활성 승인자 0명이면 409 — 결정 불가능한 pending 데드락 방지 (version submit 대칭)."""
+    map_id = seed_map(visibility="private", grants=[("user", "owner.u", "owner")])
+    act_as("owner.u")
+    r = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert r.status_code == 409
+    assert "no approvers" in r.json()["detail"]
+    assert pending_request_count(map_id, "visibility_change") == 0
 
 
 def test_approval_list_visible_to_approver_403_to_others(
@@ -713,6 +771,10 @@ def test_approvers_assigned_by_set(client: TestClient, enforce: None) -> None:
 def test_auth_off_management_open(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "off perm map"}).json()
     map_id = created["id"]
+    # 가시성 요청 가드: 승인자 필수 → 승인자 추가
+    async def _add_approver(session) -> None:
+        session.add(MapApprover(map_id=map_id, user_id="a"))
+    _seed(_add_approver)
 
     # collaborators
     assert client.get(f"/api/maps/{map_id}/permissions").status_code == 200

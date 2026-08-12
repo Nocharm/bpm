@@ -308,6 +308,29 @@ async def request_visibility_change(
 ) -> ApprovalRequest:
     """가시성 변경 요청 — 즉시 적용하지 않고 승인 지연(§5). before→after 표기용으로 현재값도 저장."""
     found_map = await _get_map_or_404(session, map_id)
+    # 무변경 요청 거부 (rename 의 'new name equals current name' 대칭)
+    if payload.to_visibility == found_map.visibility:
+        raise HTTPException(
+            status_code=422, detail="visibility unchanged — nothing to request"
+        )
+    # 중복 요청 거부 — 같은 맵에 pending visibility_change 가 있으면 안 됨
+    pending = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending is not None:
+        raise HTTPException(
+            status_code=409, detail="a visibility change request is already pending"
+        )
+    # 승인자 0명이면 아무도 decide 못 하는 pending 이 박제 — version submit 과 동일 가드
+    approvers = await workflow.load_active_approvers(session, map_id)
+    if not approvers:
+        raise HTTPException(
+            status_code=409, detail="map has no approvers — assign approvers first"
+        )
     req = ApprovalRequest(
         map_id=map_id,
         kind="visibility_change",
