@@ -409,6 +409,12 @@ async def delete_version(
             status_code=409, detail="cannot delete the last version of a map"
         )
 
+    # 동봉 가시성 요청 스윕 — 버전이 사라지면 결정할 주체가 없어 pending 이 영구 박제된다
+    # (dedupe 가드가 이후 단독 요청까지 막음). 버전 withdraw 스윕과 동일하게 unstamped.
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        bundled.status = "withdrawn"
+
     await session.delete(version)
     await session.commit()
 
@@ -524,6 +530,13 @@ async def submit_version(
     # 동봉 가시성 변경 처리
     bundle_vis = payload.to_visibility if payload is not None else None
     if bundle_vis is not None:
+        # 가시성 변경 권한은 오너 전용 — 단독 경로(visibility-request)와 동일 게이트여야
+        # 편집자가 제출 동봉으로 우회하지 못한다.
+        actor_role = await get_effective_role(session, user, version.map_id)
+        if actor_role != "owner":
+            raise HTTPException(
+                status_code=403, detail="only the owner can bundle a visibility change"
+            )
         found_map = await session.get(ProcessMap, version.map_id)
         if found_map is None or bundle_vis == found_map.visibility:
             raise HTTPException(

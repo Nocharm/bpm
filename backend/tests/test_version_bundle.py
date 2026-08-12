@@ -6,6 +6,7 @@
 """
 
 import asyncio
+from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
@@ -15,13 +16,26 @@ from sqlalchemy import func, select
 import app.auth as _auth_mod
 from app.db import SessionLocal
 from app.main import app as _app
-from app.models import ApprovalRequest, MapPermission
+from app.models import ApprovalRequest, MapPermission, MapVersion
+from app.settings import settings
 
 
 @pytest.fixture(autouse=True)
 def _clean_auth() -> None:
     yield
     _app.dependency_overrides.pop(_auth_mod.get_current_user, None)
+
+
+@pytest.fixture
+def enforce() -> Iterator[None]:
+    """enforcement ON — 기본 baseline 은 is_sysadmin 이 전원 True 라 오너 게이트가 무의미하다."""
+    prev_auth = settings.auth_enabled
+    prev_sys = settings.bpm_sysadmins
+    settings.auth_enabled = True
+    settings.bpm_sysadmins = "admin.sys"
+    yield
+    settings.auth_enabled = prev_auth
+    settings.bpm_sysadmins = prev_sys
 
 
 def _act_as(user: str) -> None:
@@ -49,6 +63,36 @@ def _set_approvers(client: TestClient, map_id: int, approvers: list[str]) -> Non
 def _checkout(client: TestClient, version_id: int) -> None:
     """버전 체크아웃."""
     client.post(f"/api/versions/{version_id}/checkout", json={})
+
+
+def _grant(map_id: int, user_id: str, role: str) -> None:
+    """권한 행 직접 시드 — PUT /permissions 의 교체 의미론에 의존하지 않는다."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                MapPermission(
+                    map_id=map_id,
+                    principal_type="user",
+                    principal_id=user_id,
+                    role=role,
+                    granted_by="seed",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _seed_spare_version(map_id: int) -> None:
+    """'마지막 버전은 삭제 불가' 가드 회피용 여분 버전 (API 는 게시 후에만 생성 허용)."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            session.add(MapVersion(map_id=map_id, label="spare"))
+            await session.commit()
+
+    asyncio.run(_run())
 
 
 def _get_all_approval_requests(map_id: int) -> list[ApprovalRequest]:
@@ -121,30 +165,35 @@ def test_submit_bundle_noop_visibility_422(client: TestClient) -> None:
 
 
 def test_submit_bundle_supersedes_standalone(client: TestClient) -> None:
-    """오너(local-dev)가 POST /api/maps/{id}/visibility-request 생성 →
-    다른 유저(a, 편집자+승인자)가 submit with bundle → standalone 행 status=="superseded" +
-    오너에게만 type=="permission_superseded" 알림 존재, 편집자는 받지 않음, 동봉 행만 pending."""
+    """다른 유저(a)의 단독 가시성 요청이 있는 상태에서 오너(local-dev)가 submit with bundle →
+    standalone 행 status=="superseded" + 요청자 a 에게만 type=="permission_superseded" 알림 존재,
+    동봉 제출자(오너)는 받지 않음, 동봉 행만 pending.
+
+    동봉은 오너 전용 게이트라(제출자 == 오너), 요청자 ≠ 제출자 대비를 위해 standalone 은 a 명의로 시드한다."""
 
     map_id, version_id = _create_map(client, visibility="private")
     _set_approvers(client, map_id, ["a", "b"])
 
-    # 편집자 "a"에게 editor 권한 부여 (버전 체크아웃·제출 가능하도록)
-    client.put(
-        f"/api/maps/{map_id}/permissions",
-        json={
-            "members": [{"user_id": "a", "role": "editor"}]
-        },
-    )
+    # Step 1: 다른 유저 "a" 명의의 단독 가시성 요청 (ORM 시드 — 요청자를 제출자와 분리)
+    async def _seed_standalone_by_a() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                ApprovalRequest(
+                    map_id=map_id,
+                    kind="visibility_change",
+                    payload={
+                        "from_visibility": "private",
+                        "to_visibility": "public",
+                    },
+                    requested_by="a",
+                    status="pending",
+                )
+            )
+            await session.commit()
 
-    # Step 1: Owner(local-dev) creates standalone visibility request
-    resp = client.post(
-        f"/api/maps/{map_id}/visibility-request",
-        json={"to_visibility": "public"},
-    )
-    assert resp.status_code == 201
+    asyncio.run(_seed_standalone_by_a())
 
-    # Step 2: Editor(a) checks out version and submits with bundle
-    _act_as("a")
+    # Step 2: Owner(local-dev) checks out version and submits with bundle
     _checkout(client, version_id)
     resp = client.post(
         f"/api/versions/{version_id}/submit",
@@ -168,25 +217,25 @@ def test_submit_bundle_supersedes_standalone(client: TestClient) -> None:
     assert bundled.kind == "visibility_change"
     assert bundled.payload["version_id"] == version_id
 
-    # Step 4: Verify notification was sent ONLY to standalone requester (owner)
-    _act_as("local-dev")  # Owner checks their notifications
-    owner_notifications = client.get("/api/notifications").json()
-    owner_got = [
-        n
-        for n in owner_notifications
-        if n["type"] == "permission_superseded" and n["map_id"] == map_id
-    ]
-    assert len(owner_got) == 1, "Owner should receive permission_superseded notification"
-
-    # Step 5: Verify submitter (editor "a") did NOT receive supersede notification
+    # Step 4: Verify notification was sent ONLY to standalone requester ("a")
     _act_as("a")
-    editor_notifications = client.get("/api/notifications").json()
-    editor_got = [
+    requester_notifications = client.get("/api/notifications").json()
+    requester_got = [
         n
-        for n in editor_notifications
+        for n in requester_notifications
         if n["type"] == "permission_superseded" and n["map_id"] == map_id
     ]
-    assert len(editor_got) == 0, "Editor should NOT receive permission_superseded notification"
+    assert len(requester_got) == 1, "Standalone requester should receive permission_superseded"
+
+    # Step 5: Verify submitter (owner "local-dev") did NOT receive supersede notification
+    _act_as("local-dev")
+    submitter_notifications = client.get("/api/notifications").json()
+    submitter_got = [
+        n
+        for n in submitter_notifications
+        if n["type"] == "permission_superseded" and n["map_id"] == map_id
+    ]
+    assert len(submitter_got) == 0, "Submitter should NOT receive permission_superseded"
 
 
 def test_submit_without_body_unchanged(client: TestClient) -> None:
@@ -534,3 +583,138 @@ def test_second_bundle_does_not_supersede_first_versions_bundle(client: TestClie
 
     # 최종 카운트: 3개 (우리 bundle, foreign bundle, superseded standalone)
     assert len(visibility_reqs) == 3, f"Should have 3 visibility requests total, got {len(visibility_reqs)}"
+
+
+def test_submit_bundle_requires_owner(client: TestClient, enforce: None) -> None:
+    """동봉 가시성 변경은 오너 전용 — 편집자 점유 보유자는 403·요청 0행, 오너는 200·요청 1행."""
+
+    _act_as("owner.u")
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _grant(map_id, "ed.u", "editor")
+
+    # 편집자가 점유 후 동봉 제출 → 403 (단독 visibility-request 게이트와 대칭)
+    _act_as("ed.u")
+    _checkout(client, version_id)
+    resp = client.post(
+        f"/api/versions/{version_id}/submit",
+        json={"to_visibility": "public"},
+    )
+    assert resp.status_code == 403
+    assert "owner" in resp.text.lower()
+    assert len(_get_all_approval_requests(map_id)) == 0
+    assert client.get(f"/api/versions/{version_id}/workflow").json()["status"] == "draft"
+
+    # 오너가 점유를 넘겨받아 동봉 제출 → 200 + 동봉 행 1개
+    client.delete(f"/api/versions/{version_id}/checkout")
+    _act_as("owner.u")
+    _checkout(client, version_id)
+    resp = client.post(
+        f"/api/versions/{version_id}/submit",
+        json={"to_visibility": "public"},
+    )
+    assert resp.status_code == 200
+    reqs = _get_all_approval_requests(map_id)
+    assert len(reqs) == 1
+    assert reqs[0].payload["version_id"] == version_id
+    assert reqs[0].requested_by == "owner.u"
+
+
+def test_withdraw_bundled_409(client: TestClient) -> None:
+    """동봉 행은 범용 철회 엔드포인트로 지울 수 없다 — 409, 행은 pending 유지."""
+
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _checkout(client, version_id)
+    assert (
+        client.post(
+            f"/api/versions/{version_id}/submit", json={"to_visibility": "public"}
+        ).status_code
+        == 200
+    )
+
+    bundled = _get_all_approval_requests(map_id)[0]
+    resp = client.delete(f"/api/approval-requests/{bundled.id}")
+    assert resp.status_code == 409
+    assert "version" in resp.text.lower()
+
+    still = _get_all_approval_requests(map_id)[0]
+    assert still.status == "pending"
+
+
+def test_pending_peek_excludes_bundled(client: TestClient) -> None:
+    """동봉 pending 만 있으면 Settings 의 pending 마커 조회는 null — 단독 요청만 노출."""
+
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _checkout(client, version_id)
+    assert (
+        client.post(
+            f"/api/versions/{version_id}/submit", json={"to_visibility": "public"}
+        ).status_code
+        == 200
+    )
+
+    resp = client.get(f"/api/maps/{map_id}/visibility-requests/pending")
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+
+def test_sysadmin_queue_excludes_bundled(client: TestClient) -> None:
+    """sysadmin 전역 큐는 동봉 행을 숨긴다(decide 가 409라 죽은 버튼) — 단독 행은 그대로 노출."""
+
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _checkout(client, version_id)
+    assert (
+        client.post(
+            f"/api/versions/{version_id}/submit", json={"to_visibility": "public"}
+        ).status_code
+        == 200
+    )
+    bundled = _get_all_approval_requests(map_id)[0]
+
+    # 대조군 — 다른 맵의 단독 요청은 큐에 남아야 필터가 과잉이 아님이 증명된다
+    other_map_id, _ = _create_map(client, visibility="private")
+    _set_approvers(client, other_map_id, ["a"])
+    standalone = client.post(
+        f"/api/maps/{other_map_id}/visibility-request",
+        json={"to_visibility": "public"},
+    ).json()
+
+    ids = [r["id"] for r in client.get("/api/approval-requests").json()]
+    assert bundled.id not in ids
+    assert standalone["id"] in ids
+
+
+def test_delete_version_sweeps_bundle(client: TestClient) -> None:
+    """approved 버전 삭제 시 동봉 행을 withdrawn 으로 스윕 — 안 하면 pending 이 박제돼
+    dedupe 가드가 이후 단독 요청까지 영구 차단한다."""
+
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _seed_spare_version(map_id)  # 마지막 버전 삭제 금지 가드 회피
+    _checkout(client, version_id)
+    assert (
+        client.post(
+            f"/api/versions/{version_id}/submit", json={"to_visibility": "public"}
+        ).status_code
+        == 200
+    )
+
+    _act_as("a")
+    assert client.post(f"/api/versions/{version_id}/approve", json={}).status_code == 200
+
+    _act_as("local-dev")
+    assert client.get(f"/api/versions/{version_id}/workflow").json()["status"] == "approved"
+    assert client.delete(f"/api/versions/{version_id}").status_code == 204
+
+    bundled = _get_all_approval_requests(map_id)[0]
+    assert bundled.status == "withdrawn"
+
+    # dedupe 해제 확인 — 새 단독 요청이 통과해야 한다
+    resp = client.post(
+        f"/api/maps/{map_id}/visibility-request",
+        json={"to_visibility": "public"},
+    )
+    assert resp.status_code == 201

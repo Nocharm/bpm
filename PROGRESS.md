@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-13 — 거버넌스 A 게시 동봉 (feat/governance-ux)
+- **최종 리뷰 픽스웨이브 (BE)**: 동봉 가시성 변경은 오너 전용 게이트 — 편집자가 제출 동봉으로 단독 요청 게이트를 우회하던 구멍을 막음. 잔여 표면 3곳도 정합화(범용 철회 409·pending peek 단독만·sysadmin 전역 큐에서 동봉 제외) + `delete_version` 동봉 스윕(approved 버전 삭제 시 pending 박제로 이후 단독 요청까지 영구 차단되던 데드락). 게이트: BE pytest 1028·ruff 0.
 - **QA 체크리스트**: `docs/qa/governance-ux-checklist.md` 신설 — 4페이즈 사용자 실검증 항목(P0 7·C 5·B 4·A 9·회귀 4) + docs/README 인덱스 등록.
 - **A 완결 게이트**: BE pytest 1023·ruff 0 / FE vitest 599·lint 0 error·tsc 0·build OK. 승인요청 3표면(에디터 모달·설정 패널·셀프 게시 팝오버)에서 가시성 변경을 동봉하면 버전 만장일치에 편승해 publish 시 적용, reject/withdraw 시 함께 종결(부분 승인 없음·직접 decide 409).
 - **Task A1 완결 게이트**: BE pytest 1017·ruff 0 / 신규 test_version_bundle.py 4건 전부 PASS. `SubmitIn` 스키마(to_visibility optional), `submit_version` 함수가 bundle payload 수용(동봉 가시성 변경을 버전 결정에 병합)·단독 pending 요청 supersede·approval_requests 생성(version_id 링크).

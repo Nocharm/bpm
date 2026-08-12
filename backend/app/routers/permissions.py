@@ -423,15 +423,19 @@ async def request_visibility_change(
 async def get_pending_visibility_request(
     map_id: int, session: AsyncSession = Depends(get_session)
 ) -> ApprovalRequest | None:
-    """pending 가시성 요청 조회 — Settings 마운트 시 pending 마커 복원용 (없으면 null)."""
+    """pending 가시성 요청 조회 — Settings 마운트 시 pending 마커 복원용 (없으면 null).
+
+    동봉 행(payload.version_id 有)은 제외 — 버전 결정으로만 처리돼 단독 철회·결정이 불가하다.
+    """
     await _get_map_or_404(session, map_id)
-    return await session.scalar(
+    rows = await session.scalars(
         select(ApprovalRequest).where(
             ApprovalRequest.map_id == map_id,
             ApprovalRequest.kind == "visibility_change",
             ApprovalRequest.status == "pending",
         )
     )
+    return next((r for r in rows.all() if r.payload.get("version_id") is None), None)
 
 
 # ── D. Approval requests — list + decide ──────────────────────
@@ -468,6 +472,7 @@ async def list_pending_approval_requests(
     """교차맵 대기 승인 요청 — sysadmin 전역 큐(권한 하향·가시성 변경). pending 만, 최신순.
 
     맵별 목록(/maps/{id}/approval-requests)과 달리 모든 맵을 가로질러 sysadmin 콘솔 승인 큐를 채운다.
+    동봉 가시성 행은 제외 — decide 가 409라 큐에 노출하면 죽은 버튼만 남는다.
     """
     rows = await session.scalars(
         select(ApprovalRequest)
@@ -478,7 +483,11 @@ async def list_pending_approval_requests(
         )
         .order_by(ApprovalRequest.created_at.desc())
     )
-    return list(rows.all())
+    return [
+        r
+        for r in rows.all()
+        if not (r.kind == "visibility_change" and r.payload.get("version_id") is not None)
+    ]
 
 
 @router.post("/approval-requests/{request_id}/decide", response_model=ApprovalRequestOut)
@@ -538,6 +547,11 @@ async def withdraw_approval_request(
         raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
     if req.kind not in ("permission_downgrade", "visibility_change"):
         raise HTTPException(status_code=409, detail="use the kind-specific withdraw endpoint")
+    if req.payload.get("version_id") is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="bundled with a version submission — withdraw the version instead",
+        )
     if req.status != "pending":
         raise HTTPException(status_code=409, detail=f"request already {req.status}")
     if req.requested_by != user:
