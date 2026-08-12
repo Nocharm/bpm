@@ -473,6 +473,44 @@ def test_collaborators_viewer_can_read_not_write(client: TestClient, enforce: No
     )
 
 
+def test_downgrade_duplicate_pending_409(client: TestClient, enforce: None) -> None:
+    """같은 grant 대상 pending 다운그레이드가 있으면 PATCH/DELETE 재요청은 409."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    first = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert first.status_code == 200 and first.json()["pending"] is True
+    dup = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert dup.status_code == 409
+    dup_del = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
+    assert dup_del.status_code == 409
+    assert pending_request_count(map_id, "permission_downgrade") == 1
+
+
+def test_downgrade_pending_other_grant_unaffected(client: TestClient, enforce: None) -> None:
+    """중복 가드는 grant 단위 — 다른 grant 의 다운그레이드는 그대로 지연 생성."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed1", "editor"),
+            ("user", "ed2", "editor"),
+        ]
+    )
+    g1, g2 = grant_id(map_id, "ed1"), grant_id(map_id, "ed2")
+    act_as("actor.ed")
+    assert client.patch(f"/api/maps/{map_id}/permissions/{g1}", json={"role": "viewer"}).json()["pending"] is True
+    r2 = client.patch(f"/api/maps/{map_id}/permissions/{g2}", json={"role": "viewer"})
+    assert r2.status_code == 200 and r2.json()["pending"] is True
+    assert pending_request_count(map_id, "permission_downgrade") == 2
+
+
 # ── group principal: stored but effective_role ignores ────────
 
 

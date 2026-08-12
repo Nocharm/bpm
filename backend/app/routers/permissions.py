@@ -153,6 +153,10 @@ async def update_permission(
     # 오너(=sysadmin 포함, effective_role 단계에서 owner로 해석)는 다운그레이드 승인 없이 즉시 적용
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, new_role) and actor_role != "owner":
+        if await _find_pending_downgrade(session, map_id, permission_id) is not None:
+            raise HTTPException(
+                status_code=409, detail="a change request for this grant is already pending"
+            )
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -203,6 +207,10 @@ async def delete_permission(
     # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
+        if await _find_pending_downgrade(session, map_id, permission_id) is not None:
+            raise HTTPException(
+                status_code=409, detail="a change request for this grant is already pending"
+            )
         found_map = await _get_map_or_404(session, map_id)
         req = ApprovalRequest(
             map_id=map_id,
@@ -240,6 +248,22 @@ async def _get_grant_or_404(
     if grant is None or grant.map_id != map_id:
         raise HTTPException(status_code=404, detail=f"permission {permission_id} not found")
     return grant
+
+
+async def _find_pending_downgrade(
+    session: AsyncSession, map_id: int, permission_id: int
+) -> ApprovalRequest | None:
+    """같은 grant 대상 pending 다운그레이드 요청 — payload 가 JSON 이라 파이썬에서 필터(맵당 소량)."""
+    rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "permission_downgrade",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    return next(
+        (r for r in rows.all() if r.payload.get("permission_id") == permission_id), None
+    )
 
 
 # ── B. Owner transfer ─────────────────────────────────────────
