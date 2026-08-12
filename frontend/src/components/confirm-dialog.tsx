@@ -62,6 +62,8 @@ interface ConfirmDialogProps {
   input?: { value: string; onChange: (value: string) => void; placeholder?: string; rows?: number };
   // confirm 버튼 비활성(예: 사유 미입력) / disable confirm.
   confirmDisabled?: boolean;
+  // 확인 직전 인터랙티브 옵션(예: 게시 동봉 체크박스) — input 아래·버튼 행 위에 렌더.
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -78,6 +80,7 @@ export function ConfirmDialog({
   banner,
   input,
   confirmDisabled = false,
+  children,
 }: ConfirmDialogProps) {
   const groups: ConfirmLine[][] = sections ?? (lines && lines.length > 0 ? [lines] : []);
   const confirmBtn = danger
@@ -149,6 +152,7 @@ export function ConfirmDialog({
             onChange={(event) => input.onChange(event.target.value)}
           />
         )}
+        {children}
         <div className={`flex w-full justify-end gap-2 ${isRich ? "" : ""}`}>
           {cancelLabel && (
             <button

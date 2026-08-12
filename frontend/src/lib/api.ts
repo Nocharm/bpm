@@ -784,8 +784,14 @@ export function getWorkflowState(versionId: number): Promise<WorkflowState> {
   return request<WorkflowState>(`/versions/${versionId}/workflow`);
 }
 
-export function submitVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/submit`, { method: "POST" });
+export function submitVersion(
+  versionId: number,
+  toVisibility?: "public" | "private",
+): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/submit`, {
+    method: "POST",
+    ...(toVisibility ? { body: JSON.stringify({ to_visibility: toVisibility }) } : {}),
+  });
 }
 
 export function approveVersion(versionId: number): Promise<VersionSummary> {
