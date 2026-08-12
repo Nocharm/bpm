@@ -150,6 +150,15 @@ def pending_request_count(map_id: int, kind: str) -> int:
     return _seed(_count)  # type: ignore[return-value]
 
 
+def request_status(request_id: int) -> str | None:
+    """승인 요청의 현재 상태 조회."""
+    async def _get(session) -> str | None:
+        req = await session.get(ApprovalRequest, request_id)
+        return None if req is None else req.status
+
+    return _seed(_get)  # type: ignore[return-value]
+
+
 # ── A. Collaborators ──────────────────────────────────────────
 
 
@@ -969,3 +978,87 @@ def test_create_version_holds_checkout_for_creator(
     r = client.post(f"/api/maps/{map_id}/versions", json={"label": "To-Be"})
     assert r.status_code == 201
     assert checked_out_by_of(r.json()["id"]) == "creator.u"
+
+
+# ── Supersede pending downgrades ──────────────────────────────
+
+
+def test_owner_direct_change_supersedes_pending(
+    client: TestClient, enforce: None
+) -> None:
+    """오너가 같은 grant 를 직접 변경하면 pending 다운그레이드는 superseded + 요청자 알림."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+
+    act_as("owner.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is False
+    assert request_status(req_id) == "superseded"
+
+    act_as("actor.ed")
+    got = [
+        n
+        for n in client.get("/api/notifications").json()
+        if n["type"] == "permission_superseded" and n["map_id"] == map_id
+    ]
+    assert len(got) == 1
+    assert "'perm map'" in got[0]["message"]
+
+
+def test_owner_remove_supersedes_pending(client: TestClient, enforce: None) -> None:
+    """오너가 grant 를 직접 제거해도 pending 다운그레이드는 superseded."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+    act_as("owner.u")
+    assert (
+        client.delete(f"/api/maps/{map_id}/permissions/{gid}").json()["pending"]
+        is False
+    )
+    assert request_status(req_id) == "superseded"
+
+
+def test_owner_transfer_supersedes_pending_on_promoted_grant(
+    client: TestClient, enforce: None
+) -> None:
+    """오너 이전으로 owner 로 승격된 grant 의 pending 다운그레이드는 superseded.
+
+    방치하면 승인 시 owner grant 가 viewer 로 강등돼 오너 부재 상태가 된다.
+    """
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+
+    act_as("owner.u")
+    r = client.post(f"/api/maps/{map_id}/transfer-owner", json={"new_owner": "ed"})
+    assert r.status_code == 200
+    assert request_status(req_id) == "superseded"
+    assert grant_role(map_id, "ed") == "owner"

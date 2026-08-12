@@ -182,6 +182,7 @@ async def update_permission(
         await session.refresh(req)
         # 지연 — 아직 적용 안 됨. pending 마커로 응답
         return {"pending": True, "approval_request": _serialize_request(req)}
+    await _supersede_pending_downgrades(session, map_id, permission_id, actor=user)
     grant.role = new_role
     await session.commit()
     await session.refresh(grant)
@@ -236,6 +237,7 @@ async def delete_permission(
         await session.commit()
         await session.refresh(req)
         return {"pending": True, "approval_request": _serialize_request(req)}
+    await _supersede_pending_downgrades(session, map_id, permission_id, actor=user)
     await session.delete(grant)
     await session.commit()
     return {"pending": False, "deleted": True}
@@ -266,6 +268,27 @@ async def _find_pending_downgrade(
     )
 
 
+async def _supersede_pending_downgrades(
+    session: AsyncSession, map_id: int, permission_id: int, *, actor: str
+) -> None:
+    """직접 적용이 pending 다운그레이드를 무효화 — rename supersede 선례(maps._supersede_pending_rename)."""
+    req = await _find_pending_downgrade(session, map_id, permission_id)
+    if req is None:
+        return
+    req.status = "superseded"
+    req.decided_by = actor
+    req.decided_at = _now()
+    found_map = await session.get(ProcessMap, map_id)
+    map_name = found_map.name if found_map is not None else f"map {map_id}"
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type="permission_superseded",
+        map_id=map_id,
+        message=f"Your permission change request on '{map_name}' was superseded — the owner applied a change directly",
+    )
+
+
 # ── B. Owner transfer ─────────────────────────────────────────
 
 
@@ -276,6 +299,7 @@ async def _find_pending_downgrade(
 async def transfer_owner(
     map_id: int,
     payload: OwnerTransferIn,
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """소유권 이전 — 즉시. 기존 owner grant → editor, new_owner grant → owner, owner_id 갱신.
@@ -306,6 +330,7 @@ async def transfer_owner(
     for g in grants:
         if g.role == "owner":
             g.role = "editor"
+    await _supersede_pending_downgrades(session, map_id, new_owner_grant.id, actor=user)
     new_owner_grant.role = "owner"
     found_map.owner_id = new_owner
     await session.commit()
