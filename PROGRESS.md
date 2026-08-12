@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-12 — 거버넌스 UX 설계 재검토 반영
+- 코드 실측 재검토로 설계 문서 개정: **P0 선행 정비 신설**(visibility/permission 라이프사이클 대칭화·소프트삭제 스윕 통일·승인자 0명 데드락 409), A 배선 표면 3곳+withdraw 연쇄, B 게이트 editor 기준 확정, C는 red dot→count pill+top-nav inbox 배지. 구현 순서 P0→C→B→A 확정.
+
 ## 2026-08-12 — 9910 검증 반영 + 관리 탭 후속 2종
 - 검증: 멱등 재실행·카테고리 관리·홈 노출·회귀 스팟 사용자 확인 완료(잔여: CM-PUR-001 연계 SP 노드 1건). 오우닝 부서장 자동핀은 **보류 결정**(현행 유지).
 - **Move 모달 트리화**: 캐스케이드 → 지정 모달과 동일한 조직도식 트리(루트 행·자기 서브트리 숨김·깊이 초과 위치 비활성·잔여 422는 인라인 표시 — 블러 뒤 토스트 안 보이던 문제 해소). category-cascade 헬퍼 완전 폐기.
