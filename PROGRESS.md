@@ -3,6 +3,14 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-13 — 관리자 UX: 동기화 로딩·테이블 CSV (feat/admin-sync-csv)
+- **완결 게이트**: BE pytest 1033·ruff 0 / FE vitest 606·lint 0 error·tsc 0·build OK. 보안 리뷰 반영: CSV 수식 인젝션 가드(FE/BE 동치 이스케이프).
+- **S1**: HR 동기화 로딩 스피너 — sync 버튼 Loader2 spinner + await listEmployees (재조회까지 busy).
+- **S2**: 공용 CSV 유틸(`lib/csv.ts`, BOM은 다운로드 시 `\uFEFF` 이스케이프 접두) + `ExportCsvButton` 재사용 → employees/departments/notices 3표 CSV 내보내기(화면과 동일 컬럼·formatter, 전체 데이터 기준). 부서 트리 평탄화는 `flattenDeptRows`로 추출해 접힘 무관 전체 행 재사용.
+- **S3**: `GET /api/admin/tables/{name}/export` 신설 — read_table과 동일 게이트/검증/정렬·필터 미러(페이징 없음), StreamingResponse 500행 배치(BOM 미부착, FE가 접두), 셀 이스케이프는 FE `lib/csv.ts` escapeCsvCell과 동치(`_escape_csv_cell` — 수식 인젝션 가드 ' 접두 후 인용).
+- **S4**: DB 테이블 뷰어에 CSV 내보내기 버튼 — `exportDbTableCsv`(raw text, request() 미러 별도 함수)로 뷰어 현재 sort/order/query 그대로 전체 내보내기, `downloadCsv`+`admin.exportCsv` 재사용.
+- **리뷰 픽스 R1(S3)**: 정렬 컬럼 동값이 배치(500행)보다 많으면 PK 타이브레이커 없이 OFFSET 배치 경계에서 행 중복/누락 가능 → `order_by(sort_expr, *pk_cols)`로 고정. CSV 셀 직렬화는 JSON 컬럼(dict/list)은 `json.dumps`, bool은 소문자 true/false로(뷰어 JSON.stringify와 동치, `_render_cell` 응답 경로는 무변경).
+
 ## 2026-08-12~13 — 거버넌스 UX 확장 4페이즈 (feat/governance-ux → dev 머지)
 - **설계 재검토**(docs/design/2026-08-08-governance-ux-design.md 개정): 코드 실측으로 P0 선행 정비 신설, B 게이트 editor 확정, C는 red dot→count pill+top-nav 배지, 구현 순서 P0→C→B→A.
 - **P0 라이프사이클 대칭화**: visibility/permission 요청에 중복 409·요청자 withdraw(DELETE /approval-requests/{id})·직접 적용 supersede(+알림), 소프트삭제 스윕 통일(_get_map_or_404·inbox block3·sysadmin 큐), 승인자0 409, FE pending 마커 새로고침 복원+철회 버튼.

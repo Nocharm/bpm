@@ -4,6 +4,7 @@
 // 서버 /api/employees·/sync는 require_admin으로 보호됨(프론트 게이팅과 별개).
 
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import {
   getAppSettings,
@@ -17,6 +18,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
+import { ExportCsvButton } from "./export-csv-button";
 
 /** 노출 직책 카드 — EDW distinct 직책(available_positions) 중 부서장 표기로 쓸 항목(exposed_positions) 체크·저장.
  *  exposed에는 있는데 available엔 없는 항목(수집 전 기본값 4종)도 목록에 얹어 체크 유지. */
@@ -148,7 +150,7 @@ export function EmployeeTable() {
           ? `aborted — ${s.aborted_reason}`
           : `scanned ${s.scanned} · upserted ${s.upserted} · deactivated ${s.deactivated} · deleted ${s.deleted} · skipped ${s.skipped} · ${positionInfo}`,
       );
-      void listEmployees().then(setRows).catch(() => setRows([]));
+      setRows(await listEmployees());
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "sync failed");
     } finally {
@@ -156,18 +158,47 @@ export function EmployeeTable() {
     }
   };
 
+  // 화면 표와 동일 컬럼·값 — status는 표와 같은 formatter(active t()), 전체 rows 기준(25행 슬라이스 무관)
+  const getExportRows = (): string[][] => [
+    ["loginId", "name", "korean name", "korean dept", "title", "department", "role", "status", "source"],
+    ...rows.map((r) => [
+      r.login_id,
+      r.name,
+      r.korean_name,
+      r.korean_dept,
+      r.title,
+      r.department,
+      r.role,
+      r.active ? t("perm.sysadmin.userStatusActive") : t("perm.sysadmin.userStatusInactive"),
+      r.source,
+    ]),
+  ];
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className="text-body-strong text-ink">{t("admin.title")}</p>
         <div className="flex items-center gap-2">
+          <ExportCsvButton
+            dataId="employees-export-csv"
+            filename={`bpm-employees-${new Date().toISOString().slice(0, 10)}.csv`}
+            getRows={getExportRows}
+            disabled={rows.length === 0}
+          />
           <button
             type="button"
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={() => void onSync()}
             disabled={busy}
           >
-            {busy ? t("admin.syncing") : t("admin.sync")}
+            {busy ? (
+              <>
+                <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
+                {t("admin.syncing")}
+              </>
+            ) : (
+              t("admin.sync")
+            )}
           </button>
         </div>
       </div>

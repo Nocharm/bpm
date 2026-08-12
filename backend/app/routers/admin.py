@@ -4,9 +4,12 @@
 Admin console directory — richer fields than /api/directory, sysadmin-gated.
 """
 
+import json
 from datetime import date, datetime, time, timedelta
+from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import String, Text, and_, asc, cast, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +43,9 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 # 테이블 뷰어 페이지 크기 — 기본 50, 상한 200 (대량 테이블 보호) / page-size bounds.
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
+
+# CSV 내보내기 배치 크기 — 전체를 리스트로 모으지 않고 이 단위로 fetch/yield (메모리 바운드).
+EXPORT_BATCH_SIZE = 500
 
 
 @router.get("/users", response_model=AdminDirectoryOut)
@@ -315,6 +321,101 @@ def _render_cell(value: object) -> object:
     if isinstance(value, (bytes, memoryview)):
         return f"<binary {len(value)} bytes>"
     return value
+
+
+def _escape_csv_cell(value: str) -> str:
+    """CSV 셀 이스케이프 — FE `lib/csv.ts` escapeCsvCell과 동치(byte-for-byte) 유지 필수.
+
+    1) 수식 인젝션 가드: `=`/`+`/`-`/`@`/TAB/CR로 시작하면 `'` 1개 접두(Excel/Sheets가 수식으로 안 읽음).
+    2) 쉼표·따옴표·CR·LF 포함 시에만 `"..."` 인용, 내부 `"`는 `""`로 이중화.
+    """
+    guarded = f"'{value}" if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+    if any(ch in guarded for ch in (",", '"', "\r", "\n")):
+        return '"' + guarded.replace('"', '""') + '"'
+    return guarded
+
+
+def _stringify_csv_value(value: object) -> str:
+    """CSV 셀 값 → 문자열. JSON 컬럼(dict/list)은 json.dumps, bool은 소문자 true/false —
+    뷰어(JSON.stringify) 출력과 동치 유지(`_render_cell`의 JSON 직렬화 경로는 건드리지 않음)."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _build_csv_row(values: list[object]) -> str:
+    """값 리스트 → CRLF로 끝나는 한 줄 CSV(각 셀은 `_stringify_csv_value`+`_escape_csv_cell`로 변환)."""
+    cells = [_escape_csv_cell(_stringify_csv_value(v)) for v in values]
+    return ",".join(cells) + "\r\n"
+
+
+@router.get("/tables/{name}/export")
+async def export_table_csv(
+    name: str,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    sort: str | None = Query(None),
+    order: str = Query("asc"),
+    q: str | None = Query(None),
+) -> StreamingResponse:
+    """sysadmin 전용 — 선택 테이블 전체 행을 CSV로 스트리밍(읽기전용, 페이징 없음).
+
+    read_table과 동일한 게이트·테이블명 검증·정렬/필터를 적용하되 전체 행을 낸다.
+    BOM은 붙이지 않음(FE downloadCsv가 접두 — 이중 BOM 방지). 500행 배치 fetch로 메모리 바운드.
+    """
+    _require_sysadmin(login_id)
+
+    # 테이블명 검증 — 메타데이터에 있는 테이블만 (임의 SQL 차단) / validate against metadata.
+    table = Base.metadata.tables.get(name)
+    if table is None:
+        raise HTTPException(status_code=404, detail="unknown table")
+
+    columns = [c.name for c in table.columns]
+
+    # 필터 — 문자열 컬럼에 대해서만 ILIKE(OR). q는 바인드 파라미터 / text-column ILIKE, q is bound.
+    where = None
+    if q:
+        text_cols = [c for c in table.columns if isinstance(c.type, (String, Text))]
+        if text_cols:
+            where = or_(*[cast(c, String).ilike(f"%{q}%") for c in text_cols])
+
+    stmt = select(table)
+    if where is not None:
+        stmt = stmt.where(where)
+    # 정렬 — sort 컬럼은 실제 컬럼만 허용, 아니면 PK(없으면 무정렬) / validate sort col.
+    # PK를 항상 타이브레이커로 덧붙인다 — sort 컬럼에 동값이 많으면(예: role) OFFSET 배치마다
+    # DB가 동값 그룹 내 순서를 다르게 낼 수 있어, 배치 경계에서 행이 중복되거나 누락된다.
+    if sort and sort in columns:
+        col = table.c[sort]
+        sort_expr = desc(col) if order == "desc" else asc(col)
+        stmt = stmt.order_by(sort_expr, *table.primary_key.columns)
+    elif table.primary_key.columns:
+        stmt = stmt.order_by(*table.primary_key.columns)
+
+    async def _stream_rows() -> AsyncIterator[str]:
+        yield _build_csv_row(columns)
+        offset = 0
+        while True:
+            batch = (
+                await session.execute(stmt.limit(EXPORT_BATCH_SIZE).offset(offset))
+            ).mappings().all()
+            if not batch:
+                break
+            for row in batch:
+                yield _build_csv_row([_render_cell(row[c]) for c in columns])
+            if len(batch) < EXPORT_BATCH_SIZE:
+                break
+            offset += EXPORT_BATCH_SIZE
+
+    return StreamingResponse(
+        _stream_rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}.csv"'},
+    )
 
 
 def _build_kst_range(from_date: date, to_date: date) -> tuple[datetime, datetime]:
