@@ -163,6 +163,8 @@ export function PendingApprovalsPanel({
                 : t("perm.approvals.kindSpDesignation");
         const detail = renderDetail(req);
         const isDeciding = decidingIds.has(req.id);
+        const isBundled =
+          req.kind === "visibility_change" && req.payload.version_id != null;
 
         return (
           <div
@@ -184,7 +186,11 @@ export function PendingApprovalsPanel({
             </div>
 
             {/* 승인/반려 버튼 — 결정권 없는 행은 안내만 / Approve / reject buttons — read-only hint otherwise */}
-            {canDecideKind(req.kind) ? (
+            {isBundled ? (
+              <span className="ml-4 shrink-0 text-fine text-ink-tertiary">
+                {t("perm.approvals.bundledWithVersion")}
+              </span>
+            ) : canDecideKind(req.kind) ? (
               <div className="ml-4 flex shrink-0 items-center gap-2">
                 <button
                   type="button"
