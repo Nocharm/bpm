@@ -4,9 +4,15 @@
 // 변경은 visibility-request(승인 워크플로) 경유 — 적용 시 pending 마커만 표시(낙관적 적용 금지).
 // 퍼블릭 전환 시 잔존 viewer 그랜트는 승인 적용 시 서버가 제거(PV).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { requestVisibilityChange, type MapSummary } from "@/lib/api";
+import {
+  getPendingVisibilityRequest,
+  requestVisibilityChange,
+  withdrawApprovalRequest,
+  type ApprovalRequest,
+  type MapSummary,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 type Visibility = MapSummary["visibility"];
@@ -26,15 +32,43 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
 
   // 선택만 스테이징 — 적용 버튼을 눌러야 요청 전송 (PV)
   const [staged, setStaged] = useState<Visibility>(visibility);
-  const [pending, setPending] = useState(false);
+  const [pendingReq, setPendingReq] = useState<ApprovalRequest | null>(null);
+  const pending = pendingReq !== null;
   const changed = staged !== visibility;
+
+  // 마운트 시 서버 pending 복원 — 새로고침해도 마커·철회 버튼 유지
+  useEffect(() => {
+    let alive = true;
+    getPendingVisibilityRequest(mapIdNum)
+      .then((req) => {
+        if (alive) setPendingReq(req);
+      })
+      .catch(() => {
+        // 복원 실패는 치명적이지 않음 — 요청 시 서버 409가 중복을 재차 방어
+      });
+    return () => {
+      alive = false;
+    };
+  }, [mapIdNum]);
 
   async function handleApply() {
     if (!isOwner || pending || !changed) return;
     try {
       const req = await requestVisibilityChange(mapIdNum, staged);
-      if (req.status === "pending") setPending(true);
+      if (req.status === "pending") setPendingReq(req);
       onToast(t("perm.visibilityToastRequested"));
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleWithdraw() {
+    if (!pendingReq) return;
+    try {
+      await withdrawApprovalRequest(pendingReq.id);
+      setPendingReq(null);
+      setStaged(visibility);
+      onToast(t("perm.visibilityToastWithdrawn"));
     } catch (err) {
       onToast(err instanceof Error ? err.message : String(err));
     }
@@ -95,9 +129,21 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
       )}
 
       {pending && (
-        <span className="self-start rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
-          {t("perm.visibilityPending")}
-        </span>
+        <div className="flex items-center gap-2 self-start">
+          <span className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
+            {t("perm.visibilityPending")}
+          </span>
+          {isOwner && (
+            <button
+              type="button"
+              data-id="visibility-withdraw"
+              className="rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink hover:bg-surface-alt"
+              onClick={() => void handleWithdraw()}
+            >
+              {t("perm.visibilityWithdraw")}
+            </button>
+          )}
+        </div>
       )}
 
       {!isOwner && (

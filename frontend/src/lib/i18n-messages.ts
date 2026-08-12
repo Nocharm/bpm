@@ -1212,6 +1212,8 @@ const en = {
   "perm.visibilityReadOnly": "You don't have permission to change visibility (owner-only).",
   "perm.visibilityCurrent": "current",
   "perm.visibilityApply": "Apply change",
+  "perm.visibilityWithdraw": "Withdraw request",
+  "perm.visibilityToastWithdrawn": "Visibility change request withdrawn.",
   "perm.visibilityPreviewPublic": "Going public lets everyone view this map; existing viewer grants are removed on approval.",
   "perm.visibilityPreviewPrivate": "Going private restricts viewing to granted users only.",
   // ── 위험 구역(Danger) / Danger zone tab ──
@@ -2783,6 +2785,8 @@ const ko: Record<MessageKey, string> = {
   "perm.visibilityReadOnly": "공개 범위 변경 권한이 없습니다 (소유자 전용).",
   "perm.visibilityCurrent": "현재",
   "perm.visibilityApply": "변경 적용",
+  "perm.visibilityWithdraw": "요청 철회",
+  "perm.visibilityToastWithdrawn": "공개 범위 변경 요청을 철회했습니다.",
   "perm.visibilityPreviewPublic": "퍼블릭으로 전환하면 모든 사용자가 열람할 수 있고, 기존 뷰어 권한은 승인 시 제거됩니다.",
   "perm.visibilityPreviewPrivate": "프라이빗으로 전환하면 권한이 부여된 사용자만 열람합니다.",
   // ── 위험 구역(Danger) / Danger zone tab ──
