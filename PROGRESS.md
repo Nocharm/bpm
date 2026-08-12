@@ -6,6 +6,7 @@
 ## 2026-08-13 — 거버넌스 C 승인 탭 통합 (feat/governance-ux)
 - **Task C1 — 결재 목록 게이트 오너 확대**: `GET /api/maps/{map_id}/approval-requests`를 오너(비승인자)에게도 허용 — `_assert_owner_or_approver` 헬퍼 신설, `list_approval_requests` 런타임 판정 전환. rename/sp 결정권자인 오너가 통합 결재 대기 탭을 보기 위한 전제. 테스트 2건 추가, pytest 1013·ruff OK.
 - **Task C2+C3 — 결재 대기 탭 4종 통합 + 레일 배지**: `PendingApprovalsPanel`을 permission_downgrade/visibility_change/map_rename/sp_designation 4종으로 확대, 행별 결정권(`canDecideKind` — rename/sp는 오너, 나머지는 승인자) + `onCountChange` 콜백. 설정 페이지는 `canSeeApprovals = canDecide || isOwner`로 탭 게이트 확대하고 좌측 레일에 pending 카운트 배지 추가. i18n 4키(EN/KO). 게이트: vitest 598·lint 0 error·tsc 0·build OK.
+- **Task C4 — top-nav 인박스 카운트 배지**: `InboxBadge` 신설 컴포넌트(`src/components/inbox-badge.tsx` — `listInboxApprovals` 15s 폴링, notification-bell 선례), top-nav NAV_TABS 인박스 탭에 조건부 렌더. 게이트: vitest 598·lint 0 error·tsc 0·build OK.
 
 ## 2026-08-12~13 — 거버넌스 P0 선행 정비 (feat/governance-ux)
 - **P0 완결 게이트**: BE pytest 1011·ruff 0 / FE vitest 598·lint 0 error·tsc 0·build OK. visibility/permission 승인 요청이 rename/sp와 대칭(중복 409·withdraw·supersede)이 됐고 소프트삭제 유령 pending·승인자0 데드락 해소 — A(게시 동봉)·C(승인 탭 통합)의 전제 충족.

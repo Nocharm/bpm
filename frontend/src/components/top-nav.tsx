@@ -19,6 +19,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FeedbackSidePanel } from "@/components/feedback-side-panel";
+import { InboxBadge } from "@/components/inbox-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { Tooltip } from "@/components/tooltip";
 
@@ -126,6 +127,7 @@ export function TopNav() {
               >
                 <Icon size={14} strokeWidth={1.5} />
                 {t(tab.labelKey)}
+                {tab.href === "/inbox" && <InboxBadge />}
               </Link>
             );
           })}
