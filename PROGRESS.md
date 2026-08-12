@@ -5,6 +5,7 @@
 
 ## 2026-08-13 — 거버넌스 B 카드 멤버 편집 (feat/governance-ux)
 - **Task B1 — AddCollaborator 컴포넌트 추출**: `collaborators-panel.tsx`의 로컬 `AddCollaboratorForm`(+어댑터 `toPickerGroups`)을 `add-collaborator.tsx`로 순수 이동, `export function AddCollaborator`로 승격(맵 상세 카드 재사용 준비, Task B2). 동작·마크업 무변경. 게이트: vitest 598·lint 0 error·tsc 0·build OK.
+- **Task B2 — 맵 상세 카드 멤버 추가/제거 배선**: `map-detail-card.tsx`에 `canManageMembers`(editor+) 게이트로 행별 제거 버튼(owner 행·오우닝 부서 synthetic 행 제외, `e.stopPropagation()`) + pending 배지(RoleBadge) + 하단 `AddCollaborator` 추가 행을 배선(협업자 패널과 동일한 addMapPermission/removeMapPermission·pending 규칙, `localReloadKey` 재조회). 게이트: vitest 598·lint 0 error·tsc 0·build OK.
 
 ## 2026-08-13 — 거버넌스 C 승인 탭 통합 (feat/governance-ux)
 - **C 완결 게이트**: BE pytest 1013·ruff 0 / FE vitest 598·lint 0 error·tsc 0·build OK. 결재 대기 탭이 4종 전종을 다루고(행별 결정권=서버 게이트와 일치), 좌측 레일·top-nav 인박스에 pending 카운트 배지.
