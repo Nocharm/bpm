@@ -70,6 +70,11 @@ try {
     .locator('[data-id="framework-group-box"] [data-id="map-card-name"]', { hasText: MAP_NAME })
     .first().isVisible().catch(() => false);
   check("map-holding category renders tint group box", boxedCard);
+  // 펼침 진입 애니메이션 — 드러난 영역 래퍼에 accordion-open 키프레임이 실제로 걸려 있어야 한다
+  // (computed animationName은 재생 종료 후에도 유지 — 백그라운드 스로틀과 무관).
+  const animName = await page.locator(".accordion-open").first()
+    .evaluate((el) => getComputedStyle(el).animationName).catch(() => "none");
+  check("expand animation keyframes applied", animName === "accordion-open", animName);
 
   // ── 3) 검색 — Framework 뷰에서도 공용 플랫 검색으로 전환·복귀 ──────────────
   await page.locator('[data-id="home-map-search"]').fill(MAP_NAME);
@@ -125,10 +130,25 @@ try {
   check("Departments toggle renders org accordion (regression)", orgVisible);
 
   // 직접 맵 4개+ 리스트(시드에선 미지정 섹션, 기본 펼침)는 3.5개 높이로 잘리고 Show all 버튼이 뜬다.
-  const clampBtn = page.locator('[data-id^="org-list-expand-"]').first();
+  const clampBtn = page.locator('button[data-id^="org-list-expand-"]').first();
   const clampShown = await clampBtn.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   const clampLabel = clampShown ? ((await clampBtn.textContent()) ?? "") : "";
   check("dept map list clamps with Show all button", clampShown && clampLabel.includes("Show all"), clampLabel.trim());
+  // 접힌 영역은 내부 스크롤 — 넘친 콘텐츠를 휠로 볼 수 있고(scrollTop 이동), overscroll-contain으로
+  // 경계에서 바깥 목록로의 스크롤 전파를 막는다(마우스가 올라간 영역만 스크롤).
+  const scrollInfo = await page.locator('[data-id$="-scroll"]').first().evaluate((el) => {
+    el.scrollTop = 120;
+    return {
+      scrollable: el.scrollHeight > el.clientHeight,
+      moved: el.scrollTop > 0,
+      contain: getComputedStyle(el).overscrollBehaviorY === "contain",
+    };
+  });
+  check(
+    "clamped area scrolls internally with overscroll containment",
+    scrollInfo.scrollable && scrollInfo.moved && scrollInfo.contain,
+    JSON.stringify(scrollInfo),
+  );
   await clampBtn.click();
   const expandedLabel = (await clampBtn.textContent()) ?? "";
   check("Show all expands list and turns into Collapse", expandedLabel.includes("Collapse"), expandedLabel.trim());
@@ -152,10 +172,29 @@ try {
   );
   // 리스트 "전체 펼치기" 상태도 새로고침에 유지 — Growth Center 트리 펼침(bpm.home.tree)과
   // 리스트 확장(bpm.home.deptListExpand) 둘 다 복원돼 버튼이 Collapse로 남아야 한다.
-  const clampAfterReload = page.locator('[data-id^="org-list-expand-"]').first();
+  const clampAfterReload = page.locator('button[data-id^="org-list-expand-"]').first();
   const persistedLabel = await clampAfterReload.waitFor({ state: "visible", timeout: 8000 })
     .then(async () => (await clampAfterReload.textContent()) ?? "").catch(() => "");
   check("list expand state persists across reload", persistedLabel.includes("Collapse"), persistedLabel.trim());
+
+  // ── 9) 스티키 박스 헤더 + 우측 다시 접기 ───────────────────────────────────
+  // 전체 펼침 상태의 박스 헤더엔 우측 다시 접기 버튼이 뜨고, 헤더 래퍼는 computed sticky여야 한다.
+  const headerCollapse = page.locator('button[data-id="org-list-collapse-unassigned"]');
+  const collapseVisible = await headerCollapse.waitFor({ state: "visible", timeout: 8000 })
+    .then(() => true).catch(() => false);
+  const stickyPos = collapseVisible
+    ? await headerCollapse.evaluate((el) => getComputedStyle(el.parentElement).position)
+    : "none";
+  check("sticky box header shows right-side collapse while expanded",
+    collapseVisible && stickyPos === "sticky", `visible=${collapseVisible} pos=${stickyPos}`);
+  await headerCollapse.click();
+  const reclamped = ((await page.locator('button[data-id^="org-list-expand-"]').first().textContent()) ?? "")
+    .includes("Show all");
+  check("header collapse re-clamps the list", reclamped);
+  // 나의 부서 즐겨찾기 박스도 같은 스티키 헤더 규칙 적용(시드 3맵이라 클램프 버튼은 없음 — 헤더만 확인).
+  const favSticky = await page.locator('[data-id="home-my-dept"] div.sticky').first()
+    .evaluate((el) => getComputedStyle(el).position).catch(() => "none");
+  check("my-dept favorites box header is sticky too", favSticky === "sticky", favSticky);
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
   await ctx.close();

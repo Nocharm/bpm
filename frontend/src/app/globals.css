@@ -219,6 +219,42 @@ button:not(:disabled):active {
   }
 }
 
+/* 홈 아코디언 펼침(부서·업무 체계) — 드러나는 영역이 0→콘텐츠 높이로 자라며 아래 행을 밀어낸다
+   (즉시 등장 "뿅" 방지, 시선이 성장하는 영역을 따라가게). grid 0fr→1fr 트릭이라 높이 측정이 필요 없다.
+   overflow는 keyframe 안에서만 hidden(비애니메이션 속성은 재생 중에만 적용) — 종료 후엔 카드
+   그림자/선택 링이 클리핑되지 않는다. */
+@keyframes accordion-open {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    overflow: hidden;
+  }
+  99% {
+    overflow: hidden;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+.accordion-open {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: accordion-open 300ms var(--ease-smooth);
+}
+
+/* 내부 콘텐츠가 0fr 행 안에서 줄어들 수 있어야 한다 — min-height 기본값(auto)이면 행이 안 접힌다. */
+.accordion-open > * {
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion-open {
+    animation: none;
+  }
+}
+
 /* 엣지 — 기본선 border-strong, 선택 시 바이올렛 accent. 점선 marching 애니메이션은 React Flow `animated` 기본 제공 */
 .react-flow__edge-path {
   stroke: var(--color-border-strong);
