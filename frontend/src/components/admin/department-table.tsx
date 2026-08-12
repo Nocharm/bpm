@@ -21,6 +21,7 @@ import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
 import { buildDeptPathTree, DeptTreePicker } from "./dept-tree-picker";
+import { ExportCsvButton } from "./export-csv-button";
 
 const PILL =
   "inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary";
@@ -104,6 +105,41 @@ interface DeptRow {
   hasChildren: boolean;
 }
 
+/** 조직도 트리 평탄화 — 전 직원 경로의 전 프리픽스를 노드로, collapsedSet에 있는 경로의 자식은 생략.
+ *  화면 렌더(collapsed 상태 반영)와 CSV 전체 내보내기(빈 Set — 접힘 무관 전체 행)에서 공유. */
+function flattenDeptRows(
+  adminPaths: string[],
+  adminKorean: Map<string, string>,
+  dirDepts: DirectoryDept[],
+  collapsedSet: Set<string>,
+): DeptRow[] {
+  const koreanByPath = new Map<string, string>();
+  for (const d of dirDepts) if (d.korean_name) koreanByPath.set(d.id, d.korean_name);
+  for (const [p, k] of adminKorean) if (!koreanByPath.has(p)) koreanByPath.set(p, k);
+  const roots = buildDeptPathTree(
+    adminPaths.map((p) => ({
+      id: p,
+      name: p.split("/").at(-1) ?? p,
+      korean_name: koreanByPath.get(p) ?? "",
+    })),
+  );
+  const flat: DeptRow[] = [];
+  const walk = (node: { path: string; name: string; koreanName: string; depth: number; children: unknown[] }): void => {
+    flat.push({
+      path: node.path,
+      name: node.name,
+      koreanName: node.koreanName || (koreanByPath.get(node.path) ?? ""),
+      depth: node.depth,
+      hasChildren: node.children.length > 0,
+    });
+    if (!collapsedSet.has(node.path)) {
+      for (const c of node.children) walk(c as typeof node);
+    }
+  };
+  roots.forEach(walk);
+  return flat;
+}
+
 export function DepartmentTable() {
   const { t } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -164,33 +200,23 @@ export function DepartmentTable() {
   };
 
   // 조직도 트리 — 전 직원 경로의 전 프리픽스를 노드로(중간 부서 포함), 접기 상태 반영해 평탄화
-  const rows: DeptRow[] = useMemo(() => {
-    const koreanByPath = new Map<string, string>();
-    for (const d of dirDepts) if (d.korean_name) koreanByPath.set(d.id, d.korean_name);
-    for (const [p, k] of adminKorean) if (!koreanByPath.has(p)) koreanByPath.set(p, k);
-    const roots = buildDeptPathTree(
-      adminPaths.map((p) => ({
-        id: p,
-        name: p.split("/").at(-1) ?? p,
-        korean_name: koreanByPath.get(p) ?? "",
-      })),
-    );
-    const flat: DeptRow[] = [];
-    const walk = (node: { path: string; name: string; koreanName: string; depth: number; children: unknown[] }): void => {
-      flat.push({
-        path: node.path,
-        name: node.name,
-        koreanName: node.koreanName || (koreanByPath.get(node.path) ?? ""),
-        depth: node.depth,
-        hasChildren: node.children.length > 0,
-      });
-      if (!collapsed.has(node.path)) {
-        for (const c of node.children) walk(c as typeof node);
-      }
-    };
-    roots.forEach(walk);
-    return flat;
-  }, [adminPaths, adminKorean, dirDepts, collapsed]);
+  const rows: DeptRow[] = useMemo(
+    () => flattenDeptRows(adminPaths, adminKorean, dirDepts, collapsed),
+    [adminPaths, adminKorean, dirDepts, collapsed],
+  );
+
+  // CSV는 접힘 상태와 무관하게 전체 트리 — 빈 Set으로 전 행 평탄화
+  const getExportRows = (): string[][] => {
+    const full = flattenDeptRows(adminPaths, adminKorean, dirDepts, new Set());
+    return [
+      [t("perm.sysadmin.deptColName"), t("admin.deptKrCol"), t("perm.sysadmin.deptColCount")],
+      ...full.map((row) => [
+        row.name,
+        row.koreanName,
+        String(getDeptMembers(users, row.path.split("/")).length),
+      ]),
+    ];
+  };
 
   if (error) {
     return (
@@ -243,6 +269,15 @@ export function DepartmentTable() {
           {remapMsg && <p className="text-fine text-ink-tertiary">{remapMsg}</p>}
         </div>
       )}
+
+      <div className="flex justify-end">
+        <ExportCsvButton
+          dataId="departments-export-csv"
+          filename={`bpm-departments-${new Date().toISOString().slice(0, 10)}.csv`}
+          getRows={getExportRows}
+          disabled={rows.length === 0}
+        />
+      </div>
 
       <div className="max-h-[60vh] overflow-y-auto" data-id="dept-table-scroll">
         <TableCard>

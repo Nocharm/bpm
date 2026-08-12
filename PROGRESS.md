@@ -5,6 +5,7 @@
 
 ## 2026-08-13 — 관리자 UX: 동기화 로딩·테이블 CSV (feat/admin-sync-csv)
 - **S1**: HR 동기화 로딩 스피너 — sync 버튼 Loader2 spinner + await listEmployees (재조회까지 busy).
+- **S2**: 공용 CSV 유틸(`lib/csv.ts`, BOM은 다운로드 시 `\uFEFF` 이스케이프 접두) + `ExportCsvButton` 재사용 → employees/departments/notices 3표 CSV 내보내기(화면과 동일 컬럼·formatter, 전체 데이터 기준). 부서 트리 평탄화는 `flattenDeptRows`로 추출해 접힘 무관 전체 행 재사용.
 
 ## 2026-08-12~13 — 거버넌스 UX 확장 4페이즈 (feat/governance-ux → dev 머지)
 - **설계 재검토**(docs/design/2026-08-08-governance-ux-design.md 개정): 코드 실측으로 P0 선행 정비 신설, B 게이트 editor 확정, C는 red dot→count pill+top-nav 배지, 구현 순서 P0→C→B→A.
