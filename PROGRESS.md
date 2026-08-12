@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-11 — 조직 기준 전환(dept_info → departments) 설계
+- **검토 문서 갱신(사용자 실검증 반영)**: 웹 임포트(자작 json/jsonl)·슬롯 이양 확인 완료로 체크, "알려진 한계·후속 트랙" 섹션 신설(승인 워크플로/거버넌스 UX 별도 트랙·재임포트 덮어쓰기 정책·rows 500캡·KB 백필·스케일 하드닝·Move 모달 캐스케이드 잔존).
 - **상세 카드 카테고리 필 최상단 행 분리**: 우측 필 무리가 shrink-0라 긴 L1~L5 경로가 타이틀을 세로로 쥐어짜던 것 → category_path 있으면 헤더 위 전용 행(max-w-full+truncate+title 툴팁), 미연결 유령 필(오너)은 기존 우측 위치 유지. 실측 타이틀 1줄(21px) 복원.
 - **업무 체계 지정 모달 조직도식 트리 개편**: 캐스케이드 셀렉트 N개 → lazy 트리(framework-assign-modal) — **리프(child_count 0)만 선택 가능**(상위 클릭=펼침/접힘), 선택 행 accent 틴트+체크 강조, 미선택 시 연결 버튼 비활성, 현재 지정 체인은 getCategoryChain으로 프리펼침+리프면 프리선택. 캐스케이드 시딩 헬퍼(seedChainIds/seedLevelParents)는 고아화로 제거(pickCascadeLevel은 관리자 Move 모달이 계속 사용). 브라우저 검증 6/6(프리펼침·강조·상위 선택불가·선택 이동·재지정 왕복). 비고: 기존에 비-리프에 지정된 맵은 재지정 시 리프를 골라야 함(의도).
 - **홈 리스트 후속 2차(스크롤바 숨김·접힘 애니·클램프 전환·카드 이름 클릭 교정)**: ① 클램프 스크롤바 숨김+`overflow-x-hidden`(폭 밀림·우측 이탈 방지), overscroll-contain 제거(끝 도달 시 바깥 목록으로 자연 체이닝) ② 접힘도 `accordion-close`(고스트 렌더 — **상태·영속은 즉시 커밋**, 지연 커밋은 그 사이 리로드에 접힘 유실: 기존 스모크가 적발) ③ Show all↔Collapse 높이 전환 `clamp-size`(interpolate-size, max-content↔px) ④ **grid 래퍼 min-width:0 필수** — 없으면 카드 truncate가 막혀 긴 이름 리스트가 틴트 박스 우측을 138px 뚫음(나의 부서에서 재현·수정) ⑤ 맵 카드 이름 클릭=선택으로 통일(오클릭 방지), 에디터 이동은 호버 시 권한 필 앞 ↗ Open 버튼(기존 `home.openMap` 키 재사용). 스모크 25/25·23/23.
