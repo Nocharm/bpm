@@ -98,6 +98,100 @@ def test_read_table_non_sysadmin_403(client: TestClient, sysadmin_enforced: None
     assert res.status_code == 403
 
 
+def test_export_table_csv_sysadmin_200(client: TestClient, sysadmin_enforced: None) -> None:
+    """sysadmin export → 200 text/csv, header row + CRLF-joined data rows == full seeded row count."""
+    total = client.get(
+        "/api/admin/tables/employees",
+        params={"size": 200},
+        headers={"X-Dev-User": SYSADMIN},
+    ).json()["total"]
+
+    res = client.get(
+        "/api/admin/tables/employees/export", headers={"X-Dev-User": SYSADMIN}
+    )
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["content-type"]
+    assert res.headers["content-disposition"] == 'attachment; filename="employees.csv"'
+
+    assert res.text.endswith("\r\n")
+    lines = res.text[: -len("\r\n")].split("\r\n")
+    assert "login_id" in lines[0].split(",")
+    assert len(lines) - 1 == total
+
+
+def test_export_table_csv_filter(client: TestClient, sysadmin_enforced: None) -> None:
+    """q filters across text columns, same as read_table — fewer rows than the unfiltered export."""
+    res_all = client.get(
+        "/api/admin/tables/employees/export", headers={"X-Dev-User": SYSADMIN}
+    )
+    res_filtered = client.get(
+        "/api/admin/tables/employees/export",
+        params={"q": "admin.kim"},
+        headers={"X-Dev-User": SYSADMIN},
+    )
+    assert res_filtered.status_code == 200
+    all_rows = res_all.text[: -len("\r\n")].split("\r\n")
+    filtered_rows = res_filtered.text[: -len("\r\n")].split("\r\n")
+    assert len(filtered_rows) < len(all_rows)
+    assert any("admin.kim" in row for row in filtered_rows[1:])
+
+
+def test_export_table_csv_non_sysadmin_403(client: TestClient, sysadmin_enforced: None) -> None:
+    res = client.get(
+        "/api/admin/tables/employees/export", headers={"X-Dev-User": NON_SYSADMIN}
+    )
+    assert res.status_code == 403
+
+
+def test_export_table_csv_unknown_404(client: TestClient, sysadmin_enforced: None) -> None:
+    res = client.get(
+        "/api/admin/tables/no_such_table/export", headers={"X-Dev-User": SYSADMIN}
+    )
+    assert res.status_code == 404
+
+
+def test_export_table_csv_formula_injection_guard(
+    client: TestClient, sysadmin_enforced: None
+) -> None:
+    """Cell starting with '=' is single-quote-prefixed in the CSV (Excel/Sheets formula-injection guard)."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.models import Employee
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                Employee(
+                    login_id="csv.formula",
+                    name="=SUM(A1)",
+                    source="local",
+                    active=True,
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_seed())
+    try:
+        res = client.get(
+            "/api/admin/tables/employees/export",
+            params={"q": "csv.formula"},
+            headers={"X-Dev-User": SYSADMIN},
+        )
+        assert res.status_code == 200
+        assert "'=SUM(A1)" in res.text
+    finally:
+
+        async def _cleanup() -> None:
+            async with SessionLocal() as session:
+                row = await session.get(Employee, "csv.formula")
+                if row is not None:
+                    await session.delete(row)
+                    await session.commit()
+
+        asyncio.run(_cleanup())
+
+
 def test_read_table_binary_column_rendered(client: TestClient, sysadmin_enforced: None) -> None:
     """LargeBinary 컬럼(kb_chunks.embedding)은 크기 표시로 대체 — bytes 직렬화 500 회귀 방지."""
     import asyncio
