@@ -1,7 +1,7 @@
 // 맵 카드 리스트 3.5개 높이 클램프 — 긴 목록은 3.5개만 보여 "더 있음"을 암시하고,
-// 접힌 영역은 내부 스크롤(휠이 올라간 영역만 스크롤 — overscroll-contain으로 바깥 전파 차단),
-// 아래 풀폭 쉐브론 버튼(Show all ⌄ / Collapse ⌃)으로 전체 펼침·재접힘을 토글한다.
-// 홈 부서 목록(org-accordion)과 업무 체계 목록(framework-tree)이 공유. 펼침 상태 영속은 호출부 책임.
+// 접힌 영역은 내부 스크롤(스크롤바는 숨김 — 폭 밀림 방지, 끝에 닿으면 바깥 목록 스크롤로 자연 체이닝),
+// 아래 풀폭 쉐브론 버튼(Show all ⌄ / Collapse ⌃)으로 전체 펼침·재접힘을 토글한다(높이 전환 애니메이션).
+// 홈 부서·미지정·나의 부서·업무 체계 목록이 공유. 펼침 상태 영속은 호출부 책임.
 "use client";
 
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -32,8 +32,8 @@ export function ClampedList({ count, expanded, onToggle, dataId, children }: Cla
     <div className="flex flex-col gap-1">
       <div
         data-id={`${dataId}-scroll`}
-        className={clamped ? "overflow-y-auto overscroll-contain" : undefined}
-        style={clamped ? { maxHeight: `${CLAMP_MAX_HEIGHT_PX}px` } : undefined}
+        className="clamp-size overflow-x-hidden overflow-y-auto"
+        style={{ maxHeight: clamped ? `${CLAMP_MAX_HEIGHT_PX}px` : "max-content" }}
       >
         {children}
       </div>

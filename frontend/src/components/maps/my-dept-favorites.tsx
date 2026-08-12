@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useClosingKeys } from "@/lib/use-closing-keys";
 import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
@@ -53,14 +54,23 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
     window.localStorage.setItem(FAV_LIST_EXPAND_KEY, JSON.stringify({ expanded: next }));
   };
 
+  // 섹션 접힘 애니메이션 — 상태는 즉시 커밋, 고스트 렌더로 accordion-close만 재생 후 언마운트.
+  const { closingKeys, beginClose, cancelClose } = useClosingKeys<string>();
+
   if (maps.length === 0) return null;
 
+  const isClosing = closingKeys.has("fav");
   const header = (
     <button
       type="button"
       data-id="my-dept-toggle"
       aria-expanded={open}
-      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (open) beginClose("fav");
+        else cancelClose("fav");
+        onToggle();
+      }}
       className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-divider"
     >
       {open
@@ -79,7 +89,7 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
 
   return (
     <section data-id="home-my-dept" className="flex flex-col gap-2">
-      {open ? (
+      {(open || isClosing) ? (
         <DeptGroupBox>
           <StickyBoxHeader
             showCollapse={maps.length > CLAMP_VISIBLE && listExpanded}
@@ -88,9 +98,9 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
           >
             {header}
           </StickyBoxHeader>
-          {/* accordion-open — 펼침 시 0→콘텐츠 높이 진입 애니메이션(globals.css). 인셋은 pl-5 pr-2
+          {/* accordion-open/close — 펼침·접힘 높이 애니메이션(globals.css). 인셋은 pl-5 pr-2
               고정값(depth 파생 아님) — 조직도 카드 리스트와 동일 상수라야 폭이 일치한다 */}
-          <div className="accordion-open">
+          <div className={isClosing ? "accordion-close" : "accordion-open"}>
             <ClampedList
               count={maps.length}
               expanded={listExpanded}

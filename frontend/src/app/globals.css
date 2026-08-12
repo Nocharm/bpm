@@ -244,14 +244,67 @@ button:not(:disabled):active {
   animation: accordion-open 300ms var(--ease-smooth);
 }
 
-/* 내부 콘텐츠가 0fr 행 안에서 줄어들 수 있어야 한다 — min-height 기본값(auto)이면 행이 안 접힌다. */
+/* 내부 콘텐츠가 0fr 행 안에서 줄어들 수 있어야 한다 — min-height 기본값(auto)이면 행이 안 접힌다.
+   min-width도 0 필수 — 그리드 아이템 기본 auto는 카드 truncate 축소를 막아 리스트가 min-content
+   폭으로 틴트 박스 우측을 뚫는다(긴 맵 이름에서 재현). */
 .accordion-open > * {
   min-height: 0;
+  min-width: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .accordion-open {
     animation: none;
+  }
+}
+
+/* 홈 아코디언 접힘 — 펼침의 역방향(콘텐츠 높이→0). forwards로 0fr을 유지한 채 잠깐 뒤 실제
+   언마운트가 따라온다(컴포넌트의 closing 상태가 애니메이션 후 커밋). 시선이 줄어드는 영역을 따라간다. */
+@keyframes accordion-close {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+.accordion-close {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden; /* 줄어드는 동안 내용 클립 — 곧 언마운트라 상시 hidden이어도 부작용 없음 */
+  animation: accordion-close 240ms var(--ease-smooth) forwards;
+}
+
+.accordion-close > * {
+  min-height: 0;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion-close {
+    animation-duration: 1ms; /* none이면 forwards 최종 상태(0fr)가 안 잡혀 커밋 전까지 원높이로 남는다 */
+  }
+}
+
+/* 클램프(3.5개) ↔ 전체 펼침 전환 — max-content↔px를 트랜지션(Chrome interpolate-size).
+   미지원 브라우저는 즉시 전환으로 폴백. 스크롤바는 숨김 — 등장/소멸 시 폭을 밀어 카드가
+   틴트 박스 밖으로 삐져나오는 레이아웃 시프트의 원인이라 시각 단서는 반 장 잘림+버튼이 담당. */
+.clamp-size {
+  interpolate-size: allow-keywords;
+  transition: max-height 350ms var(--ease-smooth);
+  scrollbar-width: none;
+}
+
+.clamp-size::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clamp-size {
+    transition: none;
   }
 }
 

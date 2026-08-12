@@ -1,13 +1,14 @@
 "use client";
 
-// 홈 프로세스맵 카드 — 클릭=선택(우측 상세). 타이틀은 더 이상 에디터로 직행하지 않음(열기는 상세에서) /
-// Home map card: click selects it (detail panel). The title no longer navigates — open from detail.
+// 홈 프로세스맵 카드 — 클릭=선택(우측 상세). 타이틀 클릭도 선택(에디터 직행 오클릭 방지) —
+// 에디터 이동은 호버 시 권한 필 앞에 나타나는 Open 버튼으로만 /
+// Home map card: any click selects it; navigation lives in the hover-revealed Open pill.
 // 카드 자체 액션은 삭제(owner)만. 가시성·역할·허용 인원은 메타 한 줄.
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Clock, GitBranch, Globe, Lock, TriangleAlert, User, Users, Workflow } from "lucide-react";
+import { ArrowUpRight, Clock, GitBranch, Globe, Lock, TriangleAlert, User, Users, Workflow } from "lucide-react";
 
 import { type MapSummary } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -168,14 +169,10 @@ export function MapCard({
       {/* 1줄 — 좌: 타이틀+상태 / 우: 역할 배지 + 공개/비공개 아이콘 (역할은 공개+뷰어면 생략) */}
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <Link
-            data-id="map-card-name"
-            href={`/maps/${map.id}`}
-            className="min-w-0 truncate text-body-strong text-ink hover:text-accent hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
+          {/* 이름은 링크가 아니다 — 클릭이 카드로 버블링돼 선택된다(에디터 직행 오클릭 방지). */}
+          <span data-id="map-card-name" className="min-w-0 truncate text-body-strong text-ink">
             <Highlight text={map.name} ranges={nameRanges ?? []} />
-          </Link>
+          </span>
           {map.latest_version_status && (
             <span
               data-id="map-card-status"
@@ -195,6 +192,17 @@ export function MapCard({
           )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {/* 에디터 바로 이동 — 호버 시에만 노출(자리는 항상 차지해 레이아웃 점프 없음), 비노출 중엔 클릭 불가 */}
+          <Link
+            data-id="map-card-open"
+            href={`/maps/${map.id}`}
+            title={t("home.openMap")}
+            onClick={(e) => e.stopPropagation()}
+            className="pointer-events-none inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-150 ease-smooth hover:border-accent hover:text-accent focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
+          >
+            <ArrowUpRight size={12} strokeWidth={1.5} />
+            {t("home.openMap")}
+          </Link>
           {showRole && <RoleBadge role={map.my_role as MapRole} />}
           <span
             data-id="map-card-visibility"
