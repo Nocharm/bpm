@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-13 — 거버넌스 A 게시 동봉 (feat/governance-ux)
+- **Task A1 완결 게이트**: BE pytest 1017·ruff 0 / 신규 test_version_bundle.py 4건 전부 PASS. `SubmitIn` 스키마(to_visibility optional), `submit_version` 함수가 bundle payload 수용(동봉 가시성 변경을 버전 결정에 병합)·단독 pending 요청 supersede·approval_requests 생성(version_id 링크).
+
 ## 2026-08-13 — 거버넌스 B 카드 멤버 편집 (feat/governance-ux)
 - **B 완결 게이트**: BE pytest 1013·ruff 0(무변경 확인) / FE vitest 598·lint 0 error·tsc 0·build OK. 홈/에디터 맵 카드에서 멤버 추가·제거가 설정 화면과 같은 규칙(승격 즉시·강등 승인 경유)으로 가능.
 - **Task B1 — AddCollaborator 컴포넌트 추출**: `collaborators-panel.tsx`의 로컬 `AddCollaboratorForm`(+어댑터 `toPickerGroups`)을 `add-collaborator.tsx`로 순수 이동, `export function AddCollaborator`로 승격(맵 상세 카드 재사용 준비, Task B2). 동작·마크업 무변경. 게이트: vitest 598·lint 0 error·tsc 0·build OK.

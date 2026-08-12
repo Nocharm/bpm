@@ -19,6 +19,7 @@ from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
+    ApprovalRequest,
     CheckoutRequest,
     Edge,
     Group,
@@ -27,6 +28,7 @@ from app.models import (
     ProcessMap,
     VersionApproval,
     VersionEvent,
+    _now,
 )
 from app.schemas import (
     CheckoutIn,
@@ -37,6 +39,7 @@ from app.schemas import (
     EligibleAssigneesOut,
     PendingCheckoutRequestOut,
     RejectIn,
+    SubmitIn,
     VersionCreate,
     VersionOut,
     VersionUpdate,
@@ -480,10 +483,12 @@ async def get_workflow_state(
 @router.post("/versions/{version_id}/submit", response_model=VersionOut)
 async def submit_version(
     version_id: int,
+    payload: SubmitIn | None = None,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림."""
+    """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림.
+    선택: 가시성 변경을 버전 결정에 동봉 (approval_requests 생성)."""
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
@@ -499,6 +504,47 @@ async def submit_version(
     if not approvers:
         raise HTTPException(
             status_code=409, detail="map has no approvers — assign approvers first"
+        )
+
+    # 동봉 가시성 변경 처리
+    bundle_vis = payload.to_visibility if payload is not None else None
+    if bundle_vis is not None:
+        found_map = await session.get(ProcessMap, version.map_id)
+        if found_map is None or bundle_vis == found_map.visibility:
+            raise HTTPException(
+                status_code=422, detail="visibility unchanged — nothing to bundle"
+            )
+        # Standalone pending 이 있으면 동봉이 대체 — 요청자에게 supersede 알림 (P0 대칭)
+        standalone = await session.scalar(
+            select(ApprovalRequest).where(
+                ApprovalRequest.map_id == version.map_id,
+                ApprovalRequest.kind == "visibility_change",
+                ApprovalRequest.status == "pending",
+            )
+        )
+        if standalone is not None:
+            standalone.status = "superseded"
+            standalone.decided_by = user
+            standalone.decided_at = _now()
+            await workflow.create_notifications(
+                session,
+                [standalone.requested_by],
+                type="permission_superseded",
+                map_id=version.map_id,
+                message=f"Your visibility change request on '{found_map.name}' was superseded — it is now bundled with a version submission",
+            )
+        session.add(
+            ApprovalRequest(
+                map_id=version.map_id,
+                kind="visibility_change",
+                payload={
+                    "from_visibility": found_map.visibility,
+                    "to_visibility": bundle_vis,
+                    "version_id": version_id,
+                },
+                requested_by=user,
+                status="pending",
+            )
         )
 
     await session.execute(
