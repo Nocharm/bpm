@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-13 — 관리자 UX: 동기화 로딩·테이블 CSV (feat/admin-sync-csv)
+- **완결 게이트**: BE pytest 1033·ruff 0 / FE vitest 606·lint 0 error·tsc 0·build OK. 보안 리뷰 반영: CSV 수식 인젝션 가드(FE/BE 동치 이스케이프).
 - **S1**: HR 동기화 로딩 스피너 — sync 버튼 Loader2 spinner + await listEmployees (재조회까지 busy).
 - **S2**: 공용 CSV 유틸(`lib/csv.ts`, BOM은 다운로드 시 `\uFEFF` 이스케이프 접두) + `ExportCsvButton` 재사용 → employees/departments/notices 3표 CSV 내보내기(화면과 동일 컬럼·formatter, 전체 데이터 기준). 부서 트리 평탄화는 `flattenDeptRows`로 추출해 접힘 무관 전체 행 재사용.
 - **S3**: `GET /api/admin/tables/{name}/export` 신설 — read_table과 동일 게이트/검증/정렬·필터 미러(페이징 없음), StreamingResponse 500행 배치(BOM 미부착, FE가 접두), 셀 이스케이프는 FE `lib/csv.ts` escapeCsvCell과 동치(`_escape_csv_cell` — 수식 인젝션 가드 ' 접두 후 인용).
