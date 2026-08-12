@@ -1220,6 +1220,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 승인요청 동봉 옵션의 목표 가시성 — 현재값의 반대.
   const bundleTargetVis: "public" | "private" =
     mapVisibility === "public" ? "private" : "public";
+  // 가시성 동봉은 오너 전용(서버 403). 로드 전 myRole=null 이면 숨겨 — mapVisibility 기본값 기준의
+  // 잘못된 목표값이 잠깐 노출되는 것도 함께 막힌다.
+  const canBundleVisibility = myRole === "owner";
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
     !!username &&
@@ -3031,6 +3034,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         setVersions(detail.versions);
         // 동봉 가시성 변경(셀프 게시 체인 포함)이 서버에 반영된 뒤 bundleTargetVis 소스도 갱신 — 안 하면 다음 동봉 계산이 구 값 기준.
         setMapVisibility(detail.visibility);
+        // 동봉 체크박스 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
+        setMyRole(detail.my_role);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
@@ -9540,12 +9545,16 @@ function MapEditor({ mapId }: { mapId: number }) {
             setSubmitConfirmOpen(true);
           }}
           onClose={() => setSelfPublishPrompt(null)}
-          bundleLabel={t("approval.bundleVisibility", {
-            target:
-              bundleTargetVis === "public"
-                ? t("perm.visibilityPublic")
-                : t("perm.visibilityPrivate"),
-          })}
+          bundleLabel={
+            canBundleVisibility
+              ? t("approval.bundleVisibility", {
+                  target:
+                    bundleTargetVis === "public"
+                      ? t("perm.visibilityPublic")
+                      : t("perm.visibilityPrivate"),
+                })
+              : undefined
+          }
         />
       )}
       {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}
@@ -9581,20 +9590,22 @@ function MapEditor({ mapId }: { mapId: number }) {
             setBundleVisibility(false);
           }}
         >
-          <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
-            <input
-              type="checkbox"
-              data-id="submit-bundle-visibility"
-              checked={bundleVisibility}
-              onChange={(e) => setBundleVisibility(e.target.checked)}
-            />
-            {t("approval.bundleVisibility", {
-              target:
-                bundleTargetVis === "public"
-                  ? t("perm.visibilityPublic")
-                  : t("perm.visibilityPrivate"),
-            })}
-          </label>
+          {canBundleVisibility && (
+            <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
+              <input
+                type="checkbox"
+                data-id="submit-bundle-visibility"
+                checked={bundleVisibility}
+                onChange={(e) => setBundleVisibility(e.target.checked)}
+              />
+              {t("approval.bundleVisibility", {
+                target:
+                  bundleTargetVis === "public"
+                    ? t("perm.visibilityPublic")
+                    : t("perm.visibilityPrivate"),
+              })}
+            </label>
+          )}
         </ConfirmDialog>
       )}
       {/* 승인 확인 */}

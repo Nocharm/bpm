@@ -40,7 +40,9 @@ export function SelfPublishPopover({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const { left, top } = clampToViewport(position.x, position.y, 256, 112);
+  // 동봉 체크박스 행(≈36px)이 붙으면 팝오버가 그만큼 높아진다 — 클램프 추정치도 함께 키워야
+  // 화면 하단에서 잘리지 않는다.
+  const { left, top } = clampToViewport(position.x, position.y, 256, bundleLabel ? 148 : 112);
 
   return createPortal(
     <ModalBackdrop

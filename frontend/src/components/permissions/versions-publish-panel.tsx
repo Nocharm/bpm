@@ -37,6 +37,8 @@ interface VersionsPublishPanelProps {
   canEdit: boolean;
   /** 현재 맵 가시성 — 승인요청 동봉 옵션의 대상(반대값) 계산용 / Current map visibility, for the bundle-option target. */
   visibility: "public" | "private";
+  /** 오너 여부 — 가시성 동봉은 오너 전용(서버 403)이라 비오너에겐 체크박스를 숨긴다 / Owner-only bundle option. */
+  canBundle: boolean;
   /** 액션 실패(403/409/422) 토스트 / Toast for action failures. */
   onToast?: (msg: string) => void;
   /** 액션 성공 후 호출 — 동봉 가시성 변경이 맵 레벨 상태(visibility)를 바꿀 수 있어 호스트가 재조회하도록 신호 / Notify host after a successful action, since bundled visibility changes affect map-level state. */
@@ -51,6 +53,7 @@ export function VersionsPublishPanel({
   versions: versionsProp,
   canEdit,
   visibility,
+  canBundle,
   onToast,
   onChanged,
 }: VersionsPublishPanelProps) {
@@ -104,6 +107,7 @@ export function VersionsPublishPanel({
           currentUserId={currentUserId}
           canEdit={canEdit}
           visibility={visibility}
+          canBundle={canBundle}
           onToast={onToast}
           onChanged={onChanged}
         />
@@ -120,6 +124,7 @@ interface VersionRowProps {
   currentUserId: string;
   canEdit: boolean;
   visibility: "public" | "private";
+  canBundle: boolean;
   onToast?: (msg: string) => void;
   onChanged?: () => void;
 }
@@ -130,6 +135,7 @@ function VersionRow({
   currentUserId,
   canEdit,
   visibility,
+  canBundle,
   onToast,
   onChanged,
 }: VersionRowProps) {
@@ -330,12 +336,16 @@ function VersionRow({
             void runAction(() => submitVersion(versionId));
           }}
           onClose={() => setSelfPublishAt(null)}
-          bundleLabel={t("approval.bundleVisibility", {
-            target:
-              bundleTargetVis === "public"
-                ? t("perm.visibilityPublic")
-                : t("perm.visibilityPrivate"),
-          })}
+          bundleLabel={
+            canBundle
+              ? t("approval.bundleVisibility", {
+                  target:
+                    bundleTargetVis === "public"
+                      ? t("perm.visibilityPublic")
+                      : t("perm.visibilityPrivate"),
+                })
+              : undefined
+          }
         />
       )}
       {submitConfirmOpen && (
@@ -355,20 +365,22 @@ function VersionRow({
             setBundleVisibility(false);
           }}
         >
-          <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
-            <input
-              type="checkbox"
-              data-id="panel-submit-bundle-visibility"
-              checked={bundleVisibility}
-              onChange={(e) => setBundleVisibility(e.target.checked)}
-            />
-            {t("approval.bundleVisibility", {
-              target:
-                bundleTargetVis === "public"
-                  ? t("perm.visibilityPublic")
-                  : t("perm.visibilityPrivate"),
-            })}
-          </label>
+          {canBundle && (
+            <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
+              <input
+                type="checkbox"
+                data-id="panel-submit-bundle-visibility"
+                checked={bundleVisibility}
+                onChange={(e) => setBundleVisibility(e.target.checked)}
+              />
+              {t("approval.bundleVisibility", {
+                target:
+                  bundleTargetVis === "public"
+                    ? t("perm.visibilityPublic")
+                    : t("perm.visibilityPrivate"),
+              })}
+            </label>
+          )}
         </ConfirmDialog>
       )}
       {rejecting && (

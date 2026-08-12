@@ -408,6 +408,7 @@ export default function SettingsPage() {
                       currentUserId={currentMockUser.id}
                       canEdit={canEdit}
                       visibility={visibility}
+                      canBundle={isOwner}
                       onToast={showToast}
                       onChanged={() => void refreshMap()}
                     />
