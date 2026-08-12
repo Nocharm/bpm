@@ -19,6 +19,7 @@ from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
+    ApprovalRequest,
     CheckoutRequest,
     Edge,
     Group,
@@ -27,6 +28,7 @@ from app.models import (
     ProcessMap,
     VersionApproval,
     VersionEvent,
+    _now,
 )
 from app.schemas import (
     CheckoutIn,
@@ -37,6 +39,7 @@ from app.schemas import (
     EligibleAssigneesOut,
     PendingCheckoutRequestOut,
     RejectIn,
+    SubmitIn,
     VersionCreate,
     VersionOut,
     VersionUpdate,
@@ -406,6 +409,12 @@ async def delete_version(
             status_code=409, detail="cannot delete the last version of a map"
         )
 
+    # 동봉 가시성 요청 스윕 — 버전이 사라지면 결정할 주체가 없어 pending 이 영구 박제된다
+    # (dedupe 가드가 이후 단독 요청까지 막음). 버전 withdraw 스윕과 동일하게 unstamped.
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        bundled.status = "withdrawn"
+
     await session.delete(version)
     await session.commit()
 
@@ -477,13 +486,30 @@ async def get_workflow_state(
     )
 
 
+async def _find_bundled_visibility(
+    session: AsyncSession, version_id: int
+) -> ApprovalRequest | None:
+    """이 버전에 동봉된 pending 가시성 요청 — payload.version_id 연계 (governance A)."""
+    rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    return next(
+        (r for r in rows.all() if r.payload.get("version_id") == version_id), None
+    )
+
+
 @router.post("/versions/{version_id}/submit", response_model=VersionOut)
 async def submit_version(
     version_id: int,
+    payload: SubmitIn | None = None,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림."""
+    """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림.
+    선택: 가시성 변경을 버전 결정에 동봉 (approval_requests 생성)."""
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
@@ -499,6 +525,63 @@ async def submit_version(
     if not approvers:
         raise HTTPException(
             status_code=409, detail="map has no approvers — assign approvers first"
+        )
+
+    # 동봉 가시성 변경 처리
+    bundle_vis = payload.to_visibility if payload is not None else None
+    if bundle_vis is not None:
+        # 가시성 변경 권한은 오너 전용 — 단독 경로(visibility-request)와 동일 게이트여야
+        # 편집자가 제출 동봉으로 우회하지 못한다.
+        actor_role = await get_effective_role(session, user, version.map_id)
+        if actor_role != "owner":
+            raise HTTPException(
+                status_code=403, detail="only the owner can bundle a visibility change"
+            )
+        found_map = await session.get(ProcessMap, version.map_id)
+        if found_map is None or bundle_vis == found_map.visibility:
+            raise HTTPException(
+                status_code=422, detail="visibility unchanged — nothing to bundle"
+            )
+        # Standalone pending 이 있으면 동봉이 대체 — 요청자에게 supersede 알림 (P0 대칭)
+        standalone = next(
+            (
+                r
+                for r in (
+                    await session.scalars(
+                        select(ApprovalRequest).where(
+                            ApprovalRequest.map_id == version.map_id,
+                            ApprovalRequest.kind == "visibility_change",
+                            ApprovalRequest.status == "pending",
+                        )
+                    )
+                ).all()
+                if r.payload.get("version_id") is None  # 동봉 행 제외 — 단독 요청만 대체
+            ),
+            None,
+        )
+        if standalone is not None:
+            standalone.status = "superseded"
+            standalone.decided_by = user
+            standalone.decided_at = _now()
+            await workflow.create_notifications(
+                session,
+                [standalone.requested_by],
+                type="permission_superseded",
+                map_id=version.map_id,
+                message=f"Your visibility change request on '{found_map.name}' was superseded — it is now bundled with a version submission",
+            )
+        session.add(
+            ApprovalRequest(
+                map_id=version.map_id,
+                kind="visibility_change",
+                payload={
+                    "from_visibility": found_map.visibility,
+                    "to_visibility": bundle_vis,
+                    "version_id": version_id,
+                },
+                requested_by=user,
+                status="pending",
+            )
         )
 
     await session.execute(
@@ -616,6 +699,21 @@ async def reject_version(
             version_id=version_id,
             message=f"'{version.label}' was rejected: {payload.reason}",
         )
+
+    # 동봉 가시성 변경 거절
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        bundled.status = "rejected"
+        bundled.decided_by = user
+        bundled.decided_at = _now()
+        await workflow.create_notifications(
+            session,
+            [bundled.requested_by],
+            type="permission_rejected",
+            map_id=version.map_id,
+            message=f"Your bundled visibility change on '{version.label}' was rejected with the version",
+        )
+
     record_version_event(session, version_id, "rejected", user, note=payload.reason)
     await session.commit()
     await session.refresh(version)
@@ -658,6 +756,25 @@ async def publish_version(
     for prior in prior_published:
         prior.status = workflow.EXPIRED
         record_version_event(session, prior.id, "expired", user)
+
+    # 동봉 가시성 변경 적용 — 단독 승인과 동일 적용기 재사용(viewer 스윕·삭제맵 멱등 포함).
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        # 함수-로컬 import: permissions 모듈이 versions 를 import 하지 않는지 먼저 확인 —
+        # 순환이 없으면 모듈 상단 import 로 승격해도 된다(주석 유지).
+        from app.routers.permissions import _apply_request
+
+        await _apply_request(session, bundled)
+        bundled.status = "applied"
+        bundled.decided_by = user
+        bundled.decided_at = _now()
+        await workflow.create_notifications(
+            session,
+            [bundled.requested_by],
+            type="permission_approved",
+            map_id=version.map_id,
+            message=f"Your bundled visibility change on '{version.label}' was applied with the publish",
+        )
 
     version.status = workflow.PUBLISHED
     await workflow.create_notifications(
@@ -776,6 +893,11 @@ async def withdraw_version(
 
     # 반려본 회수는 항상 기록(반려 이력이 의미 있음) — 상태 변경 전에 판정.
     was_rejected = version.status == workflow.REJECTED
+
+    # 동봉 가시성 변경 회수
+    bundled = await _find_bundled_visibility(session, version_id)
+    if bundled is not None:
+        bundled.status = "withdrawn"
 
     version.status = workflow.DRAFT
     version.checked_out_by = user

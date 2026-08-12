@@ -784,8 +784,14 @@ export function getWorkflowState(versionId: number): Promise<WorkflowState> {
   return request<WorkflowState>(`/versions/${versionId}/workflow`);
 }
 
-export function submitVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/submit`, { method: "POST" });
+export function submitVersion(
+  versionId: number,
+  toVisibility?: "public" | "private",
+): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/submit`, {
+    method: "POST",
+    ...(toVisibility ? { body: JSON.stringify({ to_visibility: toVisibility }) } : {}),
+  });
 }
 
 export function approveVersion(versionId: number): Promise<VersionSummary> {
@@ -931,6 +937,18 @@ export function requestVisibilityChange(
     method: "POST",
     body: JSON.stringify({ to_visibility: toVisibility }),
   });
+}
+
+// pending 가시성 요청 조회 — 설정 마운트 시 pending 마커 복원 (없으면 null).
+export function getPendingVisibilityRequest(
+  mapId: number,
+): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/visibility-requests/pending`);
+}
+
+// 본인 pending 승인 요청 철회 — permission_downgrade/visibility_change 전용 (204).
+export function withdrawApprovalRequest(requestId: number): Promise<void> {
+  return request<void>(`/approval-requests/${requestId}`, { method: "DELETE" });
 }
 
 // 맵의 승인 요청 목록 — collaborators 패널의 pending 다운그레이드 표시에 사용.

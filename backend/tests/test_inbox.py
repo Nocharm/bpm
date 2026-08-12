@@ -108,3 +108,33 @@ def test_inbox_empty_for_unrelated_user(client: TestClient) -> None:
     _act_as("stranger")
     items = client.get("/api/inbox/approvals").json()
     assert not any(it.get("version_id") == version_id for it in items)
+
+
+def test_inbox_excludes_approval_requests_of_deleted_maps(client: TestClient) -> None:
+    """block 3(권한/가시성)도 소프트삭제 맵을 숨긴다 — block 4·5와 대칭."""
+    from app.models import ApprovalRequest, MapApprover, ProcessMap, _now
+
+    async def _seed_deleted_pending() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(name=f"inbox-del-{uuid4().hex[:6]}", visibility="private")
+            m.versions.append(MapVersion(label="As-Is"))
+            session.add(m)
+            await session.flush()
+            session.add(MapApprover(map_id=m.id, user_id="a"))
+            session.add(
+                ApprovalRequest(
+                    map_id=m.id,
+                    kind="visibility_change",
+                    payload={"from_visibility": "private", "to_visibility": "public"},
+                    requested_by="owner.del",
+                    status="pending",
+                )
+            )
+            m.deleted_at = _now()
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed_deleted_pending())
+    _act_as("a")
+    items = client.get("/api/inbox/approvals").json()
+    assert all(not (i["kind"] == "approval_request" and i["map_id"] == map_id) for i in items)

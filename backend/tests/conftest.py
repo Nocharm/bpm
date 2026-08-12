@@ -31,7 +31,7 @@ def client() -> TestClient:
 # 승인자 의미론 변경(2026-07-09): employees 행 없는 승인자는 퇴사자로 간주해 정족수에서 제외.
 # 기존 테스트들의 가상 승인자 id를 활성 직원으로 시드해 종전 시나리오를 유지한다.
 _TEST_APPROVER_IDS = [
-    "a", "b", "a1", "a2", "boss", "lead", "x", "local-dev",
+    "a", "b", "a1", "a2", "boss", "lead", "x", "local-dev", "appr",
     # notif-* 승인자는 여기서 시드하지 않음 — 전역 선시드하면 공지 브로드캐스트 테스트의
     # 수신자에 포함돼 알림 개수 단언이 오염된다. test_notifications 헬퍼가 자체 시드.
 ]

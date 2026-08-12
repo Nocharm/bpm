@@ -14,7 +14,16 @@ from sqlalchemy import func, select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import Department, Employee, MapApprover, MapPermission, MapVersion, ProcessMap
+from app.models import (
+    ApprovalRequest,
+    Department,
+    Employee,
+    MapApprover,
+    MapPermission,
+    MapVersion,
+    ProcessMap,
+    _now,
+)
 from app.permissions.access import get_effective_role
 from app.settings import settings
 
@@ -133,6 +142,38 @@ def first_version_id(map_id: int) -> int:
         )
 
     return _seed(_get)  # type: ignore[return-value]
+
+
+def pending_request_count(map_id: int, kind: str) -> int:
+    async def _count(session) -> int:
+        return await session.scalar(
+            select(func.count())
+            .select_from(ApprovalRequest)
+            .where(
+                ApprovalRequest.map_id == map_id,
+                ApprovalRequest.kind == kind,
+                ApprovalRequest.status == "pending",
+            )
+        )
+
+    return _seed(_count)  # type: ignore[return-value]
+
+
+def request_status(request_id: int) -> str | None:
+    """승인 요청의 현재 상태 조회."""
+    async def _get(session) -> str | None:
+        req = await session.get(ApprovalRequest, request_id)
+        return None if req is None else req.status
+
+    return _seed(_get)  # type: ignore[return-value]
+
+
+def soft_delete_map(map_id: int) -> None:
+    async def _del(session) -> None:
+        m = await session.get(ProcessMap, map_id)
+        m.deleted_at = _now()
+
+    _seed(_del)
 
 
 # ── A. Collaborators ──────────────────────────────────────────
@@ -458,6 +499,44 @@ def test_collaborators_viewer_can_read_not_write(client: TestClient, enforce: No
     )
 
 
+def test_downgrade_duplicate_pending_409(client: TestClient, enforce: None) -> None:
+    """같은 grant 대상 pending 다운그레이드가 있으면 PATCH/DELETE 재요청은 409."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    first = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert first.status_code == 200 and first.json()["pending"] is True
+    dup = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert dup.status_code == 409
+    dup_del = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
+    assert dup_del.status_code == 409
+    assert pending_request_count(map_id, "permission_downgrade") == 1
+
+
+def test_downgrade_pending_other_grant_unaffected(client: TestClient, enforce: None) -> None:
+    """중복 가드는 grant 단위 — 다른 grant 의 다운그레이드는 그대로 지연 생성."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed1", "editor"),
+            ("user", "ed2", "editor"),
+        ]
+    )
+    g1, g2 = grant_id(map_id, "ed1"), grant_id(map_id, "ed2")
+    act_as("actor.ed")
+    assert client.patch(f"/api/maps/{map_id}/permissions/{g1}", json={"role": "viewer"}).json()["pending"] is True
+    r2 = client.patch(f"/api/maps/{map_id}/permissions/{g2}", json={"role": "viewer"})
+    assert r2.status_code == 200 and r2.json()["pending"] is True
+    assert pending_request_count(map_id, "permission_downgrade") == 2
+
+
 # ── group principal: stored but effective_role ignores ────────
 
 
@@ -522,7 +601,9 @@ def test_owner_transfer_new_owner_not_editor_409(
 def test_visibility_request_owner_creates_pending(
     client: TestClient, enforce: None
 ) -> None:
-    map_id = seed_map(visibility="private", grants=[("user", "owner.u", "owner")])
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
     act_as("owner.u")
     r = client.post(
         f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
@@ -545,6 +626,63 @@ def test_visibility_request_non_owner_403(client: TestClient, enforce: None) -> 
         ).status_code
         == 403
     )
+
+
+def test_visibility_request_duplicate_pending_409(client: TestClient, enforce: None) -> None:
+    """같은 맵에 pending 가시성 요청이 있으면 재요청은 409 — 행이 쌓이지 않는다."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    first = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert first.status_code == 201
+    dup = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert dup.status_code == 409
+    assert pending_request_count(map_id, "visibility_change") == 1
+
+
+def test_visibility_request_noop_422(client: TestClient, enforce: None) -> None:
+    """현재값과 같은 가시성 요청은 422 — rename 의 'new name equals current name' 대칭."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    r = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "private"}
+    )
+    assert r.status_code == 422
+
+
+def test_visibility_request_no_approvers_409(client: TestClient, enforce: None) -> None:
+    """활성 승인자 0명이면 409 — 결정 불가능한 pending 데드락 방지 (version submit 대칭)."""
+    map_id = seed_map(visibility="private", grants=[("user", "owner.u", "owner")])
+    act_as("owner.u")
+    r = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert r.status_code == 409
+    assert "no approvers" in r.json()["detail"]
+    assert pending_request_count(map_id, "visibility_change") == 0
+
+
+def test_approval_list_owner_can_read(client: TestClient, enforce: None) -> None:
+    """승인자가 아닌 오너도 결재 대기 목록 열람 — rename/sp 결정권자라 통합 탭에 필요 (C)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner")], approvers=["a"])
+    act_as("owner.u")
+    assert client.get(f"/api/maps/{map_id}/approval-requests").status_code == 200
+
+
+def test_approval_list_editor_still_403(client: TestClient, enforce: None) -> None:
+    """오너도 승인자도 아닌 editor 는 여전히 403."""
+    map_id = seed_map(
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")], approvers=["a"]
+    )
+    act_as("ed")
+    assert client.get(f"/api/maps/{map_id}/approval-requests").status_code == 403
 
 
 def test_approval_list_visible_to_approver_403_to_others(
@@ -713,6 +851,10 @@ def test_approvers_assigned_by_set(client: TestClient, enforce: None) -> None:
 def test_auth_off_management_open(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "off perm map"}).json()
     map_id = created["id"]
+    # 가시성 요청 가드: 승인자 필수 → 승인자 추가
+    async def _add_approver(session) -> None:
+        session.add(MapApprover(map_id=map_id, user_id="a"))
+    _seed(_add_approver)
 
     # collaborators
     assert client.get(f"/api/maps/{map_id}/permissions").status_code == 200
@@ -869,3 +1011,200 @@ def test_create_version_holds_checkout_for_creator(
     r = client.post(f"/api/maps/{map_id}/versions", json={"label": "To-Be"})
     assert r.status_code == 201
     assert checked_out_by_of(r.json()["id"]) == "creator.u"
+
+
+# ── Supersede pending downgrades ──────────────────────────────
+
+
+def test_owner_direct_change_supersedes_pending(
+    client: TestClient, enforce: None
+) -> None:
+    """오너가 같은 grant 를 직접 변경하면 pending 다운그레이드는 superseded + 요청자 알림."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+
+    act_as("owner.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is False
+    assert request_status(req_id) == "superseded"
+
+    act_as("actor.ed")
+    got = [
+        n
+        for n in client.get("/api/notifications").json()
+        if n["type"] == "permission_superseded" and n["map_id"] == map_id
+    ]
+    assert len(got) == 1
+    assert "'perm map'" in got[0]["message"]
+
+
+def test_owner_remove_supersedes_pending(client: TestClient, enforce: None) -> None:
+    """오너가 grant 를 직접 제거해도 pending 다운그레이드는 superseded."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+    act_as("owner.u")
+    assert (
+        client.delete(f"/api/maps/{map_id}/permissions/{gid}").json()["pending"]
+        is False
+    )
+    assert request_status(req_id) == "superseded"
+
+
+def test_owner_transfer_supersedes_pending_on_promoted_grant(
+    client: TestClient, enforce: None
+) -> None:
+    """오너 이전으로 owner 로 승격된 grant 의 pending 다운그레이드는 superseded.
+
+    방치하면 승인 시 owner grant 가 viewer 로 강등돼 오너 부재 상태가 된다.
+    """
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+
+    act_as("owner.u")
+    r = client.post(f"/api/maps/{map_id}/transfer-owner", json={"new_owner": "ed"})
+    assert r.status_code == 200
+    assert request_status(req_id) == "superseded"
+    assert grant_role(map_id, "ed") == "owner"
+
+
+# ── C. Visibility request ──────────────────────────────────────
+
+
+def test_pending_visibility_peek_and_withdraw(client: TestClient, enforce: None) -> None:
+    """peek 는 pending 반환(없으면 null), 요청자 철회 → withdrawn, 이후 재요청 가능."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    assert client.get(f"/api/maps/{map_id}/visibility-requests/pending").json() is None
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    peek = client.get(f"/api/maps/{map_id}/visibility-requests/pending").json()
+    assert peek is not None and peek["id"] == req["id"]
+
+    assert client.delete(f"/api/approval-requests/{req['id']}").status_code == 204
+    assert request_status(req["id"]) == "withdrawn"
+    assert client.get(f"/api/maps/{map_id}/visibility-requests/pending").json() is None
+    # withdrawn 은 pending 아님 — 재요청 201
+    again = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    )
+    assert again.status_code == 201
+
+
+def test_withdraw_guards(client: TestClient, enforce: None) -> None:
+    """철회는 요청자 본인(403)·pending 상태(409)·해당 kind(409)만 허용."""
+    map_id = seed_map(
+        visibility="private",
+        grants=[("user", "owner.u", "owner"), ("user", "actor.ed", "editor"), ("user", "ed", "editor")],
+        approvers=["a"],
+    )
+    act_as("owner.u")
+    vis_req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    # 비요청자 → 403
+    act_as("actor.ed")
+    assert client.delete(f"/api/approval-requests/{vis_req['id']}").status_code == 403
+    # 결정된 요청 → 409
+    act_as("a")
+    client.post(f"/api/approval-requests/{vis_req['id']}/decide", json={"decision": "reject"})
+    act_as("owner.u")
+    assert client.delete(f"/api/approval-requests/{vis_req['id']}").status_code == 409
+    # rename kind → 409 (맵 스코프 전용 경로 유지)
+    act_as("actor.ed")
+    rn = client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "renamed x"}).json()
+    assert client.delete(f"/api/approval-requests/{rn['id']}").status_code == 409
+
+
+def test_withdraw_own_downgrade_request(client: TestClient, enforce: None) -> None:
+    """다운그레이드 요청자도 같은 엔드포인트로 철회 — 철회 후 재요청 가능(중복 가드 해제)."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    req_id = client.patch(
+        f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}
+    ).json()["approval_request"]["id"]
+    assert client.delete(f"/api/approval-requests/{req_id}").status_code == 204
+    assert request_status(req_id) == "withdrawn"
+    # 철회 후 재요청 (중복 가드 해제됨)
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is True
+
+
+# ── 소프트삭제 스윕 통일 ────────────────────────────────────────
+
+
+def test_soft_deleted_map_permission_endpoints_404(client: TestClient, enforce: None) -> None:
+    """소프트삭제 맵은 권한/가시성/승인목록 엔드포인트 전부 404 (rename 선례와 대칭)."""
+    map_id = seed_map(
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")], approvers=["a"]
+    )
+    gid = grant_id(map_id, "ed")
+    soft_delete_map(map_id)
+    act_as("owner.u")
+    assert client.get(f"/api/maps/{map_id}/permissions").status_code == 404
+    assert (
+        client.post(
+            f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"}).status_code
+        == 404
+    )
+    act_as("a")
+    assert client.get(f"/api/maps/{map_id}/approval-requests").status_code == 404
+
+
+def test_sysadmin_queue_excludes_soft_deleted(client: TestClient, enforce: None) -> None:
+    """sysadmin 전역 큐는 소프트삭제 맵의 pending 을 숨긴다."""
+    map_id = seed_map(
+        visibility="private", grants=[("user", "owner.u", "owner")], approvers=["a"]
+    )
+    act_as("owner.u")
+    req = client.post(
+        f"/api/maps/{map_id}/visibility-request", json={"to_visibility": "public"}
+    ).json()
+    soft_delete_map(map_id)
+    act_as(SYSADMIN)
+    ids = [r["id"] for r in client.get("/api/approval-requests").json()]
+    assert req["id"] not in ids

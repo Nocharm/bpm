@@ -560,6 +560,12 @@ class WorkflowStateOut(BaseModel):
     pending_checkout_requests: list[PendingCheckoutRequestOut] = []
 
 
+class SubmitIn(BaseModel):
+    """버전 승인요청 동봉 옵션 — 가시성 변경을 버전 결정에 편승 (governance A)."""
+
+    to_visibility: Literal["public", "private"] | None = None
+
+
 class RejectIn(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 

@@ -28,20 +28,28 @@ import {
   User,
   Users,
   UsersRound,
+  X,
 } from "lucide-react";
 
 import {
+  addMapPermission,
   getDirectory,
   getMap,
   listGroups,
   listMapPermissions,
+  removeMapPermission,
+  type DirectoryDept,
+  type DirectoryUser,
+  type Group,
   type MapDetail,
   type MapPermission,
+  type PrincipalType,
 } from "@/lib/api";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
+import { AddCollaborator } from "@/components/permissions/add-collaborator";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -197,6 +205,12 @@ export function MapDetailCard({
   const [frameworkModalOpen, setFrameworkModalOpen] = useState(false);
   // 모달 성공 시 내부 재조회 트리거 — 부모의 reloadKey 없이도 detail을 최신화 (기존 reloadKey 패턴과 동일 기법).
   const [localReloadKey, setLocalReloadKey] = useState(0);
+  // B: 카드 내 멤버 추가 피커용 raw 디렉터리/그룹 (파생 Map과 별도 보존)
+  const [dirUsersRaw, setDirUsersRaw] = useState<DirectoryUser[]>([]);
+  const [dirDeptsRaw, setDirDeptsRaw] = useState<DirectoryDept[]>([]);
+  const [groupsRaw, setGroupsRaw] = useState<Group[]>([]);
+  // 다운그레이드/제거 승인 대기 permission id — RoleBadge pending 배지 (협업자 패널과 대칭, 세션-로컬)
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
@@ -217,6 +231,33 @@ export function MapDetailCard({
   const collapseVersions = () => setExpandedVersions(new Set());
   const collapseMembers = () => setExpandedMembers(new Set());
 
+  // 멤버 제거 — 승인 지연이면 행 유지 + pending 배지, 즉시 적용이면 재조회 (협업자 패널과 동일 규칙)
+  async function handleRemoveMember(perm: MapPermission) {
+    try {
+      const result = await removeMapPermission(mapId, perm.id);
+      if (result.pending) {
+        setPendingIds((prev) => new Set(prev).add(perm.id));
+      } else {
+        setLocalReloadKey((k) => k + 1);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleAddMember(
+    principalType: PrincipalType,
+    principalId: string,
+    role: "viewer" | "editor",
+  ) {
+    try {
+      await addMapPermission(mapId, principalType, principalId, role);
+      setLocalReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   useEffect(() => {
     let active = true;
     void getMap(mapId)
@@ -233,6 +274,9 @@ export function MapDetailCard({
             if (!active) return;
             setMembers(perms);
             setMembersStatus("ready");
+            setDirUsersRaw(dir.users);
+            setDirDeptsRaw(dir.departments);
+            setGroupsRaw(groups);
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
             setKoreanNameById(new Map(dir.users.map((u) => [u.id, u.korean_name ?? ""])));
             setTitleById(
@@ -290,6 +334,9 @@ export function MapDetailCard({
   const isOwner = detail.my_role === "owner";
   // 오우닝 부서 org_path — 멤버 컬럼에 협업 부서 행처럼 노출(인스펙터/상세 공용). const라 클로저 내 narrowing 유지.
   const owningDeptPath = detail.owning_department;
+  // 멤버 추가/제거 편집 게이트 — 백엔드 기준 editor+ (sysadmin은 서버 my_role이 owner로 해석됨)
+  const canManageMembers =
+    detail !== null && (detail.my_role === "editor" || detail.my_role === "owner");
 
   // 나의 소속(직접 user / 내 그룹 / 내 부서) 여부 — 하이라이트 / is this grant "mine"?
   // 부서: org_path 정확일치 또는 prefix("…/") 경계 (belongs_to_department 규약, HM-2).
@@ -757,7 +804,23 @@ export function MapDetailCard({
                                 {restNode}
                               </span>
                             </span>
-                            <RoleBadge role={perm.role as MapRole} />
+                            <span className="flex items-center gap-1">
+                              <RoleBadge role={perm.role as MapRole} pending={pendingIds.has(perm.id)} />
+                              {canManageMembers && perm.role !== "owner" && (
+                                <button
+                                  type="button"
+                                  data-id={`map-detail-remove-member-${perm.id}`}
+                                  aria-label="Remove member"
+                                  className="rounded-xs p-0.5 text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface-alt hover:text-error group-hover:opacity-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleRemoveMember(perm);
+                                  }}
+                                >
+                                  <X size={12} strokeWidth={1.5} />
+                                </button>
+                              )}
+                            </span>
                           </div>
                           </Fragment>
                         );
@@ -765,6 +828,18 @@ export function MapDetailCard({
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {canManageMembers && members !== null && (
+              <div data-id="map-detail-add-member">
+                <AddCollaborator
+                  dirUsers={dirUsersRaw}
+                  dirDepts={dirDeptsRaw}
+                  groups={groupsRaw}
+                  excludeIds={new Set(members.map((m) => m.principal_id))}
+                  viewerGrantDisabled={detail?.visibility === "public"}
+                  onAdd={(pt, pid, role) => void handleAddMember(pt, pid, role)}
+                />
               </div>
             )}
           </div>

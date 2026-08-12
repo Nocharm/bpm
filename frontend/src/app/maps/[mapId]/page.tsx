@@ -805,6 +805,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [sectionsOpen, setSectionsOpen] = useState(false);
   const [wordReimportOpen, setWordReimportOpen] = useState(false);
   const [mapMode, setMapMode] = useState<string>("normal");
+  // 승인요청 모달의 가시성 동봉 옵션이 반대값을 계산하려면 현재 가시성이 필요 — getMap 로드 시 채움.
+  const [mapVisibility, setMapVisibility] = useState<"public" | "private">("private");
   const [docName, setDocName] = useState<string>("");
   const [docSections, setDocSections] = useState<SectionEntry[]>([]);
   const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
@@ -959,6 +961,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
   // 승인 요청 확인 다이얼로그 — 승인자 목록 확인 후 제출 / Submit confirm listing approvers.
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  // 승인요청에 가시성 변경 동봉 여부(체크박스) — 게시 시 함께 적용.
+  const [bundleVisibility, setBundleVisibility] = useState(false);
   // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 / Self-publish prompt at click point.
   const [selfPublishPrompt, setSelfPublishPrompt] = useState<{ x: number; y: number } | null>(null);
   // 승인/게시/회수/거절 확인 다이얼로그 — 전이 액션 통일 모달 / transition confirm modals.
@@ -1213,6 +1217,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     : undefined;
   // 회수 모달 핸드오프용 제출자 — 회수 대상은 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출.
   const withdrawSubmitter = currentVersion?.submitted_by ?? null;
+  // 승인요청 동봉 옵션의 목표 가시성 — 현재값의 반대.
+  const bundleTargetVis: "public" | "private" =
+    mapVisibility === "public" ? "private" : "public";
+  // 가시성 동봉은 오너 전용(서버 403). 로드 전 myRole=null 이면 숨겨 — mapVisibility 기본값 기준의
+  // 잘못된 목표값이 잠깐 노출되는 것도 함께 막힌다.
+  const canBundleVisibility = myRole === "owner";
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
     !!username &&
@@ -2111,6 +2121,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapOwner(detail.created_by);
         setMyRole(detail.my_role);
         setMapMode(detail.mode ?? "normal");
+        setMapVisibility(detail.visibility);
         setDocName(detail.doc_name ?? "");
         setDocSections(detail.doc_sections ?? []);
         setVersions(detail.versions);
@@ -3021,6 +3032,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 전체 버전 재로딩 — 게시 시 직전 published→expired 반영(우측에 published 2개 방지).
         const detail = await getMap(mapId);
         setVersions(detail.versions);
+        // 동봉 가시성 변경(셀프 게시 체인 포함)이 서버에 반영된 뒤 bundleTargetVis 소스도 갱신 — 안 하면 다음 동봉 계산이 구 값 기준.
+        setMapVisibility(detail.visibility);
+        // 동봉 체크박스 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
+        setMyRole(detail.my_role);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
@@ -9519,15 +9534,27 @@ function MapEditor({ mapId }: { mapId: number }) {
       {selfPublishPrompt && (
         <SelfPublishPopover
           position={selfPublishPrompt}
-          onYes={() => {
+          onYes={(bundle) => {
             setSelfPublishPrompt(null);
-            void runTransition(runSelfPublishChain);
+            void runTransition((id) =>
+              runSelfPublishChain(id, bundle ? bundleTargetVis : undefined),
+            );
           }}
           onNo={() => {
             setSelfPublishPrompt(null);
             setSubmitConfirmOpen(true);
           }}
           onClose={() => setSelfPublishPrompt(null)}
+          bundleLabel={
+            canBundleVisibility
+              ? t("approval.bundleVisibility", {
+                  target:
+                    bundleTargetVis === "public"
+                      ? t("perm.visibilityPublic")
+                      : t("perm.visibilityPrivate"),
+                })
+              : undefined
+          }
         />
       )}
       {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}
@@ -9554,10 +9581,32 @@ function MapEditor({ mapId }: { mapId: number }) {
           cancelLabel={t("common.cancel")}
           onConfirm={() => {
             setSubmitConfirmOpen(false);
-            void runTransition(submitVersion);
+            const vis = bundleVisibility ? bundleTargetVis : undefined;
+            setBundleVisibility(false);
+            void runTransition((id) => submitVersion(id, vis));
           }}
-          onClose={() => setSubmitConfirmOpen(false)}
-        />
+          onClose={() => {
+            setSubmitConfirmOpen(false);
+            setBundleVisibility(false);
+          }}
+        >
+          {canBundleVisibility && (
+            <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
+              <input
+                type="checkbox"
+                data-id="submit-bundle-visibility"
+                checked={bundleVisibility}
+                onChange={(e) => setBundleVisibility(e.target.checked)}
+              />
+              {t("approval.bundleVisibility", {
+                target:
+                  bundleTargetVis === "public"
+                    ? t("perm.visibilityPublic")
+                    : t("perm.visibilityPrivate"),
+              })}
+            </label>
+          )}
+        </ConfirmDialog>
       )}
       {/* 승인 확인 */}
       {approveConfirmOpen && (

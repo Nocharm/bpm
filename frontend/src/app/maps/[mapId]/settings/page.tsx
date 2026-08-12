@@ -158,6 +158,12 @@ export default function SettingsPage() {
     currentMockUser !== null &&
     (currentMockUser.isSysadmin || isApprover(permState, currentMockUser.id, mapIdStr));
 
+  // 결재 대기 탭 노출 — 승인자/sysadmin OR 오너(rename/sp 결정권자) (설계 §C)
+  const canSeeApprovals = canDecide || isOwner;
+
+  // 결재 대기 pending 카운트 — 좌측 레일 배지 (패널 onCountChange가 갱신)
+  const [approvalsCount, setApprovalsCount] = useState(0);
+
   // 점유권 요청 탭 — 소유자 또는 sysadmin만 표시 (보유자는 에디터 승인탭에서 처리) /
   // Checkout requests tab: owner or sysadmin only (holder acts via editor approval tab).
   const canDecideCheckout = currentMockUser !== null && isOwner;
@@ -165,7 +171,7 @@ export default function SettingsPage() {
   // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
   const visibleTabs = ALL_TABS.filter(
     (tab) =>
-      (tab.id !== "approvals" || canDecide) &&
+      (tab.id !== "approvals" || canSeeApprovals) &&
       (tab.id !== "checkout" || canDecideCheckout) &&
       // 서브프로세스 지정은 오너 전용 섹션 / Subprocess designation is owner-only.
       (tab.id !== "subprocess" || isOwner),
@@ -297,7 +303,7 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               type="button"
-              className={`rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
+              className={`flex items-center rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
                 activeSection === tab.id
                   ? "bg-accent-tint text-accent"
                   : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
@@ -309,6 +315,14 @@ export default function SettingsPage() {
               }
             >
               {t(tab.labelKey)}
+              {tab.id === "approvals" && approvalsCount > 0 && (
+                <span
+                  data-id="settings-approvals-count"
+                  className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent"
+                >
+                  {approvalsCount}
+                </span>
+              )}
             </button>
           ))}
 
@@ -393,7 +407,10 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       currentUserId={currentMockUser.id}
                       canEdit={canEdit}
+                      visibility={visibility}
+                      canBundle={isOwner}
                       onToast={showToast}
+                      onChanged={() => void refreshMap()}
                     />
                   ) : tab.id === "danger" ? (
                     isOwner ? (
@@ -407,9 +424,12 @@ export default function SettingsPage() {
                         {t("perm.dangerReadOnly")}
                       </p>
                     )
-                  ) : tab.id === "approvals" && canDecide ? (
+                  ) : tab.id === "approvals" && canSeeApprovals ? (
                     <PendingApprovalsPanel
                       mapId={mapIdStr}
+                      isOwner={isOwner}
+                      isApprover={canDecide}
+                      onCountChange={setApprovalsCount}
                       onDecided={() => void refreshMap()}
                       onToast={(item) => showToast(item.message)}
                     />

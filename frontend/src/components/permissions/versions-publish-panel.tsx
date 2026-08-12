@@ -23,6 +23,7 @@ import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { StatusBadge } from "@/components/status-badge";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 // ── 타입 / Types ─────────────────────────────────────────────
 
@@ -34,8 +35,14 @@ interface VersionsPublishPanelProps {
   versions?: VersionSummary[];
   /** editor 이상 여부 / Whether current user has editor+ role. */
   canEdit: boolean;
+  /** 현재 맵 가시성 — 승인요청 동봉 옵션의 대상(반대값) 계산용 / Current map visibility, for the bundle-option target. */
+  visibility: "public" | "private";
+  /** 오너 여부 — 가시성 동봉은 오너 전용(서버 403)이라 비오너에겐 체크박스를 숨긴다 / Owner-only bundle option. */
+  canBundle: boolean;
   /** 액션 실패(403/409/422) 토스트 / Toast for action failures. */
   onToast?: (msg: string) => void;
+  /** 액션 성공 후 호출 — 동봉 가시성 변경이 맵 레벨 상태(visibility)를 바꿀 수 있어 호스트가 재조회하도록 신호 / Notify host after a successful action, since bundled visibility changes affect map-level state. */
+  onChanged?: () => void;
 }
 
 // ── 메인 컴포넌트 / Main component ───────────────────────────
@@ -45,7 +52,10 @@ export function VersionsPublishPanel({
   currentUserId,
   versions: versionsProp,
   canEdit,
+  visibility,
+  canBundle,
   onToast,
+  onChanged,
 }: VersionsPublishPanelProps) {
   const { t } = useI18n();
 
@@ -96,7 +106,10 @@ export function VersionsPublishPanel({
           label={version.label}
           currentUserId={currentUserId}
           canEdit={canEdit}
+          visibility={visibility}
+          canBundle={canBundle}
           onToast={onToast}
+          onChanged={onChanged}
         />
       ))}
     </div>
@@ -110,7 +123,10 @@ interface VersionRowProps {
   label: string;
   currentUserId: string;
   canEdit: boolean;
+  visibility: "public" | "private";
+  canBundle: boolean;
   onToast?: (msg: string) => void;
+  onChanged?: () => void;
 }
 
 function VersionRow({
@@ -118,7 +134,10 @@ function VersionRow({
   label,
   currentUserId,
   canEdit,
+  visibility,
+  canBundle,
   onToast,
+  onChanged,
 }: VersionRowProps) {
   const { t } = useI18n();
 
@@ -151,25 +170,31 @@ function VersionRow({
   }, [versionId, onToast]);
 
   // 액션 실행 헬퍼 — 호출 후 워크플로 재조회, 실패 시 토스트 / Run an action, then refetch; surface failures.
+  // 성공 시 onChanged로 호스트에 알림 — 동봉 가시성 변경이 맵 레벨 visibility를 바꿔 이 행 밖의 상태(VisibilityControl 등)도 재조회돼야 함.
   const runAction = useCallback(
     async (fn: () => Promise<unknown>) => {
       setBusy(true);
       try {
         await fn();
         await reload();
+        onChanged?.();
       } catch (err) {
         onToast?.(err instanceof Error ? err.message : String(err));
       } finally {
         setBusy(false);
       }
     },
-    [reload, onToast],
+    [reload, onToast, onChanged],
   );
 
   // 반려 모달 표시 — 훅이라 조기 반환 위에 둔다(rules-of-hooks)
   const [rejecting, setRejecting] = useState(false);
   // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 (에디터 승인 탭과 동일 플로우)
   const [selfPublishAt, setSelfPublishAt] = useState<{ x: number; y: number } | null>(null);
+  // 승인요청 확인 모달(비셀프 승인자 경로) + 가시성 변경 동봉 체크박스 상태 — 에디터와 동일 플로우
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [bundleVisibility, setBundleVisibility] = useState(false);
+  const bundleTargetVis: "public" | "private" = visibility === "public" ? "private" : "public";
 
   if (wf === null) {
     return (
@@ -222,7 +247,7 @@ function VersionRow({
                 setSelfPublishAt({ x: event.clientX, y: event.clientY });
                 return;
               }
-              void runAction(() => submitVersion(versionId));
+              setSubmitConfirmOpen(true);
             }}
           >
             <Send size={16} strokeWidth={1.5} />
@@ -300,16 +325,63 @@ function VersionRow({
       {selfPublishAt && (
         <SelfPublishPopover
           position={selfPublishAt}
-          onYes={() => {
+          onYes={(bundle) => {
             setSelfPublishAt(null);
-            void runAction(() => runSelfPublishChain(versionId));
+            void runAction(() =>
+              runSelfPublishChain(versionId, bundle ? bundleTargetVis : undefined),
+            );
           }}
           onNo={() => {
             setSelfPublishAt(null);
             void runAction(() => submitVersion(versionId));
           }}
           onClose={() => setSelfPublishAt(null)}
+          bundleLabel={
+            canBundle
+              ? t("approval.bundleVisibility", {
+                  target:
+                    bundleTargetVis === "public"
+                      ? t("perm.visibilityPublic")
+                      : t("perm.visibilityPrivate"),
+                })
+              : undefined
+          }
         />
+      )}
+      {submitConfirmOpen && (
+        <ConfirmDialog
+          icon={<Send size={28} strokeWidth={1.5} />}
+          title={t("approval.submitConfirmTitle")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const vis = bundleVisibility ? bundleTargetVis : undefined;
+            setSubmitConfirmOpen(false);
+            setBundleVisibility(false);
+            void runAction(() => submitVersion(versionId, vis));
+          }}
+          onClose={() => {
+            setSubmitConfirmOpen(false);
+            setBundleVisibility(false);
+          }}
+        >
+          {canBundle && (
+            <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
+              <input
+                type="checkbox"
+                data-id="panel-submit-bundle-visibility"
+                checked={bundleVisibility}
+                onChange={(e) => setBundleVisibility(e.target.checked)}
+              />
+              {t("approval.bundleVisibility", {
+                target:
+                  bundleTargetVis === "public"
+                    ? t("perm.visibilityPublic")
+                    : t("perm.visibilityPrivate"),
+              })}
+            </label>
+          )}
+        </ConfirmDialog>
       )}
       {rejecting && (
         <PromptDialog

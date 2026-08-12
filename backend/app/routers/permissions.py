@@ -17,7 +17,7 @@ from app.permissions import logic
 from app.permissions.access import assert_map_role, get_effective_role
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
-    require_approver_or_sysadmin,
+    is_map_approver,
     require_map_role,
 )
 from app.routers.maps import _assert_unique_name
@@ -38,9 +38,21 @@ router = APIRouter(
 
 async def _get_map_or_404(session: AsyncSession, map_id: int) -> ProcessMap:
     found_map = await session.get(ProcessMap, map_id)
-    if found_map is None:
+    if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     return found_map
+
+
+async def _assert_owner_or_approver(
+    session: AsyncSession, user: str, map_id: int
+) -> None:
+    """오너(sysadmin 포함 — effective_role 해석) 또는 지정 승인자만 — 결재 대기 목록 게이트 (C)."""
+    role = await get_effective_role(session, user, map_id)
+    if role == "owner":
+        return
+    if await is_map_approver(session, user, map_id):
+        return
+    raise HTTPException(status_code=403, detail="owner, approver, or sysadmin only")
 
 
 # ── A. Collaborators ──────────────────────────────────────────
@@ -153,6 +165,10 @@ async def update_permission(
     # 오너(=sysadmin 포함, effective_role 단계에서 owner로 해석)는 다운그레이드 승인 없이 즉시 적용
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, new_role) and actor_role != "owner":
+        if await _find_pending_downgrade(session, map_id, permission_id) is not None:
+            raise HTTPException(
+                status_code=409, detail="a change request for this grant is already pending"
+            )
         req = ApprovalRequest(
             map_id=map_id,
             kind="permission_downgrade",
@@ -178,6 +194,7 @@ async def update_permission(
         await session.refresh(req)
         # 지연 — 아직 적용 안 됨. pending 마커로 응답
         return {"pending": True, "approval_request": _serialize_request(req)}
+    await _supersede_pending_downgrades(session, map_id, permission_id, actor=user)
     grant.role = new_role
     await session.commit()
     await session.refresh(grant)
@@ -203,6 +220,10 @@ async def delete_permission(
     # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
+        if await _find_pending_downgrade(session, map_id, permission_id) is not None:
+            raise HTTPException(
+                status_code=409, detail="a change request for this grant is already pending"
+            )
         found_map = await _get_map_or_404(session, map_id)
         req = ApprovalRequest(
             map_id=map_id,
@@ -228,6 +249,7 @@ async def delete_permission(
         await session.commit()
         await session.refresh(req)
         return {"pending": True, "approval_request": _serialize_request(req)}
+    await _supersede_pending_downgrades(session, map_id, permission_id, actor=user)
     await session.delete(grant)
     await session.commit()
     return {"pending": False, "deleted": True}
@@ -242,6 +264,43 @@ async def _get_grant_or_404(
     return grant
 
 
+async def _find_pending_downgrade(
+    session: AsyncSession, map_id: int, permission_id: int
+) -> ApprovalRequest | None:
+    """같은 grant 대상 pending 다운그레이드 요청 — payload 가 JSON 이라 파이썬에서 필터(맵당 소량)."""
+    rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "permission_downgrade",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    return next(
+        (r for r in rows.all() if r.payload.get("permission_id") == permission_id), None
+    )
+
+
+async def _supersede_pending_downgrades(
+    session: AsyncSession, map_id: int, permission_id: int, *, actor: str
+) -> None:
+    """직접 적용이 pending 다운그레이드를 무효화 — rename supersede 선례(maps._supersede_pending_rename)."""
+    req = await _find_pending_downgrade(session, map_id, permission_id)
+    if req is None:
+        return
+    req.status = "superseded"
+    req.decided_by = actor
+    req.decided_at = _now()
+    found_map = await session.get(ProcessMap, map_id)
+    map_name = found_map.name if found_map is not None else f"map {map_id}"
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type="permission_superseded",
+        map_id=map_id,
+        message=f"Your permission change request on '{map_name}' was superseded — the owner applied a change directly",
+    )
+
+
 # ── B. Owner transfer ─────────────────────────────────────────
 
 
@@ -252,6 +311,7 @@ async def _get_grant_or_404(
 async def transfer_owner(
     map_id: int,
     payload: OwnerTransferIn,
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """소유권 이전 — 즉시. 기존 owner grant → editor, new_owner grant → owner, owner_id 갱신.
@@ -282,6 +342,7 @@ async def transfer_owner(
     for g in grants:
         if g.role == "owner":
             g.role = "editor"
+    await _supersede_pending_downgrades(session, map_id, new_owner_grant.id, actor=user)
     new_owner_grant.role = "owner"
     found_map.owner_id = new_owner
     await session.commit()
@@ -308,6 +369,29 @@ async def request_visibility_change(
 ) -> ApprovalRequest:
     """가시성 변경 요청 — 즉시 적용하지 않고 승인 지연(§5). before→after 표기용으로 현재값도 저장."""
     found_map = await _get_map_or_404(session, map_id)
+    # 무변경 요청 거부 (rename 의 'new name equals current name' 대칭)
+    if payload.to_visibility == found_map.visibility:
+        raise HTTPException(
+            status_code=422, detail="visibility unchanged — nothing to request"
+        )
+    # 중복 요청 거부 — 같은 맵에 pending visibility_change 가 있으면 안 됨
+    pending = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending is not None:
+        raise HTTPException(
+            status_code=409, detail="a visibility change request is already pending"
+        )
+    # 승인자 0명이면 아무도 decide 못 하는 pending 이 박제 — version submit 과 동일 가드
+    approvers = await workflow.load_active_approvers(session, map_id)
+    if not approvers:
+        raise HTTPException(
+            status_code=409, detail="map has no approvers — assign approvers first"
+        )
     req = ApprovalRequest(
         map_id=map_id,
         kind="visibility_change",
@@ -331,18 +415,44 @@ async def request_visibility_change(
     return req
 
 
+@router.get(
+    "/maps/{map_id}/visibility-requests/pending",
+    response_model=ApprovalRequestOut | None,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_pending_visibility_request(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> ApprovalRequest | None:
+    """pending 가시성 요청 조회 — Settings 마운트 시 pending 마커 복원용 (없으면 null).
+
+    동봉 행(payload.version_id 有)은 제외 — 버전 결정으로만 처리돼 단독 철회·결정이 불가하다.
+    """
+    await _get_map_or_404(session, map_id)
+    rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    return next((r for r in rows.all() if r.payload.get("version_id") is None), None)
+
+
 # ── D. Approval requests — list + decide ──────────────────────
 
 
 @router.get(
     "/maps/{map_id}/approval-requests",
     response_model=list[ApprovalRequestOut],
-    dependencies=[Depends(require_approver_or_sysadmin())],
 )
 async def list_approval_requests(
-    map_id: int, session: AsyncSession = Depends(get_session)
+    map_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> list[ApprovalRequest]:
+    """맵의 승인 요청 목록 — 결재 대기 탭(4종 통합). 오너도 rename/sp 결정권자라 열람 허용 (C)."""
     await _get_map_or_404(session, map_id)
+    await _assert_owner_or_approver(session, user, map_id)
     rows = await session.scalars(
         select(ApprovalRequest)
         .where(ApprovalRequest.map_id == map_id)
@@ -362,13 +472,22 @@ async def list_pending_approval_requests(
     """교차맵 대기 승인 요청 — sysadmin 전역 큐(권한 하향·가시성 변경). pending 만, 최신순.
 
     맵별 목록(/maps/{id}/approval-requests)과 달리 모든 맵을 가로질러 sysadmin 콘솔 승인 큐를 채운다.
+    동봉 가시성 행은 제외 — decide 가 409라 큐에 노출하면 죽은 버튼만 남는다.
     """
     rows = await session.scalars(
         select(ApprovalRequest)
-        .where(ApprovalRequest.status == "pending")
+        .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+        .where(
+            ApprovalRequest.status == "pending",
+            ProcessMap.deleted_at.is_(None),
+        )
         .order_by(ApprovalRequest.created_at.desc())
     )
-    return list(rows.all())
+    return [
+        r
+        for r in rows.all()
+        if not (r.kind == "visibility_change" and r.payload.get("version_id") is not None)
+    ]
 
 
 @router.post("/approval-requests/{request_id}/decide", response_model=ApprovalRequestOut)
@@ -392,6 +511,11 @@ async def decide_approval_request(
         await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
         raise HTTPException(status_code=409, detail=f"request already {req.status}")
+    if req.kind == "visibility_change" and req.payload.get("version_id") is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="bundled with a version submission — decided by the version approval",
+        )
 
     req.decided_by = user
     req.decided_at = _now()
@@ -411,9 +535,37 @@ async def decide_approval_request(
     return req
 
 
+@router.delete("/approval-requests/{request_id}", status_code=204)
+async def withdraw_approval_request(
+    request_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """본인 pending 요청 철회 → withdrawn (행 보존 — 이력). rename/sp 는 맵 스코프 경로 유지."""
+    req = await session.get(ApprovalRequest, request_id)
+    if req is None:
+        raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
+    if req.kind not in ("permission_downgrade", "visibility_change"):
+        raise HTTPException(status_code=409, detail="use the kind-specific withdraw endpoint")
+    if req.payload.get("version_id") is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="bundled with a version submission — withdraw the version instead",
+        )
+    if req.status != "pending":
+        raise HTTPException(status_code=409, detail=f"request already {req.status}")
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    req.status = "withdrawn"
+    await session.commit()
+
+
 async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
     """승인된 요청의 payload 를 실제 데이터에 적용 (downgrade / visibility_change)."""
     if req.kind == "permission_downgrade":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 적용 없이 applied
         permission_id = req.payload.get("permission_id")
         to_role = req.payload.get("to_role")
         grant = await session.get(MapPermission, permission_id)
@@ -425,7 +577,7 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
             grant.role = to_role
     elif req.kind == "visibility_change":
         found_map = await session.get(ProcessMap, req.map_id)
-        if found_map is not None:
+        if found_map is not None and found_map.deleted_at is None:
             to_vis = req.payload.get("to_visibility")
             found_map.visibility = to_vis
             # 퍼블릭 전환 시 잔존 viewer 그랜트 제거 — 전원 열람이라 불필요 (PV)
