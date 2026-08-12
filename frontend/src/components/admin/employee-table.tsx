@@ -4,6 +4,7 @@
 // 서버 /api/employees·/sync는 require_admin으로 보호됨(프론트 게이팅과 별개).
 
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import {
   getAppSettings,
@@ -148,7 +149,7 @@ export function EmployeeTable() {
           ? `aborted — ${s.aborted_reason}`
           : `scanned ${s.scanned} · upserted ${s.upserted} · deactivated ${s.deactivated} · deleted ${s.deleted} · skipped ${s.skipped} · ${positionInfo}`,
       );
-      void listEmployees().then(setRows).catch(() => setRows([]));
+      setRows(await listEmployees());
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "sync failed");
     } finally {
@@ -163,11 +164,18 @@ export function EmployeeTable() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={() => void onSync()}
             disabled={busy}
           >
-            {busy ? t("admin.syncing") : t("admin.sync")}
+            {busy ? (
+              <>
+                <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
+                {t("admin.syncing")}
+              </>
+            ) : (
+              t("admin.sync")
+            )}
           </button>
         </div>
       </div>
