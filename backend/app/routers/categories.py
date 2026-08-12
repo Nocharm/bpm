@@ -561,7 +561,16 @@ async def update_category(
 
         new_level = by_id[new_parent_id].level + 1 if new_parent_id is not None else 1
         if new_level + subtree_height > MAX_CATEGORY_LEVEL:
-            raise HTTPException(status_code=422, detail="max depth is 5")
+            # 안내 명확화 — 어느 레벨까지 가능한지 명시(모달이 이 detail을 인라인 표시)
+            max_parent_level = MAX_CATEGORY_LEVEL - subtree_height - 1
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"max depth is {MAX_CATEGORY_LEVEL}: this category spans "
+                    f"{subtree_height + 1} level(s), so the new parent must be "
+                    f"level {max_parent_level} or above"
+                ),
+            )
 
         # 서브트리 전체 level 재계산 — BFS로 부모 level+1 전파. level_by_id에 이미 있는 id는
         # 스킵(cycle guard) — 부모 사이클이 있으면 안 그럴 시 같은 id가 계속 frontier에 다시
@@ -615,24 +624,46 @@ async def delete_category(
     login_id: str = Depends(require_sysadmin),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """빈 카테고리만 삭제 가능 — 자식 보유 409, 연결 맵(소프트삭제 포함) 존재 409."""
+    """서브트리 묶음 삭제 — 서브트리 어디든 연결 맵(소프트삭제 포함)이 1개라도 있으면 409,
+    없으면 하위 카테고리까지 통째로 삭제(2026-08-12 정책: 빈 하위는 개별 정리 없이 묶음 처리)."""
     category = await session.get(ProcessCategory, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
 
-    child_count = await session.scalar(
-        select(func.count())
-        .select_from(ProcessCategory)
-        .where(ProcessCategory.parent_id == category_id)
-    )
-    if child_count:
-        raise HTTPException(status_code=409, detail=f"has {child_count} child categories")
+    # 서브트리 수집(자기 포함) — BFS, visited 가드로 (동시성) 부모 사이클에도 종료 보장.
+    rows = (
+        await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
+    ).all()
+    children_by_parent: dict[int | None, list[int]] = {}
+    for r in rows:
+        children_by_parent.setdefault(r.parent_id, []).append(r.id)
+    subtree_ids: set[int] = {category_id}
+    frontier = children_by_parent.get(category_id, [])
+    while frontier:
+        subtree_ids.update(frontier)
+        frontier = [
+            nid
+            for n in frontier
+            for nid in children_by_parent.get(n, [])
+            if nid not in subtree_ids
+        ]
 
     map_count = await session.scalar(
-        select(func.count()).select_from(ProcessMap).where(ProcessMap.category_id == category_id)
+        select(func.count())
+        .select_from(ProcessMap)
+        .where(ProcessMap.category_id.in_(subtree_ids))
     )
     if map_count:
-        raise HTTPException(status_code=409, detail=f"{map_count} maps are linked")
+        raise HTTPException(
+            status_code=409, detail=f"{map_count} maps are linked in this subtree"
+        )
 
-    await session.delete(category)
+    # 자식부터 삭제(level 역순) — 자기참조 FK 제약 하에서도 안전한 순서.
+    subtree_rows = (
+        await session.scalars(
+            select(ProcessCategory).where(ProcessCategory.id.in_(subtree_ids))
+        )
+    ).all()
+    for row_obj in sorted(subtree_rows, key=lambda c: -c.level):
+        await session.delete(row_obj)
     await session.commit()

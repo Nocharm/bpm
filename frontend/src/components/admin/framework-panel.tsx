@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   FolderPlus,
@@ -31,7 +32,6 @@ import {
   type CategoryNode,
   type FrameworkImportResult,
 } from "@/lib/api";
-import { pickCascadeLevel } from "@/lib/category-cascade";
 import { parseCategoriesFile, parseMapsFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
 import { CountTag } from "@/components/maps/count-tag";
@@ -604,7 +604,6 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
         <MoveCategoryModal
           node={movingNode}
           onClose={() => setMovingNode(null)}
-          onToast={onToast}
           onMoved={() => {
             setMovingNode(null);
             void refreshTree().then(() => onToast(t("framework.adminMoved")));
@@ -636,29 +635,42 @@ interface MoveCategoryModalProps {
   node: CategoryNode;
   onClose: () => void;
   onMoved: () => void;
-  onToast: (message: string) => void;
 }
 
-// 이동 대상(새 부모) 캐스케이드 셀렉트 — framework-assign-modal.tsx의 레벨별 lazy 셀렉트 패턴을
-// 참고하되 이양 섹션 없이 단순화. depth 0에만 "(root)" 옵션을 추가해 최상위로도 이동 가능하게 한다.
-// 자기 자신/자손으로의 이동은 서버 422를 신뢰(클라 필터링 생략) — 실패 시 토스트로만 알림.
-function MoveCategoryModal({ node, onClose, onMoved, onToast }: MoveCategoryModalProps) {
+// 이동 대상(새 부모) 선택 — 지정 모달(framework-assign-modal)과 같은 조직도식 lazy 트리.
+// 자기 서브트리는 트리에서 숨겨 자기/자손 이동을 원천 차단하고, 깊이 5 초과가 확실한 행
+// (레벨 하한 기준)은 비활성. 잔여 초과(깊은 서브트리)는 서버 422 detail을 모달 안 인라인으로
+// 표시한다 — 백드롭 블러에 토스트가 묻혀 안 보이던 문제 교정(2026-08-12).
+function MoveCategoryModal({ node, onClose, onMoved }: MoveCategoryModalProps) {
   const { t } = useI18n();
-  const [chain, setChain] = useState<number[]>([]);
-  const [rootPicked, setRootPicked] = useState(false);
-  const [optionsByDepth, setOptionsByDepth] = useState<CategoryNode[][]>([]);
+  const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(new Map());
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set());
+  const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
+  // 선택 — "root"(최상위로 이동) 또는 새 부모 카테고리 id. 미선택이면 버튼 비활성.
+  const [selected, setSelected] = useState<number | "root" | null>(null);
   const [loadingRoot, setLoadingRoot] = useState(true);
-  const [fetchedParentIds, setFetchedParentIds] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 이동 묶음이 차지하는 최소 레벨 수 — 자식 유무까지만 클라가 확실히 안다(그 이하 깊이는 서버 판정).
+  const minSpan = node.child_count > 0 ? 2 : 1;
+  const isTooDeep = (row: CategoryNode) => row.level + minSpan > MAX_CATEGORY_LEVEL;
 
   useEffect(() => {
     let active = true;
-    void listCategoryNodes().then((nodes) => {
-      if (active) {
-        setOptionsByDepth([nodes]);
-        setLoadingRoot(false);
-      }
-    });
+    void listCategoryNodes()
+      .then((nodes) => {
+        if (active) {
+          setChildrenByParent(new Map([[null, nodes]]));
+          setLoadingRoot(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setLoadingRoot(false);
+          setError(getApiErrorDetail(err));
+        }
+      });
     return () => {
       active = false;
     };
@@ -672,55 +684,105 @@ function MoveCategoryModal({ node, onClose, onMoved, onToast }: MoveCategoryModa
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // 체인 끝(마지막 선택)의 자식을 lazy 로드 — framework-assign-modal.tsx와 동일 패턴.
-  useEffect(() => {
-    if (chain.length === 0) return;
-    const depth = chain.length - 1;
-    const parentId = chain[depth];
-    if (optionsByDepth[depth + 1] || fetchedParentIds.has(parentId)) return;
-    let active = true;
-    void listCategoryNodes(parentId).then((nodes) => {
-      if (!active) return;
-      if (nodes.length > 0) {
-        setOptionsByDepth((prev) => {
-          const next = prev.slice(0, depth + 1);
-          next[depth + 1] = nodes;
-          return next;
-        });
-      }
-      setFetchedParentIds((prev) => new Set(prev).add(parentId));
-    });
-    return () => {
-      active = false;
-    };
-  }, [chain, optionsByDepth, fetchedParentIds]);
-
-  function pickAt(depth: number, value: string) {
-    if (depth === 0 && value === "root") {
-      setRootPicked(true);
-      setChain([]);
-      setOptionsByDepth((prev) => prev.slice(0, 1));
-      // optionsByDepth를 잘라낸 만큼 fetchedParentIds도 리셋 — 안 그러면 예전에 "리프로 확인됨"
-      // 표시가 남아, 옵션이 이미 잘려나간 노드를 다시 선택해도 effect 가드가 재조회를 막는다.
-      setFetchedParentIds(new Set());
+  function toggleOpen(row: CategoryNode) {
+    if (openIds.has(row.id)) {
+      setOpenIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
       return;
     }
-    setRootPicked(false);
-    setChain((prev) => pickCascadeLevel(prev, depth, Number(value)));
-    setOptionsByDepth((prev) => prev.slice(0, depth + 1));
-    setFetchedParentIds(new Set());
+    setOpenIds((prev) => new Set(prev).add(row.id));
+    if (!childrenByParent.has(row.id) && !loadingIds.has(row.id)) {
+      setLoadingIds((prev) => new Set(prev).add(row.id));
+      void listCategoryNodes(row.id)
+        .then((nodes) => {
+          setChildrenByParent((prev) => new Map(prev).set(row.id, nodes));
+        })
+        .catch((err: unknown) => setError(getApiErrorDetail(err)))
+        .finally(() => {
+          setLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(row.id);
+            return next;
+          });
+        });
+    }
   }
 
-  const canConfirm = rootPicked || chain.length > 0;
+  // 행 — 쉐브론(펼침)과 라벨(선택)을 형제 버튼으로 분리(중첩 인터랙티브 회피). 선택 행은 accent+체크.
+  const renderRow = (row: CategoryNode, depth: number): ReactNode => {
+    if (row.id === node.id) return null; // 자기 서브트리 숨김 — 자기/자손 이동 원천 차단
+    const open = openIds.has(row.id);
+    const children = childrenByParent.get(row.id) ?? [];
+    const hasChildren = row.child_count > 0;
+    const disabled = isTooDeep(row);
+    const isSelected = selected === row.id;
+    return (
+      <li key={row.id} className="flex flex-col">
+        <div
+          style={{ paddingLeft: `${depth * 14 + 4}px` }}
+          className={`flex items-center gap-0.5 rounded-sm pr-1.5 ${isSelected ? "bg-accent-tint" : ""}`}
+        >
+          {hasChildren && !disabled ? (
+            <button
+              type="button"
+              data-id={`framework-move-toggle-${row.id}`}
+              aria-expanded={open}
+              aria-label={row.name}
+              className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-divider"
+              onClick={() => toggleOpen(row)}
+            >
+              {open
+                ? <ChevronDown size={14} strokeWidth={1.5} />
+                : <ChevronRight size={14} strokeWidth={1.5} />}
+            </button>
+          ) : (
+            <span className="inline-block w-[22px] shrink-0" />
+          )}
+          <button
+            type="button"
+            data-id={`framework-move-pick-${row.id}`}
+            disabled={disabled}
+            aria-pressed={isSelected}
+            className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-sm py-1 text-left text-caption ${
+              isSelected
+                ? "text-accent"
+                : disabled
+                  ? "text-ink-tertiary opacity-50"
+                  : "text-ink hover:bg-divider"
+            }`}
+            onClick={() => setSelected(row.id)}
+          >
+            <span className="min-w-0 truncate">{row.name}</span>
+            {isSelected && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
+          </button>
+        </div>
+        {open &&
+          (loadingIds.has(row.id) ? (
+            <p style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }} className="py-0.5 text-fine text-ink-tertiary">
+              {t("common.loading")}
+            </p>
+          ) : (
+            children.length > 0 && (
+              <ul className="flex flex-col">{children.map((c) => renderRow(c, depth + 1))}</ul>
+            )
+          ))}
+      </li>
+    );
+  };
 
   async function handleMove() {
-    if (!canConfirm) return;
+    if (selected === null) return;
     setSubmitting(true);
+    setError(null);
     try {
-      await updateCategory(node.id, { parent_id: rootPicked ? null : chain[chain.length - 1] });
+      await updateCategory(node.id, { parent_id: selected === "root" ? null : selected });
       onMoved();
     } catch (err) {
-      onToast(getApiErrorDetail(err));
+      // 인라인 표시 — 백드롭 블러 위 토스트는 안 보인다(422 깊이 초과 detail 포함)
+      setError(getApiErrorDetail(err));
     } finally {
       setSubmitting(false);
     }
@@ -757,32 +819,37 @@ function MoveCategoryModal({ node, onClose, onMoved, onToast }: MoveCategoryModa
           </button>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-sm bg-surface-alt p-2">
-          <p className="text-fine text-ink-tertiary">{t("framework.adminMovePickParent")}</p>
+        <div
+          data-id="framework-move-tree"
+          className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-sm bg-surface-alt p-2"
+        >
+          <p className="text-fine text-ink-tertiary">{t("framework.adminMoveDepthHint")}</p>
           {loadingRoot ? (
             <p className="text-caption text-ink-tertiary">{t("common.loading")}</p>
           ) : (
-            optionsByDepth.map((options, depth) => (
-              <select
-                key={depth}
-                data-id={`framework-move-level-${depth}`}
-                className="w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
-                value={depth === 0 && rootPicked ? "root" : (chain[depth] ?? "")}
-                onChange={(event) => pickAt(depth, event.target.value)}
-              >
-                <option value="" disabled>
-                  {t("framework.adminMovePickParent")}
-                </option>
-                {depth === 0 && <option value="root">{t("framework.adminMoveRootOption")}</option>}
-                {options.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
-            ))
+            <ul className="flex flex-col">
+              {/* 최상위로 이동 — 항상 유효한 목적지 */}
+              <li className="flex flex-col">
+                <button
+                  type="button"
+                  data-id="framework-move-pick-root"
+                  aria-pressed={selected === "root"}
+                  className={`flex w-full items-center gap-1.5 rounded-sm py-1 pl-1 pr-1.5 text-left text-caption ${
+                    selected === "root" ? "bg-accent-tint text-accent" : "text-ink hover:bg-divider"
+                  }`}
+                  onClick={() => setSelected("root")}
+                >
+                  <FolderTree size={14} strokeWidth={1.5} className="shrink-0" />
+                  <span className="min-w-0 truncate">{t("framework.adminMoveRootOption")}</span>
+                  {selected === "root" && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
+                </button>
+              </li>
+              {(childrenByParent.get(null) ?? []).map((row) => renderRow(row, 0))}
+            </ul>
           )}
         </div>
+
+        {error && <p data-id="framework-move-error" className="text-caption text-error">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
@@ -796,7 +863,7 @@ function MoveCategoryModal({ node, onClose, onMoved, onToast }: MoveCategoryModa
           <button
             type="button"
             data-id="framework-move-confirm"
-            disabled={!canConfirm || submitting}
+            disabled={selected === null || submitting}
             className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={() => void handleMove()}
           >

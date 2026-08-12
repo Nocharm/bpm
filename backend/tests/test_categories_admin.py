@@ -172,14 +172,11 @@ def test_move_guards(client: TestClient) -> None:
 
 
 def test_delete_guards_and_ok(client: TestClient) -> None:
+    """2026-08-12 정책 — 서브트리에 맵이 1개라도 있으면 409, 없으면 하위 카테고리까지 묶음 삭제."""
     parent = client.post("/api/categories", json={"name": "DP", "code": "ADM-DEL-P"}).json()
     child = client.post(
         "/api/categories", json={"name": "DC", "parent_id": parent["id"], "code": "ADM-DEL-C"}
     ).json()
-
-    resp = client.delete(f"/api/categories/{parent['id']}")
-    assert resp.status_code == 409
-    assert "child categories" in resp.json()["detail"]
 
     created_map = client.post(
         "/api/maps",
@@ -195,16 +192,23 @@ def test_delete_guards_and_ok(client: TestClient) -> None:
     )
     assert link.status_code == 200
 
+    # 맵이 자식(서브트리)에 걸려 있으면 부모 삭제도 거부 — 직접 연결이 아니어도 막힌다
+    resp = client.delete(f"/api/categories/{parent['id']}")
+    assert resp.status_code == 409
+    assert "maps are linked in this subtree" in resp.json()["detail"]
+
     resp2 = client.delete(f"/api/categories/{child['id']}")
     assert resp2.status_code == 409
-    assert "maps are linked" in resp2.json()["detail"]
+    assert "maps are linked in this subtree" in resp2.json()["detail"]
 
+    # 맵 연결 해제 후 부모 삭제 → 자식까지 묶음으로 사라진다
     client.put(f"/api/maps/{created_map['id']}/category", json={"category_id": None})
-    resp3 = client.delete(f"/api/categories/{child['id']}")
+    resp3 = client.delete(f"/api/categories/{parent['id']}")
     assert resp3.status_code == 204
 
-    children_after = client.get(f"/api/categories/nodes?parent_id={parent['id']}").json()
-    assert children_after == []
+    roots_after = client.get("/api/categories/nodes").json()
+    assert all(n["id"] != parent["id"] for n in roots_after)
+    assert client.get(f"/api/categories/nodes?parent_id={parent['id']}").json() == []
 
 
 def test_crud_requires_sysadmin(client: TestClient, enforce: None) -> None:
