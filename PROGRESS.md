@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-13 — 거버넌스 A 게시 동봉 (feat/governance-ux)
+- **QA 체크리스트**: `docs/qa/governance-ux-checklist.md` 신설 — 4페이즈 사용자 실검증 항목(P0 7·C 5·B 4·A 9·회귀 4) + docs/README 인덱스 등록.
 - **A 완결 게이트**: BE pytest 1023·ruff 0 / FE vitest 599·lint 0 error·tsc 0·build OK. 승인요청 3표면(에디터 모달·설정 패널·셀프 게시 팝오버)에서 가시성 변경을 동봉하면 버전 만장일치에 편승해 publish 시 적용, reject/withdraw 시 함께 종결(부분 승인 없음·직접 decide 409).
 - **Task A1 완결 게이트**: BE pytest 1017·ruff 0 / 신규 test_version_bundle.py 4건 전부 PASS. `SubmitIn` 스키마(to_visibility optional), `submit_version` 함수가 bundle payload 수용(동봉 가시성 변경을 버전 결정에 병합)·단독 pending 요청 supersede·approval_requests 생성(version_id 링크).
 - **Task A2 완결 게이트**: BE pytest 1023·ruff 0 / test_version_bundle.py 신규 6건 전부 PASS. `_find_bundled_visibility` 헬퍼 + publish·reject·withdraw·decide·inbox 5 표면 동봉 처리(연쇄 적용·종결·409 직결정·박스 제외). 원형 import 확인: permissions.py→versions.py 의존 없음, 함수-로컬 import 안전. supersede query 단독 요청만(version_id None 필터) 대체, 다른 버전의 동봉 간섭 원천차단.
