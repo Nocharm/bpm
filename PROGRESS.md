@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-13 — 거버넌스 C 승인 탭 통합 (feat/governance-ux)
+- **Task C1 — 결재 목록 게이트 오너 확대**: `GET /api/maps/{map_id}/approval-requests`를 오너(비승인자)에게도 허용 — `_assert_owner_or_approver` 헬퍼 신설, `list_approval_requests` 런타임 판정 전환. rename/sp 결정권자인 오너가 통합 결재 대기 탭을 보기 위한 전제. 테스트 2건 추가, pytest 1013·ruff OK.
+
 ## 2026-08-12~13 — 거버넌스 P0 선행 정비 (feat/governance-ux)
 - **P0 완결 게이트**: BE pytest 1011·ruff 0 / FE vitest 598·lint 0 error·tsc 0·build OK. visibility/permission 승인 요청이 rename/sp와 대칭(중복 409·withdraw·supersede)이 됐고 소프트삭제 유령 pending·승인자0 데드락 해소 — A(게시 동봉)·C(승인 탭 통합)의 전제 충족.
 - **Task 1 — visibility_change 요청 가드 3종**: 무변경 422(`to_visibility == current`) · 중복 409(pending 요청 존재) · 승인자0 409(`load_active_approvers` 결과 공집합). 기존 permission 테스트 6건 회귀 확인(approver 시드 추가+test_auth_off_management_open 승인자 inline 추가). 게이트 59/59.

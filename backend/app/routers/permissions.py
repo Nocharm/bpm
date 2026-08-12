@@ -17,7 +17,7 @@ from app.permissions import logic
 from app.permissions.access import assert_map_role, get_effective_role
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
-    require_approver_or_sysadmin,
+    is_map_approver,
     require_map_role,
 )
 from app.routers.maps import _assert_unique_name
@@ -41,6 +41,18 @@ async def _get_map_or_404(session: AsyncSession, map_id: int) -> ProcessMap:
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     return found_map
+
+
+async def _assert_owner_or_approver(
+    session: AsyncSession, user: str, map_id: int
+) -> None:
+    """오너(sysadmin 포함 — effective_role 해석) 또는 지정 승인자만 — 결재 대기 목록 게이트 (C)."""
+    role = await get_effective_role(session, user, map_id)
+    if role == "owner":
+        return
+    if await is_map_approver(session, user, map_id):
+        return
+    raise HTTPException(status_code=403, detail="owner, approver, or sysadmin only")
 
 
 # ── A. Collaborators ──────────────────────────────────────────
@@ -428,12 +440,15 @@ async def get_pending_visibility_request(
 @router.get(
     "/maps/{map_id}/approval-requests",
     response_model=list[ApprovalRequestOut],
-    dependencies=[Depends(require_approver_or_sysadmin())],
 )
 async def list_approval_requests(
-    map_id: int, session: AsyncSession = Depends(get_session)
+    map_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> list[ApprovalRequest]:
+    """맵의 승인 요청 목록 — 결재 대기 탭(4종 통합). 오너도 rename/sp 결정권자라 열람 허용 (C)."""
     await _get_map_or_404(session, map_id)
+    await _assert_owner_or_approver(session, user, map_id)
     rows = await session.scalars(
         select(ApprovalRequest)
         .where(ApprovalRequest.map_id == map_id)

@@ -669,6 +669,22 @@ def test_visibility_request_no_approvers_409(client: TestClient, enforce: None) 
     assert pending_request_count(map_id, "visibility_change") == 0
 
 
+def test_approval_list_owner_can_read(client: TestClient, enforce: None) -> None:
+    """승인자가 아닌 오너도 결재 대기 목록 열람 — rename/sp 결정권자라 통합 탭에 필요 (C)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner")], approvers=["a"])
+    act_as("owner.u")
+    assert client.get(f"/api/maps/{map_id}/approval-requests").status_code == 200
+
+
+def test_approval_list_editor_still_403(client: TestClient, enforce: None) -> None:
+    """오너도 승인자도 아닌 editor 는 여전히 403."""
+    map_id = seed_map(
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")], approvers=["a"]
+    )
+    act_as("ed")
+    assert client.get(f"/api/maps/{map_id}/approval-requests").status_code == 403
+
+
 def test_approval_list_visible_to_approver_403_to_others(
     client: TestClient, enforce: None
 ) -> None:
