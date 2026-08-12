@@ -304,6 +304,33 @@ export function MapDetailCard({
     <>
       {!only && (
         <>
+      {/* 업무 체계 카테고리 — 경로가 있으면 최상단 전용 행(긴 L1~L5 경로가 우측 필 무리를 키워
+          타이틀이 세로로 쥐어짜지는 것 방지), 없으면 오너의 연결 유령 필만 기존 우측 무리에 유지 */}
+      {detail.category_path && (
+        <div className="flex text-fine">
+          {isOwner ? (
+            <button
+              type="button"
+              data-id="map-detail-category"
+              title={detail.category_path}
+              className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+              onClick={() => setFrameworkModalOpen(true)}
+            >
+              <Network size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="min-w-0 truncate">{detail.category_path}</span>
+            </button>
+          ) : (
+            <span
+              data-id="map-detail-category"
+              title={detail.category_path}
+              className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+            >
+              <Network size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="min-w-0 truncate">{detail.category_path}</span>
+            </span>
+          )}
+        </div>
+      )}
       {/* 헤더 — 좌: 타이틀 / 우: 공개·역할·오우닝 부서 필 (Open 버튼 제거 — 열기는 카드 타이틀 링크) */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -381,31 +408,17 @@ export function MapDetailCard({
               {t("home.owningMissingBadge")}
             </span>
           )}
-          {/* 업무 체계 카테고리 — 오너는 클릭해 연결/해제/이양 모달, 비오너는 연결돼 있을 때만 표시 (Phase 2) */}
-          {isOwner ? (
+          {/* 업무 체계 연결 유령 필(미연결 오너 전용) — 연결된 경로 필은 위 최상단 행으로 이동 (Phase 2) */}
+          {isOwner && !detail.category_path && (
             <button
               type="button"
               data-id="map-detail-category"
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${
-                detail.category_path
-                  ? "bg-accent-tint text-accent"
-                  : "border border-dashed border-hairline text-ink-tertiary hover:border-accent hover:text-accent"
-              }`}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-hairline px-2 py-0.5 text-ink-tertiary hover:border-accent hover:text-accent"
               onClick={() => setFrameworkModalOpen(true)}
             >
               <Network size={12} strokeWidth={1.5} />
-              {detail.category_path || t("home.frameworkAssign")}
+              {t("home.frameworkAssign")}
             </button>
-          ) : (
-            detail.category_path && (
-              <span
-                data-id="map-detail-category"
-                className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
-              >
-                <Network size={12} strokeWidth={1.5} />
-                {detail.category_path}
-              </span>
-            )
           )}
         </div>
       </div>
