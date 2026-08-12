@@ -192,6 +192,124 @@ def test_export_table_csv_formula_injection_guard(
         asyncio.run(_cleanup())
 
 
+def test_escape_csv_cell_matches_fe_combined_guard_and_quote() -> None:
+    """FE `lib/csv.ts` csv.test.ts의 '=a,b' 케이스(가드+인용 동시 발동)와 동치 — 드리프트 가드."""
+    from app.routers.admin import _escape_csv_cell
+
+    assert _escape_csv_cell("=a,b") == "\"'=a,b\""
+
+
+def test_export_table_csv_stable_sort_with_batching(
+    client: TestClient, sysadmin_enforced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """정렬 컬럼에 동값이 배치 크기보다 많으면 PK 타이브레이커 없이는 OFFSET 배치 경계에서
+    행이 중복/누락될 수 있다 — 회귀 가드. EXPORT_BATCH_SIZE를 작게 패치해 여러 SELECT를 강제."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.models import Employee
+
+    ids = [f"tie.test.{i}" for i in range(12)]
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            for login_id in ids:
+                session.add(
+                    Employee(
+                        login_id=login_id,
+                        name=login_id,
+                        role="qa_tie_test",  # 전원 동일값 — sort 컬럼 단독으론 무순서
+                        source="local",
+                        active=True,
+                    )
+                )
+            await session.commit()
+
+    asyncio.run(_seed())
+    monkeypatch.setattr("app.routers.admin.EXPORT_BATCH_SIZE", 5)
+    try:
+        res = client.get(
+            "/api/admin/tables/employees/export",
+            params={"q": "tie.test.", "sort": "role", "order": "asc"},
+            headers={"X-Dev-User": SYSADMIN},
+        )
+        assert res.status_code == 200
+        import csv
+        import io
+
+        rows = list(csv.reader(io.StringIO(res.text)))
+        header, data_rows = rows[0], rows[1:]
+        pk_idx = header.index("login_id")
+        pks = [r[pk_idx] for r in data_rows]
+        assert sorted(pks) == sorted(ids)  # no dup, no missing across batches
+        assert len(pks) == len(set(pks))
+    finally:
+
+        async def _cleanup() -> None:
+            async with SessionLocal() as session:
+                for login_id in ids:
+                    row = await session.get(Employee, login_id)
+                    if row is not None:
+                        await session.delete(row)
+                await session.commit()
+
+        asyncio.run(_cleanup())
+
+
+def test_export_table_csv_json_cell_serialization(
+    client: TestClient, sysadmin_enforced: None
+) -> None:
+    """JSON 컬럼(dict)은 json.dumps 형태로, bool은 소문자 true — 뷰어(JSON.stringify)와 동치."""
+    import asyncio
+    import csv
+    import io
+    import json
+
+    from app.db import SessionLocal
+    from app.models import KbChunk
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            chunk = KbChunk(
+                source_type="library",
+                source_id=999998,
+                chunk_index=0,
+                chunk_text="admin tables json cell probe",
+                embedding=b"\x00",
+                meta={"flag": True, "note": None, "count": 3},
+            )
+            session.add(chunk)
+            await session.commit()
+            return chunk.id
+
+    chunk_id = asyncio.run(_seed())
+    try:
+        res = client.get(
+            "/api/admin/tables/kb_chunks/export",
+            params={"q": "admin tables json cell probe"},
+            headers={"X-Dev-User": SYSADMIN},
+        )
+        assert res.status_code == 200
+        rows = list(csv.reader(io.StringIO(res.text)))
+        header, data_rows = rows[0], rows[1:]
+        meta_idx = header.index("meta")
+        id_idx = header.index("id")
+        mine = next(r for r in data_rows if int(r[id_idx]) == chunk_id)
+        assert json.loads(mine[meta_idx]) == {"flag": True, "note": None, "count": 3}
+        assert "true" in mine[meta_idx]
+        assert "True" not in mine[meta_idx]
+    finally:
+
+        async def _cleanup() -> None:
+            async with SessionLocal() as session:
+                row = await session.get(KbChunk, chunk_id)
+                if row is not None:
+                    await session.delete(row)
+                    await session.commit()
+
+        asyncio.run(_cleanup())
+
+
 def test_read_table_binary_column_rendered(client: TestClient, sysadmin_enforced: None) -> None:
     """LargeBinary 컬럼(kb_chunks.embedding)은 크기 표시로 대체 — bytes 직렬화 500 회귀 방지."""
     import asyncio

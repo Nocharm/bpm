@@ -4,6 +4,7 @@
 Admin console directory — richer fields than /api/directory, sysadmin-gated.
 """
 
+import json
 from datetime import date, datetime, time, timedelta
 from typing import AsyncIterator
 
@@ -334,9 +335,21 @@ def _escape_csv_cell(value: str) -> str:
     return guarded
 
 
+def _stringify_csv_value(value: object) -> str:
+    """CSV 셀 값 → 문자열. JSON 컬럼(dict/list)은 json.dumps, bool은 소문자 true/false —
+    뷰어(JSON.stringify) 출력과 동치 유지(`_render_cell`의 JSON 직렬화 경로는 건드리지 않음)."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 def _build_csv_row(values: list[object]) -> str:
-    """값 리스트 → CRLF로 끝나는 한 줄 CSV(각 셀은 `_escape_csv_cell`로 이스케이프)."""
-    cells = [_escape_csv_cell("" if v is None else str(v)) for v in values]
+    """값 리스트 → CRLF로 끝나는 한 줄 CSV(각 셀은 `_stringify_csv_value`+`_escape_csv_cell`로 변환)."""
+    cells = [_escape_csv_cell(_stringify_csv_value(v)) for v in values]
     return ",".join(cells) + "\r\n"
 
 
@@ -374,9 +387,12 @@ async def export_table_csv(
     if where is not None:
         stmt = stmt.where(where)
     # 정렬 — sort 컬럼은 실제 컬럼만 허용, 아니면 PK(없으면 무정렬) / validate sort col.
+    # PK를 항상 타이브레이커로 덧붙인다 — sort 컬럼에 동값이 많으면(예: role) OFFSET 배치마다
+    # DB가 동값 그룹 내 순서를 다르게 낼 수 있어, 배치 경계에서 행이 중복되거나 누락된다.
     if sort and sort in columns:
         col = table.c[sort]
-        stmt = stmt.order_by(desc(col) if order == "desc" else asc(col))
+        sort_expr = desc(col) if order == "desc" else asc(col)
+        stmt = stmt.order_by(sort_expr, *table.primary_key.columns)
     elif table.primary_key.columns:
         stmt = stmt.order_by(*table.primary_key.columns)
 
