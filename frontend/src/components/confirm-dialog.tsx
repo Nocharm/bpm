@@ -64,6 +64,8 @@ interface ConfirmDialogProps {
   confirmDisabled?: boolean;
   // 확인 직전 인터랙티브 옵션(예: 게시 동봉 체크박스) — input 아래·버튼 행 위에 렌더.
   children?: ReactNode;
+  // 호출 지점 식별용 data-id — 미지정 시 기본값 유지(기존 호출부 전부 무변경).
+  dialogId?: string;
 }
 
 export function ConfirmDialog({
@@ -81,6 +83,7 @@ export function ConfirmDialog({
   input,
   confirmDisabled = false,
   children,
+  dialogId = "confirm-dialog",
 }: ConfirmDialogProps) {
   const groups: ConfirmLine[][] = sections ?? (lines && lines.length > 0 ? [lines] : []);
   const confirmBtn = danger
@@ -94,7 +97,7 @@ export function ConfirmDialog({
       className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
     >
       <div
-        data-id="confirm-dialog"
+        data-id={dialogId}
         className={`flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg ${
           isRich ? "items-center text-center" : ""
         }`}
