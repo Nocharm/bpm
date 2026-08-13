@@ -206,6 +206,7 @@ import {
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
 import { getStaleSectionNodeIds } from "@/lib/word-map-home";
@@ -2497,7 +2498,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setCheckout(state);
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.checkout"));
+          setStatus(humanizeApiError(err, t));
         }
       }
     };
@@ -3028,7 +3029,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.workflow"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [versionId, mapId, refreshWorkflow, t],

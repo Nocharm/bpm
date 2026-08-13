@@ -1193,11 +1193,9 @@ const en = {
   "perm.addButton": "Add",
   "perm.removeButton": "Remove",
   "perm.toastGated": "Approval request sent.",
-  "perm.toastGatedBy": "Approval pending — can be approved by: {names}",
   "perm.pending.tag": "Approval pending",
   "perm.pending.removed": "removed",
   "perm.pending.by": "requested by {name}",
-  "perm.approversNone": "a designated approver or a system admin",
   "perm.noCollaborators": "No collaborators yet.",
   "perm.backToEditor": "Back to editor",
   // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──
@@ -2796,11 +2794,9 @@ const ko: Record<MessageKey, string> = {
   "perm.addButton": "추가",
   "perm.removeButton": "제거",
   "perm.toastGated": "승인 요청을 보냈습니다.",
-  "perm.toastGatedBy": "승인 대기 — 승인 가능: {names}",
   "perm.pending.tag": "승인 대기",
   "perm.pending.removed": "제거",
   "perm.pending.by": "{name} 요청",
-  "perm.approversNone": "지정 승인자 또는 시스템 관리자",
   "perm.noCollaborators": "협업자가 없습니다.",
   "perm.backToEditor": "편집기로 돌아가기",
   // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──

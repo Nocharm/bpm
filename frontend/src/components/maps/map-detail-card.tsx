@@ -212,6 +212,8 @@ export function MapDetailCard({
   // 편집 스택 — 화면에 쌓인 add/remove, Save 전까지 서버에 반영되지 않는다(R2 QA 피드백, 협업자 패널과 대칭).
   const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
   const [savingStaged, setSavingStaged] = useState(false);
+  // 스택 저장 부분 실패 — 배너 채널(카드 전체를 죽이는 fatal error와 분리, 최종 리뷰 픽스 아래 참고).
+  const [stagedSaveError, setStagedSaveError] = useState<string | null>(null);
   // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
   const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
@@ -256,9 +258,11 @@ export function MapDetailCard({
     document.querySelector(`[data-id="staged-add-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
   }, [lastAddedKey]);
 
-  // Save — 스택을 일괄 실행. 실패가 있을 때만 error state로 표시(기존 catch(err) 관례와 동일 채널) —
-  // 성공/승인대기는 재조회(reload)의 최신 목록·pending 배지로 이미 반영된다.
+  // Save — 스택을 일괄 실행. 실패가 있을 때만 배너로 표시(fatal error state와는 별도 채널) — 부분 실패는
+  // 이 브랜치가 의도적으로 만드는 정상 플로우 결과(R1 상호배제 409, 강등 승인대기 409)라 카드 전체를 죽이면
+  // 안 되고 복구 가능해야 한다(최종 리뷰 픽스). 성공/승인대기는 재조회(reload)의 최신 목록·pending 배지로 이미 반영된다.
   async function handleSaveStaged() {
+    setStagedSaveError(null);
     setSavingStaged(true);
     try {
       const result = await applyStagedOps(mapId, stagedOps);
@@ -269,7 +273,7 @@ export function MapDetailCard({
           failed: result.failed.length,
         });
         const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
-        setError(`${summary} — ${failureText}`);
+        setStagedSaveError(`${summary} — ${failureText}`);
       }
       setStagedOps([]);
       setLocalReloadKey((k) => k + 1);
@@ -977,6 +981,24 @@ export function MapDetailCard({
                 >
                   {savingStaged && <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />}
                   {t("perm.staged.save")}
+                </button>
+              </div>
+            )}
+            {/* 부분 실패 배너 — Save 시점엔 stagedOps가 이미 비워지므로 위 바와 독립 조건.
+                dismissible: 리마운트 없이도 X로 닫아 카드 나머지를 계속 쓸 수 있어야 한다 (최종 리뷰 픽스). */}
+            {stagedSaveError && (
+              <div
+                data-id="perm-staged-error"
+                className="mt-2 flex items-start justify-between gap-2 rounded-sm border border-hairline bg-surface px-2 py-1.5 text-fine text-error"
+              >
+                <span className="min-w-0 flex-1">{stagedSaveError}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  className="shrink-0 rounded-sm p-0.5 text-error hover:bg-surface-alt"
+                  onClick={() => setStagedSaveError(null)}
+                >
+                  <X size={12} strokeWidth={1.5} />
                 </button>
               </div>
             )}

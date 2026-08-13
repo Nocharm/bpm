@@ -21,6 +21,7 @@ import {
   submitVersion,
   withdrawVersion,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { StatusBadge } from "@/components/status-badge";
@@ -208,12 +209,12 @@ function VersionRow({
         await reload();
         onChanged?.();
       } catch (err) {
-        onToast?.(err instanceof Error ? err.message : String(err));
+        onToast?.(humanizeApiError(err, t));
       } finally {
         setBusy(false);
       }
     },
-    [reload, onToast, onChanged],
+    [reload, onToast, onChanged, t],
   );
 
   // 전이 확인 모달 상태 — 에디터와 동일한 5종 공용 다이얼로그(항상 모달 경유, 동봉 유무 무관).
