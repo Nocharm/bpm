@@ -7,6 +7,7 @@
 - **설계 확정·문서화**: `docs/superpowers/specs/2026-08-14-approval-comments-design.md` — ① Group A(~50곳) 원시 JSON 에러 humanizeApiError 전수 스윕(폴백에만 HTTP 코드) ② 거절 배너 재디자인(거절자 필+사유) ③ 전이 모달 4종 선택 코멘트(`VersionEvent.note` 재사용, 스키마 무변경 — 바로철회 시 자동 동반삭제) ④ 버전 카드 코멘트 보기 모달(클릭점→중앙 확대, 바깥 mousedown 닫힘) ⑤ 받은함 거절 사유 유실 버그 픽스(`ApprovalRequest.decision_reason` 컬럼). 구현은 `feat/approval-comments` 워크트리에서.
 - **구현 플랜**: `docs/superpowers/plans/2026-08-14-approval-comments.md` — 9태스크(TDD·태스크당 커밋·게이트 명시). 실측 보강: 받은함 비버전 거절은 사유 입력란 자체가 부재(`isVersion` 게이트)·approve 이벤트는 승인자별 기록·에러 틴트는 `border-error/40 bg-error/10` 기존 패턴 재사용.
 - **Task 2 완료**: 전이 4단계(submit/approve/publish/withdraw) 선택 코멘트 스레딩 `VersionEvent.note` — SubmitIn/CommentIn 스키마 추가(공백 정규화), 4개 엔드포인트 배선(즉시철회 submitted 자동삭제 포함), 테스트 5/5·전체 1047/1047·ruff 0.
+- **Task 3 완료**: 받은함 거절 사유 저장 `ApprovalRequest.decision_reason`(`_ADDED_COLUMNS` 자동 ALTER 등록) — `DecisionIn.reason`(Task 2 `_normalize_comment` 재사용) → reject 시 컬럼 저장 + `_notify_permission_decision` 3개 message(rename/sp_designation/permission) 말미 `": {reason}"` 동봉, approve는 사유 미전달. 테스트 2/2·전체 1049/1049·ruff 0.
 
 ## 2026-08-14 — QA 문서 정비: ai 2건 삭제·dev-vs-main 로컬 검증·alarm-audit 재검증 부기 (dev 직접)
 - **ai-connectivity-test·ai-real-model-smoke 삭제**(사용자 확인 완료분) + `docs/README.md`·`.env.example` 참조 정리.

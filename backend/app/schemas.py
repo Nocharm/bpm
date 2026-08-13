@@ -229,11 +229,15 @@ class ApprovalRequestOut(BaseModel):
     status: str
     decided_by: str | None
     decided_at: datetime | None
+    decision_reason: str | None = None
     created_at: datetime
 
 
 class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
+    reason: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("reason")(classmethod(lambda cls, v: _normalize_comment(v)))
 
 
 # ── 사용자 그룹 관리 (Layer 4 Task 3b) ──────────────────────────
