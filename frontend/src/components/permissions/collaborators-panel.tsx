@@ -126,7 +126,11 @@ function CollaboratorRow({
   const stagedChange = stagedOp?.kind === "change" ? stagedOp : null;
 
   return (
-    <div className={`flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-alt ${stagedRemove ? "opacity-60" : ""}`}>
+    // relative+group+pr-8 — 제거 X는 absolute라 공간을 차지하지 않는다, 공통 pr로 오너/본인(뱃지)
+    // 행과 편집(select) 행의 우측 요소가 같은 x좌표에서 끝나 정렬이 흔들리지 않는다 (U4).
+    <div
+      className={`group relative flex items-center gap-2 rounded-sm py-1.5 pl-2 pr-8 hover:bg-surface-alt ${stagedRemove ? "opacity-60" : ""}`}
+    >
       {/* 유형 아이콘 / Type icon */}
       <PrincipalIcon type={principalType} />
 
@@ -196,12 +200,15 @@ function CollaboratorRow({
         </span>
       )}
 
-      {/* 제거 버튼 / Remove button */}
+      {/* 제거 버튼 — absolute+hover라 flex 공간을 차지하지 않는다(정렬 교정, U4). display 아닌
+          opacity 토글이라 Tab 포커스는 유지되고 focus:/group-focus-within:로 키보드 사용자도 도달 가능. /
+          Remove button: absolute + opacity-hover so it reserves no flex space; opacity (not display)
+          keeps it tab-reachable, revealed via focus:/group-focus-within: for keyboard users. */}
       {!isOwner && !controlsDisabled && !stagedRemove && (
         <button
           type="button"
           title={t("perm.removeButton")}
-          className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+          className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-ink-tertiary opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           onClick={() => onRemove(perm)}
         >
           <X size={16} strokeWidth={1.5} />
