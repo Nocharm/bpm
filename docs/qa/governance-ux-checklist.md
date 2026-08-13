@@ -1,7 +1,7 @@
 # 거버넌스 UX 확장 검증 체크리스트 (feat/governance-ux)
 
-> 설계: [`docs/design/2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md) · 4페이즈(P0 라이프사이클 대칭화 → C 승인 탭 통합 → B 카드 멤버 편집 → A 게시 동봉).
-> 자동 게이트는 전부 그린(BE pytest 1042·ruff 0 / FE vitest 620·lint 0 error·tsc 0·build OK) — 이 문서는 **사용자 실사용 검증**용. 항목당 1~2분.
+> 설계: [`docs/design/2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md) · 4페이즈(P0 라이프사이클 대칭화 → C 승인 탭 통합 → B 카드 멤버 편집 → A 게시 동봉) + R4 가시성 UX.
+> 자동 게이트: BE pytest 1042·ruff 0 / FE vitest 620·lint 0 error(1 warning)·tsc 0·build OK — 이 문서는 **사용자 실사용 검증**용. 항목당 1~2분.
 
 ## 준비
 
@@ -86,6 +86,14 @@ DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys .venv/bin/uvicorn app.main:
 - [ ] **R3-3 role 원복 시 스택 태그 소거**: 협업자 패널에서 editor → viewer로 변경(태그 추가) → 즉시 viewer → editor로 원복 선택 → 고스트 태그가 행에서 소거되고, Save 클릭 시 해당 행이 결과에서 빠짐(no-op 미집계).
 - [ ] **R3-4 SP 등록 요청 중복 409**: 비오너 E로 미등록 맵 SP 카드 등록 요청 → pending 상태 → 다시 요청 시도 또는 새로고침 후 재시도 → "already pending" 또는 유사 읽기 쉬운 문구(백엔드 detail 원문 아님), 화면에 pending 상태·Withdraw UI 남음.
 - [ ] **R3-5 본인 강등 대기 중 드래프트 진입 + 동봉 미집계**: 본인(E)의 강등 요청이 pending 중일 때, 같은 맵 체크아웃 시도 → 경고 안내 메시지 1회 표시 후 진입 허용(반복 에러 없음). 또한 동봉 요청(가시성)의 pending 행이 결재 대기 배지 카운트에 **포함되지 않음**(오너만 동봉 가능하므로 결재자의 작업 아님).
+
+## R4 (가시성 UX)
+
+- [ ] **R4-1 승인자 모달 우측 위 가시성 배지**: 에디터 승인 탭에서 승인자 관리 모달 열기 → 헤더 타이틀 옆 우측 위에 현재 맵 가시성(Globe/Lock 아이콘 + "Public"/"Private") 배지 표시. (설정 화면 승인자 카드는 별도 표면 — 배지 없음이 정상.)
+- [ ] **R4-2 동봉 UI 드롭다운(3표면)**: 에디터 승인요청 모달·설정 Request approval 모달·셀프 게시 팝오버의 동봉 UI → 라벨 "공개 범위"(EN "Visibility") + 우측 드롭다운(Globe/Lock 아이콘+현재값 라벨+ChevronDown) → 클릭 시 메뉴(Private/Public 옵션, 현재 값 옆에 "Current" 필 리터럴) → 옵션 선택 시 적용·메뉴 닫힘. 재클릭 또는 현재값 재선택 시 해제 null.
+- [ ] **R4-3 인스펙터 맵 탭 가시성 3:1 + 승인자 정보 모달**: 우측 사이드바 Map 탭 가시성 섹션 → Private/Public 버튼 비율 3:1(현재 활성 버튼이 3배 넓음) → O만 비활성 버튼 클릭 가능(E는 정적) → pending 있으면 필 표시 → O가 비활성 버튼 클릭 → ConfirmDialog(타이틀 "공개 범위 변경"·현재→대상 화살표 표시·승인자 이름 필 목록·안내 문구) → 승인자 0명이면 안내 경고 + confirm 비활성 → 확인하면 `requestVisibilityChange` → 성공 시 pending 갱신·모달 닫힘.
+- [ ] **R4-4 멤버 행 제거 hover 스왑**: 맵 상세 카드(또는 에디터 Map 탭)의 협업자 멤버 행 → 기본 권한 배지(Viewer/Editor) → **행 hover 시** 같은 자리에 빨간 Remove 필로 스왑 → 클릭하면 제거 예정 스택 태그가 적립되고(즉시 적용 아님) **Save** 시 반영(오너는 즉시 적용, 에디터의 editor 제거는 승인 대기 배지). 오우닝 부서·오너 행에는 Remove 스왑 없음.
+- [ ] **R4-5 협업자 패널 X 정렬 교정**: 설정 협업자 패널의 제거 X 버튼 → hover 시만 표시로 전환(공간 비차지 — `absolute opacity-0 group-hover:opacity-100`) → 행 select/badge 우측 정렬이 제거·편집 모두 일치(우측 패딩 공통 부여).
 
 ## 회귀 스팟 (기존 기능 무손상 확인)
 

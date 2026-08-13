@@ -494,6 +494,8 @@ export function MapDetailCard({
     }
     // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
     const stagedRemove = stagedRemoveIds.has(perm.id);
+    // 옛 X버튼과 동일 조건 — 역할 필 자리에 hover/focus 시 Remove 필로 스왑 (U4).
+    const removable = canManageMembers && perm.role !== "owner" && !stagedRemove;
     return (
       <Fragment key={perm.id}>
         {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
@@ -538,7 +540,33 @@ export function MapDetailCard({
             </span>
           </span>
           <span className="flex items-center gap-1">
-            <RoleBadge role={perm.role as MapRole} pending={perm.pending_change != null} />
+            {/* 역할 필 자리 — hover/focus 시 같은 자리·같은 크기의 빨간 Remove 필로 스왑 (U4).
+                min-w는 "Remove ×" 실측폭(69.2px, Pretendard 12px) 기준 — Viewer/Editor 필이 더 좁아
+                호버 시 잘리는 것 방지(버튼은 absolute라 이 wrapper 폭에 맞춰 늘어나지 않는다). */}
+            <span
+              className={`relative inline-flex items-center justify-center ${removable ? "min-w-[72px]" : ""}`}
+            >
+              <span className={removable ? "group-hover:invisible group-focus-within:invisible" : ""}>
+                <RoleBadge role={perm.role as MapRole} pending={perm.pending_change != null} />
+              </span>
+              {removable && (
+                <button
+                  type="button"
+                  data-id={`map-detail-remove-member-${perm.id}`}
+                  aria-label="Remove member"
+                  // opacity/pointer-events(display 토글 아님) — 부서/그룹 행은 상위에 tabIndex가
+                  // 없어 group-focus-within만으론 못 열림, 버튼 자체가 Tab 순서에 남아 있어야
+                  // focus:opacity-100로 직접 도달 가능(display:none은 Tab에서 완전히 제외됨).
+                  className="absolute inset-0 flex items-center justify-center gap-0.5 rounded-sm border border-error bg-surface text-fine text-error opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-error/10 focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveMember(perm);
+                  }}
+                >
+                  {t("perm.removePill")} <X size={10} strokeWidth={1.5} />
+                </button>
+              )}
+            </span>
             {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
             {perm.pending_change && (
               <span
@@ -568,20 +596,6 @@ export function MapDetailCard({
                   <X size={12} strokeWidth={1.5} />
                 </button>
               </span>
-            )}
-            {canManageMembers && perm.role !== "owner" && !stagedRemove && (
-              <button
-                type="button"
-                data-id={`map-detail-remove-member-${perm.id}`}
-                aria-label="Remove member"
-                className="rounded-xs p-0.5 text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface-alt hover:text-error group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveMember(perm);
-                }}
-              >
-                <X size={12} strokeWidth={1.5} />
-              </button>
             )}
           </span>
         </div>

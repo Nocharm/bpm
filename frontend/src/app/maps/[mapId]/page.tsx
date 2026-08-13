@@ -7387,6 +7387,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           {managingApprovers && (
             <ApproverManager
               mapId={mapId}
+              visibility={mapVisibility}
               onClose={() => setManagingApprovers(false)}
               onSaved={() => void refreshWorkflow()}
             />
