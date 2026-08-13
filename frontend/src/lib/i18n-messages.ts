@@ -1206,7 +1206,8 @@ const en = {
   // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──
   "perm.staged.add": "To add",
   "perm.staged.change": "Change",
-  "perm.staged.remove": "To remove",
+  // 맵 카드 staged 필 고정폭(60px) 실측 결과 "To remove"(70.2px)가 안 들어가 축약 (governance-r5 V1)
+  "perm.staged.remove": "Remove",
   "perm.staged.save": "Save changes",
   "perm.staged.cancel": "Discard",
   "perm.staged.result": "{applied} applied · {pending} pending approval · {failed} failed",
