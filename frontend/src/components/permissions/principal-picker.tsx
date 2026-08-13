@@ -43,7 +43,10 @@ interface PrincipalPickerProps {
   myDeptsFirst?: boolean;
   /** 빈 검색(브라우즈) 시 최상단 고정할 user principalId — 오우닝 부서 리더 노출용. 검색 랭킹은 불변. */
   pinnedIds?: Set<string>;
-  onSelect: (option: PrincipalOption) => void;
+  /** 클릭 좌표(마우스 경로)를 함께 전달 — Enter 경로는 생략(undefined), 소비측은 입력창 rect로 폴백. */
+  onSelect: (option: PrincipalOption, coords?: { x: number; y: number }) => void;
+  /** `${principalType}:${principalId}` — 일치하는 옵션 행에 선택 효과(팝오버가 열린 동안 어떤 이름이 눌렸는지 표시). */
+  highlightId?: string | null;
 }
 
 // 피커가 제안하는 후보 목록 / Build candidate list from seed data.
@@ -93,6 +96,7 @@ export function PrincipalPicker({
   myDeptsFirst,
   pinnedIds,
   onSelect,
+  highlightId,
 }: PrincipalPickerProps) {
   const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
@@ -276,17 +280,19 @@ export function PrincipalPicker({
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
             const idRanges: MatchRange[] = matches.find((m) => m.field === "id")?.ranges ?? [];
+            const optKey = `${opt.principalType}:${opt.principalId}`;
+            const isHighlighted = highlightId === optKey;
             return (
               <button
-                key={`${opt.principalType}:${opt.principalId}`}
+                key={optKey}
                 type="button"
                 className={`flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt ${
                   active === idx ? "bg-surface-alt" : ""
-                }`}
+                } ${isHighlighted ? "ring-1 ring-accent bg-accent-tint/40" : ""}`}
                 onMouseEnter={() => setActive(idx)}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onSelect(opt);
+                onClick={(e) => {
+                  onSelect(opt, { x: e.clientX, y: e.clientY });
                   setQuery("");
                 }}
               >

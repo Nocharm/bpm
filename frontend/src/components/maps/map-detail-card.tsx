@@ -212,6 +212,8 @@ export function MapDetailCard({
   // 편집 스택 — 화면에 쌓인 add/remove, Save 전까지 서버에 반영되지 않는다(R2 QA 피드백, 협업자 패널과 대칭).
   const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
   const [savingStaged, setSavingStaged] = useState(false);
+  // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
@@ -240,11 +242,19 @@ export function MapDetailCard({
 
   function handleAddMember(principalType: PrincipalType, principalId: string, role: "viewer" | "editor") {
     setStagedOps((ops) => upsertStagedOp(ops, { kind: "add", principalType, principalId, role }));
+    setLastAddedKey(`${principalType}:${principalId}`);
+    window.setTimeout(() => setLastAddedKey(null), 1200); // 플래시 애니메이션 후 리셋(재추가 시 재발화)
   }
 
   function handleCancelStaged(op: StagedOp) {
     setStagedOps((ops) => removeStagedOp(ops, op));
   }
+
+  // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
+  useEffect(() => {
+    if (!lastAddedKey) return;
+    document.querySelector(`[data-id="staged-add-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [lastAddedKey]);
 
   // Save — 스택을 일괄 실행. 실패가 있을 때만 error state로 표시(기존 catch(err) 관례와 동일 채널) —
   // 성공/승인대기는 재조회(reload)의 최신 목록·pending 배지로 이미 반영된다.
@@ -900,10 +910,14 @@ export function MapDetailCard({
                   : op.principalType === "group"
                     ? UsersRound
                     : LEVEL_ICONS[deptLevelRank(deptLeaf(op.principalId))] ?? Building2;
+              const addKey = `${op.principalType}:${op.principalId}`;
               return (
                 <div
-                  key={`add:${op.principalType}:${op.principalId}`}
-                  className="flex items-center justify-between gap-2 rounded-sm border border-dashed border-hairline py-1.5 pl-1.5 pr-2.5"
+                  key={`add:${addKey}`}
+                  data-id={`staged-add-${addKey}`}
+                  className={`flex items-center justify-between gap-2 rounded-sm border border-dashed border-hairline py-1.5 pl-1.5 pr-2.5 ${
+                    lastAddedKey === addKey ? "motion-safe:animate-[picker-flash_1200ms_ease-in-out]" : ""
+                  }`}
                 >
                   <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center text-ink-muted">

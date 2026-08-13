@@ -232,6 +232,14 @@ export function CollaboratorsPanel({
   // 편집 스택 — 화면에 쌓인 add/change/remove, Save 전까지 서버에 반영되지 않는다 (R2 QA 피드백).
   const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
   const [savingStaged, setSavingStaged] = useState(false);
+  // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+
+  // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
+  useEffect(() => {
+    if (!lastAddedKey) return;
+    document.querySelector(`[data-id="staged-add-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [lastAddedKey]);
 
   const reload = useCallback(async () => {
     try {
@@ -274,6 +282,8 @@ export function CollaboratorsPanel({
   // function으로: React Compiler가 useCallback 수동 deps와 어긋나면 빌드가 깨진다, frontend/AGENTS.md).
   function handleAdd(principalType: PrincipalType, principalId: string, role: "viewer" | "editor") {
     setStagedOps((ops) => upsertStagedOp(ops, { kind: "add", principalType, principalId, role }));
+    setLastAddedKey(`${principalType}:${principalId}`);
+    window.setTimeout(() => setLastAddedKey(null), 1200); // 플래시 애니메이션 후 리셋(재추가 시 재발화)
   }
 
   function handleChangeRole(perm: ApiPermission, toRole: MapRole) {
@@ -377,10 +387,15 @@ export function CollaboratorsPanel({
 
       {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그 + 개별 취소 X /
           Staged "to add" rows — dashed ghost row with a tag and a per-row cancel. */}
-      {stagedAdds.map((op) => (
+      {stagedAdds.map((op) => {
+        const addKey = `${op.principalType}:${op.principalId}`;
+        return (
         <div
-          key={`add:${op.principalType}:${op.principalId}`}
-          className="flex items-center gap-2 rounded-sm border border-dashed border-hairline px-2 py-1.5"
+          key={`add:${addKey}`}
+          data-id={`staged-add-${addKey}`}
+          className={`flex items-center gap-2 rounded-sm border border-dashed border-hairline px-2 py-1.5 ${
+            lastAddedKey === addKey ? "motion-safe:animate-[picker-flash_1200ms_ease-in-out]" : ""
+          }`}
         >
           <PrincipalIcon type={op.principalType} />
           <span className="min-w-0 flex-1 truncate text-caption text-ink">
@@ -399,7 +414,8 @@ export function CollaboratorsPanel({
             <X size={16} strokeWidth={1.5} />
           </button>
         </div>
-      ))}
+        );
+      })}
 
       {/* 협업자 추가 폼 — 편집자 이상만 / Add form for editor+ only */}
       {canEdit && (
