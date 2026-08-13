@@ -34,6 +34,20 @@ export function removeStagedOp(ops: StagedOp[], target: StagedOp): StagedOp[] {
   return ops.filter((op) => getStagedOpKey(op) !== key);
 }
 
+// 현재 role을 다시 선택하면 그 행의 staged op를 지운다(no-op change를 쌓지 않음 — R2 최종 리뷰 후속).
+// change 후 원복뿐 아니라 staged remove 후 원래 role 재선택도 "원상 유지" 의도이므로 같은 키로 소거된다.
+export function stageRoleChange(
+  ops: StagedOp[],
+  permissionId: number,
+  toRole: "viewer" | "editor",
+  currentRole: string,
+): StagedOp[] {
+  if (toRole === currentRole) {
+    return removeStagedOp(ops, { kind: "change", permissionId, toRole });
+  }
+  return upsertStagedOp(ops, { kind: "change", permissionId, toRole });
+}
+
 export interface StagedResult {
   applied: number;
   pending: number;

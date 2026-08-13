@@ -24,7 +24,13 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
-import { applyStagedOps, upsertStagedOp, removeStagedOp, type StagedOp } from "@/lib/permission-staging";
+import {
+  applyStagedOps,
+  upsertStagedOp,
+  removeStagedOp,
+  stageRoleChange,
+  type StagedOp,
+} from "@/lib/permission-staging";
 
 import { AddCollaborator } from "./add-collaborator";
 import { PrincipalIcon } from "./principal-picker";
@@ -288,7 +294,7 @@ export function CollaboratorsPanel({
 
   function handleChangeRole(perm: ApiPermission, toRole: MapRole) {
     if (toRole === "owner") return; // select는 viewer/editor만 제공 — 방어적 가드
-    setStagedOps((ops) => upsertStagedOp(ops, { kind: "change", permissionId: perm.id, toRole }));
+    setStagedOps((ops) => stageRoleChange(ops, perm.id, toRole, perm.role));
   }
 
   function handleRemove(perm: ApiPermission) {

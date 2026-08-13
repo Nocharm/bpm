@@ -24,8 +24,13 @@ const APPROVAL_KINDS = new Set([
   "sp_designation",
 ]);
 
+// 버전에 동봉된 visibility_change 행 — 버전 승인으로만 결정되는 읽기전용이라 결재 대기 배지에 세지 않는다.
+function isBundledRow(r: ApprovalRequest): boolean {
+  return r.kind === "visibility_change" && r.payload.version_id != null;
+}
+
 function countPending(rows: ApprovalRequest[]): number {
-  return rows.filter((r) => r.status === "pending" && APPROVAL_KINDS.has(r.kind)).length;
+  return rows.filter((r) => r.status === "pending" && APPROVAL_KINDS.has(r.kind) && !isBundledRow(r)).length;
 }
 
 interface Props {
@@ -164,8 +169,7 @@ export function PendingApprovalsPanel({
                 : t("perm.approvals.kindSpDesignation");
         const detail = renderDetail(req);
         const isDeciding = decidingIds.has(req.id);
-        const isBundled =
-          req.kind === "visibility_change" && req.payload.version_id != null;
+        const isBundled = isBundledRow(req);
 
         return (
           <div

@@ -5,6 +5,7 @@
 
 ## 2026-08-13 — 거버넌스 R3: 후속 정비 (feat/governance-r3)
 - **T1 UI 정기간식**: SP 안내 ⓘ 클릭 시 접힘/펼침 토글 차단(`stopPropagation`) + SP 등록 409 메시지 i18n화(`apiError.spDesignationPending`, "이미 이 맵의 등록 요청이 승인 대기 중입니다.").
+- **T2 로직 정합**: `stageRoleChange`로 원복 선택(현재 role 재선택) 시 staged change/remove를 소거해 no-op 스택 쌓임 방지(협업자 패널 적용 — 맵 상세 카드는 role 변경 UI 자체가 없어 해당 없음). `PendingApprovalsPanel` 결재 대기 카운트는 버전 동봉 visibility_change 행(`isBundledRow`) 제외(목록 표시는 유지).
 
 ## 2026-08-13 — 거버넌스 R2: QA 피드백 반영 (feat/governance-r2 → dev 머지)
 - **pending 가시성·복구**: 행 단위 pending 노출(`PermissionOut.pending_change`·`WorkflowStateOut.bundled_visibility`)로 요청자 아닌 유저에게도 승인 대기 태그(→role·요청자) 표시. `lib/api-errors.ts` `humanizeApiError`(서버 detail 전방일치 10종→i18n) 16개 catch 지점 — 409도 pending 재조회로 마커·철회 버튼 복구(막다른 상태 제거).
