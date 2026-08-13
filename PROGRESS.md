@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-14 — 협업자 스테이징 UX 7종 설계 스펙 (fix/frontend-minor)
+- **설계 확정·문서화**: `docs/superpowers/specs/2026-08-14-collab-staging-ux-design.md` — ① 스테이지 필 즉시/승인 예고(Zap/Hourglass, FE forecast 미러) ② pending 필 중복 렌더·고정폭 깨짐 픽스 ③ 스테이지 필 호버 캔슬 전환(X버튼 제거) ④ pending 회수(BE `PendingChangeOut.request_id` 추가+기존 철회 API) ⑤ 변경적용→되돌리기(직전 1회 메모리, 확인 모달+역방향 예고) ⑥ 오우닝 부서 피커 조직도 브라우즈(내 부서 3개 고정+들여쓰기 트리) ⑦ 홈 필터 필 3단계 반응형(full/label/icon, 실측 기반). 구현은 `fix/frontend-minor` 워크트리에서.
+
 ## 2026-08-14 — 승인 워크플로 코멘트 + 에러 인간화 설계 스펙 (dev 직접)
 - **설계 확정·문서화**: `docs/superpowers/specs/2026-08-14-approval-comments-design.md` — ① Group A(~50곳) 원시 JSON 에러 humanizeApiError 전수 스윕(폴백에만 HTTP 코드) ② 거절 배너 재디자인(거절자 필+사유) ③ 전이 모달 4종 선택 코멘트(`VersionEvent.note` 재사용, 스키마 무변경 — 바로철회 시 자동 동반 삭제) ④ 버전 카드 코멘트 보기 모달(클릭점→중앙 확대, 바깥 mousedown 닫힘) ⑤ 받은함 거절 사유 유실 버그 픽스(`ApprovalRequest.decision_reason` 컬럼). 구현은 `feat/approval-comments` 워크트리에서.
 - **구현 플랜**: `docs/superpowers/plans/2026-08-14-approval-comments.md` — 9태스크(TDD·태스크당 커밋·게이트 명시). 실측 보강: 받은함 비버전 거절은 사유 입력란 자체가 부재(`isVersion` 게이트)·approve 이벤트는 승인자별 기록·에러 틴트는 `border-error/40 bg-error/10` 기존 패턴 재사용.
