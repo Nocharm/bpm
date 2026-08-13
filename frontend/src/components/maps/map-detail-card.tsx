@@ -70,6 +70,14 @@ const ROLE_ORDER: Record<string, number> = { owner: 0, editor: 1, viewer: 2 };
 // 크기가 바뀌지 않는다(governance-r5 V1, R5-1). pending 배지는 문구가 길어 예외(콘텐츠 폭 유지).
 const ROLE_PILL_WIDTH_CLASS = "w-[60px] inline-flex items-center justify-center text-center whitespace-nowrap";
 
+// 개인(user) 그룹 1차 클램프 — 3.3행만 보이고 나머지는 내부 스크롤(전체 펼치기 버튼으로 해제, W3).
+// 행 높이 50px = 아이콘 h-9(36px, 텍스트 2줄보다 큰 지배 요소) + py-1.5(12px) + border(2px) 실측 합산,
+// 행 간격 4px(gap-1). 3.3행 = 3행 온전 + 4행째 살짝 잘림("더 있음" 암시, 홈 3.5클램프 선례와 동일 의도).
+const MEMBERS_ROW_HEIGHT_PX = 50;
+const MEMBERS_CLAMP_MAX_HEIGHT_PX = MEMBERS_ROW_HEIGHT_PX * 3.3 + 4 * 3;
+// 클램프 발동 임계 — 이 개수 이하면 클램프도 버튼도 없다(홈 ClampedList와 동일 규칙).
+const MEMBERS_CLAMP_VISIBLE = 3;
+
 // 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
 const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "user", labelKey: "home.memberUser" },
@@ -224,6 +232,8 @@ export function MapDetailCard({
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
+  // 개인(user) 그룹 3.3행 클램프 해제 여부 — 컴포넌트 state만, 영속 불요(W3).
+  const [membersUserExpanded, setMembersUserExpanded] = useState(false);
   const toggleVersion = (id: number) =>
     setExpandedVersions((prev) => {
       const next = new Set(prev);
@@ -922,11 +932,41 @@ export function MapDetailCard({
                           deptLevelRank(deptLeaf(b.principal_id))
                       : 0;
                   });
+                  const rowNodes = rows.map((perm, i) =>
+                    renderMemberRow(perm, i > 0 && rows[i - 1].role !== perm.role),
+                  );
+                  // 개인 그룹만 3.3행 클램프 대상 — 부서/그룹 그룹·오너 섹션은 클램프 없음 (W3).
+                  const clampable = g.type === "user" && rows.length > MEMBERS_CLAMP_VISIBLE;
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
-                      {rows.map((perm, i) =>
-                        renderMemberRow(perm, i > 0 && rows[i - 1].role !== perm.role),
+                      {clampable ? (
+                        <>
+                          <div
+                            data-id="map-detail-members-scroll"
+                            className="clamp-size flex flex-col gap-1 overflow-x-hidden overflow-y-auto"
+                            style={{
+                              maxHeight: membersUserExpanded
+                                ? "max-content"
+                                : `${MEMBERS_CLAMP_MAX_HEIGHT_PX}px`,
+                            }}
+                          >
+                            {rowNodes}
+                          </div>
+                          <button
+                            type="button"
+                            data-id="map-detail-members-expand"
+                            aria-expanded={membersUserExpanded}
+                            onClick={() => setMembersUserExpanded((v) => !v)}
+                            className="w-full rounded-sm py-1 text-center text-fine text-accent hover:bg-divider hover:underline"
+                          >
+                            {membersUserExpanded
+                              ? t("home.membersCollapse")
+                              : t("home.membersShowAll", { count: rows.length })}
+                          </button>
+                        </>
+                      ) : (
+                        rowNodes
                       )}
                     </div>
                   );

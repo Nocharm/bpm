@@ -6,6 +6,7 @@
 ## 2026-08-13 — 거버넌스 R6: 인스펙터 재정비 (feat/governance-r6)
 - W1: 버전 선택 행(VersionPill+관리 아이콘)을 승인 탭 → 맵 탭 최상단으로 이동, 노드 디스플레이/엣지 스타일 섹션을 기본 접힘 아코디언(`useClosingKeys`+`accordion-open/close`)으로 전환하고 항목별 아이콘(UserRound/Building2/Server/Link/SlidersHorizontal) 추가. 백엔드 무변경. 게이트: FE vitest 620·lint 0 error·tsc 0·build OK.
 - W2: 승인 탭 순서를 결재 대기(최상단, 기본 접힘)→드래프트 CTA(신설, 옛 버전 행 자리)→승인 워크플로(기본 펼침 접힘 섹션)→서브프로세스 지정→버전 카드로 재배치, `editor-approvals-section`을 `<details>`→W1과 동일 accordion 인스턴스(신규 키) 공유로 전환. 체크아웃 UI는 draft 전용(`showCheckout` rejected 제외 — 재편집 가능 상태에서 체크아웃 진입 UI가 사라짐, 사용자 지시대로 구현). 게이트: FE vitest 620·lint 0 error·tsc 0·build OK.
+- W3: 협업자 카드 개인(user) 그룹만 3.3행 클램프(행 4개 초과 시, `clamp-size` — 홈 3.5클램프와 동일 max-height↔max-content 전환+숨김 스크롤바 메커니즘 재사용) + 전체 펼치기/접기 토글(`home.membersShowAll`/`home.membersCollapse`, `{count}` 플레이스홀더는 기존 `verShowMore` 관례). 행 높이 50px(아이콘 h-9 36 + py-1.5 12 + border 2 실측 합산)로 max-h 177px 산출. 부서/그룹 그룹·오너 섹션은 클램프 제외. 게이트: FE vitest 620·lint 0 error·tsc 0·build OK.
 
 ## 2026-08-13 — 거버넌스 R5: 멤버 행 Remove 필 폴리시 (feat/governance-r5 → dev 머지)
 - 사용자 피드백 5건 일괄: 스왑 크기 불변(고정폭 `w-[60px]`을 RoleBadge 신설 `className` prop으로 — `min-w-[72px]` wrapper 폐기)·X 아이콘 제거(문구만)·`invisible`→opacity 페이드(`duration-150`)·행 루트 `group`→`group/member`(인스펙터 `<details.group>` 조상 누수로 전 행 동시 스왑되던 버그 해소)·제거 예정 태그를 소속 줄 우측 2행으로 분리(권한 필 유지, 취소 X 공간 예약+hover 페이드 인). EN `perm.staged.remove` "To remove"→"Remove"(60px 폭 맞춤).
