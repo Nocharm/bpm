@@ -36,6 +36,7 @@ from app.schemas import (
     CheckoutIn,
     CheckoutOut,
     CheckoutTransferIn,
+    CommentIn,
     DeptInfoValueOut,
     DirectoryUserOut,
     EligibleAssigneesOut,
@@ -645,7 +646,10 @@ async def submit_version(
         version_id=version_id,
         message=f"{requester_name} requested approval for '{version.label}'",
     )
-    record_version_event(session, version_id, "submitted", user)
+    record_version_event(
+        session, version_id, "submitted", user,
+        note=payload.comment if payload is not None else None,
+    )
     await session.commit()
     await session.refresh(version)
     return version
@@ -654,6 +658,7 @@ async def submit_version(
 @router.post("/versions/{version_id}/approve", response_model=VersionOut)
 async def approve_version(
     version_id: int,
+    payload: CommentIn | None = None,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
@@ -680,7 +685,10 @@ async def approve_version(
     if existing is None:
         session.add(VersionApproval(version_id=version_id, approver=user))
         await session.flush()
-        record_version_event(session, version_id, "approved", user)
+        record_version_event(
+            session, version_id, "approved", user,
+            note=payload.comment if payload is not None else None,
+        )
 
     approved_count = await session.scalar(
         select(func.count())
@@ -767,6 +775,7 @@ async def reject_version(
 @router.post("/versions/{version_id}/publish", response_model=VersionOut)
 async def publish_version(
     version_id: int,
+    payload: CommentIn | None = None,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
@@ -829,7 +838,10 @@ async def publish_version(
         version_id=version_id,
         message=f"'{version.label}' was published",
     )
-    record_version_event(session, version_id, "published", user)
+    record_version_event(
+        session, version_id, "published", user,
+        note=payload.comment if payload is not None else None,
+    )
     await session.commit()
     # 게시본 지식기반 인덱싱 — fire-and-forget(임베딩 지연이 게시 응답을 막지 않게) (design 2026-07-23 §7)
     if embed_client.is_embed_enabled():
@@ -903,6 +915,7 @@ async def republish_version(
 @router.post("/versions/{version_id}/withdraw", response_model=VersionOut)
 async def withdraw_version(
     version_id: int,
+    payload: CommentIn | None = None,
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
@@ -949,7 +962,10 @@ async def withdraw_version(
 
     if was_rejected or (approval_count and approval_count > 0):
         # 반려본 회수 또는 승인 1건 이상 후 회수 → 회수 기록을 남긴다(제출·승인·반려 이력 유지).
-        record_version_event(session, version_id, "withdrawn", user)
+        record_version_event(
+            session, version_id, "withdrawn", user,
+            note=payload.comment if payload is not None else None,
+        )
     else:
         # 승인 0건 회수 → 이번 승인요청(submitted) 흔적을 삭제, 회수 기록도 남기지 않는다.
         latest_submitted = await session.scalar(
