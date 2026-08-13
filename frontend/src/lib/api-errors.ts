@@ -18,6 +18,7 @@ const DETAIL_PREFIX_MAP: [string, MessageKey][] = [
   ["your permission change is pending approval", "apiError.permissionPending"],
   ["sync throttled", "apiError.syncThrottled"],
   ["only the owner can bundle", "apiError.ownerOnlyBundle"],
+  ["a designation request is already pending", "apiError.spDesignationPending"],
 ];
 
 export function humanizeApiError(err: unknown, t: TFunc): string {
