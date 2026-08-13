@@ -8,6 +8,7 @@
 - U2 동봉 픽커 재설계: pill 행 → 라벨("Visibility"/"공개 범위") + 우측 드롭다운(Globe/Lock/ChevronDown, current 옵션엔 리터럴 "Current" 필). 3 사용처(에디터·패널·셀프 게시 팝오버) 배선 무변경, `perm.visibilityCurrent`는 `visibility-control.tsx`가 여전히 써서 유지.
 - U3 인스펙터 맵 탭 가시성 3:1 + 워크플로 시작 모달: 4열 그리드(현재 3열+전환 1열 아이콘)는 전원 공통 레이아웃, 전환 클릭 인터랙션(버튼+모달)만 오너 전용(비오너는 같은 3:1 지오메트리를 정적 `<div>`로). 전환 클릭 → `ConfirmDialog`(승인자 이름 필 목록+0명 경고로 confirm 비활성, 조회 실패는 별도 에러로 구분) → `requestVisibilityChange`, 409는 `humanizeApiError`+pending 재조회로 복구(막다른 상태 금지). mapId 전환 시 모달 상태 강제 리셋(링크맵 열기 등 stale target 방지). `ConfirmDialog`에 선택적 `dialogId` prop 추가(기존 호출부 전부 기본값 유지, 무변화).
 - U4 카드 멤버 행(`map-detail-card.tsx`): 제거 X버튼 폐기 → RoleBadge 자리에 hover/focus 시 같은 자리·크기의 빨간 Remove 필로 스왑(`min-w-[72px]`, Remove ×의 Pretendard 실측폭 69.2px 기준으로 Viewer/Editor보다 좁을 때 잘림 방지). 버튼은 opacity/pointer-events 토글(=Tab 순서 유지, `focus:`/`group-focus-within:`로 키보드 도달) — display 토글은 부서/그룹 행처럼 상위 tabIndex 없는 행에서 키보드로 영영 못 여는 회귀라 배제. 설정 패널(`collaborators-panel.tsx`)은 select UX 그대로, X만 같은 opacity 패턴으로 absolute 전환(행 `pr-8` 공통화로 뱃지/select 우측 정렬 통일) — 선택 UX 변경 없음(사용자 확정 범위).
+- **U5 최종 게이트 + QA R4 + PROGRESS 마감**: BE 1042·FE 620·lint 1 warning / QA `docs/qa/governance-ux-checklist.md` R4 섹션 5항목(승인자 배지·동봉 드롭다운·인스펙터 3:1 모달·카드 제거 hover 스왑·패널 X 정렬).
 
 ## 2026-08-13 — 거버넌스 R3: 후속 정비 6건 (feat/governance-r3 → dev 머지)
 - R2 리뷰 이월분 정비: SP ⓘ 클릭이 접힘 토글 안 함(stopPropagation) · SP 등록 409 문구 i18n(`apiError.spDesignationPending`) · `stageRoleChange`로 원복 선택 시 staged op 소거(no-op 스택 방지, 협업자 패널 — 맵 카드는 role 변경 UI 없음) · 결재 대기 카운트에서 동봉 행 제외(`isBundledRow`, 목록 표시는 유지).
